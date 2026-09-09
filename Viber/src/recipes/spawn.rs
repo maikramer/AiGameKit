@@ -361,7 +361,10 @@ pub fn startup(world: &mut World) {
             materials: &mut materials,
             sky_mats: &mut sky_mats,
             asset_server: &asset_server,
+            game_config: world.get_resource::<crate::config::GameConfig>().cloned(),
             tiled: &mut tiled,
+            mesh_cache: std::collections::HashMap::new(),
+            material_cache: std::collections::HashMap::new(),
             chip_counter: std::cell::Cell::new(0),
             mixer: std::cell::RefCell::new(None),
             chips: std::cell::RefCell::new(Vec::new()),
@@ -461,6 +464,62 @@ pub type HudAttrs = Vec<(String, String)>;
 /// Deferred HUD requests: (tag, attrs).
 pub type HudList = Vec<(String, HudAttrs)>;
 
+/// Chave de cache de malha de primitiva: a forma + dimensões (bits de f32
+/// — duas primitivas "iguais" no XML são o mesmo asset).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum MeshKey {
+    Cuboid([u32; 3]),
+    Sphere(u32),
+    Cylinder(u32, u32),
+    Plane([u32; 2]),
+    Capsule(u32, u32),
+}
+
+fn mesh_key(shape: &Shape) -> MeshKey {
+    let bits = |v: f32| v.to_bits();
+    match shape {
+        Shape::Cuboid { half_size } => MeshKey::Cuboid(half_size.map(bits)),
+        Shape::Sphere { radius } => MeshKey::Sphere(bits(*radius)),
+        Shape::Cylinder {
+            half_height,
+            radius,
+        } => MeshKey::Cylinder(bits(*half_height), bits(*radius)),
+        Shape::Plane { half_size } => MeshKey::Plane(half_size.map(bits)),
+        Shape::Capsule {
+            radius,
+            half_height,
+        } => MeshKey::Capsule(bits(*radius), bits(*half_height)),
+    }
+}
+
+/// Chave de cache de materiais: a spec canonizada em bits (f32 não é
+/// `Eq`/`Hash`) + a flag de UV world-space, que muda a textura carregada.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct MaterialKey {
+    base_color: Option<[u32; 3]>,
+    metallic: Option<u32>,
+    roughness: Option<u32>,
+    opacity: Option<u32>,
+    emissive: Option<[u32; 3]>,
+    texture: Option<String>,
+    texture_tile: Option<u32>,
+    world_tiled: bool,
+}
+
+fn material_key(spec: &MaterialSpec, world_tiled: bool) -> MaterialKey {
+    let bits = |v: f32| v.to_bits();
+    MaterialKey {
+        base_color: spec.base_color.map(|c| c.map(bits)),
+        metallic: spec.metallic.map(bits),
+        roughness: spec.roughness.map(bits),
+        opacity: spec.opacity.map(bits),
+        emissive: spec.emissive.map(|c| c.map(bits)),
+        texture: spec.texture.clone(),
+        texture_tile: spec.texture_tile.map(bits),
+        world_tiled,
+    }
+}
+
 /// Borrowed asset handles used while spawning one world.
 struct SpawnCtx<'a> {
     meshes: &'a mut Assets<Mesh>,
@@ -471,10 +530,22 @@ struct SpawnCtx<'a> {
     /// `Assets<Mesh>` missing for the terrain bootstrap).
     sky_mats: &'a mut Assets<crate::sky::SkyMaterial>,
     asset_server: &'a AssetServer,
+    /// Config.yaml do jogo — o `<MusicLayer>` resolve `{bgm_dir}/{layer}.ogg`
+    /// daqui (apps mínimas de teste correm sem resource: dir canónico vazio
+    /// deixa o load falhar com warn, como um ficheiro ausente).
+    game_config: Option<crate::config::GameConfig>,
     /// World-tiled texture registry (single sampler writer em
     /// `crate::textures`): primitivas com `texture-tile-size` usam UVs em
     /// metros e precisam de REPEAT — registadas no próprio `load`.
     tiled: &'a mut crate::textures::WorldTiledTextures,
+    /// Cache de malhas por forma+dimensões: as partes repetidas de uma
+    /// composition/protótipo (paredes iguais, postes iguais) partilham o
+    /// mesmo asset em vez de registar um por entidade. Primitivas com UVs
+    /// world-space (`texture-tile-size` em Plane/Cuboid) NÃO entram — as
+    /// UVs levam a translation do mundo assada.
+    mesh_cache: std::collections::HashMap<MeshKey, Handle<Mesh>>,
+    /// Cache de materiais por spec exata — mesmo contrato do mesh_cache.
+    material_cache: std::collections::HashMap<MaterialKey, Handle<StandardMaterial>>,
     chip_counter: std::cell::Cell<usize>,
     mixer: std::cell::RefCell<Option<crate::music::AudioMixerSettings>>,
     /// Deferred HUD chip UI nodes (resource name + stack index).
@@ -494,6 +565,44 @@ struct SpawnCtx<'a> {
     worldsys: crate::worldsys::PendingWorldSystems,
     /// `<Sky>` attrs — constrói o domo no fim do startup.
     sky_request: std::cell::RefCell<Option<Vec<(String, String)>>>,
+}
+
+/// Malha de primitiva com dedup: as partes repetidas de uma
+/// composition/protótipo (paredes iguais, postes iguais) partilham o mesmo
+/// asset. Primitivas com UVs world-space (`texture-tile-size` em
+/// Plane/Cuboid) NÃO entram na cache — `scale_primitive_uvs` assa a
+/// translation do mundo nas UVs.
+fn primitive_mesh_handle(ctx: &mut SpawnCtx, shape: &Shape) -> Handle<Mesh> {
+    let key = mesh_key(shape);
+    if let Some(handle) = ctx.mesh_cache.get(&key) {
+        return handle.clone();
+    }
+    let handle = ctx.meshes.add(primitive_mesh(shape));
+    ctx.mesh_cache.insert(key, handle.clone());
+    handle
+}
+
+/// Material com dedup — a chave é a spec canonizada em bits (+ flag de UV
+/// world-space, que muda a textura carregada). Centenas de partes idênticas
+/// passam a partilhar um único `StandardMaterial`.
+fn material_handle(
+    ctx: &mut SpawnCtx,
+    spec: &MaterialSpec,
+    world_tiled_uv: bool,
+) -> Handle<StandardMaterial> {
+    let key = material_key(spec, world_tiled_uv);
+    if let Some(handle) = ctx.material_cache.get(&key) {
+        return handle.clone();
+    }
+    let handle = build_material(
+        spec,
+        world_tiled_uv,
+        ctx.materials,
+        ctx.asset_server,
+        ctx.tiled,
+    );
+    ctx.material_cache.insert(key, handle.clone());
+    handle
 }
 
 /// Grupo interno de pedras de margem (`rocks="1"` num corpo de água):
@@ -807,11 +916,21 @@ fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &Entity
             }
         }
         ColliderShape::Auto => {
-            entity.insert(PendingCollider {
-                shape: ColliderShape::Auto,
-                gltf: None,
-                age: 0.0,
-            });
+            // Primitiva (parte de `<Composition>` ou `collider="auto"`
+            // autoral): a forma é conhecida AGORA — colisor exato, sem
+            // PendingCollider nem AABB aproximado.
+            if let EntityKind::Primitive { shape, .. } = &spec.kind {
+                entity.insert(crate::physics::collider_for_shape(
+                    shape,
+                    Vec3::from(spec.transform.scale),
+                ));
+            } else {
+                entity.insert(PendingCollider {
+                    shape: ColliderShape::Auto,
+                    gltf: None,
+                    age: 0.0,
+                });
+            }
         }
         ColliderShape::Mesh { url, .. } | ColliderShape::Precompute { url } => {
             // Root-absolute asset paths are unapproved in bevy; strip the '/'.
@@ -823,6 +942,21 @@ fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &Entity
                 gltf: Some(handle),
                 age: 0.0,
             });
+        }
+        // Sphere/cylinder/capsule explícitos são imediatos, como a caixa.
+        ColliderShape::Sphere { .. }
+        | ColliderShape::Cylinder { .. }
+        | ColliderShape::Capsule { .. } => {
+            if let Some((collider, transform)) = immediate_collider(&physics.collider) {
+                if transform.translation == Vec3::ZERO {
+                    entity.insert(collider);
+                } else {
+                    let parent = entity.id();
+                    entity.world_scope(|world| {
+                        world.spawn((Name::new("collider"), collider, transform, ChildOf(parent)));
+                    });
+                }
+            }
         }
     }
 }
@@ -866,6 +1000,38 @@ fn spawn_entity(
             // relativo ao novo y.
             entity.insert(crate::worldsys::SeatOnTerrain);
         }
+        EntityKind::Composition {
+            body, place, seat, ..
+        } => {
+            // Corpo do objeto composto: os colisores das partes (filhos com
+            // `ColliderShape::Auto`, resolvidos em `attach_physics`) colam-se
+            // a ESTE body — colisor composto do Rapier, um por primitiva.
+            if let Some((rb, gravity)) = crate::physics::body_bundle(*body, None) {
+                entity.insert((rb, gravity));
+            }
+            // Colocação: `place` explícito ganha (amostra o terreno onde o
+            // autor pediu); sem `place`, assenta como os grupos (a menos que
+            // `seat="none"` — objeto flutuante, mantém a cota autoral).
+            if let Some(place) = place {
+                entity.insert(crate::worldsys::PendingPlace {
+                    at: Vec2::new(place.at[0], place.at[1]),
+                    align_to_terrain: place.align_to_terrain,
+                    base_y_offset: place.base_y_offset,
+                });
+            } else if *seat {
+                // Composition assenta SEMPRE como bloco — mesmo espalhada
+                // (uma caixa de 240 m não é repartida pelas partes).
+                entity.insert((crate::worldsys::SeatOnTerrain, crate::worldsys::SeatAsUnit));
+            }
+        }
+        // `<Use>` é expandido em parse-time (`recipes::expand_uses`) — se
+        // chegou aqui, o mundo foi montado à mão; não spawna nada.
+        EntityKind::Use { prototype, .. } => {
+            bevy::log::warn!(
+                "<Use prototype=\"{prototype}\"> chegou ao spawn sem expansão — ignorada"
+            );
+            return;
+        }
         EntityKind::ParticleSystem { spec } => {
             let resolved = crate::particles::resolve(spec);
             let capacity = crate::particles::emitter_capacity(&resolved);
@@ -904,32 +1070,38 @@ fn spawn_entity(
         EntityKind::GltfScene { url } => {
             let path = url.trim_start_matches('/');
             let handle: Handle<Gltf> = crate::meshopt::load_gltf(ctx.asset_server, path.to_owned());
+            // Cristais/vidro (r3): a URL marca os materiais da cena para o
+            // patch transmissivo do `prop_tint` quando o glTF aterrar.
+            if path.contains("crystal") || path.contains("glass") {
+                entity.insert(crate::prop_tint::TransmissiveGltf);
+            }
             entity.insert(GltfScenePending { handle });
         }
         EntityKind::Primitive { shape, material } => {
-            let mut primitive = primitive_mesh(shape);
             // UV world-space (`texture-tile-size` > 0 em Plane/Cuboid, a
             // mesma fórmula das ribbons) ⇒ a textura precisa de REPEAT:
             // registada no `load` para o escritor único de samplers.
             let world_tiled_uv = material.texture.is_some()
                 && material.texture_tile.is_some_and(|tile| tile > 0.0)
                 && matches!(shape, Shape::Plane { .. } | Shape::Cuboid { .. });
-            if material.texture.is_some() {
-                if let Some(tile) = material.texture_tile {
-                    // UV world-space: decals com o mesmo tile-size batem com
-                    // as ribbons das estradas (mesmo divisor, mesma origem).
-                    scale_primitive_uvs(&mut primitive, shape, tile, spec.transform.translation);
-                }
+            if let Some(tile) = material.texture_tile.filter(|_| world_tiled_uv) {
+                // UV world-space: mesh DEDICADO — `scale_primitive_uvs` assa
+                // a translation do mundo nas UVs, por isso decals em sítios
+                // diferentes não podem partilhar o asset (decals no MESMO
+                // sítio partilham material, que é o que alinha o padrão com
+                // as ribbons das estradas).
+                let mut primitive = primitive_mesh(shape);
+                scale_primitive_uvs(&mut primitive, shape, tile, spec.transform.translation);
+                let mesh = ctx.meshes.add(primitive);
+                let mat = material_handle(ctx, material, world_tiled_uv);
+                entity.insert((Mesh3d(mesh), MeshMaterial3d(mat), Visibility::Inherited));
+            } else {
+                // Cache por forma+dimensões/spec: paredes iguais de uma
+                // composition, instâncias de um protótipo — um asset só.
+                let mesh = primitive_mesh_handle(ctx, shape);
+                let mat = material_handle(ctx, material, false);
+                entity.insert((Mesh3d(mesh), MeshMaterial3d(mat), Visibility::Inherited));
             }
-            let mesh = ctx.meshes.add(primitive);
-            let mat = build_material(
-                material,
-                world_tiled_uv,
-                ctx.materials,
-                ctx.asset_server,
-                ctx.tiled,
-            );
-            entity.insert((Mesh3d(mesh), MeshMaterial3d(mat), Visibility::Inherited));
         }
         EntityKind::PointLight {
             color,
@@ -953,6 +1125,19 @@ fn spawn_entity(
             }
             if let Some(v) = shadows {
                 light.shadow_maps_enabled = *v;
+                if *v {
+                    // PCSS (passe r2): penumbra que cresce com a distância do
+                    // caster — no PointLight deriva do `radius` (a chama da
+                    // lanterna ~0.35 m lê como emissor estendido). Requer
+                    // feature `experimental_pbr_pcss`.
+                    #[cfg(feature = "experimental_pbr_pcss")]
+                    {
+                        light.soft_shadows_enabled = true;
+                    }
+                    // Contact shadows por luz: o raymarch da depth cobre os
+                    // pés do caster onde o shadow map não tem resolução.
+                    light.contact_shadows_enabled = true;
+                }
             }
             entity.insert(light);
         }
@@ -991,18 +1176,43 @@ fn spawn_entity(
                     Vec3::NEG_Y
                 },
             );
-            // Cascades tuned for a character-scale third-person view: crisp
-            // near the hero, still covering the buildings around him. Bevy's
-            // default bound is sized for a small demo scene and leaves the
-            // near ground unshadowed in a world this size.
+            // Cascatas para a terceira pessoa à escala do herói: nítidas
+            // perto, cobrindo ainda os edifícios à volta. O default do Bevy é
+            // dimensionado para uma demo pequena e deixa o chão próximo sem
+            // sombra num mundo deste tamanho.
+            //
+            // P1.8 (fotorrealismo): a distância máxima sobe para 600 m para as
+            // serras distantes receberem sombra do sol. Trade-off: a cascata
+            // mais longe (12 m → 600 m) cobre a faixa com MUITO menos
+            // densidade de texels — suficiente para penumbras de montanha a
+            // meia distância, mas o detalhe fino morre lá longe; o custo
+            // paga-se no shadow map 4096² (recurso `DirectionalLightShadowMap`
+            // no run, main.rs — o default do Bevy é 2048²). As 4 cascatas por
+            // luz são o TETO do renderer do Bevy 0.19.1
+            // (`MAX_CASCADES_PER_LIGHT`) — o builder aceita mais, mas o
+            // extract do pbr corta na 4.ª com warning e subviews fora do
+            // array de camadas do shadow map.
             let cascades = bevy::light::CascadeShadowConfigBuilder {
                 num_cascades: 4,
                 first_cascade_far_bound: 12.0,
-                maximum_distance: 220.0,
+                maximum_distance: 600.0,
                 ..Default::default()
             }
             .build();
-            entity.insert((light, cascades, transform, Visibility::Inherited));
+            // PCSS (passe r2): o SOL como emissor estendido (~1.5 m de tamaño
+            // aparente na escala das sombras) — as sombras das árvores/muros
+            // abrem penumbra suave à medida que se afastam do caster, em vez
+            // da borda dura do shadow map. Filtro `Temporal` na câmara
+            // (postfx.rs) + TAA limpam o noise. Requer feature
+            // `experimental_pbr_pcss`.
+            #[cfg(feature = "experimental_pbr_pcss")]
+            {
+                light.soft_shadow_size = Some(1.5);
+            }
+            // Contact shadows direcionais: o raymarch por-pixel da depth cobre
+            // a folga de bias dos shadow maps junto dos pés dos casters.
+            light.contact_shadows_enabled = true;
+            entity.insert((light, cascades, bevy::light::VolumetricLight, transform, Visibility::Inherited));
         }
         // Ambient light uses the `GlobalAmbientLight` resource; it is not
         // spawned as an entity.
@@ -1111,14 +1321,19 @@ fn spawn_entity(
             // O playback é do backend kira — o `audio_loop_starter`
             // (crate::music) arranca o loop no bus de música quando o
             // componente pendente aparece; os buses do mixer aplicam-se ao
-            // vivo, no canal.
+            // vivo, no canal. O path é `{bgm_dir}/{layer}.ogg` com o dir do
+            // config.yaml do jogo.
+            let url = match &ctx.game_config {
+                Some(config) => config.bgm_path(layer),
+                None => format!("{layer}.ogg"),
+            };
             entity.insert((
                 crate::music::MusicLayerTag {
                     layer: layer.clone(),
                     base_volume: *base_volume,
                 },
                 crate::music::AudioLoopPending {
-                    url: format!("assets/audio/bgm/{layer}.ogg"),
+                    url,
                     music: true,
                 },
             ));
@@ -1326,6 +1541,19 @@ fn build_material(
     if let Some(v) = spec.roughness {
         material.perceptual_roughness = v.clamp(0.0, 1.0);
     }
+    if let Some(v) = spec.opacity {
+        // `opacity="0"` = invisível (parede de colisor puro, o truque das
+        // interiors do VibeGame); 0..1 = translúcido (Blend, sem depth write
+        // — o renderer do Bevy trata isso no AlphaMode).
+        let alpha = v.clamp(0.0, 1.0);
+        material.base_color.set_alpha(alpha);
+        if alpha < 1.0 {
+            material.alpha_mode = AlphaMode::Blend;
+        }
+    }
+    if let Some([r, g, b]) = spec.emissive {
+        material.emissive = LinearRgba::rgb(r, g, b);
+    }
     if let Some(url) = spec.texture.as_deref() {
         let handle = if world_tiled_uv {
             // UVs em metros: REPEAT via o registry do escritor único.
@@ -1487,6 +1715,69 @@ pub fn gltf_scene_spawner(
     }
 }
 
+/// Chaves de cache de mesh/material — a base do dedup de assets.
+#[cfg(test)]
+mod cache_key_tests {
+    use super::*;
+
+    #[test]
+    fn test_mesh_key_equal_for_identical_shapes() {
+        let a = Shape::Cuboid {
+            half_size: [1.0, 0.5, 1.0],
+        };
+        let b = Shape::Cuboid {
+            half_size: [1.0, 0.5, 1.0],
+        };
+        assert_eq!(mesh_key(&a), mesh_key(&b), "duas paredes iguais → 1 asset");
+        let c = Shape::Cuboid {
+            half_size: [1.0, 0.6, 1.0],
+        };
+        assert_ne!(
+            mesh_key(&a),
+            mesh_key(&c),
+            "dimensão diferente → asset próprio"
+        );
+        // -0.0 e 0.0 têm bits diferentes mas são o mesmo float de facto —
+        // para o cache, bits exatos são o contrato (XML idêntico → mesmos bits).
+        let s1 = Shape::Sphere { radius: 0.5 };
+        let s2 = Shape::Sphere { radius: 0.5 };
+        assert_eq!(mesh_key(&s1), mesh_key(&s2));
+        assert_ne!(mesh_key(&s1), mesh_key(&Shape::Sphere { radius: 0.6 }));
+    }
+
+    #[test]
+    fn test_mesh_key_distinguishes_variants() {
+        let base = mesh_key(&Shape::Cylinder {
+            half_height: 1.0,
+            radius: 0.5,
+        });
+        let capsule = mesh_key(&Shape::Capsule {
+            half_height: 1.0,
+            radius: 0.5,
+        });
+        assert_ne!(base, capsule, "cilindro e cápsula nunca partilham asset");
+    }
+
+    #[test]
+    fn test_material_key_equal_for_identical_specs() {
+        let mut a = MaterialSpec::default();
+        a.base_color = Some([0.5, 0.25, 0.125]);
+        a.roughness = Some(0.8);
+        a.opacity = Some(1.0);
+        let b = a.clone();
+        assert_eq!(material_key(&a, false), material_key(&b, false));
+        // A flag de UV world-space participa na chave (textura diferente).
+        assert_ne!(material_key(&a, false), material_key(&a, true));
+        let mut c = a.clone();
+        c.opacity = Some(0.5);
+        assert_ne!(material_key(&a, false), material_key(&c, false));
+        // Textura com url diferente → material próprio.
+        let mut d = a.clone();
+        d.texture = Some("/assets/t.png".to_string());
+        assert_ne!(material_key(&a, false), material_key(&d, false));
+    }
+}
+
 #[cfg(test)]
 mod terrain_collect_tests {
     use super::*;
@@ -1610,6 +1901,11 @@ fn build_declarative_ui(
     for (index, source) in styles.iter().enumerate() {
         match source.strip_prefix('@') {
             Some(relative) => {
+                // O src é relativo à PASTA DO JOGO e o prefixo `ui/` faz
+                // parte do caminho autor (`@ui/hud.css` → <jogo>/ui/hud.css)
+                // — juntar um ui_dir do config DUPLICAVA o prefixo
+                // (<jogo>/ui/ui/hud.css) e despia o HUD de estilo (caso
+                // real 2026-09-08). O formato do src é contrato do XML.
                 let base = world_dir.unwrap_or_else(|| std::path::Path::new("."));
                 let path = base.join(relative.trim_start_matches('/'));
                 match std::fs::read_to_string(&path) {

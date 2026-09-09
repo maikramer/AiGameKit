@@ -9,6 +9,26 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+/// Escreve o config.yaml mínimo (contrato obrigatório do jogo) num tempdir
+/// de teste — docs/ASSETS.md.
+fn write_config(dir: &Path) {
+    std::fs::write(
+        dir.join("config.yaml"),
+        concat!(
+            "assets:\n",
+            "  roots: []\n",
+            "  bgm_dir: assets/audio/bgm\n",
+            "  sfx_dir: assets/audio/sfx\n",
+            "  terrain_textures_dir: assets/textures\n",
+            "game:\n",
+            "  scripts_dir: scripts\n",
+            "save:\n",
+            "  dir: /tmp\n",
+        ),
+    )
+    .unwrap();
+}
+
 fn viber(args: &[&str]) -> (i32, String, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_viber"))
         .args(args)
@@ -41,6 +61,7 @@ fn test_analyze_unknown_tag_is_skipped_with_warning() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bad.xml");
     std::fs::write(&path, "<world><GameObject /></world>").unwrap();
+    write_config(dir.path());
     let (code, stdout, stderr) = viber(&["analyze", path.to_str().unwrap()]);
     assert_eq!(code, 0, "stderr: {stderr}");
     assert!(
@@ -56,6 +77,7 @@ fn test_analyze_strict_fails_on_unknown_tag() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bad.xml");
     std::fs::write(&path, "<world><GameObject /></world>").unwrap();
+    write_config(dir.path());
     let (code, _, stderr) = viber(&["analyze", "--strict", path.to_str().unwrap()]);
     assert_eq!(code, 1);
     assert!(stderr.contains("strict mode"), "stderr: {stderr}");
@@ -65,6 +87,7 @@ fn test_analyze_strict_fails_on_unknown_tag() {
 fn test_analyze_include_chain_is_expanded() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("props.xml"), "<world><Cuboid /></world>").unwrap();
+    write_config(dir.path());
     let path = dir.path().join("main.xml");
     std::fs::write(&path, "<world><Include src=\"props.xml\" /></world>").unwrap();
     let (code, stdout, stderr) = viber(&["analyze", path.to_str().unwrap()]);
@@ -77,6 +100,7 @@ fn test_analyze_warns_but_succeeds_on_unknown_attribute() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("warn.xml");
     std::fs::write(&path, "<world><Entity pos-x=\"0 0 0\" /></world>").unwrap();
+    write_config(dir.path());
     let (code, _, stderr) = viber(&["analyze", path.to_str().unwrap()]);
     assert_eq!(code, 0);
     assert!(
@@ -124,6 +148,10 @@ fn test_create_scaffolds_project_and_world_analyzes() {
 
     let world = dir.path().join("demo").join("world.xml");
     assert!(world.is_file(), "world.xml criado");
+    assert!(
+        dir.path().join("demo").join("config.yaml").is_file(),
+        "config.yaml criado"
+    );
     let content = std::fs::read_to_string(&world).unwrap();
     assert!(content.contains("<world"), "conteúdo do template");
 
@@ -240,6 +268,65 @@ fn test_analyze_road_network_rejects_foreign_children() {
     assert_eq!(code, 1);
     assert!(
         stderr.contains("only <Way> and <Segment>"),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
+fn test_analyze_composition_and_prototypes_reported() {
+    let dir = tempfile::tempdir().unwrap();
+    write_config(dir.path());
+    let path = dir.path().join("composition.xml");
+    std::fs::write(
+        &path,
+        r##"<world>
+  <Prototype id="house">
+    <Composition name="house-root">
+      <Box translation="0 1 0" half-size="2 1 1.5" base-color="#c8b8a0" />
+      <Box translation="0 2.3 0" half-size="2.3 0.3 1.8" base-color="#8a4030" />
+      <PointLight translation="0 1.6 0" color="#ffd9a0" intensity="600" />
+    </Composition>
+  </Prototype>
+  <Use prototype="house" pos="0 0 0" name="house.a" />
+  <Use prototype="house" pos="12 0 0" euler="0 90 0" name="house.b" />
+  <Composition translation="-10 0 0" place="at: -10 0; align-to-terrain: 0">
+    <Sphere radius="0.6" base-color="#ffcc77" metallic="0.6" roughness="0.3" />
+    <Cylinder radius="0.2" half-height="1" translation="0 1 0" />
+    <PointLight translation="0 2.2 0" intensity="900" color="#a0c0ff" />
+  </Composition>
+</world>"##,
+    )
+    .unwrap();
+    let (code, stdout, stderr) = viber(&["analyze", path.to_str().unwrap()]);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert!(stdout.contains("compositions 3"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("compositions: 3 root(s)"),
+        "stdout: {stdout}"
+    );
+    // 4 partes nas 2 instâncias da casa (2 Box cada) + 2 na composition
+    // standalone (Sphere + Cylinder); as PointLight não são partes.
+    assert!(stdout.contains("6 part(s)"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("prototypes: 1 definido(s), 2 instância(s)"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("house×2"), "stdout: {stdout}");
+    assert!(stdout.contains("OK"), "stdout: {stdout}");
+
+    // --strict: um <Use> apontando para um id inexistente falha.
+    let bad = dir.path().join("bad-use.xml");
+    std::fs::write(
+        &bad,
+        r##"<world>
+  <Use prototype="fantasma" pos="0 0 0" />
+</world>"##,
+    )
+    .unwrap();
+    let (code, _, stderr) = viber(&["analyze", "--strict", bad.to_str().unwrap()]);
+    assert_eq!(code, 1);
+    assert!(
+        stderr.contains("protótipo desconhecido"),
         "stderr: {stderr}"
     );
 }

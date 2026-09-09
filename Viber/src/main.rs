@@ -20,9 +20,9 @@ use viber::recipes::spawn::{self, PendingWorld};
 use viber::ui;
 use viber::{
     ai, ambient, animation, audit, camera, economy, feedback, grass, harvest, hud, impact, menus,
-    meshopt, music, particles, physics, physics_fx, player, postfx, profiler, prop_tint, quests,
-    recipes, render_lod, save, scaffold, skills, sky, spawner, terrain, textures, trail, travel,
-    vitals, worldsys, xml,
+    meshopt, music, particles, physics, physics_fx, player, postfx, profiler, prop_tint, prune,
+    quests, recipes, render_lod, save, scaffold, skills, sky, spawner, terrain, textures, trail,
+    travel, vitals, worldsys, xml,
 };
 
 /// Native Bevy engine for AiGameKit declarative worlds.
@@ -61,6 +61,14 @@ enum Command {
         /// Always use this binary — never delegate to cargo in a checkout
         #[arg(long)]
         no_cargo: bool,
+    },
+    /// Manual target/ housekeeping — the same pruning `viber run` does at
+    /// startup (drops the OPPOSITE profile's build/test binaries and
+    /// incremental caches; with `--debug` it drops release instead of dev)
+    Prune {
+        /// Drop target/release (as if the current run were `--debug`)
+        #[arg(long)]
+        debug: bool,
     },
     /// Parse and validate a world XML file without opening a window
     Analyze {
@@ -404,6 +412,24 @@ fn delegate_run_to_cargo(world: &Path, debug: bool, bridge: Option<u16>) -> Resu
     }
 }
 
+/// Housekeeping do `target/` (ver `viber::prune`): dentro de um checkout, o
+/// arranque do run remove executáveis e caches incrementais do perfil OPOSTO
+/// — os binários de teste do Bevy em dev pesam ~2.2 GB cada e reconstruírem-se
+/// num relink de segundos. Silencioso quando não há nada a limpar.
+fn run_target_housekeeping(active_debug: bool) {
+    // O filho delegado (`cargo run -- run … --no-cargo`) não repete: o pai
+    // limpou antes de lançar o cargo.
+    if std::env::var_os(CARGO_DELEGATE_GUARD).is_some() {
+        return;
+    }
+    let Ok(cwd) = std::env::current_dir() else { return };
+    let Some(root) = viber_checkout_root(&cwd) else { return };
+    let report = prune::housekeeping(&root, active_debug);
+    if let Some(line) = report.describe() {
+        eprintln!("viber: prune: {line}");
+    }
+}
+
 fn create(name: &str) -> Result<()> {
     let cwd = std::env::current_dir().context("reading the current directory")?;
     let world_path = scaffold::create_world_project(&cwd.join(name))?;
@@ -422,15 +448,40 @@ fn analyze(path: &Path, strict: bool) -> Result<()> {
     let summary = recipes::summarize(&world);
     println!("Viber world: {}", path.display());
     println!(
-        "  entities: {} (groups {}, primitives {}, point lights {}, directional lights {}, cameras {}, gltf scenes {})",
+        "  entities: {} (groups {}, compositions {}, primitives {}, point lights {}, directional lights {}, cameras {}, gltf scenes {})",
         summary.entities(),
         summary.groups,
+        summary.compositions,
         summary.primitives,
         summary.point_lights,
         summary.directional_lights,
         summary.cameras,
         summary.gltf_scenes
     );
+    if summary.compositions > 0 {
+        println!(
+            "  compositions: {} root(s), {} part(s) com colisor composto por primitiva",
+            summary.compositions, summary.composition_parts
+        );
+    }
+    if !world.prototypes.is_empty() || !world.prototype_instances.is_empty() {
+        let instances: usize = world.prototype_instances.values().sum();
+        let used: Vec<String> = world
+            .prototype_instances
+            .iter()
+            .map(|(id, count)| format!("{id}×{count}"))
+            .collect();
+        println!(
+            "  prototypes: {} definido(s), {} instância(s){}",
+            world.prototypes.len(),
+            instances,
+            if used.is_empty() {
+                String::new()
+            } else {
+                format!(" — {}", used.join(", "))
+            }
+        );
+    }
     println!(
         "  ambient light: {}",
         if summary.has_ambient {
@@ -498,9 +549,13 @@ fn analyze(path: &Path, strict: bool) -> Result<()> {
         );
     }
     // Auditoria de assets: ausentes, compressões/formatos não suportados,
-    // colliders ausentes em glTF — lê só cabeçalhos, sem engine.
-    let (world_dir, asset_root) = world_asset_dirs(path);
-    let report = audit::audit(&world, &world_dir, &asset_root);
+    // colliders ausentes em glTF — lê só cabeçalhos, sem engine. O config
+    // do jogo é obrigatório também aqui: o audit usa os MESMOS paths que o
+    // runtime vai usar.
+    let world_dir = world_base_dir(path).unwrap_or_else(|| PathBuf::from("."));
+    let config = viber::config::load(&world_dir)?;
+    let (world_dir, asset_roots) = world_asset_dirs(path, &config);
+    let report = audit::audit(&world, &world_dir, &asset_roots, &config);
     if report.references > 0 || !report.colliderless.is_empty() {
         println!(
             "  assets: {} referência(s) auditada(s), {} problema(s)",
@@ -532,11 +587,21 @@ fn analyze(path: &Path, strict: bool) -> Result<()> {
     for warning in &world.warnings {
         eprintln!("warning: {warning}");
     }
+    for id in &world.unknown_prototypes {
+        eprintln!("warning: <Use prototype=\"{id}\"> sem definição — instância ignorada");
+    }
     if strict && !world.skipped_tags.is_empty() {
         anyhow::bail!(
             "strict mode: {} not-implemented tags present ({} elements)",
             world.skipped_tags.len(),
             total_skipped(&world)
+        );
+    }
+    if strict && !world.unknown_prototypes.is_empty() {
+        anyhow::bail!(
+            "strict mode: {} <Use> com protótipo desconhecido: {}",
+            world.unknown_prototypes.len(),
+            world.unknown_prototypes.join(", ")
         );
     }
     if strict && report.missing_count() > 0 {
@@ -549,16 +614,15 @@ fn analyze(path: &Path, strict: bool) -> Result<()> {
     Ok(())
 }
 
-/// world_dir (scripts/estilos relativos) + asset root (a pasta que CONTÉM
-/// `assets/`) — a mesma resolução do `run`.
-fn world_asset_dirs(path: &Path) -> (PathBuf, PathBuf) {
+/// world_dir (scripts/estilos relativos) + asset roots por ordem de
+/// precedência (docs/ASSETS.md): a pasta do mundo SEMPRE primeiro (é lá que
+/// os shaders especializados são escritos e os overrides vivem), as roots
+/// extra do `config.yaml` do jogo a seguir. A engine não descobre nada por
+/// conta própria — quem serve o quê é declarado pelo jogo.
+fn world_asset_dirs(path: &Path, config: &viber::config::GameConfig) -> (PathBuf, Vec<PathBuf>) {
     let world_dir = world_base_dir(path).unwrap_or_else(|| PathBuf::from("."));
-    let asset_root = match world_base_dir(path) {
-        Some(dir) if dir.join("assets").is_dir() => dir,
-        Some(dir) if dir.join("public").is_dir() => dir.join("public"),
-        _ => PathBuf::from("assets"),
-    };
-    (world_dir, asset_root)
+    let roots = config.asset_roots(&world_dir);
+    (world_dir, roots)
 }
 
 fn total_skipped(world: &ParsedWorld) -> usize {
@@ -570,60 +634,82 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // depend on the CWD (bevy resolves relative asset roots against the exe).
     let path = &std::path::absolute(path)?;
     let world = load_world(path)?;
-    let title = format!(
-        "Viber — {}",
-        path.file_name().and_then(|n| n.to_str()).unwrap_or("world")
-    );
-    // Asset root: the folder that CONTAINS `assets/` — the world dir itself
-    // when it has one (mirrored assets), else its `public/`, else default.
-    // Calculada ANTES de escrever o shader — materiais custom resolvem
-    // "shaders/sky.wgsl" pela asset root, e escrever em world_dir/shaders
-    // com layout public/ deixava o domo do céu inteiro sem renderizar.
-    let world_dir = world_base_dir(path).unwrap_or_else(|| PathBuf::from("."));
-    let asset_root = match world_base_dir(path) {
-        Some(dir) if dir.join("assets").is_dir() => dir,
-        Some(dir) if dir.join("public").is_dir() => dir.join("public"),
-        // Fallback relativo: o Bevy resolve raiz de assets RELATIVA contra o
-        // exe (target/debug/assets) — o write dos shaders e o leitor de assets
-        // têm de ver o mesmo sítio; absolutizar contra o CWD.
-        _ => std::path::absolute("assets")?,
-    };
+    // O config.yaml do jogo é OBRIGATÓRIO e lido antes de tudo: é dele que
+    // vêm as asset roots e os diretórios (docs/ASSETS.md).
+    let world_dir_pre = world_base_dir(path).unwrap_or_else(|| PathBuf::from("."));
+    let config = viber::config::load(&world_dir_pre)?;
+    let title = config.title.clone().unwrap_or_else(|| {
+        format!(
+            "Viber — {}",
+            path.file_name().and_then(|n| n.to_str()).unwrap_or("world")
+        )
+    });
+    // Asset roots por ordem de precedência: a pasta do mundo primeiro, as
+    // roots extra do config a seguir (`VIBER_ASSET_POOL` continua a ganhar
+    // para debug/CI). Calculadas ANTES de escrever o shader: materiais
+    // custom resolvem o shader especializado pela 1.ª root, e o `run`
+    // escreve-o sempre nela — as roots extra nunca são escritas.
+    let (world_dir, asset_roots) = world_asset_dirs(path, &config);
+    let asset_root = asset_roots[0].clone();
     // O shader do céu é ESPECIALIZADO por mundo: a config do <Sky>/<DayCycle>/
     // <Weather> é injectada como consts WGSL (o uniform de material custom no
     // Bevy 0.19 nunca re-uploads — ver sky.rs). O mesmo para a água (relógio
     // do glint + vento das ondas) e para o blend de camadas do terreno
     // (world span dos splats) — este último só se algum <Terrain> pedir
-    // `layers`; mundos sem camadas nem tocam no ficheiro.
+    // `layers`; mundos sem camadas nem tocam no ficheiro. O diretório é
+    // SEMPRE `shaders/` da 1.ª root: os `Material::fragment_shader()` são fns
+    // ESTÁTICAS que lêem `shaders/{sky,water,terrain_chunk}.wgsl` contra as
+    // roots — a escrita e a leitura têm de casar (contrato de conteúdo,
+    // docs/ASSETS.md).
     let sky_config = sky::SkyConfig::from_world(&world.entities);
+    // VIBER_SKY_MODEL sobrepõe o attr `<Sky model>` (A/B sem editar XML).
+    let sky_config = match std::env::var("VIBER_SKY_MODEL").ok().as_deref() {
+        Some(v) if v.eq_ignore_ascii_case("nishita") => sky::SkyConfig {
+            model: sky::SkyModel::Nishita,
+            ..sky_config
+        },
+        Some(v) if v.eq_ignore_ascii_case("analytic") => sky::SkyConfig {
+            model: sky::SkyModel::Analytic,
+            ..sky_config
+        },
+        _ => sky_config,
+    };
     let water_config = terrain::water_material::WaterSurfaceConfig::from_world(&world.entities);
     let layers_config = terrain::layer_material::TerrainChunkConfig::from_world(&world.entities);
     let shaders_dir = asset_root.join("shaders");
     let _ = std::fs::create_dir_all(&shaders_dir);
-    if let Err(e) = std::fs::write(
-        shaders_dir.join("sky.wgsl"),
-        sky_config.render_world_shader(),
-    ) {
-        eprintln!("viber: falha ao escrever shaders/sky.wgsl: {e}");
-    }
-    if let Err(e) = std::fs::write(
-        shaders_dir.join("water.wgsl"),
-        water_config.render_world_shader(),
-    ) {
-        eprintln!("viber: falha ao escrever shaders/water.wgsl: {e}");
+    for (name, contents) in [
+        ("sky.wgsl", sky_config.render_world_shader()),
+        ("water.wgsl", water_config.render_world_shader()),
+    ] {
+        if let Err(e) = std::fs::write(shaders_dir.join(name), contents) {
+            eprintln!("viber: falha ao escrever {}/{name}: {e}", shaders_dir.display());
+        }
     }
     if let Some(layers_config) = &layers_config {
         if let Err(e) = std::fs::write(
             shaders_dir.join("terrain_chunk.wgsl"),
             layers_config.render_world_shader(),
         ) {
-            eprintln!("viber: falha ao escrever shaders/terrain_chunk.wgsl: {e}");
+            eprintln!(
+                "viber: falha ao escrever {}/terrain_chunk.wgsl: {e}",
+                shaders_dir.display()
+            );
         }
     }
     let mut app = bevy::app::App::new();
     // Registered before `AssetPlugin`, which snapshots the sources when it
-    // builds. The reader expands `EXT_meshopt_compression` so the engine can
-    // read the shared asset pool's compressed GLBs as authored.
-    meshopt::register_asset_source(&mut app, asset_root.clone());
+    // builds. The reader is multi-root (world → extras do config) and expands
+    // `EXT_meshopt_compression`, so the engine reads compressed GLBs as
+    // authored — no per-example mirror.
+    meshopt::register_asset_source(&mut app, asset_roots.clone());
+    // O config viaja COMO RESOURCE: ambient (sfx_dir), save (dir), terreno
+    // (textures_dir) e o spawn (bgm_dir) leem-no de lá.
+    app.insert_resource(config.clone());
+    app.insert_resource(save::SaveDir(Some(config.save_dir().to_path_buf())));
+    // O modelo do céu também viaja como resource — o IBL pinta o cubemap com
+    // a MESMA radiância que o domo desenha (analítico ou nishita).
+    app.insert_resource(sky::SkyModelState::from_config(&sky_config));
     let mut plugins = bevy::DefaultPlugins
         .set(bevy::window::WindowPlugin {
             primary_window: Some(bevy::window::Window {
@@ -694,6 +780,12 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // `worldsys::sun_drive` aims the directional light from it; nothing was
     // creating it, so that system failed parameter validation.
     app.init_resource::<worldsys::SunState>();
+    // Sombras de qualidade (passe visual r1): mapas 4096 (dir) / 1536 (pontos)
+    // — os defaults (2048/1024) deixavam as sombras das árvores granuladas
+    // mesmo ao pé do herói. Custo de VRAM/fill aceito; KTX2 já devolveu a
+    // margem (docs/PERFORMANCE.md).
+    app.insert_resource(bevy::light::DirectionalLightShadowMap { size: 4096 });
+    app.insert_resource(bevy::light::PointLightShadowMap { size: 1536 });
     // `hud_menu_system` corre sempre (main loop), mas o `HudMenuState` só
     // nascia dentro de `build_menu` — mundos sem `TabbedModal` (o HUD é agora
     // declarativo) panicas na validação do `ResMut` todos os frames.
@@ -719,6 +811,9 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // Pós-processamento (exposição/bloom/SSAO) na câmara do mundo; os
     // `pp-*` das `<BiomeRegion>` conduzem-no. `VIBER_NO_POSTFX=1` desliga.
     app.add_plugins(postfx::PostFxPlugin);
+    // IBL vivo do céu (LightProbe + cubemap da paleta da atmosfera, filtrado
+    // na GPU) — ambiente/reflexos que seguem a hora do dia. `VIBER_NO_IBL=1`.
+    app.add_plugins(viber::ibl::SkyIblPlugin);
     app.add_plugins(terrain::TerrainPlugin);
     app.add_plugins(terrain::runtime::TerrainFeaturesPlugin);
     // Sub-bosque instanciado (a relva que o `<Vegetation>` não consegue ser):
@@ -730,9 +825,9 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // `WorldTiledTextures` é consumido aqui; escrever o sampler noutro
     // sistema reabria a corrida clamp/REPEAT das texturas de chão).
     app.add_plugins(textures::TexturesPlugin);
-    // Fase 2: Luau — scripts de `world_dir/scripts/` com `on_update(dt)`.
+    // Fase 2: Luau — scripts do `scripts_dir` do config, com `on_update(dt)`.
     app.add_plugins(luau::LuauScriptPlugin {
-        scripts_dir: world_dir.join("scripts"),
+        scripts_dir: config.scripts_dir_on(&world_dir),
     });
     app.add_plugins(combat::CombatPlugin);
     // Vitals juice (passe de juice r1): deteção robusta de level-up (qualquer
@@ -905,6 +1000,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
                 .after(skills::abilities_system),
             sky::sky_follow_camera,
             worldsys::seat_statics_once,
+            worldsys::resolve_pending_place,
             hud::hud_toggle,
             timed(Group::Fx, particles::particle_emitter_update),
             timed(Group::Spawner, spawner::instantiate_spawn_groups),
@@ -927,6 +1023,7 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
             release: _,
             no_cargo,
         } => {
+            run_target_housekeeping(debug);
             let world = resolve_world_path(path)?;
             // `--bridge` sem valor escolhe porta livre ANTES da delegação —
             // a porta impressa no arranque tem de ser a que a engine usa de
@@ -944,6 +1041,17 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
             run(&world, bridge)
                 .map(|_| std::process::ExitCode::SUCCESS)
                 .with_context(|| format!("running {}", world.display()))
+        }
+        Command::Prune { debug } => {
+            let cwd = std::env::current_dir().context("reading the current directory")?;
+            let root = viber_checkout_root(&cwd)
+                .context("not inside a Viber checkout — no target/ to prune")?;
+            let report = prune::housekeeping(&root, debug);
+            match report.describe() {
+                Some(line) => println!("viber: prune: {line}"),
+                None => println!("viber: prune: nothing to clean"),
+            }
+            Ok(std::process::ExitCode::SUCCESS)
         }
         Command::Analyze { path, strict } => resolve_world_path(path).and_then(|world| {
             analyze(&world, strict)
@@ -1918,8 +2026,8 @@ mod tests {
     fn test_run_bridge_flag_shapes() {
         let none = Cli::try_parse_from(["viber", "run", "w.xml"]).expect("sem --bridge");
         let bare = Cli::try_parse_from(["viber", "run", "w.xml", "--bridge"]).expect("--bridge nu");
-        let fixed =
-            Cli::try_parse_from(["viber", "run", "w.xml", "--bridge", "15999"]).expect("--bridge N");
+        let fixed = Cli::try_parse_from(["viber", "run", "w.xml", "--bridge", "15999"])
+            .expect("--bridge N");
         match (none.command, bare.command, fixed.command) {
             (
                 Some(Command::Run { bridge: a, .. }),
@@ -1938,10 +2046,10 @@ mod tests {
     /// curta, a que os agentes escrevem naturalmente) e depois (na variante).
     #[test]
     fn test_debug_world_flag_positions() {
-        let before =
-            Cli::try_parse_from(["viber", "debug", "--world", "qa-pontes", "probe"]).expect("antes");
-        let after =
-            Cli::try_parse_from(["viber", "debug", "probe", "--world", "qa-pontes"]).expect("depois");
+        let before = Cli::try_parse_from(["viber", "debug", "--world", "qa-pontes", "probe"])
+            .expect("antes");
+        let after = Cli::try_parse_from(["viber", "debug", "probe", "--world", "qa-pontes"])
+            .expect("depois");
         match (before.command, after.command) {
             (
                 Some(Command::Debug {
@@ -1953,17 +2061,15 @@ mod tests {
                     command: sub2,
                 }),
             ) => {
-                assert_eq!(w1.as_deref(), Some(Path::new("qa-pontes")), "antes do subcomando");
+                assert_eq!(
+                    w1.as_deref(),
+                    Some(Path::new("qa-pontes")),
+                    "antes do subcomando"
+                );
                 assert_eq!(w2.as_deref(), None, "sem world no parent");
                 assert!(matches!(sub1, DebugCommand::Probe { .. }));
                 assert!(
-                    matches!(
-                        sub2,
-                        DebugCommand::Probe {
-                            world: Some(_),
-                            ..
-                        }
-                    ),
+                    matches!(sub2, DebugCommand::Probe { world: Some(_), .. }),
                     "depois do subcomando"
                 );
             }

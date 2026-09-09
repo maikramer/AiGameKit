@@ -742,17 +742,107 @@ impl AssetReader for MeshoptAssetReader {
     }
 }
 
-/// Registers the meshopt-aware reader over the default file source.
+/// Tries several file readers in order — the first root that has the asset
+/// wins.
+///
+/// This is the native port of VibeGame's `sharedAssets` plugin: the world's
+/// own tree serves first (per-game overrides), the shared pool fills in the
+/// rest, and no example keeps a copy of pool content on disk.
+struct MultiRootFileReader {
+    roots: Vec<Box<dyn ErasedAssetReader>>,
+}
+
+impl MultiRootFileReader {
+    fn new(roots: &[PathBuf]) -> Self {
+        Self {
+            roots: roots
+                .iter()
+                .map(|root| {
+                    Box::new(bevy::asset::io::file::FileAssetReader::new(root))
+                        as Box<dyn ErasedAssetReader>
+                })
+                .collect(),
+        }
+    }
+}
+
+impl AssetReader for MultiRootFileReader {
+    async fn read<'a>(&'a self, path: &'a Path) -> Result<impl Reader + 'a, AssetReaderError> {
+        let mut missing = AssetReaderError::NotFound(path.to_path_buf());
+        for reader in &self.roots {
+            match reader.read(path).await {
+                Ok(reader) => return Ok(reader),
+                // A root that simply does not have the file falls through to
+                // the next one; any other error (permissions, IO) is real and
+                // ends the search.
+                Err(AssetReaderError::NotFound(_)) => {}
+                Err(other) => missing = other,
+            }
+        }
+        Err(missing)
+    }
+
+    async fn read_meta<'a>(&'a self, path: &'a Path) -> Result<impl Reader + 'a, AssetReaderError> {
+        let mut missing = AssetReaderError::NotFound(path.to_path_buf());
+        for reader in &self.roots {
+            match reader.read_meta(path).await {
+                Ok(reader) => return Ok(reader),
+                Err(AssetReaderError::NotFound(_)) => {}
+                Err(other) => missing = other,
+            }
+        }
+        Err(missing)
+    }
+
+    fn read_directory<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> impl ConditionalSendFuture<Output = Result<Box<PathStream>, AssetReaderError>> {
+        async move {
+            let mut missing = AssetReaderError::NotFound(path.to_path_buf());
+            for reader in &self.roots {
+                match reader.read_directory(path).await {
+                    Ok(stream) => return Ok(stream),
+                    Err(AssetReaderError::NotFound(_)) => {}
+                    Err(other) => missing = other,
+                }
+            }
+            Err(missing)
+        }
+    }
+
+    fn is_directory<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> impl ConditionalSendFuture<Output = Result<bool, AssetReaderError>> {
+        async move {
+            let mut seen = false;
+            for reader in &self.roots {
+                match reader.is_directory(path).await {
+                    Ok(true) => return Ok(true),
+                    Ok(false) => seen = true,
+                    Err(AssetReaderError::NotFound(_)) => {}
+                    Err(other) => return Err(other),
+                }
+            }
+            Ok(seen)
+        }
+    }
+}
+
+/// Registers the meshopt-aware multi-root reader over the default file
+/// source. `asset_roots` is in precedence order (world root first, shared
+/// pool last — see [`discover_asset_pool`]).
 ///
 /// Must run **before** `AssetPlugin` is added, since the plugin snapshots the
 /// registered sources when it builds.
-pub fn register_asset_source(app: &mut App, asset_root: PathBuf) {
-    let root = asset_root.to_string_lossy().into_owned();
+pub fn register_asset_source(app: &mut App, asset_roots: Vec<PathBuf>) {
     app.register_asset_source(
         AssetSourceId::Default,
         AssetSourceBuilder::new(move || {
-            let file = bevy::asset::io::file::FileAssetReader::new(root.clone());
-            Box::new(MeshoptAssetReader::new(Box::new(file))) as Box<dyn ErasedAssetReader>
+            Box::new(MeshoptAssetReader::new(Box::new(MultiRootFileReader::new(
+                &asset_roots,
+            )))) as Box<dyn ErasedAssetReader>
         }),
     );
 }
@@ -773,22 +863,21 @@ pub fn load_gltf(server: &AssetServer, path: String) -> Handle<bevy::gltf::Gltf>
         .load(path)
 }
 
-/// The shared asset pool, wherever it currently lives.
+/// The shared asset pool of THIS checkout — repo/test helper only.
 ///
-/// It has moved between the VibeGame and Viber example trees, so both are
-/// tried and the tests skip cleanly when neither is checked out.
+/// A engine NÃO descobre o pool por conta própria: cada jogo declara as suas
+/// asset roots no `config.yaml` (docs/ASSETS.md) e `VIBER_ASSET_POOL`
+/// continua a existir como override de debug/CI em
+/// `config::GameConfig::asset_roots`. Este helper serve aos TESTES (guarda
+/// `tests/asset_pool_dedup.rs`, decodes de GLBs reais), para quem a
+/// localização do pool é um facto do checkout e não do jogo.
 pub fn shared_asset_pool() -> Option<std::path::PathBuf> {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    [
-        root.join("examples/shared-assets/public"),
-        root.join("../Viber/examples/shared-assets/public"),
-        root.join("../VibeGame/examples/shared-assets/public"),
-    ]
-    .into_iter()
+    let candidate =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/shared-assets/public");
     // "Pool presente" = tem `assets/meshes`: num checkout sem os binários
     // (GLBs não versionados) a raiz existe mas os testes têm de saltar
     // limpo em vez de panicar no scan.
-    .find(|candidate| candidate.join("assets/meshes").is_dir())
+    (candidate.join("assets/meshes").is_dir()).then_some(candidate)
 }
 
 #[cfg(test)]
@@ -1145,6 +1234,35 @@ mod tests {
             "{}: the reader returned still-compressed bytes",
             relative.display()
         );
+    }
+
+    /// Multi-root (docs/ASSETS.md): a root do mundo serve primeiro (override
+    /// local), o pool preenche o que faltar, e o que nenhuma tem é NotFound.
+    #[test]
+    fn test_multi_root_reader_falls_through_to_the_pool() {
+        let world = tempfile::tempdir().expect("tmpdir");
+        let pool = tempfile::tempdir().expect("tmpdir");
+        std::fs::write(world.path().join("local.txt"), b"local").unwrap();
+        std::fs::write(pool.path().join("pooled.txt"), b"pool").unwrap();
+
+        let reader = MeshoptAssetReader::new(Box::new(MultiRootFileReader::new(&[
+            world.path().to_path_buf(),
+            pool.path().to_path_buf(),
+        ])));
+        let read = |file: &str| {
+            bevy::tasks::block_on(async {
+                let mut r = AssetReader::read(&reader, Path::new(file)).await?;
+                let mut out = Vec::new();
+                r.read_to_end(&mut out).await?;
+                Ok::<_, AssetReaderError>(out)
+            })
+        };
+        assert_eq!(read("local.txt").unwrap(), b"local".to_vec());
+        assert_eq!(read("pooled.txt").unwrap(), b"pool".to_vec());
+        assert!(matches!(
+            read("fantasma.txt"),
+            Err(AssetReaderError::NotFound(_))
+        ));
     }
 
     /// First compressed GLB under `dir`, as a path relative to `root`.

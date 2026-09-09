@@ -263,6 +263,14 @@ impl PendingWorldSystems {
 #[derive(Debug, Component)]
 pub struct SeatOnTerrain;
 
+/// Marcador de "assenta como UNIDADE": em cima de [`SeatOnTerrain`], força o
+/// seating pelo centro do conteúdo MESMO quando o span passa o limiar
+/// [`SEAT_CENTER_MAX_EXTENT_M`] — é o contrato das `<Composition>` (um
+/// objeto inteiro nunca é partido em partes para assentar; uma caixa de
+/// 240 m continua a subir em bloco).
+#[derive(Debug, Component)]
+pub struct SeatAsUnit;
+
 /// One-shot: seat authored groups on the carved terrain surface.
 ///
 /// Only the OUTERMOST seatable group of each subtree is seated as a whole
@@ -300,6 +308,7 @@ pub fn seat_statics_once(
     mut transforms: Query<(Entity, &mut Transform)>,
     parents: Query<(Entity, &ChildOf)>,
     seated: Query<(), With<SeatOnTerrain>>,
+    unit: Query<(), With<SeatAsUnit>>,
 ) {
     if *done {
         return;
@@ -319,7 +328,14 @@ pub fn seat_statics_once(
         .filter(|e| seated.contains(*e) && !has_seated_ancestor(*e, &parents, &seated))
         .collect();
     for root in roots {
-        seat_group(root, &runtime, &children_of, &seated, &mut transforms);
+        seat_group(
+            root,
+            &runtime,
+            &children_of,
+            &seated,
+            &unit,
+            &mut transforms,
+        );
     }
     *done = true;
 }
@@ -338,6 +354,7 @@ fn seat_group(
     runtime: &crate::terrain::runtime::TerrainRuntime,
     children_of: &std::collections::HashMap<Entity, Vec<Entity>>,
     seated: &Query<(), With<SeatOnTerrain>>,
+    unit: &Query<(), With<SeatAsUnit>>,
     transforms: &mut Query<(Entity, &mut Transform)>,
 ) {
     let Ok((_, group_transform)) = transforms.get(entity) else {
@@ -370,7 +387,7 @@ fn seat_group(
         max = max.max(*xz);
     }
     let extent = (max.x - min.x).max(max.y - min.y);
-    if extent <= SEAT_CENTER_MAX_EXTENT_M {
+    if extent <= SEAT_CENTER_MAX_EXTENT_M || unit.contains(entity) {
         // Conteúdo co-localizado: senta pelo CENTRO do AABB do conteúdo.
         let center = (min + max) * 0.5;
         seat_at(
@@ -386,7 +403,7 @@ fn seat_group(
     // filho fica à cota do seu próprio sítio.
     for (kid, xz) in kid_xz {
         if seated.contains(kid) {
-            seat_group(kid, runtime, children_of, seated, transforms);
+            seat_group(kid, runtime, children_of, seated, unit, transforms);
         } else {
             seat_at(
                 kid,
@@ -452,6 +469,105 @@ fn has_seated_ancestor(
         current = parent.parent();
     }
     false
+}
+
+/// `<Composition place="at: x z; …">` — colocação EXPLÍCITA no terreno,
+/// resolvida uma única vez quando o terreno existe (o mesmo gatilho do
+/// seating). Diferenças para [`SeatOnTerrain`]:
+///
+/// - o ponto de amostragem é `at` (mundo), não o centro do conteúdo;
+/// - a cota é definida exatamente (sobe E desce), não apenas para cima;
+/// - `align-to-terrain` orienta o +Y do objeto à normal do terreno
+///   (yaw autoral preservado) — cadeiras numa ladeira assentam na ladeira.
+#[derive(Debug, Clone, Component)]
+pub struct PendingPlace {
+    /// Ponto de amostragem em XZ mundo.
+    pub at: Vec2,
+    /// Orientar o objeto à normal do terreno.
+    pub align_to_terrain: bool,
+    /// Somado em Y após a amostragem.
+    pub base_y_offset: f32,
+}
+
+/// One-shot: resolve todos os [`PendingPlace`] quando o terreno existe.
+///
+/// O XZ do objeto é REESCRITO para `at` (a composição vai PARA onde o autor
+/// pediu — semântica do `place` do VibeGame), compensando a translation do
+/// pai para o caso aninhado. Só altera a pose uma vez; depois o componente
+/// sai da entidade.
+#[allow(clippy::type_complexity)]
+pub fn resolve_pending_place(
+    mut done: Local<bool>,
+    runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
+    mut pending: Query<(Entity, &mut Transform, &PendingPlace, Option<&ChildOf>)>,
+    globals: Query<&GlobalTransform>,
+    mut commands: Commands,
+) {
+    if *done {
+        return;
+    }
+    let Some(runtime) = runtime else {
+        return;
+    };
+    for (entity, mut transform, place, parent) in &mut pending {
+        // XZ do PAI em mundo: um `<Use>`/composition aninhado num grupo com
+        // translation mantém o offset — `at` é sempre XZ MUNDO.
+        let parent_xz = parent
+            .and_then(|p| globals.get(p.parent()).ok())
+            .map(|g| Vec2::new(g.translation().x, g.translation().z))
+            .unwrap_or(Vec2::ZERO);
+        let local_xz = place.at - parent_xz;
+        let authored_y = transform.translation.y;
+        let ground = place_ground_y(&runtime, place.at.x, place.at.y, authored_y);
+        transform.translation.x = local_xz.x;
+        transform.translation.z = local_xz.y;
+        transform.translation.y = ground + place.base_y_offset;
+        if place.align_to_terrain {
+            let normal = terrain_normal(&runtime, place.at.x, place.at.y);
+            transform.rotation = align_up_to(normal, transform.rotation);
+        }
+        commands.entity(entity).remove::<PendingPlace>();
+    }
+    *done = true;
+}
+
+/// Cota do solo para colocação explícita: o topo do span em que o objeto
+/// está (mesma regra do `seat_at` — um `place` sob um saliente não teleporta
+/// para cima do teto), caindo para o primeiro span.
+fn place_ground_y(
+    runtime: &crate::terrain::runtime::TerrainRuntime,
+    x: f32,
+    z: f32,
+    authored_y: f32,
+) -> f32 {
+    let spans = runtime.column(x, z);
+    spans
+        .iter()
+        .rev()
+        .map(|span| span.top)
+        .find(|&top| top <= authored_y + 0.25)
+        .or_else(|| spans.first().map(|span| span.top))
+        .unwrap_or(authored_y)
+}
+
+/// Normal do terreno por diferenças finitas do sampler de alturas.
+fn terrain_normal(runtime: &crate::terrain::runtime::TerrainRuntime, x: f32, z: f32) -> Vec3 {
+    const EPS: f32 = 0.5;
+    let hl = runtime.sample(x - EPS, z);
+    let hr = runtime.sample(x + EPS, z);
+    let hd = runtime.sample(x, z - EPS);
+    let hu = runtime.sample(x, z + EPS);
+    Vec3::new(hl - hr, 2.0 * EPS, hd - hu).normalize_or(Vec3::Y)
+}
+
+/// Quaternion que orienta +Y à normal do terreno, preservando o heading
+/// autoral (a rotação de inclinação aplica-se ANTES — em mundo).
+pub fn align_up_to(normal: Vec3, authored: Quat) -> Quat {
+    let n = normal.normalize_or(Vec3::Y);
+    if (n - Vec3::Y).length_squared() < 1e-6 {
+        return authored;
+    }
+    Quat::from_rotation_arc(Vec3::Y, n) * authored
 }
 
 /// Iluminância da luz direcional à noite, como fração da que o mundo
@@ -1482,5 +1598,73 @@ mod tests {
             travel.y < -0.5,
             "moonlight travels downwards onto the ground, got {travel:?}"
         );
+    }
+}
+
+/// Helpers puros do `place` de `<Composition>`: cota do solo e alinhamento
+/// à normal.
+#[cfg(test)]
+mod place_tests {
+    use super::*;
+
+    #[test]
+    fn test_align_up_to_identity_when_normal_is_up() {
+        let authored = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
+        assert_eq!(align_up_to(Vec3::Y, authored), authored);
+    }
+
+    #[test]
+    fn test_align_up_to_tilts_preserving_yaw() {
+        // Normal a 45° no plano XZ+Y (ladeira suave).
+        let normal = Vec3::new(0.0, 1.0, 1.0).normalize();
+        let yaw = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
+        let aligned = align_up_to(normal, yaw);
+        // O +Y local do resultado aponta na direção da normal.
+        let up = aligned * Vec3::Y;
+        assert!((up - normal).length() < 1e-4, "up={up:?} normal={normal:?}");
+        // O heading (projeção XZ do forward) continua a apontar para o yaw
+        // autoral — a inclinação não roda o objeto à volta de Y.
+        let forward_world = aligned * Vec3::NEG_Z;
+        let forward_yaw = yaw * Vec3::NEG_Z;
+        let angle = |v: Vec3| v.z.atan2(v.x);
+        let d = (angle(forward_world) - angle(forward_yaw)).rem_euclid(std::f32::consts::TAU);
+        assert!(
+            d < 0.2 || d > std::f32::consts::TAU - 0.2,
+            "yaw preservado: {d} rad de desvio"
+        );
+    }
+
+    #[test]
+    fn test_place_ground_y_uses_flat_fixture() {
+        use crate::terrain::brush::BrushGrid;
+        use crate::terrain::heightmap::HeightMapU16;
+        use crate::terrain::runtime::TerrainRuntime;
+        use crate::terrain::spec::TerrainSpec;
+        use std::sync::Arc;
+
+        let spec = TerrainSpec {
+            world_size: 64.0,
+            max_height: 100.0,
+            ..TerrainSpec::default()
+        };
+        let map = HeightMapU16 {
+            width: 33,
+            depth: 33,
+            data: vec![u16::MAX / 2; 33 * 33],
+        };
+        let grid = BrushGrid::from_height_map(&map, spec.world_size, spec.max_height, 0.0)
+            .expect("grid builds");
+        let runtime = TerrainRuntime {
+            spec,
+            grid: Arc::new(grid),
+            water: Vec::new(),
+            roads: Vec::new(),
+            pads: Vec::new(),
+            voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
+        };
+        let ground = runtime.sample(0.0, 0.0);
+        // `place` define a cota EXATA (sobe e desce), ao contrário do seating.
+        assert_eq!(place_ground_y(&runtime, 0.0, 0.0, 0.0), ground);
+        assert_eq!(place_ground_y(&runtime, 0.0, 0.0, 80.0), ground);
     }
 }

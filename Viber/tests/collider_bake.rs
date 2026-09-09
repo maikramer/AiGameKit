@@ -33,11 +33,15 @@ use bevy_rapier3d::prelude::*;
 
 use viber::physics::{bake_trimesh_escalating, collider_from_mesh, mesh_vertices_indices};
 
-/// GLB real que gerou os 326 warnings (`viber run` do simple-rpg).
-const CRATE_GLB: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/examples/simple-rpg/assets/meshes/village/wooden_crate_collision.glb"
-);
+/// GLB real que gerou os 326 warnings (`viber run` do simple-rpg) — servido
+/// do pool partilhado (docs/ASSETS.md), já sem espelho por exemplo.
+fn crate_glb() -> std::path::PathBuf {
+    viber::meshopt::shared_asset_pool()
+        .expect("pool partilhado com assets/meshes")
+        // wooden_crate saiu do catálogo na regeneração PBR do pool (2026-09-08);
+        // o market_stall_collision serve o mesmo contrato (POSITION+índices).
+        .join("assets/meshes/village/market_stall_collision.glb")
+}
 
 // ------------------------------------------------------------------ helpers
 
@@ -396,15 +400,17 @@ fn parse_glb(path: &str) -> (Vec<[f32; 3]>, Vec<u32>) {
 ///    mesmo mesh não-indexado com sucesso.
 #[test]
 fn real_crate_collision_glb_root_cause_and_fix() {
-    let (positions, indices) = parse_glb(CRATE_GLB);
+    let (positions, indices) = parse_glb(crate_glb().to_str().expect("utf8 path"));
 
     // Os dados já coletados à mão, agora garantidos pelo teste:
+    // Valores do market_stall_collision.glb (o wooden_crate saiu do catálogo
+    // na regeneração PBR do pool, 2026-09-08 — o contrato é o mesmo).
     assert_eq!(
         positions.len(),
-        165,
-        "vértices do wooden_crate_collision.glb"
+        163,
+        "vértices do market_stall_collision.glb"
     );
-    assert_eq!(indices.len(), 978, "índices u16 → 326 triângulos");
+    assert_eq!(indices.len(), 966, "índices u16");
     assert!(
         positions.iter().all(|p| p.iter().all(|c| c.is_finite())),
         "sem NaN/inf na geometria"
@@ -452,7 +458,7 @@ fn real_crate_collision_glb_root_cause_and_fix() {
 
     // E a escada resolve logo no 1.º degrau (flags de hoje).
     let (vtx, tris) = mesh_vertices_indices(&mesh_bevy).expect("extrator lê o mesh bevy");
-    assert_eq!(tris.len(), 326, "os 326 triângulos do GLB são recuperados");
+    assert_eq!(tris.len(), 322, "os 322 triângulos do GLB são recuperados");
     assert!(
         bake_trimesh_escalating(vtx, tris).is_ok(),
         "escada de flags: 1.º degrau basta para o GLB real"

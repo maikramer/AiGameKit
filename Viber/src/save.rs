@@ -13,7 +13,7 @@
 //! ficheiro, como os serializers por módulo do VibeGame.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -35,31 +35,47 @@ use crate::vitals::{Health, Xp};
 #[derive(Debug, Clone, Resource, Default)]
 pub struct WorldBaseDir(pub Option<std::path::PathBuf>);
 
+/// Diretório de saves do `config.yaml` do jogo (`save.dir`); `None` = o
+/// histórico `~/.local/share/viber` (apps mínimas de teste).
+#[derive(Debug, Clone, Resource, Default)]
+pub struct SaveDir(pub Option<PathBuf>);
+
 /// Nome do ficheiro de save fallback (quando o mundo é desconhecido).
 pub const SAVE_FILENAME: &str = "simple-rpg.save.json";
 
-/// Caminho do save: `~/.local/share/viber/<nome>` via [`dirs::home_dir`]
-/// (semântica `$HOME` exata — NÃO `XDG_DATA_HOME`, os saves históricos
-/// vivem aí; fallback: cwd).
+/// Caminho do save: `save.dir` do config do jogo (fallback histórico
+/// `~/.local/share/viber` via [`dirs::home_dir`] — semântica `$HOME` exata,
+/// NÃO `XDG_DATA_HOME`, os saves históricos vivem aí; último fallback: cwd).
 pub fn save_path() -> PathBuf {
-    save_path_for(None)
+    save_path_for(None, None)
 }
 
 /// Caminho do save prefixado pelo mundo (`base_dir` = pasta do world.xml):
 /// gravar no mundo A e carregar no B nunca mais restaura o estado errado.
 /// Sem base_dir conhecida, cai no nome global histórico.
-pub fn save_path_for(base_dir: Option<&std::path::Path>) -> PathBuf {
+pub fn save_path_for(base_dir: Option<&std::path::Path>, save_dir: Option<&Path>) -> PathBuf {
     let name = base_dir
         .and_then(|dir| dir.file_name())
         .map(|world| format!("{}.save.json", world.to_string_lossy()))
         .unwrap_or_else(|| SAVE_FILENAME.to_string());
-    dirs::home_dir()
-        .map(|home| {
-            let dir = home.join(".local/share/viber");
+    let dir = match save_dir.map(Path::to_path_buf) {
+        Some(dir) => {
             let _ = std::fs::create_dir_all(&dir);
-            dir.join(&name)
-        })
-        .unwrap_or_else(|| PathBuf::from(name))
+            dir
+        }
+        None => dirs::home_dir()
+            .map(|home| {
+                let dir = home.join(".local/share/viber");
+                let _ = std::fs::create_dir_all(&dir);
+                dir
+            })
+            .unwrap_or_default(),
+    };
+    if dir.as_os_str().is_empty() {
+        PathBuf::from(name)
+    } else {
+        dir.join(name)
+    }
 }
 
 // ── estrutura do save ───────────────────────────────────────────────────
@@ -266,7 +282,8 @@ fn options_system(
     mut tree: ResMut<SkillTree>,
     mut stats: ResMut<PlayerStatsResource>,
     mut progress: ResMut<LevelProgress>,
-    terrain_base: Option<Res<WorldBaseDir>>,
+    // Um único param (tuplo) — o sistema já usa os 16 slots do Bevy.
+    world_and_save: (Option<Res<WorldBaseDir>>, Option<Res<SaveDir>>),
     mut heroes: Query<
         (
             &mut Health,
@@ -319,7 +336,8 @@ fn options_system(
             }
         }
     }
-    let base_dir = terrain_base.as_deref().and_then(|w| w.0.as_deref());
+    let base_dir = world_and_save.0.as_deref().and_then(|w| w.0.as_deref());
+    let save_dir = world_and_save.1.as_deref().and_then(|d| d.0.as_deref());
     if (on_system_tab && keys.just_pressed(KeyCode::KeyJ)) || save_requested {
         // Sem herói (ausente/Disabled) não há estado real para gravar — cair
         // nos defaults ((100,100),(0,100), origem) SOBRESCREVIA um save bom.
@@ -347,7 +365,10 @@ fn options_system(
                 position,
                 (mixer.master, mixer.music, mixer.sfx),
             );
-            if let Err(e) = save_to_disk(&save_path_for(base_dir), &game) {
+            if let Err(e) = save_to_disk(
+                    &save_path_for(base_dir, save_dir),
+                    &game,
+                ) {
                 toasts.write(ScriptToast(format!("Falha ao gravar: {e}")));
                 sfx.write(crate::ambient::SfxEvent {
                     clip: crate::ambient::SfxClip::Error,
@@ -369,7 +390,7 @@ fn options_system(
         }
     }
     if (on_system_tab && keys.just_pressed(KeyCode::KeyL)) || load_requested {
-        match load_from_disk(&save_path_for(base_dir)) {
+        match load_from_disk(&save_path_for(base_dir, save_dir)) {
             Ok(game) => {
                 // Stats PRÉVIO capturado ANTES de apply_save o substituir —
                 // o delta tem de ser sessão→save; capturar depois (quando

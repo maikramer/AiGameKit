@@ -19,9 +19,123 @@ use viber::xml;
 
 use std::path::Path;
 
-/// Parses and carves a world exactly like `terrain::runtime::bootstrap` does,
-/// then builds the voxel field from its caves.
+/// The full guard set the bootstrap arms the scatter with.
+fn full_guards<'a>(
+    result: &'a viber::terrain::features::FeatureResult,
+    cliff_mask: &'a viber::terrain::cliffs::CliffMask,
+    taken: &'a [viber::terrain::voxel::TakenDisc],
+) -> viber::terrain::voxel::ScatterGuards<'a> {
+    viber::terrain::voxel::ScatterGuards {
+        water: &result.water,
+        roads: &result.roads,
+        cliffs: Some(cliff_mask),
+        pads: &result.pads,
+        taken,
+    }
+}
+
+/// Parses and carves a world exactly like `terrain::runtime::bootstrap` does
+/// — carve, cliff bands, authored features, then the scatter with the FULL
+/// guard set — and builds the voxel field.
 fn carve(world_file: &str) -> (BrushGrid, VoxelField, viber::terrain::spec::TerrainSpec) {
+    let (grid, features, spec, result, cliff_mask, cliff_bands, taken) =
+        bootstrap_to_scatter(world_file);
+    let mut mods: Vec<Box<dyn VoxelMod>> = Vec::new();
+    for (i, band) in cliff_bands.iter().enumerate() {
+        mods.extend(band.clone().into_mods(&format!("cliff:{i}")));
+    }
+    for cave in &features.caves {
+        mods.extend(cave.build(&grid));
+    }
+    for arch in &features.arches {
+        mods.extend(arch.build(&grid));
+    }
+    for bridge in &features.bridges {
+        mods.extend(bridge.build(&grid));
+    }
+    for field in &features.rock_fields {
+        let got = field.resolve(&grid, &full_guards(&result, &cliff_mask, &taken));
+        for c in &got.caves {
+            mods.extend(c.build(&grid));
+        }
+        for a in &got.arches {
+            mods.extend(a.build(&grid));
+        }
+        for b in &got.bridges {
+            mods.extend(b.build(&grid));
+        }
+    }
+    let field = VoxelField::new(mods, spec.world_size, spec.chunk_size);
+    (grid, field, spec)
+}
+
+/// The discs an authored cave claims — the tunnel line plus its rooms.
+fn claim_cave(cave: &viber::terrain::voxel::CaveSpec, out: &mut Vec<viber::terrain::voxel::TakenDisc>) {
+    let r = cave.radius.iter().copied().fold(0.0_f32, f32::max).max(2.0);
+    for p in viber::terrain::paths::resample(&cave.path, 8.0) {
+        out.push(viber::terrain::voxel::TakenDisc { at: p, radius: r });
+    }
+    for chamber in &cave.chambers {
+        out.push(viber::terrain::voxel::TakenDisc {
+            at: chamber.at,
+            radius: chamber.radius,
+        });
+    }
+    for shaft in &cave.shafts {
+        out.push(viber::terrain::voxel::TakenDisc {
+            at: shaft.at,
+            radius: shaft.radius,
+        });
+    }
+}
+
+/// The discs an authored bridge claims — the deck, half width included.
+fn claim_bridge(
+    bridge: &viber::terrain::voxel::BridgeSpec,
+    out: &mut Vec<viber::terrain::voxel::TakenDisc>,
+) {
+    for p in viber::terrain::paths::resample(&bridge.path, 8.0) {
+        out.push(viber::terrain::voxel::TakenDisc {
+            at: p,
+            radius: bridge.width * 0.5,
+        });
+    }
+}
+
+/// The discs an authored arch claims — the whole band, leg to leg.
+fn claim_arch(
+    arch: &viber::terrain::voxel::ArchSpec,
+    out: &mut Vec<viber::terrain::voxel::TakenDisc>,
+) {
+    let span = arch
+        .span
+        .unwrap_or(viber::terrain::voxel::arch::DEFAULT_ARCH_SPAN);
+    let r = arch.thickness + span * 0.5;
+    let pts: Vec<bevy::math::Vec2> = if arch.path.is_empty() {
+        vec![arch.at]
+    } else {
+        arch.path.clone()
+    };
+    for p in viber::terrain::paths::resample(&pts, 8.0) {
+        out.push(viber::terrain::voxel::TakenDisc { at: p, radius: r });
+    }
+}
+
+/// Everything the bootstrap builds up to the scatter: the carved grid, the
+/// feature registries, the cliff bands + mask and the discs claimed by
+/// authored features. The field builder (`carve`) and the scatter tests share
+/// this, so a test never seeds with weaker guards than the engine does.
+fn bootstrap_to_scatter(
+    world_file: &str,
+) -> (
+    BrushGrid,
+    viber::terrain::features::TerrainFeatures,
+    viber::terrain::spec::TerrainSpec,
+    viber::terrain::features::FeatureResult,
+    viber::terrain::cliffs::CliffMask,
+    Vec<viber::terrain::voxel::CliffBand>,
+    Vec<viber::terrain::voxel::TakenDisc>,
+) {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("worlds")
         .join(world_file);
@@ -30,6 +144,7 @@ fn carve(world_file: &str) -> (BrushGrid, VoxelField, viber::terrain::spec::Terr
     let mut pending = viber::recipes::spawn::PendingTerrain::default();
     viber::recipes::spawn::collect_terrain(&world.entities, &mut pending);
     let spec = pending.terrain.clone().expect("world has a <Terrain>");
+    let features = pending.features.clone();
 
     let map = HeightMapU16::procedural(&spec, spec.resolution.max(1) as usize);
     let mut grid = BrushGrid::from_height_map(
@@ -39,80 +154,51 @@ fn carve(world_file: &str) -> (BrushGrid, VoxelField, viber::terrain::spec::Terr
         spec.height_smoothing,
     )
     .expect("grid builds");
-    apply_features(&mut grid, &pending.features);
+    let result = apply_features(&mut grid, &pending.features);
 
-    // Same order as the bootstrap: cliff bands resolve against the CARVED
-    // grid, then caves, then arches.
+    // Same order as the bootstrap: bands resolve against the CARVED grid,
+    // before the mask, and the authored bands join the public query layer.
     let texel = grid.texel();
-    let cliff_bands: Vec<viber::terrain::voxel::CliffBand> = pending
-        .features
+    let cliff_bands: Vec<viber::terrain::voxel::CliffBand> = features
         .cliffs
         .iter()
         .filter_map(|cliff| viber::terrain::voxel::CliffBand::build(cliff, &grid, texel))
         .collect();
-    let mut mods: Vec<Box<dyn VoxelMod>> = Vec::new();
-    for (i, band) in cliff_bands.iter().enumerate() {
-        mods.extend(band.clone().into_mods(&format!("cliff:{i}")));
+    let mut cliff_mask = viber::terrain::cliffs::CliffMask::build_with(
+        &grid,
+        spec.cliff_angle,
+        spec.cliff_min_area,
+        spec.cliff_min_drop,
+        spec.cliff_min_extent,
+    );
+    cliff_mask.add_authored_bands(&cliff_bands);
+    let mut taken: Vec<viber::terrain::voxel::TakenDisc> = Vec::new();
+    for cave in &features.caves {
+        claim_cave(cave, &mut taken);
     }
-    for cave in &pending.features.caves {
-        mods.extend(cave.build(&grid));
+    for bridge in &features.bridges {
+        claim_bridge(bridge, &mut taken);
     }
-    for arch in &pending.features.arches {
-        mods.extend(arch.build(&grid));
+    for arch in &features.arches {
+        claim_arch(arch, &mut taken);
     }
-    for bridge in &pending.features.bridges {
-        mods.extend(bridge.build(&grid));
-    }
-    // `<RockFeatures>` resolves against the carved grid and then builds like
-    // anything authored — same order the bootstrap uses.
-    for seeded in seed_rocks(&grid, &pending.features) {
-        mods.extend(seeded);
-    }
-    let field = VoxelField::new(mods, spec.world_size, spec.chunk_size);
-    (grid, field, spec)
+    (
+        grid, features, spec, result, cliff_mask, cliff_bands, taken,
+    )
 }
 
-/// Resolves every `<RockFeatures>` field the way the bootstrap does, and
-/// returns the mods each seeded feature builds.
-fn seed_rocks(
-    grid: &BrushGrid,
-    features: &viber::terrain::features::TerrainFeatures,
-) -> Vec<Vec<Box<dyn VoxelMod>>> {
-    let guards = viber::terrain::voxel::ScatterGuards::default();
-    let mut out = Vec::new();
-    for field in &features.rock_fields {
-        let got = field.resolve(grid, &guards);
-        for c in &got.caves {
-            out.push(c.build(grid));
-        }
-        for a in &got.arches {
-            out.push(a.build(grid));
-        }
-        for b in &got.bridges {
-            out.push(b.build(grid));
-        }
-    }
-    out
-}
-
-/// The seeded specs of the QA world's one `<RockFeatures>` field.
+/// The seeded specs of the QA world's one `<RockFeatures>` field, resolved
+/// with the full guard set.
 fn qa_scatter() -> (BrushGrid, viber::terrain::voxel::ScatterResult) {
-    let (grid, _field, _spec) = carve("qa-pontes.xml");
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("worlds")
-        .join("qa-pontes.xml");
-    let loaded = xml::include::load_world(&path).expect("world loads");
-    let world = recipes::parse_world(&loaded.root_attrs, &loaded.nodes).expect("world parses");
-    let mut pending = viber::recipes::spawn::PendingTerrain::default();
-    viber::recipes::spawn::collect_terrain(&world.entities, &mut pending);
-    let spec = pending
-        .features
+    let (grid, features, _spec, result, cliff_mask, _bands, taken) =
+        bootstrap_to_scatter("qa-pontes.xml");
+    let field = features
         .rock_fields
         .first()
         .expect("the QA world seeds rocks")
         .clone();
-    let got = spec.resolve(&grid, &viber::terrain::voxel::ScatterGuards::default());
-    (grid, got)
+    let seeded = field.resolve(&grid, &full_guards(&result, &cliff_mask, &taken));
+    (grid, seeded)
 }
 
 #[test]
@@ -903,16 +989,12 @@ fn test_the_viaduct_repeats_its_opening_along_the_path() {
 
 #[test]
 fn test_the_same_seed_seeds_the_same_rocks_twice() {
-    let (grid, first) = qa_scatter();
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("worlds")
-        .join("qa-pontes.xml");
-    let loaded = xml::include::load_world(&path).expect("world loads");
-    let world = recipes::parse_world(&loaded.root_attrs, &loaded.nodes).expect("world parses");
-    let mut pending = viber::recipes::spawn::PendingTerrain::default();
-    viber::recipes::spawn::collect_terrain(&world.entities, &mut pending);
-    let spec = pending.features.rock_fields[0].clone();
-    let second = spec.resolve(&grid, &viber::terrain::voxel::ScatterGuards::default());
+    let (grid, features, _spec, result, cliff_mask, _bands, taken) =
+        bootstrap_to_scatter("qa-pontes.xml");
+    let guards = full_guards(&result, &cliff_mask, &taken);
+    let spec = features.rock_fields[0].clone();
+    let first = spec.resolve(&grid, &guards);
+    let second = spec.resolve(&grid, &guards);
     assert!(!first.is_empty(), "the field seeded nothing at all");
     assert_eq!(
         first, second,
@@ -924,7 +1006,7 @@ fn test_the_same_seed_seeds_the_same_rocks_twice() {
         seed: spec.seed + 1,
         ..spec.clone()
     }
-    .resolve(&grid, &viber::terrain::voxel::ScatterGuards::default());
+    .resolve(&grid, &guards);
     assert_ne!(first, moved, "changing the seed changed nothing");
 }
 
@@ -995,6 +1077,7 @@ fn test_seeded_rocks_keep_out_of_the_water() {
     let guards = viber::terrain::voxel::ScatterGuards {
         water: &result.water,
         roads: &result.roads,
+        ..viber::terrain::voxel::ScatterGuards::default()
     };
     let got = over_the_river.resolve(&grid, &guards);
     assert!(!got.is_empty(), "nothing seeded — the test proves nothing");
@@ -1010,3 +1093,69 @@ fn test_seeded_rocks_keep_out_of_the_water() {
         );
     }
 }
+
+/// Builds the mask + claimed discs exactly like the bootstrap, then resolves
+/// the QA world's field with the FULL guard set and asserts every seeded
+/// cave is clean along its whole path.
+#[test]
+fn test_seeded_caves_stay_clear_of_every_feature_along_the_whole_path() {
+    let (grid, features, _spec, result, cliff_mask, _bands, taken) =
+        bootstrap_to_scatter("qa-pontes.xml");
+    let guards = full_guards(&result, &cliff_mask, &taken);
+
+    let field = features
+        .rock_fields
+        .first()
+        .expect("the QA world seeds rocks");
+    let (got, stats) = field.resolve_with_stats(&grid, &guards);
+    assert!(
+        !got.caves.is_empty(),
+        "no cave survived the guards — the test proves nothing (stats: {stats:?})"
+    );
+
+    let clear_of_roads = field.clear_of_roads.max(2.0);
+    for cave in &got.caves {
+        let stations = viber::terrain::paths::resample(&cave.path, 4.0);
+        assert!(
+            stations.len() >= 2,
+            "a seeded cave must have a real path, got {} station(s)",
+            stations.len()
+        );
+        let h0 = grid.sample(stations[0].x, stations[0].y);
+        for (i, s) in stations.iter().enumerate() {
+            assert!(
+                !result.water.iter().any(|w| w.contains(*s)),
+                "cave `{}` station {i} {s:?} is inside a water carve zone",
+                cave.name.as_deref().unwrap_or("?")
+            );
+            assert!(
+                result
+                    .roads
+                    .iter()
+                    .all(|r| r.distance_to_road(*s) >= clear_of_roads),
+                "cave `{}` station {i} {s:?} digs into a road corridor",
+                cave.name.as_deref().unwrap_or("?")
+            );
+            assert!(
+                h0 - grid.sample(s.x, s.y) <= 1.5,
+                "cave `{}` station {i} {s:?} dives {:.1} m below the mouth — \
+                 the tube would trench the valley floor",
+                cave.name.as_deref().unwrap_or("?"),
+                h0 - grid.sample(s.x, s.y)
+            );
+        }
+        // The hill must rise over the run: both mouths open on rising ground.
+        let high = stations
+            .iter()
+            .map(|s| grid.sample(s.x, s.y))
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            high - h0 >= cave.depth * 0.5,
+            "cave `{}` climbs only {:.1} m over its run — the mouth ramps would \
+             trench flat ground instead of opening in the slope",
+            cave.name.as_deref().unwrap_or("?"),
+            high - h0
+        );
+    }
+}
+

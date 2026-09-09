@@ -21,12 +21,26 @@ bevy = { version = "0.19", features = [
     "jpeg",
     "webp",
     "basis-universal",
+    # LUTs reais do bevy: DFG (split-sum do IBL por roughness) e bluenoise
+    # (SSAO/contact shadows/SSR). Sem estas features o bevy_pbr usa
+    # placeholders — DFG 1×1 e noise de reserva (bevy_pbr lib.rs:274-359).
+    # Estudo: docs/VISUAL_ROADMAP.md P0.1.
+    "dfg_lut",
+    "bluenoise_texture",
+    # PCSS (soft shadows físicos): soft_shadow_size nas luzes — ver spawn.rs.
+    # Experimental no 0.19, exigido explícito pelo bevy_pbr.
+    "experimental_pbr_pcss",
 ] }
 clap = { version = "4.6", features = ["derive"] }
+
 image = { version = "0.25", default-features = false, features = ["png"] }
 roxmltree = "0.20"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# config.yaml do jogo (src/config.rs) — o contrato de paths lido em runtime.
+# serde_yaml está "archived" (dtolnay) mas congelado-estável e é o parser de
+# referência; adoção registada em docs/CRATES.md.
+serde_yaml = "0.9"
 
 flate2 = "1"
 # `async-collider` gives `Collider::from_bevy_mesh` (trimesh/convex colliders
@@ -67,6 +81,13 @@ tempfile = "3"
 # tens. Optimizing *dependencies* only keeps `viber`'s own crate fast to
 # rebuild (the inner loop an agent actually pays for) while the engine,
 # the physics solver and the texture decoders run at full speed.
+
+[features]
+# PCSS (soft shadows físicos): re-export da feature do bevy para os
+# `#[cfg(feature = ...)]` do código da engine (spawn.rs).
+default = ["experimental_pbr_pcss"]
+experimental_pbr_pcss = ["bevy/experimental_pbr_pcss"]
+
 [profile.dev]
 opt-level = 1
 

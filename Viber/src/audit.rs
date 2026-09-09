@@ -72,32 +72,63 @@ struct AssetRef {
     context: String,
 }
 
-/// Audita o mundo: recolhe refs e verifica cada uma. `asset_root` é a pasta
-/// que CONTÉM `assets/` (igual ao runtime); `world_dir` resolve
-/// scripts/estilos relativos.
+/// Audita o mundo: recolhe refs e verifica cada uma. `asset_roots` está em
+/// ordem de precedência (docs/ASSETS.md): a pasta do mundo primeiro, as
+/// roots extra do config.yaml do jogo a seguir — [`resolve_asset`] decide;
+/// `world_dir` resolve scripts/estilos relativos; `config` fornece os dirs
+/// de áudio e texturas do jogo.
 /// Paths de áudio carregados por HARDCODE na engine: os clips do registry
 /// Lua (`luau::SFX_NAME_REGISTRY` — uma linha por variante, aliases caem no
-/// dedup) mais os loops de ambiente (`ambient::AMBIENT_LOOP_FILES`). O audit
-/// valida-os a todos porque nunca aparecem no XML — sem isto o `analyze`
-/// dizia "ok" com o jogo mudo (foi o caso dos loops de água).
-pub(crate) fn engine_audio_files() -> Vec<&'static str> {
-    let mut files: Vec<&'static str> = crate::luau::SFX_NAME_REGISTRY
+/// dedup) mais os loops de ambiente (`ambient::AMBIENT_LOOP_FILES`),
+/// resolvidos contra o `sfx_dir` do config. O audit valida-os a todos
+/// porque nunca aparecem no XML — sem isto o `analyze` dizia "ok" com o jogo
+/// mudo (foi o caso dos loops de água).
+pub(crate) fn engine_audio_files(config: &crate::config::GameConfig) -> Vec<String> {
+    let mut files: Vec<String> = crate::luau::SFX_NAME_REGISTRY
         .iter()
-        .map(|(_, clip)| clip.file())
+        .map(|(_, clip)| config.sfx_path(clip.file()))
         .collect();
-    files.extend(crate::ambient::AMBIENT_LOOP_FILES.iter().copied());
+    files.extend(
+        crate::ambient::AMBIENT_LOOP_FILES
+            .iter()
+            .map(|rel| config.sfx_path(rel)),
+    );
     files.sort_unstable();
     files.dedup();
     files
 }
 
-pub fn audit(world: &ParsedWorld, world_dir: &Path, asset_root: &Path) -> AuditReport {
+/// Resolve um caminho de asset contra as roots por ordem: a primeira que o
+/// tem ganha (override por-mundo → pool partilhado). Quando nenhuma o tem,
+/// devolve o join com a 1.ª root — a mensagem de "ausente" aponta ao sítio
+/// onde o autor esperava o ficheiro.
+fn resolve_asset(roots: &[PathBuf], rel: &str) -> PathBuf {
+    let rel = rel.trim_start_matches('/');
+    for root in roots {
+        let candidate = root.join(rel);
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+    roots
+        .first()
+        .map(|root| root.join(rel))
+        .unwrap_or_else(|| PathBuf::from(rel))
+}
+
+pub fn audit(
+    world: &ParsedWorld,
+    world_dir: &Path,
+    asset_roots: &[PathBuf],
+    config: &crate::config::GameConfig,
+) -> AuditReport {
     let mut report = AuditReport::default();
     let mut refs: Vec<AssetRef> = Vec::new();
     collect_entities(
         &world.entities,
         world_dir,
-        asset_root,
+        asset_roots,
+        config,
         false,
         &mut refs,
         &mut report,
@@ -109,11 +140,11 @@ pub fn audit(world: &ParsedWorld, world_dir: &Path, asset_root: &Path) -> AuditR
     report.issues.extend(audit_feature_conflicts(&features));
 
     // SFX carregados por path HARDCODED na engine — ver
-    // [`engine_audio_files`].
-    for file in engine_audio_files() {
+    // [`engine_audio_files`]. Os paths vêm do `sfx_dir` do config do jogo.
+    for file in engine_audio_files(config) {
         refs.push(AssetRef {
             kind: RefKind::Audio,
-            path: asset_root.join(file.trim_start_matches('/')),
+            path: resolve_asset(asset_roots, &file),
             context: "sfx engine".to_string(),
         });
     }
@@ -189,7 +220,8 @@ pub fn audit(world: &ParsedWorld, world_dir: &Path, asset_root: &Path) -> AuditR
 fn collect_entities(
     entities: &[EntitySpec],
     world_dir: &Path,
-    asset_root: &Path,
+    asset_roots: &[PathBuf],
+    config: &crate::config::GameConfig,
     inherited_collider: bool,
     refs: &mut Vec<AssetRef>,
     report: &mut AuditReport,
@@ -218,7 +250,7 @@ fn collect_entities(
                 }
                 refs.push(AssetRef {
                     kind: RefKind::Glb,
-                    path: asset_root.join(url.trim_start_matches('/')),
+                    path: resolve_asset(asset_roots, url),
                     context: format!("<{url}> {label}"),
                 });
             }
@@ -226,7 +258,7 @@ fn collect_entities(
                 if let Some(texture) = &material.texture {
                     refs.push(AssetRef {
                         kind: RefKind::Texture,
-                        path: asset_root.join(texture.trim_start_matches('/')),
+                        path: resolve_asset(asset_roots, texture),
                         context: format!("<texture=\"{texture}\"> {label}"),
                     });
                 }
@@ -235,14 +267,14 @@ fn collect_entities(
                 if let Some(heightmap) = &spec.heightmap {
                     refs.push(AssetRef {
                         kind: RefKind::Heightmap,
-                        path: asset_root.join(heightmap.trim_start_matches('/')),
+                        path: resolve_asset(asset_roots, heightmap),
                         context: format!("<heightmap=\"{heightmap}\">"),
                     });
                 }
                 if let Some(texture) = &spec.texture {
                     refs.push(AssetRef {
                         kind: RefKind::Texture,
-                        path: asset_root.join(texture.trim_start_matches('/')),
+                        path: resolve_asset(asset_roots, texture),
                         context: format!("<terrain texture=\"{texture}\">"),
                     });
                 }
@@ -253,27 +285,28 @@ fn collect_entities(
                         continue;
                     }
                     // Alias do pool (`grass`) ou caminho cru de textura — a
-                    // mesma resolução do bootstrap (`splat::pool_albedo`).
-                    let path =
-                        crate::terrain::splat::pool_albedo(layer).unwrap_or_else(|| layer.clone());
+                    // mesma resolução do bootstrap (config.terrain_albedo).
+                    let path = config
+                        .terrain_albedo(layer)
+                        .unwrap_or_else(|| layer.clone());
                     refs.push(AssetRef {
                         kind: RefKind::Texture,
-                        path: asset_root.join(path.trim_start_matches('/')),
+                        path: resolve_asset(asset_roots, &path),
                         context: format!("<terrain layers=\"…{layer}…\">"),
                     });
                 }
             }
             EntityKind::Road { spec } => {
-                push_ribbon_texture(asset_root, &spec.texture, &label, refs)
+                push_ribbon_texture(asset_roots, &spec.texture, &label, refs)
             }
             EntityKind::RoadNetwork { spec } => {
-                push_ribbon_texture(asset_root, &spec.texture, &label, refs)
+                push_ribbon_texture(asset_roots, &spec.texture, &label, refs)
             }
             EntityKind::GroundDecal { spec } => {
                 if let Some(texture) = &spec.texture {
                     refs.push(AssetRef {
                         kind: RefKind::Texture,
-                        path: asset_root.join(texture.trim_start_matches('/')),
+                        path: resolve_asset(asset_roots, texture),
                         context: format!("<decal texture=\"{texture}\"> {label}"),
                     });
                 }
@@ -282,14 +315,15 @@ fn collect_entities(
                 for mesh in &spec.meshes {
                     refs.push(AssetRef {
                         kind: RefKind::Glb,
-                        path: asset_root.join(mesh.trim_start_matches('/')),
+                        path: resolve_asset(asset_roots, mesh),
                         context: format!("<vegetation mesh=\"{mesh}\"> {label}"),
                     });
                 }
             }
             EntityKind::MusicLayer { layer, .. } => {
-                // Convenção do runtime (spawn.rs): assets/audio/bgm/{layer}.ogg.
-                let path = asset_root.join(format!("assets/audio/bgm/{layer}.ogg"));
+                // Convenção do runtime (spawn.rs): {bgm_dir}/{layer}.ogg,
+                // com o dir do config do jogo.
+                let path = resolve_asset(asset_roots, &config.bgm_path(layer));
                 refs.push(AssetRef {
                     kind: RefKind::Audio,
                     path,
@@ -297,7 +331,9 @@ fn collect_entities(
                 });
             }
             EntityKind::UiStyle { source } => {
-                // O parser antecede '@' ao `src` (`@ui/hud.css`).
+                // O parser antecede '@' ao `src` (`@ui/hud.css`); o caminho
+                // é relativo à pasta do jogo (o prefixo `ui/` é do autor —
+                // contrato do XML, não um dir do config).
                 let file = source.trim_start_matches('@');
                 refs.push(AssetRef {
                     kind: RefKind::Stylesheet,
@@ -310,7 +346,8 @@ fn collect_entities(
         collect_entities(
             &entity.children,
             world_dir,
-            asset_root,
+            asset_roots,
+            config,
             collider_covered,
             refs,
             report,
@@ -507,37 +544,52 @@ fn audit_road_line(
 
     for (name, lake) in &idx.lakes {
         let shape = LakeShape::new(lake.at);
-        // Quanto o traçado penetra o contorno orgânico REAL (não o disco
-        // nominal): `r(θ) − |p − at|`, máximo das amostras.
+        // Quanto o traçado (com a MEIA-LARGURA do ribbon) penetra o contorno
+        // orgânico REAL: `r(θ) − (|p − at| − half)`. Testar só a linha
+        // central deixava passar trilhos cuja BORDA ficava dentro de água —
+        // o decal mergulhava na bacia abaixo do plano sem nada no relatório
+        // (caso real: o trilho NE da Lagoa Grande do simple-rpg, eixo a
+        // 30.0 m do centro com o contorno real a ~29 m naquele rumo).
+        let half = width * 0.5;
         let mut depth_in = 0.0_f32;
+        let mut worst = path[0];
         for p in &samples {
             let d = p.distance(lake.at);
             let delta = *p - lake.at;
             let theta = delta.y.atan2(delta.x);
-            depth_in = depth_in.max(shape.contour(lake.radius, theta) - d);
+            let inside = shape.contour(lake.radius, theta) - (d - half);
+            if inside > depth_in {
+                depth_in = inside;
+                worst = *p;
+            }
         }
         if depth_in <= 0.0 {
             continue;
         }
         if is_bridge {
-            let worst = lake.radius * CONTOUR_PEAK;
-            let tips_inside = path.iter().any(|tip| tip.distance(lake.at) < worst);
+            let reach = lake.radius * CONTOUR_PEAK;
+            let tips_inside = path.iter().any(|tip| tip.distance(lake.at) < reach);
             if tips_inside {
                 issues.push(AuditIssue {
                     severity: Severity::Warning,
                     message: format!(
                         "ponte \"{label}\": pontas dentro do alcance do contorno orgânico do lago \
-                         \"{name}\" (lâmina até r={worst:.0} m, ±{}%) — a água pode cobrir \
+                         \"{name}\" (lâmina até r={reach:.0} m, ±{}%) — a água pode cobrir \
                          pontas/deck; afaste as pontas",
                         (CONTOUR_PEAK - 1.0) * 100.0,
                     ),
                 });
             } else {
                 issues.push(AuditIssue {
-                    severity: Severity::Info,
+                    severity: Severity::Warning,
                     message: format!(
-                        "ponte \"{label}\" cruza o lago \"{name}\" — o deck é ribbon plana; \
-                         garanta pontas fora da lâmina (worst-case r={worst:.0} m)",
+                        "ponte \"{label}\" cruza o lago \"{name}\" perto de ({:.0}, {:.0}) — o \
+                         deck é ribbon plana SEM collider no terreno voxel: o herói não tem por \
+                         onde atravessar; usa uma <Bridge> volumétrica no vão e garante pontas \
+                         fora da lâmina (worst-case r={:.0} m)",
+                        worst.x,
+                        worst.y,
+                        reach,
                     ),
                 });
             }
@@ -545,9 +597,11 @@ fn audit_road_line(
             issues.push(AuditIssue {
                 severity: Severity::Warning,
                 message: format!(
-                    "estrada \"{label}\" entra na lâmina do lago \"{name}\" (até \
-                     {depth_in:.1} m para dentro; contorno orgânico ±{}%) — o piso fica \
-                     submerso",
+                    "estrada \"{label}\" entra na lâmina do lago \"{name}\" perto de \
+                     ({:.0}, {:.0}) (até {depth_in:.1} m para dentro, contando a meia-largura \
+                     do ribbon; contorno orgânico ±{}%) — o piso fica submerso",
+                    worst.x,
+                    worst.y,
                     (CONTOUR_PEAK - 1.0) * 100.0,
                 ),
             });
@@ -559,13 +613,21 @@ fn audit_road_line(
             continue;
         }
         let half = river.width * 0.5;
+        // A borda do ribbon conta: uma estrada cuja margem entra na lâmina
+        // rasga o piso na água mesmo com o eixo seco.
+        let road_half = width * 0.5;
         let mut dmin = f32::INFINITY;
+        let mut worst = path[0];
         for p in &samples {
             if let Some(hit) = nearest_on_path(&river.path, *p) {
-                dmin = dmin.min(p.distance(hit.point));
+                let d = p.distance(hit.point);
+                if d < dmin {
+                    dmin = d;
+                    worst = *p;
+                }
             }
         }
-        if dmin >= half {
+        if dmin >= half + road_half {
             continue;
         }
         if is_bridge {
@@ -585,10 +647,12 @@ fn audit_road_line(
             });
             if tips_clear {
                 issues.push(AuditIssue {
-                    severity: Severity::Info,
+                    severity: Severity::Warning,
                     message: format!(
-                        "ponte \"{label}\" cruza o rio \"{name}\" (lâmina ±{half:.0} m) — o \
-                         deck é ribbon plana; confirme a altura no runtime",
+                        "ponte \"{label}\" cruza o rio \"{name}\" perto de ({:.0}, {:.0}) — o \
+                         deck é ribbon plana SEM collider no terreno voxel: o herói não tem \
+                         por onde atravessar; usa uma <Bridge> volumétrica no vão",
+                        worst.x, worst.y,
                     ),
                 });
             } else {
@@ -604,8 +668,10 @@ fn audit_road_line(
             issues.push(AuditIssue {
                 severity: Severity::Warning,
                 message: format!(
-                    "estrada \"{label}\" cruza a lâmina do rio \"{name}\" (±{half:.0} m) — o \
-                     piso fica submerso",
+                    "estrada \"{label}\" cruza a lâmina do rio \"{name}\" perto de ({:.0}, \
+                     {:.0}) (eixo a {dmin:.1} m do centro; lâmina ±{half:.0} m + meia-largura \
+                     do ribbon) — o piso fica submerso",
+                    worst.x, worst.y,
                 ),
             });
         }
@@ -635,7 +701,7 @@ fn audit_road_line(
 }
 
 fn push_ribbon_texture(
-    asset_root: &Path,
+    asset_roots: &[PathBuf],
     texture: &Option<String>,
     label: &str,
     refs: &mut Vec<AssetRef>,
@@ -643,7 +709,7 @@ fn push_ribbon_texture(
     if let Some(texture) = texture {
         refs.push(AssetRef {
             kind: RefKind::Texture,
-            path: asset_root.join(texture.trim_start_matches('/')),
+            path: resolve_asset(asset_roots, texture),
             context: format!("<ribbon texture=\"{texture}\"> {label}"),
         });
     }
@@ -686,17 +752,17 @@ fn audit_glb(path: &Path, context: &str, issues: &mut Vec<AuditIssue>) {
     let Ok(json) = std::str::from_utf8(&bytes[20..end]) else {
         return;
     };
-    // Draco/Basis: a engine não lê — falha o load com warn em runtime.
-    for (extension, hint) in [
-        (
-            "KHR_draco_mesh_compression",
-            "a engine (Bevy 0.19) não lê Draco",
-        ),
-        (
-            "KHR_texture_basisu",
-            "a engine (Bevy 0.19) não lê Basis/KTX2",
-        ),
-    ] {
+    // Draco: a engine não lê — falha o load com warn em runtime.
+    // `KHR_texture_basisu` NÃO está na lista: a engine lê KTX2 tal-como-
+    // autorado (o `MeshoptAssetReader` passa-o e o Bevy transcode UASTC —
+    // `meshopt::load_gltf` desliga a validação exactamente por isso). A
+    // regra antiga só não disparava porque o extinto espelho vinha
+    // decomprimido; servindo o pool direto ela virava falso positivo em
+    // massa.
+    for (extension, hint) in [(
+        "KHR_draco_mesh_compression",
+        "a engine (Bevy 0.19) não lê Draco",
+    )] {
         if json.contains(extension) {
             issues.push(AuditIssue {
                 severity: Severity::Warning,
@@ -908,7 +974,7 @@ mod tests {
         std::fs::create_dir_all(asset_root.join("scripts")).unwrap();
         // O fixture cria-os vazios: o que se testa aqui é a recolha de refs
         // e o reporte dos assets do MUNDO, não a existência dos clips.
-        for rel in engine_audio_files() {
+        for rel in engine_audio_files(&crate::config::fixture()) {
             let path = asset_root.join(rel.trim_start_matches('/'));
             std::fs::create_dir_all(path.parent().expect("parent")).unwrap();
             std::fs::File::create(&path).unwrap();
@@ -929,9 +995,10 @@ mod tests {
             )],
             ..Default::default()
         };
-        let report = audit(&world, &world_dir, &asset_root);
+        let config = crate::config::fixture();
+        let report = audit(&world, &world_dir, &[asset_root.clone()], &config);
         // 1 ref do mundo + os SFX da engine (fixture cria-os, nenhum falha).
-        assert_eq!(report.references, 1 + engine_audio_files().len());
+        assert_eq!(report.references, 1 + engine_audio_files(&config).len());
         assert_eq!(report.missing_count(), 1);
         assert!(
             report.issues[0].message.contains("ausente")
@@ -964,7 +1031,8 @@ mod tests {
             ],
             ..Default::default()
         };
-        let report = audit(&world, &world_dir, &asset_root);
+        let config = crate::config::fixture();
+        let report = audit(&world, &world_dir, &[asset_root.clone()], &config);
         assert_eq!(
             report.colliderless,
             vec!["/assets/meshes/b.glb".to_string()]
@@ -1001,7 +1069,8 @@ mod tests {
             ],
             ..Default::default()
         };
-        let report = audit(&world, &world_dir, &asset_root);
+        let config = crate::config::fixture();
+        let report = audit(&world, &world_dir, &[asset_root.clone()], &config);
         assert_eq!(report.missing_count(), 0);
         assert_eq!(report.issues.len(), 1, "só o Draco: {:?}", report.issues);
         assert!(report.issues[0].message.contains("Draco"));
@@ -1063,7 +1132,8 @@ mod tests {
         world
             .entities
             .push(with_texture("d", "/assets/textures/ok.png", "z"));
-        let report = audit(&world, &world_dir, &asset_root);
+        let config = crate::config::fixture();
+        let report = audit(&world, &world_dir, &[asset_root.clone()], &config);
         assert_eq!(report.missing_count(), 0);
         assert_eq!(report.issues.len(), 3, "{:?}", report.issues);
         assert!(
@@ -1133,7 +1203,8 @@ mod tests {
             ],
             ..Default::default()
         };
-        let report = audit(&world, &world_dir, &asset_root);
+        let config = crate::config::fixture();
+        let report = audit(&world, &world_dir, &[asset_root.clone()], &config);
         // Ausentes: lobo.glb (não criado), fantasma.glb, bgm/inexistente.ogg.
         assert_eq!(report.missing_count(), 3, "{:?}", report.issues);
         // Script existente não gera issue; audio ok não gera.
@@ -1149,6 +1220,72 @@ mod tests {
         let path = dir.path().join(name);
         std::fs::write(&path, bytes).expect("escrever fixture");
         path
+    }
+
+    #[test]
+    fn test_pool_fallback_root_resolves_and_override_wins() {
+        // Contrato multi-root (docs/ASSETS.md): a 1.ª root serve primeiro
+        // (override por-mundo), o pool preenche o que faltar, e o "ausente"
+        // aponta à 1.ª root quando ninguém tem o ficheiro.
+        let dir = tempfile::tempdir().expect("tmpdir");
+        let world_dir = dir.path().join("mundo");
+        let pool = dir.path().join("pool");
+        std::fs::create_dir_all(world_dir.join("assets/meshes")).unwrap();
+        std::fs::create_dir_all(pool.join("assets/meshes")).unwrap();
+        // Só no pool → resolvido pelo fallback.
+        std::fs::write(
+            pool.join("assets/meshes/do_pool.glb"),
+            glb_bytes(None),
+        )
+        .unwrap();
+        // Nas DUAS (override local ganha; basta existir para não faltar).
+        std::fs::write(world_dir.join("assets/meshes/override.glb"), glb_bytes(None)).unwrap();
+        std::fs::write(pool.join("assets/meshes/override.glb"), glb_bytes(None)).unwrap();
+        // Os SFX da engine são auditados por HARDCODE (nunca aparecem no
+        // XML) — fixture no POOL prova que o fallback também os resolve.
+        for rel in engine_audio_files(&crate::config::fixture()) {
+            let path = pool.join(rel.trim_start_matches('/'));
+            std::fs::create_dir_all(path.parent().expect("parent")).unwrap();
+            std::fs::File::create(&path).unwrap();
+        }
+        let world = ParsedWorld {
+            entities: vec![
+                entity(
+                    "a",
+                    EntityKind::GltfScene {
+                        url: "/assets/meshes/do_pool.glb".into(),
+                    },
+                    ColliderShape::Auto,
+                ),
+                entity(
+                    "b",
+                    EntityKind::GltfScene {
+                        url: "/assets/meshes/override.glb".into(),
+                    },
+                    ColliderShape::Auto,
+                ),
+                entity(
+                    "c",
+                    EntityKind::GltfScene {
+                        url: "/assets/meshes/fantasma.glb".into(),
+                    },
+                    ColliderShape::Auto,
+                ),
+            ],
+            ..Default::default()
+        };
+        let roots = vec![world_dir.clone(), pool.clone()];
+        let config = crate::config::fixture();
+        let report = audit(&world, &world_dir, &roots, &config);
+        // Só fantasma falta — e a mensagem aponta à root do MUNDO.
+        assert_eq!(report.missing_count(), 1, "{:?}", report.issues);
+        assert!(
+            report.issues[0]
+                .message
+                .contains(&world_dir.join("assets/meshes/fantasma.glb").display().to_string()),
+            "{:?}",
+            report.issues
+        );
     }
 
     /// Cabeçalho KTX2 mínimo (12 magia + 32 campos + scheme @44 = 48 bytes).
@@ -1296,7 +1433,9 @@ mod tests {
         assert_eq!(warns.len(), 1, "{issues:?}");
         assert!(warns[0].message.contains("afaste as pontas"), "{issues:?}");
 
-        // Pontas a 15 m (> worst-case 14.5) mas o vão cruza a lâmina → só Info.
+        // Pontas a 15 m (> worst-case 14.5) mas o vão cruza a lâmina →
+        // Warning: o deck é ribbon plana sem collider — travessia quebrada
+        // no terreno voxel, mesmo com as pontas secas.
         let idx = feature_index(
             r#"<world>
               <Lake at="0 0" radius="10" depth="2" />
@@ -1309,10 +1448,17 @@ mod tests {
         );
         let issues = audit_feature_conflicts(&idx);
         assert!(
-            issues.iter().all(|i| i.severity == Severity::Info),
+            issues.iter().all(|i| i.severity == Severity::Warning),
             "{issues:?}"
         );
-        assert!(issues.iter().any(|i| i.message.contains("cruza o lago")));
+        let cruza = issues
+            .iter()
+            .find(|i| i.message.contains("cruza o lago"))
+            .expect("mensagem de travessia");
+        assert!(cruza.message.contains("<Bridge>"), "{issues:?}");
+        // O ponto reportado é o de maior penetração (meio do vão), não as
+        // pontas — o passo de amostragem (2 m desde o vértice) pega (-1, 0).
+        assert!(cruza.message.contains("(-1, 0)"), "{issues:?}");
     }
 
     #[test]
@@ -1331,7 +1477,8 @@ mod tests {
         assert_eq!(hits.len(), 1, "{issues:?}");
         assert_eq!(hits[0].severity, Severity::Warning);
 
-        // Ponte com pontas claras (20 ≥ 5+2+2) → Info; pontas curtas → Warning.
+        // Ponte com pontas claras (20 ≥ 5+2+2) → Warning (deck sem collider);
+        // pontas curtas → Warning (água cobre as pontas).
         let idx = feature_index(
             r#"<world>
               <River path="-50 0 50 0" width="10" bank-width="2" />
@@ -1344,7 +1491,13 @@ mod tests {
         );
         let issues = audit_feature_conflicts(&idx);
         assert!(
-            issues.iter().all(|i| i.severity == Severity::Info),
+            issues.iter().all(|i| i.severity == Severity::Warning),
+            "{issues:?}"
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.message.contains("<Bridge> volumétrica")),
             "{issues:?}"
         );
 

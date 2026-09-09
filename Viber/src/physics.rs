@@ -53,9 +53,17 @@ pub enum ColliderShape {
     #[default]
     None,
     /// Box derived from the entity's own rendered bounds (`collider="auto"`).
+    /// On a primitive (incl. as parte de uma `<Composition>`) resolve no
+    /// spawn para um colisor EXATO derivado da forma — sem espera de malha.
     Auto,
     /// Explicit box, full size in meters, with an optional local offset.
     Box { size: Vec3, offset: Vec3 },
+    /// Explicit sphere (exact ball collider — `shape: sphere; radius: …`).
+    Sphere { radius: f32 },
+    /// Explicit cylinder (Y axis — `shape: cylinder; radius: …; half-height: …`).
+    Cylinder { radius: f32, half_height: f32 },
+    /// Explicit capsule (Y axis — `shape: capsule; radius: …; half-height: …`).
+    Capsule { radius: f32, half_height: f32 },
     /// Exact triangle mesh from a dedicated collision glTF.
     Mesh { url: String, anchor: MeshAnchor },
     /// Convex hull baked from a render mesh — the cheap stand-in used for
@@ -167,6 +175,42 @@ pub fn parse_collider(value: &str) -> (ColliderShape, Option<String>) {
                 Some(format!("collider `{trimmed}`: trimesh without `mesh-url`")),
             ),
         },
+        "sphere" | "ball" => {
+            let radius = get("radius")
+                .and_then(|r| r.parse::<f32>().ok())
+                .unwrap_or(0.5);
+            (ColliderShape::Sphere { radius }, None)
+        }
+        "cylinder" => {
+            let radius = get("radius")
+                .and_then(|r| r.parse::<f32>().ok())
+                .unwrap_or(0.5);
+            let half_height = get("half-height")
+                .and_then(|h| h.parse::<f32>().ok())
+                .unwrap_or(0.5);
+            (
+                ColliderShape::Cylinder {
+                    radius,
+                    half_height,
+                },
+                None,
+            )
+        }
+        "capsule" => {
+            let radius = get("radius")
+                .and_then(|r| r.parse::<f32>().ok())
+                .unwrap_or(0.5);
+            let half_height = get("half-height")
+                .and_then(|h| h.parse::<f32>().ok())
+                .unwrap_or(0.5);
+            (
+                ColliderShape::Capsule {
+                    radius,
+                    half_height,
+                },
+                None,
+            )
+        }
         "precompute" | "convex" => match get("mesh-url") {
             Some(url) => (ColliderShape::Precompute { url }, None),
             None => (
@@ -325,18 +369,71 @@ pub fn body_bundle(
     Some((body, GravityScale(gravity_scale.unwrap_or(1.0))))
 }
 
-/// Builds the collider for a shape that needs no asset, i.e. an explicit box.
-/// Deferred shapes return `None` and are handled by the resolver.
+/// Builds the collider for a shape that needs no asset (explicit box,
+/// sphere, cylinder, capsule). Deferred shapes return `None` and are handled
+/// by the resolver.
 pub fn immediate_collider(shape: &ColliderShape) -> Option<(Collider, Transform)> {
-    match shape {
-        ColliderShape::Box { size, offset } => {
+    let collider = match shape {
+        ColliderShape::Box { size, offset: _ } => {
             let half = (*size * 0.5).max(Vec3::splat(1e-3));
-            Some((
-                Collider::cuboid(half.x, half.y, half.z),
-                Transform::from_translation(*offset),
-            ))
+            Collider::cuboid(half.x, half.y, half.z)
         }
-        _ => None,
+        ColliderShape::Sphere { radius } => Collider::ball(radius.max(1e-3)),
+        ColliderShape::Cylinder {
+            radius,
+            half_height,
+        } => Collider::cylinder(half_height.max(1e-3), radius.max(1e-3)),
+        ColliderShape::Capsule {
+            radius,
+            half_height,
+        } => Collider::capsule_y(half_height.max(1e-3), radius.max(1e-3)),
+        _ => return None,
+    };
+    // Só a caixa tem offset autoral; as restantes assentam no próprio transform.
+    let offset = match shape {
+        ColliderShape::Box { offset, .. } => *offset,
+        _ => Vec3::ZERO,
+    };
+    Some((collider, Transform::from_translation(offset)))
+}
+
+/// Colisor EXATO para a forma de uma primitiva (partes de uma
+/// `<Composition>`, ou qualquer primitiva com `collider="auto"`) — derivado
+/// da geometria, multiplicado pelo scale da parte, sem PendingCollider.
+///
+/// Aproximações assumidas (baratas e visuais-mente corretas): esfera com
+/// scale não-uniforme usa o maior eixo (elipsoide → ball); cilindro/cápsula
+/// usam o maior eixo horizontal para o raio (elipse → círculo).
+pub fn collider_for_shape(shape: &crate::recipes::Shape, scale: Vec3) -> Collider {
+    match shape {
+        crate::recipes::Shape::Cuboid { half_size } => Collider::cuboid(
+            (half_size[0] * scale.x).max(1e-3),
+            (half_size[1] * scale.y).max(1e-3),
+            (half_size[2] * scale.z).max(1e-3),
+        ),
+        crate::recipes::Shape::Sphere { radius } => {
+            Collider::ball((radius * scale.max_element()).max(1e-3))
+        }
+        crate::recipes::Shape::Cylinder {
+            half_height,
+            radius,
+        } => Collider::cylinder(
+            (half_height * scale.y).max(1e-3),
+            (radius * scale.x.max(scale.z)).max(1e-3),
+        ),
+        crate::recipes::Shape::Capsule {
+            radius,
+            half_height,
+        } => Collider::capsule_y(
+            (half_height * scale.y).max(1e-3),
+            (radius * scale.x.max(scale.z)).max(1e-3),
+        ),
+        // Planos XZ: lâmina fina (a mesma convenção do Pad/Plane do VibeGame).
+        crate::recipes::Shape::Plane { half_size } => Collider::cuboid(
+            (half_size[0] * scale.x).max(1e-3),
+            0.02,
+            (half_size[1] * scale.z).max(1e-3),
+        ),
     }
 }
 
@@ -496,8 +593,13 @@ pub fn resolve_pending_colliders(
                 // rather than a correction to apply.
                 commands.entity(entity).insert((collider, ColliderResolved));
             }
-            // Boxes are built at spawn time; `None` never becomes a collider.
-            ColliderShape::Box { .. } | ColliderShape::None => {
+            // Boxes/spheres/cylinders/capsules are built at spawn time;
+            // `None` never becomes a collider.
+            ColliderShape::Box { .. }
+            | ColliderShape::Sphere { .. }
+            | ColliderShape::Cylinder { .. }
+            | ColliderShape::Capsule { .. }
+            | ColliderShape::None => {
                 commands.entity(entity).insert(ColliderResolved);
             }
         }
@@ -1263,5 +1365,120 @@ mod terrain_collider_tests {
         // Fora: distância euclidiana ao rectângulo, Y ignorado.
         let d = column_xz_distance(Vec3::new(80.0, 0.0, 30.0), coords, half, edge);
         assert!((d - 16.0).abs() < 1e-4, "d={d}");
+    }
+}
+
+/// Colisores exatos de primitivas: `collider_for_shape` (partes de
+/// composition e `collider="auto"` em primitivas) e as novas formas
+/// imediatas do `parse_collider`.
+#[cfg(test)]
+mod shape_collider_tests {
+    use super::*;
+    use crate::recipes::Shape;
+
+    #[test]
+    fn test_collider_for_cuboid_scales_each_axis() {
+        let shape = Shape::Cuboid {
+            half_size: [1.0, 2.0, 3.0],
+        };
+        let collider = collider_for_shape(&shape, Vec3::new(2.0, 1.0, 0.5));
+        let cuboid = collider.as_cuboid().unwrap();
+        // half extents: [1,2,3] × scale → [2,2,1.5]
+        assert_eq!(cuboid.half_extents().x, 2.0);
+        assert_eq!(cuboid.half_extents().y, 2.0);
+        assert_eq!(cuboid.half_extents().z, 1.5);
+    }
+
+    #[test]
+    fn test_collider_for_sphere_uses_max_axis_on_nonuniform_scale() {
+        let collider = collider_for_shape(&Shape::Sphere { radius: 0.5 }, Vec3::new(1.0, 3.0, 1.0));
+        assert_eq!(
+            collider.as_ball().unwrap().radius(),
+            1.5,
+            "elipsoide → ball do maior eixo"
+        );
+    }
+
+    #[test]
+    fn test_collider_for_cylinder_and_capsule() {
+        let cyl = collider_for_shape(
+            &Shape::Cylinder {
+                half_height: 1.0,
+                radius: 0.5,
+            },
+            Vec3::new(2.0, 2.0, 1.0),
+        );
+        assert_eq!(cyl.as_cylinder().unwrap().half_height(), 2.0);
+        assert_eq!(cyl.as_cylinder().unwrap().radius(), 1.0);
+
+        let cap = collider_for_shape(
+            &Shape::Capsule {
+                half_height: 0.5,
+                radius: 0.25,
+            },
+            Vec3::ONE,
+        );
+        assert_eq!(cap.as_capsule().unwrap().half_height(), 0.5);
+        assert_eq!(cap.as_capsule().unwrap().radius(), 0.25);
+    }
+
+    #[test]
+    fn test_collider_for_plane_is_thin_slab() {
+        let collider = collider_for_shape(
+            &Shape::Plane {
+                half_size: [4.0, 2.0],
+            },
+            Vec3::ONE,
+        );
+        let cuboid = collider.as_cuboid().unwrap();
+        assert_eq!(cuboid.half_extents().x, 4.0);
+        assert_eq!(
+            cuboid.half_extents().y,
+            0.02,
+            "lâmina fina (convenção Pad/Plane)"
+        );
+        assert_eq!(cuboid.half_extents().z, 2.0);
+    }
+
+    #[test]
+    fn test_parse_collider_sphere_cylinder_capsule() {
+        let (shape, warning) = parse_collider("shape: sphere; radius: 0.8");
+        assert_eq!(warning, None);
+        assert_eq!(shape, ColliderShape::Sphere { radius: 0.8 });
+
+        let (shape, warning) = parse_collider("shape: cylinder; radius: 1; half-height: 2");
+        assert_eq!(warning, None);
+        assert_eq!(
+            shape,
+            ColliderShape::Cylinder {
+                radius: 1.0,
+                half_height: 2.0
+            }
+        );
+
+        let (shape, warning) = parse_collider("shape: capsule");
+        assert_eq!(warning, None);
+        assert_eq!(
+            shape,
+            ColliderShape::Capsule {
+                radius: 0.5,
+                half_height: 0.5
+            }
+        );
+
+        // Todas são imediatas (nada pendente).
+        for shape in [
+            ColliderShape::Sphere { radius: 1.0 },
+            ColliderShape::Cylinder {
+                radius: 1.0,
+                half_height: 1.0,
+            },
+            ColliderShape::Capsule {
+                radius: 1.0,
+                half_height: 1.0,
+            },
+        ] {
+            assert!(immediate_collider(&shape).is_some());
+        }
     }
 }

@@ -149,53 +149,56 @@ pub const SFX_CLIPS_ALL: &[SfxClip] = &[
     SfxClip::Dash,
 ];
 
-/// Loops ambientes carregados por path fixo (`setup_water_ambience`) — não
-/// são clips `SfxEvent`; o audit valida a existência deles a partir daqui.
+/// Loops ambientes carregados por path fixo (`setup_water_ambience`),
+/// RELATIVOS ao `sfx_dir` do config.yaml do jogo — não são clips
+/// `SfxEvent`; o audit valida a existência deles a partir daqui.
 pub const AMBIENT_LOOP_FILES: &[&str] = &[
-    "assets/audio/sfx/world/water_lake.ogg",
-    "assets/audio/sfx/world/water_flow.ogg",
-    "assets/audio/sfx/world/water_waterfall.ogg",
+    "world/water_lake.ogg",
+    "world/water_flow.ogg",
+    "world/water_waterfall.ogg",
 ];
 
 impl SfxClip {
+    /// Clip RELATIVO ao `sfx_dir` do config.yaml do jogo
+    /// (`config.sfx_path(clip.file())` dá o path AssetServer).
     pub fn file(self) -> &'static str {
         match self {
-            SfxClip::Hit => "assets/audio/sfx/hit.ogg",
-            SfxClip::Whoosh => "assets/audio/sfx/whoosh.ogg",
-            SfxClip::Harvest => "assets/audio/sfx/harvest.ogg",
-            SfxClip::Ui => "assets/audio/sfx/ui.ogg",
-            SfxClip::ChopHit => "assets/audio/sfx/combat/chop_hit.ogg",
-            SfxClip::ChopBreak => "assets/audio/sfx/combat/chop_break.ogg",
-            SfxClip::MineHit => "assets/audio/sfx/combat/mine_hit.ogg",
-            SfxClip::MineBreak => "assets/audio/sfx/combat/mine_break.ogg",
-            SfxClip::LevelUp => "assets/audio/sfx/ui/levelup.ogg",
-            SfxClip::QuestDone => "assets/audio/sfx/ui/quest_complete.ogg",
-            SfxClip::Travel => "assets/audio/sfx/combat/swing.ogg",
-            SfxClip::Footstep => "assets/audio/sfx/ambient/footstep.ogg",
-            SfxClip::FootstepWater => "assets/audio/sfx/ambient/footstep_water.ogg",
-            SfxClip::Loot => "assets/audio/sfx/world/chest_open.ogg",
-            SfxClip::Hurt => "assets/audio/sfx/player/hurt.ogg",
-            SfxClip::Heal => "assets/audio/sfx/player/heal.ogg",
-            SfxClip::GameOver => "assets/audio/sfx/ui/game_over.ogg",
-            SfxClip::QuestAccept => "assets/audio/sfx/ui/quest_accept.ogg",
-            SfxClip::Notification => "assets/audio/sfx/ui/notification.ogg",
-            SfxClip::Coin => "assets/audio/sfx/ui/coin.ogg",
-            SfxClip::Buy => "assets/audio/sfx/ui/buy.ogg",
-            SfxClip::Error => "assets/audio/sfx/ui/error.ogg",
-            SfxClip::Save => "assets/audio/sfx/ui/save.ogg",
-            SfxClip::Load => "assets/audio/sfx/ui/load.ogg",
-            SfxClip::ShopOpen => "assets/audio/sfx/ui/shop_open.ogg",
-            SfxClip::EnemyHurt => "assets/audio/sfx/creatures/enemy_hurt.ogg",
-            SfxClip::EnemyDeath => "assets/audio/sfx/creatures/enemy_death.ogg",
-            SfxClip::WolfGrowl => "assets/audio/sfx/creatures/wolf_growl.ogg",
-            SfxClip::SlimeSquish => "assets/audio/sfx/creatures/slime_squish.ogg",
-            SfxClip::BossRoar => "assets/audio/sfx/creatures/boss_roar.ogg",
-            SfxClip::ShieldBlock => "assets/audio/sfx/combat/shield_block.ogg",
-            SfxClip::DoorOpen => "assets/audio/sfx/world/door_open.ogg",
-            SfxClip::DoorClose => "assets/audio/sfx/world/door_close.ogg",
-            SfxClip::BombDrop => "assets/audio/sfx/world/bomb_drop.ogg",
-            SfxClip::Jump => "assets/audio/sfx/player/jump.ogg",
-            SfxClip::Dash => "assets/audio/sfx/player/dash.ogg",
+            SfxClip::Hit => "hit.ogg",
+            SfxClip::Whoosh => "whoosh.ogg",
+            SfxClip::Harvest => "harvest.ogg",
+            SfxClip::Ui => "ui.ogg",
+            SfxClip::ChopHit => "combat/chop_hit.ogg",
+            SfxClip::ChopBreak => "combat/chop_break.ogg",
+            SfxClip::MineHit => "combat/mine_hit.ogg",
+            SfxClip::MineBreak => "combat/mine_break.ogg",
+            SfxClip::LevelUp => "ui/levelup.ogg",
+            SfxClip::QuestDone => "ui/quest_complete.ogg",
+            SfxClip::Travel => "combat/swing.ogg",
+            SfxClip::Footstep => "ambient/footstep.ogg",
+            SfxClip::FootstepWater => "ambient/footstep_water.ogg",
+            SfxClip::Loot => "world/chest_open.ogg",
+            SfxClip::Hurt => "player/hurt.ogg",
+            SfxClip::Heal => "player/heal.ogg",
+            SfxClip::GameOver => "ui/game_over.ogg",
+            SfxClip::QuestAccept => "ui/quest_accept.ogg",
+            SfxClip::Notification => "ui/notification.ogg",
+            SfxClip::Coin => "ui/coin.ogg",
+            SfxClip::Buy => "ui/buy.ogg",
+            SfxClip::Error => "ui/error.ogg",
+            SfxClip::Save => "ui/save.ogg",
+            SfxClip::Load => "ui/load.ogg",
+            SfxClip::ShopOpen => "ui/shop_open.ogg",
+            SfxClip::EnemyHurt => "creatures/enemy_hurt.ogg",
+            SfxClip::EnemyDeath => "creatures/enemy_death.ogg",
+            SfxClip::WolfGrowl => "creatures/wolf_growl.ogg",
+            SfxClip::SlimeSquish => "creatures/slime_squish.ogg",
+            SfxClip::BossRoar => "creatures/boss_roar.ogg",
+            SfxClip::ShieldBlock => "combat/shield_block.ogg",
+            SfxClip::DoorOpen => "world/door_open.ogg",
+            SfxClip::DoorClose => "world/door_close.ogg",
+            SfxClip::BombDrop => "world/bomb_drop.ogg",
+            SfxClip::Jump => "player/jump.ogg",
+            SfxClip::Dash => "player/dash.ogg",
         }
     }
 }
@@ -289,6 +292,8 @@ impl Plugin for AmbientPlugin {
                     // banda branca noturna — o splat das layers ignorava a
                     // hora e lia-se como dia iluminado atrás das serras).
                     crate::terrain::layer_material::terrain_daynight_tint,
+                    // Chuva → chão molhado (canal walls_b.w do chunk; r3).
+                    crate::terrain::layer_material::terrain_rain_wetness,
                 ),
             );
     }
@@ -591,12 +596,13 @@ pub struct SfxHandles {
 
 impl SfxHandles {
     /// Pré-carrega TODOS os clips (PostStartup) — o `.ogg` falhado só
-    /// produz warn de load e o play é no-op silencioso.
-    pub fn load(server: &AssetServer) -> Self {
+    /// produz warn de load e o play é no-op silencioso. Os paths vêm do
+    /// `sfx_dir` do config.yaml do jogo.
+    pub fn load(server: &AssetServer, config: &crate::config::GameConfig) -> Self {
         Self {
             clips: SFX_CLIPS_ALL
                 .iter()
-                .map(|clip| (*clip, server.load(clip.file())))
+                .map(|clip| (*clip, server.load(config.sfx_path(clip.file()))))
                 .collect(),
         }
     }
@@ -606,8 +612,8 @@ impl SfxHandles {
     }
 }
 
-fn load_sfx_assets(mut commands: Commands, server: Res<AssetServer>) {
-    commands.insert_resource(SfxHandles::load(&server));
+fn load_sfx_assets(mut commands: Commands, server: Res<AssetServer>, config: Res<crate::config::GameConfig>) {
+    commands.insert_resource(SfxHandles::load(&server, &config));
 }
 
 /// Toca o clip com volume por distância (Ativos de áudio são globais; a
@@ -695,23 +701,28 @@ const WATER_AUDIBLE_RADIUS: f32 = 26.0;
 /// Ganho máximo junto à água (antes dos buses do mixer).
 const WATER_MAX_GAIN: f32 = 0.5;
 
-/// Spawna UMA vez os dois loops quando o runtime do terreno existe.
+/// Spawna UMA vez os dois loops quando o runtime do terreno existe. Os
+/// paths resolvem contra o `sfx_dir` do config.yaml do jogo.
 fn setup_water_ambience(
     mut commands: Commands,
     runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     spawned: Query<(), With<WaterAmbienceLoop>>,
+    config: Option<Res<crate::config::GameConfig>>,
 ) {
     if runtime.is_none() || !spawned.is_empty() {
         return;
     }
-    for (river, file) in [
-        (false, "assets/audio/sfx/world/water_lake.ogg"),
-        (true, "assets/audio/sfx/world/water_flow.ogg"),
+    let Some(config) = config else {
+        return;
+    };
+    for (river, clip) in [
+        (false, "world/water_lake.ogg"),
+        (true, "world/water_flow.ogg"),
     ] {
         commands.spawn((
             WaterAmbienceLoop { river },
             crate::music::AudioLoopPending {
-                url: file.to_string(),
+                url: config.sfx_path(clip),
                 music: false,
             },
         ));
@@ -793,6 +804,7 @@ fn setup_waterfall_ambience(
     mut commands: Commands,
     runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     spawned: Query<(), With<WaterfallLoop>>,
+    config: Option<Res<crate::config::GameConfig>>,
 ) {
     let Some(runtime) = runtime else {
         return;
@@ -817,7 +829,10 @@ fn setup_waterfall_ambience(
                     drop: c.drop,
                 },
                 crate::music::AudioLoopPending {
-                    url: "assets/audio/sfx/world/water_waterfall.ogg".to_string(),
+                    url: config
+                        .as_deref()
+                        .map(|c| c.sfx_path("world/water_waterfall.ogg"))
+                        .unwrap_or_else(|| "world/water_waterfall.ogg".to_string()),
                     music: false,
                 },
             ));
@@ -1047,6 +1062,7 @@ fn setup_rain_ambience(
     mut commands: Commands,
     weather: Option<Res<crate::worldsys::WeatherState>>,
     spawned: Query<(), With<RainAmbienceLoop>>,
+    config: Option<Res<crate::config::GameConfig>>,
 ) {
     if weather.is_none() || !spawned.is_empty() {
         return;
@@ -1054,7 +1070,10 @@ fn setup_rain_ambience(
     commands.spawn((
         RainAmbienceLoop,
         crate::music::AudioLoopPending {
-            url: "assets/audio/sfx/ambient/rain_loop.ogg".to_string(),
+            url: config
+                .as_deref()
+                .map(|c| c.sfx_path("ambient/rain_loop.ogg"))
+                .unwrap_or_else(|| "ambient/rain_loop.ogg".to_string()),
             music: false,
         },
     ));
@@ -1184,7 +1203,7 @@ mod tests {
 
     #[test]
     fn test_sfx_clip_files() {
-        assert!(SfxClip::Hit.file().starts_with("assets/audio/sfx/"));
+        assert!(SfxClip::Hit.file().starts_with(""));
         // core 4: os stubs .wav sintéticos foram substituídos por clips
         // Text2Sound (.ogg) — nada na engine pode apontar a .wav.
         assert!(SfxClip::Ui.file().ends_with("ui.ogg"));
@@ -1234,8 +1253,9 @@ mod tests {
         }
     }
 
-    /// Os OGGs do passe de juice existem no pool E no espelho de assets do
-    /// mundo flagship (a raiz que a engine realmente carrega no simple-rpg).
+    /// Os OGGs do passe de juice existem no POOL partilhado — a única árvore
+    /// de assets que a engine carrega (docs/ASSETS.md; sem espelho por
+    /// exemplo, o teste deixa de exigir cópias redundantes).
     #[test]
     fn test_juice_audio_assets_exist() {
         let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -1243,13 +1263,10 @@ mod tests {
             "examples/shared-assets/public/assets/audio/sfx/ambient/rain_loop.ogg",
             "examples/shared-assets/public/assets/audio/sfx/ambient/footstep.ogg",
             "examples/shared-assets/public/assets/audio/sfx/ambient/footstep_water.ogg",
-            "examples/simple-rpg/assets/audio/sfx/ambient/rain_loop.ogg",
-            "examples/simple-rpg/assets/audio/sfx/ambient/footstep.ogg",
-            "examples/simple-rpg/assets/audio/sfx/ambient/footstep_water.ogg",
-            "examples/simple-rpg/assets/audio/sfx/ui/levelup.ogg",
-            "examples/simple-rpg/assets/audio/sfx/ui/quest_complete.ogg",
-            "examples/simple-rpg/assets/audio/sfx/combat/swing.ogg",
-            "examples/simple-rpg/assets/audio/sfx/world/chest_open.ogg",
+            "examples/shared-assets/public/assets/audio/sfx/ui/levelup.ogg",
+            "examples/shared-assets/public/assets/audio/sfx/ui/quest_complete.ogg",
+            "examples/shared-assets/public/assets/audio/sfx/combat/swing.ogg",
+            "examples/shared-assets/public/assets/audio/sfx/world/chest_open.ogg",
         ] {
             let path = manifest.join(rel);
             assert!(path.is_file(), "falta {}", path.display());

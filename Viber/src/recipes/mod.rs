@@ -9,7 +9,7 @@
 pub mod spawn;
 pub mod transform;
 
-use crate::physics::{PhysicsSpec, parse_body, parse_collider};
+use crate::physics::{BodyKind, PhysicsSpec, parse_body, parse_collider};
 use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow, bail};
@@ -21,11 +21,11 @@ use crate::terrain::decal::GroundDecalSpec;
 use crate::terrain::roads::{RoadNetworkSpec, RoadProfile, RoadSpec, SegmentSpec, WaySpec};
 use crate::terrain::spec::TerrainPadSpec;
 use crate::terrain::voxel::ArchSpec;
-use crate::terrain::voxel::arch::ArchProfile;
 use crate::terrain::voxel::BridgeSpec;
 use crate::terrain::voxel::BridgeStyle;
 use crate::terrain::voxel::CaveSpec;
 use crate::terrain::voxel::RockFeaturesSpec;
+use crate::terrain::voxel::arch::ArchProfile;
 use crate::terrain::water::{LakeSpec, RiverSpec};
 use crate::xml::{XmlNode, values};
 
@@ -35,10 +35,17 @@ pub const KNOWN_TAGS: &[&str] = &[
     "entity",
     "group",
     "cuboid",
+    // VibeGame spelling — inside `<Composition>` (and anywhere else) a
+    // `<Box>` is a cuboid.
+    "box",
     "sphere",
     "cylinder",
     "plane",
     "capsule",
+    // Composed objects (`<Composition>`) + prototypes (`<Prototype>`/`<Use>`).
+    "composition",
+    "prototype",
+    "use",
     "pointlight",
     "directionallight",
     "ambientlight",
@@ -102,6 +109,14 @@ pub struct ParsedWorld {
     pub warnings: Vec<String>,
     /// Elements skipped because their tag is not implemented, by tag name.
     pub skipped_tags: BTreeMap<String, usize>,
+    /// `<Prototype id>` definitions (collected from the whole expanded tree
+    /// BEFORE the entity pass, so definition order and `<Include>` position
+    /// never matter). Never spawned — só a fonte das expansões de `<Use>`.
+    pub prototypes: BTreeMap<String, EntitySpec>,
+    /// Instâncias por protótipo após a expansão (`analyze`/telemetria).
+    pub prototype_instances: BTreeMap<String, usize>,
+    /// Ids referenced by `<Use>` sem definição (warning; `--strict` = erro).
+    pub unknown_prototypes: Vec<String>,
 }
 
 /// Accumulates non-fatal parse findings.
@@ -109,6 +124,11 @@ pub struct ParsedWorld {
 struct ParseCtx {
     warnings: Vec<String>,
     skipped: BTreeMap<String, usize>,
+    /// Profundidade de `<Composition>` em que o parser está: primitivas a
+    /// depth > 0 sem física autoral ganham `ColliderShape::Auto` (colisor
+    /// exato derivado da forma no spawn). Grupos são transparentes ao
+    /// contexto (sub-pivots não o desligam).
+    composition_depth: usize,
 }
 
 /// Local transform of an entity (world transform comes from the hierarchy).
@@ -149,11 +169,23 @@ pub enum Shape {
 }
 
 /// `StandardMaterial` overrides; unset fields use Bevy defaults.
+///
+/// A chave do cache de materiais do spawn é uma forma canonizada em bits
+/// (`spawn::MaterialKey`) — f32 não é `Eq`/`Hash`, mas duas specs com os
+/// mesmos bits são o mesmo material.
 #[derive(Debug, Clone, Default)]
 pub struct MaterialSpec {
     pub base_color: Option<[f32; 3]>,
     pub metallic: Option<f32>,
     pub roughness: Option<f32>,
+    /// `opacity` (0..1) — abaixo de 1 a parte fica translúcida
+    /// (`AlphaMode::Blend`, `depthWrite` off no renderer); 0 = invisível,
+    /// útil para paredes de colisor puro (o truque `opacity="0"` do
+    /// VibeGame).
+    pub opacity: Option<f32>,
+    /// `emissive` (#hex) — brilho próprio da parte (vidro de lanterna,
+    /// brasa); independente da luz da cena.
+    pub emissive: Option<[f32; 3]>,
     /// `texture="/assets/…"`` (ou `texture-url`) — base color map. Os
     /// fragmentos migrados do VibeGame tinham `texture-url` nas decal
     /// planes (praça de cobblestone) e o migrador deixou cair o atributo;
@@ -164,10 +196,93 @@ pub struct MaterialSpec {
     pub texture_tile: Option<f32>,
 }
 
+/// `place="at: x z; …"` de uma `<Composition>` — colocação explícita no
+/// terreno, resolvida no arranque por [`crate::worldsys::resolve_pending_place`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlaceSpec {
+    /// XZ mundo (soma dos XZ dos ancestrais, como as ground features).
+    pub at: [f32; 2],
+    /// `align-to-terrain` — orienta o +Y do root à normal do terreno
+    /// (yaw autoral preservado). Default off.
+    pub align_to_terrain: bool,
+    /// `base-y-offset` — somado em Y após a amostragem do solo.
+    pub base_y_offset: f32,
+}
+
+/// Parseia `place="at: x z; align-to-terrain: 0|1; base-y-offset: y"`.
+/// Component-string; `at` é obrigatório (composição sem `at` devolve None
+/// com warning).
+fn parse_place(value: &str, ctx_tag: &str, ctx: &mut ParseCtx) -> Option<PlaceSpec> {
+    let mut place = PlaceSpec {
+        at: [0.0, 0.0],
+        align_to_terrain: false,
+        base_y_offset: 0.0,
+    };
+    let mut has_at = false;
+    for (key, val) in parse_component_string(value) {
+        match key.as_str() {
+            "at" => match values::parse_vec2(&val, &format!("{ctx_tag} place at")) {
+                Ok([x, z]) => {
+                    place.at = [x, z];
+                    has_at = true;
+                }
+                Err(error) => ctx.warnings.push(format!("{ctx_tag}: {error}")),
+            },
+            "align-to-terrain" => {
+                place.align_to_terrain =
+                    values::parse_bool(&val, &format!("{ctx_tag} place align-to-terrain"))
+                        .unwrap_or(false);
+            }
+            "base-y-offset" | "y-offset" => {
+                place.base_y_offset =
+                    values::parse_f32(&val, &format!("{ctx_tag} place base-y-offset"))
+                        .unwrap_or(0.0);
+            }
+            // surface-epsilon / max-slope-deg do VibeGame: aceites sem
+            // efeito (a amostragem Viber já resolve o solo pelo span).
+            "surface-epsilon" | "max-slope-deg" => {}
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored place key `{other}`")),
+        }
+    }
+    if !has_at {
+        ctx.warnings.push(format!(
+            "{ctx_tag}: place sem `at: x z` — colocação explícita ignorada"
+        ));
+        return None;
+    }
+    Some(place)
+}
+
 #[derive(Debug, Clone)]
 pub enum EntityKind {
     /// Transform-only container (the `entity` and `group` tags).
     Group,
+    /// `<Composition>` — um objeto inteiro definido por primitivas: o root
+    /// recebe um corpo ([`BodyKind`], default `fixed`) e cada primitiva
+    /// descendente ganha um colisor EXATO derivado da própria forma
+    /// (cuboid/ball/cylinder/capsule) — colisor composto do Rapier, não o
+    /// AABB-união dos grupos. Luzes/partículas como filhos continuam a ser
+    /// entidades normais.
+    Composition {
+        /// `body` (default `fixed`; `none` desliga o corpo).
+        body: BodyKind,
+        /// `collider="auto"` (default) liga os colisores por parte;
+        /// `collider="none"` deixa a composition só visual.
+        collider: bool,
+        /// `place="at: x z; …"` — colocação explícita (substitui o seating).
+        place: Option<PlaceSpec>,
+        /// `seat="none"` — objeto flutuante: não assenta no terreno.
+        seat: bool,
+    },
+    /// `<Use prototype="id">` — instância de um `<Prototype>`. Expandida em
+    /// parse-time (deep-clone + overrides); nunca chega ao spawn.
+    Use {
+        prototype: String,
+        /// Attrs crus do `<Use>` para aplicar sobre o root do protótipo.
+        overrides: Vec<(String, String)>,
+    },
     Primitive {
         shape: Shape,
         material: MaterialSpec,
@@ -786,7 +901,22 @@ pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result
                 .push(format!("<world>: ignored attribute `{other}`")),
         }
     }
+    // Passagem 0: protótipos. Recolhidos do raw tree ANTES de parsear
+    // entidades — um `<Use>` num ficheiro incluído antes da definição (ou
+    // dentro do próprio ficheiro de definição) funciona na mesma.
+    let mut prototypes = BTreeMap::new();
+    collect_prototypes(nodes, &mut prototypes, &mut ctx)?;
     let entities = parse_entities(nodes, &mut ctx)?;
+    let mut instances = BTreeMap::new();
+    let mut unknown = Vec::new();
+    let entities = expand_uses(
+        entities,
+        &prototypes,
+        &mut Vec::new(),
+        &mut instances,
+        &mut unknown,
+        &mut ctx,
+    );
     let ambient_count = count_ambient_lights(&entities);
     if ambient_count > 1 {
         ctx.warnings.push(format!(
@@ -811,7 +941,213 @@ pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result
         entities,
         warnings,
         skipped_tags: ctx.skipped,
+        prototypes,
+        prototype_instances: instances,
+        unknown_prototypes: unknown,
     })
+}
+
+/// Recolhe `<Prototype id>` de TODO o raw tree (qualquer profundidade —
+/// incluídos spliceiam os seus filhos ao mundo, por isso uma definição
+/// dentro de um include chega aqui na mesma). Última definição de um id
+/// ganha (ordem de documento). Só o attr `id` é significativo.
+fn collect_prototypes(
+    nodes: &[XmlNode],
+    out: &mut BTreeMap<String, EntitySpec>,
+    ctx: &mut ParseCtx,
+) -> Result<()> {
+    for node in nodes {
+        if node.tag.eq_ignore_ascii_case("prototype") {
+            match node.attr("id").map(str::trim).filter(|s| !s.is_empty()) {
+                Some(id) => {
+                    let ctx_tag = format!("<Prototype id=\"{id}\">");
+                    for (key, _) in &node.attrs {
+                        if !key.eq_ignore_ascii_case("id") {
+                            ctx.warnings
+                                .push(format!("{ctx_tag}: ignored attribute `{key}`"));
+                        }
+                    }
+                    let children = parse_entities(&node.children, ctx)?;
+                    if children.len() != 1 {
+                        ctx.warnings.push(format!(
+                            "{ctx_tag}: expected exactly 1 root element, got {} — using the first",
+                            children.len()
+                        ));
+                    }
+                    if let Some(root) = children.into_iter().next() {
+                        out.insert(id.to_string(), root);
+                    }
+                }
+                None => ctx
+                    .warnings
+                    .push(format!("<{}>: Prototype sem `id` — ignorado", node.tag)),
+            }
+        }
+        collect_prototypes(&node.children, out, ctx)?;
+    }
+    Ok(())
+}
+
+/// Limite de aninhamento de `<Use>` (um protótipo pode instanciar outro).
+const MAX_USE_DEPTH: usize = 16;
+
+/// Expande `<Use>` (deep-clone do protótipo + overrides no root), em toda a
+/// árvore. `stack` guarda os ids em expansão para cortar ciclos; ids sem
+/// definição ficam registados em `unknown` (uma entrada por id, para o
+/// `analyze`/`--strict`).
+fn expand_uses(
+    specs: Vec<EntitySpec>,
+    prototypes: &BTreeMap<String, EntitySpec>,
+    stack: &mut Vec<String>,
+    instances: &mut BTreeMap<String, usize>,
+    unknown: &mut Vec<String>,
+    ctx: &mut ParseCtx,
+) -> Vec<EntitySpec> {
+    let mut out = Vec::with_capacity(specs.len());
+    for mut spec in specs {
+        if let EntityKind::Use {
+            prototype,
+            overrides,
+        } = spec.kind
+        {
+            if stack.iter().any(|id| id == &prototype) {
+                ctx.warnings.push(format!(
+                    "<Use prototype=\"{prototype}\">: ciclo de protótipos — instância ignorada"
+                ));
+                continue;
+            }
+            if stack.len() >= MAX_USE_DEPTH {
+                ctx.warnings.push(format!(
+                    "<Use prototype=\"{prototype}\">: aninhamento > {MAX_USE_DEPTH} — instância ignorada"
+                ));
+                continue;
+            }
+            let Some(prototype_spec) = prototypes.get(&prototype) else {
+                if !unknown.iter().any(|u| u == &prototype) {
+                    unknown.push(prototype.clone());
+                }
+                continue;
+            };
+            // Expande primeiro a subárvore (para os `<Use>` internos), e só
+            // depois aplica os overrides deste `<Use>` no root FINAL — um
+            // protótipo cujo root é outro `<Use>` mantém assim o transform
+            // pedido em vez de o perder na substituição.
+            let clone = prototype_spec.clone();
+            stack.push(prototype.clone());
+            let mut expanded = expand_uses(vec![clone], prototypes, stack, instances, unknown, ctx);
+            stack.pop();
+            if let Some(mut inst) = expanded.pop() {
+                apply_use_overrides(&mut inst, &overrides, &prototype, ctx);
+                *instances.entry(prototype).or_insert(0) += 1;
+                out.push(inst);
+            }
+        } else {
+            spec.children = expand_uses(
+                std::mem::take(&mut spec.children),
+                prototypes,
+                stack,
+                instances,
+                unknown,
+                ctx,
+            );
+            out.push(spec);
+        }
+    }
+    out
+}
+
+/// Aplica os attrs do `<Use>` sobre o root clonado do protótipo. Campos
+/// presentes SUBSTITUEM os do protótipo (transform: só os componentes
+/// indicados; o resto mantém o valor autoral). Valores inválidos avisam e
+/// mantêm o do protótipo — um `<Use>` mal escrito nunca falha o mundo.
+fn apply_use_overrides(
+    spec: &mut EntitySpec,
+    overrides: &[(String, String)],
+    id: &str,
+    ctx: &mut ParseCtx,
+) {
+    let ctx_tag = format!("<Use prototype=\"{id}\">");
+    for (key, value) in overrides {
+        let warning: Option<String> = match key.as_str() {
+            "name" => {
+                spec.name = Some(value.clone());
+                None
+            }
+            "tag" => {
+                spec.tag = Some(value.clone());
+                None
+            }
+            "script" => {
+                spec.script = Some(value.clone());
+                None
+            }
+            "destructible" => {
+                spec.destructible = Some(DestructibleSpec::parse(value));
+                None
+            }
+            "collider" => {
+                let (shape, warning) = parse_collider(value);
+                spec.physics.collider = shape;
+                warning.map(|w| format!("{ctx_tag}: {w}"))
+            }
+            "rigidbody" | "body" => {
+                let (kind, mass, gravity_scale) = parse_body(value);
+                spec.physics.body = kind;
+                spec.physics.mass = mass;
+                spec.physics.gravity_scale = gravity_scale;
+                None
+            }
+            "translation" | "pos" => values::parse_vec3(value, &format!("{ctx_tag} pos"))
+                .map(|v| spec.transform.translation = v)
+                .map_err(|e| e.to_string())
+                .err(),
+            "euler" => values::parse_vec3(value, &format!("{ctx_tag} euler"))
+                .map(|v| spec.transform.euler_deg = Some(v))
+                .map_err(|e| e.to_string())
+                .err(),
+            "rotation" => parse_rotation_attr(value, &format!("{ctx_tag} rotation"))
+                .map(|q| spec.transform.rotation_quat = Some(q))
+                .map_err(|e| e.to_string())
+                .err(),
+            "scale" => values::parse_vec3(value, &format!("{ctx_tag} scale"))
+                .map(|v| spec.transform.scale = v)
+                .map_err(|e| e.to_string())
+                .err(),
+            "transform" => {
+                for (tkey, tval) in parse_component_string(value) {
+                    match tkey.as_str() {
+                        "pos" | "position" => {
+                            if let Ok(v) =
+                                values::parse_vec3(&tval, &format!("{ctx_tag} transform pos"))
+                            {
+                                spec.transform.translation = v;
+                            }
+                        }
+                        "euler" | "rotation" => {
+                            if let Ok(v) =
+                                values::parse_vec3(&tval, &format!("{ctx_tag} transform euler"))
+                            {
+                                spec.transform.euler_deg = Some(v);
+                            }
+                        }
+                        "scale" => {
+                            if let Ok(v) =
+                                values::parse_vec3(&tval, &format!("{ctx_tag} transform scale"))
+                            {
+                                spec.transform.scale = v;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                None
+            }
+            other => Some(format!("{ctx_tag}: ignored attribute `{other}`")),
+        };
+        if let Some(warning) = warning {
+            ctx.warnings.push(warning);
+        }
+    }
 }
 
 /// Ambient lights are applied as a world resource, so more than one is
@@ -839,9 +1175,14 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
     let lower = node.tag.to_ascii_lowercase();
     match lower.as_str() {
         "entity" | "group" => finish_group(node, ctx).map(Some),
-        "cuboid" | "sphere" | "cylinder" | "plane" | "capsule" => {
+        "cuboid" | "box" | "sphere" | "cylinder" | "plane" | "capsule" => {
             finish_primitive(node, ctx).map(Some)
         }
+        "composition" => finish_composition(node, ctx).map(Some),
+        // Definições são recolhidas pela passagem 0 (`collect_prototypes`);
+        // aqui são no-op para não caírem no aviso de tag desconhecida.
+        "prototype" => Ok(None),
+        "use" => finish_use(node, ctx).map(Some),
         "pointlight" => finish_point_light(node, ctx).map(Some),
         "directionallight" => finish_directional_light(node, ctx).map(Some),
         "ambientlight" => finish_ambient_light(node, ctx).map(Some),
@@ -943,6 +1284,18 @@ struct Common {
     physics: PhysicsSpec,
 }
 
+/// Parseia o attr `rotation`: 4 componentes = quaternion cru `x y z w`
+/// (comportamento histórico); 3 componentes = euler em RADIANOS — a
+/// convenção das partes de `<Composition>` do VibeGame, aceite em qualquer
+/// entidade para os mundos migrarem sem reescrever rotações.
+fn parse_rotation_attr(value: &str, ctx: &str) -> Result<[f32; 4]> {
+    if value.split_whitespace().count() == 3 {
+        let e = values::parse_vec3(value, ctx)?;
+        return Ok(transform::euler_rad_to_quat(e));
+    }
+    values::parse_vec4(value, ctx)
+}
+
 /// Parse the universal attributes, returning the ones left for the kind parser.
 fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(String, String)>)> {
     let ctx_tag = format!("<{}>", node.tag);
@@ -988,8 +1341,9 @@ fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(Stri
                     Some(values::parse_vec3(value, &format!("{ctx_tag} euler"))?);
             }
             "rotation" => {
+                // 3 valores = euler radianos (compat VibeGame); 4 = quat xyzw.
                 common.transform.rotation_quat =
-                    Some(values::parse_vec4(value, &format!("{ctx_tag} rotation"))?);
+                    Some(parse_rotation_attr(value, &format!("{ctx_tag} rotation"))?);
             }
             "scale" => {
                 common.transform.scale = values::parse_vec3(value, &format!("{ctx_tag} scale"))?;
@@ -1060,12 +1414,135 @@ fn finish_group(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     })
 }
 
-fn finish_primitive(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let lower = node.tag.to_ascii_lowercase();
+/// `<Composition>` — objeto inteiro em primitivas. Defaults pensados para o
+/// caso comum: `body="fixed"` (cenário imóvel) e colisores por parte
+/// (`collider="auto"`); `body="none"`, `collider="none"`, `seat="none"` e
+/// `place="…"` desligam cada default.
+fn finish_composition(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
+    // Corpo: a partir do physics parseado; sem attr → fixed (um objeto
+    // composto é quase sempre cenário e o colisor composto precisa de um).
+    let body = if node.attr("rigidbody").is_none() && node.attr("body").is_none() {
+        crate::physics::BodyKind::Fixed
+    } else {
+        common.physics.body
+    };
+    // Colisor: raw attr distingue "auto" (default) de "none"; qualquer
+    // component-string explícita não se aplica a uma composition inteira.
+    let mut collider = true;
+    if let Some(raw) = node.attr("collider") {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "" | "auto" | "true" | "1" => {}
+            "none" | "false" | "0" => collider = false,
+            _ => ctx.warnings.push(format!(
+                "{ctx_tag}: collider `{raw}` — numa composition só `auto` (default) ou `none`; a usar por-parte"
+            )),
+        }
+    }
+    let mut place = None;
+    let mut seat = true;
+    let mut unknown = Vec::new();
+    for (key, value) in rest {
+        match key.as_str() {
+            "place" => place = parse_place(&value, &ctx_tag, ctx),
+            "seat" => {
+                if value.trim().eq_ignore_ascii_case("none") {
+                    seat = false;
+                } else {
+                    unknown.push((key, value));
+                }
+            }
+            // VibeGame: tolerância de análise do CLI, sem efeito em runtime.
+            "overlap-max" => {}
+            _ => unknown.push((key, value)),
+        }
+    }
+    warn_ignored(node, unknown, ctx);
+    // `place` explícito substitui o seating automático por completo.
+    if place.is_some() {
+        seat = false;
+    }
+    // As primitivas filhas entram em modo "parte": sem física autoral
+    // ganham `ColliderShape::Auto` (colisor exato no spawn) — mas só se a
+    // composition estiver com colisores ligados (`collider="none"` põe a
+    // profundidade a 0, desligando o modo parte na subárvore).
+    let outer_depth = ctx.composition_depth;
+    ctx.composition_depth = if collider { outer_depth + 1 } else { 0 };
+    let parsed_children = parse_entities(&node.children, ctx);
+    ctx.composition_depth = outer_depth;
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        physics: crate::physics::PhysicsSpec {
+            collider: crate::physics::ColliderShape::None,
+            body,
+            mass: common.physics.mass,
+            gravity_scale: common.physics.gravity_scale,
+        },
+        destructible: common.destructible,
+        kind: EntityKind::Composition {
+            body,
+            collider,
+            place,
+            seat,
+        },
+        children: parsed_children?,
+    })
+}
+
+/// `<Use prototype="id">` — placeholder de instância; `expand_uses` troca-o
+/// pelo protótipo clonado antes do spawn.
+fn finish_use(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let ctx_tag = format!("<{}>", node.tag);
+    let Some(prototype) = node
+        .attr("prototype")
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        ctx.warnings
+            .push(format!("{ctx_tag}: missing prototype — skipped"));
+        return Ok(EntitySpec {
+            name: None,
+            tag: None,
+            script: None,
+            destructible: None,
+            transform: TransformSpec::default(),
+            physics: PhysicsSpec::default(),
+            kind: EntityKind::Group,
+            children: Vec::new(),
+        });
+    };
+    let overrides: Vec<(String, String)> = node
+        .attrs
+        .iter()
+        .filter(|(key, _)| !key.eq_ignore_ascii_case("prototype"))
+        .cloned()
+        .collect();
+    Ok(EntitySpec {
+        name: None,
+        tag: None,
+        script: None,
+        destructible: None,
+        transform: TransformSpec::default(),
+        physics: PhysicsSpec::default(),
+        kind: EntityKind::Use {
+            prototype,
+            overrides,
+        },
+        children: Vec::new(),
+    })
+}
+
+fn finish_primitive(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let lower = node.tag.to_ascii_lowercase();
+    let (mut common, rest) = parse_common(node, ctx)?;
+    let ctx_tag = format!("<{}>", node.tag);
     let mut shape = match lower.as_str() {
-        "cuboid" => Shape::Cuboid {
+        "cuboid" | "box" => Shape::Cuboid {
             half_size: [0.5; 3],
         },
         "sphere" => Shape::Sphere { radius: 0.5 },
@@ -1116,12 +1593,29 @@ fn finish_primitive(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             "base-color" => material.base_color = Some(values::parse_color(&value, &kctx)?),
             "metallic" => material.metallic = Some(values::parse_f32(&value, &kctx)?),
             "roughness" => material.roughness = Some(values::parse_f32(&value, &kctx)?),
+            "opacity" => {
+                let v = values::parse_f32(&value, &kctx)?;
+                material.opacity = Some(v.clamp(0.0, 1.0));
+            }
+            "emissive" | "emissive-color" => {
+                material.emissive = Some(values::parse_color(&value, &kctx)?);
+            }
             "texture" | "texture-url" => material.texture = Some(value),
             "texture-tile-size" => material.texture_tile = Some(values::parse_f32(&value, &kctx)?),
             other => ctx
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
         }
+    }
+    // Parte de uma `<Composition>` (depth > 0) sem física autoral ganha
+    // `ColliderShape::Auto` — colisor EXATO derivado da própria forma no
+    // spawn. Um `collider="none"` ou `shape: …` autoral na parte é honrado.
+    if ctx.composition_depth > 0
+        && node.attr("collider").is_none()
+        && node.attr("rigidbody").is_none()
+        && node.attr("body").is_none()
+    {
+        common.physics.collider = crate::physics::ColliderShape::Auto;
     }
     Ok(EntitySpec {
         name: common.name,
@@ -2978,7 +3472,9 @@ fn finish_arch(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     }
     let has_path = spec.path.len() >= 2;
     if authored_at && has_path {
-        bail!("{ctx_tag}: use either `at` (one portal) or `path` (feet on their own ground), not both");
+        bail!(
+            "{ctx_tag}: use either `at` (one portal) or `path` (feet on their own ground), not both"
+        );
     }
     if !authored_at && !has_path {
         bail!("{ctx_tag}: needs `at` with an \"x z\" position, or a `path` of at least 2 points");
@@ -3068,7 +3564,10 @@ fn finish_bridge(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         }
     }
     if !spec.rise.is_finite() {
-        bail!("{ctx_tag}: rise must be a finite number (got {r})", r = spec.rise);
+        bail!(
+            "{ctx_tag}: rise must be a finite number (got {r})",
+            r = spec.rise
+        );
     }
     if spec.spans == Some(0) {
         bail!("{ctx_tag}: spans must be >= 1 (use style=\"natural\" for a bridge with no piers)");
@@ -3477,6 +3976,10 @@ fn finish_road_network(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
 #[derive(Debug, Default, PartialEq)]
 pub struct WorldSummary {
     pub groups: usize,
+    /// `<Composition>` roots — objetos inteiros em primitivas.
+    pub compositions: usize,
+    /// Primitivas descendentes de uma composition (as "partes").
+    pub composition_parts: usize,
     pub primitives: usize,
     pub point_lights: usize,
     pub directional_lights: usize,
@@ -3539,6 +4042,7 @@ impl WorldSummary {
     /// Total spawned entities (ambient lights are resources, not entities).
     pub fn entities(&self) -> usize {
         self.groups
+            + self.compositions
             + self.primitives
             + self.point_lights
             + self.directional_lights
@@ -3617,11 +4121,24 @@ fn count_ui_elements(node: &XmlNode) -> usize {
 
 /// Walk the entity tree and count each kind.
 pub fn summarize(world: &ParsedWorld) -> WorldSummary {
-    fn walk(specs: &[EntitySpec], out: &mut WorldSummary) {
+    fn walk(specs: &[EntitySpec], in_composition: bool, out: &mut WorldSummary) {
         for spec in specs {
+            // Primitivas dentro de uma composition contam duas vezes: como
+            // primitivas (entidades) e como partes da composition.
+            let mut next_in_composition = in_composition;
             match &spec.kind {
                 EntityKind::Group => out.groups += 1,
-                EntityKind::Primitive { .. } => out.primitives += 1,
+                EntityKind::Composition { .. } => {
+                    out.compositions += 1;
+                    next_in_composition = true;
+                }
+                EntityKind::Use { .. } => {} // expandida em parse-time
+                EntityKind::Primitive { .. } => {
+                    if in_composition {
+                        out.composition_parts += 1;
+                    }
+                    out.primitives += 1;
+                }
                 EntityKind::PointLight { .. } => out.point_lights += 1,
                 EntityKind::DirectionalLight { .. } => out.directional_lights += 1,
                 EntityKind::AmbientLight { .. } => out.has_ambient = true,
@@ -3661,11 +4178,11 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 | EntityKind::WorldBorder { .. }
                 | EntityKind::EngineConfig { .. } => out.world_systems += 1,
             }
-            walk(&spec.children, out);
+            walk(&spec.children, next_in_composition, out);
         }
     }
     let mut out = WorldSummary::default();
-    walk(&world.entities, &mut out);
+    walk(&world.entities, false, &mut out);
     out
 }
 
@@ -4572,6 +5089,8 @@ mod tests {
             summary,
             WorldSummary {
                 caves: 1,
+                compositions: 0,
+                composition_parts: 0,
                 arches: 0,
                 bridges: 1,
                 rock_fields: 1,
@@ -5019,5 +5538,317 @@ mod tests {
             panic!("expected biome region");
         };
         assert!(display_name.is_empty());
+    }
+}
+
+/// Composição e protótipos: `<Composition>`, `<Prototype>`, `<Use>`,
+/// colisores por parte, `place` e os aliases de compat VibeGame.
+#[cfg(test)]
+mod composition_tests {
+    use super::*;
+    use crate::physics::ColliderShape;
+
+    fn node(tag: &str, attrs: &[(&str, &str)]) -> XmlNode {
+        XmlNode {
+            tag: tag.to_string(),
+            attrs: attrs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            text: String::new(),
+            children: vec![],
+        }
+    }
+
+    fn parse_one(n: &XmlNode) -> Result<(EntitySpec, Vec<String>)> {
+        let mut ctx = ParseCtx::default();
+        let spec =
+            parse_entity(n, &mut ctx)?.ok_or_else(|| anyhow::anyhow!("element was skipped"))?;
+        Ok((spec, ctx.warnings))
+    }
+
+    #[test]
+    fn test_composition_defaults_body_fixed_collider_per_part() {
+        let mut comp = node("Composition", &[]);
+        comp.children = vec![
+            node("Box", &[("half-size", "1 0.5 1")]),
+            node("PointLight", &[("intensity", "100")]),
+        ];
+        let (spec, w) = parse_one(&comp).unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::Composition {
+            body,
+            collider,
+            place,
+            seat,
+        } = spec.kind
+        else {
+            panic!("expected composition");
+        };
+        assert_eq!(body, BodyKind::Fixed, "default é cenário imóvel");
+        assert!(collider, "default liga colisores por parte");
+        assert!(place.is_none());
+        assert!(seat, "default assenta no terreno como os grupos");
+        // A parte ganha colisor exato (Auto → derivado da forma no spawn).
+        assert!(matches!(
+            spec.children[0].physics.collider,
+            ColliderShape::Auto
+        ));
+        // A luz NÃO ganha colisor.
+        assert_eq!(spec.children[1].physics.collider, ColliderShape::None);
+    }
+
+    #[test]
+    fn test_composition_body_none_and_collider_none() {
+        let mut comp = node("Composition", &[("body", "none"), ("collider", "none")]);
+        comp.children = vec![node("Sphere", &[("radius", "0.4")])];
+        let (spec, w) = parse_one(&comp).unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::Composition { body, collider, .. } = spec.kind else {
+            panic!("expected composition");
+        };
+        assert_eq!(body, BodyKind::None, "none é honrado (bug do VibeGame)");
+        assert!(!collider);
+        // Sem colisores, a parte não é marcada.
+        assert_eq!(spec.children[0].physics.collider, ColliderShape::None);
+    }
+
+    #[test]
+    fn test_composition_per_part_collider_override_respected() {
+        let mut comp = node("Composition", &[]);
+        comp.children = vec![node("Sphere", &[("radius", "0.4"), ("collider", "none")])];
+        let (spec, _) = parse_one(&comp).unwrap();
+        assert_eq!(
+            spec.children[0].physics.collider,
+            ColliderShape::None,
+            "collider=none autoral na parte é respeitado"
+        );
+    }
+
+    #[test]
+    fn test_composition_nested_group_parts_get_colliders() {
+        let mut comp = node("Composition", &[]);
+        let mut sub = node("Group", &[("translation", "0 2 0")]);
+        sub.children = vec![node("Cylinder", &[("radius", "0.2")])];
+        comp.children = vec![sub];
+        let (spec, _) = parse_one(&comp).unwrap();
+        assert!(
+            matches!(
+                spec.children[0].children[0].physics.collider,
+                ColliderShape::Auto
+            ),
+            "sub-pivots propagam o colisor às suas partes"
+        );
+    }
+
+    #[test]
+    fn test_composition_place_parse() {
+        let (spec, w) = parse_one(&node(
+            "Composition",
+            &[(
+                "place",
+                "at: 10 20; align-to-terrain: 1; base-y-offset: 0.5",
+            )],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::Composition { place, seat, .. } = spec.kind else {
+            panic!("expected composition");
+        };
+        let place = place.expect("place parsed");
+        assert_eq!(place.at, [10.0, 20.0]);
+        assert!(place.align_to_terrain);
+        assert_eq!(place.base_y_offset, 0.5);
+        // Com place explícito o seating auto desliga-se.
+        assert!(!seat);
+    }
+
+    #[test]
+    fn test_composition_seat_none() {
+        let (spec, _) = parse_one(&node("Composition", &[("seat", "none")])).unwrap();
+        let EntityKind::Composition { seat, .. } = spec.kind else {
+            panic!("expected composition");
+        };
+        assert!(!seat);
+    }
+
+    #[test]
+    fn test_box_tag_is_cuboid_alias() {
+        let (spec, w) = parse_one(&node("Box", &[("half-size", "2 1 0.5")])).unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::Primitive { shape, .. } = spec.kind else {
+            panic!("expected primitive");
+        };
+        assert!(matches!(shape, Shape::Cuboid { half_size } if half_size == [2.0, 1.0, 0.5]));
+    }
+
+    #[test]
+    fn test_rotation_three_values_is_euler_radians() {
+        // VibeGame composition convention: rotation="x y z" em RADIANOS.
+        let (spec, _) = parse_one(&node("Entity", &[("rotation", "0 0 1.5707964")])).unwrap();
+        let q = spec.transform.rotation_quat.expect("quat parsed");
+        let out = transform::quat_apply(q, [1.0, 0.0, 0.0]);
+        assert!(
+            (out[1] - 1.0).abs() < 1e-4,
+            "π/2 rad em Z manda X para Y: {out:?}"
+        );
+    }
+
+    #[test]
+    fn test_rotation_four_values_still_quat() {
+        let (spec, _) = parse_one(&node("Entity", &[("rotation", "0 0 0 1")])).unwrap();
+        assert_eq!(spec.transform.rotation_quat, Some([0.0, 0.0, 0.0, 1.0]));
+    }
+
+    #[test]
+    fn test_primitive_emissive_parsed() {
+        let (spec, w) = parse_one(&node("Sphere", &[("emissive", "#ff6622")])).unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::Primitive { material, .. } = spec.kind else {
+            panic!();
+        };
+        assert_eq!(material.emissive, Some([1.0, 0.4, 0.13333334]));
+        // Alias do VibeGame / grafia alternativa.
+        let (spec, w) = parse_one(&node("Sphere", &[("emissive-color", "red")])).unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::Primitive { material, .. } = spec.kind else {
+            panic!();
+        };
+        assert!(material.emissive.is_some());
+    }
+
+    #[test]
+    fn test_primitive_opacity_parsed_and_clamped() {
+        let (spec, w) = parse_one(&node("Box", &[("opacity", "0.25")])).unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::Primitive { material, .. } = spec.kind else {
+            panic!();
+        };
+        assert_eq!(material.opacity, Some(0.25));
+        let (spec, _) = parse_one(&node("Box", &[("opacity", "7")])).unwrap();
+        let EntityKind::Primitive { material, .. } = spec.kind else {
+            panic!();
+        };
+        assert_eq!(material.opacity, Some(1.0), "clamp 0..1");
+    }
+
+    #[test]
+    fn test_prototype_collected_and_use_expanded_with_overrides() {
+        let mut proto = node("Prototype", &[("id", "wall")]);
+        let mut comp = node("Composition", &[]);
+        comp.children = vec![node("Box", &[("half-size", "2 0.1 0.2")])];
+        proto.children = vec![comp];
+        let use_a = node(
+            "Use",
+            &[
+                ("prototype", "wall"),
+                ("translation", "1 0 2"),
+                ("name", "a"),
+            ],
+        );
+        let world = parse_world(&[], &[proto, use_a]).unwrap();
+        assert!(world.warnings.is_empty(), "{:?}", world.warnings);
+        assert_eq!(world.entities.len(), 1, "protótipo não spawna entidade");
+        assert_eq!(world.prototypes.len(), 1);
+        assert_eq!(world.prototype_instances.get("wall"), Some(&1));
+        let inst = &world.entities[0];
+        assert_eq!(inst.name.as_deref(), Some("a"), "override de name");
+        assert_eq!(
+            inst.transform.translation,
+            [1.0, 0.0, 2.0],
+            "override de pos"
+        );
+        assert!(
+            matches!(inst.kind, EntityKind::Composition { .. }),
+            "a instância é a árvore do protótipo"
+        );
+        assert!(
+            matches!(inst.children[0].physics.collider, ColliderShape::Auto),
+            "as marcas de colisor por parte sobrevivem à expansão"
+        );
+    }
+
+    #[test]
+    fn test_use_inside_group_expands_in_place() {
+        let mut proto = node("Prototype", &[("id", "p")]);
+        proto.children = vec![node("Sphere", &[("radius", "1")])];
+        let mut group = node("Group", &[("translation", "5 0 5")]);
+        group.children = vec![node("Use", &[("prototype", "p")])];
+        let world = parse_world(&[], &[proto, group]).unwrap();
+        assert_eq!(world.entities[0].children.len(), 1);
+        assert!(matches!(
+            world.entities[0].children[0].kind,
+            EntityKind::Primitive { .. }
+        ));
+    }
+
+    #[test]
+    fn test_use_unknown_prototype_is_recorded_not_fatal() {
+        let world = parse_world(&[], &[node("Use", &[("prototype", "ghost")])]).unwrap();
+        assert_eq!(world.entities.len(), 0);
+        assert_eq!(world.unknown_prototypes, vec!["ghost".to_string()]);
+    }
+
+    #[test]
+    fn test_prototype_cycle_is_cut_with_warning() {
+        let mut a = node("Prototype", &[("id", "a")]);
+        a.children = vec![node("Use", &[("prototype", "b")])];
+        let mut b = node("Prototype", &[("id", "b")]);
+        b.children = vec![node("Use", &[("prototype", "a")])];
+        let seed = node("Use", &[("prototype", "a")]);
+        let world = parse_world(&[], &[a, b, seed]).unwrap();
+        assert!(
+            world
+                .warnings
+                .iter()
+                .any(|w| w.contains("ciclo de protótipos")),
+            "{:?}",
+            world.warnings
+        );
+        assert_eq!(world.entities.len(), 0, "a instância em ciclo é descartada");
+    }
+
+    #[test]
+    fn test_nested_use_chains_resolve() {
+        // a instancia b que instancia uma primitiva — dois níveis.
+        let mut a = node("Prototype", &[("id", "a")]);
+        a.children = vec![node("Use", &[("prototype", "b")])];
+        let mut b = node("Prototype", &[("id", "b")]);
+        b.children = vec![node("Sphere", &[("radius", "0.3")])];
+        let use_a = node("Use", &[("prototype", "a"), ("pos", "9 9 9")]);
+        let world = parse_world(&[], &[a, b, use_a]).unwrap();
+        let root = &world.entities[0];
+        assert!(matches!(root.kind, EntityKind::Primitive { .. }));
+        assert_eq!(root.transform.translation, [9.0, 9.0, 9.0]);
+        assert_eq!(world.prototype_instances.get("a"), Some(&1));
+        assert_eq!(world.prototype_instances.get("b"), Some(&1));
+    }
+
+    #[test]
+    fn test_prototype_defined_in_included_position_is_found() {
+        // Definição DEPOIS do uso na ordem do documento: a passagem 0
+        // recolhe tudo antes da expansão.
+        let use_early = node("Use", &[("prototype", "late"), ("name", "x")]);
+        let mut proto = node("Prototype", &[("id", "late")]);
+        proto.children = vec![node("Sphere", &[("radius", "1")])];
+        let world = parse_world(&[], &[use_early, proto]).unwrap();
+        assert!(
+            world.unknown_prototypes.is_empty(),
+            "{:?}",
+            world.unknown_prototypes
+        );
+        assert_eq!(world.entities.len(), 1);
+    }
+
+    #[test]
+    fn test_summarize_counts_compositions_and_parts() {
+        let mut comp = node("Composition", &[]);
+        comp.children = vec![node("Box", &[]), node("Box", &[]), node("PointLight", &[])];
+        let world = parse_world(&[], &[comp]).unwrap();
+        let summary = summarize(&world);
+        assert_eq!(summary.compositions, 1);
+        assert_eq!(summary.composition_parts, 2);
+        assert_eq!(summary.primitives, 2);
+        assert_eq!(summary.point_lights, 1);
     }
 }

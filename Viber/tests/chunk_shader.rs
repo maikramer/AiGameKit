@@ -14,7 +14,7 @@
 use naga::valid::{Capabilities, ValidationFlags};
 
 /// Explicit minimal stubs for the `#import`s the chunk shader uses.
-const IMPORTS: [(&str, &str); 6] = [
+const IMPORTS: [(&str, &str); 9] = [
     (
         "#import bevy_pbr::forward_io::{VertexOutput, FragmentOutput}",
         "struct VertexOutput {\n\
@@ -28,31 +28,62 @@ const IMPORTS: [(&str, &str); 6] = [
     ),
     (
         "#import bevy_pbr::mesh_view_bindings::view",
-        "struct View { world_position: vec4<f32>, };\n\
-         @group(1) @binding(0) var<uniform> view: View;\n\
-         // apply_fog lê `view_bindings::fog` — o stub textual resolve a\n\
-         // referência para este var (ver REPLACE abaixo); o import REAL do\n\
-         // namespace `as view_bindings` é guardado por teste próprio.\n\
-         struct FogStub { color: vec4<f32>, };\n\
-         @group(1) @binding(1) var<uniform> fog: FogStub;",
+        "struct View { world_position: vec4<f32>, clip_from_view: mat4x4<f32>, };\n\
+         @group(1) @binding(0) var<uniform> view: View;",
     ),
     (
-        // O compose real (naga_oil) cria o módulo `view_bindings` a partir
-        // deste alias; no harness textual o `view_bindings::fog` é reescrito
-        // para o var `fog` do stub acima.
-        "#import bevy_pbr::mesh_view_bindings as view_bindings",
-        "",
+        "#import bevy_pbr::pbr_types::{pbr_input_new, STANDARD_MATERIAL_FLAGS_FOG_ENABLED_BIT}",
+        "const STANDARD_MATERIAL_FLAGS_FOG_ENABLED_BIT: u32 = 1u << 8u;\n\
+         struct PbrMaterialStub {\n\
+         \x20   flags: u32,\n\
+         \x20   base_color: vec4<f32>,\n\
+         \x20   perceptual_roughness: f32,\n\
+         };\n\
+         struct PbrInput {\n\
+         \x20   material: PbrMaterialStub,\n\
+         \x20   diffuse_occlusion: vec3<f32>,\n\
+         \x20   specular_occlusion: f32,\n\
+         \x20   frag_coord: vec4<f32>,\n\
+         \x20   world_position: vec4<f32>,\n\
+         \x20   world_normal: vec3<f32>,\n\
+         \x20   N: vec3<f32>,\n\
+         \x20   V: vec3<f32>,\n\
+         \x20   is_orthographic: bool,\n\
+         \x20   flags: u32,\n\
+         };\n\
+         fn pbr_input_new() -> PbrInput {\n\
+         \x20   var p: PbrInput;\n\
+         \x20   p.material.flags = 0u;\n\
+         \x20   p.material.base_color = vec4<f32>(1.0, 1.0, 1.0, 1.0);\n\
+         \x20   p.material.perceptual_roughness = 0.5;\n\
+         \x20   p.diffuse_occlusion = vec3<f32>(1.0, 1.0, 1.0);\n\
+         \x20   p.specular_occlusion = 1.0;\n\
+         \x20   p.frag_coord = vec4<f32>(0.0, 0.0, 0.0, 1.0);\n\
+         \x20   p.world_position = vec4<f32>(0.0, 0.0, 0.0, 1.0);\n\
+         \x20   p.world_normal = vec3<f32>(0.0, 0.0, 1.0);\n\
+         \x20   p.N = vec3<f32>(0.0, 0.0, 1.0);\n\
+         \x20   p.V = vec3<f32>(1.0, 0.0, 0.0);\n\
+         \x20   p.is_orthographic = false;\n\
+         \x20   p.flags = 0u;\n\
+         \x20   return p;\n\
+         }",
     ),
     (
-        "#import bevy_pbr::pbr_functions::apply_fog",
-        "fn apply_fog(\n\
-         \x20   fog_params: FogStub,\n\
-         \x20   input_color: vec4<f32>,\n\
-         \x20   fragment_world_position: vec3<f32>,\n\
-         \x20   view_world_position: vec3<f32>,\n\
-         \x20   frag_coord_xy: vec2<f32>,\n\
-         ) -> vec4<f32> {\n\
+        "#import bevy_pbr::pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing, calculate_view}",
+        "fn apply_pbr_lighting(pbr_input: PbrInput) -> vec4<f32> {\n\
+         \x20   return pbr_input.material.base_color;\n\
+         }\n\
+         fn main_pass_post_lighting_processing(pbr_input: PbrInput, input_color: vec4<f32>) -> vec4<f32> {\n\
          \x20   return input_color;\n\
+         }\n\
+         fn calculate_view(world_position: vec4<f32>, is_orthographic: bool) -> vec3<f32> {\n\
+         \x20   return normalize(vec3<f32>(0.0, 0.0, 1.0));\n\
+         }",
+    ),
+    (
+        "#import bevy_pbr::lighting::perceptualRoughnessToRoughness",
+        "fn perceptualRoughnessToRoughness(perceptual_roughness: f32) -> f32 {\n\
+         \x20   return perceptual_roughness * perceptual_roughness;\n\
          }",
     ),
     (
@@ -64,8 +95,18 @@ const IMPORTS: [(&str, &str); 6] = [
     ),
     (
         "#import bevy_pbr::mesh_bindings::mesh",
-        "struct MeshBindStub { material_and_lightmap_bind_group_slot: u32, }\n\
+        "struct MeshBindStub { material_and_lightmap_bind_group_slot: u32, flags: u32, }\n\
          @group(2) @binding(4) var<storage, read> mesh: array<MeshBindStub>;",
+    ),
+    (
+        "#import bevy_pbr::mesh_view_bindings::screen_space_ambient_occlusion_texture",
+        "@group(1) @binding(1) var screen_space_ambient_occlusion_texture: texture_2d<f32>;",
+    ),
+    (
+        "#import bevy_pbr::ssao_utils::ssao_multibounce",
+        "fn ssao_multibounce(visibility: f32, base_color: vec3<f32>) -> vec3<f32> {\n\
+         \x20   return vec3<f32>(visibility);\n\
+         }",
     ),
 ];
 
@@ -118,11 +159,7 @@ fn standalone(source: &str, defines: &[&str]) -> String {
         out.push('\n');
     }
     assert!(stack.is_empty(), "unbalanced #ifdef in the chunk shader");
-    // O stub do `view` declara `fog` ao nível de topo; no compose real é o
-    // módulo `view_bindings` (criado pelo import `as view_bindings`) que o
-    // expõe. Textualmente não há namespaces em WGSL — reescreve a
-    // referência para o stub.
-    out.replace("view_bindings::fog", "fog")
+    out
 }
 
 fn validate(source: &str) -> naga::Module {
@@ -140,9 +177,11 @@ fn chunk_shader_validates_in_every_define_combination() {
     for defines in [
         vec!["BINDLESS", "VERTEX_COLORS"], // the live `run` configuration
         vec!["BINDLESS", "VERTEX_COLORS", "DISTANCE_FOG"], // idem, com câmara com `DistanceFog` (default do `run`)
+        vec!["BINDLESS", "VERTEX_COLORS", "SCREEN_SPACE_AMBIENT_OCCLUSION"], // idem, com SSAO na câmara (default do `run`)
         vec!["BINDLESS"], // chunk meshes always carry colors — but the gate compiles either way
         vec!["VERTEX_COLORS"], // portable non-bindless fallback
         vec!["DISTANCE_FOG"], // fog sem bindless (câmara com DistanceFog, driver sem bindless)
+        vec!["SCREEN_SPACE_AMBIENT_OCCLUSION"], // SSAO sem bindless
         vec![],
     ] {
         validate(&standalone(template, &defines));

@@ -369,6 +369,7 @@ fn carved_crossings_world() -> (
     let guards = viber::terrain::voxel::ScatterGuards {
         water: &result.water,
         roads: &result.roads,
+        ..viber::terrain::voxel::ScatterGuards::default()
     };
     for field in &pending.features.rock_fields {
         let seeded = field.resolve(&grid, &guards);

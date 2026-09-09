@@ -21,7 +21,33 @@ pub const WORLD_XML_TEMPLATE: &str = r##"<?xml version="1.0"?>
 </world>
 "##;
 
-/// Cria `<target_dir>/world.xml` a partir do template.
+/// `config.yaml` gerado por `viber create` — o contrato de paths do jogo
+/// com a engine (docs/ASSETS.md). Jogo standalone: sem roots extra (a pasta
+/// do jogo é a única root); os dirs canónicos do pool partilhado vêm
+/// materializados, prontos a apontar quando o jogo adotar assets.
+pub const CONFIG_YAML_TEMPLATE: &str = r#"# config.yaml — contrato de paths do jogo com a engine (docs/ASSETS.md).
+# Relativos a ESTA pasta. Obrigatório: o run/analyze não arranca sem ele.
+title: # opcional — título da janela (vazio = nome do world.xml)
+
+assets:
+  # Roots extra, por ordem, DEPOIS da pasta do jogo (a 1.ª root é sempre a
+  # pasta do próprio jogo — overrides e shaders/ especializados vivem lá).
+  # Exemplo, partilhando o pool do monorepo:
+  #   roots:
+  #     - ../shared-assets/public
+  roots: []
+  bgm_dir: assets/audio/bgm              # <MusicLayer layer="x"> → {bgm_dir}/x.ogg
+  sfx_dir: assets/audio/sfx              # clips da engine → {sfx_dir}/…
+  terrain_textures_dir: assets/textures  # layers de terreno → {dir}/{alias}/…
+
+game:
+  scripts_dir: scripts                   # script="x.lua" + hot-reload
+
+save:
+  dir: ~/.local/share/viber              # {dir}/{mundo}.save.json (~ ok)
+"#;
+
+/// Cria `<target_dir>/{world.xml,config.yaml}` a partir dos templates.
 ///
 /// Falha se `target_dir` já existir — nunca sobrescreve. Devolve o caminho do
 /// `world.xml` criado.
@@ -36,5 +62,8 @@ pub fn create_world_project(target_dir: &Path) -> Result<PathBuf> {
     let world_path = target_dir.join("world.xml");
     fs::write(&world_path, WORLD_XML_TEMPLATE)
         .with_context(|| format!("writing {}", world_path.display()))?;
+    let config_path = target_dir.join(crate::config::CONFIG_FILE);
+    fs::write(&config_path, CONFIG_YAML_TEMPLATE)
+        .with_context(|| format!("writing {}", config_path.display()))?;
     Ok(world_path)
 }

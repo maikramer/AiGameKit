@@ -43,10 +43,13 @@ fn shipped_hud_has_unique_ids_and_valid_bindings() {
                 }
                 if node.tag == "UiIcon" {
                     let src = node.attr("src").expect("icon source");
-                    assert!(
-                        root.join(src.trim_start_matches('/')).exists(),
-                        "missing icon {src}"
-                    );
+                    // A mesma resolução da engine (docs/ASSETS.md): a pasta do
+                    // mundo primeiro, o pool partilhado como fallback.
+                    let rel = src.trim_start_matches('/');
+                    let exists = root.join(rel).exists()
+                        || viber::meshopt::shared_asset_pool()
+                            .is_some_and(|pool| pool.join(rel).exists());
+                    assert!(exists, "missing icon {src}");
                 }
             }
         }

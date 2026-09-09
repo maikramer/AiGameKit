@@ -109,6 +109,17 @@ fn template_and_specialized_worlds_parse_and_validate() {
             sun_intensity: 0.0,
             ..Default::default()
         },
+        SkyConfig {
+            // O ramo físico (nishita) com os multiplicadores do simple-rpg:
+            // valida o vec3 das consts e o raymarch no mesmo harness.
+            drive: true,
+            model: viber::sky::SkyModel::Nishita,
+            rayleigh: 2.8,
+            nishita_mie: 1.5,
+            mie_g: 0.8,
+            sun_intensity: 2.6,
+            ..Default::default()
+        },
     ] {
         validate(&standalone(&config.render_world_shader()));
     }
@@ -276,9 +287,27 @@ fn render(
         "sky test storage",
         &[binding(0, BufferBindingType::Storage { read_only: true })],
     );
+    // O layout do pipeline tem de ter UM slot por grupo até ao grupo do
+    // material (0 = view, 1..MATERIAL_BIND_GROUP-1 vazios, MATERIAL = storage
+    // do céu). Hardcodar 3 grupos e ligar o storage ao 2 falhava a validação
+    // ("Binding is missing from the pipeline layout") quando o bevy 0.19.1
+    // passou o MATERIAL_BIND_GROUP_INDEX para 3 — estes testes GPU são
+    // `#[ignore]`, por isso o desvio ficou invisível até 2026-09-08.
+    // O slice tem de ser LITERAL (um Vec intermédio fixa o tipo antes da
+    // coerção e os lifetimes `&'a [Option<&'a BindGroupLayout<'a>>]` do
+    // descriptor não unificam) — o assert mantém o acoplamento honesto.
+    assert_eq!(
+        MATERIAL_BIND_GROUP, 3,
+        "bevy mudou o grupo do material — atualizar o layout de grupos do harness"
+    );
     let layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[Some(&view_layout), Some(&empty_layout), Some(&sky_layout)],
+        bind_group_layouts: &[
+            Some(&view_layout),
+            Some(&empty_layout),
+            Some(&empty_layout),
+            Some(&sky_layout),
+        ],
         immediate_size: 0,
     });
     let pipeline = device.create_render_pipeline(&RawRenderPipelineDescriptor {
@@ -390,7 +419,7 @@ fn render(
         pass.set_pipeline(&pipeline);
         pass.set_bind_group(0, &*view_group, &[]);
         pass.set_bind_group(1, &*empty_group, &[]);
-        pass.set_bind_group(2, &*sky_group, &[]);
+        pass.set_bind_group(MATERIAL_BIND_GROUP, &*sky_group, &[]);
         pass.draw(0..3, 0..1);
     }
     encoder.copy_texture_to_buffer(
@@ -590,4 +619,43 @@ fn sky_gpu_finite_day_night_and_zero_clouds() {
             );
         }
     }
+}
+
+#[test]
+#[ignore = "requires a Vulkan/Metal/DX12 adapter; explicit real-GPU regression and optional captures"]
+fn sky_gpu_nishita_finite_and_day_night_separation() {
+    let options = WgpuSettings {
+        priority: WgpuSettingsPriority::WebGPU,
+        ..Default::default()
+    };
+    let resources = bevy::tasks::block_on(initialize_renderer(
+        options.backends.unwrap(),
+        None,
+        &options,
+    ));
+    eprintln!("Sky GPU adapter: {:?}", resources.3.get_info());
+    let (device, queue) = (&resources.0, &resources.1);
+    let config = SkyConfig {
+        drive: true,
+        model: viber::sky::SkyModel::Nishita,
+        ..Default::default()
+    };
+    let day = render(device, queue, &config, atmosphere(false, 0.0, 120.0), false);
+    let night = render(device, queue, &config, atmosphere(true, 0.0, 120.0), false);
+    let dawn = render(device, queue, &config, dawn_atmosphere(), false);
+    for (label, pixels) in [("nishita-day", &day), ("nishita-night", &night), ("nishita-dawn", &dawn)] {
+        assert_pixels(label, pixels);
+        capture(label, pixels);
+    }
+    let mean = |pixels: &[[f32; 4]]| {
+        pixels
+            .iter()
+            .map(|p| (p[0] + p[1] + p[2]) as f64 / 3.0)
+            .sum::<f64>()
+            / pixels.len() as f64
+    };
+    assert!(
+        mean(&day) > mean(&night) * 1.5,
+        "nishita day/night radiance not separated"
+    );
 }
