@@ -110,7 +110,27 @@ class Adapter(WorkerAdapter):
                 "hint": "Runtime budget / MeshRender sem headroom — `vramd evict` ou reduz views.",
             }
         self.report_progress(request, 0.25, "painting")
-        textured = model.paint_mesh(mesh_objs, image_path)
+
+        # As fases do pipeline (xatlas, seleção de vistas, bake, inpaint) são
+        # silenciosas por dentro — ligar os hooks _step do vendor ao progresso
+        # do vramd para o watchdog de idle distinguir "a trabalhar" de
+        # "pendurado" (o village_house demorava 10+ min em fases mudas e era
+        # morto como timeout/OOM-spin).
+        phase_bounds = {
+            "uv_unwrap": (0.25, 0.40),
+            "view_selection": (0.40, 0.45),
+            "multiview_render": (0.45, 0.60),
+            "enhance": (0.60, 0.65),
+            "bake": (0.65, 0.80),
+            "inpaint": (0.80, 0.85),
+            "save": (0.85, 0.90),
+        }
+
+        def _phase_progress(phase: str, pct: float) -> None:
+            lo, hi = phase_bounds.get(str(phase), (0.25, 0.90))
+            self.report_progress(request, lo + (hi - lo) * max(0.0, min(1.0, pct / 100.0)), f"paint_{phase}")
+
+        textured = model.paint_mesh(mesh_objs, image_path, step_callback=_phase_progress)
 
         if self.should_abort(request):
             return self.cancelled_response("cancelled before save")
