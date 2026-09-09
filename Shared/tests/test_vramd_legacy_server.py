@@ -318,3 +318,33 @@ class TestEnsureVram:
         monkeypatch.setattr("aigamekit_shared.vramd_client.is_vramd_running", lambda: False)
         monkeypatch.setattr("aigamekit_shared.vramd_client.discover_active_sockets", lambda: [])
         assert ensure_vram_available(5000) is True
+
+    def test_early_true_with_backend_when_free_covers_need(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Backend declarado + livre >= needed: o caller prossegue sem vramd.
+
+        O pico calibrado do backend é worst-case estático (fp16 residente) —
+        não pode recusar modos leves (ex.: paint3d SDNQ + group offload com
+        pesos em streaming). O vramd só é consultado quando falta espaço.
+        """
+        monkeypatch.setattr("aigamekit_shared.gpu.query_gpu_free_mib", lambda: 5511)
+
+        def _fail_if_called(*args: object, **kwargs: object) -> None:
+            raise AssertionError("vramd não devia ser consultado com VRAM suficiente")
+
+        monkeypatch.setattr("aigamekit_shared.vramd_client.send_to_vramd", _fail_if_called)
+        assert ensure_vram_available(4000, backend="paint3d", quant_mode="sdnq-uint8") is True
+
+    def test_consults_vramd_when_short_even_with_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Livre < needed: o vramd é consultado para evicção (comportamento mantido)."""
+        monkeypatch.setattr("aigamekit_shared.gpu.query_gpu_free_mib", lambda: 1000)
+        monkeypatch.setattr("aigamekit_shared.vramd_client.is_vramd_running", lambda: True)
+
+        calls: list[dict] = []
+
+        def _mock_send(req, timeout_sec=None):
+            calls.append(req)
+            return {"status": "ok"}
+
+        monkeypatch.setattr("aigamekit_shared.vramd_client.send_to_vramd", _mock_send)
+        assert ensure_vram_available(4000, backend="paint3d", quant_mode="sdnq-uint8") is True
+        assert calls and calls[0]["cmd"] == "ensure-vram" and calls[0]["backend"] == "paint3d"

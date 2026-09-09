@@ -82,10 +82,22 @@ def _enable_sage_attention(requested: bool) -> bool:
     return True
 
 
-def _prepare_gpu(allow_shared: bool, kill_others: bool, memory_efficient: bool = False) -> None:
-    """Prep GPU só para path in-process (depois de tentar vramd)."""
+def _prepare_gpu(
+    allow_shared: bool,
+    kill_others: bool,
+    memory_efficient: bool = False,
+    group_offload: bool = False,
+) -> None:
+    """Prep GPU só para path in-process (depois de tentar vramd).
+
+    ``needed_mib`` por modo: com group offload os pesos dos UNets vão para
+    streaming (CPU pinned + CUDA streams) — pico medido em 6 GB ≈ 2.6 GiB
+    reserved (ativações + raster + VAE) + folga. Sem GO mantém-se o 4000
+    histórico (pesos quantizados residentes).
+    """
+    needed_mib = 3200 if group_offload else 4000
     prepare_gpu_exclusive(
-        needed_mib=4000,
+        needed_mib=needed_mib,
         allow_shared=allow_shared,
         kill_others=kill_others,
         allow_shared_env="PAINT3D_ALLOW_SHARED_GPU",
@@ -268,8 +280,8 @@ def cli(ctx, verbose):
     default=False,
     show_default=True,
     help=(
-        "Group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1): pesos fp16 em"
-        " streaming — mais qualidade (SDNQ dispensado), mais tempo de geração."
+        "Group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1): pesos SDNQ em"
+        " streaming — ~2 GiB de VRAM libertados, mais tempo de geração."
     ),
 )
 @add_vramd_options
@@ -375,9 +387,13 @@ def texture(
     if output is None:
         output = mesh_path.with_name(f"{mesh_path.stem}_textured.glb")
 
+    # Allocator por modo: com group offload o churn de onloads + max_split_size_mb
+    # fragmenta o allocator (reserved 1.9→5.4 GB medidos) — sem max_split fica estável.
+    from .painter import cuda_alloc_conf_for
+
     os.environ.setdefault(
         "PYTORCH_CUDA_ALLOC_CONF",
-        "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6",
+        cuda_alloc_conf_for(_env_bool("PAINT3D_GROUP_OFFLOAD", allow_group_offload)),
     )
     if torch_compile:
         os.environ.pop("TORCHDYNAMO_DISABLE", None)
@@ -476,7 +492,12 @@ def texture(
     ):
         sys.exit(0)
 
-    _prepare_gpu(allow_shared_gpu, gpu_kill_others, memory_efficient=mem_eff)
+    _prepare_gpu(
+        allow_shared_gpu,
+        gpu_kill_others,
+        memory_efficient=mem_eff,
+        group_offload=_env_bool("PAINT3D_GROUP_OFFLOAD", allow_group_offload),
+    )
 
     try:
         start = time.time()
@@ -599,8 +620,8 @@ def texture(
     default=False,
     show_default=True,
     help=(
-        "Group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1): pesos fp16 em"
-        " streaming — mais qualidade (SDNQ dispensado), mais tempo de geração."
+        "Group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1): pesos SDNQ em"
+        " streaming — ~2 GiB de VRAM libertados, mais tempo de geração."
     ),
 )
 @click.option(
@@ -733,9 +754,13 @@ def texture_batch(
                 texture_size = hwp.texture_size
         Console(stderr=True).print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
 
+    # Allocator por modo: com group offload o churn de onloads + max_split_size_mb
+    # fragmenta o allocator (reserved 1.9→5.4 GB medidos) — sem max_split fica estável.
+    from .painter import cuda_alloc_conf_for
+
     os.environ.setdefault(
         "PYTORCH_CUDA_ALLOC_CONF",
-        "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6",
+        cuda_alloc_conf_for(_env_bool("PAINT3D_GROUP_OFFLOAD", allow_group_offload)),
     )
     if torch_compile:
         os.environ.pop("TORCHDYNAMO_DISABLE", None)
@@ -870,7 +895,12 @@ def texture_batch(
                 emit_result(item_id, TOOL_PAINT3D, STATUS_ERROR, error=str(exc), seconds=round(elapsed, 2))
 
         if pending_inprocess:
-            _prepare_gpu(allow_shared_gpu, gpu_kill_others, memory_efficient=mem_eff)
+            _prepare_gpu(
+                allow_shared_gpu,
+                gpu_kill_others,
+                memory_efficient=mem_eff,
+                group_offload=_env_bool("PAINT3D_GROUP_OFFLOAD", allow_group_offload),
+            )
             _batch_proc = PaintBatchProcessor(
                 max_num_view=max_views,
                 view_resolution=view_resolution,
@@ -1207,9 +1237,15 @@ def serve(ums_worker: bool) -> None:
         return
 
     # PYTORCH_CUDA_ALLOC_CONF é critério para VRAM ~6 GB; herda do env se definido.
+    # Allocator por modo: com group offload o churn de onloads + max_split_size_mb
+    # fragmenta o allocator (reserved 1.9→5.4 GB medidos) — sem max_split fica
+    # estável. Aqui (startup do worker) só o env conta; o adapter corrige por
+    # request (load) quando o GO chega pela payload.
+    from .painter import cuda_alloc_conf_for
+
     os.environ.setdefault(
         "PYTORCH_CUDA_ALLOC_CONF",
-        "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6",
+        cuda_alloc_conf_for(_env_bool("PAINT3D_GROUP_OFFLOAD", False)),
     )
 
     from aigamekit_shared.worker_serve import run_ums_worker_cli

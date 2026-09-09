@@ -18,6 +18,8 @@ import shutil
 import sys
 import tempfile
 import warnings
+from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -137,20 +139,53 @@ def _group_offload_intent(allow: bool) -> bool:
     )
 
 
-def _prep_group_offload_pipeline_env(allow: bool) -> None:
-    """Intenção de group offload → garantir UNet fp16 desde o load.
+@contextmanager
+def _no_prequantized_unet_env(allow: bool):
+    """Desliga os artefactos qint8 (quanto) do disco **só** durante o constructor.
 
-    Os artefactos qint8 pré-computados (``unet-qint8.safetensors``) carregam
-    automaticamente em GPUs <10 GB no constructor do pipeline — antes de
-    qualquer decisão de offload. Com group offload pretendemos pesos fp16 em
-    streaming (qualidade máxima); quanto QTensor x streams é terreno não
-    testado. Override explícito do utilizador (``PAINT3D_USE_QUANTIZED_UNET``)
-    é respeitado (o GO skipa nesse caso).
+    Os artefactos ``unet-qint8.safetensors`` carregam automaticamente em GPUs
+    <10 GB dentro de ``Hunyuan3DPaintPipeline(config)`` — antes de qualquer
+    decisão de offload. No caminho com group offload usamos SDNQ uint8
+    (quantização própria, aplicada depois do load e antes dos hooks);
+    quanto QTensor com CUDA streams é que é terreno não testado. O env é
+    restaurado no fim (worker persistente: nada sticky entre requests).
+    Override explícito do utilizador é respeitado (o GO skipa nesse caso).
     """
     if not _group_offload_intent(allow):
+        yield
         return
-    if os.environ.get("PAINT3D_USE_QUANTIZED_UNET", "").strip() == "":
-        os.environ["PAINT3D_USE_QUANTIZED_UNET"] = "0"
+    key = "PAINT3D_USE_QUANTIZED_UNET"
+    prior = os.environ.get(key)
+    if prior is not None and prior.strip():
+        yield  # override explícito — não mexer
+        return
+    os.environ[key] = "0"
+    try:
+        yield
+    finally:
+        os.environ.pop(key, None)
+
+
+# Allocator default do paint3d (CLI): anti-fragmentação para o perfil clássico
+# (pesos residentes + ativações grandes).
+ALLOC_CONF_DEFAULT = "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6"
+# Com group offload NÃO usar max_split_size_mb: o streaming faz churn de
+# milhares de onloads pequenos intercalados com blocos grandes de ativação —
+# max_split proíbe partir blocos >64 MB e o reserved explode por fragmentação
+# (medido: 1.9→5.4 GB em 2 s com nvml_free a 74 MB; sem max_split fica estável
+# ~2.1-2.6 GB). garbage_collection_threshold também fora (GC agressivo
+# desnecessário com pesos fora da GPU).
+ALLOC_CONF_GROUP_OFFLOAD = "expandable_segments:True"
+
+
+def cuda_alloc_conf_for(group_offload: bool) -> str:
+    """``PYTORCH_CUDA_ALLOC_CONF`` adequado ao modo (GO streaming vs clássico).
+
+    O CLI usa com ``setdefault`` (override do utilizador respeitado); o worker
+    vramd substitui o env herdado do supervisor (pode estar stale com
+    ``max_split_size_mb``) — só eficaz antes da primeira alocação CUDA.
+    """
+    return ALLOC_CONF_GROUP_OFFLOAD if _group_offload_intent(group_offload) else ALLOC_CONF_DEFAULT
 
 
 def _auto_dino_device(memory_efficient: bool, gpu_ids: list[int] | None) -> str:
@@ -637,9 +672,12 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
       ``enable_group_offload``, preservando também os caches internos (RoPE)
       que o processor escreve nesse dict.
 
-    Quando aplica, o SDNQ é dispensado (pesos fp16 em streaming — qualidade
-    máxima em troca de tempo de geração) e o ``offload_ref_unet`` custom fica
-    desligado (os hooks são donos da colocação; ver ``_paint_group_offload_active``).
+    Convive com o SDNQ uint8 (mem-eff): a quantização corre **antes** dos
+    hooks ( caller), e as camadas SDNQ subclassam ``Conv2d``/``Linear`` com
+    ``scale``/``zero_point`` registados como Parameters — o leaf-level
+    apanha-as como folhas e o grupo move peso+escalas juntos (micro-testado).
+    Quando aplica, o ``offload_ref_unet`` custom fica desligado (os hooks são
+    donos da colocação; ver ``_paint_group_offload_active``).
 
     Opt-in: ``--group-offload`` (CLI) ou ``PAINT3D_GROUP_OFFLOAD=1``. Best-effort:
     se falhar, retorna False — o pipeline segue com a colocação do constructor.
@@ -664,10 +702,13 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
     diff_pipe = inner_mv.pipeline
 
     # UNet qint8 (quanto) carregado — pesos QTensor com CUDA streams é terreno
-    # não testado; o caminho de qualidade com GO é fp16.
+    # não testado (no caminho GO usamos SDNQ próprio; o constructor desliga os
+    # artefactos quanto via ``_no_prequantized_unet_env``).
     if getattr(inner_mv, "_unet_quantized", False):
         if verbose:
-            _logger.warn("Group offload skip: UNet qint8 (quanto) carregado — use fp16 (PAINT3D_USE_QUANTIZED_UNET=0)")
+            _logger.warn(
+                "Group offload skip: UNet qint8 (quanto) carregado — use SDNQ/fp16 (PAINT3D_USE_QUANTIZED_UNET=0)"
+            )
         return False
 
     # Footprint do Hunyuan3D-Paint — registry centralizado.
@@ -676,9 +717,17 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
         return False
     usable_gib = (max(m for _, m in specs) / GIB) * 0.9
     footprint = get_footprint("hunyuan-paint")
+    # quant_mode="none" (footprint como fp16): garante que o plano engaja GO
+    # mesmo com SDNQ activo — o objectivo é tirar os pesos da GPU, não só caber.
     cfg = plan_group_offload(usable_gib, footprint, quant_mode="none")
     if cfg is None:
         return False  # modelo cabe na GPU — sem offload
+    # record_stream=False (conservador): com record=True as cópias GPU dos
+    # grupos só são reutilizáveis depois dos eventos do side stream — no
+    # dual-UNet (2 forwards/step) observámos OOM-spin em 6 GB com record=True
+    # (fp16); a atribuição exacta da causa não ficou provada, mas sem record
+    # os frees são determinísticos e o overlap H2D↔compute mantém-se.
+    cfg = replace(cfg, record_stream=False)
 
     # Aplicar aos inner UNets do pipeline Hunyuan-Paint.
     # NOTA: o wrapper UNet2p5DConditionModel tem forward dual-stream; aplicamos
@@ -729,7 +778,7 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         if verbose:
-            _logger.info(f"Paint3D group offload ativo ({cfg.summary()}) — SDNQ dispensado (fp16 em streaming)")
+            _logger.info(f"Paint3D group offload ativo ({cfg.summary()})")
         return True
     return False
 
@@ -807,13 +856,25 @@ def _fit_glb_aabb_to_reference(output_path: str | Path, reference_path: str | Pa
     Determinístico, **sem heurística**: lê rotação do node-transform do input,
     calcula escala+translação por AABB (trimesh só para métricas), aplica a
     matriz 4x4 em bpy e re-exporta com NORMAL+TANGENT via ``save_glb``.
+
+    GLBs do pool (meshopt+KTX2, 2 buffers) podem não ser legíveis pelo trimesh
+    (o bpy lê-os — o paint em si funciona): nesse caso saltamos o placement
+    com aviso em vez de abortar o comando no último passo e perder o
+    deliverable já escrito.
     """
     import trimesh
 
     from paint3d.utils.mesh_io import load_mesh_bpy, save_glb
 
-    ref = trimesh.load(str(reference_path), force="scene")
-    out_scene = trimesh.load(str(output_path), force="scene")
+    try:
+        ref = trimesh.load(str(reference_path), force="scene")
+        out_scene = trimesh.load(str(output_path), force="scene")
+    except Exception as exc:
+        _logger.warn(
+            f"placement saltado: trimesh não lê a referência/output "
+            f"({type(exc).__name__}: {exc}) — GLB mantém a colocação do paint"
+        )
+        return
 
     rot = np.eye(3)
     nodes = list(ref.graph.nodes_geometry)
@@ -1053,8 +1114,8 @@ def apply_hunyuan_paint(
 
         with profile_span("paint_load_pipeline"):
             _preflight_paint_model(model_repo, subfolder, verbose=verbose)
-            _prep_group_offload_pipeline_env(allow_group_offload)
-            pipe = Hunyuan3DPaintPipeline(config)
+            with _no_prequantized_unet_env(allow_group_offload):
+                pipe = Hunyuan3DPaintPipeline(config)
             # Skip inpaint em ilhas UV nunca baked (cascas internas / occlusas).
             from .paint_prep import (
                 apply_top_view_weight,
@@ -1074,12 +1135,12 @@ def apply_hunyuan_paint(
             # Bake supersampled: subdiv SIMPLE só no bake para precisão por-texel.
 
         with profile_span("paint_optimize_pipeline"):
-            # Group offload primeiro: se aplicar, os pesos fp16 ficam em
-            # streaming (CUDA streams) e o SDNQ é dispensado — mais qualidade
-            # em troca de mais tempo de geração.
-            group_offload_applied = _try_paint_group_offload(pipe, allow=allow_group_offload, verbose=verbose)
-
-            if memory_efficient and not group_offload_applied and _sdnq_available() and pipe.unet is not None:
+            # SDNQ PRIMEIRO, hooks DEPOIS: os hooks de group offload guardam
+            # referências aos parâmetros/buffers (grupos + cópias pinned) —
+            # quantizar depois trocaria as camadas e invalidava-as. SDNQ uint8
+            # convive com leaf-level (as camadas subclassam Conv2d/Linear e
+            # scale/zero_point são Parameters registados no mesmo grupo).
+            if memory_efficient and _sdnq_available() and pipe.unet is not None:
                 from aigamekit_shared.sdnq import quantize_model
 
                 if verbose:
@@ -1095,12 +1156,16 @@ def apply_hunyuan_paint(
                         f"Quantização SDNQ do UNet falhou ({e}) — a abortar para não pintar com modelo meio-quantizado."
                     ) from e
             elif verbose:
-                if group_offload_applied:
-                    _logger.info("Group offload ativo — SDNQ dispensado (pesos fp16 em streaming)")
-                elif memory_efficient:
+                if memory_efficient:
                     _logger.warn("Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
                 else:
                     _logger.info("Modo alta VRAM — UNet em FP16 (sem quantização)")
+
+            # Group offload com CUDA streams (depois da quantização).
+            group_offload_applied = _try_paint_group_offload(pipe, allow=allow_group_offload, verbose=verbose)
+            if group_offload_applied and verbose:
+                quant_note = "SDNQ uint8 + streams" if memory_efficient else "fp16 + streams"
+                _logger.info(f"Group offload ativo ({quant_note})")
             try:
                 if pipe.vae is not None:
                     enable_vae_optimizations(
@@ -1392,8 +1457,8 @@ class PaintBatchProcessor:
 
         with profile_span("paint_load_pipeline"):
             _preflight_paint_model(self._model_repo, self._subfolder, verbose=self._verbose)
-            _prep_group_offload_pipeline_env(self._allow_group_offload)
-            pipe = Hunyuan3DPaintPipeline(config)
+            with _no_prequantized_unet_env(self._allow_group_offload):
+                pipe = Hunyuan3DPaintPipeline(config)
             from .paint_prep import (
                 apply_top_view_weight,
                 install_depth_bias,
@@ -1408,13 +1473,10 @@ class PaintBatchProcessor:
             install_depth_bias(pipe.render, logger=_logger)
 
         with profile_span("paint_optimize_pipeline"):
-            # Group offload primeiro: se aplicar, pesos fp16 em streaming e o
-            # SDNQ é dispensado (qualidade > tempo).
-            group_offload_applied = _try_paint_group_offload(
-                pipe, allow=self._allow_group_offload, verbose=self._verbose
-            )
+            # SDNQ PRIMEIRO, hooks DEPOIS (ver apply_hunyuan_paint): os hooks
+            # guardam referências aos parâmetros — quantizar depois invalidava-as.
             try:
-                if self._memory_efficient and not group_offload_applied and _sdnq_available() and pipe.unet is not None:
+                if self._memory_efficient and _sdnq_available() and pipe.unet is not None:
                     from aigamekit_shared.sdnq import quantize_model
 
                     if self._verbose:
@@ -1423,12 +1485,17 @@ class PaintBatchProcessor:
                         )
                     pipe.unet = quantize_model(pipe.unet, preset="sdnq-uint8", dequantize_fp32=False)
                 elif self._verbose:
-                    if group_offload_applied:
-                        _logger.info("[batch] Group offload ativo — SDNQ dispensado (pesos fp16 em streaming)")
-                    elif self._memory_efficient:
+                    if self._memory_efficient:
                         _logger.warn("[batch] Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
                     else:
                         _logger.info("[batch] Modo alta VRAM — UNet em FP16 (sem quantização)")
+
+                group_offload_applied = _try_paint_group_offload(
+                    pipe, allow=self._allow_group_offload, verbose=self._verbose
+                )
+                if group_offload_applied and self._verbose:
+                    quant_note = "SDNQ uint8 + streams" if self._memory_efficient else "fp16 + streams"
+                    _logger.info(f"[batch] Group offload ativo ({quant_note})")
                 if pipe.vae is not None:
                     enable_vae_optimizations(
                         pipe.vae,

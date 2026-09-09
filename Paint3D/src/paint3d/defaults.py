@@ -24,10 +24,14 @@ Modo memory-efficient (``memory_efficient=True``):
   pintura. Env: PAINT3D_OFFLOAD_REF_UNET=0 desliga.
 
 Group offload com CUDA streams (``--group-offload`` / PAINT3D_GROUP_OFFLOAD=1):
-- Pesos fp16 dos dois UNets em streaming (leaf_level + streams, diffusers);
-  SDNQ fica dispensado e o offload_ref_unet custom desligado — mais qualidade
-  em troca de mais tempo de geração. Convive com o dual-stream do UNet2p5D
-  via holder opaco (``ConditionEmbedRef``) + ``exclude_kwargs`` no vendor.
+- Os pesos SDNQ uint8 dos dois UNets ficam em streaming (leaf_level + streams,
+  diffusers) — ~2 GiB de VRAM libertados para ativações/raster em GPUs de 6 GB,
+  em troca de mais tempo de geração. O quanto qint8 do disco fica fora nesse
+  caminho (SDNQ próprio, quantizado ANTES dos hooks); o offload_ref_unet custom
+  desliga-se (os hooks são donos da colocação). Convive com o dual-stream do
+  UNet2p5D via holder opaco (``ConditionEmbedRef``) + ``exclude_kwargs``.
+- Nota allocator: com GO não usar ``max_split_size_mb`` (fragmenta com o churn
+  de onloads — ver ``painter.cuda_alloc_conf_for``).
 
 Colocação de modelos auxiliares (auto por VRAM; env override):
 - DINO-giant: GPU fp16 quando >=10 GiB (single) ou GPU secundária (multi);

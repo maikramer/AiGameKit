@@ -418,3 +418,81 @@ class TestParkRefUnetCoexistence:
         assert _park_ref_unet_on_cpu(pipe, verbose=False) is True
         # O flag custom NÃO liga — a colocação é dos hooks.
         assert wrapper.offload_ref_unet is False
+
+
+class TestNoPrequantizedUnetEnv:
+    """``_no_prequantized_unet_env``: scoped (nada sticky), override respeitado."""
+
+    def test_env_restored_after_context(self, monkeypatch):
+        import os
+
+        from paint3d.painter import _no_prequantized_unet_env
+
+        monkeypatch.delenv("PAINT3D_USE_QUANTIZED_UNET", raising=False)
+        monkeypatch.setenv("PAINT3D_GROUP_OFFLOAD", "1")
+        with _no_prequantized_unet_env(allow=False):
+            assert os.environ["PAINT3D_USE_QUANTIZED_UNET"] == "0"
+        assert "PAINT3D_USE_QUANTIZED_UNET" not in os.environ
+
+    def test_explicit_override_respected(self, monkeypatch):
+        import os
+
+        from paint3d.painter import _no_prequantized_unet_env
+
+        monkeypatch.setenv("PAINT3D_USE_QUANTIZED_UNET", "1")
+        monkeypatch.setenv("PAINT3D_GROUP_OFFLOAD", "1")
+        with _no_prequantized_unet_env(allow=True):
+            assert os.environ["PAINT3D_USE_QUANTIZED_UNET"] == "1"
+        assert os.environ["PAINT3D_USE_QUANTIZED_UNET"] == "1"
+
+    def test_noop_without_intent(self, monkeypatch):
+        import os
+
+        from paint3d.painter import _no_prequantized_unet_env
+
+        monkeypatch.delenv("PAINT3D_USE_QUANTIZED_UNET", raising=False)
+        monkeypatch.delenv("PAINT3D_GROUP_OFFLOAD", raising=False)
+        with _no_prequantized_unet_env(allow=False):
+            assert "PAINT3D_USE_QUANTIZED_UNET" not in os.environ
+        assert "PAINT3D_USE_QUANTIZED_UNET" not in os.environ
+
+
+class TestSdnqLayersUnderGroupOffload:
+    """Camadas SDNQ uint8 sob hooks de group offload (ordem: quantizar → hooks).
+
+    As camadas SDNQ subclassam ``nn.Linear``/``nn.Conv2d`` (leaf-level apanha-as)
+    e ``scale``/``zero_point`` são Parameters registados — o grupo move
+    peso+escalas juntos. Em CPU quantizamos com ``quantization_device=cpu``.
+    """
+
+    def test_sdnq_uint8_output_stable_under_hooks(self):
+        import torch
+        import torch.nn as nn
+        from diffusers.hooks import apply_group_offloading
+
+        pytest.importorskip("sdnq", reason="sdnq indisponível")
+        from aigamekit_shared.sdnq import quantize_model
+
+        torch.manual_seed(0)
+        model = nn.Sequential(nn.Linear(64, 128), nn.GELU(), nn.Linear(128, 64))
+        x = torch.randn(2, 64)
+
+        quantized = quantize_model(
+            model, preset="sdnq-uint8", dequantize_fp32=False, quantization_device="cpu", return_device="cpu"
+        )
+        lin = quantized[0]
+        assert type(lin).__name__ == "SDNQLinear"
+        # scale/zero_point registados como parâmetros (os hooks movem-nos).
+        param_names = [n for n, _ in lin.named_parameters()]
+        assert any("scale" in n or "zero_point" in n for n in param_names)
+
+        y_ref = quantized(x)
+        apply_group_offloading(
+            quantized,
+            onload_device=torch.device("cpu"),
+            offload_device=torch.device("cpu"),
+            offload_type="leaf_level",
+            use_stream=False,
+        )
+        y_hooks = quantized(x)
+        assert torch.allclose(y_ref, y_hooks, atol=1e-4)

@@ -78,6 +78,12 @@ paint3d texture mesh.glb -i ref.png --no-smooth
 # Override render/texture resolution (GPUs with >8 GB VRAM)
 paint3d texture mesh.glb -i ref.png --render-size 2048 --texture-size 4096
 
+# Small-GPU (~6 GB) headroom: group offload with CUDA streams — the SDNQ
+# uint8 weights of both UNets stream through the GPU (frees ~2 GiB VRAM for
+# activations/raster). Coexists with the UNet2p5D dual-stream; longer
+# generation in exchange for VRAM headroom.
+paint3d texture mesh.glb -i ref.png --group-offload
+
 # AI upscale (optional, requires: pip install spandrel)
 paint3d texture mesh.glb -i ref.png --upscale --upscale-factor 2
 

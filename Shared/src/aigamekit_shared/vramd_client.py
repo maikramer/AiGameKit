@@ -827,9 +827,12 @@ def ensure_vram_available(
     Se houver servers ativos a segurar VRAM, pede-lhes ``release`` gracioso e
     espera até haver espaço (ou timeout).
 
-    Preferência: se o **vramd** estiver ativo, envia
-    ``ensure-vram`` para evicção inteligente peso+LRU. Com ``backend``, o vramd
-    usa ``max(needed_mib, peak=pesos+activação+safety)`` — não só o pedido cru.
+    Preferência: se o **vramd** estiver ativo e **faltar** espaço (livre <
+    ``needed_mib``), envia ``ensure-vram`` para evicção inteligente peso+LRU.
+    Com espaço suficiente o caller prossegue sem consultar o daemon — o
+    ``needed_mib`` é do caller, que conhece o seu modo (quantização, group
+    offload com pesos em streaming); o pico calibrado do backend (``max(
+    needed, peak)`` no vramd) entra apenas na evicção, como worst-case.
 
     Args:
         needed_mib: VRAM necessária em MiB (mínimo pedido pelo cliente).
@@ -843,8 +846,14 @@ def ensure_vram_available(
     from .gpu import query_gpu_free_mib
 
     free = query_gpu_free_mib()
-    if free is not None and free >= needed_mib and backend is None:
-        return True  # já há espaço, não incomodar ninguém
+    if free is not None and free >= needed_mib:
+        # Já há espaço para a necessidade declarada pelo caller — que conhece o
+        # seu modo real (quantização / group offload com pesos em streaming).
+        # O pico calibrado do backend é um worst-case estático (fp16 residente)
+        # que recusava jobs que cabem (ex.: paint3d SDNQ+streams, ~3 GiB de
+        # pico vs 5+ GiB calibrados). O vramd só é consultado quando falta
+        # espaço — para pedir evicção.
+        return True
 
     # Preferir o vramd se ativo (evicção inteligente peso+LRU + peak por backend).
     if is_vramd_running():

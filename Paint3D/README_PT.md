@@ -53,9 +53,11 @@ paint3d texture mesh.glb -i ref.png --no-smooth
 # Resolução mais alta (GPUs com >8 GB VRAM)
 paint3d texture mesh.glb -i ref.png --render-size 2048 --texture-size 4096
 
-# Máxima qualidade em GPUs pequenas (~6 GB): pesos fp16 em streaming via CUDA
-# streams (group offload) — dispensa a quantização SDNQ em troca de mais tempo
-# de geração. Convive com o dual-stream do UNet2p5D (reference attention).
+# Máxima qualidade em GPUs pequenas (~6 GB): group offload com CUDA streams —
+# pesos SDNQ uint8 dos dois UNets em streaming (liberta ~2 GiB de VRAM para
+# as ativações/raster). Convive com o dual-stream do UNet2p5D; mais tempo de
+# geração em troca de folga de VRAM (views/resoluções mais altas ficam ao
+# alcance sem OOM).
 paint3d texture mesh.glb -i ref.png --group-offload
 
 # Upscale IA (opcional, requer: pip install spandrel)
