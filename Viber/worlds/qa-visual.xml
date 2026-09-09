@@ -1,0 +1,51 @@
+<!--
+  qa-visual: banco de teste determinístico da passe visual r1 (Luz & Atmosfera).
+  Sem scripts, sem criaturas, sem chuva: só o terreno com layers, um muro para
+  receber sombras, três lanternas (com shadows="true") e a noite. Permite
+  verificar AO VIVO: PBR do terreno (sombras em cascata), normal maps, pools
+  de PointLight com sombras (o caso "luz dentro do poste") e o grading noturno.
+
+  Uso: viber session up (com este mundo) e viber debug screenshot.
+-->
+<world clear-color="#0b1020">
+  <Terrain
+    world-size="512" max-height="40" chunk-size="64" resolution="64" levels="3"
+    height-smoothing="1" cliff-angle="50"
+    layers="grass vale_grass dirt forest_floor gravel mountain_stone sand dirt_trail"
+    cliff-streaks="0.5" cliff-moss="0.35" />
+  <AmbientLight color="0x8090b0" brightness="60" />
+  <DirectionalLight illuminance="800" direction="-0.3 -1 -0.4" shadows="true" />
+  <DayCycle minute-of-day="1380" minutes-per-real-second="0" drive-ambient="1" ambient-day-intensity="0.26" ambient-night-intensity="0.2" />
+  <Sky cloud-coverage="0.25" cloud-density="0.4" star-density="1.0" />
+  <ThirdPersonCamera distance="6" height="2.2" pitch="16" />
+
+  <!-- Muro comprido: recebe as sombras das lanternas e da direcional -->
+  <Entity name="muro" translation="-6 0 -8">
+    <Cuboid half-size="10 2 0.6" base-color="#6b6f76" collider="shape: box" />
+  </Entity>
+  <!-- Postes de lanterna (torch_post + luz quente COM sombras) -->
+  <Group name="lanterna-a" translation="0 0 0">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-b" translation="8 0 -4">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
+  </Group>
+  <!-- Fogueira aberta (o caso que SABEMOS funcionar: luz acima da boca) -->
+  <Group name="fogueira" translation="4 0 6">
+    <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
+    <PointLight translation="0 0.9 0" color="0xff7a22" intensity="90000" radius="0.6" shadows="true" />
+  </Group>
+  <!-- Luz despendurada SEM geometry por perto (referência de pool limpo) -->
+  <Group name="luz-livre" translation="-4 0 4">
+    <PointLight translation="0 3 0" color="0xffd9a0" intensity="80000" radius="0.5" shadows="true" />
+  </Group>
+
+  <PlayerGLTF model-url="/assets/meshes/characters/hero_lod0.glb" pos="2 0 2" />
+  <UiStyle src="ui/hud.css" />
+  <HudScreenLayer>
+    <Minimap range="80" />
+    <HealthBar />
+  </HudScreenLayer>
+</world>

@@ -38,11 +38,25 @@ const CFG_AURORA: f32 = 0.6;
 const CFG_NEBULA: f32 = 0.5;
 const CFG_WIND_X: f32 = 0.7;
 const CFG_WIND_Z: f32 = 0.25;
+const CFG_SKY_MODEL: f32 = 0.0;
+const CFG_NISHITA_GAIN: f32 = 0.2;
+const CFG_NISHITA_RAYLEIGH: vec3<f32> = vec3(5.5e-6, 13.0e-6, 22.4e-6);
+const CFG_NISHITA_MIE: f32 = 21e-6;
+const CFG_NISHITA_NIGHT_FLOOR: f32 = 0.06;
 // === END WORLD CONFIG ===
 
 const PI: f32 = 3.141592653589793;
 const TAU: f32 = 6.283185307179586;
 const ROT: mat2x2<f32> = mat2x2<f32>(0.8, 0.6, -0.6, 0.8);
+
+// === Nishita physical sky (bevy_atmosphere v0.13.0, Apache-2.0 — port 1:1
+// de shaders/nishita.wgsl; ver src/sky_nishita.rs para o par CPU/IBL) ===
+const PLANET_RADIUS: f32 = 6371000.0;
+const ATMO_RADIUS: f32 = 6471000.0;
+const RAYLEIGH_H: f32 = 8000.0;
+const MIE_H: f32 = 1200.0;
+const NISHITA_ISTEPS: u32 = 16u;
+const NISHITA_JSTEPS: u32 = 8u;
 
 struct Atmosphere {
     sun: vec3<f32>,
@@ -139,6 +153,91 @@ fn sky_gradient(dir: vec3<f32>, a: Atmosphere) -> vec3<f32> {
     return mix(color, a.horizon * 0.42, below);
 }
 
+// Ray-sphere intersection against a sphere centred at the origin; returns
+// (near, far). No real intersection → (1e5, -1e5). Negative values mean
+// "behind the ray origin": the raymarch only uses the SPAN far-near, which
+// stays correct even when both roots are negative (ray pointing out of the
+// atmosphere).
+fn rsi(rd: vec3<f32>, r0: vec3<f32>, sr: f32) -> vec2<f32> {
+    let a = dot(rd, rd);
+    let b = 2.0 * dot(rd, r0);
+    let c = dot(r0, r0) - (sr * sr);
+    let d = (b * b) - (4.0 * a * c);
+    if (d < 0.0) { return vec2(1e5, -1e5); }
+    return vec2((-b - sqrt(d)) / (2.0 * a), (-b + sqrt(d)) / (2.0 * a));
+}
+
+fn nishita_sky(dir: vec3<f32>, a: Atmosphere) -> vec3<f32> {
+    // Rays at or below the horizon stop at the planet and the fallback below
+    // covers them. The early-out also keeps the raymarch out of deep
+    // underground samples, where exp() overflows and inf·0 = NaN (the
+    // crate's skybox never sees those rays — its origin sits 1 km up).
+    if (dir.y <= 0.0) { return vec3(0.0); }
+    let r = dir;
+    let p_sun = a.sun;
+    // Observer at ground level plus the camera height: the horizon of the
+    // model stays pinned to dir.y == 0, matching the flat-world horizon.
+    let cam_h = max(view.world_from_view[3].y, 0.5);
+    let r0 = vec3(0.0, PLANET_RADIUS + cam_h, 0.0);
+    let k_rlh = CFG_NISHITA_RAYLEIGH;
+    let k_mie = CFG_NISHITA_MIE;
+    let g = clamp(CFG_MIE_G, 0.0, 0.96);
+    let i_sun = 22.0 * clamp(CFG_SUN_INTENSITY, 0.0, 32.0) * CFG_NISHITA_GAIN;
+
+    var p = rsi(r, r0, ATMO_RADIUS);
+    if (p.x > p.y) { return vec3(0.0); }
+    // The primary ray stops at the planet; for above-horizon rays the planet
+    // root sits behind the camera and the span stays correct.
+    p.y = min(p.y, rsi(r, r0, PLANET_RADIUS).x);
+    let i_step_size = (p.y - p.x) / f32(NISHITA_ISTEPS);
+
+    var i_depth = 0.0;
+    var total_rlh = vec3(0.0);
+    var total_mie = vec3(0.0);
+    var i_od_rlh = 0.0;
+    var i_od_mie = 0.0;
+
+    let mu = dot(r, p_sun);
+    let mumu = mu * mu;
+    let gg = g * g;
+    let p_rlh = 3.0 / (16.0 * PI) * (1.0 + mumu);
+    let p_mie = 3.0 / (8.0 * PI) * ((1.0 - gg) * (mumu + 1.0))
+        / (pow(1.0 + gg - 2.0 * mu * g, 1.5) * (2.0 + gg));
+
+    for (var i = 0u; i < NISHITA_ISTEPS; i++) {
+        let i_pos = r0 + r * (i_depth + i_step_size * 0.5);
+        let i_height = length(i_pos) - PLANET_RADIUS;
+        let od_step_rlh = exp(-i_height / RAYLEIGH_H) * i_step_size;
+        let od_step_mie = exp(-i_height / MIE_H) * i_step_size;
+        i_od_rlh += od_step_rlh;
+        i_od_mie += od_step_mie;
+
+        let j_step_size = rsi(p_sun, i_pos, ATMO_RADIUS).y / f32(NISHITA_JSTEPS);
+        var j_depth = 0.0;
+        var j_od_rlh = 0.0;
+        var j_od_mie = 0.0;
+        for (var j = 0u; j < NISHITA_JSTEPS; j++) {
+            let j_pos = i_pos + p_sun * (j_depth + j_step_size * 0.5);
+            let j_height = length(j_pos) - PLANET_RADIUS;
+            j_od_rlh += exp(-j_height / RAYLEIGH_H) * j_step_size;
+            j_od_mie += exp(-j_height / MIE_H) * j_step_size;
+            j_depth += j_step_size;
+        }
+
+        let attn = exp(-(k_mie * (i_od_mie + j_od_mie) + k_rlh * (i_od_rlh + j_od_rlh)));
+        total_rlh += od_step_rlh * attn;
+        total_mie += od_step_mie * attn;
+        i_depth += i_step_size;
+    }
+
+    let color = i_sun * (p_rlh * k_rlh * total_rlh + p_mie * k_mie * total_mie);
+    // Physical night is ~black; keep the palette's airglow cue so the night
+    // dome still separates from pitch black (stars/moon ride on top).
+    let night_floor = mix(a.horizon, a.zenith, smoothstep(0.0, 0.45, r.y))
+        * a.night * CFG_NISHITA_NIGHT_FLOOR;
+    return max(color, vec3(0.0)) + night_floor;
+}
+
 fn sun_light(dir: vec3<f32>, a: Atmosphere, pixel: f32) -> vec3<f32> {
     let radius = 0.014;
     let distance = length(dir - a.sun);
@@ -152,7 +251,13 @@ fn sun_light(dir: vec3<f32>, a: Atmosphere, pixel: f32) -> vec3<f32> {
     let halo = exp(-distance * distance * 90.0) * 0.32;
     let visible = smoothstep(-0.055, 0.005, a.sun.y)
         * smoothstep(-radius, 0.002, dir.y);
-    let glow = mie * clamp(CFG_MIE * 120.0, 0.0, 1.6) + halo;
+    // O ramo nishita já traz o glow físico (fase Mie do raymarch) — o disco
+    // analítico fica só como núcleo crisp; duplicar o halo queimava o sol.
+    let glow = select(
+        mie * clamp(CFG_MIE * 120.0, 0.0, 1.6) + halo,
+        0.0,
+        CFG_SKY_MODEL >= 0.5
+    );
     return a.tint * (disc * 24.0 + glow) * clamp(CFG_SUN_INTENSITY, 0.0, 32.0) * visible;
 }
 
@@ -324,6 +429,16 @@ fn evaluate_sky(dir: vec3<f32>, pixel_angle: f32) -> vec3<f32> {
     let pixel = clamp(pixel_angle, 0.00001, 0.1);
     let time = sky.sun_tint.w;
     var color = sky_gradient(dir, a);
+    if (CFG_SKY_MODEL >= 0.5) {
+        // Scattering físico substitui o gradiente (e o glow do sol); as
+        // features compõem-se por cima exactamente como no ramo analítico.
+        color = nishita_sky(dir, a);
+        // O ramo analítico estende o horizonte para o hemisfério inferior
+        // DENTRO do gradiente; aqui o raymarch devolve 0 abaixo do horizonte
+        // e a mesma extensão entra à parte.
+        let below = 1.0 - exp(min(dir.y, 0.0) * 3.0);
+        color = mix(color, a.horizon * 0.42, below);
+    }
     color += milky_way(dir, a.night, pixel);
     color += star_field(dir, time, a.night, pixel);
     color += aurora_ribbons(dir, time, a.night, pixel);

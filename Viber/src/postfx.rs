@@ -21,14 +21,42 @@
 //!    parece autocolante sobre o terreno. Exige os prepasses de profundidade
 //!    e normal, que o próprio componente declara via `#[require]`.
 //!
+//! Passe visual r1 ("Luz & Atmosfera") acrescentou à lente:
+//!
+//! 4. **[`DepthOfField`]** — bokeh subtil com o foco no herói
+//!    ([`drive_dof_focus`] persegue a distância câmara↔herói); teto de CoC
+//!    20 px e `max_depth` 700 m para o horizonte não virar sopa.
+//! 5. **[`Vignette`] + [`ChromaticAberration`]** — a "lente" fotográfica,
+//!    doseada muito abaixo dos defaults.
+//! 6. **[`VolumetricFog`] + [`FogVolume`]** — god-rays: o volume segue o
+//!    herói e o `VolumetricLight` do sol (spawn.rs) acende-o onde a luz
+//!    atravessa geometria. Desligável com `VIBER_NO_VOLUMETRICS=1`.
+//!
+//! Passe visual P1.10 (VISUAL_ROADMAP) acrescentou à lente:
+//!
+//! 7. **[`MotionBlur`]** — desfoque de movimento por pixel com os defaults
+//!    cinematográficos (shutter 180°, 1 amostra). O `#[require]` insere o
+//!    `MotionVectorPrepass`; o TAA já exige o MESMO prepass, portanto os
+//!    motion vectors são partilhados entre os dois.
+//! 8. **[`ContrastAdaptiveSharpening`]** — sharpening adaptativo ao contraste
+//!    (CAS), a correr no post-process DEPOIS do AA: devolve o detalhe que o
+//!    TAA (e o FXAA do fallback) suavizam.
+//!
 //! `VIBER_NO_POSTFX=1` desliga tudo (comparações A/B e GPUs fracas).
 
+use bevy::anti_alias::contrast_adaptive_sharpening::ContrastAdaptiveSharpening;
 use bevy::anti_alias::fxaa::Fxaa;
+use bevy::anti_alias::taa::TemporalAntiAliasing;
 use bevy::camera::Exposure;
 use bevy::core_pipeline::prepass::{DepthPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
-use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
+use bevy::light::{FogVolume, VolumetricFog};
+use bevy::pbr::{ContactShadows, ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
+use bevy::post_process::auto_exposure::AutoExposure;
 use bevy::post_process::bloom::{Bloom, BloomPrefilter};
+use bevy::post_process::dof::{DepthOfField, DepthOfFieldMode};
+use bevy::post_process::effect_stack::{ChromaticAberration, Vignette};
+use bevy::post_process::motion_blur::MotionBlur;
 use bevy::prelude::*;
 use bevy::render::view::Msaa;
 
@@ -62,6 +90,32 @@ pub const KICK_TAU: f32 = 0.32;
 pub const MAX_KICK_EV: f32 = 1.2;
 /// Abaixo deste valor o kick corta a zero (fim determinístico do decay).
 const KICK_EPS: f32 = 1e-3;
+
+/// TAA ligado por omissão (passe r2): faz o AA, estabiliza o noise do PCSS
+/// (`ShadowFilteringMethod::Temporal`), do SSAO `High` e do ContactShadows —
+/// técnicas estocásticas desenhadas PARA acumulação temporal. O TAA do Bevy
+/// não lida bem com meshes alpha-blended (a água), portanto `VIBER_NO_TAA=1`
+/// devolve o FXAA + Gaussian e desce o SSAO a Medium (o fallback r1).
+fn taa_enabled() -> bool {
+    std::env::var_os("VIBER_NO_TAA").is_none()
+}
+
+/// Volumetrics (god-rays + volume de névoa) LIGADOS por omissão; desligar com
+/// `VIBER_NO_VOLUMETRICS=1`.
+///
+/// História: na r1 (sem TAA) `VolumetricFog` + `FogVolume` + `VolumetricLight`
+/// apagavam o frame inteiro (cena preta, HUD vivo, zero erros no log) —
+/// bevy 0.19.1 + wgpu 29.0.4 + NV 595.84. Com o TAA da r2 a mesma stack
+/// RENDERIZA (bisseção 2026-09-07: glow de scattering na direção do sol
+/// confirmado em qa-visual). Custo: ~+8 ms de raymarch fixo por pixel —
+/// em mundos pesados `VIBER_NO_VOLUMETRICS=1` devolve o orçamento.
+fn volumetrics_enabled() -> bool {
+    std::env::var_os("VIBER_NO_VOLUMETRICS").is_none()
+}
+
+/// Marcador do [`FogVolume`] cinemático que segue o herói.
+#[derive(Component)]
+struct CinematicFogVolume;
 
 /// Alvos de pós-processamento em vigor (base do mundo × bioma atual).
 #[derive(Debug, Clone, Resource)]
@@ -166,6 +220,7 @@ impl Plugin for PostFxPlugin {
             info!("postfx: desligado por VIBER_NO_POSTFX");
             return;
         }
+        app.add_plugins(bevy::post_process::auto_exposure::AutoExposurePlugin);
         app.add_systems(
             bevy::app::Update,
             (
@@ -174,9 +229,20 @@ impl Plugin for PostFxPlugin {
                 // frame (publicada depois de `sun_drive`; o registo/glue vive
                 // no `AmbientPlugin`, que também consome a paleta).
                 timed(Group::Fx, drive_postfx).after(crate::worldsys::atmosphere_drive),
+                timed(Group::Fx, drive_dof_focus),
             )
                 .chain(),
         );
+        if volumetrics_enabled() {
+            app.add_systems(
+                bevy::app::Startup,
+                spawn_fog_volume, // precisa de Assets<Image> para a textura 3D
+            );
+            app.add_systems(
+                bevy::app::Update,
+                (follow_fog_volume, timed(Group::Fx, drive_fog_texture)),
+            );
+        }
     }
 }
 
@@ -216,20 +282,112 @@ fn attach_postfx_to_cameras(
             // para quem ler o spawn da câmara.
             DepthPrepass,
             NormalPrepass,
+            // TAA (r2): a acumulação temporal é o que faz o PCSS-temporal, o
+            // SSAO High e os contact shadows lerem limpos (são estocásticos —
+            // sem TAA ficam noisy). `#[require]` traz jitter/mip-bias/motion
+            // vectors automaticamente. Água alpha-blended pode fantasmar;
+            // VIBER_NO_TAA=1 devolve o FXAA.
+            Msaa::Off,
+            // Motion blur (P1.10): desfoque de movimento por pixel com os
+            // defaults cinematográficos (shutter 180°, 1 amostra). O
+            // `#[require]` insere o MotionVectorPrepass; o TAA já exige o
+            // MESMO prepass, logo os motion vectors são partilhados.
+            MotionBlur::default(),
+            // SSAO High aproveita o denoise temporal do TAA (r1 era Medium
+            // por causa do ruído sem acumulação).
             ScreenSpaceAmbientOcclusion {
-                // `High` é o default do Bevy; `Medium` custa metade das
-                // amostras e sem TAA a diferença de ruído é pequena depois do
-                // denoise espacial.
-                quality_level: ScreenSpaceAmbientOcclusionQualityLevel::Medium,
+                quality_level: if taa_enabled() {
+                    ScreenSpaceAmbientOcclusionQualityLevel::High
+                } else {
+                    ScreenSpaceAmbientOcclusionQualityLevel::Medium
+                },
                 ..ScreenSpaceAmbientOcclusion::default()
             },
-            // O SSAO do Bevy resolve contra um alvo de amostra única e recusa
-            // correr com MSAA ligado — sem isto o render loga
-            // `SSAO ... requires Msaa::Off` por frame e o AO nunca aparece.
-            // O FXAA substitui o anti-aliasing que o MSAA fazia.
-            Msaa::Off,
-            Fxaa::default(),
+            // Contact shadows: raymarch na depth por luz com sombras — as
+            // sombras de contacto miúdas (herói→chão, poste→calçada) onde os
+            // shadow maps não têm resolução. Passo linear 24 ≈ raios de 0.5 m.
+            ContactShadows {
+                linear_steps: 24,
+                thickness: 0.2,
+                length: 0.5,
+            },
+            // Exposição AUTO (r2): a câmara mede o histograma e adapta-se —
+            // a noite da vila abre +2..3 stops sozinha (as lanternas POPAM)
+            // e o meio-dia fecha. Combina com o EV autoral do bioma
+            // (compensação multiplicativa). Velocidades cinematográficas:
+            // abre devagar, fecha mais devagar ainda.
+            AutoExposure {
+                range: -6.0..=8.0,
+                speed_brighten: 1.2,
+                speed_darken: 0.5,
+                ..AutoExposure::default()
+            },
+            // DoF cinemático subtil: foco no herói (o `drive_dof_focus`
+            // persegue a distância real câmara↔herói), bokeh com teto de 20 px
+            // e `max_depth` a 700 m para o horizonte/fog não virar sopa.
+            DepthOfField {
+                mode: DepthOfFieldMode::Bokeh,
+                focal_distance: 5.0,
+                aperture_f_stops: 1.4,
+                max_circle_of_confusion_diameter: 20.0,
+                max_depth: 700.0,
+                ..DepthOfField::default()
+            },
+            // Vinheta leve e aberração cromática subtil — a "lente" da câmara.
+            // Intensidade muito abaixo dos defaults (1.0 / 0.02) para ler como
+            // vidro fotográfico e não como filtro.
+            Vignette {
+                intensity: 0.30,
+                radius: 0.85,
+                smoothness: 2.5,
+                ..Vignette::default()
+            },
+            ChromaticAberration {
+                intensity: 0.0035,
+                max_samples: 8,
+                ..ChromaticAberration::default()
+            },
+            // CAS (P1.10): sharpening adaptativo ao contraste — corre no
+            // post-process DEPOIS do AA e devolve o detalhe que o TAA (e o
+            // FXAA do fallback) suavizam.
+            ContrastAdaptiveSharpening::default(),
+            // Color grading (CDL) — o `drive_postfx` conduz-o pela hora do dia.
+            bevy::render::view::ColorGrading::default(),
         ));
+        if taa_enabled() {
+            commands.entity(camera).insert((
+                TemporalAntiAliasing::default(),
+                // Espiral Jimenez (CoD:AW) + rotação por noise — desenho PARA
+                // o TAA; suaviza a penumbra do PCSS.
+                bevy::light::ShadowFilteringMethod::Temporal,
+            ));
+        } else {
+            commands.entity(camera).insert((
+                Fxaa::default(),
+                bevy::light::ShadowFilteringMethod::Gaussian,
+            ));
+        }
+        // Volumetrics (god-rays + volume de névoa que segue o herói):
+        // LIGADOS por omissão — desligar com `VIBER_NO_VOLUMETRICS=1` (ver
+        // `volumetrics_enabled`; apagavam o frame na bisseção r1, renderizam
+        // com o TAA da r2).
+        if volumetrics_enabled() {
+            commands.entity(camera).insert(VolumetricFog {
+                // Sem EnvironmentMapLight no motor: ambient do volume a 0 —
+                // a névoa brilha pela luz do sol (VolumetricLight), não por
+                // si mesma (senão a noite fica com uma wash cinzenta).
+                ambient_intensity: 0.0,
+                // BANDING: sem jitter o raymarch amostra os MESMOS offsets
+                // por raios de profundidade semelhante e as faixas de
+                // integração aparecem como linhas horizontais no céu (raios
+                // longos até ao domo, 850 m, com 32/64 passos). O jitter
+                // desloca a origem do raio por noise — o TAA acumula e
+                // dissolve as faixas.
+                jitter: 1.0,
+                step_count: 64,
+                ..VolumetricFog::default()
+            });
+        }
     }
 }
 
@@ -241,11 +399,11 @@ fn drive_postfx(
     biomes: Option<Res<BiomeRegions>>,
     players: Query<&GlobalTransform, With<Player>>,
     mut state: ResMut<PostFxState>,
-    mut cameras: Query<(&mut Bloom, &mut Exposure), With<Camera3d>>,
+    mut cameras: Query<(&mut Bloom, &mut Exposure, Option<&mut bevy::render::view::ColorGrading>), With<Camera3d>>,
 ) {
     let mut exposure_mult = 1.0;
     let mut bloom = BASE_BLOOM;
-    if let (Some(biomes), Ok(player)) = (biomes, players.single()) {
+    if let (Some(biomes), Ok(player)) = (biomes.as_deref(), players.single()) {
         let pos = player.translation();
         let region = biomes
             .list
@@ -281,12 +439,328 @@ fn drive_postfx(
         state.bloom += (state.target_bloom - state.bloom) * t;
     }
     let (ev100, bloom) = (ev_with_kick(state.ev100, state.kick), state.bloom);
-    for (mut camera_bloom, mut exposure) in &mut cameras {
+    // Grading POR HORA (r3): a golden hour aquece e satura, a noite dessatura
+    // e arrefece — o "film stock" muda com o dia. ASC CDL compõe com o
+    // TonyMcMapface (aplicado pré-tonemap). O grading por BIOMA precisa de
+    // attrs no parser (frente fria do worldsys/recipes) — fica para seguir.
+    let golden = atmosphere.golden;
+    let night = atmosphere.night;
+    let temperature = 0.0 + golden * 0.35 - night * 0.25;
+    let saturation = 1.0 + golden * 0.18 - night * 0.22;
+    for (mut camera_bloom, mut exposure, grading) in &mut cameras {
         if camera_bloom.intensity != bloom {
             camera_bloom.intensity = bloom;
         }
         if exposure.ev100 != ev100 {
             exposure.ev100 = ev100;
+        }
+        // A câmara pode não ter ColorGrading (inserido pelo attach com o
+        // resto do pós; defensivo se alguém a spawnar à mão).
+        if let Some(mut grading) = grading {
+            let g = &mut grading.global;
+            if g.temperature != temperature {
+                g.temperature = temperature;
+            }
+            if g.post_saturation != saturation {
+                g.post_saturation = saturation;
+            }
+            // Sombras levemente levantadas à noite (o toe do TonyMcMapface
+            // já ajuda; o CDL acaba de dar).
+            let lift = night * 0.06;
+            for section in grading.all_sections_mut() {
+                if section.lift != lift {
+                    section.lift = lift;
+                }
+            }
+        }
+    }
+}
+
+/// Persegue a distância câmara↔herói com o foco do [`DepthOfField`] — a
+/// câmara de terceira pessoa orbita o herói, portanto ELE é o foco da lente
+/// e o mundo desfoca atrás (bokeh). Interpolada a 6/s para o zoom não saltar.
+#[allow(clippy::type_complexity)]
+fn drive_dof_focus(
+    time: Res<Time>,
+    players: Query<&GlobalTransform, With<Player>>,
+    mut cameras: Query<(&GlobalTransform, &mut DepthOfField), With<Camera3d>>,
+    mut focus: Local<Option<f32>>,
+) {
+    let Ok(player) = players.single() else {
+        return;
+    };
+    let player_pos = player.translation();
+    let t = (time.delta_secs() * 6.0).clamp(0.0, 1.0);
+    for (camera_tf, mut dof) in &mut cameras {
+        let target = camera_tf.translation().distance(player_pos).max(0.5);
+        let next = match *focus {
+            Some(prev) => prev + (target - prev) * t,
+            None => target,
+        };
+        *focus = Some(next);
+        if (dof.focal_distance - next).abs() > 1e-3 {
+            dof.focal_distance = next;
+        }
+    }
+}
+
+/// Spawn do volume de névoa volumétrica (god-rays): um cubo 900×600×900 m
+/// com TEXTURA 3D de densidade FBM, raymarched contra a depth — o
+/// [`bevy::light::VolumetricLight`] do sol (spawn.rs) acende-o quando a luz
+/// atravessa geometria (copas, portas, desfiladeiros) e produz os shafts. A
+/// textura faz a névoa ONDULAR (bancos e clareiras em vez de sopa uniforme);
+/// o `drive_fog_texture` rola-a com o vento do `<Weather>`.
+fn spawn_fog_volume(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    commands.spawn((
+        CinematicFogVolume,
+        FogVolume {
+            // God-rays ADITIVOS: absorção ~nula — a transmissão nunca
+            // escurece o céu para breu (as "faixas pretas" do topo); a
+            // névoa SÓ soma luz espalhada na direcção do sol.
+            absorption: 0.02,
+            scattering: 0.30,
+            density_factor: 0.12,
+            // Forward-scattering alto: os shafts ganham força quando a câmara
+            // aponta para a fonte — o comportamento cinematográfico.
+            scattering_asymmetry: 0.65,
+            fog_color: Color::srgb(1.0, 0.97, 0.92),
+            // Névoa com TEXTURA (bancos FBM que rolam com o vento).
+            // `VIBER_NO_FOGTEX=1` volta à névoa uniforme (A/B de QA).
+            density_texture: std::env::var_os("VIBER_NO_FOGTEX")
+                .is_none()
+                .then(|| images.add(fbm_density_texture())),
+            ..FogVolume::default()
+        },
+        // ALTO e centrado ACIMA do herói: a aresta do cubo tem de ficar fora
+        // do ecrã em enquadramentos normais (uma aresta que corta o céu lê-se
+        // como faixa). 600 m de meio-largura vertical cobre colinas e voo
+        // de câmara curto.
+        Transform::from_scale(Vec3::new(900.0, 600.0, 900.0)),
+    ));
+}
+
+/// Textura de densidade 64³ — FBM 3D (hash inteiro, 3 oitavas com rotação
+/// de grelha): bancos de névoa com clareiras. Só o canal R é lido pelo
+/// raymarch; gravamos R = densidade, G = uma segunda camada mais alto-freq
+/// (futura variação por altura), sampler REPEAT para o scroll poder rolar.
+///
+/// Hash inteiro (u32): o hash float degenera em coordenadas grandes (ver
+/// water.wgsl) — aqui é CPU e o mundo de células é pequeno, mas mantemos o
+/// padrão determinístico da engine (mesma textura em todas as runs).
+fn fbm_density_texture() -> Image {
+    const N: u32 = 64;
+    let mut data = vec![0u8; (N * N * N) as usize * 4];
+    let mut idx = 0usize;
+    for z in 0..N {
+        for y in 0..N {
+            for x in 0..N {
+                let p = [
+                    x as f32 / N as f32,
+                    y as f32 / N as f32,
+                    z as f32 / N as f32,
+                ];
+                let d = fbm_density(p);
+                let fine = fbm_density([p[0] * 3.1 + 7.7, p[1] * 3.1, p[2] * 3.1]);
+                data[idx] = (d * 255.0).round().clamp(0.0, 255.0) as u8;
+                data[idx + 1] = (fine * 255.0).round().clamp(0.0, 255.0) as u8;
+                data[idx + 2] = 0;
+                data[idx + 3] = 255;
+                idx += 4;
+            }
+        }
+    }
+    let mut image = Image::new(
+        bevy::render::render_resource::Extent3d {
+            width: N,
+            height: N,
+            depth_or_array_layers: N,
+        },
+        bevy::render::render_resource::TextureDimension::D3,
+        data,
+        bevy::render::render_resource::TextureFormat::Rgba8Unorm,
+        bevy::asset::RenderAssetUsages::MAIN_WORLD | bevy::asset::RenderAssetUsages::RENDER_WORLD,
+    );
+    // MIP CHAIN 3D PRÓPRIA (downsample 2×2×2). DUPLA função: (1) o
+    // `patch_image` do `crate::textures` faz early-return em texturas com
+    // mips — senão cozinhava uma chain 2D em cima de uma D3 (mip_count 12
+    // com bytes 2D; o wgpu esperava a chain 3D e o prepare do GpuImage
+    // panica-va: "range end 1179648 out of range for slice of length
+    // 1054036", crash da r3); (2) o filtering fica estável se o raymarch
+    // alguma vez amostrar com bias.
+    let mips = N.trailing_zeros() + 1;
+    image.texture_descriptor.mip_level_count = mips;
+    let chain_len = mip3_chain_bytes(N, mips);
+    if let Some(full) = image.data.as_mut() {
+        let base_len = full.len();
+        full.resize(chain_len, 0);
+        for level in 1..mips {
+            let parent = N >> (level - 1);
+            let size = N >> level;
+            let src_off = mip3_chain_bytes(N, level - 1);
+            let dst_off = mip3_chain_bytes(N, level);
+            // Calcula o nível NUM VEC à parte: os índices de leitura (mip
+            // anterior, já em `full`) e escrita (mip corrente) sobrepõem o
+            // mesmo buffer — pré-computar evita o borrow partilhado e lê
+            // valores consistentes.
+            let mut next = vec![0u8; (size * size * size) as usize * 4];
+            for z in 0..size {
+                for y in 0..size {
+                    for x in 0..size {
+                        for c in 0..4 {
+                            let texel = |xx: u32, yy: u32, zz: u32| {
+                                let off = src_off + ((zz * parent + yy) * parent + xx) as usize * 4 + c;
+                                full[off] as u32
+                            };
+                            let acc = texel(x * 2, y * 2, z * 2)
+                                + texel(x * 2 + 1, y * 2, z * 2)
+                                + texel(x * 2, y * 2 + 1, z * 2)
+                                + texel(x * 2 + 1, y * 2 + 1, z * 2)
+                                + texel(x * 2, y * 2, z * 2 + 1)
+                                + texel(x * 2 + 1, y * 2, z * 2 + 1)
+                                + texel(x * 2, y * 2 + 1, z * 2 + 1)
+                                + texel(x * 2 + 1, y * 2 + 1, z * 2 + 1);
+                            let idx = ((z * size + y) * size + x) as usize * 4 + c;
+                            next[idx] = (acc / 8) as u8;
+                        }
+                    }
+                }
+            }
+            full[dst_off..dst_off + next.len()].copy_from_slice(&next);
+        }
+        debug_assert_eq!(full.len(), chain_len.max(base_len));
+    }
+    // REPEAT: o offset anima (scroll infinito da névoa com o vento).
+    image.sampler = bevy::image::ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor {
+        address_mode_u: bevy::image::ImageAddressMode::Repeat,
+        address_mode_v: bevy::image::ImageAddressMode::Repeat,
+        address_mode_w: bevy::image::ImageAddressMode::Repeat,
+        ..bevy::image::ImageSamplerDescriptor::linear()
+    });
+    image
+}
+
+/// Offset (bytes) do início do mip `level` na cadeia de uma textura 3D `n`³
+/// RGBA8 (mip a mip, layout do wgpu). Com `level == mips` dá o TOTAL da
+/// cadeia — usado para o resize do buffer.
+fn mip3_chain_bytes(n: u32, level: u32) -> usize {
+    (0..level)
+        .map(|l| {
+            let s = n >> l;
+            (s * s * s) as usize * 4
+        })
+        .sum()
+}
+
+/// FBM 3D em [0,1] — 3 oitavas de value noise com rotação por oitava
+/// (sem a rotação as oitavas alinham nos eixos e saem prateleiras).
+fn fbm_density(p: [f32; 3]) -> f32 {
+    fn hash(x: i32, y: i32, z: i32) -> f32 {
+        let mut h = (x as u32)
+            .wrapping_mul(0x27d4eb2d)
+            ^ (y as u32).wrapping_mul(0x165667b1)
+            ^ (z as u32).wrapping_mul(0x9e3779b1);
+        h = h.wrapping_mul(0x85ebca6b);
+        h ^= h >> 13;
+        h = h.wrapping_mul(0xc2b2ae35);
+        h ^= h >> 16;
+        (h & 0x00ff_ffff) as f32 / 16_777_216.0
+    }
+    fn vnoise(x: f32, y: f32, z: f32) -> f32 {
+        let (xi, yi, zi) = (x.floor(), y.floor(), z.floor());
+        let (xf, yf, zf) = (x - xi, y - yi, z - zi);
+        let s = |t: f32| t * t * (3.0 - 2.0 * t);
+        let (u, v, w) = (s(xf), s(yf), s(zf));
+        let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+        let c000 = hash(xi as i32, yi as i32, zi as i32);
+        let c100 = hash(xi as i32 + 1, yi as i32, zi as i32);
+        let c010 = hash(xi as i32, yi as i32 + 1, zi as i32);
+        let c110 = hash(xi as i32 + 1, yi as i32 + 1, zi as i32);
+        let c001 = hash(xi as i32, yi as i32, zi as i32 + 1);
+        let c101 = hash(xi as i32 + 1, yi as i32, zi as i32 + 1);
+        let c011 = hash(xi as i32, yi as i32 + 1, zi as i32 + 1);
+        let c111 = hash(xi as i32 + 1, yi as i32 + 1, zi as i32 + 1);
+        lerp(
+            lerp(lerp(c000, c100, u), lerp(c010, c110, u), v),
+            lerp(lerp(c001, c101, u), lerp(c011, c111, u), v),
+            w,
+        )
+    }
+    // Células ~8 (uma célula = N/8 texels): bancos grandes. Rotação por
+    // oitava quebra o alinhamento axial.
+    let mut sum = 0.0;
+    let mut amp = 0.5;
+    let mut norm = 0.0;
+    let mut q = [p[0] * 8.0, p[1] * 8.0, p[2] * 8.0];
+    for _ in 0..3 {
+        sum += vnoise(q[0], q[1], q[2]) * amp;
+        norm += amp;
+        q = [
+            q[0] * 0.80 + q[1] * 0.60 + 2.3,
+            -q[0] * 0.60 + q[1] * 0.80 + 5.1,
+            q[2] * 1.93 + 9.7,
+        ];
+        amp *= 0.5;
+    }
+    // Remap para CONTRASTE: névoa em bancos (0.2..1) com clareiras — uma
+    // distribuição uniforme lia-se como ruído de TV, não névoa.
+    let base = sum / norm;
+    (base - 0.28).max(0.0) / 0.72
+}
+
+/// Rola a textura de densidade com o vento do `<Weather>` e ajusta a
+/// densidade do volume pela HORA (alvorad/amanhecer e pântano mais densos):
+/// a névoa passa a viver — desliza, engrossa ao amanhecer, dissolve ao
+/// meio-dia.
+#[allow(clippy::type_complexity)]
+fn drive_fog_texture(
+    time: Res<Time>,
+    weather: Option<Res<crate::worldsys::WeatherState>>,
+    atmosphere: Res<crate::worldsys::AtmosphereState>,
+    biomes: Option<Res<crate::worldsys::BiomeRegions>>,
+    players: Query<&GlobalTransform, With<Player>>,
+    mut volumes: Query<&mut FogVolume, With<CinematicFogVolume>>,
+) {
+    let (wind_x, wind_z) = weather
+        .as_deref()
+        .map(|w| (w.wind[0], w.wind[1]))
+        .unwrap_or((0.7, 0.25));
+    for mut volume in &mut volumes {
+        // Scroll lento na direcção do vento (UV/s × força 0.004).
+        let speed = 0.004 * time.delta_secs();
+        volume.density_texture_offset.x += wind_x * speed;
+        volume.density_texture_offset.z += wind_z * speed;
+        // Engrossa à alvorada/crepúsculo e no pântano; meio-dia limpo.
+        let golden_haze = atmosphere.golden * 0.06;
+        let mut density = 0.10 + golden_haze;
+        if let (Some(biomes), Ok(player)) = (biomes.as_deref(), players.single()) {
+            let pos = player.translation();
+            if biomes
+                .list
+                .iter()
+                .any(|b| b.id.contains("swamp") && crate::ambient::point_in_polygon(pos.x, pos.z, &b.polygon))
+            {
+                density += 0.10;
+            }
+        }
+        volume.density_factor = density;
+    }
+}
+
+/// O volume segue o herói (centrado, +50 m acima dos pés para cobrir colinas
+/// e voo de câmara) — sem textura de densidade, deslizar não tem artefactos.
+#[allow(clippy::type_complexity)]
+fn follow_fog_volume(
+    players: Query<&GlobalTransform, With<Player>>,
+    mut volumes: Query<&mut Transform, With<CinematicFogVolume>>,
+) {
+    let Ok(player) = players.single() else {
+        return;
+    };
+    let p = player.translation();
+    for mut volume in &mut volumes {
+        let target = Vec3::new(p.x, p.y + 50.0, p.z);
+        if volume.translation != target {
+            volume.translation = target;
         }
     }
 }

@@ -47,7 +47,55 @@ pub struct PropTintPlugin;
 impl Plugin for PropTintPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PropTintState>()
-            .add_systems(Update, timed(Group::Fx, prop_daynight_tint));
+            .add_systems(Update, (timed(Group::Fx, prop_daynight_tint), patch_transmissive_gltf));
+    }
+}
+
+/// Marcador inserido pelo spawn quando a URL do glTF contém "crystal"/"glass"
+/// — os materiais da cena ganham transmissão especular quando o glTF carrega
+/// (cristais que refratam o mundo + refletem o IBL do céu).
+#[derive(Component)]
+pub struct TransmissiveGltf;
+
+/// Patch UMA VEZ por material dos glTFs marcados: `specular_transmission`
+/// com IOR de quartzo e espessura de seixo — o
+/// `ScreenSpaceTransmissionPlugin` (default na câmara 3D) refrata a cena por
+/// trás e o env map do IBL preenche o resto. Sem o patch os cristais são
+/// pedras azuis opacas.
+fn patch_transmissive_gltf(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    children: Query<&Children>,
+    roots: Query<(Entity, &bevy::world_serialization::WorldAssetRoot, &TransmissiveGltf)>,
+    mesh_materials: Query<&MeshMaterial3d<StandardMaterial>>,
+    mut patched: Local<std::collections::HashSet<bevy::asset::AssetId<StandardMaterial>>>,
+) {
+    // O `WorldAssetRoot` só existe depois do gltf carregar e a cena spawnar
+    // — a primeira passada vê a hierarquia completa; no fim o marcador sai
+    // para não re-percorrer a árvore todos os frames.
+    for (entity, _root, _marker) in roots.iter() {
+        let mut stack = vec![entity];
+        while let Some(current) = stack.pop() {
+            let Ok(kids) = children.get(current) else {
+                continue;
+            };
+            for &kid in kids {
+                stack.push(kid);
+                let Ok(handle) = mesh_materials.get(kid) else {
+                    continue;
+                };
+                if !patched.insert(handle.id()) {
+                    continue;
+                }
+                if let Some(mut material) = materials.get_mut(handle.id()) {
+                    material.specular_transmission = 0.85;
+                    material.ior = 1.45;
+                    material.thickness = 0.6;
+                    material.perceptual_roughness = 0.05;
+                }
+            }
+        }
+        commands.entity(entity).remove::<TransmissiveGltf>();
     }
 }
 
