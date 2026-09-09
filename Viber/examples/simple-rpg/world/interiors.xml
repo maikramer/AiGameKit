@@ -42,6 +42,38 @@
 
   Mover a grelha obriga a actualizar REGISTRY em src/game/interiors.ts.
 -->
+  <!-- ═══════════ Protótipos: shells definidos UMA vez ═══════════
+       <Prototype>/<Use> (docs do Viber: docs/COMPOSITION.md): o shell é
+       uma <Composition> — 1 corpo fixed + colisores EXATOS por primitiva
+       (as paredes colidem; o interior e o vão da porta ficam livres, ao
+       contrário do antigo collider="auto" de grupo que criava 1 AABB de
+       todo o shell) + luzes penduradas como filhos. -->
+  <Prototype id="interior.shell.chapel">
+    <Composition name="interior.chapel.shell">
+      <Plane translation="0 0.12 0" half-size="12 9" />
+      <Box translation="-6.7 0.35 -9" half-size="5.3 0.35 0.14" />
+      <Box translation="6.7 0.35 -9" half-size="5.3 0.35 0.14" />
+      <Box translation="0 0.35 -9" half-size="1.4 0.35 0.08" />
+      <Box translation="0 0.35 9" half-size="12 0.35 0.14" />
+      <Box translation="-12 0.35 0" half-size="0.14 0.35 9" />
+      <Box translation="12 0.35 0" half-size="0.14 0.35 9" />
+      <PointLight translation="0 2.4 0" color="#ffd9a0" intensity="8000" />
+      <PointLight translation="0 2.2 5" color="#ffe2b0" intensity="6400" />
+    </Composition>
+  </Prototype>
+  <Prototype id="interior.shell.forge">
+    <Composition name="interior.forge.shell">
+      <Plane translation="0 0.12 0" half-size="11 8" />
+      <Box translation="-6.2 0.35 -8" half-size="4.8 0.35 0.14" />
+      <Box translation="6.2 0.35 -8" half-size="4.8 0.35 0.14" />
+      <Box translation="0 0.35 -8" half-size="1.4 0.35 0.08" />
+      <Box translation="0 0.35 8" half-size="11 0.35 0.14" />
+      <Box translation="-11 0.35 0" half-size="0.14 0.35 8" />
+      <Box translation="11 0.35 0" half-size="0.14 0.35 8" />
+      <PointLight translation="0 2.3 4" color="#ff8a40" intensity="9600" />
+      <PointLight translation="0 2.2 -2" color="#ffc090" intensity="4800" />
+    </Composition>
+  </Prototype>
   <Group name="interiors" translation="0 0 0">
     <!-- Patamar da zona: achata o terreno sob a grelha inteira para a caixa
        preta assentar num plano. Sem ele o relevo (4 m de amplitude aqui)
@@ -53,39 +85,27 @@
        com roughness 1 / metalness 0 não devolve nada do IBL, por isso lê-se
        como vazio. collider="none": quem prende o jogador são as paredes da
        sala, não esta casca. Altura 40 m para a câmara de 3ª pessoa não sair.
-       É um <Entity> container (e não <Group>) POR CAUSA DO SEATING: grupos
-       recebem SeatOnTerrain e, com o span dos filhos a >60 m (limiar
-       SEAT_CENTER_MAX_EXTENT_M), cada Cuboid era enviado individualmente à
-       cota do solo e piso/teto/paredes colapsavam todos à mesma altura.
-       Como Entity simples, o seating levanta-a UMA vez, EM BLOCO, à cota do
-       pad (mesmo mecanismo da mobília solta) e os offsets internos ficam
-       intactos. -->
-    <Entity translation="859 0 281" body="none" collider="none" overlap-max="99">
+       É uma <Composition> POR CAUSA DO SEATING: uma composition assenta
+       SEMPRE como BLOCO (marcador SeatAsUnit), mesmo com o span dos filhos
+       a >60 m — o limite que partia grupos espalhados em partes não se
+       aplica. O seating levanta-a UMA vez, à cota do pad, e os offsets
+       internos ficam intactos. -->
+    <Composition translation="859 0 281" body="none" collider="none">
       <!-- Chão do vazio a +0.04: à cota do terreno perdia o z-fight com o
          relevo do pad e via-se uma faixa de chão iluminado entre as salas
          e a parede da caixa. Fica abaixo do <Pad> das salas (0.12). -->
-      <Cuboid translation="0 0.04 0" base-color="#000000" roughness="1" metallic="0" half-size="120 0.04 110" />
-      <Cuboid translation="0 40 0" base-color="#000000" roughness="1" metallic="0" half-size="120 0.1 110" />
-      <Cuboid translation="-120 20 0" base-color="#000000" roughness="1" metallic="0" half-size="0.1 20 110" />
-      <Cuboid translation="120 20 0" base-color="#000000" roughness="1" metallic="0" half-size="0.1 20 110" />
-      <Cuboid translation="0 20 -110" base-color="#000000" roughness="1" metallic="0" half-size="120 20 0.1" />
-      <Cuboid translation="0 20 110" base-color="#000000" roughness="1" metallic="0" half-size="120 20 0.1" />
-    </Entity>
+      <Box translation="0 0.04 0" base-color="#000000" roughness="1" metallic="0" half-size="120 0.04 110" />
+      <Box translation="0 40 0" base-color="#000000" roughness="1" metallic="0" half-size="120 0.1 110" />
+      <Box translation="-120 20 0" base-color="#000000" roughness="1" metallic="0" half-size="0.1 20 110" />
+      <Box translation="120 20 0" base-color="#000000" roughness="1" metallic="0" half-size="0.1 20 110" />
+      <Box translation="0 20 -110" base-color="#000000" roughness="1" metallic="0" half-size="120 20 0.1" />
+      <Box translation="0 20 110" base-color="#000000" roughness="1" metallic="0" half-size="120 20 0.1" />
+    </Composition>
     <!-- ══════════════════════ CAPELA ══════════════════════ -->
-    <!-- Shell 24×18. Paredes 0.70 m, vão −Z, sem teto. Altar +Z. Pad 32×26. -->
-    <Group translation="857 0 226" body="fixed" collider="auto" overlap-max="2">
-      <Plane translation="0 0.12 0" half-size="12 9" />
-      <Cuboid translation="-6.7 0.35 -9" half-size="5.3 0.35 0.14" />
-      <Cuboid translation="6.7 0.35 -9" half-size="5.3 0.35 0.14" />
-      <Cuboid translation="0 0.35 -9" half-size="1.4 0.35 0.08" />
-      <Cuboid translation="0 0.35 9" half-size="12 0.35 0.14" />
-      <Cuboid translation="-12 0.35 0" half-size="0.14 0.35 9" />
-      <Cuboid translation="12 0.35 0" half-size="0.14 0.35 9" />
-    </Group>
-    <Group translation="857 0 226" body="fixed" collider="none" overlap-max="2">
-      <PointLight translation="0 2.4 0" color="#ffd9a0" intensity="8000" />
-      <PointLight translation="0 2.2 5" color="#ffe2b0" intensity="6400" />
-    </Group>
+    <!-- Shell 24×18. Paredes 0.70 m, vão −Z, sem teto. Altar +Z. Pad 32×26.
+       Instância do protótipo (shell + luzes definidos no topo do ficheiro):
+       colisores exatos por parede em vez do AABB-união do grupo antigo. -->
+    <Use prototype="interior.shell.chapel" translation="857 0 226" name="interior.chapel" />
     <Entity name="interior.chapel.altar" translation="857 0 232.9" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_altar_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/interiors/chapel_altar_lod0.glb" />
     </Entity>
@@ -131,20 +151,9 @@
     <!-- Saída no vão −Z. Distância spawn ≈8.1 m. -->
     <Entity name="portal.exit_chapel" translation="857 0 217.9" script="building-portal.lua" />
     <!-- ══════════════════════ FERRARIA ══════════════════════ -->
-    <!-- Shell 22×16. Paredes 0.70 m, vão −Z, sem teto. Fornalha +Z. Pad 30×24. -->
-    <Group translation="917 0 226" body="fixed" collider="auto" overlap-max="2">
-      <Plane translation="0 0.12 0" half-size="11 8" />
-      <Cuboid translation="-6.2 0.35 -8" half-size="4.8 0.35 0.14" />
-      <Cuboid translation="6.2 0.35 -8" half-size="4.8 0.35 0.14" />
-      <Cuboid translation="0 0.35 -8" half-size="1.4 0.35 0.08" />
-      <Cuboid translation="0 0.35 8" half-size="11 0.35 0.14" />
-      <Cuboid translation="-11 0.35 0" half-size="0.14 0.35 8" />
-      <Cuboid translation="11 0.35 0" half-size="0.14 0.35 8" />
-    </Group>
-    <Group translation="917 0 226" body="fixed" collider="none" overlap-max="2">
-      <PointLight translation="0 2.3 4" color="#ff8a40" intensity="9600" />
-      <PointLight translation="0 2.2 -2" color="#ffc090" intensity="4800" />
-    </Group>
+    <!-- Shell 22×16. Paredes 0.70 m, vão −Z, sem teto. Fornalha +Z. Pad 30×24.
+       Instância do protótipo (shell + luzes definidos no topo do ficheiro). -->
+    <Use prototype="interior.shell.forge" translation="917 0 226" name="interior.forge" />
     <Entity name="interior.forge.furnace" translation="917 0 232.4" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/forge_furnace_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/interiors/forge_furnace_lod0.glb" />
     </Entity>

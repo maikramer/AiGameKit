@@ -22,18 +22,25 @@
     <!-- ============================================================
        LESTE — Deserto (dock em d1/d2)
        ============================================================ -->
-    <!-- Termina na praia do oásis (140,92 r=14) — não dentro da bacia. -->
-    <Road path="160 6 148 52 142 76" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/desert_sand/albedo.ktx2" normal-map-url="/assets/textures/desert_sand/normal.ktx2" />
+    <!-- Termina na praia do oásis (140,92 r=14) — não dentro da bacia. O
+       fim antigo (142,76) punha a BORDA do ribbon 1.2 m dentro da lâmina
+       no rumo NE (o audit conta a meia-largura); o fim atual fica com o
+       ribbon inteiro fora da linha de água. -->
+    <Road path="160 6 148 52 143 73" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/desert_sand/albedo.ktx2" normal-map-url="/assets/textures/desert_sand/normal.ktx2" />
     <Road path="200 10 184 -28 176 -60 164 -92 156 -110" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/desert_sand/albedo.ktx2" normal-map-url="/assets/textures/desert_sand/normal.ktx2" />
     <Road path="240 8 236 52 240 72" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/desert_sand/albedo.ktx2" normal-map-url="/assets/textures/desert_sand/normal.ktx2" />
     <Road path="200 10 210 -24 214 -32" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/desert_sand/albedo.ktx2" normal-map-url="/assets/textures/desert_sand/normal.ktx2" />
     <!-- ============================================================
        OESTE — Pântano
        ============================================================ -->
-    <!-- Dock na artéria oeste antes da ponte da Lagoa Grande; contorna a
-       margem NE da lagoa (-190,-16 r=24) — o início antigo (-184,0)
-       caía dentro da água. -->
-    <Road path="-160 1.7 -172 8 -190 20 -214 48 -244 76 -260 92" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/swamp_mud/albedo.ktx2" normal-map-url="/assets/textures/swamp_mud/normal.ktx2" />
+    <!-- Trilho da margem da Lagoa Grande (-190,-16 r=24): arranca NO arco
+       norte da artéria (via -192 32, paths/network.xml), desce ao
+       acampamento do pescador (-187.5,13.5), contorna a margem norte a
+       ≥34.5 m do centro (worst-case 30.7 m) e sobe a NE para o cemitério.
+       A travessia da lagoa foi fechada a favor do desvio por terra (o
+       contorno lê-se melhor que um viaduto no canto da lagoa); traçados
+       que ralavam a bacia ficam fora da lâmina. -->
+    <Road path="-192 32 -184 20 -196 18 -206 22 -218 36 -228 48 -244 76 -260 92" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/swamp_mud/albedo.ktx2" normal-map-url="/assets/textures/swamp_mud/normal.ktx2" />
     <!-- Ramo sul → barco naufragado (-184,-52). O traçado antigo cortava a
        corda SW da lagoa e o ponto médio (-200,-44) mergulhava 2 m na lâmina
        orgânica (-190,-16 r=24, ±28%); o novo mantém TODO o traçado (e as

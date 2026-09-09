@@ -1,0 +1,22 @@
+<world>
+  <!--
+  Margem da Bruxa — trilhos que descem ao rio no troço oeste: do Posto
+  Avançado (torre, -92,176) à margem sul e da margem norte à Clareira da
+  Bruxa (-20,270).
+
+  A travessia de rocha natural (`<Bridge>` voxel, 56 m × 3 m) foi REMOVIDA
+  a pedido do autor (2026-09-07): o sólido voxel fino degradava nos LODs e
+  lia-se como uma crista de terra de ~50 m a entrar no rio — o mesmo
+  defeito que matou a ponte norte voxel. Quem quiser cruzar aqui vadeia o
+  rio ou usa a Ponte de Pedra do norte; os trilhos ficam como acessos de
+  margem (pesca/água), que é como já liam sem a ponte.
+  -->
+  <Group name="bridge.passadeira-da-bruxa" translation="0 0 0">
+    <!-- Esporão sul: liga ao trilho do Posto Avançado em (-68,172) e
+       termina na MARGEM do rio. -->
+    <Road path="-52 198 -60 184 -68 172" width="3" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.6" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/forest_floor/albedo.ktx2" normal-map-url="/assets/textures/forest_floor/normal.ktx2" />
+    <!-- Esporão norte: desce à Clareira da Bruxa a partir da margem. -->
+    <Road path="-34 248 -26 258 -20 270" width="3" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.6" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/forest_floor/albedo.ktx2" normal-map-url="/assets/textures/forest_floor/normal.ktx2" />
+  </Group>
+  <!-- FIM bridge.passadeira-da-bruxa -->
+</world>

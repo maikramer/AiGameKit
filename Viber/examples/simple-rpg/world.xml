@@ -57,6 +57,15 @@
   <Include src="/world/spawn/dressing.xml" />
   <Include src="/world/paths/network.xml" />
   <Include src="/world/paths/trails.xml" />
+  <!-- Pontes composition — uma travessia de água por ficheiro: a Ponte de
+       Pedra do Norte (artéria × rio, centrada no eixo x=4) e a passadeira
+       de rocha natural do loop oeste da floresta. Os <Bridge> são mods
+       voxel aditivos com collider próprio; cada ficheiro traz também a
+       decoração e os esporões de trilho das cabeças. A Lagoa Grande NÃO tem
+       travessia: a artéria contorna-a por terra (decisão autoral — o
+       contorno lê-se melhor que um viaduto no canto da lagoa). -->
+  <Include src="/world/bridges/ponte-norte.xml" />
+  <Include src="/world/bridges/passadeira-da-bruxa.xml" />
   <!-- Aleia de lanternas nas quatro artérias (postes + chama + luz
            quente). Depois de network.xml: o poste assenta no leito já
            planado da estrada. -->

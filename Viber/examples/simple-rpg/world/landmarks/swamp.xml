@@ -13,11 +13,13 @@
 -->
   <Group name="biome.swamp.landmarks" translation="0 0 0">
     <!-- ============================================================
-       §1 LAGOAS — grande (-190,-16 r=24, ponte da artéria oeste),
-       noroeste (-156,68 r=14) e leste (-236,-84 r=18). Vitórias-régias
-       em vegetation/swamp.xml (§3); ponte em paths/network.xml.
+       §1 LAGOAS — grande (-190,-16 r=24, SEM travessia: a artéria
+       contorna-a por terra na margem norte), noroeste (-156,68 r=14)
+       e leste (-236,-84 r=18). Vitórias-régias em vegetation/swamp.xml
+       (§3). A grande tem pedras de margem (rocks="1") — a curva da
+       artéria não fica nua.
        ============================================================ -->
-    <Lake at="-190 -16" radius="24" depth="2.6" water-offset="0.5" color="#2f5a4a" opacity="0.8" ripple="0.7" />
+    <Lake at="-190 -16" radius="24" depth="2.6" water-offset="0.5" color="#2f5a4a" opacity="0.8" ripple="0.7" rocks="1" />
     <Lake at="-156 68" radius="14" depth="2.1" water-offset="0.5" color="#2f5a4a" opacity="0.8" ripple="0.7" />
     <!-- Lagoa nova a leste, para o brejo não ser só duas poças no eixo. -->
     <Lake at="-236 -84" radius="18" depth="2.3" water-offset="0.5" color="#2f5a4a" opacity="0.8" ripple="0.7" />
@@ -111,9 +113,11 @@
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <!-- ============================================================
-       §6 PONTE DA LAGOA GRANDE — cabeças acesas + acampamento de
-       pescador na margem norte. Tips da ponte: w_lake_e (-171,2.2) /
-       w_lake_w (-209,2.8) (paths/network.xml).
+       §6 MARGEM DA LAGOA GRANDE — tochas de margem + acampamento de
+       pescador. A travessia da lagoa foi fechada a favor do desvio por
+       terra da artéria (paths/network.xml); as tochas marcam as antigas
+       cabeças (w_lake_e/w_lake_w), onde o trilho da margem
+       (paths/trails.xml) encontra a água a caminho do cemitério.
        ============================================================ -->
     <!-- Tocha da cabeça este. -->
     <Entity name="lake_bridge_torch_e" translation="-167 0 7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
@@ -135,8 +139,8 @@
     <Group translation="-213 0 7.6" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
     </Group>
-    <!-- Acampamento de pescador na margem norte, de frente para a ponte e
-       para a barca encalhada do outro lado da lagoa. -->
+    <!-- Acampamento de pescador na margem norte, de frente para o trilho
+       da margem e para a barca encalhada do outro lado da lagoa. -->
     <Entity name="lagoon-campfire" translation="-187.5 0 13.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
     </Entity>

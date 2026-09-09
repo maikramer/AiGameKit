@@ -1,0 +1,92 @@
+<world>
+  <!--
+  Viaduto de Pedra do Norte — a artéria norte a cruzar o vale do rio SEM
+  tocar nas margens (a vista que o portão norte enquadra desde a praça).
+
+  Lições das tentativas anteriores: (1) Segment profile=bridge = ribbon
+  plana sem collider; (2) <Bridge> voxel = sólido fino que degrada nos
+  LODs; (3) ponte curta + pads elevados = socalcos e calçada borrada;
+  (4) estrada a acabar PERTO da água = o FALLOFF do carve (26 m) wrap
+  para além do fim da ribbon, ergue o banco à cota da estrada até ao
+  guard de água do rio e corta a pique — um esporão de terra a mergulhar
+  no rio junto à ponte. Portanto: a ribbon TERMINA longe da água
+  (n_bank 4,175 — o falloff decae no alto, antes do vale) e o TABULEIRO
+  cobre tudo: nível (z 175→191, plano a 46.75 sobre o corredor plano da
+  estrada) + rampa (z 191→242, 4.55°, 46.75→42.70 até ao pad-pino 240).
+
+  COMPOSITION de primitivas (docs/COMPOSITION.md): colisor exato por
+  parte, cota fixa (seat="none"), cobble world-space (tile 9, o mesmo
+  da artéria). Relva não atravessa o tabuleiro: sob o troço de nível o
+  terreno é o corredor da própria estrada (a relva evita roads).
+  `SpawnExclusion` central limpa árvores/vegetação de toda a zona (sem
+  ribbon no vão, o `avoid-road` dos spawners não o protege). Pilares
+  cotados INDIVIDUALMENTE (tabuleiro inclinado — um pilar único-high
+  furava o piso a norte); topo de cada pilar embute 0.1 m na laje.
+  -->
+  <SpawnExclusion at="4 209" radius="42" />
+  <Composition name="ponte_norte" translation="4 0 216.5" seat="none" body="fixed" collider="auto">
+    <!-- Troço de NÍVEL (z 174.5→192): plano a 46.75, 0.12 acima da estrada
+       (46.63) — lidera o terreno plano do corredor; SOBREPÕE 1 m à rampa
+       (caixas nunca apenas encostam — hairline/gap). -->
+    <Box translation="0 46.25 -33" half-size="3.5 0.5 8.5"
+         texture="/assets/textures/cobblestone_road/albedo.ktx2" texture-tile-size="9" base-color="#9a9a94" />
+    <!-- Troço em RAMPA (z 191→242): 4.55°, topo 46.75→42.70 até ao
+         pad-pino de n_resume. -->
+    <Box translation="0 44.22 0" half-size="3.5 0.5 25.5" euler="4.55 0 0"
+         texture="/assets/textures/cobblestone_road/albedo.ktx2" texture-tile-size="9" base-color="#9a9a94" />
+    <!-- Parapeitos com capstone (laje de fecho mais larga) — cobrem o
+         tabuleiro E a rampa inline de entrada (alvenaria contínua). -->
+    <Box translation="-3.35 47.0 -37.25" half-size="0.22 0.45 12.5" base-color="#8a8a84" />
+    <Box translation="3.35 47.0 -37.25" half-size="0.22 0.45 12.5" base-color="#8a8a84" />
+    <Box translation="-3.35 44.97 -1.25" half-size="0.22 0.45 24.25" euler="4.55 0 0" base-color="#8a8a84" />
+    <Box translation="3.35 44.97 -1.25" half-size="0.22 0.45 24.25" euler="4.55 0 0" base-color="#8a8a84" />
+    <Box translation="-3.35 47.53 -37.25" half-size="0.3 0.07 12.5" base-color="#7d7d78" />
+    <Box translation="3.35 47.53 -37.25" half-size="0.3 0.07 12.5" base-color="#7d7d78" />
+    <Box translation="-3.35 45.5 -1.25" half-size="0.3 0.07 24.25" euler="4.55 0 0" base-color="#7d7d78" />
+    <Box translation="3.35 45.5 -1.25" half-size="0.3 0.07 24.25" euler="4.55 0 0" base-color="#7d7d78" />
+    <!-- Rampa INLINE no sentido da estrada (z 166.25→175.25, 2.9°): topo
+         46.35→46.78 — a ponta externa enterra 0.15 m na estrada (zero
+         degrau garantido) e a interna SOBREPÕE o troço de nível. -->
+    <Box translation="0 46.05 -45.75" half-size="3.5 0.5 4.25" euler="-2.86 0 0"
+         texture="/assets/textures/cobblestone_road/albedo.ktx2" texture-tile-size="9" base-color="#9a9a94" />
+    <!-- Pináculos (newels) nos 4 cantos — sul no PÉ da rampa (z 167). -->
+    <Box translation="-3.35 47.15 -49.5" half-size="0.28 0.62 0.28" base-color="#76766f" />
+    <Box translation="3.35 47.15 -49.5" half-size="0.28 0.62 0.28" base-color="#76766f" />
+    <Box translation="-3.35 43.1 23" half-size="0.28 0.62 0.28" base-color="#76766f" />
+    <Box translation="3.35 43.1 23" half-size="0.28 0.62 0.28" base-color="#76766f" />
+    <!-- Pilares no espelho do vale (um na água, um no banco norte). -->
+    <Cylinder translation="0 41.3 -10" radius="0.8" half-height="3.3" base-color="#7d7d78" />
+    <Cylinder translation="0 40.5 10" radius="0.8" half-height="2.5" base-color="#7d7d78" />
+  </Composition>
+
+  <!-- Tochas de gateway nas duas cabeças (padrão da aleia de lanternas).
+       A sul fica no PÉ da rampinha de canto (9.8, 172.5) — em (8.6, 176)
+       ficava EM CIMA da rampa (o herói subia-lhe em cima). -->
+  <Entity translation="9.8 0 172.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+  </Entity>
+  <Entity translation="9.8 0 172.5">
+    <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
+  </Entity>
+  <Group translation="9.8 0 172.5" body="fixed" collider="none">
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+  </Group>
+  <Entity translation="-0.6 0 242.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+  </Entity>
+  <Entity translation="-0.6 0 242.5">
+    <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
+  </Entity>
+  <Group translation="-0.6 0 242.5" body="fixed" collider="none">
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+  </Group>
+  <Entity translation="8.6 0 240.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+  </Entity>
+  <Entity translation="8.6 0 240.5">
+    <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
+  </Entity>
+  <Group translation="8.6 0 240.5" body="fixed" collider="none">
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+  </Group>
+</world>

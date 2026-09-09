@@ -26,7 +26,7 @@
                eixo da chaminé — local (1.9, -0.2) → mundo (-22.1, -26.2). -->
     <Group translation="-27.2 0 -33.4" body="fixed" collider="none">
       <ParticleSystem preset="fire" transform="pos: 0 1.0 0" particle-emitter="preset: fire; emission-rate: 26; shape-radius: 0.22; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.0; start-speed-max: 2.2; start-size-min: 0.24; start-size-max: 0.52; start-color: #ff6600; looping: 1; world-space: 1" />
-      <PointLight translation="0 1.2 0" color="0xff7a22" intensity="110000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.2 0" color="0xff7a22" intensity="110000" radius="0.6" shadows="true" />
     </Group>
     <!-- Fumo no topo da chaminé (y=5.9, logo acima do topo modelado a 5.75). -->
     <Group translation="-27.1 0 -33.4" body="fixed" collider="none">

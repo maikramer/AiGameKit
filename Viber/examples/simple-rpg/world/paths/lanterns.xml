@@ -28,7 +28,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-4.2 0 60" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="4.2 0 60" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -37,7 +37,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="4.2 0 60" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="-6.2 0 96" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -46,7 +46,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-6.2 0 96" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="2.2 0 96" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -55,7 +55,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="2.2 0 96" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="-4.2 0 -58" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -64,7 +64,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-4.2 0 -58" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="4.2 0 -58" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -73,7 +73,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="4.2 0 -58" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="-2.2 0 -84" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -82,7 +82,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-2.2 0 -84" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="6.2 0 -84" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -91,7 +91,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="6.2 0 -84" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="60 0 -4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -100,7 +100,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="60 0 -4.2" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="60 0 4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -109,7 +109,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="60 0 4.2" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="96 0 -2.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -118,7 +118,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="96 0 -2.2" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="96 0 6.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -127,7 +127,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="96 0 6.2" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="-58 0 -4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -136,7 +136,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-58 0 -4.2" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="-58 0 4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -145,7 +145,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-58 0 4.2" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="-80 0 -6.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -154,7 +154,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-80 0 -6.2" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
     <Entity translation="-80 0 2.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
@@ -163,7 +163,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-80 0 2.2" body="fixed" collider="none">
-      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" />
+      <PointLight translation="0 2.2 0" color="0xffa040" intensity="55000" radius="0.5" shadows="true" />
     </Group>
   </Group>
   <!-- FIM paths.lanterns -->
