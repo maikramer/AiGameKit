@@ -23,6 +23,12 @@ Modo memory-efficient (``memory_efficient=True``):
 - Ref-UNet offload: dual-stream UNet vai para CPU após o 1.º step de cada
   pintura. Env: PAINT3D_OFFLOAD_REF_UNET=0 desliga.
 
+Group offload com CUDA streams (``--group-offload`` / PAINT3D_GROUP_OFFLOAD=1):
+- Pesos fp16 dos dois UNets em streaming (leaf_level + streams, diffusers);
+  SDNQ fica dispensado e o offload_ref_unet custom desligado — mais qualidade
+  em troca de mais tempo de geração. Convive com o dual-stream do UNet2p5D
+  via holder opaco (``ConditionEmbedRef``) + ``exclude_kwargs`` no vendor.
+
 Colocação de modelos auxiliares (auto por VRAM; env override):
 - DINO-giant: GPU fp16 quando >=10 GiB (single) ou GPU secundária (multi);
   caso contrário CPU fp32. Env: PAINT3D_DINO_DEVICE.

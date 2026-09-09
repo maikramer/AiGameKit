@@ -326,6 +326,68 @@ class TestDualStreamGroupOffloadCUDA:
         assert torch.allclose(out2.float(), base_out.float(), atol=2e-3)
 
 
+class TestAdoptVendoredOptimizations:
+    """O pipeline em produção carrega os blocos do snapshot HF
+    (``diffusers_modules.local.*``), não o vendor — o adopt transplantado tem
+    de trocar também o forward do bloco (unwrap do holder), senão o bloco do
+    snapshot faz item-assignment no ``ConditionEmbedRef``.
+    """
+
+    def test_transplants_wrapper_and_block_forward(self, monkeypatch):
+        import sys
+        import types
+
+        from paint3d.hy3dpaint.hunyuanpaintpbr.unet import attn_processor as v_attn
+        from paint3d.hy3dpaint.hunyuanpaintpbr.unet import modules as v_modules
+        from paint3d.hy3dpaint.utils.multiview_utils import _adopt_vendored_unet_optimizations
+
+        mod_name = "diffusers_modules.local.hunyuan3d-paintpbr-v2-1.unet.modules"
+        fake_mod = types.ModuleType(mod_name)
+
+        class UNet2p5DConditionModel:
+            def forward(self, *args, **kwargs): ...
+
+        class Basic2p5DTransformerBlock:
+            def forward(self, *args, **kwargs): ...
+
+        class AttnCore:
+            @staticmethod
+            def process_attention_base(*args, **kwargs): ...
+
+        fake_mod.UNet2p5DConditionModel = UNet2p5DConditionModel
+        fake_mod.Basic2p5DTransformerBlock = Basic2p5DTransformerBlock
+        fake_mod.AttnCore = AttnCore
+        monkeypatch.setitem(sys.modules, mod_name, fake_mod)
+        UNet2p5DConditionModel.__module__ = mod_name
+
+        class FakePipeline:
+            unet = UNet2p5DConditionModel()
+
+        _adopt_vendored_unet_optimizations(FakePipeline())
+
+        assert UNet2p5DConditionModel.forward is v_modules.UNet2p5DConditionModel.forward
+        assert Basic2p5DTransformerBlock.forward is v_modules.Basic2p5DTransformerBlock.forward
+        assert AttnCore.process_attention_base is v_attn.AttnCore.process_attention_base
+
+    def test_vendored_block_forward_contract(self):
+        """O forward transplantado resolve unwrap/holder no módulo vendored."""
+        from paint3d.hy3dpaint.hunyuanpaintpbr.unet.modules import (
+            Basic2p5DTransformerBlock,
+            ConditionEmbedRef,
+            unwrap_condition_embeds,
+        )
+
+        wrapper = _build_wrapper()
+        block = wrapper.unet.down_blocks[0].attentions[0].transformer_blocks[0]
+        assert isinstance(block, Basic2p5DTransformerBlock)
+
+        embeds: dict = {}
+        ref = ConditionEmbedRef(embeds)
+        assert unwrap_condition_embeds(ref) is embeds
+        # O forward assinado no vendored é o que o transplant copia.
+        assert block.forward.__func__ is Basic2p5DTransformerBlock.forward
+
+
 class TestParkRefUnetCoexistence:
     """_park_ref_unet_on_cpu não mexe quando os hooks são donos da colocação."""
 

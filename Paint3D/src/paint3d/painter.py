@@ -127,6 +127,32 @@ def _env_flag(name: str, default: bool) -> bool:
     return default
 
 
+def _group_offload_intent(allow: bool) -> bool:
+    """True se o group offload foi pedido (flag CLI ou env)."""
+    return bool(allow) or os.environ.get("PAINT3D_GROUP_OFFLOAD", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _prep_group_offload_pipeline_env(allow: bool) -> None:
+    """Intenção de group offload → garantir UNet fp16 desde o load.
+
+    Os artefactos qint8 pré-computados (``unet-qint8.safetensors``) carregam
+    automaticamente em GPUs <10 GB no constructor do pipeline — antes de
+    qualquer decisão de offload. Com group offload pretendemos pesos fp16 em
+    streaming (qualidade máxima); quanto QTensor x streams é terreno não
+    testado. Override explícito do utilizador (``PAINT3D_USE_QUANTIZED_UNET``)
+    é respeitado (o GO skipa nesse caso).
+    """
+    if not _group_offload_intent(allow):
+        return
+    if os.environ.get("PAINT3D_USE_QUANTIZED_UNET", "").strip() == "":
+        os.environ["PAINT3D_USE_QUANTIZED_UNET"] = "0"
+
+
 def _auto_dino_device(memory_efficient: bool, gpu_ids: list[int] | None) -> str:
     """DINO-giant (~2.2 GB fp16): GPU só quando há folga de VRAM.
 
@@ -549,9 +575,7 @@ def _apply_paint_kernel_opts(
         # compila-se só o VAE.
         if memory_efficient or allow_group_offload:
             if verbose:
-                _logger.info(
-                    "torch.compile nos UNets skip (SDNQ/group offload incompatível); tenta só VAE"
-                )
+                _logger.info("torch.compile nos UNets skip (SDNQ/group offload incompatível); tenta só VAE")
             unet_targets: list[tuple[Any, str]] = []
         else:
             unet_targets = []
@@ -638,6 +662,13 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
     if inner_mv is None or not hasattr(inner_mv, "pipeline"):
         return False
     diff_pipe = inner_mv.pipeline
+
+    # UNet qint8 (quanto) carregado — pesos QTensor com CUDA streams é terreno
+    # não testado; o caminho de qualidade com GO é fp16.
+    if getattr(inner_mv, "_unet_quantized", False):
+        if verbose:
+            _logger.warn("Group offload skip: UNet qint8 (quanto) carregado — use fp16 (PAINT3D_USE_QUANTIZED_UNET=0)")
+        return False
 
     # Footprint do Hunyuan3D-Paint — registry centralizado.
     specs = cuda_gpu_specs()
@@ -1022,6 +1053,7 @@ def apply_hunyuan_paint(
 
         with profile_span("paint_load_pipeline"):
             _preflight_paint_model(model_repo, subfolder, verbose=verbose)
+            _prep_group_offload_pipeline_env(allow_group_offload)
             pipe = Hunyuan3DPaintPipeline(config)
             # Skip inpaint em ilhas UV nunca baked (cascas internas / occlusas).
             from .paint_prep import (
@@ -1063,7 +1095,9 @@ def apply_hunyuan_paint(
                         f"Quantização SDNQ do UNet falhou ({e}) — a abortar para não pintar com modelo meio-quantizado."
                     ) from e
             elif verbose:
-                if memory_efficient:
+                if group_offload_applied:
+                    _logger.info("Group offload ativo — SDNQ dispensado (pesos fp16 em streaming)")
+                elif memory_efficient:
                     _logger.warn("Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
                 else:
                     _logger.info("Modo alta VRAM — UNet em FP16 (sem quantização)")
@@ -1358,6 +1392,7 @@ class PaintBatchProcessor:
 
         with profile_span("paint_load_pipeline"):
             _preflight_paint_model(self._model_repo, self._subfolder, verbose=self._verbose)
+            _prep_group_offload_pipeline_env(self._allow_group_offload)
             pipe = Hunyuan3DPaintPipeline(config)
             from .paint_prep import (
                 apply_top_view_weight,
@@ -1388,7 +1423,9 @@ class PaintBatchProcessor:
                         )
                     pipe.unet = quantize_model(pipe.unet, preset="sdnq-uint8", dequantize_fp32=False)
                 elif self._verbose:
-                    if self._memory_efficient:
+                    if group_offload_applied:
+                        _logger.info("[batch] Group offload ativo — SDNQ dispensado (pesos fp16 em streaming)")
+                    elif self._memory_efficient:
                         _logger.warn("[batch] Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
                     else:
                         _logger.info("[batch] Modo alta VRAM — UNet em FP16 (sem quantização)")

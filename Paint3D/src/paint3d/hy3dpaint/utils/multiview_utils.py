@@ -39,6 +39,8 @@ def _adopt_vendored_unet_optimizations(pipeline) -> None:
 
     - ``AttnCore.process_attention_base`` → SDPA com SageAttention opcional
     - ``UNet2p5DConditionModel.forward`` → ref-UNet offload + ensure-device
+    - ``Basic2p5DTransformerBlock.forward`` → unwrap do ``ConditionEmbedRef``
+      (holder opaco que preserva o ``condition_embed_dict`` com group offload)
 
     As funções vendored resolvem globals no módulo vendored, mantendo o
     comportamento ao serem ligadas a classes de outro módulo. As classes do
@@ -62,7 +64,21 @@ def _adopt_vendored_unet_optimizations(pipeline) -> None:
 
     target.forward = v_modules.UNet2p5DConditionModel.forward
 
+    # O forward vendored partilha o ``condition_embed_dict`` entre os dois
+    # streams via holder opaco (``ConditionEmbedRef``) — necessário para
+    # conviver com os hooks de group offload (send_to_device recria dicts).
+    # Os blocos do snapshot não conhecem o holder: transplantar também o
+    # forward do bloco (faz o unwrap; senão ``item assignment`` no holder).
     snap_mod = sys.modules.get(mod_name)
+    snap_block = getattr(snap_mod, "Basic2p5DTransformerBlock", None) if snap_mod is not None else None
+    if snap_block is not None:
+        snap_block.forward = v_modules.Basic2p5DTransformerBlock.forward
+    else:
+        print(
+            "[Paint 2.1] AVISO: Basic2p5DTransformerBlock do snapshot não encontrado — "
+            "group offload (dual-stream holder) pode falhar."
+        )
+
     snap_core = getattr(snap_mod, "AttnCore", None) if snap_mod is not None else None
     if snap_core is None:
         attn_mod = sys.modules.get(mod_name.rsplit(".", 1)[0] + ".attn_processor")
