@@ -37,11 +37,13 @@ está em `Viber/docs/LUA_API.md`.
 O `analyze` imprime o relatório de cobertura — é o roteiro do que falta à
 engine (hoje: só as 5 tags `EngineConfig` data-only).
 
-Assets: os GLBs do pool partilhado vêm com meshopt + KTX2/BasisU +
-quantização (bevy 0.19 não lê nenhuma das três sintaxes). O espelho
-`assets/` (regenerável com `scripts/sync_assets.py`, não versionado) guarda
-cópias decomprimidas; a asset root do mundo é a pasta que contém `assets/`
-(o decodificador EXT_meshopt também já corre em runtime, `src/meshopt.rs`).
+Assets: `/assets/…` resolve contra as asset roots do `config.yaml` deste
+jogo — a pasta do jogo SEMPRE primeiro (overrides), o pool partilhado
+`Viber/examples/shared-assets/public/assets` declarado em
+`assets.roots` como root extra (`Viber/docs/ASSETS.md`). A engine
+descomprime meshopt/KTX2 à leitura (`src/meshopt.rs`), portanto **não há
+espelho nem cópia local do pool** (guarda anti-regressão:
+`tests/asset_pool_dedup.rs`).
 
 ## Estrutura
 
@@ -52,11 +54,9 @@ cópias decomprimidas; a asset root do mundo é a pasta que contém `assets/`
   `include_str!`; campos: `id, npc, biome, title, lines_*, objective, rewards`)
 - `scripts/**.lua` — comportamento Luau (inimigos/bosses, colheita, POIs,
   HUD/UI) via a API `viber.*` (`Viber/docs/LUA_API.md`)
-- `assets/` — espelho local (não versionado) dos assets referenciados,
-  gerado por `scripts/sync_assets.py` a partir do pool partilhado
-  `Viber/examples/shared-assets/public` (GLBs decomprimidos de
-  meshopt/KTX2/quantização que o bevy 0.19 não lê; caminhos `/assets/...`
-  resolvem aqui via asset root = pasta do mundo)
+- `config.yaml` — **contrato de paths com a engine** (obrigatório; roots,
+  dirs de áudio/texturas/scripts/UI, save) — `Viber/docs/ASSETS.md`
+- `tools/` — scripts de geração por-jogo (ex.: `gen_heightmap.py`)
 
 ## Re-migrar
 
@@ -69,11 +69,10 @@ python3 Viber/scripts/migrate_from_vibegame.py \
   -o Viber/examples/simple-rpg/
 ```
 
-Depois de mudanças nos assets (novos refs, GLBs novos):
-
-```bash
-python3 Viber/scripts/sync_assets.py   # pool: Viber/examples/shared-assets/public
-```
+Depois de mudanças nos assets (novos refs, GLBs novos): os assets
+partilhados vão para o POOL (`Viber/examples/shared-assets/` — ver o README
+do pool); por-jogo ficam em `assets/` versionado. `viber analyze
+examples/simple-rpg/world.xml` confirma que tudo resolve.
 
 Cada ficheiro de saída leva um cabeçalho com os attrs descartados e as tags
 passadas verbatim. Regras de mapeamento: docstring do conversor.

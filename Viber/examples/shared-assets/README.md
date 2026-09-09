@@ -2,7 +2,9 @@
 
 **Uma** pasta com todos os assets gerados do repo — manifests canónicos e os
 binários finais (GLB/PNG/JSON). Nenhum exemplo guarda cópias nem symlinks: o
-plugin `vibegame({ sharedAssets })` serve `public/assets/` daqui a todos eles.
+plugin `vibegame({ sharedAssets })` serve `public/assets/` daqui a todos eles
+no browser, e a engine nativa Viber consome-o como root extra declarado no
+`config.yaml` de cada jogo (`Viber/docs/ASSETS.md`).
 
 ## Packs
 
@@ -73,6 +75,13 @@ export default defineConfig({ plugins: [vibegame({ sharedAssets })] });
 
 Sem symlinks e sem binários duplicados em disco. Não há passo de sync: editar
 aqui chega a todos os exemplos no reload seguinte.
+
+**Viber nativo** (`viber run/analyze`): a mesma semântica sem vite — cada
+jogo declara este pool como root extra no seu `config.yaml`
+(`assets.roots`); a pasta do jogo responde primeiro (overrides por-mundo
+ganham). Detalhe e regras: `Viber/docs/ASSETS.md` (o guarda
+`tests/asset_pool_dedup.rs` parte a build de quem recriar cópias por
+exemplo).
 
 ## O que **não** vive aqui
 

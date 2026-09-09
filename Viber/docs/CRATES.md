@@ -15,6 +15,7 @@ driver NV (materiais/shaders custom) avaliado, (4) manutenção ativa do crate.
 | — (dedup) | — | SplitMix64 ×6 ficheiros | `src/rng.rs` único; golden test congela a sequência (`Rng::new(0)` → `0xE220A8397B1DCDAF…`). `spawner.rs` re-exporta para compat. |
 | `notify` | 8.2 | — (feature nova) | Hot-reload de scripts Luau: `src/hot_reload.rs`, watcher recursivo sobre `<mundo>/scripts/`, debounce 250 ms, erro de compilação mantém o chunk antigo. `VIBER_HOT_RELOAD=0` desliga. |
 | `bevy_kira_audio` | 0.26 (kira 0.12) | `bevy_audio`/rodio como backend de playback | Buses tipados `MusicBus`/`SfxBus` (`crate::music`); `mixer_sync` empurra o `AudioMixerSettings` (save/menu/XML) para os canais — volumes respondem AO VIVO, mesmo em one-shots a meio. Crossfade `fade_step` preservado em linear (testes intactos); conversão `linear_to_db` só na fronteira. Jitter de pitch via `with_playback_rate`. Cachoeiras/água/chuva/BGM todos no bus SFX/Music. |
+| `serde_yaml` | 0.9 | parsing do `config.yaml` do jogo (`src/config.rs`) | Contrato de paths lido em runtime (roots/bgm/sfx/texturas/scripts/ui/save). Arquivada (dtolnay) mas congelada-estável e é o parser de referência; ~1 dep transitiva (`unsafe-libyaml`). Chaves desconhecidas avisam e não partem o parse. |
 
 O `bevy_audio`/rodio do Bevy fica compilado (tirar a feature do `bevy` exige
 re-listar ~20 features default — frágil); NENHUM som nasce por ele —
