@@ -526,14 +526,16 @@ pub fn third_person_camera(
                             // a câmara (Y conhecido): sob um overhang o chão
                             // é o de baixo — o topo da rocha é teto, não
                             // minTerrainDistance.
-                            let min_y = rt
-                                .surface_below(
+                            let min_y = if rt.in_field(desired.x, desired.z) {
+                                rt.surface_below(
                                     desired.x,
                                     desired.z,
                                     desired.y + crate::player::GROUND_PROBE,
                                 )
                                 .unwrap_or(f32::NEG_INFINITY)
-                                + cam.min_terrain_distance;
+                            } else {
+                                f32::NEG_INFINITY
+                            } + cam.min_terrain_distance;
                             if desired.y < min_y {
                                 safe.y = min_y;
                             }

@@ -90,6 +90,19 @@
   <Include src="/world/frontier/ridges.xml" />
   <Include src="/world/frontier/cliffs.xml" />
   <Include src="/world/frontier/horizon.xml" />
+  <!-- ============================================================
+       CAMADA DE FANTASIA (world/fantasy/) — os três destinos que faltavam
+       ao mapa: a mesa alta a leste (Alto de Vael), os primeiros túneis voxel
+       (`<Cave>`) e a ruína monumental do planalto oeste. Cada um traz o seu
+       trilho em paths/trails.xml. Ordem: depois do terreno e dos trilhos
+       (as bocas das grutas assentam sobre o relevo já vestido), antes dos
+       spawners de criaturas — as exclusões de spawn destes sítios têm de
+       estar registadas quando os grupos de spawner computam as colocações.
+       ============================================================ -->
+  <Include src="/world/fantasy/alto-de-vael.xml" />
+  <Include src="/world/fantasy/grutas.xml" />
+  <Include src="/world/fantasy/bosque-encantado.xml" />
+  <Include src="/world/fantasy/cidadela-caida.xml" />
   <Include src="/world/atmosphere/ambient-fx.xml" />
   <Include src="/world/creatures/enemies.xml" />
   <Include src="/world/creatures/bosses.xml" />

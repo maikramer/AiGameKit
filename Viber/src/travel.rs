@@ -451,6 +451,7 @@ pub struct TravelMenuState {
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn travel_menu_system(
     keys: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
     players: Query<&GlobalTransform, With<Player>>,
     named: Query<(&Name, &GlobalTransform)>,
     nota: Res<NotaLog>,
@@ -465,16 +466,27 @@ fn travel_menu_system(
     mut q_content: Query<&mut Text, With<TravelContent>>,
     mut toasts: MessageWriter<ScriptToast>,
     mut sfx: MessageWriter<crate::ambient::SfxEvent>,
+    // Profiling 2026-09-09: o scan de TODAS as entidades nomeadas custava
+    // ~1 ms POR FRAME (a 2.ª linha do profiler). A proximidade da fogueira
+    // agora calcula-se a 4 Hz — o [G] responde ao cache mais recente (o
+    // player atravessa os 14 m de alcance em mais de 1 s a andar).
+    mut scan_throttle: Local<f32>,
+    mut cached_campfire: Local<bool>,
 ) {
     // Fogueira POR NOME ("campfire" no mundo) — sem o marcador, qualquer
     // entidade a <14 m (árvore, rocha, NPC) abria o fast-travel em todo o
     // lado e o requisito "fogueira da praça" era letra morta.
-    let near_campfire = players.iter().next().is_some_and(|player| {
-        named.iter().any(|(name, t)| {
-            name.to_ascii_lowercase().contains("campfire")
-                && t.translation().distance(player.translation()) < TRAVEL_CAMPFIRE_RANGE_M
-        })
-    });
+    *scan_throttle -= time.delta_secs();
+    if *scan_throttle <= 0.0 {
+        *scan_throttle = 0.25;
+        *cached_campfire = players.iter().next().is_some_and(|player| {
+            named.iter().any(|(name, t)| {
+                name.to_ascii_lowercase().contains("campfire")
+                    && t.translation().distance(player.translation()) < TRAVEL_CAMPFIRE_RANGE_M
+            })
+        });
+    }
+    let near_campfire = *cached_campfire;
 
     if keys.just_pressed(KeyCode::KeyG) && (near_campfire || state.open) {
         state.open = !state.open;
@@ -604,8 +616,6 @@ fn travel_fade_system(
     mut overlay: Query<(&mut BackgroundColor, &mut Visibility), With<TravelFadeOverlay>>,
     mut heroes: Query<(&mut Transform, &mut Player), With<Player>>,
     mut commands: Commands,
-    meshes: Option<ResMut<Assets<Mesh>>>,
-    materials: Option<ResMut<Assets<StandardMaterial>>>,
 ) {
     if fade.phase == TravelFadePhase::Idle {
         return;
@@ -620,12 +630,10 @@ fn travel_fade_system(
                 player.vel_z = 0.0;
                 player.vel_y = 0.0;
             }
-            if let (Some(mut meshes), Some(mut materials)) = (meshes, materials) {
+            {
                 // Poeira de aterragem — visível quando o fade abre.
                 crate::particles::spawn_burst(
                     &mut commands,
-                    &mut meshes,
-                    &mut materials,
                     &crate::vitals::juice_spec(
                         "ground-dust",
                         (0.3, 0.7),

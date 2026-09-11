@@ -247,8 +247,38 @@ pub struct PendingWorldSystems {
     pub day_cycle: Option<DayCycleState>,
     pub weather: Option<WeatherState>,
     pub border: Option<WorldBorderConfig>,
+    pub interior_scene: Option<InteriorSceneConfig>,
     pub biomes: Vec<BiomeRegionData>,
     pub configs: Vec<EngineConfigData>,
+}
+
+/// `<InteriorScene at="x z" size="w d">` — uma cena de interior declarada
+/// como BOLSA, fora da área do mapa.
+///
+/// PORQUÊ: os ambientes internos não vivem no mundo, vivem noutro sítio. Se
+/// esse sítio for dentro do campo do heightmap, o mundo inteiro continua a
+/// mexer lá dentro — a cota do terreno atravessa o soalho, a névoa e a tinta
+/// do bioma entram na sala, chove dentro de casa e a `WorldBorder` devolve o
+/// herói ao vale a meio da visita. A bolsa é a declaração que diz à engine
+/// "aqui não há mundo": o retângulo é isento do clamp de fronteira, trata-se
+/// como bioma nenhum (névoa/tinta/exposição neutras) e não chove.
+///
+/// O sítio escolhido é FORA da pegada do heightmap (`|x|` ou `|z|` >
+/// `world_size/2`), onde o terreno já não gera colunas nem colliders — ver
+/// `TerrainRuntime::in_field`. A distância faz o resto: conteúdo a >2 km não
+/// entra em render-distance, em cull-distance nem em raio de ativação.
+#[derive(Debug, Clone, Copy, PartialEq, bevy::prelude::Resource)]
+pub struct InteriorSceneConfig {
+    /// Canto mínimo do retângulo (XZ, metros).
+    pub min: [f32; 2],
+    /// Canto máximo do retângulo (XZ, metros).
+    pub max: [f32; 2],
+}
+
+impl InteriorSceneConfig {
+    pub fn contains(&self, x: f32, z: f32) -> bool {
+        x >= self.min[0] && x <= self.max[0] && z >= self.min[1] && z <= self.max[1]
+    }
 }
 
 impl PendingWorldSystems {
@@ -428,6 +458,12 @@ fn seat_at(
     let Ok((_, mut transform)) = transforms.get_mut(entity) else {
         return;
     };
+    // Fora da pegada do heightmap não há chão para onde assentar: sem esta
+    // guarda, o `column` saturado na orla levantava uma cena de interior
+    // inteira (ou cada filho dela) à cota da borda do mundo.
+    if !runtime.in_field(x, z) {
+        return;
+    }
     // Levantar um static afundado até ao topo do SPAN em que ele está: um
     // static correctamente pousado sob um overhang não é puxado através da
     // rocha (o topo do mundo ali é teto), e um static enterrado sobe até à
@@ -1026,6 +1062,7 @@ fn mix_linear(night: [f32; 3], day: Color, t: f32) -> Color {
 #[allow(clippy::needless_pass_by_value)]
 pub fn world_border_clamp(
     border: Option<Res<WorldBorderConfig>>,
+    scene: Option<Res<InteriorSceneConfig>>,
     mut players: Query<&mut Transform, With<crate::player::Player>>,
     mut logged: Local<bool>,
 ) {
@@ -1040,6 +1077,11 @@ pub fn world_border_clamp(
     }
     for mut transform in &mut players {
         let pos = transform.translation;
+        // Dentro da bolsa o herói está declaradamente fora do mundo: o clamp
+        // devolvê-lo-ia ao vale a meio da visita.
+        if scene.as_deref().is_some_and(|s| s.contains(pos.x, pos.z)) {
+            continue;
+        }
         let dist_sq = pos.x * pos.x + pos.z * pos.z;
         if dist_sq > limit * limit {
             let scale = limit / dist_sq.sqrt();
@@ -1666,5 +1708,22 @@ mod place_tests {
         // `place` define a cota EXATA (sobe e desce), ao contrário do seating.
         assert_eq!(place_ground_y(&runtime, 0.0, 0.0, 0.0), ground);
         assert_eq!(place_ground_y(&runtime, 0.0, 0.0, 80.0), ground);
+    }
+
+    /// A bolsa só isenta do clamp/DENTRO do retângulo — e um retângulo
+    /// degenerado (min == max) não isenta nada.
+    #[test]
+    fn test_interior_scene_contains() {
+        let scene = InteriorSceneConfig {
+            min: [2564.0, 2570.0],
+            max: [2752.0, 2742.0],
+        };
+        assert!(scene.contains(2658.0, 2656.0), "centro");
+        assert!(scene.contains(2564.0, 2570.0), "canto (inclusivo)");
+        assert!(!scene.contains(2563.0, 2656.0), "fora por x");
+        assert!(!scene.contains(2658.0, 2743.0), "fora por z");
+        // O mundo (world-size 4000) fica longe: a bolsa é mesmo fora.
+        assert!(!scene.contains(0.0, 0.0));
+        assert!(!scene.contains(860.0, 780.0), "o Alto de Vael não é bolsa");
     }
 }

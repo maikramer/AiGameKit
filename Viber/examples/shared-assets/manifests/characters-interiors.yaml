@@ -1,0 +1,157 @@
+# NPCs de INTERIOR — o povo que vive dentro das casas (o elenco de rua já
+# existe em manifests/characters.yaml: merchant, healer, blacksmith, guard,
+# elder, scout). Manifest PRÓPRIO de propósito: `resume` só corre as fases
+# pendentes, e um ficheiro separado garante que nenhum asset já pronto do
+# pack `characters` é tocado por este lote.
+#
+# Regenerar:
+#   cd Viber/examples/shared-assets
+#   ../../GameAssets/.venv/bin/python -m gameassets resume \
+#       --profile game.yaml --manifest manifests/characters-interiors
+output_dir: ../public/assets
+meshes_subdir: meshes/characters
+images_subdir: images/characters
+assets:
+  - id: npc_innkeeper
+    idea:
+      friendly cartoon innkeeper NPC wearing a stained apron over a rolled-sleeve
+      shirt, towel over one shoulder, sturdy build, warm welcoming smile, standing
+      upright in relaxed A-pose with arms angled down at 45 degrees away from the
+      body, visible gap between arms and torso, open hands with spread fingers,
+      hands empty, no weapons, no props, full body visible, front-facing, fantasy
+      tavern keeper
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,talk,call,foldarms,eat,yes,no
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.7
+        - 1.6
+        - 0.55
+  - id: npc_priest
+    idea:
+      serene cartoon priest NPC wearing a long simple robe with a rope belt and a
+      plain hood collar, kind calm expression, hands relaxed open, standing upright
+      in relaxed A-pose with arms angled down at 45 degrees away from the body,
+      visible gap between arms and torso, hands empty, no weapons, no props, full
+      body visible, front-facing, fantasy village vicar
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,talk,foldarms,yes,no
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.55
+        - 1.7
+        - 0.4
+  - id: npc_scholar
+    idea:
+      thoughtful cartoon scholar NPC wearing a long reading coat with a narrow
+      sash, round spectacles, ink-stained fingers, scroll case at the hip, standing
+      upright in relaxed A-pose with arms angled down at 45 degrees away from the
+      body, visible gap between arms and torso, open hands with spread fingers,
+      hands empty, no weapons, no props, full body visible, front-facing, fantasy
+      scribe librarian
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,talk,lean,foldarms,yes,no
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.5
+        - 1.62
+        - 0.4
+  - id: npc_cook
+    idea:
+      bustling cartoon cook NPC wearing a flour-dusted apron over a short-sleeve
+      tunic with the sleeves pushed up, hair tied back under a cloth wrap, cheerful
+      round face, standing upright in relaxed A-pose with arms angled down at 45
+      degrees away from the body, visible gap between arms and torso, open hands
+      with spread fingers, hands empty, no weapons, no props, full body visible,
+      front-facing, fantasy kitchen cook
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,talk,eat,call,foldarms,yes,no
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.66
+        - 1.56
+        - 0.52
+  - id: npc_bard
+    idea:
+      lively cartoon bard NPC wearing a bright short cape over a laced tunic, feathered
+      cap, easy grin, light build, standing upright in relaxed A-pose with arms angled
+      down at 45 degrees away from the body, visible gap between arms and torso, open
+      hands with spread fingers, hands empty, no weapons, no props, no instrument,
+      full body visible, front-facing, fantasy minstrel
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,talk,dance,call,yes,no
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.55
+        - 1.66
+        - 0.44

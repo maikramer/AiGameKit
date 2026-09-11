@@ -382,6 +382,20 @@ impl TerrainRuntime {
         let spans = self.voxel.column(&*self.grid, x, z);
         spans.len() >= 2 && spans[0].thickness() < MIN_STAND_THICKNESS
     }
+    /// O XZ cai dentro da pegada do heightmap?
+    ///
+    /// Fora dela **não há terreno nenhum** — e as amostras do `BrushGrid`/
+    /// `VoxelField` não sabem dizê-lo: saturam no texel da borda e devolvem a
+    /// cota da orla como se fosse chão. Quem pergunta por chão tem de
+    /// perguntar isto primeiro, senão uma zona declaradamente vazia (uma cena
+    /// de interior fora do mapa, por exemplo) herda a cota da borda: era esse
+    /// o mecanismo do CCT ser despenetrado ~4 s depois de um teleporte para
+    /// fora do campo.
+    pub fn in_field(&self, x: f32, z: f32) -> bool {
+        let half = self.spec.world_size * 0.5;
+        x >= -half && x <= half && z >= -half && z <= half
+    }
+
     /// Ground height at a world XZ position (meters).
     ///
     /// This is the **topmost** solid surface. It keeps that meaning now that a
@@ -472,6 +486,12 @@ impl bevy::app::Plugin for TerrainFeaturesPlugin {
                     // Sem isto o chão do splat ficava com o albedo de dia às
                     // 23:00 (a função existia e nunca corria).
                     timed(Group::Terrain, super::layer_material::terrain_daynight_tint),
+                    // Chuva → chão molhado (canal `walls_b.w` do chunk). Mora
+                    // AQUI e não no `AmbientPlugin` para estar sob `timed`, e
+                    // para ser o ÚNICO registo: registar a mesma fn em dois
+                    // sítios faz o Bevy ficar com a versão SEM `timed` e o
+                    // sistema desaparece do profiler (ver `ambient.rs`).
+                    timed(Group::Terrain, super::layer_material::terrain_rain_wetness),
                 ),
             );
     }
@@ -800,6 +820,7 @@ pub fn bootstrap(world: &mut World) {
             &config,
             edge,
             rows,
+            &asset_roots,
         ))
     };
 
@@ -1098,6 +1119,26 @@ fn terrain_standard_material(
 /// mountain carry snow/stone, chunks of a swamp carry mud — different areas
 /// render different layer sets.
 #[allow(clippy::too_many_arguments)]
+/// Existe algum ficheiro para `asset_path` nas asset roots, na ordem em que o
+/// asset server as registrou?
+///
+/// Serve para NÃO pedir ao `AssetServer` um mapa que se sabe ausente. Os
+/// mapas OPCIONAIS das layers de terreno (`normal`/`height`/`ao`) faltam em
+/// algumas do pool — `dirt_trail` e `dirt_road` só têm albedo — e cada pedido
+/// falhado custa um `ERROR Path not found` do Bevy mais um watch pendente. No
+/// simple-rpg isso são 12 linhas de erro no arranque para um caso que o
+/// material já trata como normal (normal plana, height 0.5, AO 1.0): o
+/// ruído esconde erros verdadeiros no log, que é o que o QA lê.
+///
+/// O teste é o mesmo que o `audit` usa (`resolve_asset`): um `is_file` sobre
+/// as roots, uma vez por slot no bootstrap.
+fn asset_present(asset_roots: &[std::path::PathBuf], asset_path: &str) -> bool {
+    asset_roots
+        .iter()
+        .any(|root| root.join(asset_path).is_file())
+}
+
+#[allow(clippy::too_many_arguments)]
 fn spawn_chunk_materials(
     spec: &TerrainSpec,
     grid: &BrushGrid,
@@ -1111,6 +1152,7 @@ fn spawn_chunk_materials(
     config: &TerrainChunkConfig,
     edge: f32,
     rows: u32,
+    asset_roots: &[std::path::PathBuf],
 ) -> ChunkLayerMap {
     // `spec.layers` vem CANÓNICA do parse (`canonicalize_layers`: posição =
     // slot, buracos = ""). Colocar por slot e não por ordem escrita — sem
@@ -1166,6 +1208,11 @@ fn spawn_chunk_materials(
         let Some(path) = game_config.terrain_normal(entry) else {
             continue;
         };
+        // Mapa opcional: sem ficheiro no pool fica o fallback (plana/neutra)
+        // e nem se chega a pedir a carga.
+        if !asset_present(asset_roots, &path) {
+            continue;
+        }
         layer_normals[slot] = load_world_texture(server, world, &path);
     }
 
@@ -1183,6 +1230,11 @@ fn spawn_chunk_materials(
         let Some(path) = game_config.terrain_height(entry) else {
             continue;
         };
+        // Mapa opcional: sem ficheiro no pool fica o fallback (plana/neutra)
+        // e nem se chega a pedir a carga.
+        if !asset_present(asset_roots, &path) {
+            continue;
+        }
         layer_heights[slot] = load_world_texture(server, world, &path);
     }
     let flat_ao = images.add(flat_ao_image());
@@ -1194,6 +1246,11 @@ fn spawn_chunk_materials(
         let Some(path) = game_config.terrain_ao(entry) else {
             continue;
         };
+        // Mapa opcional: sem ficheiro no pool fica o fallback (plana/neutra)
+        // e nem se chega a pedir a carga.
+        if !asset_present(asset_roots, &path) {
+            continue;
+        }
         layer_aos[slot] = load_world_texture(server, world, &path);
     }
 
@@ -1435,15 +1492,16 @@ fn spawn_water(
     }
     // A cor/alpha do corpo (e o fade de margem) chegam pelas VERTEX COLORS;
     // o shader da extensão (`shaders/water.wgsl`) acrescenta ondas, fresnel e
-    // glint por cima deste PBR base. `reflectance 1.0` = F0 0.04, o F0 real
-    // da água: com o IBL do probe o espelho rasante reflete o CÉU de verdade
-    // (o tint analítico do shader ficou residual para mundos sem IBL).
+    // glint por cima deste PBR base. `reflectance 0.8` = F0 ~0.03, o F0 da
+    // água sem o excesso de espelho: com 1.0 o reflexo do céu pálido lavava
+    // o corpo ("leite") — 0.8 + rugosidade maior no shader deixam a cor
+    // dominar e o céu entrar só ao rasante.
     let water_material = materials.add(WaterMaterial {
         base: StandardMaterial {
             base_color: Color::WHITE,
             metallic: 0.0,
             perceptual_roughness: 0.08,
-            reflectance: 1.0,
+            reflectance: 0.8,
             alpha_mode: bevy::material::AlphaMode::Blend,
             cull_mode: None,
             ..StandardMaterial::default()
@@ -1473,7 +1531,7 @@ fn spawn_water(
     for (body, &(is_lake, spec_i)) in result.water.iter().zip(&result.water_specs) {
         let (name, mesh) = if is_lake {
             let lake = &features.lakes[spec_i];
-            ("lake", lake_water_mesh(lake, body.water_y))
+            ("lake", lake_water_mesh(lake, body.water_y, grid))
         } else {
             let river = &features.rivers[spec_i];
             ("river", river_water_mesh(river, body))

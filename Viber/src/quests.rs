@@ -561,8 +561,6 @@ fn quest_dialogue_system(
     mut toasts: MessageWriter<ScriptToast>,
     mut sfx: MessageWriter<crate::ambient::SfxEvent>,
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut banners: Query<(&mut QuestDoneBanner, &Children)>,
     mut balloons: Query<(&mut Visibility, &mut HudBalloon, &Children)>,
     mut texts: Query<&mut Text>,
@@ -649,8 +647,6 @@ fn quest_dialogue_system(
                     // CONCLUÍDA" + faíscas no herói + SFX de missão feita.
                     quest_done_fanfare(
                         &mut commands,
-                        &mut meshes,
-                        &mut materials,
                         &mut sfx,
                         &mut banners,
                         &mut texts,
@@ -755,8 +751,6 @@ pub fn quest_banner_alpha(remaining: f32) -> f32 {
 #[allow(clippy::too_many_arguments)]
 fn quest_done_fanfare(
     commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
     sfx: &mut MessageWriter<crate::ambient::SfxEvent>,
     banners: &mut Query<(&mut QuestDoneBanner, &Children)>,
     texts: &mut Query<&mut Text>,
@@ -769,8 +763,6 @@ fn quest_done_fanfare(
     });
     crate::particles::spawn_burst(
         commands,
-        meshes,
-        materials,
         &crate::vitals::juice_spec(
             "sparkle",
             (0.15, 0.4),

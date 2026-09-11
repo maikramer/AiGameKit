@@ -399,7 +399,18 @@ pub fn player_movement(
         // real colliders stream in. Under an overhang or inside a cave the
         // top of the world is the WRONG floor and must not snap the hero up
         // through the roof — see [`last_resort_ground`].
-        let top = runtime.sample(transform.translation.x, transform.translation.z);
+        //
+        // FORA DA PEGADA não há terreno: as amostras saturam na orla e
+        // devolvem-me a cota da borda, que aqui dentro seria uma "superfície"
+        // a 2 km de distância usada para resgatar o herói — o salto de metro
+        // que uma cena de interior fora do mapa levava. Fora do campo as duas
+        // rede de segurança desligam-se e manda o collider.
+        let in_field = runtime.in_field(transform.translation.x, transform.translation.z);
+        let top = if in_field {
+            runtime.sample(transform.translation.x, transform.translation.z)
+        } else {
+            f32::NEG_INFINITY
+        };
 
         // Void rescue: a hero this far under the surface tunnelled through the
         // terrain collider (see [`fell_out_of_world`]). Put them back on the
@@ -418,13 +429,17 @@ pub fn player_movement(
         // gruta o topo é teto, não chão. É só a rede de segurança de
         // "sem collider carregado": com chão de collider debaixo do herói
         // (`TerrainCollisionStatus.ready`), o collider é a autoridade.
-        let ground = runtime
-            .surface_below(
-                transform.translation.x,
-                transform.translation.z,
-                transform.translation.y + GROUND_PROBE,
-            )
-            .unwrap_or(f32::NEG_INFINITY);
+        let ground = if in_field {
+            runtime
+                .surface_below(
+                    transform.translation.x,
+                    transform.translation.z,
+                    transform.translation.y + GROUND_PROBE,
+                )
+                .unwrap_or(f32::NEG_INFINITY)
+        } else {
+            f32::NEG_INFINITY
+        };
 
         // Vertical integration. Falls faster than it rises feels right
         // (gravity is already twice the jump-fair value); see
@@ -503,6 +518,12 @@ pub fn dialogue_interaction(
     players: Query<&GlobalTransform, With<Player>>,
     npcs: Query<(&GlobalTransform, &DialogueNpc)>,
 ) {
+    // Todo o custo (varrer os NPC e medir distâncias) só existe no frame em que
+    // [E] é premido. Fora disso o resultado era descartado (`let _ = near`),
+    // portanto era N `distance` (sqrt) + um `min_by` por frame sem leitor.
+    if !keys.just_pressed(KeyCode::KeyE) {
+        return;
+    }
     let Ok(player) = players.single() else {
         return;
     };
@@ -511,7 +532,7 @@ pub fn dialogue_interaction(
     // NPC em alcance, `.next()` devolvia o id errado (order-dependent).
     let nearest = npcs
         .iter()
-        .filter(|(t, _)| t.translation().distance(player_pos) < 3.5)
+        .filter(|(t, _)| t.translation().distance_squared(player_pos) < 3.5 * 3.5)
         .min_by(|(a, _), (b, _)| {
             a.translation()
                 .distance_squared(player_pos)
@@ -519,14 +540,10 @@ pub fn dialogue_interaction(
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
         .map(|(_, npc)| npc.dialogue_id.as_str());
-    let near = nearest.is_some();
-    if keys.just_pressed(KeyCode::KeyE) {
-        match nearest {
-            Some(id) => bevy::log::info!("interaction: dialogue {} available", id),
-            None => bevy::log::info!("interaction: nothing nearby"),
-        }
+    match nearest {
+        Some(id) => bevy::log::info!("interaction: dialogue {} available", id),
+        None => bevy::log::info!("interaction: nothing nearby"),
     }
-    let _ = near; // prompt UI lands with the HUD phase
 }
 
 // ------------------------------------------------------ character controller

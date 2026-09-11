@@ -917,24 +917,18 @@ pub fn swing_track_system(
         let combo_sparks = (fx.combo.hits.min(4) * 2) as usize;
         crate::particles::spawn_burst(
             &mut fx.commands,
-            &mut meshes,
-            &mut materials,
             &hit_flash_spec(),
             target_pos + Vec3::Y * 1.25,
             if crit { 24 } else { 12 },
         );
         crate::particles::spawn_burst(
             &mut fx.commands,
-            &mut meshes,
-            &mut materials,
             &hit_sparks_spec(),
             target_pos + Vec3::Y * 1.0,
             if crit { 40 } else { 22 } + combo_sparks,
         );
         crate::particles::spawn_burst(
             &mut fx.commands,
-            &mut meshes,
-            &mut materials,
             &impact_spec("slash", (0.6, 1.1), (0.14, 0.26), (0.4, 1.2), None),
             target_pos + Vec3::Y * 1.2,
             if crit { 6 } else { 4 },
@@ -965,16 +959,12 @@ pub fn swing_track_system(
             // — o abate tem de fechar com um ponto fulgurante, não sumir-se.
             crate::particles::spawn_burst(
                 &mut fx.commands,
-                &mut meshes,
-                &mut materials,
                 &impact_spec("explosion", (0.55, 1.2), (0.3, 0.6), (3.0, 7.0), None),
                 target_pos + Vec3::Y * 1.0,
                 20,
             );
             crate::particles::spawn_burst(
                 &mut fx.commands,
-                &mut meshes,
-                &mut materials,
                 &impact_spec("smoke", (0.6, 1.3), (0.8, 1.6), (0.8, 1.8), None),
                 target_pos + Vec3::Y * 1.3,
                 9,
@@ -1069,16 +1059,12 @@ pub fn swing_track_system(
         let position = origin + aim * 1.2 + Vec3::Y * 0.3;
         crate::particles::spawn_burst(
             &mut fx.commands,
-            &mut meshes,
-            &mut materials,
             &impact_spec("explosion", (0.55, 1.15), (0.35, 0.65), (3.5, 8.0), None),
             position,
             20,
         );
         crate::particles::spawn_burst(
             &mut fx.commands,
-            &mut meshes,
-            &mut materials,
             &impact_spec("ground-dust", (0.5, 1.0), (0.6, 1.2), (1.0, 2.4), None),
             position.with_y(origin.y + 0.1),
             8,
@@ -1212,14 +1198,21 @@ pub fn play_death_animation(
 
 /// Cadáveres somem após a animação de morte.
 pub fn tick_corpses(
-    mut corpses: Query<(Entity, &mut Corpse)>,
+    mut corpses: Query<(Entity, &mut Corpse, &CorpseFade)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut commands: Commands,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
-    for (entity, mut corpse) in &mut corpses {
+    for (entity, mut corpse, fade) in &mut corpses {
         corpse.timer -= dt;
         if corpse.timer <= 0.0 {
+            // Os clones do fade morrem COM o cadáver: sem isto cada abate
+            // deixava até MAX_FLASH_MATS materiais residentes para sempre (o
+            // Bevy não faz GC de assets) e o store crescia sem limite.
+            for handle in fade.materials.iter() {
+                materials.remove(handle);
+            }
             commands.entity(entity).despawn();
         }
     }
@@ -1539,8 +1532,6 @@ struct FireballFx<'w> {
 fn fireball_step(
     mut commands: Commands,
     time: Res<Time>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut fx: FireballFx,
     mut balls: Query<(Entity, &mut Transform, &mut Fireball)>,
     mut enemies: Query<
@@ -1581,24 +1572,18 @@ fn fireball_step(
             // o projétil somia sem um único pixel de fogo).
             crate::particles::spawn_burst(
                 &mut commands,
-                &mut meshes,
-                &mut materials,
                 &impact_spec("explosion", (0.5, 1.1), (0.3, 0.65), (3.0, 7.5), None),
                 center + Vec3::Y * 1.0,
                 16,
             );
             crate::particles::spawn_burst(
                 &mut commands,
-                &mut meshes,
-                &mut materials,
                 &hit_sparks_spec(),
                 center + Vec3::Y * 1.0,
                 12,
             );
             crate::particles::spawn_burst(
                 &mut commands,
-                &mut meshes,
-                &mut materials,
                 &hit_flash_spec(),
                 center + Vec3::Y * 1.2,
                 8,
@@ -1816,5 +1801,46 @@ mod tests {
                 < 1e-4
         );
         assert!((authored_max_hp("townsfolk.lua") - crate::vitals::DEFAULT_HEALTH).abs() < 1e-4);
+    }
+
+    /// O cadáver leva os clones do fade COM ele: sem isto cada abate deixava
+    /// até `MAX_FLASH_MATS` materiais residentes para sempre (o Bevy não faz
+    /// GC de assets) e o store crescia sem limite numa sessão de combate.
+    #[test]
+    fn test_corpse_leva_os_clones() {
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .add_systems(Update, tick_corpses);
+
+        let corpse = {
+            let world = app.world_mut();
+            let clone = world
+                .resource_mut::<Assets<StandardMaterial>>()
+                .add(StandardMaterial {
+                    alpha_mode: AlphaMode::Blend,
+                    ..StandardMaterial::default()
+                });
+            world
+                .spawn((
+                    Corpse { timer: 0.0 },
+                    CorpseFade {
+                        materials: vec![clone],
+                        base_y: 0.0,
+                    },
+                ))
+                .id()
+        };
+        app.update();
+
+        assert_eq!(
+            app.world().resource::<Assets<StandardMaterial>>().len(),
+            0,
+            "o clone do fade foi removido com o cadáver"
+        );
+        assert!(
+            app.world().get_entity(corpse).is_err(),
+            "o cadáver despawnou"
+        );
     }
 }

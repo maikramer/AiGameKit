@@ -648,8 +648,6 @@ pub fn abilities_system(
             }
             crate::particles::spawn_burst(
                 &mut commands,
-                &mut fx.meshes,
-                &mut fx.materials,
                 &crate::combat::hit_sparks_spec(),
                 t.translation() + Vec3::Y * 1.0,
                 STRIKE_SPARK_COUNT,
@@ -708,8 +706,6 @@ pub fn abilities_system(
         );
         crate::particles::spawn_burst(
             &mut commands,
-            &mut fx.meshes,
-            &mut fx.materials,
             &crate::combat::impact_spec("ground-dust", (0.5, 1.0), (0.5, 1.0), (2.0, 4.5), None),
             pos.with_y(pos.y + 0.15),
             12,
@@ -853,8 +849,6 @@ fn bomb_step_system(
                 }
                 crate::particles::spawn_burst(
                     &mut commands,
-                    &mut fx.meshes,
-                    &mut fx.materials,
                     &crate::combat::hit_sparks_spec(),
                     t.translation() + Vec3::Y * 1.0,
                     BOMB_SPARK_COUNT,

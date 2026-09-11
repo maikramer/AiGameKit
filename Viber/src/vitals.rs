@@ -232,8 +232,6 @@ pub fn level_up_fx(
     mut sfx: MessageWriter<crate::ambient::SfxEvent>,
     mut toasts: MessageWriter<crate::luau::ScriptToast>,
     mut commands: Commands,
-    mut meshes: Option<ResMut<Assets<Mesh>>>,
-    mut materials: Option<ResMut<Assets<StandardMaterial>>>,
 ) {
     for event in events.read() {
         // SFX e toast são de interface (sem posição, volume cheio).
@@ -248,21 +246,12 @@ pub fn level_up_fx(
         if let Some(fx) = postfx.as_deref_mut() {
             fx.kick_exposure(LEVELUP_KICK_EV);
         }
-        // as_deref_mut por iteração: os assets têm de sobreviver a vários
-        // eventos no mesmo frame (Option<ResMut> não é Copy). Já são
-        // `&mut Assets<_>` — passam direto ao spawn_burst.
-        let (Some(meshes), Some(materials)) = (meshes.as_deref_mut(), materials.as_deref_mut())
-        else {
-            continue; // apps mínimas sem AssetPlugin: bursts não aplicam
-        };
         let Some(anchor) = players.iter().next().map(|t| t.translation()) else {
             continue;
         };
         // Aura mágica a subir + faíscas douradas — o herói é a âncora.
         crate::particles::spawn_burst(
             &mut commands,
-            &mut *meshes,
-            &mut *materials,
             &juice_spec(
                 "magic",
                 (0.35, 0.85),
@@ -275,8 +264,6 @@ pub fn level_up_fx(
         );
         crate::particles::spawn_burst(
             &mut commands,
-            &mut *meshes,
-            &mut *materials,
             &juice_spec(
                 "sparkle",
                 (0.15, 0.45),
