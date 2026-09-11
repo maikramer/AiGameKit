@@ -258,3 +258,107 @@ class TestTryGroupOffloadingWithConfig:
 
         assert result is True
         custom_mod.enable_group_offload.assert_called_once()
+
+
+class TestAllocConfByMode:
+    """Alloc conf comum: sem max_split_size_mb quando GO vai correr."""
+
+    def test_go_conf_has_no_max_split(self) -> None:
+        from aigamekit_shared.group_offload import ALLOC_CONF_GROUP_OFFLOAD, cuda_alloc_conf_for
+
+        assert "max_split_size_mb" not in cuda_alloc_conf_for(True)
+        assert "expandable_segments:True" == ALLOC_CONF_GROUP_OFFLOAD
+
+    def test_classic_conf_keeps_max_split(self) -> None:
+        from aigamekit_shared.group_offload import cuda_alloc_conf_for
+
+        assert "max_split_size_mb" in cuda_alloc_conf_for(False)
+        assert "garbage_collection_threshold" in cuda_alloc_conf_for(False)
+
+    def test_apply_early_setdefault_respects_user(self, monkeypatch) -> None:
+        import os
+
+        from aigamekit_shared.group_offload import apply_alloc_conf_early
+
+        monkeypatch.delenv("PYTORCH_CUDA_ALLOC_CONF", raising=False)
+        apply_alloc_conf_early(True)
+        assert "max_split_size_mb" not in os.environ["PYTORCH_CUDA_ALLOC_CONF"]
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "user:override"
+        apply_alloc_conf_early(False)
+        assert os.environ["PYTORCH_CUDA_ALLOC_CONF"] == "user:override"
+
+
+class TestGroupOffloadWillEngage:
+    """Réplica pura do gate GO (helper comum dos CLIs)."""
+
+    def test_skymap_6gb_prequantized_engages_go(self) -> None:
+        from aigamekit_shared.group_offload import group_offload_will_engage
+        from aigamekit_shared.lowvram import GIB, get_footprint
+
+        fp = get_footprint("flux-dev-uint4")
+        # Sem allow_quant=("none",) o planner "inventa" fp8 sobre o uint4 → full.
+        assert (
+            group_offload_will_engage(
+                fp, full_gpu_budget_fraction=0.70, gpu_specs=[(0, int(6 * GIB))], allow_quant=("none",)
+            )
+            is True
+        )
+        # 24GB: full com folga (4.2/21.6 = 19%) → sem GO.
+        assert (
+            group_offload_will_engage(
+                fp, full_gpu_budget_fraction=0.70, gpu_specs=[(0, int(24 * GIB))], allow_quant=("none",)
+            )
+            is False
+        )
+
+    def test_kill_switch_disables(self, monkeypatch) -> None:
+        from aigamekit_shared.group_offload import group_offload_will_engage
+        from aigamekit_shared.lowvram import GIB, get_footprint
+
+        monkeypatch.setenv("TEXTURE2D_GROUP_OFFLOAD", "0")
+        assert (
+            group_offload_will_engage(
+                get_footprint("sd15-base"),
+                full_gpu_budget_fraction=0.70,
+                gpu_specs=[(0, int(4 * GIB))],
+                tool_env_var="TEXTURE2D_GROUP_OFFLOAD",
+            )
+            is False
+        )
+
+    def test_needed_mib_uses_activation_plus_margin(self) -> None:
+        from aigamekit_shared.group_offload import group_offload_needed_mib
+        from aigamekit_shared.lowvram import get_footprint
+
+        n = group_offload_needed_mib(get_footprint("sd15-base"))
+        assert n == max(2500, int((1.2 + 1.2) * 1024))
+
+
+class TestGoPlannerKwargsBase:
+    """_go_planner_kwargs da DiffusionGeneratorBase: flag + env coerentes."""
+
+    def test_kwargs_flag_and_env(self, monkeypatch) -> None:
+        from aigamekit_shared.base_generator import DiffusionGeneratorBase
+
+        class _G(DiffusionGeneratorBase):
+            GROUP_OFFLOAD_ENV = "TESTTOOL_GROUP_OFFLOAD"
+
+            def _load_pipeline(self):
+                return None
+
+            def generate(self, prompt, **kw):
+                return None
+
+        monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+        monkeypatch.delenv("TESTTOOL_GROUP_OFFLOAD", raising=False)
+        g = _G(device="cpu")
+        assert g._go_planner_kwargs(full_gpu_budget_fraction=0.7) == {
+            "allow_group_offload": True,
+            "full_gpu_budget_fraction": 0.7,
+        }
+        monkeypatch.setenv("TESTTOOL_GROUP_OFFLOAD", "0")
+        assert g._go_planner_kwargs(full_gpu_budget_fraction=0.7) == {
+            "allow_group_offload": False,
+            "full_gpu_budget_fraction": None,
+        }
+        assert g.group_offload is True  # default ON na base

@@ -153,3 +153,158 @@ def test_hw_auto_does_not_clamp_explicit_resolution(monkeypatch: pytest.MonkeyPa
     assert r.exit_code == 0, r.output
     _, kwargs = mock_gen.generate.call_args
     assert kwargs.get("width") == 1024
+
+
+# ---------------------------------------------------------------------------
+# Group offload + CUDA streams (default ON) — kill-switch, gate e alloc conf.
+# ---------------------------------------------------------------------------
+
+
+def test_group_offload_kill_switch_disables_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TEXT2ICON_GROUP_OFFLOAD=0 desliga o GO em qualquer hardware."""
+    from text2icon.hardware import group_offload_will_engage
+
+    monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+    monkeypatch.setenv("TEXT2ICON_GROUP_OFFLOAD", "0")
+    assert group_offload_will_engage() is False
+
+
+def test_group_offload_will_engage_pure_4gb(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gate puro com specs explícitos: GPU 4 GB (sana fp16 ~8.8 GiB pico) engaja GO.
+
+    Usa a versão do Shared com ``gpu_specs`` — não depende do hardware do host.
+    """
+    from aigamekit_shared.group_offload import group_offload_will_engage as shared_will_engage
+    from aigamekit_shared.lowvram import get_footprint
+    from text2icon.generator import FULL_GPU_BUDGET_FRACTION, GROUP_OFFLOAD_ENV
+
+    monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+    monkeypatch.delenv("TEXT2ICON_GROUP_OFFLOAD", raising=False)
+    assert (
+        shared_will_engage(
+            get_footprint("sana-sprint-600m"),
+            full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION,
+            gpu_specs=[(0, _gib(4))],
+            tool_env_var=GROUP_OFFLOAD_ENV,
+            allow_quant=("none",),
+        )
+        is True
+    )
+    # Kill-switch vence mesmo com specs que engajariam.
+    monkeypatch.setenv("TEXT2ICON_GROUP_OFFLOAD", "0")
+    assert (
+        shared_will_engage(
+            get_footprint("sana-sprint-600m"),
+            full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION,
+            gpu_specs=[(0, _gib(4))],
+            tool_env_var=GROUP_OFFLOAD_ENV,
+            allow_quant=("none",),
+        )
+        is False
+    )
+
+
+def test_group_offload_intent_flag_and_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--no-group-offload`` (allow=False) e o env kill-switch cortam a intenção."""
+    from text2icon.hardware import group_offload_intent
+
+    monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+    monkeypatch.delenv("TEXT2ICON_GROUP_OFFLOAD", raising=False)
+    assert group_offload_intent() is True
+    assert group_offload_intent(allow=False) is False
+    monkeypatch.setenv("TEXT2ICON_GROUP_OFFLOAD", "0")
+    assert group_offload_intent() is False
+
+
+def test_alloc_conf_by_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sem max_split_size_mb quando GO vai correr (fragmentação sob churn)."""
+    from aigamekit_shared.group_offload import ALLOC_CONF_DEFAULT, ALLOC_CONF_GROUP_OFFLOAD
+    from text2icon.hardware import cuda_alloc_conf_for
+
+    monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+    # GO desligado → conf clássico mesmo em GPU pequena (host-independent).
+    monkeypatch.setenv("TEXT2ICON_GROUP_OFFLOAD", "0")
+    assert cuda_alloc_conf_for(True) == ALLOC_CONF_DEFAULT
+    assert "max_split_size_mb" in ALLOC_CONF_DEFAULT
+    assert "max_split_size_mb" not in ALLOC_CONF_GROUP_OFFLOAD
+
+
+@pytest.mark.parametrize("command", ["generate", "batch"])
+def test_cli_exposes_group_offload_flag(command: str) -> None:
+    """--group-offload/--no-group-offload existe e é default ON."""
+    runner = CliRunner()
+    r = runner.invoke(cli, [command, "--help"])
+    assert r.exit_code == 0
+    assert "--group-offload" in r.output
+
+
+def test_generator_go_class_attrs() -> None:
+    """Kill-switch e fração de orçamento expostos no generator (contrato Shared)."""
+    from text2icon.generator import SanaIconGenerator
+
+    assert SanaIconGenerator.GROUP_OFFLOAD_ENV == "TEXT2ICON_GROUP_OFFLOAD"
+    assert SanaIconGenerator.FULL_GPU_BUDGET_FRACTION == 0.70
+
+
+class TestGroupOffloadAdapterAndPayload:
+    """GO no adapter vramd e no builder de payload."""
+
+    def test_adapter_maps_allow_group_offload_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """allow_group_offload False viaja para o ctor como group_offload False."""
+        from text2icon.worker_serve_adapter import Adapter
+
+        captured: dict[str, object] = {}
+
+        class _FakeGen:
+            def warmup(self) -> None:
+                pass
+
+        def _fake_ctor(**kwargs: object) -> _FakeGen:
+            captured.update(kwargs)
+            return _FakeGen()
+
+        monkeypatch.setattr("text2icon.generator.SanaIconGenerator", _fake_ctor)
+        monkeypatch.delenv("PYTORCH_CUDA_ALLOC_CONF", raising=False)
+        Adapter().load(allow_group_offload=False)
+        assert captured["group_offload"] is False
+        assert "allow_group_offload" not in captured
+
+    def test_adapter_group_offload_default_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Sem allow_group_offload no request, o ctor fica GO default ON."""
+        from text2icon.worker_serve_adapter import Adapter
+
+        captured: dict[str, object] = {}
+
+        class _FakeGen:
+            def warmup(self) -> None:
+                pass
+
+        def _fake_ctor(**kwargs: object) -> _FakeGen:
+            captured.update(kwargs)
+            return _FakeGen()
+
+        monkeypatch.setattr("text2icon.generator.SanaIconGenerator", _fake_ctor)
+        monkeypatch.delenv("PYTORCH_CUDA_ALLOC_CONF", raising=False)
+        Adapter().load()
+        assert captured["group_offload"] is True
+
+    def test_payload_allow_group_offload_travels(self) -> None:
+        """allow_group_offload=True viaja no payload vramd (extra merge)."""
+        from text2icon.vramd_payload import build_generate_request
+
+        req = build_generate_request(prompt="icon", output="/tmp/i.png", allow_group_offload=True)
+        assert req["allow_group_offload"] is True
+
+    def test_payload_allow_group_offload_false(self) -> None:
+        """allow_group_offload=False viaja como False."""
+        from text2icon.vramd_payload import build_generate_request
+
+        req = build_generate_request(prompt="icon", output="/tmp/i.png", allow_group_offload=False)
+        assert req["allow_group_offload"] is False
+
+    def test_payload_allow_group_offload_default_absent(self) -> None:
+        """Sem allow_group_offload, o payload fica igual ao de antes (sem key)."""
+        from text2icon.vramd_payload import build_generate_request
+
+        req = build_generate_request(prompt="icon", output="/tmp/i.png")
+        assert "allow_group_offload" not in req

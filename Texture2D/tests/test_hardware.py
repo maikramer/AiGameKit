@@ -91,3 +91,50 @@ def test_cli_exposes_hw_auto_flag(command: str) -> None:
     r = runner.invoke(cli, [command, "--help"])
     assert r.exit_code == 0
     assert "--hw-auto" in r.output
+
+
+class TestGroupOffloadProfile:
+    """Group offload + streams default ON (padrão tools 2D): offload_mode no perfil."""
+
+    def test_4gb_profile_reports_group_stream(self) -> None:
+        """SD1.5 fp16 full (2.4+1.2=3.6 GiB) ficaria a 99% de uma 4 GB → GO."""
+        from texture2d.hardware import profile_from_specs
+
+        p = profile_from_specs([(0, _gib(4))])
+        assert p.offload_mode == "group_stream"
+        assert "group-offload+streams" in p.summary()
+
+    def test_8gb_profile_stays_full_gpu(self) -> None:
+        """3.6/7.2 = 50% ≤ 70% → full-GPU com folga (comportamento clássico)."""
+        from texture2d.hardware import profile_from_specs
+
+        p = profile_from_specs([(0, _gib(8))])
+        assert p.offload_mode == "none"
+        assert "group-offload" not in p.summary()
+
+    def test_kill_switch_back_to_classic(self, monkeypatch) -> None:
+        monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+        monkeypatch.setenv("TEXTURE2D_GROUP_OFFLOAD", "0")
+        from texture2d.hardware import group_offload_will_engage, profile_from_specs
+
+        p = profile_from_specs([(0, _gib(4))])
+        assert p.offload_mode == "none"
+        assert group_offload_will_engage() is False
+
+    def test_alloc_conf_no_max_split_when_go(self, monkeypatch) -> None:
+        from aigamekit_shared.group_offload import ALLOC_CONF_GROUP_OFFLOAD
+        from texture2d.hardware import cuda_alloc_conf_for
+
+        monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+        monkeypatch.delenv("TEXTURE2D_GROUP_OFFLOAD", raising=False)
+        # GO desligado → conf clássico mesmo que a flag peça GO.
+        monkeypatch.setenv("TEXTURE2D_GROUP_OFFLOAD", "0")
+        assert "max_split_size_mb" in cuda_alloc_conf_for(True)
+        assert "max_split_size_mb" not in ALLOC_CONF_GROUP_OFFLOAD
+
+    @pytest.mark.parametrize("command", ["generate", "batch"])
+    def test_cli_exposes_group_offload_flag(self, command: str) -> None:
+        runner = CliRunner()
+        r = runner.invoke(cli, [command, "--help"])
+        assert r.exit_code == 0
+        assert "--group-offload" in r.output

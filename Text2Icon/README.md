@@ -54,6 +54,7 @@ text2icon generate "shield emblem" --quant-transformer sdnq-fp8
 | `--gpu-ids` | auto | Split multi-GPU (ex: `0,1`) |
 | `--quality` | `medium` | Tier de qualidade (fast/low/medium/high/highest) |
 | `--hw-auto/--no-hw-auto` | on | Auto-detecção de hardware (transformer + SDNQ + offload + clamp) |
+| `--group-offload/--no-group-offload` | on | **Group offload + CUDA streams** quando o full-GPU não teria folga (pico ≈ ativação; kill-switch `TEXT2ICON_GROUP_OFFLOAD=0`) |
 | `--vramd-priority` | interactive / env | Prioridade na fila vramd (`interactive` \| `batch`) |
 | `--no-vramd` | off | Forçar geração in-process (ignorar vramd) |
 | `--vramd-stream` | off | Mostrar eventos de fila/progresso do vramd |
@@ -114,6 +115,7 @@ Depois `gameassets batch` gera os ícones e `gameassets handoff` copia-os para `
 | `TEXT2ICON_MODEL_ID` | Override do modelo default |
 | `TEXT2ICON_BIN` | Caminho do binário (usado pelo GameAssets) |
 | `TEXT2ICON_HW_AUTO` | `0` desliga a auto-detecção de hardware |
+| `TEXT2ICON_GROUP_OFFLOAD` | `0` desliga o group offload com streams (`AIGAMEKIT_GROUP_OFFLOAD=0` é o global) |
 | `HF_HOME` | Cache do Hugging Face |
 
 ## Testes

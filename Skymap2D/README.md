@@ -73,7 +73,10 @@ skymap2d generate "clear blue sky" --format exr -o sky_clear.exr
 # High quality with explicit seed
 skymap2d generate "nebula" --quality high --seed 42 -o sky_nebula.png
 
-# Low VRAM: hw-auto handles small GPUs automatically (on by default)
+# Low VRAM: hw-auto handles small GPUs automatically (on by default).
+# Group offload + CUDA streams is ON by default (--no-group-offload / SKYMAP2D_GROUP_OFFLOAD=0
+to disable): when full-GPU wouldn't have headroom, weights stream by groups
+(peak ≈ activation) — see docs/findings/TEXT2D_GROUP_OFFLOAD_FINDINGS.md
 skymap2d generate "alien planet" -o sky_alien.png
 ```
 

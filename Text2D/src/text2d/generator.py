@@ -78,7 +78,12 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
 
     Herda de ``DiffusionGeneratorBase``: warmup, unload, _log, _clear_cache,
     _status, _place_with_planner, save_image, generate_batch.
+
+    Group offload + CUDA streams default ON (gate de folga
+    ``FULL_GPU_BUDGET_FRACTION`` no planner; kill-switch ``TEXT2D_GROUP_OFFLOAD``).
     """
+
+    GROUP_OFFLOAD_ENV = "TEXT2D_GROUP_OFFLOAD"
 
     def __init__(
         self,
@@ -119,9 +124,7 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
 
     def _group_offload_allowed(self) -> bool:
         """Group offload habilitado: flag do ctor AND env kill-switch."""
-        from aigamekit_shared.group_offload import is_group_offload_enabled
-
-        return bool(self.group_offload) and is_group_offload_enabled(tool_env_var=GROUP_OFFLOAD_ENV)
+        return bool(self._go_planner_kwargs()["allow_group_offload"])
 
     def _load_pipeline(self) -> Any:
         if self._pipe is not None:
@@ -175,16 +178,14 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
         # folga, prefere group offload + CUDA streams (pico ≈ ativação).
         # target_resolution=1024 (tier medium): VAE tiling + attention slicing
         # ligam como chunks menores mesmo em full-GPU.
-        go = self._group_offload_allowed()
         placement_plan = self._place_with_planner(
             pipe,
             model_footprint(self.model_id),
             quant_mode=preset or "none",
             allow_quant=("none", preset) if preset else ("none",),
             model_attr="transformer",
-            allow_group_offload=go,
-            full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION if go else None,
             target_resolution=1024,
+            **self._go_planner_kwargs(full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION),
         )
 
         # Otimizações de speed: compile + step cache + channels_last + attention.
@@ -215,13 +216,11 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             keep = set(self.gpu_ids)
             specs = [(i, m) for i, m in specs if i in keep]
         allow_multi = self.gpu_ids is None or len(self.gpu_ids) >= 2
-        go = self._group_offload_allowed()
         return plan_offload(
             specs,
             model_footprint(self.model_id),
             allow_multi_gpu=allow_multi,
-            allow_group_offload=go,
-            full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION if go else None,
+            **self._go_planner_kwargs(full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION),
         )
 
     def _resolve_preset(self, plan: Any) -> str | None:

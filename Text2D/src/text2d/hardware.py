@@ -12,10 +12,22 @@ Perfis para os hardwares de referência:
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
-from aigamekit_shared.group_offload import is_group_offload_enabled
+from aigamekit_shared.group_offload import (
+    ALLOC_CONF_DEFAULT,  # noqa: F401 — re-export (testes/CLI usam daqui)
+    ALLOC_CONF_GROUP_OFFLOAD,  # noqa: F401 — re-export
+    is_group_offload_enabled,
+)
+from aigamekit_shared.group_offload import (
+    apply_alloc_conf_early as _apply_alloc_conf_early,
+)
+from aigamekit_shared.group_offload import (
+    cuda_alloc_conf_for as _cuda_alloc_conf_for,
+)
+from aigamekit_shared.group_offload import (
+    group_offload_will_engage as _shared_will_engage,
+)
 from aigamekit_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from aigamekit_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 from aigamekit_shared.lowvram import OFFLOAD_GROUP_STREAM, OFFLOAD_NONE, plan_offload
@@ -31,20 +43,11 @@ from .generator import (
 HW_AUTO_ENV = "TEXT2D_HW_AUTO"
 
 # ---------------------------------------------------------------------------
-# PYTORCH_CUDA_ALLOC_CONF por modo — a lição do Paint3D (OOM de fragmentação):
-# com group offload, o streaming faz churn de milhares de onloads pequenos
-# intercalados com blocos grandes de ativação; max_split_size_mb proíbe partir
-# blocos grandes e o reserved explode por fragmentação. Sem GO, max_split +
-# gc_threshold reduzem o pico de alocação clássico.
+# needed_mib do fallback in-process quando GO+streams vai correr (calibrado
+# na RTX 4050 6 GB, 2026-09-11): 1024² pico ~5.5 GiB (chunks de ativação usam
+# a VRAM livre pós-offload); 512² ~2.6 GiB. O alloc conf por modo vive no
+# Shared (aigamekit_shared.group_offload).
 # ---------------------------------------------------------------------------
-ALLOC_CONF_DEFAULT = "expandable_segments:True,max_split_size_mb:128,garbage_collection_threshold:0.6"
-ALLOC_CONF_GROUP_OFFLOAD = "expandable_segments:True"
-
-# needed_mib do fallback in-process quando GO+streams vai correr: pico ≈
-# ativação + trânsito de grupos + VAE decode — não pesos+ativação, que
-# recusava jobs que correm bem. Calibrado na RTX 4050 6 GB (2026-09-11,
-# GO+streams+int4): 1024² pico ~5.5 GiB (chunks de ativação usam a VRAM
-# livre pós-offload); 512² ~2.6 GiB.
 GROUP_OFFLOAD_NEEDED_MIB = 5400
 GROUP_OFFLOAD_NEEDED_MIB_SMALL = 3000  # lados ≤ 640 px (quality fast/low)
 
@@ -157,14 +160,20 @@ def detect_hardware_profile() -> Text2DHardwareProfile:
 def group_offload_will_engage() -> bool:
     """Réplica pura do gate: o plano para o hardware ATUAL engaja group offload?
 
-    Usado antes do load (CLI/worker) para: (a) escolher o
-    ``PYTORCH_CUDA_ALLOC_CONF`` certo; (b) reduzir o ``needed_mib`` do
-    fallback in-process (com GO o pico é ≈ ativação, não pesos+ativação).
+    Usa **specs com VRAM livre** (o mesmo sinal do placement real) — numa GPU
+    parcialmente ocupada o gate concorda com o planner. O ``offload_mode`` do
+    perfil (specs totais) fica para display.
     """
     if not group_offload_intent():
         return False
     hwp = detect_hardware_profile()
-    return hwp.device == "cuda" and hwp.offload_mode == OFFLOAD_GROUP_STREAM
+    if hwp.device != "cuda":
+        return False
+    return _shared_will_engage(
+        model_footprint(hwp.model_id),
+        full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION,
+        tool_env_var=GROUP_OFFLOAD_ENV,
+    )
 
 
 def cuda_alloc_conf_for(group_offload: bool = True) -> str:
@@ -175,12 +184,10 @@ def cuda_alloc_conf_for(group_offload: bool = True) -> str:
             é devolvido quando o offload **vai correr** neste hardware — GPUs
             grandes voltam ao conf clássico (max_split reduz o pico).
     """
-    if group_offload_intent(group_offload) and group_offload_will_engage():
-        return ALLOC_CONF_GROUP_OFFLOAD
-    return ALLOC_CONF_DEFAULT
+    return _cuda_alloc_conf_for(group_offload_intent(group_offload) and group_offload_will_engage())
 
 
 def apply_alloc_conf_early(group_offload: bool = True) -> None:
     """``setdefault`` do alloc conf no arranque do CLI (torch lê o env na 1ª
     alocação CUDA; o override explícito do utilizador ganha sempre)."""
-    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", cuda_alloc_conf_for(group_offload))
+    _apply_alloc_conf_early(group_offload_intent(group_offload) and group_offload_will_engage())

@@ -100,7 +100,16 @@ class TextureGenerator(DiffusionGeneratorBase):
 
     Herda de ``DiffusionGeneratorBase``: warmup, unload, _log, _clear_cache,
     _resolve_seed, _build_generator, _report_vram, generate_batch, save_image.
+
+    Group offload + CUDA streams default ON (padrão das tools 2D): em GPUs
+    onde o full-GPU não teria folga, os pesos do UNet/CLIP streamam por grupos
+    (pico ≈ ativação). Kill-switch: ``TEXTURE2D_GROUP_OFFLOAD=0``.
     """
+
+    GROUP_OFFLOAD_ENV = "TEXTURE2D_GROUP_OFFLOAD"
+
+    # Gate de folga comum das tools 2D: full-GPU só com pico ≤70% do orçamento.
+    FULL_GPU_BUDGET_FRACTION = 0.70
 
     def __init__(
         self,
@@ -110,7 +119,7 @@ class TextureGenerator(DiffusionGeneratorBase):
         model_id: str | None = None,
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
-        group_offload: bool = False,
+        group_offload: bool = True,
         torch_compile: bool | None = None,
         torch_compile_mode: str = "default",
         channels_last: bool = False,
@@ -143,6 +152,8 @@ class TextureGenerator(DiffusionGeneratorBase):
 
         from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline
 
+        from aigamekit_shared.lowvram import get_footprint
+
         kwargs: dict[str, Any] = {
             "torch_dtype": self.torch_dtype,
             "safety_checker": None,
@@ -169,17 +180,23 @@ class TextureGenerator(DiffusionGeneratorBase):
         n_vae = patch_conv2d_circular(pipe.vae)
         self._log(f"Circular padding: {n_unet} convs no UNet, {n_vae} no VAE")
 
-        self._status("Passo 3/3 — mover pipeline para device")
+        # Colocação unificada (planner lowvram): full-GPU com folga, group
+        # offload + streams quando não haveria margem, VAE tiling/slicing +
+        # attention slicing como chunks. SD1.5: attrs unet/text_encoder (sem
+        # text_encoder_2); o VAE fica de fora do GO (conflita com tiling).
+        self._status("Passo 3/3 — colocação")
         self._clear_cache()
         self._reset_peak_mem_stats()
-        pipe.to(self.device)
-        if self.device.startswith("cuda"):
-            self._report_vram()
-
-        # SD1.5 full-GPU: plan fictício offload=none para helpers partilhados.
-        from types import SimpleNamespace
-
-        plan = SimpleNamespace(offload="none")
+        plan = self._place_with_planner(
+            pipe,
+            get_footprint("sd15-base"),
+            # SD1.5 corre sempre fp16 (sem quant runtime) — o planner não pode
+            # recomendar degraus que a tool não aplica.
+            allow_quant=("none",),
+            offload_modules=("unet", "text_encoder"),
+            target_resolution=1024,
+            **self._go_planner_kwargs(full_gpu_budget_fraction=self.FULL_GPU_BUDGET_FRACTION),
+        )
         self._maybe_compile_transformer(pipe, plan)
         self._maybe_apply_channels_last(pipe, plan)
         self._maybe_select_attention_backend(pipe, plan)

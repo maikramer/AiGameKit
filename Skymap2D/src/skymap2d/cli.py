@@ -166,6 +166,17 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     ),
 )
 @click.option(
+    "--group-offload/--no-group-offload",
+    "group_offload",
+    default=True,
+    show_default=True,
+    help=(
+        "Group offload + CUDA streams quando o full-GPU não teria folga "
+        "(pico ≈ ativação; chunks = VAE tiling + attention slicing). "
+        "Kill-switch: SKYMAP2D_GROUP_OFFLOAD=0."
+    ),
+)
+@click.option(
     "--compile/--no-compile",
     "torch_compile",
     default=False,
@@ -222,6 +233,7 @@ def generate_cmd(
     image_format: str,
     exr_scale: float,
     hw_auto: bool,
+    group_offload: bool,
     torch_compile: bool,
     torch_compile_mode: str,
     step_cache: str,
@@ -234,6 +246,12 @@ def generate_cmd(
     from aigamekit_shared.gpu import warn_if_vram_occupied
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
+
+    # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA; com
+    # group offload, max_split_size_mb causa fragmentação sob churn de onloads).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early(group_offload)
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
@@ -337,6 +355,7 @@ def generate_cmd(
                 "lora_strength": lora_strength,
                 "preset": preset,
                 "exr_scale": exr_scale,
+                "allow_group_offload": group_offload,
             },
             t_start=start,
             noun="Skymap",
@@ -350,8 +369,19 @@ def generate_cmd(
             return
 
         if not cpu:
+            from .hardware import group_offload_will_engage
+
+            if group_offload_will_engage():
+                # GO+streams: pico ≈ ativação + trânsito de grupos — não exigir
+                # pesos+ativação ao ensure_vram (recusava jobs que correm bem).
+                from aigamekit_shared.group_offload import group_offload_needed_mib
+                from aigamekit_shared.lowvram import get_footprint
+
+                needed_mib = group_offload_needed_mib(get_footprint("flux-dev-uint4"), margin_gib=1.5)
+            else:
+                needed_mib = needed_mib_for_backend("skymap2d", memory_efficient=mem_eff)
             prepare_gpu_exclusive(
-                needed_mib=needed_mib_for_backend("skymap2d", memory_efficient=mem_eff),
+                needed_mib=needed_mib,
                 allow_shared=True,
                 kill_others=False,
                 backend="skymap2d",
@@ -369,6 +399,7 @@ def generate_cmd(
             torch_compile_mode=torch_compile_mode,
             step_cache=step_cache,
             channels_last=channels_last,
+            group_offload=group_offload,
         )
 
         with console.status(
@@ -490,6 +521,13 @@ def presets_cmd() -> None:
     help="Auto-detecção de hardware (offload/clamp/multi-GPU). Env: SKYMAP2D_HW_AUTO=0.",
 )
 @click.option(
+    "--group-offload/--no-group-offload",
+    "group_offload",
+    default=True,
+    show_default=True,
+    help=("Group offload + CUDA streams quando o full-GPU não teria folga. Kill-switch: SKYMAP2D_GROUP_OFFLOAD=0."),
+)
+@click.option(
     "--compile/--no-compile",
     "torch_compile",
     default=True,
@@ -537,6 +575,7 @@ def batch_cmd(
     image_format: str,
     exr_scale: float,
     hw_auto: bool,
+    group_offload: bool,
     torch_compile: bool,
     torch_compile_mode: str,
     step_cache: str,
@@ -546,6 +585,11 @@ def batch_cmd(
     vramd_stream: bool,
 ) -> None:
     """Gera skymaps em batch a partir de um ficheiro de prompts (um por linha)."""
+    # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early(group_offload)
+
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
     _user_set_width = ctx.get_parameter_source("width") not in (_src.DEFAULT,)
@@ -627,6 +671,7 @@ def batch_cmd(
                 "guidance": guidance_scale,
                 "preset": preset,
                 "exr_scale": exr_scale,
+                "allow_group_offload": group_offload,
             },
             t_start=t0,
             noun="Skymap",
@@ -646,9 +691,20 @@ def batch_cmd(
         if not cpu:
             from aigamekit_shared.gpu import warn_if_vram_occupied
 
+            from .hardware import group_offload_will_engage
+
             warn_if_vram_occupied()
+            if group_offload_will_engage():
+                # GO+streams: pico ≈ ativação + trânsito de grupos — não exigir
+                # pesos+ativação ao ensure_vram (recusava jobs que correm bem).
+                from aigamekit_shared.group_offload import group_offload_needed_mib
+                from aigamekit_shared.lowvram import get_footprint
+
+                needed_mib = group_offload_needed_mib(get_footprint("flux-dev-uint4"), margin_gib=1.5)
+            else:
+                needed_mib = needed_mib_for_backend("skymap2d", memory_efficient=mem_eff)
             prepare_gpu_exclusive(
-                needed_mib=needed_mib_for_backend("skymap2d", memory_efficient=mem_eff),
+                needed_mib=needed_mib,
                 allow_shared=True,
                 kill_others=False,
                 backend="skymap2d",
@@ -664,6 +720,7 @@ def batch_cmd(
             torch_compile_mode=torch_compile_mode,
             step_cache=step_cache,
             channels_last=channels_last,
+            group_offload=group_offload,
         )
         base_params: dict[str, Any] = {
             "guidance_scale": guidance_scale,
@@ -743,6 +800,12 @@ def serve(ums_worker: bool) -> None:
     """
     from aigamekit_shared.worker_serve import run_ums_worker_cli
     from skymap2d.worker_serve_adapter import Adapter
+
+    # Worker vramd: alloc conf por modo antes da 1ª alocação CUDA (o request
+    # pode pedir GO; o adapter corrige por-request se o torch ainda não acordou).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early()
 
     run_ums_worker_cli(Adapter, tool_name="skymap2d", ums_worker=ums_worker, console=console)
 

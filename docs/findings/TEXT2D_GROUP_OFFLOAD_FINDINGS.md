@@ -82,6 +82,47 @@ Fatores de peso novos (`QUANT_WEIGHT_FACTOR`): `sdnq-int3` 0.28, `sdnq-int2`
 - **`needed_mib` do fallback in-process com GO:** 3000 MiB (≤640 px) /
   5400 MiB (>640 px) (`group_offload_needed_mib`), alinhado com a medição.
 
+## Replicação nas tools 2D irmãs + código comum (2026-09-11, parte 2)
+
+O método virou **default absoluto das tools 2D**, com a maquinaria fatorada no
+Shared (cada tool só "liga"):
+
+- **`aigamekit_shared.group_offload`** (novo bloco comum):
+  `ALLOC_CONF_DEFAULT`/`ALLOC_CONF_GROUP_OFFLOAD` + `cuda_alloc_conf_for()` +
+  `apply_alloc_conf_early()` (setdefault; max_split fora sob churn de GO),
+  `group_offload_will_engage(footprint, full_gpu_budget_fraction, …)` — réplica
+  pura do gate com **specs de VRAM livre** (`cuda_gpu_free_specs`, o mesmo sinal
+  do placement real: numa GPU parcialmente ocupada o CLI gate concorda com o
+  planner) — e `group_offload_needed_mib(footprint)` (act + margem 1.2 GiB).
+- **`DiffusionGeneratorBase`**: `group_offload=True` default + class attr
+  `GROUP_OFFLOAD_ENV` (kill-switch por tool) + `_go_planner_kwargs()` —
+  devolve `allow_group_offload`/`full_gpu_budget_fraction` coerentes com
+  flag+env, prontos a despejar no `_place_with_planner`.
+- **Text2D**: refactorado para consumir o comum (sem duplicação).
+
+| Tool | Footprint | Placement | GO modules | Notas |
+|------|-----------|-----------|------------|-------|
+| Text2D | flux-klein-4b/9b | gate 0.70 + preset aplicado | transformer + text_encoders | referência |
+| Texture2D | **sd15-base** (2.4/1.2/1.8, novo) | planner adotado (era `pipe.to` direto), `allow_quant=("none",)` (SD1.5 sempre fp16 — sem quant runtime) | `("unet","text_encoder")` | VAE fora do GO (tiling); offload_mode no perfil |
+| Skymap2D | flux-dev-uint4 (pré-quant) | gate 0.70 + **mantém `force_group_offload=memory_efficient`** (histórico: footprint só cobre o transformer) | default (transformer + encoders) | |
+| Text2Icon | sana-sprint-600m | gate 0.70 + `target_resolution=1024` | default (transformer + encoder; sem text_encoder_2) | quantização própria no ctor → `allow_quant=("none",)` já existente |
+
+- `allow_quant=("none",)` nas irmãs também protege o gate do CLI: sem isto o
+  planner "inventa" fp8-layerwise sobre checkpoints que a tool não quantiza em
+  runtime (SD1.5) ou já vêm uint4 (skymap) — bug apanhado no E2E do Texture2D.
+- CLIs de todas: `--group-offload/--no-group-offload` default ON, alloc conf
+  early, `allow_group_offload` no payload vramd (worker → ctor), `needed_mib`
+  GO-aware no fallback in-process; `calibrate_load_kwargs` GO no backends.yaml.
+- **E2E Texture2D (RTX 4050, GPU partilhada ~3.6 GiB livres com 3 processos
+  alheios):** `group_stream + block_level + streams` em `unet`/`text_encoder`,
+  textura 512² gerada ao lado dos outros processos ✓. GPU limpa 8 GB+:
+  full-GPU clássico com folga (3.6/7.2 = 50% ≤ 70%) ✓.
+- Suites: Texture2D 269 ✓ (era 263), Skymap2D 255 ✓ (+8), Text2Icon 183 ✓
+  (+12), Text2D 171 ✓, Shared 1291 ✓, GameAssets 766 ✓. E2E GO do Skymap2D
+  (2048²) e Text2Icon ficou pendente de janela de GPU livre (a 4050 esteve
+  ocupada por trabalhos paralelos); os gates/recusas honrados foram
+  verificados (needed 2764 MiB recusado corretamente com 1989 livres).
+
 ## vramd 0.3.7 (upstream `~/GitClones/vramd`, release via tag → Actions)
 
 **Causa raiz do "não roda nos pipelines":** o admit usava a calibração do

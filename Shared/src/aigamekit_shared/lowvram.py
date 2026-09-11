@@ -126,6 +126,10 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     "flux-klein-4b": ModelFootprint(14.0, 1.5, 5.0, architecture="flux"),
     "flux-klein-9b": ModelFootprint(26.0, 1.5, 9.0, architecture="flux"),
     "flux-dev-uint4": ModelFootprint(2.2, 2.0, 3.0, architecture="flux"),
+    # SD1.5 (StableDiffusionPipeline): unet 860M + VAE 84M + CLIP 123M ≈ 2.4 GiB
+    # fp16; ativação a 1024² com circular padding. Calibração 6g (2026-08):
+    # peak 3392 MiB full-GPU fp16.
+    "sd15-base": ModelFootprint(2.4, 1.2, 1.8, architecture="sd"),
     "hunyuan3d-2.1-dit": ModelFootprint(6.5, 1.5, 5.0, architecture="hunyuan3d"),
     # Hunyuan3D-Omni (~3.3B): DiT + ShapeVAE + OmniEncoder/DINOv2; README ~10 GB fp16.
     "hunyuan3d-omni": ModelFootprint(10.0, 2.0, 6.0, architecture="hunyuan3d"),

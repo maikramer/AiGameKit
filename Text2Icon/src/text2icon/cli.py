@@ -203,6 +203,17 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     show_default=True,
     help="Memory format NHWC (channels_last) no VAE/transformer — Ampere+ conv path.",
 )
+@click.option(
+    "--group-offload/--no-group-offload",
+    "group_offload",
+    default=True,
+    show_default=True,
+    help=(
+        "Group offload + CUDA streams quando o full-GPU não teria folga "
+        "(pico ≈ ativação; chunks = VAE tiling + attention slicing). "
+        "Kill-switch: TEXT2ICON_GROUP_OFFLOAD=0."
+    ),
+)
 @add_vramd_options
 @click.pass_context
 def generate_cmd(
@@ -228,6 +239,7 @@ def generate_cmd(
     torch_compile_mode: str,
     step_cache: str,
     channels_last: bool,
+    group_offload: bool,
     vramd_priority: str | None,
     no_vramd: bool,
     vramd_stream: bool,
@@ -236,6 +248,12 @@ def generate_cmd(
     from aigamekit_shared.gpu import warn_if_vram_occupied
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
+
+    # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA; com
+    # group offload, max_split_size_mb causa fragmentação sob churn de onloads).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early(group_offload)
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
@@ -320,6 +338,7 @@ def generate_cmd(
                 "negative_prompt": negative_prompt,
                 "transformer_quant_preset": transformer_quant_preset,
                 "model_id": resolved_model,
+                "allow_group_offload": group_offload,
             },
             t_start=t_start,
             noun="Ícone",
@@ -366,14 +385,25 @@ def generate_cmd(
                 return
 
     if not cpu:
-        prepare_gpu_exclusive(
-            needed_mib=needed_mib_for_backend(
+        # GO+streams vai correr: pico ≈ ativação + trânsito de grupos — não
+        # exigir pesos+ativação ao ensure_vram (recusava jobs que correm bem).
+        from .hardware import group_offload_will_engage
+
+        if group_offload_will_engage():
+            from aigamekit_shared.group_offload import group_offload_needed_mib
+            from aigamekit_shared.lowvram import get_footprint
+
+            needed_mib = group_offload_needed_mib(get_footprint("sana-sprint-600m"))
+        else:
+            needed_mib = needed_mib_for_backend(
                 "text2icon",
                 quant_mode=transformer_quant_preset
                 if transformer_quant_preset not in (None, "", "auto", "none")
                 else None,
                 memory_efficient=_icon_mem_eff,
-            ),
+            )
+        prepare_gpu_exclusive(
+            needed_mib=needed_mib,
             allow_shared=True,
             kill_others=False,
             backend="text2icon",
@@ -396,6 +426,7 @@ def generate_cmd(
             torch_compile_mode=torch_compile_mode,
             step_cache=step_cache,
             channels_last=channels_last,
+            group_offload=group_offload,
         )
 
         with console.status(
@@ -533,6 +564,17 @@ def generate_cmd(
     show_default=True,
     help="channels_last NHWC (default ON em batch — ~-13% hot).",
 )
+@click.option(
+    "--group-offload/--no-group-offload",
+    "group_offload",
+    default=True,
+    show_default=True,
+    help=(
+        "Group offload + CUDA streams quando o full-GPU não teria folga "
+        "(pico ≈ ativação; chunks = VAE tiling + attention slicing). "
+        "Kill-switch: TEXT2ICON_GROUP_OFFLOAD=0."
+    ),
+)
 @add_vramd_options
 @click.pass_context
 def batch_cmd(
@@ -553,11 +595,17 @@ def batch_cmd(
     torch_compile_mode: str,
     step_cache: str,
     channels_last: bool,
+    group_offload: bool,
     vramd_priority: str | None,
     no_vramd: bool,
     vramd_stream: bool,
 ) -> None:
     """Gera ícones em batch a partir de um ficheiro de prompts (um por linha)."""
+    # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early(group_offload)
+
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
     _user_set_width = ctx.get_parameter_source("width") not in (_src.DEFAULT,)
@@ -645,6 +693,7 @@ def batch_cmd(
                 "transparent": transparent,
                 "transformer_quant_preset": transformer_quant_preset,
                 "model_id": resolved_model,
+                "allow_group_offload": group_offload,
             },
             t_start=t0,
             noun="Ícone",
@@ -662,14 +711,25 @@ def batch_cmd(
         pending.append((idx, prompt, out_path))
 
     if pending:
-        prepare_gpu_exclusive(
-            needed_mib=needed_mib_for_backend(
+        # GO+streams vai correr: pico ≈ ativação + trânsito de grupos — não
+        # exigir pesos+ativação ao ensure_vram (recusava jobs que correm bem).
+        from .hardware import group_offload_will_engage
+
+        if group_offload_will_engage():
+            from aigamekit_shared.group_offload import group_offload_needed_mib
+            from aigamekit_shared.lowvram import get_footprint
+
+            needed_mib = group_offload_needed_mib(get_footprint("sana-sprint-600m"))
+        else:
+            needed_mib = needed_mib_for_backend(
                 "text2icon",
                 quant_mode=transformer_quant_preset
                 if transformer_quant_preset not in (None, "", "auto", "none")
                 else None,
                 memory_efficient=_icon_mem_eff,
-            ),
+            )
+        prepare_gpu_exclusive(
+            needed_mib=needed_mib,
             allow_shared=True,
             kill_others=False,
             backend="text2icon",
@@ -688,6 +748,7 @@ def batch_cmd(
             torch_compile_mode=torch_compile_mode,
             step_cache=step_cache,
             channels_last=channels_last,
+            group_offload=group_offload,
         )
         base_params = {
             "guidance_scale": guidance_scale,
@@ -920,6 +981,12 @@ def serve(ums_worker: bool) -> None:
     """
     from aigamekit_shared.worker_serve import run_ums_worker_cli
     from text2icon.worker_serve_adapter import Adapter
+
+    # Worker vramd: alloc conf por modo antes da 1ª alocação CUDA (o request
+    # pode pedir GO; o adapter corrige por-request se o torch ainda não acordou).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early()
 
     run_ums_worker_cli(Adapter, tool_name="text2icon", ums_worker=ums_worker, console=console)
 

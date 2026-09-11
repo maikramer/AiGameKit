@@ -19,10 +19,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from aigamekit_shared.group_offload import (
+    apply_alloc_conf_early as _apply_alloc_conf_early,
+)
+from aigamekit_shared.group_offload import (
+    cuda_alloc_conf_for as _cuda_alloc_conf_for,
+)
+from aigamekit_shared.group_offload import (
+    group_offload_will_engage as _group_offload_will_engage,
+)
+from aigamekit_shared.group_offload import is_group_offload_enabled
 from aigamekit_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from aigamekit_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
-from .generator import STANDARD_TRANSFORMER_ID, TERNARY_TRANSFORMER_ID
+from .generator import FULL_GPU_BUDGET_FRACTION, GROUP_OFFLOAD_ENV, STANDARD_TRANSFORMER_ID, TERNARY_TRANSFORMER_ID
 
 HW_AUTO_ENV = "TEXT2ICON_HW_AUTO"
 
@@ -152,3 +162,52 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
 def detect_hardware_profile() -> Text2IconHardwareProfile:
     """Detecta GPUs CUDA e devolve o perfil correspondente."""
     return detect_profile(profile_from_specs)
+
+
+# ---------------------------------------------------------------------------
+# Group offload + CUDA streams (default ON) — réplica do gate + alloc conf.
+# O gate real (VRAM) vive no planner lowvram; aqui só a intenção + kill-switch.
+# ---------------------------------------------------------------------------
+
+
+def group_offload_intent(allow: bool = True) -> bool:
+    """Intenção de group offload: flag ``--group-offload`` AND env kill-switch."""
+    if not allow:
+        return False
+    return is_group_offload_enabled(tool_env_var=GROUP_OFFLOAD_ENV)
+
+
+def group_offload_will_engage() -> bool:
+    """Réplica pura do gate: o plano para o hardware ATUAL engaja group offload?
+
+    Usa a versão do Shared com o footprint do Sana (``sana-sprint-600m``) e o
+    mesmo ``allow_quant=("none",)`` do placement (o ctor já quantizou antes do
+    load — o planner planeia só colocação). Usado antes do load (CLI/worker)
+    para escolher o ``PYTORCH_CUDA_ALLOC_CONF`` certo e reduzir o
+    ``needed_mib`` do fallback in-process (com GO o pico é ≈ ativação).
+    """
+    from aigamekit_shared.lowvram import get_footprint
+
+    return _group_offload_will_engage(
+        get_footprint("sana-sprint-600m"),
+        full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION,
+        tool_env_var=GROUP_OFFLOAD_ENV,
+        allow_quant=("none",),
+    )
+
+
+def cuda_alloc_conf_for(group_offload: bool = True) -> str:
+    """``PYTORCH_CUDA_ALLOC_CONF`` por modo — chamar ANTES da 1ª alocação CUDA.
+
+    Args:
+        group_offload: intenção (flag ``--group-offload`` + env). O conf GO só
+            é devolvido quando o offload **vai correr** neste hardware — GPUs
+            grandes voltam ao conf clássico (max_split reduz o pico).
+    """
+    return _cuda_alloc_conf_for(group_offload_intent(group_offload) and group_offload_will_engage())
+
+
+def apply_alloc_conf_early(group_offload: bool = True) -> None:
+    """``setdefault`` do alloc conf no arranque do CLI (torch lê o env na 1ª
+    alocação CUDA; o override explícito do utilizador ganha sempre)."""
+    _apply_alloc_conf_early(group_offload_intent(group_offload) and group_offload_will_engage())

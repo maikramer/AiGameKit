@@ -20,9 +20,29 @@ class Adapter(WorkerAdapter):
     name = "texture2d"
 
     def load(self, **kwargs: Any) -> Any:
+        import os
+
         from texture2d.generator import TextureGenerator
 
+        # Alloc conf por-request (padrão das tools 2D): o serve pode ter
+        # arrancado com o conf clássico (max_split) e o request pedir GO — o
+        # torch lê o env na 1ª alocação CUDA, por isso só substituímos se ainda
+        # dorme.
+        try:
+            import torch
+
+            if not torch.cuda.is_initialized():
+                from texture2d.hardware import cuda_alloc_conf_for
+
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = cuda_alloc_conf_for(
+                    bool(kwargs.get("allow_group_offload", True))
+                )
+        except Exception:
+            pass
+
         load_kwargs: dict[str, Any] = {"verbose": kwargs.get("verbose", False)}
+        # GO default ON no request (padrão 2D): só o pedido explícito False desliga.
+        load_kwargs["group_offload"] = bool(kwargs.pop("allow_group_offload", True))
         # Sinais de peak/admit do vramd que o ctor não aceita — sem este skip,
         # um backends.yaml calibrado (quant_mode/sdnq_preset) ou preload com
         # step_cache injectava kwargs no ctor → TypeError → backend broken.

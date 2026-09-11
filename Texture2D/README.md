@@ -89,6 +89,7 @@ texture2d generate "dark marble floor" -n "blurry, watermark" -o marble.png
 | `--gpu-ids` | str | None | GPU IDs for multi-GPU split (e.g. `"0,1"`) |
 | `--quality` | str | `medium` | Quality tier: `fast`, `low`, `medium`, `high`, `highest` |
 | `--hw-auto/--no-hw-auto` | flag | `on` | Hardware auto-detection (device + multi-GPU). No offload/clamp (SD1.5 fits any CUDA GPU) |
+| `--group-offload/--no-group-offload` | flag | `on` | **Group offload + CUDA streams** when full-GPU wouldn't have headroom (shared/tight GPU; peak ≈ activation; VAE tiling + attention slicing as chunks). Kill-switch: `TEXTURE2D_GROUP_OFFLOAD=0` |
 | `--ground` | str | `auto` | Top-down ground mode: applies viewpoint/lighting/scale prompt modifiers |
 | `-v, --verbose` | flag | `false` | Verbose logging |
 

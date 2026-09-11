@@ -39,3 +39,24 @@ class TestPlacementHonoursMemoryEfficient:
         assert "_flux_dev_uint4_footprint()" in source
         assert "target_resolution=2048" in source
         assert 'model_attr="transformer"' in source
+
+
+class TestPlacementGroupOffloadGate:
+    """Group offload + CUDA streams default ON (gate de folga no planner)."""
+
+    def test_class_attrs_env_and_budget(self):
+        assert SkymapGenerator.GROUP_OFFLOAD_ENV == "SKYMAP2D_GROUP_OFFLOAD"
+        assert SkymapGenerator.FULL_GPU_BUDGET_FRACTION == 0.70
+
+    def test_constructor_accepts_group_offload_default_on(self):
+        params = inspect.signature(SkymapGenerator.__init__).parameters
+        assert "group_offload" in params
+        assert params["group_offload"].default is True
+
+    def test_planner_call_uses_go_planner_kwargs(self):
+        """O placement despeja ``_go_planner_kwargs`` (gate de folga full-GPU)."""
+        source = inspect.getsource(SkymapGenerator._load_pipeline)
+        assert "_go_planner_kwargs(" in source
+        assert "FULL_GPU_BUDGET_FRACTION" in source
+        # O force histórico (mem_eff → GO direto) mantém-se.
+        assert "force_group_offload=bool(self.memory_efficient)" in source

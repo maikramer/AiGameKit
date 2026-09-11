@@ -118,30 +118,36 @@ def test_alloc_conf_by_mode(monkeypatch) -> None:
 
 
 def test_group_offload_will_engage_pure(monkeypatch) -> None:
-    """Gate puro: só pergunta o perfil (specs) — sem torch/CUDA no path."""
+    """Gate puro: intent + device (cuda) → pergunta ao helper Shared (free specs)."""
     monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+    monkeypatch.delenv("TEXTURE2D_GROUP_OFFLOAD", raising=False)
     monkeypatch.delenv("TEXT2D_GROUP_OFFLOAD", raising=False)
 
     import text2d.hardware as hw
 
-    orig = hw.detect_hardware_profile
+    calls: list[str] = []
 
     class _P:
         device = "cuda"
-        offload_mode = "group_stream"
+        model_id = hw.LOW_VRAM_MODEL_ID
 
-    try:
-        hw.detect_hardware_profile = lambda: _P()  # type: ignore[assignment]
-        assert group_offload_will_engage() is True
+    def _fake_shared(footprint, **kw):
+        calls.append("asked")
+        return True
 
-        class _Q:
-            device = "cuda"
-            offload_mode = "none"
+    monkeypatch.setattr(hw, "detect_hardware_profile", lambda: _P())
+    monkeypatch.setattr(hw, "_shared_will_engage", _fake_shared)
+    assert group_offload_will_engage() is True
+    assert calls == ["asked"]
 
-        hw.detect_hardware_profile = lambda: _Q()  # type: ignore[assignment]
-        assert group_offload_will_engage() is False
-    finally:
-        hw.detect_hardware_profile = orig  # type: ignore[assignment]
+    # CPU → nem pergunta ao helper.
+    class _Cpu:
+        device = "cpu"
+        model_id = hw.LOW_VRAM_MODEL_ID
+
+    monkeypatch.setattr(hw, "detect_hardware_profile", lambda: _Cpu())
+    assert group_offload_will_engage() is False
+    assert calls == ["asked"]
 
 
 def test_detect_returns_profile() -> None:

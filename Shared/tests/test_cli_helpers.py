@@ -383,8 +383,10 @@ class TestNeededMibForBackend:
         assert int4 < fp16
         assert int4 >= 512
 
-    def test_texture2d_fallback(self) -> None:
-        assert needed_mib_for_backend("texture2d") == 2500
+    def test_texture2d_uses_sd15_footprint(self) -> None:
+        """texture2d tem footprint real (sd15-base) desde o GO default — não o
+        fallback genérico de 2500 MiB."""
+        assert needed_mib_for_backend("texture2d") == max(512, int((2.4 + 1.2) * 1024))
 
     def test_terrain3d_fallback(self) -> None:
         assert needed_mib_for_backend("terrain3d") == 3200

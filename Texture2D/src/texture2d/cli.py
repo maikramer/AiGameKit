@@ -152,6 +152,17 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     ),
 )
 @click.option(
+    "--group-offload/--no-group-offload",
+    "group_offload",
+    default=True,
+    show_default=True,
+    help=(
+        "Group offload + CUDA streams quando o full-GPU não teria folga "
+        "(GPU apertada/ocupada; pico ≈ ativação; VAE tiling + attention "
+        "slicing como chunks). Kill-switch: TEXTURE2D_GROUP_OFFLOAD=0."
+    ),
+)
+@click.option(
     "--ground",
     type=click.Choice(["auto", "on", "off"], case_sensitive=False),
     default="auto",
@@ -203,6 +214,7 @@ def generate_cmd(
     gpu_ids_str: str | None,
     quality: str,
     hw_auto: bool,
+    group_offload: bool,
     ground: str,
     torch_compile: bool,
     torch_compile_mode: str,
@@ -215,6 +227,11 @@ def generate_cmd(
     from aigamekit_shared.gpu import warn_if_vram_occupied
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
+
+    # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early(group_offload)
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
@@ -285,6 +302,7 @@ def generate_cmd(
                 "preset": preset,
                 "ground": ground,
                 "model_id": resolved_model,
+                "allow_group_offload": group_offload,
             },
             t_start=t_start,
             noun="Textura",
@@ -333,8 +351,19 @@ def generate_cmd(
             # Se None (server não respondeu), continua para fallback in-process
 
     if not cpu:
+        from .hardware import group_offload_will_engage
+
+        if group_offload_will_engage():
+            # GO+streams: pico ≈ ativação + trânsito de grupos — não exigir
+            # pesos+ativação ao ensure_vram (recusava jobs que correm bem).
+            from aigamekit_shared.group_offload import group_offload_needed_mib
+            from aigamekit_shared.lowvram import get_footprint
+
+            needed_mib: int = group_offload_needed_mib(get_footprint("sd15-base"))
+        else:
+            needed_mib = needed_mib_for_backend("texture2d")
         prepare_gpu_exclusive(
-            needed_mib=needed_mib_for_backend("texture2d"),
+            needed_mib=needed_mib,
             allow_shared=True,
             kill_others=False,
             backend="texture2d",
@@ -347,6 +376,7 @@ def generate_cmd(
             verbose=verbose,
             model_id=model_id,
             gpu_ids=gpu_ids,
+            group_offload=group_offload,
             torch_compile=torch_compile,
             torch_compile_mode=torch_compile_mode,
             channels_last=channels_last,
@@ -462,6 +492,13 @@ def presets_cmd() -> None:
     help="Auto-detecção de hardware (device + multi-GPU). Env: TEXTURE2D_HW_AUTO=0.",
 )
 @click.option(
+    "--group-offload/--no-group-offload",
+    "group_offload",
+    default=True,
+    show_default=True,
+    help=("Group offload + CUDA streams quando o full-GPU não teria folga. Kill-switch: TEXTURE2D_GROUP_OFFLOAD=0."),
+)
+@click.option(
     "--ground",
     type=click.Choice(["auto", "on", "off"], case_sensitive=False),
     default="auto",
@@ -505,6 +542,7 @@ def batch_cmd(
     gpu_ids_str: str | None,
     quality: str,
     hw_auto: bool,
+    group_offload: bool,
     ground: str,
     torch_compile: bool,
     torch_compile_mode: str,
@@ -514,6 +552,11 @@ def batch_cmd(
     vramd_stream: bool,
 ) -> None:
     """Gera texturas em batch a partir de um ficheiro de prompts (um por linha)."""
+    # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early(group_offload)
+
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
     _user_set_width = ctx.get_parameter_source("width") not in (_src.DEFAULT,)
@@ -586,6 +629,7 @@ def batch_cmd(
                 "preset": preset,
                 "ground": ground,
                 "model_id": resolved_model,
+                "allow_group_offload": group_offload,
             },
             t_start=t0,
             noun="Textura",
@@ -601,8 +645,18 @@ def batch_cmd(
         pending.append((idx, prompt_text, out_path))
 
     if pending:
+        from .hardware import group_offload_will_engage
+
+        if group_offload_will_engage():
+            # GO+streams: pico ≈ ativação + trânsito de grupos.
+            from aigamekit_shared.group_offload import group_offload_needed_mib
+            from aigamekit_shared.lowvram import get_footprint
+
+            needed_mib: int = group_offload_needed_mib(get_footprint("sd15-base"))
+        else:
+            needed_mib = needed_mib_for_backend("texture2d")
         prepare_gpu_exclusive(
-            needed_mib=needed_mib_for_backend("texture2d"),
+            needed_mib=needed_mib,
             allow_shared=True,
             kill_others=False,
             backend="texture2d",
@@ -612,6 +666,7 @@ def batch_cmd(
             verbose=bool(ctx.obj.get("VERBOSE")),
             model_id=model_id,
             gpu_ids=gpu_ids,
+            group_offload=group_offload,
             torch_compile=torch_compile,
             torch_compile_mode=torch_compile_mode,
             channels_last=channels_last,
@@ -819,6 +874,12 @@ def serve(ums_worker: bool) -> None:
     """
     from aigamekit_shared.worker_serve import run_ums_worker_cli
     from texture2d.worker_serve_adapter import Adapter
+
+    # Worker vramd: alloc conf por modo antes da 1ª alocação CUDA (o request
+    # pode pedir GO; o adapter corrige por-request se o torch ainda não acordou).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early()
 
     run_ums_worker_cli(Adapter, tool_name="texture2d", ums_worker=ums_worker, console=console)
 

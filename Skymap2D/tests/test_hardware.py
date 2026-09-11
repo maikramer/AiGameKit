@@ -120,6 +120,48 @@ def test_cli_exposes_hw_auto_flag(command: str) -> None:
     assert "--hw-auto" in r.output
 
 
+@pytest.mark.parametrize("command", ["generate", "batch"])
+def test_cli_exposes_group_offload_flag(command: str) -> None:
+    runner = CliRunner()
+    r = runner.invoke(cli, [command, "--help"])
+    assert r.exit_code == 0
+    # Nota: rich-click faz wrap da parte "--no-group-offload" em 80 colunas —
+    # por isso só a forma positiva é substring estável.
+    assert "--group-offload" in r.output
+
+
+def test_group_offload_kill_switch_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``SKYMAP2D_GROUP_OFFLOAD=0`` mata o gate GO (tool > global)."""
+    from skymap2d.hardware import group_offload_intent, group_offload_will_engage
+
+    monkeypatch.setenv("AIGAMEKIT_GROUP_OFFLOAD", "1")
+    monkeypatch.delenv("SKYMAP2D_GROUP_OFFLOAD", raising=False)
+    assert group_offload_intent() is True
+    monkeypatch.setenv("SKYMAP2D_GROUP_OFFLOAD", "0")
+    assert group_offload_intent() is False
+    assert group_offload_will_engage() is False
+    # A flag ``--no-group-offload`` também desliga a intenção.
+    assert group_offload_intent(allow=False) is False
+
+
+def test_6gb_profile_summary_shows_group_offload_streams(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Perfil 6 GB (gate GO ativo): o summary denuncia GO+streams."""
+    monkeypatch.delenv("SKYMAP2D_GROUP_OFFLOAD", raising=False)
+    monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+    p = profile_from_specs([(0, _gib(6))])
+    assert p.offload_mode == "group_stream"
+    assert "group-offload+streams" in p.summary()
+
+
+def test_16gb_profile_offload_mode_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GPU grande: full-GPU com folga — offload_mode permanece 'none'."""
+    monkeypatch.delenv("SKYMAP2D_GROUP_OFFLOAD", raising=False)
+    monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+    p = profile_from_specs([(0, _gib(16))])
+    assert p.offload_mode == "none"
+    assert "group-offload+streams" not in p.summary()
+
+
 def test_hw_auto_clamps_higher_resolution() -> None:
     """hw-auto must clamp resolution down to max_width/max_height on small GPUs."""
     p = profile_from_specs([(0, _gib(6))])

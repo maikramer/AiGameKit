@@ -411,6 +411,17 @@ def test_build_generate_request_optional_fields() -> None:
     assert req["custom"] == 1
 
 
+def test_build_generate_request_allow_group_offload() -> None:
+    from skymap2d.vramd_payload import build_generate_request
+
+    # Flag GO viaja no request (o worker mapeia para o ctor do generator).
+    req = build_generate_request(prompt="x", output="y.png", allow_group_offload=True)
+    assert req["allow_group_offload"] is True
+    # Sem a flag, nada é injetado (comportamento clássico preservado).
+    req2 = build_generate_request(prompt="x", output="y.png")
+    assert "allow_group_offload" not in req2
+
+
 # ---------------------------------------------------------------------------
 # exr_export
 # ---------------------------------------------------------------------------

@@ -197,7 +197,15 @@ class SkymapGenerator(DiffusionGeneratorBase):
 
     Herda de ``DiffusionGeneratorBase``: warmup, unload, _log, _clear_cache,
     _status, _place_with_planner, save_image, generate_batch.
+
+    Group offload + CUDA streams default ON (gate de folga
+    ``FULL_GPU_BUDGET_FRACTION`` no planner; kill-switch ``SKYMAP2D_GROUP_OFFLOAD``).
     """
+
+    # Kill-switch por tool do group offload (precedência: tool > global AIGAMEKIT_GROUP_OFFLOAD).
+    GROUP_OFFLOAD_ENV = "SKYMAP2D_GROUP_OFFLOAD"
+    # Gate de folga comum das tools 2D: full-GPU só com ~30% de folga no orçamento.
+    FULL_GPU_BUDGET_FRACTION = 0.70
 
     def __init__(
         self,
@@ -211,6 +219,7 @@ class SkymapGenerator(DiffusionGeneratorBase):
         torch_compile_mode: str = "default",
         step_cache: str | None = None,
         channels_last: bool = False,
+        group_offload: bool = True,
     ) -> None:
         super().__init__(
             device=device,
@@ -219,6 +228,7 @@ class SkymapGenerator(DiffusionGeneratorBase):
             cache_dir=cache_dir,
             gpu_ids=gpu_ids,
             memory_efficient=memory_efficient,
+            group_offload=group_offload,
             torch_compile=torch_compile,
             torch_compile_mode=torch_compile_mode,
             step_cache=step_cache,
@@ -289,6 +299,8 @@ class SkymapGenerator(DiffusionGeneratorBase):
         # isto o planner via "4.2 de 5.1 GiB, cabe", escolhia full-GPU e o load
         # rebentava com 5.31 GiB alocados numa placa de 6 GB — e o
         # ``memory_efficient`` que lhe era passado nem sequer era consultado.
+        # Nos casos não-mem_eff, o gate de folga FULL_GPU_BUDGET_FRACTION via
+        # ``_go_planner_kwargs``: full-GPU só com folga; sem folga → GO+streams.
         placement_plan = self._place_with_planner(
             pipe,
             _flux_dev_uint4_footprint(),
@@ -296,6 +308,7 @@ class SkymapGenerator(DiffusionGeneratorBase):
             model_attr="transformer",
             target_resolution=2048,
             force_group_offload=bool(self.memory_efficient),
+            **self._go_planner_kwargs(full_gpu_budget_fraction=self.FULL_GPU_BUDGET_FRACTION),
         )
 
         # Kernel opts: compile + step-cache + channels_last + attention (sage/flash).

@@ -23,9 +23,12 @@ def build_generate_request(
     model_id: str | None = None,
     gpu_ids: list[int] | str | None = None,
     memory_efficient: bool | None = None,
+    allow_group_offload: bool | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload vramd text2icon com peak/load opts."""
+    if allow_group_offload is not None:
+        extra = {**(extra or {}), "allow_group_offload": bool(allow_group_offload)}
     payload = build_request_body(
         prompt=prompt,
         output=output,

@@ -64,7 +64,17 @@ class DiffusionGeneratorBase(ABC):
 
     A base fornece: lifecycle (warmup/unload), logging, cache clear, device
     resolution, multi-GPU placement, VRAM reporting, batch generation, save_image.
+
+    Group offload + CUDA streams: ``group_offload`` é **default ON** (o método
+    de folga das tools 2D — pico ≈ ativação quando o full-GPU não teria
+    margem). O gate real (VRAM) vive no planner lowvram; aqui só existe a
+    intenção + kill-switch por tool (``GROUP_OFFLOAD_ENV``, ex.:
+    ``TEXT2D_GROUP_OFFLOAD=0``; global: ``AIGAMEKIT_GROUP_OFFLOAD=0``).
+    Subclasses usam :meth:`_go_planner_kwargs` ao chamar ``_place_with_planner``.
     """
+
+    # Env var do kill-switch de group offload desta tool (override por subclass).
+    GROUP_OFFLOAD_ENV: str | None = None
 
     def __init__(
         self,
@@ -75,7 +85,7 @@ class DiffusionGeneratorBase(ABC):
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
         memory_efficient: bool = False,
-        group_offload: bool = False,
+        group_offload: bool = True,
         torch_compile: bool | None = None,
         torch_compile_mode: str = "default",
         step_cache: str | None = None,
@@ -267,6 +277,28 @@ class DiffusionGeneratorBase(ABC):
             return False
 
         return try_group_offloading(pipe, config=config, log=True, log_fn=self._log)
+
+    def _go_planner_kwargs(self, *, full_gpu_budget_fraction: float | None = None) -> dict[str, Any]:
+        """kwargs de planner coerentes com a flag GO + env kill-switch da tool.
+
+        Devolve ``allow_group_offload`` + ``full_gpu_budget_fraction`` prontos a
+        despejar no ``_place_with_planner`` (padrão das tools 2D):
+
+            self._place_with_planner(
+                pipe, footprint, **self._go_planner_kwargs(
+                    full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION),
+                ...)
+
+        Sem GO (flag off / kill-switch), o gate de folga é ignorado — o
+        comportamento clássico do planner (caber chega).
+        """
+        from .group_offload import is_group_offload_enabled
+
+        go = bool(self.group_offload) and is_group_offload_enabled(tool_env_var=self.GROUP_OFFLOAD_ENV)
+        return {
+            "allow_group_offload": go,
+            "full_gpu_budget_fraction": full_gpu_budget_fraction if go else None,
+        }
 
     def _place_with_planner(
         self,

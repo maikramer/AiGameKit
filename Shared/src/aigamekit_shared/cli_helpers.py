@@ -90,6 +90,7 @@ BACKEND_FOOTPRINT_KEYS: dict[str, str] = {
     "text2d": "flux-klein-9b",
     "text2icon": "sana-sprint-600m",
     "skymap2d": "flux-dev-uint4",
+    "texture2d": "sd15-base",
     "text3d": "hunyuan3d-omni",
     "paint3d": "hunyuan-paint",
     "part3d": "hunyuan3d-part",
@@ -99,7 +100,6 @@ BACKEND_FOOTPRINT_KEYS: dict[str, str] = {
 
 # Fallbacks quando não há footprint (MiB) — alinhados a ``backends.yaml`` vram_mib.
 _BACKEND_NEEDED_FALLBACK_MIB: dict[str, int] = {
-    "texture2d": 2500,
     "terrain3d": 3200,
 }
 

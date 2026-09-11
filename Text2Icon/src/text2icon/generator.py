@@ -62,6 +62,15 @@ DEFAULT_TRANSFORMER_ID = STANDARD_TRANSFORMER_ID
 # Alias compat: o "modelo" do text2icon é o transformer.
 DEFAULT_MODEL_ID = DEFAULT_TRANSFORMER_ID
 
+# Env var do kill-switch de group offload (precedência: tool > global).
+GROUP_OFFLOAD_ENV = "TEXT2ICON_GROUP_OFFLOAD"
+
+# Fração do orçamento de VRAM que um plano full-GPU pode usar; acima disso o
+# planner prefere **group offload + CUDA streams** (pico ≈ ativação) — mesma
+# política do Text2D. Kill-switch: ``--no-group-offload`` ou
+# ``TEXT2ICON_GROUP_OFFLOAD=0`` (além do global ``AIGAMEKIT_GROUP_OFFLOAD=0``).
+FULL_GPU_BUDGET_FRACTION = 0.70
+
 BASE_ICON_INSTRUCTIONS = (
     "app icon, simple, centered, bold, clean background, high contrast, "
     "flat design, crisp edges, single subject, readable at small size"
@@ -109,7 +118,16 @@ class SanaIconGenerator(DiffusionGeneratorBase):
 
     Herda de ``DiffusionGeneratorBase``: warmup, unload, _log, _clear_cache,
     _status, _place_with_planner, save_image, generate_batch.
+
+    Group offload + CUDA streams default ON (gate de folga
+    ``FULL_GPU_BUDGET_FRACTION`` no planner; kill-switch ``TEXT2ICON_GROUP_OFFLOAD``).
     """
+
+    # Env var do kill-switch de group offload (precedência: tool > global).
+    GROUP_OFFLOAD_ENV = GROUP_OFFLOAD_ENV
+
+    # Fração do orçamento full-GPU (ver constante homónima do módulo).
+    FULL_GPU_BUDGET_FRACTION = FULL_GPU_BUDGET_FRACTION
 
     def __init__(
         self,
@@ -125,6 +143,7 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         torch_compile_mode: str = "default",
         step_cache: str | None = None,
         channels_last: bool = False,
+        group_offload: bool = True,
     ) -> None:
         super().__init__(
             device=device,
@@ -133,6 +152,7 @@ class SanaIconGenerator(DiffusionGeneratorBase):
             cache_dir=cache_dir,
             gpu_ids=gpu_ids,
             memory_efficient=low_vram,
+            group_offload=group_offload,
             torch_compile=torch_compile,
             torch_compile_mode=torch_compile_mode,
             step_cache=step_cache,
@@ -351,8 +371,15 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         placement_plan = self._place_with_planner(
             pipe,
             footprint,
+            # O ctor já quantizou transformer/encoder acima (SDNQ runtime) — o
+            # placement planeia só a colocação com esse quant: allow_quant fixo.
+            # Gate de folga FULL_GPU_BUDGET_FRACTION: sem folga, prefere group
+            # offload + CUDA streams (pico ≈ ativação). target_resolution=1024:
+            # VAE tiling + attention slicing ligam como chunks menores.
             allow_quant=("none",),
             model_attr="transformer",
+            target_resolution=1024,
+            **self._go_planner_kwargs(full_gpu_budget_fraction=self.FULL_GPU_BUDGET_FRACTION),
         )
 
         # Kernel opts: compile + step-cache + channels_last + attention (sage/flash).

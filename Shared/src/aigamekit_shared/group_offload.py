@@ -349,3 +349,72 @@ def try_layerwise_casting(
         return False
 
     return applied_any
+
+
+# ---------------------------------------------------------------------------
+# Política comum das tools 2D — alloc conf por modo + réplica do gate GO
+# ---------------------------------------------------------------------------
+
+# Lição Paint3D/Text2D (OOM de fragmentação): com group offload, o streaming
+# faz churn de milhares de onloads pequenos intercalados com blocos grandes de
+# ativação; ``max_split_size_mb`` proíbe partir blocos grandes e o reserved
+# explode por fragmentação. Sem GO, max_split + gc_threshold reduzem o pico de
+# alocação clássico. Torch lê o env na 1ª alocação CUDA — aplicar cedo (CLI).
+ALLOC_CONF_DEFAULT = "expandable_segments:True,max_split_size_mb:128,garbage_collection_threshold:0.6"
+ALLOC_CONF_GROUP_OFFLOAD = "expandable_segments:True"
+
+
+def cuda_alloc_conf_for(go_will_engage: bool) -> str:
+    """``PYTORCH_CUDA_ALLOC_CONF`` por modo (o caller decide SE o GO vai correr)."""
+    return ALLOC_CONF_GROUP_OFFLOAD if go_will_engage else ALLOC_CONF_DEFAULT
+
+
+def apply_alloc_conf_early(go_will_engage: bool) -> None:
+    """``setdefault`` do alloc conf no arranque do CLI (override do user ganha)."""
+    import os
+
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", cuda_alloc_conf_for(go_will_engage))
+
+
+def group_offload_will_engage(
+    footprint: Any,
+    *,
+    full_gpu_budget_fraction: float,
+    gpu_specs: list[tuple[int, int]] | list[tuple[int, int, int]] | None = None,
+    tool_env_var: str | None = None,
+    allow_quant: tuple[str, ...] | None = None,
+) -> bool:
+    """Réplica pura do gate: o plano para ESTE hardware engaja group offload?
+
+    Usado pelos CLIs antes do load (alloc conf early, ``needed_mib`` do fallback
+    in-process) — o mesmo sinal do placement real: **specs com VRAM livre**
+    (``cuda_gpu_free_specs``) quando ``gpu_specs`` é None, para uma GPU
+    parcialmente ocupada concordar com o planner (que também a vê ocupada).
+    ``allow_quant`` deve espelhar o do placement (ex.: ``("none",)`` para
+    checkpoints pré-quantizados — senão o planner inventa quant inexistente).
+    """
+    if not is_group_offload_enabled(tool_env_var=tool_env_var):
+        return False
+    from .hardware import cuda_gpu_free_specs
+    from .lowvram import OFFLOAD_GROUP_STREAM, plan_offload
+
+    specs = cuda_gpu_free_specs() if gpu_specs is None else gpu_specs
+    if not specs:
+        return False
+    plan = plan_offload(
+        specs,
+        footprint,
+        allow_quant=allow_quant,
+        full_gpu_budget_fraction=full_gpu_budget_fraction,
+    )
+    return plan.offload == OFFLOAD_GROUP_STREAM
+
+
+def group_offload_needed_mib(footprint: Any, *, margin_gib: float = 1.2) -> int:
+    """``needed_mib`` do fallback in-process quando GO+streams vai correr.
+
+    Com GO o pico ≈ ativação + trânsito de grupos + decode — não pesos+
+    ativação. Margem genérica 1.2 GiB; tools com medição própria (ex.: text2d,
+    por resolução) usam os seus valores calibrados.
+    """
+    return max(2500, int((float(footprint.activation_gib) + margin_gib) * 1024))

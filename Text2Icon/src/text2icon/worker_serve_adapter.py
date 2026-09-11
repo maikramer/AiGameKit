@@ -20,7 +20,25 @@ class Adapter(WorkerAdapter):
     name = "text2icon"
 
     def load(self, **kwargs: Any) -> Any:
+        import os
+
         from text2icon.generator import SanaIconGenerator
+
+        # Alloc conf por-request (padrão Text2D/Paint3D): o serve pode ter
+        # arrancado com o conf clássico (max_split) e o request pedir GO — o
+        # torch lê o env na 1ª alocação CUDA, por isso só substituímos se
+        # ainda dorme.
+        try:
+            import torch
+
+            if not torch.cuda.is_initialized():
+                from text2icon.hardware import cuda_alloc_conf_for
+
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = cuda_alloc_conf_for(
+                    bool(kwargs.get("allow_group_offload", True))
+                )
+        except Exception:
+            pass
 
         # vramd: channels_last on (bench 6GB: ~-13% hot). Compile piora hot — off.
         # low_vram/cpu_offload: só se o request trouxer (CLI hw_auto) — sem re-decidir.
@@ -32,6 +50,8 @@ class Adapter(WorkerAdapter):
         # memory_efficient (peak) → ctor low_vram (cpu offload interno).
         if "low_vram" not in kwargs and kwargs.get("memory_efficient") is not None:
             load_kwargs["low_vram"] = bool(kwargs.get("memory_efficient"))
+        # allow_group_offload (peak/CLI) → ctor group_offload (GO default ON).
+        load_kwargs["group_offload"] = bool(kwargs.pop("allow_group_offload", True))
         skip = {
             "verbose",
             "low_vram",
@@ -40,6 +60,7 @@ class Adapter(WorkerAdapter):
             "torch_compile",
             "sdnq_preset",
             "quant_preset",
+            "allow_group_offload",
             # Perfil da tool (CLI/hw_auto) — o ctor SanaIconGenerator não o
             # aceita; o offload interno é controlado por ``low_vram`` acima.
             "cpu_offload",

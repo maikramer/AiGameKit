@@ -35,14 +35,25 @@ backends:
     calibrate_request:
       prompt: "a red cube on a white background"
       output: "/tmp/vramd-calibrate-text2icon.png"
+    # Calibrar o path de produção: GO+streams (o modo default quando o
+    # full-GPU não tem folga). O load_kwargs grava ``allow_group_offload`` no
+    # descriptor — o admit 0.3.7+ só usa a medição para requests do mesmo modo.
     calibrate_load_kwargs:
       sdnq_preset: sdnq-int4
+      allow_group_offload: true
 
   - name: texture2d
     adapter: aigamekit_shared.worker_serve_adapter_base
     vram_mib: 2500
+    footprint_key: sd15-base
     priority: 20
     tool: texture2d
+    # Calibrar o path de produção: GO+streams (default das tools 2D). O
+    # load_kwargs grava ``allow_group_offload`` no descriptor — o admit 0.3.7+
+    # só usa a medição para requests do mesmo modo.
+    calibrate_load_kwargs:
+      memory_efficient: true
+      allow_group_offload: true
     calibrate_request:
       prompt: "seamless red brick wall"
       output: "/tmp/vramd-calibrate-texture2d.png"
@@ -76,6 +87,11 @@ backends:
     calibrate_request:
       prompt: "stormy sky over mountains"
       output: "/tmp/vramd-calibrate-skymap2d.png"
+    # Calibrar o path GO de produção (o modo default do hw-auto em GPUs
+    # apertadas); o admit 0.3.7+ só usa a medição para requests do mesmo modo.
+    calibrate_load_kwargs:
+      memory_efficient: true
+      allow_group_offload: true
 
   - name: text3d
     adapter: aigamekit_shared.worker_serve_adapter_base
