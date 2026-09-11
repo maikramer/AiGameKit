@@ -2,13 +2,15 @@
 
 Contexto (2026-09-10): o Bevy 0.19 fatia o payload UASTC pelo block size do
 formato-alvo derivado do DFD. Texturas grayscale (ex.: AO do Materialize) saem
-do ``gltf-transform uastc`` com ``channelType = KHR_DF_CHANNEL_UASTC_RRRR``
+do ``gltf-transform uastc`` com ``channelType = KHR_DF_CHANNEL_UASTC_RRR``
 (byte 4) → o transcoder escolhe BC4 (8 B/block) e fatia mal um payload UASTC
 (16 B/block) → falha de transcode. O payload UASTC é idêntico em forma ao RGB
 (o block é sempre 128 bits); apenas o byte do canal engana o consumer.
 
-O fix é um patch de **1 byte** no DFD (canal do sample 0: 4 → 0 = RGB) — sem
-recompressão, sem alterar o layout do GLB.
+O fix é um patch de **1 byte** no DFD (canal do sample 0: 4=RRR → 0=RGB) — sem
+recompressão, sem alterar o layout do GLB. RGBA (3) é legítimo (icons com
+alpha → BC7 16 B) e RRRG/RG (5/6) têm canal G/alpha real — nenhum deles se
+toca (ver ``_CHANNEL_OK``/``_CHANNEL_RRR``).
 
 Layout empírico (verificado com ``ktx info`` do KTX-Software sobre o pool):
 - KTX2: header com ``dfdByteOffset`` (u64@48 nos ficheiros standard; alguns
@@ -26,8 +28,15 @@ from pathlib import Path
 
 KTX2_MAGIC = b"\xabKTX"
 
-# KHR_DF_CHANNEL_UASTC_*: 0=RGB, 1=RGBA; 2/3/4 (RRR/RRG/RRRR) partem o Bevy.
-_CHANNEL_OK = (0, 1)
+# KHR_DF_CHANNEL_UASTC_* (khr_df.h oficial): RGB=0, RGBA=3, RRR=4, RRRG=5,
+# RG=6. O Bevy 0.19 deriva o formato-alvo do canal: **RRR (4) escolhe BC4
+# (8 B/block) e fatia mal o payload UASTC (16 B/block)** — transcode falha.
+# RGBA (3, icons com alpha) → BC7 16 B: OK. RRRG/RG (5/6) têm canal
+# G/alpha real → não se patcheiam para RGB (perda); alvo BC5 = 16 B.
+_CHANNEL_RGB = 0
+_CHANNEL_RGBA = 3
+_CHANNEL_RRR = 4
+_CHANNEL_OK = (_CHANNEL_RGB, _CHANNEL_RGBA)
 
 
 @dataclass(frozen=True)
@@ -42,7 +51,7 @@ class DfdFinding:
 
     @property
     def needs_fix(self) -> bool:
-        return self.channel_type not in _CHANNEL_OK
+        return self.channel_type == _CHANNEL_RRR
 
 
 def _locate_dfd(ktx2: bytes) -> tuple[int, int] | None:
@@ -123,7 +132,7 @@ def fix_ktx2_dfd(ktx2_path: str | Path, *, dry_run: bool = False) -> int:
     if loc is None:
         return 0
     chan_pos = loc[0] + 31
-    if data[chan_pos] in _CHANNEL_OK:
+    if data[chan_pos] != _CHANNEL_RRR:
         return 0
     if not dry_run:
         data[chan_pos] = 0  # KHR_DF_CHANNEL_UASTC_RGB
@@ -162,8 +171,8 @@ def fix_glb_ktx2_dfd(glb_path: str | Path, *, dry_run: bool = False) -> int:
             continue
         dfd_off, _total = loc
         chan_pos = start + dfd_off + 31
-        if data[chan_pos] not in _CHANNEL_OK:
-            data[chan_pos] = 0  # KHR_DF_CHANNEL_UASTC_RGB
+        if data[chan_pos] == _CHANNEL_RRR:
+            data[chan_pos] = _CHANNEL_RGB
             fixed += 1
     if fixed and not dry_run:
         path.write_bytes(bytes(data))

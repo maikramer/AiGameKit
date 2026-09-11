@@ -81,9 +81,10 @@ class TestScanGlbKtx2Dfd:
         assert findings[0].image_name == "ao"
         assert findings[0].needs_fix is True
 
-    def test_rgb_is_ok(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("chan", [0, 3])
+    def test_rgb_and_rgba_are_ok(self, tmp_path: Path, chan: int) -> None:
         p = tmp_path / "a.glb"
-        p.write_bytes(_glb([_ktx2(channel_type=0)]))
+        p.write_bytes(_glb([_ktx2(channel_type=chan)]))
         findings = scan_glb_ktx2_dfd(p)
         assert len(findings) == 1
         assert findings[0].needs_fix is False
@@ -98,11 +99,12 @@ class TestScanGlbKtx2Dfd:
         assert scan_glb_ktx2_dfd(other) == []
 
     def test_mixed_images(self, tmp_path: Path) -> None:
+        # 0=RGB, 3=RGBA (icons), 4=RRR (quebra o Bevy), 5=RRRG (canal real).
         p = tmp_path / "a.glb"
-        p.write_bytes(_glb([_ktx2(0), _ktx2(4), _ktx2(1)]))
+        p.write_bytes(_glb([_ktx2(0), _ktx2(4), _ktx2(3), _ktx2(5)]))
         findings = scan_glb_ktx2_dfd(p)
-        assert [f.channel_type for f in findings] == [0, 4, 1]
-        assert [f.needs_fix for f in findings] == [False, True, False]
+        assert [f.channel_type for f in findings] == [0, 4, 3, 5]
+        assert [f.needs_fix for f in findings] == [False, True, False, False]
 
 
 class TestFixGlbKtx2Dfd:
@@ -133,8 +135,8 @@ class TestFixGlbKtx2Dfd:
 
     def test_only_bad_images_counted(self, tmp_path: Path) -> None:
         p = tmp_path / "a.glb"
-        p.write_bytes(_glb([_ktx2(0), _ktx2(4), _ktx2(4)]))
-        assert fix_glb_ktx2_dfd(p) == 2
+        p.write_bytes(_glb([_ktx2(0), _ktx2(4), _ktx2(4), _ktx2(3)]))
+        assert fix_glb_ktx2_dfd(p) == 2  # RGBA(3) intocado
 
     def test_non_glb_returns_zero(self, tmp_path: Path) -> None:
         p = tmp_path / "x.bin"
@@ -171,16 +173,25 @@ class TestLayoutAgainstPool:
         assert m._locate_dfd(b"\x00" * 512) is None
 
 
-@pytest.mark.parametrize("chan", [2, 3, 4])
-def test_all_single_channel_variants_fixed(tmp_path: Path, chan: int) -> None:
+def test_rrr_variant_fixed(tmp_path: Path) -> None:
+    # Apenas RRR (4) é normalizado — o valor que faz o Bevy escolher BC4.
     p = tmp_path / "a.glb"
-    p.write_bytes(_glb([_ktx2(chan)]))
+    p.write_bytes(_glb([_ktx2(4)]))
     assert fix_glb_ktx2_dfd(p) == 1
     assert scan_glb_ktx2_dfd(p)[0].channel_type == 0
 
 
 class TestFixKtx2Standalone:
     """fix_ktx2_dfd sobre ficheiros KTX2 avulsos (ktx create directo)."""
+
+    def test_rgba_and_dual_channel_untouched(self, tmp_path: Path) -> None:
+        from aigamekit_shared.gltf_ktx2 import fix_glb_ktx2_dfd
+
+        p = tmp_path / "a.glb"
+        original = _glb([_ktx2(3), _ktx2(5), _ktx2(6)])
+        p.write_bytes(original)
+        assert fix_glb_ktx2_dfd(p) == 0
+        assert p.read_bytes() == original
 
     def test_patches_and_is_idempotent(self, tmp_path: Path) -> None:
         from aigamekit_shared.gltf_ktx2 import fix_ktx2_dfd

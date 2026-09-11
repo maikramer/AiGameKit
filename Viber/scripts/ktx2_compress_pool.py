@@ -228,6 +228,15 @@ def convert_loose(path: Path) -> tuple[bool, str]:
             source = Path(tmp) / "source.png"
             with Image.open(path) as image:
                 image.convert("RGBA").save(source)
+        # Grayscale/palette PNGs (L/LA/P) sairiam com DFD UASTC_RRR/RG — o
+        # Bevy 0.19 deriva o formato-alvo do canal (RRR→BC4 8 B/block) e o
+        # transcode falha. Promover para RGB/RGBA antes do encode.
+        with Image.open(source) as image:
+            if image.mode not in ("RGB", "RGBA"):
+                has_alpha = "A" in image.mode or "transparency" in image.info
+                promoted = Path(tmp) / "source_promoted.png"
+                image.convert("RGBA" if has_alpha else "RGB").save(promoted)
+                source = promoted
         command = [
             "ktx",
             "create",

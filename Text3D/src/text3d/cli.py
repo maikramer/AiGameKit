@@ -2611,26 +2611,31 @@ def finish_cmd(
     "--recursive/--no-recursive",
     default=True,
     show_default=True,
-    help="Expandir globs/dirs recursivamente (*.glb).",
+    help="Expandir globs/dirs recursivamente (*.glb e *.ktx2).",
 )
 @click.option("--dry-run", is_flag=True, help="Só reportar; não escrever.")
 @click.pass_context
 def fix_ktx2_dfd_cmd(ctx, paths, recursive, dry_run):
-    """Normaliza DFD UASTC single-channel (RRRR) → RGB em GLBs (patch 1 byte).
+    """Normaliza DFD UASTC single-channel (RRR) → RGB em GLBs/KTX2 (patch 1 byte).
 
     O Bevy 0.19 fatia o payload UASTC pelo block size do formato-alvo derivado
-    do DFD: texturas grayscale (ex.: AO) com ``channelType=RRRR`` escolhem BC4
+    do DFD: texturas grayscale (ex.: AO) com ``channelType=RRR`` escolhem BC4
     (8 B/block) e o transcode falha. O patch muda o canal para RGB sem
-    recomprimir (payload UASTC é igual em forma).
+    recomprimir (payload UASTC é igual em forma). RGBA (icons com alpha) é
+    legítimo e não é tocado.
     """
-    from aigamekit_shared.gltf_ktx2 import fix_glb_ktx2_dfd, scan_glb_ktx2_dfd
+    from aigamekit_shared.gltf_ktx2 import fix_glb_ktx2_dfd, fix_ktx2_dfd, scan_glb_ktx2_dfd
 
     verbose = bool(ctx.obj.get("VERBOSE"))
     files: list[Path] = []
     for p in paths:
         path = Path(p)
         if path.is_dir():
-            files.extend(sorted(path.rglob("*.glb") if recursive else path.glob("*.glb")))
+            exts = ("*.glb", "*.ktx2")
+            found: list[Path] = []
+            for ext in exts:
+                found.extend(path.rglob(ext) if recursive else path.glob(ext))
+            files.extend(sorted(found))
         elif any(ch in p for ch in "*?["):
             files.extend(sorted(Path().glob(p)) if not path.is_absolute() else sorted(Path("/").glob(p.lstrip("/"))))
         else:
@@ -2641,6 +2646,14 @@ def fix_ktx2_dfd_cmd(ctx, paths, recursive, dry_run):
         if not f.is_file():
             continue
         total_files += 1
+        if f.suffix.lower() == ".ktx2":
+            scanned += 1
+            n = 0 if dry_run else fix_ktx2_dfd(f)
+            if n:
+                console.print(f"[green]OK[/green] {f}: DFD normalizado")
+                fixed_files += 1
+                total_fixes += n
+            continue
         findings = scan_glb_ktx2_dfd(f)
         scanned += len(findings)
         pending = [x for x in findings if x.needs_fix]
