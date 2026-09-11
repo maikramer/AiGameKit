@@ -237,19 +237,29 @@ struct TerrainChunkBindings {
 
 // Achatamento por distância: perto vê-se o material, longe vê-se cor. FLAT_MIN
 // é o achatamento mínimo colado à câmara — as fotos do pool têm contraste a
-// mais para um mundo cel-ish mesmo aos pés do herói.
-const FLAT_NEAR: f32 = 42.0;
-const FLAT_FAR: f32 = 260.0;
-const FLAT_MIN: f32 = 0.22;
+// mais para um mundo cel-ish mesmo aos pés do herói. r4 (2026-09-09): os
+// limites esticaram (42/260 → 64/340) — o detalhe morria aos ~100 m e as
+// encostas ao fundo liam-se como cor chapada; a aerial perspective
+// (320–1100 m) assume o resto do caminho até ao horizonte.
+const FLAT_NEAR: f32 = 64.0;
+const FLAT_FAR: f32 = 340.0;
+const FLAT_MIN: f32 = 0.15;
 
 // Weights below this contribute nothing visible; skipping their texture
 // fetch keeps the typical fragment at 2–3 layers instead of 4.
 const WEIGHT_EPSILON: f32 = 0.004;
 
-// Height-blend: quanto uma diferença de altura (mapas 0..1) desloca o peso
-// do PAR dominante — 12 resolve a fronteira com ~0.08 de diferença. Planos
-// (0.5) devolvem 0.5 e o blend original sobrevive.
-const HEIGHT_BLEND_STRENGTH: f32 = 12.0;
+// Height-bias CONTÍNUO: cada layer ganha/perde peso proporcional à SUA
+// altura (`h−0.5`), com teto/piso — a layer alta sai à frente na fronteira
+// (a pedra sobre a relva) SEM colapso. A primeira versão redistribuía o
+// PAR dominante com força 12: a layer perdedora colapsava a 0 e as
+// fronteiras do splat — que são suaves — endureciam em LINHAS RETAS
+// ("uma textura acaba, a outra começa", 2026-09-09). Multiplicativo com
+// clamp é contínuo em todo o lado e mantém a largura da transição.
+const HEIGHT_BIAS: f32 = 2.5;
+/// Piso do multiplicador: a layer baixa nunca perde mais do que 65% do
+/// peso — impossível desaparecer de golpe.
+const HEIGHT_BIAS_MIN: f32 = 0.35;
 
 // Força do AO do pool sobre o albedo (1 = total; 0.6 mantém o chão vivo).
 const AO_STRENGTH: f32 = 0.6;
@@ -569,62 +579,8 @@ fn fragment(
     var rough = 0.0;
     var ao = 0.0;
 
-    // ── Height-blend (r4) ────────────────────────────────────────────────
-    // Redistribui o peso do PAR dominante pela altura relativa das texturas:
-    // a rocha "sai por cima" da relva na fronteira, a neve fica nos picos.
-    // Os pesos passam a viver em locais (w0..w7) em vez de ler os planos
-    // diretamente nos ramos abaixo. Com height maps planos (fallback 0.5) o
-    // blend devolve 0.5 e os pesos originais sobrevivem — mundos sem o mapa
-    // degradam para o blend de sempre. A soma do par redistribuído é
-    // invariante, portanto o `total` do fim não muda.
-    var w0 = s.r;
-    var w1 = s.g;
-    var w2 = s.b;
-    var w3 = s.a;
-    var w4 = s2.r;
-    var w5 = s2.g;
-    var w6 = s2.b;
-    var w7 = s2.a;
-    // Os dois maiores pesos por seleção em duas passadas — array LOCAL
-    // aceita indexação dinâmica em WGSL.
-    var w: array<f32, 8> = array<f32, 8>(w0, w1, w2, w3, w4, w5, w6, w7);
-    var i1 = 0;
-    var i2 = 1;
-    var m1 = w[0];
-    var m2 = w[1];
-    if (m2 > m1) {
-        i1 = 1;
-        i2 = 0;
-        m1 = w[1];
-        m2 = w[0];
-    }
-    for (var k = 2; k < 8; k += 1) {
-        if (w[k] > m1) {
-            i2 = i1;
-            m2 = m1;
-            i1 = k;
-            m1 = w[k];
-        } else if (w[k] > m2) {
-            i2 = k;
-            m2 = w[k];
-        }
-    }
-    let pair = m1 + m2;
-    if (pair > 2.0 * WEIGHT_EPSILON) {
-        let h1 = layer_scalar_sample(i1, slot, world.xz / params.tiles[i1].x, wdx / params.tiles[i1].x, wdy / params.tiles[i1].x, true);
-        let h2 = layer_scalar_sample(i2, slot, world.xz / params.tiles[i2].x, wdx / params.tiles[i2].x, wdy / params.tiles[i2].x, true);
-        let blend = clamp(0.5 + (h1 - h2) * HEIGHT_BLEND_STRENGTH, 0.0, 1.0);
-        w[i1] = pair * blend;
-        w[i2] = pair * (1.0 - blend);
-    }
-    w0 = w[0];
-    w1 = w[1];
-    w2 = w[2];
-    w3 = w[3];
-    w4 = w[4];
-    w5 = w[5];
-    w6 = w[6];
-    w7 = w[7];
+    // Σ dos pesos APÓS o height-bias (renormaliza no fim).
+    var wsum = 0.0;
     // ── Frame tangente derivado da normal geométrica (sem atributos de
     // tangente): T = ⊥ à normal no plano horizontal, B fecha a base ortonormal.
     // A projeção top-down (uv = world.xz/tile) torna este frame o espaço
@@ -638,90 +594,138 @@ fn fragment(
     // ~unitária → normalizar no fim é seguro).
     var n_world = vec3<f32>(0.0);
 
-    if (w0 > WEIGHT_EPSILON) {
+    if (s.r > WEIGHT_EPSILON) {
         let t = params.tiles[0].x;
-        let tex = layer_sample(0, slot, world.xz / t, wdx / t, wdy / t);
-        albedo += w0 * mix(tex * params.tints[0].rgb, params.flats[0].rgb, flat_mix);
-        rough += w0 * params.roughs[0].x;
-        ao += w0 * layer_scalar_sample(0, slot, world.xz / t, wdx / t, wdy / t, false);
-        let nm = layer_normal_sample(0, slot, world.xz / t, wdx / t, wdy / t) * 2.0 - 1.0;
+        let uv_t = world.xz / t;
+        let tex = layer_sample(0, slot, uv_t, wdx / t, wdy / t);
+        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
+        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
+        let h = layer_scalar_sample(0, slot, uv_t, wdx / t, wdy / t, true);
+        let wb0 = s.r * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
+        albedo += wb0 * mix(tex * params.tints[0].rgb, params.flats[0].rgb, flat_mix);
+        rough += wb0 * params.roughs[0].x;
+        ao += wb0 * layer_scalar_sample(0, slot, uv_t, wdx / t, wdy / t, false);
+        wsum += wb0;
+        let nm = layer_normal_sample(0, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
         let k = 1.0 - flat_mix;
-        n_world += w0 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
+        n_world += wb0 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
     }
-    if (w1 > WEIGHT_EPSILON) {
+    if (s.g > WEIGHT_EPSILON) {
         let t = params.tiles[1].x;
-        let tex = layer_sample(1, slot, world.xz / t, wdx / t, wdy / t);
-        albedo += w1 * mix(tex * params.tints[1].rgb, params.flats[1].rgb, flat_mix);
-        rough += w1 * params.roughs[1].x;
-        ao += w1 * layer_scalar_sample(1, slot, world.xz / t, wdx / t, wdy / t, false);
-        let nm = layer_normal_sample(1, slot, world.xz / t, wdx / t, wdy / t) * 2.0 - 1.0;
+        let uv_t = world.xz / t;
+        let tex = layer_sample(1, slot, uv_t, wdx / t, wdy / t);
+        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
+        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
+        let h = layer_scalar_sample(1, slot, uv_t, wdx / t, wdy / t, true);
+        let wb1 = s.g * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
+        albedo += wb1 * mix(tex * params.tints[1].rgb, params.flats[1].rgb, flat_mix);
+        rough += wb1 * params.roughs[1].x;
+        ao += wb1 * layer_scalar_sample(1, slot, uv_t, wdx / t, wdy / t, false);
+        wsum += wb1;
+        let nm = layer_normal_sample(1, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
         let k = 1.0 - flat_mix;
-        n_world += w1 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
+        n_world += wb1 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
     }
-    if (w2 > WEIGHT_EPSILON) {
+    if (s.b > WEIGHT_EPSILON) {
         let t = params.tiles[2].x;
-        let tex = layer_sample(2, slot, world.xz / t, wdx / t, wdy / t);
-        albedo += w2 * mix(tex * params.tints[2].rgb, params.flats[2].rgb, flat_mix);
-        rough += w2 * params.roughs[2].x;
-        ao += w2 * layer_scalar_sample(2, slot, world.xz / t, wdx / t, wdy / t, false);
-        let nm = layer_normal_sample(2, slot, world.xz / t, wdx / t, wdy / t) * 2.0 - 1.0;
+        let uv_t = world.xz / t;
+        let tex = layer_sample(2, slot, uv_t, wdx / t, wdy / t);
+        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
+        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
+        let h = layer_scalar_sample(2, slot, uv_t, wdx / t, wdy / t, true);
+        let wb2 = s.b * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
+        albedo += wb2 * mix(tex * params.tints[2].rgb, params.flats[2].rgb, flat_mix);
+        rough += wb2 * params.roughs[2].x;
+        ao += wb2 * layer_scalar_sample(2, slot, uv_t, wdx / t, wdy / t, false);
+        wsum += wb2;
+        let nm = layer_normal_sample(2, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
         let k = 1.0 - flat_mix;
-        n_world += w2 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
+        n_world += wb2 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
     }
-    if (w3 > WEIGHT_EPSILON) {
+    if (s.a > WEIGHT_EPSILON) {
         let t = params.tiles[3].x;
-        let tex = layer_sample(3, slot, world.xz / t, wdx / t, wdy / t);
-        albedo += w3 * mix(tex * params.tints[3].rgb, params.flats[3].rgb, flat_mix);
-        rough += w3 * params.roughs[3].x;
-        ao += w3 * layer_scalar_sample(3, slot, world.xz / t, wdx / t, wdy / t, false);
-        let nm = layer_normal_sample(3, slot, world.xz / t, wdx / t, wdy / t) * 2.0 - 1.0;
+        let uv_t = world.xz / t;
+        let tex = layer_sample(3, slot, uv_t, wdx / t, wdy / t);
+        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
+        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
+        let h = layer_scalar_sample(3, slot, uv_t, wdx / t, wdy / t, true);
+        let wb3 = s.a * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
+        albedo += wb3 * mix(tex * params.tints[3].rgb, params.flats[3].rgb, flat_mix);
+        rough += wb3 * params.roughs[3].x;
+        ao += wb3 * layer_scalar_sample(3, slot, uv_t, wdx / t, wdy / t, false);
+        wsum += wb3;
+        let nm = layer_normal_sample(3, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
         let k = 1.0 - flat_mix;
-        n_world += w3 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
+        n_world += wb3 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
     }
-    if (w4 > WEIGHT_EPSILON) {
+    if (s2.r > WEIGHT_EPSILON) {
         let t = params.tiles[4].x;
-        let tex = layer_sample(4, slot, world.xz / t, wdx / t, wdy / t);
-        albedo += w4 * mix(tex * params.tints[4].rgb, params.flats[4].rgb, flat_mix);
-        rough += w4 * params.roughs[4].x;
-        ao += w4 * layer_scalar_sample(4, slot, world.xz / t, wdx / t, wdy / t, false);
-        let nm = layer_normal_sample(4, slot, world.xz / t, wdx / t, wdy / t) * 2.0 - 1.0;
+        let uv_t = world.xz / t;
+        let tex = layer_sample(4, slot, uv_t, wdx / t, wdy / t);
+        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
+        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
+        let h = layer_scalar_sample(4, slot, uv_t, wdx / t, wdy / t, true);
+        let wb4 = s2.r * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
+        albedo += wb4 * mix(tex * params.tints[4].rgb, params.flats[4].rgb, flat_mix);
+        rough += wb4 * params.roughs[4].x;
+        ao += wb4 * layer_scalar_sample(4, slot, uv_t, wdx / t, wdy / t, false);
+        wsum += wb4;
+        let nm = layer_normal_sample(4, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
         let k = 1.0 - flat_mix;
-        n_world += w4 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
+        n_world += wb4 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
     }
-    if (w5 > WEIGHT_EPSILON) {
+    if (s2.g > WEIGHT_EPSILON) {
         let t = params.tiles[5].x;
-        let tex = layer_sample(5, slot, world.xz / t, wdx / t, wdy / t);
-        albedo += w5 * mix(tex * params.tints[5].rgb, params.flats[5].rgb, flat_mix);
-        rough += w5 * params.roughs[5].x;
-        ao += w5 * layer_scalar_sample(5, slot, world.xz / t, wdx / t, wdy / t, false);
-        let nm = layer_normal_sample(5, slot, world.xz / t, wdx / t, wdy / t) * 2.0 - 1.0;
+        let uv_t = world.xz / t;
+        let tex = layer_sample(5, slot, uv_t, wdx / t, wdy / t);
+        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
+        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
+        let h = layer_scalar_sample(5, slot, uv_t, wdx / t, wdy / t, true);
+        let wb5 = s2.g * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
+        albedo += wb5 * mix(tex * params.tints[5].rgb, params.flats[5].rgb, flat_mix);
+        rough += wb5 * params.roughs[5].x;
+        ao += wb5 * layer_scalar_sample(5, slot, uv_t, wdx / t, wdy / t, false);
+        wsum += wb5;
+        let nm = layer_normal_sample(5, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
         let k = 1.0 - flat_mix;
-        n_world += w5 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
+        n_world += wb5 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
     }
-    if (w6 > WEIGHT_EPSILON) {
+    if (s2.b > WEIGHT_EPSILON) {
         let t = params.tiles[6].x;
-        let tex = layer_sample(6, slot, world.xz / t, wdx / t, wdy / t);
-        albedo += w6 * mix(tex * params.tints[6].rgb, params.flats[6].rgb, flat_mix);
-        rough += w6 * params.roughs[6].x;
-        ao += w6 * layer_scalar_sample(6, slot, world.xz / t, wdx / t, wdy / t, false);
-        let nm = layer_normal_sample(6, slot, world.xz / t, wdx / t, wdy / t) * 2.0 - 1.0;
+        let uv_t = world.xz / t;
+        let tex = layer_sample(6, slot, uv_t, wdx / t, wdy / t);
+        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
+        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
+        let h = layer_scalar_sample(6, slot, uv_t, wdx / t, wdy / t, true);
+        let wb6 = s2.b * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
+        albedo += wb6 * mix(tex * params.tints[6].rgb, params.flats[6].rgb, flat_mix);
+        rough += wb6 * params.roughs[6].x;
+        ao += wb6 * layer_scalar_sample(6, slot, uv_t, wdx / t, wdy / t, false);
+        wsum += wb6;
+        let nm = layer_normal_sample(6, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
         let k = 1.0 - flat_mix;
-        n_world += w6 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
+        n_world += wb6 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
     }
-    if (w7 > WEIGHT_EPSILON) {
+    if (s2.a > WEIGHT_EPSILON) {
         let t = params.tiles[7].x;
-        let tex = layer_sample(7, slot, world.xz / t, wdx / t, wdy / t);
-        albedo += w7 * mix(tex * params.tints[7].rgb, params.flats[7].rgb, flat_mix);
-        rough += w7 * params.roughs[7].x;
-        ao += w7 * layer_scalar_sample(7, slot, world.xz / t, wdx / t, wdy / t, false);
-        let nm = layer_normal_sample(7, slot, world.xz / t, wdx / t, wdy / t) * 2.0 - 1.0;
+        let uv_t = world.xz / t;
+        let tex = layer_sample(7, slot, uv_t, wdx / t, wdy / t);
+        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
+        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
+        let h = layer_scalar_sample(7, slot, uv_t, wdx / t, wdy / t, true);
+        let wb7 = s2.a * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
+        albedo += wb7 * mix(tex * params.tints[7].rgb, params.flats[7].rgb, flat_mix);
+        rough += wb7 * params.roughs[7].x;
+        ao += wb7 * layer_scalar_sample(7, slot, uv_t, wdx / t, wdy / t, false);
+        wsum += wb7;
+        let nm = layer_normal_sample(7, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
         let k = 1.0 - flat_mix;
-        n_world += w7 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
+        n_world += wb7 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
     }
 
     // The CPU bakes the eight weights to sum 1; clamp anyway so a fallback
     // plane must not push the sum past 1.
-    let total = max(w0 + w1 + w2 + w3 + w4 + w5 + w6 + w7, 1.0);
+    let total = max(wsum, 1e-4);
     albedo /= total;
     rough = clamp(rough / total, 0.05, 1.0);
     // AO por texel do pool: soma ponderada pelos MESMOS pesos do albedo

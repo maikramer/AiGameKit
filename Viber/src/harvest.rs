@@ -741,8 +741,6 @@ pub fn harvest_impact_system(
         destructible.hits_taken += 1;
         crate::particles::spawn_burst(
             &mut fx.commands,
-            &mut fx.meshes,
-            &mut fx.materials,
             &hit_burst_spec(&data.hit_preset),
             impact,
             data.hit_burst_count as usize,
@@ -833,8 +831,6 @@ fn break_prop(
     // Burst de break (o "leaves no centro antes da queda" do Fall incluído).
     crate::particles::spawn_burst(
         &mut fx.commands,
-        &mut fx.meshes,
-        &mut fx.materials,
         &hit_burst_spec(&data.preset),
         prop_pos + Vec3::Y * 0.8,
         data.burst_count as usize,
@@ -1015,7 +1011,6 @@ pub fn tree_fall_system(
     time: Res<Time>,
     mut falls: Query<(Entity, &mut Transform, &mut TreeFall)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
     mut commands: Commands,
 ) {
     let dt = time.delta_secs();
@@ -1032,16 +1027,12 @@ pub fn tree_fall_system(
             let point = fall.cut_point + fall.dir * (fall.top_length * FALL_IMPACT_FRACTION);
             crate::particles::spawn_burst(
                 &mut commands,
-                &mut meshes,
-                &mut materials,
                 &hit_burst_spec("ground-dust"),
                 Vec3::new(point.x, fall.ground_y + 0.15, point.z),
                 30,
             );
             crate::particles::spawn_burst(
                 &mut commands,
-                &mut meshes,
-                &mut materials,
                 &hit_burst_spec("leaves"),
                 Vec3::new(point.x, fall.ground_y + 0.5, point.z),
                 25,

@@ -288,12 +288,16 @@ impl Plugin for AmbientPlugin {
                     // — é esta escrita por frame que faz o céu mudar com o
                     // `set_clock` (o relógio do mundo não é `globals.time`).
                     crate::sky::sky_material_drive.after(crate::worldsys::atmosphere_drive),
-                    // Tint dia/noite do albedo do TERRENO (r5, bissecção da
-                    // banda branca noturna — o splat das layers ignorava a
-                    // hora e lia-se como dia iluminado atrás das serras).
-                    crate::terrain::layer_material::terrain_daynight_tint,
-                    // Chuva → chão molhado (canal walls_b.w do chunk; r3).
-                    crate::terrain::layer_material::terrain_rain_wetness,
+                    // O tint dia/noite do TERRENO (r5, bissecção da banda
+                    // branca noturna) e o chão molhado (r3, canal `walls_b.w`)
+                    // NÃO se registam aqui: vivem no `TerrainFeaturesPlugin`
+                    // (src/terrain/runtime.rs), embrulhados em `timed` para
+                    // aparecerem no profiler. Registá-los também aqui era uma
+                    // DUPLICAÇÃO silenciosa — o `Timed` devolve o
+                    // `system_type()` do sistema INTERIOR, portanto o Bevy vê o
+                    // wrapper e a função crua como o mesmo sistema e o registo
+                    // posterior sobrepõe o anterior: a versão que sobrevivia era
+                    // a SEM `timed` e o sistema desaparecia do profiler.
                 ),
             );
     }
@@ -364,10 +368,13 @@ fn biome_fog_system(
     weather: Option<Res<crate::worldsys::WeatherState>>,
     players: Query<&GlobalTransform, With<Player>>,
     biomes: Option<Res<crate::worldsys::BiomeRegions>>,
+    scene: Option<Res<crate::worldsys::InteriorSceneConfig>>,
     mut current: ResMut<CurrentBiome>,
     mut cameras: Query<Entity, With<Camera3d>>,
     mut commands: Commands,
     mut toasts: MessageWriter<ScriptToast>,
+    // Estado suavizado da transição de bioma (mult, tint, peso do tint).
+    mut biome_blend: Local<Option<(f32, [f32; 3], f32)>>,
 ) {
     // 4×/s: a paleta muda devagar (o dia inteiro dura 20 min reais) e a
     // névoa é um componente inserido, não um uniform barato.
@@ -377,16 +384,32 @@ fn biome_fog_system(
     }
     *throttle = 0.25;
 
-    let region = match (biomes, players.iter().next()) {
-        (Some(biomes), Some(player)) => {
+    // Dentro da bolsa de interior não há bioma: a cena está declaradamente
+    // FORA do mundo (a 2 km do mapa) e a única razão para a `BiomeRegion` do
+    // vale se aplicar lá era a posição no plano. Sem isto a sala herda a
+    // névoa, a tinta e a exposição de um bioma onde não está — o exterior
+    // pinta-se por cima do interior.
+    let inside_scene = scene
+        .as_deref()
+        .zip(players.iter().next())
+        .is_some_and(|(scene, player)| {
             let pos = player.translation();
-            biomes
-                .list
-                .iter()
-                .find(|b| point_in_polygon(pos.x, pos.z, &b.polygon))
-                .cloned()
+            scene.contains(pos.x, pos.z)
+        });
+    let region = if inside_scene {
+        None
+    } else {
+        match (biomes, players.iter().next()) {
+            (Some(biomes), Some(player)) => {
+                let pos = player.translation();
+                biomes
+                    .list
+                    .iter()
+                    .find(|b| point_in_polygon(pos.x, pos.z, &b.polygon))
+                    .cloned()
+            }
+            _ => None,
         }
-        _ => None,
     };
 
     // Toast só na TRANSIÇÃO (o sistema agora corre sempre, não só ao entrar).
@@ -410,13 +433,31 @@ fn biome_fog_system(
         None => (1.0, None),
     };
 
+    // ── Transição SUAVE de bioma ──────────────────────────────────────────
+    // A paleta por região aplicava-se de GOLPE ao cruzar o polígono — a
+    // "linha diagonal" que cortava o ecrã de um lado ao outro. O alvo agora
+    // persegue-se por lerp (~0.9 s a 4 Hz): o toast anuncia, o olho não vê
+    // o corte. Primeira chamada: snap ao alvo.
+    let target_mult = density_mult;
+    let target_tint = tint.unwrap_or([1.0, 1.0, 1.0]);
+    let target_weight = if tint.is_some() { 1.0 } else { 0.0 };
+    let blend = biome_blend
+        .get_or_insert((target_mult, target_tint, target_weight));
+    const BLEND_K: f32 = 0.35;
+    blend.0 += (target_mult - blend.0) * BLEND_K;
+    for c in 0..3 {
+        blend.1[c] += (target_tint[c] - blend.1[c]) * BLEND_K;
+    }
+    blend.2 += (target_weight - blend.2) * BLEND_K;
+    let (smooth_mult, smooth_tint, smooth_weight) = *blend;
+
     // Cor: horizonte da hora + um toque do bioma, na MESMA escala do domo
     // (paleta raw — o r7 multiplicava por SKY_RADIANCE 400 e o fog ficava
     // branco estourado, r8 limitava a luminância). O cap 0.8×horizonte
     // mantém-se: silhuetas de serra lêem-se contra um fundo mais claro.
     let mut color = [atmosphere.fog[0], atmosphere.fog[1], atmosphere.fog[2]];
-    if let Some(tint) = tint {
-        color = mix_rgb(color, tint, BIOME_TINT_WEIGHT);
+    if smooth_weight > 0.01 {
+        color = mix_rgb(color, smooth_tint, BIOME_TINT_WEIGHT * smooth_weight);
     }
     let horizon_sky = [
         atmosphere.horizon[0],
@@ -431,12 +472,16 @@ fn biome_fog_system(
         color = [color[0] * k, color[1] * k, color[2] * k];
     }
     // À noite a névoa não pode "acender" o mundo: é o azul profundo que
-    // engole o longe e deixa as fogueiras a valer ouro. E a CHUVA (WS-A)
-    // fecha o horizonte: +60 % de densidade com tempestade cheia — o mesmo
-    // sítio a 200 m lê-se véu a chover.
+    // engole o longe e deixa as fogueiras a valer ouro. Mas a névoa é
+    // VISIBILIDADE: os multiplicadores de noite/chuva ficaram SUTIS de
+    // propósito — eram +35 %/+60 %, que no pântano à chuva apagavam a
+    // paisagem a ~90 m ("chuva com noite não se vê nada, fica tudo cinza
+    // branco", repro do user 2026-09-11). A base
+    // ([`FOG_BASE_DENSITY`]) e o multiplicador do bioma continuam a mandar;
+    // noite e chuva só dão um toque.
     let rain = weather.map(|w| w.rain.clamp(0.0, 1.0)).unwrap_or(0.0);
     let density =
-        FOG_BASE_DENSITY * density_mult * (1.0 + 0.35 * atmosphere.night) * (1.0 + 0.6 * rain);
+        FOG_BASE_DENSITY * smooth_mult * (1.0 + 0.08 * atmosphere.night) * (1.0 + 0.12 * rain);
 
     // Inscattering direcional — a escala NÃO é arbitrária, e errá-la lava o
     // frame inteiro de branco (r1/r2).
@@ -945,6 +990,7 @@ fn ripple_spec() -> crate::recipes::ParticleSpec {
 #[allow(clippy::type_complexity)]
 fn rain_emitter_driver(
     mut commands: Commands,
+    scene: Option<Res<crate::worldsys::InteriorSceneConfig>>,
     weather: Option<Res<crate::worldsys::WeatherState>>,
     players: Query<&GlobalTransform, With<Player>>,
     mut emitters: Query<
@@ -964,7 +1010,16 @@ fn rain_emitter_driver(
         return;
     };
     let anchor = player.translation() + Vec3::Y * RAIN_EMITTER_HEIGHT;
-    let intensity = weather.rain.clamp(0.0, 1.0);
+    // Telhado implícito: dentro da bolsa de interior não chove — o emissor
+    // segue o player e seguiria para dentro da sala.
+    let intensity = if scene
+        .as_deref()
+        .is_some_and(|s| s.contains(anchor.x, anchor.z))
+    {
+        0.0
+    } else {
+        weather.rain.clamp(0.0, 1.0)
+    };
     let Ok((mut transform, mut emitter, mut visibility)) = emitters.single_mut() else {
         // Ainda não existe: spawna UM. O `Commands::queue` só dá `&mut World`
         // — daí o `spawn_looping_in_world`.
@@ -1018,8 +1073,6 @@ fn rain_ripple_spawner(
     weather: Option<Res<crate::worldsys::WeatherState>>,
     players: Query<&GlobalTransform, With<Player>>,
     runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut commands: Commands,
 ) {
     let Some(weather) = weather else {
@@ -1048,8 +1101,6 @@ fn rain_ripple_spawner(
             .unwrap_or(origin.y - RAIN_EMITTER_HEIGHT);
         crate::particles::spawn_burst(
             &mut commands,
-            &mut meshes,
-            &mut materials,
             &ripple_spec(),
             Vec3::new(x, y + 0.03, z),
             2,
@@ -1276,12 +1327,15 @@ mod tests {
     /// A chuva fecha o horizonte: densidade ×(1+0.6·rain) na névoa da câmara.
     #[test]
     fn test_biome_fog_thickens_with_rain() {
-        fn fog_density(rain: f32) -> f32 {
+        fn fog_density(rain: f32, night: f32) -> f32 {
             let mut app = bevy::app::App::new();
             app.add_plugins(bevy::MinimalPlugins);
             app.add_message::<ScriptToast>();
             app.insert_resource(CurrentBiome::default());
-            app.insert_resource(crate::worldsys::AtmosphereState::default());
+            app.insert_resource(crate::worldsys::AtmosphereState {
+                night,
+                ..Default::default()
+            });
             app.insert_resource(crate::worldsys::WeatherState {
                 wind: [0.0, 0.0],
                 wind_strength: 0.0,
@@ -1305,11 +1359,18 @@ mod tests {
                 other => panic!("falloff inesperado: {other:?}"),
             }
         }
-        let dry = fog_density(0.0);
-        let wet = fog_density(0.5);
+        // A névoa é VISIBILIDADE: noite e chuva dão só um toque (eram +35 % e
+        // +60 %, que apagavam a paisagem a ~90 m no pântano à chuva).
+        let dry = fog_density(0.0, 0.0);
+        let wet = fog_density(1.0, 0.0);
         assert!(
-            (wet / dry - 1.3).abs() < 1e-4,
-            "chuva 0.5 engrossa a névoa ×1.3: {wet} vs {dry}"
+            (wet / dry - 1.12).abs() < 1e-4,
+            "chuva cheia engrossa a névoa ×1.12 (subtil): {wet} vs {dry}"
+        );
+        let night = fog_density(0.0, 1.0);
+        assert!(
+            (night / dry - 1.08).abs() < 1e-4,
+            "noite engrossa a névoa ×1.08 (subtil): {night} vs {dry}"
         );
     }
 

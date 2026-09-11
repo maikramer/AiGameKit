@@ -689,49 +689,89 @@ pub fn publish_ui_script_view(
     visibility: Query<&Visibility>,
     disabled: Query<Has<UiDisabled>>,
 ) {
-    if let Ok(mut snapshot) = state.view.data.lock() {
+    // Cada bloco republica só o que MUDOU. Sem estes gates o sistema clonava
+    // o `UiData` inteiro (10+ `String`) e copiava clicks/modais/tabs em TODOS
+    // os frames, mesmo com o mundo parado e sem um único script de UI a
+    // escrever. Um frame em falta não muda nada: o script lê o mesmo valor que
+    // já lá estava, e no frame seguinte a mudança entra por `is_changed`.
+    if data.is_changed()
+        && let Ok(mut snapshot) = state.view.data.lock()
+    {
         *snapshot = data.clone();
     }
-    if let Ok(mut snapshot) = state.view.clicks.lock() {
+    if clicks.is_changed()
+        && let Ok(mut snapshot) = state.view.clicks.lock()
+    {
         snapshot.clone_from(&clicks.0);
     }
-    if let Ok(mut snapshot) = state.view.modals.lock() {
+    if modals.is_changed()
+        && let Ok(mut snapshot) = state.view.modals.lock()
+    {
         snapshot.clone_from(&modals.open);
     }
-    if let Ok(mut snapshot) = state.view.tabs.lock() {
+    if tabs.is_changed()
+        && let Ok(mut snapshot) = state.view.tabs.lock()
+    {
         snapshot.clone_from(&tabs.active);
     }
     // Per-element state by id. The registry is a few hundred entries, so the
     // walk is cheap; keeping it on the view means a script can ask for ANY
     // element, not just the ones it wrote.
+    //
+    // O mapa actualiza-se NO SÍTIO, sem `clear()` + reinserção: o `id.clone()`
+    // e o `text.clone()` por elemento registado eram centenas de alocações de
+    // `String` em cada frame (HUD + menu + profiler), com o valor quase sempre
+    // igual ao da véspera. Só as entradas cujo elemento saiu do registry caem.
     if let Ok(mut elements) = state.view.elements.lock() {
-        elements.clear();
+        elements.retain(|id, _| registry.by_id.contains_key(id.as_str()));
         for (id, &entity) in &registry.by_id {
             // (bar, cooldown, slider, check, input) — whichever this entity has.
             let (bar, cooldown, slider, check, input) = widgets
                 .get(entity)
                 .unwrap_or((None, None, None, None, None));
-            let text = input
-                .map(|input| input.text.clone())
-                .or_else(|| texts.get(entity).map(|text| text.0.clone()).ok())
+            // Empréstimos, não clones: a `String` só nasce na inserção de um
+            // elemento novo.
+            let text: &str = input
+                .map(|input| input.text.as_str())
+                .or_else(|| texts.get(entity).map(|text| text.0.as_str()).ok())
                 .unwrap_or_default();
             let value = slider
                 .map(|slider| slider.value)
                 .or_else(|| bar.map(|bar| bar.value))
                 .or_else(|| cooldown.map(|cd| cd.value))
                 .unwrap_or(0.0);
-            elements.insert(
-                id.clone(),
-                UiElementRead {
-                    text,
-                    value,
-                    visible: visibility
-                        .get(entity)
-                        .is_ok_and(|v| *v != Visibility::Hidden),
-                    checked: check.is_some_and(|check| check.checked),
-                    disabled: disabled.get(entity).unwrap_or(false),
-                },
-            );
+            let visible = visibility.get(entity).is_ok_and(|v| *v != Visibility::Hidden);
+            let checked = check.is_some_and(|check| check.checked);
+            let disabled = disabled.get(entity).unwrap_or(false);
+            if elements.contains_key(id.as_str()) {
+                let entry = elements
+                    .get_mut(id.as_str())
+                    .expect("contains_key acabou de dizer que existe");
+                if entry.text != text
+                    || entry.value != value
+                    || entry.visible != visible
+                    || entry.checked != checked
+                    || entry.disabled != disabled
+                {
+                    entry.text.clear();
+                    entry.text.push_str(text);
+                    entry.value = value;
+                    entry.visible = visible;
+                    entry.checked = checked;
+                    entry.disabled = disabled;
+                }
+            } else {
+                elements.insert(
+                    id.clone(),
+                    UiElementRead {
+                        text: text.to_owned(),
+                        value,
+                        visible,
+                        checked,
+                        disabled,
+                    },
+                );
+            }
         }
     }
     // Focused input id, for `viber.ui.focused()`.

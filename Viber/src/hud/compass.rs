@@ -98,15 +98,20 @@ pub fn hud_compass_update(
         .unwrap_or_default();
     for (mut node, mut visibility, letter) in &mut letters {
         let delta = crate::camera::shortest_angle_delta_deg(heading, letter.bearing_deg);
-        match compass_offset_px(delta, 230.0, 55.0) {
+        // Escrita GUARDADA também na `Visibility`: escrever o mesmo valor
+        // marca `Changed` e punha o Taffy a refazer o layout da faixa do
+        // compasso em todos os frames.
+        let wanted = match compass_offset_px(delta, 230.0, 55.0) {
             Some(offset) => {
-                let wanted = Val::Px(230.0 + offset);
-                if node.left != wanted {
-                    node.left = wanted;
+                if node.left != Val::Px(230.0 + offset) {
+                    node.left = Val::Px(230.0 + offset);
                 }
-                *visibility = Visibility::Visible;
+                Visibility::Visible
             }
-            None => *visibility = Visibility::Hidden,
+            None => Visibility::Hidden,
+        };
+        if *visibility != wanted {
+            *visibility = wanted;
         }
     }
     for (mut node, tick) in &mut ticks {
@@ -129,11 +134,14 @@ pub fn hud_compass_update(
             node.left = wanted;
         }
         let sector = sector_distance(&bearings, dist.bearing_deg, 22.5);
-        *visibility = if sector.is_some() {
+        let wanted_visibility = if sector.is_some() {
             Visibility::Visible
         } else {
             Visibility::Hidden
         };
+        if *visibility != wanted_visibility {
+            *visibility = wanted_visibility;
+        }
         let next = sector.map_or_else(|| " ".to_string(), |d| format!("{}m", d.round() as i32));
         if text.0 != next {
             text.0 = next;

@@ -608,6 +608,13 @@ fn stream_grass_tiles(
         return;
     };
     let eye = camera.translation();
+    // Fora da pegada do heightmap não há relva que fazer: a rede de tiles
+    // segue a câmara e o lattice do terreno SATURA na orla, portanto uma cena
+    // de interior posta fora do mapa acordava com tufos de erva a flutuar à
+    // cota da borda do mundo, dentro da sala.
+    if !terrain.in_field(eye.x, eye.z) {
+        return;
+    }
 
     let material = match &field.material {
         Some(handle) => handle.clone(),

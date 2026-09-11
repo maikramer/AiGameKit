@@ -314,6 +314,7 @@ pub fn decode_glb(bytes: &[u8]) -> Result<Vec<u8>> {
         // sem reescrever o buffer, as views novas ficam fora do declarado e
         // o loader rejeita o GLB.
         doc["buffers"] = serde_json::json!([{ "byteLength": out_bin.len() }]);
+        widen_uastc_channel_layout(&doc, &mut out_bin);
         return write_glb(&doc, &out_bin);
     }
 
@@ -384,6 +385,9 @@ pub fn decode_glb(bytes: &[u8]) -> Result<Vec<u8>> {
     }
     strip_extension(&mut doc, "extensionsRequired", QUANTIZATION);
     doc["buffers"] = serde_json::json!([{ "byteLength": out_bin.len() }]);
+    // Last, on the FINAL buffer: the layout lives inside the KTX2 payload, so
+    // it has to be patched where the image bytes actually ended up.
+    widen_uastc_channel_layout(&doc, &mut out_bin);
 
     write_glb(&doc, &out_bin)
 }
@@ -428,6 +432,105 @@ fn lift_basisu_sources(doc: &mut serde_json::Value) {
         strip_extension(doc, "extensionsUsed", BASISU);
         strip_extension(doc, "extensionsRequired", BASISU);
     }
+}
+
+/// KTX2 file identifier (spec §3.1).
+const KTX2_IDENTIFIER: [u8; 12] = [
+    0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A,
+];
+/// Byte offset of `dfdByteOffset` in a KTX2 header: 12 (identifier) + 36 (nine
+/// `u32` header fields) (spec §3.1).
+const KTX2_DFD_OFFSET_FIELD: usize = 48;
+/// First byte of the first sample descriptor in a KTX2 data-format descriptor:
+/// 4 (`dfdTotalSize`) + 4 (`vendorIdAndVersion`) + 4 (`descriptorBlockSize`) +
+/// 4 (color model/primaries/transfer/flags) + 4 (`texelBlockDimension`) + 8
+/// (`bytesPlane`) (spec §3.10).
+const KTX2_DFD_FIRST_SAMPLE: usize = 28;
+/// `channelType` of the first sample within its descriptor: `bitOffset` (2) +
+/// `bitLength` (1) (spec §3.10).
+const KTX2_DFD_SAMPLE_CHANNEL_TYPE: usize = 3;
+/// `KHR_DF_CHANNEL_UASTC_RRR` — the single-channel UASTC layout.
+const UASTC_CHANNEL_RRR: u8 = 4;
+/// `KHR_DF_CHANNEL_UASTC_RGB` — the three-channel UASTC layout.
+const UASTC_CHANNEL_RGB: u8 = 0;
+
+/// Rewrites single-channel UASTC textures to the three-channel layout.
+///
+/// Workaround for a Bevy 0.19 bug that makes an entire GLB unloadable. The
+/// pool's KTX2 textures carry a *channel layout* in their data-format
+/// descriptor, and `bevy_image::ktx2::get_transcoded_formats` maps
+/// `UASTC_RRR` to **BC4**. It then sizes the slice handed to the UASTC
+/// transcoder with the *target* format's block size —
+///
+/// ```text
+/// let block_bytes = texture_format_info.block_copy_size(None).unwrap();
+/// let level_bytes = (num_blocks_x * num_blocks_y * block_bytes) as usize;
+/// transcoder.transcode_slice(&level_data[offset..(offset + level_bytes)], …)
+/// ```
+///
+/// — but a UASTC block is **always 16 bytes**, while a BC4 block is 8. Half
+/// the level is passed to a transcoder that needs all of it, and the load
+/// dies with `Failed to transcode mip level 0 from UASTC to BC4:
+/// TranscodeFailed` (BC5/BC7 paths are 16 bytes and unaffected, which is why
+/// only `RRR` — an ambient-occlusion or roughness map exported as one
+/// channel — breaks).
+///
+/// Declaring the texture `RGB` sends it down the BC7 path, where the block
+/// sizes agree. Nothing is lost: UASTC codes four channels in every block
+/// whatever the descriptor says, and the material samples the red channel,
+/// so the widen is a re-labelling, not a conversion. The cost is BC7's 16
+/// bytes per block instead of BC4's 8 — twice the VRAM for those maps, and
+/// the difference between "an invisible cactus" and "a cactus".
+///
+/// Returns how many textures were rewritten.
+fn widen_uastc_channel_layout(doc: &serde_json::Value, bin: &mut [u8]) -> usize {
+    let Some(views) = doc.get("bufferViews").and_then(|v| v.as_array()) else {
+        return 0;
+    };
+    let Some(images) = doc.get("images").and_then(|v| v.as_array()) else {
+        return 0;
+    };
+    let mut widened = 0;
+    for image in images {
+        // An image with a `uri` lives in a sibling file we do not control.
+        if image.get("uri").is_some() {
+            continue;
+        }
+        let Some(view) = image
+            .get("bufferView")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|index| views.get(index as usize))
+        else {
+            continue;
+        };
+        let start = view
+            .get("byteOffset")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as usize;
+        let length = view
+            .get("byteLength")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as usize;
+        let Some(end) = start.checked_add(length).filter(|end| *end <= bin.len()) else {
+            continue;
+        };
+        let data = &mut bin[start..end];
+        if data.len() < KTX2_DFD_OFFSET_FIELD + 4 || data[..12] != KTX2_IDENTIFIER {
+            continue;
+        }
+        let dfd = u32::from_le_bytes([
+            data[KTX2_DFD_OFFSET_FIELD],
+            data[KTX2_DFD_OFFSET_FIELD + 1],
+            data[KTX2_DFD_OFFSET_FIELD + 2],
+            data[KTX2_DFD_OFFSET_FIELD + 3],
+        ]) as usize;
+        let channel_type = dfd + KTX2_DFD_FIRST_SAMPLE + KTX2_DFD_SAMPLE_CHANNEL_TYPE;
+        if channel_type < data.len() && data[channel_type] == UASTC_CHANNEL_RRR {
+            data[channel_type] = UASTC_CHANNEL_RGB;
+            widened += 1;
+        }
+    }
+    widened
 }
 
 /// Removes `name` from an extension list, dropping the list when it empties.
@@ -1047,6 +1150,54 @@ mod tests {
         );
     }
 
+    /// End-to-end proof on the real pool: a `UASTC_RRR` texture must come out
+    /// of the reader labelled `RGB`.
+    ///
+    /// `desert/cactus_lod0.glb` and `desert/ruin_pillar_lod0.glb` are the
+    /// production cases — both shipped a single-channel AO map and both made
+    /// the engine log `Failed to transcode mip level 0 from UASTC to BC4`
+    /// before this rewrite existed.
+    #[test]
+    fn test_pool_asset_with_single_channel_austc_is_widened() {
+        let pool = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../Viber/examples/shared-assets/public/assets/meshes");
+        let mut checked = 0;
+        for asset in ["desert/cactus_lod0.glb", "desert/ruin_pillar_lod0.glb"] {
+            let path = pool.join(asset);
+            if !path.is_file() {
+                eprintln!("{asset} absent — skipping");
+                continue;
+            }
+            let bytes = std::fs::read(&path).expect("reads");
+            let decoded = decode_glb(&bytes).expect("decodes");
+            let json = json_chunk(&decoded).expect("json chunk");
+            let bin = bin_chunk(&decoded).expect("bin chunk");
+            let mut probe = bin.to_vec();
+            // Every KTX2 image in the decoded file must now be non-RRR: the
+            // rewrite already ran, so a second pass finds nothing to do.
+            assert_eq!(
+                widen_uastc_channel_layout(&json, &mut probe),
+                0,
+                "{asset}: reader left a single-channel UASTC texture behind"
+            );
+            // And the images really are KTX2, so the assertion above means
+            // something.
+            let ktx2_images = json["images"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter(|i| i["mimeType"].as_str() == Some("image/ktx2"))
+                        .count()
+                })
+                .unwrap_or(0);
+            assert!(ktx2_images > 0, "{asset}: expected embedded KTX2 images");
+            checked += 1;
+        }
+        if checked == 0 {
+            eprintln!("pool absent — skipping");
+        }
+    }
+
     /// A decoded GLB must not *require* extensions the reader cannot name.
     ///
     /// Bevy refuses the whole file when `extensionsRequired` lists something
@@ -1201,6 +1352,16 @@ mod tests {
         serde_json::from_slice(bytes.get(20..20 + len)?).ok()
     }
 
+    /// The BIN chunk's payload: past the GLB header, the JSON chunk and the
+    /// second chunk header. `write_glb` pads the JSON chunk, so the offsets
+    /// are exact.
+    fn bin_chunk(bytes: &[u8]) -> Option<&[u8]> {
+        let json_len = u32::from_le_bytes(bytes.get(12..16)?.try_into().ok()?) as usize;
+        let data = 20 + json_len + 8;
+        let len = u32::from_le_bytes(bytes.get(data - 8..data - 4)?.try_into().ok()?) as usize;
+        bytes.get(data..data + len)
+    }
+
     use bevy::asset::io::file::FileAssetReader;
 
     /// The reader must actually decode when it is handed a compressed asset —
@@ -1281,5 +1442,82 @@ mod tests {
             }
         }
         None
+    }
+
+    /// Builds the smallest KTX2 stream that carries a data-format descriptor:
+    /// identifier + the nine header fields + the descriptor offset, then a
+    /// DFD whose first sample has `channel_type` = `channel`.
+    fn ktx2_with_channel(channel: u8) -> Vec<u8> {
+        /// Where the fixture puts its DFD: 12 + 36 header + 32 index.
+        const DFD_OFFSET: u32 = 80;
+        let mut bytes = KTX2_IDENTIFIER.to_vec();
+        bytes.extend_from_slice(&[0_u8; 36]);
+        // dfdByteOffset, then dfdByteLength / kv pair / supercompression.
+        bytes.extend_from_slice(&DFD_OFFSET.to_le_bytes());
+        bytes.extend_from_slice(&[0_u8; 4]);
+        bytes.extend_from_slice(&[0_u8; 24]);
+        assert_eq!(bytes.len(), DFD_OFFSET as usize);
+        let mut dfd = vec![0_u8; KTX2_DFD_FIRST_SAMPLE + KTX2_DFD_SAMPLE_CHANNEL_TYPE + 1];
+        dfd[KTX2_DFD_FIRST_SAMPLE + KTX2_DFD_SAMPLE_CHANNEL_TYPE] = channel;
+        bytes.extend_from_slice(&dfd);
+        bytes
+    }
+
+    /// A GLB whose single image is `image`, embedded in the BIN chunk.
+    fn glb_with_image(image: Vec<u8>) -> (serde_json::Value, Vec<u8>) {
+        let doc = serde_json::json!({
+            "asset": { "version": "2.0" },
+            "images": [{ "mimeType": "image/ktx2", "bufferView": 0 }],
+            "bufferViews": [{ "buffer": 0, "byteOffset": 0, "byteLength": image.len() }],
+        });
+        (doc, image)
+    }
+
+    /// The bug this fix exists for: Bevy sizes the UASTC slice with the BC4
+    /// block size (8) instead of UASTC's own 16, so an `RRR` texture kills the
+    /// whole GLB. Re-labelling it `RGB` sends it down the BC7/16-byte path.
+    #[test]
+    fn test_widen_uastc_channel_layout_rewrites_rrr() {
+        let (doc, mut bin) = glb_with_image(ktx2_with_channel(UASTC_CHANNEL_RRR));
+        let at = KTX2_DFD_OFFSET_FIELD;
+        let dfd = u32::from_le_bytes(bin[at..at + 4].try_into().unwrap()) as usize;
+        let byte = dfd + KTX2_DFD_FIRST_SAMPLE + KTX2_DFD_SAMPLE_CHANNEL_TYPE;
+        assert_eq!(bin[byte], UASTC_CHANNEL_RRR, "fixture starts as RRR");
+
+        assert_eq!(widen_uastc_channel_layout(&doc, &mut bin), 1);
+        assert_eq!(bin[byte], UASTC_CHANNEL_RGB);
+    }
+
+    /// The layouts Bevy already handles must survive untouched — a widen is a
+    /// workaround, not a blanket re-encode.
+    #[test]
+    fn test_widen_uastc_channel_layout_leaves_other_layouts_alone() {
+        for channel in [UASTC_CHANNEL_RGB, 3, 5, 6] {
+            let (doc, mut bin) = glb_with_image(ktx2_with_channel(channel));
+            assert_eq!(widen_uastc_channel_layout(&doc, &mut bin), 0, "{channel}");
+            let at = KTX2_DFD_OFFSET_FIELD;
+            let dfd = u32::from_le_bytes(bin[at..at + 4].try_into().unwrap()) as usize;
+            let byte = dfd + KTX2_DFD_FIRST_SAMPLE + KTX2_DFD_SAMPLE_CHANNEL_TYPE;
+            assert_eq!(bin[byte], channel);
+        }
+    }
+
+    #[test]
+    fn test_widen_uastc_channel_layout_ignores_foreign_and_external_images() {
+        // Not a KTX2 stream: the descriptor offset would be read from garbage.
+        let (doc, mut bin) = glb_with_image(vec![0_u8; 64]);
+        assert_eq!(widen_uastc_channel_layout(&doc, &mut bin), 0);
+        assert!(bin.iter().all(|b| *b == 0), "nothing rewritten");
+
+        // An external image is a sibling file the reader does not own.
+        let mut doc = serde_json::json!({
+            "images": [{ "mimeType": "image/ktx2", "uri": "a.ktx2" }],
+            "bufferViews": [{ "buffer": 0, "byteOffset": 0, "byteLength": 64 }],
+        });
+        let mut bin = ktx2_with_channel(UASTC_CHANNEL_RRR);
+        assert_eq!(widen_uastc_channel_layout(&doc, &mut bin), 0);
+        // A `bufferView` past the end of the BIN chunk must not panic.
+        doc["images"] = serde_json::json!([{ "mimeType": "image/ktx2", "bufferView": 3 }]);
+        assert_eq!(widen_uastc_channel_layout(&doc, &mut bin), 0);
     }
 }

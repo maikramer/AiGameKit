@@ -431,6 +431,9 @@ pub fn startup(world: &mut World) {
     if let Some(border) = pending_worldsys.border {
         world.insert_resource(border);
     }
+    if let Some(scene) = pending_worldsys.interior_scene {
+        world.insert_resource(scene);
+    }
     if !pending_worldsys.biomes.is_empty() {
         world.insert_resource(crate::worldsys::BiomeRegions {
             list: pending_worldsys.biomes.clone(),
@@ -503,6 +506,7 @@ struct MaterialKey {
     emissive: Option<[u32; 3]>,
     texture: Option<String>,
     texture_tile: Option<u32>,
+    normal_map: Option<String>,
     world_tiled: bool,
 }
 
@@ -516,6 +520,7 @@ fn material_key(spec: &MaterialSpec, world_tiled: bool) -> MaterialKey {
         emissive: spec.emissive.map(|c| c.map(bits)),
         texture: spec.texture.clone(),
         texture_tile: spec.texture_tile.map(bits),
+        normal_map: spec.normal_map.clone(),
         world_tiled,
     }
 }
@@ -1064,6 +1069,7 @@ fn spawn_entity(
                     ),
                     capacity,
                     culled: false,
+                    idle: false,
                 },
             ));
         }
@@ -1134,9 +1140,20 @@ fn spawn_entity(
                     {
                         light.soft_shadows_enabled = true;
                     }
-                    // Contact shadows por luz: o raymarch da depth cobre os
-                    // pés do caster onde o shadow map não tem resolução.
-                    light.contact_shadows_enabled = true;
+                    // Contact shadows: NÃO na PointLight. Em Bevy 0.19 o
+                    // raymarch da depth (`calculate_contact_shadow`) está
+                    // DENTRO do loop de cada luz em `pbr_functions.wgsl` — não
+                    // é um passe único de ecrã, é um raymarch por luz e por
+                    // pixel. Com até `LIGHT_BUDGET` (12) tochas no cluster de
+                    // um pixel, são 12 raymarches fullscreen de 24 passos por
+                    // frame para um raio de 0,5 m que o shadow map da lanterna
+                    // já resolve: ganho visual nulo, conta real. A técnica fica
+                    // no SOL, que é onde faz falta (herói→chão, poste→calçada).
+                    // `VIBER_POINT_CONTACT_SHADOWS=1` devolve-o (A/B de QA).
+                    light.contact_shadows_enabled = matches!(
+                        std::env::var("VIBER_POINT_CONTACT_SHADOWS").as_deref(),
+                        Ok("1") | Ok("true") | Ok("on") | Ok("yes")
+                    );
                 }
             }
             entity.insert(light);
@@ -1473,6 +1490,12 @@ fn spawn_entity(
                 margin: *margin,
             });
         }
+        EntityKind::InteriorScene { min, max } => {
+            ctx.worldsys.interior_scene = Some(crate::worldsys::InteriorSceneConfig {
+                min: *min,
+                max: *max,
+            });
+        }
         EntityKind::EngineConfig { tag, attrs } => {
             ctx.worldsys
                 .configs
@@ -1562,6 +1585,15 @@ fn build_material(
             asset_server.load(url.trim_start_matches('/').to_owned())
         };
         material.base_color_texture = Some(handle);
+    }
+    if let Some(url) = spec.normal_map.as_deref() {
+        // O normal do pool é LINEAR: carregar pelo mesmo caminho da base
+        // color dava sRGB e o mapa saía esbranquiçado (normais empurradas
+        // para cima e o relevo a desaparecer). `load_tiled_image` regista o
+        // sampler e devolve o handle cru do AssetServer, que já é linear
+        // quando o ficheiro é KTX2 de dados.
+        let handle = asset_server.load(url.trim_start_matches('/').to_owned());
+        material.normal_map_texture = Some(handle);
     }
     materials.add(material)
 }

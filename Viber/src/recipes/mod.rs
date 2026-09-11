@@ -79,6 +79,7 @@ pub const KNOWN_TAGS: &[&str] = &[
     "weather",
     "biomeregion",
     "worldborder",
+    "interiorscene",
     "navmesh",
     "spawngate",
     "projectiletemplate",
@@ -194,6 +195,11 @@ pub struct MaterialSpec {
     /// `texture-tile-size` — metros por repetição da textura (UVs da
     /// primitiva são 0..1; sem isso a textura estica pela malha toda).
     pub texture_tile: Option<f32>,
+    /// `normal-map` (ou `normal-map-url`) — mapa de normais em espaço
+    /// tangente do pool, para a primitiva deixar de ser uma superfície lisa.
+    /// Sem isto um soalho/parede texturado lê-se plano: o albedo dá o padrão,
+    /// mas a luz continua a bater numa face perfeitamente lisa.
+    pub normal_map: Option<String>,
 }
 
 /// `place="at: x z; …"` de uma `<Composition>` — colocação explícita no
@@ -504,6 +510,13 @@ pub enum EntityKind {
         radius: f32,
         warn_seconds: f32,
         margin: f32,
+    },
+    /// `<InteriorScene at size>` — retângulo declarado como bolsa de interior
+    /// (fora da área do mapa): isento do clamp de fronteira, sem bioma e sem
+    /// chuva. Ver [`crate::worldsys::InteriorSceneConfig`].
+    InteriorScene {
+        min: [f32; 2],
+        max: [f32; 2],
     },
     /// Engine config element kept as raw data (`Sky`, `NavMesh`,
     /// `SpawnGate`, `ProjectileTemplate`, `PostFxDebugToggle`,
@@ -1220,6 +1233,7 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
         "weather" => finish_weather(node, ctx).map(Some),
         "biomeregion" => finish_biome_region(node, ctx).map(Some),
         "worldborder" => finish_world_border(node, ctx).map(Some),
+        "interiorscene" => finish_interior_scene(node, ctx).map(Some),
         "questtracker" | "waypointarrow" => finish_hud_element(node, ctx).map(Some),
         "musiclayer" => match node.attr("layer").map(str::trim).filter(|s| !s.is_empty()) {
             Some(layer) => finish_music_layer(node, layer, ctx).map(Some),
@@ -1602,6 +1616,7 @@ fn finish_primitive(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             }
             "texture" | "texture-url" => material.texture = Some(value),
             "texture-tile-size" => material.texture_tile = Some(values::parse_f32(&value, &kctx)?),
+            "normal-map" | "normal-map-url" => material.normal_map = Some(value),
             other => ctx
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
@@ -2641,6 +2656,54 @@ fn finish_world_border(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
             radius,
             warn_seconds,
             margin,
+        },
+        children: Vec::new(),
+    })
+}
+
+/// `<InteriorScene at="x z" size="w d">` — a bolsa de interior (ver
+/// [`crate::worldsys::InteriorSceneConfig`]).
+///
+/// `at` é o CENTRO e `size` a extensão total (a mesma convenção do
+/// `<TerrainPad>`), para o retângulo se ler como "a cena ocupa isto".
+fn finish_interior_scene(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let off = terrain_offset(&common, node, ctx);
+    let mut center: Option<[f32; 2]> = None;
+    let mut size: Option<[f32; 2]> = None;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "at" => {
+                let p = values::parse_vec2(&value, &kctx)?;
+                center = Some([p[0] + off.x, p[1] + off.y]);
+            }
+            "size" => size = Some(values::parse_vec2(&value, &kctx)?),
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    let (Some(center), Some(size)) = (center, size) else {
+        bail!(
+            "{ctx_tag}: `at` with an \"x z\" centre and `size` with a \"w d\" extent are both required"
+        );
+    };
+    if !(size[0] > 0.0) || !(size[1] > 0.0) || !size[0].is_finite() || !size[1].is_finite() {
+        bail!("{ctx_tag}: size must be two positive, finite numbers (got {size:?})");
+    }
+    let half = [size[0] * 0.5, size[1] * 0.5];
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        physics: common.physics,
+        destructible: common.destructible,
+        kind: EntityKind::InteriorScene {
+            min: [center[0] - half[0], center[1] - half[1]],
+            max: [center[0] + half[0], center[1] + half[1]],
         },
         children: Vec::new(),
     })
@@ -4176,6 +4239,7 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 | EntityKind::Weather { .. }
                 | EntityKind::BiomeRegion { .. }
                 | EntityKind::WorldBorder { .. }
+                | EntityKind::InteriorScene { .. }
                 | EntityKind::EngineConfig { .. } => out.world_systems += 1,
             }
             walk(&spec.children, next_in_composition, out);
@@ -5850,5 +5914,33 @@ mod composition_tests {
         assert_eq!(summary.composition_parts, 2);
         assert_eq!(summary.primitives, 2);
         assert_eq!(summary.point_lights, 1);
+    }
+
+    /// `<InteriorScene at size>` → retângulo min/max centrado em `at`.
+    #[test]
+    fn test_interior_scene_parses_center_and_size() {
+        let (spec, warns) = parse_one(&node(
+            "InteriorScene",
+            &[("at", "2600 2700"), ("size", "240 200")],
+        ))
+        .unwrap();
+        assert!(warns.is_empty(), "{warns:?}");
+        let EntityKind::InteriorScene { min, max } = spec.kind else {
+            panic!("esperava InteriorScene, veio {:?}", spec.kind);
+        };
+        assert_eq!(min, [2480.0, 2600.0]);
+        assert_eq!(max, [2720.0, 2800.0]);
+        // A translação do ancestral desloca o centro (contrato das ground
+        // features: um `<InteriorScene>` dentro de um `<Group>` segue o grupo).
+        assert!(parse_one(&node("InteriorScene", &[("at", "0 0")])).is_err());
+        assert!(parse_one(&node("InteriorScene", &[("size", "10 10")])).is_err());
+        assert!(
+            parse_one(&node(
+                "InteriorScene",
+                &[("at", "0 0"), ("size", "0 10")]
+            ))
+            .is_err(),
+            "tamanho nulo tem de ser recusado"
+        );
     }
 }

@@ -52,7 +52,7 @@ use bevy::core_pipeline::prepass::{DepthPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::light::{FogVolume, VolumetricFog};
 use bevy::pbr::{ContactShadows, ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
-use bevy::post_process::auto_exposure::AutoExposure;
+use bevy::post_process::auto_exposure::{AutoExposure, AutoExposureCompensationCurve};
 use bevy::post_process::bloom::{Bloom, BloomPrefilter};
 use bevy::post_process::dof::{DepthOfField, DepthOfFieldMode};
 use bevy::post_process::effect_stack::{ChromaticAberration, Vignette};
@@ -111,6 +111,22 @@ fn taa_enabled() -> bool {
 /// em mundos pesados `VIBER_NO_VOLUMETRICS=1` devolve o orçamento.
 fn volumetrics_enabled() -> bool {
     std::env::var_os("VIBER_NO_VOLUMETRICS").is_none()
+}
+
+/// Passos do raymarch volumétrico (`VIBER_VOLUMETRIC_STEPS`).
+///
+/// É o único custo do volumétrico que se regula: o passe é full-res e não tem
+/// knob de resolução interna. O `jitter` + o TAA acumulam os passos ao longo
+/// dos frames, portanto a 40 passos a imagem CONVERGIDA é praticamente a mesma
+/// (o que sobe é o ruído por frame, que o TAA já tem de limpar por causa do
+/// PCSS). O gate existe para o A/B de QA: medir o frame e comparar a imagem
+/// antes de mexer no default.
+fn volumetric_steps() -> u32 {
+    std::env::var("VIBER_VOLUMETRIC_STEPS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|steps| *steps > 0)
+        .unwrap_or(64)
 }
 
 /// Marcador do [`FogVolume`] cinemático que segue o herói.
@@ -184,6 +200,99 @@ pub fn ev100_for_exposure_multiplier(base_ev100: f32, multiplier: f32) -> f32 {
     base_ev100 - multiplier.log2()
 }
 
+/// Teto do ganho da exposição AUTOMÁTICA nas cenas escuras, em stops.
+///
+/// O `AutoExposure` expõe para a luminância média da cena. De noite o mundo
+/// físico fica ~6 stops abaixo do meio-cinza e o medidor satura no máximo
+/// (+6 EV) — mas o céu e a névoa vivem na ESCALA DA PALETA (o domo é um
+/// material custom que nunca recebe a exposição física, ver `sky.rs`;
+/// `ambient.rs` usa a mesma escala para o fog se fundir com o horizonte do
+/// domo). Multiplicar a paleta noturna (azul-escuro ~0.04) por 2^6 põe o
+/// frame inteiro a branco — o "chuva à noite = ecrã branco" (repro ao vivo
+/// 2026-09-10 no pântano: fog medido em 0.048 de luminância, frame a 236/255;
+/// com a exposição neutralizada a mesma cena é uma noite azul legível).
+///
+/// 0.5 = a noite fica a NOITE (o ganho que resta é o mínimo para as fontes
+/// quentes poparem); medido no simples-rpg, pântano com chuva a 0.9, 23:36 —
+/// frame 127/255 com 2.0, 83/255 com 0.5, 71/255 com 0.0. O dia, o crepúsculo
+/// e os interiores NÃO são tocados: a rampa só começa a apertar em
+/// [`NIGHT_LIFT_KNEE_EV`]. `VIBER_NO_AECURVE=1` devolve a curva plana (o
+/// comportamento sem teto) para A/B.
+pub const NIGHT_LIFT_CAP_EV: f32 = 0.5;
+
+/// Luminância média (log2, a unidade do histograma) a partir da qual o teto
+/// começa a apertar. 3.0 = o comportamento de sempre fica INTACTO para cenas
+/// até 3 stops abaixo do meio-cinza (crepúsculo, sombra funda, interiores) e o
+/// aperto faz-se em rampa até ao dobro (6 stops = noite cheia, onde o medidor
+/// satura). Sem esta folga, o teto escurecia também a alvorada/crepúsculo que
+/// o user aprovou.
+pub const NIGHT_LIFT_KNEE_EV: f32 = 3.0;
+
+/// Compensação (stops) que o medidor soma ao alvo, para uma cena de
+/// luminância média `x` (log2) — o `y` da curva de
+/// [`night_capped_compensation_curve`], e a única fonte da regra:
+/// `alvo = comp(x) − x`.
+///
+/// * `x ≥ −KNEE`: `0` — o alvo de sempre (`−x`, expor para o meio-cinza):
+///   dia, crepúsculo, sombra funda e interiores ficam exactamente como eram.
+/// * `x ≤ −2·KNEE`: `x + CAP` — o alvo fica preso em [`NIGHT_LIFT_CAP_EV`].
+/// * Entre os dois: rampa linear do `y` entre `0` e `−2·KNEE + CAP`, para o
+///   shutter não dar um degrau ao escurecer. (Rampa no `y` — rampear o ALVO
+///   não é monótono, porque `−x` cresce mais depressa do que a rampa aperta.)
+pub fn auto_exposure_compensation(x: f32) -> f32 {
+    let knee = NIGHT_LIFT_KNEE_EV;
+    if !x.is_finite() {
+        return 0.0;
+    }
+    if x >= -knee {
+        0.0
+    } else if x <= -2.0 * knee {
+        x + NIGHT_LIFT_CAP_EV
+    } else {
+        let s = (-x - knee) / knee;
+        (NIGHT_LIFT_CAP_EV - 2.0 * knee) * s
+    }
+}
+
+/// Ganho (stops) que a exposição automática aplica a uma cena de luminância
+/// média `x` (log2): `comp(x) − x`. Ver [`auto_exposure_compensation`].
+pub fn auto_exposure_target_lift(x: f32) -> f32 {
+    auto_exposure_compensation(x) - x
+}
+
+/// `AutoExposureCompensationCurve` que implementa
+/// [`auto_exposure_compensation`]: o medidor soma-a ao alvo.
+///
+/// A curva é a API desenhada pelo Bevy para isto (asset próprio, amostrado
+/// por LUT de 256 valores no passe do medidor) — não há knob de "ganho
+/// máximo" no componente.
+pub fn night_capped_compensation_curve() -> AutoExposureCompensationCurve {
+    use bevy::math::cubic_splines::LinearSpline;
+    AutoExposureCompensationCurve::from_curve(LinearSpline::new(night_capped_curve_points()))
+        .unwrap_or_default()
+}
+
+/// Pontos `(x = luminância média em log2, y = compensação em stops)` da curva
+/// de [`night_capped_compensation_curve`] — amostram
+/// [`auto_exposure_compensation`] nos cepos (e no escuro fundo, onde o valor
+/// já é constante); separados para o teste poder verificar que a curva é
+/// construível (monótona, sem descontinuidades).
+fn night_capped_curve_points() -> [bevy::math::Vec2; 6] {
+    use bevy::math::vec2;
+    let knee = NIGHT_LIFT_KNEE_EV;
+    let at = |x: f32| vec2(x, auto_exposure_compensation(x));
+    [
+        // Escuro fundo: o teto já está preso (dois pontos só para a LUT
+        // cobrir toda a gama do histograma).
+        at(-12.0),
+        at(-2.0 * knee),
+        at(-1.5 * knee),
+        at(-knee),
+        at(0.0),
+        at(8.0),
+    ]
+}
+
 /// Pulso de pós-processo num impacto de combate: `stops` de exposição
 /// (positivo CLAREIA um instante — hit 0.25, crítico/finisher 0.5, abate 0.7;
 /// negativo ESCURECE — o "ai" do dano recebido) + `bloom_add` de
@@ -253,18 +362,32 @@ fn attach_postfx_to_cameras(
     mut commands: Commands,
     state: Res<PostFxState>,
     cameras: Query<Entity, (With<Camera3d>, Without<Bloom>)>,
+    mut curves: ResMut<Assets<AutoExposureCompensationCurve>>,
+    // Uma curva por processo, partilhada por todas as câmaras.
+    mut curve: Local<Option<Handle<AutoExposureCompensationCurve>>>,
 ) {
+    let compensation_curve = curve
+        .get_or_insert_with(|| {
+            if std::env::var_os("VIBER_NO_AECURVE").is_some() {
+                info!("postfx: teto da exposição automática DESLIGADO (VIBER_NO_AECURVE)");
+                curves.add(AutoExposureCompensationCurve::default())
+            } else {
+                curves.add(night_capped_compensation_curve())
+            }
+        })
+        .clone();
     for camera in &cameras {
         commands.entity(camera).insert((
             Bloom {
                 intensity: state.bloom,
                 // O preset NATURAL tem threshold 0.0: COM TUDO a brilhar, o
                 // boost de baixa-frequência (0.7) transforma regiões lisas e
-                // grandes de HDR alto — o domo do céu em radiância de cena
-                // (~400, ver sky.wgsl) — numa wash de ecrã inteiro (superfícies
-                // texturizadas cancelam-se nos mips; um gradiente liso não).
-                // Threshold 700 deixa o glow para o que é realmente brilhante:
-                // o disco solar e fontes emissivas à noite.
+                // grandes de HDR alto — o domo do céu, que escreve a PALETA
+                // directamente no alvo HDR (SKY_RADIANCE = 1, ver sky.rs) —
+                // numa wash de ecrã inteiro (superfícies texturizadas
+                // cancelam-se nos mips; um gradiente liso não). Threshold 700
+                // deixa o glow para o que é realmente brilhante: o disco
+                // solar e fontes emissivas à noite.
                 prefilter: BloomPrefilter {
                     threshold: 700.0,
                     threshold_softness: 0.5,
@@ -316,10 +439,15 @@ fn attach_postfx_to_cameras(
             // e o meio-dia fecha. Combina com o EV autoral do bioma
             // (compensação multiplicativa). Velocidades cinematográficas:
             // abre devagar, fecha mais devagar ainda.
+            //
+            // A CURVA limita a abertura a [`NIGHT_LIFT_CAP_EV`] nos escuros:
+            // sem ela o medidor satura de noite e abre os +6 EV do máximo,
+            // que na escala da paleta (céu/névoa) é um frame branco.
             AutoExposure {
                 range: -6.0..=8.0,
                 speed_brighten: 1.2,
                 speed_darken: 0.5,
+                compensation_curve: compensation_curve.clone(),
                 ..AutoExposure::default()
             },
             // DoF cinemático subtil: foco no herói (o `drive_dof_focus`
@@ -367,6 +495,12 @@ fn attach_postfx_to_cameras(
                 bevy::light::ShadowFilteringMethod::Gaussian,
             ));
         }
+        // SSR da água (`VIBER_WATER_SSR=1`, src/water_ssr.rs): o marcador
+        // ativa o passe no Core3d (entre o TAA e o tonemapping). Os prepasses
+        // depth/normal já foram inseridos acima para o SSAO.
+        if crate::water_ssr::water_ssr_requested() {
+            commands.entity(camera).insert(crate::water_ssr::WaterSsr);
+        }
         // Volumetrics (god-rays + volume de névoa que segue o herói):
         // LIGADOS por omissão — desligar com `VIBER_NO_VOLUMETRICS=1` (ver
         // `volumetrics_enabled`; apagavam o frame na bisseção r1, renderizam
@@ -384,7 +518,7 @@ fn attach_postfx_to_cameras(
                 // desloca a origem do raio por noise — o TAA acumula e
                 // dissolve as faixas.
                 jitter: 1.0,
-                step_count: 64,
+                step_count: volumetric_steps(),
                 ..VolumetricFog::default()
             });
         }
@@ -504,6 +638,30 @@ fn drive_dof_focus(
     }
 }
 
+/// Densidade BASE do volume de névoa (`FogVolume::density_factor`).
+///
+/// É a ÚNICA fonte do valor: o `drive_fog_texture` reescreve o campo em TODOS
+/// os frames (hora/vento/pântano), portanto o que o spawn põe aqui só dura até
+/// ao primeiro Update — com o número duplicado, baixar a densidade no spawn
+/// não mudava nada (auditoria 2026-09-10: o driver fixava 0.10 e o "dia
+/// leitoso" continuava).
+const FOG_VOLUME_DENSITY: f32 = 0.07;
+
+/// Bónus de densidade do bioma pântano (id contém "swamp") — a bruma que o
+/// mundo pede ali; o resto do mundo usa a base.
+const FOG_VOLUME_SWAMP_BONUS: f32 = 0.10;
+
+/// Fração da densidade do volume que sobrevive à NOITE (o resto escala com o
+/// dia). Ver [`drive_fog_texture`]: o volume existe para os god-rays, que são
+/// um efeito de SOL — à noite o `light_attenuation` do bevy
+/// (`exp(−densidade × raio do AABB × (abs+scat))`, ≈ 0 com estes números)
+/// apaga a contribuição da luz (sol E lanternas) e o que sobra é um véu que
+/// encobre a distância sem dar nada em troca. **0 = desligado à noite**; medido
+/// no `qa-raster` à chuva: a densidade a 1/5 ainda comia 1/3 do contraste que
+/// a cena ganha sem volume nenhum.
+/// `VIBER_NO_VOLUMETRICS=1` desliga-o em absoluto (A/B).
+const FOG_VOLUME_NIGHT_ATTENUATION: f32 = 0.0;
+
 /// Spawn do volume de névoa volumétrica (god-rays): um cubo 900×600×900 m
 /// com TEXTURA 3D de densidade FBM, raymarched contra a depth — o
 /// [`bevy::light::VolumetricLight`] do sol (spawn.rs) acende-o quando a luz
@@ -517,9 +675,12 @@ fn spawn_fog_volume(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             // God-rays ADITIVOS: absorção ~nula — a transmissão nunca
             // escurece o céu para breu (as "faixas pretas" do topo); a
             // névoa SÓ soma luz espalhada na direcção do sol.
+            // (2026-09-09: scattering/densidade baixados — o véu aditivo
+            // branco lavava o céu inteiro visto do chão, o "dia leitoso"
+            // do repro do utilizador; os shafts continuam, mais discretos.)
             absorption: 0.02,
-            scattering: 0.30,
-            density_factor: 0.12,
+            scattering: 0.16,
+            density_factor: FOG_VOLUME_DENSITY,
             // Forward-scattering alto: os shafts ganham força quando a câmara
             // aponta para a fonte — o comportamento cinematográfico.
             scattering_asymmetry: 0.65,
@@ -729,9 +890,22 @@ fn drive_fog_texture(
         let speed = 0.004 * time.delta_secs();
         volume.density_texture_offset.x += wind_x * speed;
         volume.density_texture_offset.z += wind_z * speed;
-        // Engrossa à alvorada/crepúsculo e no pântano; meio-dia limpo.
+        // Engrossa à alvorada/crepúsculo e no pântano; meio-dia limpo. A base
+        // é a MESMA do spawn ([`FOG_VOLUME_DENSITY`]) — escrever aqui um
+        // literal tornava o valor do spawn letra morta.
+        //
+        // ESCALA COM O DIA ([`FOG_VOLUME_NIGHT_ATTENUATION`]): o volume
+        // existe para os god-rays, que são um efeito de SOL. À noite a luz
+        // direcional NÃO o acende (o `light_attenuation` do bevy é
+        // `exp(−densidade × raio do AABB × (abs+scat))` ≈ 0 com estes
+        // números) e ele só soma o véu — encobre a distância sem dar nada em
+        // troca. Medido no `qa-raster` de noite com chuva: sem o volume o
+        // contraste da cena sobe ~50 % (sd 3.2 → 4.8) e o frame clareia;
+        // no pântano (que leva o bónus) o véu era o pior do mundo.
         let golden_haze = atmosphere.golden * 0.06;
-        let mut density = 0.10 + golden_haze;
+        let day_att = FOG_VOLUME_NIGHT_ATTENUATION
+            + (1.0 - FOG_VOLUME_NIGHT_ATTENUATION) * atmosphere.day;
+        let mut density = FOG_VOLUME_DENSITY * day_att + golden_haze;
         if let (Some(biomes), Ok(player)) = (biomes.as_deref(), players.single()) {
             let pos = player.translation();
             if biomes
@@ -739,10 +913,14 @@ fn drive_fog_texture(
                 .iter()
                 .any(|b| b.id.contains("swamp") && crate::ambient::point_in_polygon(pos.x, pos.z, &b.polygon))
             {
-                density += 0.10;
+                density += FOG_VOLUME_SWAMP_BONUS * day_att;
             }
         }
-        volume.density_factor = density;
+        // Só escreve quando muda (o componente em `Changed` por frame faz o
+        // passe re-preparar o volume à toa).
+        if (volume.density_factor - density).abs() > 1e-6 {
+            volume.density_factor = density;
+        }
     }
 }
 
@@ -780,6 +958,37 @@ mod tests {
         // Valores inválidos não mexem na base.
         assert!((ev100_for_exposure_multiplier(10.0, 0.0) - 10.0).abs() < 1e-5);
         assert!((ev100_for_exposure_multiplier(10.0, f32::NAN) - 10.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_auto_exposure_lift_is_capped_in_the_dark() {
+        // Noite cheia (o medidor satura no fundo do histograma): o ganho fica
+        // preso no teto — era aqui que a noite ia a branco (+6 EV).
+        assert!((auto_exposure_target_lift(-6.0) - NIGHT_LIFT_CAP_EV).abs() < 1e-5);
+        assert!((auto_exposure_target_lift(-12.0) - NIGHT_LIFT_CAP_EV).abs() < 1e-5);
+        // Crepúsculo/sombra funda/interior: comportamento de sempre (expor
+        // para o meio-cinza) — o aperto da noite não lhes toca.
+        let knee = -NIGHT_LIFT_KNEE_EV;
+        assert!((auto_exposure_target_lift(knee) + knee).abs() < 1e-5);
+        assert!((auto_exposure_target_lift(0.0)).abs() < 1e-5);
+        assert!((auto_exposure_target_lift(3.0) + 3.0).abs() < 1e-5);
+        // A rampa é monótona entre o joelho e o dobro (sem degrau no shutter).
+        let ramp: Vec<f32> = (0..=10)
+            .map(|i| auto_exposure_target_lift(knee - i as f32 * 0.3))
+            .collect();
+        assert!(
+            ramp.windows(2).all(|w| w[1] <= w[0] + 1e-6),
+            "rampa não-monotónica: {ramp:?}"
+        );
+        // A curva tem de sair do `from_curve` (monótona, sem descontinuidades
+        // — um `Err` cai no default, que é a LUT plana e sem teto).
+        use bevy::math::cubic_splines::LinearSpline;
+        assert!(
+            AutoExposureCompensationCurve::from_curve(LinearSpline::new(
+                night_capped_curve_points()
+            ))
+            .is_ok()
+        );
     }
 
     #[test]

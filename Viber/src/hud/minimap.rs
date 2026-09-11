@@ -190,6 +190,31 @@ fn inside_panel(x: f32, z: f32) -> bool {
     x.abs() <= MINIMAP_W * 0.5 && z.abs() <= MINIMAP_H * 0.5
 }
 
+/// Posiciona um blip (ou esconde-o) só quando o valor MUDA.
+///
+/// O Bevy marca `Changed` na escrita mesmo com o valor igual: escrever
+/// `*transform`/`*visibility` incondicionalmente punha o Taffy a refazer o
+/// layout do painel do HUD em todos os frames, mesmo com o herói parado e
+/// nenhum dot a mexer-se. `None` = sem alvo, blip escondido.
+fn set_blip(transform: &mut UiTransform, visibility: &mut Visibility, wanted: Option<(f32, f32)>) {
+    match wanted {
+        Some((tx, tz)) => {
+            let wanted = UiTransform::from_translation(Val2::new(Val::Px(tx), Val::Px(tz)));
+            if *transform != wanted {
+                *transform = wanted;
+            }
+            if *visibility != Visibility::Visible {
+                *visibility = Visibility::Visible;
+            }
+        }
+        None => {
+            if *visibility != Visibility::Hidden {
+                *visibility = Visibility::Hidden;
+            }
+        }
+    }
+}
+
 /// Animate the minimap: o mapa DESLIZA sob o painel (o herói fica sempre no
 /// centro, virado para onde a câmara olha), com blips de NPC, de hostis e a
 /// âncora do marco assinado por cima.
@@ -321,19 +346,25 @@ pub fn hud_minimap_update(
 
     // O mapa desliza ao contrário do herói: o herói é o centro do painel.
     if let Ok(mut transform) = terrain.single_mut() {
-        *transform = UiTransform::from_translation(Val2::new(
+        let wanted = UiTransform::from_translation(Val2::new(
             Val::Px(-player_pos.x * scale),
             Val::Px(-player_pos.z * scale),
         ));
+        if *transform != wanted {
+            *transform = wanted;
+        }
     }
 
     // Seta do jogador: fixa no centro, orientada pela câmara.
     if let Ok(mut transform) = arrow.single_mut() {
-        *transform = UiTransform {
+        let wanted = UiTransform {
             translation: Val2::ZERO,
             rotation: Rot2::radians(arrow_rotation_rad(cam.yaw_deg)),
             scale: Vec2::ONE,
         };
+        if *transform != wanted {
+            *transform = wanted;
+        }
     }
 
     // Blips relativos ao herói (o mapa é north-up, sem rotação).
@@ -345,20 +376,19 @@ pub fn hud_minimap_update(
         .map(|t| offset(t.translation().x, t.translation().z))
         .filter(|(x, z)| inside_panel(*x, *z))
         .collect();
+    // Distância AO QUADRADO: `hypot` faz um `sqrt` por comparação (O(n log n)
+    // raízes por frame) e a ordem relativa é a mesma.
     near.sort_by(|a, b| {
-        a.0.hypot(a.1)
-            .partial_cmp(&b.0.hypot(b.1))
+        (a.0 * a.0 + a.1 * a.1)
+            .partial_cmp(&(b.0 * b.0 + b.1 * b.1))
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     for (index, (mut transform, mut visibility)) in dots.iter_mut().enumerate() {
-        match near.get(index) {
-            Some(&(x, z)) => {
-                let (tx, tz) = clamp_to_panel(x, z);
-                *transform = UiTransform::from_translation(Val2::new(Val::Px(tx), Val::Px(tz)));
-                *visibility = Visibility::Visible;
-            }
-            None => *visibility = Visibility::Hidden,
-        }
+        set_blip(
+            &mut transform,
+            &mut visibility,
+            near.get(index).map(|&(x, z)| clamp_to_panel(x, z)),
+        );
     }
 
     // Hostis: o que um mapa de mundo aberto tem de dizer antes de tudo o
@@ -369,33 +399,29 @@ pub fn hud_minimap_update(
         .filter(|(x, z)| inside_panel(*x, *z))
         .collect();
     hostiles.sort_by(|a, b| {
-        a.0.hypot(a.1)
-            .partial_cmp(&b.0.hypot(b.1))
+        (a.0 * a.0 + a.1 * a.1)
+            .partial_cmp(&(b.0 * b.0 + b.1 * b.1))
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     for (index, (mut transform, mut visibility)) in blips.iter_mut().enumerate() {
-        match hostiles.get(index) {
-            Some(&(x, z)) => {
-                let (tx, tz) = clamp_to_panel(x, z);
-                *transform = UiTransform::from_translation(Val2::new(Val::Px(tx), Val::Px(tz)));
-                *visibility = Visibility::Visible;
-            }
-            None => *visibility = Visibility::Hidden,
-        }
+        set_blip(
+            &mut transform,
+            &mut visibility,
+            hostiles.get(index).map(|&(x, z)| clamp_to_panel(x, z)),
+        );
     }
 
     // Âncora do marco assinado: presa à borda quando fica fora do
     // enquadramento — continua a dizer a direcção.
     if let Ok((mut transform, mut visibility)) = anchor.single_mut() {
-        match waypoint.as_deref().and_then(|w| w.position) {
-            Some(position) => {
+        let wanted = waypoint
+            .as_deref()
+            .and_then(|w| w.position)
+            .map(|position| {
                 let (x, z) = offset(position.x, position.z);
-                let (tx, tz) = clamp_to_panel(x, z);
-                *transform = UiTransform::from_translation(Val2::new(Val::Px(tx), Val::Px(tz)));
-                *visibility = Visibility::Visible;
-            }
-            None => *visibility = Visibility::Hidden,
-        }
+                clamp_to_panel(x, z)
+            });
+        set_blip(&mut transform, &mut visibility, wanted);
     }
 }
 

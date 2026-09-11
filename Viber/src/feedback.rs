@@ -146,7 +146,13 @@ pub struct HitFlash {
 /// trocado no 1.º frame do flash e fica (visualmente idêntico, emissive
 /// apagado no fim) — sem reversão de handles.
 #[derive(Component)]
-struct FlashMaterials(Vec<Handle<StandardMaterial>>);
+/// Materiais clonados para o hit-flash de UM inimigo: `(nó, original, clone)`.
+/// O clone é necessário (os assets são partilhados entre instâncias — mutar o
+/// original acenderia TODOS os lobos), mas o par `(nó, original)` existe para
+/// o fim do flash REVERTER a troca e REMOVER o clone do asset store: o Bevy
+/// não faz GC de assets, portanto deixá-los ficar (o comportamento anterior)
+/// era um leak de até [`MAX_FLASH_MATS`] materiais POR GOLPE, para sempre.
+struct FlashMaterials(Vec<(Entity, Handle<StandardMaterial>, Handle<StandardMaterial>)>);
 
 /// Intensidade do flash no instante com `timer` restante — queda quadrática:
 /// pop imediato, desvanecimento rápido (o golpe tem de LER no frame do toque).
@@ -896,8 +902,10 @@ pub(crate) fn collect_subtree(root: Entity, children: &Query<&Children>, out: &m
 /// Hit-flash do inimigo: no 1.º frame clona os materiais da subárvore (os
 /// assets são partilhados entre instâncias — mutar o original acenderia
 /// TODOS os lobos quando um apanha), troca os handles e acende-os em
-/// branco-quente; nos seguintes, anima o emissive até apagar. O clone fica
-/// (emissive preto = visual original) — sem reversão de handles.
+/// branco-quente; nos seguintes, anima o emissive até apagar. No fim, REVERTE
+/// a troca e remove os clones — restaurar o original é até mais fiel do que
+/// o comportamento antigo (deixava um clone com emissive a PRETO, que apagava
+/// o brilho de materiais emissivos originais) e fecha o leak.
 #[allow(clippy::type_complexity)]
 fn hit_flash_system(
     time: Res<Time>,
@@ -912,10 +920,17 @@ fn hit_flash_system(
         flash.timer -= dt;
         if flash.timer <= 0.0 {
             if let Some(owned) = owned.as_mut() {
-                for handle in owned.0.iter() {
-                    if let Some(mut material) = materials.get_mut(handle) {
-                        material.emissive = LinearRgba::BLACK;
+                for (node, original, clone) in owned.0.iter() {
+                    // Só reverte se o handle do nó ainda FOR o nosso clone:
+                    // se entretanto outra coisa o trocou (o cadáver clona de
+                    // novo para o fade), o clone já não está referenciado e
+                    // removê-lo é seguro de qualquer forma.
+                    if let Ok(mut slot) = mesh_materials.get_mut(*node)
+                        && slot.0 == *clone
+                    {
+                        slot.0 = original.clone();
                     }
+                    materials.remove(clone);
                 }
             }
             commands
@@ -930,8 +945,8 @@ fn hit_flash_system(
             HIT_FLASH_EMISSIVE * 0.68 * intensity,
         );
         if let Some(owned) = owned.as_mut() {
-            for handle in owned.0.iter() {
-                if let Some(mut material) = materials.get_mut(handle) {
+            for (_, _, clone) in owned.0.iter() {
+                if let Some(mut material) = materials.get_mut(clone) {
                     material.emissive = emissive;
                 }
             }
@@ -939,7 +954,8 @@ fn hit_flash_system(
             // Primeiro frame do flash: clona e troca (uma vez por flash).
             let mut subtree = Vec::new();
             collect_subtree(entity, &children, &mut subtree);
-            let mut cloned: Vec<Handle<StandardMaterial>> = Vec::new();
+            let mut cloned: Vec<(Entity, Handle<StandardMaterial>, Handle<StandardMaterial>)> =
+                Vec::new();
             for node in subtree {
                 if cloned.len() >= MAX_FLASH_MATS {
                     break;
@@ -953,8 +969,8 @@ fn hit_flash_system(
                 let mut copy = original.clone();
                 copy.emissive = emissive;
                 let handle = materials.add(copy);
-                slot.0 = handle.clone();
-                cloned.push(handle);
+                let original = std::mem::replace(&mut slot.0, handle.clone());
+                cloned.push((node, original, handle));
             }
             commands.entity(entity).insert(FlashMaterials(cloned));
         }
@@ -1309,6 +1325,10 @@ mod tests {
                 base_color: Color::srgb(0.8, 0.2, 0.1),
                 ..Default::default()
             });
+        // Linha de base DEPOIS de criar o material do teste: o FeedbackPlugin
+        // também tem materiais próprios (vinheta, …), portanto o que se mede
+        // é o DELTA do flash, não a contagem absoluta do store.
+        let baseline = world.resource::<Assets<StandardMaterial>>().len();
         let enemy = world
             .spawn((Mesh3d(mesh), MeshMaterial3d(original.clone())))
             .id();
@@ -1359,14 +1379,81 @@ mod tests {
         );
         let mut q = world.query::<&MeshMaterial3d<StandardMaterial>>();
         let current = q.get(world, enemy).unwrap().0.clone();
-        let material = world
-            .resource::<Assets<StandardMaterial>>()
-            .get(&current)
-            .unwrap();
-        assert_eq!(material.emissive, LinearRgba::BLACK, "flash apagado no fim");
+        assert_eq!(
+            current, original,
+            "o slot VOLTA ao material original — o clone não fica (leak fechado)"
+        );
         assert!(
-            current != original,
-            "o clone fica (visualmente idêntico) — sem reversão de handle"
+            !world.resource::<Assets<StandardMaterial>>().contains(&current)
+                || current == original,
+            "sem clones órfãos no store"
+        );
+        assert_eq!(
+            world.resource::<Assets<StandardMaterial>>().len(),
+            baseline,
+            "o clone foi removido — o store volta à linha de base do arranque"
+        );
+    }
+
+    /// O hit-flash FECHA A CONTA: no fim do flash o nó volta ao material
+    /// ORIGINAL e o clone sai do asset store. O comportamento anterior deixava
+    /// o clone residente para sempre (o Bevy não faz GC de assets) — até
+    /// `MAX_FLASH_MATS` materiais POR GOLPE a acumular numa sessão.
+    #[test]
+    fn test_hit_flash_remove_os_clones_no_fim() {
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .add_systems(Update, hit_flash_system);
+
+        let (enemy, child, original) = {
+            let world = app.world_mut();
+            let original = world
+                .resource_mut::<Assets<StandardMaterial>>()
+                .add(StandardMaterial::default());
+            let enemy = world
+                .spawn(HitFlash {
+                    timer: HIT_FLASH_SECS,
+                })
+                .id();
+            let child = world
+                .spawn((MeshMaterial3d(original.clone()), ChildOf(enemy)))
+                .id();
+            (enemy, child, original)
+        };
+
+        app.update(); // 1.º frame: clona e troca
+        assert_eq!(
+            app.world().resource::<Assets<StandardMaterial>>().len(),
+            2,
+            "o clone existe durante o flash"
+        );
+
+        for mut flash in app
+            .world_mut()
+            .query::<&mut HitFlash>()
+            .iter_mut(app.world_mut())
+        {
+            flash.timer = 0.0;
+        }
+        app.update(); // fim: reverte e remove
+
+        let world = app.world();
+        assert_eq!(
+            world.resource::<Assets<StandardMaterial>>().len(),
+            1,
+            "o clone foi removido do asset store"
+        );
+        assert_eq!(
+            world.get::<MeshMaterial3d<StandardMaterial>>(child)
+                .expect("o nó sobrevive ao flash")
+                .0,
+            original,
+            "o nó voltou ao material ORIGINAL"
+        );
+        assert!(
+            world.get_entity(enemy).is_ok(),
+            "o inimigo sobrevive — só o flash sai"
         );
     }
 }

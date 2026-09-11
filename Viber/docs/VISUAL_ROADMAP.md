@@ -18,14 +18,36 @@ alvo 90 fps ≈ 11 ms/frame; volumétrico custa ~+8 ms fixos).
 - ✅ **P0.4** — splat 32²→64² (1 m/texel; custo de bake de boot ×4 aceite).
 - ✅ **P0.5** — água r2 com o port do `bevy_water` (ver secção própria):
   deslocamento de vértice + espuma de crista (jacobian) + buoyancy CPU +
-  reflexo de céu pelo IBL (reflectance 1.0, tint residual 0.10) + IBL 128².
-  SSR e o re-encode dos KTX2 sem mips ficam na fila.
+  reflexo de céu pelo IBL + IBL 128². SSR e o re-encode dos KTX2 sem mips
+  ficam na fila.
+- ✅ **Água r2b (rios, 2026-09-09, verificada em QA)** — faixas ELIMINADAS por
+  duas frentes: (1) a coluna de água passou a profundidade ANALÍTICA assada
+  nos vértices (`uv.y` = water_y − leito da grid do carve) — o depth prepass
+  mudava nas fronteiras de chunk/LOD e desenhava faixas, e o fallback de
+  coluna constante ao lado de leituras reais era outra; (2) DOMAIN WARP no
+  campo de ondas — as cristas deixaram de ser famílias de linhas paralelas
+  (o λ dominante de 7 m atravessava o rio em faixas regulares). Mais: malha
+  do rio 3→5 vértices transversais, gains de normais/espuma/glitter subidos,
+  reflectance 0.8 + roughness 0.22 (matam o "leite" do céu pálido espelhado),
+  lóbulo do glint 360→140, espuma de margem ×0.75. Espelhado no
+  `wave_height_at` CPU (buoyancy). QA medido: sem periodicidade transversal,
+  animação ~2× (diff de frame 9.6→20.4).
 - ✅ **P0.6** — docs corrigidos (AGENTS.md: layers PRODUÇÃO, gates reais).
 - ✅ **P1.8** — sombras até 600 m (4 cascatas — o Bevy 0.19 tem
   `MAX_CASCADES_PER_LIGHT=4` hard-coded; shadow map 4096 já existia em
   `main.rs`).
 - ✅ **P1.10 (parcial)** — `MotionBlur` + `ContrastAdaptiveSharpening` na
   câmara; debanding fica na fila.
+- ✅ **r4 (2026-09-09, mais melhorias visuais)** — (a) height-blend do P0.3
+  REFEITO: a redistribuição binária do par dominante (força 12) colapsava a
+  layer perdedora a 0 e as fronteiras do splat endureciam em LINHAS RETAS
+  ("uma textura acaba, outra começa") — agora é bias multiplicativo
+  CONTÍNUO com piso (HEIGHT_BIAS 2.5, min 0.35; ninguém desaparece);
+  (b) FLAT_NEAR/FAR 42/260→64/340 (detalhe até às encostas; o revisor
+  confirma zero artefactos e névoa em camadas); (c) IBL 6→12 fases/dia;
+  (d) transição de bioma SUAVE (lerp ~0.9 s da densidade/tint do fog —
+  a antiga "linha diagonal" ao cruzar o polígono); (e) blend do terreno
+  validado em QA (fade orgânico).
 - ⏳ **Verificação** — `cargo check/test`, `analyze` e QA visual ADIADOS
   (GPU ocupada a gerar assets). O harness novo `tests/water_shader.rs`
   compila o vertex da água em naga headless; `tests/chunk_shader.rs` cobre
@@ -110,11 +132,26 @@ Derivas de docs a corrigir no mesmo passe: AGENTS.md ainda diz `layers`
 
 ### P1 — médio (1–3 dias cada, com gate de env e A/B)
 
-7. **Reflexo de cena na água**: SSR forward próprio (raymarch sobre
-   depth+normal, aplicado SÓ à água, `VIBER_WATER_SSR=1` para iterar) ou
-   reflexo planar para os maiores lagos. Não usar o SSR do Bevy (deferred ×
-   materiais custom). Refração real do fundo vem junto (sample da cor da
-   cena no depth prepass, não do corpo).
+7. **Reflexo de cena na água** — **FEITO a 2026-09-09 (Fase B)**:
+   `src/water_ssr.rs` — passe fullscreen no Core3d (TAA→tonemapping) com
+   raymarch screen-space sobre o depth prepass + normal do prepass (traz as
+   ondas), água auto-selecionada por cota (`TerrainRuntime.water`), Fresnel
+   Schlick, sem hit → mantém o espelho do IBL. Gate `VIBER_WATER_SSR=1`;
+   harness naga em `tests/water_ssr_shader.rs` (layout 288/160 B é contrato).
+   Falta shot de aceitação num mundo com céu (qa-agua não tem `<Sky>`) + perf.
+   Refração real do fundo (sample da cor no depth, não do corpo) fica em
+   aberto. Não usar o SSR do Bevy (deferred × materiais custom).
+   **7-RT (Fase A, 2026-09-09) — REMOVIDO a pedido do autor (2026-09-10).**
+   O ray tracing de hardware (`bevy_solari` 0.19.1, ReSTIR DI/GI + specular GI
+   com ray queries experimentais do wgpu 29) custou ~6 ms/frame na RTX 4050
+   com ganho visual zero no fluxo atual — iluminação mista (props sem IBL
+   noturno) e terreno bindless só alcançável por proxies `RaytracingMesh3d`
+   com albedo aproximado. Saiu do repositório: o módulo `src/rt.rs`, a feature
+   cargo `rt`/`rt-dlss`, as deps de sonda (`wgpu`/`pollster`), o registo do
+   `RtPlugin` e o ramo do solari no `postfx`. **A direção é o caminho raster**
+   (SSR de água abaixo + probes regionais `src/probes.rs`, default ON). Se
+   voltar à mesa, os números do estudo estão no histórico deste ficheiro e a
+   API do solari continua in-tree no Bevy (basta re-adicionar a feature).
 8. **Sombras**: 5ª cascata / mapa 4096 / máximo 300→600 m (cascata distante
    de baixa densidade) — as montanhas ganham sombra; afinar bias.
 9. **Substituir `FLAT_NEAR/FLAT_FAR` por fade dithered/LOD-morph** (detalhe
@@ -137,14 +174,6 @@ Derivas de docs a corrigir no mesmo passe: AGENTS.md ainda diz `layers`
     substituindo o domo analítico: céu/fog/aerial unificados fisicamente. O
     próprio Bevy avisa que atmosphere + volumétrico juntos não está testado —
     exige protótipo A/B com `VIBER_NO_VOLUMETRICS=1`.
-    **Progresso (2026-09-08):** primeiro passo implementado como modelo
-    alternativo do domo — o raymarch Nishita (Rayleigh+Mie, 16×8) do
-    `bevy_atmosphere` v0.13.0 portado para `src/sky.wgsl` + `src/sky_nishita.rs`
-    (par CPU para o IBL), activável com `<Sky model="nishita">` ou
-    `VIBER_SKY_MODEL=nishita` (default `analytic`, A/B por fazer). Ficou fora
-    deste passo: unificação fog/aerial (o `AtmosphereState`/DistanceFog ainda
-    derivam da paleta analítica) e o `bevy_pbr::atmosphere` nativo — avaliar
-    depois do A/B.
 15. **Deferred + SSR global** — cascata sobre o material bindless do terreno
     (shader deferred próprio), GBuffer extra na VRAM de 6 GiB, conflito com
     occlusion culling. Só se o item 7 provar que SSR paga a pena.

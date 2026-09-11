@@ -532,9 +532,62 @@ const CFG_MOSS: f32 = {};\n\
 /// Albedo multiplicador do terreno para o daylight factor `day`
 /// (0 = noite, 1 = dia pleno). `day = 1.0` devolve `[1, 1, 1]` bit-igual ao
 /// look aprovado de dia.
-/// Degraus do factor de luz em que o tint do chão é republicado. 48 passos
-/// num dia de 20 min ≈ um burst a cada 25 s.
-const DAY_TINT_STEPS: f32 = 48.0;
+/// Degraus do factor de luz em que o tint do chão é republicado. Profiling
+/// 2026-09-09: cada degrau reescreve a tabela de TODOS os materiais de
+/// chunk (~4 k entradas da binding array) e lia-se como SOLUÇO de frame —
+/// 48 passos (burst a cada ~25 s) era excessivo; 16 (~75 s) mantém a
+/// transição imperceptível (cada degrau = 6 % do fator de luz) com um
+/// terço dos bursts.
+const DAY_TINT_STEPS: f32 = 16.0;
+
+/// Quantos materiais de chunk aceitam UMA escrita por frame.
+///
+/// Cada `get_mut` num material bindless custa caro do lado do render: o Bevy
+/// liberta e re-aloca o slot, **destrói e recria o bind group** (com o array
+/// inteiro de texturas do slab) e re-uploada o data buffer + a tabela de
+/// índices — o upstream diz explicitamente que ainda não há fast path para
+/// "só mudou o conteúdo do buffer" (`bevy_pbr/src/material.rs`, junto ao
+/// `bind_group_allocator.free`). Com 63×63 = 3969 materiais no `simple-rpg`,
+/// um passo do tint escrevia os 3969 num único frame: é a assinatura dos
+/// soluços medidos (±850 MiB de VRAM e fps 37→20 em bursts).
+///
+/// O valor escrito é IDÊNTICO para todos e muda devagar (16 passos por dia de
+/// jogo, ou uma rampa de chuva de segundos), portanto espalhar a passagem por
+/// ~1 s não muda um pixel — só deixa de existir o frame que paga a conta toda.
+const CHUNK_MATERIAL_WRITE_BUDGET: usize = 64;
+
+/// Fatia `[início, fim)` da passagem orçamentada por frame.
+///
+/// Pura de propósito: é a peça que garante que uma passagem ACABA. Pôr a
+/// conta inline nos dois sistemas deixava a convergência sem teste, e um
+/// cursor que nunca chega ao fim é o falhanço silencioso que este orçamento
+/// pode introduzir — o mundo ficava com metade dos materiais no valor antigo,
+/// para sempre (ver `test_sweep_slice_covers_every_material_once`).
+fn sweep_slice(total: usize, cursor: usize, budget: usize) -> (usize, usize) {
+    let start = cursor.min(total);
+    (start, start.saturating_add(budget).min(total))
+}
+
+/// Orçamento em vigor ([`CHUNK_MATERIAL_WRITE_BUDGET`], sobreponível por
+/// `VIBER_CHUNK_TINT_BUDGET`).
+///
+/// `VIBER_CHUNK_TINT_BUDGET=0` = SEM orçamento (escreve tudo no mesmo frame,
+/// o comportamento anterior). É o braço de controlo do A/B: as duas metades
+/// correm no MESMO binário e o profiler mostra `avg_ms`/`max_ms` do próprio
+/// sistema, o que é imune à contenda de GPU de engines de agentes paralelos.
+fn chunk_material_write_budget() -> usize {
+    match std::env::var("VIBER_CHUNK_TINT_BUDGET")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+    {
+        Some(0) => usize::MAX,
+        Some(value) => value,
+        None => CHUNK_MATERIAL_WRITE_BUDGET,
+    }
+}
+
+/// Tolerância do "já está publicado" (ver [`terrain_rain_wetness`]).
+const WETNESS_PUBLISH_EPS: f32 = 1e-3;
 
 pub fn terrain_day_tint(day: f32) -> [f32; 3] {
     let day = day.clamp(0.0, 1.0);
@@ -563,6 +616,8 @@ pub fn terrain_daynight_tint(
     mut chunk_materials: ResMut<Assets<TerrainChunkMaterial>>,
     mut standards: ResMut<Assets<StandardMaterial>>,
     mut last_step: Local<Option<f32>>,
+    mut cursor: Local<usize>,
+    mut sweep: Local<Option<(Vec4, Vec4)>>,
 ) {
     let day = clock
         .as_deref()
@@ -586,9 +641,10 @@ pub fn terrain_daynight_tint(
         let Some(chunks) = chunks else { return };
     if let Some(layers) = &chunks.layer {
         // Tocar no material marca-o Modified e re-escreve a sua entrada na
-        // binding array. A 60 Hz × 4000 chunks isso é uma inundação da fila
-        // do render world; o passo quantizado faz o burst acontecer ~48×
-        // por dia de jogo em vez de por frame.
+        // binding array, com bind group novo por material. A 60 Hz × 3969
+        // chunks isso é uma inundação da fila do render world; o passo
+        // quantizado tira a frequência e o orçamento tira o PICO (ver
+        // `CHUNK_MATERIAL_WRITE_BUDGET`).
         let step = (day * DAY_TINT_STEPS).round() / DAY_TINT_STEPS;
         if last_step.is_none_or(|prev| (step - prev).abs() > 1e-4) {
             *last_step = Some(step);
@@ -600,8 +656,8 @@ pub fn terrain_daynight_tint(
             // sem publicador (sem DayCycle/atmosphere) fica 0 = desligado.
             // O horizonte vem em valores de radiância (HDR, pico ~400) —
             // normalizado ao canal máximo para um TINT visível ≤ 1.
-            let sky = atmosphere.as_deref().map(|a| a.horizon);
-            let sky4 = sky.map(|h| {
+            let sky4 = atmosphere.as_deref().map(|a| {
+                let h = a.horizon;
                 let peak = h[0].max(h[1]).max(h[2]).max(1.0);
                 Vec4::new(h[0] / peak, h[1] / peak, h[2] / peak, 0.85)
             });
@@ -610,13 +666,32 @@ pub fn terrain_daynight_tint(
             } else {
                 Vec4::ZERO
             };
-            for handle in layers.materials.values() {
+            // Sem atmosfera não há o que publicar (o default do `from_slots`
+            // mantém o caminho desligado) — não vale a pena abrir sweep.
+            // NÃO se reinicia o cursor: um passo novo a meio de uma passagem
+            // continua a passagem com o valor novo (os materiais ainda não
+            // visitados apanham-no já) em vez de a recomeçar — com um mundo de
+            // dia muito curto, reiniciar deixava os últimos da lista por
+            // escrever para sempre.
+            if let Some(sky4) = sky4 {
+                *sweep = Some((sky4, sun4));
+            }
+        }
+        if let Some((sky4, sun4)) = *sweep {
+            let total = layers.materials.len();
+            let (start, end) = sweep_slice(total, *cursor, chunk_material_write_budget());
+            for handle in layers.materials.values().skip(start).take(end - start) {
                 if let Some(mut material) = chunk_materials.get_mut(handle) {
-                    material.params.day_tint = sky4.unwrap_or(material.params.day_tint);
+                    material.params.day_tint = sky4;
                     if sun4.w > 0.0 {
                         material.params.sun_dir = sun4;
                     }
                 }
+            }
+            *cursor = end;
+            if *cursor >= total {
+                *sweep = None;
+                *cursor = 0;
             }
         }
     }
@@ -632,6 +707,11 @@ pub fn terrain_daynight_tint(
 /// chunk — o `chunk.wgsl` lê-o como `wet` e molha o chão (albedo escurecido
 /// + roughness de poça). Sistema próprio (throttle 0.5 s) porque o passo do
 /// day-tint quantiza por FASE do dia e a chuva muda dentro da fase.
+///
+/// Como o day tint, a passagem é ORÇAMENTADA por frame
+/// ([`CHUNK_MATERIAL_WRITE_BUDGET`]). O `published` é o valor que já chegou a
+/// TODOS os materiais: sem ele, um tick a meio de uma passagem reiniciava o
+/// cursor e os últimos materiais da lista nunca seriam escritos.
 pub fn terrain_rain_wetness(
     time: Res<Time>,
     weather: Option<Res<crate::worldsys::WeatherState>>,
@@ -639,6 +719,9 @@ pub fn terrain_rain_wetness(
     mut chunk_materials: ResMut<Assets<TerrainChunkMaterial>>,
     mut throttle: Local<f32>,
     mut current: Local<f32>,
+    mut published: Local<Option<f32>>,
+    mut cursor: Local<usize>,
+    mut sweep: Local<Option<f32>>,
 ) {
     *throttle -= time.delta_secs();
     if *throttle > 0.0 {
@@ -651,16 +734,32 @@ pub fn terrain_rain_wetness(
         .unwrap_or(0.0);
     // Suavização por passada (0.5 s): a chuva empapa e seca gradualmente.
     *current += (target - *current).clamp(-0.2, 0.2);
-    if (*current - target).abs() < 1e-3 {
-        return;
-    }
     let Some(chunks) = chunks else { return };
     let Some(layers) = &chunks.layer else {
         return;
     };
-    for handle in layers.materials.values() {
-        if let Some(mut material) = chunk_materials.get_mut(handle) {
-            material.params.walls_b.w = *current;
+    // O `walls_b.w` de fábrica é 0 (seco): um mundo que nunca choveu já está
+    // publicado a 0 e não paga uma passagem só para escrever zeros.
+    if sweep.is_none() && (published.unwrap_or(0.0) - *current).abs() > WETNESS_PUBLISH_EPS {
+        *sweep = Some(*current);
+        *cursor = 0;
+    }
+    if let Some(value) = *sweep {
+        let total = layers.materials.len();
+        let (start, end) = sweep_slice(total, *cursor, chunk_material_write_budget());
+        for handle in layers.materials.values().skip(start).take(end - start) {
+            if let Some(mut material) = chunk_materials.get_mut(handle) {
+                material.params.walls_b.w = value;
+            }
+        }
+        *cursor = end;
+        if *cursor >= total {
+            // Publica também o valor final convergido — o early-out antigo
+            // saía antes de escrever o último `current` e o chão ficava
+            // 0.001 mais seco do que o estado interno dizia.
+            *published = Some(value);
+            *sweep = None;
+            *cursor = 0;
         }
     }
 }
@@ -870,5 +969,38 @@ mod tests {
             self.children.push(terrain);
             self
         }
+    }
+
+    /// A passagem orçamentada tem de COBRIR TODOS os materiais exatamente uma
+    /// vez. É o único falhanço silencioso que o orçamento podia introduzir:
+    /// metade do mundo ficava com o tint/chuva antigos e nada no ecrã o
+    /// denunciava (o valor muda devagar).
+    #[test]
+    fn test_sweep_slice_covers_every_material_once() {
+        let total = 3969usize; // 63×63, a grelha do simple-rpg
+        let budget = 64usize;
+        let mut cursor = 0usize;
+        let mut frames = 0usize;
+        let mut visited = 0usize;
+        while cursor < total {
+            let (start, end) = sweep_slice(total, cursor, budget);
+            assert_eq!(start, cursor, "a fatia começa onde o cursor está");
+            assert!(end > start, "um cursor preso seria um ciclo infinito");
+            assert!(end - start <= budget, "o orçamento é um TETO");
+            visited += end - start;
+            cursor = end;
+            frames += 1;
+            assert!(frames < 1000, "passagem a divergir");
+        }
+        assert_eq!(visited, total, "cada material visitado exatamente uma vez");
+        assert_eq!(frames, total.div_ceil(budget));
+
+        // `VIBER_CHUNK_TINT_BUDGET=0` → `usize::MAX`: tudo num só frame, o
+        // comportamento anterior (o braço de controlo do A/B).
+        assert_eq!(sweep_slice(total, 0, usize::MAX), (0, total));
+        // Orçamento maior que a lista não rebenta nem anda para trás.
+        assert_eq!(sweep_slice(4, 0, 10_000), (0, 4));
+        // Cursor já no fim devolve fatia vazia (o laço pára).
+        assert_eq!(sweep_slice(total, total, budget).0, total);
     }
 }

@@ -727,7 +727,12 @@ pub(crate) fn emitter_sprite_bind(
     for (entity, material_handle) in &unbound {
         commands.entity(entity).insert(SpriteBound);
         if let Some(mut material) = materials.get_mut(&material_handle.0) {
-            material.base_color_texture = Some(sprite.texture.clone());
+            // Os materiais do `BurstPool` são PARTILHADOS e já vêm ligados:
+            // só escreve — e só marca `Changed`, com o bind group novo que
+            // isso custa — na primeira vez que um material vé esta textura.
+            if material.base_color_texture.is_none() {
+                material.base_color_texture = Some(sprite.texture.clone());
+            }
         }
     }
 }
@@ -774,6 +779,19 @@ pub struct ParticleEmitter {
     /// Set while the emitter is beyond [`EMITTER_CULL_DISTANCE`]; its mesh has
     /// been cleared once and neither the sim nor the writer run.
     pub culled: bool,
+    /// Set depois da primeira escrita com zero partículas vivas: o mesh já está
+    /// degenerado, e reescrever `capacity × 4` vértices + re-uploadar o mesh
+    /// por frame não muda um pixel. Apanha os emissores que emitem e param — a
+    /// chuva com intensidade a 0 fica `Visibility::Hidden` mas o emissor
+    /// continua vivo e a pagar a escrita.
+    pub idle: bool,
+}
+
+/// Gate de emissor vazio: sem partículas vivas, o mesh já está degenerado e a
+/// reescrita + upload por frame não muda um pixel. `VIBER_PARTICLE_IDLE_GATE=0`
+/// desliga (comportamento anterior — o braço de controlo do A/B no profiler).
+fn idle_gate_enabled() -> bool {
+    std::env::var("VIBER_PARTICLE_IDLE_GATE").as_deref() != Ok("0")
 }
 
 /// Advance every emitter and rewrite its billboard mesh.
@@ -801,10 +819,24 @@ pub fn particle_emitter_update(
                     write_billboards(&mut mesh, &[], position, camera_pos, 1.0, capacity);
                 }
             }
+            emitter.idle = true;
             continue;
         }
         emitter.culled = false;
         emitter.sim.step(dt);
+        // Vazio: escrever os zeros UMA vez (senão a última partícula morta
+        // ficava congelada no mesh) e depois não voltar a tocar-lhe.
+        // `VIBER_PARTICLE_IDLE_GATE=0` desliga o gate — é o braço de controlo
+        // do A/B (com ele, o emissor de chuva a 0 reescreve `capacity × 4`
+        // vértices e re-uploada o mesh em todos os frames, para nada).
+        if emitter.sim.particles.is_empty() && idle_gate_enabled() {
+            if emitter.idle {
+                continue;
+            }
+            emitter.idle = true;
+        } else {
+            emitter.idle = false;
+        }
         if let Some(mut mesh) = meshes.get_mut(&mesh_handle.0) {
             write_billboards(
                 &mut mesh,
@@ -846,39 +878,122 @@ pub fn burst_lifetime(resolved: &ResolvedEmitter) -> f32 {
     resolved.life.1 + 0.25
 }
 
+/// Escadote de capacidades do pool de malhas de burst.
+///
+/// A capacidade pedida (`count + 8`) varia continuamente (com a velocidade do
+/// golpe, o combo, a intensidade da chuva); sem escadote, o pool desbaratava
+/// num balde por valor. Arredondar para CIMA é seguro — a capacidade é um
+/// TETO do burst, não um alvo — e o pool converge para ≤ 7 malhas.
+const MESH_BUCKETS: [usize; 7] = [16, 32, 64, 128, 256, 512, 1024];
+
+fn mesh_bucket(requested: usize) -> usize {
+    MESH_BUCKETS
+        .iter()
+        .copied()
+        .find(|bucket| *bucket >= requested)
+        .unwrap_or(MESH_BUCKETS[MESH_BUCKETS.len() - 1])
+}
+
+/// Assets de burst PARTILHADOS e RECICLADOS.
+///
+/// Antes disto cada burst criava `Assets::add(particle_mesh)` +
+/// `Assets::add(emitter_material)` e a entidade despawnava sem os libertar —
+/// o Bevy não faz GC de assets, portanto em combate (dezenas de bursts/s) e
+/// com a chuva (ripples a ~14/s) o asset store crescia **sem limite**. Agora:
+/// as malhas voltam ao pool no despawn (só podem ser REUTILIZADAS, nunca
+/// partilhadas — o `particle_emitter_update` reescreve a malha de cada
+/// emissor por frame) e há exactamente DOIS materiais (`Add` e `Blend` —
+/// `emitter_material` só depende de `resolved.additive`).
+#[derive(Resource, Default)]
+pub struct BurstPool {
+    meshes: std::collections::HashMap<usize, Vec<bevy::asset::Handle<bevy::mesh::Mesh>>>,
+    material_add: Option<Handle<StandardMaterial>>,
+    material_blend: Option<Handle<StandardMaterial>>,
+}
+
+impl BurstPool {
+    fn take_mesh(&mut self, requested: usize) -> Option<bevy::asset::Handle<bevy::mesh::Mesh>> {
+        self.meshes
+            .get_mut(&mesh_bucket(requested))
+            .and_then(|pool| pool.pop())
+    }
+
+    fn park_mesh(
+        &mut self,
+        capacity: usize,
+        handle: bevy::asset::Handle<bevy::mesh::Mesh>,
+    ) {
+        self.meshes.entry(mesh_bucket(capacity)).or_default().push(handle);
+    }
+
+    fn material(&self, additive: bool) -> Option<Handle<StandardMaterial>> {
+        if additive {
+            self.material_add.clone()
+        } else {
+            self.material_blend.clone()
+        }
+    }
+
+    fn park_material(&mut self, additive: bool, handle: Handle<StandardMaterial>) {
+        if additive {
+            self.material_add = Some(handle);
+        } else {
+            self.material_blend = Some(handle);
+        }
+    }
+}
+
 /// Spawna um burst `preset` em `position` — usado pelo melee (slash/sparks),
-/// finisher (explosion), mortes e impactos de projétil.
-pub fn spawn_burst(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    spec: &ParticleSpec,
-    position: Vec3,
-    count: usize,
-) {
-    let capacity = (count + 8).min(1024);
-    let mut sim = EmitterSim::seeded(spec, position);
-    sim.burst(count, capacity);
-    // Só burst: o update normal integra as partículas mas nunca emite mais.
-    sim.resolved.emission_rate = 0.0;
-    let lifetime = burst_lifetime(&sim.resolved);
-    let capacity = (count + 8).min(1024);
-    let mesh = meshes.add(particle_mesh(capacity));
-    let material = materials.add(emitter_material(&sim.resolved));
-    commands.spawn((
-        Transform::from_translation(position),
-        Visibility::Inherited,
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
-        NotShadowCaster,
-        ParticleEmitter {
-            sim,
-            capacity,
-            culled: false,
-        },
-        ParticleBurst { timer: lifetime },
-        Name::new("fx:burst"),
-    ));
+/// finisher (explosion), mortes e impactos de projétil. Os assets vêm do
+/// [`BurstPool`] (ver a doc do recurso); por isso a assinatura já não pede
+/// `Assets<Mesh>`/`Assets<StandardMaterial>` e o spawn corre por
+/// `Commands::queue` — precisa do `World` para chegar ao pool.
+pub fn spawn_burst(commands: &mut Commands, spec: &ParticleSpec, position: Vec3, count: usize) {
+    let spec = spec.clone();
+    commands.queue(move |world: &mut World| {
+        // Apps mínimas de teste (e qualquer mundo montado sem o `BurstPlugin`)
+        // também disparam bursts: o pool nasce à primeira utilização em vez de
+        // obrigar cada chamador a conhecer o recurso.
+        if !world.contains_resource::<BurstPool>() {
+            world.init_resource::<BurstPool>();
+        }
+        let capacity = mesh_bucket(count + 8);
+        let mut sim = EmitterSim::seeded(&spec, position);
+        sim.burst(count, capacity);
+        // Só burst: o update normal integra as partículas mas nunca emite mais.
+        sim.resolved.emission_rate = 0.0;
+        let lifetime = burst_lifetime(&sim.resolved);
+        let mesh = match world.resource_mut::<BurstPool>().take_mesh(count + 8) {
+            Some(handle) => handle,
+            None => world.resource_mut::<Assets<Mesh>>().add(particle_mesh(capacity)),
+        };
+        let additive = sim.resolved.additive;
+        let material = match world.resource::<BurstPool>().material(additive) {
+            Some(handle) => handle,
+            None => {
+                let handle = world
+                    .resource_mut::<Assets<StandardMaterial>>()
+                    .add(emitter_material(&sim.resolved));
+                world.resource_mut::<BurstPool>().park_material(additive, handle.clone());
+                handle
+            }
+        };
+        world.spawn((
+            Transform::from_translation(position),
+            Visibility::Inherited,
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            NotShadowCaster,
+            ParticleEmitter {
+                sim,
+                capacity,
+                culled: false,
+                idle: false,
+            },
+            ParticleBurst { timer: lifetime },
+            Name::new("fx:burst"),
+        ));
+    });
 }
 
 /// Spawna um emissor CONTÍNUO `preset` em `position` — espuma da linha de
@@ -904,7 +1019,8 @@ pub fn spawn_looping(
         ParticleEmitter {
             sim,
             capacity,
-            culled: false,
+              idle: false,
+          culled: false,
         },
         Name::new("fx:ambient"),
     ));
@@ -934,7 +1050,8 @@ pub fn spawn_looping_in_world(world: &mut World, spec: &ParticleSpec, position: 
             NotShadowCaster,
             ParticleEmitter {
                 sim,
-                capacity,
+                       idle: false,
+         capacity,
                 culled: false,
             },
             Name::new("fx:ambient"),
@@ -942,16 +1059,28 @@ pub fn spawn_looping_in_world(world: &mut World, spec: &ParticleSpec, position: 
         .id()
 }
 
-/// Despawna o emissor quando o burst termina (as partículas morrem com ele).
+/// Despawna o emissor quando o burst termina (as partículas morrem com ele) e
+/// DEVOLVE a malha ao [`BurstPool`] — zerada, porque a malha reciclada não
+/// pode estrear com as partículas do burst anterior (um frame de fantasma).
 fn burst_despawn_system(
     time: Res<Time>,
-    mut bursts: Query<(Entity, &mut ParticleBurst)>,
+    mut bursts: Query<(Entity, &mut ParticleBurst, &ParticleEmitter, &Mesh3d)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut pool: ResMut<BurstPool>,
     mut commands: Commands,
 ) {
     let dt = time.delta_secs();
-    for (entity, mut burst) in &mut bursts {
+    for (entity, mut burst, emitter, mesh) in &mut bursts {
         burst.timer -= dt;
         if burst.timer <= 0.0 {
+            if let Some(mut mesh_asset) = meshes.get_mut(&mesh.0) {
+                if let Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)) =
+                    mesh_asset.attribute_mut(bevy::mesh::Mesh::ATTRIBUTE_POSITION)
+                {
+                    positions.fill([0.0; 3]);
+                }
+            }
+            pool.park_mesh(emitter.capacity, mesh.0.clone());
             commands.entity(entity).despawn();
         }
     }
@@ -961,7 +1090,8 @@ fn burst_despawn_system(
 pub struct BurstPlugin;
 impl bevy::app::Plugin for BurstPlugin {
     fn build(&self, app: &mut bevy::app::App) {
-        app.add_systems(bevy::app::Update, timed(Group::Fx, burst_despawn_system));
+        app.init_resource::<BurstPool>()
+            .add_systems(bevy::app::Update, timed(Group::Fx, burst_despawn_system));
         // Sprite radial suave nos materiais dos emissores (WS-A) — `Option`
         // em tudo o que depende do AssetPlugin, para sobreviver em Apps de
         // teste headless sem assets.
@@ -1240,4 +1370,66 @@ mod tests {
         big.emission_rate = 10_000.0;
         assert_eq!(emitter_capacity(&big), EMITTER_MESH_CAP);
     }
+
+    /// O asset store NÃO cresce com os bursts: a malha volta ao pool no
+    /// despawn e o material é partilhado por modo de blend. Antes do pool,
+    /// cada burst deixava um `Mesh` + um `StandardMaterial` residentes para
+    /// sempre (o Bevy não faz GC de assets) — em combate e com os ripples da
+    /// chuva (~14/s) era crescimento ilimitado.
+    #[test]
+    fn test_burst_assets_nao_acumulam() {
+        use bevy::ecs::world::CommandQueue;
+
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .init_resource::<Assets<bevy::mesh::Mesh>>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .init_resource::<BurstPool>()
+            .add_systems(Update, burst_despawn_system);
+
+        for round in 0..5 {
+            let mut queue = CommandQueue::default();
+            {
+                let world = app.world_mut();
+                let mut commands = Commands::new(&mut queue, world);
+                spawn_burst(&mut commands, &fire_spec(), Vec3::ZERO, 40 + round);
+            }
+            queue.apply(app.world_mut());
+            // Expira o burst: o despawn devolve a malha ao pool. (Sem
+            // `clear_entities` entre rondas — no Bevy 0.19 ele invalida os
+            // fetches de recursos, incluindo o pool que se quer medir.)
+            for mut burst in app
+                .world_mut()
+                .query::<&mut ParticleBurst>()
+                .iter_mut(app.world_mut())
+            {
+                burst.timer = 0.0;
+            }
+            app.update();
+            let _ = round;
+        }
+
+        let world = app.world();
+        assert_eq!(
+            world.resource::<Assets<bevy::mesh::Mesh>>().len(),
+            1,
+            "uma malha no pool, reutilizada em todas as rondas"
+        );
+        assert_eq!(
+            world.resource::<Assets<StandardMaterial>>().len(),
+            1,
+            "um material por modo de blend (o fire é additive)"
+        );
+        assert!(
+            world
+                .resource::<BurstPool>()
+                .meshes
+                .values()
+                .map(Vec::len)
+                .sum::<usize>()
+                >= 1,
+            "a malha está PARQUEADA no pool, não abandonada no store"
+        );
+    }
+
 }

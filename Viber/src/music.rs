@@ -89,9 +89,12 @@ pub struct LoopInstance(pub Handle<AudioInstance>);
 pub struct LoopVolume(pub f32);
 
 /// Player context marker for the driver (reuses the `Player` component).
-pub fn bgm_zone(x: f32, z: f32) -> &'static str {
-    // Interiores remotos (caixa dos interiores, com margem)
-    if (770.0..950.0).contains(&x) && (205.0..355.0).contains(&z) {
+pub fn bgm_zone(x: f32, z: f32, scene: Option<&crate::worldsys::InteriorSceneConfig>) -> &'static str {
+    // Bolsa de interior DECLARADA (fora da área do mapa). A zona de masmorra
+    // seguia uma caixa copiada à mão (770..950 × 205..355) que ficava para
+    // trás de cada vez que a grelha de interiores se movia — e a grelha mudou
+    // de sítio: agora segue o `<InteriorScene>`, que é a fonte de verdade.
+    if scene.is_some_and(|s| s.contains(x, z)) {
         return "dungeon";
     }
     // Cunha dos Picos Gelados: z <= -240, |x| abre 240 → 1040
@@ -255,6 +258,7 @@ pub fn mixer_sync(
 pub fn music_driver(
     time: Res<Time>,
     players: Query<&GlobalTransform, With<crate::player::Player>>,
+    scene: Option<Res<crate::worldsys::InteriorSceneConfig>>,
     mut combat: ResMut<CombatMusicState>,
     mut layers: Query<(&MusicLayerTag, &LoopInstance, &mut LoopVolume)>,
     mut instances: ResMut<Assets<AudioInstance>>,
@@ -268,7 +272,7 @@ pub fn music_driver(
     // Combate ativo ganha à zona (boss > battle); sem luta, música do sítio.
     let zone = combat
         .active_layer(time.elapsed_secs_f64())
-        .unwrap_or_else(|| bgm_zone(pos.x, pos.z));
+        .unwrap_or_else(|| bgm_zone(pos.x, pos.z, scene.as_deref()));
     let dt = time.delta_secs().clamp(0.0, 0.2);
     for (tag, instance, mut volume) in &mut layers {
         let target = layer_target(&tag.layer, zone, tag.base_volume);
@@ -303,29 +307,34 @@ mod tests {
 
     #[test]
     fn test_bgm_zone_village_at_origin() {
-        assert_eq!(bgm_zone(0.0, 0.0), "village");
-        assert_eq!(bgm_zone(40.0, 30.0), "village");
+        assert_eq!(bgm_zone(0.0, 0.0, None), "village");
+        assert_eq!(bgm_zone(40.0, 30.0, None), "village");
     }
 
     #[test]
     fn test_bgm_zone_dungeon_box() {
-        assert_eq!(bgm_zone(850.0, 280.0), "dungeon");
-        assert_eq!(bgm_zone(775.0, 210.0), "dungeon");
-        // fora da caixa
-        assert_eq!(bgm_zone(760.0, 280.0), "explore");
+        let scene = crate::worldsys::InteriorSceneConfig {
+            min: [2500.0, 2500.0],
+            max: [2900.0, 2830.0],
+        };
+        assert_eq!(bgm_zone(2700.0, 2700.0, Some(&scene)), "dungeon");
+        assert_eq!(bgm_zone(2510.0, 2820.0, Some(&scene)), "dungeon");
+        // fora da bolsa (e sem bolsa declarada) cai na zona normal
+        assert_eq!(bgm_zone(2400.0, 2700.0, Some(&scene)), "explore");
+        assert_eq!(bgm_zone(2700.0, 2700.0, None), "explore");
     }
 
     #[test]
     fn test_bgm_zone_mountain_wedge() {
-        assert_eq!(bgm_zone(0.0, -300.0), "mountain");
-        assert_eq!(bgm_zone(200.0, -400.0), "mountain");
+        assert_eq!(bgm_zone(0.0, -300.0, None), "mountain");
+        assert_eq!(bgm_zone(200.0, -400.0, None), "mountain");
         // wedge fecha a sul: em z=-250 só |x| <= 240+10
-        assert_eq!(bgm_zone(600.0, -250.0), "explore");
+        assert_eq!(bgm_zone(600.0, -250.0, None), "explore");
     }
 
     #[test]
     fn test_bgm_zone_explore_default() {
-        assert_eq!(bgm_zone(300.0, 300.0), "explore");
+        assert_eq!(bgm_zone(300.0, 300.0, None), "explore");
     }
 
     #[test]

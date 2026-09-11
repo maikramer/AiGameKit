@@ -123,6 +123,14 @@ pub struct WorldStats {
     /// `lod_pending` preso acima de zero = orçamento saturado.
     pub lod_swaps: usize,
     pub lod_pending: usize,
+    /// Entradas dos ASSET STORES (`Assets::<T>::len()`), não entidades: é o
+    /// número que denuncia leaks/churn de assets (o Bevy não faz GC — o
+    /// `meshes` acima conta INSTÂNCIAS e não vê um material clonado que
+    /// ninguém libertou). `assets_*` a subir monotonicamente numa sessão =
+    /// algo está a criar assets por evento sem os devolver.
+    pub assets_meshes: usize,
+    pub assets_materials: usize,
+    pub assets_images: usize,
 }
 
 /// Transform local + global (`viber.debug.transform`/`info`).
@@ -592,6 +600,9 @@ fn build_view(world: &mut World) -> DebugView {
     let meshes = world.get_resource::<bevy::asset::Assets<Mesh>>();
     let materials = world.get_resource::<bevy::asset::Assets<StandardMaterial>>();
     let images = world.get_resource::<bevy::asset::Assets<Image>>();
+    stats.assets_meshes = meshes.map(bevy::asset::Assets::len).unwrap_or(0);
+    stats.assets_materials = materials.map(bevy::asset::Assets::len).unwrap_or(0);
+    stats.assets_images = images.map(bevy::asset::Assets::len).unwrap_or(0);
     let mut archetype_cache: HashMap<usize, Arc<Vec<String>>> = HashMap::new();
     for e in world.iter_entities() {
         let entity = e.id();
@@ -1274,6 +1285,16 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let table = lua.create_table()?;
             table.raw_set("entities", s.entities)?;
             table.raw_set("meshes", s.meshes)?;
+            table.raw_set(
+                "assets",
+                {
+                    let t = lua.create_table()?;
+                    t.raw_set("meshes", s.assets_meshes)?;
+                    t.raw_set("materials", s.assets_materials)?;
+                    t.raw_set("images", s.assets_images)?;
+                    t
+                },
+            )?;
             table.raw_set("colliders", s.colliders_total)?;
             table.raw_set("colliders_cuboid", s.colliders_cuboid)?;
             table.raw_set("colliders_ball", s.colliders_ball)?;

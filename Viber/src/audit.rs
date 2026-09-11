@@ -234,6 +234,25 @@ fn collect_entities(
             .unwrap_or_else(|| "sem nome".into());
 
         let collider_covered = inherited_collider || !entity.physics.is_empty();
+        // `mesh-url` de um colisor é uma referência a FICHEIRO como outra
+        // qualquer: um caminho mal montado (ou um `_collision.glb` que não
+        // existe para aquele prop) dava "Path not found" no arranque sem o
+        // `analyze` dizer nada — foi assim que uma grelha de interiores
+        // inteira nasceu com o colisor a apontar para o nome errado.
+        {
+            let url = match &entity.physics.collider {
+                crate::physics::ColliderShape::Mesh { url, .. }
+                | crate::physics::ColliderShape::Precompute { url } => Some(url),
+                _ => None,
+            };
+            if let Some(url) = url {
+                refs.push(AssetRef {
+                    kind: RefKind::Glb,
+                    path: resolve_asset(asset_roots, url),
+                    context: format!("<collider mesh-url=\"{url}\"> {label}"),
+                });
+            }
+        }
         if let Some(script) = &entity.script {
             refs.push(AssetRef {
                 kind: RefKind::Script,
@@ -260,6 +279,16 @@ fn collect_entities(
                         kind: RefKind::Texture,
                         path: resolve_asset(asset_roots, texture),
                         context: format!("<texture=\"{texture}\"> {label}"),
+                    });
+                }
+                // `normal-map` da primitiva: mesma resolução de roots do
+                // albedo — um mapa de normais em falta deixava o soalho liso
+                // sem que o `analyze` dissesse nada.
+                if let Some(normal) = &material.normal_map {
+                    refs.push(AssetRef {
+                        kind: RefKind::Texture,
+                        path: resolve_asset(asset_roots, normal),
+                        context: format!("<normal-map=\"{normal}\"> {label}"),
                     });
                 }
             }
@@ -317,6 +346,41 @@ fn collect_entities(
                         kind: RefKind::Glb,
                         path: resolve_asset(asset_roots, mesh),
                         context: format!("<vegetation mesh=\"{mesh}\"> {label}"),
+                    });
+                }
+            }
+            // O template do spawner é a ÚNICA referência ao GLB das
+            // instâncias — sem este braço um template partido passava o
+            // `analyze` em silêncio e o motor só avisava 60 s depois do
+            // arranque ("template still loading — group skipped"), com o
+            // grupo inteiro a não produzir nada. Foi assim que
+            // `props/rock_boulder_lod0.glb` (referido só por um template de
+            // `spawn/dressing.xml`) ficou fora do relatório enquanto o motor
+            // o procurava em vão a cada arranque.
+            EntityKind::StaticSpawner { spec } | EntityKind::DynamicSpawner { spec } => {
+                for url in &spec.template_urls {
+                    refs.push(AssetRef {
+                        kind: RefKind::Glb,
+                        path: resolve_asset(asset_roots, url),
+                        context: format!("<GLTFLoader> {label}"),
+                    });
+                }
+                for lod in &spec.template_lods {
+                    for url in [&lod.lod1_url, &lod.lod2_url].into_iter().flatten() {
+                        refs.push(AssetRef {
+                            kind: RefKind::Glb,
+                            path: resolve_asset(asset_roots, url),
+                            context: format!("<GLTFLoader lód> {label}"),
+                        });
+                    }
+                }
+                // `<Creature script="…">` corre a partir do dir de scripts do
+                // jogo, como qualquer `script=` de entidade.
+                if let Some(script) = &spec.template_script {
+                    refs.push(AssetRef {
+                        kind: RefKind::Script,
+                        path: world_dir.join("scripts").join(script),
+                        context: format!("<GLTFLoader template script=\"{script}\"> {label}"),
                     });
                 }
             }
@@ -773,6 +837,54 @@ fn audit_glb(path: &Path, context: &str, issues: &mut Vec<AuditIssue>) {
             });
         }
     }
+    // KTX2 EMBUTIDO: a extensão `KHR_texture_basisu` está em TODO o pool
+    // (UASTC também a declara), portanto não distingue nada — a diferença
+    // entre um GLB que carrega e um que falha está no
+    // `supercompressionScheme` de cada imagem. É preciso abrir o payload.
+    // Sem isto, um GLB do BasisLZ passa o `analyze` e só falha no arranque
+    // ("Unsupported supercompression scheme: BasisLZ"), com o objeto a não
+    // aparecer no mundo.
+    let Ok(doc) = serde_json::from_str::<serde_json::Value>(json) else {
+        return;
+    };
+    let Some(images) = doc.get("images").and_then(|v| v.as_array()) else {
+        return;
+    };
+    let views = doc.get("bufferViews").and_then(|v| v.as_array());
+    // Chunk BIN: a seguir ao header do GLB (12), ao header do chunk JSON (8),
+    // ao JSON e ao header do chunk BIN (8).
+    let bin = 20 + json_len + 8;
+    for image in images {
+        if image.get("mimeType").and_then(|m| m.as_str()) != Some("image/ktx2") {
+            continue;
+        }
+        let Some(view) = image
+            .get("bufferView")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|index| views.and_then(|v| v.get(index as usize)))
+        else {
+            continue;
+        };
+        let offset = view
+            .get("byteOffset")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as usize;
+        let Some(start) = bin.checked_add(offset) else {
+            continue;
+        };
+        let Some(header) = bytes.get(start..(start + 52).min(bytes.len())) else {
+            continue;
+        };
+        if let Some(problem) = ktx2_payload_problem(header) {
+            issues.push(AuditIssue {
+                severity: Severity::Warning,
+                message: format!(
+                    "ktx2 embutido não suportado: {} usa {problem} — {context}",
+                    path.display()
+                ),
+            });
+        }
+    }
 }
 
 // ---------------------------------------------------------------- texturas
@@ -827,18 +939,80 @@ fn read_header(path: &Path, n: u64) -> Option<Vec<u8>> {
     Some(buffer)
 }
 
-/// KTX2: magia de 12 bytes + cabeçalho de 80; `vkFormat` (u32 LE @12) e
-/// `supercompressionScheme` (u32 LE @44; 0 none / 1 BasisLZ / 2 Zstandard —
-/// discriminantes conferidos na crate `ktx2` 0.5).
+/// KTX2: magia de 12 bytes + cabeçalho de 80; `vkFormat` (u32 LE @12),
+/// `supercompressionScheme` (u32 LE @44; 0 none / 1 BasisLZ / 2 Zstandard) e
+/// `dfdByteOffset` (u32 LE @48) — discriminantes conferidos na crate `ktx2`
+/// 0.5.
 const KTX2_MAGIC: [u8; 12] = [
     0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A,
 ];
+/// `KHR_DF_MODEL_ETC1S` — o modelo que o BasisLZ transporta.
+///
+/// UASTC declara `KHR_DF_MODEL_UASTC` (166), e é essa a diferença que o
+/// `vkFormat 0` sozinho não conta: `VK_FORMAT_UNDEFINED` só quer dizer "o
+/// formato vem do descritor", que é o caso de **todo** o KTX2 do pipeline,
+/// incluindo o UASTC que o Bevy lê sem problema.
+const KTX2_DFD_MODEL_ETC1S: u8 = 163;
+/// `colorModel` do descritor de formato: logo a seguir a
+/// `dfdTotalSize`(4) + `vendorId`(4) + `descriptorBlockSize`(4).
+const KTX2_DFD_COLOR_MODEL: usize = 12;
+
+/// O `colorModel` do primeiro bloco do descritor, quando está ao alcance da
+/// leitura de cabeçalho.
+fn ktx2_dfd_color_model(bytes: &[u8]) -> Option<u8> {
+    let dfd = u32::from_le_bytes(bytes.get(48..52)?.try_into().ok()?) as usize;
+    bytes.get(dfd + KTX2_DFD_COLOR_MODEL).copied()
+}
+
+/// O problema de um payload KTX2 (em ficheiro solto ou embutido num GLB), se
+/// houver. Precisa dos primeiros 52 bytes + do descritor, quando ao alcance.
+///
+/// A regra é a mesma nos dois sítios de propósito: o que a engine recusa é
+/// uma propriedade do payload, não de onde ele vive.
+fn ktx2_payload_problem(bytes: &[u8]) -> Option<String> {
+    if bytes.len() < 16 || bytes[..12] != KTX2_MAGIC {
+        return None; // magia errada é reportada pelo caller (só o solto a testa)
+    }
+    let vk_format = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
+    // O scheme só se lê com os 48 bytes do cabeçalho presentes.
+    let scheme = (bytes.len() >= 48)
+        .then(|| u32::from_le_bytes([bytes[44], bytes[45], bytes[46], bytes[47]]));
+    if scheme == Some(1) {
+        // BasisLZ é o ÚNICO scheme que o Bevy não descomprime — fatal venha
+        // o payload de ETC1S ou de UASTC.
+        return Some(
+            "supercompressão BasisLZ (scheme 1) — a engine (Bevy 0.19) não descomprime BasisLZ; reexporta em UASTC (`text3d finish`)"
+                .to_string(),
+        );
+    }
+    if vk_format == 0 && ktx2_dfd_color_model(bytes) == Some(KTX2_DFD_MODEL_ETC1S) {
+        // ETC1S fora do BasisLZ não devia existir: se aparecer, é sinal de
+        // um encode a meio caminho.
+        return Some("ETC1S sem BasisLZ (colorModel 163) — reexporta em UASTC (`text3d finish`)".to_string());
+    }
+    if (147..=156).contains(&vk_format) {
+        // Família ETC2/EAC crua: VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK
+        // (147 = 0x93) até VK_FORMAT_EAC_R11G11_SNORM_BLOCK (156 = 0x9C) —
+        // discriminantes conferidos na crate `ktx2` 0.5, enum `Format`.
+        // UASTC declara o formato no descritor (vkFormat 0) e passa.
+        return Some(format!(
+            "ETC2/EAC cru (vkFormat {vk_format}) — desktop não amostra ETC2; reexporta em UASTC (`text3d finish`)"
+        ));
+    }
+    None
+}
 
 /// O `.ktx2` merece sniffing próprio: ETC1S/BasisLZ é FATAL na engine (o
 /// Bevy 0.19 não descomprime BasisLZ — regra "nunca etc1s") e entrava como
 /// falso negativo, ao contrário do análogo GLB (Draco/Basis verificados).
+///
+/// O scheme é quem decide, não o `vkFormat`: o pool inteiro declara
+/// `VK_FORMAT_UNDEFINED` (UASTC com o formato no descritor, scheme `none`),
+/// e uma versão anterior deste teste marcava-o todo como BasisLZ — 13 avisos
+/// falsos no simple-rpg, que é a maneira mais rápida de ensinar quem lê o
+/// relatório a ignorá-lo.
 fn audit_ktx2(path: &Path, context: &str, issues: &mut Vec<AuditIssue>) {
-    let Some(bytes) = read_header(path, 48) else {
+    let Some(bytes) = read_header(path, 4096) else {
         return;
     };
     if bytes.len() < 12 || bytes[..12] != KTX2_MAGIC {
@@ -852,33 +1026,8 @@ fn audit_ktx2(path: &Path, context: &str, issues: &mut Vec<AuditIssue>) {
         return;
     }
     let vk_format = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
-    // O scheme só se lê com os 48 bytes do cabeçalho presentes.
-    let scheme = (bytes.len() >= 48)
-        .then(|| u32::from_le_bytes([bytes[44], bytes[45], bytes[46], bytes[47]]));
-    let problem = if vk_format == 0 {
-        // VK_FORMAT_UNDEFINED: Basis Universal — o formato real decide-se na
-        // transcodificação; é o caminho do etc1s/BasisLZ.
-        Some(
-            "Basis Universal (vkFormat 0 — ETC1S/BasisLZ) — a engine (Bevy 0.19) não descomprime BasisLZ; reexporta em UASTC (`text3d finish`)"
-                .to_string(),
-        )
-    } else if (147..=156).contains(&vk_format) {
-        // Família ETC2/EAC crua: VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK
-        // (147 = 0x93) até VK_FORMAT_EAC_R11G11_SNORM_BLOCK (156 = 0x9C) —
-        // discriminantes conferidos na crate `ktx2` 0.5, enum `Format`.
-        // UASTC costuma declarar VK_FORMAT_R8G8B8A8_* (37) e passa.
-        Some(format!(
-            "ETC2/EAC cru (vkFormat {vk_format}) — desktop não amostra ETC2; reexporta em UASTC (`text3d finish`)"
-        ))
-    } else if scheme == Some(1) {
-        Some(
-            "supercompressão BasisLZ (scheme 1) — a engine (Bevy 0.19) não descomprime BasisLZ; reexporta em UASTC (`text3d finish`)"
-                .to_string(),
-        )
-    } else {
-        None
-    };
-    if let Some(problem) = problem {
+    let _ = vk_format;
+    if let Some(problem) = ktx2_payload_problem(&bytes) {
         issues.push(AuditIssue {
             severity: Severity::Warning,
             message: format!(
@@ -1303,10 +1452,25 @@ mod tests {
         bytes
     }
 
+    /// Cabeçalho KTX2 mínimo (12 magia + 32 campos + scheme @44 = 48 bytes),
+    /// com o `dfdByteOffset` @48 a apontar para um descritor que declara
+    /// `color_model`.
+    fn ktx2_header_with_dfd(vk_format: u32, scheme: u32, color_model: u8) -> Vec<u8> {
+        /// Onde o descritor começa: depois do cabeçalho (52) e do índice.
+        const DFD_OFFSET: u32 = 80;
+        let mut bytes = ktx2_header(vk_format, scheme);
+        bytes.extend_from_slice(&DFD_OFFSET.to_le_bytes()); // dfdByteOffset @48
+        bytes.resize(DFD_OFFSET as usize, 0);
+        bytes.resize(DFD_OFFSET as usize + 16, 0);
+        bytes[DFD_OFFSET as usize + KTX2_DFD_COLOR_MODEL] = color_model;
+        bytes
+    }
+
     #[test]
     fn test_ktx2_etc1s_and_etc2_flagged_uastc_passes() {
         let dir = tempfile::tempdir().expect("tmpdir");
-        // ETC1S/BasisLZ: vkFormat 0 (UNDEFINED — Basis Universal) → warn.
+        // ETC1S/BasisLZ: vkFormat 0 (UNDEFINED — o formato vem do descritor)
+        // com supercompressão BasisLZ → warn.
         let mut issues = Vec::new();
         audit_texture(
             &write_bytes(&dir, "etc1s.ktx2", &ktx2_header(0, 1)),
@@ -1330,6 +1494,32 @@ mod tests {
             &mut issues,
         );
         assert!(issues.is_empty(), "UASTC passa limpo: {issues:?}");
+        // UASTC como o pipeline o escreve: vkFormat 0 (o formato está no
+        // descritor), SEM supercompressão, colorModel UASTC → limpo. Era aqui
+        // que a versão anterior do teste marcava o pool inteiro como
+        // BasisLZ (13 avisos falsos no simple-rpg).
+        let mut issues = Vec::new();
+        audit_texture(
+            &write_bytes(&dir, "uastc-dfd.ktx2", &ktx2_header_with_dfd(0, 0, 166)),
+            "teste",
+            &mut issues,
+        );
+        assert!(
+            issues.is_empty(),
+            "UASTC com o formato no descritor passa limpo: {issues:?}"
+        );
+        // ETC1S sem BasisLZ: o encode parou a meio → warn.
+        let mut issues = Vec::new();
+        audit_texture(
+            &write_bytes(&dir, "etc1s-sem-lz.ktx2", &ktx2_header_with_dfd(0, 0, 163)),
+            "teste",
+            &mut issues,
+        );
+        assert_eq!(
+            issues.len(),
+            1,
+            "ETC1S sem BasisLZ tem de ser apanhado: {issues:?}"
+        );
         // Magia errada (PNG guardado como .ktx2) → warn.
         let mut issues = Vec::new();
         audit_texture(

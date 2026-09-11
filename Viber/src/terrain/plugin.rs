@@ -329,16 +329,27 @@ fn update_voxel_columns(
     };
 
     let rows = (spec.world_size / edge).ceil().max(1.0) as u32;
-    let clamp_coord = |axis: f32| -> u32 {
-        (((axis - render_distance + half) / edge).floor().max(0.0) as u32).min(rows - 1)
-    };
-    let clamp_hi = |axis: f32| -> u32 {
-        (((axis + render_distance + half) / edge).floor().max(0.0) as u32).min(rows - 1)
-    };
-    let min_cx = clamp_coord(cam_xz.x);
-    let max_cx = clamp_hi(cam_xz.x);
-    let min_cz = clamp_coord(cam_xz.y);
-    let max_cz = clamp_hi(cam_xz.y);
+    // A janela desejada INTERSECTA a grelha em vez de saturar nela. Com o
+    // `clamp` antigo, uma câmara fora do campo (uma cena de interior posta
+    // fora do mapa) arrastava a janela para a orla e mandava construir lá
+    // colunas — 2 km de distância, inúteis, e a coluna da borda era depois
+    // colada ao herói como se fosse o chão dele. Intersectar dá o conjunto
+    // vazio, que é a verdade: ali não há terreno.
+    let lo = |axis: f32| ((axis - render_distance + half) / edge).floor();
+    let hi = |axis: f32| ((axis + render_distance + half) / edge).floor();
+    let first = |v: f32| v.max(0.0).min(rows as f32 - 1.0) as u32;
+    let last = |v: f32| v.min(rows as f32 - 1.0).max(0.0) as u32;
+    let (min_cx_v, max_cx_v) = (lo(cam_xz.x), hi(cam_xz.x));
+    let (min_cz_v, max_cz_v) = (lo(cam_xz.y), hi(cam_xz.y));
+    let min_cx = first(min_cx_v);
+    let max_cx = last(max_cx_v);
+    let min_cz = first(min_cz_v);
+    let max_cz = last(max_cz_v);
+    // Fora da pegada (ou sem interseção) → nenhuma coluna desejada.
+    let window_empty = min_cx_v > rows as f32 - 1.0
+        || max_cx_v < 0.0
+        || min_cz_v > rows as f32 - 1.0
+        || max_cz_v < 0.0;
 
     // 1. Campo de LOD de toda a janela visível, ANTES de tocar em nada.
     //
@@ -350,7 +361,7 @@ fn update_voxel_columns(
     // Colunas ainda por nascer entram com o LOD cru: a vizinha ao lado tem de
     // ver o LOD que ela VAI ter, não a ausência dela.
     let mut lod_field = LodField::new(rows);
-    for cz in min_cz..=max_cz {
+    for cz in (if window_empty { 1 } else { min_cz })..=(if window_empty { 0 } else { max_cz }) {
         for cx in min_cx..=max_cx {
             let coords = UVec2::new(cx, cz);
             let dist = center_of(coords).distance(cam_xz);

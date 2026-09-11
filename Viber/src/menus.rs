@@ -577,18 +577,47 @@ fn spawn_campfire_banner(mut commands: Commands) {
         });
 }
 
+/// `haystack.contains(needle)` ASCII case-insensitive, sem alocar.
+///
+/// O `name.to_ascii_lowercase().contains(..)` do banner criava um `String` por
+/// entidade nomeada do mundo em cada frame — milhares de `malloc`/frame no
+/// `simple-rpg` (cada instância de spawner leva `Name`) só para responder a
+/// uma pergunta binária.
+pub(crate) fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
+    let needle = needle.as_bytes();
+    if needle.is_empty() {
+        return true;
+    }
+    haystack
+        .as_bytes()
+        .windows(needle.len())
+        .any(|window| window.eq_ignore_ascii_case(needle))
+}
+
+/// Intervalo do scan de fogueiras. O banner é um prompt de HUD a 3,5 m: a
+/// 0,1 s o atraso máximo é de ~6 frames e o scan (o mundo inteiro, por nome)
+/// passa de 60× a 10× por segundo.
+const CAMPFIRE_SCAN_INTERVAL: f32 = 0.1;
+
 fn campfire_banner_system(
+    time: Res<Time>,
+    mut throttle: Local<f32>,
     players: Query<&GlobalTransform, With<Player>>,
     camps: Query<(&Name, &GlobalTransform), Without<Player>>,
     mut banner: Query<&mut Visibility, With<CampfireBanner>>,
 ) {
+    *throttle -= time.delta_secs();
+    if *throttle > 0.0 {
+        return;
+    }
+    *throttle = CAMPFIRE_SCAN_INTERVAL;
     // Fogueira POR NOME ("campfire") — sem o marcador o banner ficava
     // praticamente sempre visível (o player está a <3,5 m de ALGUMA
     // entidade quase todo o tempo).
     let near = players.iter().next().is_some_and(|player| {
         camps.iter().any(|(name, c)| {
-            name.to_ascii_lowercase().contains("campfire")
-                && c.translation().distance(player.translation()) < 3.5
+            contains_ignore_ascii_case(name.as_str(), "campfire")
+                && c.translation().distance_squared(player.translation()) < 3.5 * 3.5
         })
     });
     for mut visibility in banner.iter_mut() {

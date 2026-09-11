@@ -7,6 +7,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use bevy::app::PluginGroup;
 use bevy::ecs::schedule::IntoScheduleConfigs;
+use bevy::log::info;
 use bevy_kira_audio::AudioApp;
 use clap::{CommandFactory, Parser, Subcommand};
 use serde_json::Value;
@@ -661,19 +662,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // ESTÁTICAS que lêem `shaders/{sky,water,terrain_chunk}.wgsl` contra as
     // roots — a escrita e a leitura têm de casar (contrato de conteúdo,
     // docs/ASSETS.md).
-    let sky_config = sky::SkyConfig::from_world(&world.entities);
-    // VIBER_SKY_MODEL sobrepõe o attr `<Sky model>` (A/B sem editar XML).
-    let sky_config = match std::env::var("VIBER_SKY_MODEL").ok().as_deref() {
-        Some(v) if v.eq_ignore_ascii_case("nishita") => sky::SkyConfig {
-            model: sky::SkyModel::Nishita,
-            ..sky_config
-        },
-        Some(v) if v.eq_ignore_ascii_case("analytic") => sky::SkyConfig {
-            model: sky::SkyModel::Analytic,
-            ..sky_config
-        },
-        _ => sky_config,
-    };
+    let sky_config = sky::SkyConfig::from_world(&world.entities).with_env_override();
     let water_config = terrain::water_material::WaterSurfaceConfig::from_world(&world.entities);
     let layers_config = terrain::layer_material::TerrainChunkConfig::from_world(&world.entities);
     let shaders_dir = asset_root.join("shaders");
@@ -697,6 +686,20 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             );
         }
     }
+    // SSR da água (Fase B): shader ESTÁTICO (sem especialização por mundo) —
+    // só se escreve com o gate ligado, para não tocar no disco de mundos que
+    // não o usam.
+    if viber::water_ssr::water_ssr_requested() {
+        if let Err(e) = std::fs::write(
+            shaders_dir.join("water_ssr.wgsl"),
+            viber::water_ssr::WATER_SSR_WGSL,
+        ) {
+            eprintln!(
+                "viber: falha ao escrever {}/water_ssr.wgsl: {e}",
+                shaders_dir.display()
+            );
+        }
+    }
     let mut app = bevy::app::App::new();
     // Registered before `AssetPlugin`, which snapshots the sources when it
     // builds. The reader is multi-root (world → extras do config) and expands
@@ -707,9 +710,13 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // (textures_dir) e o spawn (bgm_dir) leem-no de lá.
     app.insert_resource(config.clone());
     app.insert_resource(save::SaveDir(Some(config.save_dir().to_path_buf())));
-    // O modelo do céu também viaja como resource — o IBL pinta o cubemap com
-    // a MESMA radiância que o domo desenha (analítico ou nishita).
+    // O modelo do céu também viaja como resource — o IBL (`ibl.rs`) pinta o
+    // cubemap com a MESMA radiância que o domo desenha e os probes regionais
+    // (`probes.rs`) usam os mesmos coeficientes. Sem ele os dois lêem `None` e
+    // ficam presos em `analytic`, qualquer que seja o `<Sky model>`.
     app.insert_resource(sky::SkyModelState::from_config(&sky_config));
+    // (a linha do modelo resolvido sai depois de `add_plugins` — o subscriber
+    // de tracing só existe a partir daí; ver `viber debug logs`)
     let mut plugins = bevy::DefaultPlugins
         .set(bevy::window::WindowPlugin {
             primary_window: Some(bevy::window::Window {
@@ -727,6 +734,24 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
         plugins = plugins.set(bridge::logs::log_plugin_with_bridge());
     }
     app.add_plugins(plugins);
+    // SSR de reflexões raster (Fase B, src/water_ssr.rs): reflexo de cena na
+    // água + chão molhado na chuva por raymarch sobre o depth prepass.
+    // OPT-IN (`VIBER_WATER_SSR=1`) enquanto não existir acumulação temporal
+    // própria do passe — sem ela o reflexo dança com as ondas (medido).
+    app.add_plugins(viber::water_ssr::WaterSsrPlugin);
+    // Probes regionais (src/probes.rs): bounce de bioma nos pads com tint,
+    // parallax-corrected. DEFAULT ON — `VIBER_PROBES=0` desliga.
+    app.add_plugins(viber::probes::RegionalProbesPlugin);
+    // Céu/dia/noite, IBL e probes regionais resolvem o modelo por AQUI (o
+    // subscriber de tracing já existe): é a linha que confirma na QA que o
+    // gate `<Sky model>`/`VIBER_SKY_MODEL` chegou ao render e ao IBL.
+    info!(
+        "sky: modelo {} (attr <Sky model> / VIBER_SKY_MODEL)",
+        match sky_config.model {
+            sky::SkyModel::Nishita => "nishita",
+            sky::SkyModel::Analytic => "analytic",
+        }
+    );
     // Áudio: backend kira (bevy_kira_audio) com buses tipados — o
     // `AudioMixerSettings` (save/menu/XML) empurra volumes para os canais
     // (crate::music::mixer_sync) e tudo o que está a tocar responde ao vivo.
