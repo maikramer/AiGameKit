@@ -1,0 +1,44 @@
+<!--
+  QA DA CAMADA DE FANTASIA · mundo leve para validar world/fantasy/*.xml.
+
+  PORQUÊ UM MUNDO LEVE: a `world.xml` completa carrega cidade + 8 tapetes de
+  vegetação + 20 grupos de spawn de criaturas + interiores, e com outra engine
+  já viva na GPU não há VRAM para duas cópias dela. Este mundo traz só o que
+  as features novas precisam de MENTIR: o MESMO `<Terrain>` (sem ele não há
+  seating, carve nem cota de gruta), os trilhos e os quatro ficheiros de
+  fantasia. Sem cidade, sem vegetação, sem criaturas, sem UI.
+
+  O que este mundo prova (nada disto o `analyze` consegue ver — só corre no
+  bootstrap, contra o heightfield e os sólidos voxel já construídos):
+    - as `<Cave>` abrem bocas utilizáveis e o dressing de superfície assenta;
+    - os props INTERIORES (topo, fora de grupo) ficam à cota calculada em vez
+      de serem levantados ao chão como os das groups;
+    - os `<RockFeatures>` semeiam arcos/grutas na escarpa em vez de os
+      recusarem todos;
+    - a calçada, o coro, o anel da cidadela e o bosque assentam nos sítios.
+
+  Correr (protocolo de sessão, nunca `run` directo):
+    cd examples/simple-rpg
+    viber session up com a flag de mundo
+    viber debug (flag de mundo) lua em viber.debug.tp(860, 430)
+    viber debug (flag de mundo) screenshot
+    viber session release com o dono da tarefa
+-->
+<world clear-color="#8fc2ef">
+  <Include src="/world/environment.xml" />
+  <PlayerGLTF name="player" pos="0 150 0" model-url="/assets/meshes/characters/hero_lod0.glb">
+  </PlayerGLTF>
+  <SpawnGate target-entity="player" y-fallback="150" />
+  <Group name="world-base" translation="0 0 0">
+    <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="/assets/terrain/terrain.ahgt" skirt-width="0.015625" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92"
+           cliff-angle="50" sharpen="true" sharpen-angle="35" sharpen-seed="7"
+           cliff-streaks="0.55" cliff-moss="0.4" />
+    <NavMesh />
+  </Group>
+  <Include src="/world/paths/trails.xml" />
+  <Include src="/world/fantasy/alto-de-vael.xml" />
+  <Include src="/world/fantasy/grutas.xml" />
+  <Include src="/world/fantasy/bosque-encantado.xml" />
+  <Include src="/world/fantasy/cidadela-caida.xml" />
+  <OrbitCamera distance="3.3" height="1.55" pitch="18.3" />
+</world>

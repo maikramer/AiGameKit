@@ -1,0 +1,314 @@
+<!--
+  A CIDADELA CAÍDA — a ruína monumental do planalto oeste. Loaded via Include.
+
+  PORQUÊ: o planalto oeste (x -700..-1250) é a segunda grande mesa vazia do
+  mapa: ~189 m de cota, declive 0.5-2°, e nada lá em cima. Do vale parece
+  uma serra; em cima é um chão liso e morto. Aqui fica a explicação do mapa:
+  uma cidadela de muralha de pedra como a de Discordia, mas caída.
+
+  REUTILIZA, DE PROPÓSITO: a muralha usa os MESMOS GLBs das muralhas de
+  Discordia (`infra/city_wall_seg_a/b/c`, `city_gate_arch`). Uma ruína que
+  partilha a linguagem construtiva da cidade viva conta uma história — é a
+  mesma gente, noutro tempo. Um conjunto de modelos "de ruína" próprios
+  diria só "outro sítio".
+
+  COTAS MEDIDAS (tools/height_probe.py): centro (-880,-300) 188.6 m, declive
+  0.5°. O anel da muralha (r=62) corre entre 185.9 e 190.1 m — 4 m de
+  desnível, que num pano de muralha se lê como muro torto. O pad de 140×140
+  nivela o recinto antes de a pedra assentar.
+
+  GEOMETRIA DO ANEL: cada segmento fica em
+  `(cx + r·sen θ, cz + r·cos θ)` com `yaw = θ` — o eixo longo do segmento é
+  o x local, e a tangente da circunferência em θ é `(cos θ, -sen θ)`, que é
+  exatamente o que `yaw = θ` roda. Passo de 6° a r=62 dá corda 6.49 m (o mesh
+  tem 6.5 m): encosta sem sobrepor, e as folgas que sobram leem-se como a
+  junta que o tempo abriu.
+-->
+  <world>
+  <Group name="fantasy.cidadela" translation="0 0 0">
+    <TerrainPad at="-880 -300" size="140 140" falloff="40" corner-radius="34" />
+    <SpawnExclusion at="-880 -300" radius="44" />
+    <!-- ============================================================
+       §1 MURALHA — dois arcos de 13 segmentos. Os 108° que faltam de cada
+       lado não são um erro: é o lado que caiu, virado ao vale (leste) e ao
+       pântano (norte). O portão solitário do §2 fica no vão leste.
+       ============================================================ -->
+    <Entity translation="-880.00 0 -238.00" transform="rotation: 0 0 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-873.52 0 -238.34" transform="rotation: 0 6 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-867.11 0 -239.35" transform="rotation: 0 12 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-860.84 0 -241.03" transform="rotation: 0 18 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-854.78 0 -243.36" transform="rotation: 0 24 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-849.00 0 -246.31" transform="rotation: 0 30 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-843.56 0 -249.84" transform="rotation: 0 36 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-838.51 0 -253.93" transform="rotation: 0 42 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-833.93 0 -258.51" transform="rotation: 0 48 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-829.84 0 -263.56" transform="rotation: 0 54 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-826.31 0 -269.00" transform="rotation: 0 60 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-823.36 0 -274.78" transform="rotation: 0 66 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-821.03 0 -280.84" transform="rotation: 0 72 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-880.00 0 -362.00" transform="rotation: 0 180 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-886.48 0 -361.66" transform="rotation: 0 186 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-892.89 0 -360.65" transform="rotation: 0 192 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-899.16 0 -358.97" transform="rotation: 0 198 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-905.22 0 -356.64" transform="rotation: 0 204 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-911.00 0 -353.69" transform="rotation: 0 210 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-916.44 0 -350.16" transform="rotation: 0 216 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-921.49 0 -346.07" transform="rotation: 0 222 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-926.07 0 -341.49" transform="rotation: 0 228 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-930.16 0 -336.44" transform="rotation: 0 234 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-933.69 0 -331.00" transform="rotation: 0 240 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-936.64 0 -325.22" transform="rotation: 0 246 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-938.97 0 -319.16" transform="rotation: 0 252 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <!-- ============================================================
+       §2 O PORTÃO QUE FICOU DE PÉ (-818,-300) — no meio do vão leste, virado
+       ao vale. É o primeiro pedaço que se vê a subir de baixo: um portão sem
+       muralha nenhuma à volta.
+       ============================================================ -->
+    <Entity name="cidadela-gate" translation="-818 0 -300" transform="rotation: 0 90 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_gate_arch_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_gate_arch_lod0.glb" />
+      <PointLight translation="0 4.2 0" color="0xffb060" intensity="70000" radius="1.0" shadows="false" />
+    </Entity>
+    <!-- Uma torre de canto caída, ainda a marcar o canto que já não defende. -->
+    <Entity translation="-829.84 0 -336.44" transform="rotation: 0 126 0; scale: 0.95 0.95 0.95" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_corner_lod0.glb" />
+    </Entity>
+    <Entity translation="-930.16 0 -263.56" transform="rotation: 0 306 0; scale: 0.95 0.95 0.95" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/infra/city_wall_corner_lod0.glb" />
+    </Entity>
+    <!-- ============================================================
+       §3 O PÁTIO — a torre do mestre ainda de pé, a casa comprida
+       desabada ao lado e a capela reduzida a altar e bancos. Tudo dentro de
+       r=30 do centro, para o recinto ler como um sítio só.
+       ============================================================ -->
+    <Entity name="cidadela-keep" translation="-880 0 -300" transform="rotation: 0 20 0; scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
+    </Entity>
+    <Entity translation="-892 0 -314" transform="rotation: 0 118 0; scale: 0.85 0.85 0.85" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/village_longhouse_lod0.glb" />
+    </Entity>
+    <Entity translation="-866 0 -318" transform="rotation: 0 200 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_altar_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/interiors/chapel_altar_lod0.glb" />
+    </Entity>
+    <Entity translation="-872 0 -324" transform="rotation: 0 200 0; scale: 1.3 1.3 1.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_statue_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/interiors/chapel_statue_lod0.glb" />
+    </Entity>
+    <Entity translation="-860 0 -312" transform="rotation: 0 20 0; scale: 1.3 1.3 1.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_statue_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/interiors/chapel_statue_lod0.glb" />
+    </Entity>
+    <Entity translation="-868 0 -320" transform="rotation: 0 200 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/interiors/chapel_pew_lod0.glb" />
+    </Entity>
+    <Entity translation="-866 0 -316" transform="rotation: 0 200 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/interiors/chapel_pew_lod0.glb" />
+    </Entity>
+    <!-- O círculo de cristal no meio do pátio: o que eles guardavam, e a
+         razão pela qual a cidadela ardeu. -->
+    <Entity name="cidadela-relic" translation="-880 0 -288" transform="rotation: 0 30 0; scale: 2.6 2.6 2.6" script="poi/ruin-relic.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+      <PointLight translation="0 1.8 0" color="0x9fd8ff" intensity="5600" radius="1.1" shadows="false" />
+    </Entity>
+    <SpawnExclusion at="-880 -288" radius="10" />
+    <Entity translation="-889 0 -293" transform="rotation: 0 120 0; scale: 1.9 1.9 1.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity translation="-871 0 -293" transform="rotation: 0 240 0; scale: 2.1 2.1 2.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity translation="-880 0 -296.5" transform="rotation: 0 300 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity translation="-880 0 -288">
+      <ParticleSystem preset="magic" transform="pos: 0 2.2 0" particle-emitter="preset: magic; emission-rate: 24; shape-radius: 3.0; start-life-min: 1.4; start-life-max: 3.2; start-speed-min: 0.2; start-speed-max: 0.7; start-size-min: 0.12; start-size-max: 0.3; looping: 1; world-space: 1" />
+    </Entity>
+    <Entity name="cidadela-chest" translation="-886 0 -310" transform="rotation: 0 40 0" script="chest.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
+    </Entity>
+    <!-- Fogueira de acampamento: alguém vive aqui agora. -->
+    <Entity translation="-892 0 -292" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
+    </Entity>
+    <Entity translation="-892 0 -292">
+      <ParticleSystem preset="fire" transform="pos: 0 0.42 0" particle-emitter="preset: fire; emission-rate: 40; shape-radius: 0.28; start-life-min: 0.5; start-life-max: 1.3; start-speed-min: 1.3; start-speed-max: 2.7; start-size-min: 0.3; start-size-max: 0.62; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-892 0 -292" body="fixed" collider="none">
+      <PointLight translation="0 0.7 0" color="0xff8a33" intensity="5400" radius="0.8" />
+    </Group>
+    <Entity name="cidadela-desk" translation="-874 0 -296" transform="rotation: 0 100 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="-888 0 -304" transform="rotation: 0 -30 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <!-- ============================================================
+       §4 DESTROÇOS — a pedra do muro caído. Pilares deitados, montes de
+       blocos e pedregulhos musgosos espalhados pelo pátio e pelo anel,
+       todos com colisor (é por cima disto que se anda, não por dentro).
+       ============================================================ -->
+    <Entity translation="-846 0 -282" transform="rotation: 0 34 78" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 3.0 1.0 1.0">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="-902 0 -334" transform="rotation: 0 210 84" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 3.0 1.0 1.0">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="-910 0 -282" transform="rotation: 0 96 70" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 3.0 1.0 1.0">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="-838 0 -312" transform="rotation: 0 300 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
+    </Entity>
+    <Entity translation="-918 0 -306" transform="rotation: 0 60 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/terrain/form_stack_11_lod0.glb" />
+    </Entity>
+    <Entity translation="-852 0 -334" transform="rotation: 0 180 0; scale: 1.2 1.2 1.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
+    </Entity>
+    <Entity translation="-924 0 -288" transform="rotation: 0 12 0; scale: 1.1 1.1 1.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_lod0.glb">
+      <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
+    </Entity>
+    <Entity translation="-898 0 -276" transform="rotation: 0 74 0; scale: 1.3 1.3 1.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb">
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" />
+    </Entity>
+    <Entity translation="-862 0 -270" transform="rotation: 0 220 0; scale: 1.2 1.2 1.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_lod0.glb">
+      <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
+    </Entity>
+    <!-- ============================================================
+       §5 TOCHAS DO ANEL — os suportes de tocha da cidade viva, ainda
+       espaçados como estavam: seis ao longo da muralha que resta. À noite
+       desenham o anel que já não existe.
+       ============================================================ -->
+    <Entity translation="-880 0 -244" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Entity translation="-880 0 -244">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 20; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-880 0 -244" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <Entity translation="-874.5 0 -256.5" transform="rotation: 0 30 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Entity translation="-874.5 0 -256.5">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 20; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-874.5 0 -256.5" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <Entity translation="-836 0 -256.5" transform="rotation: 0 330 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Entity translation="-836 0 -256.5">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 20; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-836 0 -256.5" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <Entity translation="-880 0 -356" transform="rotation: 0 180 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Entity translation="-880 0 -356">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 20; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-880 0 -356" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <Entity translation="-910 0 -348" transform="rotation: 0 214 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Group translation="-910 0 -348" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <Entity translation="-926 0 -330" transform="rotation: 0 238 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Group translation="-926 0 -330" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <!-- ============================================================
+       §6 NÉVOA DO ALTO (189 m) — a mesa apanha o vento e a humidade das
+       duas bacias em baixo; a névoa rasteira é o que faz o sítio ler-se
+       frio e morto. Mais rala que a do pântano: aqui é altitude, não
+       charco.
+       ============================================================ -->
+    <Entity translation="-880 0 -300">
+      <ParticleSystem preset="smoke" transform="pos: 0 0.9 0" particle-emitter="preset: smoke; emission-rate: 5; start-life-min: 5; start-life-max: 9; start-speed-min: 0.06; start-speed-max: 0.22; start-size-min: 2.0; start-size-max: 4.0; start-color: #9aa8b4; looping: 1; world-space: 1" />
+    </Entity>
+    <Entity translation="-902 0 -320">
+      <ParticleSystem preset="smoke" transform="pos: 0 0.9 0" particle-emitter="preset: smoke; emission-rate: 5; start-life-min: 5; start-life-max: 9; start-speed-min: 0.06; start-speed-max: 0.22; start-size-min: 2.0; start-size-max: 4.0; start-color: #9aa8b4; looping: 1; world-space: 1" />
+    </Entity>
+    <Entity translation="-856 0 -276">
+      <ParticleSystem preset="smoke" transform="pos: 0 0.9 0" particle-emitter="preset: smoke; emission-rate: 4; start-life-min: 5; start-life-max: 9; start-speed-min: 0.06; start-speed-max: 0.22; start-size-min: 2.0; start-size-max: 3.6; start-color: #9aa8b4; looping: 1; world-space: 1" />
+    </Entity>
+    <Entity translation="-880 0 -352">
+      <ParticleSystem preset="sparkle" transform="pos: 0 1.2 0" />
+    </Entity>
+    <!-- ============================================================
+       §7 OS QUE FICARAM — sombras no pátio (a cidadela é assombrada: é o
+       único sítio do mapa onde elas fazem sentido em número) e lobos na
+       mesa aberta, longe do muro.
+       ============================================================ -->
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="8" seed="9901" region-min="-916 0 -336" region-max="-844 0 -264" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="1440">
+      <Creature role="enemy" script="enemies/shade.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/shade_lod0.glb" lod1-url="/assets/meshes/characters/shade_lod1.glb" lod2-url="/assets/meshes/characters/shade_lod2.glb" lod-threshold-near="20" lod-threshold-mid="60" />
+      </Creature>
+    </DynamicSpawner>
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="6" seed="9902" region-min="-1040 0 -420" region-max="-900 0 -300" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="1440">
+      <Creature role="enemy" script="enemies/wolf.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/wolf_lod0.glb" lod1-url="/assets/meshes/characters/wolf_lod1.glb" lod2-url="/assets/meshes/characters/wolf_lod2.glb" lod-threshold-near="20" lod-threshold-mid="60" />
+      </Creature>
+    </DynamicSpawner>
+  </Group>
+  <!-- FIM fantasy.cidadela -->
+  </world>

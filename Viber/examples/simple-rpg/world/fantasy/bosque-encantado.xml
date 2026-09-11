@@ -1,0 +1,192 @@
+<!--
+  BOSQUE ENCANTADO — a bacia escondida do extremo norte. Loaded via Include.
+
+  PORQUÊ: a norte do vale há uma MURALHA — a cota sobe de ~58 m (fim da
+  artéria, -8/286) a ~176 m no cavalgamento das colinas — e do outro lado
+  dela existe a maior bacia plana do mapa: ~73 m de cota, declive 0-4°, de
+  x=-100 a x=400 e de z=1230 a z=1800. Estava vazia e ninguém lá chegava. É
+  o sítio perfeito para o que o resto do mapa não tem: um lugar calmo e
+  estranho, alcançado por uma subida dura.
+
+  COMO SE CHEGA: trilho novo em paths/trails.xml (dock em n_end, -8 286:
+  sobe a muralha por noroeste e desce à bacia). O perfil medido tem pernos
+  de 54 % e 41 % de grau (28-35°) — duro, mas dentro do
+  `HERO_MAX_SLOPE_DEG` = 55° e coerente com os outros trilhos de montanha
+  do mapa (o do Mirante da Caldeira chega a 61 %).
+
+  COTAS MEDIDAS (tools/height_probe.py):
+    clareira (180,1330) 73.9 declive 3.2   altar (150,1300) 74.1 declive 2.6
+    lagoa    (200,1400) 72.7 declive 0.5   portão (240,1250) 79.2 declive 2.7
+  Tudo dentro de 6 m de amplitude: o pad só é preciso sob o anel de pedras,
+  para as oito pedras assentarem ao mesmo nível.
+-->
+  <world>
+  <Group name="fantasy.bosque-encantado" translation="0 0 0">
+    <!-- ============================================================
+       §1 A LAGOA DOS LUMES — espelho de água escuro no meio da bacia. O
+       `rocks="1"` traz as pedras de margem do pipeline automático (as
+       mesmas dos lagos do pântano), e a cor puxa a verde para o bioma ler
+       como "água viva", não como o azul dos lagos do vale.
+       ============================================================ -->
+    <Lake at="200 1400" radius="22" depth="2.6" water-offset="0.4" color="#2b7f86" opacity="0.7" ripple="0.35" rocks="1" rocks-density="0.16" rocks-scale-max="1.8" />
+    <SpawnExclusion at="200 1400" radius="36" />
+    <Entity name="ambient_water_lumes" translation="200 0 1400" script="ambient-water.lua" />
+    <!-- ============================================================
+       §2 ANEL DOS ANTIGOS — oito menires a 26 m do centro da lagoa, sobre um
+       pad para assentarem todos à mesma cota (2 m de desnível natural às
+       voltas do anel lêem-se como colocação torta). Não é um círculo de
+       culto: não tem altar nem luz quente, é só pedra e a marca que ela
+       deixa.
+       ============================================================ -->
+    <TerrainPad at="200 1400" size="66 66" falloff="22" corner-radius="18" />
+    <Entity translation="200 0 1426" transform="rotation: 0 12 0; scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="218.4 0 1418.4" transform="rotation: 0 57 0; scale: 1.35 1.35 1.35" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="225.5 0 1400" transform="rotation: 0 102 0; scale: 1.55 1.55 1.55" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="218.4 0 1381.6" transform="rotation: 0 147 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="200 0 1374" transform="rotation: 0 192 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="181.6 0 1381.6" transform="rotation: 0 237 0; scale: 1.45 1.45 1.45" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="174.5 0 1400" transform="rotation: 0 282 0; scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <!-- O oitavo caiu para dentro da lagoa. -->
+    <Entity translation="186 0 1420" transform="rotation: 0 40 74" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.2 0.9 0.9">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <!-- ============================================================
+       §3 COGUMELOS QUE BRILHAM — o mesmo `forest/mushroom_glow` do sub-bosque
+       da Floresta Sombria, aqui à escala 2.2-4.2. É o que dá o tom do sítio:
+       de dia são cogumelos grandes, de noite são lanternas. Um tapete
+       disperso por toda a bacia e um anel denso na margem da lagoa.
+       ============================================================ -->
+    <StaticSpawner profile="tree" count="150" seed="8801" region-min="60 0 1240" region-max="360 0 1720"
+                    align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1"
+                    max-slope-deg="26" max-slope-attempts="64" scale-min="1.6" scale-max="3.2"
+                    avoid-overlaps="1" footprint-radius="1.6" cluster-count="18" cluster-radius="16"
+                    random-yaw="true" variation="foliage" max-distance="1980">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- Anel denso à volta da água: `near-water` é o anel em SECO à lâmina. -->
+    <StaticSpawner profile="tree" count="70" seed="8802" region-min="150 0 1350" region-max="250 0 1450"
+                    near-water="1" avoid-water="0" align-to-terrain="1" ground-align="auto"
+                    max-slope-deg="30" max-slope-attempts="96" scale-min="2.4" scale-max="4.2"
+                    avoid-overlaps="1" footprint-radius="2.4" random-yaw="true" variation="foliage" max-distance="1960">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- Os cinco maiores, postos à mão: são marcos, não tapete. -->
+    <Entity translation="228 0 1408" transform="rotation: 0 20 0; scale: 5.4 5.4 5.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb">
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
+      <PointLight translation="0 3.4 0" color="0x66e8c0" intensity="5200" radius="1.4" shadows="false" />
+    </Entity>
+    <Entity translation="164 0 1440" transform="rotation: 0 130 0; scale: 4.6 4.6 4.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb">
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
+      <PointLight translation="0 3.0 0" color="0x66e8c0" intensity="4400" radius="1.3" shadows="false" />
+    </Entity>
+    <Entity translation="242 0 1352" transform="rotation: 0 250 0; scale: 4.0 4.0 4.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb">
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
+      <PointLight translation="0 2.6 0" color="0x66e8c0" intensity="3800" radius="1.2" shadows="false" />
+    </Entity>
+    <Entity translation="140 0 1300" transform="rotation: 0 70 0; scale: 3.4 3.4 3.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb">
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
+    </Entity>
+    <Entity translation="285 0 1420" transform="rotation: 0 310 0; scale: 3.0 3.0 3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb">
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
+    </Entity>
+    <!-- ============================================================
+       §4 ALTAR DO CREPÚSCULO (150,1300) — o altar druida do pool, sozinho na
+       borda oeste da clareira. Recompensa mística ([F], crystal-shrine.lua).
+       ============================================================ -->
+    <SpawnExclusion at="150 1300" radius="16" />
+    <Entity name="bosque-altar" translation="150 0 1300" transform="scale: 1.9 1.9 1.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/druid_stone_altar_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/terrain/druid_stone_altar_lod0.glb" />
+      <PointLight translation="0 1.2 0" color="0x7cffd0" intensity="3200" radius="1.0" shadows="false" />
+    </Entity>
+    <Entity name="bosque-shrine" translation="151 0 1302" script="crystal-shrine.lua" />
+    <Entity translation="150 0 1300">
+      <ParticleSystem preset="magic" transform="pos: 0 1.4 0" particle-emitter="preset: magic; emission-rate: 20; shape-radius: 2.2; start-life-min: 1.4; start-life-max: 3.2; start-speed-min: 0.2; start-speed-max: 0.7; start-size-min: 0.12; start-size-max: 0.28; looping: 1; world-space: 1" />
+    </Entity>
+    <!-- Cogumelos forrageáveis: [F] come e cura 40 HP (mushroom.lua). -->
+    <Entity name="bosque-forage-1" translation="168 0 1322" script="mushroom.lua" />
+    <Entity name="bosque-forage-2" translation="216 0 1462" script="mushroom.lua" />
+    <Entity name="bosque-forage-3" translation="132 0 1386" script="mushroom.lua" />
+    <!-- ============================================================
+       §5 PORTÃO DA BACIA — dois arcos de ROCHA voxel (as primeiras
+       `<Arch>` do mapa, sólidos union com vão em arco e colisão própria).
+       O `natural` curva uma banda de cones de pé a pé: lê-se como a rocha que
+       o tempo furou, não como um arco que alguém construiu. Ficam no
+       estreitamento por onde o trilho desce à bacia, um antes do outro,
+       enquadrando a descida.
+       ============================================================ -->
+    <Arch name="bosque-portao" at="240 1250" width="9" height="7.5" thickness="2.4" depth="4.5" yaw="205" profile="natural" />
+    <Arch name="bosque-portao-2" at="205 1580" width="8" height="6.5" thickness="2.2" depth="4" yaw="90" profile="natural" />
+    <!-- ============================================================
+       §6 VAGA-LUMES E NÉVOA — a bacia é funda e húmida: névoa rasteira presa
+       no fundo (as encostas fecham-na) e vaga-lumes por todo o lado. Os
+       emissores vivem DENTRO do grupo, a y=0 local, que é o idioma do
+       atmosphere/ambient-fx.xml: o seating levanta o wrapper ao chão e o
+       emissor fica à altura local pedida.
+       ============================================================ -->
+    <Entity translation="200 0 1400">
+      <ParticleSystem preset="fireflies" transform="pos: 0 1.2 0" particle-emitter="preset: fireflies; emission-rate: 26; shape-radius: 16; start-life-min: 2.5; start-life-max: 5.5; start-speed-min: 0.1; start-speed-max: 0.5; start-size-min: 0.12; start-size-max: 0.3; looping: 1; world-space: 1" />
+    </Entity>
+    <Entity translation="140 0 1330">
+      <ParticleSystem preset="fireflies" transform="pos: 0 1.1 0" particle-emitter="preset: fireflies; emission-rate: 20; shape-radius: 12; start-life-min: 2.5; start-life-max: 5.0; start-speed-min: 0.1; start-speed-max: 0.45; start-size-min: 0.1; start-size-max: 0.26; looping: 1; world-space: 1" />
+    </Entity>
+    <Entity translation="270 0 1450">
+      <ParticleSystem preset="fireflies" transform="pos: 0 1.1 0" particle-emitter="preset: fireflies; emission-rate: 20; shape-radius: 12; start-life-min: 2.5; start-life-max: 5.0; start-speed-min: 0.1; start-speed-max: 0.45; start-size-min: 0.1; start-size-max: 0.26; looping: 1; world-space: 1" />
+    </Entity>
+    <Entity translation="200 0 1520">
+      <ParticleSystem preset="smoke" transform="pos: 0 0.8 0" particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.8; start-size-max: 3.6; start-color: #8fb0a4; looping: 1; world-space: 1" />
+    </Entity>
+    <Entity translation="130 0 1420">
+      <ParticleSystem preset="smoke" transform="pos: 0 0.8 0" particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.8; start-size-max: 3.4; start-color: #8fb0a4; looping: 1; world-space: 1" />
+    </Entity>
+    <Entity translation="270 0 1360">
+      <ParticleSystem preset="smoke" transform="pos: 0 0.8 0" particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.8; start-size-max: 3.4; start-color: #8fb0a4; looping: 1; world-space: 1" />
+    </Entity>
+    <!-- Brilho na lâmina da lagoa. -->
+    <Entity translation="186 0 1386">
+      <ParticleSystem preset="sparkle" transform="pos: 0 0.9 0" />
+    </Entity>
+    <!-- ============================================================
+       §7 A BACIA É DELES — boglings (o povo do brejo, que é o que esta bacia
+       é) e limos. Regiões nos prados a leste e a oeste, longe do altar e do
+       portão, para o sítio continuar a ser um refúgio se o jogador não
+       mexer.
+       ============================================================ -->
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="6" seed="8811" region-min="250 0 1300" region-max="340 0 1450" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="2000">
+      <Creature role="enemy" script="enemies/bogling.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/bogling_lod0.glb" lod1-url="/assets/meshes/characters/bogling_lod1.glb" lod2-url="/assets/meshes/characters/bogling_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
+      </Creature>
+    </DynamicSpawner>
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="6" seed="8812" region-min="60 0 1280" region-max="120 0 1420" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="2000">
+      <Creature role="enemy" script="enemies/slime.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/slime_lod0.glb" lod1-url="/assets/meshes/characters/slime_lod1.glb" lod2-url="/assets/meshes/characters/slime_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
+      </Creature>
+    </DynamicSpawner>
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="4" seed="8813" region-min="160 0 1560" region-max="300 0 1700" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="2000">
+      <Creature role="enemy" script="enemies/bogling.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/bogling_lod0.glb" lod1-url="/assets/meshes/characters/bogling_lod1.glb" lod2-url="/assets/meshes/characters/bogling_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
+      </Creature>
+    </DynamicSpawner>
+  </Group>
+  <!-- FIM fantasy.bosque-encantado -->
+  </world>

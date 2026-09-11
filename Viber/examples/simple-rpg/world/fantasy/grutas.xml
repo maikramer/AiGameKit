@@ -1,0 +1,311 @@
+<!--
+  GRUTAS DE FANTASIA — os dois primeiros túneis voxel do mapa. Loaded via
+  Include.
+
+  PORQUÊ: `<Cliff>`/`<Arch>`/`<Cave>` são sólidos 3D no campo voxel e nenhum
+  estava usado no simple-rpg (`analyze` contava caves 0, arches 0, rock fields
+  0). Uma gruta é a única forma de pôr ROCHA POR CIMA DA CABEÇA do jogador —
+  o heightfield não a sabe exprimir — e é o que faltava ao mapa para deixar
+  de ser uma superfície com coisas pousadas em cima.
+
+  CONTRATO DE AUTHORIA (ver `src/terrain/voxel/cave.rs`):
+  - `path` é XZ. A cota do túnel vem do TERRENO: o eixo fica `depth` metros
+    abaixo da superfície em cada estação, e a gruta acompanha a encosta em
+    vez de precisar de Y autoral em cada curva.
+  - `open-ends` (default) faz a profundidade subir a zero nas duas pontas: é
+    o que abre as bocas. Sem ele a gruta é uma bolha selada.
+  - `depth` tem de ser MAIOR que o maior raio, senão o túnel rebenta a
+    superfície ao longo de todo o comprimento (o parser avisa).
+  - `radius` aceita UM valor (tubo constante) ou um PERFIL interpolado por
+    comprimento de arco — é assim que a boca sai estreita e a galeria abre.
+
+  COTAS MEDIDAS (tools/height_probe.py — o mesmo sampler do `src/terrain/`):
+    Mina do Veio   A(-60,-216) 98.7  B(-74,-236) 104.6  C(-88,-256) 109.6
+                   D(-104,-276) 118.7  E(-118,-292) 131.6
+    Porta do Ermo  A(500,-58) 82.0  B(540,-52) 94.1  C(590,-46) 130.1
+                   D(640,-46) 157.6  E(690,-52) 170.3  F(720,-56) 174.9
+  O eixo do túnel sobe ~30° na Porta: com `HERO_MAX_SLOPE_DEG` = 55° o herói
+  sobe-o a pé, e é por isso que esta é a via de acesso ao Alto de Vael.
+
+  INTERIORES (props lá dentro): são `translation` de TOPO, FORA de qualquer
+  `<Group>` — uma `<Entity>` simples nunca recebe o `SeatOnTerrain` que os
+  grupos levam, e é essa a única maneira de fixar uma cota abaixo do chão. As
+  Y vêm do cálculo acima (pavimento = cota do eixo − raio, com o pavimento
+  em tigela da câmara descontado pelo raio horizontal); cada prop assenta
+  0.1-0.2 m ENTERRADO de propósito — o erro de interpolação da malha é da
+  mesma ordem, e meio palmo dentro da rocha não se vê enquanto flutuar se vê.
+-->
+  <world>
+  <!-- NOTA DE POOL (não muda o conteúdo, mas explica escolhas de asset):
+       `desert/ruin_pillar_lod0`, `farm/flint_rock_*`, `farm/ore_vein_*`,
+       `desert/cactus_lod*`, `desert/dead_bush_*`, `forest/dead_tree_lod0`,
+       `village/chapel_lod0` e `vegetation/plant_flatShort` EXISTEM no pool
+       mas falham a carregar no arranque com
+         Failed to transcode mip level 0 from UASTC to BC4: TranscodeFailed
+       — qualquer referência a eles produz props invisíveis. É por isso que
+       as molduras das bocas usam `props/stone_pillar` e não `ruin_pillar`.
+       Falha PRÉ-EXISTENTE do pool (o desert.xml/peaks.xml já usam
+       `ruin_pillar` e já estão sem ele), não introduzida por este ficheiro.
+    -->
+  <!-- ================================================================
+       §1 MINA DO VEIO — a boca de mina dos Picos (landmarks/peaks.xml §3)
+       deixa de ser um cenário de mentira: a galeria entra na encosta a
+       sudoeste, sobe 33 m e abre numa câmara com o veio de cristal.
+       ================================================================ -->
+  <Cave name="mina-do-veio" path="-60 -216 -74 -236 -88 -256 -104 -276 -118 -292"
+        radius="2.4 3.6 3.6 3.2" depth="10" open-ends="true"
+        mouth-flare="1" mouth-fraction="0.12">
+    <!-- A câmara é uma elipsoide própria: alargar o tubo para fazer a sala
+         alargava também o corredor que lá chega. -->
+    <Chamber at="-88 -256" radius="8.5" height="7" depth="13" />
+    <!-- Chaminé a 2/3 do caminho: a única luz natural lá dentro. Fica a
+         depth 12 (não 15) para o fundo parar entre o pavimento e o tecto do
+         túnel — mais fundo e abria um poço no chão da galeria. -->
+    <Shaft at="-104 -276" radius="2" depth="12" />
+  </Cave>
+
+  <!-- ================================================================
+       §2 PORTA DO ERMO — o túnel que sobe do deserto à mesa do Alto de
+       Vael. 94 m de subida em 230 m de túnel; sai no planalto em (720,-56),
+       onde começa a calçada dos monólitos (world/fantasy/alto-de-vael.xml
+       §3). É a passagem dos peregrinos: sem ela, o alto só se alcançava
+       trepando 30-50° de escarpa.
+       ================================================================ -->
+  <Cave name="porta-do-ermo" path="500 -58 540 -52 590 -46 640 -46 690 -52 720 -56"
+        radius="4" depth="11" open-ends="true"
+        mouth-flare="1" mouth-fraction="0.12">
+    <Chamber at="590 -46" radius="7" height="7" depth="14" />
+    <Shaft at="620 -45" radius="2.2" depth="17" />
+  </Cave>
+
+  <!-- ================================================================
+       §3 BOCAS — o dressing que diz "aqui entra-se". Os pilares de ruína
+       emolduram cada boca, os braseiros acendem-na à noite e as caixas
+       contam que alguém trabalha (ou trabalhou) ali.
+       ================================================================ -->
+  <Group name="fantasy.grutas.bocas" translation="0 0 0">
+    <!-- Mina do Veio: acampamento de mineração (-60,-216) -->
+    <SpawnExclusion at="-60 -216" radius="14" />
+    <!-- Veios de cristal expostos junto à boca, colhíveis a sério (colisor +
+         `destructible` + `<ResourceNode>`): é o que o caminho do spawner dá e
+         o `<Entity destructible>` sozinho não dá (loot → só XP). O veio é a
+         razão de a mina existir, e é o que se mina.
+         ⚠️ NÃO usar `farm/ore_vein` aqui: o asset EXISTE no pool mas falha a
+         carregar no arranque (`Failed to transcode mip level 0 from UASTC to
+         BC4`) — a referência produziria props invisíveis. Mesma falha em
+         `farm/flint_rock_*`, `desert/cactus_lod*`, `desert/dead_bush_*`,
+         `desert/ruin_pillar_lod0`, `forest/dead_tree_lod0`,
+         `village/chapel_lod0` e `vegetation/plant_flatShort` — todas
+         PRÉ-EXISTENTES no pool, nenhuma introduzida por este ficheiro. -->
+    <!-- ESCOMBRO DA BOCA — pedra miúda em volta do entalhe. Duas razões: um
+         adit de mina real tem escombro à porta, e a malha voxel deixa
+         lascas finas na orla de qualquer recorte sub-voxel (limitação
+         conhecida do mesher — "folhas finas" — que só um refinamento de
+         voxel resolve). A pedra esconde a orla em vez de a mostrar.
+         As regiões ficam FORA do `<SpawnExclusion>` da boca de propósito: a
+         ocupação rejeita qualquer candidato dentro do disco. -->
+    <StaticSpawner profile="tree" count="14" seed="5311" region-min="-50 0 -198" region-max="-22 0 -170"
+                    align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1"
+                    max-slope-deg="56" max-slope-attempts="96" scale-min="0.7" scale-max="1.6"
+                    avoid-overlaps="1" footprint-radius="1.5" pick-strategy="random"
+                    random-yaw="true" variation="rock" max-distance="1962">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+    </StaticSpawner>
+    <StaticSpawner profile="tree" count="10" seed="5312" region-min="-92 0 -214" region-max="-70 0 -194"
+                    align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1"
+                    max-slope-deg="52" max-slope-attempts="96" scale-min="0.6" scale-max="1.4"
+                    avoid-overlaps="1" footprint-radius="1.4" pick-strategy="random"
+                    random-yaw="true" variation="rock" max-distance="1962">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+    </StaticSpawner>
+    <StaticSpawner profile="tree" count="7" seed="5301" region-min="-76 0 -232" region-max="-48 0 -204"
+                    align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1"
+                    max-slope-deg="48" max-slope-attempts="64" scale-min="1.0" scale-max="1.8"
+                    avoid-overlaps="1" random-yaw="true" variation="rock" max-distance="1962">
+      <GameObject role="static" destructible="popup-text: Crystal; popup-color: #9fc4e8; preset: rockshards; burst-count: 26; hits: 4; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 14; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/props/crystal_blue_lod0.glb" lod1-url="/assets/meshes/props/crystal_blue_lod1.glb" lod2-url="/assets/meshes/props/crystal_blue_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+        <ResourceNode kind="stone" yield="6" transform="pos: 0 0 0" />
+      </GameObject>
+    </StaticSpawner>
+    <Entity translation="-52 0 -210" transform="rotation: 0 24 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="-49.5 0 -213" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <Entity translation="-66 0 -210" transform="rotation: 0 118 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9">
+      <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
+    </Entity>
+    <Entity translation="-50 0 -206" transform="rotation: 0 -18 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/notice_board_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/notice_board_lod0.glb" />
+    </Entity>
+    <Entity translation="-68 0 -204" transform="rotation: 0 62 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Entity translation="-68 0 -204">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-68 0 -204" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3200" radius="0.6" />
+    </Group>
+    <!-- Braseiros de boca: as duas unicas luzes que se vêem da estrada. -->
+    <Entity translation="-56 0 -222" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Entity translation="-56 0 -222">
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-56 0 -222" body="none" collider="none">
+      <PointLight translation="0 1.1 0" color="0xffa83a" intensity="4200" radius="0.6" />
+    </Group>
+    <Entity translation="-50 0 -220" transform="rotation: 0 300 0; scale: 1.5 1.5 1.5">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <!-- Porta do Ermo: boca BAIXA (500,-58), no chão do Ermo -->
+    <SpawnExclusion at="500 -58" radius="16" />
+    <StaticSpawner profile="tree" count="12" seed="5321" region-min="514 0 -78" region-max="540 0 -46"
+                    align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1"
+                    max-slope-deg="56" max-slope-attempts="96" scale-min="0.7" scale-max="1.7"
+                    avoid-overlaps="1" footprint-radius="1.5" pick-strategy="random"
+                    random-yaw="true" variation="rock" max-distance="1962">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- Pilares a ±5 m do eixo, medidos no eixo local do túnel (o mesmo
+         cálculo do §1 do landmarks/desert.xml: o vão do GLB não serve de
+         colisor, um casco decimado fecha a passagem). -->
+    <Entity name="ermo-pillar-a" translation="500.7 0 -62.9" transform="rotation: 0 291 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.3 5.0 1.3; pos-offset-y: 2.5" />
+    <Entity name="ermo-pillar-b" translation="499.3 0 -53.1" transform="rotation: 0 291 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.3 5.0 1.3; pos-offset-y: 2.5" />
+    <Entity translation="500.7 0 -62.9" transform="rotation: 0 291 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="none">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="499.3 0 -53.1" transform="rotation: 0 111 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="none">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="494 0 -58" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Entity translation="494 0 -58">
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 32; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="494 0 -58" body="none" collider="none">
+      <PointLight translation="0 1.1 0" color="0xffa83a" intensity="4600" radius="0.7" />
+    </Group>
+    <Entity translation="506 0 -64" transform="rotation: 0 40 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="490 0 -52" transform="rotation: 0 200 0; scale: 1.4 1.4 1.4">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <!-- Porta do Ermo: boca ALTA (720,-56), na mesa do Vael -->
+    <SpawnExclusion at="720 -56" radius="16" />
+    <StaticSpawner profile="tree" count="12" seed="5322" region-min="734 0 -74" region-max="758 0 -44"
+                    align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1"
+                    max-slope-deg="40" max-slope-attempts="96" scale-min="0.7" scale-max="1.7"
+                    avoid-overlaps="1" footprint-radius="1.5" pick-strategy="random"
+                    random-yaw="true" variation="rock" max-distance="1962">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+    </StaticSpawner>
+    <Entity name="ermo-pillar-c" translation="719.4 0 -61" transform="rotation: 0 96 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.3 5.0 1.3; pos-offset-y: 2.5" />
+    <Entity name="ermo-pillar-d" translation="720.6 0 -51" transform="rotation: 0 96 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.3 5.0 1.3; pos-offset-y: 2.5" />
+    <Entity translation="719.4 0 -61" transform="rotation: 0 96 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="none">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="720.6 0 -51" transform="rotation: 0 276 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="none">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="726 0 -56" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Entity translation="726 0 -56">
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 32; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="726 0 -56" body="none" collider="none">
+      <PointLight translation="0 1.1 0" color="0xffa83a" intensity="4600" radius="0.7" />
+    </Group>
+    <Entity translation="714 0 -62" transform="rotation: 0 -30 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="730 0 -48" transform="rotation: 0 150 0; scale: 1.5 1.5 1.5">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+  </Group>
+  <!-- FIM fantasy.grutas.bocas -->
+
+  <!-- ================================================================
+       §4 INTERIOR DA MINA DO VEIO — cota do eixo 99.6 m em C, pavimento da
+       câmara 93.1 m (centro) a 93.7 m (borda de 4 m).
+       ================================================================ -->
+  <!-- Luz de galeria (sem lanterna visível: numa mina a luz chega de sítios
+       que o jogador não vê). -->
+  <PointLight translation="-74 95.5 -236" color="0x7fd4ff" intensity="2600" radius="0.9" />
+  <PointLight translation="-104 109.5 -276" color="0xbfe6ff" intensity="3400" radius="0.9" />
+  <PointLight translation="-88 96.4 -256" color="0x9fd8ff" intensity="3600" radius="1.2" />
+  <PointLight translation="-88 94.3 -256" color="0xffc98a" intensity="1800" radius="0.8" />
+  <!-- O espólio dos mineiros, no fundo da sala. -->
+  <Entity name="mina-do-veio-hoard" translation="-88 92.9 -256" script="chest.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
+  </Entity>
+  <!-- O veio: cristais a crescer do pavimento em tigela, encostados às
+       paredes da sala (a borda está mais alta que o centro). -->
+  <Entity translation="-91.5 93.4 -258.5" transform="rotation: 0 30 0; scale: 2.2 2.2 2.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+    <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+  </Entity>
+  <Entity translation="-84.5 93.5 -259" transform="rotation: 0 170 0; scale: 1.7 1.7 1.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+    <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+  </Entity>
+  <Entity translation="-91 93.5 -252.5" transform="rotation: 0 260 0; scale: 1.9 1.9 1.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+    <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+  </Entity>
+  <Entity translation="-85 93.5 -252.5" transform="rotation: 0 80 0; scale: 1.3 1.3 1.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+    <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+  </Entity>
+  <Entity translation="-92.5 93.5 -255" transform="rotation: 0 210 0; scale: 2.6 2.6 2.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+    <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+  </Entity>
+  <ParticleSystem preset="sparkle" transform="pos: -88 93.8 -256" />
+  <ParticleSystem preset="magic" transform="pos: -88 95.2 -256" particle-emitter="preset: magic; emission-rate: 14; shape-radius: 3.4; start-life-min: 1.2; start-life-max: 2.6; start-speed-min: 0.15; start-speed-max: 0.5; start-size-min: 0.1; start-size-max: 0.24; looping: 1; world-space: 1" />
+
+  <!-- ================================================================
+       §5 INTERIOR DA PORTA DO ERMO — câmara de descanso a meio da subida:
+       eixo 119.1 m, pavimento 112.6 m no centro.
+       ================================================================ -->
+  <PointLight translation="540 84.4 -52" color="0xffb066" intensity="2800" radius="0.9" />
+  <PointLight translation="640 147.9 -46" color="0xffb066" intensity="2800" radius="0.9" />
+  <PointLight translation="690 160.5 -52" color="0xbfe6ff" intensity="2600" radius="0.9" />
+  <PointLight translation="590 116.2 -46" color="0x9fd8ff" intensity="3800" radius="1.2" />
+  <PointLight translation="590 114.3 -46" color="0xffc98a" intensity="1600" radius="0.8" />
+  <!-- A câmara é a única paragem da subida: banco de pedra, baú e um veio a
+       iluminar. O baú recompensa quem fez a travessia a pé. -->
+  <Entity name="porta-do-ermo-hoard" translation="590 112.45 -46" script="chest.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
+  </Entity>
+  <Entity translation="587 112.9 -48" transform="rotation: 0 40 0; scale: 1.8 1.8 1.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+    <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+  </Entity>
+  <Entity translation="593 113 -48.5" transform="rotation: 0 200 0; scale: 2.4 2.4 2.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+    <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+  </Entity>
+  <Entity translation="587.5 113.05 -43" transform="rotation: 0 300 0; scale: 1.5 1.5 1.5">
+    <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+  </Entity>
+  <Entity translation="590 112.8 -49" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+  </Entity>
+  <Entity translation="590 113.4 -49">
+    <ParticleSystem preset="fire" transform="pos: 0 0 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
+  </Entity>
+  <ParticleSystem preset="sparkle" transform="pos: 590 113.4 -45" />
+  <!-- Poço de luz da chaminé: a poeira a dançar no facho que cai de cima. -->
+  <ParticleSystem preset="dust" transform="pos: 620 133.4 -45" particle-emitter="preset: dust; emission-rate: 10; start-life-min: 1.6; start-life-max: 3.0; start-speed-min: 0.1; start-speed-max: 0.4; start-size-min: 0.12; start-size-max: 0.3; looping: 1; world-space: 1" />
+  </world>

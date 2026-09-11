@@ -1,0 +1,299 @@
+<!--
+  ALTO DE VAEL — o planalto leste. Loaded via Include.
+
+  PORQUÊ: o planalto a leste do vale é a maior superfície plana do mapa e
+  estava VAZIA — 450 × 1600 m de mesa, entre os 174 e os 199 m, sem um único
+  objeto, e o jogador via-a de baixo a partir do portão leste sem nunca lá
+  poder ir. Este ficheiro dá-lhe um destino: o santuário de cristais onde a
+  lenda diz que o céu toca a pedra.
+
+  COMO SE CHEGA: a `<Cave>` "porta-do-ermo" (world/fantasy/grutas.xml) sobe
+  do deserto através da escarpa; o seu respiradouro sai no planalto em
+  (720,-56). Dali parte a calçada de monólitos (§3) até ao coro.
+
+  RELEVO CONFIRMADO (ferramenta: tools/height_probe.py, o MESMO sampler do
+  `src/terrain/sampler.rs`):
+    (880,780) h=195.0 declive 0.5° relevo50=1.6  → recinto cerimonial
+    (770,730) h=196.3 declive 0.4° relevo40=1.2   → atalaia (118 m do coro)
+    (700,210) h=182.6 declive 11.6°              → miradouro de borda
+    (720,-56) h=174.9 declive  2.7°              → saída da Porta do Ermo
+
+  O recinto fica no ponto mais alto e mais liso da mesa (grelha fina em torno
+  de (880,780): 194-195 m, declive 0-2°, relevo 1.6 m) e a 400 m da caixa
+  preta da cena de interiores — a 30 m dela a casca tapava metade do quadro.
+  Toda a calçada (720,-56)→(860,430) mostra declive ≤ 4°: a mesa é mesmo uma
+  mesa, e nada aqui precisa de pad salvo o recinto, para garantir soalho.
+-->
+  <world>
+  <Group name="fantasy.alto-de-vael" translation="0 0 0">
+    <!-- Soalho do recinto: 1.8 m de amplitude natural não chega a ser um
+         problema, mas o anel de cristais assenta em bloco e um degrau de
+         metro e meio sob a fila lê-se como erro de colocação. -->
+    <TerrainPad at="880 780" size="92 84" falloff="34" corner-radius="28" />
+    <SpawnExclusion at="880 780" radius="60" />
+    <!-- ⚠️ Pilares de ruína (`desert/ruin_pillar_lod0`) NÃO entram aqui: o
+         asset existe no pool mas falha a carregar (`Failed to transcode mip
+         level 0 from UASTC to BC4`), pelo que o marco ficaria invisível. É o
+         mesmo caso de `farm/flint_rock_*`, `desert/cactus_lod*`,
+         `desert/dead_bush_*`, `forest/dead_tree_lod0`, `village/chapel_lod0`
+         e `vegetation/plant_flatShort` — falhas PRÉ-EXISTENTES do pool (o
+         desert.xml e o peaks.xml já usam `ruin_pillar` e já estão sem ele),
+         nenhuma introduzida por estes ficheiros. `props/stone_pillar` carrega.
+    -->
+    <!-- ============================================================
+       §1 CORO DE CRISTAL — o recinto. Nove agulhas num anel de 17 m, o altar
+       no centro. É o marco que se vê do vale: cristal a esta escala não
+       existe em mais nenhum bioma, e à noite o recinto acende-se azul.
+       ============================================================ -->
+    <Entity name="vael-choir-0" translation="880.0 0 797.0" transform="rotation: 0 0 0; scale: 4.6 4.6 4.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-1" translation="890.9 0 793.0" transform="rotation: 0 40 0; scale: 5.9 5.9 5.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-2" translation="896.7 0 783.0" transform="rotation: 0 80 0; scale: 7.2 7.2 7.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-3" translation="894.7 0 771.5" transform="rotation: 0 120 0; scale: 5.25 5.25 5.25" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-4" translation="885.8 0 764.0" transform="rotation: 0 160 0; scale: 6.55 6.55 6.55" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-5" translation="874.2 0 764.0" transform="rotation: 0 200 0; scale: 4.6 4.6 4.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-6" translation="865.3 0 771.5" transform="rotation: 0 240 0; scale: 5.9 5.9 5.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-7" translation="863.3 0 783.0" transform="rotation: 0 280 0; scale: 7.2 7.2 7.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-8" translation="869.1 0 793.0" transform="rotation: 0 320 0; scale: 5.25 5.25 5.25" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <!-- Altar central: a pedra druídica (o único altar do pool com face de
+         mesa) sob a Agulha — o obelisco do Ermo trazido para o alto. -->
+    <Entity name="vael-altar" translation="880 0 780" transform="scale: 2.1 2.1 2.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/druid_stone_altar_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/terrain/druid_stone_altar_lod0.glb" />
+      <PointLight translation="0 2.4 0" color="0x7cc4ff" intensity="7200" radius="1.2" shadows="false" />
+      <PointLight translation="0 9.5 0" color="0xa8dcff" intensity="5200" radius="1.6" shadows="false" />
+    </Entity>
+    <Entity name="vael-needle" translation="880 0 780" transform="scale: 1.35 1.35 1.35" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/desert_obelisk_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/desert/desert_obelisk_lod0.glb" />
+    </Entity>
+    <Entity translation="880 0 780">
+      <ParticleSystem preset="magic" transform="pos: 0 3.2 0" particle-emitter="preset: magic; emission-rate: 26; shape-radius: 4.5; start-life-min: 1.4; start-life-max: 3.2; start-speed-min: 0.25; start-speed-max: 0.9; start-size-min: 0.14; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <!-- As quatro sentinelas de pedra — pilares virados para o centro, a 30 m
+         do altar. -->
+    <Entity translation="850 0 780" transform="rotation: 0 90 0; scale: 1.3 1.3 1.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="910 0 780" transform="rotation: 0 -90 0; scale: 1.3 1.3 1.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="880 0 750" transform="rotation: 0 180 0; scale: 1.3 1.3 1.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <!-- A quarta sentinela está deitada: o recinto não é um edifício vivo. -->
+    <Entity translation="878 0 809" transform="rotation: 0 64 76" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.4 1.0 1.0">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <!-- Braseiros de recepção, virados para a calçada (sul). -->
+    <Entity translation="872 0 812" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Entity translation="872 0 812">
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 34; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="872 0 812" body="none" collider="none">
+      <PointLight translation="0 1.1 0" color="0xffa83a" intensity="5400" radius="0.6" />
+    </Group>
+    <Entity translation="888 0 812" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Entity translation="888 0 812">
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 34; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="888 0 812" body="none" collider="none">
+      <PointLight translation="0 1.1 0" color="0xffa83a" intensity="5400" radius="0.6" />
+    </Group>
+    <!-- O altar premia quem subiu: [F] ora (crystal-shrine.lua, +20 XP). -->
+    <Entity name="vael-shrine" translation="882 0 782" script="crystal-shrine.lua" />
+    <!-- ============================================================
+       §2 FRAGMENTOS SUSPENSOS — três lascas de pedra a flutuar por cima do
+       recinto (y = 244/259/233, a mesa está a 195 m). TOP-LEVEL de propósito:
+       fora de qualquer <Group>, e uma <Entity> simples não recebe o
+       `SeatOnTerrain` que os grupos levam — é a única maneira de fixar uma
+       cota acima do chão. Vêem-se do vale: é a assinatura visual do Alto de
+       Vael ao longe.
+       ============================================================ -->
+    <Entity name="vael-shard-a" translation="880 244 780">
+      <Entity translation="0 0 0" transform="scale: 4.6 4.6 4.6">
+        <GltfScene url="/assets/meshes/terrain/form_outcrop_5_lod0.glb" />
+      </Entity>
+      <Entity translation="0 6.5 0" transform="rotation: 0 30 0; scale: 4.2 4.2 4.2">
+        <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+      </Entity>
+      <Entity translation="0 -1.5 0">
+        <ParticleSystem preset="sparkle" transform="pos: 0 0 0" />
+      </Entity>
+      <PointLight translation="0 7.5 0" color="0x8fd0ff" intensity="9000" radius="1.4" shadows="false" />
+    </Entity>
+    <Entity name="vael-shard-b" translation="818 259 756">
+      <Entity translation="0 0 0" transform="rotation: 0 140 0; scale: 3.1 3.1 3.1">
+        <GltfScene url="/assets/meshes/terrain/form_outcrop_8_lod0.glb" />
+      </Entity>
+      <Entity translation="0 4.4 0" transform="rotation: 0 200 0; scale: 3.0 3.0 3.0">
+        <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+      </Entity>
+      <Entity translation="0 -1.2 0">
+        <ParticleSystem preset="sparkle" transform="pos: 0 0 0" />
+      </Entity>
+      <PointLight translation="0 5.2 0" color="0x8fd0ff" intensity="6400" radius="1.2" shadows="false" />
+    </Entity>
+    <Entity name="vael-shard-c" translation="938 233 798">
+      <Entity translation="0 0 0" transform="rotation: 0 250 0; scale: 2.4 2.4 2.4">
+        <GltfScene url="/assets/meshes/terrain/form_outcrop_2_lod0.glb" />
+      </Entity>
+      <Entity translation="0 3.4 0" transform="rotation: 0 80 0; scale: 2.4 2.4 2.4">
+        <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+      </Entity>
+      <PointLight translation="0 4.0 0" color="0x8fd0ff" intensity="4800" radius="1.1" shadows="false" />
+    </Entity>
+    <!-- ============================================================
+       §3 CALÇADA DOS MONÓLITOS — a avenida da Porta do Ermo (720,-56) até ao
+       coro: 8 pilares alternados ±7 m do eixo, para a estrada ficar livre.
+
+       O traçado desce pela BORDA OESTE da mesa e só vira a leste a z≥400.
+       Foi traçado assim para contornar a caixa preta da cena de interiores,
+       que então vivia em (859,281) — 240×220 m de casca selada no meio do
+       planalto. Os interiores mudaram-se para uma bolsa FORA da área do mapa
+       (world/interiors.xml + <InteriorScene>), portanto já não há nada a
+       contornar: a avenida fica como está (está verificada em jogo e lê-se
+       como a estrada da borda da mesa, que é o que se quer).
+       ============================================================ -->
+    <Entity name="vael-way-1" translation="705.0 0 40.3" transform="rotation: 0 20 0; scale: 1.35 1.35 1.35" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity name="vael-way-2" translation="715.1 0 137.8" transform="rotation: 0 96 0; scale: 1.15 1.15 1.15" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity name="vael-way-3" translation="702.9 0 234.6" transform="rotation: 0 205 0; scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+      <PointLight translation="0 4.3 0" color="0x9fd8ff" intensity="7200" radius="0.8" shadows="false" />
+    </Entity>
+    <Entity name="vael-way-4" translation="721.1 0 330.8" transform="rotation: 0 288 0; scale: 1.25 1.25 1.25" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity name="vael-way-5" translation="720.0 0 429.0" transform="rotation: 0 44 0; scale: 1.45 1.45 1.45" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+      <PointLight translation="0 4.3 0" color="0x9fd8ff" intensity="7200" radius="0.8" shadows="false" />
+    </Entity>
+    <Entity name="vael-way-6" translation="763.4 0 516.8" transform="rotation: 0 150 0; scale: 1.2 1.2 1.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity name="vael-way-7" translation="781.5 0 613.1" transform="rotation: 0 30 82" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.9 0.8 0.8">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity name="vael-way-8" translation="832.4 0 697.1" transform="rotation: 0 260 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+      <PointLight translation="0 4.3 0" color="0x9fd8ff" intensity="7200" radius="0.8" shadows="false" />
+    </Entity>
+    <!-- ============================================================
+       §4 MIRADOURO DA BORDA (700,210) — o alto onde a mesa acaba a pique
+       sobre o vale do Ermo. Braseiro, banco e o cairn que dá a recompensa
+       de vista (poi/mirante-vista.lua). Declive 11.6°: um pad pequeno
+       segura a base do cairn sem terraplanar o rebordo.
+       ============================================================ -->
+    <TerrainPad at="700 210" size="16 16" falloff="9" corner-radius="6" />
+    <SpawnExclusion at="700 210" radius="16" />
+    <Entity name="vael-rim-cairn" translation="700 0 210" transform="scale: 1.8 1.8 1.8" script="poi/mirante-vista.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/terrain/stone_cairn_lod0.glb" />
+      <!-- Marca noturna do marco: o fio azul do alto. -->
+      <PointLight translation="0 2.6 0" color="0x9fd8ff" intensity="65000" radius="0.7" shadows="false" />
+    </Entity>
+    <Entity translation="694 0 205" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Entity translation="694 0 205">
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="694 0 205" body="none" collider="none">
+      <PointLight translation="0 1.1 0" color="0xffa83a" intensity="4800" radius="0.6" />
+    </Group>
+    <Entity translation="703 0 203" transform="rotation: 0 250 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.6 0.9 0.55">
+      <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
+    </Entity>
+    <!-- ============================================================
+       §5 ATALAIA DO VAEL (770,730) — torre de vigia no ponto mais alto da
+       mesa (196.3 m, declive 0.4°). Ruína habitada: restos de guarnição,
+       roda de armas e um braseiro aceso que se vê do recife inteiro à noite.
+       ============================================================ -->
+    <SpawnExclusion at="770 730" radius="24" />
+    <Entity name="vael-watch" translation="770 0 730" transform="rotation: 0 210 0; scale: 1.15 1.15 1.15" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
+      <PointLight translation="0 5.2 0" color="0xffb060" intensity="70000" radius="1.0" shadows="false" />
+    </Entity>
+    <Entity translation="762 0 736" transform="rotation: 0 -40 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/weapon_rack_lod0.glb" />
+    </Entity>
+    <Entity translation="778 0 722" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="781 0 727" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <Entity translation="766 0 720" transform="rotation: 0 70 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9">
+      <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
+    </Entity>
+    <Entity translation="759 0 726" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
+    </Entity>
+    <Entity translation="759 0 726">
+      <ParticleSystem preset="fire" transform="pos: 0 0.42 0" particle-emitter="preset: fire; emission-rate: 40; shape-radius: 0.28; start-life-min: 0.5; start-life-max: 1.3; start-speed-min: 1.3; start-speed-max: 2.7; start-size-min: 0.3; start-size-max: 0.62; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="759 0 726" body="fixed" collider="none">
+      <PointLight translation="0 0.7 0" color="0xff8a33" intensity="5400" radius="0.8" />
+    </Group>
+    <Entity translation="759 0 726">
+      <ParticleSystem preset="smoke" transform="pos: 0 1.5 0" particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 2.4; start-life-max: 4.4; start-speed-min: 0.3; start-speed-max: 0.8; start-size-min: 0.35; start-size-max: 0.8; start-color: #9a9a9a; looping: 1; world-space: 1" />
+    </Entity>
+    <!-- ============================================================
+       §6 ESCARPA — arcos e pontes de rocha no degrau por onde se sobe/desce
+       entre o Ermo e a mesa. É o único sítio do planalto com declive a
+       sério (16-58°), que é exatamente o que um campo de `<RockFeatures>`
+       precisa para semear. Determinístico por `seed`; caves a 2 (as
+       semeadas só nascem onde o chão sobe à frente da boca).
+       ============================================================ -->
+    <RockFeatures name="vael-escarpment" region="450 -300 800 430" seed="61831"
+                  arches="6" caves="2" bridges="2"
+                  min-slope="16" max-slope="58" min-drop="5" min-rise="3"
+                  spacing="42" clear-of-roads="14" />
+    <!-- ============================================================
+       §7 GUARDIÕES — sombras no recinto (a luz do coro atrai-as) e lobos na
+       mesa aberta. O `<SpawnExclusion r=60>` do §1 entra na ocupação
+       partilhada ANTES de qualquer grupo (`src/spawner.rs`, passe 2), pelo
+       que vale para TODOS os spawners — DynamicSpawner incluído. As regiões
+       abaixo ficam fora do anel de propósito, para não gastar a densidade
+       em candidatos que a exclusão ia rejeitar.
+       ============================================================ -->
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="6" seed="7741" region-min="950 0 700" region-max="1030 0 820" random-yaw="true" avoid-overlaps="false" max-slope-deg="30" max-distance="1220">
+      <Creature role="enemy" script="enemies/shade.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/shade_lod0.glb" />
+      </Creature>
+    </DynamicSpawner>
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="5" seed="7742" region-min="740 0 560" region-max="880 0 670" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="1280">
+      <Creature role="enemy" script="enemies/wolf.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/wolf_lod0.glb" />
+      </Creature>
+    </DynamicSpawner>
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="7" seed="7743" region-min="760 0 830" region-max="900 0 940" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="1260">
+      <Creature role="enemy" script="enemies/shade.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/shade_lod0.glb" />
+      </Creature>
+    </DynamicSpawner>
+  </Group>
+  <!-- FIM fantasy.alto-de-vael -->
+  </world>
