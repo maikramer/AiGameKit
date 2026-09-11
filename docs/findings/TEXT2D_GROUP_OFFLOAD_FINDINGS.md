@@ -121,7 +121,12 @@ Shared (cada tool só "liga"):
   (+12), Text2D 171 ✓, Shared 1291 ✓, GameAssets 766 ✓. E2E GO do Skymap2D
   (2048²) e Text2Icon ficou pendente de janela de GPU livre (a 4050 esteve
   ocupada por trabalhos paralelos); os gates/recusas honrados foram
-  verificados (needed 2764 MiB recusado corretamente com 1989 livres).
+  verificados (needed 2764 MiB recusado corretamente com 1989 livres). E2E
+  Text2Icon GO a 512² confirmado depois (GPU ~5.7 GiB livres):
+  `group_stream + block + streams` em transformer/text_encoder, ícone ✓;
+  uma tentativa a 1024² OOMou com processos paralelos a crescer na mesma
+  janela (VAE Sana fp32 é guloso — recalibrar `sana-sprint-600m` quando
+  houver janela estável).
 
 ## vramd 0.3.7 (upstream `~/GitClones/vramd`, release via tag → Actions)
 
