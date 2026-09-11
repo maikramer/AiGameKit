@@ -20,30 +20,19 @@ class Adapter(WorkerAdapter):
     name = "skymap2d"
 
     def load(self, **kwargs: Any) -> Any:
-        import os
+        from aigamekit_shared.group_offload import apply_alloc_conf_for_request, pop_allow_group_offload
+        from skymap2d.generator import SkymapGenerator
+        from skymap2d.hardware import POLICY
 
         # Alloc conf por-request (padrão text2d): o serve pode ter arrancado
         # com o conf clássico (max_split) e o request pedir GO — o torch lê o
-        # env na 1ª alocação CUDA, por isso só substituímos se ainda dorme.
-        try:
-            import torch
-
-            if not torch.cuda.is_initialized():
-                from skymap2d.hardware import cuda_alloc_conf_for
-
-                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = cuda_alloc_conf_for(
-                    bool(kwargs.get("allow_group_offload", True))
-                )
-        except Exception:
-            pass
-
-        from skymap2d.generator import SkymapGenerator
+        # env na 1ª alocação CUDA (só substitui se ainda dorme).
+        allow_go = pop_allow_group_offload(kwargs)
+        apply_alloc_conf_for_request(POLICY, allow_go)
 
         # vramd: compile on (bench 6GB: ~-19% hot; cold ~6 min amortizado).
         # channels_last ~0 no skymap - nao forcar.
         # memory_efficient (cpu-offload): só do request (CLI hw_auto) — sem re-decidir.
-        # GO do request: ``allow_group_offload`` (vramd/CLI) → flag do ctor.
-        group_offload = bool(kwargs.pop("allow_group_offload", True))
         load_kwargs: dict[str, Any] = {
             "verbose": kwargs.get("verbose", False),
             "torch_compile": kwargs.get("torch_compile", True),
@@ -53,7 +42,7 @@ class Adapter(WorkerAdapter):
         load_kwargs.update({k: v for k, v in kwargs.items() if k not in skip})
         if "memory_efficient" in kwargs:
             load_kwargs["memory_efficient"] = bool(kwargs["memory_efficient"])
-        load_kwargs["group_offload"] = group_offload
+        load_kwargs["group_offload"] = allow_go
         gen = SkymapGenerator(**load_kwargs)
         gen.warmup()
         return gen

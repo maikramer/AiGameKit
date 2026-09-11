@@ -267,7 +267,7 @@ class TestAllocConfByMode:
         from aigamekit_shared.group_offload import ALLOC_CONF_GROUP_OFFLOAD, cuda_alloc_conf_for
 
         assert "max_split_size_mb" not in cuda_alloc_conf_for(True)
-        assert "expandable_segments:True" == ALLOC_CONF_GROUP_OFFLOAD
+        assert ALLOC_CONF_GROUP_OFFLOAD == "expandable_segments:True"
 
     def test_classic_conf_keeps_max_split(self) -> None:
         from aigamekit_shared.group_offload import cuda_alloc_conf_for
@@ -362,3 +362,72 @@ class TestGoPlannerKwargsBase:
             "full_gpu_budget_fraction": None,
         }
         assert g.group_offload is True  # default ON na base
+
+
+class TestToolOffloadPolicy:
+    """Política GO por tool — gate/alloc conf/needed num objeto (Shared)."""
+
+    def test_fraction_gate_by_gpus(self) -> None:
+        from aigamekit_shared.group_offload import ToolOffloadPolicy
+        from aigamekit_shared.lowvram import GIB
+
+        p = ToolOffloadPolicy(footprint_key="flux-klein-4b", tool_env_var="TEXT2D_POLICY_TEST")
+        assert p.will_engage(gpu_specs=[(0, 5815 * 2**20, 6141 * 2**20)]) is True  # 6 GB
+        assert p.will_engage(gpu_specs=[(0, 24 * GIB, 24 * GIB)]) is False  # full com folga
+
+    def test_classic_gate_for_fp16_only_tools(self) -> None:
+        """fraction=None (paint3d-style): GO só quando nem fp16 cabe."""
+        from aigamekit_shared.group_offload import ToolOffloadPolicy
+        from aigamekit_shared.lowvram import GIB
+
+        p = ToolOffloadPolicy(
+            footprint_key="hunyuan-paint", tool_env_var="PAINT3D_POLICY_TEST", full_gpu_budget_fraction=None
+        )
+        assert p.will_engage(gpu_specs=[(0, 5815 * 2**20, 6141 * 2**20)]) is True  # fp16 8 > 5.7
+        assert p.will_engage(gpu_specs=[(0, 12 * GIB, 12 * GIB)]) is False  # fp16 cabe
+
+    def test_kill_switch_disables_everything(self, monkeypatch) -> None:
+        from aigamekit_shared.group_offload import ToolOffloadPolicy
+
+        monkeypatch.setenv("TEXT2D_POLICY_TEST", "0")
+        p = ToolOffloadPolicy(footprint_key="flux-klein-4b", tool_env_var="TEXT2D_POLICY_TEST")
+        assert p.will_engage(gpu_specs=[(0, 5815 * 2**20, 6141 * 2**20)]) is False
+        assert "max_split_size_mb" in p.cuda_alloc_conf_for(True)  # conf clássico
+
+    def test_plan_offload_mode_for_profiles(self) -> None:
+        from aigamekit_shared.group_offload import ToolOffloadPolicy
+        from aigamekit_shared.lowvram import GIB
+
+        p = ToolOffloadPolicy(footprint_key="sd15-base", allow_quant=("none",))
+        assert p.plan_offload_mode([(0, 4 * GIB)]) == "group_stream"
+        assert p.plan_offload_mode([(0, 8 * GIB)]) == "none"
+
+    def test_needed_and_helper_or_classic(self, monkeypatch) -> None:
+        from aigamekit_shared.cli_helpers import group_offload_needed_or_classic
+        from aigamekit_shared.group_offload import ToolOffloadPolicy
+        from aigamekit_shared.lowvram import GIB
+
+        # allow_quant espelha o placement real (SD1.5 sem quant runtime).
+        p = ToolOffloadPolicy(footprint_key="sd15-base", allow_quant=("none",))
+        assert p.needed_mib() == max(2500, int((1.2 + 1.2) * 1024))
+
+        # GO vai engajar (GPU 4 GB) → needed do policy (act+margem).
+        monkeypatch.setattr(
+            "aigamekit_shared.hardware.cuda_gpu_free_specs",
+            lambda: [(0, 4 * GIB, 4 * GIB)],
+        )
+        assert group_offload_needed_or_classic("texture2d", p) == p.needed_mib()
+
+        # GO não engaja (GPU 24 GB) → needed clássico (footprint completo).
+        monkeypatch.setattr(
+            "aigamekit_shared.hardware.cuda_gpu_free_specs",
+            lambda: [(0, 24 * GIB, 24 * GIB)],
+        )
+        assert group_offload_needed_or_classic("texture2d", p) == max(512, int((2.4 + 1.2) * 1024))
+
+    def test_pop_allow_group_offload(self) -> None:
+        from aigamekit_shared.group_offload import pop_allow_group_offload
+
+        kw = {"allow_group_offload": False, "x": 1}
+        assert pop_allow_group_offload(kw) is False and "allow_group_offload" not in kw
+        assert pop_allow_group_offload({"x": 1}) is True  # default ON no request

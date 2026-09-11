@@ -16,9 +16,10 @@ from rich.rule import Rule
 from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
+    add_group_offload_option,
     add_vramd_options,
     delegate_or_prepare,
-    needed_mib_for_backend,
+    group_offload_needed_or_classic,
     prepare_gpu_exclusive,
 )
 from aigamekit_shared.path_utils import safe_filename
@@ -165,17 +166,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "GPUs pequenas. Flags explícitas ganham. Env: SKYMAP2D_HW_AUTO=0."
     ),
 )
-@click.option(
-    "--group-offload/--no-group-offload",
-    "group_offload",
-    default=True,
-    show_default=True,
-    help=(
-        "Group offload + CUDA streams quando o full-GPU não teria folga "
-        "(pico ≈ ativação; chunks = VAE tiling + attention slicing). "
-        "Kill-switch: SKYMAP2D_GROUP_OFFLOAD=0."
-    ),
-)
+@add_group_offload_option()
 @click.option(
     "--compile/--no-compile",
     "torch_compile",
@@ -249,9 +240,9 @@ def generate_cmd(
 
     # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA; com
     # group offload, max_split_size_mb causa fragmentação sob churn de onloads).
-    from .hardware import apply_alloc_conf_early
+    from .hardware import POLICY
 
-    apply_alloc_conf_early(group_offload)
+    POLICY.apply_alloc_conf_early(group_offload)
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
@@ -369,17 +360,12 @@ def generate_cmd(
             return
 
         if not cpu:
-            from .hardware import group_offload_will_engage
+            from .hardware import POLICY
 
-            if group_offload_will_engage():
-                # GO+streams: pico ≈ ativação + trânsito de grupos — não exigir
-                # pesos+ativação ao ensure_vram (recusava jobs que correm bem).
-                from aigamekit_shared.group_offload import group_offload_needed_mib
-                from aigamekit_shared.lowvram import get_footprint
-
-                needed_mib = group_offload_needed_mib(get_footprint("flux-dev-uint4"), margin_gib=1.5)
-            else:
-                needed_mib = needed_mib_for_backend("skymap2d", memory_efficient=mem_eff)
+            # GO+streams (pico ≈ ativação + trânsito de grupos; margem calibrada
+            # 1.5 GiB): needed_mib GO-aware — não exigir pesos+ativação ao
+            # ensure_vram (recusava jobs que correm bem).
+            needed_mib = group_offload_needed_or_classic("skymap2d", POLICY, memory_efficient=mem_eff, margin_gib=1.5)
             prepare_gpu_exclusive(
                 needed_mib=needed_mib,
                 allow_shared=True,
@@ -520,13 +506,7 @@ def presets_cmd() -> None:
     show_default=True,
     help="Auto-detecção de hardware (offload/clamp/multi-GPU). Env: SKYMAP2D_HW_AUTO=0.",
 )
-@click.option(
-    "--group-offload/--no-group-offload",
-    "group_offload",
-    default=True,
-    show_default=True,
-    help=("Group offload + CUDA streams quando o full-GPU não teria folga. Kill-switch: SKYMAP2D_GROUP_OFFLOAD=0."),
-)
+@add_group_offload_option()
 @click.option(
     "--compile/--no-compile",
     "torch_compile",
@@ -586,9 +566,9 @@ def batch_cmd(
 ) -> None:
     """Gera skymaps em batch a partir de um ficheiro de prompts (um por linha)."""
     # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA).
-    from .hardware import apply_alloc_conf_early
+    from .hardware import POLICY
 
-    apply_alloc_conf_early(group_offload)
+    POLICY.apply_alloc_conf_early(group_offload)
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
@@ -691,18 +671,12 @@ def batch_cmd(
         if not cpu:
             from aigamekit_shared.gpu import warn_if_vram_occupied
 
-            from .hardware import group_offload_will_engage
+            from .hardware import POLICY
 
             warn_if_vram_occupied()
-            if group_offload_will_engage():
-                # GO+streams: pico ≈ ativação + trânsito de grupos — não exigir
-                # pesos+ativação ao ensure_vram (recusava jobs que correm bem).
-                from aigamekit_shared.group_offload import group_offload_needed_mib
-                from aigamekit_shared.lowvram import get_footprint
-
-                needed_mib = group_offload_needed_mib(get_footprint("flux-dev-uint4"), margin_gib=1.5)
-            else:
-                needed_mib = needed_mib_for_backend("skymap2d", memory_efficient=mem_eff)
+            # GO+streams (pico ≈ ativação + trânsito de grupos; margem 1.5 GiB):
+            # needed_mib GO-aware — não exigir pesos+ativação ao ensure_vram.
+            needed_mib = group_offload_needed_or_classic("skymap2d", POLICY, memory_efficient=mem_eff, margin_gib=1.5)
             prepare_gpu_exclusive(
                 needed_mib=needed_mib,
                 allow_shared=True,
@@ -803,9 +777,9 @@ def serve(ums_worker: bool) -> None:
 
     # Worker vramd: alloc conf por modo antes da 1ª alocação CUDA (o request
     # pode pedir GO; o adapter corrige por-request se o torch ainda não acordou).
-    from .hardware import apply_alloc_conf_early
+    from .hardware import POLICY
 
-    apply_alloc_conf_early()
+    POLICY.apply_alloc_conf_early()
 
     run_ums_worker_cli(Adapter, tool_name="skymap2d", ums_worker=ums_worker, console=console)
 

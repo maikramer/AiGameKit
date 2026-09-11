@@ -13,21 +13,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aigamekit_shared.group_offload import (
-    apply_alloc_conf_early as _apply_alloc_conf_early,
-)
-from aigamekit_shared.group_offload import (
-    cuda_alloc_conf_for as _cuda_alloc_conf_for,
-)
-from aigamekit_shared.group_offload import (
-    group_offload_will_engage as _shared_will_engage,
-)
-from aigamekit_shared.group_offload import (
-    is_group_offload_enabled,
-)
+from aigamekit_shared.group_offload import ToolOffloadPolicy
 from aigamekit_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from aigamekit_shared.hardware import hw_auto_enabled as _hw_auto_enabled
-from aigamekit_shared.lowvram import OFFLOAD_GROUP_STREAM, OFFLOAD_NONE, get_footprint, plan_offload
+from aigamekit_shared.lowvram import OFFLOAD_GROUP_STREAM, OFFLOAD_NONE
 
 HW_AUTO_ENV = "TEXTURE2D_HW_AUTO"
 GROUP_OFFLOAD_ENV = "TEXTURE2D_GROUP_OFFLOAD"
@@ -40,17 +29,20 @@ FULL_GPU_BUDGET_FRACTION = 0.70
 DEFAULT_WIDTH = 512
 DEFAULT_HEIGHT = 512
 
+# Política GO da tool — gate (specs livres, fraction 0.70), alloc conf por modo,
+# needed_mib do fallback in-process e offload_mode do perfil, num só objeto
+# (aigamekit_shared.group_offload.ToolOffloadPolicy).
+POLICY = ToolOffloadPolicy(
+    footprint_key="sd15-base",
+    tool_env_var=GROUP_OFFLOAD_ENV,
+    full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION,
+    allow_quant=("none",),  # SD1.5 sempre fp16 (sem quant runtime)
+)
+
 
 def hw_auto_enabled() -> bool:
     """``TEXTURE2D_HW_AUTO=0`` desliga a auto-detecção."""
     return _hw_auto_enabled(HW_AUTO_ENV)
-
-
-def group_offload_intent(allow: bool = True) -> bool:
-    """Intenção de group offload: flag ``--group-offload`` AND env kill-switch."""
-    if not allow:
-        return False
-    return is_group_offload_enabled(tool_env_var=GROUP_OFFLOAD_ENV)
 
 
 @dataclass(frozen=True)
@@ -66,21 +58,6 @@ class Texture2DHardwareProfile(HardwareProfileBase):
         if self.gpu_ids:
             parts.append(f"gpus={self.gpu_ids}")
         return " | ".join(parts)
-
-
-def _offload_mode(gpus: list[tuple[int, int]]) -> str:
-    """Modo do planner para a GPU primária (mesma política do generator)."""
-    if not group_offload_intent() or not gpus:
-        return OFFLOAD_NONE
-    primary = max(gpus, key=lambda t: t[1])
-    plan = plan_offload(
-        [primary],
-        get_footprint("sd15-base"),
-        allow_multi_gpu=False,
-        allow_quant=("none",),  # SD1.5 sempre fp16 (sem quant runtime)
-        full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION,
-    )
-    return plan.offload
 
 
 def profile_from_specs(gpus: list[tuple[int, int]]) -> Texture2DHardwareProfile:
@@ -112,40 +89,10 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Texture2DHardwareProfile:
         max_height=None,
         gpu_ids=gpu_ids,
         total_vram_gib=round(total_gib, 1),
-        offload_mode=_offload_mode(gpus),
+        offload_mode=POLICY.plan_offload_mode(gpus),
     )
 
 
 def detect_hardware_profile() -> Texture2DHardwareProfile:
     """Detecta GPUs CUDA e devolve o perfil correspondente."""
     return detect_profile(profile_from_specs)
-
-
-def group_offload_will_engage() -> bool:
-    """Réplica pura do gate: o plano para o hardware ATUAL engaja group offload?
-
-    Usa **specs com VRAM livre** (o mesmo sinal do placement real) — numa GPU
-    parcialmente ocupada o gate concorda com o planner. O ``offload_mode`` do
-    perfil (specs totais) fica para display.
-    """
-    if not group_offload_intent():
-        return False
-    hwp = detect_hardware_profile()
-    if hwp.device != "cuda":
-        return False
-    return _shared_will_engage(
-        get_footprint("sd15-base"),
-        full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION,
-        tool_env_var=GROUP_OFFLOAD_ENV,
-        allow_quant=("none",),
-    )
-
-
-def cuda_alloc_conf_for(group_offload: bool = True) -> str:
-    """``PYTORCH_CUDA_ALLOC_CONF`` por modo — ver aigamekit_shared.group_offload."""
-    return _cuda_alloc_conf_for(group_offload_intent(group_offload) and group_offload_will_engage())
-
-
-def apply_alloc_conf_early(group_offload: bool = True) -> None:
-    """``setdefault`` do alloc conf no arranque do CLI (antes da 1ª alocação CUDA)."""
-    _apply_alloc_conf_early(group_offload_intent(group_offload) and group_offload_will_engage())

@@ -13,7 +13,6 @@ import normal do ``paint3d`` (CLI interactiva, batch, etc.).
 from __future__ import annotations
 
 import contextlib
-import os
 import time
 from typing import Any
 
@@ -30,17 +29,15 @@ class Adapter(WorkerAdapter):
     name = "paint3d"
 
     def load(self, **kwargs: Any) -> Any:
-        import torch
-
+        from aigamekit_shared.group_offload import apply_alloc_conf_for_request
         from paint3d import defaults as _defaults
-        from paint3d.painter import PaintBatchProcessor, cuda_alloc_conf_for
+        from paint3d.painter import POLICY, PaintBatchProcessor
 
         # O worker herda o env do supervisor vramd — que pode ter arrancado com
         # um PYTORCH_CUDA_ALLOC_CONF stale (max_split_size_mb fragmenta o
         # allocator com o churn de onloads do group offload: reserved medido
         # 1.9→5.4 GB em 2 s). Só eficaz antes da primeira alocação CUDA.
-        if not torch.cuda.is_initialized():
-            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = cuda_alloc_conf_for(bool(kwargs.get("allow_group_offload", True)))
+        apply_alloc_conf_for_request(POLICY, bool(kwargs.get("allow_group_offload", True)))
 
         # vramd-only / peak-planning keys — PaintBatchProcessor não os aceita.
         quant = kwargs.pop("sdnq_preset", None) or kwargs.pop("quant_mode", None)

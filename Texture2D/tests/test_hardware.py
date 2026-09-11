@@ -115,21 +115,21 @@ class TestGroupOffloadProfile:
     def test_kill_switch_back_to_classic(self, monkeypatch) -> None:
         monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
         monkeypatch.setenv("TEXTURE2D_GROUP_OFFLOAD", "0")
-        from texture2d.hardware import group_offload_will_engage, profile_from_specs
+        from texture2d.hardware import POLICY, profile_from_specs
 
         p = profile_from_specs([(0, _gib(4))])
         assert p.offload_mode == "none"
-        assert group_offload_will_engage() is False
+        assert POLICY.will_engage() is False
 
     def test_alloc_conf_no_max_split_when_go(self, monkeypatch) -> None:
         from aigamekit_shared.group_offload import ALLOC_CONF_GROUP_OFFLOAD
-        from texture2d.hardware import cuda_alloc_conf_for
+        from texture2d.hardware import POLICY
 
         monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
         monkeypatch.delenv("TEXTURE2D_GROUP_OFFLOAD", raising=False)
         # GO desligado → conf clássico mesmo que a flag peça GO.
         monkeypatch.setenv("TEXTURE2D_GROUP_OFFLOAD", "0")
-        assert "max_split_size_mb" in cuda_alloc_conf_for(True)
+        assert "max_split_size_mb" in POLICY.cuda_alloc_conf_for(True)
         assert "max_split_size_mb" not in ALLOC_CONF_GROUP_OFFLOAD
 
     @pytest.mark.parametrize("command", ["generate", "batch"])

@@ -418,3 +418,147 @@ def group_offload_needed_mib(footprint: Any, *, margin_gib: float = 1.2) -> int:
     por resolução) usam os seus valores calibrados.
     """
     return max(2500, int((float(footprint.activation_gib) + margin_gib) * 1024))
+
+
+# ---------------------------------------------------------------------------
+# Política GO por tool — um objeto, todo o padrão (gate/alloc conf/needed)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ToolOffloadPolicy:
+    """Política de group offload de uma tool: gate do planner, alloc conf por
+    modo e ``needed_mib`` do fallback in-process — num só sítio.
+
+    Cada tool instancia no seu ``hardware.py`` (ou equivalente)::
+
+        POLICY = ToolOffloadPolicy(
+            footprint_key="flux-klein-4b",
+            tool_env_var="TEXT2D_GROUP_OFFLOAD",
+        )
+
+    e usa ``POLICY.will_engage() / cuda_alloc_conf_for(flag) /
+    apply_alloc_conf_early(flag) / needed_mib() / plan_offload_mode(gpus)`` —
+    os CLIs ganham a flag com :func:`aigamekit_shared.cli_helpers.add_group_offload_option`
+    e o ``needed_mib`` GO-aware com
+    :func:`aigamekit_shared.cli_helpers.group_offload_needed_or_classic`.
+
+    Args:
+        footprint_key: chave do registry ``lowvram.FOOTPRINTS`` do modelo-alvo.
+        tool_env_var: kill-switch por tool (ex.: ``"TEXT2D_GROUP_OFFLOAD"``);
+            precedência sobre o global ``AIGAMEKIT_GROUP_OFFLOAD``.
+        full_gpu_budget_fraction: gate de folga (0.70 = full-GPU só com pico
+            ≤70% do orçamento; sem folga → GO+streams). ``None`` = gate
+            clássico (GO quando nem full-GPU **fp16** cabe — para tools que
+            não seguem a escada de quant do planner, ex.: paint3d com SDNQ
+            próprio aplicado fora do planner).
+        allow_quant: espelhar o ``allow_quant`` do placement real (ex.
+            ``("none",)`` para checkpoints pré-quantizados/sem quant runtime).
+    """
+
+    footprint_key: str | None = None
+    tool_env_var: str | None = None
+    full_gpu_budget_fraction: float | None = 0.70
+    allow_quant: tuple[str, ...] | None = None
+    # Footprint dinâmico por GPU (ex.: text2d escolhe 4B/9B pela VRAM):
+    # ``(specs) -> ModelFootprint``; prevalece sobre ``footprint_key``.
+    footprint_fn: Any | None = None
+
+    def footprint(self, specs: Any | None = None) -> Any:
+        from .lowvram import get_footprint
+
+        if self.footprint_fn is not None and specs:
+            return self.footprint_fn(specs)
+        return get_footprint(self.footprint_key or "")
+
+    def intent(self, allow: bool = True) -> bool:
+        """GO pedido: flag ``--group-offload`` AND env kill-switch."""
+        if not allow:
+            return False
+        return is_group_offload_enabled(tool_env_var=self.tool_env_var)
+
+    def will_engage(self, allow: bool = True, gpu_specs: Any | None = None) -> bool:
+        """O plano para ESTE hardware engaja group offload? (specs de VRAM livre)."""
+        if not self.intent(allow):
+            return False
+        return (
+            group_offload_will_engage(
+                self.footprint(),
+                full_gpu_budget_fraction=self.full_gpu_budget_fraction if self.full_gpu_budget_fraction else 0.0,
+                gpu_specs=gpu_specs,
+                tool_env_var=self.tool_env_var,
+                allow_quant=self.allow_quant,
+            )
+            if self.full_gpu_budget_fraction
+            else self._classic_gate_engages(gpu_specs)
+        )
+
+    @staticmethod
+    def _specs(gpu_specs: Any | None = None) -> Any:
+        from .hardware import cuda_gpu_free_specs
+
+        specs = cuda_gpu_free_specs() if gpu_specs is None else gpu_specs
+        return specs or None
+
+    def _classic_gate_engages(self, gpu_specs: Any | None = None) -> bool:
+        """Gate clássico (fraction=None): GO quando nem full-GPU fp16 cabe."""
+        from .lowvram import GIB
+
+        specs = self._specs(gpu_specs)
+        if not specs:
+            return False
+        _idx, free, total = max(specs, key=lambda s: s[-1])
+        usable = min((total / GIB) * 0.9, (free / GIB) * 0.95)
+        return plan_group_offload(usable, self.footprint(specs), quant_mode="none") is not None
+
+    def plan_offload_mode(self, gpus: list[tuple[int, int]], allow: bool = True) -> str:
+        """``offload`` do plano para a GPU primária (perfis hw/summary)."""
+        from .lowvram import OFFLOAD_NONE, plan_offload
+
+        if not gpus or not self.intent(allow):
+            return OFFLOAD_NONE
+        primary = max(gpus, key=lambda t: t[1])
+        plan = plan_offload(
+            [primary],
+            self.footprint(),
+            allow_multi_gpu=False,
+            allow_quant=self.allow_quant,
+            full_gpu_budget_fraction=self.full_gpu_budget_fraction,
+        )
+        return plan.offload
+
+    def cuda_alloc_conf_for(self, allow: bool = True) -> str:
+        """``PYTORCH_CUDA_ALLOC_CONF`` por modo (conf GO só quando vai correr)."""
+        return cuda_alloc_conf_for(self.will_engage(allow))
+
+    def apply_alloc_conf_early(self, allow: bool = True) -> None:
+        """``setdefault`` do alloc conf no arranque do CLI (antes da 1ª CUDA)."""
+        apply_alloc_conf_early(self.will_engage(allow))
+
+    def needed_mib(self, margin_gib: float = 1.2) -> int:
+        """``needed_mib`` do fallback in-process com GO (act + margem)."""
+        return group_offload_needed_mib(self.footprint(), margin_gib=margin_gib)
+
+
+def pop_allow_group_offload(kwargs: dict[str, Any]) -> bool:
+    """Extrai ``allow_group_offload`` do request vramd (default True) — adapters.
+
+    Devolve o valor para o ctor ``group_offload`` da tool (o env do supervisor
+    não reflete o pedido do utilizador; o pedido explícito viaja no request).
+    """
+    return bool(kwargs.pop("allow_group_offload", True))
+
+
+def apply_alloc_conf_for_request(policy: ToolOffloadPolicy, allow: bool) -> None:
+    """Alloc conf por-request no worker vramd: substitui o env herdado do
+    supervisor (pode estar stale com max_split) SE o torch ainda não acordou
+    — torch lê o env na 1ª alocação CUDA."""
+    try:
+        import torch
+
+        if not torch.cuda.is_initialized():
+            import os
+
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = policy.cuda_alloc_conf_for(allow)
+    except Exception:
+        pass

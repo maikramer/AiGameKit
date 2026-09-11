@@ -33,9 +33,7 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 from PIL import Image  # noqa: E402
 
-from aigamekit_shared.group_offload import (  # noqa: E402
-    cuda_alloc_conf_for as _shared_cuda_alloc_conf_for,
-)
+from aigamekit_shared.group_offload import ToolOffloadPolicy  # noqa: E402
 
 from diffusers.utils import logging as _diffusers_logging  # isort: skip  # noqa: E402
 
@@ -133,14 +131,16 @@ def _env_flag(name: str, default: bool) -> bool:
     return default
 
 
-def _group_offload_intent(allow: bool) -> bool:
-    """True se o group offload foi pedido (flag CLI ou env)."""
-    return bool(allow) or os.environ.get("PAINT3D_GROUP_OFFLOAD", "0").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
+# Política GO do paint (aigamekit_shared.group_offload.ToolOffloadPolicy): gate
+# clássico (``full_gpu_budget_fraction=None`` — GO quando nem full-GPU **fp16**
+# cabe; NÃO o gate de folga 0.70 das tools 2D, decisão deliberada: o SDNQ do
+# paint é aplicado fora do planner), alloc conf por modo e kill-switch
+# ``PAINT3D_GROUP_OFFLOAD`` num só objeto.
+POLICY = ToolOffloadPolicy(
+    footprint_key="hunyuan-paint",
+    tool_env_var="PAINT3D_GROUP_OFFLOAD",
+    full_gpu_budget_fraction=None,
+)
 
 
 @contextmanager
@@ -155,7 +155,7 @@ def _no_prequantized_unet_env(allow: bool):
     restaurado no fim (worker persistente: nada sticky entre requests).
     Override explícito do utilizador é respeitado (o GO skipa nesse caso).
     """
-    if not _group_offload_intent(allow):
+    if not POLICY.intent(allow):
         yield
         return
     key = "PAINT3D_USE_QUANTIZED_UNET"
@@ -175,45 +175,37 @@ def _no_prequantized_unet_env(allow: bool):
 # pequenos intercalados com blocos grandes de ativação — o reserved explode por
 # fragmentação; medido: 1.9→5.4 GB em 2 s com nvml_free a 74 MB; sem max_split
 # fica estável ~2.1-2.6 GB). Re-export para os importadores históricos (cli/adapter).
-def _paint_go_gate_cfg():
-    """(puro) ``GroupOffloadConfig`` do GO para o hunyuan-paint — ou ``None``.
+def _paint_go_cfg():
+    """(puro) ``GroupOffloadConfig`` do GO hunyuan-paint — ou ``None``.
 
-    Gate único partilhado pelo apply real (``_try_paint_group_offload``) e pela
-    réplica do CLI (``_group_offload_will_engage``): quant_mode="none"
-    (footprint fp16) — o objectivo é tirar os pesos da GPU, não só caber — e
-    **specs com VRAM livre** (``cuda_gpu_free_specs``): numa GPU parcialmente
-    ocupada o gate engaja GO como o runtime efetivamente precisa (lição das
-    tools 2D: decidir pelo total enganava).
+    Helper fino sobre o gate clássico da ``POLICY`` (``fraction=None``): extrai
+    as **specs livres** e o footprint da POLICY (mesmo sinal do placement — numa
+    GPU parcialmente ocupada o gate engaja como o runtime precisa) e deixa o
+    ``plan_group_offload`` resolver o setup com ``quant_mode="none"`` (footprint
+    fp16 — o objectivo é tirar os pesos da GPU, não só caber). O apply real
+    (``_try_paint_group_offload``) precisa do CFG; o bool do gate é
+    ``POLICY.will_engage()``.
     """
     from aigamekit_shared.group_offload import plan_group_offload
-    from aigamekit_shared.hardware import cuda_gpu_free_specs
-    from aigamekit_shared.lowvram import GIB, get_footprint
+    from aigamekit_shared.lowvram import GIB
 
-    specs = cuda_gpu_free_specs()
+    specs = POLICY._specs()
     if not specs:
         return None
     _idx, free_mib, total_mib = max(specs, key=lambda s: s[-1])
     usable_gib = min((total_mib / GIB) * 0.9, (free_mib / GIB) * 0.95)
-    return plan_group_offload(usable_gib, get_footprint("hunyuan-paint"), quant_mode="none")
+    return plan_group_offload(usable_gib, POLICY.footprint(specs), quant_mode="none")
 
 
 def cuda_alloc_conf_for(group_offload: bool) -> str:
     """``PYTORCH_CUDA_ALLOC_CONF`` adequado ao modo (GO streaming vs clássico).
 
-    Conf GO apenas quando o offload vai **engajar** (modelo não cabe na GPU
-    LIVRE — GPUs grandes ficam no perfil clássico com pesos residentes). O CLI
-    usa com ``setdefault`` (override do utilizador respeitado); o worker vramd
+    Delega na ``POLICY`` (o conf GO só quando o gate vai **engajar** — GPUs
+    grandes ficam no perfil clássico com pesos residentes). O CLI usa com
+    ``setdefault`` (override do utilizador respeitado); o worker vramd
     substitui o env herdado do supervisor — só eficaz antes da 1ª alocação CUDA.
     """
-    return _shared_cuda_alloc_conf_for(_group_offload_intent(group_offload) and _group_offload_will_engage())
-
-
-def _group_offload_will_engage() -> bool:
-    """Replica o gate de VRAM do GO (fp16 não cabe na VRAM livre) — puro."""
-    try:
-        return _paint_go_gate_cfg() is not None
-    except Exception:
-        return False
+    return POLICY.cuda_alloc_conf_for(group_offload)
 
 
 def _auto_dino_device(memory_efficient: bool, gpu_ids: list[int] | None) -> str:
@@ -706,15 +698,14 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
     Quando aplica, o ``offload_ref_unet`` custom fica desligado (os hooks são
     donos da colocação; ver ``_paint_group_offload_active``).
 
-    Opt-in: ``--group-offload`` (CLI) ou ``PAINT3D_GROUP_OFFLOAD=1``. Best-effort:
-    se falhar, retorna False — o pipeline segue com a colocação do constructor.
+    Opt-in via flag ``allow`` (``--group-offload``, default ON) com kill-switch
+    ``PAINT3D_GROUP_OFFLOAD=0`` (global: ``AIGAMEKIT_GROUP_OFFLOAD=0``) —
+    ``POLICY.intent``. Best-effort: se falhar, retorna False — o pipeline segue
+    com a colocação do constructor.
     """
-    import os
-
     from aigamekit_shared.group_offload import try_group_offloading
 
-    env_on = os.environ.get("PAINT3D_GROUP_OFFLOAD", "0").strip().lower() in ("1", "true", "yes", "on")
-    if not (allow or env_on):
+    if not POLICY.intent(allow):
         return False
 
     # Aceder ao inner diffusers pipeline (HunyuanPaintPipeline).
@@ -733,9 +724,9 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
             )
         return False
 
-    # Gate único (VRAM LIVRE, footprint fp16 — ver _paint_go_gate_cfg): tirar os
+    # Gate único (VRAM LIVRE, footprint fp16 — ver _paint_go_cfg/POLICY): tirar os
     # pesos da GPU quando não caberiam, mesmo com SDNQ activo.
-    cfg = _paint_go_gate_cfg()
+    cfg = _paint_go_cfg()
     if cfg is None:
         return False  # modelo cabe na GPU — sem offload
     # record_stream=False (conservador): com record=True as cópias GPU dos

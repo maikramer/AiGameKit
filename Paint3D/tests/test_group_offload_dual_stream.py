@@ -430,7 +430,7 @@ class TestNoPrequantizedUnetEnv:
 
         monkeypatch.delenv("PAINT3D_USE_QUANTIZED_UNET", raising=False)
         monkeypatch.setenv("PAINT3D_GROUP_OFFLOAD", "1")
-        with _no_prequantized_unet_env(allow=False):
+        with _no_prequantized_unet_env(allow=True):
             assert os.environ["PAINT3D_USE_QUANTIZED_UNET"] == "0"
         assert "PAINT3D_USE_QUANTIZED_UNET" not in os.environ
 
@@ -503,38 +503,45 @@ class TestSdnqLayersUnderGroupOffload:
 
 class TestPaintGoGateFreeSpecs:
     """Gate GO único (0.2.6 upgrade): decide pela VRAM LIVRE, não pelo total —
-    numa GPU ocupada o GO engaja como o runtime precisa (lição tools 2D)."""
+    numa GPU ocupada o GO engaja como o runtime precisa (lição tools 2D).
+
+    O gate vive na POLICY do painter (gate clássico, ``fraction=None``); o CFG
+    para o apply real sai do helper fino ``_paint_go_cfg``."""
 
     def test_gate_cfg_none_when_fp16_fits_free_vram(self, monkeypatch) -> None:
         import paint3d.painter as painter
 
         # 24 GB com 20 livres: fp16 (6+2=8 GiB) cabe folgado → sem GO.
+        monkeypatch.delenv("PAINT3D_GROUP_OFFLOAD", raising=False)
+        monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
         monkeypatch.setattr(
             "aigamekit_shared.hardware.cuda_gpu_free_specs",
             lambda: [(0, 20 * 1024**3, 24 * 1024**3)],
         )
-        assert painter._paint_go_gate_cfg() is None
-        assert painter._group_offload_will_engage() is False
+        assert painter._paint_go_cfg() is None
+        assert painter.POLICY.will_engage() is False
 
     def test_gate_cfg_engages_when_free_vram_tight(self, monkeypatch) -> None:
         import paint3d.painter as painter
 
         # 24 GB TOTAL mas só 6 livres (GPU ocupada): min(21.6, 5.7)=5.7 < 8 → GO.
         # O gate antigo (specs totais) dizia "cabe" e não engajava.
+        monkeypatch.delenv("PAINT3D_GROUP_OFFLOAD", raising=False)
+        monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
         monkeypatch.setattr(
             "aigamekit_shared.hardware.cuda_gpu_free_specs",
             lambda: [(0, 6 * 1024**3, 24 * 1024**3)],
         )
-        assert painter._paint_go_gate_cfg() is not None
-        assert painter._group_offload_will_engage() is True
+        assert painter._paint_go_cfg() is not None
+        assert painter.POLICY.will_engage() is True
 
     def test_alloc_conf_delegates_to_shared(self, monkeypatch) -> None:
         import paint3d.painter as painter
-        from aigamekit_shared.group_offload import ALLOC_CONF_GROUP_OFFLOAD
+        from aigamekit_shared.group_offload import ALLOC_CONF_GROUP_OFFLOAD, ToolOffloadPolicy
 
         monkeypatch.setenv("PAINT3D_GROUP_OFFLOAD", "1")
-        monkeypatch.setattr(painter, "_group_offload_will_engage", lambda: True)
+        monkeypatch.setattr(ToolOffloadPolicy, "will_engage", lambda self, allow=True, gpu_specs=None: True)
         assert painter.cuda_alloc_conf_for(True) == ALLOC_CONF_GROUP_OFFLOAD
         assert "max_split_size_mb" not in painter.cuda_alloc_conf_for(True)
-        monkeypatch.setattr(painter, "_group_offload_will_engage", lambda: False)
+        monkeypatch.setattr(ToolOffloadPolicy, "will_engage", lambda self, allow=True, gpu_specs=None: False)
         assert "max_split_size_mb" in painter.cuda_alloc_conf_for(True)

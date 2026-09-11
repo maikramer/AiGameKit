@@ -13,23 +13,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aigamekit_shared.group_offload import (
-    ALLOC_CONF_DEFAULT,  # noqa: F401 — re-export (testes/CLI usam daqui)
-    ALLOC_CONF_GROUP_OFFLOAD,  # noqa: F401 — re-export
-    is_group_offload_enabled,
-)
-from aigamekit_shared.group_offload import (
-    apply_alloc_conf_early as _apply_alloc_conf_early,
-)
-from aigamekit_shared.group_offload import (
-    cuda_alloc_conf_for as _cuda_alloc_conf_for,
-)
-from aigamekit_shared.group_offload import (
-    group_offload_will_engage as _shared_group_offload_will_engage,
-)
+from aigamekit_shared.group_offload import ToolOffloadPolicy
 from aigamekit_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from aigamekit_shared.hardware import hw_auto_enabled as _hw_auto_enabled
-from aigamekit_shared.lowvram import OFFLOAD_GROUP_STREAM, OFFLOAD_NONE, get_footprint, plan_offload
+from aigamekit_shared.lowvram import OFFLOAD_GROUP_STREAM, OFFLOAD_NONE
 
 from .generator import SkymapGenerator
 
@@ -47,17 +34,20 @@ GROUP_OFFLOAD_ENV = "SKYMAP2D_GROUP_OFFLOAD"
 DEFAULT_WIDTH = 2048
 DEFAULT_HEIGHT = 1024
 
+# Política GO da tool — gate (specs livres, fraction do generator: fonte única),
+# alloc conf por modo e offload_mode do perfil, num só objeto
+# (aigamekit_shared.group_offload.ToolOffloadPolicy).
+POLICY = ToolOffloadPolicy(
+    footprint_key="flux-dev-uint4",
+    tool_env_var=GROUP_OFFLOAD_ENV,
+    full_gpu_budget_fraction=SkymapGenerator.FULL_GPU_BUDGET_FRACTION,
+    allow_quant=("none",),
+)
+
 
 def hw_auto_enabled() -> bool:
     """``SKYMAP2D_HW_AUTO=0`` desliga a auto-detecção."""
     return _hw_auto_enabled(HW_AUTO_ENV)
-
-
-def group_offload_intent(allow: bool = True) -> bool:
-    """Intenção de group offload: flag ``--group-offload`` AND env kill-switch."""
-    if not allow:
-        return False
-    return is_group_offload_enabled(tool_env_var=GROUP_OFFLOAD_ENV)
 
 
 @dataclass(frozen=True)
@@ -100,16 +90,9 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Skymap2DHardwareProfile:
     gpu_ids = [idx for idx, _ in gpus] if len(gpus) > 1 else None
 
     # offload_mode: réplica do gate GO do generator sobre o single-GPU principal
-    # (fonte única: mesmos knobs de folga/kill-switch). O caminho dos clamp
-    # tiers mantém-se — o offload_mode é observabilidade para o summary.
-    _go_intent = group_offload_intent()
-    plan = plan_offload(
-        [max(gpus, key=lambda t: t[1])],
-        get_footprint("flux-dev-uint4"),
-        allow_quant=("none",),
-        allow_group_offload=_go_intent,
-        full_gpu_budget_fraction=SkymapGenerator.FULL_GPU_BUDGET_FRACTION if _go_intent else None,
-    )
+    # (fonte única: POLICY — mesmos knobs de folga/kill-switch). O caminho dos
+    # clamp tiers mantém-se — o offload_mode é observabilidade para o summary.
+    offload_mode = POLICY.plan_offload_mode(gpus)
 
     if largest_gib >= 12.0:
         # Full GPU, sem offload, resolução livre.
@@ -121,7 +104,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Skymap2DHardwareProfile:
             max_height=None,
             gpu_ids=gpu_ids,
             total_vram_gib=round(total_gib, 1),
-            offload_mode=plan.offload,
+            offload_mode=offload_mode,
         )
 
     if largest_gib >= 8.0:
@@ -134,7 +117,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Skymap2DHardwareProfile:
             max_height=1024,
             gpu_ids=gpu_ids,
             total_vram_gib=round(total_gib, 1),
-            offload_mode=plan.offload,
+            offload_mode=offload_mode,
         )
 
     # < 8 GiB (inclui < 6): offload + clamp a 1024x512.
@@ -147,42 +130,10 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Skymap2DHardwareProfile:
         max_height=512,
         gpu_ids=gpu_ids,
         total_vram_gib=round(total_gib, 1),
-        offload_mode=plan.offload,
+        offload_mode=offload_mode,
     )
 
 
 def detect_hardware_profile() -> Skymap2DHardwareProfile:
     """Detecta GPUs CUDA e devolve o perfil correspondente."""
     return detect_profile(profile_from_specs)
-
-
-def group_offload_will_engage() -> bool:
-    """Réplica pura do gate: o plano para o hardware ATUAL engaja group offload?
-
-    Usado antes do load (CLI/worker) para: (a) escolher o
-    ``PYTORCH_CUDA_ALLOC_CONF`` certo; (b) reduzir o ``needed_mib`` do
-    fallback in-process (com GO o pico é ≈ ativação, não pesos+ativação).
-    """
-    return _shared_group_offload_will_engage(
-        get_footprint("flux-dev-uint4"),
-        full_gpu_budget_fraction=SkymapGenerator.FULL_GPU_BUDGET_FRACTION,
-        tool_env_var=GROUP_OFFLOAD_ENV,
-        allow_quant=("none",),
-    )
-
-
-def cuda_alloc_conf_for(group_offload: bool = True) -> str:
-    """``PYTORCH_CUDA_ALLOC_CONF`` por modo — chamar ANTES da 1ª alocação CUDA.
-
-    Args:
-        group_offload: intenção (flag ``--group-offload`` + env). O conf GO só
-            é devolvido quando o offload **vai correr** neste hardware — GPUs
-            grandes voltam ao conf clássico (max_split reduz o pico).
-    """
-    return _cuda_alloc_conf_for(group_offload_intent(group_offload) and group_offload_will_engage())
-
-
-def apply_alloc_conf_early(group_offload: bool = True) -> None:
-    """``setdefault`` do alloc conf no arranque do CLI (torch lê o env na 1ª
-    alocação CUDA; o override explícito do utilizador ganha sempre)."""
-    _apply_alloc_conf_early(group_offload_intent(group_offload) and group_offload_will_engage())

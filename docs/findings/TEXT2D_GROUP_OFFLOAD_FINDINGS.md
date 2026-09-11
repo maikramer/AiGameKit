@@ -236,3 +236,35 @@ pintura da mesa íntegra — screenshot validado); os admits das três usam o
 footprint GO (medições pré-GO corretamente invalidadas pelo gate 0.3.7), e o
 Text2D já usa a calibração GO medida. Pico do paint ~6 GiB = device dedicado
 (chunks GO usam a VRAM livre — comportamento documentado na calibração GO).
+
+
+## Centralização: ToolOffloadPolicy (2026-09-11, parte 5)
+
+O padrão GO estava replicado por tool (~40 linhas × 5: intent/will_engage/
+alloc conf ×2/needed). Agora vive num objeto do Shared — cada tool instancia::
+
+    POLICY = ToolOffloadPolicy(
+        footprint_key="sd15-base",            # ou footprint_fn (4B/9B por GPU)
+        tool_env_var="TEXTURE2D_GROUP_OFFLOAD",
+        allow_quant=("none",),                # espelha o placement real
+        full_gpu_budget_fraction=0.70,        # None = gate fp16 clássico (paint3d)
+    )
+
+e consome: ``POLICY.will_engage()`` (specs LIVRES), ``plan_offload_mode(gpus)``
+(perfis hw), ``cuda_alloc_conf_for(flag)``/``apply_alloc_conf_early(flag)``,
+``needed_mib()``. CLIs ganham a flag com ``add_group_offload_option()`` e o
+needed GO-aware com ``group_offload_needed_or_classic(backend, POLICY, ...)``;
+os adapters vramd usam ``pop_allow_group_offload(kwargs)`` +
+``apply_alloc_conf_for_request(POLICY, allow)``.
+
+Decisões: o Paint3D mantém o gate fp16 clássico (``fraction=None``) — não
+segue a escada de quant do planner; os ``vramd_payload.py`` builders NÃO foram
+centralizados (só ~8 linhas de rodapé são comuns — indireção sem ganho);
+``QUANT_WEIGHT_FACTOR`` permanece espelhado entre Shared/lowvram e vramd/
+footprints (repos separados — manter sincronizado em releases vramd).
+
+Otimização documentada (não executada — requer sync do footprint no vramd):
+``flux-dev-uint4.largest_gib`` 3.0 é conservador (transformer uint4 ~2.2) —
+com 2.4 o skymap 6 GB escolheria ``block_level`` em vez de ``leaf`` (menos
+sync points). O Triton MM fused (0.2.6) já está ativo nos E2E via
+``apply_quantized_matmul`` (ligado sempre que Triton existe).

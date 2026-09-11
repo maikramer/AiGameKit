@@ -88,7 +88,6 @@ def env_bool(env_var: str, cli_wants: bool) -> bool:
 # Backend vramd → chave em ``aigamekit_shared.lowvram.FOOTPRINTS`` (ou None = YAML/heuristic).
 BACKEND_FOOTPRINT_KEYS: dict[str, str] = {
     "text2d": "flux-klein-9b",
-    "text2icon": "sana-sprint-600m",
     "skymap2d": "flux-dev-uint4",
     "texture2d": "sd15-base",
     "text3d": "hunyuan3d-omni",
@@ -138,7 +137,7 @@ def needed_mib_for_backend(
                 # 4 bits por defeito nos DiT grandes (FLUX klein/Hunyuan/Motion):
                 # pico folgado em GPUs 6-12 GB com group offload.
                 mode = "sdnq-int4"
-            elif backend in ("paint3d", "part3d", "text2icon"):
+            elif backend in ("paint3d", "part3d"):
                 mode = "sdnq-uint8"
             else:
                 # skymap2d / text2sound: mem_eff = offload; footprint já reflecte quant.
@@ -501,7 +500,7 @@ def with_vramd_peak_opts(
         if backend == "text2d":
             # FLUX klein: 4 bits é o piso por defeito (mais quantização = folga).
             out["sdnq_preset"] = "sdnq-int4"
-        elif backend in ("paint3d", "part3d", "text2icon"):
+        elif backend in ("paint3d", "part3d"):
             out["sdnq_preset"] = prefer_fp8_preset("sdnq-uint8")
         elif backend in ("text3d", "motion3d"):
             out["sdnq_preset"] = "sdnq-int4"
@@ -553,7 +552,7 @@ def try_vramd_delegation(
     carga paralela) — levantam ``click.ClickException``.
 
     Args:
-        tool: Nome do backend (ex: ``text2icon``).
+        tool: Nome do backend (ex: ``text3d``).
         payload: Parâmetros do pedido (prompt, output, steps, ...).
         t_start: Timestamp de início (``time.time()``) para calcular elapsed.
         noun: Substantivo para a mensagem de sucesso (ex: ``"Ícone"``, ``"Textura"``).
@@ -761,3 +760,55 @@ def delegate_or_prepare(
     if prepare is not None:
         prepare()
     return False
+
+
+def add_group_offload_option():
+    """Decorador click com a flag ``--group-offload`` padrão das tools 2D/3D.
+
+    Uso (substitui o bloco ``@click.option("--group-offload/...")`` repetido)::
+
+        @cli.command("generate")
+        @add_group_offload_option()
+        @add_vramd_options
+        def generate_cmd(..., group_offload: bool, ...):
+    """
+    import click
+
+    return click.option(
+        "--group-offload/--no-group-offload",
+        "group_offload",
+        default=True,
+        show_default=True,
+        help=(
+            "Group offload + CUDA streams quando o full-GPU não teria folga "
+            "(pico ≈ ativação; chunks via VAE tiling + attention slicing). "
+            "Kill-switch: <TOOL>_GROUP_OFFLOAD=0 (global: AIGAMEKIT_GROUP_OFFLOAD=0)."
+        ),
+    )
+
+
+def group_offload_needed_or_classic(
+    backend: str,
+    policy: Any,
+    *,
+    quant_mode: str | None = None,
+    memory_efficient: bool = False,
+    margin_gib: float | None = None,
+) -> int:
+    """``needed_mib`` do fallback in-process: GO-aware quando o GO vai engajar.
+
+    Com GO o pico é ≈ ativação + trânsito de grupos (``policy.needed_mib``) —
+    exigir pesos+ativação ao ensure_vram recusava jobs que correm bem; sem GO,
+    o ``needed_mib_for_backend`` clássico.
+
+    Args:
+        backend: nome vramd (ex.: ``"text2d"``).
+        policy: :class:`~aigamekit_shared.group_offload.ToolOffloadPolicy` da tool.
+        quant_mode/memory_efficient: sinais do ramo clássico.
+        margin_gib: override da margem do ramo GO (ex.: skymap 1.5).
+    """
+    if policy.will_engage():
+        if margin_gib is not None:
+            return policy.needed_mib(margin_gib=margin_gib)
+        return policy.needed_mib()
+    return needed_mib_for_backend(backend, quant_mode=quant_mode, memory_efficient=memory_efficient)

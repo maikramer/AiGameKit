@@ -132,16 +132,16 @@ def test_cli_exposes_group_offload_flag(command: str) -> None:
 
 def test_group_offload_kill_switch_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """``SKYMAP2D_GROUP_OFFLOAD=0`` mata o gate GO (tool > global)."""
-    from skymap2d.hardware import group_offload_intent, group_offload_will_engage
+    from skymap2d.hardware import POLICY
 
     monkeypatch.setenv("AIGAMEKIT_GROUP_OFFLOAD", "1")
     monkeypatch.delenv("SKYMAP2D_GROUP_OFFLOAD", raising=False)
-    assert group_offload_intent() is True
+    assert POLICY.intent() is True
     monkeypatch.setenv("SKYMAP2D_GROUP_OFFLOAD", "0")
-    assert group_offload_intent() is False
-    assert group_offload_will_engage() is False
+    assert POLICY.intent() is False
+    assert POLICY.will_engage() is False
     # A flag ``--no-group-offload`` também desliga a intenção.
-    assert group_offload_intent(allow=False) is False
+    assert POLICY.intent(allow=False) is False
 
 
 def test_6gb_profile_summary_shows_group_offload_streams(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -16,10 +16,11 @@ from rich.rule import Rule
 from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
+    add_group_offload_option,
     add_vramd_options,
     delegate_or_prepare,
+    group_offload_needed_or_classic,
     legacy_server_allowed,
-    needed_mib_for_backend,
     prepare_gpu_exclusive,
 )
 from aigamekit_shared.path_utils import safe_filename
@@ -151,17 +152,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "(SD1.5 cabe em qualquer GPU CUDA). Env: TEXTURE2D_HW_AUTO=0."
     ),
 )
-@click.option(
-    "--group-offload/--no-group-offload",
-    "group_offload",
-    default=True,
-    show_default=True,
-    help=(
-        "Group offload + CUDA streams quando o full-GPU não teria folga "
-        "(GPU apertada/ocupada; pico ≈ ativação; VAE tiling + attention "
-        "slicing como chunks). Kill-switch: TEXTURE2D_GROUP_OFFLOAD=0."
-    ),
-)
+@add_group_offload_option()
 @click.option(
     "--ground",
     type=click.Choice(["auto", "on", "off"], case_sensitive=False),
@@ -229,9 +220,9 @@ def generate_cmd(
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
 
     # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA).
-    from .hardware import apply_alloc_conf_early
+    from .hardware import POLICY
 
-    apply_alloc_conf_early(group_offload)
+    POLICY.apply_alloc_conf_early(group_offload)
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
@@ -351,17 +342,11 @@ def generate_cmd(
             # Se None (server não respondeu), continua para fallback in-process
 
     if not cpu:
-        from .hardware import group_offload_will_engage
+        from .hardware import POLICY
 
-        if group_offload_will_engage():
-            # GO+streams: pico ≈ ativação + trânsito de grupos — não exigir
-            # pesos+ativação ao ensure_vram (recusava jobs que correm bem).
-            from aigamekit_shared.group_offload import group_offload_needed_mib
-            from aigamekit_shared.lowvram import get_footprint
-
-            needed_mib: int = group_offload_needed_mib(get_footprint("sd15-base"))
-        else:
-            needed_mib = needed_mib_for_backend("texture2d")
+        # GO+streams (pico ≈ ativação + trânsito de grupos): needed_mib GO-aware
+        # — não exigir pesos+ativação ao ensure_vram (recusava jobs que correm bem).
+        needed_mib: int = group_offload_needed_or_classic("texture2d", POLICY)
         prepare_gpu_exclusive(
             needed_mib=needed_mib,
             allow_shared=True,
@@ -491,13 +476,7 @@ def presets_cmd() -> None:
     show_default=True,
     help="Auto-detecção de hardware (device + multi-GPU). Env: TEXTURE2D_HW_AUTO=0.",
 )
-@click.option(
-    "--group-offload/--no-group-offload",
-    "group_offload",
-    default=True,
-    show_default=True,
-    help=("Group offload + CUDA streams quando o full-GPU não teria folga. Kill-switch: TEXTURE2D_GROUP_OFFLOAD=0."),
-)
+@add_group_offload_option()
 @click.option(
     "--ground",
     type=click.Choice(["auto", "on", "off"], case_sensitive=False),
@@ -553,9 +532,9 @@ def batch_cmd(
 ) -> None:
     """Gera texturas em batch a partir de um ficheiro de prompts (um por linha)."""
     # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA).
-    from .hardware import apply_alloc_conf_early
+    from .hardware import POLICY
 
-    apply_alloc_conf_early(group_offload)
+    POLICY.apply_alloc_conf_early(group_offload)
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
@@ -645,16 +624,10 @@ def batch_cmd(
         pending.append((idx, prompt_text, out_path))
 
     if pending:
-        from .hardware import group_offload_will_engage
+        from .hardware import POLICY
 
-        if group_offload_will_engage():
-            # GO+streams: pico ≈ ativação + trânsito de grupos.
-            from aigamekit_shared.group_offload import group_offload_needed_mib
-            from aigamekit_shared.lowvram import get_footprint
-
-            needed_mib: int = group_offload_needed_mib(get_footprint("sd15-base"))
-        else:
-            needed_mib = needed_mib_for_backend("texture2d")
+        # GO+streams (pico ≈ ativação + trânsito de grupos): needed_mib GO-aware.
+        needed_mib: int = group_offload_needed_or_classic("texture2d", POLICY)
         prepare_gpu_exclusive(
             needed_mib=needed_mib,
             allow_shared=True,
@@ -877,9 +850,9 @@ def serve(ums_worker: bool) -> None:
 
     # Worker vramd: alloc conf por modo antes da 1ª alocação CUDA (o request
     # pode pedir GO; o adapter corrige por-request se o torch ainda não acordou).
-    from .hardware import apply_alloc_conf_early
+    from .hardware import POLICY
 
-    apply_alloc_conf_early()
+    POLICY.apply_alloc_conf_early()
 
     run_ums_worker_cli(Adapter, tool_name="texture2d", ums_worker=ums_worker, console=console)
 
