@@ -217,3 +217,22 @@ sempre no fallback in-process; com o medido 5568 o job corre no worker — E2E
 **E2E final (4050 6 GB, sdnq 0.2.6 + vramd 0.3.9):** `✓ via vramd`,
 `peak=5568 MiB`, worker carregado em 19.8 s, GO+streams+int4, 1024² em 30.4 s
 totais.
+
+
+## Testes reais das tools (RTX 4050 6 GB, 2026-09-11 parte 4 — sdnq 0.2.6 + vramd 0.3.9)
+
+Todos via vramd (delegate + admit por modo), GPU dedicada, seed fixa:
+
+| Tool | Resultado | Admit (MiB) | GO aplicado | Pico device |
+|---|---|---|---|---|
+| Text2Icon 1024² | ✓ 25.9 s | 2903 (footprint int4 GO) | transformer + Gemma (block) | 3344 MiB |
+| Skymap2D 1024×512 | ✓ 449.9 s | 5504 (footprint GO; medição pré-GO invalidada) | transformer + 2 encoders (leaf) | ~3344 MiB |
+| Paint3D mesa+textura | ✓ 145.2 s | 5248 (footprint uint8 GO) | unet + unet_dual + encoder (leaf, exclude cross_attn) | 6033 MiB |
+| Text2D 1024² (regressão) | ✓ 30.4 s | **5568 (peak medido 0.3.9)** | transformer + encoders (block) | — |
+
+Notas: o tier do Text2Icon na 6 GB escolhe **int4** (signed, sem codebook) — o
+codebook Lloyd-Max em GPU real foi exercitado pelo Paint3D (uint8 explícito,
+pintura da mesa íntegra — screenshot validado); os admits das três usam o
+footprint GO (medições pré-GO corretamente invalidadas pelo gate 0.3.7), e o
+Text2D já usa a calibração GO medida. Pico do paint ~6 GiB = device dedicado
+(chunks GO usam a VRAM livre — comportamento documentado na calibração GO).
