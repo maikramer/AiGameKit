@@ -34,8 +34,12 @@ use crate::worldsys::{AtmosphereState, DayCycleState};
 const FACE_SIZE: u32 = 128;
 
 /// Fases do dia que regeram o cubemap. Mais fases = transições mais suaves,
-/// cada uma custa um re-filtro compute (~1 frame).
-const DAY_PHASES: u32 = 6;
+/// cada uma custa um re-filtro compute (~1 frame). 12 (era 6, 2026-09-09):
+/// os saltos discretos de ambiente às trocas de fase liam-se nas encostas.
+const DAY_PHASES: u32 = 12;
+
+/// Quanto do chão default o tint regional substitui (probes regionais).
+const TINT_MIX_GROUND: f32 = 0.65;
 
 /// Escala da intensidade do IBL gerado. O filtro integra a RADIÂNCIA do
 /// cubemap — a paleta do `AtmosphereState` vive na mesma escala que o domo
@@ -143,6 +147,18 @@ fn update_sky_cubemap(
 /// fonte — sem mips o render panica ("storage_view_mip_6 … only has 1 total
 /// mip level"), crash real a 2026-09-07 no qa-enriched.
 pub fn sky_cubemap(a: &AtmosphereState, nishita: Option<&crate::sky_nishita::NishitaModel>) -> Image {
+    sky_cubemap_tinted(a, nishita, None)
+}
+
+/// Como [`sky_cubemap`], mas com um TINT opcional misturado no hemisfério de
+/// baixo (o "bounce" local) — usado pelos probes regionais dos pads
+/// (`crate::probes`): pântano esverdeado, deserto arenoso, etc. `None` = o
+/// pintor padrão do IBL mundial.
+pub fn sky_cubemap_tinted(
+    a: &AtmosphereState,
+    nishita: Option<&crate::sky_nishita::NishitaModel>,
+    ground_tint: Option<[f32; 3]>,
+) -> Image {
     // 128 = 2^7 → 8 níveis de mip (128..1): a geração GPU acede ao mip_7.
     let mips = FACE_SIZE.trailing_zeros() + 1;
     // `Image::new` valida os bytes contra o MIPEL 0 — o buffer estende-se à
@@ -163,7 +179,7 @@ pub fn sky_cubemap(a: &AtmosphereState, nishita: Option<&crate::sky_nishita::Nis
                 let uc = (x as f32 + 0.5) / FACE_SIZE as f32 * 2.0 - 1.0;
                 let vc = (y as f32 + 0.5) / FACE_SIZE as f32 * 2.0 - 1.0;
                 let dir = face_direction(face, uc, vc);
-                let color = sky_radiance(a, dir, sun, moon, nishita);
+                let color = sky_radiance(a, dir, sun, moon, nishita, ground_tint);
                 let rgba = [
                     f32_to_f16(color[0]),
                     f32_to_f16(color[1]),
@@ -298,6 +314,7 @@ fn sky_radiance(
     sun: Vec3,
     moon: Vec3,
     nishita: Option<&crate::sky_nishita::NishitaModel>,
+    ground_tint: Option<[f32; 3]>,
 ) -> [f32; 3] {
     let up = dir.y;
     // Céu: horizonte → zénite; chão: horizonte → chão escuro (a bounce do
@@ -314,7 +331,11 @@ fn sky_radiance(
         }
         None => mix_rgb(a.horizon, a.zenith, smoothstep(0.0, 0.45, up)),
     };
-    let ground = a.horizon.map(|c| c * 0.18 + a.fog_of(c));
+    let ground_default = a.horizon.map(|c| c * 0.18 + a.fog_of(c));
+    let ground = match ground_tint {
+        Some(t) => mix_rgb(ground_default, t, TINT_MIX_GROUND),
+        None => ground_default,
+    };
     let mut color = mix_rgb(ground, sky, smoothstep(-0.12, 0.06, up));
 
     // Lua: fria e fraca, só quando o sol está baixo (ambos os modelos).
@@ -435,8 +456,8 @@ mod tests {
         let mut a = AtmosphereState::default();
         a.sun_dir = Vec3::new(0.0, 1.0, 0.0);
         a.night = 0.0;
-        let at_sun = sky_radiance(&a, Vec3::Y, a.sun_dir, a.moon_dir, None);
-        let away = sky_radiance(&a, -Vec3::Y, a.sun_dir, a.moon_dir, None);
+        let at_sun = sky_radiance(&a, Vec3::Y, a.sun_dir, a.moon_dir, None, None);
+        let away = sky_radiance(&a, -Vec3::Y, a.sun_dir, a.moon_dir, None, None);
         assert!(at_sun[1] > away[1], "olhar para o sol é mais luminoso");
 
         // Noite: zénite azulado (b > r) e escuro.
@@ -446,7 +467,7 @@ mod tests {
         a.horizon = [0.04, 0.05, 0.10];
         a.sun_dir = -Vec3::Y;
         a.moon_dir = Vec3::Y;
-        let night = sky_radiance(&a, Vec3::Y, a.sun_dir, a.moon_dir, None);
+        let night = sky_radiance(&a, Vec3::Y, a.sun_dir, a.moon_dir, None, None);
         assert!(night[2] > night[0], "noite azulada");
     }
 
@@ -457,13 +478,14 @@ mod tests {
         a.night = 0.0;
         a.day = 1.0;
         let model = crate::sky_nishita::NishitaModel::default();
-        let at_sun = sky_radiance(&a, Vec3::Y, a.sun_dir, a.moon_dir, Some(&model));
+        let at_sun = sky_radiance(&a, Vec3::Y, a.sun_dir, a.moon_dir, Some(&model), None);
         let off = sky_radiance(
             &a,
             Vec3::new(0.2, 0.8, 0.5).normalize(),
             a.sun_dir,
             a.moon_dir,
             Some(&model),
+            None,
         );
         // A direção do sol (zénite) domina a radiância física; tudo finito.
         assert!(
@@ -478,7 +500,7 @@ mod tests {
         a.night = 1.0;
         a.day = 0.0;
         a.sun_dir = -Vec3::Y;
-        let night = sky_radiance(&a, Vec3::Y, a.sun_dir, a.moon_dir, Some(&model));
+        let night = sky_radiance(&a, Vec3::Y, a.sun_dir, a.moon_dir, Some(&model), None);
         assert!(
             night.iter().all(|v| v.is_finite() && *v >= 0.0),
             "noite nishita sã: {night:?}"

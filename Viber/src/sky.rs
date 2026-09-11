@@ -243,6 +243,22 @@ impl SkyConfig {
         config
     }
 
+    /// Override do modelo pelo `VIBER_SKY_MODEL` (A/B sem editar o XML) —
+    /// `nishita`/`analytic`, qualquer outra coisa mantém o attr.
+    ///
+    /// Vive AQUI (e não no `run`) porque o `run` tem DOIS consumidores do
+    /// mesmo config: o bloco CONFIG do WGSL e o [`SkyModelState`] que o IBL e
+    /// os probes regionais lêem — resolvido num sítio só, os dois não podem
+    /// discordar sobre que céu o mundo desenha.
+    pub fn with_env_override(mut self) -> SkyConfig {
+        match std::env::var("VIBER_SKY_MODEL").ok().as_deref() {
+            Some(v) if v.eq_ignore_ascii_case("nishita") => self.model = SkyModel::Nishita,
+            Some(v) if v.eq_ignore_ascii_case("analytic") => self.model = SkyModel::Analytic,
+            _ => {}
+        }
+        self
+    }
+
     /// Instância do modelo físico para o IBL — os MESMOS coeficientes que o
     /// bloco CONFIG emite para o WGSL (o ganho vem de
     /// [`crate::sky_nishita::NISHITA_GAIN`], partilhado).
@@ -581,6 +597,22 @@ pub fn sky_follow_camera(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// O `SkyModelState` (resource lido pelo IBL e pelos probes regionais)
+    /// TEM de seguir o modelo resolvido no config — era por aqui que
+    /// `<Sky model="nishita">` chegava a ficar sem efeito nenhum no ambiente.
+    #[test]
+    fn test_sky_model_state_follows_config() {
+        let cfg = SkyConfig {
+            model: SkyModel::Nishita,
+            ..SkyConfig::default()
+        };
+        assert_eq!(SkyModelState::from_config(&cfg).model, SkyModel::Nishita);
+        assert_eq!(
+            SkyModelState::from_config(&SkyConfig::default()).model,
+            SkyModel::Analytic
+        );
+    }
 
     /// O shader gerado substitui o bloco CONFIG e mantém o resto intacto.
     #[test]

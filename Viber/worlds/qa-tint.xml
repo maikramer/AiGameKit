@@ -1,0 +1,39 @@
+<!--
+  qa-tint: banco de teste do PUBLISH de tint do terreno e do chão molhado
+  (`src/terrain/layer_material.rs`). Sem props, sem criaturas, sem scripts:
+  só terreno com `layers`, um relógio e chuva, para o custo medido ser o dos
+  dois sistemas em teste e não do mundo.
+
+  Porquê: o `terrain_daynight_tint` e o `terrain_rain_wetness` escrevem nos
+  params de TODOS os materiais de chunk, e cada `get_mut` num material
+  bindless destrói/recria o bind group (ver `CHUNK_MATERIAL_WRITE_BUDGET`).
+  Com `world-size=2048` e `chunk-size=64` são 32×32 = 1024 materiais — escala
+  suficiente para o orçamento por frame (64/frame) ser visível no perfil.
+
+  Uso:
+    viber session up (com este mundo, porta explícita)
+    viber debug (com este mundo) lua 'viber.debug.set_clock(300) return true'
+    viber debug (com este mundo) screenshot -o tint.png
+  Saltar o relógio por vários passos do dia força uma passagem por passo —
+  é assim que o pico se mede (prof com várias amostras).
+-->
+<world clear-color="#0b1020">
+  <Terrain
+    world-size="2048" max-height="45" chunk-size="64" resolution="64"
+    levels="3" height-smoothing="1" cliff-angle="50"
+    layers="grass vale_grass dirt gravel mountain_stone sand"
+    cliff-streaks="0.5" cliff-moss="0.35" />
+  <AmbientLight color="0x8090b0" brightness="60" />
+  <DirectionalLight illuminance="800" direction="-0.3 -1 -0.4" shadows="true" />
+  <!-- Dia de 4 min reais: 16 passos de tint por dia = um a cada 15 s, para
+       o publish acontecer sozinho enquanto se olha para a imagem. -->
+  <DayCycle minute-of-day="600" minutes-per-real-second="6" dawn-minute="330" dusk-minute="1200" />
+  <Weather rain="0.9" wind="0.6 0.2" wind-strength="0.5" clouds="0.5" />
+  <Sky cloud-coverage="0.3" cloud-density="0.4" />
+  <ThirdPersonCamera distance="8" height="2.5" pitch="16" />
+  <PlayerGLTF model-url="/assets/meshes/characters/hero_lod0.glb" pos="0 0 0" />
+  <HudScreenLayer>
+    <Minimap range="80" />
+    <HealthBar />
+  </HudScreenLayer>
+</world>

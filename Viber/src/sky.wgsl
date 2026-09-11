@@ -412,8 +412,14 @@ fn cumulus_layer(dir: vec3<f32>, color: vec3<f32>, a: Atmosphere, wind: vec2<f32
     let blocker = cloud_density(uv + light_dir.xz * 0.48, coverage, footprint);
     // More matter towards the light means LESS transmitted light, not more.
     let transmission = exp(-blocker * clamp(CFG_CLOUD_DENSITY, 0.0, 4.0) * 4.0);
-    let shade = clamp(0.28 + transmission * 0.62 + (top - base) * 0.18, 0.0, 1.0);
-    let shadow = mix(vec3(0.012, 0.018, 0.032), a.zenith * 0.45 + vec3(0.16), a.day);
+    // Piso de sombra 0.42 (era 0.28): os centros espessos das massas não
+    // colapsam para quase-preto de dia — nuvens de tempestade continuam
+    // escuras, mas o céu deixa de ler "manchado de preto".
+    let shade = clamp(0.42 + transmission * 0.55 + (top - base) * 0.18, 0.0, 1.0);
+    // Sombra do dia CLARA: com o piso escuro original (zenith*0.45+0.16) as
+    // massas espessas ficavam num slate quase preto que, contra o véu claro
+    // do horizonte, lia-se como "céu preto" de dia (repro 2026-09-09).
+    let shadow = mix(vec3(0.012, 0.018, 0.032), a.zenith * 0.55 + vec3(0.34), a.day);
     let daylight = mix(vec3(0.95, 0.97, 1.0), a.tint * vec3(0.98, 0.86, 0.74), a.golden * 0.8);
     let lit = mix(vec3(0.055, 0.070, 0.10), daylight, a.day);
     var cloud = mix(shadow, lit, shade);
