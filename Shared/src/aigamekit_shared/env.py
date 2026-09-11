@@ -12,7 +12,6 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 TEXT2D_BIN = "TEXT2D_BIN"
-TEXT2ICON_BIN = "TEXT2ICON_BIN"
 TEXT3D_BIN = "TEXT3D_BIN"
 TEXT2SOUND_BIN = "TEXT2SOUND_BIN"
 TEXTURE2D_BIN = "TEXTURE2D_BIN"
@@ -36,7 +35,6 @@ AIGAMEKIT_PREFER_MONOREPO = "AIGAMEKIT_PREFER_MONOREPO"
 
 TOOL_BINS = {
     "text2d": TEXT2D_BIN,
-    "text2icon": TEXT2ICON_BIN,
     "text3d": TEXT3D_BIN,
     "text2sound": TEXT2SOUND_BIN,
     "texture2d": TEXTURE2D_BIN,
@@ -75,7 +73,6 @@ class ToolLayout:
 
 TOOL_LAYOUT: dict[str, ToolLayout] = {
     "text2d": ToolLayout("Text2D", "text2d"),
-    "text2icon": ToolLayout("Text2Icon", "text2icon"),
     "text3d": ToolLayout("Text3D", "text3d"),
     "text2sound": ToolLayout("Text2Sound", "text2sound"),
     "texture2d": ToolLayout("Texture2D", "texture2d"),

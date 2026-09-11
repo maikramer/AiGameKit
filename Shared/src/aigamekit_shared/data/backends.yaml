@@ -26,22 +26,6 @@
 # precisa de ter um modelo de teste.
 
 backends:
-  - name: text2icon
-    adapter: aigamekit_shared.worker_serve_adapter_base
-    vram_mib: 3000
-    footprint_key: sana-sprint-600m
-    priority: 20
-    tool: text2icon
-    calibrate_request:
-      prompt: "a red cube on a white background"
-      output: "/tmp/vramd-calibrate-text2icon.png"
-    # Calibrar o path de produção: GO+streams (o modo default quando o
-    # full-GPU não tem folga). O load_kwargs grava ``allow_group_offload`` no
-    # descriptor — o admit 0.3.7+ só usa a medição para requests do mesmo modo.
-    calibrate_load_kwargs:
-      sdnq_preset: sdnq-int4
-      allow_group_offload: true
-
   - name: texture2d
     adapter: aigamekit_shared.worker_serve_adapter_base
     vram_mib: 2500

@@ -86,7 +86,7 @@ class TestTryUmsDelegation:
 
     def test_returns_false_when_no_output(self) -> None:
         console = MagicMock()
-        result = try_vramd_delegation("text2icon", {}, t_start=time.time(), noun="Ícone", console=console)
+        result = try_vramd_delegation("text2d", {}, t_start=time.time(), noun="Imagem", console=console)
         assert result is False
 
     def test_returns_false_when_ums_down(self) -> None:
@@ -97,7 +97,7 @@ class TestTryUmsDelegation:
             patch("aigamekit_shared.cli_helpers.delegate_to_vramd", return_value=None),
         ):
             result = try_vramd_delegation(
-                "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
+                "text2d", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Imagem", console=console
             )
         assert result is False
         printed = " ".join(str(c) for c in console.print.call_args_list)
@@ -116,7 +116,7 @@ class TestTryUmsDelegation:
             return_value={"status": "ok", "output": str(fake_output), "seed": 42},
         ):
             result = try_vramd_delegation(
-                "text2icon", {"output": str(fake_output)}, t_start=time.time(), noun="Ícone", console=console
+                "text2d", {"output": str(fake_output)}, t_start=time.time(), noun="Imagem", console=console
             )
         assert result is True
         # Verificar que o console imprimiu algo.
@@ -133,7 +133,7 @@ class TestTryUmsDelegation:
             patch("aigamekit_shared.vramd_client.vramd_is_busy", return_value=False),
         ):
             result = try_vramd_delegation(
-                "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
+                "text2d", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Imagem", console=console
             )
         assert result is False
 
@@ -149,7 +149,7 @@ class TestTryUmsDelegation:
             pytest.raises(click.ClickException, match="sem resposta"),
         ):
             try_vramd_delegation(
-                "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
+                "text2d", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Imagem", console=console
             )
 
     def test_raises_on_error_when_ums_busy(self) -> None:
@@ -166,7 +166,7 @@ class TestTryUmsDelegation:
             pytest.raises(click.ClickException, match="vramd ocupado"),
         ):
             try_vramd_delegation(
-                "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
+                "text2d", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Imagem", console=console
             )
 
     def test_vram_insufficient_falls_back_in_process(self) -> None:
@@ -224,10 +224,10 @@ class TestTryUmsDelegation:
         console = MagicMock()
         with patch("aigamekit_shared.cli_helpers.delegate_to_vramd") as mock_delegate:
             result = try_vramd_delegation(
-                "text2icon",
+                "text2d",
                 {"output": "/tmp/x.png"},
                 t_start=time.time(),
-                noun="Ícone",
+                noun="Imagem",
                 console=console,
                 enabled=False,
             )
@@ -251,10 +251,10 @@ class TestTryUmsDelegation:
             pytest.raises(click.ClickException, match="fila cheia"),
         ):
             try_vramd_delegation(
-                "text2icon",
+                "text2d",
                 {"output": "/tmp/x.png"},
                 t_start=time.time(),
-                noun="Ícone",
+                noun="Imagem",
                 console=console,
             )
 
@@ -268,10 +268,10 @@ class TestTryUmsDelegation:
             return_value={"status": "ok", "output": str(fake_output)},
         ) as mock_delegate:
             try_vramd_delegation(
-                "text2icon",
+                "text2d",
                 {"output": str(fake_output)},
                 t_start=time.time(),
-                noun="Ícone",
+                noun="Imagem",
                 console=console,
                 priority="batch",
             )

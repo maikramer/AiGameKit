@@ -60,7 +60,7 @@ class TestUmsClientDown:
     def test_submit_none_when_ums_down(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VRAMD_AUTO_START", "0")
         with patch.object(ms, "ensure_vramd_running", return_value=False):
-            assert ms.submit_to_vramd("text2icon", {"prompt": "x"}) is None
+            assert ms.submit_to_vramd("text2d", {"prompt": "x"}) is None
 
     def test_poll_none_when_down(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with patch.object(ms, "ensure_vramd_running", return_value=False) as ens:
@@ -169,12 +169,12 @@ class TestUmsClientAgainstMockSocket:
         monkeypatch.setattr(ms, "ensure_vramd_running", lambda **_k: True)
         monkeypatch.setattr(ms, "is_vramd_running", lambda: True)
 
-        sub = ms.submit_to_vramd("text2icon", {"prompt": "hi"}, priority="batch")
+        sub = ms.submit_to_vramd("text2d", {"prompt": "hi"}, priority="batch")
         assert sub is not None
         assert sub["job_id"] == "jid-1"
         assert any(r.get("cmd") == "submit" and r.get("priority") == "batch" for r in received)
 
-        gen = ms.delegate_to_vramd("text2icon", {"prompt": "hi", "output": "/tmp/x.png"}, priority="interactive")
+        gen = ms.delegate_to_vramd("text2d", {"prompt": "hi", "output": "/tmp/x.png"}, priority="interactive")
         assert gen is not None
         assert gen["status"] == "ok"
 

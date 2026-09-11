@@ -103,18 +103,13 @@ class TestResolveVramdStartCmd:
 
 
 class TestSocketPath:
-    def test_text2icon_socket_path(self) -> None:
-        path = server_socket_path("text2icon")
-        assert path.name == "text2icon-server.sock"
-        assert "aigamekit" in str(path)
-
     def test_text2d_socket_path(self) -> None:
         path = server_socket_path("text2d")
         assert path.name == "text2d-server.sock"
 
     def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VRAMD_CLIENT_SOCKET", "/tmp/custom.sock")
-        path = server_socket_path("text2icon")
+        path = server_socket_path("text2d")
         assert path == Path("/tmp/custom.sock")
 
 

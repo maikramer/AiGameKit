@@ -25,8 +25,8 @@ class TestValidatePrompt:
         assert not ok
         assert "500" in err
 
-    def test_text2icon_uses_max_1000(self) -> None:
-        """Text2Icon permite prompts até 1000 chars (Sana tem contexto maior)."""
+    def test_custom_max_length_1000(self) -> None:
+        """Tools com contexto maior permitem prompts até 1000 chars."""
         ok, _ = validate_prompt("x" * 800, max_length=1000)
         assert ok
 
@@ -92,8 +92,8 @@ class TestValidateParams:
         assert not ok
         assert "10" in err
 
-    def test_text2icon_allows_1_step(self) -> None:
-        """Sana Sprint gera em 1-4 passos; min_steps=1."""
+    def test_custom_min_steps_1(self) -> None:
+        """Modelos destilados geram em 1-4 passos; min_steps=1."""
         ok, _ = validate_params({"num_inference_steps": 1, "width": 512, "height": 512}, min_steps=1)
         assert ok
 

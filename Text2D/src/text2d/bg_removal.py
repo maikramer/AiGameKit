@@ -1,6 +1,6 @@
 """Remoção de fundo (alpha) para ícones — via rembg (U2Net).
 
-Import lazy do ``rembg`` para que o núcleo do text2icon funcione sem onnxruntime
+Import lazy do ``rembg`` para que o núcleo do text2d funcione sem onnxruntime
 instalado; a remoção de fundo só é exigida quando o utilizador passa
 ``--transparent``.
 """
@@ -23,7 +23,7 @@ def remove_background(image: Image.Image, *, session: Any = None) -> Image.Image
     modelo (~176 MB) e guarda-o na cache do HF/torch.
 
     Args:
-        image: Imagem PIL de entrada (tipicamente RGB do Sana).
+        image: Imagem PIL de entrada (tipicamente RGB do FLUX).
         session: Sessão rembg reutilizada (opcional). Se ``None``, cria uma nova.
 
     Returns:

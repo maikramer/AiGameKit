@@ -1,6 +1,6 @@
 """Bridge: manifests GPU → specs vramd → run_gpu_wave (ou fallback).
 
-Shape/paint + text2d/text2icon/texture2d/skymap2d/text2sound/terrain3d.
+Shape/paint + text2d/texture2d/skymap2d/text2sound/terrain3d.
 """
 
 from __future__ import annotations
@@ -511,7 +511,7 @@ def run_paint_wave_or_fallback(
 
 
 # ---------------------------------------------------------------------------
-# text2d / text2icon / texture2d / skymap2d / text2sound / terrain3d
+# text2d / texture2d / skymap2d / text2sound / terrain3d
 # ---------------------------------------------------------------------------
 
 
@@ -573,21 +573,6 @@ def resolve_text2d_vram_opts() -> tuple[str | None, bool, str | None, str | None
         return "sdnq-uint8", True, None, None
 
 
-def resolve_text2icon_vram_opts() -> tuple[str | None, bool]:
-    """Resolve (transformer_quant_preset, memory_efficient) via hw_auto."""
-    try:
-        from text2icon.hardware import detect_hardware_profile, hw_auto_enabled
-
-        if hw_auto_enabled():
-            hwp = detect_hardware_profile()
-            quant = hwp.transformer_sdnq_preset
-            mem = bool(hwp.cpu_offload) or (quant not in (None, "", "none"))
-            return (None if quant in (None, "", "none") else str(quant)), mem
-    except Exception:
-        pass
-    return "sdnq-uint8", True
-
-
 def resolve_skymap2d_vram_opts() -> bool:
     """Resolve memory_efficient via hw_auto (admit-safe True sem GPU)."""
     try:
@@ -623,9 +608,15 @@ def text2d_specs_from_items(
     steps: int = 4,
     guidance: float = 1.0,
     quality: str | None = None,
+    category: str | None = None,
+    transparent: bool = False,
     gpu_ids: list[int] | None = None,
 ) -> list[UmsJobSpec]:
-    """Converte items text2d_manifest → ``UmsJobSpec`` (peak via hw_auto)."""
+    """Converte items text2d_manifest → ``UmsJobSpec`` (peak via hw_auto).
+
+    ``category`` (ex.: ``icon``) e ``transparent`` suportam o modo ícone do
+    text2d — a categoria resolve no QualityEngine antes dos defaults.
+    """
     try:
         from text2d.vramd_payload import build_generate_request
     except ImportError:
@@ -633,11 +624,11 @@ def text2d_specs_from_items(
 
     quant, mem, model_id, footprint = resolve_text2d_vram_opts()
     w, h, st, g = width, height, steps, guidance
-    if quality:
+    if quality or category:
         try:
             from aigamekit_shared.quality import QualityEngine
 
-            qp = QualityEngine().resolve("text2d", quality=quality).params
+            qp = QualityEngine().resolve("text2d", quality=quality, category=category).params
             if width == 1024 and "width" in qp:
                 w = int(qp["width"])
             if height == 1024 and "height" in qp:
@@ -666,47 +657,8 @@ def text2d_specs_from_items(
             memory_efficient=mem,
             quant_preset=quant,
             footprint_key=footprint,
-        )
-        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
-    return specs
-
-
-def text2icon_specs_from_items(
-    items: list[dict[str, Any]],
-    *,
-    manifest_dir: Path,
-    width: int = 512,
-    height: int = 512,
-    steps: int = 2,
-    guidance: float = 4.5,
-    transparent: bool = False,
-    gpu_ids: list[int] | None = None,
-) -> list[UmsJobSpec]:
-    """Converte prompts text2icon → ``UmsJobSpec``."""
-    try:
-        from text2icon.vramd_payload import build_generate_request
-    except ImportError:
-        return []
-
-    quant, mem = resolve_text2icon_vram_opts()
-    specs: list[UmsJobSpec] = []
-    for item in items:
-        aid = str(item["id"])
-        out = _resolve_path(manifest_dir, str(item["output"]))
-        payload = build_generate_request(
-            prompt=str(item["prompt"]),
-            output=str(out),
-            width=int(item.get("width", width)),
-            height=int(item.get("height", height)),
-            steps=int(item.get("steps", steps)),
-            guidance=float(item.get("guidance", item.get("guidance_scale", guidance))),
-            seed=item.get("seed"),
-            transparent=bool(item.get("transparent", transparent)),
-            negative_prompt=item.get("negative_prompt"),
-            transformer_quant_preset=item.get("transformer_quant_preset", quant),
-            model_id=item.get("model_id"),
-            gpu_ids=gpu_ids,
-            memory_efficient=mem,
+            category=category,
+            transparent=True if transparent else None,
         )
         specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
     return specs
@@ -895,6 +847,8 @@ def run_text2d_wave_or_fallback(
     steps: int = 4,
     guidance: float = 1.0,
     quality: str | None = None,
+    category: str | None = None,
+    transparent: bool = False,
     on_progress: Callable[[UmsJobResult], None] | None = None,
 ) -> list[dict[str, Any]] | None:
     """Wave text2d via vramd. ``None`` → caller usa subprocess generate-batch."""
@@ -910,45 +864,13 @@ def run_text2d_wave_or_fallback(
         steps=steps,
         guidance=guidance,
         quality=quality,
-        gpu_ids=gpu_ids,
-    )
-    if not specs:
-        return None
-    return _run_optional_wave("text2d", specs, no_vramd=False, vramd_stream=vramd_stream, on_progress=on_progress)
-
-
-def run_text2icon_wave_or_fallback(
-    items: list[dict[str, Any]],
-    *,
-    manifest_dir: Path,
-    no_vramd: bool,
-    vramd_stream: bool = False,
-    gpu_ids: list[int] | None = None,
-    width: int = 512,
-    height: int = 512,
-    steps: int = 2,
-    guidance: float = 4.5,
-    transparent: bool = False,
-    on_progress: Callable[[UmsJobResult], None] | None = None,
-) -> list[dict[str, Any]] | None:
-    """Wave text2icon via vramd. ``None`` → caller usa subprocess generate."""
-    if no_vramd:
-        return None
-    if not items:
-        return []
-    specs = text2icon_specs_from_items(
-        items,
-        manifest_dir=manifest_dir,
-        width=width,
-        height=height,
-        steps=steps,
-        guidance=guidance,
+        category=category,
         transparent=transparent,
         gpu_ids=gpu_ids,
     )
     if not specs:
         return None
-    return _run_optional_wave("text2icon", specs, no_vramd=False, vramd_stream=vramd_stream, on_progress=on_progress)
+    return _run_optional_wave("text2d", specs, no_vramd=False, vramd_stream=vramd_stream, on_progress=on_progress)
 
 
 def run_texture2d_wave_or_fallback(

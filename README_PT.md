@@ -282,7 +282,7 @@ Logs: `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` (vramd → `vramd-….log`
 
 ## Unified Model Server (vramd)
 
-Todas as ferramentas GPU (Text2D, Text2Icon, Text3D, Paint3D, Part3D, Texture2D, Skymap2D, Text2Sound, Terrain3D) delegam a geração ao **Unified Model Server** — um supervisor único que detém a VRAM da máquina. Um socket (`~/.cache/aigamekit/model-server.sock`), um processo, inventário global de modelos, sem servers por-tool.
+Todas as ferramentas GPU (Text2D, Text3D, Paint3D, Part3D, Texture2D, Skymap2D, Text2Sound, Terrain3D) delegam a geração ao **Unified Model Server** — um supervisor único que detém a VRAM da máquina. Um socket (`~/.cache/aigamekit/model-server.sock`), um processo, inventário global de modelos, sem servers por-tool.
 
 **Como funciona:**
 
@@ -306,8 +306,7 @@ Flags das tools: `--vramd-priority interactive|batch`, `--no-vramd`, `--vramd-st
 
 | Ferramenta | Modelo(s) default | Gate HF | Notas |
 |------------|-------------------|---------|-------|
-| **Text2D** | [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (baixa VRAM) / [FLUX.2 Klein 9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (alta VRAM) — base fp16 + **quantização SDNQ em runtime** | 9B: **gated** (aceitar termos no Hub); 4B: público | Override `TEXT2D_MODEL_ID`; hw-auto escolhe 4B abaixo de ~7,5 GB VRAM |
-| **Text2Icon** | [Sana 600M 512px](https://huggingface.co/Efficient-Large-Model/Sana_600M_512px_diffusers) (default) / [Clark Air 1.6B 1.58-bit](https://huggingface.co/clark-labs/clark-air-sana-1.6b-1.58bit) (baixa VRAM) | não | pipeline [Sana 1600M 512px](https://huggingface.co/Efficient-Large-Model/Sana_1600M_512px_diffusers) |
+| **Text2D** | [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (baixa VRAM) / [FLUX.2 Klein 9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (alta VRAM) — base fp16 + **quantização SDNQ em runtime** | 9B: **gated** (aceitar termos no Hub); 4B: público | Override `TEXT2D_MODEL_ID`; hw-auto escolhe 4B abaixo de ~7,5 GB VRAM. Ícones de UI: `--category icon` (512², 2 steps) + `--transparent` (rembg) |
 | **Text3D** | [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) shape (SDNQ INT4; controlos bbox/pose/point/voxel) + imagem de referência Text2D FLUX | não | Tencent Community License; BiRefNet p/ remoção de fundo |
 | **Paint3D** | [Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) paint (`hunyuan3d-paintpbr-v2-1`) | não | + Real-ESRGAN (upscale opcional) |
 | **Part3D** | [Hunyuan3D-Part](https://huggingface.co/tencent/Hunyuan3D-Part) (P3-SAM + X-Part) | não | Tencent Community License |

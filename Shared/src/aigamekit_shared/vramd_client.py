@@ -2,7 +2,7 @@
 
 Um server long-lived (Unix domain socket) que carrega um pipeline uma vez e serve
 pedidos subsequentes sem cold start. Cada ferramenta regista o seu próprio loader
-e tem o seu próprio socket (ex: ``text2icon-server.sock``).
+e tem o seu próprio socket (ex: ``text2d-server.sock``).
 
 Protocolo de coordenação de VRAM:
   - ``request_release(socket)`` — pede ao server para descarregar o modelo mas
@@ -51,7 +51,6 @@ VRAMD_SOCKET = Path.home() / ".cache" / "vramd" / "vramd.sock"
 
 # Um socket por tool — evita misturar modelos diferentes (legacy per-tool servers).
 _SOCKET_FOR_TOOL: dict[str, str] = {
-    "text2icon": "text2icon-server.sock",
     "text2d": "text2d-server.sock",
     "texture2d": "texture2d-server.sock",
 }
@@ -60,7 +59,7 @@ DEFAULT_IDLE_TIMEOUT_MIN = 30
 
 
 def server_socket_path(tool: str) -> Path:
-    """Path do socket para uma tool (ex: ``text2icon`` → ``text2icon-server.sock``)."""
+    """Path do socket para uma tool (ex: ``text2d`` → ``text2d-server.sock``)."""
     override = os.environ.get("VRAMD_CLIENT_SOCKET", "").strip()
     if override:
         return Path(override)
@@ -84,7 +83,7 @@ def _ensure_server_dir() -> None:
 
 def is_server_running(socket_path: Path | str | None = None) -> bool:
     """Verifica se um server está vivo via PID file + socket connect."""
-    spath = Path(socket_path) if socket_path else server_socket_path("text2icon")
+    spath = Path(socket_path) if socket_path else server_socket_path("text2d")
     ppath = _pid_path(spath)
 
     if not ppath.exists():
@@ -114,7 +113,7 @@ def is_server_running(socket_path: Path | str | None = None) -> bool:
 
 def get_server_pid(socket_path: Path | str | None = None) -> int | None:
     """Lê o PID de um server ativo. Retorna ``None`` se não estiver a correr."""
-    spath = Path(socket_path) if socket_path else server_socket_path("text2icon")
+    spath = Path(socket_path) if socket_path else server_socket_path("text2d")
     ppath = _pid_path(spath)
     if not ppath.exists():
         return None
@@ -175,7 +174,7 @@ def send_request(
     Returns:
         Dict de resposta, ou ``None`` se o server não estiver disponível.
     """
-    spath = Path(socket_path) if socket_path else server_socket_path("text2icon")
+    spath = Path(socket_path) if socket_path else server_socket_path("text2d")
     if not spath.exists():
         return None
     try:
@@ -208,7 +207,7 @@ def send_request_stream(
     Yields:
         Dict por linha. A última tipicamente tem ``status`` ok/error.
     """
-    spath = Path(socket_path) if socket_path else server_socket_path("text2icon")
+    spath = Path(socket_path) if socket_path else server_socket_path("text2d")
     if not spath.exists():
         return
     try:
@@ -664,7 +663,7 @@ def delegate_to_vramd(
     senão ``interactive``. GameAssets batch deve exportar ``VRAMD_PRIORITY=batch``.
 
     Args:
-        backend: Nome do backend (ex: ``text2icon``).
+        backend: Nome do backend (ex: ``text2d``).
         request: Parâmetros do pedido (prompt, output, steps, ...).
         timeout_sec: Timeout para o pedido de geração.
         priority: ``interactive`` | ``batch`` (opcional).

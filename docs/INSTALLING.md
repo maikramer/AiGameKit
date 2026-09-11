@@ -72,8 +72,7 @@ Useful variable: `PYTHON_CMD` — interpreter to use (default `python3`, or `pyt
 
 | `./install.sh …` command | Folder | Type | Min Python | Notes |
 |--------------------------|--------|------|------------|-------|
-| `text2d` | Text2D | Python | 3.13 | PyTorch/CUDA; SDNQ FLUX |
-| `text2icon` | Text2Icon | Python | 3.13 | Sana Sprint 0.6B (NVlabs/Sana); rembg transparent BG; PyTorch |
+| `text2d` | Text2D | Python | 3.13 | PyTorch/CUDA; SDNQ FLUX; UI icons via `--category icon --transparent` (rembg) |
 | `text3d` | Text3D | Python | 3.13 | Depends on Text2D; nvdiffrast after venv |
 | `part3d` | Part3D | Python | 3.13 | Semantic decomposition (Hunyuan3D-Part: P3-SAM + X-Part); PyTorch |
 | `gameassets` | GameAssets | Python | 3.13 | Batch + `dream`; orchestrates CLIs |
@@ -174,7 +173,7 @@ SKIP_INFERENCE=1 scripts/docker/ubuntu-clean-test.sh # installs + smokes only
 ```
 
 - Runs in **2 groups** (disk-layout limit: the repo may live on a separate
-  drive): A = light tools (`modelserver rocks3d texture2d text2icon text2sound
+  drive): A = light tools (`modelserver rocks3d texture2d text2sound
   skymap2d aigamekitlab materialize`), B = GPU/3D chain (`modelserver text2d
   text3d paint3d rigging3d animator3d terrain3d vibegame gameassets`).
 - **Host caches are mounted** to avoid massive downloads: `~/.cache/huggingface`

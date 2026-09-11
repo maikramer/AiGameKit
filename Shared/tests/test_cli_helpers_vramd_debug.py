@@ -13,23 +13,23 @@ class TestFormatUmsDebugLine:
         line = format_vramd_debug_line(
             {
                 "ums_debug": {
-                    "backend": "text2icon",
+                    "backend": "text2d",
                     "priority": "interactive",
                     "job_id": "abcdef12-3456-7890",
                     "queue_wait_sec": 0.12,
                     "generate_sec": 1.5,
                     "affinity_cuts": 2,
-                    "loaded_backends": ["text2icon"],
+                    "loaded_backends": ["text2d"],
                 }
             }
         )
-        assert "backend=text2icon" in line
+        assert "backend=text2d" in line
         assert "pri=interactive" in line
         assert "job=abcdef12…" in line
         assert "wait=0.12s" in line
         assert "gen=1.5s" in line
         assert "cuts=2" in line
-        assert "loaded=['text2icon']" in line
+        assert "loaded=['text2d']" in line
 
     def test_falls_back_to_top_level(self) -> None:
         line = format_vramd_debug_line({"backend": "alpha", "priority": "batch", "job_id": "zzzzzzzz"})

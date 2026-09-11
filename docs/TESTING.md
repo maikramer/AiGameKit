@@ -19,8 +19,7 @@ GPU / bpy / integration tests remain valuable; they must **skip** cleanly withou
 | Shared | accessory lib | `make test-shared` | `tests/test_shared_coverage_100.py` |
 | ModelServer (vramd) | accessory | `make test-modelserver` | `tests/test_modelserver_coverage_100.py` |
 | AiGameKitLab | accessory | `make test-aigamekitlab` | `tests/test_aigamekitlab_coverage_suite.py`, `*_100b.py` |
-| Text2D | tool | `make test-text2d` | `test_text2d_coverage_suite.py`, `*_100b.py` |
-| Text2Icon | tool | `make test-text2icon` | `test_text2icon_coverage_suite.py`, `*_100b.py` |
+| Text2D | tool | `make test-text2d` | `test_text2d_coverage_suite.py`, `*_100b.py`, `test_icons.py` |
 | Text3D | tool | `make test-text3d` | `test_text3d_coverage_100.py` |
 | Paint3D | tool | `make test-paint3d` | `test_paint3d_coverage_suite.py`, `*_100b.py` |
 | Part3D | tool | `make test-part3d` | `test_part3d_coverage_100.py` |

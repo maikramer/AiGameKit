@@ -19,8 +19,7 @@ Testes GPU / bpy / integração continuam úteis; têm de fazer **skip** limpo s
 | Shared | acessório (lib) | `make test-shared` | `tests/test_shared_coverage_100.py` |
 | ModelServer (vramd) | acessório | `make test-modelserver` | `tests/test_modelserver_coverage_100.py` |
 | AiGameKitLab | acessório | `make test-aigamekitlab` | `tests/test_aigamekitlab_coverage_suite.py`, `*_100b.py` |
-| Text2D | ferramenta | `make test-text2d` | `test_text2d_coverage_suite.py`, `*_100b.py` |
-| Text2Icon | ferramenta | `make test-text2icon` | `test_text2icon_coverage_suite.py`, `*_100b.py` |
+| Text2D | ferramenta | `make test-text2d` | `test_text2d_coverage_suite.py`, `*_100b.py`, `test_icons.py` |
 | Text3D | ferramenta | `make test-text3d` | `test_text3d_coverage_100.py` |
 | Paint3D | ferramenta | `make test-paint3d` | `test_paint3d_coverage_suite.py`, `*_100b.py` |
 | Part3D | ferramenta | `make test-part3d` | `test_part3d_coverage_100.py` |

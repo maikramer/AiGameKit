@@ -13,14 +13,12 @@ from gameassets.vramd_batch import (
     resolve_paint3d_vram_opts,
     resolve_skymap2d_vram_opts,
     resolve_text2d_vram_opts,
-    resolve_text2icon_vram_opts,
     resolve_text2sound_vram_opts,
     resolve_text3d_vram_opts,
     run_motion3d_wave_or_fallback,
     run_skymap2d_wave_or_fallback,
     run_terrain3d_wave_or_fallback,
     run_text2d_wave_or_fallback,
-    run_text2icon_wave_or_fallback,
     run_text2sound_wave_or_fallback,
     run_texture2d_wave_or_fallback,
     shape_specs_from_items,
@@ -182,20 +180,6 @@ class TestResolveOptionalVramOpts:
         assert mem is True
         assert fp == "flux-klein-4b"
 
-    def test_text2icon_hw_auto(self) -> None:
-        hwp = MagicMock()
-        hwp.transformer_sdnq_preset = "sdnq-uint8"
-        hwp.cpu_offload = True
-        mods = _make_pkg(
-            "text2icon.hardware",
-            hw_auto_enabled=lambda: True,
-            detect_hardware_profile=lambda: hwp,
-        )
-        with _temp_modules(mods):
-            quant, mem = resolve_text2icon_vram_opts()
-        assert quant == "sdnq-uint8"
-        assert mem is True
-
     def test_skymap_admit_safe(self) -> None:
         mods = _make_pkg("skymap2d.hardware", hw_auto_enabled=lambda: False)
         with _temp_modules(mods):
@@ -234,12 +218,53 @@ class TestText2dSpecsHwAuto:
         assert mock_build.call_args.kwargs["memory_efficient"] is True
         assert mock_build.call_args.kwargs["quant_preset"] == "sdnq-uint8"
 
+    def test_icon_mode_payload(self, tmp_path: Path) -> None:
+        """Modo ícone (ex-Text2Icon): category icon + transparent + defaults 512/2/1.0."""
+        out = tmp_path / "potion.png"
+        items = [{"id": "icon-potion", "prompt": "red health potion", "output": str(out)}]
+        mock_build = MagicMock(return_value={"output": str(out), "memory_efficient": True})
+        hw_mods = {
+            **_make_pkg(
+                "text2d.hardware",
+                hw_auto_enabled=lambda: True,
+                detect_hardware_profile=lambda: MagicMock(
+                    quant_preset="sdnq-uint8",
+                    memory_efficient=True,
+                    model_id="m4b",
+                ),
+            ),
+            **_make_pkg(
+                "text2d.generator",
+                LOW_VRAM_MODEL_ID="m4b",
+                model_footprint_key=lambda mid: "flux-klein-4b",
+            ),
+            **_make_pkg("text2d.vramd_payload", build_generate_request=mock_build),
+        }
+        with _temp_modules(hw_mods):
+            specs = text2d_specs_from_items(
+                items,
+                manifest_dir=tmp_path,
+                width=512,
+                height=512,
+                steps=2,
+                guidance=1.0,
+                category="icon",
+                transparent=True,
+            )
+        assert len(specs) == 1
+        kwargs = mock_build.call_args.kwargs
+        assert kwargs["category"] == "icon"
+        assert kwargs["transparent"] is True
+        assert kwargs["width"] == 512
+        assert kwargs["height"] == 512
+        assert kwargs["steps"] == 2
+        assert kwargs["guidance"] == 1.0
+
 
 class TestOptionalWaveOrFallback:
     def test_no_vramd_all_backends(self) -> None:
         items = [{"id": "a", "prompt": "x", "output": "/tmp/x.png"}]
         assert run_text2d_wave_or_fallback(items, manifest_dir=Path("."), no_vramd=True) is None
-        assert run_text2icon_wave_or_fallback(items, manifest_dir=Path("."), no_vramd=True) is None
         assert run_texture2d_wave_or_fallback(items, manifest_dir=Path("."), no_vramd=True) is None
         assert run_skymap2d_wave_or_fallback(items, manifest_dir=Path("."), no_vramd=True) is None
         assert run_text2sound_wave_or_fallback(items, manifest_dir=Path("."), no_vramd=True) is None

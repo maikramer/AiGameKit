@@ -348,3 +348,81 @@ def test_from_dict_skymap2d_with_prompt() -> None:
     assert p.skymap2d.prompt == "sunset over mountains"
     assert p.skymap2d.width == 2048
     assert p.skymap2d.height == 1024
+
+
+def test_from_dict_icons() -> None:
+    p = GameProfile.from_dict(
+        {
+            "title": "A",
+            "genre": "B",
+            "tone": "C",
+            "style_preset": "lowpoly",
+            "icons": {
+                "prompts": ["red health potion", "steel sword"],
+                "width": 512,
+                "height": 512,
+                "steps": 2,
+                "guidance_scale": 1.0,
+                "transparent": True,
+                "model_id": "black-forest-labs/FLUX.2-klein-4B",
+            },
+        }
+    )
+    assert p.icons is not None
+    assert p.icons.prompts == ["red health potion", "steel sword"]
+    assert p.icons.width == 512
+    assert p.icons.height == 512
+    assert p.icons.steps == 2
+    assert p.icons.guidance_scale == 1.0
+    assert p.icons.transparent is True
+    assert p.icons.model_id == "black-forest-labs/FLUX.2-klein-4B"
+
+
+def test_from_dict_icons_defaults_when_empty() -> None:
+    p = GameProfile.from_dict(
+        {
+            "title": "A",
+            "genre": "B",
+            "tone": "C",
+            "style_preset": "lowpoly",
+            "icons": {"prompts": []},
+        }
+    )
+    assert p.icons is not None
+    assert p.icons.prompts == []
+    assert p.icons.width is None
+    assert p.icons.transparent is False
+
+
+def test_from_dict_text2icon_legacy_alias() -> None:
+    """`text2icon:` é alias legado (silencioso) de `icons:` em game.yaml."""
+    p = GameProfile.from_dict(
+        {
+            "title": "A",
+            "genre": "B",
+            "tone": "C",
+            "style_preset": "lowpoly",
+            "text2icon": {
+                "prompts": ["mana orb"],
+                "transparent": True,
+            },
+        }
+    )
+    assert p.icons is not None
+    assert p.icons.prompts == ["mana orb"]
+    assert p.icons.transparent is True
+
+
+def test_from_dict_icons_wins_over_legacy_alias() -> None:
+    p = GameProfile.from_dict(
+        {
+            "title": "A",
+            "genre": "B",
+            "tone": "C",
+            "style_preset": "lowpoly",
+            "icons": {"prompts": ["nova"]},
+            "text2icon": {"prompts": ["legado"]},
+        }
+    )
+    assert p.icons is not None
+    assert p.icons.prompts == ["nova"]

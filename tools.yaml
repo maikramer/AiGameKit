@@ -26,23 +26,11 @@ tools:
     folder: Text2D
     cli_name: text2d
     python_module: text2d
-    description: "CLI text-to-image com FLUX.2 Klein (SDNQ)"
+    description: "CLI text-to-image com FLUX.2 Klein (SDNQ); ícones de UI via --category icon --transparent"
     min_python: [3, 13]
     extra_aliases: [text2d-generate]
     needs_pytorch: true
     install_order: -2
-    post_install: aigamekit_shared.installer.clified_hooks:pip_check_post_install
-
-  text2icon:
-    name: "Text2Icon"
-    kind: python
-    folder: Text2Icon
-    cli_name: text2icon
-    python_module: text2icon
-    description: "CLI text-to-icon com Sana Sprint 0.6B (NVlabs/Sana)"
-    min_python: [3, 13]
-    extra_aliases: [text2icon-generate]
-    needs_pytorch: true
     post_install: aigamekit_shared.installer.clified_hooks:pip_check_post_install
 
   text3d:

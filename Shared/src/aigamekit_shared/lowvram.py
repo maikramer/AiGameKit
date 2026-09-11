@@ -144,8 +144,6 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     "hy-motion-full": ModelFootprint(2.5, 1.5, 2.0, architecture="dit"),
     # Legacy Motius key (retired path) — keep for old payloads.
     "motius-t2mgpt": ModelFootprint(1.5, 0.8, 2.5, architecture="dit"),
-    # Sana Sprint 600M transformer + Gemma 2B encoder (~7.3 GiB fp16 total).
-    "sana-sprint-600m": ModelFootprint(7.3, 1.5, 3.0, architecture="sana"),
 }
 
 # Footprint genérico de fallback (modelo médio ~8 GiB) quando a chave é desconhecida.

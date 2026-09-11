@@ -13,11 +13,6 @@ profiles:
       height: 512
       steps: 4
       guidance: 1.0
-    text2icon:
-      width: 512
-      height: 512
-      steps: 8
-      guidance: 4.0
     text3d:
       preset: fast
       guidance: 4.5
@@ -97,11 +92,6 @@ profiles:
       height: 768
       steps: 4
       guidance: 1.0
-    text2icon:
-      width: 512
-      height: 512
-      steps: 12
-      guidance: 4.5
     text3d:
       preset: fast
       guidance: 4.5
@@ -181,11 +171,6 @@ profiles:
       height: 1024
       steps: 4
       guidance: 1.0
-    text2icon:
-      width: 512
-      height: 512
-      steps: 20
-      guidance: 4.5
     text3d:
       preset: balanced
       guidance: 4.5
@@ -265,11 +250,6 @@ profiles:
       height: 1024
       steps: 8
       guidance: 1.0
-    text2icon:
-      width: 512
-      height: 512
-      steps: 25
-      guidance: 5.0
     text3d:
       preset: hq
       guidance: 4.5
@@ -349,11 +329,6 @@ profiles:
       height: 1024
       steps: 12
       guidance: 1.5
-    text2icon:
-      width: 512
-      height: 512
-      steps: 30
-      guidance: 5.0
     text3d:
       preset: hq
       guidance: 4.5

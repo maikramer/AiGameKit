@@ -12,42 +12,6 @@
 version: 2
 backends:
 
-- name: text2icon
-  adapter: aigamekit_shared.worker_serve_adapter_base
-  vram_mib: 5632
-  priority: 20
-  tool: text2icon
-  footprint_key: sana-sprint-600m
-  runtime:
-    monorepo_tool: text2icon
-  vram:
-    weights_gib: 4.66
-    activation_gib: 0.85
-    context_gib: 0.0
-    peak_mib: 5632
-    safety_mib: 384
-    admit_peak_mib: 6016
-  peak_profile:
-    quant_mode: sdnq-int4
-    unload_frees_vram: false
-    load_kwargs:
-      cpu_offload: true
-      sdnq_preset: sdnq-int4
-  measured:
-    confidence: low
-    repeats: 3
-    samples: 660
-    load_sec: 13.014
-    generate_sec_median: 2.291
-    gpu: NVIDIA GeForce RTX 4050 Laptop GPU
-    gpu_total_mib: 6141
-    driver: '595.84'
-    at: '2026-08-08T20:50:29+00:00'
-    fragmentation_mib: 756
-    warnings:
-    - 'unload devolveu 82 MiB de 4764 MiB: evictar este backend NÃO liberta VRAM; pesos e contexto não
-      separáveis'
-    - 'VRAM de terceiros variou 82 MiB durante a medição (baseline 0 → 82): pico possivelmente enviesado'
 - name: texture2d
   adapter: aigamekit_shared.worker_serve_adapter_base
   vram_mib: 3392

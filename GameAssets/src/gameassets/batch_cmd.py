@@ -26,22 +26,23 @@ from .batch_guard import batch_directory_lock, detect_gpu_ids, query_gpu_free_mi
 from .cli_rich import click
 from .helpers import (
     _append_gpu_kill_flag,
+    _append_icon_args,
     _append_quality,
     _append_skymap2d_profile_args,
     _append_terrain3d_profile_args,
     _append_text2d_profile_args,
-    _append_text2icon_profile_args,
     _append_texture2d_profile_args,
     _audio_path_for_row_manifest,
     _build_context,
     _dry_run_emit,
     _dry_run_header,
+    _icons_profile_effective,
     _materialize_diffuse_argv,
     _resolve_manifest_path,
     _resolve_materialize_bin_texture2d,
     _resolve_skymap2d_bin,
     _resolve_terrain3d_bin,
-    _resolve_text2icon_bin,
+    _resolve_text2d_bin,
     _row_uses_texture2d,
     _row_wants_animate,
     _row_wants_audio,
@@ -51,7 +52,6 @@ from .helpers import (
     _seed_for_row,
     _skymap2d_profile_effective,
     _terrain3d_profile_effective,
-    _text2icon_profile_effective,
     _text2sound_args_for_row,
     _text2sound_profile_effective,
     _texture2d_material_maps_path,
@@ -106,7 +106,6 @@ from .vramd_batch import (
     run_skymap2d_wave_or_fallback,
     run_terrain3d_wave_or_fallback,
     run_text2d_wave_or_fallback,
-    run_text2icon_wave_or_fallback,
     run_text2sound_wave_or_fallback,
     run_texture2d_wave_or_fallback,
 )
@@ -228,7 +227,7 @@ console = Console()
     "--no-icons",
     is_flag=True,
     default=False,
-    help="Skip UI icon generation even if text2icon is configured in game.yaml.",
+    help="Skip UI icon generation even if icons are configured in game.yaml.",
 )
 @click.option(
     "--profile-tools",
@@ -422,17 +421,16 @@ def batch_cmd(
             else:
                 raise click.ClickException("skymap2d não encontrado (defina SKYMAP2D_BIN)") from None
 
-    # text2icon (scene-level ícones de UI via Sana Sprint)
-    with_icons = not no_icons and profile.text2icon is not None and bool(_text2icon_profile_effective(profile).prompts)
-    text2icon_bin: str | None = None
-    if with_icons:
+    # icons (scene-level ícones de UI via text2d --category icon)
+    with_icons = not no_icons and profile.icons is not None and bool(_icons_profile_effective(profile).prompts)
+    if with_icons and text2d_bin is None:
         try:
-            text2icon_bin = _resolve_text2icon_bin()
+            text2d_bin = _resolve_text2d_bin()
         except FileNotFoundError:
             if dry_run:
-                text2icon_bin = "text2icon"
+                text2d_bin = "text2d"
             else:
-                raise click.ClickException("text2icon não encontrado (defina TEXT2ICON_BIN)") from None
+                raise click.ClickException("text2d não encontrado (defina TEXT2D_BIN)") from None
 
     meta = Table(show_header=False, box=box.SIMPLE, title="[bold]Batch[/bold]")
     meta.add_row("Perfil", str(profile_path.resolve()))
@@ -467,7 +465,7 @@ def batch_cmd(
     meta.add_row("animator3d", animator3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("terrain3d", terrain3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("skymap2d", skymap2d_bin or "[dim](desligado)[/dim]")
-    meta.add_row("text2icon", text2icon_bin or "[dim](desligado)[/dim]")
+    meta.add_row("icons (text2d)", text2d_bin if with_icons else "[dim](desligado)[/dim]")
     meta.add_row("Modo", "[cyan]dry-run[/cyan]" if dry_run else "execução")
     if gpu_ids:
         meta.add_row("GPUs", ",".join(str(g) for g in gpu_ids))
@@ -481,7 +479,7 @@ def batch_cmd(
     if with_skymap:
         _ord_prefix.append("Skymap2D")
     if with_icons:
-        _ord_prefix.append("Text2Icon")
+        _ord_prefix.append("Icons")
     if skip_text2d:
         ord_skip: list[str] = [*_ord_prefix, "Geração 2D omitida"]
         if any_audio_row and not skip_audio:
@@ -598,14 +596,14 @@ def batch_cmd(
             sky_argv = [skymap2d_bin, "generate", sky_eff.prompt or "", "-o", str(sky_out_dir / "sky.png")]
             _append_skymap2d_profile_args(sky_eff, sky_argv, quality=profile.generation)
             _dry_run_emit(dry_plan, phase="Skymap2D", row_id=None, argv=sky_argv)
-        if with_icons and text2icon_bin:
-            icon_eff = _text2icon_profile_effective(profile)
+        if with_icons and text2d_bin:
+            icon_eff = _icons_profile_effective(profile)
             icon_out_dir = Path(profile.output_dir) / "icons"
             for icon_prompt in icon_eff.prompts:
                 icon_slug = _safe_slug(icon_prompt)
-                icon_argv = [text2icon_bin, "generate", icon_prompt, "-o", str(icon_out_dir / f"{icon_slug}.png")]
-                _append_text2icon_profile_args(icon_eff, icon_argv, quality=profile.generation)
-                _dry_run_emit(dry_plan, phase="Text2Icon", row_id=icon_slug, argv=icon_argv)
+                icon_argv = [text2d_bin, "generate", icon_prompt, "-o", str(icon_out_dir / f"{icon_slug}.png")]
+                _append_icon_args(icon_eff, icon_argv, quality=profile.generation)
+                _dry_run_emit(dry_plan, phase="Icons", row_id=icon_slug, argv=icon_argv)
         if not skip_text2d:
             if any_texture2d_row and any_text2d_row:
                 p1_title = "--- Fase 1: Text2D / Texture2D (por linha) ---"
@@ -1150,12 +1148,12 @@ def batch_cmd(
                                 if not continue_on_error:
                                     raise click.Abort()
 
-                    # --- Pre-phase: Text2Icon (scene-level, UI icons) ---
-                    if with_icons and text2icon_bin:
-                        icon_eff = _text2icon_profile_effective(profile)
+                    # --- Pre-phase: Icons (scene-level, UI icons via text2d) ---
+                    if with_icons and text2d_bin:
+                        icon_eff = _icons_profile_effective(profile)
                         icon_out_dir = Path(profile.output_dir) / "icons"
                         icon_out_dir.mkdir(parents=True, exist_ok=True)
-                        dash.set_phase("Text2Icon", len(icon_eff.prompts))
+                        dash.set_phase("Icons", len(icon_eff.prompts))
                         icon_items_d: list[dict[str, Any]] = []
                         for _icon_prompt in icon_eff.prompts:
                             _icon_slug = _safe_slug(_icon_prompt)
@@ -1173,12 +1171,10 @@ def batch_cmd(
                                 _ii["steps"] = icon_eff.steps
                             if icon_eff.guidance_scale is not None:
                                 _ii["guidance"] = icon_eff.guidance_scale
-                            if icon_eff.transparent:
-                                _ii["transparent"] = True
                             if icon_eff.model_id:
                                 _ii["model_id"] = icon_eff.model_id
                             icon_items_d.append(_ii)
-                        ums_icons = run_text2icon_wave_or_fallback(
+                        ums_icons = run_text2d_wave_or_fallback(
                             icon_items_d,
                             manifest_dir=manifest_dir,
                             no_vramd=no_vramd,
@@ -1187,7 +1183,9 @@ def batch_cmd(
                             width=int(icon_eff.width or 512),
                             height=int(icon_eff.height or 512),
                             steps=int(icon_eff.steps or 2),
-                            guidance=float(icon_eff.guidance_scale or 4.5),
+                            guidance=float(icon_eff.guidance_scale or 1.0),
+                            quality=profile.generation,
+                            category="icon",
                             transparent=bool(icon_eff.transparent),
                             on_progress=lambda r: dash.update_asset(
                                 r.asset_id,
@@ -1201,17 +1199,15 @@ def batch_cmd(
                                 _icon_out = icon_out_dir / f"{_icon_slug}.png"
                                 _icon_label = f"ícone {_icon_idx + 1}/{len(icon_eff.prompts)}"
                                 dash.update_asset(f"icon-{_icon_slug}", "running", f"A gerar {_icon_label}...")
-                                _icon_argv = [text2icon_bin, "generate", _icon_prompt, "-o", str(_icon_out)]
-                                _append_text2icon_profile_args(icon_eff, _icon_argv, quality=profile.generation)
+                                _icon_argv = [text2d_bin, "generate", _icon_prompt, "-o", str(_icon_out)]
+                                _append_icon_args(icon_eff, _icon_argv, quality=profile.generation)
                                 if no_vramd:
                                     _icon_argv.append("--no-vramd")
                                 _t_icon = time.perf_counter()
                                 _r_icon = run_cmd(_icon_argv, extra_env=child_env, cwd=manifest_dir)
-                                _timing_append(
-                                    {"id": f"icon-{_icon_slug}"}, "text2icon_sec", time.perf_counter() - _t_icon
-                                )
+                                _timing_append({"id": f"icon-{_icon_slug}"}, "icons_sec", time.perf_counter() - _t_icon)
                                 if _r_icon.returncode != 0:
-                                    _icon_err = merge_subprocess_output(_r_icon) or "text2icon falhou"
+                                    _icon_err = merge_subprocess_output(_r_icon) or "ícones (text2d) falhou"
                                     dash.update_asset(f"icon-{_icon_slug}", "error", _icon_err)
                                     failures += 1
                                     if not continue_on_error:
@@ -1224,7 +1220,7 @@ def batch_cmd(
                                 if _ir.get("status") in ("ok", "skipped"):
                                     dash.update_asset(_aid, "ok", str(_ir.get("output") or ""))
                                 else:
-                                    dash.update_asset(_aid, "error", _ir.get("error") or "text2icon falhou")
+                                    dash.update_asset(_aid, "error", _ir.get("error") or "ícones (text2d) falhou")
                                     failures += 1
                                     if not continue_on_error:
                                         raise click.Abort()
@@ -2618,12 +2614,13 @@ def batch_cmd(
                                 if not continue_on_error:
                                     raise click.Abort()
 
-                    # --- Pre-phase: Text2Icon (scene-level, UI icons) ---
-                    if with_icons and text2icon_bin:
-                        icon_eff = _text2icon_profile_effective(profile)
+                    # --- Pre-phase: Icons (scene-level, UI icons via text2d) ---
+                    if with_icons and text2d_bin:
+                        icon_eff = _icons_profile_effective(profile)
                         icon_out_dir = Path(profile.output_dir) / "icons"
                         icon_out_dir.mkdir(parents=True, exist_ok=True)
-                        progress.console.print(f"[cyan]Text2Icon[/cyan] — a gerar {len(icon_eff.prompts)} ícone(s)...")
+                        _icons_n = len(icon_eff.prompts)
+                        progress.console.print(f"[cyan]Icons (text2d)[/cyan] — a gerar {_icons_n} ícone(s)...")
                         icon_items_p = [
                             {
                                 "id": f"icon-{_safe_slug(p)}",
@@ -2632,7 +2629,7 @@ def batch_cmd(
                             }
                             for p in icon_eff.prompts
                         ]
-                        ums_icons_p = run_text2icon_wave_or_fallback(
+                        ums_icons_p = run_text2d_wave_or_fallback(
                             icon_items_p,
                             manifest_dir=manifest_dir,
                             no_vramd=no_vramd,
@@ -2641,15 +2638,17 @@ def batch_cmd(
                             width=int(icon_eff.width or 512),
                             height=int(icon_eff.height or 512),
                             steps=int(icon_eff.steps or 2),
-                            guidance=float(icon_eff.guidance_scale or 4.5),
+                            guidance=float(icon_eff.guidance_scale or 1.0),
+                            quality=profile.generation,
+                            category="icon",
                             transparent=bool(icon_eff.transparent),
                         )
                         if ums_icons_p is None:
                             for _icon_prompt in icon_eff.prompts:
                                 _icon_slug = _safe_slug(_icon_prompt)
                                 _icon_out = icon_out_dir / f"{_icon_slug}.png"
-                                _icon_argv = [text2icon_bin, "generate", _icon_prompt, "-o", str(_icon_out)]
-                                _append_text2icon_profile_args(icon_eff, _icon_argv, quality=profile.generation)
+                                _icon_argv = [text2d_bin, "generate", _icon_prompt, "-o", str(_icon_out)]
+                                _append_icon_args(icon_eff, _icon_argv, quality=profile.generation)
                                 if no_vramd:
                                     _icon_argv.append("--no-vramd")
                                 _t_icon = time.perf_counter()
@@ -2658,7 +2657,9 @@ def batch_cmd(
                                 if _r_icon.returncode != 0:
                                     failures += 1
                                     _icon_err = merge_subprocess_output(_r_icon) or ""
-                                    progress.console.print(f"[red]Text2Icon falhou[/red] ({_icon_slug}): {_icon_err}")
+                                    progress.console.print(
+                                        f"[red]Ícones (text2d) falhou[/red] ({_icon_slug}): {_icon_err}"
+                                    )
                                     if not continue_on_error:
                                         raise click.Abort()
                                 else:
@@ -2672,7 +2673,7 @@ def batch_cmd(
                                 else:
                                     failures += 1
                                     progress.console.print(
-                                        f"[red]Text2Icon falhou[/red] ({_ir.get('id')}): {_ir.get('error')}"
+                                        f"[red]Ícones (text2d) falhou[/red] ({_ir.get('id')}): {_ir.get('error')}"
                                     )
                                     if not continue_on_error:
                                         raise click.Abort()

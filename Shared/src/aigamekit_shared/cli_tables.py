@@ -37,13 +37,13 @@ def render_info_table(
 
     Args:
         console: Console Rich.
-        tool_name: Nome da tool para o header (ex: ``text2icon``).
+        tool_name: Nome da tool para o header (ex: ``text2d``).
         subtitle: Subtítulo do panel.
         extra_rows: Rows extra no topo da tabela (ex: model IDs, presets) —
             lista de ``(label, value)``.
         output_dir: Diretório de saída padrão (ex: ``str(DEFAULT_ICON_DIR.resolve())``).
         hw_profile_summary: Summary do hardware profile auto-detectado.
-        hw_auto_state: Estado do hw-auto (ex: ``" (desligado: TEXT2ICON_HW_AUTO=0)"``).
+        hw_auto_state: Estado do hw-auto (ex: ``" (desligado: TEXT2D_HW_AUTO=0)"``).
     """
     console.print(
         Panel.fit(

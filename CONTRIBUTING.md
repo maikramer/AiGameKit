@@ -273,8 +273,7 @@ Describe how you tested your changes.
 AiGameKit/
 ├── Shared/           # Shared utilities (logging, GPU, HF helpers, vramd client)
 ├── Vramd/      # Unified Model Server (vramd) — GPU/VRAM supervisor
-├── Text2D/           # Text to 2D sprite generation
-├── Text2Icon/        # Text to UI icon generation (Sana)
+├── Text2D/           # Text to 2D sprite generation (UI icons via --category icon)
 ├── Text3D/           # Text/image to 3D model generation (Hunyuan3D-Omni)
 ├── Paint3D/          # 3D texture painting (Hunyuan3D-Paint 2.1)
 ├── Part3D/           # Semantic part decomposition (Hunyuan3D-Part)

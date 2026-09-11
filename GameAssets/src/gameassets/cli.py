@@ -211,7 +211,6 @@ def info_cmd() -> None:
     row("text2d", "TEXT2D_BIN", "text2d")
     row("texture2d", "TEXTURE2D_BIN", "texture2d")
     row("skymap2d", "SKYMAP2D_BIN", "skymap2d")
-    row("text2icon", "TEXT2ICON_BIN", "text2icon")
     row("text2sound", "TEXT2SOUND_BIN", "text2sound")
     row("text3d", "TEXT3D_BIN", "text3d")
     row("paint3d", "PAINT3D_BIN", "paint3d")

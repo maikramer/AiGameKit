@@ -20,25 +20,15 @@ class Adapter(WorkerAdapter):
     name = "text2d"
 
     def load(self, **kwargs: Any) -> Any:
-        import os
-
+        from aigamekit_shared.group_offload import apply_alloc_conf_for_request
         from text2d.generator import KleinFluxGenerator
+        from text2d.hardware import POLICY
         from text2d.vramd_load import map_vramd_load_kwargs
 
-        # Alloc conf por-request (padrão Paint3D): o serve pode ter arrancado
-        # com o conf clássico (max_split) e o request pedir GO — o torch lê o
-        # env na 1ª alocação CUDA, por isso só substituímos se ainda dorme.
-        try:
-            import torch
-
-            if not torch.cuda.is_initialized():
-                from text2d.hardware import cuda_alloc_conf_for
-
-                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = cuda_alloc_conf_for(
-                    bool(kwargs.get("allow_group_offload", True))
-                )
-        except Exception:
-            pass
+        # Alloc conf por-request (o serve pode ter arrancado com o conf
+        # clássico/max_split e o request pedir GO); ``allow_group_offload``
+        # viaja no request e o map_vramd_load repassa-o ao ctor.
+        apply_alloc_conf_for_request(POLICY, bool(kwargs.get("allow_group_offload", True)))
 
         # Peak/offload: só do request (CLI hw_auto / with_vramd_peak_opts).
         load_kwargs = map_vramd_load_kwargs(kwargs)
@@ -55,6 +45,13 @@ class Adapter(WorkerAdapter):
 
         prompt = request.get("prompt", "")
         output = request.get("output")
+
+        # Categoria icon: styling de app-icon no prompt (idempotente — o CLI
+        # já pode ter augmentado antes de delegar ao vramd).
+        if request.get("category") == "icon":
+            from text2d.icons import augment_prompt_for_icon
+
+            prompt = augment_prompt_for_icon(prompt)
 
         # Observabilidade: shape da geração (admit já usou quant; aqui diagnóstico).
         runtime_budget = {
@@ -90,6 +87,16 @@ class Adapter(WorkerAdapter):
         out_path = Path(output)
         ext = out_path.suffix.lower().lstrip(".")
         img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
+
+        # Ícone transparente: RGBA exige PNG (recusar JPEG antes do save) e
+        # remoção de fundo via rembg (U2Net) sobre a imagem gerada.
+        if request.get("transparent"):
+            if ext in ("jpg", "jpeg"):
+                return {"status": "error", "error": "--transparent requer saída .png"}
+            from text2d.bg_removal import remove_background
+
+            image = remove_background(image)
+
         self.report_progress(request, 0.95, "saving")
         saved = KleinFluxGenerator.save_image(image, out_path, image_format=img_format)
 

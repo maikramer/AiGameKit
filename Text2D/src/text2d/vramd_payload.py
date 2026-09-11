@@ -27,11 +27,22 @@ def build_generate_request(
     channels_last: bool = False,
     step_cache: str | None = None,
     allow_group_offload: bool | None = None,
+    category: str | None = None,
+    transparent: bool | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload vramd text2d com peak/load opts."""
     if allow_group_offload is not None:
         extra = {**(extra or {}), "allow_group_offload": bool(allow_group_offload)}
+    optional: dict[str, Any] = {
+        "model_id": model_id,
+        "torch_compile_mode": torch_compile_mode,
+        "step_cache": step_cache,
+        "category": category,
+    }
+    # Transparente só viaja quando True (contrato vramd: chave opcional).
+    if transparent:
+        optional["transparent"] = True
     payload = build_request_body(
         prompt=prompt,
         output=output,
@@ -44,11 +55,7 @@ def build_generate_request(
             "torch_compile": bool(torch_compile),
             "channels_last": bool(channels_last),
         },
-        optional={
-            "model_id": model_id,
-            "torch_compile_mode": torch_compile_mode,
-            "step_cache": step_cache,
-        },
+        optional=optional,
         extra=extra,
     )
 

@@ -419,7 +419,7 @@ def run_ums_worker_cli(
 
     Args:
         adapter_cls: Classe ``Adapter`` do ``worker_serve_adapter`` da tool.
-        tool_name: Nome do backend (ex: ``text2icon``).
+        tool_name: Nome do backend (ex: ``text2d``).
         ums_worker: Valor da flag ``--ums-worker`` do click.
         console: Console Rich opcional (output do aviso sem a flag).
     """

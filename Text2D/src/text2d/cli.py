@@ -20,6 +20,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
+    add_group_offload_option,
     add_vramd_options,
     delegate_or_prepare,
     needed_mib_for_backend,
@@ -135,6 +136,18 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Quality tier (fast / low / medium / high / highest).",
 )
 @click.option(
+    "--category",
+    type=click.Choice(["icon"]),
+    default=None,
+    help="Categoria de asset (icon: 512², 2 passos, styling de ícone).",
+)
+@click.option(
+    "--transparent/--no-transparent",
+    default=False,
+    show_default=True,
+    help="Remover fundo (rembg/U2Net); requer saída .png.",
+)
+@click.option(
     "--hw-auto/--no-hw-auto",
     "hw_auto",
     default=True,
@@ -145,17 +158,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "ganham. Env: TEXT2D_HW_AUTO=0."
     ),
 )
-@click.option(
-    "--group-offload/--no-group-offload",
-    "group_offload",
-    default=True,
-    show_default=True,
-    help=(
-        "Group offload + CUDA streams quando o full-GPU não teria folga "
-        "(pico ≈ ativação; chunks = VAE tiling + attention slicing). "
-        "Kill-switch: TEXT2D_GROUP_OFFLOAD=0."
-    ),
-)
+@add_group_offload_option()
 @click.option(
     "--compile/--no-compile",
     "torch_compile",
@@ -207,6 +210,8 @@ def generate_cmd(
     profile: bool,
     gpu_ids_str: str | None,
     quality: str,
+    category: str | None,
+    transparent: bool,
     hw_auto: bool,
     group_offload: bool,
     torch_compile: bool,
@@ -240,7 +245,7 @@ def generate_cmd(
     from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
-    _qresolved = _qengine.resolve("text2d", quality=quality)
+    _qresolved = _qengine.resolve("text2d", quality=quality, category=category)
     if not _user_set_width and "width" in _qresolved.params:
         width = _qresolved.params["width"]
     if not _user_set_height and "height" in _qresolved.params:
@@ -249,6 +254,18 @@ def generate_cmd(
         steps = _qresolved.params["steps"]
     if not _user_set_guidance and "guidance" in _qresolved.params:
         guidance_scale = _qresolved.params["guidance"]
+
+    # Validar saída transparente ANTES de qualquer trabalho de GPU (a imagem
+    # RGBA final só pode ser gravada em PNG).
+    if transparent and output is not None and Path(output).suffix.lower() != ".png":
+        raise click.ClickException("--transparent requer saída .png")
+
+    # Categoria icon: styling de app-icon no prompt (idempotente; a tabela da
+    # consola abaixo mostra o prompt final augmentado).
+    if category == "icon":
+        from .icons import augment_prompt_for_icon
+
+        prompt = augment_prompt_for_icon(prompt)
 
     if not cpu:
         warn_if_vram_occupied()
@@ -299,26 +316,33 @@ def generate_cmd(
     prof_log = Path(log_p) if log_p else None
     t_start = time.time()
 
+    vramd_payload: dict[str, Any] = {
+        "prompt": prompt,
+        "output": str(Path(output).resolve()),
+        "width": width,
+        "height": height,
+        "steps": steps,
+        "guidance": guidance_scale,
+        "seed": seed,
+        "model_id": resolved_model,
+        "torch_compile": torch_compile,
+        "torch_compile_mode": torch_compile_mode,
+        "channels_last": channels_last,
+        "step_cache": step_cache,
+        "allow_group_offload": group_offload,
+    }
+    # Categoria/transparente só viajam quando pedidos (contrato vramd).
+    if category is not None:
+        vramd_payload["category"] = category
+    if transparent:
+        vramd_payload["transparent"] = True
+
     if (
         not cpu
         and output is not None
         and delegate_or_prepare(
             "text2d",
-            payload={
-                "prompt": prompt,
-                "output": str(Path(output).resolve()),
-                "width": width,
-                "height": height,
-                "steps": steps,
-                "guidance": guidance_scale,
-                "seed": seed,
-                "model_id": resolved_model,
-                "torch_compile": torch_compile,
-                "torch_compile_mode": torch_compile_mode,
-                "channels_last": channels_last,
-                "step_cache": step_cache,
-                "allow_group_offload": group_offload,
-            },
+            payload=vramd_payload,
             t_start=t_start,
             noun="Imagem",
             console=console,
@@ -415,6 +439,12 @@ def generate_cmd(
                 )
                 progress.update(task, description="[green]Concluído")
             emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=100)
+
+            # Ícone transparente: rembg (U2Net) sobre a imagem gerada (RGBA).
+            if transparent:
+                from .bg_removal import remove_background
+
+                image = remove_background(image)
 
             emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=0)
             with prof.span("save"):
@@ -529,13 +559,7 @@ def _parse_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     show_default=True,
     help="Auto-detecção de hardware (offload/modelo/multi-GPU). Env: TEXT2D_HW_AUTO=0.",
 )
-@click.option(
-    "--group-offload/--no-group-offload",
-    "group_offload",
-    default=True,
-    show_default=True,
-    help=("Group offload + CUDA streams quando o full-GPU não teria folga. Kill-switch: TEXT2D_GROUP_OFFLOAD=0."),
-)
+@add_group_offload_option()
 @click.option(
     "--quality",
     type=click.Choice(list(VALID_QUALITIES)),

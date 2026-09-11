@@ -71,8 +71,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | Directory | Language | Package name | Description |
 |-----------|----------|--------------|-------------|
 | `Shared/` | Python | `aigamekit-shared` | Shared lib (logging, GPU, subprocess, installers, CLI) |
-| `Text2D/` | Python | `text2d` | Text-to-image (FLUX SDNQ; group offload+streams e int4 por defeito — int3/int2 só em GPUs <4 GB; [`docs/findings/TEXT2D_GROUP_OFFLOAD_FINDINGS.md`](docs/findings/TEXT2D_GROUP_OFFLOAD_FINDINGS.md)) |
-| `Text2Icon/` | Python | `text2icon` | Text-to-icon (Sana Sprint 0.6B, NVlabs/Sana); transparent BG via rembg |
+| `Text2D/` | Python | `text2d` | Text-to-image (FLUX SDNQ; group offload+streams e int4 por defeito — int3/int2 só em GPUs <4 GB; [`docs/findings/TEXT2D_GROUP_OFFLOAD_FINDINGS.md`](docs/findings/TEXT2D_GROUP_OFFLOAD_FINDINGS.md)). Ícones de UI: `--category icon` (512², 2 steps) + `--transparent` (rembg) — substitui o antigo Text2Icon |
 | `Text3D/` | Python | `text3d` | Text-to-3D (Hunyuan3D-Omni SDNQ) |
 | `Paint3D/` | Python | `paint3d` | 3D texturing (Hunyuan3D-Paint 2.1, bilateral smooth, bake_exp=6) |
 | `Part3D/` | Python | `part3d` | Semantic mesh part decomposition (Hunyuan3D-Part: P3-SAM + X-Part; SDNQ) |
@@ -141,7 +140,6 @@ make test              # pytest all Python packages + cargo test Materialize
 make test-shared       # pytest Shared only
 make test-modelserver  # pytest ModelServer (vramd) only
 make test-text2d       # pytest Text2D only
-make test-text2icon    # pytest Text2Icon only
 make test-text3d       # pytest Text3D only
 make test-paint3d      # pytest Paint3D only
 make test-part3d       # pytest Part3D only
@@ -438,7 +436,7 @@ Roadmap: Phases 0–3 ✅ — XML + spawn; terrain (heightfield + features); Lua
 
 The canonical system is the **vramd** supervisor in `Vramd/` (PyPI package,
 installed by `./install.sh vramd`) — one process, one socket
-(`~/.cache/vramd/vramd.sock`), 9 GPU backends, smart job queue (priority + VRAM
+(`~/.cache/vramd/vramd.sock`), 10 GPU backends, smart job queue (priority + VRAM
 affinity cuts≤3), and weight+LRU eviction. It replaces the former
 `ModelServer/`. Client helpers live in
 `Shared/src/aigamekit_shared/vramd_client.py`.
@@ -453,7 +451,7 @@ CLI: `vramd` (`vramd start` / `status` / `queue` / `cancel` / `respawn` / …).
 in-process GPU prep (auto-starts vramd unless `VRAMD_AUTO_START=0`). Jobs go
 through `JobQueue` → `AffinityScheduler` → `WorkerPool` (`MAX_INFLIGHT=1`).
 Interactive CLI beats batch (`VRAMD_PRIORITY=batch` set by GameAssets).
-Per-tool legacy servers (`text2icon server`, etc.) remain as **deprecated** fallback only.
+Per-tool legacy servers (`texture2d server`, etc.) remain as **deprecated** fallback only.
 
 **Canonical venv + subprocess workers (live):** vramd runs in `Vramd/.venv`
 (`./install.sh vramd`). Auto-start precedence
@@ -508,10 +506,10 @@ vramd start|stop|status|submit|queue|wait|cancel|flush|backends|preload|evict|re
 # zero                        — zera TODA a VRAM do vramd (mata workers idle) SEM parar o supervisor
 # calibrate <backend>         — mede o footprint VRAM real (job real + NVML por processo) e emite o descriptor YAML
 # same as: vramd …
-text2icon generate "icon" -o out.png   # Auto-delegates to vramd (~7s vs ~20s cold)
-text2icon generate "icon" -o out.png --vramd-stream --vramd-priority interactive
+text2d generate "icon" --category icon -o out.png   # Auto-delegates to vramd (modo icon: 512²/2 steps)
+text2d generate "icon" --category icon --transparent -o out.png --vramd-stream --vramd-priority interactive
 # Tool flags (all GPU generate/decompose): --vramd-priority | --no-vramd | --vramd-stream
-# Deprecated legacy: text2icon server | server-status | server-stop
+# Deprecated legacy (per-tool servers): <tool> server | server-status | server-stop
 ```
 
 **Calibration is tied to VRAM.** The packaged catalog lives in

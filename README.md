@@ -361,7 +361,7 @@ Logs: `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` (vramd → `vramd-….log`
 
 ## Unified Model Server (vramd)
 
-Every GPU tool (Text2D, Text2Icon, Text3D, Paint3D, Part3D, Texture2D, Skymap2D, Text2Sound, Terrain3D) delegates generation to the **Unified Model Server** — a single supervisor process that owns the machine's VRAM. One socket (`~/.cache/aigamekit/model-server.sock`), one process, global model inventory, no per-tool servers.
+Every GPU tool (Text2D, Text3D, Paint3D, Part3D, Texture2D, Skymap2D, Text2Sound, Terrain3D) delegates generation to the **Unified Model Server** — a single supervisor process that owns the machine's VRAM. One socket (`~/.cache/aigamekit/model-server.sock`), one process, global model inventory, no per-tool servers.
 
 **How it works:**
 
@@ -385,8 +385,7 @@ Tool flags: `--vramd-priority interactive|batch`, `--no-vramd`, `--vramd-stream`
 
 | Tool | Default model(s) | HF gate | Notes |
 |------|------------------|---------|-------|
-| **Text2D** | [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (low VRAM) / [FLUX.2 Klein 9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (high VRAM) — fp16 base + **SDNQ runtime** quantization | 9B: **gated** (accept on Hub); 4B: public | `TEXT2D_MODEL_ID` override; hw-auto picks 4B under ~7.5 GB VRAM |
-| **Text2Icon** | [Sana 600M 512px](https://huggingface.co/Efficient-Large-Model/Sana_600M_512px_diffusers) (default) / [Clark Air 1.6B 1.58-bit](https://huggingface.co/clark-labs/clark-air-sana-1.6b-1.58bit) (low VRAM) | no | pipeline [Sana 1600M 512px](https://huggingface.co/Efficient-Large-Model/Sana_1600M_512px_diffusers) |
+| **Text2D** | [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (low VRAM) / [FLUX.2 Klein 9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (high VRAM) — fp16 base + **SDNQ runtime** quantization | 9B: **gated** (accept on Hub); 4B: public | `TEXT2D_MODEL_ID` override; hw-auto picks 4B under ~7.5 GB VRAM. UI icons: `--category icon` (512², 2 steps) + `--transparent` (rembg) |
 | **Text3D** | [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) shape (SDNQ INT4; bbox/pose/point/voxel controls) + Text2D FLUX reference image | no | Tencent Community License; BiRefNet bg-removal |
 | **Paint3D** | [Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) paint (`hunyuan3d-paintpbr-v2-1`) | no | + Real-ESRGAN (optional upscale) |
 | **Part3D** | [Hunyuan3D-Part](https://huggingface.co/tencent/Hunyuan3D-Part) (P3-SAM + X-Part) | no | Tencent Community License |

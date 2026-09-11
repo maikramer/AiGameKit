@@ -99,17 +99,17 @@ def validate_params(
     Args:
         params: Dict com chaves ``guidance_scale``, ``num_inference_steps``,
             ``width``, ``height`` (todas opcionais, com defaults sensatos).
-        min_steps: Passos mínimos (default 10; Text2Icon/Sana Sprint usa 1).
+        min_steps: Passos mínimos (default 10; modelos destilados usam 1).
         max_steps: Passos máximos (default 100).
         min_guidance: Guidance mínimo (default 1.0).
         max_guidance: Guidance máximo (default 20.0).
         min_dim, max_width, max_height, warn_ratio, logger: Ver ``validate_dimensions``.
         default_guidance: Guidance usada quando o params não a traz (default 7.5;
-            Text2Icon/Sana 4.5, Skymap2D 6.0).
+            Skymap2D 6.0).
         default_steps: Passos usados quando o params não os traz (default 50;
-            Text2Icon/Sana 2, Skymap2D 40).
+            Skymap2D 40).
         default_width, default_height: Dimensões usadas quando ausentes
-            (default 1024; Text2Icon 512, Skymap2D 2048x1024).
+            (default 1024; Skymap2D 2048x1024).
 
     Returns:
         Tuple ``(is_valid, error_message)``.

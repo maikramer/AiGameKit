@@ -138,6 +138,14 @@ categories:
       duration: 1.5
       trim: true
 
+  icon:
+    label: "Icon"
+    text2d:
+      width: 512
+      height: 512
+      steps: 2
+      guidance: 1.0
+
   # ── Vehicles & Structures ──
   vehicle:
     label: "Vehicle"

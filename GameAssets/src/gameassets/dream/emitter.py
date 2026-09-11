@@ -59,11 +59,10 @@ def emit_game_yaml(plan: DreamPlan, *, with_audio: bool = True) -> str:
         }
 
     if plan.icon_prompts:
-        doc["text2icon"] = {
+        # Sem width/height: o modo icon do text2d tem defaults próprios (512x512).
+        doc["icons"] = {
             "prompts": plan.icon_prompts,
             "transparent": True,
-            "width": 256,
-            "height": 256,
         }
 
     return yaml.dump(doc, default_flow_style=False, allow_unicode=True, sort_keys=False)

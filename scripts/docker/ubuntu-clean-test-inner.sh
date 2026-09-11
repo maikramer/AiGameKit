@@ -143,7 +143,7 @@ if [ "${TEST_TOOLS:-}" != "" ]; then
   TOOLS="$TEST_TOOLS"
   echo "Modo TEST_TOOLS — só: $TOOLS"
 else
-  TOOLS="modelserver text2d text2icon text3d gameassets aigamekitlab text2sound texture2d skymap2d terrain3d rocks3d rigging3d animator3d paint3d materialize vibegame"
+  TOOLS="modelserver text2d text3d gameassets aigamekitlab text2sound texture2d skymap2d terrain3d rocks3d rigging3d animator3d paint3d materialize vibegame"
   echo "Modo completo — todas as tools do tools.yaml (instalação + inferência)."
 fi
 echo "Tools a instalar: $TOOLS"
@@ -157,7 +157,6 @@ materialize|materialize|
 vibegame|vibegame|
 text3d|text3d|
 text2d|text2d|
-text2icon|text2icon|
 aigamekitlab|aigamekit-lab|
 text2sound|text2sound|
 texture2d|texture2d|
@@ -321,8 +320,10 @@ if [ "${TEST_INFERENCE:-1}" = "1" ]; then
   has_tool texture2d && ums_clean && run_infer texture2d "$INF_DIR/texture.png" strict \
     texture2d generate "textura seamless de pedra cinzenta" -o "$INF_DIR/texture.png" -W 512 -H 512 --seed 42
 
-  has_tool text2icon && ums_clean && run_infer text2icon "$INF_DIR/icon.png" strict \
-    text2icon generate "espada de fantasia" -o "$INF_DIR/icon.png" --seed 42
+  # Ícones: modo icon do text2d (512², 2 steps — substitui o antigo Text2Icon/Sana).
+  # Sem --transparent para não descarregar o U2Net do rembg no teste limpo.
+  has_tool text2d && ums_clean && run_infer text2d "$INF_DIR/icon.png" strict \
+    text2d generate "espada de fantasia" --category icon -o "$INF_DIR/icon.png" --seed 42
 
   # text2sound: --no-ums de propósito — o worker do UMS mistura devices
   # (cuda:0 + cpu) no decode; in-process (hw-auto) funciona e termina.

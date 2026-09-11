@@ -226,8 +226,8 @@ class Skymap2DProfile:
 
 
 @dataclass
-class Text2IconProfile:
-    """Opções passadas ao CLI text2icon generate (Sana Sprint 0.6B - ícones de UI).
+class IconsProfile:
+    """Opções passadas ao CLI text2d generate --category icon (ícones de UI).
 
     Scene-level: ``prompts`` é uma lista de descrições de ícones (não por linha
     do manifest, como o skymap2d). Cada prompt gera um PNG em ``<out>/icons/``.
@@ -287,7 +287,7 @@ class GameProfile:
     text2d: Text2DProfile | None = None
     texture2d: Texture2DProfile | None = None
     skymap2d: Skymap2DProfile | None = None
-    text2icon: Text2IconProfile | None = None
+    icons: IconsProfile | None = None
     text3d: Text3DProfile | None = None
     paint3d: Paint3DProfile | None = None
     text2sound: Text2SoundProfile | None = None
@@ -459,34 +459,35 @@ class GameProfile:
                 lora_strength=lr_s,
                 model_id=mid_ss,
             )
-        # text2icon (scene-level ícones de UI via Sana Sprint 0.6B)
-        icon2: Text2IconProfile | None = None
-        raw_icon2 = data.get("text2icon")
-        if isinstance(raw_icon2, dict):
-            raw_prompts = raw_icon2.get("prompts")
+        # icons (scene-level ícones de UI via text2d --category icon);
+        # `text2icon:` é alias legado (silencioso) de `icons:`
+        icons_prof: IconsProfile | None = None
+        raw_icons = data.get("icons") if isinstance(data.get("icons"), dict) else data.get("text2icon")
+        if isinstance(raw_icons, dict):
+            raw_prompts = raw_icons.get("prompts")
             icon_prompts: list[str] = []
             if isinstance(raw_prompts, list):
                 icon_prompts = [str(p).strip() for p in raw_prompts if str(p).strip()]
-            iw = raw_icon2.get("width")
-            ih = raw_icon2.get("height")
-            ist = raw_icon2.get("steps")
-            igs = raw_icon2.get("guidance_scale")
+            iw = raw_icons.get("width")
+            ih = raw_icons.get("height")
+            ist = raw_icons.get("steps")
+            igs = raw_icons.get("guidance_scale")
             try:
                 iw_s = int(iw) if iw is not None else None
                 ih_s = int(ih) if ih is not None else None
                 ist_s = int(ist) if ist is not None else None
                 igs_s = float(igs) if igs is not None else None
             except (TypeError, ValueError) as e:
-                raise ValueError("text2icon.width, height, steps e guidance_scale devem ser números válidos") from e
-            imid = raw_icon2.get("model_id")
+                raise ValueError("icons.width, height, steps e guidance_scale devem ser números válidos") from e
+            imid = raw_icons.get("model_id")
             imid_s = str(imid).strip() if imid not in (None, "") else None
-            icon2 = Text2IconProfile(
+            icons_prof = IconsProfile(
                 prompts=icon_prompts,
                 width=iw_s,
                 height=ih_s,
                 steps=ist_s,
                 guidance_scale=igs_s,
-                transparent=bool(raw_icon2.get("transparent", False)),
+                transparent=bool(raw_icons.get("transparent", False)),
                 model_id=imid_s,
             )
         ts2: Text2SoundProfile | None = None
@@ -925,7 +926,7 @@ class GameProfile:
             text2d=t2,
             texture2d=tex2,
             skymap2d=sky2,
-            text2icon=icon2,
+            icons=icons_prof,
             text3d=t3,
             paint3d=p3d,
             text2sound=ts2,

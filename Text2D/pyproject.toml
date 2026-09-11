@@ -22,6 +22,7 @@ dependencies = [
     "numpy>=1.24.0",
     "Pillow>=10.0.0",
     "click>=8.1.0",
+    "rembg>=2.0.0",
     "rich>=13.0.0",
     "rich-click>=1.8.0",
     "aigamekit-shared[gpu,image] @ file:../Shared",

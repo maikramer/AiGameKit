@@ -88,13 +88,13 @@ fi
 
 # --- Grupos -----------------------------------------------------------------
 # Default: 2 grupos que cobrem todas as tools (limite: disco do repo).
-# Grupo A (leve)  — modelserver rocks3d texture2d text2icon text2sound
+# Grupo A (leve)  — modelserver rocks3d texture2d text2sound
 #                   skymap2d aigamekitlab materialize
 # Grupo B (GPU)   — cadeia 3D + integração: modelserver text2d text3d paint3d
 #                   rigging3d animator3d terrain3d vibegame gameassets
 # (modelserver em AMBOS: o UMS gere a VRAM 6 GB com sdnq-int4 — sem ele, o
 # ensure_vram legacy recusa fp16 e a cadeia 3D não arranca.)
-GROUP_A="modelserver rocks3d texture2d text2icon text2sound skymap2d aigamekitlab materialize"
+GROUP_A="modelserver rocks3d texture2d text2sound skymap2d aigamekitlab materialize"
 GROUP_B="modelserver text2d text3d paint3d rigging3d animator3d terrain3d vibegame gameassets"
 
 clean_artifacts() {

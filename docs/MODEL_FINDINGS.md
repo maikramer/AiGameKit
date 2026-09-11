@@ -78,7 +78,6 @@ SDNQ aos pesos; `memory_efficient` pode reduzir activação (~×0.65).
 | `hunyuan3d-omni` | 10.0 | 2.0 | 6.0 | Text3D Omni |
 | `hunyuan-paint` | 6.0 | 2.0 | 5.0 | Paint3D |
 | `hunyuan3d-part` | 4.75 | 1.5 | 5.2 | Part3D |
-| `sana-sprint-600m` | 7.3 | 1.5 | 3.0 | Text2Icon |
 | `flux-dev-uint4` | 7.4 | 2.0 | 3.0 | Skymap (já quant) |
 | `flux-klein-4b` | 14.0 | 1.5 | 5.0 | Text2D 4B |
 | `stable-audio-open` | 3.5 | 1.5 | 2.0 | Text2Sound |
@@ -151,7 +150,6 @@ Tabela raw: [`KERNEL_OPTS_BENCH.md`](KERNEL_OPTS_BENCH.md). Prompt/seed fixos.
 |------|------|--------|
 | **Text3D** | `flashvdm` (−42% hot vs vanilla) | fp8 (Half/BF16); compile one-shot; CL só (~0) |
 | **Text2D** | compile+CL em **batch/vramd** (já default) | step-cache c/ group_stream |
-| **Text2Icon** | channels_last batch/vramd (já default) | compile em 6 GB (hot pior) |
 | **Paint3D** | mem-eff / SDNQ | `--compile` mem-eff (`QConv2d` FAIL) |
 | **Part3D** | flashvdm+CL; autotune `cond_batch=1` / `max_parts=1` ≤6.5 GB | Conditioner compile (`torch_cluster.fps`) |
 | **Skymap2D** | compile em batch/vramd (−19% hot; já default) | CL só (~0); one-shot compile (cold ~6 min) |
@@ -166,10 +164,8 @@ Bottleneck Text3D fast em 6 GB: **volume decode vanilla** (~2122 chunks), não
 |------|---------|
 | vramd `text2d` | `torch_compile=True` + `channels_last=True` |
 | vramd `skymap2d` | `torch_compile=True` |
-| vramd `text2icon` | `channels_last=True`, compile off |
 | `text2d generate-batch` | `--compile` / `--channels-last` ON |
 | `skymap2d batch` | `--compile` ON |
-| `text2icon batch` | `--channels-last` ON |
 | One-shot `generate` | compile/CL OFF (opt-in) |
 
 ---

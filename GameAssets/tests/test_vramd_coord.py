@@ -244,7 +244,7 @@ class TestWaveOrFallback:
 
 @pytest.mark.parametrize(
     "backend",
-    ["text3d", "paint3d", "text2d", "text2icon", "texture2d", "skymap2d", "text2sound", "terrain3d"],
+    ["text3d", "paint3d", "text2d", "texture2d", "skymap2d", "text2sound", "terrain3d"],
 )
 def test_payload_builders_smoke(backend: str) -> None:
     if backend == "text3d":
@@ -267,12 +267,9 @@ def test_payload_builders_smoke(backend: str) -> None:
         p = build_generate_request(prompt="x", output="/o.png", memory_efficient=True, quant_preset="sdnq-uint8")
         assert p["prompt"] == "x"
         assert p.get("memory_efficient") is True
-    elif backend == "text2icon":
-        pytest.importorskip("text2icon.vramd_payload")
-        from text2icon.vramd_payload import build_generate_request
-
-        p = build_generate_request(prompt="icon", output="/o.png")
-        assert p["prompt"] == "icon"
+        # Modo ícone (ex-Text2Icon): categoria icon + transparente no payload.
+        pi = build_generate_request(prompt="icon", output="/i.png", category="icon", transparent=True)
+        assert pi["prompt"] == "icon"
     elif backend == "texture2d":
         pytest.importorskip("texture2d.vramd_payload")
         from texture2d.vramd_payload import build_generate_request

@@ -116,6 +116,23 @@ When `--quality` is set and explicit `--width` / `--height` / `--steps` are **no
 
 Kernel opts on ~6 GB: prefer compile+channels-last for **batch/vramd** (defaults on); keep one-shot `generate` opt-in. Details: [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
+### Ícones (substitui Text2Icon)
+
+Icon generation now lives in Text2D via the `icon` asset category — same pipeline (FLUX Klein), icon-tuned defaults:
+
+```bash
+text2d generate "espada de fantasia" --category icon --transparent -o icon.png
+```
+
+- `--category icon` resolves **512×512, 2 steps** (QualityEngine category; the category beats `--quality` tiers) and augments the prompt with app-icon styling (idempotent — no duplicate instructions if the prompt already says "icon"/"logo").
+- `--transparent` removes the background (rembg/U2Net) after generation; output must be `.png` (clear error otherwise).
+- `--quality` still applies if you want to fine-tune, but the `icon` category wins over tiers — use `-s`/`-W`/`-H` for explicit overrides.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--category` | str | — | Asset category: `icon` (512², 2 steps, icon styling) |
+| `--transparent/--no-transparent` | flag | off | Remove background (rembg/U2Net); requires `.png` output |
+
 ### `text2d generate-batch MANIFEST`
 
 Batch generate multiple images from a JSON manifest file. Emits JSONL progress on stdout.

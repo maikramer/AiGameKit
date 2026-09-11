@@ -1,11 +1,11 @@
 # AiGameKit monorepo — common tasks for Python packages (ruff, pytest, mypy), Rust (Materialize), and VibeGame (Bun).
 # Requires GNU Make; on Windows, use Git Bash / MSYS2 / WSL so shell recipes and `find` work as expected.
 
-PYTHON_PROJECTS := Shared Text2D Text2Icon Text3D Paint3D Part3D GameAssets Texture2D Skymap2D Text2Sound Rigging3D Animator3D Motion3D AiGameKitLab Terrain3D Rocks3D
+PYTHON_PROJECTS := Shared Text2D Text3D Paint3D Part3D GameAssets Texture2D Skymap2D Text2Sound Rigging3D Animator3D Motion3D AiGameKitLab Terrain3D Rocks3D
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text2icon test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-viber test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-viber test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
 
 # Each package is tested from its own venv (installed by ./install.sh <tool>, which
 # adds the [dev] extra). CI has no per-package venv, so the system interpreter stays
@@ -57,9 +57,6 @@ test-shared: ## pytest only in Shared/
 test-text2d: ## pytest only in Text2D/
 	$(call run-pytest,Text2D)
 
-test-text2icon: ## pytest only in Text2Icon/
-	$(call run-pytest,Text2Icon)
-
 test-text3d: ## pytest only in Text3D/
 	$(call run-pytest,Text3D)
 
@@ -102,12 +99,12 @@ test-rocks3d: ## pytest only in Rocks3D/
 test-materialize: ## cargo test in Materialize/
 	cd Materialize && cargo test
 
-test-intrinsic: ## pytest Intrinsic/ (CPU-first; usa o venv da package se existir, senão Shared)
+test-intrinsic: ## pytest Intrinsic/ (CPU-first; usa o venv da package se existir, senão Text2D)
 	@if [ -x Intrinsic/.venv/bin/python ]; then \
 		cd Intrinsic && .venv/bin/python -m pytest tests/ -q; \
 	else \
-		echo "Intrinsic/.venv ausente — a usar o venv do Text2Icon (só testes CPU; ./install.sh intrinsic para o venv próprio)"; \
-		cd Intrinsic && PYTHONPATH=src ../Text2Icon/.venv/bin/python -m pytest tests/ -q; \
+		echo "Intrinsic/.venv ausente — a usar o venv do Text2D (só testes CPU; ./install.sh intrinsic para o venv próprio)"; \
+		cd Intrinsic && PYTHONPATH=src ../Text2D/.venv/bin/python -m pytest tests/ -q; \
 	fi
 
 test-rust: test-materialize ## alias for test-materialize

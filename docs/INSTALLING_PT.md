@@ -72,8 +72,7 @@ Variável útil: `PYTHON_CMD` — interpretador a usar (por defeito `python3`, o
 
 | Comando `./install.sh …` | Pasta | Tipo | Python mín. | Notas |
 |--------------------------|-------|------|---------------|--------|
-| `text2d` | Text2D | Python | 3.13 | PyTorch/CUDA; SDNQ FLUX |
-| `text2icon` | Text2Icon | Python | 3.13 | Sana Sprint 0.6B (NVlabs/Sana); BG transparente via rembg; PyTorch |
+| `text2d` | Text2D | Python | 3.13 | PyTorch/CUDA; SDNQ FLUX; ícones de UI via `--category icon --transparent` (rembg) |
 | `text3d` | Text3D | Python | 3.13 | Depende de Text2D; nvdiffrast pós-venv |
 | `part3d` | Part3D | Python | 3.13 | Decomposição semântica (Hunyuan3D-Part: P3-SAM + X-Part); PyTorch |
 | `gameassets` | GameAssets | Python | 3.13 | Batch + `dream`; orquestra CLIs |
@@ -174,7 +173,7 @@ SKIP_INFERENCE=1 scripts/docker/ubuntu-clean-test.sh # só instalação + smokes
 ```
 
 - Corre em **2 grupos** (limite do layout de disco: o repo pode viver num disco
-  separado): A = tools leves (`modelserver rocks3d texture2d text2icon
+  separado): A = tools leves (`modelserver rocks3d texture2d
   text2sound skymap2d aigamekitlab materialize`), B = cadeia GPU/3D
   (`modelserver text2d text3d paint3d rigging3d animator3d terrain3d vibegame
   gameassets`).

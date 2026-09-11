@@ -178,7 +178,7 @@ Full pipeline execution. Generates 2D images, 3D meshes, textures, audio, riggin
 **Key behaviors:**
 
 - **Exclusive lock:** `.gameassets_batch.lock` (fcntl) prevents two batches in the same folder. `--skip-batch-lock` disables.
-- **VRAM / vramd:** GPU sub-tools delegate to **vramd** by default; batch sets `VRAMD_PRIORITY=batch` and inherits other `VRAMD_*` / `AIGAMEKIT_ALLOW_LEGACY_SERVER` from the parent env. **hw-auto** fills peak signals (`sdnq_preset` / `memory_efficient` on the payload) — no public `--low-vram` / `--memory-efficient` CLI. Batch **waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) + optional `text2d` / `text2icon` / `texture2d` / `skymap2d` / `text2sound` / `terrain3d` (`run_*_wave_or_fallback`). Ops: [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
+- **VRAM / vramd:** GPU sub-tools delegate to **vramd** by default; batch sets `VRAMD_PRIORITY=batch` and inherits other `VRAMD_*` / `AIGAMEKIT_ALLOW_LEGACY_SERVER` from the parent env. **hw-auto** fills peak signals (`sdnq_preset` / `memory_efficient` on the payload) — no public `--low-vram` / `--memory-efficient` CLI. Batch **waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) + optional `text2d` / icons (`text2d --category icon`) / `texture2d` / `skymap2d` / `text2sound` / `terrain3d` (`run_*_wave_or_fallback`). Ops: [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
 - **VRAM preflight:** warns if free VRAM < ~1.8 GiB. `--skip-gpu-preflight` disables.
 - **CUDA:** sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` if unset.
 - **Multi-GPU:** `--gpu-ids 0,1` propagates `CUDA_VISIBLE_DEVICES` and `--gpu-ids` to all sub-tools (and into vramd payloads via each CLI’s `with_vramd_load_opts`).

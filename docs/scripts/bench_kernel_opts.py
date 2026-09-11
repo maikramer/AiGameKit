@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Bench kernel opts Text2D/Text2Icon/Texture2D/Skymap2D/Text3D/Paint3D/Part3D.
+"""Bench kernel opts Text2D/Texture2D/Skymap2D/Text3D/Paint3D/Part3D.
 
 Uso::
 
     python docs/scripts/bench_kernel_opts.py --tool text2d
-    python docs/scripts/bench_kernel_opts.py --tool text2icon
     python docs/scripts/bench_kernel_opts.py --tool texture2d
     python docs/scripts/bench_kernel_opts.py --tool skymap2d
     python docs/scripts/bench_kernel_opts.py --tool text3d --image path.png
@@ -12,7 +11,7 @@ Uso::
     python docs/scripts/bench_kernel_opts.py --tool part3d --mesh path.glb
     python docs/scripts/bench_kernel_opts.py --tool all
 
-Text2Icon/Skymap2D: subprocesso por config (VRAM presa no mesmo PID).
+Skymap2D: subprocesso por config (VRAM presa no mesmo PID).
 """
 
 from __future__ import annotations
@@ -156,115 +155,6 @@ def bench_text2d(configs: list[tuple[str, dict]], *, width: int, height: int, st
     sys.path.insert(0, str(REPO / "Text2D" / "src"))
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     return [_run_text2d_config(name, kwargs, width=width, height=height, steps=steps) for name, kwargs in configs]
-
-
-ICON_PROMPT = "red wooden crate icon, stylized game prop, white background, centered"
-
-
-def _run_text2icon_config(
-    name: str,
-    kwargs: dict[str, Any],
-    *,
-    width: int,
-    height: int,
-    steps: int,
-) -> RunResult:
-    from text2icon.generator import SanaIconGenerator
-
-    print(f"\n=== Text2Icon [{name}] ===")
-    gen = SanaIconGenerator(
-        verbose=True,
-        low_vram=True,
-        torch_compile=kwargs.get("torch_compile", False),
-        torch_compile_mode=kwargs.get("torch_compile_mode", "default"),
-        step_cache=kwargs.get("step_cache", "off"),
-        channels_last=kwargs.get("channels_last", False),
-    )
-    t0 = time.perf_counter()
-    gen.warmup()
-    _sync_cuda()
-    load_s = time.perf_counter() - t0
-
-    times: dict[str, float] = {}
-    try:
-        for tag in ("cold", "hot"):
-            t1 = time.perf_counter()
-            img, _meta = gen.generate(
-                ICON_PROMPT,
-                width=width,
-                height=height,
-                num_inference_steps=steps,
-                guidance_scale=4.5,
-                seed=SEED,
-                remove_background=False,
-            )
-            _sync_cuda()
-            times[tag] = time.perf_counter() - t1
-            out = OUT_DIR / f"text2icon_{name}_{tag}.png"
-            gen.save_image(img, out)
-            print(f"  {tag}: {times[tag]:.1f}s → {out}")
-        notes = "ok"
-    except Exception as exc:
-        times.setdefault("cold", float("nan"))
-        times.setdefault("hot", float("nan"))
-        notes = f"FAIL:{type(exc).__name__}:{exc}"
-        print(f"  FAIL: {exc}")
-    finally:
-        gen.unload()
-        del gen
-        _clear_gpu()
-
-    return RunResult(
-        "text2icon",
-        name,
-        load_s,
-        times.get("cold", float("nan")),
-        times.get("hot", float("nan")),
-        notes,
-    )
-
-
-def bench_text2icon(configs: list[tuple[str, dict]], *, width: int, height: int, steps: int) -> list[RunResult]:
-    """Corre cada config em subprocesso — Sana/group_offload deixa VRAM presa no mesmo PID."""
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    script = Path(__file__).resolve()
-    py = sys.executable
-    results: list[RunResult] = []
-    for name, _kwargs in configs:
-        print(f"\n=== Text2Icon subprocess [{name}] ===", flush=True)
-        cmd = [
-            py,
-            "-u",
-            str(script),
-            "--tool",
-            "text2icon",
-            "--only",
-            name,
-            "--width",
-            str(width),
-            "--height",
-            str(height),
-            "--t2d-steps",
-            str(steps),
-            "--append",
-            "--inprocess",
-        ]
-        proc = subprocess.run(cmd, cwd=str(REPO), check=False)
-        if proc.returncode != 0:
-            results.append(RunResult("text2icon", name, float("nan"), float("nan"), float("nan"), "FAIL:subprocess"))
-        else:
-            # Linha já anotada pelo filho; placeholder para o resumo do pai.
-            results.append(RunResult("text2icon", name, float("nan"), float("nan"), float("nan"), "subprocess-ok"))
-    return results
-
-
-def bench_text2icon_inprocess(
-    configs: list[tuple[str, dict]], *, width: int, height: int, steps: int
-) -> list[RunResult]:
-    sys.path.insert(0, str(REPO / "Shared" / "src"))
-    sys.path.insert(0, str(REPO / "Text2Icon" / "src"))
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    return [_run_text2icon_config(name, kwargs, width=width, height=height, steps=steps) for name, kwargs in configs]
 
 
 TEXTURE_PROMPT = "seamless red wooden crate texture, stylized game prop, tileable"
@@ -821,7 +711,6 @@ def main() -> None:
         "--tool",
         choices=[
             "text2d",
-            "text2icon",
             "texture2d",
             "skymap2d",
             "text2sound",
@@ -856,7 +745,7 @@ def main() -> None:
     ap.add_argument(
         "--inprocess",
         action="store_true",
-        help="Text2Icon/Skymap2D: correr no processo actual (filho do subprocesso-pai)",
+        help="Skymap2D: correr no processo actual (filho do subprocesso-pai)",
     )
     args = ap.parse_args()
 
@@ -866,12 +755,6 @@ def main() -> None:
         ("t2d-compile", {"torch_compile": True, "torch_compile_mode": "default"}),
         ("t2d-compile-cl", {"torch_compile": True, "channels_last": True}),
         ("t2d-step-cache", {"step_cache": "auto"}),
-    ]
-    t2i_configs: list[tuple[str, dict]] = [
-        ("t2i-baseline", {}),
-        ("t2i-channels-last", {"channels_last": True}),
-        ("t2i-compile", {"torch_compile": True, "torch_compile_mode": "default"}),
-        ("t2i-compile-cl", {"torch_compile": True, "channels_last": True}),
     ]
     tex_configs: list[tuple[str, dict]] = [
         ("tex-baseline", {}),
@@ -924,7 +807,6 @@ def main() -> None:
 
     if args.only:
         t2d_configs = [c for c in t2d_configs if c[0] in args.only]
-        t2i_configs = [c for c in t2i_configs if c[0] in args.only]
         tex_configs = [c for c in tex_configs if c[0] in args.only]
         sky_configs = [c for c in sky_configs if c[0] in args.only]
         snd_configs = [c for c in snd_configs if c[0] in args.only]
@@ -936,14 +818,6 @@ def main() -> None:
 
     if args.tool in ("text2d", "all"):
         all_rows.extend(bench_text2d(t2d_configs, width=args.width, height=args.height, steps=args.t2d_steps))
-
-    if args.tool in ("text2icon", "all"):
-        t2i_kw = dict(width=args.width, height=args.height, steps=max(args.t2d_steps, 8))
-        if args.inprocess or (args.only and len(t2i_configs) == 1):
-            # Filho (uma config) ou --inprocess explícito: medir no PID actual.
-            all_rows.extend(bench_text2icon_inprocess(t2i_configs, **t2i_kw))
-        else:
-            all_rows.extend(bench_text2icon(t2i_configs, **t2i_kw))
 
     if args.tool in ("texture2d", "all"):
         # SD1.5: 20 steps no bench (default CLI=30) para cold/hot mais rápidos.

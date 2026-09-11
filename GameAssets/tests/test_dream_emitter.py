@@ -82,6 +82,23 @@ class TestEmitGameYaml:
         doc = yaml.safe_load(out)
         assert "text2sound" in doc
 
+    def test_has_icons_block_when_icon_prompts(self) -> None:
+        plan = _sample_plan()
+        plan.icon_prompts = ["red health potion", "steel sword"]
+        out = emit_game_yaml(plan)
+        doc = yaml.safe_load(out)
+        assert doc["icons"]["prompts"] == ["red health potion", "steel sword"]
+        assert doc["icons"]["transparent"] is True
+        # Sem width/height: o modo icon do text2d tem defaults próprios (512x512).
+        assert "width" not in doc["icons"]
+        assert "height" not in doc["icons"]
+        assert "text2icon" not in doc
+
+    def test_no_icons_block_without_icon_prompts(self) -> None:
+        out = emit_game_yaml(_sample_plan())
+        doc = yaml.safe_load(out)
+        assert "icons" not in doc
+
     def test_no_text2sound_when_disabled(self) -> None:
         out = emit_game_yaml(_sample_plan(), with_audio=False)
         doc = yaml.safe_load(out)

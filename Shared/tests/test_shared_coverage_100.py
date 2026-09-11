@@ -51,7 +51,6 @@ from aigamekit_shared.seed_utils import generate_seed, resolve_effective_seed, s
 QUALITIES = list(VALID_QUALITIES)
 TOOLS = [
     "text2d",
-    "text2icon",
     "text3d",
     "paint3d",
     "texture2d",
@@ -97,6 +96,7 @@ def test_quality_engine_list_qualities_contains(quality: str) -> None:
         "door",
         "effects",
         "ui",
+        "icon",
     ],
 )
 def test_quality_engine_category_info(category: str) -> None:
@@ -182,7 +182,6 @@ def test_legacy_server_allowed(env_val: str, expected: bool) -> None:
     "backend",
     [
         "text2d",
-        "text2icon",
         "skymap2d",
         "text3d",
         "paint3d",
@@ -338,7 +337,6 @@ def test_hw_auto(ev: str, v: str, exp: bool) -> None:
         "hunyuan3d-part",
         "hunyuan-paint",
         "stable-audio-open",
-        "sana-sprint-600m",
     ],
 )
 def test_get_footprint(key: str) -> None:
@@ -359,7 +357,7 @@ def test_footprint_weights(quant: str) -> None:
 
 @pytest.mark.parametrize("specs,dev", [([], "cpu"), ([(0, 24 * GIB)], "cuda")])
 def test_plan_offload_device(specs: list, dev: str) -> None:
-    plan = plan_offload(specs, get_footprint("sana-sprint-600m"))
+    plan = plan_offload(specs, get_footprint("sd15-base"))
     assert plan.device == dev
 
 

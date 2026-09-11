@@ -324,8 +324,8 @@ def run_handoff(
 
         out["rows"].append(entry)
 
-    # --- Scene-level UI icons (text2icon) ---
-    # Ícones gerados pelo text2icon em <output_dir>/icons/*.png → public/assets/icons/.
+    # --- Scene-level UI icons (text2d --category icon) ---
+    # Ícones gerados pelo text2d em <output_dir>/icons/*.png → public/assets/icons/.
     icons_entries: list[dict[str, str]] = []
     src_icons_dir = Path(profile.output_dir) / "icons"
     if src_icons_dir.is_dir():

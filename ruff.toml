@@ -3,7 +3,6 @@ line-length = 120
 src = [
     "Shared/src",
     "Text2D/src",
-    "Text2Icon/src",
     "Text3D/src",
     "Paint3D/src",
     "GameAssets/src",

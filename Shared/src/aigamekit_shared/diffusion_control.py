@@ -1,6 +1,6 @@
 """Hooks de progresso / cancel cooperativo para pipelines Diffusers.
 
-Usado pelos generators 2D (text2icon, text2d, texture2d, skymap2d) e pelos
+Usado pelos generators 2D (text2d, texture2d, skymap2d) e pelos
 adapters vramd. O cancel a meio do CUDA não mata o kernel — interrompe no próximo
 ``callback_on_step_end`` via ``GenerationAborted``.
 """

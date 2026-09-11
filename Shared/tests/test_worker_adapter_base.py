@@ -1,7 +1,7 @@
 """Testes do prólogo/epílogo canónico dos adapters 2D (WorkerAdapter).
 
 ``begin_generate`` / ``finish_response`` padronizam o generate() dos
-adapters de worker subprocesso (text2d/text2icon/texture2d/skymap2d/
+adapters de worker subprocesso (text2d/texture2d/skymap2d/
 text2sound) — validação, abort pre-check, hooks e resposta de sucesso.
 """
 
