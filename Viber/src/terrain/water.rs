@@ -162,7 +162,16 @@ fn wave_fbm(p: Vec2, drift: Vec2) -> f32 {
 pub fn wave_height_at(p: Vec2, t: f32, wind: [f32; 2], wind_strength: f32, wave_amp: f32) -> f32 {
     let wdir = (Vec2::new(wind[0], wind[1]) + Vec2::new(1e-4, 0.0)).normalize();
     let strength = wind_strength.clamp(0.05, 3.0);
-    let speed = 0.55 + 0.45 * strength;
+    let speed = 0.7 + 0.5 * strength;
+
+    // DOMAIN WARP — o MESMO do `wave_height` do shader (espelho linha a
+    // linha: cristas curvadas em vez de famílias de linhas paralelas).
+    let warp = Vec2::new(
+        wave_value_noise(p * 0.11 + Vec2::new(t * 0.03, 0.0)),
+        wave_value_noise(p * 0.13 - Vec2::new(0.0, t * 0.025)),
+    ) * 2.2
+        - Vec2::splat(1.1);
+    let q = p + warp;
 
     // Direções giradas em relação ao vento (graus): 0, +34, −51, +73.
     let d0 = wdir;
@@ -181,13 +190,13 @@ pub fn wave_height_at(p: Vec2, t: f32, wind: [f32; 2], wind_strength: f32, wave_
 
     let (k0, k1, k2, k3) = (0.897f32, 1.366, 2.094, 3.396);
     let mut h = 0.0;
-    h += (p.dot(d0) * k0 - t * k0.sqrt() * 1.35 * speed).sin() * 0.30;
-    h += (p.dot(d1) * k1 + t * k1.sqrt() * 1.10 * speed).sin() * 0.20;
-    h += (p.dot(d2) * k2 - t * k2.sqrt() * 0.95 * speed).sin() * 0.12;
-    h += (p.dot(d3) * k3 + t * k3.sqrt() * 0.80 * speed).sin() * 0.07;
+    h += (q.dot(d0) * k0 - t * k0.sqrt() * 1.35 * speed).sin() * 0.22;
+    h += (q.dot(d1) * k1 + t * k1.sqrt() * 1.10 * speed).sin() * 0.18;
+    h += (q.dot(d2) * k2 - t * k2.sqrt() * 0.95 * speed).sin() * 0.12;
+    h += (q.dot(d3) * k3 + t * k3.sqrt() * 0.80 * speed).sin() * 0.07;
 
     let drift = wdir * t * 0.35 * speed;
-    h += wave_fbm(p * 0.9 + drift, drift * 0.4) * 0.55 * (0.6 + 0.4 * strength.min(2.0));
+    h += wave_fbm(q * 0.9 + drift, drift * 0.4) * 0.62 * (0.6 + 0.4 * strength.min(2.0));
     h * wave_amp
 }
 
@@ -1495,7 +1504,10 @@ fn box_smooth(values: &mut [f32], half: usize) {
 /// **uv.x = [`LakeSpec::opacity`]** — the shader reads it as the extinction
 /// scale of the water column, so `opacity` now controls how *murky* the body
 /// is instead of flattening a constant transparency over the whole mirror.
-pub fn lake_water_mesh(spec: &LakeSpec, water_y: f32) -> ChunkMeshData {
+/// **uv.y = water depth** (water_y − leito da grid do carve, assado por
+/// vértice): o shader usa-a como coluna analítica em vez do depth prepass —
+/// LOD-independente, sem faixas nas fronteiras de chunk.
+pub fn lake_water_mesh(spec: &LakeSpec, water_y: f32, grid: &BrushGrid) -> ChunkMeshData {
     let shape = LakeShape::new(spec.at);
     let y = water_y;
     let murk = spec.opacity;
@@ -1507,9 +1519,11 @@ pub fn lake_water_mesh(spec: &LakeSpec, water_y: f32) -> ChunkMeshData {
     // (`WaterBody::mirror_reach`) — ver [`lake_mirror_reach`].
     let reach = lake_mirror_reach(spec.depth, spec.water_offset);
     let push = |mesh: &mut ChunkMeshData, p: Vec2, radial: f32, mask: f32| {
+        // Coluna vertical: o leito É a grid (o carve escreveu a taça lá).
+        let depth = (water_y - grid.sample(p.x, p.y)).clamp(0.05, 40.0);
         mesh.positions.push([p.x, y, p.y]);
         mesh.normals.push([0.0, 1.0, 0.0]);
-        mesh.uvs.push([murk, radial]);
+        mesh.uvs.push([murk, depth]);
         mesh.colors
             .push([spec.color[0], spec.color[1], spec.color[2], mask]);
     };
@@ -1573,7 +1587,9 @@ pub fn lake_water_mesh(spec: &LakeSpec, water_y: f32) -> ChunkMeshData {
 /// over the outer quarter of the width. Positions are **world space**.
 ///
 /// Same vertex contract as [`lake_water_mesh`]: colour alpha is the shore mask
-/// and **uv.x carries [`RiverSpec::opacity`]** as the extinction scale.
+/// and **uv.x carries [`RiverSpec::opacity`]** as the extinction scale;
+/// **uv.y = water depth** (a EFETIVA do registry, por estação — o shader
+/// usa-a como coluna analítica em vez do depth prepass).
 pub fn river_water_mesh(spec: &RiverSpec, body: &WaterBody) -> ChunkMeshData {
     let mut mesh = ChunkMeshData::default();
     let n = body.stations.len();
@@ -1584,8 +1600,12 @@ pub fn river_water_mesh(spec: &RiverSpec, body: &WaterBody) -> ChunkMeshData {
     // carve já a guarda EFETIVA (escalada pelo reach da linha de água, ver
     // [`waterline_reach`]); pools abrem, rápidos apertam.
     let murk = spec.opacity;
-    // Three vertices per station (left, center, right): the shore mask fades
-    // on the outer quarter of each half, so the center stays unmasked.
+    // FIVE vertices per station (left → right): the shore mask fades on the
+    // outer quarter of each half, so the center stays unmasked. Eram 3 —
+    // mas o deslocamento de onda no VÉRTICE (water.wgsl) amostrado a 3
+    // pontos numa largura de 16 m produzia dois planos gigantes; 5 pontos
+    // (≈4 m entre vértices) dão às ondas geometria contínua.
+    const CROSS_VERTS: usize = 5;
     let mask_at = |v: f32| -> f32 {
         let edge = (((v - 0.5).abs() * 2.0 - (1.0 - WATER_EDGE_FADE * 2.0)).max(0.0)
             / (WATER_EDGE_FADE * 2.0))
@@ -1600,11 +1620,11 @@ pub fn river_water_mesh(spec: &RiverSpec, body: &WaterBody) -> ChunkMeshData {
         let y = body.surface_y[i];
         // Meia-largura EFETIVA da estação (pools abrem, rápidos apertam).
         let half_i = body.half_width_at(i);
-        for v in [0.0_f32, 0.5, 1.0] {
+        for v in [0.0_f32, 0.25, 0.5, 0.75, 1.0] {
             let p = *st + perp * (half_i * (v * 2.0 - 1.0));
             mesh.positions.push([p.x, y, p.y]);
             mesh.normals.push([0.0, 1.0, 0.0]);
-            mesh.uvs.push([murk, v]);
+            mesh.uvs.push([murk, body.depth_at(i, spec.depth)]);
             mesh.colors
                 .push([spec.color[0], spec.color[1], spec.color[2], mask_at(v)]);
         }
@@ -1657,13 +1677,16 @@ pub fn river_water_mesh(spec: &RiverSpec, body: &WaterBody) -> ChunkMeshData {
             let (h0_i, h1_i) = if c.wall { (c.lip, c.base) } else { (i, i + 1) };
             let half0 = body.half_width_at(h0_i) * wide;
             let half1 = body.half_width_at(h1_i) * wide;
+            // Coluna da FACE = a do poço a jusante (a queda despenca para
+            // água funda; a face vertical lê a absorção do caldeirão).
+            let face_depth = body.depth_at(if c.wall { c.base } else { i + 1 }, spec.depth);
             let base = mesh.positions.len() as u32;
             for (c, h, y) in [(top_c, half0, top_y), (st1, half1, bot_y)] {
                 for v in [0.0_f32, 0.5, 1.0] {
                     let p = c + perp * (h * (v * 2.0 - 1.0));
                     mesh.positions.push([p.x, y, p.y]);
                     mesh.normals.push([dir.x, 0.0, dir.y]);
-                    mesh.uvs.push([murk, v]);
+                    mesh.uvs.push([murk, face_depth]);
                     mesh.colors
                         .push([spec.color[0], spec.color[1], spec.color[2], 1.0]);
                 }
@@ -1694,17 +1717,16 @@ pub fn river_water_mesh(spec: &RiverSpec, body: &WaterBody) -> ChunkMeshData {
             ]);
             continue;
         }
-        // Vertices: 3 per station (l, c, r). Four CCW triangles per segment.
-        let l0 = (i * 3) as u32;
-        let c0 = l0 + 1;
-        let r0 = l0 + 2;
-        let l1 = ((i + 1) * 3) as u32;
-        let c1 = l1 + 1;
-        let r1 = l1 + 2;
-        mesh.indices.extend_from_slice(&[
-            l0, l1, c0, c0, l1, c1, // left half
-            c0, c1, r0, r0, c1, r1, // right half
-        ]);
+        // Vertices: CROSS_VERTS por estação; um par de triângulos por faixa
+        // transversal (o mesmo padrão de winding do l0-l1-c0 antigo).
+        let per = CROSS_VERTS as u32;
+        for k in 0..(per - 1) {
+            let a = (i as u32) * per + k;
+            let b = a + 1;
+            let c = a + per;
+            let d = c + 1;
+            mesh.indices.extend_from_slice(&[a, c, b, b, c, d]);
+        }
     }
     mesh
 }
@@ -2024,7 +2046,7 @@ mod tests {
             ..LakeSpec::default()
         };
         let body = carve_lake(&mut grid, &spec, 0).expect("lake");
-        let mesh = lake_water_mesh(&spec, body.water_y);
+        let mesh = lake_water_mesh(&spec, body.water_y, &grid);
         let expected = 1 + LAKE_FAN_SEGMENTS * 8;
         assert_eq!(mesh.positions.len(), expected, "center + eight rings");
         assert_eq!(mesh.indices.len(), LAKE_FAN_SEGMENTS * 45, "fan + 7 bands");
@@ -2067,23 +2089,23 @@ mod tests {
         let spec = river_spec();
         let body = carve_river(&mut grid, &spec, 0, &[]).expect("river");
         let mesh = river_water_mesh(&spec, &body);
-        assert_eq!(mesh.positions.len(), body.stations.len() * 3, "l/c/r");
-        assert_eq!(mesh.indices.len(), (body.stations.len() - 1) * 12);
+        // 5 vértices transversais por estação; 4 faixas × 2 triângulos × 3
+        // índices por segmento.
+        assert_eq!(mesh.positions.len(), body.stations.len() * 5, "l→r");
+        assert_eq!(mesh.indices.len(), (body.stations.len() - 1) * 24);
         for (i, p) in mesh.positions.iter().enumerate() {
-            let st = body.stations[i / 3];
+            let st = body.stations[i / 5];
             // A ribbon acaba na linha de água real do canal (t_wl da taça).
             let side = body.water_width
                 * 0.5
                 * waterline_reach(spec.depth, spec.water_offset).clamp(0.4, 1.0);
-            let side = match i % 3 {
-                0 | 2 => side,
-                _ => 0.0, // center vertex rides the surface
-            };
+            let frac = (i % 5) as f32 / 4.0; // 0..1 transversal
+            let side = side * (frac * 2.0 - 1.0);
             let d = ((p[0] - st.x).powi(2) + (p[2] - st.y).powi(2)).sqrt();
-            assert!((d - side).abs() < 1e-3, "vertex {i} at expected offset");
+            assert!((d - side.abs()).abs() < 1e-3, "vertex {i} at expected offset");
         }
         let edge = mesh.colors[0][3];
-        let mid = mesh.colors[1][3];
+        let mid = mesh.colors[2][3];
         assert!(edge < mid, "edge fades: {edge} vs {mid}");
         assert!((mid - 1.0).abs() < 1e-4, "center unmasked: {mid}");
         for uv in &mesh.uvs {
@@ -2124,17 +2146,18 @@ mod tests {
         let fall = body.cascades[0];
         let segs = fall.base - fall.lip;
         assert!(segs >= 1);
+        let ribbon = n * 5; // CROSS_VERTS por estação
         assert_eq!(
             mesh.positions.len(),
-            n * 3 + segs * 12,
+            ribbon + segs * 12,
             "ribbon verts + curtain face + back: {} vs {}",
             mesh.positions.len(),
-            n * 3 + segs * 12
+            ribbon + segs * 12
         );
         // Os 6 vértices da PRIMEIRA FACE: topo = cota do lip, base = cota
         // da estação seguinte, normais horizontais (face vertical).
         let lip = fall.lip;
-        let face = &mesh.positions[n * 3..n * 3 + 6];
+        let face = &mesh.positions[ribbon..ribbon + 6];
         for v in &face[0..3] {
             assert!((v[1] - body.surface_y[lip]).abs() < 1e-3, "top at the lip");
         }
@@ -2144,12 +2167,12 @@ mod tests {
                 "bottom at the plunge surface"
             );
         }
-        for normal in &mesh.normals[n * 3..n * 3 + 6] {
+        for normal in &mesh.normals[ribbon..ribbon + 6] {
             assert!(normal[1].abs() < 1e-6, "horizontal face normal");
         }
         // Por segmento: os 6 do VERSO seguem a face, com normal +Y.
         for seg in 0..segs {
-            let f0 = n * 3 + seg * 12;
+            let f0 = ribbon + seg * 12;
             let face = &mesh.positions[f0..f0 + 6];
             let back = &mesh.positions[f0 + 6..f0 + 12];
             assert_eq!(back, face, "back shares the face geometry");
@@ -2309,8 +2332,8 @@ mod tests {
         let ribbon_half = |i: usize| {
             let st = body.stations[i];
             Vec2::new(
-                mesh.positions[i * 3][0] - st.x,
-                mesh.positions[i * 3][2] - st.y,
+                mesh.positions[i * 5][0] - st.x,
+                mesh.positions[i * 5][2] - st.y,
             )
             .length()
         };
@@ -2616,17 +2639,18 @@ mod tests {
             c.bot_y
         };
         let mesh = river_water_mesh(&spec, &body);
-        // A ribbon empurra n·3 vértices UMA vez (por estação); a queda em
+        // A ribbon empurra n·5 vértices UMA vez (por estação); a queda em
         // parede acrescenta UM quadro (6 face + 6 verso) — independentemente
         // do número de segmentos que a queda cubra (os índices da ribbon é
         // que não nascem nos segmentos da queda).
+        let ribbon = n * 5;
         assert_eq!(
             mesh.positions.len(),
-            n * 3 + 12,
+            ribbon + 12,
             "wall fall = one quad over the whole fall, no extra ribbon verts"
         );
         // O fundo do quadro está no PÉ da banda (2 m abaixo da lâmina).
-        let min_y = mesh.positions[n * 3..]
+        let min_y = mesh.positions[ribbon..]
             .iter()
             .map(|p| p[1])
             .fold(f32::MAX, f32::min);
@@ -2757,7 +2781,7 @@ mod tests {
             body.water_y
         );
         // O espelho desaparece sobre a ilha (centro do leque com alpha 0).
-        let mesh = lake_water_mesh(&spec, body.water_y);
+        let mesh = lake_water_mesh(&spec, body.water_y, &grid);
         assert!(
             mesh.colors[0][3] < 0.05,
             "mirror alpha over the island: {}",
@@ -2770,7 +2794,7 @@ mod tests {
             depth: 3.0,
             ..LakeSpec::default()
         };
-        let mesh = lake_water_mesh(&bare, body.water_y);
+        let mesh = lake_water_mesh(&bare, body.water_y, &grid);
         assert!((mesh.colors[0][3] - 1.0).abs() < 1e-5);
     }
 
@@ -2899,7 +2923,10 @@ mod tests {
                 depth,
                 ..LakeSpec::default()
             };
-            let mesh = lake_water_mesh(&spec, 8.0);
+            // A grid só alimenta a coluna (uv.y); a extensão do espelho não
+            // depende dela — uma qualquer serve.
+            let grid = test_grid();
+            let mesh = lake_water_mesh(&spec, 8.0, &grid);
             let outer0 = 1 + LAKE_FAN_SEGMENTS;
             mesh.positions[outer0..]
                 .iter()

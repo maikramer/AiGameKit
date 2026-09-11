@@ -21,7 +21,9 @@
 //!
 //! Everything is driven off [`super::runtime::TerrainRuntime`]'s registry
 //! ([`super::water::WaterBody::surface_y_at`]), so it works for lakes and
-//! rivers alike and costs one registry query per swimmer per frame.
+//! rivers alike. A caixa XZ de cada corpo ([`body_bounds`]) filtra os
+//! nadadores em terra antes da query: sem ela, cada um dos ~170 nadadores
+//! pagava o `nearest_on_path` do rio — O(estações) — todos os frames.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::light::NotShadowCaster;
@@ -98,6 +100,13 @@ pub struct Ripple {
 #[derive(Resource)]
 pub struct RippleAssets {
     pub mesh: Handle<Mesh>,
+    /// Materiais dos anéis RECICLADOS. Cada anel anima o SEU alpha (o fade é
+    /// por idade, ver `ripple_system`), portanto não podem partilhar um — mas
+    /// podem voltar a usar-se quando o anel anterior morre. Antes disto cada
+    /// anel nascia com um `materials.add` novo e o material ficava residente
+    /// para sempre (o Bevy não faz GC de assets): com a chuva eram ~14
+    /// anéis/s a acumular sem limite.
+    pub materials: Vec<Handle<StandardMaterial>>,
 }
 
 // ── lógica pura (testada) ───────────────────────────────────────────────
@@ -188,7 +197,51 @@ fn burst_spec(preset: &str) -> ParticleSpec {
 fn setup_ripple_assets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
     commands.insert_resource(RippleAssets {
         mesh: meshes.add(ripple_mesh()),
+        materials: Vec::new(),
     });
+}
+
+/// Caixa XZ CONSERVADORA de um corpo de água — a broad-phase das queries de
+/// água por nadador.
+///
+/// O `WaterBody` de um RIO resolve TODAS as suas queries
+/// (`contains`/`is_near`/`surface_y_at`/`distance_to_waterline`) com
+/// `nearest_on_path` sobre o vetor inteiro de estações — O(estações) cada
+/// uma. O `water_contact_system` perguntava a CADA nadador por TODOS os
+/// corpos: com as ~170 criaturas do `simple-rpg` são dezenas de milhares de
+/// testes de segmento por frame, para 99 % de bichos que estão em terra firme.
+///
+/// Medir a caixa UMA vez por corpo por frame custa `corpos × estações` (≈13 ×
+/// estações) e corta as queries ao que interessa. A caixa é deliberadamente
+/// GENEROSA — pico do contorno orgânico × reach do espelho nos lagos, maior
+/// meia-largura de estação nos rios — para nunca excluir um ponto que o corpo
+/// molhe de facto.
+fn body_bounds(body: &super::water::WaterBody) -> (Vec2, Vec2) {
+    match body.kind {
+        super::WaterKind::Lake => {
+            let reach = body
+                .carve_radius
+                .max(body.radius * super::water::CONTOUR_PEAK * body.mirror_reach);
+            (body.at - Vec2::splat(reach), body.at + Vec2::splat(reach))
+        }
+        super::WaterKind::River => {
+            if body.stations.is_empty() {
+                return (body.at, body.at);
+            }
+            let half = body
+                .half_width
+                .iter()
+                .copied()
+                .fold(body.carve_radius, f32::max);
+            let mut min = body.stations[0];
+            let mut max = body.stations[0];
+            for station in &body.stations {
+                min = min.min(*station);
+                max = max.max(*station);
+            }
+            (min - Vec2::splat(half), max + Vec2::splat(half))
+        }
+    }
 }
 
 /// Marca herói e criaturas como candidatos a salpicar (idempotente).
@@ -222,18 +275,22 @@ fn tag_swimmers(
 fn water_contact_system(
     time: Res<Time>,
     terrain: Option<Res<TerrainRuntime>>,
-    assets: Option<Res<RippleAssets>>,
+    assets: Option<ResMut<RippleAssets>>,
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut swimmers: Query<(&GlobalTransform, &mut WaterContact)>,
     ripples: Query<(), With<Ripple>>,
+    mut bounds: Local<Vec<(Vec2, Vec2)>>,
 ) {
-    let (Some(terrain), Some(assets)) = (terrain, assets) else {
+    let (Some(terrain), Some(mut assets)) = (terrain, assets) else {
         return;
     };
     let dt = time.delta_secs().max(1e-4);
     let mut budget = MAX_RIPPLES.saturating_sub(ripples.iter().count());
+    // Broad-phase: uma caixa por corpo por frame (`body_bounds`), para a query
+    // por nadador não pagar o `nearest_on_path` do rio em todos eles.
+    bounds.clear();
+    bounds.extend(terrain.water.iter().map(body_bounds));
     for (transform, mut contact) in &mut swimmers {
         let pos = transform.translation();
         let previous = contact.last_pos.unwrap_or(pos);
@@ -242,10 +299,15 @@ fn water_contact_system(
         let planar_speed = Vec2::new(step.x, step.z).length() / dt;
         let fall_speed = (-step.y / dt).max(0.0);
 
+        let p = Vec2::new(pos.x, pos.z);
         let surface = terrain
             .water
             .iter()
-            .filter_map(|body| body.surface_y_at(Vec2::new(pos.x, pos.z)))
+            .zip(bounds.iter())
+            .filter(|(_, (min, max))| {
+                p.x >= min.x && p.x <= max.x && p.y >= min.y && p.y <= max.y
+            })
+            .filter_map(|(body, _)| body.surface_y_at(p))
             .fold(None::<f32>, |acc, y| Some(acc.map_or(y, |a| a.max(y))));
         let Some(surface_y) = surface else {
             if contact.wet {
@@ -266,14 +328,12 @@ fn water_contact_system(
             let at = Vec3::new(pos.x, surface_y, pos.z);
             spawn_burst(
                 &mut commands,
-                &mut meshes,
-                &mut materials,
                 &burst_spec("splash"),
                 at,
                 splash_count(fall_speed, submersion),
             );
             if budget > 0 {
-                spawn_ripple(&mut commands, &assets, &mut materials, at, 1.35);
+                spawn_ripple(&mut commands, &mut assets, &mut materials, at, 1.35);
                 budget -= 1;
             }
             contact.since_ripple = 0.0;
@@ -281,8 +341,6 @@ fn water_contact_system(
             let at = Vec3::new(pos.x, surface_y, pos.z);
             spawn_burst(
                 &mut commands,
-                &mut meshes,
-                &mut materials,
                 &burst_spec("splash"),
                 at,
                 12,
@@ -294,14 +352,12 @@ fn water_contact_system(
                 let at = Vec3::new(pos.x, surface_y, pos.z);
                 spawn_burst(
                     &mut commands,
-                    &mut meshes,
-                    &mut materials,
                     &burst_spec("wade"),
                     at,
                     (4.0 + planar_speed * 2.0) as usize,
                 );
                 if budget > 0 {
-                    spawn_ripple(&mut commands, &assets, &mut materials, at, 1.0);
+                    spawn_ripple(&mut commands, &mut assets, &mut materials, at, 1.0);
                     budget -= 1;
                 }
             }
@@ -310,14 +366,10 @@ fn water_contact_system(
     }
 }
 
-fn spawn_ripple(
-    commands: &mut Commands,
-    assets: &RippleAssets,
-    materials: &mut Assets<StandardMaterial>,
-    at: Vec3,
-    scale: f32,
-) {
-    let material = materials.add(StandardMaterial {
+/// O material do anel: constante (o fade anima-se no alpha DESTE material,
+/// por isso é um por anel — reciclado pelo pool de [`RippleAssets`]).
+fn ripple_material() -> StandardMaterial {
+    StandardMaterial {
         base_color: Color::srgba(0.92, 0.97, 1.0, 0.0),
         unlit: true,
         alpha_mode: AlphaMode::Blend,
@@ -326,7 +378,20 @@ fn spawn_ripple(
         // anel pisca ao passar por cima do espelho.
         depth_bias: 8.0,
         ..StandardMaterial::default()
-    });
+    }
+}
+
+fn spawn_ripple(
+    commands: &mut Commands,
+    assets: &mut RippleAssets,
+    materials: &mut Assets<StandardMaterial>,
+    at: Vec3,
+    scale: f32,
+) {
+    let material = assets
+        .materials
+        .pop()
+        .unwrap_or_else(|| materials.add(ripple_material()));
     commands.spawn((
         Name::new("fx:ripple"),
         Transform::from_translation(Vec3::new(at.x, at.y + RIPPLE_LIFT, at.z))
@@ -349,6 +414,7 @@ fn ripple_system(
     time: Res<Time>,
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut assets: ResMut<RippleAssets>,
     mut ripples: Query<(
         Entity,
         &mut Transform,
@@ -360,6 +426,9 @@ fn ripple_system(
     for (entity, mut transform, mut ripple, material) in &mut ripples {
         ripple.age += dt;
         if ripple.age >= ripple.life {
+            // O material volta ao pool: o próximo anel herda-o (o alpha é
+            // reescrito a partir da idade, o estado anterior não importa).
+            assets.materials.push(material.0.clone());
             commands.entity(entity).despawn();
             continue;
         }

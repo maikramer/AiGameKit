@@ -4,16 +4,20 @@
 // The fragment entry REPLACES `StandardMaterial`'s (ExtendedMaterial base):
 // it rebuilds `PbrInput` via `pbr_input_from_standard_material`, perturbs the
 // normal with a wind-driven wave field, and — the part that makes water read
-// as a *body* instead of a sheet of cellophane — reconstructs the opaque
-// scene behind the surface from the DEPTH PREPASS to get the real water
-// column, then applies Beer–Lambert absorption over it. Shallow water is
-// clear, deep water is near-opaque, and the shoreline gets a foam band for
-// free. Lighting, shadows and fog still come from the normal PBR path.
+// as a *body* instead of a sheet of cellophane — reads the water column from
+// the PER-VERTEX depth baked by `water.rs` (uv.y = water_y − leito da grid
+// do carve) and applies Beer–Lambert absorption over it. A coluna é
+// ANALÍTICA: não depende do LOD do terreno nem do depth prepass — as
+// leituras do prepass mudavam nas fronteiras de chunk e desenhavam faixas no
+// corpo (e o fallback de coluna constante ao lado de leituras reais era
+// outra faixa). Shallow water is clear, deep water is near-opaque, and the
+// shoreline gets a foam band for free. Lighting, shadows and fog still come
+// from the normal PBR path.
 //
 // MESH CONTRACT (see `water.rs`): vertex COLOR = body rgb + shore-fade mask
 // in alpha; vertex UV.x = the body's `opacity` reinterpreted as an
-// **extinction scale** (how murky the water is), UV.y = radial/cross-stream
-// coordinate. No texture is sampled, so UV.x is free for this.
+// **extinction scale** (how murky the water is), UV.y = water depth in
+// meters. No texture is sampled, so the UVs are free for this.
 //
 // WORLD SPECIALIZATION: `viber run` rewrites the CONFIG block below from the
 // world's <DayCycle>/<Weather> attributes before the renderer loads this file
@@ -28,9 +32,6 @@
 // — redeclarar em group(0) conflitua com o binding da view.
 #import bevy_pbr::mesh_view_bindings::{globals, view}
 #import bevy_pbr::view_transformations as vt
-// `prepass_depth` só existe com DEPTH_PREPASS; o módulo importa-se sempre
-// (fica vazio sem o define) e a CHAMADA é que vai dentro do #ifdef.
-#import bevy_pbr::prepass_utils
 // O vertex shader da extensão SUBSTITUI o base do bevy (extended_material),
 // por isso este ficheiro replica o `mesh.wgsl` inteiro e importa o mesmo
 // conjunto de módulos (linhas simples — o harness de testes resolve-as).
@@ -64,7 +65,7 @@ const EXTINCTION: vec3<f32> = vec3<f32>(0.90, 0.44, 0.30);
 /// prepass não escreveu nada atrás da água (céu).
 const MAX_PATH: f32 = 60.0;
 /// Banda de espuma junto à margem (profundidade vertical, m).
-const FOAM_DEPTH: f32 = 0.45;
+const FOAM_DEPTH: f32 = 0.55;
 /// Profundidade em que a lâmina começa a existir (m) — abaixo disto a água
 /// desaparece em vez de terminar numa linha dura sobre a margem.
 const SHORE_FADE: f32 = 0.30;
@@ -163,7 +164,18 @@ fn wave_height(p: vec2<f32>, t: f32) -> f32 {
     let wind = vec2<f32>(CFG_WIND_X, CFG_WIND_Z);
     let wdir = normalize(wind + vec2(1e-4, 0.0));
     let strength = clamp(CFG_WIND_STRENGTH, 0.05, 3.0);
-    let speed = 0.55 + 0.45 * strength;
+    let speed = 0.7 + 0.5 * strength;
+
+    // DOMAIN WARP: o campo é amostrado num domínio dobrado por noise lento à
+    // deriva — sem isto os trens desenhavam FAMÍLIAS DE LINHAS PARALELAS (o
+    // λ dominante de 7 m atravessava o rio em faixas regulares transversais,
+    // o "xadrez de faixas" original). Com o warp as cristas curvam-se,
+    // quebram-se e fundem-se organicamente.
+    let warp = vec2<f32>(
+        value_noise(p * 0.11 + vec2(t * 0.03, 0.0)),
+        value_noise(p * 0.13 - vec2(0.0, t * 0.025)),
+    ) * 2.2 - vec2(1.1);
+    let q = p + warp;
 
     // Direcções giradas em relação ao vento (graus): 0, +34, -51, +73.
     let d0 = wdir;
@@ -175,13 +187,13 @@ fn wave_height(p: vec2<f32>, t: f32) -> f32 {
     // mais devagar, o campo nunca "congela" num padrão repetido).
     let k0 = 0.897; let k1 = 1.366; let k2 = 2.094; let k3 = 3.396;
     var h = 0.0;
-    h += sin(dot(p, d0) * k0 - t * sqrt(k0) * 1.35 * speed) * 0.30;
-    h += sin(dot(p, d1) * k1 + t * sqrt(k1) * 1.10 * speed) * 0.20;
-    h += sin(dot(p, d2) * k2 - t * sqrt(k2) * 0.95 * speed) * 0.12;
-    h += sin(dot(p, d3) * k3 + t * sqrt(k3) * 0.80 * speed) * 0.07;
+    h += sin(dot(q, d0) * k0 - t * sqrt(k0) * 1.35 * speed) * 0.22;
+    h += sin(dot(q, d1) * k1 + t * sqrt(k1) * 1.10 * speed) * 0.18;
+    h += sin(dot(q, d2) * k2 - t * sqrt(k2) * 0.95 * speed) * 0.12;
+    h += sin(dot(q, d3) * k3 + t * sqrt(k3) * 0.80 * speed) * 0.07;
 
     let drift = wdir * t * 0.35 * speed;
-    h += fbm(p * 0.9 + drift, drift * 0.4) * 0.55 * (0.6 + 0.4 * min(strength, 2.0));
+    h += fbm(q * 0.9 + drift, drift * 0.4) * 0.62 * (0.6 + 0.4 * min(strength, 2.0));
     // `ripple` do <Lake> — amplitude das ondas (multiplier de mundo).
     return h * CFG_WAVE_AMP;
 }
@@ -195,7 +207,7 @@ fn wave_normal(p: vec2<f32>, t: f32, damp: f32) -> vec3<f32> {
     let hr = wave_height(p + vec2(e, 0.0), t);
     let hd = wave_height(p - vec2(0.0, e), t);
     let hu = wave_height(p + vec2(0.0, e), t);
-    let gain = (0.55 + 0.30 * clamp(CFG_WIND_STRENGTH, 0.0, 2.0)) * damp * CFG_WAVE_AMP;
+    let gain = (0.75 + 0.35 * clamp(CFG_WIND_STRENGTH, 0.0, 2.0)) * damp * CFG_WAVE_AMP;
     return normalize(vec3<f32>((hl - hr) * gain, 2.0 * e, (hd - hu) * gain));
 }
 
@@ -207,7 +219,13 @@ fn wave_jacobian(p: vec2<f32>, t: f32) -> f32 {
     let wind = vec2<f32>(CFG_WIND_X, CFG_WIND_Z);
     let wdir = normalize(wind + vec2(1e-4, 0.0));
     let strength = clamp(CFG_WIND_STRENGTH, 0.05, 3.0);
-    let speed = 0.55 + 0.45 * strength;
+    let speed = 0.7 + 0.5 * strength;
+    // O MESMO domain warp do `wave_height` — o jacobian espelha o campo.
+    let warp = vec2<f32>(
+        value_noise(p * 0.11 + vec2(t * 0.03, 0.0)),
+        value_noise(p * 0.13 - vec2(0.0, t * 0.025)),
+    ) * 2.2 - vec2(1.1);
+    let q = p + warp;
 
     let d0 = wdir;
     let d1 = vec2<f32>(wdir.x * 0.829 - wdir.y * 0.559, wdir.x * 0.559 + wdir.y * 0.829);
@@ -216,10 +234,10 @@ fn wave_jacobian(p: vec2<f32>, t: f32) -> f32 {
 
     let k0 = 0.897; let k1 = 1.366; let k2 = 2.094; let k3 = 3.396;
     var j = 1.0;
-    j += sin(dot(p, d0) * k0 - t * sqrt(k0) * 1.35 * speed) * 0.30 * k0 * k0;
-    j += sin(dot(p, d1) * k1 + t * sqrt(k1) * 1.10 * speed) * 0.20 * k1 * k1;
-    j += sin(dot(p, d2) * k2 - t * sqrt(k2) * 0.95 * speed) * 0.12 * k2 * k2;
-    j += sin(dot(p, d3) * k3 + t * sqrt(k3) * 0.80 * speed) * 0.07 * k3 * k3;
+    j += sin(dot(q, d0) * k0 - t * sqrt(k0) * 1.35 * speed) * 0.22 * k0 * k0;
+    j += sin(dot(q, d1) * k1 + t * sqrt(k1) * 1.10 * speed) * 0.18 * k1 * k1;
+    j += sin(dot(q, d2) * k2 - t * sqrt(k2) * 0.95 * speed) * 0.12 * k2 * k2;
+    j += sin(dot(q, d3) * k3 + t * sqrt(k3) * 0.80 * speed) * 0.07 * k3 * k3;
     return j;
 }
 
@@ -232,7 +250,7 @@ fn wave_jacobian(p: vec2<f32>, t: f32) -> f32 {
 // fragmento já é um campo estilizado forte — aqui o que se move é a
 // geometria, não a luz. A máscara de margem (alpha da cor) desvanece o
 // deslocamento até zero na beira — a lâmina nunca descola do banco.
-const VERTEX_WAVE_GAIN: f32 = 0.12;
+const VERTEX_WAVE_GAIN: f32 = 0.16;
 
 #ifdef MORPH_TARGETS
 fn morph_vertex(vertex_in: Vertex, instance_index: u32) -> Vertex {
@@ -366,59 +384,47 @@ fn fragment(
     // Animated surface: perturb the geometric normal towards the wave field.
     let n = wave_normal(world.xz, t, damp);
     // Seen from below keep the flipped geometric normal (front_facing path
-    // already normalized it); from above blend in the waves.
-    pbr_input.N = select(pbr_input.N, normalize(mix(pbr_input.N, n, 0.85)), is_front);
+    // already normalized it); from above blend in the waves — mix alto
+    // (0.92): a 0.85 o campo lia-se quase plano em céu difuso.
+    pbr_input.N = select(pbr_input.N, normalize(mix(pbr_input.N, n, 0.92)), is_front);
 
     // Altura da onda no ponto — modula a COR (cristas mais claras, vales
     // mais escuros). Sob céu encoberto o specular/glint morre e, sem isto,
     // a superfície lê-se como um espelho liso (o "aerogel parado"): a
     // variação difusa é o que mantém a água viva em qualquer luz.
     let hh = wave_height(world.xz, t);
-    let wave_tint = 1.0 + 0.16 * clamp(hh, -1.0, 1.0);
+    let wave_tint = 1.0 + 0.22 * clamp(hh, -1.0, 1.0);
     // Correnteza: faixas de noise à deriva na direção do vento — vendem
     // FLUXO (o campo anda com t) em cor, não em specular.
-    let streak = fbm(world.xz * vec2<f32>(0.5, 1.1) + vec2<f32>(t * 0.22, 0.0),
-                     vec2<f32>(t * 0.06, 0.0));
+    let streak = fbm(world.xz * vec2<f32>(0.5, 1.1) + vec2<f32>(t * 0.3, 0.0),
+                     vec2<f32>(t * 0.09, 0.0));
 
-    // ── Coluna de água (depth prepass) ───────────────────────────────
-    // `path` = caminho óptico dentro da água (absorção), `depth_v` = altura
-    // real da coluna (espuma/margem). Sem prepass caímos num valor fixo que
-    // mantém o corpo opaco em vez de voltar ao vidro transparente.
-    // Fallback sem prepass (`VIBER_NO_POSTFX=1`): uma coluna média constante
-    // — corpo sólido com o fade da malha na margem, em vez de 60 m opacos.
+    // ── Coluna de água (profundidade ASSADA nos vértices) ──────────────
+    // `uv.y` transporta a profundidade VERTICAL da coluna (water_y − leito),
+    // assada no build da malha a partir da MESMA grid do carve — analítica e
+    // LOD-independente. (O depth prepass que aqui se lia mudava com o LOD do
+    // terreno nas fronteiras de chunk e desenhava faixas no corpo; o
+    // fallback de coluna constante, ao lado de leituras reais, era outra
+    // faixa. Um deck de estrada acima da lâmina também já não "seca" o rio
+    // — a coluna é o que a grid diz, não o que o prepass vê.)
     var path = 2.2;
     var depth_v = 2.2;
-#ifdef DEPTH_PREPASS
-    let raw = prepass_utils::prepass_depth(in.position, 0u);
-    if (raw > 0.0) {
-        let ndc = vt::frag_coord_to_ndc(in.position);
-        let scene_view = vt::position_ndc_to_view(vec3<f32>(ndc.xy, raw));
-        let scene_world = (view.world_from_view * vec4<f32>(scene_view, 1.0)).xyz;
-        // Um fundo NO ou ACIMA do plano de água é leitura impossível para
-        // uma coluna — prepass stale/grosso (LOD a suavizar o canal, deck
-        // de estrada a cruzar a lâmina, relva na margem). Aceitar esse
-        // valor punha `depth_v = 0` → `shore = 0` → alpha 0: o corpo
-        // DESAPARECIA por bandas (o "rio seco" junto a travessias). Nesse
-        // caso mantemos o fallback da coluna constante, que mantém o corpo
-        // sólido; a margem real (fundo ligeiramente abaixo da lâmina)
-        // continua a esbater pelo `shore` como sempre.
-        let dy = world.y - scene_world.y;
-        if (dy > 0.0) {
-            path = clamp(distance(scene_world, world), 0.0, MAX_PATH);
-            depth_v = dy;
-        }
-    }
+#ifdef VERTEX_UVS_A
+    depth_v = max(in.uv.y, 0.05);
+    // Caminho óptico: coluna vertical a dividir pelo cosseno do ângulo de
+    // visão (raio reto — suave, sem amostras por pixel).
+    let to_cam = normalize(view.world_position - world);
+    path = clamp(depth_v / max(to_cam.y, 0.06), 0.0, MAX_PATH);
 #endif
 
     let ext = EXTINCTION * (0.45 + 1.55 * murk);
     let transmit = exp(-path * ext);
     let absorb = clamp(1.0 - dot(transmit, vec3<f32>(1.0 / 3.0)), 0.0, 1.0);
     // Margem: a lâmina nasce da profundidade, não de um anel de vértices —
-    // é isto que substitui o contorno duro do disco sobre o banco. PISO de
-    // 0.55: o prepass de profundidade é pouco fiável perto de margens/estradas
-    // (leituras rasas falsas apagavam o corpo inteiro — o "aerogel"); o fade
-    // suave da margem fica por conta do fade da malha (alpha da vértice).
-    let shore = max(smoothstep(0.0, SHORE_FADE, depth_v), 0.55);
+    // é isto que substitui o contorno duro do disco sobre o banco. O piso de
+    // 0.45 (era 0.55) já não defende leituras falsas do prepass — a coluna é
+    // analítica — só segura o fade de malha perto da margem.
+    let shore = max(smoothstep(0.0, SHORE_FADE, depth_v), 0.45);
 
     // Day clock → sun/moon direction and daylight factor (mirrors worldsys).
     var minute = CFG_CLOCK_START;
@@ -442,10 +448,11 @@ fn fragment(
         glint_strength = 0.22 + 0.78 * day;
     }
 
-    // Fresnel: SEMPRE a partir de uma normal quase plana. Alimentá-lo com a
-    // normal ondulada fazia a opacidade variar crista a crista — as faixas
-    // rectas que se viam desenhadas por cima da relva eram exactamente isso.
-    let n_flat = normalize(mix(vec3<f32>(0.0, 1.0, 0.0), pbr_input.N, 0.18));
+    // Fresnel: normal QUASE plana (o feed com a normal ondulada fazia a
+    // opacidade variar crista a crista — faixas rectas sobre as margens). O
+    // mix sobe um pouco (0.18 → 0.24) para a face ganhar vida sem voltar às
+    // faixas.
+    let n_flat = normalize(mix(vec3<f32>(0.0, 1.0, 0.0), pbr_input.N, 0.24));
     let nv = clamp(dot(n_flat, pbr_input.V), 0.0, 1.0);
     let fres = mix(0.02, 1.0, pow(1.0 - nv, 5.0));
 
@@ -464,9 +471,9 @@ fn fragment(
     // Espuma de CRISTA (jacobian, estilo bevy_water): onde o campo empina a
     // onda quebra — independe da margem, aparece em todo o corpo com vento.
     // `damp`/`shore` seguram as cristas ao longe e na beira.
-    let crest = (1.0 - smoothstep(0.0, 0.55, wave_jacobian(world.xz, t)))
-        * clamp(CFG_WIND_STRENGTH, 0.0, 2.0) * 0.5 * damp * shore;
-    let foam = clamp(foam_band * foam_band * foam_noise + crest, 0.0, 1.0) * shore * 0.55;
+    let crest = (1.0 - smoothstep(0.0, 0.7, wave_jacobian(world.xz, t)))
+        * clamp(CFG_WIND_STRENGTH, 0.0, 2.0) * 0.75 * damp * shore;
+    let foam = clamp(foam_band * foam_band * foam_noise + crest, 0.0, 1.0) * shore * 0.75;
 
     // Corpo: cor rasa → cor profunda ao longo da absorção. O reflexo do CÉU
     // agora entra pelo IBL real (apply_pbr_lighting com o env map do probe +
@@ -475,8 +482,8 @@ fn fragment(
     // nunca ler preto. `wave_tint`/`streak` dão variação difusa
     // (cristas/correnteza) que sobrevive a céu encoberto.
     let body = pbr_input.material.base_color.rgb;
-    let shallow = body * 1.25;
-    let deep = body * 0.42;
+    let shallow = body * 1.35;
+    let deep = body * 0.52;
     var col = mix(shallow, deep, absorb) * wave_tint;
     col += sky_tint * fres * 0.10;
     col = mix(col, col * 1.3 + vec3<f32>(0.02), streak * 0.35);
@@ -489,18 +496,21 @@ fn fragment(
     pbr_input.material.base_color = vec4<f32>(col, alpha);
 
     // Wave crests roughen the mirror; calmer water stays glossy.
-    // Rugosidade um pouco mais alta que o espelho perfeito: a 0.06 o lóbulo
-    // do sol arrastava-se pelas cristas em manchas brancas em vez de cintilar.
+    // Base 0.22 (era 0.14): com reflectance 1.0 o lóbulo especular do IBL
+    // espelhava o céu pálido como um borrão branco ("água leitosa") — mais
+    // rugosidade espalha o reflexo e deixa a COR do corpo dominar.
     pbr_input.material.perceptual_roughness = clamp(
-        0.14 + 0.06 * clamp(CFG_WIND_STRENGTH, 0.0, 2.0) + 0.35 * foam,
+        0.22 + 0.06 * clamp(CFG_WIND_STRENGTH, 0.0, 2.0) + 0.35 * foam,
         0.02,
         1.0,
     );
 
-    // Sun/moon glint: tight specular lobe, masked by sparkle noise so it
-    // shimmers instead of forming one perfect blob. Emissive drives bloom.
+    // Sun/moon glint: specular lobe, masked by sparkle noise so it shimmers
+    // instead of forming one perfect blob. Emissive drives bloom. O lóbulo a
+    // 360 era UM ponto — o sol baixo da golden hour não deixava rastro; 140
+    // alarga o caminho de sol na água mantendo o cintilar.
     let reflect_dir = reflect(-glint_dir, pbr_input.N);
-    let lobe = pow(max(dot(reflect_dir, pbr_input.V), 0.0), 360.0);
+    let lobe = pow(max(dot(reflect_dir, pbr_input.V), 0.0), 140.0);
     // Ruído de cintilação a frequência alta (célula ~11 cm): a 5.5 as células
     // eram maiores que o lóbulo e o glint saía em manchas brancas contínuas.
     // `wind="0 0"` é autoral válido e normalize(vec2(0)) = NaN — mesmo guard
@@ -508,7 +518,7 @@ fn fragment(
     // o glint.
     let sparkle_dir = normalize(vec2<f32>(CFG_WIND_X, CFG_WIND_Z) + vec2(1e-4, 0.0));
     let sparkle = pow(value_noise(world.xz * 9.0 + sparkle_dir * t * 2.1), 3.0);
-    let glint = lobe * sparkle * 1.3 * glint_strength * glint_color * damp * (1.0 - foam);
+    let glint = lobe * sparkle * 1.8 * glint_strength * glint_color * damp * (1.0 - foam);
     pbr_input.material.emissive = vec4<f32>(glint, 1.0);
 
     var out: FragmentOutput;

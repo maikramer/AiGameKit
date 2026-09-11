@@ -1,0 +1,49 @@
+<!-- QA do caminho RASTER de reflexões (Fase B+): SSR na água + chão molhado
+     na chuva (VIBER_WATER_SSR) e probes regionais (VIBER_PROBES=0 desliga).
+     Tem <Sky> + <DayCycle> + <Weather rain> — o qa-agua é o mundo de
+     bisseção (sem céu, sem player), este é o de aceitação visual. -->
+<world clear-color="#87ceeb">
+  <AmbientLight color="#bfd4e0" brightness="400" />
+  <DirectionalLight direction="-0.5 -1 -0.3" illuminance="28000" shadows="true" />
+
+  <Sky rayleigh="2.5" />
+  <DayCycle minute-of-day="620" minutes-per-real-second="0.2"
+            dawn-minute="330" dusk-minute="1170" max-sun-elevation="55" />
+  <!-- Tempestade contínua: chão molhado + reflexos (o estado que a SSR de
+       chão usa). `cycle` desligado de propósito — tempestade determinística. -->
+  <Weather wind="0.8 0.3" wind-strength="2.2" rain="0.9" />
+
+  <Terrain name="vale" world-size="512" max-height="60" chunk-size="64"
+           levels="4" resolution="64" collision-resolution="32"
+           height-smoothing="1" seed="7"
+           base-color="#c9c5ba"
+           layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road pebbles"
+           shore-width="5" snow-height="0.92" />
+
+  <TerrainPad name="plaza" at="0 0" size="48 48" falloff="14" corner-radius="10" />
+
+  <!-- Bioma com tint para os probes regionais (pântano na cota do lago). -->
+  <BiomeRegion id="pantano_qa" display-name="Pântano QA"
+               polygon="-80,-90; 30,-90; 30,30; -80,30"
+               fog-density="4.5" tint="#7a8f6a" />
+
+  <Lake name="lagoa_qa" at="-34 -42" radius="15" depth="3" water-offset="0.5"
+        color="#1e5a6e" opacity="0.66" ripple="1.2"
+        bank="beach" rocks="1" rocks-density="0.18">
+    <Island at="-38 -46" radius="4.5" height="1.4" />
+  </Lake>
+
+  <River name="rio_qa" path="150 120 110 70 78 30 52 -8 30 -45 8 -80"
+         width="11" depth="3" water-offset="0.8"
+         bank-width="4.5" bank-height="0.9" color="#1d5a78" opacity="0.74"
+         bank="gorge" rocks="1" pool-spacing="16"
+         spring="1" />
+
+  <PlayerGLTF model-url="/assets/meshes/characters/hero_lod0.glb"
+              pos="-20 2 -30" name="player" />
+
+  <!-- Miradouro NO ilhéu: água a 360°, framing determinístico para o A/B
+       de reflexões (a órbita do player dependia de yaw aleatório). -->
+  <Group name="miradouro_lago" translation="-38 3 -46" />
+  <OrbitCamera target="miradouro_lago" distance="18" pitch="10" />
+</world>
