@@ -601,6 +601,17 @@ def gltf_transform_finish(
                     res.ktx2_uastc_applied = True
                     if _glb_has_ktx2(current):
                         res.ktx2_applied = True
+                    # Texturas grayscale (ex.: AO) saem com DFD channelType
+                    # RRRR — o Bevy fatia o payload UASTC pelo block size do
+                    # BC4 e o transcode falha. Normalizar para RGB (1 byte).
+                    try:
+                        from aigamekit_shared.gltf_ktx2 import fix_glb_ktx2_dfd
+
+                        n_fix = fix_glb_ktx2_dfd(current)
+                        if n_fix:
+                            log.info("gltf_finish: DFD UASTC normalizado em %d textura(s) (RRRR→RGB)", n_fix)
+                    except Exception as exc:  # best-effort — não travar o finish
+                        log.warning("gltf_finish: normalização DFD KTX2 falhou — %s", exc)
             else:
                 log.warning("gltf_finish: passo %s falhou — %s", label, err)
 

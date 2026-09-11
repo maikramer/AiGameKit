@@ -2605,6 +2605,71 @@ def finish_cmd(
         )
 
 
+@cli.command("fix-ktx2-dfd")
+@click.argument("paths", nargs=-1, required=True)
+@click.option(
+    "--recursive/--no-recursive",
+    default=True,
+    show_default=True,
+    help="Expandir globs/dirs recursivamente (*.glb).",
+)
+@click.option("--dry-run", is_flag=True, help="Só reportar; não escrever.")
+@click.pass_context
+def fix_ktx2_dfd_cmd(ctx, paths, recursive, dry_run):
+    """Normaliza DFD UASTC single-channel (RRRR) → RGB em GLBs (patch 1 byte).
+
+    O Bevy 0.19 fatia o payload UASTC pelo block size do formato-alvo derivado
+    do DFD: texturas grayscale (ex.: AO) com ``channelType=RRRR`` escolhem BC4
+    (8 B/block) e o transcode falha. O patch muda o canal para RGB sem
+    recomprimir (payload UASTC é igual em forma).
+    """
+    from aigamekit_shared.gltf_ktx2 import fix_glb_ktx2_dfd, scan_glb_ktx2_dfd
+
+    verbose = bool(ctx.obj.get("VERBOSE"))
+    files: list[Path] = []
+    for p in paths:
+        path = Path(p)
+        if path.is_dir():
+            files.extend(sorted(path.rglob("*.glb") if recursive else path.glob("*.glb")))
+        elif any(ch in p for ch in "*?["):
+            files.extend(sorted(Path().glob(p)) if not path.is_absolute() else sorted(Path("/").glob(p.lstrip("/"))))
+        else:
+            files.append(path)
+
+    total_files = fixed_files = total_fixes = scanned = 0
+    for f in files:
+        if not f.is_file():
+            continue
+        total_files += 1
+        findings = scan_glb_ktx2_dfd(f)
+        scanned += len(findings)
+        pending = [x for x in findings if x.needs_fix]
+        if not pending:
+            continue
+        names = ", ".join(x.image_name or f"img{x.image_index}" for x in pending)
+        if dry_run:
+            console.print(f"[yellow]DRY[/yellow] {f}: {len(pending)} a corrigir ({names})")
+            fixed_files += 1
+            total_fixes += len(pending)
+            continue
+        n = fix_glb_ktx2_dfd(f)
+        if n:
+            console.print(f"[green]OK[/green] {f}: {n} DFD normalizado(s) ({names})")
+            fixed_files += 1
+            total_fixes += n
+        elif verbose:
+            console.print(f"[dim]{f}: scan mudou entre passos (0 corrigidos)[/dim]")
+
+    label = "corrigidos" if not dry_run else "a corrigir (dry-run)"
+    console.print(
+        Rule(
+            f"[bold green]fix-ktx2-dfd[/bold green] → {total_fixes} textura(s) em "
+            f"{fixed_files}/{total_files} GLB(s) {label} · {scanned} KTX2 analisados",
+            style="green",
+        )
+    )
+
+
 @cli.command("collision")
 @click.argument("input_mesh", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--output", "-o", type=click.Path(path_type=Path), required=True, help="Output collision GLB")

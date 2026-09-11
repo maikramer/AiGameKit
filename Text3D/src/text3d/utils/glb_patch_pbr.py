@@ -186,7 +186,24 @@ def _png_size(path: Path) -> tuple[int, int]:
 
 
 def _png_to_ktx2(png: Path, tmp: Path) -> Path:
-    """PNG → KTX2 UASTC+Zstd via KTX-Software (linear, mapa de dados)."""
+    """PNG → KTX2 UASTC+Zstd via KTX-Software (linear, mapa de dados).
+
+    PNGs grayscale (ex.: AO do Materialize) saem com DFD ``UASTC_RRRR`` — o
+    Bevy 0.19 fatia o payload pelo block size do BC4 e o transcode falha.
+    Promover para RGB antes do encode **e** normalizar o DFD do resultado
+    (belt-and-suspenders; ver ``aigamekit_shared.gltf_ktx2``).
+    """
+    src = png
+    try:
+        from PIL import Image as _PILImage
+
+        with _PILImage.open(png) as im:
+            if im.mode not in ("RGB", "RGBA"):
+                rgb = tmp / f"{png.stem}_rgb.png"
+                im.convert("RGB").save(rgb)
+                src = rgb
+    except Exception:
+        pass  # sem PIL: o normalizador de DFD a jusante ainda apanha
     out = tmp / f"{png.stem}.ktx2"
     proc = subprocess.run(
         [
@@ -200,7 +217,7 @@ def _png_to_ktx2(png: Path, tmp: Path) -> Path:
             "linear",
             "--zstd",
             "18",
-            str(png),
+            str(src),
             str(out),
         ],
         capture_output=True,
@@ -211,6 +228,12 @@ def _png_to_ktx2(png: Path, tmp: Path) -> Path:
     if proc.returncode != 0 or not out.is_file():
         tail = (proc.stderr.strip().splitlines() or [f"rc={proc.returncode}"])[-1]
         raise RuntimeError(f"ktx create falhou: {tail}")
+    try:
+        from aigamekit_shared.gltf_ktx2 import fix_ktx2_dfd
+
+        fix_ktx2_dfd(out)
+    except Exception:
+        pass
     return out
 
 
