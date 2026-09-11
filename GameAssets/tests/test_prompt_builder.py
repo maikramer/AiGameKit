@@ -57,6 +57,16 @@ def test_for_3d_adds_hint(preset_lowpoly: dict) -> None:
     assert p2 != p3 or "watertight" in p3.lower()
 
 
+def test_texture2d_hint_has_no_legacy_lora_token() -> None:
+    """hint_texture sem o trigger ``smlstxtr`` da LoRA antiga — o checkpoint
+    SD1.5 base não o conhece e desperdiça tokens CLIP."""
+    from gameassets.prompt_builder import enhance_prompt_for_pipeline
+
+    p = enhance_prompt_for_pipeline("grey mountain rock", category="rock", image_source="texture2d")
+    assert "seamless texture" in p.lower()
+    assert "smlstxtr" not in p.lower()
+
+
 def test_generate_3d_bans_baked_vfx(preset_lowpoly: dict) -> None:
     profile = GameProfile(title="A", genre="B", tone="C", style_preset="lowpoly")
     row = ManifestRow(

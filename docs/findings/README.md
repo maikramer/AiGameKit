@@ -10,6 +10,7 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [OCTREE_FACES_FINDINGS.md](OCTREE_FACES_FINDINGS.md) | Empírico simple-rpg: faces ≈ 8×10⁴·char_m²; κ·octree² (κ≈5.5); por categoria |
 | [PAINT_PART_FINDINGS.md](PAINT_PART_FINDINGS.md) | Paint SDNQ/bake; Part3D; payload vramd |
 | [IMAGE_SKY_SOUND_FINDINGS.md](IMAGE_SKY_SOUND_FINDINGS.md) | Text2D, Skymap, audio trim, kernels |
+| [TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md](TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md) | Seamless 2.0: métrica continuidade (a antiga media igualdade), VAE tiling quebra costura, late-circular + roll, hires refine, heal |
 | [TEXT2SOUND_SA3_LOOP_FINDINGS.md](TEXT2SOUND_SA3_LOOP_FINDINGS.md) | BGM seamless SA3: equal-power, comprimento exacto, mastering dobrado |
 | [VIBEGAME_AUDIO_COMBAT_FINDINGS.md](VIBEGAME_AUDIO_COMBAT_FINDINGS.md) | Cull espacial, profiler Audio, SFX longos, melee impact 0.35 |
 | [VIBEGAME_COMBAT_FEEL_FINDINGS.md](VIBEGAME_COMBAT_FEEL_FINDINGS.md) | Hit-stop, camera shake, knockback CCT, stagger, telegraph, i-frames; PauseSystem vs timeScale |

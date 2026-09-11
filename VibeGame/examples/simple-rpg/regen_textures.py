@@ -122,7 +122,7 @@ def generate_texture(name: str, prompt: str, negative: str) -> bool:
             "width": 1024,
             "height": 1024,
             "steps": 28,
-            "guidance": 3.5,
+            "guidance": 7.0,
         },
         timeout_sec=600,
     )
@@ -137,7 +137,7 @@ def generate_texture(name: str, prompt: str, negative: str) -> bool:
             "width": 1024,
             "height": 1024,
             "steps": 28,
-            "guidance": 3.5,
+            "guidance": 7.0,
             "seed": result.get("seed"),
             "regenerated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         }

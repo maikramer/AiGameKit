@@ -44,7 +44,7 @@ CATEGORIES: dict[str, AssetCategory] = {
             "no crossed limbs, no bent elbows or knees, no clenched fists, "
             "no self-occlusion between arms and torso"
         ),
-        hint_texture="smlstxtr, human skin fabric texture, seamless texture",
+        hint_texture="human skin fabric texture, seamless texture",
         extra_negatives=(
             "held weapon",
             "held item",
@@ -71,7 +71,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="creature concept art, side view, clear silhouette on white background",
         hint_3d="single creature model, no rider or accessories, clean organic mesh",
         hint_rig="standing in neutral pose with legs apart, arms or forelimbs extended, symmetrical stance",
-        hint_texture="smlstxtr, creature scales skin pattern, seamless texture",
+        hint_texture="creature scales skin pattern, seamless texture",
         extra_negatives=(
             "rider",
             "saddle",
@@ -89,7 +89,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game chest or treasure box, front view, clear lid visible on white background",
         hint_3d="isolated chest or container, no hands or characters, clean geometry with visible lid seam",
         hint_rig="",
-        hint_texture="smlstxtr, wood metal chest surface, seamless texture",
+        hint_texture="wood metal chest surface, seamless texture",
         extra_negatives=(
             "scattered coins",
             "spilling treasure",
@@ -107,7 +107,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game weapon, side view, clean silhouette on white background",
         hint_3d="single clean weapon, no hands or characters holding it, isolated tool",
         hint_rig="",
-        hint_texture="smlstxtr, metal blade wood handle material, seamless texture",
+        hint_texture="metal blade wood handle material, seamless texture",
         extra_negatives=(
             "hand holding",
             "hands gripping",
@@ -125,7 +125,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game-ready tree, full view, trunk and canopy visible on white background",
         hint_3d="stylized game tree, clean trunk and canopy separation",
         hint_rig="",
-        hint_texture="smlstxtr, tree bark leaf foliage, seamless texture",
+        hint_texture="tree bark leaf foliage, seamless texture",
     ),
     "rock": AssetCategory(
         name="rock",
@@ -134,7 +134,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game-ready rock formation, single isolated boulder, white background",
         hint_3d="simple rock or boulder, low-poly friendly, no attached ground plane",
         hint_rig="",
-        hint_texture="smlstxtr, rock stone surface detail, seamless texture",
+        hint_texture="rock stone surface detail, seamless texture",
     ),
     "mineral": AssetCategory(
         name="mineral",
@@ -143,7 +143,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="crystal or mineral cluster, front view, faceted surfaces on white background",
         hint_3d="crystal formation with distinct facets, clean geometry, no ground attachment",
         hint_rig="",
-        hint_texture="smlstxtr, crystal gem mineral surface, seamless texture",
+        hint_texture="crystal gem mineral surface, seamless texture",
     ),
     "building": AssetCategory(
         name="building",
@@ -164,7 +164,7 @@ CATEGORIES: dict[str, AssetCategory] = {
             "no volumetric smoke, no fire plume geometry, no particle blobs"
         ),
         hint_rig="",
-        hint_texture="smlstxtr, stone brick wall surface, seamless texture",
+        hint_texture="stone brick wall surface, seamless texture",
         extra_negatives=(
             "worm's eye view",
             "looking up from below",
@@ -193,7 +193,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game furniture piece, front view, clean proportions on white background",
         hint_3d="isolated furniture item, no room or floor, clean geometry with visible part lines",
         hint_rig="",
-        hint_texture="smlstxtr, wood furniture surface grain, seamless texture",
+        hint_texture="wood furniture surface grain, seamless texture",
     ),
     # Explicit "prop" — many manifests use category: prop; without this entry
     # get_target_faces falls back to 3000 and bake-master shreds the mesh.
@@ -204,7 +204,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game prop, front view, clean silhouette on white background",
         hint_3d="isolated game prop, no hands or characters, clean readable geometry",
         hint_rig="",
-        hint_texture="smlstxtr, game prop surface detail, seamless texture",
+        hint_texture="game prop surface detail, seamless texture",
     ),
     "vegetation": AssetCategory(
         name="vegetation",
@@ -213,7 +213,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game vegetation or plant, full view, leaf detail visible on white background",
         hint_3d="vegetation cluster, clean stem and leaf separation, no ground plane",
         hint_rig="",
-        hint_texture="smlstxtr, green leaf grass vegetation, seamless texture",
+        hint_texture="green leaf grass vegetation, seamless texture",
     ),
     "vehicle": AssetCategory(
         name="vehicle",
@@ -222,7 +222,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game vehicle, side view, mechanical detail on white background",
         hint_3d="isolated vehicle model, no driver or terrain, clean mechanical geometry",
         hint_rig="",
-        hint_texture="smlstxtr, metal vehicle paint surface, seamless texture",
+        hint_texture="metal vehicle paint surface, seamless texture",
     ),
     "armor": AssetCategory(
         name="armor",
@@ -231,7 +231,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game armor piece, front view, clean surfaces on white background",
         hint_3d="isolated armor piece, no body or character inside, clean plate geometry",
         hint_rig="laid flat or in T-pose arrangement, armor open and unfolded",
-        hint_texture="smlstxtr, metal armor plate leather, seamless texture",
+        hint_texture="metal armor plate leather, seamless texture",
     ),
     "food": AssetCategory(
         name="food",
@@ -240,7 +240,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game food item, top-down or front view, simple organic shape on white background",
         hint_3d="isolated food item, no plate or table, clean simple organic geometry",
         hint_rig="",
-        hint_texture="smlstxtr, food surface detail organic, seamless texture",
+        hint_texture="food surface detail organic, seamless texture",
     ),
     "tool": AssetCategory(
         name="tool",
@@ -249,7 +249,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game tool or implement, side view, clean handle and head on white background",
         hint_3d="single clean tool, no hands or characters, clean silhouette with handle and head",
         hint_rig="",
-        hint_texture="smlstxtr, wood metal tool surface, seamless texture",
+        hint_texture="wood metal tool surface, seamless texture",
     ),
     "terrain": AssetCategory(
         name="terrain",
@@ -258,7 +258,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="terrain tile or ground chunk, top-down view, surface detail on white background",
         hint_3d="ground chunk or terrain tile, flat bottom surface, no full landscape",
         hint_rig="",
-        hint_texture="smlstxtr, ground dirt grass terrain, seamless texture",
+        hint_texture="ground dirt grass terrain, seamless texture",
     ),
     "effects": AssetCategory(
         name="effects",
@@ -267,7 +267,7 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="visual effect element, abstract shape, simple form on white background",
         hint_3d="abstract effect mesh, very low complexity, single element",
         hint_rig="",
-        hint_texture="smlstxtr, glowing energy particle surface, seamless texture",
+        hint_texture="glowing energy particle surface, seamless texture",
     ),
 }
 

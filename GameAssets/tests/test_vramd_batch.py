@@ -23,6 +23,7 @@ from gameassets.vramd_batch import (
     run_texture2d_wave_or_fallback,
     shape_specs_from_items,
     text2d_specs_from_items,
+    texture2d_specs_from_items,
 )
 from gameassets.vramd_coord import FALLBACK_SUBPROCESS, UmsJobResult, UmsJobSpec
 
@@ -259,6 +260,52 @@ class TestText2dSpecsHwAuto:
         assert kwargs["height"] == 512
         assert kwargs["steps"] == 2
         assert kwargs["guidance"] == 1.0
+
+
+class TestTexture2dSpecsQuality:
+    def test_quality_overrides_sentinel_defaults(self, tmp_path: Path) -> None:
+        """Tier high (768/768/28/7.0) sobrepõe os defaults sentinel do signature."""
+        out = tmp_path / "t.png"
+        items = [{"id": "t", "prompt": "rock", "output": str(out)}]
+        mock_build = MagicMock(return_value={"output": str(out)})
+        mods = _make_pkg("texture2d.vramd_payload", build_generate_request=mock_build)
+        with _temp_modules(mods):
+            specs = texture2d_specs_from_items(items, manifest_dir=tmp_path, quality="high")
+        assert len(specs) == 1
+        kwargs = mock_build.call_args.kwargs
+        assert kwargs["width"] == 768
+        assert kwargs["height"] == 768
+        assert kwargs["steps"] == 28
+        assert kwargs["guidance"] == 7.0
+
+    def test_signature_defaults_match_medium_tier(self, tmp_path: Path) -> None:
+        """Sem quality: defaults 512/512/28/7.0 (= tier medium)."""
+        out = tmp_path / "t.png"
+        items = [{"id": "t", "prompt": "rock", "output": str(out)}]
+        mock_build = MagicMock(return_value={"output": str(out)})
+        mods = _make_pkg("texture2d.vramd_payload", build_generate_request=mock_build)
+        with _temp_modules(mods):
+            texture2d_specs_from_items(items, manifest_dir=tmp_path)
+        kwargs = mock_build.call_args.kwargs
+        assert kwargs["width"] == 512
+        assert kwargs["height"] == 512
+        assert kwargs["steps"] == 28
+        assert kwargs["guidance"] == 7.0
+
+    def test_explicit_params_beat_quality(self, tmp_path: Path) -> None:
+        """Params explícitos (≠ sentinel) não são sobrescritos pelo tier."""
+        out = tmp_path / "t.png"
+        items = [{"id": "t", "prompt": "rock", "output": str(out)}]
+        mock_build = MagicMock(return_value={"output": str(out)})
+        mods = _make_pkg("texture2d.vramd_payload", build_generate_request=mock_build)
+        with _temp_modules(mods):
+            texture2d_specs_from_items(items, manifest_dir=tmp_path, width=256, steps=10, guidance=5.0, quality="high")
+        kwargs = mock_build.call_args.kwargs
+        assert kwargs["width"] == 256
+        assert kwargs["steps"] == 10
+        assert kwargs["guidance"] == 5.0
+        # height ficou no sentinel 512 → tier aplica.
+        assert kwargs["height"] == 768
 
 
 class TestOptionalWaveOrFallback:

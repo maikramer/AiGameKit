@@ -1,4 +1,4 @@
-"""Testes para texture2d.tileability (seam-difference metric)."""
+"""Testes para texture2d.tileability (seam-continuity metric)."""
 
 from __future__ import annotations
 
@@ -52,15 +52,36 @@ class TestScoreTileableImages:
         assert report.edge_mse_vertical == pytest.approx(0.0, abs=1e-6)
         assert report.max_abs_edge_diff == 0
 
-    def test_wrapped_pattern_scores_near_one(self):
+    def test_wrapped_noise_scores_high(self):
+        # Ruído é contínuo na costura em termos estatísticos (seam ≈ adjacente)
+        # — a métrica de continuidade pontua alto; igualdade não é exigida.
         report = score_tileability(_make_wrapped_pattern(size=256))
-        assert report.score == pytest.approx(1.0, abs=1e-9)
-        assert report.edge_mse_horizontal == pytest.approx(0.0, abs=1e-9)
-        assert report.edge_mse_vertical == pytest.approx(0.0, abs=1e-9)
+        assert report.score > 0.9
 
-    def test_random_noise_scores_low(self):
+    def test_smooth_periodic_pattern_passes(self):
+        # Padrão periódico suave (período exato = W): costura contínua.
+        import math
+
+        size = 256
+        arr = numpy.zeros((size, size, 3), dtype=numpy.uint8)
+        for x in range(size):
+            v = int(127.5 + 127.5 * math.sin(2 * math.pi * x / size))
+            arr[:, x, :] = v
+        report = score_tileability(Image.fromarray(arr, "RGB"))
+        assert report.score >= 0.85  # PASS: costura ≈ gradiente interno
+
+    def test_hard_edge_column_scores_low(self):
+        # Interior plano com uma coluna brilhante na borda: costura >> adjacente.
+        size = 128
+        arr = numpy.zeros((size, size, 3), dtype=numpy.uint8)
+        arr[:, 0, :] = 255
+        report = score_tileability(Image.fromarray(arr, "RGB"))
+        assert report.score < 0.1
+
+    def test_random_noise_is_continuous_high(self):
+        # Ruído puro: o salto na costura é igual ao gradiente interno — tileable.
         report = score_tileability(_make_random_noise(size=256))
-        assert report.score < 0.5
+        assert report.score > 0.8
 
     def test_horizontal_gradient_is_not_tileable(self):
         # Gradiente horizontal: borda esq ~0, dir ~255 => costura forte.
@@ -124,8 +145,8 @@ class TestSummaryAndDict:
         assert "score=" in s
         assert "PASS" in s
 
-    def test_summary_shows_fail_for_noise(self):
-        report = score_tileability(_make_random_noise(size=64))
+    def test_summary_shows_fail_for_seamed(self):
+        report = score_tileability(_make_seamed(size=64))
         assert "FAIL" in report.summary()
 
     def test_to_dict_has_expected_keys(self):

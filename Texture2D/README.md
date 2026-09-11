@@ -2,23 +2,32 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-CLI for **seamless (tileable) 2D textures** using **Stable Diffusion v1.5 + circular padding**, running locally on GPU.
+CLI for **seamless (tileable) 2D textures** using **Stable Diffusion v1.5**, running locally on GPU.
 
-Tiling is achieved **by construction**: every `Conv2d` layer in the UNet and VAE is patched to `padding_mode="circular"`, so the receptive field wraps around the image borders and the output tiles seamlessly in both axes — no LoRA, no post-processing, no trigger word. Uses [`stable-diffusion-v1-5/stable-diffusion-v1-5`](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) to generate textures that repeat without visible seams — ideal for floors, rocks, walls, and game-dev materials.
+**Seamless 2.0** — tiling via three complementary layers:
+
+1. **`--seamless-mode late` (default)** — noise rolling (latents rolled by half each step) + circular conv padding only in the final ~20% of steps. Recipe from [pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion) (Apache 2.0): constant circular padding measurably hurts FID/CLIP; late+rolling keeps quality **and** tileability. `full` (circular from step 0, the classic behavior) and `off` (plain SD1.5) remain available.
+2. **Controlled VAE decode** — the pipeline always outputs latents and the tool decodes them itself: **integral decode** (no tiling) whenever the resolution allows. The diffusers `tiled_decode` slices without wrapping and breaks the circular seam at the pixel level; when tiling is unavoidable (1024² on tight VRAM), the latent is circular-padded first and the result cropped (wrap-preserving).
+3. **Hires via latent upscale + refine** — targets above 512² (the SD1.5 native resolution) are generated at native, then the latent is upscaled and refined with a short strength-controlled pass (classic hires-fix) instead of direct high-res generation (known to duplicate content). The `high`/`highest` tiers use this automatically.
+
+Plus quality extras: **VAE ft-mse** by default (`TEXTURE2D_VAE_ID=none` to disable), seam terms in the base negative prompt, a **tileability score** in every JSON sidecar, and optional **auto-heal** of the seam band when the score falls below 0.85.
 
 In the [AiGameKit](../README.md) monorepo, the package depends on [**aigamekit-shared**](../Shared/) (`aigamekit_shared`): quality presets, Rich CLI, GPU helpers, and shared conventions aligned with Text2D, Text3D, and GameAssets.
 
 ## Overview
 
-- **Local GPU inference** — Stable Diffusion v1.5 + circular padding, no cloud API needed; fits in ~2.5 GB VRAM (a 6 GiB GPU is plenty)
-- **Tiling by construction** — circular padding on all convolutions, no LoRA or post-processing
+- **Local GPU inference** — Stable Diffusion 1.5 + seamless 2.0, no cloud API needed; fits in ~2.5 GB VRAM (a 6 GiB GPU is plenty)
+- **Seamless modes** — `late` (noise rolling + late circular; best quality), `full` (classic circular), `off`
+- **Hires >512²** — native generation + latent upscale + refine (no direct above-native sampling)
+- **Wrap-preserving decode** — integral VAE decode by default; circular-padded tiling only when VRAM demands it
 - **Real CFG** — negative prompts work natively (`--negative-prompt`), no `true-cfg` 2x cost
 - **Automatic seamless prompting** — appends tileable/seamless instructions automatically
+- **Tileability score + auto-heal** — score in the JSON sidecar; optional cross-fade heal below 0.85
 - **13 material presets** — Wood, Stone, Grass, Sand, Dirt, Metal, Brick, Fabric, Leather, Concrete, Marble, Gravel, Tile Floor
 - **Quality tiers** — `fast`, `low`, `medium` (default), `high`, `highest` via `--quality`
 - **Batch generation** — multiple textures from a prompt file
 - **Multi-GPU** — `--gpu-ids 0,1` splits weights across GPUs via accelerate
-- **JSON metadata** — each texture has a `.json` sidecar with seed, final prompt, and parameters
+- **JSON metadata** — each texture has a `.json` sidecar with seed, final prompt, parameters, and tileability
 - **Hardware auto-detection** — `--hw-auto` detects device and multi-GPU layout (on by default)
 
 ## Installation
@@ -91,6 +100,11 @@ texture2d generate "dark marble floor" -n "blurry, watermark" -o marble.png
 | `--hw-auto/--no-hw-auto` | flag | `on` | Hardware auto-detection (device + multi-GPU). No offload/clamp (SD1.5 fits any CUDA GPU) |
 | `--group-offload/--no-group-offload` | flag | `on` | **Group offload + CUDA streams** when full-GPU wouldn't have headroom (shared/tight GPU; peak ≈ activation; VAE tiling + attention slicing as chunks). Kill-switch: `TEXTURE2D_GROUP_OFFLOAD=0` |
 | `--ground` | str | `auto` | Top-down ground mode: applies viewpoint/lighting/scale prompt modifiers |
+| `--seamless-mode` | str | `late` | `late` (roll + late circular, best quality) · `full` (circular from start) · `off` (plain SD1.5) |
+| `--refine-steps` | int | 12 | Hires refine steps (targets >512²); tier `high` uses 12, `highest` 16 |
+| `--vae-tiling/--no-vae-tiling` | flag | auto | VAE decode: auto = integral whenever it fits (preserves the seam); force wrap-preserving tiling with `--vae-tiling` |
+| `--seam-heal/--no-seam-heal` | flag | on | Cross-fade heal of the border band when the tileability score < 0.85 |
+| `--no-hires` | flag | off | Generate directly at the requested resolution (skip 512 + refine) |
 | `-v, --verbose` | flag | `false` | Verbose logging |
 
 > **Note:** When `--quality` is set, resolution and steps are auto-filled from the quality profile **only if** the user didn't explicitly pass `-W`, `-H`, `-s`, or `-g`. Explicit flags always win (soft resolution via `QualityEngine`).
@@ -174,13 +188,13 @@ Per-tool `texture2d server` remains only as a **deprecated** fallback. See [`Vra
 
 The `--quality` flag selects a preconfigured parameter profile. Profiles only fill defaults — explicitly provided flags (`-W`, `-H`, `-s`, `-g`) always take precedence.
 
-| Profile | Resolution | Steps | Guidance | Description |
-|---------|-----------|-------|----------|-------------|
-| `fast` | 512×512 | 16 | 7.0 | Quick preview, minimum viable quality |
-| `low` | 512×512 | 24 | 7.0 | Basic quality, faster generation |
-| `medium` | 512×512 | 28 | 7.0 | Standard quality (**default**) |
-| `high` | 768×768 | 32 | 7.0 | High quality, slower generation |
-| `highest` | 1024×1024 | 40 | 7.0 | Maximum quality, longest generation |
+| Profile | Resolution | Steps | Guidance | Refine | Description |
+|---------|-----------|-------|----------|--------|-------------|
+| `fast` | 512×512 | 16 | 7.0 | — | Quick preview, minimum viable quality |
+| `low` | 512×512 | 24 | 7.0 | — | Basic quality, faster generation |
+| `medium` | 512×512 | 28 | 7.0 | — | Standard quality (**default**) |
+| `high` | 768×768 | 28 | 7.0 | 12 | Hires: native 512 + latent upscale + refine |
+| `highest` | 1024×1024 | 32 | 7.0 | 16 | Hires: native 512 + latent upscale + refine |
 
 ### Material Presets
 
@@ -212,6 +226,7 @@ texture2d generate "scratched surface" --preset Metal --quality high -o metal.pn
 | Variable | Description |
 |----------|-------------|
 | `TEXTURE2D_MODEL_ID` | Override default SD model ID (`stable-diffusion-v1-5/stable-diffusion-v1-5`) |
+| `TEXTURE2D_VAE_ID` | Override VAE (default `stabilityai/sd-vae-ft-mse`); `none` keeps the checkpoint VAE |
 | `TEXTURE2D_HW_AUTO` | Set to `0` to disable hardware auto-detection |
 | `TEXTURE2D_BIN` | Override `texture2d` binary path (used by GameAssets) |
 
@@ -283,7 +298,7 @@ Texture2D/
 │   ├── client.py              # Model server client
 │   ├── cursor_skill/
 │   │   └── SKILL.md           # Cursor Agent Skill
-│   ├── generator.py           # SD1.5 + circular padding inference
+│   ├── generator.py           # SD1.5 + seamless 2.0 (modes, decode, hires refine, heal)
 │   ├── hardware.py            # Hardware auto-detection profile
 │   ├── image_processor.py     # Image saving + metadata
 │   ├── presets.py             # 13 material presets

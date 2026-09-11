@@ -76,7 +76,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Paint3D/` | Python | `paint3d` | 3D texturing (Hunyuan3D-Paint 2.1, bilateral smooth, bake_exp=6) |
 | `Part3D/` | Python | `part3d` | Semantic mesh part decomposition (Hunyuan3D-Part: P3-SAM + X-Part; SDNQ) |
 | `GameAssets/` | Python | `gameassets` | Batch asset generation |
-| `Texture2D/` | Python | `texture2d` | Seamless 2D textures (local SD1.5) |
+| `Texture2D/` | Python | `texture2d` | Seamless 2D textures (local SD1.5; seamless 2.0: late-circular + noise rolling, decode integral, hires 512+refine, score/auto-heal — [`docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md`](docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md)) |
 | `Skymap2D/` | Python | `skymap2d` | 360-degree skymaps (local FLUX.1-dev + LoRA) |
 | `Text2Sound/` | Python | `text2sound` | Text-to-audio (Stable Audio 3 Small: music/sfx; legado Open via `--model`) |
 | `Rigging3D/` | Python | `rigging3d` | Auto-rigging (SkinTokens, Python 3.13) |

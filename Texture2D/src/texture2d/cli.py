@@ -28,7 +28,14 @@ from aigamekit_shared.quality import VALID_QUALITIES
 
 from ._validate_cli import validate_tileable_cmd
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
-from .generator import DEFAULT_GUIDANCE, DEFAULT_RESOLUTION, DEFAULT_STEPS, TextureGenerator, default_model_id
+from .generator import (
+    DEFAULT_GUIDANCE,
+    DEFAULT_REFINE_STEPS,
+    DEFAULT_RESOLUTION,
+    DEFAULT_STEPS,
+    TextureGenerator,
+    default_model_id,
+)
 from .presets import TEXTURE_PRESETS, list_presets
 from .utils import format_bytes
 
@@ -165,6 +172,37 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     ),
 )
 @click.option(
+    "--seamless-mode",
+    type=click.Choice(["late", "full", "off"]),
+    default="late",
+    show_default=True,
+    help=(
+        "late: noise rolling + circular só nos últimos ~20% (melhor FID); "
+        "full: circular do início (clássico); off: SD1.5 puro."
+    ),
+)
+@click.option(
+    "--refine-steps",
+    default=DEFAULT_REFINE_STEPS,
+    show_default=True,
+    type=int,
+    help="Steps do refine hires (alvo >512²: gera à nativa + latent upscale + refine).",
+)
+@click.option(
+    "--vae-tiling/--no-vae-tiling",
+    "vae_tiling",
+    default=None,
+    help="Decode do VAE: auto (integral sempre que cabe — preserva a costura) ou força o tiling circular-aware.",
+)
+@click.option(
+    "--seam-heal/--no-seam-heal",
+    "seam_heal",
+    default=True,
+    show_default=True,
+    help="Auto-heal da costura (cross-fade da banda de borda) quando o score de tileability fica < 0.85.",
+)
+@click.option("--no-hires", is_flag=True, help="Gerar directamente à resolução pedida (sem 512 + refine).")
+@click.option(
     "--compile/--no-compile",
     "torch_compile",
     default=False,
@@ -207,6 +245,11 @@ def generate_cmd(
     hw_auto: bool,
     group_offload: bool,
     ground: str,
+    seamless_mode: str,
+    refine_steps: int,
+    vae_tiling: bool | None,
+    seam_heal: bool,
+    no_hires: bool,
     torch_compile: bool,
     torch_compile_mode: str,
     channels_last: bool,
@@ -214,7 +257,7 @@ def generate_cmd(
     no_vramd: bool,
     vramd_stream: bool,
 ) -> None:
-    """Gera uma textura seamless a partir do PROMPT (SD1.5 + circular padding)."""
+    """Gera uma textura seamless a partir do PROMPT (SD1.5 + seamless 2.0)."""
     from aigamekit_shared.gpu import warn_if_vram_occupied
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
@@ -230,6 +273,7 @@ def generate_cmd(
     _user_set_height = ctx.get_parameter_source("height") not in (_src.DEFAULT,)
     _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
     _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
+    _user_set_refine = ctx.get_parameter_source("refine_steps") not in (_src.DEFAULT,)
 
     from aigamekit_shared.quality import QualityEngine
 
@@ -243,6 +287,9 @@ def generate_cmd(
         steps = _qresolved.params["steps"]
     if not _user_set_guidance and "guidance" in _qresolved.params:
         guidance_scale = _qresolved.params["guidance"]
+    # refine_steps do tier (hires) — flag explícita ganha.
+    if not _user_set_refine and "refine_steps" in _qresolved.params:
+        refine_steps = int(_qresolved.params["refine_steps"])
 
     if not cpu:
         warn_if_vram_occupied()
@@ -264,9 +311,20 @@ def generate_cmd(
     table = Table(show_header=False, box=box.SIMPLE)
     table.add_row("[bold]Prompt[/bold]", f"[cyan]{prompt}[/cyan]")
     table.add_row("[bold]Backend[/bold]", "Stable Diffusion v1.5 (circular padding)")
-    table.add_row("[bold]Resolução[/bold]", f"{width}x{height}")
-    table.add_row("[bold]Passos[/bold]", str(steps))
+    table.add_row(
+        "[bold]Resolução[/bold]",
+        f"{width}x{height}"
+        + (" [dim](hires: 512 + refine)[/dim]" if max(width, height) > 512 and not no_hires else ""),
+    )
+    table.add_row(
+        "[bold]Passos[/bold]",
+        str(steps) + (f" + refine {refine_steps}" if max(width, height) > 512 and not no_hires else ""),
+    )
     table.add_row("[bold]Guidance[/bold]", str(guidance_scale))
+    table.add_row(
+        "[bold]Seamless[/bold]",
+        {"late": "late (roll + circular tardio)", "full": "full (circular)", "off": "off (SD puro)"}[seamless_mode],
+    )
     if preset and preset != "None":
         table.add_row("[bold]Preset[/bold]", preset)
     table.add_row("[bold]Modelo[/bold]", resolved_model)
@@ -294,6 +352,11 @@ def generate_cmd(
                 "ground": ground,
                 "model_id": resolved_model,
                 "allow_group_offload": group_offload,
+                "seamless_mode": seamless_mode,
+                "refine_steps": refine_steps,
+                **({"vae_tiling": vae_tiling} if vae_tiling is not None else {}),
+                **({"seam_heal": False} if not seam_heal else {}),
+                **({"hires": False} if no_hires else {}),
             },
             t_start=t_start,
             noun="Textura",
@@ -397,6 +460,11 @@ def generate_cmd(
                 height=height,
                 preset=preset,
                 ground=ground,
+                seamless_mode=seamless_mode,
+                refine_steps=refine_steps,
+                vae_tiling=vae_tiling,
+                seam_heal=seam_heal,
+                hires=not no_hires,
             )
             progress.update(task, description="[green]Concluído")
 
@@ -418,6 +486,8 @@ def generate_cmd(
         console.print(Rule("[bold green]Resultado", style="green"))
         console.print(f"[bold green]\u2713[/bold green] Textura: [cyan]{saved.resolve()}[/cyan] [dim]({sz})[/dim]")
         console.print(f"[dim]Seed: {metadata.get('seed', '?')}[/dim]")
+        if isinstance(metadata.get("tileability"), dict):
+            console.print(f"[dim]Tileability: {metadata['tileability'].get('score', '?'):.4f}[/dim]")
         console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
 
     except ImportError as e:

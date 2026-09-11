@@ -279,3 +279,46 @@ class TestResolveText2DIconCategory:
         assert r.params["steps"] == 8
         assert r.params["width"] == 512  # resto vem da categoria
         assert r.source == "explicit"
+
+
+class TestResolveTexture2D:
+    """Texture2D — tiers high/highest usam hires (512 nativo + upscale) com refine_steps."""
+
+    @pytest.mark.parametrize(
+        "quality,width,height,steps,guidance",
+        [
+            ("fast", 512, 512, 16, 7.0),
+            ("low", 512, 512, 24, 7.0),
+            ("medium", 512, 512, 28, 7.0),
+            ("high", 768, 768, 28, 7.0),
+            ("highest", 1024, 1024, 32, 7.0),
+        ],
+    )
+    def test_resolve_texture2d_tiers(
+        self, engine: QualityEngine, quality: str, width: int, height: int, steps: int, guidance: float
+    ) -> None:
+        """Sem categoria, cada tier mantém os valores do profile."""
+        r = engine.resolve("texture2d", quality=quality)
+        assert r.params["width"] == width
+        assert r.params["height"] == height
+        assert r.params["steps"] == steps
+        assert r.params["guidance"] == guidance
+        assert r.source == "quality_profile"
+
+    @pytest.mark.parametrize(
+        "quality,refine_steps",
+        [
+            ("high", 12),
+            ("highest", 16),
+        ],
+    )
+    def test_refine_steps_present_on_hires_tiers(self, engine: QualityEngine, quality: str, refine_steps: int) -> None:
+        """high/highest expõem refine_steps — a fase de detalhe vive no refine (hires)."""
+        r = engine.resolve("texture2d", quality=quality)
+        assert r.params["refine_steps"] == refine_steps
+
+    @pytest.mark.parametrize("quality", ["fast", "low", "medium"])
+    def test_refine_steps_absent_below_high(self, engine: QualityEngine, quality: str) -> None:
+        """Tiers sem hires só têm as chaves definidas no profile — sem refine_steps."""
+        r = engine.resolve("texture2d", quality=quality)
+        assert "refine_steps" not in r.params

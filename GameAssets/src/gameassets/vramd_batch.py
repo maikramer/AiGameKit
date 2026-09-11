@@ -670,18 +670,40 @@ def texture2d_specs_from_items(
     manifest_dir: Path,
     width: int = 512,
     height: int = 512,
-    steps: int = 20,
-    guidance: float = 7.5,
+    steps: int = 28,
+    guidance: float = 7.0,
+    quality: str | None = None,
     negative_prompt: str | None = None,
     preset: str | None = None,
     model_id: str | None = None,
     gpu_ids: list[int] | None = None,
 ) -> list[UmsJobSpec]:
-    """Converte items texture2d → ``UmsJobSpec``."""
+    """Converte items texture2d → ``UmsJobSpec``.
+
+    ``quality`` resolve no QualityEngine antes dos defaults (tier ``medium``
+    = steps 28 / guidance 7.0, já os defaults do signature).
+    """
     try:
         from texture2d.vramd_payload import build_generate_request
     except ImportError:
         return []
+
+    w, h, st, g = width, height, steps, guidance
+    if quality:
+        try:
+            from aigamekit_shared.quality import QualityEngine
+
+            qp = QualityEngine().resolve("texture2d", quality=quality).params
+            if width == 512 and "width" in qp:
+                w = int(qp["width"])
+            if height == 512 and "height" in qp:
+                h = int(qp["height"])
+            if steps == 28 and "steps" in qp:
+                st = int(qp["steps"])
+            if guidance == 7.0 and "guidance" in qp:
+                g = float(qp["guidance"])
+        except Exception:
+            pass
 
     specs: list[UmsJobSpec] = []
     for item in items:
@@ -690,10 +712,10 @@ def texture2d_specs_from_items(
         payload = build_generate_request(
             prompt=str(item["prompt"]),
             output=str(out),
-            width=int(item.get("width", width)),
-            height=int(item.get("height", height)),
-            steps=int(item.get("steps", steps)),
-            guidance=float(item.get("guidance", item.get("guidance_scale", guidance))),
+            width=int(item.get("width", w)),
+            height=int(item.get("height", h)),
+            steps=int(item.get("steps", st)),
+            guidance=float(item.get("guidance", item.get("guidance_scale", g))),
             seed=item.get("seed"),
             negative_prompt=item.get("negative_prompt", negative_prompt),
             preset=item.get("preset", preset),
@@ -882,8 +904,9 @@ def run_texture2d_wave_or_fallback(
     gpu_ids: list[int] | None = None,
     width: int = 512,
     height: int = 512,
-    steps: int = 20,
-    guidance: float = 7.5,
+    steps: int = 28,
+    guidance: float = 7.0,
+    quality: str | None = None,
     negative_prompt: str | None = None,
     preset: str | None = None,
     model_id: str | None = None,
@@ -901,6 +924,7 @@ def run_texture2d_wave_or_fallback(
         height=height,
         steps=steps,
         guidance=guidance,
+        quality=quality,
         negative_prompt=negative_prompt,
         preset=preset,
         model_id=model_id,

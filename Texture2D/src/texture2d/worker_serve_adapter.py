@@ -56,7 +56,7 @@ class Adapter(WorkerAdapter):
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
         import time
 
-        from texture2d.generator import DEFAULT_GUIDANCE, DEFAULT_RESOLUTION, DEFAULT_STEPS
+        from texture2d.generator import DEFAULT_GUIDANCE, DEFAULT_REFINE_STEPS, DEFAULT_RESOLUTION, DEFAULT_STEPS
 
         error, steps, should_abort, on_step = self.begin_generate(request, default_steps=DEFAULT_STEPS)
         if error:
@@ -76,6 +76,11 @@ class Adapter(WorkerAdapter):
                 height=int(request.get("height", DEFAULT_RESOLUTION)),
                 preset=request.get("preset"),
                 ground=request.get("ground", "auto"),
+                seamless_mode=request.get("seamless_mode", "late"),
+                refine_steps=int(request.get("refine_steps", DEFAULT_REFINE_STEPS)),
+                vae_tiling=request.get("vae_tiling"),
+                seam_heal=bool(request.get("seam_heal", True)),
+                hires=bool(request.get("hires", True)),
                 should_abort=should_abort,
                 on_step=on_step,
             )
