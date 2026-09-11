@@ -118,8 +118,14 @@ backends:
       mesh_path: "test-mesh.glb"
       image_path: "test-image.png"
       output: "/tmp/vramd-calibrate-paint3d.glb"
+    # Calibrar o path de produção das GPUs pequenas: SDNQ uint8 (com codebook
+    # Lloyd-Max desde a 0.2.6) + group offload. O load_kwargs grava
+    # ``allow_group_offload`` no descriptor — o admit 0.3.7+ só usa a medição
+    # para requests do mesmo modo.
     calibrate_load_kwargs:
-      sdnq_preset: sdnq-fp8
+      sdnq_preset: sdnq-uint8
+      memory_efficient: true
+      allow_group_offload: true
 
   - name: part3d
     adapter: aigamekit_shared.worker_serve_adapter_base

@@ -473,16 +473,19 @@ class TestSdnqLayersUnderGroupOffload:
         pytest.importorskip("sdnq", reason="sdnq indisponível")
         from aigamekit_shared.sdnq import quantize_model
 
+        # Layers ≥ minimum_allowed_numel (16384, SDNQ 0.2.2+) — menores já não
+        # quantizam. 256→512→256: 128k pesos/layer, input coerente.
         torch.manual_seed(0)
-        model = nn.Sequential(nn.Linear(64, 128), nn.GELU(), nn.Linear(128, 64))
-        x = torch.randn(2, 64)
+        model = nn.Sequential(nn.Linear(256, 512), nn.GELU(), nn.Linear(512, 256))
+        x = torch.randn(2, 256)
 
         quantized = quantize_model(
             model, preset="sdnq-uint8", dequantize_fp32=False, quantization_device="cpu", return_device="cpu"
         )
         lin = quantized[0]
         assert type(lin).__name__ == "SDNQLinear"
-        # scale/zero_point registados como parâmetros (os hooks movem-nos).
+        # scale/zero_point registados como parâmetros (os hooks movem-nos) — e o
+        # codebook Lloyd-Max (preset 0.2.6) também viaja como estado da layer.
         param_names = [n for n, _ in lin.named_parameters()]
         assert any("scale" in n or "zero_point" in n for n in param_names)
 
@@ -496,3 +499,42 @@ class TestSdnqLayersUnderGroupOffload:
         )
         y_hooks = quantized(x)
         assert torch.allclose(y_ref, y_hooks, atol=1e-4)
+
+
+class TestPaintGoGateFreeSpecs:
+    """Gate GO único (0.2.6 upgrade): decide pela VRAM LIVRE, não pelo total —
+    numa GPU ocupada o GO engaja como o runtime precisa (lição tools 2D)."""
+
+    def test_gate_cfg_none_when_fp16_fits_free_vram(self, monkeypatch) -> None:
+        import paint3d.painter as painter
+
+        # 24 GB com 20 livres: fp16 (6+2=8 GiB) cabe folgado → sem GO.
+        monkeypatch.setattr(
+            "aigamekit_shared.hardware.cuda_gpu_free_specs",
+            lambda: [(0, 20 * 1024**3, 24 * 1024**3)],
+        )
+        assert painter._paint_go_gate_cfg() is None
+        assert painter._group_offload_will_engage() is False
+
+    def test_gate_cfg_engages_when_free_vram_tight(self, monkeypatch) -> None:
+        import paint3d.painter as painter
+
+        # 24 GB TOTAL mas só 6 livres (GPU ocupada): min(21.6, 5.7)=5.7 < 8 → GO.
+        # O gate antigo (specs totais) dizia "cabe" e não engajava.
+        monkeypatch.setattr(
+            "aigamekit_shared.hardware.cuda_gpu_free_specs",
+            lambda: [(0, 6 * 1024**3, 24 * 1024**3)],
+        )
+        assert painter._paint_go_gate_cfg() is not None
+        assert painter._group_offload_will_engage() is True
+
+    def test_alloc_conf_delegates_to_shared(self, monkeypatch) -> None:
+        import paint3d.painter as painter
+        from aigamekit_shared.group_offload import ALLOC_CONF_GROUP_OFFLOAD
+
+        monkeypatch.setenv("PAINT3D_GROUP_OFFLOAD", "1")
+        monkeypatch.setattr(painter, "_group_offload_will_engage", lambda: True)
+        assert painter.cuda_alloc_conf_for(True) == ALLOC_CONF_GROUP_OFFLOAD
+        assert "max_split_size_mb" not in painter.cuda_alloc_conf_for(True)
+        monkeypatch.setattr(painter, "_group_offload_will_engage", lambda: False)
+        assert "max_split_size_mb" in painter.cuda_alloc_conf_for(True)

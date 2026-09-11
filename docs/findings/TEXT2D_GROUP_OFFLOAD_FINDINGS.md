@@ -167,3 +167,53 @@ Adoção monorepo: `vramd>=0.3.7` (pin `aigamekit-vramd` + venv canónico).
   `TestFineBitPresets` (sdnq), record_stream, default peak int4.
 - Text2D: perfis 6/8/12/16 GB + int3/int2 + kill-switch + alloc conf + flags
   CLI + map load `group_offload` + quantização real int3/int2 (Hadamard, CPU).
+
+
+## SDNQ 0.2.1 → 0.2.6 + upgrade Paint3D (2026-09-11, parte 3)
+
+**Lib** ([Disty0/sdnq](https://github.com/Disty0/sdnq/releases) 0.2.2→0.2.6):
+fused Triton MM default (+30% MM), `minimum_allowed_numel=16384` (layers
+pequenas já não quantizam — testes com modelos mini têm de usar ≥16k pesos),
+fix hadamard non-pow2, fix SD1.5 atten, **Lloyd-Max `use_codebook=True`**
+(só dtypes unsigned; `codebook_steps`), Hadamard N4 (grupo 256).
+
+**Bench (Sequential 512→512, CPU, erro relativo):**
+
+| Ponto | Antes | Agora | Ganho |
+|---|---|---|---|
+| fino 3-bit | int3 svd+had32: 0.297 | **uint3 had256+codebook (sem svd): 0.143** | −52% |
+| fino 2-bit | int2 svd+had32: 0.884 (inutilizável) | **uint2 had256+codebook: 0.312** | −65% |
+| uint4 | svd+had32: 0.088 | +had256+codebook: 0.061 | −31% |
+| uint8 (default) | 0.0058 | +codebook: 0.0038 | −34% |
+
+O codebook Lloyd-Max exige unsigned — os degraus finos `sdnq-int3`/`sdnq-int2`
+passaram a **uint3/uint2 + Hadamard N4 + codebook, sem SVD** (o codebook captura
+o residual melhor; chaves mantidas por compat com ladder/vramd). `sdnq-uint8`
+(default do pipeline) e `sdnq-uint4` ganharam codebook; **int4/int8/fp8 ficaram
+intocados** (produção validada; uint4+codebook é o candidato documentado a
+próximo degrau default, −45% de erro vs int4). O codebook também **acelera** a
+quantização (micro: 3.3s→0.9s uint8) — não há trade-off de load. Testes que
+usavam modelos mini partiram no `minimum_allowed_numel` (layers <16k pesos não
+quantizam) — corrigidos para ≥256×256.
+
+**Compatibilidade codebook × group offload:** provada por
+`TestSdnqLayersUnderGroupOffload` (output allclose sob hooks leaf-level) — o
+estado do codebook viaja na layer e os grupos movem-no junto.
+
+**Paint3D (upgrade):** gate GO único `_paint_go_gate_cfg()` com **specs de VRAM
+livre** (o gate antigo via o total — numa GPU ocupada não engajava; lição das
+tools 2D), alloc conf delegado ao Shared (`aigamekit_shared.group_offload`,
+max_split 64→128 unificado), docstring SDNQ×GO documenta o codebook, e o
+`calibrate_load_kwargs` do backends.yaml passou a medir o path de produção
+(uint8+GO em vez de fp8).
+
+**vramd 0.3.8/0.3.9:** 0.3.8 — admit conhece os fatores uint4/int3/int2/uint3/
+uint2 (antes caíam em 1.0 = fp16 e recusavam fine-bit jobs). 0.3.9 —
+`ensure_loaded` honra `vram.peak_mib` **medido** (mesmo quant+modo) em vez de
+somar safety por cima: text2d GO 6g pedia 5922 MiB (>5815 máx livres) e caía
+sempre no fallback in-process; com o medido 5568 o job corre no worker — E2E
+30.4 s totais (vs 152.8 s na dança admit/fallback).
+
+**E2E final (4050 6 GB, sdnq 0.2.6 + vramd 0.3.9):** `✓ via vramd`,
+`peak=5568 MiB`, worker carregado em 19.8 s, GO+streams+int4, 1024² em 30.4 s
+totais.

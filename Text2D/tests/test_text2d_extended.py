@@ -216,13 +216,15 @@ class TestFineBitQuantizationReal:
 
         torch.manual_seed(7)
         for preset in ("sdnq-int3", "sdnq-int2"):
-            lin = torch.nn.Linear(64, 64, dtype=torch.float32)
-            x = torch.randn(2, 64, dtype=torch.float32)
+            lin = torch.nn.Linear(256, 256, dtype=torch.float32)
+            x = torch.randn(2, 256, dtype=torch.float32)
             ref = lin(x)
             q = quantize_model(lin, preset, quantization_device="cpu", return_device="cpu")
             out = q(x)
             # Bits finos degradam — mas o output mantém a escala/energia do
-            # original (o Hadamard+SVD evita colapso numérico).
+            # original (uint+Hadamard N4+Lloyd-Max evita colapso numérico).
+            # Nota: 256×256 > minimum_allowed_numel (16384) — layers menores
+            # já não quantizam (SDNQ 0.2.2+).
             assert out.shape == ref.shape
             assert torch.isfinite(out).all()
             rel = (out - ref).norm() / ref.norm()

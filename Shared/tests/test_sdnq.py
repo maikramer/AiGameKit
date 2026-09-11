@@ -23,7 +23,7 @@ class TestPresets:
     def test_all_presets_have_required_fields(self):
         for name, preset in PRESETS.items():
             assert preset.name == name
-            assert preset.weights_dtype in ("uint8", "int8", "int4", "uint4", "fp8", "int3", "int2")
+            assert preset.weights_dtype in ("uint8", "int8", "int4", "uint4", "fp8", "int3", "int2", "uint3", "uint2")
             assert preset.group_size >= 0
             assert isinstance(preset.use_svd, bool)
             assert preset.dequantize_fp32 is True
@@ -350,32 +350,46 @@ class TestAutoQuantizedMatmulDefault:
 
 
 class TestFineBitPresets:
-    """Degraus int3/int2: exclusivos de offload, com Hadamard+SVD."""
+    """Degraus 3/2 bits: exclusivos de offload; SDNQ 0.2.6 — unsigned + Hadamard
+    N4 + Lloyd-Max codebook (a chave ``sdnq-intN`` mantém-se por compat)."""
 
     def test_int3_preset_fields(self):
         p = PRESETS["sdnq-int3"]
-        assert p.weights_dtype == "int3"
+        assert p.weights_dtype == "uint3"  # codebook exige unsigned (0.2.6)
         assert p.use_hadamard is True
-        assert p.use_svd is True
+        assert p.hadamard_group_size == 256  # N4/ConvRot
+        assert p.use_codebook is True
+        assert p.use_svd is False  # Lloyd-Max captura o residual melhor (medido)
         assert p.group_size == 32
 
     def test_int2_preset_fields(self):
         p = PRESETS["sdnq-int2"]
-        assert p.weights_dtype == "int2"
+        assert p.weights_dtype == "uint2"
         assert p.use_hadamard is True
+        assert p.use_codebook is True
 
-    def test_coarse_presets_have_no_hadamard(self):
-        for name in ("sdnq-uint8", "sdnq-int8", "sdnq-int4", "sdnq-uint4", "sdnq-fp8"):
+    def test_uint8_has_codebook(self):
+        """Default do pipeline: Lloyd-Max ON (-34% erro, quantização mais rápida)."""
+        assert PRESETS["sdnq-uint8"].use_codebook is True
+        assert PRESETS["sdnq-uint8"].use_hadamard is False
+
+    def test_uint4_has_codebook_and_hadamard_n4(self):
+        p = PRESETS["sdnq-uint4"]
+        assert p.use_codebook is True
+        assert p.hadamard_group_size == 256
+        assert p.use_svd is True  # formato Disty0
+
+    def test_coarse_signed_presets_untouched(self):
+        """int4/int8/fp8 = produção validada: sem hadamard/codebook."""
+        for name in ("sdnq-int8", "sdnq-int4", "sdnq-fp8"):
             assert PRESETS[name].use_hadamard is False
+            assert PRESETS[name].use_codebook is False
 
     def test_create_config_passes_hadamard(self):
-        """create_config inclui use_hadamard/hadamard_group_size nos kwargs."""
-        import inspect
-
+        """create_config inclui use_hadamard/use_codebook/hadamard_group_size."""
         from aigamekit_shared.sdnq import create_config
 
         cfg = create_config("sdnq-int3", quantization_device="cpu", return_device="cpu")
         assert cfg.use_hadamard is True
-        assert cfg.hadamard_group_size == 32
-        # Sanity: SDNQConfig aceita os kwargs em CPU (lib instalada).
-        assert inspect.isclass(type(cfg))
+        assert cfg.hadamard_group_size == 256
+        assert cfg.use_codebook is True

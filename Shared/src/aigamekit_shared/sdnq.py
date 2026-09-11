@@ -50,8 +50,11 @@ class SDNQPreset:
     """Tested SDNQ quantization preset with all parameters for ``SDNQConfig``.
 
     These presets encode the best-tested configurations from benchmark sweeps
-    across Text2D (FLUX Klein), Paint3D
-    (Hunyuan3D-Paint UNet).
+    across Text2D (FLUX Klein), Paint3D (Hunyuan3D-Paint UNet).
+
+    SDNQ >=0.2.6 features: ``use_codebook`` (Lloyd-Max quantization — unsigned
+    dtypes only; ~-34% error no uint8, ~-52% no 3-bit vs signed int) e
+    ``hadamard_group_size`` 256 (N4/Hadamard ConvRot, melhor que N2-32).
     """
 
     name: str
@@ -63,6 +66,8 @@ class SDNQPreset:
     dequantize_fp32: bool
     description: str
     use_hadamard: bool = False
+    hadamard_group_size: int | None = None  # None = group_size (compat N2)
+    use_codebook: bool = False
 
 
 PRESETS: dict[str, SDNQPreset] = {
@@ -74,7 +79,11 @@ PRESETS: dict[str, SDNQPreset] = {
         svd_rank=32,
         svd_steps=8,
         dequantize_fp32=True,
-        description="SDNQ UINT8 — best tested, default for all models",
+        use_codebook=True,
+        description=(
+            "SDNQ UINT8 + Lloyd-Max codebook — default (best tested); 0.2.6: "
+            "-34% de erro e quantização mais rápida vs sem codebook"
+        ),
     ),
     "sdnq-int8": SDNQPreset(
         name="sdnq-int8",
@@ -104,7 +113,13 @@ PRESETS: dict[str, SDNQPreset] = {
         svd_rank=32,
         svd_steps=8,
         dequantize_fp32=True,
-        description="SDNQ UINT4 — matches Disty0 pre-quantized checkpoints (uint4-svd-r32)",
+        use_hadamard=True,
+        hadamard_group_size=256,
+        use_codebook=True,
+        description=(
+            "SDNQ UINT4 + SVD + Hadamard N4 + Lloyd-Max (formato Disty0; "
+            "0.2.6: -31% de erro vs svd only)"
+        ),
     ),
     "sdnq-fp8": SDNQPreset(
         name="sdnq-fp8",
@@ -117,29 +132,36 @@ PRESETS: dict[str, SDNQPreset] = {
         description="SDNQ FP8 — RTX 40 series (Ada Lovelace+)",
     ),
     # Degraus abaixo de 4 bits: exclusivos dos modos de offload do planner
-    # (lowvram) — quando nem int4 + group offload dá folga. Hadamard + SVD
-    # compensam parcialmente a perda de bits (SDNQ >=0.2.0).
+    # (lowvram) — quando nem int4 + group offload dá folga. SDNQ 0.2.6: dtype
+    # unsigned + Hadamard N4 + Lloyd-Max codebook (signed int não suporta
+    # codebook) — medido: 3-bit -52% / 2-bit -65% de erro vs signed int, sem
+    # SVD (o codebook captura o residual melhor). A chave ``sdnq-intN`` mantém-
+    # se por compat com o ladder do planner/vramd (mesmos bits, mesma poupança).
     "sdnq-int3": SDNQPreset(
         name="sdnq-int3",
-        weights_dtype="int3",
+        weights_dtype="uint3",
         group_size=32,
-        use_svd=True,
+        use_svd=False,
         svd_rank=32,
         svd_steps=8,
         dequantize_fp32=True,
         use_hadamard=True,
-        description="SDNQ INT3 — degrau de offload abaixo do int4 (Hadamard+SVD)",
+        hadamard_group_size=256,
+        use_codebook=True,
+        description="SDNQ 3-bit — uint3 + Hadamard N4 + Lloyd-Max (degrau de offload)",
     ),
     "sdnq-int2": SDNQPreset(
         name="sdnq-int2",
-        weights_dtype="int2",
+        weights_dtype="uint2",
         group_size=32,
-        use_svd=True,
+        use_svd=False,
         svd_rank=32,
         svd_steps=8,
         dequantize_fp32=True,
         use_hadamard=True,
-        description="SDNQ INT2 — último recurso de VRAM (qualidade degradada)",
+        hadamard_group_size=256,
+        use_codebook=True,
+        description="SDNQ 2-bit — uint2 + Hadamard N4 + Lloyd-Max (último recurso)",
     ),
 }
 
@@ -333,15 +355,16 @@ def create_config(
         "svd_rank": p.svd_rank,
         "svd_steps": p.svd_steps,
         "use_hadamard": p.use_hadamard,
+        "use_codebook": p.use_codebook,
         "use_quantized_matmul": matmul,
         "quantization_device": device,
         "return_device": ret_device,
         "dequantize_fp32": p.dequantize_fp32,
     }
     if p.use_hadamard:
-        # Rotações de Hadamard por grupo — melhora precisão em bits baixos
-        # (int3/int2); alinhado com o group_size do preset.
-        kwargs["hadamard_group_size"] = p.group_size
+        # Hadamard N4 (ConvRot) quando o grupo é potência de 4 (ex.: 256) —
+        # melhor qualidade que N2; None = group_size do preset (compat).
+        kwargs["hadamard_group_size"] = p.hadamard_group_size or p.group_size
     if modules_to_not_convert is not None:
         kwargs["modules_to_not_convert"] = modules_to_not_convert
     kwargs.update(overrides)
