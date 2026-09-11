@@ -88,9 +88,19 @@
        Boca de mina na encosta: moldura de pilares, veio a brilhar e
        carga abandonada. Fonte do "Vale do Cristal".
        ============================================================ -->
-    <Entity name="peaks-crystal-mine" translation="-60 0 -216" transform="rotation: 0 215 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/crystal_mine_entrance_collision.glb; mesh-anchor: base">
+    <!-- ⚠️ `crystal_mine_entrance_collision.glb` NÃO serve de colisor: é um
+         casco decimado (159 vértices) que preenche a bbox inteira
+         (x ±2.0, y 0→3.46, z ±1.58) — tapava o vão da boca e fechava a
+         `<Cave name="mina-do-veio">` (world/fantasy/grutas.xml §1) atrás
+         dela. Mesmo caso do arco do deserto (landmarks/desert.xml §1).
+         Colisão = duas caixas-pilar a ±1.6 m no eixo LOCAL do modelo, viradas
+         com ele (yaw 215°): eixo x local → mundo (−0.819, +0.574), logo
+         (±1.6) → (∓1.31, ±0.918). O vão livre fica com 2.3 m. -->
+    <Entity name="peaks-crystal-mine" translation="-60 0 -216" transform="rotation: 0 215 0">
       <GltfScene url="/assets/meshes/terrain/crystal_mine_entrance_lod0.glb" />
     </Entity>
+    <Entity name="peaks-crystal-mine-jamb-a" translation="-61.31 0 -215.08" transform="rotation: 0 215 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.9 3.5 3.2; pos-offset-y: 1.75" />
+    <Entity name="peaks-crystal-mine-jamb-b" translation="-58.69 0 -216.92" transform="rotation: 0 215 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.9 3.5 3.2; pos-offset-y: 1.75" />
     <!-- Afloramentos que ancoram a boca de mina à encosta. -->
     <Entity translation="-68 0 -230" transform="rotation: 0 290 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_cliff_20_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/form_cliff_20_lod0.glb" />

@@ -66,6 +66,47 @@
        a diagonal antiga cortava o creste a ~1.5 m) atravessando a sela
        entre picos-gargela-oeste e picos-horizonte. -->
     <Road path="-12 -286 -96 -308 -160 -420 -380 -600 -520 -690 -590 -720" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.5" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/mountain_stone/albedo.ktx2" normal-map-url="/assets/textures/mountain_stone/normal.ktx2" />
+    <!-- ============================================================
+       ANEL FANTASMA — ramos para as features de fantasia
+       (world/fantasy/*.xml). Todos drapejados (`flatten="0"`), como os
+       outros trilhos: são caminhos de terra sobre o relevo cru, não
+       artérias. Perfis de grau medidos com tools/height_probe.py — os
+       pernos mais duros são 54 % (28°) na subida ao Bosque e 61 % (31°) na
+       subida à Cidadela, ambos dentro do `HERO_MAX_SLOPE_DEG` = 55°.
+       ============================================================ -->
+    <!-- Ermo → boca BAIXA da Porta do Ermo (o túnel voxel que sobe à mesa
+       do Alto de Vael). Arranca no fim da artéria do deserto (290,-4). -->
+    <Road path="290 -4 350 -20 400 -30 440 -42 470 -52 500 -58" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/desert_sand/albedo.ktx2" normal-map-url="/assets/textures/desert_sand/normal.ktx2" />
+    <!-- Mesa do Alto: da boca ALTA do túnel (720,-56) até ao coro de cristal,
+       pela calçada dos monólitos. Sobe pela borda oeste e vai ao ponto mais
+       alto da mesa (195 m em (880,780)); declive ≤ 9° em todo o traçado. O
+       traçado foi desenhado a contornar a caixa preta dos interiores, que
+       então vivia em (859,281) — os interiores mudaram-se para uma bolsa fora
+       da área do mapa (world/interiors.xml), mas a avenida fica como está:
+       está verificada em jogo e lê-se como a estrada da borda da mesa. -->
+    <Road path="720 -56 712 40 708 140 710 240 714 330 719 402 745 470 780 560 815 650 845 720 868 762 880 780" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.6" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/mountain_stone/albedo.ktx2" normal-map-url="/assets/textures/mountain_stone/normal.ktx2" />
+    <!-- Coro → Atalaia do Vael (118 m a oeste; o ponto mais alto da mesa). -->
+    <Road path="880 780 850 772 810 752 770 730" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.5" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/mountain_stone/albedo.ktx2" normal-map-url="/assets/textures/mountain_stone/normal.ktx2" />
+    <!-- Ramo do miradouro de borda (700,210): sai da calçada a (708,140) e
+       sobe 20 m. A ponta antiga (838,300) nascia dentro da casca dos
+       interiores, que já não está no planalto. -->
+    <Road path="708 140 704 180 706 213" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.5" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/mountain_stone/albedo.ktx2" normal-map-url="/assets/textures/mountain_stone/normal.ktx2" />
+    <!-- Vale → Bosque Encantado: a subida da muralha norte pelo corredor de
+       x≈-60 (o mais suave dos três candidatos medidos, 54/24/41/45 %), o
+       planalto intermédio e a descida à bacia escondida. -->
+    <Road path="-8 286 -30 304 -52 330 -66 380 -76 430 -72 480 -56 530 -30 580 0 620 40 680 80 760 105 850 125 960 145 1070" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.6" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/forest_floor/albedo.ktx2" normal-map-url="/assets/textures/forest_floor/normal.ktx2" />
+    <!-- A descida ao fundo da bacia: o chão é húmido e a textura muda com
+       ele. Termina na margem OESTE da Lagoa dos Lumes — o traçado antigo
+       acabava em (200,1400), que é o CENTRO da lagoa: o audit do `analyze`
+       apanhou-o (o ribbon entrava 27 m na lâmina, contorno orgânico ±45 %).
+       A ponta nova fica a 41 m do centro, fora do pior caso do contorno
+       (22 × 1.45 = 31.9 m) e com a meia-largura contada. -->
+    <Road path="145 1070 165 1160 182 1250 180 1310 172 1370" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/swamp_mud/albedo.ktx2" normal-map-url="/assets/textures/swamp_mud/normal.ktx2" />
+    <!-- Pântano → Cidadela Caída: o trilho dos pés da muralha oeste.
+       Arranca no fim da artéria do pântano (-292,12); a subida da mesa tem
+       um perno de 61 % (31°) entre (-600,-80) e (-700,-150). -->
+    <Road path="-292 12 -400 40 -500 -20 -560 -50 -620 -95" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.6" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/swamp_mud/albedo.ktx2" normal-map-url="/assets/textures/swamp_mud/normal.ktx2" />
+    <Road path="-620 -95 -700 -150 -745 -195 -780 -230 -860 -290 -876 -298" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.5" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/mountain_stone/albedo.ktx2" normal-map-url="/assets/textures/mountain_stone/normal.ktx2" />
   </Group>
   <!-- FIM paths.trails -->
 </world>
