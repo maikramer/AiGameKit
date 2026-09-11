@@ -92,7 +92,6 @@ class TestEmitGameYaml:
         # Sem width/height: o modo icon do text2d tem defaults próprios (512x512).
         assert "width" not in doc["icons"]
         assert "height" not in doc["icons"]
-        assert "text2icon" not in doc
 
     def test_no_icons_block_without_icon_prompts(self) -> None:
         out = emit_game_yaml(_sample_plan())

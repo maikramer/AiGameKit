@@ -1,9 +1,8 @@
 """Ícones no Text2D — categoria `icon`, transparente (rembg) e integração CLI/adapter.
 
-Porta do Text2Icon: styling de prompt idempotente + remoção de fundo opcional.
-Suite CPU-first: rembg é mockado em sys.modules (padrão unittest.mock), o
-generator do adapter é um MagicMock — nada importa torch para além do que a
-collection já carrega.
+Styling de prompt idempotente + remoção de fundo opcional. Suite CPU-first:
+rembg é mockado em sys.modules (padrão unittest.mock), o generator do adapter
+é um MagicMock — nada importa torch para além do que a collection já carrega.
 """
 
 from __future__ import annotations
@@ -100,7 +99,7 @@ class TestAugmentPromptForIcon:
         assert ICON_CATEGORY == "icon"
 
     def test_base_instructions_exact_text(self) -> None:
-        """Texto portado verbatim do Text2Icon (contrato de styling)."""
+        """Contrato de styling: texto exato das instruções de app-icon."""
         from text2d.icons import BASE_ICON_INSTRUCTIONS
 
         assert BASE_ICON_INSTRUCTIONS == (

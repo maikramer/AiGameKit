@@ -392,37 +392,3 @@ def test_from_dict_icons_defaults_when_empty() -> None:
     assert p.icons.prompts == []
     assert p.icons.width is None
     assert p.icons.transparent is False
-
-
-def test_from_dict_text2icon_legacy_alias() -> None:
-    """`text2icon:` é alias legado (silencioso) de `icons:` em game.yaml."""
-    p = GameProfile.from_dict(
-        {
-            "title": "A",
-            "genre": "B",
-            "tone": "C",
-            "style_preset": "lowpoly",
-            "text2icon": {
-                "prompts": ["mana orb"],
-                "transparent": True,
-            },
-        }
-    )
-    assert p.icons is not None
-    assert p.icons.prompts == ["mana orb"]
-    assert p.icons.transparent is True
-
-
-def test_from_dict_icons_wins_over_legacy_alias() -> None:
-    p = GameProfile.from_dict(
-        {
-            "title": "A",
-            "genre": "B",
-            "tone": "C",
-            "style_preset": "lowpoly",
-            "icons": {"prompts": ["nova"]},
-            "text2icon": {"prompts": ["legado"]},
-        }
-    )
-    assert p.icons is not None
-    assert p.icons.prompts == ["nova"]

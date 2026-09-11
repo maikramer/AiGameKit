@@ -137,7 +137,7 @@ class TextureGenerator(DiffusionGeneratorBase):
             channels_last=channels_last,
         )
         # SD1.5 é treinado em fp16/float32. A base resolve bfloat16 em CUDA (formato
-        # nativo dos FLUX/Sana), mas o UNet do SD1.5 em bf16 produz NaNs em algumas
+        # nativo dos FLUX), mas o UNet do SD1.5 em bf16 produz NaNs em algumas
         # camadas — forçar float16.
         import torch
 

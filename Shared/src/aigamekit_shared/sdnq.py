@@ -116,10 +116,7 @@ PRESETS: dict[str, SDNQPreset] = {
         use_hadamard=True,
         hadamard_group_size=256,
         use_codebook=True,
-        description=(
-            "SDNQ UINT4 + SVD + Hadamard N4 + Lloyd-Max (formato Disty0; "
-            "0.2.6: -31% de erro vs svd only)"
-        ),
+        description=("SDNQ UINT4 + SVD + Hadamard N4 + Lloyd-Max (formato Disty0; 0.2.6: -31% de erro vs svd only)"),
     ),
     "sdnq-fp8": SDNQPreset(
         name="sdnq-fp8",
@@ -213,7 +210,7 @@ def register_sdnq(*, patch_lora: bool = False) -> bool:
 
     Importing ``SDNQConfig`` registers SDNQ as a backend so ``from_pretrained`` can
     load pre-quantized checkpoints. Consolidates the duplicated ``_register_sdnq``
-    pattern that existed across Text2D, Text2Icon, Skymap2D, and Texture2D.
+    pattern that existed across the 2D tools (Text2D, Skymap2D, Texture2D).
 
     Args:
         patch_lora: When ``True``, also apply :func:`patch_lora_shape_calculation`

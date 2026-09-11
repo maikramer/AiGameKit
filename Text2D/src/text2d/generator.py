@@ -275,7 +275,7 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
         from aigamekit_shared.diffusion_control import attach_step_hooks
         from aigamekit_shared.validation import validate_params
 
-        # Paridade com os siblings (Text2Icon/Skymap2D/Texture2D): erro limpo
+        # Paridade com os siblings (Skymap2D/Texture2D): erro limpo
         # por dimensões não múltiplas de 8 / steps-guidance fora do intervalo
         # em vez de falha críptica no diffusers.
         is_valid, error = validate_params(

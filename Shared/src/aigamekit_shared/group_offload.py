@@ -188,7 +188,7 @@ def try_group_offloading(
     no decode. O VAE é gerido pelo path model_cpu/sequential do planner.
 
     Args:
-        pipe: Objeto pipeline diffusers (FluxPipeline, SanaPipeline, etc.).
+        pipe: Objeto pipeline diffusers (FluxPipeline, etc.).
         config: :class:`GroupOffloadConfig` resolvido por :func:`plan_group_offload`.
             Se fornecido, tem precedência sobre os parâmetros individuais abaixo.
         onload_device: Device GPU para onload (default: ``cuda``).

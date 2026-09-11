@@ -116,9 +116,9 @@ When `--quality` is set and explicit `--width` / `--height` / `--steps` are **no
 
 Kernel opts on ~6 GB: prefer compile+channels-last for **batch/vramd** (defaults on); keep one-shot `generate` opt-in. Details: [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
-### Ícones (substitui Text2Icon)
+### Ícones
 
-Icon generation now lives in Text2D via the `icon` asset category — same pipeline (FLUX Klein), icon-tuned defaults:
+Icon generation lives in Text2D via the `icon` asset category — same pipeline (FLUX Klein), icon-tuned defaults:
 
 ```bash
 text2d generate "espada de fantasia" --category icon --transparent -o icon.png

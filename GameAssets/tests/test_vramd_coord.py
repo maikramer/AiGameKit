@@ -267,7 +267,7 @@ def test_payload_builders_smoke(backend: str) -> None:
         p = build_generate_request(prompt="x", output="/o.png", memory_efficient=True, quant_preset="sdnq-uint8")
         assert p["prompt"] == "x"
         assert p.get("memory_efficient") is True
-        # Modo ícone (ex-Text2Icon): categoria icon + transparente no payload.
+        # Modo ícone: categoria icon + transparente no payload.
         pi = build_generate_request(prompt="icon", output="/i.png", category="icon", transparent=True)
         assert pi["prompt"] == "icon"
     elif backend == "texture2d":

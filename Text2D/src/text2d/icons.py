@@ -1,9 +1,9 @@
-"""Styling de ícones para o Text2D (porta do Text2Icon, substituído pelo FLUX Klein).
+"""Styling de ícones para o Text2D (categoria ``icon``).
 
-A geração de ícones passou a ser uma categoria do Text2D: ``--category icon``
-resolve 512² + 2 passos via QualityEngine e augmenta o prompt com instruções
-de app-icon. Este módulo é a porta direta do ``text2icon.generator`` (mesma
-string de instruções e mesma lógica de idempotência).
+A geração de ícones é uma categoria do Text2D: ``--category icon`` resolve
+512² + 2 passos via QualityEngine e augmenta o prompt com instruções de
+app-icon (lógica idempotente — sem duplicar se o prompt já descreve um
+ícone/logo/emblema).
 """
 
 from __future__ import annotations

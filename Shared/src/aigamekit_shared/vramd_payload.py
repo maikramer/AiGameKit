@@ -1,6 +1,6 @@
 """Corpo de request vramd partilhado — montagem de payload sem wrap por-tool.
 
-Antes, cada tool (text2d, text2icon, texture2d, skymap2d, text2sound, text3d,
+Antes, cada tool (text2d, texture2d, skymap2d, text2sound, text3d,
 paint3d, terrain3d) duplicava o mesmo esqueleto no seu ``vramd_payload.py``:
 
 1. dict core com coerções (``int(width)``, ``float(guidance)``…);

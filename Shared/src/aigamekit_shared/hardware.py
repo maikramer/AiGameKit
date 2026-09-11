@@ -47,19 +47,17 @@ def cuda_gpu_specs() -> list[tuple[int, int]]:
 class HardwareProfileBase:
     """Base partilhada dos perfis de hardware por-tool (``hardware.py``).
 
-    Campos comuns às 8 tools com ``hardware.py`` (T2D, T2Icon, Texture2D,
-    Skymap2D, T2Sound, Text3D, Paint3D, Part3D): identidade + GPUs — todos
-    obrigatórios (as 8 tools tinham-nos sem default). Cada tool estende com
+    Campos comuns às tools com ``hardware.py`` (T2D, Texture2D, Skymap2D,
+    T2Sound, Text3D, Paint3D, Part3D): identidade + GPUs — todos
+    obrigatórios (as tools tinham-nos sem default). Cada tool estende com
     os campos do seu planner (``memory_efficient``, ``sdnq_preset``, clamps,
     …) e implementa ``summary()`` com os campos que lhe interessam::
 
         @dataclass(frozen=True)
-        class Text2IconHardwareProfile(HardwareProfileBase):
-            cpu_offload: bool
-            max_width: int | None
-            max_height: int | None
-            transformer_id: str = ""
-            transformer_sdnq_preset: str | None = None
+        class ExemploHardwareProfile(HardwareProfileBase):
+            memory_efficient: bool
+            quant_preset: str | None = None
+            model_id: str = ""
 
     A construção é sempre por kwargs (``profile_from_specs``), por isso a
     ordem dos campos herdados não é uma restrição.

@@ -1,9 +1,9 @@
 """Validação de parâmetros de geração — funções partilhadas parameterizáveis.
 
-Extrai as 3 cópias quase-idênticas de ``validate_prompt`` / ``validate_dimensions``
-/ ``validate_params`` que existiam em Texture2D/utils.py, Skymap2D/utils.py e
-Text2Icon/utils.py. As diferenças (max_length, limites de dimensão, range de
-passos, ratio 2:1 do equirect) são agora parâmetros com defaults sensatos.
+Extrai as cópias quase-idênticas de ``validate_prompt`` / ``validate_dimensions``
+/ ``validate_params`` que existiam nos utils das tools 2D. As diferenças
+(max_length, limites de dimensão, range de passos, ratio 2:1 do equirect) são
+agora parâmetros com defaults sensatos.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ def validate_prompt(prompt: str, *, max_length: int = 500) -> tuple[bool, str | 
 
     Args:
         prompt: O texto do prompt.
-        max_length: Comprimento máximo em caracteres (default 500; Text2Icon usa 1000).
+        max_length: Comprimento máximo em caracteres (default 500; algumas tools usam 1000).
 
     Returns:
         Tuple ``(is_valid, error_message)``. ``error_message`` é ``None`` se válido.

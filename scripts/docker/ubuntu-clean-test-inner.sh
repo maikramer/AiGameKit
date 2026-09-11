@@ -320,8 +320,8 @@ if [ "${TEST_INFERENCE:-1}" = "1" ]; then
   has_tool texture2d && ums_clean && run_infer texture2d "$INF_DIR/texture.png" strict \
     texture2d generate "textura seamless de pedra cinzenta" -o "$INF_DIR/texture.png" -W 512 -H 512 --seed 42
 
-  # Ícones: modo icon do text2d (512², 2 steps — substitui o antigo Text2Icon/Sana).
-  # Sem --transparent para não descarregar o U2Net do rembg no teste limpo.
+  # Ícones: modo icon do text2d (512², 2 steps). Sem --transparent para não
+  # descarregar o U2Net do rembg no teste limpo.
   has_tool text2d && ums_clean && run_infer text2d "$INF_DIR/icon.png" strict \
     text2d generate "espada de fantasia" --category icon -o "$INF_DIR/icon.png" --seed 42
 

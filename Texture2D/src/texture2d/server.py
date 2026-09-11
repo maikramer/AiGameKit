@@ -1,8 +1,8 @@
 """Model server do Texture2D — mantém o pipeline SD1.5 + circular padding carregado.
 
-Réplica do padrão do text2icon: um servidor long-lived (Unix socket) que segura o
-``TextureGenerator`` na VRAM. Invocações subsequentes do CLI detetam o servidor e
-delegam automaticamente (~3-5s vs cold start).
+Servidor long-lived (Unix socket) que segura o ``TextureGenerator`` na VRAM.
+Invocações subsequentes do CLI detetam o servidor e delegam automaticamente
+(~3-5s vs cold start).
 
 Protocolo: JSON sobre Unix socket (uma linha de pedido, uma linha de resposta).
 Comandos: ``generate``, ``release``, ``status``, ``shutdown``.
@@ -31,8 +31,7 @@ from aigamekit_shared.vramd_client import (
     stop_server,
 )
 
-# Reexportados para o CLI aceder via ``server.get_server_status`` / ``server.stop_server``
-# (o text2icon tem um bug latente por NÃO os reexportar — replicamos a versão correta).
+# Reexportados para o CLI aceder via ``server.get_server_status`` / ``server.stop_server``.
 __all__ = [
     "TOOL_NAME",
     "get_server_status",

@@ -38,7 +38,7 @@ shapes (text3d) → ensure_to_paint (CPU)
 | Shape | `text3d` | `run_shape_wave_or_fallback` | Omni via `resolve_row_omni` + softfill |
 | Paint | `paint3d` | `run_paint_wave_or_fallback` | Peak: mem-eff / SDNQ no payload |
 | Text2D | `text2d` | `run_text2d_wave_or_fallback` | |
-| Icon | `text2d` | `run_text2d_wave_or_fallback` (`category=icon`, `transparent`) | Modo ícone do Text2D (ex-Text2Icon) |
+| Icon | `text2d` | `run_text2d_wave_or_fallback` (`category=icon`, `transparent`) | Modo ícone do Text2D |
 | Texture | `texture2d` | `run_texture2d_wave_or_fallback` | |
 | Skymap | `skymap2d` | `run_skymap2d_wave_or_fallback` | |
 | Sound | `text2sound` | `run_text2sound_wave_or_fallback` | |

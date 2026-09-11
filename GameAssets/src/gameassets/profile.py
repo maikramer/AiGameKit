@@ -459,10 +459,9 @@ class GameProfile:
                 lora_strength=lr_s,
                 model_id=mid_ss,
             )
-        # icons (scene-level ícones de UI via text2d --category icon);
-        # `text2icon:` é alias legado (silencioso) de `icons:`
+        # icons (scene-level ícones de UI via text2d --category icon)
         icons_prof: IconsProfile | None = None
-        raw_icons = data.get("icons") if isinstance(data.get("icons"), dict) else data.get("text2icon")
+        raw_icons = data.get("icons")
         if isinstance(raw_icons, dict):
             raw_prompts = raw_icons.get("prompts")
             icon_prompts: list[str] = []

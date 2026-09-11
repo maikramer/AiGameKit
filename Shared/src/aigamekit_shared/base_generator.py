@@ -1,6 +1,6 @@
 """Base class para generators de difusão — extrai a infraestrutura comum.
 
-Os 4 generators 2D do monorepo (Text2D, Text2Icon, Texture2D, Skymap2D) partilham
+Os generators 2D do monorepo (Text2D, Texture2D, Skymap2D) partilham
 ~60-65% de código idêntico: logging, cache clear, warmup/unload lifecycle, device
 resolution, multi-GPU placement, VRAM reporting, batch generation, e save_image.
 
@@ -36,7 +36,7 @@ def _torch() -> Any:
 def torch_dtype_for(device: str | None) -> Any:
     """Resolve o dtype torch para um device.
 
-    CUDA → bfloat16 (formato nativo dos modelos FLUX/Sana); CPU → float32.
+    CUDA → bfloat16 (formato nativo dos modelos FLUX); CPU → float32.
     Case-insensitive (aceita ``"CPU"``, ``"cuda:0"``, etc.).
     ``None`` quando torch não está instalado (dtype só é consumido quando
     um pipeline carrega — o que exige torch de qualquer forma).
@@ -323,7 +323,7 @@ class DiffusionGeneratorBase(ABC):
         offload vs full-GPU e **aplica** (multi-GPU via accelerate, offload via
         diffusers hooks, com cascade fallback).
 
-        Subclasses 2D (Text2D, Skymap2D, Text2Icon, Texture2D) chamam isto em vez
+        Subclasses 2D (Text2D, Skymap2D, Texture2D) chamam isto em vez
         de duplicar a lógica de offload. Cada uma fornece só o ``footprint``.
 
         Args:
@@ -410,7 +410,7 @@ class DiffusionGeneratorBase(ABC):
             self._log(f"torch.compile skip (offload={offload} move módulos entre devices)")
             return
 
-        # DiT/Sana → transformer; SD1.5 (Texture2D) → unet.
+        # DiT/FLUX → transformer; SD1.5 (Texture2D) → unet.
         attr = "transformer" if getattr(pipe, "transformer", None) is not None else "unet"
         model = getattr(pipe, attr, None)
         if model is None:
@@ -500,7 +500,7 @@ class DiffusionGeneratorBase(ABC):
         com error handling por item (item falhado → ``(None, {"error": ...}, idx)``).
         Seed incrementa por prompt se fornecida (seed + idx).
 
-        Contrato uniformizado para todas as tools (Texture2D, Skymap2D, Text2Icon):
+        Contrato uniformizado para todas as tools (Text2D, Skymap2D, Texture2D):
         o caller itera com per-item error continuation::
 
             for image, metadata, idx in gen.generate_batch(prompts, **params):

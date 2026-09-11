@@ -26,7 +26,7 @@ Usar quando:
 Fórmula do tamanho de tile:
   ``max_tile_px = floor(sqrt(vram_budget_bytes / bytes_per_token))``
   onde ``bytes_per_token ≈ 2 * hidden_dim * num_layers * dtype_size`` (atenção + MLP).
-  Em prática, 1024px é um bom default para FLUX/Sana em GPUs de 6-8GB.
+  Em prática, 1024px é um bom default para FLUX em GPUs de 6-8GB.
 """
 
 from __future__ import annotations
@@ -242,7 +242,7 @@ def enable_tiled_diffusion(
     limitado pelo tamanho do tile, não pela resolução total.
 
     Args:
-        pipe: pipeline diffusers (FluxPipeline, SanaPipeline, etc.).
+        pipe: pipeline diffusers (FluxPipeline, etc.).
         tile_size_px: tamanho do tile em pixels (default 1024). Reduzir para GPUs
             pequenas (ex: 768 ou 512).
         stride_px: stride entre tiles em pixels (default 512 = 50% overlap).
@@ -304,7 +304,7 @@ def latent_upscale_generate(
     Para um target 2048x1024 com native 1024x512: ~4x menos attention no denoise.
 
     Args:
-        pipe: pipeline diffusers (FluxPipeline, SanaPipeline, etc.).
+        pipe: pipeline diffusers (FluxPipeline, etc.).
         prompt: prompt de texto.
         target_width/height: resolução final desejada.
         native_width/height: resolução de difusão principal (default: metade do target).

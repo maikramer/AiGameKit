@@ -219,7 +219,7 @@ class TestText2dSpecsHwAuto:
         assert mock_build.call_args.kwargs["quant_preset"] == "sdnq-uint8"
 
     def test_icon_mode_payload(self, tmp_path: Path) -> None:
-        """Modo ícone (ex-Text2Icon): category icon + transparent + defaults 512/2/1.0."""
+        """Modo ícone: category icon + transparent + defaults 512/2/1.0."""
         out = tmp_path / "potion.png"
         items = [{"id": "icon-potion", "prompt": "red health potion", "output": str(out)}]
         mock_build = MagicMock(return_value={"output": str(out), "memory_efficient": True})
