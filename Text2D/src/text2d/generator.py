@@ -22,11 +22,22 @@ from aigamekit_shared.base_generator import DiffusionGeneratorBase
 # Re-export para backward compat (testes antigos importam de text2d.generator).
 from aigamekit_shared.base_generator import torch_dtype_for as _torch_dtype_for  # noqa: F401
 
-# Modelos BASE (fp16, não pré-quantizados). A quantização (uint8/int8/int4/fp8) é
-# escolhida por VRAM e aplicada em **runtime** via SDNQ — assim seguimos as melhorias
+# Modelos BASE (fp16, não pré-quantizados). A quantização (uint8/int8/int4/int3/int2/fp8)
+# é escolhida por VRAM e aplicada em **runtime** via SDNQ — assim seguimos as melhorias
 # do SDNQ upstream em vez de depender de checkpoints pré-quantizados congelados.
 HIGH_VRAM_MODEL_ID = "black-forest-labs/FLUX.2-klein-9B"
 LOW_VRAM_MODEL_ID = "black-forest-labs/FLUX.2-klein-4B"
+
+# Fração do orçamento de VRAM que um plano full-GPU pode usar; acima disso o
+# planner prefere **group offload + CUDA streams** (pico ≈ ativação). Motivo:
+# FLUX klein int4 full-GPU fica a 83-91% do orçamento em GPUs 8-12 GB — "caber
+# por pouco" rebenta em OOM no VAE decode/runtime dos pipelines. Com GO+streams
+# o pico cai para ~ativação e sobra folga real. Kill-switch: ``--no-group-offload``
+# ou ``TEXT2D_GROUP_OFFLOAD=0`` (além do global ``AIGAMEKIT_GROUP_OFFLOAD=0``).
+FULL_GPU_BUDGET_FRACTION = 0.70
+
+# Env var do kill-switch de group offload (precedência: tool > global).
+GROUP_OFFLOAD_ENV = "TEXT2D_GROUP_OFFLOAD"
 
 
 def model_footprint(model_id: str) -> Any:
@@ -82,6 +93,7 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
         torch_compile_mode: str = "default",
         step_cache: str | None = None,
         channels_last: bool = False,
+        group_offload: bool = True,
     ) -> None:
         super().__init__(
             device=device,
@@ -90,6 +102,7 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             cache_dir=cache_dir,
             gpu_ids=gpu_ids,
             memory_efficient=memory_efficient,
+            group_offload=group_offload,
             torch_compile=torch_compile,
             torch_compile_mode=torch_compile_mode,
             step_cache=step_cache,
@@ -103,6 +116,12 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             from aigamekit_shared.logging import Logger
 
             Logger().info(f"device={self.device} dtype={self.torch_dtype} model={self.model_id}")
+
+    def _group_offload_allowed(self) -> bool:
+        """Group offload habilitado: flag do ctor AND env kill-switch."""
+        from aigamekit_shared.group_offload import is_group_offload_enabled
+
+        return bool(self.group_offload) and is_group_offload_enabled(tool_env_var=GROUP_OFFLOAD_ENV)
 
     def _load_pipeline(self) -> Any:
         if self._pipe is not None:
@@ -151,8 +170,21 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
 
         # Colocação unificada: _place_with_planner resolve specs (VRAM livre), aplica
         # multi-GPU (accelerate) / group offload + streams / full-GPU conforme planner.
+        # A quantização já foi aplicada acima — o placement planeia só com esse quant
+        # (allow_quant fixo) e com o gate de folga FULL_GPU_BUDGET_FRACTION: sem
+        # folga, prefere group offload + CUDA streams (pico ≈ ativação).
+        # target_resolution=1024 (tier medium): VAE tiling + attention slicing
+        # ligam como chunks menores mesmo em full-GPU.
+        go = self._group_offload_allowed()
         placement_plan = self._place_with_planner(
-            pipe, model_footprint(self.model_id), quant_mode=plan.quant_mode, model_attr="transformer"
+            pipe,
+            model_footprint(self.model_id),
+            quant_mode=preset or "none",
+            allow_quant=("none", preset) if preset else ("none",),
+            model_attr="transformer",
+            allow_group_offload=go,
+            full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION if go else None,
+            target_resolution=1024,
         )
 
         # Otimizações de speed: compile + step cache + channels_last + attention.
@@ -183,7 +215,14 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             keep = set(self.gpu_ids)
             specs = [(i, m) for i, m in specs if i in keep]
         allow_multi = self.gpu_ids is None or len(self.gpu_ids) >= 2
-        return plan_offload(specs, model_footprint(self.model_id), allow_multi_gpu=allow_multi)
+        go = self._group_offload_allowed()
+        return plan_offload(
+            specs,
+            model_footprint(self.model_id),
+            allow_multi_gpu=allow_multi,
+            allow_group_offload=go,
+            full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION if go else None,
+        )
 
     def _resolve_preset(self, plan: Any) -> str | None:
         """Preset SDNQ a aplicar (``quant_preset`` explícito ganha; senão o do plano)."""

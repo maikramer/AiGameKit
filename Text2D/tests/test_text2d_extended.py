@@ -203,3 +203,27 @@ def test_klein_log_verbose_only(capsys: pytest.CaptureFixture[str]) -> None:
     g2 = KleinFluxGenerator(device="cpu", verbose=True)
     g2._log("yep")
     assert "yep" in capsys.readouterr().out
+
+
+class TestFineBitQuantizationReal:
+    """Quantização real sdnq-int3/int2 (lib instalada) — Hadamard+SVD em CPU."""
+
+    def test_int3_and_int2_quantize_and_forward(self) -> None:
+        pytest.importorskip("sdnq")
+        import torch
+
+        from aigamekit_shared.sdnq import quantize_model
+
+        torch.manual_seed(7)
+        for preset in ("sdnq-int3", "sdnq-int2"):
+            lin = torch.nn.Linear(64, 64, dtype=torch.float32)
+            x = torch.randn(2, 64, dtype=torch.float32)
+            ref = lin(x)
+            q = quantize_model(lin, preset, quantization_device="cpu", return_device="cpu")
+            out = q(x)
+            # Bits finos degradam — mas o output mantém a escala/energia do
+            # original (o Hadamard+SVD evita colapso numérico).
+            assert out.shape == ref.shape
+            assert torch.isfinite(out).all()
+            rel = (out - ref).norm() / ref.norm()
+            assert rel < 2.0, f"{preset}: erro relativo {rel:.3f} explodiu"

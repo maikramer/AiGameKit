@@ -23,7 +23,7 @@ class TestPresets:
     def test_all_presets_have_required_fields(self):
         for name, preset in PRESETS.items():
             assert preset.name == name
-            assert preset.weights_dtype in ("uint8", "int8", "int4", "uint4", "fp8")
+            assert preset.weights_dtype in ("uint8", "int8", "int4", "uint4", "fp8", "int3", "int2")
             assert preset.group_size >= 0
             assert isinstance(preset.use_svd, bool)
             assert preset.dequantize_fp32 is True
@@ -286,8 +286,11 @@ class TestSuggestPresetForVram:
     def test_low_vram_suggests_int4(self):
         assert suggest_preset_for_vram(4.0) == "sdnq-int4"
 
-    def test_very_low_vram_suggests_int4(self):
-        assert suggest_preset_for_vram(2.0) == "sdnq-int4"
+    def test_very_low_vram_suggests_int3(self):
+        assert suggest_preset_for_vram(3.5) == "sdnq-int3"
+
+    def test_tiny_vram_suggests_int2(self):
+        assert suggest_preset_for_vram(2.0) == "sdnq-int2"
 
 
 class TestPreQuantizeModel:
@@ -344,3 +347,35 @@ class TestAutoQuantizedMatmulDefault:
         assert _auto_quantized_matmul_default() is True
         monkeypatch.setenv("AIGAMEKIT_SDNQ_AUTO_MATMUL", "0")
         assert _auto_quantized_matmul_default() is False
+
+
+class TestFineBitPresets:
+    """Degraus int3/int2: exclusivos de offload, com Hadamard+SVD."""
+
+    def test_int3_preset_fields(self):
+        p = PRESETS["sdnq-int3"]
+        assert p.weights_dtype == "int3"
+        assert p.use_hadamard is True
+        assert p.use_svd is True
+        assert p.group_size == 32
+
+    def test_int2_preset_fields(self):
+        p = PRESETS["sdnq-int2"]
+        assert p.weights_dtype == "int2"
+        assert p.use_hadamard is True
+
+    def test_coarse_presets_have_no_hadamard(self):
+        for name in ("sdnq-uint8", "sdnq-int8", "sdnq-int4", "sdnq-uint4", "sdnq-fp8"):
+            assert PRESETS[name].use_hadamard is False
+
+    def test_create_config_passes_hadamard(self):
+        """create_config inclui use_hadamard/hadamard_group_size nos kwargs."""
+        import inspect
+
+        from aigamekit_shared.sdnq import create_config
+
+        cfg = create_config("sdnq-int3", quantization_device="cpu", return_device="cpu")
+        assert cfg.use_hadamard is True
+        assert cfg.hadamard_group_size == 32
+        # Sanity: SDNQConfig aceita os kwargs em CPU (lib instalada).
+        assert inspect.isclass(type(cfg))

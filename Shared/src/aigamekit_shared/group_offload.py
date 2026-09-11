@@ -123,11 +123,14 @@ def plan_group_offload(
     headroom = max(0.0, usable_vram_gib - activation)
 
     if prefer_leaf or headroom < largest * GROUP_TIGHT_HEADROOM_FACTOR:
-        # Grupos mínimos: leaf_level + streams — máxima VRAM para ativação/octree.
+        # Grupos mínimos: leaf_level + streams — máxima VRAM para ativação/octave.
+        # record_stream=False (conservador): com record=True medimos OOM-spin no
+        # Paint3D dual-UNet (frees não determinísticos sob churn de onloads);
+        # sem record os frees são determinísticos ao custo de ligeiro overhead.
         return GroupOffloadConfig(
             offload_type="leaf_level",
             use_stream=True,
-            record_stream=True,
+            record_stream=False,
         )
     # Folga para blocks inteiros: menos sync points, ainda com overlap de stream.
     # (diffusers força num_blocks_per_group=1 quando use_stream=True.)
@@ -135,7 +138,7 @@ def plan_group_offload(
         offload_type="block_level",
         use_stream=True,
         num_blocks_per_group=1,
-        record_stream=True,
+        record_stream=False,
     )
 
 

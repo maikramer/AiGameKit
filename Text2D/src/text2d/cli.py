@@ -146,6 +146,17 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     ),
 )
 @click.option(
+    "--group-offload/--no-group-offload",
+    "group_offload",
+    default=True,
+    show_default=True,
+    help=(
+        "Group offload + CUDA streams quando o full-GPU não teria folga "
+        "(pico ≈ ativação; chunks = VAE tiling + attention slicing). "
+        "Kill-switch: TEXT2D_GROUP_OFFLOAD=0."
+    ),
+)
+@click.option(
     "--compile/--no-compile",
     "torch_compile",
     default=False,
@@ -197,6 +208,7 @@ def generate_cmd(
     gpu_ids_str: str | None,
     quality: str,
     hw_auto: bool,
+    group_offload: bool,
     torch_compile: bool,
     torch_compile_mode: str,
     step_cache: str,
@@ -211,6 +223,12 @@ def generate_cmd(
     from aigamekit_shared.profiler.env import env_profile_log_path
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
+
+    # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA; com
+    # group offload, max_split_size_mb causa fragmentação sob churn de onloads).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early(group_offload)
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
@@ -299,6 +317,7 @@ def generate_cmd(
                 "torch_compile_mode": torch_compile_mode,
                 "channels_last": channels_last,
                 "step_cache": step_cache,
+                "allow_group_offload": group_offload,
             },
             t_start=t_start,
             noun="Imagem",
@@ -316,9 +335,17 @@ def generate_cmd(
 
     # Fallback in-process: coordenação VRAM (paridade Text3D/Paint3D).
     if not cpu:
-        _qmode = quant_preset if quant_preset not in (None, "none") else ("sdnq-uint8" if mem_eff else "none")
+        from .hardware import group_offload_needed_mib, group_offload_will_engage
+
+        _qmode = quant_preset if quant_preset not in (None, "none") else ("sdnq-int4" if mem_eff else "none")
+        if group_offload_will_engage():
+            # GO+streams: pico ≈ ativação + trânsito de grupos — não exigir
+            # pesos+ativação ao ensure_vram (recusava jobs que correm bem).
+            needed_mib = group_offload_needed_mib(width, height)
+        else:
+            needed_mib = needed_mib_for_backend("text2d", quant_mode=_qmode, memory_efficient=mem_eff)
         prepare_gpu_exclusive(
-            needed_mib=needed_mib_for_backend("text2d", quant_mode=_qmode, memory_efficient=mem_eff),
+            needed_mib=needed_mib,
             allow_shared=True,
             kill_others=False,
             backend="text2d",
@@ -349,6 +376,7 @@ def generate_cmd(
                 torch_compile_mode=torch_compile_mode,
                 step_cache=step_cache,
                 channels_last=channels_last,
+                group_offload=group_offload,
             )
 
             with (
@@ -502,6 +530,13 @@ def _parse_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     help="Auto-detecção de hardware (offload/modelo/multi-GPU). Env: TEXT2D_HW_AUTO=0.",
 )
 @click.option(
+    "--group-offload/--no-group-offload",
+    "group_offload",
+    default=True,
+    show_default=True,
+    help=("Group offload + CUDA streams quando o full-GPU não teria folga. Kill-switch: TEXT2D_GROUP_OFFLOAD=0."),
+)
+@click.option(
     "--quality",
     type=click.Choice(list(VALID_QUALITIES)),
     default="medium",
@@ -546,6 +581,7 @@ def generate_batch_cmd(
     gpu_ids_str: str | None,
     force: bool,
     hw_auto: bool,
+    group_offload: bool,
     batch_verbose: bool,
     quality: str,
     torch_compile: bool,
@@ -559,6 +595,11 @@ def generate_batch_cmd(
     global _batch_gen
 
     from aigamekit_shared.gpu import warn_if_vram_occupied
+
+    # Alloc conf anti-fragmentação por modo (antes da 1ª alocação CUDA).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early(group_offload)
 
     manifest_path = Path(manifest)
     out_root = Path(output_dir)
@@ -650,6 +691,7 @@ def generate_batch_cmd(
                     "torch_compile": torch_compile,
                     "torch_compile_mode": torch_compile_mode,
                     "channels_last": channels_last,
+                    "allow_group_offload": group_offload,
                 },
                 t_start=t0,
                 noun="Imagem",
@@ -684,9 +726,18 @@ def generate_batch_cmd(
             return
 
         if not cpu:
-            _qmode = quant_preset if quant_preset not in (None, "none") else ("sdnq-uint8" if mem_eff else "none")
+            from .hardware import group_offload_needed_mib, group_offload_will_engage
+
+            _qmode = quant_preset if quant_preset not in (None, "none") else ("sdnq-int4" if mem_eff else "none")
+            if group_offload_will_engage():
+                # GO+streams: pico ≈ ativação + trânsito de grupos; needed pela
+                # maior resolução pendente (itens podem sobrepor o default).
+                _max_side = max([max(it["width"], it["height"]) for it in pending_inprocess] or [width, height])
+                needed_mib = group_offload_needed_mib(_max_side, _max_side)
+            else:
+                needed_mib = needed_mib_for_backend("text2d", quant_mode=_qmode, memory_efficient=mem_eff)
             prepare_gpu_exclusive(
-                needed_mib=needed_mib_for_backend("text2d", quant_mode=_qmode, memory_efficient=mem_eff),
+                needed_mib=needed_mib,
                 allow_shared=True,
                 kill_others=False,
                 backend="text2d",
@@ -704,6 +755,7 @@ def generate_batch_cmd(
             torch_compile=torch_compile,
             torch_compile_mode=torch_compile_mode,
             channels_last=channels_last,
+            group_offload=group_offload,
         )
         _batch_gen = gen
 
@@ -862,6 +914,12 @@ def serve(ums_worker: bool) -> None:
     """
     from aigamekit_shared.worker_serve import run_ums_worker_cli
     from text2d.worker_serve_adapter import Adapter
+
+    # Worker vramd: alloc conf por modo antes da 1ª alocação CUDA (o request
+    # pode pedir GO; o adapter corrige por-request se o torch ainda não acordou).
+    from .hardware import apply_alloc_conf_early
+
+    apply_alloc_conf_early()
 
     run_ums_worker_cli(Adapter, tool_name="text2d", ums_worker=ums_worker, console=console)
 

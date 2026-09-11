@@ -282,6 +282,7 @@ class DiffusionGeneratorBase(ABC):
         force_group_offload: bool = False,
         prefer_leaf_offload: bool = False,
         target_resolution: int | None = None,
+        full_gpu_budget_fraction: float | None = None,
     ) -> Any:
         """**Entry point unificado** para colocar o pipeline na GPU.
 
@@ -340,6 +341,7 @@ class DiffusionGeneratorBase(ABC):
             force_group_offload=force_group_offload,
             prefer_leaf_offload=prefer_leaf_offload,
             target_resolution=target_resolution,
+            full_gpu_budget_fraction=full_gpu_budget_fraction,
             on_status=self._status,
         )
 

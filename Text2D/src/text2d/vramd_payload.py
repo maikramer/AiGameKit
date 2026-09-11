@@ -26,9 +26,12 @@ def build_generate_request(
     torch_compile_mode: str | None = None,
     channels_last: bool = False,
     step_cache: str | None = None,
+    allow_group_offload: bool | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload vramd text2d com peak/load opts."""
+    if allow_group_offload is not None:
+        extra = {**(extra or {}), "allow_group_offload": bool(allow_group_offload)}
     payload = build_request_body(
         prompt=prompt,
         output=output,

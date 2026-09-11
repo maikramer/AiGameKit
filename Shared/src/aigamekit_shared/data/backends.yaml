@@ -59,8 +59,13 @@ backends:
     calibrate_request:
       prompt: "a red cube on a white background"
       output: "/tmp/vramd-calibrate-text2d.png"
+    # Calibrar o path de produção: GO+streams+int4 (o modo default do hw-auto
+    # em GPUs apertadas). O load_kwargs grava ``allow_group_offload`` no
+    # descriptor — o admit 0.3.7+ só usa a medição para requests do mesmo modo.
     calibrate_load_kwargs:
       quant_preset: sdnq-int4
+      memory_efficient: true
+      allow_group_offload: true
 
   - name: skymap2d
     adapter: aigamekit_shared.worker_serve_adapter_base

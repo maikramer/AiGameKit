@@ -71,7 +71,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | Directory | Language | Package name | Description |
 |-----------|----------|--------------|-------------|
 | `Shared/` | Python | `aigamekit-shared` | Shared lib (logging, GPU, subprocess, installers, CLI) |
-| `Text2D/` | Python | `text2d` | Text-to-image (FLUX SDNQ) |
+| `Text2D/` | Python | `text2d` | Text-to-image (FLUX SDNQ; group offload+streams e int4 por defeito — int3/int2 só em GPUs <4 GB; [`docs/findings/TEXT2D_GROUP_OFFLOAD_FINDINGS.md`](docs/findings/TEXT2D_GROUP_OFFLOAD_FINDINGS.md)) |
 | `Text2Icon/` | Python | `text2icon` | Text-to-icon (Sana Sprint 0.6B, NVlabs/Sana); transparent BG via rembg |
 | `Text3D/` | Python | `text3d` | Text-to-3D (Hunyuan3D-Omni SDNQ) |
 | `Paint3D/` | Python | `paint3d` | 3D texturing (Hunyuan3D-Paint 2.1, bilateral smooth, bake_exp=6) |

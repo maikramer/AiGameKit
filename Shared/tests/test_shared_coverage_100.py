@@ -238,7 +238,7 @@ def test_with_vramd_load_extra(k: str, v: Any) -> None:
     [
         ("text3d", True, "sdnq-int4"),
         ("paint3d", True, "sdnq-uint8"),
-        ("text2d", True, "sdnq-uint8"),
+        ("text2d", True, "sdnq-int4"),  # piso 4 bits (GO+streams default)
         ("skymap2d", True, "none"),
         ("text3d", False, None),
     ],

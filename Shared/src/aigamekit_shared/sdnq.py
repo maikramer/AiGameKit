@@ -62,6 +62,7 @@ class SDNQPreset:
     svd_steps: int
     dequantize_fp32: bool
     description: str
+    use_hadamard: bool = False
 
 
 PRESETS: dict[str, SDNQPreset] = {
@@ -114,6 +115,31 @@ PRESETS: dict[str, SDNQPreset] = {
         svd_steps=8,
         dequantize_fp32=True,
         description="SDNQ FP8 — RTX 40 series (Ada Lovelace+)",
+    ),
+    # Degraus abaixo de 4 bits: exclusivos dos modos de offload do planner
+    # (lowvram) — quando nem int4 + group offload dá folga. Hadamard + SVD
+    # compensam parcialmente a perda de bits (SDNQ >=0.2.0).
+    "sdnq-int3": SDNQPreset(
+        name="sdnq-int3",
+        weights_dtype="int3",
+        group_size=32,
+        use_svd=True,
+        svd_rank=32,
+        svd_steps=8,
+        dequantize_fp32=True,
+        use_hadamard=True,
+        description="SDNQ INT3 — degrau de offload abaixo do int4 (Hadamard+SVD)",
+    ),
+    "sdnq-int2": SDNQPreset(
+        name="sdnq-int2",
+        weights_dtype="int2",
+        group_size=32,
+        use_svd=True,
+        svd_rank=32,
+        svd_steps=8,
+        dequantize_fp32=True,
+        use_hadamard=True,
+        description="SDNQ INT2 — último recurso de VRAM (qualidade degradada)",
     ),
 }
 
@@ -306,11 +332,16 @@ def create_config(
         "use_svd": p.use_svd,
         "svd_rank": p.svd_rank,
         "svd_steps": p.svd_steps,
+        "use_hadamard": p.use_hadamard,
         "use_quantized_matmul": matmul,
         "quantization_device": device,
         "return_device": ret_device,
         "dequantize_fp32": p.dequantize_fp32,
     }
+    if p.use_hadamard:
+        # Rotações de Hadamard por grupo — melhora precisão em bits baixos
+        # (int3/int2); alinhado com o group_size do preset.
+        kwargs["hadamard_group_size"] = p.group_size
     if modules_to_not_convert is not None:
         kwargs["modules_to_not_convert"] = modules_to_not_convert
     kwargs.update(overrides)
@@ -474,6 +505,10 @@ _COMPRESSION_FACTORS: dict[str, float] = {
     "int8": 0.5,
     "int4": 0.25,
     "uint4": 0.25,
+    "int3": 0.1875,
+    "uint3": 0.1875,
+    "int2": 0.125,
+    "uint2": 0.125,
 }
 
 
@@ -502,6 +537,9 @@ def estimate_vram_mb(
 def suggest_preset_for_vram(vram_gb: float) -> str:
     """Suggest the best SDNQ preset for available VRAM.
 
+    int4 é o piso para GPUs >=4 GB (o planner lowvram usa-o como quant de
+    offload); int3/int2 são os degraus finos para GPUs ainda menores.
+
     Args:
         vram_gb: Available VRAM in GB.
 
@@ -510,6 +548,8 @@ def suggest_preset_for_vram(vram_gb: float) -> str:
     """
     if vram_gb >= 8:
         return "sdnq-uint8"
-    if vram_gb >= 6:
-        return "sdnq-uint8"
-    return "sdnq-int4"
+    if vram_gb >= 4:
+        return "sdnq-int4"
+    if vram_gb >= 3:
+        return "sdnq-int3"
+    return "sdnq-int2"

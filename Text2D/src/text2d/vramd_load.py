@@ -10,7 +10,6 @@ _UMS_ONLY_LOAD_KEYS = frozenset(
         "quant_mode",
         "sdnq_preset",  # admit vramd; ctor usa ``quant_preset``
         "offload",
-        "allow_group_offload",
     }
 )
 
@@ -19,7 +18,9 @@ def map_vramd_load_kwargs(raw: dict[str, Any]) -> dict[str, Any]:
     """Normaliza kwargs vramd → ``KleinFluxGenerator``.
 
     Peak/offload vêm do request (CLI hw_auto / peak opts) — sem re-decidir VRAM
-    localmente no adapter.
+    localmente no adapter. ``allow_group_offload`` (admit/payload) viaja para o
+    ctor como ``group_offload`` — o env kill-switch do supervisor pode não
+    refletir o pedido do utilizador.
 
     Args:
         raw: kwargs vindos do BackendManager / request vramd.
@@ -39,6 +40,10 @@ def map_vramd_load_kwargs(raw: dict[str, Any]) -> dict[str, Any]:
 
     mem_eff = kwargs.get("memory_efficient")
     kwargs["memory_efficient"] = bool(mem_eff) if mem_eff is not None else False
+
+    # GO default ON no request (padrão Paint3D): só o pedido explícito False desliga.
+    allow_go = kwargs.pop("allow_group_offload", True)
+    kwargs["group_offload"] = bool(allow_go)
 
     # torch.compile default OFF: compile frio (minutos) não compensa fora de
     # batches longos — request explícito (batch/CLI) ganha sempre.

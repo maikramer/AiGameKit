@@ -20,8 +20,25 @@ class Adapter(WorkerAdapter):
     name = "text2d"
 
     def load(self, **kwargs: Any) -> Any:
+        import os
+
         from text2d.generator import KleinFluxGenerator
         from text2d.vramd_load import map_vramd_load_kwargs
+
+        # Alloc conf por-request (padrão Paint3D): o serve pode ter arrancado
+        # com o conf clássico (max_split) e o request pedir GO — o torch lê o
+        # env na 1ª alocação CUDA, por isso só substituímos se ainda dorme.
+        try:
+            import torch
+
+            if not torch.cuda.is_initialized():
+                from text2d.hardware import cuda_alloc_conf_for
+
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = cuda_alloc_conf_for(
+                    bool(kwargs.get("allow_group_offload", True))
+                )
+        except Exception:
+            pass
 
         # Peak/offload: só do request (CLI hw_auto / with_vramd_peak_opts).
         load_kwargs = map_vramd_load_kwargs(kwargs)
@@ -45,6 +62,7 @@ class Adapter(WorkerAdapter):
             "height": int(request.get("height", 1024)),
             "steps": steps,
             "memory_efficient": bool(getattr(model, "memory_efficient", False)),
+            "group_offload": bool(getattr(model, "group_offload", False)),
             "quant_preset": getattr(model, "quant_preset", None),
             "model_id": getattr(model, "model_id", None),
         }

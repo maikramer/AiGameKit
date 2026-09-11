@@ -10,9 +10,11 @@ CLI de **text-to-imagem** com [FLUX.2 Klein 4B](https://huggingface.co/black-for
 |---------|--------|--------|
 | Python  | 3.13+  | Fixado `>=3.13,<3.14` (`pyproject.toml`) |
 | GPU     | Opcional | NVIDIA + CUDA recomendado para inferência razoável |
-| VRAM    | ~6 GB+ com hw-auto e 512² | GPUs modestas: hw-auto (defeito) escolhe 4B + CPU offload; multi-GPU com `--gpu-ids` |
+| VRAM    | ~6 GB+ com hw-auto e 512² | GPUs modestas: hw-auto (defeito) escolhe 4B + **group offload com CUDA streams + int4** (pico ≈ ativação); multi-GPU com `--gpu-ids` |
 
-Auto-detecção de hardware (`--hw-auto`, ligada por defeito): GPUs <7.5 GB ganham CPU offload + modelo 4B automaticamente; rigs grandes mantêm 9B/full-GPU/multi-GPU. Flags explícitas ganham. Desligar: `--no-hw-auto` ou `TEXT2D_HW_AUTO=0`. Ver perfil: `text2d doctor`.
+Auto-detecção de hardware (`--hw-auto`, ligada por defeito): GPUs pequenas ganham o modelo 4B automaticamente; rigs grandes mantêm 9B/full-GPU/multi-GPU. Flags explícitas ganham. Desligar: `--no-hw-auto` ou `TEXT2D_HW_AUTO=0`. Ver perfil: `text2d doctor`.
+
+**Group offload + CUDA streams (defeito ON):** sempre que o full-GPU não teria folga (FLUX klein int4 ficaria a 83–91% do orçamento em GPUs 8–12 GB), o planner engaja group offload com streams — os pesos streamam por grupos e o pico cai para ≈ ativação, com VAE tiling + attention slicing como chunks menores. Quantização 4 bits por defeito; int3/int2 só em GPUs minúsculas (<4 GB), como último recurso. Kill-switch: `--no-group-offload` ou `TEXT2D_GROUP_OFFLOAD=0` (global: `AIGAMEKIT_GROUP_OFFLOAD=0`).
 | Disco   | ~8 GB  | Cache HF + pesos SDNQ (~2,5 GB em disco) |
 
 **Licença dos pesos:** o default é a base oficial [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (**Apache 2.0**, download público) / [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (**gated** — aceitar termos BFL + `HF_TOKEN`) com quantização **SDNQ em runtime** (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Checkpoints pré-quantizados [Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) são opcionais via `TEXT2D_MODEL_ID` (declaram `flux-non-commercial-license`). Resumo: [Licenças no monorepo](../README_PT.md).
@@ -110,7 +112,8 @@ Kernel opts (~6 GB): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/finding
 | `HF_HOME` | Cache Hugging Face (por defeito: `~/.cache/huggingface`) |
 | `TEXT2D_MODELS_DIR` | Diretório de modelos locais; o instalador grava em `~/.config/text2d/config.env` quando existe `Text2D/models/` com pesos |
 | `TEXT2D_OUTPUT_DIR` | Diretório de saída das imagens (criado pelo instalador em `~/.text2d/outputs`) |
-| `PYTORCH_CUDA_ALLOC_CONF` | Configuração CUDA (auto-definida se vazia) |
+| `PYTORCH_CUDA_ALLOC_CONF` | Configuração CUDA (auto por modo: `max_split_size_mb` + gc só SEM group offload — sob streaming GO fragmenta) |
+| `TEXT2D_GROUP_OFFLOAD` | `0` desliga o group offload (kill-switch da tool; `AIGAMEKIT_GROUP_OFFLOAD=0` é o global) |
 | `VRAMD_AUTO_START` | `0` desliga o auto-start do vramd |
 
 ### Guidance

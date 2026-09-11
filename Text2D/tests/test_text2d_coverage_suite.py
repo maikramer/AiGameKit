@@ -116,7 +116,7 @@ def test_vramd_payload_memory_efficient_false_default() -> None:
 
 
 def test_vramd_payload_memory_efficient_true(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Sem hardware fp8 o default memory-efficient é uint8 (patch: GPU do host varia)."""
+    """Default memory-efficient do text2d é 4 bits (mais quantização = folga)."""
     from aigamekit_shared import vramd_load
     from text2d.vramd_payload import build_generate_request
 
@@ -124,11 +124,11 @@ def test_vramd_payload_memory_efficient_true(monkeypatch: pytest.MonkeyPatch) ->
 
     req = build_generate_request(prompt="p", output="o.png", memory_efficient=True)
     assert req["memory_efficient"] is True
-    assert req.get("sdnq_preset") == "sdnq-uint8"
+    assert req.get("sdnq_preset") == "sdnq-int4"
 
 
-def test_vramd_payload_memory_efficient_fp8_upgrade(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Hardware com fp8: mesmo footprint, preset sobe para sdnq-fp8."""
+def test_vramd_payload_memory_efficient_int4_not_fp8_upgraded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hardware com fp8: o piso int4 do text2d NÃO sobe para fp8 (int4 poupa mais)."""
     from aigamekit_shared import vramd_load
     from text2d.vramd_payload import build_generate_request
 
@@ -136,7 +136,7 @@ def test_vramd_payload_memory_efficient_fp8_upgrade(monkeypatch: pytest.MonkeyPa
 
     req = build_generate_request(prompt="p", output="o.png", memory_efficient=True)
     assert req["memory_efficient"] is True
-    assert req.get("sdnq_preset") == "sdnq-fp8"
+    assert req.get("sdnq_preset") == "sdnq-int4"
 
 
 def test_vramd_payload_torch_compile_default_off() -> None:
@@ -266,8 +266,24 @@ def test_map_load_strips_offload_keys() -> None:
 
     out = map_vramd_load_kwargs({"offload": "cpu", "allow_group_offload": True, "quant_mode": "int4"})
     assert "offload" not in out
-    assert "allow_group_offload" not in out
     assert "quant_mode" not in out
+    # allow_group_offload viaja para o ctor como group_offload (GO default ON).
+    assert out["group_offload"] is True
+    assert "allow_group_offload" not in out
+
+
+def test_map_load_allow_group_offload_false() -> None:
+    from text2d.vramd_load import map_vramd_load_kwargs
+
+    out = map_vramd_load_kwargs({"allow_group_offload": False})
+    assert out["group_offload"] is False
+
+
+def test_map_load_group_offload_default_true() -> None:
+    from text2d.vramd_load import map_vramd_load_kwargs
+
+    out = map_vramd_load_kwargs({})
+    assert out["group_offload"] is True
 
 
 def test_map_load_defaults_verbose_false() -> None:
@@ -354,7 +370,7 @@ def test_profile_6gb_summary_has_quant_and_offload() -> None:
     p = profile_from_specs([(0, _gib(6))])
     s = p.summary()
     assert "quant=" in s
-    assert "cpu-offload" in s
+    assert "group-offload+streams" in s
 
 
 def test_profile_dual_12gb_multigpu_summary_gpus() -> None:

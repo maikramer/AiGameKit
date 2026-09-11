@@ -50,12 +50,35 @@ QUANT_WEIGHT_FACTOR: dict[str, float] = {
     "sdnq-int8": 0.55,
     "int4": 0.32,
     "sdnq-int4": 0.32,
+    "sdnq-uint4": 0.32,
+    # Bits finos (Hadamard+SVD): fator = bits/16 + escalas/svd (~0.07 medido no int4).
+    "sdnq-int3": 0.28,
+    "sdnq-int2": 0.25,
 }
 
 # Ordem de preferência (qualidade desce, poupança sobe). "none" primeiro; int4 por
 # último. fp8-layerwise antes de SDNQ (melhor qualidade, sem needing Triton/kernels);
 # SDNQ-first para int8/int4 (uint8 é o preset mais testado; int4 só quando é preciso caber).
-_QUANT_LADDER: tuple[str, ...] = ("none", "fp8-layerwise", "sdnq-uint8", "sdnq-int8", "sdnq-int4")
+_QUANT_LADDER: tuple[str, ...] = (
+    "none",
+    "fp8-layerwise",
+    "sdnq-uint8",
+    "sdnq-int8",
+    "sdnq-int4",
+    "sdnq-int3",
+    "sdnq-int2",
+)
+
+# Degraus exclusivos dos modos de OFFLOAD: nunca competem no full-GPU. Motivo:
+# num GPU borderline, "int3/int2 full-GPU" usa MAIS VRAM de pico do que
+# "int4 + group offload" (~ativação) e degrada a qualidade à toa — os bits
+# finos só compensam quando o int4+offload ainda não dá folga.
+_OFFLOAD_ONLY_QUANT = frozenset({"sdnq-int3", "sdnq-int2"})
+
+# Headroom do group offload (usable - activation) abaixo do qual se desce um
+# bit no quant de offload: int4 é o "suficiente"; int3/int2 são o "se for o caso".
+GO_HEADROOM_INT3_GIB = 2.5
+GO_HEADROOM_INT2_GIB = 1.5
 
 # Offload por ordem de agressividade. "none" = tudo na GPU.
 OFFLOAD_NONE = "none"
@@ -201,6 +224,25 @@ def _cpu_plan(notes: tuple[str, ...]) -> OffloadPlan:
     )
 
 
+def _offload_quant_mode(ladder: tuple[str, ...], usable_vram_gib: float, footprint: ModelFootprint) -> str:
+    """Quant dos passos de offload: int4 como base, int3/int2 só se for o caso.
+
+    O int4 é o degrau "suficiente" (pesos ~0.32x fp16); os bits finos só
+    engajam quando o headroom do group offload (usable - activation) fica
+    apertado — piorar a qualidade sem necessidade é regressão.
+    """
+    headroom = usable_vram_gib - footprint.activation_gib
+    if headroom < GO_HEADROOM_INT2_GIB:
+        preferred = "sdnq-int2"
+    elif headroom < GO_HEADROOM_INT3_GIB:
+        preferred = "sdnq-int3"
+    else:
+        preferred = "sdnq-int4"
+    if preferred in ladder:
+        return preferred
+    return ladder[-1]
+
+
 def plan_offload(
     gpu_specs: list[tuple[int, int]] | list[tuple[int, int, int]],
     footprint: ModelFootprint,
@@ -212,6 +254,7 @@ def plan_offload(
     prefer_leaf_offload: bool = False,
     target_resolution: int | None = None,
     usable_fraction: float = USABLE_VRAM_FRACTION,
+    full_gpu_budget_fraction: float | None = None,
 ) -> OffloadPlan:
     """Resolve um :class:`OffloadPlan` por escada determinística.
 
@@ -227,6 +270,10 @@ def plan_offload(
     5. Quantizar (mais agressivo) + ``sequential_cpu`` offload + VAE tiling +
        attention slicing (pico ≈ ativação).
     6. CPU (sem GPU disponível ou nada cabe).
+
+    Bits finos: ``sdnq-int3``/``sdnq-int2`` são degraus **exclusivos dos passos
+    de offload** (3-5) — o int4 é o quant de offload base e os bits finos só
+    engajam quando o headroom (orçamento - ativação) fica apertado.
 
     Multi-GPU: se >1 GPU e a soma dos orçamentos couber com os pesos (fp16 ou
     quantizados) divididos, devolve split sem offload.
@@ -245,6 +292,12 @@ def plan_offload(
             (reservar VRAM para ativação — octree alto / qualidade high).
         prefer_leaf_offload: forçar ``leaf_level`` (grupos mínimos) no group offload.
         usable_fraction: fração da VRAM total considerada utilizável.
+        full_gpu_budget_fraction: quando definido, o full-GPU (passo 2) só é aceite
+            se o pico estimado couber nesta fração do orçamento; acima disso o
+            planner prefere group offload com streams — folga real para VAE
+            decode/ativação em GPUs onde "caber por pouco" rebenta em OOM
+            (ex.: FLUX klein int4 fica 83-91% do orçamento em GPUs 8-12 GB).
+            ``None`` = comportamento clássico (caber chega).
 
     Returns:
         :class:`OffloadPlan`. Puro: nenhum acesso a torch/CUDA.
@@ -255,6 +308,12 @@ def plan_offload(
     ladder = tuple(q for q in (allow_quant or _QUANT_LADDER) if q in QUANT_WEIGHT_FACTOR)
     if not ladder:
         ladder = ("none",)
+    # Full-GPU (e split multi-GPU) nunca usam os bits finos — ver _OFFLOAD_ONLY_QUANT.
+    full_ladder = tuple(q for q in ladder if q not in _OFFLOAD_ONLY_QUANT) or ("none",)
+    # Gate de folga sem GO disponível é contraditório (a única alternativa seria
+    # model_cpu, mais lento e com pior pico que full-GPU): ignoramos o fraction.
+    if full_gpu_budget_fraction is not None and not allow_group_offload:
+        full_gpu_budget_fraction = None
 
     # Budgets por GPU: aceita 2-tuple (idx, total) ou 3-tuple (idx, free, total).
     # Com free VRAM disponível, o budget = min(total * usable_fraction, free * safety)
@@ -280,7 +339,7 @@ def plan_offload(
     # --- Multi-GPU: split dos pesos por todas as GPUs (accelerate device_map) ---
     # force_group_offload: single-GPU com stream de pesos (não split).
     if allow_multi_gpu and len(budgets) > 1 and not force_group_offload:
-        for quant in ladder:
+        for quant in full_ladder:
             weights = footprint.weights_gib(quant)
             # Pesos divididos + ativação na primária têm de caber.
             if weights <= total_budget and (weights / len(budgets)) + act <= primary_budget:
@@ -300,10 +359,13 @@ def plan_offload(
 
     # --- Single-GPU: escada quant → quant+offload ---
     # Passo 1-2: tudo na GPU, quant crescente (salvo force_group_offload).
+    # Com full_gpu_budget_fraction, "caber" não chega: acima da fração, o
+    # full-GPU é recusado a favor de group offload (folga para o runtime).
     if not force_group_offload:
-        for quant in ladder:
+        full_gpu_cap = primary_budget * full_gpu_budget_fraction if full_gpu_budget_fraction else primary_budget
+        for quant in full_ladder:
             peak = footprint.weights_gib(quant) + act
-            if peak <= primary_budget:
+            if peak <= full_gpu_cap:
                 note = "full-GPU" if quant == "none" else f"full-GPU + {quant}"
                 # Em resolução alta, activar VAE tiling + attention slicing mesmo em
                 # full-GPU — reduzem o pico de ativação sem custo de offload.
@@ -327,16 +389,21 @@ def plan_offload(
     # A fórmula decide leaf_level (VRAM mínima) vs block_level (menos sync points).
     # Algumas pipelines custom (Hunyuan3D vendored) não são compatíveis com group
     # offload — allow_group_offload=False salta para model_cpu (passo 4).
-    most_quant = ladder[-1]
+    off_quant = _offload_quant_mode(ladder, primary_budget, footprint)
     from .group_offload import plan_group_offload  # lazy: evita import circular
 
+    # Com full_gpu_budget_fraction, chegar ao passo 3 significa que o full-GPU
+    # foi recusado por FALTA DE FOLGA (não de capacidade) — forçamos o GO: a
+    # intenção é pico ≈ ativação, e o gate "cabe?" do plan_group_offload
+    # devolveria None e deixaria cair para model_cpu (mais lento, pior pico).
+    force_go = force_group_offload or full_gpu_budget_fraction is not None
     group_cfg = (
         plan_group_offload(
             primary_budget,
             footprint,
-            most_quant,
+            off_quant,
             prefer_leaf=prefer_leaf_offload,
-            force=force_group_offload,
+            force=force_go,
         )
         if allow_group_offload
         else None
@@ -344,10 +411,10 @@ def plan_offload(
     if group_cfg is not None:
         # group offload: pico ≈ ativação (só as layers necessárias onloaded).
         leaf_note = group_cfg.offload_type
-        force_note = " (force, VRAM→ativação)" if force_group_offload else ""
+        force_note = " (force, VRAM→ativação)" if force_go else ""
         return OffloadPlan(
             device="cuda",
-            quant_mode=most_quant,
+            quant_mode=off_quant,
             offload=OFFLOAD_GROUP_STREAM,
             vae_slicing=True,
             vae_tiling=True,
@@ -356,17 +423,17 @@ def plan_offload(
             primary_gpu=primary,
             usable_vram_gib=round(primary_budget, 2),
             est_peak_gib=round(act, 2),
-            notes=(f"group {leaf_note}+streams + {most_quant} + vae-tiling/attn-slice{force_note}",),
+            notes=(f"group {leaf_note}+streams + {off_quant} + vae-tiling/attn-slice{force_note}",),
             group_config=group_cfg,
         )
 
     # Passo 4: quant + model_cpu offload (pico ≈ maior módulo + ativação).
     # Fallback: diffusers antigo sem group offload, ou pipeline não-diffusers.
-    peak_model = footprint.largest_gib(most_quant) + act
+    peak_model = footprint.largest_gib(off_quant) + act
     if peak_model <= primary_budget:
         return OffloadPlan(
             device="cuda",
-            quant_mode=most_quant,
+            quant_mode=off_quant,
             offload=OFFLOAD_MODEL,
             vae_slicing=True,
             vae_tiling=True,
@@ -375,13 +442,13 @@ def plan_offload(
             primary_gpu=primary,
             usable_vram_gib=round(primary_budget, 2),
             est_peak_gib=round(peak_model, 2),
-            notes=(f"model_cpu offload + {most_quant} + vae-tiling/attn-slice",),
+            notes=(f"model_cpu offload + {off_quant} + vae-tiling/attn-slice",),
         )
 
     # Passo 5: sequential offload — pico ≈ ativação (cabe em praticamente tudo).
     return OffloadPlan(
         device="cuda",
-        quant_mode=most_quant,
+        quant_mode=off_quant,
         offload=OFFLOAD_SEQUENTIAL,
         vae_slicing=True,
         vae_tiling=True,
@@ -390,7 +457,7 @@ def plan_offload(
         primary_gpu=primary,
         usable_vram_gib=round(primary_budget, 2),
         est_peak_gib=round(act, 2),
-        notes=(f"sequential offload + {most_quant} + vae-tiling/attn-slice (lento, VRAM mínima)",),
+        notes=(f"sequential offload + {off_quant} + vae-tiling/attn-slice (lento, VRAM mínima)",),
     )
 
 
@@ -581,6 +648,7 @@ def place_pipeline(
     force_group_offload: bool = False,
     prefer_leaf_offload: bool = False,
     target_resolution: int | None = None,
+    full_gpu_budget_fraction: float | None = None,
     model_attr: str | None = None,
     no_split_classes: list[str] | None = None,
     offload_modules: tuple[str, ...] | None = None,
@@ -610,6 +678,7 @@ def place_pipeline(
         allow_multi_gpu: permitir split multi-GPU.
         force_group_offload: saltar full-GPU → group+stream (VRAM para ativação).
         prefer_leaf_offload: forçar ``leaf_level`` (grupos mínimos).
+        full_gpu_budget_fraction: ver :func:`plan_offload` (folga de full-GPU).
         model_attr: attr do ``nn.Module`` pesado (ex: ``"model"`` Hunyuan3D).
             Necessário para accelerate dispatch em pipelines custom.
         no_split_classes: override das classes no-split. Se ``None``, deriva de
@@ -634,6 +703,7 @@ def place_pipeline(
         force_group_offload=force_group_offload,
         prefer_leaf_offload=prefer_leaf_offload,
         target_resolution=target_resolution,
+        full_gpu_budget_fraction=full_gpu_budget_fraction,
     )
 
     if on_status:
@@ -653,6 +723,7 @@ def place_pipeline(
             force_group_offload=force_group_offload,
             prefer_leaf_offload=prefer_leaf_offload,
             target_resolution=target_resolution,
+            full_gpu_budget_fraction=full_gpu_budget_fraction,
         )
         if on_status:
             on_status(f"Cascade para offload: {plan.summary()}")

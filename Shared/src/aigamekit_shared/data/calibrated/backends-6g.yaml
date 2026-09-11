@@ -263,7 +263,7 @@ backends:
       não residente)'
 - name: text2d
   adapter: aigamekit_shared.worker_serve_adapter_base
-  vram_mib: 5760
+  vram_mib: 5568
   priority: 25
   tool: text2d
   footprint_key: flux-klein-9b
@@ -271,35 +271,36 @@ backends:
     monorepo_tool: text2d
   vram:
     weights_gib: 0.19
-    activation_gib: 5.18
+    activation_gib: 4.99
     context_gib: 0.23
-    peak_mib: 5760
+    peak_mib: 5568
     safety_mib: 384
-    admit_peak_mib: 6144
+    admit_peak_mib: 5952
   peak_profile:
     quant_mode: sdnq-int4
     staged_load: true
     load_kwargs:
-      memory_efficient: true
       quant_preset: sdnq-int4
-      model_id: black-forest-labs/FLUX.2-klein-4B
+      sdnq_preset: sdnq-int4
+      memory_efficient: true
+      allow_group_offload: true
+      torch_compile: false
   measured:
     confidence: low
     repeats: 3
-    samples: 1499
-    load_sec: 30.297
-    generate_sec_median: 9.798
+    samples: 1240
+    load_sec: 19.509
+    generate_sec_median: 9.674
     gpu: NVIDIA GeForce RTX 4050 Laptop GPU
     gpu_total_mib: 6141
-    driver: '595.84'
-    at: '2026-08-08T20:51:46+00:00'
-    fragmentation_mib: 4688
-    leak_mib_per_run: -57.0
+    driver: 615.71.09
+    at: '2026-09-11T18:06:37+00:00'
+    fragmentation_mib: 2076
     warnings:
-    - 'activação (5296 MiB) > 1.5x pesos (188 MiB): provável carregamento faseado dentro do generate (peso
+    - 'activação (5108 MiB) > 1.5x pesos (188 MiB): provável carregamento faseado dentro do generate (peso
       não residente)'
-    - 'VRAM de terceiros variou 82 MiB durante a medição (baseline 0 → 82): pico possivelmente enviesado'
     - 'maior intervalo entre amostras 0.22s (alvo 0.05s): pico pode ter escapado'
+
 - name: skymap2d
   adapter: aigamekit_shared.worker_serve_adapter_base
   vram_mib: 5440

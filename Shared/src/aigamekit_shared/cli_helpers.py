@@ -134,10 +134,12 @@ def needed_mib_for_backend(
     mode = (quant_mode or "").strip().lower()
     if mode in ("", "none", "null"):
         if memory_efficient:
-            if backend in ("paint3d", "text2d", "part3d", "text2icon"):
-                mode = "sdnq-uint8"
-            elif backend in ("text3d", "motion3d"):
+            if backend in ("text2d", "text3d", "motion3d"):
+                # 4 bits por defeito nos DiT grandes (FLUX klein/Hunyuan/Motion):
+                # pico folgado em GPUs 6-12 GB com group offload.
                 mode = "sdnq-int4"
+            elif backend in ("paint3d", "part3d", "text2icon"):
+                mode = "sdnq-uint8"
             else:
                 # skymap2d / text2sound: mem_eff = offload; footprint já reflecte quant.
                 mode = "none"
@@ -496,7 +498,10 @@ def with_vramd_peak_opts(
         # ocupação de VRAM, melhor qualidade.
         from .vramd_load import prefer_fp8_preset
 
-        if backend in ("paint3d", "text2d", "part3d", "text2icon"):
+        if backend == "text2d":
+            # FLUX klein: 4 bits é o piso por defeito (mais quantização = folga).
+            out["sdnq_preset"] = "sdnq-int4"
+        elif backend in ("paint3d", "part3d", "text2icon"):
             out["sdnq_preset"] = prefer_fp8_preset("sdnq-uint8")
         elif backend in ("text3d", "motion3d"):
             out["sdnq_preset"] = "sdnq-int4"

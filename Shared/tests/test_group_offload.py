@@ -157,7 +157,8 @@ class TestPlanGroupOffload:
         assert cfg is not None
         assert cfg.offload_type == "leaf_level"
         assert cfg.use_stream is True
-        assert cfg.record_stream is True
+        # record_stream=False conservador (OOM-spin medido no Paint3D dual-UNet)
+        assert cfg.record_stream is False
 
     def test_12gb_gpu_enough_for_blocks(self) -> None:
         """GPU 12 GiB + FLUX 9B: folga para blocks → block_level + stream."""

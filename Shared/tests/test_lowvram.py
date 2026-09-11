@@ -223,3 +223,80 @@ class TestFreeVram:
         plan_3 = plan_offload([_gpu_free(12.0, 12.0)], FLUX_9B)
         # min(10.8, 11.4) = 10.8 → igual ao 2-tuple.
         assert plan_2.usable_vram_gib == plan_3.usable_vram_gib
+
+
+class TestFullGpuBudgetFraction:
+    """full_gpu_budget_fraction: full-GPU só com folga; sem folga → GO+streams."""
+
+    KLEIN_4B = FOOTPRINTS["flux-klein-4b"]  # 14 GiB fp16, act 1.5, largest 5.0
+    KLEIN_9B = FOOTPRINTS["flux-klein-9b"]  # 26 GiB fp16
+
+    def test_8gb_without_headroom_gate_is_full_gpu_int4(self) -> None:
+        """Comportamento clássico (None): int4 full-GPU a 83% do orçamento."""
+        plan = plan_offload([_gpu(8)], self.KLEIN_4B, full_gpu_budget_fraction=None)
+        assert plan.offload == OFFLOAD_NONE
+        assert plan.quant_mode == "sdnq-int4"
+
+    def test_8gb_with_headroom_gate_prefers_group_stream(self) -> None:
+        """Com fraction=0.7: 83% > 70% → GO+streams (pico ≈ ativação)."""
+        plan = plan_offload([_gpu(8)], self.KLEIN_4B, full_gpu_budget_fraction=0.70)
+        assert plan.offload == OFFLOAD_GROUP_STREAM
+        assert plan.quant_mode == "sdnq-int4"
+        assert plan.vae_tiling and plan.attention_slicing
+        # O GO é forçado (o gate "cabe?" diria None e deixaria cair a model_cpu).
+        assert plan.group_config is not None
+
+    def test_12gb_9b_with_gate_prefers_group_stream(self) -> None:
+        """9B int4 full ficaria a 91% em 12 GB → GO+streams."""
+        plan = plan_offload([_gpu(12)], self.KLEIN_9B, full_gpu_budget_fraction=0.70)
+        assert plan.offload == OFFLOAD_GROUP_STREAM
+
+    def test_16gb_9b_with_gate_stays_full_gpu(self) -> None:
+        """9B int4 a ~68% em 16 GB → full-GPU mantém (folga suficiente)."""
+        plan = plan_offload([_gpu(16)], self.KLEIN_9B, full_gpu_budget_fraction=0.70)
+        assert plan.offload == OFFLOAD_NONE
+        assert plan.quant_mode == "sdnq-int4"
+
+    def test_gate_with_allow_group_offload_false_keeps_classic(self) -> None:
+        """Kill-switch de GO + fraction: o fraction não pode empurrar para
+        model_cpu — sem GO o full-GPU clássico devolve-se."""
+        plan = plan_offload([_gpu(8)], self.KLEIN_4B, full_gpu_budget_fraction=0.70, allow_group_offload=False)
+        assert plan.offload == OFFLOAD_NONE
+
+
+class TestOffloadFineBits:
+    """int4 é o quant de offload base; int3/int2 só com headroom apertado."""
+
+    KLEIN_4B = FOOTPRINTS["flux-klein-4b"]
+
+    def test_6gb_stays_int4(self) -> None:
+        """Headroom GO 5.4-1.5=3.9 >= 2.5 → int4."""
+        plan = plan_offload([_gpu(6)], self.KLEIN_4B)
+        assert plan.offload == OFFLOAD_GROUP_STREAM
+        assert plan.quant_mode == "sdnq-int4"
+
+    def test_4gb_descends_to_int3(self) -> None:
+        """Headroom GO 3.6-1.5=2.1 < 2.5 → desce um bit."""
+        plan = plan_offload([_gpu(4)], self.KLEIN_4B)
+        assert plan.offload == OFFLOAD_GROUP_STREAM
+        assert plan.quant_mode == "sdnq-int3"
+
+    def test_3gb_descends_to_int2(self) -> None:
+        """Headroom GO 2.7-1.5=1.2 < 1.5 → último recurso."""
+        plan = plan_offload([_gpu(3)], self.KLEIN_4B)
+        assert plan.offload == OFFLOAD_GROUP_STREAM
+        assert plan.quant_mode == "sdnq-int2"
+
+    def test_fine_bits_never_win_full_gpu(self) -> None:
+        """GPU 5.7 GiB: int2 full-GPU "caberia" (5.0<=5.13) — mas o planner
+        prefere int4+GO (pico menor, mais qualidade): bits finos são
+        exclusivos dos modos de offload."""
+        plan = plan_offload([_gpu(5.7)], self.KLEIN_4B)
+        assert plan.offload == OFFLOAD_GROUP_STREAM
+        assert plan.quant_mode == "sdnq-int4"
+
+    def test_custom_ladder_without_fine_bits_keeps_last(self) -> None:
+        """allow_quant custom (skymap-style ("none",)): _offload_quant_mode
+        respeita a ladder — nunca inventa degraus que a tool não suporta."""
+        plan = plan_offload([_gpu(3)], self.KLEIN_4B, allow_quant=("none",))
+        assert plan.quant_mode == "none"

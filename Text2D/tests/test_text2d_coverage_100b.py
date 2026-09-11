@@ -193,7 +193,8 @@ def test_klein_flux_generator_class_importable() -> None:
 @pytest.mark.parametrize("mem_eff", [True, False])
 @pytest.mark.parametrize("fp8_hw", [True, False], ids=["fp8-hw", "no-fp8-hw"])
 def test_build_request_memory_efficient_sdnq(mem_eff: bool, fp8_hw: bool, monkeypatch: pytest.MonkeyPatch) -> None:
-    """uint8 default sobe para fp8 apenas quando o hardware suporta (determinístico)."""
+    """mem_eff sem preset explícito → 4 bits por defeito (FLUX klein; o fp8
+    upgrade aplica-se aos siblings uint8, não ao piso int4 do text2d)."""
     from aigamekit_shared import vramd_load
     from text2d.vramd_payload import build_generate_request
 
@@ -202,7 +203,7 @@ def test_build_request_memory_efficient_sdnq(mem_eff: bool, fp8_hw: bool, monkey
     req = build_generate_request(prompt="p", output="o", memory_efficient=mem_eff)
     assert req["memory_efficient"] is mem_eff
     if mem_eff:
-        assert req.get("sdnq_preset") == ("sdnq-fp8" if fp8_hw else "sdnq-uint8")
+        assert req.get("sdnq_preset") == "sdnq-int4"
 
 
 @pytest.mark.parametrize("flag", [True, False])

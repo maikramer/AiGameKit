@@ -1,6 +1,6 @@
 # Text2D — AI Text-to-Image Generation
 
-> Fast, local text-to-image generation using [FLUX.2 Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) with SDNQ quantization. Designed for modest GPUs (6 GB VRAM; hw-auto engata o modo memory-efficient automaticamente).
+> Fast, local text-to-image generation using [FLUX.2 Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) with SDNQ quantization. Designed for modest GPUs (6 GB VRAM; hw-auto engata **group offload + CUDA streams + int4** automaticamente — pico ≈ ativação, com folga real).
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
@@ -106,6 +106,7 @@ text2d generate "character design" --quality high
 | `--gpu-ids` | str | auto | GPU IDs for multi-GPU split (e.g. `0,1`) |
 | `--quality` | str | `medium` | Quality tier: `fast` / `low` / `medium` / `high` / `highest` |
 | `--hw-auto/--no-hw-auto` | flag | on | Hardware auto-detection: enables CPU offload + 4B model on small GPUs (<7.5 GB), keeps 9B / full-GPU / multi-GPU split on big rigs. Explicit flags win. Env kill-switch: `TEXT2D_HW_AUTO=0` |
+| `--group-offload/--no-group-offload` | flag | on | **Group offload + CUDA streams** whenever full-GPU wouldn't have headroom (peak ≈ activation; smaller chunks via VAE tiling + attention slicing). Quant stays int4 (int3/int2 only as last resort on tiny GPUs). Kill-switch: `TEXT2D_GROUP_OFFLOAD=0` / `AIGAMEKIT_GROUP_OFFLOAD=0` |
 | `--compile/--no-compile` | flag | off (`generate`); **on** (`generate-batch`) | `torch.compile` on the transformer (~−6–10% hot; cold warmup costly) |
 | `--compile-mode` | str | `default` | `default` / `reduce-overhead` / `max-autotune` (Inductor; reduce-overhead only with full-GPU) |
 | `--channels-last/--no-channels-last` | flag | off (`generate`); **on** (`generate-batch`) | NHWC memory format (Ampere+); pairs well with compile |
@@ -246,7 +247,8 @@ text2d generate "thumbnail" --quality fast      # 512², 4 steps
 | `HF_HOME` | Hugging Face cache directory (default: `~/.cache/huggingface`) |
 | `TEXT2D_MODELS_DIR` | Local models directory (installer writes to `~/.config/text2d/config.env`) |
 | `TEXT2D_OUTPUT_DIR` | Default image output directory |
-| `PYTORCH_CUDA_ALLOC_CONF` | CUDA memory config (auto-set if empty) |
+| `PYTORCH_CUDA_ALLOC_CONF` | CUDA memory config (auto-set by mode: `max_split_size_mb` + gc only when group offload is OFF — under GO streaming it fragments) |
+| `TEXT2D_GROUP_OFFLOAD` | `0` disables group offload (per-tool kill-switch; `AIGAMEKIT_GROUP_OFFLOAD=0` is the global one) |
 | `AIGAMEKIT_PROFILE_LOG` | Path for JSONL profiling output (used with `--profile`) |
 
 ## Output Layout
