@@ -13,20 +13,12 @@ Perfis para os hardwares de referência:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from aigamekit_shared.group_offload import (
-    ALLOC_CONF_DEFAULT,  # noqa: F401 — re-export (testes/CLI usam daqui)
+    ALLOC_CONF_DEFAULT,  # noqa: F401 — re-export (testes usam daqui)
     ALLOC_CONF_GROUP_OFFLOAD,  # noqa: F401 — re-export
-    is_group_offload_enabled,
-)
-from aigamekit_shared.group_offload import (
-    apply_alloc_conf_early as _apply_alloc_conf_early,
-)
-from aigamekit_shared.group_offload import (
-    cuda_alloc_conf_for as _cuda_alloc_conf_for,
-)
-from aigamekit_shared.group_offload import (
-    group_offload_will_engage as _shared_will_engage,
+    ToolOffloadPolicy,
 )
 from aigamekit_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from aigamekit_shared.hardware import hw_auto_enabled as _hw_auto_enabled
@@ -64,11 +56,31 @@ def hw_auto_enabled() -> bool:
     return _hw_auto_enabled(HW_AUTO_ENV)
 
 
+def _model_id_for_largest(largest_gib: float) -> str:
+    """Modelo BASE pela VRAM da maior GPU (mesma regra do perfil hw)."""
+    return HIGH_VRAM_MODEL_ID if largest_gib >= 10.0 else LOW_VRAM_MODEL_ID
+
+
+def _footprint_for(specs: list) -> Any:
+    """Footprint dinâmico (4B/9B pela VRAM) para o policy de group offload."""
+    from aigamekit_shared.lowvram import GIB
+
+    largest_gib = max((s[-1] for s in specs), default=0) / GIB
+    return model_footprint(_model_id_for_largest(largest_gib))
+
+
+# Política GO da tool — gate (specs livres, fraction 0.70), alloc conf por modo
+# e needed_mib num só objeto (aigamekit_shared.group_offload.ToolOffloadPolicy).
+POLICY = ToolOffloadPolicy(
+    footprint_fn=_footprint_for,
+    tool_env_var=GROUP_OFFLOAD_ENV,
+    full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION,
+)
+
+
 def group_offload_intent(allow: bool = True) -> bool:
     """Intenção de group offload: flag ``--group-offload`` AND env kill-switch."""
-    if not allow:
-        return False
-    return is_group_offload_enabled(tool_env_var=GROUP_OFFLOAD_ENV)
+    return POLICY.intent(allow)
 
 
 @dataclass(frozen=True)
@@ -94,10 +106,9 @@ class Text2DHardwareProfile(HardwareProfileBase):
 
 def _plan_kwargs() -> dict:
     """Knobs partilhados pelo hw-profile e pelo generator (mesma política)."""
-    go = group_offload_intent()
     return {
-        "allow_group_offload": go,
-        "full_gpu_budget_fraction": FULL_GPU_BUDGET_FRACTION if go else None,
+        "allow_group_offload": POLICY.intent(),
+        "full_gpu_budget_fraction": FULL_GPU_BUDGET_FRACTION if POLICY.intent() else None,
     }
 
 
@@ -160,34 +171,20 @@ def detect_hardware_profile() -> Text2DHardwareProfile:
 def group_offload_will_engage() -> bool:
     """Réplica pura do gate: o plano para o hardware ATUAL engaja group offload?
 
-    Usa **specs com VRAM livre** (o mesmo sinal do placement real) — numa GPU
-    parcialmente ocupada o gate concorda com o planner. O ``offload_mode`` do
-    perfil (specs totais) fica para display.
+    Usa **specs com VRAM livre** (o mesmo sinal do placement real) e o footprint
+    do modelo que o hw-auto escolheria (4B/9B) — ver ``POLICY``.
     """
-    if not group_offload_intent():
-        return False
     hwp = detect_hardware_profile()
     if hwp.device != "cuda":
         return False
-    return _shared_will_engage(
-        model_footprint(hwp.model_id),
-        full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION,
-        tool_env_var=GROUP_OFFLOAD_ENV,
-    )
+    return POLICY.will_engage()
 
 
 def cuda_alloc_conf_for(group_offload: bool = True) -> str:
-    """``PYTORCH_CUDA_ALLOC_CONF`` por modo — chamar ANTES da 1ª alocação CUDA.
-
-    Args:
-        group_offload: intenção (flag ``--group-offload`` + env). O conf GO só
-            é devolvido quando o offload **vai correr** neste hardware — GPUs
-            grandes voltam ao conf clássico (max_split reduz o pico).
-    """
-    return _cuda_alloc_conf_for(group_offload_intent(group_offload) and group_offload_will_engage())
+    """``PYTORCH_CUDA_ALLOC_CONF`` por modo — delega na ``POLICY``."""
+    return POLICY.cuda_alloc_conf_for(group_offload)
 
 
 def apply_alloc_conf_early(group_offload: bool = True) -> None:
-    """``setdefault`` do alloc conf no arranque do CLI (torch lê o env na 1ª
-    alocação CUDA; o override explícito do utilizador ganha sempre)."""
-    _apply_alloc_conf_early(group_offload_intent(group_offload) and group_offload_will_engage())
+    """``setdefault`` do alloc conf no arranque do CLI (antes da 1ª CUDA)."""
+    POLICY.apply_alloc_conf_early(group_offload)

@@ -223,7 +223,7 @@ class TestFineBitQuantizationReal:
             out = q(x)
             # Bits finos degradam — mas o output mantém a escala/energia do
             # original (uint+Hadamard N4+Lloyd-Max evita colapso numérico).
-            # Nota: 256×256 > minimum_allowed_numel (16384) — layers menores
+            # Nota: 256x256 > minimum_allowed_numel (16384) — layers menores
             # já não quantizam (SDNQ 0.2.2+).
             assert out.shape == ref.shape
             assert torch.isfinite(out).all()

@@ -118,9 +118,8 @@ def test_alloc_conf_by_mode(monkeypatch) -> None:
 
 
 def test_group_offload_will_engage_pure(monkeypatch) -> None:
-    """Gate puro: intent + device (cuda) → pergunta ao helper Shared (free specs)."""
+    """Gate puro: device cuda → pergunta à POLICY (specs livres); CPU → não."""
     monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
-    monkeypatch.delenv("TEXTURE2D_GROUP_OFFLOAD", raising=False)
     monkeypatch.delenv("TEXT2D_GROUP_OFFLOAD", raising=False)
 
     import text2d.hardware as hw
@@ -131,16 +130,16 @@ def test_group_offload_will_engage_pure(monkeypatch) -> None:
         device = "cuda"
         model_id = hw.LOW_VRAM_MODEL_ID
 
-    def _fake_shared(footprint, **kw):
+    def _fake_will_engage(self, allow=True, gpu_specs=None):
         calls.append("asked")
         return True
 
     monkeypatch.setattr(hw, "detect_hardware_profile", lambda: _P())
-    monkeypatch.setattr(hw, "_shared_will_engage", _fake_shared)
+    monkeypatch.setattr(hw.ToolOffloadPolicy, "will_engage", _fake_will_engage)
     assert group_offload_will_engage() is True
     assert calls == ["asked"]
 
-    # CPU → nem pergunta ao helper.
+    # CPU → nem pergunta à POLICY.
     class _Cpu:
         device = "cpu"
         model_id = hw.LOW_VRAM_MODEL_ID
