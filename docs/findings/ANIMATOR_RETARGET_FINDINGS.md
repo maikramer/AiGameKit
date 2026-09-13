@@ -122,6 +122,46 @@ aigamekit-lab debug inspect meshes/{id}_lod0.glb   # anims: idle,walk,…
 
 ---
 
+## Creature procedural: yaw do mesh NÃO é canonicalizado (lobo/escorpião de lado, 2026-09-13)
+
+Os clips procedurais (`creature`/`flying`) articulam ossos e **não** tocam no yaw
+do corpo — por isso “como receberam animação” nunca foi a causa do lobo a andar
+de lado. A causa é o **mesh**: o Hunyuan3D gerou `wolf`/`scorpion` com o focinho
+ao longo de **+X**, e nem o rig SkinTokens nem o `game-pack` creature
+canonicalizam a frente para **+Z** (a convenção de facing do VibeGame
+(`planarYawRadians`) e do Viber (`facing_rotation` → `rotation * Vec3::Z`)).
+Bípedes escaparam porque o retarget humanoide impõe um rest canónico.
+
+**Sintoma:** quadrúpede desloca-se com o corpo de perfil (eixo comprido do mesh
+em X ≠ rumo do movimento em yaw); ataque/`face_player` também ficam 90° errados.
+
+**Diagnóstico sem render (GLB skinned):** FK dos nós a partir da cena (os IBM
+destes rigs são identidade — a pose vive nos nós locais): cadeia
+`clavicle→upperarm→hand` (patas dianteiras) vs `thigh→calf→foot` (traseiras).
+Lobo: patas dianteiras x≈+0.3..+0.53, cauda (cadeia `ball_l*`) x≈−0.64 →
+**focinho +X**. Escorpião: garras/`neck_01` x≈+0.47..0.49 → **frente +X**.
+Alternativa: `gltf-transform inspect` — bbox de cena comprido no X é o flag
+(bípedes saem `x≈1.2–1.6, z≈0.4`; lobo era `x=1.40, z=0.41`).
+
+**Fix aplicado (2026-09-13, assets públicos do pool
+`Viber/examples/shared-assets/public/assets/meshes/characters/`):** rotação de
+**−90° yaw** (`[0, −√½, 0, √½]` xyzw) no nó **raiz** (`Armature` nos LODs,
+`Mesh` no `*_collision.glb`) de `wolf_{lod0,lod1,lod2,collision}` e
+`scorpion_{…}` — edição só do chunk JSON (buffers KTX2/meshopt intactos),
+clips não animam o nó raiz, verificado com `gltf-transform inspect`
+(bbox pasa a `x ±0.20, z −0.70..+0.70`) e in-engine (bridge screenshot do
+`worlds/qa-locomotion.xml`: corpo alinhado com o rumo nos dois sentidos).
+`{wolf,scorpion}_precompute.json` AABBs atualizados (troca x↔z; cápsula
+vertical é insensível). `_intermediate/*` fica **sem** rotação (proveniência).
+
+**⚠️ Regeneração reintroduz o bug:** `gameassets resume` recria os LODs a partir
+de `_intermediate/{id}_rigged_animated.glb` **sem** o yaw canónico. Follow-up na
+raiz: canonicalizar yaw no caminho creature (game-pack/rig: rodar o root para a
+cadeia dos braços/dianteira ficar em +Z, detetada por FK) ou re-aplicar o bake
+pós-LOD; guard barato: regra `check glb` “frente = +Z” para `category: creature`.
+
+---
+
 ## Motion3D (HML22) → SkinTokens: o rest do source manda
 
 Doc canónico (happy path, CLIs, QA, anti-padrões):
@@ -155,6 +195,7 @@ ciclo; `pelvis` só oscila em Z (~4 cm).
 
 | Data | Nota |
 |------|------|
+| 2026-09-13 | Creature procedural: yaw do mesh não canónico (lobo/escorpião +X) — bake −90° nos GLBs públicos; regen reintroduz (follow-up na raiz) |
 | 2026-08-02 | Motion3D HML22: aim explícito + rest T-pose; neutro A-pose; pés do rest alvo; doc canónica `MOTION3D_FINDINGS.md` |
 | 2026-07-24 | Bípedes creature→humanoid Quaternius; incidente shade; force_preset |
 | 2026-07-24 | Extraído de AGENTS.md learned facts (loc_conv + `_bone_rest_dir`) |
