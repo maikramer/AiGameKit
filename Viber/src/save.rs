@@ -365,10 +365,7 @@ fn options_system(
                 position,
                 (mixer.master, mixer.music, mixer.sfx),
             );
-            if let Err(e) = save_to_disk(
-                    &save_path_for(base_dir, save_dir),
-                    &game,
-                ) {
+            if let Err(e) = save_to_disk(&save_path_for(base_dir, save_dir), &game) {
                 toasts.write(ScriptToast(format!("Falha ao gravar: {e}")));
                 sfx.write(crate::ambient::SfxEvent {
                     clip: crate::ambient::SfxClip::Error,

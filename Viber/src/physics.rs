@@ -839,6 +839,24 @@ fn collider_from_gltf(
 
 #[cfg(test)]
 mod tests {
+
+    /// `column_xz_distance` é o que decide "chão sob os pés": zero SÓ dentro
+    /// da coluna. É a diferença entre o herói ter chão analítico depois de um
+    /// teleporte e atravessar o terreno por assar (2026-09-12).
+    #[test]
+    fn column_distance_is_zero_only_inside_the_column() {
+        let half = 2000.0;
+        let edge = 64.0;
+        let coords = UVec2::new(31, 31);
+        // Centro da coluna (31,31): x0 = -2000 + 31*64 = -16 → centro em 16.
+        let inside = Vec3::new(0.0, 40.0, 0.0);
+        assert!(column_xz_distance(inside, coords, half, edge) <= 0.0);
+        // Coluna vizinha: fora, mas MUITO dentro do antigo `keep_within`.
+        let neighbour = Vec3::new(120.0, 40.0, 0.0);
+        let d = column_xz_distance(neighbour, coords, half, edge);
+        assert!(d > 0.0, "vizinha a {d} m devia contar como fora");
+        assert!(d < 192.0, "e ainda assim dentro da banda de streaming");
+    }
     use super::*;
 
     /// A position-only triangle list, the shape the glTF loader hands us for
@@ -1255,7 +1273,19 @@ pub fn stream_voxel_colliders(
     for (entity, column, has_collider, children) in &columns {
         let distance = column_xz_distance(cam, column.coords, half, edge);
         match (has_collider.is_some(), distance) {
-            (true, d) if d <= keep_within => status.ready = true,
+            (true, d) if d <= keep_within => {
+                // `ready` é "há chão SOB os pés", não "há chão algures na
+                // banda": `column_xz_distance` dá 0 só para a coluna que
+                // CONTÉM o herói. Com o teste antigo (`d <= keep_within`,
+                // ~192 m) qualquer coluna vizinha ainda assada punha
+                // `ready = true` depois de um teleporte, o chão analítico
+                // do `player_movement` desligava-se e o herói atravessava o
+                // terreno por assar — a saída de um interior devolvia-o à
+                // vila e ele caía até y≈2 (repro 2026-09-12).
+                if d <= 0.0 {
+                    status.ready = true;
+                }
+            }
             // try_* e não insert/remove: as colunas MORREM sob os pés deste
             // sistema (o swap do LOD e o cull despawnam no mesmo frame) —
             // aplicar num despawnado seria panic de engine.

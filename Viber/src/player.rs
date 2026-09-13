@@ -41,6 +41,52 @@ pub const CAMERA_TURN_SPEED: f32 = 2.5;
 /// still lands inside one 1 m voxel at 60 fps.
 pub const TERMINAL_VELOCITY: f32 = 55.0;
 
+/// Marca um herói acabado de teleportar: enquanto existe, o
+/// [`player_movement`] segura-o na superfície analítica mesmo que o
+/// `TerrainCollisionStatus` já diga "pronto" — o collider da coluna de
+/// destino pode demorar alguns frames a assar e uma queda de 40 m/s fura-o
+/// antes disso.
+#[derive(Debug, Component)]
+pub struct TeleportSettle {
+    /// Frames restantes de tutela.
+    pub frames: u8,
+}
+
+impl Default for TeleportSettle {
+    fn default() -> Self {
+        Self { frames: 30 }
+    }
+}
+
+/// Folga (m) com que um teleporte assenta ACIMA da superfície.
+pub const LANDING_CLEARANCE: f32 = 0.15;
+
+/// Y de aterragem para um teleporte: a superfície SÓLIDA sob o destino
+/// (`surface_below`, que respeita grutas e overhangs), com o topo do mundo
+/// como segunda escolha e o Y pedido como último recurso (fora da pegada do
+/// terreno — bolsas de interior — o Y autorado É o chão).
+///
+/// Pura o suficiente para teste: sem terreno devolve o pedido intacto.
+pub fn landing_position(
+    terrain: Option<&crate::terrain::runtime::TerrainRuntime>,
+    requested: Vec3,
+) -> Vec3 {
+    let Some(terrain) = terrain else {
+        return requested;
+    };
+    if !terrain.in_field(requested.x, requested.z) {
+        return requested;
+    }
+    let surface = terrain
+        .surface_below(requested.x, requested.z, requested.y + GROUND_PROBE)
+        .unwrap_or_else(|| terrain.sample(requested.x, requested.z));
+    Vec3::new(
+        requested.x,
+        surface.max(requested.y.min(surface)),
+        requested.z,
+    )
+}
+
 /// How far below the topmost surface counts as "fell out of the world" (m).
 ///
 /// Deeper than any authored cave or the whole `max-height` of a world, so a
@@ -272,6 +318,8 @@ pub fn player_movement(
     time: Res<Time>,
     runtime: Option<Res<TerrainRuntime>>,
     collision: Option<Res<crate::physics::TerrainCollisionStatus>>,
+    interior: Option<Res<crate::worldsys::InteriorSceneConfig>>,
+    interior_state: Option<Res<crate::worldsys::InteriorLighting>>,
     mut cameras: Query<&mut OrbitCamera>,
     mut sfx: MessageWriter<crate::ambient::SfxEvent>,
     mut players: Query<
@@ -280,6 +328,7 @@ pub fn player_movement(
             &mut Player,
             Option<&mut bevy_rapier3d::prelude::KinematicCharacterController>,
             Option<&bevy_rapier3d::prelude::KinematicCharacterControllerOutput>,
+            Option<&mut TeleportSettle>,
         ),
         Without<Camera>,
     >,
@@ -293,7 +342,7 @@ pub fn player_movement(
     // persiste e é reaplicado em todos os steps (o herói deslizava com o
     // menu aberto e, se estava em salto, subia indefinidamente).
     if menus.any() {
-        for (_, mut player, controller, _) in &mut players {
+        for (_, mut player, controller, _, _) in &mut players {
             player.vel_y = 0.0;
             if let Some(mut controller) = controller {
                 controller.translation = Some(Vec3::ZERO);
@@ -316,7 +365,17 @@ pub fn player_movement(
     let sprint = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let jump_held = keys.pressed(KeyCode::Space);
 
-    for (mut transform, mut player, mut controller, output) in &mut players {
+    for (mut transform, mut player, mut controller, output, mut settle) in &mut players {
+        // Tutela pós-teleporte: enquanto dura, o chão ANALÍTICO manda mesmo
+        // que já exista collider algures — a coluna de destino pode estar a
+        // assar e uma queda a 55 m/s atravessa o trimesh antes disso.
+        let settling = match settle.as_deref_mut() {
+            Some(state) if state.frames > 0 => {
+                state.frames -= 1;
+                true
+            }
+            _ => false,
+        };
         // Grounded state update first (VibeGame PlayerGroundedSystem runs
         // before movement): refresh the coyote clock and clear the jumping
         // flag on landing.
@@ -331,21 +390,47 @@ pub fn player_movement(
             }
         }
 
-        // Steering: A/D turn the camera; the character heading follows it.
-        // The yaw itself is smoothed by the camera system (turnLag), and the
-        // auto-follow hands control back after a grace period.
-        let mut camera_yaw_deg = 0.0f32;
-        if let Some(mut cam) = cameras.iter_mut().next() {
-            cam.yaw_deg -= move_x * CAMERA_TURN_SPEED * dt;
-            camera_yaw_deg = cam.yaw_deg;
-        }
-        if move_x != 0.0 {
-            player.last_steer_time = now;
-        }
-        let strafe = move_x * SIDE_MOVE_FACTOR;
-
-        let dir = process_input(move_forward, strafe, camera_yaw_deg);
-        let input_mag = input_magnitude(move_forward, strafe);
+        // Dentro de uma bolsa de interior a câmara é FIXA (uma sala por
+        // ecrã): A/D não pode rodá-la — anda-se nas 8 direções do ECRÃ, que é
+        // o controlo dos JRPG de 16 bits. Fora, o regime de sempre: A/D
+        // conduzem a câmara e o herói segue-a.
+        let interior_mode = interior
+            .as_deref()
+            .is_some_and(|scene| scene.contains(transform.translation.x, transform.translation.z));
+        // Piso duro da bolsa: só dentro dela, e só quando o herói JÁ estava
+        // no interior (entrar a voar de fora não pode ser travado a meio).
+        let interior_floor = (interior_mode
+            && interior_state.as_deref().is_some_and(|state| state.active))
+        .then_some(crate::worldsys::INTERIOR_FLOOR_Y);
+        let (dir, input_mag) = if interior_mode {
+            let yaw = interior
+                .as_deref()
+                .map(|scene| scene.camera_yaw_deg)
+                .unwrap_or(0.0);
+            // Sem `SIDE_MOVE_FACTOR`: lateral vale tanto como frente (andar
+            // na diagonal não pode ser mais lento do que andar a direito).
+            (
+                process_input(move_forward, move_x, yaw),
+                input_magnitude(move_forward, move_x),
+            )
+        } else {
+            // Steering: A/D turn the camera; the character heading follows it.
+            // The yaw itself is smoothed by the camera system (turnLag), and
+            // the auto-follow hands control back after a grace period.
+            let mut camera_yaw_deg = 0.0f32;
+            if let Some(mut cam) = cameras.iter_mut().next() {
+                cam.yaw_deg -= move_x * CAMERA_TURN_SPEED * dt;
+                camera_yaw_deg = cam.yaw_deg;
+            }
+            if move_x != 0.0 {
+                player.last_steer_time = now;
+            }
+            let strafe = move_x * SIDE_MOVE_FACTOR;
+            (
+                process_input(move_forward, strafe, camera_yaw_deg),
+                input_magnitude(move_forward, strafe),
+            )
+        };
         let sprint_mult = if sprint {
             player.sprint_multiplier
         } else {
@@ -377,13 +462,18 @@ pub fn player_movement(
         if jump_held {
             player.jump_buffer_time = now;
         }
-        if can_perform_jump(
-            now,
-            player.jump_buffer_time,
-            player.last_grounded_time,
-            player.can_jump,
-            player.grounded,
-        ) {
+        // Sem pulo dentro de um interior: a câmara é de sala e o soalho é
+        // uma ilha — saltar só servia para sair do chão e ver o vazio por
+        // cima das paredes (pedido do utilizador 2026-09-13).
+        if !interior_mode
+            && can_perform_jump(
+                now,
+                player.jump_buffer_time,
+                player.last_grounded_time,
+                player.can_jump,
+                player.grounded,
+            )
+        {
             player.vel_y = jump_velocity(player.jump_height);
             player.is_jumping = true;
             player.can_jump = false;
@@ -430,13 +520,24 @@ pub fn player_movement(
         // "sem collider carregado": com chão de collider debaixo do herói
         // (`TerrainCollisionStatus.ready`), o collider é a autoridade.
         let ground = if in_field {
-            runtime
-                .surface_below(
-                    transform.translation.x,
-                    transform.translation.z,
-                    transform.translation.y + GROUND_PROBE,
-                )
-                .unwrap_or(f32::NEG_INFINITY)
+            match runtime.surface_below(
+                transform.translation.x,
+                transform.translation.z,
+                transform.translation.y + GROUND_PROBE,
+            ) {
+                Some(surface) => surface,
+                // TUTELA PÓS-TELEPORTE: a janela do `surface_below` é o
+                // [`GROUND_PROBE`] (5 cm) — quem afunda um dedo abaixo da
+                // superfície deixa de a ver e a rede desaparece (a queda
+                // infinita ao voltar de um interior). Enquanto o
+                // [`TeleportSettle`] dura, o chão é o TOPO do mundo: o
+                // destino de um teleporte é sempre uma superfície, não o
+                // interior de uma gruta.
+                None if settling => {
+                    runtime.sample(transform.translation.x, transform.translation.z)
+                }
+                None => f32::NEG_INFINITY,
+            }
         } else {
             f32::NEG_INFINITY
         };
@@ -469,10 +570,31 @@ pub fn player_movement(
                     if player.vel_y < 0.0 {
                         player.vel_y = 0.0;
                     }
-                } else if !terrain_ready && transform.translation.y <= ground {
+                } else if interior_floor.is_some_and(|floor| transform.translation.y < floor) {
+                    // Bolsa de interior: o SOALHO é o piso do mundo. As salas
+                    // são ilhas com vãos abertos (a porta, as janelas) e sem
+                    // terreno por baixo — um passo para fora do soalho era uma
+                    // queda infinita pelo vazio (repro do utilizador
+                    // 2026-09-13: "eu não poderia cair pela porta"). Agora o
+                    // chão da bolsa é duro: ninguém cai, e é o gatilho da
+                    // porta que trata de pôr o herói lá fora.
+                    transform.translation.y = interior_floor.unwrap_or(0.0);
+                    player.vel_y = 0.0;
+                    player.grounded = true;
+                    controller.translation = Some(Vec3::new(motion.x, 0.0, motion.z));
+                } else if (!terrain_ready || settling) && transform.translation.y <= ground {
                     transform.translation.y = ground;
                     player.vel_y = 0.0;
                     player.grounded = true;
+                    // A queda DESTE frame ainda está na fila do CCT: escrever
+                    // só o Transform não chega — o Rapier aplica `motion.y` a
+                    // seguir, o herói fura o chão analítico e no frame
+                    // seguinte já está ABAIXO da superfície, onde
+                    // `surface_below` devolve `None` e a rede de segurança
+                    // deixa de existir (queda infinita). Era isto que fazia o
+                    // regresso de um interior à vila acabar a y≈−150 com as
+                    // colunas ainda por assar (repro 2026-09-12).
+                    controller.translation = Some(Vec3::new(motion.x, 0.0, motion.z));
                 } else {
                     player.grounded = false;
                 }
@@ -532,7 +654,10 @@ pub fn dialogue_interaction(
     // NPC em alcance, `.next()` devolvia o id errado (order-dependent).
     let nearest = npcs
         .iter()
-        .filter(|(t, _)| t.translation().distance_squared(player_pos) < 3.5 * 3.5)
+        .filter(|(t, _)| {
+            let range = crate::interact::default_range();
+            t.translation().distance_squared(player_pos) < range * range
+        })
         .min_by(|(a, _), (b, _)| {
             a.translation()
                 .distance_squared(player_pos)
@@ -598,6 +723,23 @@ pub fn hero_controller() -> bevy_rapier3d::prelude::KinematicCharacterController
 
 #[cfg(test)]
 mod tests {
+
+    /// Um teleporte ASSENTA: o Y de destino vira a superfície sólida sob o
+    /// ponto pedido. Sem isso o herói caía pelo mundo quando as colunas do
+    /// destino ainda não tinham collider (regresso de um interior, 2026-09-12).
+    #[test]
+    fn landing_without_terrain_keeps_the_requested_point() {
+        let requested = Vec3::new(1.0, 2.0, 3.0);
+        assert_eq!(landing_position(None, requested), requested);
+    }
+
+    /// A tutela pós-teleporte dura frames suficientes para o streaming das
+    /// colunas (30 ≈ meio segundo a 60 fps).
+    #[test]
+    fn teleport_settle_lasts_long_enough_for_streaming() {
+        let settle = TeleportSettle::default();
+        assert!(settle.frames >= 20, "frames = {}", settle.frames);
+    }
     use super::*;
 
     fn approx(a: f32, b: f32) -> bool {

@@ -517,6 +517,13 @@ pub enum EntityKind {
     InteriorScene {
         min: [f32; 2],
         max: [f32; 2],
+        /// Grelha de salas dentro da bolsa (XZ, m) — a câmara de interior
+        /// enquadra UMA sala de cada vez. `[0, 0]` = bolsa = sala única.
+        room_size: [f32; 2],
+        room_origin: [f32; 2],
+        camera_distance: f32,
+        camera_pitch_deg: f32,
+        camera_yaw_deg: f32,
     },
     /// Engine config element kept as raw data (`Sky`, `NavMesh`,
     /// `SpawnGate`, `ProjectileTemplate`, `PostFxDebugToggle`,
@@ -2672,6 +2679,11 @@ fn finish_interior_scene(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpe
     let off = terrain_offset(&common, node, ctx);
     let mut center: Option<[f32; 2]> = None;
     let mut size: Option<[f32; 2]> = None;
+    let mut room_size = [0.0f32, 0.0];
+    let mut room_origin: Option<[f32; 2]> = None;
+    let mut camera_distance = crate::worldsys::INTERIOR_CAMERA_DISTANCE;
+    let mut camera_pitch_deg = crate::worldsys::INTERIOR_CAMERA_PITCH_DEG;
+    let mut camera_yaw_deg = 0.0f32;
     for (key, value) in rest {
         let kctx = format!("{ctx_tag} {key}");
         match key.as_str() {
@@ -2680,6 +2692,15 @@ fn finish_interior_scene(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpe
                 center = Some([p[0] + off.x, p[1] + off.y]);
             }
             "size" => size = Some(values::parse_vec2(&value, &kctx)?),
+            // Câmara de interior (JRPG 16 bits): uma sala por ecrã, fixa.
+            "room-size" => room_size = values::parse_vec2(&value, &kctx)?,
+            "room-origin" => {
+                let p = values::parse_vec2(&value, &kctx)?;
+                room_origin = Some([p[0] + off.x, p[1] + off.y]);
+            }
+            "camera-distance" => camera_distance = values::parse_f32(&value, &kctx)?,
+            "camera-pitch" => camera_pitch_deg = values::parse_f32(&value, &kctx)?,
+            "camera-yaw" => camera_yaw_deg = values::parse_f32(&value, &kctx)?,
             other => ctx
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
@@ -2704,6 +2725,12 @@ fn finish_interior_scene(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpe
         kind: EntityKind::InteriorScene {
             min: [center[0] - half[0], center[1] - half[1]],
             max: [center[0] + half[0], center[1] + half[1]],
+            room_size,
+            // Sem `room-origin`, a grelha ancora no CENTRO da bolsa.
+            room_origin: room_origin.unwrap_or(center),
+            camera_distance,
+            camera_pitch_deg,
+            camera_yaw_deg,
         },
         children: Vec::new(),
     })
@@ -5925,7 +5952,7 @@ mod composition_tests {
         ))
         .unwrap();
         assert!(warns.is_empty(), "{warns:?}");
-        let EntityKind::InteriorScene { min, max } = spec.kind else {
+        let EntityKind::InteriorScene { min, max, .. } = spec.kind else {
             panic!("esperava InteriorScene, veio {:?}", spec.kind);
         };
         assert_eq!(min, [2480.0, 2600.0]);
@@ -5935,12 +5962,31 @@ mod composition_tests {
         assert!(parse_one(&node("InteriorScene", &[("at", "0 0")])).is_err());
         assert!(parse_one(&node("InteriorScene", &[("size", "10 10")])).is_err());
         assert!(
-            parse_one(&node(
-                "InteriorScene",
-                &[("at", "0 0"), ("size", "0 10")]
-            ))
-            .is_err(),
+            parse_one(&node("InteriorScene", &[("at", "0 0"), ("size", "0 10")])).is_err(),
             "tamanho nulo tem de ser recusado"
         );
     }
+}
+
+/// Cascatas do shadow map do sol (`VIBER_SHADOW_CASCADES`, default 4).
+///
+/// Cada cascata é uma vista de render: mais cascatas = sombra nítida mais
+/// longe e mais tempo de CPU no render app. O teto do Bevy 0.19 é 4
+/// (`MAX_CASCADES_PER_LIGHT`); acima disso o extract corta com warning.
+pub fn sun_shadow_cascades() -> usize {
+    std::env::var("VIBER_SHADOW_CASCADES")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .filter(|n| (1..=4).contains(n))
+        .unwrap_or(4)
+}
+
+/// Alcance máximo das cascatas do sol em metros (`VIBER_SHADOW_DISTANCE`,
+/// default 600 — as serras distantes recebem sombra).
+pub fn sun_shadow_distance() -> f32 {
+    std::env::var("VIBER_SHADOW_DISTANCE")
+        .ok()
+        .and_then(|raw| raw.parse::<f32>().ok())
+        .filter(|d| *d > 0.0)
+        .unwrap_or(600.0)
 }

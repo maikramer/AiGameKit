@@ -123,6 +123,18 @@ pub struct WorldStats {
     /// `lod_pending` preso acima de zero = orçamento saturado.
     pub lod_swaps: usize,
     pub lod_pending: usize,
+    /// Há collider de terreno SOB os pés do herói
+    /// (`physics::TerrainCollisionStatus`) — quando é `false` o
+    /// `player_movement` usa o chão analítico. É o número que explica um
+    /// herói a atravessar o mundo depois de um teleporte.
+    pub terrain_collider_ready: bool,
+    /// Estado vertical do herói: no chão? velocidade vertical?
+    pub player_grounded: bool,
+    pub player_vel_y: f32,
+    /// O herói está numa bolsa de interior (`worldsys::InteriorLighting`)?
+    pub interior_active: bool,
+    /// Brilho actual do `GlobalAmbientLight` (lux).
+    pub ambient_brightness: f32,
     /// Entradas dos ASSET STORES (`Assets::<T>::len()`), não entidades: é o
     /// número que denuncia leaks/churn de assets (o Bevy não faz GC — o
     /// `meshes` acima conta INSTÂNCIAS e não vê um material clonado que
@@ -309,6 +321,23 @@ pub enum DebugOp {
     },
     /// Minuto do dia (0–1440, wrap).
     SetClock(f32),
+    /// Look da chuva AO VIVO (`viber.debug.rain_look{...}`): fade junto da
+    /// câmara, tecto de alpha, largura do streak e rate. A afinação da chuva
+    /// é visual — sem isto cada tentativa custava um rebuild + reboot.
+    RainLook {
+        near_fade: Option<f32>,
+        alpha: Option<f32>,
+        width: Option<f32>,
+        rate: Option<f32>,
+    },
+    /// Tempo AO VIVO (`viber.debug.set_weather{rain=…}`): fixa a intensidade
+    /// contínua do `<Weather>` e PÁRA o ciclo — sem isso o scheduler voltava
+    /// a rolar o alvo a meio do A/B e os dois braços não eram comparáveis.
+    SetWeather {
+        rain: Option<f32>,
+        clouds: Option<f32>,
+        wind: Option<f32>,
+    },
     /// Redimensiona a janela primária (píxeis físicos) — QA de layouts
     /// responsivos: `viber.debug.set_window(900, 1300)` e o `@media` troca.
     SetWindow {
@@ -448,6 +477,60 @@ impl FromLua for CameraOpts {
     }
 }
 
+/// Opções de `viber.debug.set_weather{rain=…, clouds=…, wind=…}`.
+#[derive(Default)]
+pub struct WeatherOpts {
+    pub rain: Option<f32>,
+    pub clouds: Option<f32>,
+    pub wind: Option<f32>,
+}
+
+impl FromLua for WeatherOpts {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            Value::Nil => Ok(Self::default()),
+            Value::Table(t) => Ok(Self {
+                rain: t.get("rain")?,
+                clouds: t.get("clouds")?,
+                wind: t.get("wind")?,
+            }),
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "weather opts {rain=?, clouds=?, wind=?}".into(),
+                message: None,
+            }),
+        }
+    }
+}
+
+/// Opções de `viber.debug.rain_look{near_fade=…, alpha=…, width=…, rate=…}`.
+#[derive(Default)]
+pub struct RainLookOpts {
+    pub near_fade: Option<f32>,
+    pub alpha: Option<f32>,
+    pub width: Option<f32>,
+    pub rate: Option<f32>,
+}
+
+impl FromLua for RainLookOpts {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            Value::Nil => Ok(Self::default()),
+            Value::Table(t) => Ok(Self {
+                near_fade: t.get("near_fade")?,
+                alpha: t.get("alpha")?,
+                width: t.get("width")?,
+                rate: t.get("rate")?,
+            }),
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "rain look {near_fade=?, alpha=?, width=?, rate=?}".into(),
+                message: None,
+            }),
+        }
+    }
+}
+
 /// Argumento de entidade: bits numéricos (dos snapshots/`viber.tree` via
 /// `find`) ou nome (exato primeiro, depois substring case-insensitive).
 pub enum EntityArg {
@@ -509,7 +592,9 @@ fn build_view(world: &mut World) -> DebugView {
             .get_resource::<GroundState>()
             .map(|s| s.tuning)
             .unwrap_or_default();
-        let has_terrain = world.get_resource::<crate::terrain::runtime::TerrainRuntime>().is_some();
+        let has_terrain = world
+            .get_resource::<crate::terrain::runtime::TerrainRuntime>()
+            .is_some();
         has_terrain.then_some(GroundInfo {
             tuning,
             walls_a,
@@ -578,6 +663,22 @@ fn build_view(world: &mut World) -> DebugView {
     if let Some(lod) = world.get_resource::<crate::render_lod::MeshLodStats>() {
         stats.lod_swaps = lod.swaps_last_frame;
         stats.lod_pending = lod.pending;
+    }
+    if let Some(interior) = world.get_resource::<crate::worldsys::InteriorLighting>() {
+        stats.interior_active = interior.active;
+    }
+    if let Some(ambient) = world.get_resource::<bevy::light::GlobalAmbientLight>() {
+        stats.ambient_brightness = ambient.brightness;
+    }
+    if let Some(terrain) = world.get_resource::<crate::physics::TerrainCollisionStatus>() {
+        stats.terrain_collider_ready = terrain.ready;
+    }
+    {
+        let mut q = world.query::<&crate::player::Player>();
+        if let Some(player) = q.iter(world).next() {
+            stats.player_grounded = player.grounded;
+            stats.player_vel_y = player.vel_y;
+        }
     }
     // Física: `RapierContextSimulation` é COMPONENTE (contexto default).
     let physics = world.iter_entities().find_map(|e| {
@@ -1285,16 +1386,13 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let table = lua.create_table()?;
             table.raw_set("entities", s.entities)?;
             table.raw_set("meshes", s.meshes)?;
-            table.raw_set(
-                "assets",
-                {
-                    let t = lua.create_table()?;
-                    t.raw_set("meshes", s.assets_meshes)?;
-                    t.raw_set("materials", s.assets_materials)?;
-                    t.raw_set("images", s.assets_images)?;
-                    t
-                },
-            )?;
+            table.raw_set("assets", {
+                let t = lua.create_table()?;
+                t.raw_set("meshes", s.assets_meshes)?;
+                t.raw_set("materials", s.assets_materials)?;
+                t.raw_set("images", s.assets_images)?;
+                t
+            })?;
             table.raw_set("colliders", s.colliders_total)?;
             table.raw_set("colliders_cuboid", s.colliders_cuboid)?;
             table.raw_set("colliders_ball", s.colliders_ball)?;
@@ -1315,6 +1413,11 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             table.raw_set("lod_tier2", s.lod_tier2)?;
             table.raw_set("lod_swaps", s.lod_swaps)?;
             table.raw_set("lod_pending", s.lod_pending)?;
+            table.raw_set("terrain_collider_ready", s.terrain_collider_ready)?;
+            table.raw_set("player_grounded", s.player_grounded)?;
+            table.raw_set("player_vel_y", s.player_vel_y)?;
+            table.raw_set("interior_active", s.interior_active)?;
+            table.raw_set("ambient_brightness", s.ambient_brightness)?;
             table.raw_set("scripted", s.scripted)?;
             table.raw_set("disabled", s.disabled)?;
             // Do profiler: render/chunks/scripts ativos — os melhores
@@ -1691,6 +1794,33 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, minute: f32| push(lua, DebugOp::SetClock(minute)))?,
     )?;
     api.set(
+        "rain_look",
+        lua.create_function(|lua, opts: RainLookOpts| {
+            push(
+                lua,
+                DebugOp::RainLook {
+                    near_fade: opts.near_fade,
+                    alpha: opts.alpha,
+                    width: opts.width,
+                    rate: opts.rate,
+                },
+            )
+        })?,
+    )?;
+    api.set(
+        "set_weather",
+        lua.create_function(|lua, opts: WeatherOpts| {
+            push(
+                lua,
+                DebugOp::SetWeather {
+                    rain: opts.rain,
+                    clouds: opts.clouds,
+                    wind: opts.wind,
+                },
+            )
+        })?,
+    )?;
+    api.set(
         "set_window",
         lua.create_function(|lua, (width, height): (f32, f32)| {
             push(lua, DebugOp::SetWindow { width, height })
@@ -1932,6 +2062,24 @@ fn op_non_finite(op: &DebugOp) -> Option<&'static str> {
             Some("set_camera")
         }
         DebugOp::SetClock(minute) if !minute.is_finite() => Some("set_clock"),
+        DebugOp::RainLook {
+            near_fade,
+            alpha,
+            width,
+            rate,
+        } if [near_fade, alpha, width, rate]
+            .into_iter()
+            .any(|v| v.is_some_and(|value: f32| !value.is_finite())) =>
+        {
+            Some("rain_look")
+        }
+        DebugOp::SetWeather { rain, clouds, wind }
+            if [rain, clouds, wind]
+                .into_iter()
+                .any(|v| v.is_some_and(|value: f32| !value.is_finite())) =>
+        {
+            Some("set_weather")
+        }
         DebugOp::SetWindow { width, height } if !width.is_finite() || !height.is_finite() => {
             Some("set_window")
         }
@@ -1959,9 +2107,22 @@ fn op_non_finite(op: &DebugOp) -> Option<&'static str> {
             dirt,
             forest,
             shore_width,
-        } if [moss, vale_soft, streaks, rock_darken, tri_slope, tri_soft, strata_strength, patchiness, gravel, dirt, forest, shore_width]
-            .into_iter()
-            .any(|v| v.is_some_and(|x| !x.is_finite())) =>
+        } if [
+            moss,
+            vale_soft,
+            streaks,
+            rock_darken,
+            tri_slope,
+            tri_soft,
+            strata_strength,
+            patchiness,
+            gravel,
+            dirt,
+            forest,
+            shore_width,
+        ]
+        .into_iter()
+        .any(|v| v.is_some_and(|x| !x.is_finite())) =>
         {
             Some("ground")
         }
@@ -2243,6 +2404,56 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
                 }
             }
         }
+        DebugOp::RainLook {
+            near_fade,
+            alpha,
+            width,
+            rate,
+        } => match world.get_resource_mut::<crate::ambient::RainLook>() {
+            Some(mut look) => {
+                if let Some(near_fade) = near_fade {
+                    look.near_fade_m = near_fade.max(0.0);
+                }
+                if let Some(alpha) = alpha {
+                    look.max_alpha = alpha.clamp(0.0, 1.0);
+                }
+                if let Some(width) = width {
+                    look.width_scale = width.max(0.01);
+                }
+                if let Some(rate) = rate {
+                    look.rate_scale = rate.max(0.0);
+                }
+                true
+            }
+            None => {
+                warnings.push("sem RainLook — rain_look ignorado".into());
+                false
+            }
+        },
+        DebugOp::SetWeather { rain, clouds, wind } => {
+            match world.get_resource_mut::<crate::worldsys::WeatherState>() {
+                Some(mut weather) => {
+                    if let Some(rain) = rain {
+                        weather.rain = rain.clamp(0.0, 1.0);
+                        // Congela o ciclo: o `weather_drive` reescreve
+                        // `rain` todos os frames a caminho do alvo do
+                        // scheduler, e o braço de QA evaporava em 10 s.
+                        weather.cycle = false;
+                    }
+                    if let Some(clouds) = clouds {
+                        weather.clouds = clouds.clamp(0.0, 1.0);
+                    }
+                    if let Some(wind) = wind {
+                        weather.wind_strength = wind.max(0.0);
+                    }
+                    true
+                }
+                None => {
+                    warnings.push("sem WeatherState — set_weather ignorado".into());
+                    false
+                }
+            }
+        }
         DebugOp::Sun {
             yaw,
             pitch,
@@ -2270,7 +2481,10 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
             if let Some(v) = pitch {
                 sun_pitch = v;
             }
-            let (yaw_r, pitch_r) = (sun_yaw.to_radians(), sun_pitch.clamp(-89.0, 89.0).to_radians());
+            let (yaw_r, pitch_r) = (
+                sun_yaw.to_radians(),
+                sun_pitch.clamp(-89.0, 89.0).to_radians(),
+            );
             // Posição do sol no céu (azimute a partir de +X, altura = pitch)
             // → direção de VIAGEM = -posição.
             let pos = Vec3::new(

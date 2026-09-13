@@ -273,11 +273,178 @@ pub struct InteriorSceneConfig {
     pub min: [f32; 2],
     /// Canto máximo do retângulo (XZ, metros).
     pub max: [f32; 2],
+    /// Tamanho de uma SALA dentro da bolsa (XZ, metros) — a grelha que a
+    /// câmara de interior usa para enquadrar uma sala de cada vez, à maneira
+    /// dos JRPG de 16 bits (a câmara salta de sala em sala, não segue o
+    /// herói). `[0, 0]` = a bolsa inteira é uma sala só.
+    pub room_size: [f32; 2],
+    /// Distância da câmara de interior (m).
+    pub camera_distance: f32,
+    /// Inclinação da câmara de interior (graus, 90 = a pique).
+    pub camera_pitch_deg: f32,
+    /// Azimute FIXO da câmara de interior (graus).
+    pub camera_yaw_deg: f32,
+    /// Origem da grelha de salas (XZ, m) — o CENTRO da sala (0,0). As salas
+    /// ficam nos NÓS da grelha (`origem + k × room_size`), não no meio das
+    /// células; sem isto o enquadramento saía deslocado meia sala.
+    pub room_origin: [f32; 2],
+}
+
+/// Luz de INTERIOR: dentro da bolsa o ciclo dia/noite não manda.
+///
+/// As salas não têm telhado (é assim que a câmara de sala as lê), portanto de
+/// noite ficavam à luz da lua — uma divisão fechada a escurecer com o relógio
+/// do mundo lá fora não faz sentido nenhum e tirava a leitura toda (pedido do
+/// utilizador 2026-09-13: "desligar o escurecimento da noite, deixar só luz do
+/// ambiente"). Enquanto o herói está na bolsa: ambiente FIXO e tint de dia.
+#[derive(Debug, Resource, Default, Clone, Copy)]
+pub struct InteriorLighting {
+    /// O herói está dentro de uma bolsa de interior.
+    pub active: bool,
+}
+
+/// Intensidade do env map (IBL) dentro de um interior.
+///
+/// O cubemap do céu é a razão pela qual a sala ficava AZUL à noite mesmo com
+/// o ambiente no máximo: é ele que pinta a radiância do céu nas paredes. Numa
+/// divisão, o céu não entra — fica um resto mínimo para o PBR não perder o
+/// especular por completo.
+pub const INTERIOR_IBL_INTENSITY: f32 = 0.05;
+
+/// Aplica o regime de luz de interior DEPOIS dos drivers do mundo: sol a
+/// zero (a sala vive do ambiente, como o utilizador pediu) e env map do céu
+/// quase apagado. Ao sair, o IBL volta ao valor do mundo — o sol é reescrito
+/// pelo [`sun_drive`] no frame seguinte, não precisa de restauro.
+pub fn interior_lighting_apply(
+    state: Res<InteriorLighting>,
+    mut suns: Query<&mut bevy::light::DirectionalLight>,
+    mut probes: Query<&mut bevy::light::GeneratedEnvironmentMapLight>,
+    mut was_active: bevy::ecs::system::Local<bool>,
+) {
+    if state.active {
+        for mut sun in &mut suns {
+            sun.illuminance = 0.0;
+        }
+        for mut probe in &mut probes {
+            probe.intensity = INTERIOR_IBL_INTENSITY;
+        }
+        *was_active = true;
+    } else if *was_active {
+        for mut probe in &mut probes {
+            probe.intensity = crate::ibl::IBL_INTENSITY;
+        }
+        *was_active = false;
+    }
+}
+
+/// Elevação de sol EQUIVALENTE usada para a paleta dentro de um interior.
+///
+/// Não é o sol da sala (esse está a zero): é a hora que o grading, a
+/// exposição e a névoa devem assumir lá dentro — meio-dia alto, neutro.
+pub const INTERIOR_SUN_ELEVATION_DEG: f32 = 45.0;
+
+/// Cota do soalho das salas (m) — o piso DURO da bolsa de interior.
+///
+/// As salas são ilhas sem terreno por baixo: sem este piso, sair do soalho
+/// (pela porta, por um vão) era cair para sempre. A laje do gerador está a
+/// 0,12 e o herói assenta a 0,6.
+pub const INTERIOR_FLOOR_Y: f32 = 0.6;
+
+/// Brilho do ambiente de interior (lux) — a sala inteira legível sem sol.
+///
+/// A escala é a do SOL da cena (28 000 lux no `simple-rpg`), não a do
+/// ambiente autoral (~110): medido a 620 lux a capela à noite lia 45/255
+/// (contra 200 de dia) — continuava a ser noite lá dentro. A 2 400 a sala
+/// fica plana e legível, que é o que a câmara de sala pede — e a escala tem
+/// de ser a do SOL (28 000 lux) porque a exposição automática NÃO levanta a
+/// noite (o teto `postfx::NIGHT_LIFT_CAP_EV` existe para o frame não ficar
+/// branco): com 2 400 lux a sala continuava a 61/255.
+pub const INTERIOR_AMBIENT_BRIGHTNESS: f32 = 2000.0;
+
+/// Ambiente de interior efetivo (`VIBER_INTERIOR_AMBIENT`, para afinar sem
+/// recompilar).
+pub fn interior_ambient_brightness() -> f32 {
+    std::env::var("VIBER_INTERIOR_AMBIENT")
+        .ok()
+        .and_then(|raw| raw.parse::<f32>().ok())
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(INTERIOR_AMBIENT_BRIGHTNESS)
+}
+/// Cor do ambiente de interior: neutra e ligeiramente quente (pedra + velas).
+pub const INTERIOR_AMBIENT_COLOR: [f32; 3] = [1.0, 0.96, 0.90];
+
+/// Marca [`InteriorLighting`] a cada frame pela posição do herói.
+pub fn interior_lighting_drive(
+    mut state: ResMut<InteriorLighting>,
+    scene: Option<Res<InteriorSceneConfig>>,
+    players: Query<&bevy::prelude::GlobalTransform, With<crate::player::Player>>,
+) {
+    let inside = match (scene.as_deref(), players.iter().next()) {
+        (Some(scene), Some(player)) => {
+            let p = player.translation();
+            scene.contains(p.x, p.z)
+        }
+        _ => false,
+    };
+    state.active = inside;
+}
+
+/// Distância por omissão da câmara de interior (m) — a sala inteira no ecrã.
+pub const INTERIOR_CAMERA_DISTANCE: f32 = 22.0;
+/// Inclinação por omissão (graus): alto o suficiente para ler a planta da
+/// sala, baixo o suficiente para as paredes e os NPCs terem volume.
+pub const INTERIOR_CAMERA_PITCH_DEG: f32 = 58.0;
+
+impl Default for InteriorSceneConfig {
+    fn default() -> Self {
+        Self {
+            min: [0.0, 0.0],
+            max: [0.0, 0.0],
+            room_size: [0.0, 0.0],
+            camera_distance: INTERIOR_CAMERA_DISTANCE,
+            camera_pitch_deg: INTERIOR_CAMERA_PITCH_DEG,
+            camera_yaw_deg: 0.0,
+            room_origin: [0.0, 0.0],
+        }
+    }
 }
 
 impl InteriorSceneConfig {
     pub fn contains(&self, x: f32, z: f32) -> bool {
         x >= self.min[0] && x <= self.max[0] && z >= self.min[1] && z <= self.max[1]
+    }
+
+    /// Centro da SALA que contém `(x, z)` — o ponto que a câmara de interior
+    /// enquadra. Sem `room_size` autorado, é o centro da bolsa.
+    ///
+    /// A quantização é o que dá o "ecrã por sala": o alvo só muda quando o
+    /// herói atravessa a fronteira da célula, e aí a câmara SALTA para a sala
+    /// nova em vez de o seguir passo a passo.
+    pub fn room_center(&self, x: f32, z: f32) -> [f32; 2] {
+        let center_of = |min: f32, max: f32, origin: f32, p: f32, step: f32| {
+            if step <= 0.0 {
+                return 0.5 * (min + max);
+            }
+            // Nó MAIS PRÓXIMO da grelha: as salas estão em `origem + k·step`.
+            let k = ((p - origin) / step).round();
+            (origin + k * step).clamp(min, max)
+        };
+        [
+            center_of(
+                self.min[0],
+                self.max[0],
+                self.room_origin[0],
+                x,
+                self.room_size[0],
+            ),
+            center_of(
+                self.min[1],
+                self.max[1],
+                self.room_origin[1],
+                z,
+                self.room_size[1],
+            ),
+        ]
     }
 }
 
@@ -697,6 +864,7 @@ pub fn daycycle_drive(
     clock: Option<ResMut<DayCycleState>>,
     ambient: Option<ResMut<GlobalAmbientLight>>,
     sun: Res<SunState>,
+    interior: Option<Res<InteriorLighting>>,
     mut ambient_color_ref: Local<[f32; 3]>,
     mut ambient_color_captured: Local<bool>,
 ) {
@@ -709,6 +877,20 @@ pub fn daycycle_drive(
     clock.minute_of_day =
         (clock.minute_of_day + clock.minutes_per_real_second * time.delta_secs()) % (24.0 * 60.0);
     if !clock.drive_ambient {
+        return;
+    }
+    // Dentro de um interior o relógio continua a andar (as quests e o mundo lá
+    // fora dependem dele), mas a LUZ da sala não: ambiente fixo, sem noite.
+    if interior.is_some_and(|state| state.active) {
+        if clock.ambient_reference <= 0.0 {
+            clock.ambient_reference = ambient.brightness.max(1.0);
+        }
+        ambient.brightness = interior_ambient_brightness();
+        ambient.color = Color::srgb(
+            INTERIOR_AMBIENT_COLOR[0],
+            INTERIOR_AMBIENT_COLOR[1],
+            INTERIOR_AMBIENT_COLOR[2],
+        );
         return;
     }
     // Capture the world's own ambient before this system starts writing it.
@@ -1015,9 +1197,17 @@ pub fn atmosphere_drive(
     clock: Option<Res<DayCycleState>>,
     sun: Res<SunState>,
     weather: Option<Res<WeatherState>>,
+    interior: Option<Res<InteriorLighting>>,
     mut atmosphere: ResMut<AtmosphereState>,
 ) {
-    let elevation = if clock.is_some() {
+    // Dentro de um interior a PALETA também é de dia: o `AtmosphereState`
+    // manda no grading, na exposição e na névoa, e com a paleta da noite a
+    // sala continuava azul-escura por muito que o ambiente subisse (medido:
+    // 99/255 com R53 G109 B133 já com sol e IBL a zero).
+    let inside = interior.is_some_and(|state| state.active);
+    let elevation = if inside {
+        INTERIOR_SUN_ELEVATION_DEG
+    } else if clock.is_some() {
         sun.elevation_deg
     } else {
         // Sem <DayCycle> o mundo é estático: dia pleno.
@@ -1036,7 +1226,13 @@ pub fn atmosphere_drive(
     // CHUVA (WS-A): fecha ~meio stop e lava o contraste — a intensidade é a
     // contínua do <Weather> (o fog ×(1+0.6·rain) vive no `biome_fog_system`).
     // Só recursos runtime: o shader em disco NUNCA é re-escrito aqui.
-    let rain = weather.map(|w| w.rain.clamp(0.0, 1.0)).unwrap_or(0.0);
+    // Não chove dentro de casa: a bolsa já é isenta de chuva, e fechar a
+    // exposição por causa do tempo lá fora não faz sentido nenhum.
+    let rain = if inside {
+        0.0
+    } else {
+        weather.map(|w| w.rain.clamp(0.0, 1.0)).unwrap_or(0.0)
+    };
     next.exposure_scale *= 1.0 - 0.25 * rain;
     *atmosphere = next;
 }
@@ -1120,6 +1316,43 @@ pub fn point_in_biome(polygon: &[[f32; 2]], x: f32, z: f32) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    /// Câmara de interior: o alvo é o CENTRO DA SALA, quantizado pela grelha
+    /// — é o que faz o enquadramento saltar de sala em sala (JRPG 16 bits) em
+    /// vez de seguir o herói.
+    #[test]
+    fn interior_room_center_quantizes_to_the_grid() {
+        let scene = InteriorSceneConfig {
+            min: [2560.0, 2560.0],
+            max: [2740.0, 2725.0],
+            room_size: [60.0, 55.0],
+            room_origin: [2600.0, 2600.0],
+            ..InteriorSceneConfig::default()
+        };
+        // As salas estão nos NÓS da grelha (2600/2660/2720 em x): duas
+        // posições dentro da mesma sala dão o mesmo centro (sem follow).
+        let a = scene.room_center(2596.0, 2604.0);
+        let b = scene.room_center(2612.0, 2620.0);
+        assert_eq!(a, [2600.0, 2600.0]);
+        assert_eq!(a, b);
+        // Passar para a sala seguinte muda o enquadramento de uma vez só.
+        let c = scene.room_center(2650.0, 2604.0);
+        assert_eq!(c, [2660.0, 2600.0]);
+        assert_ne!(a, c);
+    }
+
+    /// Sem `room-size` autorado, a bolsa inteira é uma sala só (o centro é
+    /// sempre o mesmo ponto).
+    #[test]
+    fn interior_without_room_size_is_a_single_room() {
+        let scene = InteriorSceneConfig {
+            min: [0.0, 0.0],
+            max: [100.0, 80.0],
+            ..InteriorSceneConfig::default()
+        };
+        assert_eq!(scene.room_center(5.0, 5.0), [50.0, 40.0]);
+        assert_eq!(scene.room_center(95.0, 75.0), [50.0, 40.0]);
+    }
     use super::*;
 
     #[test]
@@ -1717,6 +1950,7 @@ mod place_tests {
         let scene = InteriorSceneConfig {
             min: [2564.0, 2570.0],
             max: [2752.0, 2742.0],
+            ..InteriorSceneConfig::default()
         };
         assert!(scene.contains(2658.0, 2656.0), "centro");
         assert!(scene.contains(2564.0, 2570.0), "canto (inclusivo)");

@@ -338,6 +338,10 @@ pub fn startup(world: &mut World) {
         &mut spawn_groups,
         &mut exclusions,
     );
+    // Os discos ficam em DOIS sítios de propósito: no `PendingSpawnGroups`
+    // (consumidos e removidos no fim da colocação) e num recurso próprio, que
+    // sobrevive — a relva procedural lê-os mais tarde (`src/grass.rs`).
+    world.insert_resource(crate::spawner::SpawnExclusions(exclusions.clone()));
     world.insert_resource(crate::spawner::PendingSpawnGroups {
         groups: spawn_groups,
         exclusions,
@@ -1154,6 +1158,12 @@ fn spawn_entity(
                         std::env::var("VIBER_POINT_CONTACT_SHADOWS").as_deref(),
                         Ok("1") | Ok("true") | Ok("on") | Ok("yes")
                     );
+                    // Marca a AUTORIA da sombra: o orçamento de sombras
+                    // (`ambient::light_budget_system`) liga/desliga o
+                    // `shadow_maps_enabled` das mais distantes ao vivo, e sem
+                    // este marcador o "desligado pelo orçamento" seria
+                    // indistinguível do "autorado sem sombra".
+                    entity.insert(crate::ambient::AuthoredShadowLight);
                 }
             }
             entity.insert(light);
@@ -1209,10 +1219,16 @@ fn spawn_entity(
             // (`MAX_CASCADES_PER_LIGHT`) — o builder aceita mais, mas o
             // extract do pbr corta na 4.ª com warning e subviews fora do
             // array de camadas do shadow map.
+            // Os dois números são knobs de perf: cada cascata é uma VISTA de
+            // render (cull + fila + batch de todos os casters dentro dela) e
+            // o alcance decide quantos props caem na última. Medido no
+            // `simple-rpg`: as sombras do sol valem ~9 ms de um frame de
+            // 31 ms. `VIBER_SHADOW_CASCADES` / `VIBER_SHADOW_DISTANCE`
+            // permitem o A/B sem recompilar.
             let cascades = bevy::light::CascadeShadowConfigBuilder {
-                num_cascades: 4,
+                num_cascades: crate::recipes::sun_shadow_cascades(),
                 first_cascade_far_bound: 12.0,
-                maximum_distance: 600.0,
+                maximum_distance: crate::recipes::sun_shadow_distance(),
                 ..Default::default()
             }
             .build();
@@ -1229,7 +1245,13 @@ fn spawn_entity(
             // Contact shadows direcionais: o raymarch por-pixel da depth cobre
             // a folga de bias dos shadow maps junto dos pés dos casters.
             light.contact_shadows_enabled = true;
-            entity.insert((light, cascades, bevy::light::VolumetricLight, transform, Visibility::Inherited));
+            entity.insert((
+                light,
+                cascades,
+                bevy::light::VolumetricLight,
+                transform,
+                Visibility::Inherited,
+            ));
         }
         // Ambient light uses the `GlobalAmbientLight` resource; it is not
         // spawned as an entity.
@@ -1349,10 +1371,7 @@ fn spawn_entity(
                     layer: layer.clone(),
                     base_volume: *base_volume,
                 },
-                crate::music::AudioLoopPending {
-                    url,
-                    music: true,
-                },
+                crate::music::AudioLoopPending { url, music: true },
             ));
         }
         EntityKind::UiStyle { source } => {
@@ -1490,10 +1509,23 @@ fn spawn_entity(
                 margin: *margin,
             });
         }
-        EntityKind::InteriorScene { min, max } => {
+        EntityKind::InteriorScene {
+            min,
+            max,
+            room_size,
+            room_origin,
+            camera_distance,
+            camera_pitch_deg,
+            camera_yaw_deg,
+        } => {
             ctx.worldsys.interior_scene = Some(crate::worldsys::InteriorSceneConfig {
                 min: *min,
                 max: *max,
+                room_size: *room_size,
+                room_origin: *room_origin,
+                camera_distance: *camera_distance,
+                camera_pitch_deg: *camera_pitch_deg,
+                camera_yaw_deg: *camera_yaw_deg,
             });
         }
         EntityKind::EngineConfig { tag, attrs } => {
