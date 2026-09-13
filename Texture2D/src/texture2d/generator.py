@@ -7,8 +7,11 @@ Seamless 2.0 — três camadas complementares:
    por metade a cada step — o conteúdo não ancora na grelha do canvas), e só na
    fase final troca para ``circular``. Receita do pattern-diffusion (Apache 2.0):
    circular constante degrada FID/CLIP; late + rolling não mede degradação.
-   O modo ``full`` (circular do início, comportamento clássico) e ``off``
-   (SD1.5 puro) continuam disponíveis.
+   O rolling exige um **scheduler stateless** (DDIM): o DPMSolverMultistep
+   extrapola com predições anteriores cacheadas que o roll desalinha (o
+   pattern-diffusion usa DDPM pela mesma razão). O modo ``full`` (circular do
+   início, comportamento clássico, DPM karras) e ``off`` (SD1.5 puro)
+   continuam disponíveis.
 2. **Decode controlado**: o pipeline corre com ``output_type="latent"`` e o VAE
    decodifica aqui — integral (sem tiling) sempre que a resolução o permite,
    porque o ``tiled_decode`` do diffusers fatura o latent sem wrap e parte a
@@ -215,6 +218,8 @@ class TextureGenerator(DiffusionGeneratorBase):
         self._unet_convs: list[Any] = []
         self._vae_convs: list[Any] = []
         self._vae_id: str = _default_vae_id()
+        # True quando o swap ft-mse correu com sucesso (set em _load_pipeline).
+        self._vae_swapped = False
 
         if self.verbose:
             _logger.info(f"device={self.device} dtype={self.torch_dtype} model={self.model_id}")
@@ -265,10 +270,16 @@ class TextureGenerator(DiffusionGeneratorBase):
                 pipe = StableDiffusionPipeline.from_pretrained(self.model_id, **kwargs)
         else:
             pipe = StableDiffusionPipeline.from_pretrained(self.model_id, **kwargs)
+        # Config original do checkpoint (antes do swap DPM) — base para o DDIM
+        # do modo late (ver _select_scheduler). Instância DPM cacheada para
+        # restaurar full/off sem reconstruir.
+        self._base_scheduler_config = dict(pipe.scheduler.config)
         pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config, use_karras_sigmas=True)
+        self._dpm_scheduler = pipe.scheduler
 
         self._status("Passo 2/4 — VAE ft-mse")
         vae_id_used = self._swap_vae(pipe)
+        self._vae_swapped = bool(vae_id_used)
 
         # Padding por camada é controlado por generate() (modo late alterna em
         # runtime); aqui só recolhemos as listas. O VAE decodifica apenas no fim
@@ -320,6 +331,36 @@ class TextureGenerator(DiffusionGeneratorBase):
     def _set_vae_padding(self, mode: str) -> None:
         for m in self._vae_convs:
             m.padding_mode = mode
+
+    # ------------------------------------------------------------- scheduler
+
+    def _select_scheduler(self, pipe: Any, seamless_mode: str) -> None:
+        """Scheduler por modo — ``late`` exige um stepper stateless (DDIM).
+
+        O noise rolling roda os latents (e o switch tardio troca o padding do
+        UNet) a meio da trajectória; o ``DPMSolverMultistepScheduler`` extrapola
+        com predições anteriores cacheadas (``model_outputs``) que ficam
+        desalinhadas da orientação corrente — o solver mistura versões rodadas
+        do mesmo sinal e o resultado degrada (ghost/bandas/cor destruída; foi
+        o bug do A/B 2026-09-11). O DDIM é função pura de (amostra, eps, t) —
+        o roll é seguro. O pattern-diffusion usa DDPM pela mesma razão.
+        ``full``/``off`` não perturbam a trajectória → DPM karras.
+        """
+        base_cfg = getattr(self, "_base_scheduler_config", None)
+        if not base_cfg:
+            return  # pipeline mockado (testes) — manter o scheduler do fake
+        current = getattr(pipe, "scheduler", None)
+        if seamless_mode == "late":
+            if getattr(self, "_ddim_scheduler", None) is None:
+                from diffusers import DDIMScheduler
+
+                self._ddim_scheduler = DDIMScheduler.from_config(base_cfg)
+            if current is not self._ddim_scheduler:
+                pipe.scheduler = self._ddim_scheduler
+                self._log("Scheduler: DDIM (stateless) para o modo late — noise rolling seguro")
+        elif current is not getattr(self, "_dpm_scheduler", current):
+            pipe.scheduler = self._dpm_scheduler
+            self._log("Scheduler: DPMSolverMultistep(karras)")
 
     # -------------------------------------------------------------- callback
 
@@ -462,6 +503,16 @@ class TextureGenerator(DiffusionGeneratorBase):
         scaling = float(getattr(vae.config, "scaling_factor", 0.18215))
         z = latents / scaling
 
+        # O VAE original do SD1.5 em fp16 tem o overflow clássico do decoder
+        # (cores invertidas/saturadas — é por isso que o ft-mse é default).
+        # Sem o swap (``TEXTURE2D_VAE_ID=none``), decodificar em fp32 e repor o
+        # dtype no fim — o VAE só corre uma vez por geração, o custo é aceitável.
+        upcast = not self._vae_swapped and self.device.startswith("cuda") and "float16" in str(self.torch_dtype)
+        if upcast:
+            vae = vae.to(torch.float32)
+            z = z.to(torch.float32)
+            self._log("Decode: VAE do checkpoint em fp16 → upcast fp32 (overflow clássico do decoder)")
+
         def _integral() -> Image.Image:
             vae.disable_tiling()
             sample = vae.decode(z, return_dict=False)[0]
@@ -496,6 +547,9 @@ class TextureGenerator(DiffusionGeneratorBase):
             self._clear_cache()
             self._log(f"OOM no decode integral ({exc}); retry com VAE tiling circular")
             return _tiled_circular().convert("RGB"), True
+        finally:
+            if upcast:
+                pipe.vae.to(self.torch_dtype)  # repor fp16 para o resto do worker
 
     # --------------------------------------------------------------- generate
 
@@ -533,8 +587,10 @@ class TextureGenerator(DiffusionGeneratorBase):
             ground: Modo chão top-down — ``"auto"`` deteta chão/terreno; ``"on"``
                 força; ``"off"`` desliga. Ver :mod:`texture2d.prompt_enhancer`.
             seamless_mode: ``"late"`` (default; noise rolling + circular nos
-                últimos ~20% — melhor FID), ``"full"`` (circular do início,
-                comportamento clássico), ``"off"`` (SD1.5 puro, sem toro).
+                últimos ~20% — melhor FID; corre em DDIM stateless porque o
+                rolling desalinha a história do DPM multistep),
+                ``"full"`` (circular do início, comportamento clássico),
+                ``"off"`` (SD1.5 puro, sem toro).
             refine_steps: Steps do refine hires quando o alvo é >512² (default 12).
             vae_tiling: ``None`` = auto (integral sempre que cabe); ``True``
                 força tiling circular-aware; ``False`` força integral.
@@ -559,6 +615,7 @@ class TextureGenerator(DiffusionGeneratorBase):
             seamless_mode = "full"
 
         pipe = self._load_pipeline()
+        self._select_scheduler(pipe, seamless_mode)
         p = (prompt or "").strip()
 
         # Merge preset — o preset pode definir prompt base, guidance/steps/resolução
@@ -603,6 +660,7 @@ class TextureGenerator(DiffusionGeneratorBase):
             "width": width,
             "height": height,
         }
+        sched = getattr(pipe, "scheduler", None)
 
         is_valid, error = validate_params(params)
         if not is_valid:
@@ -701,6 +759,7 @@ class TextureGenerator(DiffusionGeneratorBase):
             "width": width,
             "height": height,
             "seamless_mode": seamless_mode,
+            "scheduler": type(sched).__name__ if sched is not None else None,
             "hires": do_hires,
             "gen_width": gen_w if do_hires else None,
             "gen_height": gen_h if do_hires else None,

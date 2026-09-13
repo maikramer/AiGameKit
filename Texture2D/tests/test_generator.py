@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import ClassVar
 from unittest.mock import patch
 
 import numpy
@@ -101,6 +102,8 @@ class _FakeVAE:
         self.config = SimpleNamespace(scaling_factor=1.0)
         self.tiled = False
         self.decode_calls: list[tuple[int, int]] = []
+        self.decode_dtypes: list[torch.dtype] = []
+        self.to_calls: list = []
 
     def enable_tiling(self) -> None:
         self.tiled = True
@@ -108,10 +111,15 @@ class _FakeVAE:
     def disable_tiling(self) -> None:
         self.tiled = False
 
+    def to(self, *args, **kwargs):
+        self.to_calls.append(args[0] if args else kwargs.get("dtype"))
+        return self
+
     def decode(self, z, return_dict: bool = False):
         import torch.nn.functional as F
 
         self.decode_calls.append((int(z.shape[-2]), int(z.shape[-1])))
+        self.decode_dtypes.append(z.dtype)
         up = F.interpolate(z, scale_factor=8, mode="nearest")
         return (up,)
 
@@ -453,6 +461,102 @@ class TestDecodePolicy:
         lat = torch.zeros(1, 4, 32, 32)
         _, tiled = gen._decode_latents(pipe, lat, width=256, height=256, vae_tiling=None)
         assert tiled is False
+
+
+class TestDecodeUpcast:
+    """Sem o swap ft-mse, o VAE do checkpoint decodifica em fp32 (overflow fp16)."""
+
+    def _cuda_fp16_gen(self, swapped: bool) -> TextureGenerator:
+        gen = TextureGenerator(device="cpu")
+        gen.device = "cuda:0"
+        gen.torch_dtype = torch.float16
+        gen._vae_swapped = swapped
+        return gen
+
+    def test_checkpoint_vae_upcasts_to_fp32_and_restores(self):
+        gen = self._cuda_fp16_gen(swapped=False)
+        pipe = _FakePipe()
+        lat = torch.zeros(1, 4, 32, 32, dtype=torch.float16)
+        gen._decode_latents(pipe, lat, width=256, height=256, vae_tiling=False)
+        # Decode em fp32 e dtype reposto no fim (fp16).
+        assert pipe.vae.decode_dtypes == [torch.float32]
+        assert pipe.vae.to_calls == [torch.float32, torch.float16]
+
+    def test_swapped_ft_mse_stays_fp16(self):
+        gen = self._cuda_fp16_gen(swapped=True)
+        pipe = _FakePipe()
+        lat = torch.zeros(1, 4, 32, 32, dtype=torch.float16)
+        gen._decode_latents(pipe, lat, width=256, height=256, vae_tiling=False)
+        assert pipe.vae.decode_dtypes == [torch.float16]
+        assert pipe.vae.to_calls == []
+
+    def test_cpu_never_upcasts(self):
+        gen = TextureGenerator(device="cpu")
+        gen._vae_swapped = False
+        pipe = _FakePipe()
+        lat = torch.zeros(1, 4, 32, 32)
+        gen._decode_latents(pipe, lat, width=256, height=256, vae_tiling=False)
+        assert pipe.vae.to_calls == []
+
+
+class TestSelectScheduler:
+    """Modo late → DDIM stateless (roll desalinha a história do DPM multistep)."""
+
+    BASE_CFG: ClassVar[dict] = {
+        "num_train_timesteps": 1000,
+        "beta_start": 0.0001,
+        "beta_end": 0.02,
+        "beta_schedule": "scaled_linear",
+        "steps_offset": 1,
+        "clip_sample": False,
+        "set_alpha_to_one": False,
+    }
+
+    def test_late_installs_ddim(self):
+        from diffusers import DDIMScheduler
+
+        gen = TextureGenerator(device="cpu")
+        gen._base_scheduler_config = dict(self.BASE_CFG)
+        pipe = _FakePipe()
+        pipe.scheduler = object()
+        gen._select_scheduler(pipe, "late")
+        assert isinstance(pipe.scheduler, DDIMScheduler)
+        # Instância cacheada — segunda chamada não reconstrói.
+        cached = pipe.scheduler
+        gen._select_scheduler(pipe, "late")
+        assert pipe.scheduler is cached
+
+    def test_full_restores_dpm(self):
+        gen = TextureGenerator(device="cpu")
+        gen._base_scheduler_config = dict(self.BASE_CFG)
+        dpm = object()
+        gen._dpm_scheduler = dpm
+        pipe = _FakePipe()
+        pipe.scheduler = object()  # DDIM deixado pelo run anterior
+        gen._select_scheduler(pipe, "full")
+        assert pipe.scheduler is dpm
+        gen._select_scheduler(pipe, "off")
+        assert pipe.scheduler is dpm
+
+    def test_noop_without_loaded_config(self):
+        """Load mockado (sem _base_scheduler_config) — scheduler intocado."""
+        gen = TextureGenerator(device="cpu")
+        pipe = _FakePipe()
+        sentinel = object()
+        pipe.scheduler = sentinel
+        gen._select_scheduler(pipe, "late")
+        assert pipe.scheduler is sentinel
+
+    def test_generate_passes_late_scheduler_to_pipeline(self):
+        from diffusers import DDIMScheduler
+
+        gen = TextureGenerator(device="cpu")
+        gen._base_scheduler_config = dict(self.BASE_CFG)
+        fake = _FakePipe()
+        with patch.object(gen, "_load_pipeline", return_value=fake):
+            _, meta = gen.generate("stone texture", seed=1, ground="off")
+        assert isinstance(fake.scheduler, DDIMScheduler)
+        assert meta["scheduler"] == "DDIMScheduler"
 
 
 class TestHiresPath:

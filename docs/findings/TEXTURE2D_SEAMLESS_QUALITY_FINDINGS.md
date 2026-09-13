@@ -87,6 +87,40 @@ isto automaticamente com `refine_steps` 12/16 do QualityEngine.
 Nota: os runs 1024 usaram decode tiled auto (VRAM livre <3 GiB na 6 GB com
 worker GO residente); em GPUs maiores decodem integral.
 
+## A/B visual — o score não viu a corrupção (2026-09-11, corrigido)
+
+Inspeção visual das imagens do A/B acima: **`late`, `basevae`, `hires1024` e
+`direct1024` estavam visualmente destruídos** (cores invertidas/saturadas,
+bandas horizontais, ghost/double-exposure, estrutura em papa); só `full` estava
+bom. A métrica de continuidade deu scores altos a todos — ela mede a costura da
+**borda**, e a corrupção do solver é global (a borda continua wrap-consistente).
+**Lição: A/B de seamless precisa sempre de inspeção visual; o score só guarda
+a costura.**
+
+Causa raiz (uma só, explicava os 4): o **noise rolling é incompatível com o
+`DPMSolverMultistepScheduler`**. O multistep extrapola cada step com predições
+anteriores cacheadas (`model_outputs`); rodar os latents por metade a cada step
+(e trocar o padding do UNet a 80%) deixa a história do solver desalinhada da
+orientação corrente — o solver mistura versões rodadas do mesmo sinal. É por
+isso que o pattern-diffusion usa **DDPM** (stepper stateless). O `full` nunca
+perturba a trajectória → DPM karras ficava correto.
+
+Fixes (mesma data):
+
+1. **Modo `late` → `DDIMScheduler`** (stateless por step, determinístico com
+   eta=0): `_select_scheduler` em `generator.py` troca por-request a partir da
+   config original do checkpoint; `full`/`off` restauram o DPM karras
+   (instâncias cacheadas). Metadata ganhou `scheduler`.
+2. **`basevae` em fp16 → decode fp32**: o VAE original do SD1.5 tem o overflow
+   clássico do decoder em fp16 (cores invertidas/saturadas — razão histórica do
+   ft-mse). Sem o swap ft-mse (`TEXTURE2D_VAE_ID=none`, ou fallback de rede),
+   `_decode_latents` faz upcast fp32 do VAE+latent e repõe fp16 no fim. Com
+   ft-mse (default) nada muda — é estável em fp16.
+
+Suspeita descartada: o `_tiled_circular` (decode tiled com pad circular) — os
+runs 1024 corrompiam pelo modo late, não pelo tiling; re-testado após o fix do
+scheduler.
+
 ## Métrica antiga vs pool (baseline histórica)
 
 Texturas do pool VibeGame (código antigo, métrica antiga = igualdade):
