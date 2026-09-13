@@ -43,6 +43,12 @@ run_arm() {
     echo "  !! bridge nao subiu"; $VIBER session down --world "$WORLD" >/dev/null 2>&1; return 1
   fi
   sleep "$SETTLE"
+  # Snippet de Lua opcional por braço: posiciona o herói/relógio antes de
+  # medir (ex.: VIBER_AB_LUA='viber.debug.set_clock(1380) return true').
+  if [ -n "${VIBER_AB_LUA:-}" ]; then
+    $VIBER debug --world "$WORLD" lua "$VIBER_AB_LUA" >/dev/null 2>&1
+    sleep "${VIBER_AB_LUA_SETTLE:-8}"
+  fi
   $VIBER debug --world "$WORLD" prof --samples "$SAMPLES" --json \
     > "$outdir/$tag-r$round-idle.json" 2>/dev/null
   $VIBER debug --world "$WORLD" prof --samples "$SAMPLES" 2>/dev/null | tr '\n' ' ' | sed 's/^/  /'

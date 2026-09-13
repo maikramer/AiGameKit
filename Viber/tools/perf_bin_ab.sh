@@ -36,6 +36,11 @@ collect() {
   done
   [ "$ok" = 1 ] || { echo "  !! bridge nao subiu"; "$bin" session down --world "$WORLD" >/dev/null 2>&1; return 1; }
   sleep "$SETTLE"
+  # Snippet de Lua opcional por braço (enquadramento/relógio iguais nos dois).
+  if [ -n "${VIBER_AB_LUA:-}" ]; then
+    "$bin" debug --world "$WORLD" lua "$VIBER_AB_LUA" >/dev/null 2>&1
+    sleep "${VIBER_AB_LUA_SETTLE:-8}"
+  fi
 
   # 1) repouso: emissores de partículas / HUD
   "$bin" debug --world "$WORLD" prof --samples "$SAMPLES" --json > "$outdir/$tag-r$round-idle.json" 2>/dev/null
