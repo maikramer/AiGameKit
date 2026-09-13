@@ -23,6 +23,18 @@
         + clusters mais numerosos e justos: o tapete volta a ler-se como
         sub-bosque em manchas (nem tapete uniforme, nem nada). -->
     <Vegetation meshes="/assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/flower_yellowA.glb" density-per-km2="99000" seed="601" region-min="-190 0 116" region-max="190 0 380" scale-min="0.8" scale-max="1.6" max-slope-deg="26" avoid-water="1" avoid-overlaps="0" max-distance="437" max-instances="2200" cluster-count="160" cluster-radius="9.5" flower-near-radius="4.8" flower-density-ratio="0.18" plant-density-ratio="0.46" smart="1" wind="1" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="foliage" />
+    <!-- §2 Árvores colhíveis (collider + ResourceNode + tree.ts). Ficam na
+        faixa junto aos caminhos: é onde o jogador corta madeira.
+        LOOP E: 5 colocados de 44 no original. A ocupação partilhada corre
+        pela ordem do XML — este grupo (gameplay: quest forest_darkwood)
+        fica PRIMEIRO para reservar a banda dos trilhos antes do dossel
+        cenográfico; footprint 2.6 + attempts 96. -->
+    <StaticSpawner profile="tree" count="80" seed="301" region-min="-116 0 120" region-max="116 0 280" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="34" max-slope-attempts="96" scale-min="0.9" scale-max="1.35" avoid-overlaps="1" footprint-radius="2.6" max-distance="316" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+      <GameObject role="static" destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/pine_dark_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/forest/pine_dark_lod0.glb" lod1-url="/assets/meshes/forest/pine_dark_lod1.glb" lod2-url="/assets/meshes/forest/pine_dark_lod2.glb" lod-threshold-near="36" lod-threshold-mid="110" />
+        <ResourceNode kind="dark-wood" yield="3" transform="pos: 0 0 0" />
+      </GameObject>
+    </StaticSpawner>
     <!-- §1 Dossel — pinheiro escuro (pine_dark é o mesh próprio deste bioma;
         o tree_pine claro fica reservado aos Picos). Coletável: colisor
         cápsula pré-calculado + tree.ts + ResourceNode. Toda a madeira do
@@ -47,18 +59,6 @@
     <StaticSpawner profile="tree" count="420" seed="6102" region-min="-250 0 330" region-max="250 0 490" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="42" max-slope-attempts="64" scale-min="0.9" scale-max="1.4" avoid-overlaps="1" footprint-radius="2.6" cluster-count="14" cluster-radius="60" max-distance="563" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
       <GameObject role="static" destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/pine_dark_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/forest/pine_dark_lod0.glb" lod1-url="/assets/meshes/forest/pine_dark_lod1.glb" lod2-url="/assets/meshes/forest/pine_dark_lod2.glb" lod-threshold-near="60" lod-threshold-mid="130" />
-        <ResourceNode kind="dark-wood" yield="3" transform="pos: 0 0 0" />
-      </GameObject>
-    </StaticSpawner>
-    <!-- §2 Árvores colhíveis (collider + ResourceNode + tree.ts). Ficam na
-        faixa junto aos caminhos: é onde o jogador corta madeira.
-        LOOP E: 5 colocados de 44 (occupancy 1172 — a região afundava nos
-        groves do dossel). footprint 2.6 + attempts 96, e o grupo corre
-        ANTES das folhosas: a ocupação partilhada é por ordem de XML e o
-        gameplay (colheita perto dos trilhos) leva prioridade. -->
-    <StaticSpawner profile="tree" count="80" seed="301" region-min="-116 0 120" region-max="116 0 280" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="34" max-slope-attempts="96" scale-min="0.9" scale-max="1.35" avoid-overlaps="1" footprint-radius="2.6" max-distance="316" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
-      <GameObject role="static" destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/pine_dark_lod0.glb">
-        <GLTFLoader role="visual" url="/assets/meshes/forest/pine_dark_lod0.glb" lod1-url="/assets/meshes/forest/pine_dark_lod1.glb" lod2-url="/assets/meshes/forest/pine_dark_lod2.glb" lod-threshold-near="36" lod-threshold-mid="110" />
         <ResourceNode kind="dark-wood" yield="3" transform="pos: 0 0 0" />
       </GameObject>
     </StaticSpawner>
@@ -115,7 +115,7 @@
         LOOP E: 0 colocados de 24 (footprint 9 × escala 3 = disco de 27 m
         que não cabia em lado nenhum). footprint 5.5 + attempts 96. -->
     <StaticSpawner profile="tree" count="36" seed="6106" region-min="-170 0 132" region-max="170 0 350" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="45" max-slope-attempts="96" scale-min="0.9" scale-max="1.25" avoid-overlaps="1" footprint-radius="3.5" max-distance="402" random-yaw="true" variation="rock">
-      <GameObject role="static" transform="scale: 3 3 3" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 26; hits: 5; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 14; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb">
+      <GameObject role="static" transform="scale: 2.2 2.2 2.2" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 26; hits: 5; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 14; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="45" lod-threshold-mid="120" />
         <ResourceNode kind="stone" yield="6" transform="pos: 0 0 0" />
       </GameObject>
