@@ -82,7 +82,7 @@ pub const IMPACT_DELAY_MAX: f32 = 0.45;
 /// Impacto sem duração de clip conhecida (s).
 pub const FALLBACK_IMPACT_DELAY: f32 = 0.22;
 /// Alcance máximo do prompt/alvo (o `range` do prop é capado aqui).
-pub const PROMPT_RANGE_CAP: f32 = 3.5;
+pub const PROMPT_RANGE_CAP: f32 = crate::interact::BASE_RANGE_M;
 /// XP por prop quebrado (igual aos scripts tree/rock.lua que substitui).
 pub const HARVEST_XP: u32 = 30;
 
@@ -493,7 +493,9 @@ pub fn harvest_context_system(
         let dz = transform.translation().z - origin.z;
         // Comparação em quadrados: o sqrt só corre no candidato aceite.
         let dist_sq = dx * dx + dz * dz;
-        let range = destructible.range.min(PROMPT_RANGE_CAP);
+        // Alcance EFETIVO (metade do autorado): o prop mais próximo é o que
+        // conta, e os props deixaram de se sobrepor a 3,5 m.
+        let range = crate::interact::scaled_range(destructible.range.min(PROMPT_RANGE_CAP));
         if dist_sq > range * range || dist_sq < 1e-6 {
             continue;
         }

@@ -184,6 +184,9 @@ pub struct ScriptCtx {
     /// Range de interação da entidade actual (`viber.set_interaction`) —
     /// `viber.interacted` respeita-o em vez de hardcodar 3,5 m.
     pub interaction_range: Option<f32>,
+    /// Vencedor por tecla do frame (`interact::InteractionFocus`): só ele
+    /// vê `viber.interacted(tecla)` a `true`.
+    pub interaction_focus: std::collections::HashMap<KeyCode, Entity>,
     /// Snapshot do HP do herói `(current, max)` para `viber.player_hp`.
     pub player_hp: Option<(f32, f32)>,
     /// Handle de leitura partilhado do terreno (`viber.ground_below`) —
@@ -1124,7 +1127,9 @@ impl LuaScriptHost {
                         "viber.set_interaction: tecla desconhecida '{key}' (válidas: e j f q r space)"
                     ))
                 })?;
-                let range = range.unwrap_or(3.5);
+                // O default é o alcance BASE autorado; a escala global entra
+                // no `SetInteraction` (um só sítio).
+                let range = range.unwrap_or(crate::interact::BASE_RANGE_M);
                 if !range.is_finite() {
                     return Err(mlua::Error::runtime(
                         "viber.set_interaction: range não finito (NaN/inf)",
@@ -1148,7 +1153,9 @@ impl LuaScriptHost {
             })?,
         )?;
         // viber.interacted(key) -> bool — tecla pressionada NESTE frame E
-        // player dentro do alcance de interação (3.5 m).
+        // ESTA entidade é o alvo mais próximo dessa tecla
+        // (`interact::InteractionFocus`). O alcance sozinho não chega: dois
+        // NPC sobrepostos reagiam ambos ao mesmo [E].
         api.set(
             "interacted",
             lua.create_function(|lua, key: String| {
@@ -1161,9 +1168,23 @@ impl LuaScriptHost {
                 if !ctx.just_pressed.contains(&code) {
                     return Ok(false);
                 }
+                let Some(entity) = ctx.entity else {
+                    return Ok(false);
+                };
+                // Sem foco publicado ainda (1.º frame, ou entidade que ainda
+                // não registou `set_interaction`): cai no teste de alcance de
+                // sempre, para não perder a interação do frame de arranque.
+                if let Some(winner) = ctx.interaction_focus.get(&code).copied() {
+                    return Ok(winner == entity);
+                }
                 Ok(ctx
                     .player
-                    .map(|p| p.distance(ctx.origin) <= ctx.interaction_range.unwrap_or(3.5))
+                    .map(|p| {
+                        p.distance(ctx.origin)
+                            <= ctx
+                                .interaction_range
+                                .unwrap_or_else(crate::interact::default_range)
+                    })
                     .unwrap_or(false))
             })?,
         )?;
@@ -1303,6 +1324,10 @@ impl bevy::app::Plugin for LuauScriptPlugin {
         app.init_resource::<Time>();
         // Input para `viber.interacted` + evento de toasts de script.
         app.init_resource::<ButtonInput<KeyCode>>();
+        // Árbitro das interações: `viber.interacted` LÊ-O, portanto vive com o
+        // plugin (uma app mínima de teste com só este plugin tem de correr).
+        app.init_resource::<crate::interact::InteractionFocus>();
+        app.add_systems(bevy::app::PreUpdate, crate::interact::focus_interactions);
         app.add_message::<ScriptToast>();
         // SFX de scripts (`viber.sound`) — idempotente com o AmbientPlugin.
         app.add_message::<crate::ambient::SfxEvent>();
@@ -1382,12 +1407,21 @@ pub struct LuauRuntimeLocals<'s> {
 pub fn luau_update(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
+    // `Option`: apps mínimas (testes, headless) montam sistemas soltos sem o
+    // recurso — sem foco, o `interacted` cai no teste de alcance de sempre.
+    focus: Option<Res<crate::interact::InteractionFocus>>,
     mut host: ResMut<LuaScriptHost>,
     mut scripts: Query<
         (
             Entity,
             &LuaScriptRef,
             Option<&mut Transform>,
+            // O MUNDO da entidade. O `Transform` é LOCAL: um NPC dentro do
+            // grupo `city` (assentado a y≈38,7 no terreno) tem local y=0, e
+            // usar isso como posição punha-o 38 m abaixo do herói — o
+            // `viber.interacted` (raio 3,5 m) nunca disparava e o [E] "não
+            // fazia nada" em toda a cidade (repro do utilizador 2026-09-12).
+            Option<&GlobalTransform>,
             Option<&ScriptActivation>,
             Option<&ScriptInteraction>,
         ),
@@ -1482,6 +1516,11 @@ pub fn luau_update(
     // fazia os scripts lerem o snapshot do frame anterior).
     if let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
         ctx.just_pressed = just_pressed.clone();
+        // Vencedor por tecla deste frame (decidido no PreUpdate).
+        ctx.interaction_focus = focus
+            .as_deref()
+            .map(crate::interact::InteractionFocus::snapshot)
+            .unwrap_or_default();
         // Snapshot do HP do herói para `viber.player_hp` (frame-start).
         ctx.player_hp = player_components
             .as_ref()
@@ -1491,8 +1530,12 @@ pub fn luau_update(
         ctx.terrain = terrain.as_deref().map(|rt| rt.reader());
     }
 
-    for (entity, lref, transform, activation, interaction) in &mut scripts {
-        let Some(origin) = transform.as_ref().map(|t| t.translation) else {
+    for (entity, lref, transform, global, activation, interaction) in &mut scripts {
+        // Posição no MUNDO (o `Transform` sozinho é local ao grupo pai).
+        let Some(origin) = global
+            .map(GlobalTransform::translation)
+            .or_else(|| transform.as_ref().map(|t| t.translation))
+        else {
             continue;
         };
         // Congelamento (LOD de IA): além do raio de ativação o on_update nem
@@ -1530,39 +1573,54 @@ pub fn luau_update(
     for command in queued {
         match command {
             ScriptCommand::MoveBy(entity, delta) => {
-                if let Ok((_, _, Some(mut transform), _, _)) = scripts.get_mut(entity) {
-                    let x = transform.translation.x + delta.x;
-                    let z = transform.translation.z + delta.y;
+                if let Ok((_, _, Some(mut transform), global, _, _)) = scripts.get_mut(entity) {
+                    // O alvo calcula-se no MUNDO (o terreno é mundo) e
+                    // escreve-se em LOCAL: `offset` é o que o pai acrescenta.
+                    // Grupos de cidade/cena são translações puras — com um pai
+                    // rodado/escalado isto seria uma aproximação (ver o
+                    // comentário do `origin`).
+                    let offset = global
+                        .map(|g| g.translation() - transform.translation)
+                        .unwrap_or(Vec3::ZERO);
+                    let world = transform.translation + offset;
+                    let x = world.x + delta.x;
+                    let z = world.z + delta.y;
                     // Piso SOB a entidade (Y conhecido): um NPC movido por
                     // script sob um overhang não salta para o topo do mundo.
                     let y = match terrain.as_ref() {
                         Some(rt) => rt
-                            .surface_below(
-                                x,
-                                z,
-                                transform.translation.y + crate::player::GROUND_PROBE,
-                            )
+                            .surface_below(x, z, world.y + crate::player::GROUND_PROBE)
                             .unwrap_or_else(|| rt.sample(x, z)),
-                        None => transform.translation.y,
+                        None => world.y,
                     };
-                    transform.translation = Vec3::new(x, y, z);
+                    transform.translation = Vec3::new(x, y, z) - offset;
                 }
             }
             ScriptCommand::FaceTowards(entity, target) => {
-                if let Ok((_, _, Some(mut transform), _, _)) = scripts.get_mut(entity) {
-                    let dir = Vec3::new(
-                        target.x - transform.translation.x,
-                        0.0,
-                        target.z - transform.translation.z,
-                    );
+                if let Ok((_, _, Some(mut transform), global, _, _)) = scripts.get_mut(entity) {
+                    // Direção no MUNDO (o alvo é o herói, em mundo).
+                    let here = global
+                        .map(GlobalTransform::translation)
+                        .unwrap_or(transform.translation);
+                    let dir = Vec3::new(target.x - here.x, 0.0, target.z - here.z);
                     if dir.length_squared() > 1e-6 {
                         transform.rotation = crate::player::facing_rotation(dir.normalize());
                     }
                 }
             }
             ScriptCommand::TeleportPlayer(pos) => {
-                if let Some((_, Some(transform), _, _)) = player_components.as_mut() {
-                    transform.translation = pos;
+                if let Some((entity, Some(transform), _, _)) = player_components.as_mut() {
+                    // ASSENTA no destino em vez de largar o herói no ar: as
+                    // colunas do destino podem estar por assar (vinha de uma
+                    // bolsa de interior a 2,6 km) e, sem collider, o herói
+                    // caía pelo mundo fora antes de o streaming o apanhar.
+                    // A superfície analítica existe sempre — é a mesma que o
+                    // `player_movement` usa como chão de último recurso.
+                    let landed = crate::player::landing_position(terrain.as_deref(), pos);
+                    transform.translation = landed;
+                    commands
+                        .entity(*entity)
+                        .insert(crate::player::TeleportSettle::default());
                 }
             }
             ScriptCommand::AddXp(gain) => {
@@ -1615,7 +1673,10 @@ pub fn luau_update(
                     commands.entity(entity).insert(ScriptInteraction {
                         label,
                         key: code,
-                        range,
+                        // ÚNICO sítio onde o alcance autorado vira alcance
+                        // efetivo: daqui para a frente (prompt, foco,
+                        // `interacted`, colheita) todos leem o mesmo número.
+                        range: crate::interact::scaled_range(range),
                     });
                 }
             }
@@ -1757,10 +1818,15 @@ pub fn luau_update(
             }
             ScriptCommand::Topple { entity } => {
                 // tomba na direção herói→entidade (break-style: fall)
-                let target_pos = scripts
-                    .get(entity)
-                    .ok()
-                    .and_then(|(_, _, transform, _, _)| transform.as_ref().map(|t| t.translation));
+                let target_pos =
+                    scripts
+                        .get(entity)
+                        .ok()
+                        .and_then(|(_, _, transform, global, _, _)| {
+                            global
+                                .map(GlobalTransform::translation)
+                                .or_else(|| transform.as_ref().map(|t| t.translation))
+                        });
                 if let (Some(target_pos), Some(player_pos)) = (target_pos, player_pos) {
                     let dir = (target_pos - player_pos).normalize_or_zero();
                     // initial preserva o yaw autoral — sem ele o prop "popeava"
@@ -1768,7 +1834,9 @@ pub fn luau_update(
                     let initial = scripts
                         .get(entity)
                         .ok()
-                        .and_then(|(_, _, transform, _, _)| transform.as_ref().map(|t| t.rotation))
+                        .and_then(|(_, _, transform, _, _, _)| {
+                            transform.as_ref().map(|t| t.rotation)
+                        })
                         .unwrap_or_default();
                     commands.entity(entity).insert(crate::physics_fx::Falling {
                         axis: Vec3::new(dir.z, 0.0, -dir.x),
@@ -1781,10 +1849,14 @@ pub fn luau_update(
         }
     }
 
-    // Compat: `viber.set_position` legado (posição absoluta, sem snap).
+    // Compat: `viber.set_position` legado (posição absoluta = MUNDO; o
+    // Transform é local, por isso desconta-se o que o pai acrescenta).
     for (entity, pos) in host.take_pending() {
-        if let Ok((_, _, Some(mut transform), _, _)) = scripts.get_mut(entity) {
-            transform.translation = pos;
+        if let Ok((_, _, Some(mut transform), global, _, _)) = scripts.get_mut(entity) {
+            let offset = global
+                .map(|g| g.translation() - transform.translation)
+                .unwrap_or(Vec3::ZERO);
+            transform.translation = pos - offset;
         }
     }
 }

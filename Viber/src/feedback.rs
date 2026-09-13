@@ -1384,7 +1384,9 @@ mod tests {
             "o slot VOLTA ao material original — o clone não fica (leak fechado)"
         );
         assert!(
-            !world.resource::<Assets<StandardMaterial>>().contains(&current)
+            !world
+                .resource::<Assets<StandardMaterial>>()
+                .contains(&current)
                 || current == original,
             "sem clones órfãos no store"
         );
@@ -1445,7 +1447,8 @@ mod tests {
             "o clone foi removido do asset store"
         );
         assert_eq!(
-            world.get::<MeshMaterial3d<StandardMaterial>>(child)
+            world
+                .get::<MeshMaterial3d<StandardMaterial>>(child)
                 .expect("o nó sobrevive ao flash")
                 .0,
             original,

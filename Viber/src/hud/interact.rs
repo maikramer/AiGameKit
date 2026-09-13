@@ -22,8 +22,9 @@ pub struct HudBalloon {
 
 /// How long the balloon stays visible after an interaction (s).
 pub const BALLOON_DURATION: f32 = 4.0;
-/// Interaction range for the balloon, matching `player::dialogue_interaction`.
-pub const BALLOON_RANGE_M: f32 = 3.5;
+/// Interaction range for the balloon, matching `player::dialogue_interaction`
+/// — valor AUTORADO; o efetivo sai de `interact::default_range()`.
+pub const BALLOON_RANGE_M: f32 = crate::interact::BASE_RANGE_M;
 
 /// Marker for nodes toggled by a key (e.g. `<TabbedModal key="q">`).
 #[derive(Component)]

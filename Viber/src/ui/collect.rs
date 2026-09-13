@@ -126,7 +126,7 @@ pub fn collect_ui_prompt(
     }
     for (transform, _) in &npcs {
         let distance = transform.translation().distance(origin);
-        if distance <= DIALOGUE_RANGE_M {
+        if distance <= crate::interact::default_range() {
             consider(distance, "E".to_string(), "falar".to_string());
         }
     }
@@ -142,8 +142,9 @@ pub fn collect_ui_prompt(
     }
 }
 
-/// Range at which a `<DialogueNPC>` offers its prompt (m).
-pub const DIALOGUE_RANGE_M: f32 = 3.5;
+/// Range at which a `<DialogueNPC>` offers its prompt (m) — valor AUTORADO;
+/// o efetivo é `interact::default_range()` (metade, ver `src/interact.rs`).
+pub const DIALOGUE_RANGE_M: f32 = crate::interact::BASE_RANGE_M;
 
 /// Single-glyph name for the keys an interaction can be bound to.
 ///
@@ -521,7 +522,8 @@ mod tests {
                 crate::recipes::spawn::DialogueNpc {
                     dialogue_id: "test".into(),
                 },
-                GlobalTransform::from_translation(Vec3::new(2.0, 0.0, 0.0)),
+                // Dentro do alcance EFETIVO (metade do autorado: 1,75 m).
+                GlobalTransform::from_translation(Vec3::new(1.2, 0.0, 0.0)),
             ))
             .id();
         app.update();
@@ -535,9 +537,11 @@ mod tests {
                 crate::luau::ScriptInteraction {
                     label: "assinar".into(),
                     key: KeyCode::KeyF,
-                    range: 3.0,
+                    // `range` aqui é o EFETIVO (o `set_interaction` já
+                    // escalou; o teste insere o componente à mão).
+                    range: 1.5,
                 },
-                GlobalTransform::from_translation(Vec3::new(1.0, 0.0, 0.0)),
+                GlobalTransform::from_translation(Vec3::new(0.6, 0.0, 0.0)),
             ))
             .id();
         app.update();
