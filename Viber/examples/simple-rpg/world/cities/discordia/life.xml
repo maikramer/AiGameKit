@@ -1,0 +1,104 @@
+<!--
+  VIDA DA CIDADE — estandartes, lanternas de rua e miudezas de praça. Loaded via Include.
+
+  PORQUÊ: a praça e as artérias de Discordia estavam nuas — calhau no chão,
+      muralha em volta, casas encostadas — e nada que diga "aqui vive gente".
+      Este ficheiro é dressing puro, todo de PRIMITIVAS com as texturas do pool
+      (madeira, telha, pedra) e com `normal-map`: as primitivas aceitam-no desde
+      esta ronda (`MaterialSpec::normal_map`), e é o que faz um pendão ou uma
+      trave ler como objeto construído em vez de caixa colorida. Como não usa
+      GLB novo, não custa VRAM de textura e não mexe em nenhuma casa.
+
+  ORDEM: incluído DEPOIS de `cities/discordia.xml` (o distrito já está de pé:
+      os pendões e as lanternas encostam-se às paredes que existem) e ANTES de `paths/lanterns.xml` (que acende as artérias).
+
+  ESCALA: uma primitiva por peça é barata, mas o número de luzes não é — os
+      PointLight com `shadows="false"` e `radius` curto não entram na cascata
+      de sombras. As lanternas usam chama EMISSIVA + luz de raio pequeno.
+-->
+  <world>
+  <Group name="city.life" translation="0 0 0">
+    <!-- ============================================================
+       §1 BANCAS DO MERCADO — as bancas são os GLB do `market.xml`, que já
+       trazem a sua própria lona. Os "toldos" de primitivas que existiam aqui
+       (um pano inclinado + duas varas por banca) atravessavam a lona do GLB e
+       liam-se como tendas cortadas a meio: removidos a 2026-09-12 a pedido do
+       utilizador. Dressing do mercado = só o que NÃO duplica o GLB.
+       ============================================================ -->
+    <!-- Bancas de fruta: caixotes rasos com tampa de madeira. -->
+    <Entity translation="11.9 0 -20.9" transform="rotation: 0 12 0">
+      <Box translation="0 0.45 0" half-size="0.75 0.35 0.55" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+    </Entity>
+    <Entity translation="9.1 0 -19.6" transform="rotation: 0 -25 0">
+      <Box translation="0 0.45 0" half-size="0.75 0.35 0.55" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+    </Entity>
+    <!-- ============================================================
+       §2 ESTANDARTES — pendões pendurados nas paredes viradas à praça: a
+       heráldica de Discordia (vermelho e ouro) em pano rígido. Cada um leva
+       uma haste e o pano, ambos com a textura de madeira para lerem volume.
+       ============================================================ -->
+    <Entity name="banner-plaza-n" translation="0 0 37.6" transform="rotation: 0 180 0">
+      <Box translation="0 4.4 0" half-size="0.9 0.06 0.06" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.2" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 0.12" half-size="0.75 1.15 0.04" base-color="#8e2b2b" roughness="0.95" metallic="0.0" />
+      <Box translation="0 1.95 0.12" half-size="0.75 0.14 0.04" base-color="#d9b25a" roughness="0.5" metallic="0.4" />
+    </Entity>
+    <Entity name="banner-plaza-s" translation="0 0 -37.6" transform="rotation: 0 0 0">
+      <Box translation="0 4.4 0" half-size="0.9 0.06 0.06" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.2" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 -0.12" half-size="0.75 1.15 0.04" base-color="#8e2b2b" roughness="0.95" metallic="0.0" />
+      <Box translation="0 1.95 -0.12" half-size="0.75 0.14 0.04" base-color="#d9b25a" roughness="0.5" metallic="0.4" />
+    </Entity>
+    <Entity name="banner-plaza-e" translation="37.6 0 0" transform="rotation: 0 -90 0">
+      <Box translation="0 4.4 0" half-size="0.9 0.06 0.06" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.2" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 -0.12" half-size="0.75 1.15 0.04" base-color="#2b558e" roughness="0.95" metallic="0.0" />
+      <Box translation="0 1.95 -0.12" half-size="0.75 0.14 0.04" base-color="#d9b25a" roughness="0.5" metallic="0.4" />
+    </Entity>
+    <Entity name="banner-plaza-w" translation="-37.6 0 0" transform="rotation: 0 90 0">
+      <Box translation="0 4.4 0" half-size="0.9 0.06 0.06" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.2" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 0.12" half-size="0.75 1.15 0.04" base-color="#2b558e" roughness="0.95" metallic="0.0" />
+      <Box translation="0 1.95 0.12" half-size="0.75 0.14 0.04" base-color="#d9b25a" roughness="0.5" metallic="0.4" />
+    </Entity>
+    <!-- ============================================================
+       §3 LANTERNAS DE RUA — poste de madeira, braço, lanterna de vidro
+       EMISSIVA (pano claro com emissive, não `unlit`) e uma luz curta. Seis,
+       nos quatro braços da praça e duas no mercado. A chama é a luz que o
+       jogador vê de longe; o `PointLight` só ilumina o calhau em volta.
+       ============================================================ -->
+    <Entity name="street-lamp-n" translation="4 0 26" transform="rotation: 0 180 0">
+      <Cylinder translation="0 1.6 0" half-height="1.6" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.25 0.45" half-size="0.05 0.05 0.45" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 0.85" half-size="0.22 0.3 0.22" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3.2 0.85" color="0xffc98a" intensity="4200" radius="0.5" shadows="false" />
+    </Entity>
+    <Entity name="street-lamp-s" translation="-4 0 -26" transform="rotation: 0 0 0">
+      <Cylinder translation="0 1.6 0" half-height="1.6" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.25 -0.45" half-size="0.05 0.05 0.45" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 -0.85" half-size="0.22 0.3 0.22" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3.2 -0.85" color="0xffc98a" intensity="4200" radius="0.5" shadows="false" />
+    </Entity>
+    <Entity name="street-lamp-e" translation="26 0 -4" transform="rotation: 0 -90 0">
+      <Cylinder translation="0 1.6 0" half-height="1.6" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.25 -0.45" half-size="0.05 0.05 0.45" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 -0.85" half-size="0.22 0.3 0.22" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3.2 -0.85" color="0xffc98a" intensity="4200" radius="0.5" shadows="false" />
+    </Entity>
+    <Entity name="street-lamp-w" translation="-26 0 4" transform="rotation: 0 90 0">
+      <Cylinder translation="0 1.6 0" half-height="1.6" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.25 0.45" half-size="0.05 0.05 0.45" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 0.85" half-size="0.22 0.3 0.22" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3.2 0.85" color="0xffc98a" intensity="4200" radius="0.5" shadows="false" />
+    </Entity>
+    <Entity name="street-lamp-market-a" translation="6.5 0 -21.5" transform="rotation: 0 140 0">
+      <Cylinder translation="0 1.5 0" half-height="1.5" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.05 -0.4" half-size="0.05 0.05 0.4" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.0 -0.75" half-size="0.2 0.28 0.2" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3.0 -0.75" color="0xffc98a" intensity="3800" radius="0.5" shadows="false" />
+    </Entity>
+    <Entity name="street-lamp-market-b" translation="22.5 0 -12.5" transform="rotation: 0 -30 0">
+      <Cylinder translation="0 1.5 0" half-height="1.5" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.05 0.4" half-size="0.05 0.05 0.4" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.0 0.75" half-size="0.2 0.28 0.2" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3.0 0.75" color="0xffc98a" intensity="3800" radius="0.5" shadows="false" />
+    </Entity>
+  </Group>
+  <!-- FIM city.life -->
+  </world>

@@ -1,0 +1,134 @@
+<!--
+  O RAMPARTE DO VALE — silhuetas de horizonte (loop D-terreno).
+
+  PORQUÊ: a crítica "mundo de mesa de bilhar" nasce dos eixos mortos do
+  horizonte vistos DA VILA. O relevo real (tools/height_probe.py) já tem
+  massa a N (massiço 124-145 m em z 340-420) e a S (94-110 m), mas:
+    - NO  — a sela entre o massiço N e a crista NW (x -140..-100, z 340+)
+            está a 38-43 m: horizonte CHÃO para lá da floresta;
+    - O   — a bacia do pântano (26-33 m) é o ponto mais baixo do horizonte;
+    - E   — o planalto do deserto sobe suave (46→66 m) sem uma única face
+            de rocha: lê-se "rampa", não "mesa";
+    - e nenhuma SILHUETA autoral (torre, arco) recorta o céu em quadrante
+      nenhum — o obelisco é fino, o arco existente é pequeno e baixo.
+
+  Este ficheiro fecha esses eixos com <Cliff> VOXEL (sólidos com colisor,
+  pele triplanar, CliffMask que trava relva/spawners) e duas peças autorais:
+  a Torre Quebrada no cume do massiço N e o Arco Natural do Ermo.
+
+  MEDIÇÕES (height_probe.py, cota base / declive):
+    sela NO  (-130,350) 43 m 28°  → parede 20 m fecha a sela
+    crista NO (-240,370) 64 m 41° → escarpa 26 m
+    alto NO  (-300,380) 108 m 29° → escarpa 32 m (a escada sobe p/ O)
+    mesa E   (400-445, 90-155) 57-66 m 9-12° → crescente 24 m
+    parede O (-331..-347, -128..128) 33-42 m 3-17° → 18-22 m
+    torre N  (140,360) 139 m 34° → pad 14×14 a 139 + torre 15 m
+
+  FACES: `side` é a esquerda do sentido do path (src/terrain/cliffs.rs
+  `segment_left`); paths NO/SO/O escritos para a FACE cair para o vale.
+  Guardas: ≥30 m de todas as vias (audit road×cliff = width/2 + road/2 +1),
+  ≥35 m do fim NW do rio, lagos/pads/cenas intactos.
+-->
+<world>
+  <Group name="landforms.rampart" translation="0 0 0">
+    <!-- ============================================================
+       §1 NO — A ESCADARIA DO ERMO. Três paredes em escada sobre a sela
+       e a crista NO; de Discordia (0,0) leem-se como o muro do vale que
+       sobe para oeste, 63→90→140 m de cume.
+       ============================================================ -->
+    <Cliff name="escada-no-sela" path="-130 350 -172 353 -205 362"
+           width="10" height="20" profile="columnar" side="left"
+           noise="0.22" seed="91" gullies="0.2" talus="1" />
+    <Cliff name="escada-no-meio" path="-218 372 -252 378 -282 384"
+           width="12" height="26" profile="terraced" side="left"
+           noise="0.25" seed="92" notches="0.12" talus="1" />
+    <Cliff name="escada-no-alto" path="-295 390 -318 396"
+           width="14" height="32" profile="columnar" side="left"
+           noise="0.2" seed="93" gullies="0.25" talus="1" />
+
+    <!-- ============================================================
+       §2 N — A TORRE QUEBRADA (140,360). Cume do massiço a 139 m, 350 m
+       a norte da vila: a torre antiga que explica quem guardava o vale.
+       Pad nivela o soalho da ruína (declive local 34°); a exclusão
+       r=18 limpa as árvores da silhueta. Luz quente no topo: à noite a
+       ruína acende-se e serve de farol de navegação.
+       ============================================================ -->
+    <TerrainPad at="140 360" size="14 14" falloff="12" corner-radius="6" height="139" />
+    <SpawnExclusion at="140 360" radius="18" />
+    <Composition name="torre-quebrada" place="at: 140 360" body="fixed" collider="auto">
+      <!-- bases em sampografia: cursos deslocados = parede que rachou -->
+      <Cylinder translation="0 0.6 0" radius="3.2" half-height="0.6"
+                texture-url="/assets/textures/mountain_stone/albedo.ktx2"
+                normal-map-url="/assets/textures/mountain_stone/normal.ktx2"
+                texture-tile-size="3" base-color="#9a948a" roughness="0.95" />
+      <Cylinder translation="0 2.8 0" radius="2.7" half-height="1.7"
+                texture-url="/assets/textures/mountain_stone/albedo.ktx2"
+                normal-map-url="/assets/textures/mountain_stone/normal.ktx2"
+                texture-tile-size="3" base-color="#948e84" roughness="0.95" />
+      <Cylinder translation="0.35 6.3 0" radius="2.55" half-height="1.9"
+                texture-url="/assets/textures/mountain_stone/albedo.ktx2"
+                normal-map-url="/assets/textures/mountain_stone/normal.ktx2"
+                texture-tile-size="3" base-color="#8e887e" roughness="0.95" />
+      <!-- o lado que ficou de pé -->
+      <Cylinder translation="0.9 10.2 0" radius="2.4" half-height="2.1"
+                texture-url="/assets/textures/mountain_stone/albedo.ktx2"
+                normal-map-url="/assets/textures/mountain_stone/normal.ktx2"
+                texture-tile-size="3" base-color="#8a847a" roughness="0.95" />
+      <!-- tocos irregulares do coro partido -->
+      <Box translation="1.7 13.1 0.4" half-size="1.5 0.9 1.0" euler="0 14 9"
+           texture-url="/assets/textures/mountain_stone/albedo.ktx2"
+           normal-map-url="/assets/textures/mountain_stone/normal.ktx2"
+           texture-tile-size="3" base-color="#847e74" roughness="0.95" />
+      <Box translation="-0.6 12.4 -1.7" half-size="1.1 0.7 1.0" euler="0 -22 -12"
+           texture-url="/assets/textures/mountain_stone/albedo.ktx2"
+           normal-map-url="/assets/textures/mountain_stone/normal.ktx2"
+           texture-tile-size="3" base-color="#807a70" roughness="0.95" />
+      <!-- banda de janela + braseiro no topo -->
+      <Box translation="1.2 11.6 2.28" half-size="0.5 0.7 0.12"
+           base-color="#2a2620" roughness="1" collider="none" />
+      <Cylinder translation="1.6 13.9 0" radius="0.32" half-height="0.22"
+                base-color="#4a4038" metallic="0.6" roughness="0.5" />
+      <PointLight translation="1.6 14.5 0" color="0xffa050" intensity="6000" radius="1.6" shadows="false" />
+      <!-- amontoado de escombros na base (lado norte, o que caiu) -->
+      <Box translation="1.4 0.5 4.6" half-size="1.3 0.5 0.9" euler="0 38 14"
+           texture-url="/assets/textures/mountain_stone/albedo.ktx2"
+           texture-tile-size="3" base-color="#7e786e" roughness="0.95" />
+      <Box translation="-0.8 0.4 5.4" half-size="1.0 0.4 0.7" euler="0 -30 -8"
+           texture-url="/assets/textures/mountain_stone/albedo.ktx2"
+           texture-tile-size="3" base-color="#827c72" roughness="0.95" />
+      <Box translation="3.2 0.45 3.4" half-size="0.8 0.45 0.6" euler="0 62 22"
+           texture-url="/assets/textures/mountain_stone/albedo.ktx2"
+           texture-tile-size="3" base-color="#7a746a" roughness="0.95" />
+      <Cylinder translation="-2.6 0.4 3.0" radius="0.7" half-height="0.4" euler="12 0 30"
+                texture-url="/assets/textures/mountain_stone/albedo.ktx2"
+                texture-tile-size="3" base-color="#7e786e" roughness="0.95" />
+    </Composition>
+
+    <!-- ============================================================
+       §3 E — A CRESCENTE DO ERMO + ARCO NATURAL. No banco alto do
+       deserto (57-66 m), uma meia-lua columnar que abre para NO — da
+       vila e do portão E lê-se como a borda recortada de uma mesa — e,
+       destacado 60 m à frente, o arco natural que recorta o céu.
+       ============================================================ -->
+    <Cliff name="crescente-do-ermo" path="396 100 416 94 434 104 444 124 440 148"
+           width="12" height="24" profile="columnar" side="left"
+           noise="0.24" seed="94" gullies="0.2" talus="1" />
+    <Arch name="arco-do-ermo" at="352 96" profile="natural"
+          width="20" height="12" thickness="6" depth="7" yaw="40" />
+
+    <!-- ============================================================
+       §4 O — A PAREDE DO PÂNTANO. A bacia é o ponto mais baixo do
+       horizonte visto da vila; duas faixas côncavas a oeste da
+       Lagoa/cemitério levantam a linha. O vão entre as duas (z -10..50)
+       é proposital: é o porto da trilha da Clareira (paths/trails.xml),
+       que passa lá a caminho de (-540,30).
+       ============================================================ -->
+    <Cliff name="parede-pantano-sul" path="-334 -8 -337 -70 -331 -128"
+           width="10" height="18" profile="concave" side="left"
+           noise="0.28" seed="95" gullies="0.3" talus="1" />
+    <Cliff name="parede-pantano-norte" path="-342 128 -347 72 -344 52"
+           width="12" height="22" profile="concave" side="left"
+           noise="0.24" seed="96" gullies="0.25" talus="1" />
+  </Group>
+  <!-- FIM landforms.rampart -->
+</world>

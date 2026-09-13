@@ -1,0 +1,133 @@
+[
+  {
+    "id": "pilgrimage_vael",
+    "npc": "npc_pilgrim_master",
+    "biome": "desert",
+    "title": "Mestre da Romaria",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Subiste até à boca do Ermo e não sabes o que te espera lá em cima.",
+      "A estrada velha é marcada por pedras de veia: segue-as até ao coro, sobe à atalaia e desce ao miradouro.",
+      "Toca nos cinco marcos e a romaria está cumprida."
+    ],
+    "lines_progress": [
+      "Faltam {remaining} marcos da estrada velha."
+    ],
+    "lines_complete": [
+      "Cinco marcos, cinco paragens. Agora conheces o Alto de Vael como os antigos o conheciam.",
+      "Leva isto — é da oferenda de quem já subiu antes de ti."
+    ],
+    "objective": {
+      "type": "visit",
+      "target": "vael-way-1 vael-way-4 vael-choir-2 vael-watch vael-rim-cairn",
+      "count": 5,
+      "radius": 14
+    },
+    "rewards": {
+      "gold": 320,
+      "xp": 260,
+      "items": [
+        "ancient_relic:1",
+        "potion:2"
+      ]
+    }
+  },
+  {
+    "id": "outpost_veins",
+    "npc": "npc_outpost_foreman",
+    "biome": "desert",
+    "title": "Capataz do Posto",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Os veios do Alto rendem, mas as mãos são poucas desde que as sombras desceram do poente.",
+      "Traze-me doze pedras de cristal bruto e o posto volta a ter o que precisa."
+    ],
+    "lines_progress": [
+      "Ainda faltam {remaining} pedras de cristal."
+    ],
+    "lines_complete": [
+      "Isto chega para a forja do vale trabalhar uma semana. Toma — foi a nossa gente que talhou."
+    ],
+    "objective": {
+      "type": "collect",
+      "target": "stone",
+      "count": 12
+    },
+    "rewards": {
+      "gold": 260,
+      "xp": 240,
+      "items": [
+        "blessed_rod:1",
+        "potion:1"
+      ]
+    }
+  },
+  {
+    "id": "citadel_shades",
+    "npc": "npc_battle_survivor",
+    "biome": "swamp",
+    "title": "Veterano do Campo",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Este campo é o que resta de uma coluna que subiu a defender a cidadela.",
+      "Não chegámos. E agora as sombras andam por aqui com os nossos rostos.",
+      "Devolve-lhes o descanso: oito delas bastam para o campo ficar em paz."
+    ],
+    "lines_progress": [
+      "Restam {remaining} sombras em pé."
+    ],
+    "lines_complete": [
+      "Calou-se o campo. Pela primeira vez em anos não se ouve nada além do vento.",
+      "Toma o que salvámos — pouco mais havia para salvar."
+    ],
+    "objective": {
+      "type": "kill",
+      "target": "shade",
+      "count": 8
+    },
+    "rewards": {
+      "gold": 300,
+      "xp": 280,
+      "items": [
+        "moss_potion:2",
+        "iron_axe:1"
+      ]
+    }
+  },
+  {
+    "id": "smugglers_cache",
+    "npc": "npc_ranger_mira",
+    "biome": "dark-forest",
+    "title": "Mira, a Batedora",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Andam a passar carga pelo arvoredo a norte sem pagar portagem a ninguém.",
+      "Tenho o covil marcado: fogueira, tendas e um cofre que não é deles.",
+      "Tira seis deles da floresta e o trilho volta a ser meu."
+    ],
+    "lines_progress": [
+      "Ainda andam {remaining} contrabandistas pelo arvoredo."
+    ],
+    "lines_complete": [
+      "A floresta está limpa. O cofre fica para ti — quem o tirou do vale que se explique.",
+      "E diz à taberna que o trilho do norte é seguro outra vez."
+    ],
+    "objective": {
+      "type": "kill",
+      "target": "bandit",
+      "count": 6
+    },
+    "rewards": {
+      "gold": 280,
+      "xp": 240,
+      "items": [
+        "silk_cloth:2",
+        "antidote:2"
+      ]
+    }
+  }
+]

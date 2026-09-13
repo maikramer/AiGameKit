@@ -489,7 +489,304 @@ invalida fetches de recursos (descoberto à custa de um teste que se recusava a
 passar); e `Commands::new(queue, &world)` aplica os comandos **no push**, não
 no `apply` — o fecho da fila é imediato quando há ponteiro de mundo.
 
+### 4.ª passagem (2026-09-11) — o orçamento de luzes deixou de apagar a vila
+
+O `LIGHT_BUDGET` antigo escondia (`Visibility::Hidden`) todas as PointLights
+além das 12 mais próximas — **apagava-as mesmo**: ao andar pela vila à noite,
+as lanternas além da 12.ª mais próxima estavam FORA, e piscavam ON/OFF ao
+mudar o ranking (o refresh é de 1 s). Não era um limite da engine: o cluster
+do Bevy aguenta **204** objetos (`MAX_UNIFORM_BUFFER_CLUSTERABLE_OBJECTS`) e o
+`range` por omissão (20 m) já limita o custo por pixel às luzes que tocam o
+pixel.
+
+A política nova separa as duas coisas:
+
+* **Luz** — TODAS iluminam (o `simple-rpg` tem 130; cabem nas 204).
+* **Sombra** — o cube shadow map (6 faces de cena por luz, a parte cara) é
+  orçamentado às `SHADOW_LIGHT_BUDGET` = 12 mais próximas **com sombra
+  autorada** (`shadows="true"` no XML, marcadas por `AuthoredShadowLight` —
+  sem o marcador, "desligada pelo orçamento" seria indistinguível de "autorada
+  sem sombra"), com banda de histerese (`SHADOW_LIGHT_BAND` = 4) para a
+  fronteira não trocar a cada refresh. Sombras a 20+ m não se leem; luz a
+  20 m lê-se.
+
+`VIBER_LIGHT_BUDGET=12` devolve a política antiga para A/B. Com os ~18-21 ms
+devolvidos pelos contact shadows (ver a 3.ª passagem), a vila à noite fica
+toda acesa em vez de só os 12 candeeiros da vez.
+
+**Medido** (A/B no mesmo binário, braços interleaved, noite fixa por
+`set_clock(1320)`, câmara igual):
+
+| sítio | política antiga (≤12 luzes) | nova (todas) | Δ |
+|---|---|---|---|
+| spawn (poucas luzes próximas) | 29,23 / 28,81 ms | 29,09 / 28,89 ms | ~0 |
+| (-14, 14) — **21 luzes num raio de 25 m**, o ponto mais denso do mundo | 27,85 ms | 28,28 ms | **+0,43 ms** |
+
+E o diff de imagem no ponto denso mostra as lanternas que a política antiga
+mantinha APAGADAS a arder na nova (faixa superior do enquadramento: as tochas
+da direita passam de apagadas a acesas). No spawn o diff é nulo — ali a
+política antiga não escondia nada, e a nova também não custa nada.
+
+O ponto denso saiu de uma análise offline do XML (posições-mundo das 159
+`PointLight` acumuladas pela hierarquia de `<Group>`): (-14, 14) com 21 luzes
+num quadrado de 50×50 m. É o sítio de QA para este orçamento.
+
+Na mesma passagem, o `prop_daynight_tint` ganhou o orçamento por frame que o
+terreno já tinha (`PROP_TINT_BUDGET` = 64/frame, a mesma `sweep_slice`): ele
+muta TODOS os `StandardMaterial` e, no amanhecer/anoitecer, o alvo muda de
+forma contínua durante minutos — sem orçamento eram 4 passadas completas por
+segundo nessa janela, cada uma com o pico dos bind groups recriados num único
+frame. O alvo continua a recalcular ao throttle de 0,25 s; a APLICAÇÃO é que
+se espalha por frames.
+
+### 5.ª passagem (2026-09-12) — o OOM que matou uma sessão de 10 h
+
+Uma sessão do `simple-rpg` com 10 horas de jogo morreu a 2026-09-12 03:06
+com `Quitting the application due to OutOfMemory RenderError` — a alocação
+que falhou é a **`point_light_shadow_map_texture`**, e as `Validation Error`
+que se seguem ("Texture is invalid") são a consequência de a textura não
+existir.
+
+A aritmética do array: `size² × 4 B (depth) × 6 faces × nº de luzes com
+sombra`. A 1536 (o valor do passe visual r1) são **~56 MB POR LANTERNA** —
+com o orçamento de sombras cheio (12 luzes), **~680 MB** só para as sombras
+das point lights, num GPU de 6 GB partilhado com engines de agentes. Pior: o
+array é REALOCADO inteiro quando a contagem muda (o `texture_cache` do Bevy
+troca o descritor) — pico transitório de ambos os arrays, ~1,4 GB a 1536. É
+uma recriação rara (só quando muda o Nº de luzes com sombra em alcance), mas
+acontece precisamente quando o jogador entra/sai da vila — e foi isso que
+encontrou a VRAM cheia às 03:06.
+
+**Fix:** `PointLightShadowMap` passa a **1024** (~25 MB/lanterna, ~300 MB no
+pior caso, pico de realocação ~650 MB). O r1 tinha subido para 1536 pelos
+GRANULADOS das sombras das árvores — na **direcional**; nas point lights o
+mapa cobre o `range` (20 m), portanto ~2,6 cm/texel a 1024 contra ~1,7 a
+1536, com o PCSS a abrir a penumbra a partir do `radius` da lanterna — o
+caster está a metros da luz. `VIBER_POINT_SHADOW_SIZE=1536` devolve o r1 para
+A/B visual (o par tem de ser julgado com o protocolo do controle antes de se
+afirmar diferença nenhuma).
+
+Nota do post-mortem: o log da sessão mostra também uma tempestade de
+hot-reload (os mesmos ~38 scripts a recarregar 3×/s durante ~1 min às 16:56
+e de novo às 03:06) — consistente com um agente a gravar scripts em lote,
+não com um ciclo de feedback da engine; e milhares de `CommandQueue has
+un-applied commands` no encerramento, que é o ruído da morte a meio de fila,
+não a causa.
+
+### 6.ª passagem (2026-09-12) — estudo a fundo do caminho de render
+
+Mapa completo do frame por passes (estudo de código; tempos por vir do
+`VIBER_PROF_GPU=1`, ver abaixo). A cadeia: prepass depth+normal+motion →
+SSAO (full-res, 18 spp) → shadow passes (4 cascatas 4096² da direcional +
+cubes 1024² das ≤12 point lights mais próximas) → passe principal forward
+com clustering (159 luzes; ~4-8 tocam o pixel típico da vila) → volumétrico
+(full-res, 64 passos) → TAA → MotionBlur → Bloom → DoF → AutoExposure →
+vinheta/CA → CAS → tonemap. A água não custa nada sem água no frustum; o SSR
+é OPT-IN e está fora do frame (o AGENTS.md dizia "DEFAULT ON" — corrigido).
+
+**Veredictos visuais (protocolo do controlo — mesmo braço corrido 2×, 5
+frames, enquadramento e relógio fixos):**
+
+| par | TESTE | CONTROLO | veredicto |
+|---|---|---|---|
+| sombras ponto 1024 vs 1536 (noite, qa-visual) | média 0,128/255, 0,01 % dos píxeis >2, max 20 | 0,020/255, 0,02 %, max **26** | **validado invisível** — o controlo tem máximo MAIOR; ficam os −380 MB |
+| terreno com/sem salto de fetches (qa-tint, horizonte) | 0,688/255, 0,22 % >2, max 110 | 0,322/255, 0,23 %, max 83 | **validado nulo** — os poucos píxeis >50 (0,003 %) estão no MESMO sítio que o controlo (fronteira do horizonte, jitter do TAA); sem anel no limiar |
+| volumétrico 64 vs 32 (noite) | 0,208/255 | 0,119/255 | **sem decisão** — à noite o volume está atenuado e o efeito mal foi exercitado; default MANTIDO a 64, gate para um teste de DIA com god-rays |
+
+**Dois cortes desta passagem:**
+
+1. **`PointLightShadowMap` 1536→1024** (`VIBER_POINT_SHADOW_SIZE` devolve o
+   1536). Ver a 5.ª passagem: ~56 MB/lanterna → ~25 MB, o array inteiro
+   desce de ~680 MB para ~300 MB e o pico de realocação (quando muda o nº de
+   luzes com sombra em alcance) cai para metade. O r1 tinha subido para 1536
+   pelos granulados das sombras das ÁRVORES — na direcional; nas point lights
+   o mapa cobre o `range` (20 m, ~2,6 cm/texel a 1024) e o PCSS abre a
+   penumbra. Verificação visual pendente da bateria.
+2. **Salto de fetches do terreno na banda plana** (`chunk.wgsl`). O fragment
+   faz 4 fetches por layer com peso (albedo, height, AO, normal); a partir de
+   `FLAT_SKIP` = 0,995 de `flat_mix` (~335 m), o albedo já é ~100 % cor plana
+   e a normal já pesa < 0,5 % — os fetches de ALBEDO e NORMAL saltam nessas
+   layers (o HEIGHT fica: alimenta os pesos; o AO fica: escurece a distância
+   pelos mips). Nulo por construção no limiar; poupa 2 dos 4 fetches por
+   layer em toda a banda de fundo. O harness naga (`tests/chunk_shader.rs`)
+   valida em todas as combinações de defines e o guard
+   `test_chunk_material_stays_bindless` continua verde.
+
+**Observabilidade nova (de frente paralela, adoptada aqui):** `VIBER_PROF_GPU=1`
+liga o `RenderDiagnosticsPlugin` com `TIMESTAMP_QUERY` — o snapshot do profiler
+passa a trazer `render_spans` com `cpu_ms`/`gpu_ms` POR PASSE
+(`main_opaque_pass_3d`, `shadows`, `bloom`, …). É a visibilidade render-side
+que faltava a todas as passagens anteriores; e `VIBER_PROF_SYSTEMS` sobe o
+corte de 30 sistemas do snapshot. A bateria desta passagem corre com o gate
+ligado nos dois braços (o overhead é comum, os deltas ficam válidos).
+
+**Timing — tentativa INVÁLIDA, instrumento validado.** A janela de 15:55
+durou 1 min: um peer ligou a meio da bateria e o frame derivou 12→18→18→36 ms
+dentro de 3 min (as medianas são lixo). Mas o `VIBER_PROF_GPU` FUNCIONOU —
+primeira composição por passe alguma vez medida (qa-tint, braço menos
+contaminado, frame 12 ms):
+
+| passe | gpu_ms | | passe | gpu_ms |
+|---|---|---|---|---|
+| main_opaque_pass_3d | 1,55 | | taa | 0,10 |
+| ssao | 0,40 | | clustering | 0,07 |
+| bloom | 0,16 | | restantes 12 | < 0,07 cada |
+
+Os passes GPU somam ~2,6 ms num frame de 12 — nesse instante o frame não era
+pass-bound (contenção de apresentação). E **o passe de sombras NÃO aparece na
+lista**: o `RenderDiagnosticsPlugin` não instrumenta as shadow views — as
+sombras continuam invisíveis a esta medição (a fatia "chão" de 16,3 ms do
+perfil antigo continha-nas). A bateria ficou endurecida (verifica a janela ao
+fim e avisa) e os números de ms dos dois cortes ficam para a próxima janela
+séria — a chave dos spans no JSON é `gpu` (não `render_spans`).
+
+**O piso de ruído do frame NESTA máquina (medido a fechar a ronda).** A
+mesma engine, o mesmo mundo de 922 entidades, enquadramento e relógio fixos,
+leituras consecutivas de `prof --samples 5` ao longo de ~50 s:
+
+```
+32,9   29,6   74,5   13,3   16,7   16,7  ms     (clocks a 2520 MHz, 60 °C)
+```
+
+**5,6× de variação sem NENHUM processo nosso visível** — são os bursts do
+próprio ambiente de trabalho (compositor, browser, …) a roubar a GPU em
+rajadas. Consequências, com evidência: o A/B `VIBER_POINT_SHADOW_SIZE`
+1024-vs-1536 deu "1024 mais lento" DUAS VEZES (16,7 vs 10-11 ms) — e o
+controlo (1024 vs 1024) deu 16,7/16,7: era o estado da máquina, não o
+tamanho. **Comparações de frame de poucos ms são irresolveis neste estado**;
+só efeitos grandes (os −18 ms dos contact shadows) ou janelas realmente
+ociosas (utilizador ausente) medem. Os dois cortes desta passagem ficam
+justificados pelo que neles é determinístico — a aritmética da VRAM e a
+validação visual com controlo — e os ms ficam para uma máquina calma.
+
+**Gates novos desta passagem** (todos com o default INALTERADO, para A/B):
+`VIBER_POINT_SHADOW_SIZE` (1024), `VIBER_DIR_SHADOW_SIZE` (4096),
+`VIBER_SSAO=low|medium|high|ultra` (High com TAA), `VIBER_VOLUMETRIC_STEPS`
+(64), e os de frente paralela `VIBER_SHADOW_CASCADES` (4) /
+`VIBER_SHADOW_DISTANCE` (600) — as alavancas nº 2 e 4 do ranking já podem ser
+medidas sem rebuild no dia em que a máquina deixar.
+
+**Ranking das alavancas que restam** (do estudo; €/ms estimado):
+
+1. Volumétrico 64→32 passos — gate existe, decisão pendente da bateria.
+2. Cascatas da direcional: `maximum_distance` 600→300 e/ou 4096→2048 — toca
+   a decisão P1.8 (serras ao fundo com sombra do sol); exige A/B visual
+   sério antes de mexer.
+3. ~~Fetches do terreno >340 m~~ — cortado nesta passagem (ver acima).
+4. SSAO High→Medium (18→8 spp) — o TAA limpa o ruído extra; regime já
+   exercitado pelo braço `VIBER_NO_TAA=1`.
+5. Contact shadows do SOL (24 passos, ~1,5 ms estimado) — deliberadamente
+   MANTIDO: é o único que sobra e é o que faz a leitura "herói assente no
+   chão".
+
+### 7.ª passagem (2026-09-12) — o frame estava cego, e metade dele eram sombras que não se viam
+
+(Complementa a 6.ª: ela mapeia os passes por leitura de código, esta mede-os.)
+
+**O problema de medição primeiro.** O profiler só media os sistemas que nós
+embrulhamos com `timed`: no `simple-rpg` isso dava **4 ms de um frame de
+44 ms**, e os outros 40 não tinham nome nenhum. Três instrumentos novos
+fecharam o buraco:
+
+| Instrumento | O que mede | Gate |
+|---|---|---|
+| `gpu[]` no snapshot | cada span do render graph em CPU e GPU (`main_opaque_pass_3d`, `early prepass`, `ssao`, `bloom`, `taa`…) via `RenderDiagnosticsPlugin` + `TIMESTAMP_QUERY` | `VIBER_PROF_GPU=1` |
+| `sched.*` | fatia de cada schedule do `Main` + **`sched.render_wait`** (o buraco entre o fim do `Last` e o `First` seguinte: extract + render app + present) | sempre |
+| `render.*` | fases do schedule `Render` no sub-app (`prepare_views`, `queue`, `phase_sort`, `bind_groups`, `render`…) | sempre |
+| `bevy.*` | fases do `PostUpdate` do próprio Bevy (transform propagate, visibilidade, visibilidade por luz, clusters) | sempre |
+
+Mais `shadow_lights` nos contadores (PointLights com cube shadow map activo) e
+`VIBER_PROF_SYSTEMS=<n>|all` para tirar o corte de 30 linhas da lista de
+sistemas (item 4 da fila aberta — resolvido).
+
+As marcas de schedule são **schedules próprios** inseridos no
+`MainScheduleOrder`, não sistemas com `before`/`after`: dentro de um schedule
+o executor paralelo corre as âncoras quando quer. A primeira versão media
+cada set do `PostUpdate` com um par `before`/`after` independente e dava seis
+leituras cumulativas que somavam 27 ms num frame de 44 — a cadeia de UMA
+marca resolve.
+
+**O retrato do frame** (spawn do `simple-rpg`, relógio preso às 12:00,
+RTX 4050 Laptop):
+
+```
+frame                 44,3 ms
+├── main schedule       8,1 ms   (post_update 5,1 · update 2,1 · resto 0,9)
+│    └── bevy.transform_propagate 4,1 ms  ← 58 k entidades
+└── sched.render_wait  36,2 ms
+     ├── render.prepare_views   11,8 ms
+     ├── render.render          12,6 ms   (dos quais 7,4 ms de GPU nos passes)
+     ├── render.bind_groups      1,5 ms
+     └── prepare/assets/meshes   2,4 ms
+```
+
+Ou seja: **o frame é CPU no render app**, não GPU. A GPU mede 7,4 ms de
+passes e passa o resto do tempo à espera.
+
+**O achado.** A/B ao vivo (toggles novos do profiler `extra:dir-shadows` e
+`extra:point-shadows`, braços interleaved na MESMA sessão):
+
+| Braço | frame |
+|---|---|
+| sol + lanternas (como estava) | 44,5 ms |
+| só lanternas (sem sol) | 44,0 ms |
+| só sol (sem lanternas) | 31,4 ms |
+| sem sombras nenhumas | 22,5 ms |
+
+As sombras das **PointLight** valiam **~22 ms de 44** — metade do frame. Cada
+lanterna com shadow map são **6 vistas** de render (as faces do cubo): cull,
+fila, sort e batch de tudo o que lá cai, 12 vezes. O orçamento antigo dava
+sombra às **12 mais próximas, fosse qual fosse a distância e a hora**: em
+campo aberto isso eram 12 lanternas a centenas de metros, e ao meio-dia eram
+12 lanternas cuja contribuição está 6 stops abaixo do sol.
+
+**O fix** (`light_budget_system`, `src/ambient.rs`) mantém a política de LUZ
+(todas iluminam) e aperta a de SOMBRA em três eixos:
+
+1. **Ranking pela superfície da esfera de influência** (`distância − range`),
+   não pelo centro: a lanterna de `range` 20 m a 300 m deixa de ser "a 12.ª
+   mais próxima".
+2. **Tecto de distância** `SHADOW_LIGHT_MAX_DISTANCE` = 60 m
+   (`VIBER_SHADOW_LIGHT_DISTANCE`).
+3. **Gate de luz do dia** `SHADOW_LIGHT_DAYLIGHT_MAX` = 0,35 da curva
+   `daylight_factor` (a mesma do tint), com banda de 0,1
+   (`VIBER_SHADOW_LIGHT_DAYLIGHT=1` desliga o gate).
+
+A histerese vale nos dois eixos (rank e distância) — sem ela a lanterna
+piscava ao andar na fronteira, com o refresh de 1 s.
+
+**Medido** (relógio preso, spawn, duas corridas por braço no mesmo processo):
+
+| Hora | shadow_lights | frame |
+|---|---|---|
+| 12:00 antes | 12 | 44,5 ms |
+| **12:00 depois** | **0** | **30,0 / 30,0 ms** |
+| 22:00 depois | 12 | 37,2 / 38,1 ms |
+
+**De dia o frame cai 32 %** (44,5 → 30,0 ms, 22 → 33 fps) e à noite as
+sombras das lanternas continuam todas lá, que é onde se veem. `VIBER_SHADOW_LIGHTS=<n>`
+afina o orçamento (0 desliga) sem recompilar.
+
+**Cascatas do sol** ganharam knobs (`VIBER_SHADOW_CASCADES`,
+`VIBER_SHADOW_DISTANCE`) mas o default fica: 3 cascatas em vez de 4, ou
+300 m em vez de 600, valem **1,9 ms** cada — não paga a perda de sombra nas
+serras. Ficam para o perfil de GPU fraca.
+
+**Nota de método:** com outro agente a correr uma engine na mesma GPU, os
+braços entre BOOTS andaram ±100 % (um braço com `VIBER_WATER_SSR=0` chegou a
+medir 61 ms contra 30 do baseline — contaminação, não regressão). Só valem os
+braços **interleaved no mesmo processo**, e o `nvidia-smi
+--query-compute-apps` antes de citar qualquer número.
+
 ### Ainda em aberto (por ordem de €/ms)
+
+0. **`render.prepare_views` = 11,8 ms e `render.render` = 12,6 ms** são agora
+   os dois maiores itens do frame, e ainda não estão atribuídos a um sistema
+   concreto (o `PrepareViews` do Bevy leva o `prepare_lights`, as texturas de
+   view do TAA/SSAO/bloom e a preparação do SSR; o `render` inclui o encode
+   dos comandos e o present). O próximo passo é partir estes dois brackets em
+   sistemas — as âncoras já existem, falta a granularidade.
+
 
 1. **O publish do tint é estruturalmente caro, não só em bursts.** Os valores
    (`day_tint`, `sun_dir`, `walls_b.w`) são **globais do mundo** mas vivem nos

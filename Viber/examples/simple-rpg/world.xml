@@ -57,6 +57,12 @@
   <Include src="/world/spawn/dressing.xml" />
   <Include src="/world/paths/network.xml" />
   <Include src="/world/paths/trails.xml" />
+  <!-- Desgaste de chão autoral (LOOP E): ombreiras nos portões ficam em
+       cities/discordia/roads.xml; aqui vivem o caminho do mercado, a lama
+       da boca do pântano, os scuffs do outeiro-miradouro e os remendos de
+       terra batida dos campos. Depois de trails.xml: lê o heightfield
+       final ( GroundDecal é puramente visual). -->
+  <Include src="/world/paths/ground-wear.xml" />
   <!-- Pontes composition — uma travessia de água por ficheiro: a Ponte de
        Pedra do Norte (artéria × rio, centrada no eixo x=4) e a passadeira
        de rocha natural do loop oeste da floresta. Os <Bridge> são mods
@@ -91,6 +97,18 @@
   <Include src="/world/frontier/cliffs.xml" />
   <Include src="/world/frontier/horizon.xml" />
   <!-- ============================================================
+       LANDFORMS (world/landforms/) — verticalidade e vistas (loop
+       D-terreno): o ramparte do vale fecha os eixos mortos do horizonte
+       (sela NO em escada, crescente do Ermo + arco, parede do pântano,
+       Torre Quebrada no massiço N); os braços do portão embutem a vila
+       (braço O e ombro da capela na artéria N, outeiro-miradouro a S).
+       ANTES dos spawners de criaturas: as SpawnExclusion destes sítios
+       (torre, outeiro) têm de estar registadas quando os grupos
+       computam as colocações.
+       ============================================================ -->
+  <Include src="/world/landforms/rampart.xml" />
+  <Include src="/world/landforms/gate-arms.xml" />
+  <!-- ============================================================
        CAMADA DE FANTASIA (world/fantasy/) — os três destinos que faltavam
        ao mapa: a mesa alta a leste (Alto de Vael), os primeiros túneis voxel
        (`<Cave>`) e a ruína monumental do planalto oeste. Cada um traz o seu
@@ -103,6 +121,19 @@
   <Include src="/world/fantasy/grutas.xml" />
   <Include src="/world/fantasy/bosque-encantado.xml" />
   <Include src="/world/fantasy/cidadela-caida.xml" />
+  <!-- ============================================================
+       CENÁRIOS (world/scenes/) — peças de sítio com gente dentro: o
+       acampamento de peregrinos à boca do Ermo, o posto dos escavadores na
+       mesa do Alto, o campo da última batalha à porta da Cidadela e o covil
+       dos contrabandistas na orla da floresta. Cada um dá uma quest a um NPC
+       seu (`quests/fantasy_quests.json`) e traz âncoras visitáveis para o
+       objetivo de tipo `visit`. Depois das features de fantasia: assentam e
+       decoram sítios que esses ficheiros criaram.
+       ============================================================ -->
+  <Include src="/world/scenes/pilgrims-camp.xml" />
+  <Include src="/world/scenes/crystal-outpost.xml" />
+  <Include src="/world/scenes/battlefield.xml" />
+  <Include src="/world/scenes/smugglers.xml" />
   <Include src="/world/atmosphere/ambient-fx.xml" />
   <Include src="/world/creatures/enemies.xml" />
   <Include src="/world/creatures/bosses.xml" />

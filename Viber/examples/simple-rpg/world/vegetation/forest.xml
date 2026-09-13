@@ -17,46 +17,79 @@
 -->
   <Group name="biome.forest.vegetation" translation="0 0 0">
     <!-- Tapete erva/planta/flor (kit bpy em /assets/meshes/vegetation/).
-       density-per-km2 alinhada ao tecto do spawner (MAX_DENSITY_SPAWN_INSTANCES
-       = 12000) e ao orçamento de entidades: 99000 × 0.1003 km² ≈ 9932 — sem
-       capping silencioso e com folga no budget (boot ~86% de 100k). -->
-    <Vegetation meshes="/assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/flower_yellowA.glb" density-per-km2="99000" seed="601" region-min="-190 0 116" region-max="190 0 380" scale-min="0.8" scale-max="1.6" max-slope-deg="26" avoid-water="1" avoid-overlaps="0" max-distance="437" cluster-count="128" cluster-radius="8.8" flower-near-radius="4.8" flower-density-ratio="0.18" plant-density-ratio="0.46" smart="1" wind="1" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="foliage" />
+        LOOP E (anti-"relva de cartão"): o tecto por omissão da engine
+        (800/tag) deixava o chão da floresta com 1 tufo / 125 m² — relva de
+        cor única. `max-instances` explícito 2200 + grass_leafsLarge no mix
+        + clusters mais numerosos e justos: o tapete volta a ler-se como
+        sub-bosque em manchas (nem tapete uniforme, nem nada). -->
+    <Vegetation meshes="/assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/flower_yellowA.glb" density-per-km2="99000" seed="601" region-min="-190 0 116" region-max="190 0 380" scale-min="0.8" scale-max="1.6" max-slope-deg="26" avoid-water="1" avoid-overlaps="0" max-distance="437" max-instances="2200" cluster-count="160" cluster-radius="9.5" flower-near-radius="4.8" flower-density-ratio="0.18" plant-density-ratio="0.46" smart="1" wind="1" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="foliage" />
     <!-- §1 Dossel — pinheiro escuro (pine_dark é o mesh próprio deste bioma;
-       o tree_pine claro fica reservado aos Picos). Coletável: colisor
-       cápsula pré-calculado + tree.ts + ResourceNode. Toda a madeira do
-       bioma é dark-wood (madeira-escura da quest forest_darkwood); wood
-       normal fica nos Picos, no deserto e no anel do vale. -->
-    <StaticSpawner profile="tree" count="380" seed="6101" region-min="-184 0 116" region-max="184 0 356" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="40" scale-min="0.8" scale-max="1.45" avoid-overlaps="1" footprint-radius="3.8" cluster-count="14" cluster-radius="52" max-distance="413" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+        o tree_pine claro fica reservado aos Picos). Coletável: colisor
+        cápsula pré-calculado + tree.ts + ResourceNode. Toda a madeira do
+        bioma é dark-wood (madeira-escura da quest forest_darkwood); wood
+        normal fica nos Picos, no deserto e no anel do vale.
+        LOOP E: o log de spawn mostrava 104 colocados de 380 (occupancy
+        6131, cliff 1556) — a "floresta" tinha ~100 árvores inteiras.
+        count 380→620, max-slope-attempts 64 (default 32 esgotava o
+        empacotamento dos clusters), footprint 3.8→3.4 (disco mais honesto
+        para o tronco) e mais groves menores (26×46 m em vez de 14×52 m):
+        mesma seed de mundo, densidade ~3×. -->
+    <StaticSpawner profile="tree" count="620" seed="6101" region-min="-184 0 116" region-max="184 0 356" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="40" max-slope-attempts="64" scale-min="0.8" scale-max="1.3" avoid-overlaps="1" footprint-radius="2.4" cluster-count="26" cluster-radius="46" max-distance="413" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
       <GameObject role="static" destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/pine_dark_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/forest/pine_dark_lod0.glb" lod1-url="/assets/meshes/forest/pine_dark_lod1.glb" lod2-url="/assets/meshes/forest/pine_dark_lod2.glb" lod-threshold-near="34" lod-threshold-mid="95" />
         <ResourceNode kind="dark-wood" yield="3" transform="pos: 0 0 0" />
       </GameObject>
     </StaticSpawner>
-    <!-- Mata alta e rala no fundo do bioma (silhueta contra a serra da borda). -->
-    <StaticSpawner profile="tree" count="240" seed="6102" region-min="-250 0 330" region-max="250 0 490" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="42" scale-min="0.9" scale-max="1.6" avoid-overlaps="1" footprint-radius="4.2" cluster-count="10" cluster-radius="60" max-distance="563" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+    <!-- Mata alta e rala no fundo do bioma (silhueta contra a serra da borda).
+        LOOP E: 58 colocados de 240 (cliff 3522 — a serra da borda é toda
+        CliffMask). count 420 + attempts 64 + footprint 3.6 empurram a
+        tree-line o mais alto que a máscara deixa. -->
+    <StaticSpawner profile="tree" count="420" seed="6102" region-min="-250 0 330" region-max="250 0 490" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="42" max-slope-attempts="64" scale-min="0.9" scale-max="1.4" avoid-overlaps="1" footprint-radius="2.6" cluster-count="14" cluster-radius="60" max-distance="563" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
       <GameObject role="static" destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/pine_dark_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/forest/pine_dark_lod0.glb" lod1-url="/assets/meshes/forest/pine_dark_lod1.glb" lod2-url="/assets/meshes/forest/pine_dark_lod2.glb" lod-threshold-near="60" lod-threshold-mid="130" />
         <ResourceNode kind="dark-wood" yield="3" transform="pos: 0 0 0" />
       </GameObject>
     </StaticSpawner>
-    <!-- Árvores mortas — quebram a monotonia do dossel e marcam clareiras. -->
-    <StaticSpawner profile="tree" count="92" seed="6103" region-min="-180 0 124" region-max="180 0 400" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="44" scale-min="0.8" scale-max="1.3" avoid-overlaps="1" footprint-radius="2.8" cluster-count="9" cluster-radius="36" max-distance="451" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
-      <GameObject role="static" destructible="popup-text: Dead Wood; popup-color: #3a3226; preset: leaves; burst-count: 18; hits: 2; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 8; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/dead_tree_lod0.glb">
-        <GLTFLoader role="visual" url="/assets/meshes/forest/dead_tree_lod0.glb" lod1-url="/assets/meshes/forest/dead_tree_lod1.glb" lod2-url="/assets/meshes/forest/dead_tree_lod2.glb" lod-threshold-near="45" lod-threshold-mid="110" />
-        <ResourceNode kind="dark-wood" yield="2" transform="pos: 0 0 0" />
-      </GameObject>
-    </StaticSpawner>
     <!-- §2 Árvores colhíveis (collider + ResourceNode + tree.ts). Ficam na
-       faixa junto aos caminhos: é onde o jogador corta madeira. -->
-    <StaticSpawner profile="tree" count="44" seed="301" region-min="-116 0 120" region-max="116 0 280" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="34" scale-min="0.9" scale-max="1.35" avoid-overlaps="1" footprint-radius="4.4" max-distance="316" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+        faixa junto aos caminhos: é onde o jogador corta madeira.
+        LOOP E: 5 colocados de 44 (occupancy 1172 — a região afundava nos
+        groves do dossel). footprint 2.6 + attempts 96, e o grupo corre
+        ANTES das folhosas: a ocupação partilhada é por ordem de XML e o
+        gameplay (colheita perto dos trilhos) leva prioridade. -->
+    <StaticSpawner profile="tree" count="80" seed="301" region-min="-116 0 120" region-max="116 0 280" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="34" max-slope-attempts="96" scale-min="0.9" scale-max="1.35" avoid-overlaps="1" footprint-radius="2.6" max-distance="316" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
       <GameObject role="static" destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/pine_dark_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/forest/pine_dark_lod0.glb" lod1-url="/assets/meshes/forest/pine_dark_lod1.glb" lod2-url="/assets/meshes/forest/pine_dark_lod2.glb" lod-threshold-near="36" lod-threshold-mid="110" />
         <ResourceNode kind="dark-wood" yield="3" transform="pos: 0 0 0" />
       </GameObject>
     </StaticSpawner>
+    <!-- LOOP E — FOLHOSAS MISTAS (quebra o lollipop-único): carvalho +
+        bétula a pontuar o mar de pinheiros escuros. Silhuetas largas vs
+        agulhas vs mortas — três leituras de árvore no mesmo bioma. Escala
+        mais baixa que o dossel (sub-bosque de folhosa), groves próprios
+        (seed diferente desloca os centros). Bétula: precompute do pool
+        (farm/tree_birch_precompute.json). -->
+    <StaticSpawner profile="tree" count="230" seed="6107" region-min="-180 0 120" region-max="180 0 380" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="38" max-slope-attempts="64" scale-min="0.65" scale-max="1.15" avoid-overlaps="1" footprint-radius="2.2" cluster-count="22" cluster-radius="38" max-distance="437" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree" pick-strategy="random">
+      <GameObject role="static" destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/forest/tree_oak_lod0.glb" lod1-url="/assets/meshes/forest/tree_oak_lod1.glb" lod2-url="/assets/meshes/forest/tree_oak_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+        <ResourceNode kind="dark-wood" yield="2" transform="pos: 0 0 0" />
+      </GameObject>
+      <GameObject role="static" destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 20; hits: 2; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 10; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/farm/tree_birch_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/farm/tree_birch_lod0.glb" lod1-url="/assets/meshes/farm/tree_birch_lod1.glb" lod2-url="/assets/meshes/farm/tree_birch_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+        <ResourceNode kind="dark-wood" yield="2" transform="pos: 0 0 0" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- Árvores mortas — quebram a monotonia do dossel e marcam clareiras.
+        LOOP E: 35 colocados de 92; count 200, attempts 64, footprint 2.4. -->
+    <StaticSpawner profile="tree" count="200" seed="6103" region-min="-180 0 124" region-max="180 0 400" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="44" max-slope-attempts="64" scale-min="0.8" scale-max="1.3" avoid-overlaps="1" footprint-radius="1.8" cluster-count="12" cluster-radius="36" max-distance="451" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+      <GameObject role="static" destructible="popup-text: Dead Wood; popup-color: #3a3226; preset: leaves; burst-count: 18; hits: 2; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 8; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/dead_tree_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/forest/dead_tree_lod0.glb" lod1-url="/assets/meshes/forest/dead_tree_lod1.glb" lod2-url="/assets/meshes/forest/dead_tree_lod2.glb" lod-threshold-near="45" lod-threshold-mid="110" />
+        <ResourceNode kind="dark-wood" yield="2" transform="pos: 0 0 0" />
+      </GameObject>
+    </StaticSpawner>
     <!-- §3 Sub-bosque: cogumelos em tufos densos (chão de floresta húmida).
-       Mais colónias, cachos mais justos — o chão nunca lê liso. -->
-    <StaticSpawner profile="foliage" count="240" seed="6104" region-min="-176 0 120" region-max="176 0 400" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="38" scale-min="0.7" scale-max="1.2" avoid-overlaps="1" cluster-count="28" cluster-radius="8" max-distance="450" random-yaw="true" variation="foliage" pick-strategy="random">
+        LOOP E: 109 colocados de 240 (cliff 2452!, occupancy 2160);
+        count 420 + attempts 64 + footprint explícito 0.9. -->
+    <StaticSpawner profile="foliage" count="420" seed="6104" region-min="-176 0 120" region-max="176 0 400" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="38" max-slope-attempts="64" footprint-radius="0.7" scale-min="0.7" scale-max="1.2" avoid-overlaps="1" cluster-count="40" cluster-radius="8" max-distance="450" random-yaw="true" variation="foliage" pick-strategy="random">
       <GameObject role="static">
         <GLTFLoader role="visual" url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="26" lod-threshold-mid="60" />
       </GameObject>
@@ -64,8 +97,10 @@
         <GLTFLoader role="visual" url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="26" lod-threshold-mid="60" />
       </GameObject>
     </StaticSpawner>
-    <!-- §4 Pedregulhos musgosos entre as raízes (coletáveis: stone). -->
-    <StaticSpawner profile="tree" count="160" seed="6105" region-min="-190 0 120" region-max="190 0 420" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="55" scale-min="0.9" scale-max="2.6" avoid-overlaps="1" pick-strategy="random" footprint-radius="2.8" cluster-count="16" cluster-radius="30" max-distance="473" scale-axis-min="0.85" scale-axis-max="1.15" random-yaw="true" variation="rock">
+    <!-- §4 Pedregulhos musgosos entre as raízes (coletáveis: stone).
+        LOOP E: 5 colocados de 160 (occupancy 2365, cliff 2278);
+        count 300 + attempts 64 + footprint 2.2. -->
+    <StaticSpawner profile="tree" count="300" seed="6105" region-min="-190 0 120" region-max="190 0 420" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="55" max-slope-attempts="64" scale-min="0.9" scale-max="2.6" avoid-overlaps="1" pick-strategy="random" footprint-radius="1.8" cluster-count="24" cluster-radius="30" max-distance="473" scale-axis-min="0.85" scale-axis-max="1.15" random-yaw="true" variation="rock">
       <GameObject role="static" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="34" lod-threshold-mid="90" />
         <ResourceNode kind="stone" yield="4" transform="pos: 0 0 0" />
@@ -76,8 +111,10 @@
       </GameObject>
     </StaticSpawner>
     <!-- Penedos grandes com colisão (obstáculos reais + stone; colisor
-       cilindro pré-calculado mantém o carve de NavMesh barato). -->
-    <StaticSpawner profile="tree" count="24" seed="6106" region-min="-170 0 132" region-max="170 0 350" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="45" scale-min="0.9" scale-max="1.25" avoid-overlaps="1" footprint-radius="9" max-distance="402" random-yaw="true" variation="rock">
+        cilindro pré-calculado mantém o carve de NavMesh barato).
+        LOOP E: 0 colocados de 24 (footprint 9 × escala 3 = disco de 27 m
+        que não cabia em lado nenhum). footprint 5.5 + attempts 96. -->
+    <StaticSpawner profile="tree" count="36" seed="6106" region-min="-170 0 132" region-max="170 0 350" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="45" max-slope-attempts="96" scale-min="0.9" scale-max="1.25" avoid-overlaps="1" footprint-radius="3.5" max-distance="402" random-yaw="true" variation="rock">
       <GameObject role="static" transform="scale: 3 3 3" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 26; hits: 5; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 14; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="45" lod-threshold-mid="120" />
         <ResourceNode kind="stone" yield="6" transform="pos: 0 0 0" />

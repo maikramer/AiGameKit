@@ -18,9 +18,12 @@
        capping silencioso e com folga no budget (boot ~86% de 100k). -->
     <Vegetation meshes="/assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_purpleA.glb" density-per-km2="103000" seed="907" region-min="-190 0 -370" region-max="190 0 -116" scale-min="0.85" scale-max="1.5" max-slope-deg="26" avoid-water="1" avoid-overlaps="0" max-distance="428" cluster-count="56" cluster-radius="6" flower-near-radius="4" flower-density-ratio="0.14" plant-density-ratio="0.24" smart="1" wind="1" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="foliage" />
     <!-- §1 Coníferas claras (tree_pine é o mesh dos Picos; a floresta norte
-       fica com o pine_dark). Só nas cotas baixas — max-slope-deg corta as
-       encostas por si. -->
-    <StaticSpawner profile="tree" count="240" seed="9101" region-min="-180 0 -380" region-max="180 0 -116" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="33" scale-min="0.75" scale-max="1.4" avoid-overlaps="1" footprint-radius="3.8" cluster-count="16" cluster-radius="40" max-distance="433" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+        fica com o pine_dark). Só nas cotas baixas — max-slope-deg corta as
+        encostas por si.
+        LOOP E: 35 colocados de 240 (cliff 4499 — o maciço sul é quase todo
+        CliffMask); count 340 + attempts 64 + footprint 3.2 empurram a
+        tree-line até onde a máscara deixa. -->
+    <StaticSpawner profile="tree" count="340" seed="9101" region-min="-180 0 -380" region-max="180 0 -116" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="33" max-slope-attempts="64" scale-min="0.75" scale-max="1.4" avoid-overlaps="1" footprint-radius="2.4" cluster-count="20" cluster-radius="40" max-distance="433" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
       <GameObject role="static" destructible="popup-text: Frost Wood; popup-color: #aeb9c8; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_pine_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/forest/tree_pine_lod0.glb" lod1-url="/assets/meshes/forest/tree_pine_lod1.glb" lod2-url="/assets/meshes/forest/tree_pine_lod2.glb" lod-threshold-near="34" lod-threshold-mid="95" />
         <ResourceNode kind="wood" yield="2" transform="pos: 0 0 0" />

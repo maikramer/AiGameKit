@@ -1,0 +1,59 @@
+<!--
+  LOOP E — desgaste de chão autoral (GroundDecal; puramente visual, lê o
+  heightfield final). Mata a crítica "transição dura relva→cobble": terra
+  batida onde gente passa, lama onde o pântano come, scuffs no trilho do
+  miradouro e remendos de terra batida nos campos.
+
+  Convenções: texturas do pool por referência (/assets/textures/…),
+  UV world-space (texture-scale = metros por repetição), borda ondulada
+  (noise) e feather para desvanecer no relvado. Sem rotação — manchas
+  elípticas orientadas por `size "w d"`; trilhos diagonais levam 2-3
+  remendos em escada.
+-->
+<world>
+  <Group name="paths.ground-wear" translation="0 0 0">
+    <!-- Mercado: caminho de terra batida da praça ao apron do mercado
+       (15,-17). Dois remendos em diagonal (praça → mercado). -->
+    <GroundDecal name="wear.market.1" at="9 -9" size="10 8" feather="3" noise="0.16"
+                 texture="/assets/textures/dirt_trail/albedo.ktx2" texture-scale="5"
+                 base-color="#a08a6c" roughness="0.95" />
+    <GroundDecal name="wear.market.2" at="13 -14" size="9 8" feather="2.5" noise="0.18" seed="41"
+                 texture="/assets/textures/dirt_trail/albedo.ktx2" texture-scale="5"
+                 base-color="#98826a" roughness="0.95" />
+    <!-- Boca do pântano: a artéria O entra no bioma (x≈-110) e a margem
+       do grande lago fica ao norte — ombreiras de lama dos dois lados da
+       fita (a fita de cobble continua limpa no eixo). -->
+    <GroundDecal name="wear.swamp.n" at="-110 13" size="30 18" feather="5" noise="0.2" seed="42"
+                 texture="/assets/textures/swamp_mud/albedo.ktx2" texture-scale="7"
+                 base-color="#6d6350" roughness="0.98" />
+    <GroundDecal name="wear.swamp.s" at="-106 -11" size="26 16" feather="4.5" noise="0.22" seed="43"
+                 texture="/assets/textures/swamp_mud/albedo.ktx2" texture-scale="7"
+                 base-color="#71654e" roughness="0.98" />
+    <!-- Outeiro-miradouro (S): o esporão de terra (flatten="0") liga a
+       artéria S ao banco do outeiro (26,-100) — scuffs em escada pelo
+       declive. -->
+    <GroundDecal name="wear.knoll.1" at="13 -72" size="9 11" feather="3" noise="0.18" seed="44"
+                 texture="/assets/textures/dirt_trail/albedo.ktx2" texture-scale="5"
+                 base-color="#a28a6a" roughness="0.95" />
+    <GroundDecal name="wear.knoll.2" at="19 -84" size="8 10" feather="3" noise="0.2" seed="45"
+                 texture="/assets/textures/dirt_trail/albedo.ktx2" texture-scale="5"
+                 base-color="#9c8466" roughness="0.95" />
+    <GroundDecal name="wear.knoll.3" at="24 -95" size="7 9" feather="2.5" noise="0.2" seed="46"
+                 texture="/assets/textures/dirt_trail/albedo.ktx2" texture-scale="5"
+                 base-color="#968060" roughness="0.95" />
+    <!-- Campos: remendos de terra batida (passagem de gado/ carroças) nos
+       prados do vale — o relvado deixa de ser cor única vista do portão. -->
+    <GroundDecal name="wear.field.se" at="60 -50" size="13 9" feather="3.5" noise="0.2" seed="47"
+                 texture="/assets/textures/dirt/albedo.ktx2" texture-scale="6"
+                 base-color="#a68e6e" roughness="0.96" />
+    <GroundDecal name="wear.field.se2" at="76 -84" size="11 8" feather="3" noise="0.22" seed="48"
+                 texture="/assets/textures/dirt_trail/albedo.ktx2" texture-scale="5"
+                 base-color="#9e8868" roughness="0.95" />
+    <GroundDecal name="wear.field.nw" at="-64 56" size="12 10" feather="3.5" noise="0.18" seed="49"
+                 texture="/assets/textures/dirt/albedo.ktx2" texture-scale="6"
+                 base-color="#a28a6c" roughness="0.96" />
+    <GroundDecal name="wear.field.n2" at="70 62" size="10 8" feather="3" noise="0.2" seed="50"
+                 texture="/assets/textures/dirt_trail/albedo.ktx2" texture-scale="5"
+                 base-color="#a08a6a" roughness="0.95" />
+  </Group>
+</world>

@@ -125,11 +125,20 @@ assets:
         - 1.6
         - 0.55
   - id: npc_healer
+    # Silhueta reescrita a 2026-09-12: a túnica COMPRIDA até ao chão não deixava
+    # o SkinTokens ver as pernas — o rig saía com 13 ossos inventados
+    # (`LegRight1_1`, `bone_6`…), o retarget só conseguia 2 clips e a NPC lia-se
+    # como T-pose no jogo (todos os outros personagens têm 23–49 ossos). A túnica
+    # passa a acabar acima dos tornozelos e as mangas aos cotovelos: membros
+    # separados do corpo = esqueleto humanoide.
+    seed: 51771
     idea:
-      kind cartoon healer NPC wearing pale blue robe with white sash, simple headscarf,
-      gentle smile, soft slippers, standing upright in relaxed A-pose with arms angled
-      down at 45 degrees away from the body, visible gap between arms and torso, open
-      hands with spread fingers, hands empty, no weapons, no props, full body visible,
+      kind cartoon healer NPC wearing pale blue robe that ends above the ankles with
+      visible lower legs and simple boots, white sash at the waist, short sleeves ending
+      at the elbows with visible forearms, simple headscarf, gentle smile, standing
+      upright in relaxed A-pose with straight legs slightly apart and arms angled down
+      at 45 degrees away from the body, wide gap between arms and torso, open hands with
+      spread fingers, hands empty, no weapons, no props, no cape, full body visible,
       front-facing, fantasy temple cleric
     kind: character
     category: humanoid

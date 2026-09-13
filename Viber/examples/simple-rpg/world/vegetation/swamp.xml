@@ -33,16 +33,19 @@
       </GameObject>
     </StaticSpawner>
     <!-- §1 Salgueiros mortos — o dossel do brejo. Dão dark-wood
-       (madeira-escura da quest forest_darkwood; wood fica nos pinheiros
-       dos Picos, palmeiras do deserto e carvalhos do anel). -->
-    <StaticSpawner profile="tree" count="320" seed="8101" region-min="-380 0 -190" region-max="-116 0 190" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="32" scale-min="0.85" scale-max="1.6" avoid-overlaps="1" footprint-radius="3.2" cluster-count="18" cluster-radius="44" max-distance="437" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+        (madeira-escura da quest forest_darkwood; wood fica nos pinheiros
+        dos Picos, palmeiras do deserto e carvalhos do anel).
+        LOOP E: 161 colocados de 320 (occupancy 4747); attempts 64 +
+        footprint 2.8 para o brejo fechar. -->
+    <StaticSpawner profile="tree" count="440" seed="8101" region-min="-380 0 -190" region-max="-116 0 190" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="32" max-slope-attempts="64" scale-min="0.85" scale-max="1.6" avoid-overlaps="1" footprint-radius="2.2" cluster-count="22" cluster-radius="44" max-distance="437" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
       <GameObject role="static" destructible="popup-text: Bog Wood; popup-color: #3a4a30; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/dead_willow_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/swamp/dead_willow_lod0.glb" lod1-url="/assets/meshes/swamp/dead_willow_lod1.glb" lod2-url="/assets/meshes/swamp/dead_willow_lod2.glb" lod-threshold-near="32" lod-threshold-mid="90" />
         <ResourceNode kind="dark-wood" yield="2" transform="pos: 0 0 0" />
       </GameObject>
     </StaticSpawner>
-    <!-- Troncos secos esparsos no fundo da bacia. -->
-    <StaticSpawner profile="tree" count="140" seed="8102" region-min="-430 0 -210" region-max="-190 0 210" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="38" scale-min="0.8" scale-max="1.35" avoid-overlaps="1" footprint-radius="2.6" cluster-count="12" cluster-radius="40" max-distance="491" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+    <!-- Troncos secos esparsos no fundo da bacia.
+        LOOP E: 102/2287 colocados; attempts 64 + footprint 2.2. -->
+    <StaticSpawner profile="tree" count="200" seed="8102" region-min="-430 0 -210" region-max="-190 0 210" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="38" max-slope-attempts="64" scale-min="0.8" scale-max="1.35" avoid-overlaps="1" footprint-radius="2.2" cluster-count="14" cluster-radius="40" max-distance="491" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
       <GameObject role="static" destructible="popup-text: Dead Wood; popup-color: #3a3226; preset: leaves; burst-count: 18; hits: 2; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 8; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/dead_tree_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/forest/dead_tree_lod0.glb" lod1-url="/assets/meshes/forest/dead_tree_lod1.glb" lod2-url="/assets/meshes/forest/dead_tree_lod2.glb" lod-threshold-near="45" lod-threshold-mid="115" />
         <ResourceNode kind="dark-wood" yield="2" transform="pos: 0 0 0" />

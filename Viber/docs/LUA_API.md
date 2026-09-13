@@ -323,6 +323,8 @@ viber.debug.xp(n) / give(item, n)
 viber.debug.set_speed(n) / set_time_scale(n)  -- slow-mo; 0 = pausa
 viber.debug.set_camera{distance=?, pitch=?, target=?}  -- OrbitCamera (screenshots)
 viber.debug.set_clock(minuto)      -- 0–1440 (1380 = noite); sem DayCycle → warning
+viber.debug.set_weather{rain=?, clouds=?, wind=?}  -- fixa o tempo e CONGELA o ciclo (A/B)
+viber.debug.rain_look{near_fade=?, alpha=?, width=?, rate=?}  -- look da chuva ao vivo
 viber.debug.set_window(w, h)       -- redimensiona a janela p/ QA responsivo (@media, vw/vh)
 viber.debug.toast(msg)
 viber.debug.spawn_box(x, y, z, tamanho, "#rrggbb"?)   -- marker debug:box:N

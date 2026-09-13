@@ -179,7 +179,7 @@ class Room:
     iz: int
     floor: str = "stone_floor"
     wall: str = "plaster"
-    beams: bool = True
+    beams: bool = True          # no-op desde 2026-09-13 (ver `shell`)
     windows: int = 2
     # Porta de rua (world/cities/discordia/portals.xml): o par
     # porta↔saída vive NUMA linha, não em duas listas alinhadas por ordem.
@@ -260,19 +260,12 @@ def shell(room: Room) -> list[Box]:
     for sx in (-1, 1):
         out.append(Box(sx * (DOOR_W * 0.5 + 0.16), DOOR_H * 0.5, -hd, 0.16, DOOR_H * 0.5, WALL_T + 0.04, "beam"))
     out.append(Box(0.0, DOOR_H + 0.09, -hd, DOOR_W * 0.5 + 0.3, 0.09, WALL_T + 0.06, "beam"))
-    # vigas do tecto (deixam ver para dentro: são um esqueleto, não um tecto)
-    if room.beams:
-        span = room.w + 0.4
-        step = max(2.6, (room.d - 1.0) / max(1.0, round(room.d / 3.2)))
-        n = max(1, int((room.d - 1.2) / step))
-        for i in range(n + 1):
-            z = -hd + 0.6 + i * step
-            if z > hd - 0.6:
-                break
-            out.append(Box(0.0, WALL_H + 0.10, z, span * 0.5, 0.10, 0.12, "beam"))
-        # madres ao longo dos dois lados
-        for sx in (-1, 1):
-            out.append(Box(sx * (hw - 0.15), WALL_H + 0.10, 0.0, 0.12, 0.10, hd - 0.2, "beam"))
+    # SEM vigas de tecto: a câmara de interior olha a sala de cima (JRPG 16
+    # bits) e o esqueleto do telhado ficava entre a câmara e o chão, a cortar
+    # a divisão em tiras e a tapar mobília e NPCs (pedido do utilizador
+    # 2026-09-13). As paredes e os postes chegam para a sala ler como
+    # construída; o campo `beams` fica como no-op declarado para não partir
+    # salas antigas.
     # rodapé
     for sx in (-1, 1):
         out.append(Box(sx * (hw - 0.16), 0.14, 0.0, 0.05, 0.14, hd - 0.6, "beam"))
@@ -302,15 +295,31 @@ def rooms() -> list[Room]:
             Prop("interiors/chapel_pew_lod0", 3.9, -1.4, 0),
             Prop("interiors/chapel_pew_lod0", -3.9, -3.8, 0),
             Prop("interiors/chapel_pew_lod0", 3.9, -3.8, 0),
+            # 3.ª fila + tapetes da nave: a capela é a sala que o jogador vê
+            # primeiro e a que a câmara de interior enquadra inteira — vale o
+            # detalhe (pedido do utilizador 2026-09-13).
+            Prop("interiors/chapel_pew_lod0", -3.9, -6.2, 0),
+            Prop("interiors/chapel_pew_lod0", 3.9, -6.2, 0),
+            Prop("interiors/rug_woven_lod0", 0.0, -2.6, 0, 1.3),
+            Prop("interiors/rug_woven_lod0", 0.0, -5.4, 0, 1.3),
             Prop("interiors/confessional_lod0", -9.4, -4.6, 90),
             Prop("interiors/chapel_statue_lod0", 9.6, -5.6, 90),
+            # Sacristia encostada ao fundo: estante e cómoda em espelho.
+            Prop("interiors/bookshelf_lod0", -10.9, 6.4, 90),
+            Prop("interiors/cupboard_lod0", 10.9, 6.4, -90),
+            Prop("interiors/stool_wood_lod0", -6.0, 4.0, 20),
+            # Lanternas de parede: luz quente à altura dos olhos, sem sombra.
+            Prop("interiors/lantern_hanging_lod0", -11.0, -1.6, 90, light=("0xffcf8a", 5_200, 1.9)),
+            Prop("interiors/lantern_hanging_lod0", 11.0, -1.6, -90, light=("0xffcf8a", 5_200, 1.9)),
+            Prop("interiors/candelabra_tall_lod0", -2.4, -7.4, 0, light=("0xffd9a0", 6_000, 2.2)),
+            Prop("interiors/candelabra_tall_lod0", 2.4, -7.4, 0, light=("0xffd9a0", 6_000, 2.2)),
             Prop("props/stone_pillar_lod0", -10.6, 1.0, 0, 1.1),
             Prop("props/stone_pillar_lod0", 10.6, 1.0, 0, 1.1),
             Prop("village/iron_brazier_lod0", -4.8, 6.2, 0, fire=True, light=("0xffa83a", 3_600, 1.1)),
             Prop("village/iron_brazier_lod0", 4.8, 6.2, 0, fire=True, light=("0xffa83a", 3_600, 1.1)),
         ],
         npcs=[Npc("priest", 1.2, 3.4, 0, "interior-keeper.lua"),
-              Npc("elder", -3.0, -6.4, 180, "interior-folk.lua")],
+              Npc("elder", -7.6, -7.0, 160, "interior-folk.lua")],
         lights=[("0xffd9a0", 8_000, 0.0, 0.0, 2.3)]))
     # ── FERRARIA 22×16 ────────────────────────────────────────────────────
     R.append(Room("forge", "ferraria", 22, 16, 2, 0, door=(-30.47, -29.06),
@@ -587,9 +596,16 @@ def main() -> None:
     # visita) e o corte de bioma/chuva.
     xs = [r.cx - r.w * 0.5 - MARGIN for r in R] + [r.cx + r.w * 0.5 + MARGIN for r in R]
     zs = [r.cz - r.d * 0.5 - MARGIN for r in R] + [r.cz + r.d * 0.5 + MARGIN for r in R]
+    # `room-size` = o passo da grelha: dá à engine a câmara de interior no
+    # estilo JRPG de 16 bits (uma SALA por ecrã, fixa, sem follow). O
+    # enquadramento sai do centro da célula, por isso tem de ser a MESMA
+    # grelha que posiciona as salas.
     add(
         f'  <InteriorScene at="{(min(xs) + max(xs)) / 2:.0f} {(min(zs) + max(zs)) / 2:.0f}"'
-        f' size="{max(xs) - min(xs):.0f} {max(zs) - min(zs):.0f}" />'
+        f' size="{max(xs) - min(xs):.0f} {max(zs) - min(zs):.0f}"'
+        f' room-size="{STEP_X:.0f} {STEP_Z:.0f}"'
+        f' room-origin="{POCKET[0]:.0f} {POCKET[1]:.0f}"'
+        f' camera-distance="24" camera-pitch="58" camera-yaw="0" />'
     )
     add("")
     # mobília partilhada entre salas: cada `Prop` gera uma Entity própria.
@@ -641,6 +657,17 @@ local POCKET_MIN_X = POCKET.x - 200.0   -- tudo acima disto é interiores
 local FLOOR_Y = 0.6      -- soalho da sala (a laje está a 0.12)
 local INWARD = 6.0       -- quanto o herói entra para dentro ao chegar
 local MATCH_R = 3.0      -- raio de casamento porta↔saída
+local AUTO_EXIT_R = 1.6  -- encostar à porta POR DENTRO sai sem tecla
+
+-- ── REGISTO (gerado) ──
+-- ANTES da lógica de propósito: em Luau um `local` declarado DEPOIS de uma
+-- função não entra no escopo dela — a tabela no fim do ficheiro chegava ao
+-- `on_update` como global nil e o [E] das portas morria em
+-- `ipairs(nil)` (repro do utilizador 2026-09-12: "na porta da igreja aperto
+-- E e não faz nada"). Campos por NOME: a lógica lê `r.door_x`/`r.ox`/…,
+-- e as linhas posicionais antigas davam nil em todos eles.
+local ROOMS = {
+%(linhas)s}
 
 function on_update(dt)
   local st = viber.state()
@@ -651,9 +678,16 @@ function on_update(dt)
     st.ready = true
     viber.set_interaction(st.inside and "Sair" or "Entrar", "e", 2.8)
   end
+  -- SAÍDA AUTOMÁTICA (interiores): a porta de uma sala é um vão aberto sobre
+  -- o vazio — encostar a ela tem de tirar o herói dali, não pedir uma tecla
+  -- (pedido do utilizador 2026-09-13: "bloquear e imediatamente me fazer
+  -- sair"). O piso duro da bolsa trata da queda; este gatilho trata da
+  -- saída. Só vale de DENTRO: uma porta de rua continua a exigir [E], senão
+  -- passar à frente de uma casa sugava o jogador.
+  local auto = inside_pocket and viber.distance_to_player() <= AUTO_EXIT_R
   -- `interacted` não consome o evento duas vezes no mesmo frame entre
   -- entidades: cada portal decide pelo seu próprio cooldown.
-  if not viber.interacted("e") then
+  if not (auto or viber.interacted("e")) then
     st.cd = false
     return
   end
@@ -696,18 +730,15 @@ function on_update(dt)
   end
 end
 
--- ── REGISTO (gerado: { id, porta exterior (x, z), offset da sala (x, z), z local do vão }) ──
-local ROOMS = {
-%(linhas)s}
 """
 
 
 def portal_lua(R: list[Room]) -> str:
     linhas = "".join(
-        f'  {{ "{r.id}",'
-        f" {r.door[0]:8.2f}, {r.door[1]:8.2f},"
-        f" {r.ix * STEP_X:7.1f}, {r.iz * STEP_Z:7.1f},"
-        f" {r.exit_z:7.2f} }},\n"
+        f'  {{ id = "{r.id}",'
+        f" door_x = {r.door[0]:8.2f}, door_z = {r.door[1]:8.2f},"
+        f" ox = {r.ix * STEP_X:7.1f}, oz = {r.iz * STEP_Z:7.1f},"
+        f" exit_dz = {r.exit_z:7.2f} }},\n"
         for r in R
     )
     return PORTAL_HEADER % {

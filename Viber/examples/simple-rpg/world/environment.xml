@@ -30,13 +30,16 @@
              porque os billboards do Weather (crossfade por bioma) são a
              camada de nuvens "de jogo". -->
     <!-- Calendário dia/noite: o <DayCycle> escreve a elevação/azimute do
-             <Sky> (quantizados a 2°) e faz o ramp da luz ambiente
-             (0.26 de dia — o look atual — para 0.13 à noite, ~55 lux: escuro
-             o bastante para as tochas/portões/acampamentos assumirem, claro
-             o bastante para o chão continuar a ler-se). A luz direcional não
-             segue o sol abaixo do horizonte — vira lua (ver `worldsys.rs`).
-             Dia de 20 min reais; começa 08:00. -->
-    <DayCycle minute-of-day="480" minutes-per-real-second="1.2" dawn-minute="330" dusk-minute="1170" sun-azimuth-base="205" max-sun-elevation="62" drive-ambient="1" ambient-day-intensity="0.26" ambient-night-intensity="0.13" />
+              <Sky> (quantizados a 2°) e faz o ramp da luz ambiente
+              (0.26 de dia — o look atual — para 0.10 à noite: LOOP C baixou
+              de 0.13 — com as ~70 luzes da vila (cadência LOOP C nas
+              estradas + braseiros + janelas) o chão já lê pelas PRÓPRIAS
+              lanternas, e o ambiente alto esmagava a hierarquia: poças e
+              chamas não destacavam contra um chão meio-cinza. 0.10 mantém o
+              chão ao luar legível e devolve o contraste às fontes quentes).
+              A luz direcional não segue o sol abaixo do horizonte — vira
+              lua (ver `worldsys.rs`). Dia de 20 min reais; começa 08:00. -->
+    <DayCycle minute-of-day="480" minutes-per-real-second="1.2" dawn-minute="330" dusk-minute="1170" sun-azimuth-base="205" max-sun-elevation="62" drive-ambient="1" ambient-day-intensity="0.26" ambient-night-intensity="0.075" />
     <Sky sun-elevation="17" sun-azimuth="205" turbidity="2.4" rayleigh="2.8" mie-coefficient="0.0035" mie-directional-g="0.80" cloud-coverage="0.60" cloud-density="0.55" cloud-elevation="0.55" environment-intensity="0.38" sun-intensity="2.6" drive-light="1" />
     <!-- Ambiente hemisférico baixo: o IBL do céu é quem colore a sombra
            (azul de céu em cima, quente do chão embaixo); biomas continuam a
@@ -86,7 +89,7 @@
            ============================================================ -->
     <!-- NORTE: Floresta Sombria. `display-name` alimenta o bind `zone.name`
          (HUD): nome autoral vence a tabela de fallback da engine. -->
-    <BiomeRegion id="dark-forest" display-name="Floresta Sombria" polygon="[-56,56;56,56;4040,4040;-4040,4040]" tint="#1a3320" fog-density="0.0030" pp-exposure="0.78" />
+    <BiomeRegion id="dark-forest" display-name="Floresta Sombria" polygon="[-56,56;56,56;4040,4040;-4040,4040]" tint="#1a3320" fog-density="0.0020" pp-exposure="0.78" />
     <!-- LESTE: Deserto -->
     <BiomeRegion id="desert" display-name="Ermo Rubro" polygon="[56,-56;56,56;4040,4040;4040,-4040]" tint="#c2a878" fog-density="0.0014" pp-exposure="0.74" pp-bloom-strength="0.18" />
     <!-- OESTE: Pântano (bacias baixas do relevo real) -->

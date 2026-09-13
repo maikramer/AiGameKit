@@ -22,6 +22,26 @@ local POCKET_MIN_X = POCKET.x - 200.0   -- tudo acima disto é interiores
 local FLOOR_Y = 0.6      -- soalho da sala (a laje está a 0.12)
 local INWARD = 6.0       -- quanto o herói entra para dentro ao chegar
 local MATCH_R = 3.0      -- raio de casamento porta↔saída
+local AUTO_EXIT_R = 1.6  -- encostar à porta POR DENTRO sai sem tecla
+
+-- ── REGISTO (gerado) ──
+-- ANTES da lógica de propósito: em Luau um `local` declarado DEPOIS de uma
+-- função não entra no escopo dela — a tabela no fim do ficheiro chegava ao
+-- `on_update` como global nil e o [E] das portas morria em
+-- `ipairs(nil)` (repro do utilizador 2026-09-12: "na porta da igreja aperto
+-- E e não faz nada"). Campos por NOME: a lógica lê `r.door_x`/`r.ox`/…,
+-- e as linhas posicionais antigas davam nil em todos eles.
+local ROOMS = {
+  { id = "chapel", door_x =     7.46, door_z =    22.46, ox =    60.0, oz =     0.0, exit_dz =  -10.00 },
+  { id = "forge", door_x =   -30.47, door_z =   -29.06, ox =   120.0, oz =     0.0, exit_dz =   -9.00 },
+  { id = "house_a", door_x =    26.35, door_z =     8.44, ox =     0.0, oz =     0.0, exit_dz =   -9.00 },
+  { id = "house_b", door_x =   -17.44, door_z =    22.47, ox =     0.0, oz =    55.0, exit_dz =   -9.00 },
+  { id = "house_c", door_x =   -20.47, door_z =   -18.44, ox =    60.0, oz =    55.0, exit_dz =   -9.00 },
+  { id = "shepherd", door_x =   -22.33, door_z =    12.95, ox =   120.0, oz =    55.0, exit_dz =   -8.00 },
+  { id = "barn", door_x =   -26.11, door_z =    30.00, ox =     0.0, oz =   110.0, exit_dz =  -11.00 },
+  { id = "longhouse", door_x =    35.53, door_z =   -37.53, ox =    60.0, oz =   110.0, exit_dz =  -11.00 },
+  { id = "market", door_x =    10.10, door_z =   -15.70, ox =   120.0, oz =   110.0, exit_dz =   -8.00 },
+}
 
 function on_update(dt)
   local st = viber.state()
@@ -32,9 +52,16 @@ function on_update(dt)
     st.ready = true
     viber.set_interaction(st.inside and "Sair" or "Entrar", "e", 2.8)
   end
+  -- SAÍDA AUTOMÁTICA (interiores): a porta de uma sala é um vão aberto sobre
+  -- o vazio — encostar a ela tem de tirar o herói dali, não pedir uma tecla
+  -- (pedido do utilizador 2026-09-13: "bloquear e imediatamente me fazer
+  -- sair"). O piso duro da bolsa trata da queda; este gatilho trata da
+  -- saída. Só vale de DENTRO: uma porta de rua continua a exigir [E], senão
+  -- passar à frente de uma casa sugava o jogador.
+  local auto = inside_pocket and viber.distance_to_player() <= AUTO_EXIT_R
   -- `interacted` não consome o evento duas vezes no mesmo frame entre
   -- entidades: cada portal decide pelo seu próprio cooldown.
-  if not viber.interacted("e") then
+  if not (auto or viber.interacted("e")) then
     st.cd = false
     return
   end
@@ -77,15 +104,3 @@ function on_update(dt)
   end
 end
 
--- ── REGISTO (gerado: { id, porta exterior (x, z), offset da sala (x, z), z local do vão }) ──
-local ROOMS = {
-  { "chapel",     7.46,    22.46,    60.0,     0.0,  -10.00 },
-  { "forge",   -30.47,   -29.06,   120.0,     0.0,   -9.00 },
-  { "house_a",    26.35,     8.44,     0.0,     0.0,   -9.00 },
-  { "house_b",   -17.44,    22.47,     0.0,    55.0,   -9.00 },
-  { "house_c",   -20.47,   -18.44,    60.0,    55.0,   -9.00 },
-  { "shepherd",   -22.33,    12.95,   120.0,    55.0,   -8.00 },
-  { "barn",   -26.11,    30.00,     0.0,   110.0,  -11.00 },
-  { "longhouse",    35.53,   -37.53,    60.0,   110.0,  -11.00 },
-  { "market",    10.10,   -15.70,   120.0,   110.0,   -8.00 },
-}

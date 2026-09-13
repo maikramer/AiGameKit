@@ -24,7 +24,8 @@ não Unity/three.js.
 | Player + câmara | `src/player.rs`, `src/camera.rs` | WASD/setas + Shift sprint + Space salto; third-person com drag/scroll |
 | Combate | `src/combat.rs`, `src/skills.rs`, `src/feedback.rs`, `src/vitals.rs` | melee [J], alvo [V], skills [C]/[R]/[B]/[L], dano flutuante/i-frames/respawn, HP/XP |
 | Colheita (destructibles) | `src/harvest.rs` | minerar/cortar nativos: `destructible="…"` no XML + `<ResourceNode>` no template; [J]/clique perto do prop toca clip `mine`/`chop` com picareta/machado na mão; `fall` = árvore cai e fica toco, `shatter` = pedra despedaça; loot → vault/XP/quests |
-| Quests & diálogo | `src/quests.rs` | 21 quests JSON embutidas via `include_str!`, flow [E], QuestTracker |
+| Quests & diálogo | `src/quests.rs`, `examples/simple-rpg/quests/*.json` | 25 quests JSON embutidas via `include_str!` (21 do jogo + 4 dos cenários), flow [E], QuestTracker. Schema: `id`/`npc`/`biome`/`title`/`lines_intro|progress|complete`/`objective{type: kill\|collect\|visit, target, count, radius}`/`rewards{gold,xp,items}`. Um `biome` em falta derruba o FICHEIRO inteiro (warn + skip), e um JSON que caia é silencioso — `test_fantasy_scenario_quests_are_loaded` e o audit cobrem a classe. Objetivo `visit` casa por NOME de entidade + `radius`; `kill` pelo nome do script da criatura (`enemies/wolf.lua` → `wolf`); `collect` pelo vault (`stone`, `wood`, `dark-wood`, `bog-moss`). O `analyze` cruza as defs com o mundo: dador sem `<DialogueNPC dialogue-id=…>` e marco de `visit` inexistente saem como ⚠ (`audit::audit_quests`; salta em mundos sem nenhum NPC de diálogo) |
+| Cenários (peças de sítio) | `examples/simple-rpg/world/scenes/*.xml` | Quatro sítios habitados, cada um com a sua quest: acampamento de peregrinos à boca do Ermo, posto dos escavadores na mesa do Alto de Vael, campo da última batalha à porta da Cidadela e covil dos contrabandistas na orla da floresta. Agrupados por `<Group name="scene.*">`, com `SpawnExclusion`, âncoras visitáveis (nomeadas para o objetivo `visit`) e um NPC dador `<DialogueNPC>` por peça |
 | Economia & menus | `src/economy.rs`, `src/menus.rs` | vault real + hotbar [1]/[2]; toasts, banner e loading screen. O modal [Q] e a loja passaram para a UI declarativa (`world/menu.xml`); `MenusOpen` é espelhado de `UiModalsOpen` |
 | Save/load | `src/save.rs` | JSON em `~/.local/share/viber/<mundo>.save.json` (paths via crate `dirs`); [J]/[L] com um menu aberto, ou os botões Guardar/Carregar do separador Sistema (`viber.ui.action("save"\|"load")`) |
 | RNG determinístico | `src/rng.rs` | SplitMix64 ÚNICO da engine ("mesma seed, mesmo mundo") — spawner/terreno/IA/clima; sequência congelada por golden test. `splitmix64` counter-style para o heightmap procedural |
@@ -96,8 +97,10 @@ depth+normal prepass: água detectada por
 COTA (`TerrainRuntime.water`), raio refletido pela normal (com ondas), 24
 passos + bisseção, Fresnel; sem hit mantém o espelho do IBL. **CHÃO MOLHADO:
 com `<Weather rain>`, superfícies para cima ganham o mesmo reflexo × chuva ×
-0.55 — o look "rua molhada" sem material novo.** **DEFAULT ON** (caminho
-raster oficial); `VIBER_WATER_SSR=0` desliga (A/B de QA). WGSL
+0.55 — o look "rua molhada" sem material novo.** **OPT-IN**
+(`VIBER_WATER_SSR=1`) — sem acumulação temporal própria o reflexo dança com as
+ondas (medido 2026-09-10); é caminho raster oficial mas não está no frame por
+omissão. Ligar custa ~1 passe fullscreen de 24 passos. WGSL
 self-contained em `shaders/water_ssr.wgsl` (escrito no `run`); harness
 `tests/water_ssr_shader.rs` valida layout (288/176 B) e proíbe indexação
 dinâmica de arrays em uniforms (crash do compilador NV 595.84 — cotas em
@@ -347,7 +350,7 @@ as mesmas 5 abas do `?profiler=1` do VibeGame: **Sistemas** (timings por
 sistema + grupos + scripts Luau por ficheiro), **Mundo** (player/câmara/
 entidades próximas com tags), **Física** (Rapier: corpos/colisores/sono/step),
 **Áudio** (buses/layers/sinks) e **Extras** (toggles: wireframe de colisores,
-relva, pausar física). Cada aba tem **COPIAR** (JSON completo → clipboard) e
+relva, sombras do sol, sombras das lanternas, pausar física). Cada aba tem **COPIAR** (JSON completo → clipboard) e
 **EXPORTAR** (ficheiro em `$TMPDIR/viber-profiles/`).
 
 Anatomia:
@@ -374,6 +377,178 @@ QA típico: `viber debug prof --tab física`, `viber debug prof --tab tudo
 --json`, `viber debug lua 'return viber.profiler().state'`. (O P do profiler
 é toggle do modal; o P que aprende talento só existe com o menu [Q] aberto na
 tab Talentos.)
+
+### Interiores: câmara de sala (JRPG 16 bits) e movimento de ecrã
+
+Dentro da bolsa declarada por `<InteriorScene>` a câmara muda de regime
+(`camera::interior_camera_pose`): enquadra a **SALA**, não o herói.
+
+```xml
+<InteriorScene at="2658 2656" size="189 173"
+               room-size="60 55" room-origin="2600 2600"
+               camera-distance="24" camera-pitch="58" camera-yaw="0" />
+```
+
+* `room-size` + `room-origin` — grelha das salas. As salas ficam nos **nós**
+  (`origem + k × room-size`), por isso o alvo é o nó MAIS PRÓXIMO, não o meio
+  da célula (com o meio da célula o enquadramento saía meia sala ao lado).
+  Sem `room-size`, a bolsa inteira é uma sala.
+* `camera-distance` / `camera-pitch` / `camera-yaw` — pose fixa. Defaults em
+  `worldsys::INTERIOR_CAMERA_*` (22 m, 58°).
+* A câmara **não segue**: andar dentro da sala não mexe no enquadramento
+  (medido: 5 % do frame muda, e é o herói e os NPCs). Ao passar para a sala
+  seguinte SALTA, com um ease de `camera::INTERIOR_ROOM_LAG` (0,12 s) — o
+  corte seco do SNES pisca de mais com sombras e TAA.
+* **Movimento**: com a câmara fixa, A/D deixam de a rodar — o herói anda nas
+  8 direções do ECRÃ (`player_movement`, ramo `interior_mode`), sem o
+  `SIDE_MOVE_FACTOR` (a diagonal não pode ser mais lenta que a recta). Fora da
+  bolsa volta o regime de sempre (A/D conduzem a câmara).
+
+**Regime de interior (2026-09-13).** Enquanto o herói está na bolsa
+(`worldsys::InteriorLighting`, marcada por posição a cada frame):
+
+| Regra | Onde | Porquê |
+|---|---|---|
+| Ambiente FIXO (`INTERIOR_AMBIENT_BRIGHTNESS` = 2000 lux, `VIBER_INTERIOR_AMBIENT` afina) | `daycycle_drive` | a sala não escurece com o relógio lá fora |
+| Sol a 0 e IBL a `INTERIOR_IBL_INTENSITY` | `interior_lighting_apply` | o cubemap do céu pintava a sala de azul-lua |
+| Paleta/exposição/névoa de DIA (`INTERIOR_SUN_ELEVATION_DEG`) | `atmosphere_drive` | o grading noturno mantinha a sala escura mesmo com o ambiente alto — é ele o lever (medido 99 → 220/255) |
+| Tint de props em dia | `prop_tint` | idem, nos materiais |
+| Chuva ignorada | `atmosphere_drive` | não chove dentro |
+| Sem SALTO | `player_movement` | câmara de cima; saltar só tirava o herói do soalho |
+| Soalho DURO a `INTERIOR_FLOOR_Y` | `player_movement` | as salas são ilhas sem terreno: um passo fora do soalho era queda infinita |
+| Sair encostando à porta | `building-portal.lua` (`AUTO_EXIT_R`) | o vão é aberto sobre o vazio: encostar tem de tirar dali, não pedir tecla. Só de DENTRO — a porta de rua continua a exigir [E] |
+
+Sem vigas de tecto nas salas (`gen_interiors.shell`): a câmara olha de cima e
+o esqueleto do telhado cortava a divisão em tiras.
+
+**Teleportes assentam.** `viber.teleport_player` (e as portas) passam por
+`player::landing_position` + `TeleportSettle`: o destino cai na superfície
+sólida (mais `LANDING_CLEARANCE`) e o herói fica sob tutela do chão analítico
+durante ~30 frames — e nessa janela o chão é o TOPO do mundo, não o
+`surface_below` com a janela de `GROUND_PROBE` (5 cm): quem afundava um dedo
+deixava de ver a superfície e caía para sempre. Sem
+isso, voltar de um interior para a vila largava-o no ar sobre colunas ainda
+por assar e ele atravessava o mundo (y ≈ −150). No mesmo lote,
+`TerrainCollisionStatus.ready` passou a significar mesmo "há collider SOB os
+pés" (era "há collider a menos de 192 m") e o snap analítico cancela a queda
+pendente no CCT — escrever só o `Transform` não chega, o Rapier aplicava o
+`motion.y` logo a seguir.
+
+### Interações: alcance único e "o mais próximo ganha" (`src/interact.rs`)
+
+Duas regras, uma fonte (2026-09-12):
+
+* **Alcance** — o histórico eram `3.5` repetidos em seis sítios (script,
+  diálogo, prompt, balão, colheita). Agora `interact::BASE_RANGE_M` × 
+  `interact::range_scale()` (default **0,5** → 1,75 m efetivos), e os alcances
+  AUTORADOS (`viber.set_interaction(label, tecla, range)`, `destructible
+  range`) levam a mesma escala — a conversão acontece num só sítio, ao inserir
+  o `ScriptInteraction`. `VIBER_INTERACT_RANGE_SCALE=1` devolve o antigo.
+* **O mais próximo ganha** — `InteractionFocus` (recurso, recalculado no
+  `PreUpdate`) elege UM vencedor por TECLA entre tudo o que é interagível
+  (`ScriptInteraction` + `<DialogueNPC>`). `viber.interacted(tecla)` só é
+  `true` para esse vencedor; o diálogo nativo e as quests usam o mesmo
+  critério. Antes cada script decidia sozinho ("estou em alcance? disparo") e
+  dois NPC sobrepostos reagiam ambos ao mesmo [E] — o prompt mostrava um, agia
+  outro. Teclas diferentes não competem entre si.
+
+**Posição de script = `GlobalTransform`.** O `Transform` de um NPC dentro do
+grupo `city` (assentado a y≈38,7) é LOCAL (y=0); usar isso como posição punha
+toda a cidade 38 m abaixo do herói e o `viber.interacted` nunca disparava — o
+[E] "não fazia nada" na vila inteira. `luau_update` lê o mundo; `MoveBy`/
+`set_position` convertem de volta para local com o offset do pai.
+
+**Hot-reload não pode reagir a leituras.** O watcher só aceita eventos de
+ESCRITA (`hot_reload::is_write_event`): a recarga LÊ o ficheiro, e com os
+eventos de acesso ligados isso realimentava o watcher — os ~38 scripts do
+`simple-rpg` recarregavam 3×/s para sempre, sem ninguém editar nada.
+
+### Onde é que o frame se vai (instrumentos, 2026-09-12)
+
+O `timed` só mede sistemas NOSSOS — 4 ms de um frame de 44 no `simple-rpg`.
+Quatro camadas cobrem o resto; o retrato e os números estão em
+[`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) (7.ª passagem).
+
+| Linhas no snapshot | O quê | Como ligar |
+|---|---|---|
+| `gpu[]` | cada passe do render graph em CPU **e** GPU (timestamps do wgpu) | `VIBER_PROF_GPU=1` no ambiente da engine |
+| `sched.*` | fatia de cada schedule do `Main`, mais **`sched.render_wait`** — o buraco entre frames: extract + render app + present | sempre |
+| `render.*` | fases do schedule `Render` no sub-app (`prepare_views`, `queue`, `phase_sort`, `bind_groups`, `render`…) | sempre |
+| `bevy.*` | fases do `PostUpdate` do Bevy (transform propagate, visibilidade, visibilidade por luz, clusters) | sempre |
+
+Mais: `shadow_lights` nos contadores (PointLights com cube shadow map activo,
+6 vistas cada) e `VIBER_PROF_SYSTEMS=<n>|all` para tirar o corte de 30 linhas
+da lista de sistemas.
+
+```bash
+VIBER_PROF_GPU=1 viber session up --world examples/simple-rpg/world.xml
+viber debug prof --world … --samples 8          # traz "render — top passes"
+VIBER_PROF_SYSTEMS=all viber debug prof --world … --json
+```
+
+**Protocolo:** braços A/B só valem **interleaved no mesmo processo** (os
+toggles do profiler, abaixo) com o relógio preso
+(`viber.debug.set_clock(720)`); entre BOOTS, e com outro agente a correr uma
+engine na mesma GPU, o mesmo braço mede ±100 %. Confirme com
+`nvidia-smi --query-compute-apps=pid,used_memory --format=csv` antes de citar
+qualquer número.
+
+### Partículas: mesh em espaço LOCAL (bug de 2026-09-12) e o look da chuva
+
+O buffer de vértices de um emissor vive em espaço **LOCAL**: a entidade do
+mesh já carrega a transform do emissor. Escrever `emitter_pos + p.pos` no
+buffer somava a posição DUAS vezes e desenhava cada efeito ao **dobro** das
+suas coordenadas — as fogueiras e tochas da vila ardiam ~39 m no ar (a cota
+do terreno, duplicada) e a chuva, ancorada 12 m acima do herói, caía de
+~100 m e morria (vida 0,85 s) muito antes de chegar ao chão. Resultado: no
+`simple-rpg` **não se via chuva nenhuma perto do jogador**, e a massa de
+gotas ficava pendurada no céu a ler-se como véu/neblina. Regressão coberta
+por `billboard_positions_are_local_to_the_emitter`.
+
+O look da chuva tem dois controlos próprios (só o preset `rain` os usa; uma
+faísca de fogueira ao pé da câmara continua opaca):
+
+| Controlo | Default | Env | Porquê |
+|---|---|---|---|
+| `near_fade_m` | 5 m | `VIBER_RAIN_NEAR_FADE` | a câmara de 3.ª pessoa vive DENTRO da coluna de chuva; um streak de 0,5 m a 1 m do olho tapa ~40 % da altura do ecrã |
+| `max_alpha` | 0.5 | `VIBER_RAIN_ALPHA` | cortina translúcida deixa ver a paisagem; opaca é uma parede |
+
+Afinação AO VIVO (sem rebuild): `viber.debug.rain_look{near_fade=…,
+alpha=…, width=…, rate=…}` e `viber.debug.set_weather{rain=…, clouds=…,
+wind=…}` (este último **congela o ciclo** — sem isso o `weather_drive`
+voltava ao alvo do scheduler a meio do A/B).
+
+```bash
+viber debug lua 'viber.debug.set_weather{rain=1} return 1'
+viber debug lua 'viber.debug.rain_look{near_fade=3, alpha=0.6} return 1'
+```
+
+Outros acopladores da chuva, para quem for caçar "não se vê nada à chuva":
+névoa `×(1+0,12·rain)` (`biome_fog_system`), exposição `×(1−0,25·rain)`
+(`atmosphere_drive`) e chão molhado no SSR (`rain × ground`, `water_ssr.rs`).
+O volume de névoa (god-rays) **não** escala com a chuva.
+
+### Sombras: orçamento por rank, distância e hora (`src/ambient.rs`)
+
+Cada PointLight com shadow map são **6 vistas** de render. O orçamento dá
+sombra às `SHADOW_LIGHT_BUDGET` (12) mais próximas, mas agora com três
+apertos — medido: **de dia o frame do `simple-rpg` caiu 44,5 → 30,0 ms**, e à
+noite as sombras da vila ficam todas:
+
+1. ranking pela SUPERFÍCIE da esfera de influência (`distância − range`);
+2. tecto `SHADOW_LIGHT_MAX_DISTANCE` = 60 m;
+3. gate de luz do dia `SHADOW_LIGHT_DAYLIGHT_MAX` = 0,35 (curva
+   `daylight_factor`) — ao meio-dia a sombra da lanterna não se lê.
+
+Histerese nos dois eixos (rank e distância), senão a lanterna pisca ao andar
+na fronteira (refresh de 1 s).
+
+Knobs (QA e GPUs fracas): `VIBER_SHADOW_LIGHTS` (orçamento; `0` desliga),
+`VIBER_SHADOW_LIGHT_DISTANCE`, `VIBER_SHADOW_LIGHT_DAYLIGHT` (`1` = sombras
+sempre), `VIBER_POINT_SHADOW_SIZE`, `VIBER_SHADOW_CASCADES` (1–4),
+`VIBER_SHADOW_DISTANCE` (alcance das cascatas do sol). Extras do profiler
+para o A/B ao vivo: `extra:dir-shadows`, `extra:point-shadows`
+(`viber debug lua 'viber.profiler_cmd("extra:point-shadows")'`).
 
 ### Teclas (jogo)
 
@@ -419,7 +594,7 @@ em **[`docs/ASSETS.md`](docs/ASSETS.md)**; `viber create` gera um completo.
 | `Cylinder` | `radius`, `half-height` |
 | `Plane` | `half-size` (vec2, plano XZ) |
 | `Capsule` | `radius`, `half-height` |
-| `PointLight` | `color`, `intensity` (default 1200 lm), `radius`, `shadows` |
+| `PointLight` | `color`, `intensity` (default 1200 lm), `radius`, `shadows` — TODAS iluminam (o cluster do Bevy aguenta 204); com `shadows="true"` a luz concorre ao orçamento de cube shadow maps (as `SHADOW_LIGHT_BUDGET`=12 mais próximas, `ambient::light_budget_system`; `VIBER_LIGHT_BUDGET=12` devolve a política antiga de apagar as luzes além das 12 mais próximas, para A/B) |
 | `DirectionalLight` | `color`, `illuminance` (lux, default bevy 10 000), `direction` ("x y z", para onde a luz viaja; −Z da entidade alinha à direção), `shadows` |
 | `AmbientLight` | `color`, `brightness` — aplicado como recurso `GlobalAmbientLight`, não entidade |
 | `OrbitCamera` | `target` (nome de entidade), `distance`, `height`, `pitch` (graus; quando presente sobrepõe `height` via `height = distance·tan(pitch)`) |

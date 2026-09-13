@@ -1,0 +1,100 @@
+<!--
+  CAMPO DA ÚLTIMA BATALHA — o que sobrou da Cidadela. Loaded via Include.
+
+  ONDE E PORQUÊ: (-770,-265), na mesa oeste, no caminho entre o trilho do
+  pântano e o portão da Cidadela Caída (-880,-300). A cidadela é uma ruína
+  habitada por sombras e não tinha passado: este campo diz o que aconteceu —
+  carroças queimadas, armas partidas, um estandarte rasgado e um montão de
+  ossos. É a antesala do sítio e o palco da quest `citadel_shades`.
+
+  CHÃO: 0,8° de declive na mesa — nada a terraplanar. Um `<SpawnExclusion>`
+  segura o cenário livre de vegetação/spawners, e os corvos são substituídos
+  pelo que a engine tem: sombras (`DynamicSpawner` + `enemies/shade.lua`), que
+  são também o objetivo de abate da quest.
+
+  VISITAS: `battlefield-banner`, `battlefield-wreck`, `battlefield-cairn`.
+-->
+  <world>
+  <Group name="scene.battlefield" translation="0 0 0">
+    <SpawnExclusion at="-770 -265" radius="40" />
+    <!-- ── Estandarte de guerra: mastro + pano rasgado (primitivas) ───── -->
+    <Composition name="battlefield-banner" translation="-770 0 -265" body="fixed" collider="auto">
+      <Cylinder translation="0 2.6 0" half-height="2.6" radius="0.09" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.5" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0.85 3.9 0" half-size="0.85 1.0 0.03" base-color="#7a1f1f" roughness="0.95" metallic="0.0" />
+      <Box translation="0.85 2.2 0" half-size="0.55 0.55 0.03" base-color="#7a1f1f" roughness="0.95" metallic="0.0" />
+      <Box translation="0 0.1 0" half-size="0.5 0.1 0.5" texture="/assets/textures/mountain_stone/albedo.ktx2" texture-tile-size="2.5" normal-map="/assets/textures/mountain_stone/normal.ktx2" />
+      <PointLight translation="0 4.6 0" color="0xffd0a0" intensity="3400" radius="0.8" />
+    </Composition>
+    <!-- ── Carroças queimadas ─────────────────────────────────────────── -->
+    <Entity name="battlefield-wreck" translation="-774 0 -270" transform="rotation: 0 35 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/wrecked_boat_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/swamp/wrecked_boat_lod0.glb" />
+    </Entity>
+    <Entity translation="-766 0 -272" transform="rotation: 0 250 0; scale: 1.1 1.1 1.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
+    </Entity>
+    <Entity translation="-774 0 -270">
+      <ParticleSystem preset="smoke" transform="pos: 0 1.2 0" particle-emitter="preset: smoke; emission-rate: 4; start-life-min: 3.0; start-life-max: 6.0; start-speed-min: 0.15; start-speed-max: 0.5; start-size-min: 0.5; start-size-max: 1.2; start-color: #4a4a4a; looping: 1; world-space: 1" />
+    </Entity>
+    <!-- Carga espalhada pelo campo. -->
+    <Entity translation="-761 0 -268" transform="rotation: 0 -35 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.8 0.8 0.8">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="-778 0 -274" transform="rotation: 0 80 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <Entity translation="-764 0 -276" transform="rotation: 0 15 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.8 0.8 0.8">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <!-- ── Pilares de ruína tombados (a coluna que veio do planalto) ──── -->
+    <Entity translation="-782 0 -262" transform="rotation: 0 40 82" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.4 1.0 1.0">
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="-758 0 -258" transform="rotation: 0 205 88" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.4 1.0 1.0">
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="-768 0 -256" transform="rotation: 0 96 0; scale: 1.3 1.3 1.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/terrain/form_stack_11_lod0.glb" />
+    </Entity>
+    <!-- ── Ossada: o montão sobre o qual ninguém voltou a passar ──────── -->
+    <Entity name="battlefield-cairn" translation="-770 0 -276" transform="rotation: 0 130 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/bone_altar_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/swamp/bone_altar_lod0.glb" />
+      <PointLight translation="0 1.6 0" color="0x66e878" intensity="2600" radius="0.9" shadows="false" />
+    </Entity>
+    <Entity translation="-770 0 -276">
+      <ParticleSystem preset="sparkle" transform="pos: 0 1.2 0" />
+    </Entity>
+    <!-- ── Roda de armas partida e braseiros apagados ─────────────────── -->
+    <Entity translation="-779 0 -268" transform="rotation: 0 140 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/weapon_rack_lod0.glb" />
+    </Entity>
+    <Entity translation="-760 0 -272" transform="rotation: 0 40 76" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.35 0.9 0.15">
+      <GltfScene url="/assets/meshes/props/spear_lod0.glb" />
+    </Entity>
+    <Entity translation="-763 0 -264" transform="rotation: 0 12 80" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.35 0.9 0.15">
+      <GltfScene url="/assets/meshes/props/axe_lod0.glb" />
+    </Entity>
+    <Entity translation="-786 0 -272" transform="rotation: 0 300 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Entity translation="-754 0 -270" transform="rotation: 0 190 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Entity translation="-770 0 -265">
+      <ParticleSystem preset="smoke" transform="pos: 0 0.9 0" particle-emitter="preset: smoke; emission-rate: 5; start-life-min: 5; start-life-max: 9; start-speed-min: 0.06; start-speed-max: 0.22; start-size-min: 2.0; start-size-max: 3.8; start-color: #8e8a84; looping: 1; world-space: 1" />
+    </Entity>
+    <!-- ── As sombras que ficaram (objetivo de abate da quest) ────────── -->
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="8" seed="6151"
+                    region-min="-810 0 -300" region-max="-730 0 -235"
+                    random-yaw="true" avoid-overlaps="false" max-slope-deg="24" max-distance="1420">
+      <Creature role="enemy" script="enemies/shade.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/shade_lod0.glb" lod1-url="/assets/meshes/characters/shade_lod1.glb" lod2-url="/assets/meshes/characters/shade_lod2.glb" lod-threshold-near="20" lod-threshold-mid="60" />
+      </Creature>
+    </DynamicSpawner>
+    <!-- O sobrevivente: dá a quest e conta o que se passou. -->
+    <Entity name="npc_battle_survivor" translation="-766 0 -260" transform="rotation: 0 60 0">
+      <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
+      <DialogueNPC dialogue-id="citadel_shades" portrait-url="" voice-sfx="" marker-height="2.5" />
+    </Entity>
+  </Group>
+  <!-- FIM scene.battlefield -->
+  </world>

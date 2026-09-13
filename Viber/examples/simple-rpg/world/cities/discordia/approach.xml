@@ -1,0 +1,274 @@
+<!--
+  APROCHE DE DISCORDIA — densidade de meio-termo e socalcos (loop D-terreno).
+
+  PORQUÊ: a crítica apontava o "pavimento morto entre o jogador e o
+  portão" — a artéria praça→portão N era cobble despida de um e do outro
+  lado, e os relvados entre a muralha e os biomas não tinham VIDA nem
+  agricultura. BotW (Hateno) enche o meio-termo: bancas no eixo, sebes,
+  socalcos com cultivos que mostram que a vila COME.
+
+  Três frentes:
+    §1  FERIDA DO PORTÃO N — bancas, carreta, varal, estandartes,
+        canteiros e caixotaria no corredor da praça→portão (fora da
+        faixa |x| ≤ 2.4 da via, fora do anel ±25±2, fora dos AABB da
+        capela/celeiro — regras de skirts.xml/clutter.xml);
+    §2  SOCALCOS DO NORTE — dois pads-terraço (47.0 / 47.5 m) com leiras
+        de cultivo, cercas, espantalho, medas e galinheiro na subida N
+        (z 92..122), entre os braços de rocha (landforms/gate-arms.xml);
+    §3  MIMO DE ENTRADA — plantadores junto ao portão E.
+
+  Tudo em <Composition> de primitivas (docs/COMPOSITION.md): dedup
+  partilha mesh/material entre instâncias idênticas. GLBs só onde o kit
+  existe (espantalho/meda/galinheiro do farm/) — verificados no arranque
+  (pool teve falhas BC4 pontuais, alto-de-vael §notas).
+-->
+<world>
+  <!-- ============================================================
+     PROTÓTIPOS — definidos uma vez, instanciados com <Use>
+     ============================================================ -->
+  <!-- Banca de feira: 4 pernos + balcão + toldo em uma água + mercadoria. -->
+  <Prototype id="banca-feira">
+    <Composition name="banca-feira" body="fixed" collider="auto">
+      <Cylinder translation="-0.85 1.05 -0.55" radius="0.055" half-height="1.05" base-color="#5f4a36" roughness="0.8" />
+      <Cylinder translation="0.85 1.05 -0.55" radius="0.055" half-height="1.05" base-color="#5f4a36" roughness="0.8" />
+      <Cylinder translation="-0.85 2.15 0.55" radius="0.055" half-height="0.35" base-color="#5f4a36" roughness="0.8" />
+      <Cylinder translation="0.85 2.15 0.55" radius="0.055" half-height="0.35" base-color="#5f4a36" roughness="0.8" />
+      <Box translation="0 0.92 -0.55" half-size="0.95 0.05 0.42"
+           texture-url="/assets/textures/wood_planks/albedo.ktx2"
+           normal-map-url="/assets/textures/wood_planks/normal.ktx2"
+           texture-tile-size="1.2" base-color="#a08560" roughness="0.85" />
+      <Box translation="0 0.5 -0.55" half-size="0.95 0.34 0.06"
+           texture-url="/assets/textures/wood_planks/albedo.ktx2"
+           texture-tile-size="1.2" base-color="#8a704e" roughness="0.85" />
+      <!-- toldo em uma água, frente alta -->
+      <Box translation="0 2.42 0.05" half-size="1.15 0.03 0.85" euler="14 0 0"
+           base-color="#a8544a" roughness="0.9" collider="none" />
+      <!-- mercadoria no balcão -->
+      <Box translation="-0.45 1.05 -0.5" half-size="0.14 0.11 0.14" base-color="#b0803a" roughness="0.8" collider="none" />
+      <Box translation="-0.16 1.05 -0.62" half-size="0.11 0.08 0.11" base-color="#8fa04a" roughness="0.8" collider="none" />
+      <Cylinder translation="0.42 1.06 -0.55" radius="0.11" half-height="0.14" base-color="#7a4a30" roughness="0.7" collider="none" />
+      <Cylinder translation="0.68 1.04 -0.48" radius="0.09" half-height="0.09" base-color="#9a5a3a" roughness="0.7" collider="none" />
+    </Composition>
+  </Prototype>
+
+  <!-- Carreta de mão carregada: leito, rodas, varões e carga. -->
+  <Prototype id="carreta">
+    <Composition name="carreta" body="fixed" collider="auto">
+      <Box translation="0 0.78 0" half-size="0.72 0.05 0.42"
+           texture-url="/assets/textures/wood_planks/albedo.ktx2"
+           texture-tile-size="1" base-color="#96794f" roughness="0.85" />
+      <Box translation="0 0.96 -0.4" half-size="0.72 0.14 0.03"
+           texture-url="/assets/textures/wood_planks/albedo.ktx2"
+           texture-tile-size="1" base-color="#7d6240" roughness="0.85" />
+      <Box translation="0 0.96 0.4" half-size="0.72 0.14 0.03"
+           texture-url="/assets/textures/wood_planks/albedo.ktx2"
+           texture-tile-size="1" base-color="#7d6240" roughness="0.85" />
+      <Box translation="-0.69 0.96 0" half-size="0.03 0.14 0.4"
+           texture-url="/assets/textures/wood_planks/albedo.ktx2"
+           texture-tile-size="1" base-color="#7d6240" roughness="0.85" />
+      <Cylinder translation="0 0.42 -0.52" radius="0.34" half-height="0.04" euler="0 0 90"
+                base-color="#5a4632" roughness="0.8" />
+      <Cylinder translation="0 0.42 0.52" radius="0.34" half-height="0.04" euler="0 0 90"
+                base-color="#5a4632" roughness="0.8" />
+      <Cylinder translation="0 0.42 0" radius="0.04" half-height="0.5" euler="0 0 90"
+                base-color="#4a3a28" roughness="0.8" collider="none" />
+      <Cylinder translation="-0.24 0.62 0.85" radius="0.035" half-height="0.45" euler="90 0 0"
+                base-color="#5a4632" roughness="0.8" />
+      <Cylinder translation="0.24 0.62 0.85" radius="0.035" half-height="0.45" euler="90 0 0"
+                base-color="#5a4632" roughness="0.8" />
+      <!-- carga: sacos e caixote -->
+      <Sphere translation="-0.28 0.98 0" radius="0.24" scale="1 0.72 1" base-color="#b8a06a" roughness="0.9" collider="none" />
+      <Sphere translation="0.16 0.96 0.05" radius="0.21" scale="1 0.7 1" base-color="#a8905a" roughness="0.9" collider="none" />
+      <Box translation="0.52 1.02 -0.05" half-size="0.14 0.14 0.14" base-color="#8a6a42" roughness="0.85" collider="none" />
+    </Composition>
+  </Prototype>
+
+  <!-- Estandarte do portão: mastro + travessa + pano. -->
+  <Prototype id="estandarte">
+    <Composition name="estandarte" body="fixed" collider="auto">
+      <Cylinder translation="0 2.3 0" radius="0.07" half-height="2.3"
+                texture-url="/assets/textures/wood_planks/albedo.ktx2"
+                texture-tile-size="2" base-color="#5f4a36" roughness="0.8" />
+      <Cylinder translation="0 4.35 0" radius="0.035" half-height="0.62" euler="90 0 0"
+                base-color="#4a3a28" roughness="0.8" collider="none" />
+      <Box translation="0 3.95 0.34" half-size="0.02 0.85 0.6" euler="0 0 2"
+           base-color="#8a2f2a" roughness="0.9" collider="none" />
+      <Sphere translation="0 4.66 0" radius="0.07" base-color="#c9a44f" metallic="0.7" roughness="0.4" collider="none" />
+    </Composition>
+  </Prototype>
+
+  <!-- Varal de roupa: dois pernos + corda + panos. -->
+  <Prototype id="varal-roupa">
+    <Composition name="varal-roupa" body="fixed" collider="auto">
+      <Cylinder translation="-2.1 1.7 0" radius="0.05" half-height="1.7"
+                texture-url="/assets/textures/wood_planks/albedo.ktx2"
+                texture-tile-size="2" base-color="#6b5138" roughness="0.85" />
+      <Cylinder translation="2.1 1.7 0" radius="0.05" half-height="1.7"
+                texture-url="/assets/textures/wood_planks/albedo.ktx2"
+                texture-tile-size="2" base-color="#6b5138" roughness="0.85" />
+      <Cylinder translation="0 1.82 0" radius="0.02" half-height="2.1" euler="0 0 90"
+                base-color="#4a3a28" roughness="0.9" collider="none" />
+      <Box translation="-1.1 1.42 0" half-size="0.42 0.62 0.02" euler="0 0 3"
+           base-color="#cfc5b0" roughness="0.95" collider="none" />
+      <Box translation="0 1.46 0" half-size="0.38 0.58 0.02" euler="0 0 -2"
+           base-color="#8fa0b0" roughness="0.95" collider="none" />
+      <Box translation="1.15 1.4 0" half-size="0.4 0.66 0.02" euler="0 0 4"
+           base-color="#b0a488" roughness="0.95" collider="none" />
+    </Composition>
+  </Prototype>
+
+  <!-- Canteiro: caixote de madeira com arbustos e flores. -->
+  <Prototype id="canteiro">
+    <Composition name="canteiro" body="fixed" collider="auto">
+      <Box translation="0 0.19 0" half-size="0.85 0.19 0.4"
+           texture-url="/assets/textures/wood_planks/albedo.ktx2"
+           texture-tile-size="1.4" base-color="#8a704e" roughness="0.85" />
+      <Box translation="0 0.32 0" half-size="0.78 0.05 0.34" base-color="#4a3a28" roughness="1" collider="none" />
+      <Sphere translation="-0.42 0.5 0" radius="0.2" base-color="#4e7a3a" roughness="0.9" collider="none" />
+      <Sphere translation="0 0.55 0.04" radius="0.23" base-color="#578741" roughness="0.9" collider="none" />
+      <Sphere translation="0.42 0.5 -0.03" radius="0.19" base-color="#497336" roughness="0.9" collider="none" />
+      <Sphere translation="-0.42 0.68 0.05" radius="0.06" base-color="#c94a44" emissive="#5a1410" roughness="0.6" collider="none" />
+      <Sphere translation="0.05 0.76 -0.06" radius="0.06" base-color="#d8c24a" emissive="#4a3a08" roughness="0.6" collider="none" />
+      <Sphere translation="0.44 0.66 0.02" radius="0.06" base-color="#c94a44" emissive="#5a1410" roughness="0.6" collider="none" />
+    </Composition>
+  </Prototype>
+
+  <!-- Cerca rústica: dois this + duas travessas, 3.5 m. -->
+  <Prototype id="cerca">
+    <Composition name="cerca" body="fixed" collider="auto">
+      <Cylinder translation="-1.62 0.55 0" radius="0.055" half-height="0.55"
+                texture-url="/assets/textures/wood_planks/albedo.ktx2"
+                texture-tile-size="2" base-color="#6b5138" roughness="0.9" />
+      <Cylinder translation="1.62 0.55 0" radius="0.055" half-height="0.55"
+                texture-url="/assets/textures/wood_planks/albedo.ktx2"
+                texture-tile-size="2" base-color="#6b5138" roughness="0.9" />
+      <Box translation="0 0.82 0" half-size="1.72 0.05 0.04"
+           texture-url="/assets/textures/wood_planks/albedo.ktx2"
+           texture-tile-size="2" base-color="#7d6248" roughness="0.9" />
+      <Box translation="0 0.45 0" half-size="1.72 0.05 0.04"
+           texture-url="/assets/textures/wood_planks/albedo.ktx2"
+           texture-tile-size="2" base-color="#745a42" roughness="0.9" />
+    </Composition>
+  </Prototype>
+
+  <!-- Leira de cultivo: canteiro de terra 15 m com 12 linhas de brotos. -->
+  <Prototype id="leira-cultivo">
+    <Composition name="leira-cultivo" collider="none">
+      <Box translation="0 0.07 0" half-size="7.5 0.07 0.5" base-color="#57432e" roughness="1" />
+      <Capsule translation="-6.6 0.3 0" radius="0.13" half-height="0.16" base-color="#4e7a3a" roughness="0.9" />
+      <Capsule translation="-5.4 0.3 0.06" radius="0.13" half-height="0.16" base-color="#578741" roughness="0.9" />
+      <Capsule translation="-4.2 0.3 -0.05" radius="0.13" half-height="0.16" base-color="#497336" roughness="0.9" />
+      <Capsule translation="-3 0.3 0.04" radius="0.13" half-height="0.16" base-color="#4e7a3a" roughness="0.9" />
+      <Capsule translation="-1.8 0.3 -0.04" radius="0.13" half-height="0.16" base-color="#578741" roughness="0.9" />
+      <Capsule translation="-0.6 0.3 0.05" radius="0.13" half-height="0.16" base-color="#497336" roughness="0.9" />
+      <Capsule translation="0.6 0.3 -0.03" radius="0.13" half-height="0.16" base-color="#4e7a3a" roughness="0.9" />
+      <Capsule translation="1.8 0.3 0.04" radius="0.13" half-height="0.16" base-color="#578741" roughness="0.9" />
+      <Capsule translation="3 0.3 -0.05" radius="0.13" half-height="0.16" base-color="#497336" roughness="0.9" />
+      <Capsule translation="4.2 0.3 0.03" radius="0.13" half-height="0.16" base-color="#4e7a3a" roughness="0.9" />
+      <Capsule translation="5.4 0.3 -0.04" radius="0.13" half-height="0.16" base-color="#578741" roughness="0.9" />
+      <Capsule translation="6.6 0.3 0.05" radius="0.13" half-height="0.16" base-color="#497336" roughness="0.9" />
+    </Composition>
+  </Prototype>
+
+  <!-- ============================================================
+     §1 FERIDA DO PORTÃO N — praça → portão (x ±3.5..14, z 6..36).
+     Corredor da via (|x| ≤ 2.4) e anel ±25 livres.
+     ============================================================ -->
+  <Group name="city.approach" translation="0 0 0">
+    <!-- Lado oeste: a feira do portão, encostada à capela. -->
+    <Use prototype="banca-feira" pos="-8 0 12" euler="0 78 0" name="feira-portao-a" />
+    <Use prototype="banca-feira" pos="-9 0 27.5" euler="0 96 0" name="feira-portao-b" />
+    <Entity translation="-6.2 0 31.8" transform="rotation: 0 25 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.8 0.8 0.8">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="-6.8 0 33.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <Use prototype="canteiro" pos="-12 0 7.5" euler="0 15 0" name="canteiro-portao-w" />
+    <!-- Lado este: carreta estacionada, varal, banco, canteiro. -->
+    <Use prototype="carreta" pos="7 0 24.5" euler="0 -18 0" name="carreta-portao" />
+    <Use prototype="varal-roupa" pos="9.5 0 31.5" euler="0 4 0" name="varal-portao" />
+    <Use prototype="canteiro" pos="11.5 0 9" euler="0 -25 0" name="canteiro-portao-e" />
+    <!-- Estandartes ladeando o vão do portão (interior). -->
+    <Use prototype="estandarte" pos="-4.6 0 35.4" euler="0 0 0" name="estandarte-portao-w" />
+    <Use prototype="estandarte" pos="4.6 0 35.4" euler="0 0 0" name="estandarte-portao-e" />
+    <!-- Mimo do portão E: canteiros de boas-vindas. -->
+    <Use prototype="canteiro" pos="30.5 0 5.5" euler="0 -70 0" name="canteiro-portao-leste" />
+    <Use prototype="canteiro" pos="30.5 0 -5.5" euler="0 -110 0" name="canteiro-portao-leste-2" />
+
+    <!-- ============================================================
+       §2 SOCALCOS DO NORTE — dois terraços de cultivo na subida do
+       portão N (z 92..122), entre o braço O e o ombro da capela.
+       Pads nivelam (estradas carvam DEPOIS dos pads — a artéria N
+       mantém a sua faixa). Leiras a E-W seguem as curvas de nível.
+       ============================================================ -->
+    <TerrainPad at="-18.5 107" size="26 32" falloff="10" corner-radius="8" height="47" />
+    <TerrainPad at="18 108" size="24 26" falloff="10" corner-radius="8" height="47.5" />
+    <!-- Terra batida dos canteiros. -->
+    <GroundDecal name="socalco-norte-w" at="-18.5 107" size="22 27" feather="3" noise="0.14"
+                 texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5"
+                 base-color="#8a7050" roughness="0.95" />
+    <GroundDecal name="socalco-norte-e" at="18 108" size="20 21" feather="3" noise="0.14"
+                 texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5"
+                 base-color="#8a7050" roughness="0.95" />
+    <!-- Leiras oeste (6) e este (5). -->
+    <Use prototype="leira-cultivo" pos="-18.5 0 96" name="leira-w1" />
+    <Use prototype="leira-cultivo" pos="-18.5 0 100.8" name="leira-w2" />
+    <Use prototype="leira-cultivo" pos="-18.5 0 105.6" name="leira-w3" />
+    <Use prototype="leira-cultivo" pos="-18.5 0 110.4" name="leira-w4" />
+    <Use prototype="leira-cultivo" pos="-18.5 0 115.2" name="leira-w5" />
+    <Use prototype="leira-cultivo" pos="-18.5 0 120" name="leira-w6" />
+    <Use prototype="leira-cultivo" pos="18 0 98" name="leira-e1" />
+    <Use prototype="leira-cultivo" pos="18 0 102.8" name="leira-e2" />
+    <Use prototype="leira-cultivo" pos="18 0 107.6" name="leira-e3" />
+    <Use prototype="leira-cultivo" pos="18 0 112.4" name="leira-e4" />
+    <Use prototype="leira-cultivo" pos="18 0 117.2" name="leira-e5" />
+    <!-- Espantalho no centro do campo oeste; medas nos cantos. -->
+    <Entity name="espantalho-socalco" translation="-18.5 0 108" transform="rotation: 0 140 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.6 1.7 0.3">
+      <GltfScene url="/assets/meshes/farm/scarecrow_lod0.glb" />
+    </Entity>
+    <Entity name="meda-socalco-w" translation="-9.5 0 119" transform="rotation: 0 40 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: cylinder; radius: 1.1; half-height: 0.9">
+      <GltfScene url="/assets/meshes/farm/hay_bale_lod0.glb" />
+    </Entity>
+    <Entity name="meda-socalco-e1" translation="24.5 0 119.5" transform="rotation: 0 -20 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: cylinder; radius: 1.1; half-height: 0.9">
+      <GltfScene url="/assets/meshes/farm/hay_bale_lod0.glb" />
+    </Entity>
+    <Entity name="meda-socalco-e2" translation="26.5 0 116" transform="rotation: 0 65 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: cylinder; radius: 1.1; half-height: 0.9">
+      <GltfScene url="/assets/meshes/farm/hay_bale_lod0.glb" />
+    </Entity>
+    <!-- Galinheiro na cerca do campo este. -->
+    <Entity name="galinheiro-socalco" translation="26 0 99" transform="rotation: 0 -78 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.2 1.0 0.9">
+      <GltfScene url="/assets/meshes/farm/chicken_coop_lod0.glb" />
+    </Entity>
+    <!-- Cercas: lado da estrada + cabeceiras (o lado do morro dissolve). -->
+    <Use prototype="cerca" pos="-8.2 0 94" euler="0 90 0" name="cerca-w-s1" />
+    <Use prototype="cerca" pos="-8.2 0 97.5" euler="0 90 0" name="cerca-w-s2" />
+    <Use prototype="cerca" pos="-8.2 0 101" euler="0 90 0" name="cerca-w-s3" />
+    <Use prototype="cerca" pos="-8.2 0 104.5" euler="0 90 0" name="cerca-w-s4" />
+    <Use prototype="cerca" pos="-8.2 0 108" euler="0 90 0" name="cerca-w-s5" />
+    <Use prototype="cerca" pos="-8.2 0 111.5" euler="0 90 0" name="cerca-w-s6" />
+    <Use prototype="cerca" pos="-8.2 0 115" euler="0 90 0" name="cerca-w-s7" />
+    <Use prototype="cerca" pos="-8.2 0 118.5" euler="0 90 0" name="cerca-w-s8" />
+    <Use prototype="cerca" pos="-28.8 0 94.2" euler="0 0 0" name="cerca-w-w1" />
+    <Use prototype="cerca" pos="-25.3 0 94.2" euler="0 0 0" name="cerca-w-w2" />
+    <Use prototype="cerca" pos="-28.8 0 119.8" euler="0 0 0" name="cerca-w-w3" />
+    <Use prototype="cerca" pos="-25.3 0 119.8" euler="0 0 0" name="cerca-w-w4" />
+    <Use prototype="cerca" pos="8.2 0 97" euler="0 -90 0" name="cerca-e-w1" />
+    <Use prototype="cerca" pos="8.2 0 100.5" euler="0 -90 0" name="cerca-e-w2" />
+    <Use prototype="cerca" pos="8.2 0 104" euler="0 -90 0" name="cerca-e-w3" />
+    <Use prototype="cerca" pos="8.2 0 107.5" euler="0 -90 0" name="cerca-e-w4" />
+    <Use prototype="cerca" pos="8.2 0 111" euler="0 -90 0" name="cerca-e-w5" />
+    <Use prototype="cerca" pos="8.2 0 114.5" euler="0 -90 0" name="cerca-e-w6" />
+    <Use prototype="cerca" pos="8.2 0 118" euler="0 -90 0" name="cerca-e-w7" />
+    <Use prototype="cerca" pos="27.8 0 97.2" euler="0 0 0" name="cerca-e-e1" />
+    <Use prototype="cerca" pos="24.3 0 97.2" euler="0 0 0" name="cerca-e-e2" />
+    <Use prototype="cerca" pos="27.8 0 118.8" euler="0 0 0" name="cerca-e-e3" />
+    <Use prototype="cerca" pos="24.3 0 118.8" euler="0 0 0" name="cerca-e-e4" />
+  </Group>
+  <!-- FIM city.approach -->
+</world>

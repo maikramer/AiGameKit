@@ -1,0 +1,45 @@
+<!--
+  QA DOS CENÁRIOS — mundo leve para validar world/scenes/ e o dressing da
+  cidade. Só o que estes ficheiros precisam de MENTIR: o MESMO `<Terrain>` (sem
+  ele não há assentamento), os trilhos, a camada de fantasia (os cenários
+  decoram sítios que ela criou), os quatro cenários e o distrito do mercado +
+  a vida da cidade (os toldos pendem de bancas que existem).
+
+  PORQUÊ UM MUNDO LEVE: a `world.xml` completa ocupa ~5,4 GB de VRAM ao
+  arrancar e há sempre outra engine (de outro agente) a competir pela placa.
+  Este arranca em ~2 GB e mostra exactamente o que esta ronda mudou.
+
+  AVISOS DO `analyze` SÃO ESPERADOS AQUI: o audit cruza as 25 quests com o
+  mundo e este mundo não traz os NPCs de quest (`world/ai/npcs.xml`) nem os
+  marcos dos biomas — sai um ⚠ por quest sem dador e por marco de `visit`
+  ausente. Serve para confirmar que o cruzamento funciona; a `world.xml`
+  completa é que tem de dar 0.
+
+  Correr com o protocolo de sessão (ver AGENTS.md):
+    viber session up (com o mundo qa-cenarios.xml)
+    viber debug lua (teleport para o sítio do cenário)
+    viber debug screenshot (com a porta da sessão no ambiente)
+-->
+<world clear-color="#8fc2ef">
+  <Include src="/world/environment.xml" />
+  <PlayerGLTF name="player" pos="0 150 0" model-url="/assets/meshes/characters/hero_lod0.glb">
+  </PlayerGLTF>
+  <SpawnGate target-entity="player" y-fallback="150" />
+  <Group name="world-base" translation="0 0 0">
+    <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="/assets/terrain/terrain.ahgt" skirt-width="0.015625" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92"
+           cliff-angle="50" sharpen="true" sharpen-angle="35" sharpen-seed="7"
+           cliff-streaks="0.55" cliff-moss="0.4" />
+    <NavMesh />
+  </Group>
+  <Include src="/world/paths/trails.xml" />
+  <Include src="/world/fantasy/alto-de-vael.xml" />
+  <Include src="/world/fantasy/grutas.xml" />
+  <Include src="/world/fantasy/cidadela-caida.xml" />
+  <Include src="/world/cities/discordia/market.xml" />
+  <Include src="/world/cities/discordia/life.xml" />
+  <Include src="/world/scenes/pilgrims-camp.xml" />
+  <Include src="/world/scenes/crystal-outpost.xml" />
+  <Include src="/world/scenes/battlefield.xml" />
+  <Include src="/world/scenes/smugglers.xml" />
+  <OrbitCamera distance="3.3" height="1.55" pitch="18.3" />
+</world>

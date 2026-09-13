@@ -121,8 +121,10 @@
         <ResourceNode kind="stone" yield="4" transform="pos: 0 0 0" />
       </GameObject>
     </StaticSpawner>
-    <!-- Outcrops cénicos no vale (fora da cidade) — colheitáveis (stone). -->
-    <StaticSpawner profile="tree" count="56" seed="402" region-min="-110 0 -110" region-max="110 0 110" avoid-water="1" align-to-terrain="1" ground-align="auto" scale-min="0.7" scale-max="1.4" avoid-overlaps="1" pick-strategy="random" footprint-radius="3.2" cluster-count="2" cluster-radius="20" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+    <!-- Outcrops cénicos no vale (fora da cidade) — colheitáveis (stone).
+         LOOP E: 7 colocados de 56 (occupancy 1516 — 2 clusters saturavam);
+         6 groves menores + attempts 96 + footprint 2.6. -->
+    <StaticSpawner profile="tree" count="72" seed="402" region-min="-110 0 -110" region-max="110 0 110" avoid-water="1" align-to-terrain="1" ground-align="auto" max-slope-attempts="96" scale-min="0.7" scale-max="1.4" avoid-overlaps="1" pick-strategy="random" footprint-radius="2.6" cluster-count="6" cluster-radius="24" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
       <GameObject role="static" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="36" lod-threshold-mid="110" />
         <ResourceNode kind="stone" yield="4" transform="pos: 0 0 0" />

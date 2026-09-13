@@ -24,40 +24,46 @@
           portals.xml), altura do peitoral da janela.
        ============================================================ -->
     <Group translation="26.35 0 8.44" body="fixed" collider="none">
-      <PointLight translation="0 1.9 0" color="0xffb264" intensity="75000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.9 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
     </Group>
     <Group translation="-17.44 0 22.47" body="fixed" collider="none">
-      <PointLight translation="0 1.9 0" color="0xffb264" intensity="75000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.9 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
     </Group>
     <Group translation="-20.47 0 -18.44" body="fixed" collider="none">
-      <PointLight translation="0 1.9 0" color="0xffb264" intensity="75000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.9 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
     </Group>
     <Group translation="-22.33 0 12.95" body="fixed" collider="none">
-      <PointLight translation="0 1.7 0" color="0xffb264" intensity="60000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.7 0" color="0xffb264" intensity="130000" radius="0.6" shadows="false" />
     </Group>
     <!-- Capela: velas na fachada + brilho interior pelos vitrais. -->
     <Group translation="7.46 0 22.46" body="fixed" collider="none">
-      <PointLight translation="0 2.1 0" color="0xffc890" intensity="55000" radius="0.4" shadows="false" />
+      <PointLight translation="0 2.1 0" color="0xffc890" intensity="165000" radius="0.4" shadows="false" />
     </Group>
     <Group translation="10.5 0 24" body="fixed" collider="none">
-      <PointLight translation="0 1.6 0" color="0xffc890" intensity="65000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.6 0" color="0xffc890" intensity="140000" radius="0.6" shadows="false" />
     </Group>
     <!-- Celeiro + lonhouse (as portas ficam viradas para fora). -->
     <Group translation="-26.11 0 30" body="fixed" collider="none">
-      <PointLight translation="0 1.9 0" color="0xffb264" intensity="65000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.9 0" color="0xffb264" intensity="140000" radius="0.6" shadows="false" />
     </Group>
     <Group translation="35.53 0 -37.53" body="fixed" collider="none">
-      <PointLight translation="0 1.9 0" color="0xffb264" intensity="75000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.9 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
+    </Group>
+    <!-- LOOP C: a FORJA era o único edifício sem luz própria — e é a única
+         que devia arder acesa toda a noite (a boca da fornalha). Luz quente
+         e ALTA na boca do portal (portal.village_forge, -30.47 -29.06). -->
+    <Group translation="-30.47 0 -29.06" body="fixed" collider="none">
+      <PointLight translation="0 1.6 0" color="0xff9030" intensity="160000" radius="0.6" shadows="false" />
     </Group>
 
     <!-- ============================================================
        §2 MERCADO — lanternas de banca (bancas a/b/c do market.xml).
        ============================================================ -->
     <Group translation="11 0 -15" body="fixed" collider="none">
-      <PointLight translation="0 2.1 0" color="0xffb264" intensity="75000" radius="0.6" shadows="false" />
+      <PointLight translation="0 2.1 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
     </Group>
     <Group translation="18.9 0 -20.3" body="fixed" collider="none">
-      <PointLight translation="0 2.1 0" color="0xffb264" intensity="75000" radius="0.6" shadows="false" />
+      <PointLight translation="0 2.1 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
     </Group>
 
     <!-- Braseiro do canto SO da praça: ancora o primeiro plano nas
@@ -70,14 +76,14 @@
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-9 0 -6" body="fixed" collider="none">
-      <PointLight translation="0 1.2 0" color="0xffa83a" intensity="100000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
     </Group>
 
     <!-- Lanterna do quadro de anúncios (5,-12.5, utilities.xml):pool de
        luz quente sobre o centro-sul da praça — ilumina os townsfolk que
        ali passeiam nos frames de noite (peça exploração R4). -->
     <Group translation="5 0 -11" body="fixed" collider="none">
-      <PointLight translation="0 2.3 0" color="0xffb264" intensity="60000" radius="0.7" shadows="false" />
+      <PointLight translation="0 2.3 0" color="0xffb264" intensity="130000" radius="0.7" shadows="false" />
     </Group>
 
     <!-- ============================================================
@@ -85,7 +91,7 @@
           aqui só a luz por cima).
        ============================================================ -->
     <Group translation="-6 0 4" body="fixed" collider="none">
-      <PointLight translation="0 1.8 0" color="0xffb264" intensity="60000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.8 0" color="0xffb264" intensity="130000" radius="0.6" shadows="false" />
     </Group>
 
     <!-- ============================================================
@@ -99,7 +105,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-2.9 0 34.5" body="fixed" collider="none">
-      <PointLight translation="0 1.2 0" color="0xffa83a" intensity="100000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
     </Group>
     <Entity translation="2.9 0 34.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
@@ -108,7 +114,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="2.9 0 34.5" body="fixed" collider="none">
-      <PointLight translation="0 1.2 0" color="0xffa83a" intensity="100000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
     </Group>
     <Entity translation="-2.9 0 -34.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
@@ -117,7 +123,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-2.9 0 -34.5" body="fixed" collider="none">
-      <PointLight translation="0 1.2 0" color="0xffa83a" intensity="100000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
     </Group>
     <Entity translation="2.9 0 -34.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
@@ -126,7 +132,7 @@
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="2.9 0 -34.5" body="fixed" collider="none">
-      <PointLight translation="0 1.2 0" color="0xffa83a" intensity="100000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
     </Group>
 
     <!-- ============================================================
@@ -137,7 +143,7 @@
       <PointLight translation="0 7.2 0" color="0xffa050" intensity="120000" radius="0.6" shadows="false" />
     </Group>
     <Group translation="-35 0 17" body="fixed" collider="none">
-      <PointLight translation="0 1.7 0" color="0xffaa55" intensity="60000" radius="0.6" shadows="false" />
+      <PointLight translation="0 1.7 0" color="0xffaa55" intensity="130000" radius="0.6" shadows="false" />
     </Group>
     <Group translation="35 0 17" body="fixed" collider="none">
       <PointLight translation="0 1.3 0" color="0x3f8fff" intensity="45000" radius="0.6" shadows="false" />
@@ -167,7 +173,7 @@
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <Group translation="-12 0 9" body="fixed" collider="none">
-      <PointLight translation="0 2.1 0" color="0xffb264" intensity="60000" radius="0.7" shadows="false" />
+      <PointLight translation="0 2.1 0" color="0xffb264" intensity="130000" radius="0.7" shadows="false" />
     </Group>
     <!-- R9: vinheta de 1.º plano CENTRO (no terço inferior do enquadramento
        canónico d11): caixote+barrel com lanterna — pool quente sob a câmara. -->

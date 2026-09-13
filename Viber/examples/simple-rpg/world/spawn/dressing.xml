@@ -5,8 +5,9 @@
 -->
 <world>
   <!--
-  Vestir o vale (fora da SpawnExclusion r=52): pedras do anel 70–160 e
-  prados de flores nas diagonais.
+  Vestir o vale (fora da SpawnExclusion r=52): pedras do anel 70–160,
+  afloramentos/troncos no miolo 52–110, tufos de erva em manchas e prados
+  de flores nas diagonais.
 
   Antes eram 88 cairns `form_stack` idênticos — o mesmo par de meshes repetido
   nos quatro quadrantes, e ainda por cima com o albedo lavanda que o paint
@@ -14,15 +15,25 @@
   sorteia entre quatro templates (dois cairns + pedregulho nu + pedregulho
   musgoso), o que dá silhuetas e tamanhos diferentes ao longo do anel.
 
+  LOOP E (anti-"campo vazio"): o log de spawn mostrava o anel a 18/18 por
+  quadrante mas os OUTCROPS de ring.xml a 7/1637 (occupancy) — a banda
+  52–110 entre a muralha e o anel era relva nua. Acrescentámos:
+  - afloramentos form_outcrop_2/5/8 em clusters (9 groves) COM collider
+    e nó de stone — "rock outcrops" de propósito na banda média;
+  - troncos caídos + arbustos de baga (farm kit) como path-side props;
+  - um tapete de TUFOS (grass_leafsLarge + plant_flatShort) com
+    cluster-count alto e raio curto — o relvado deixa de ser cor única
+    e ganha manchas, sem cobrir tudo (max-instances 1600).
+
   Os prados vivem nas DIAGONAIS (as artérias cardeais e o anel periurbano
   ficam livres) e usam o mesmo kit de vegetação dos biomas, com a fração de
   flor bem acima do tapete normal — manchas de cor a ver do portão, sem
   concorrer com a leitura das estradas.
 
   Cidade: cities/discordia/clutter.xml. Cristas: frontier/ridges.xml.
--->
+  -->
   <Group name="valley.dressing" translation="0 0 0">
-    <StaticSpawner profile="tree" count="18" seed="5110" region-min="70 0 -70" region-max="160 0 70" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="36" scale-min="0.7" scale-max="1.3" avoid-overlaps="1" footprint-radius="3.8" cluster-count="5" cluster-radius="28" max-distance="180" random-yaw="true" variation="rock" pick-strategy="random">
+    <StaticSpawner profile="tree" count="26" seed="5110" max-slope-attempts="96" region-min="70 0 -70" region-max="160 0 70" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="36" scale-min="0.7" scale-max="1.3" avoid-overlaps="1" footprint-radius="3.8" cluster-count="5" cluster-radius="28" max-distance="180" random-yaw="true" variation="rock" pick-strategy="random">
       <GameObject role="static">
         <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
       </GameObject>
@@ -34,9 +45,12 @@
       </GameObject>
       <GameObject role="static">
         <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_outcrop_5_lod0.glb" lod1-url="/assets/meshes/terrain/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/terrain/form_outcrop_5_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
       </GameObject>
     </StaticSpawner>
-    <StaticSpawner profile="tree" count="18" seed="5111" region-min="-70 0 -160" region-max="70 0 -70" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="36" scale-min="0.7" scale-max="1.3" avoid-overlaps="1" footprint-radius="3.8" cluster-count="5" cluster-radius="28" max-distance="180" random-yaw="true" variation="rock" pick-strategy="random">
+    <StaticSpawner profile="tree" count="26" seed="5111" max-slope-attempts="96" region-min="-70 0 -160" region-max="70 0 -70" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="36" scale-min="0.7" scale-max="1.3" avoid-overlaps="1" footprint-radius="3.8" cluster-count="5" cluster-radius="28" max-distance="180" random-yaw="true" variation="rock" pick-strategy="random">
       <GameObject role="static">
         <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
       </GameObject>
@@ -48,9 +62,12 @@
       </GameObject>
       <GameObject role="static">
         <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_outcrop_5_lod0.glb" lod1-url="/assets/meshes/terrain/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/terrain/form_outcrop_5_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
       </GameObject>
     </StaticSpawner>
-    <StaticSpawner profile="tree" count="18" seed="5112" region-min="-70 0 70" region-max="70 0 160" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="36" scale-min="0.7" scale-max="1.3" avoid-overlaps="1" footprint-radius="3.8" cluster-count="5" cluster-radius="28" max-distance="180" random-yaw="true" variation="rock" pick-strategy="random">
+    <StaticSpawner profile="tree" count="26" seed="5112" max-slope-attempts="96" region-min="-70 0 70" region-max="70 0 160" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="36" scale-min="0.7" scale-max="1.3" avoid-overlaps="1" footprint-radius="3.8" cluster-count="5" cluster-radius="28" max-distance="180" random-yaw="true" variation="rock" pick-strategy="random">
       <GameObject role="static">
         <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
       </GameObject>
@@ -62,9 +79,12 @@
       </GameObject>
       <GameObject role="static">
         <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_outcrop_5_lod0.glb" lod1-url="/assets/meshes/terrain/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/terrain/form_outcrop_5_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
       </GameObject>
     </StaticSpawner>
-    <StaticSpawner profile="tree" count="18" seed="5113" region-min="-160 0 -70" region-max="-70 0 70" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="36" scale-min="0.7" scale-max="1.3" avoid-overlaps="1" footprint-radius="3.8" cluster-count="5" cluster-radius="28" max-distance="180" random-yaw="true" variation="rock" pick-strategy="random">
+    <StaticSpawner profile="tree" count="26" seed="5113" max-slope-attempts="96" region-min="-160 0 -70" region-max="-70 0 70" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="36" scale-min="0.7" scale-max="1.3" avoid-overlaps="1" footprint-radius="3.8" cluster-count="5" cluster-radius="28" max-distance="180" random-yaw="true" variation="rock" pick-strategy="random">
       <GameObject role="static">
         <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
       </GameObject>
@@ -76,6 +96,9 @@
       </GameObject>
       <GameObject role="static">
         <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_outcrop_5_lod0.glb" lod1-url="/assets/meshes/terrain/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/terrain/form_outcrop_5_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
       </GameObject>
     </StaticSpawner>
     <!-- Prados de flores nas diagonais do vale (fora das artérias). O kit é o
@@ -85,5 +108,39 @@
     <Vegetation meshes="/assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/plant_flatShort.glb" density-per-km2="210000" seed="5211" region-min="-96 0 58" region-max="-58 0 96" scale-min="0.9" scale-max="1.6" max-slope-deg="22" avoid-water="1" avoid-road="1" avoid-overlaps="0" max-distance="148" cluster-count="10" cluster-radius="7" flower-near-radius="5.5" flower-density-ratio="0.55" plant-density-ratio="0.25" smart="1" wind="1" random-yaw="true" variation="foliage" />
     <Vegetation meshes="/assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/plant_flatShort.glb" density-per-km2="210000" seed="5212" region-min="58 0 -96" region-max="96 0 -58" scale-min="0.9" scale-max="1.6" max-slope-deg="22" avoid-water="1" avoid-road="1" avoid-overlaps="0" max-distance="148" cluster-count="10" cluster-radius="7" flower-near-radius="5.5" flower-density-ratio="0.55" plant-density-ratio="0.25" smart="1" wind="1" random-yaw="true" variation="foliage" />
     <Vegetation meshes="/assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/plant_flatShort.glb" density-per-km2="210000" seed="5213" region-min="-96 0 -96" region-max="-58 0 -58" scale-min="0.9" scale-max="1.6" max-slope-deg="22" avoid-water="1" avoid-road="1" avoid-overlaps="0" max-distance="148" cluster-count="10" cluster-radius="7" flower-near-radius="5.5" flower-density-ratio="0.55" plant-density-ratio="0.25" smart="1" wind="1" random-yaw="true" variation="foliage" />
+    <!-- ============================================================
+         LOOP E — banda média 52–110: o que faltava entre a muralha e o
+         anel de pedras. Tudo com SpawnExclusion r=52 + avoid-road a
+         limpar o miolo e as artérias; clusters fazem o resto (nada de
+         pingo uniforme).
+         ============================================================ -->
+    <!-- Afloramentos de rocha (form_outcrop) em groves COM collider e nó de
+         stone — os "rock outcrops" da banda média. -->
+    <StaticSpawner profile="tree" count="30" seed="5310" region-min="-150 0 -150" region-max="150 0 150" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="38" max-slope-attempts="96" scale-min="0.8" scale-max="1.4" avoid-overlaps="1" footprint-radius="3" cluster-count="12" cluster-radius="16" max-distance="210" scale-axis-min="0.9" scale-axis-max="1.15" random-yaw="true" variation="rock" pick-strategy="random">
+      <GameObject role="static" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/terrain/form_outcrop_2_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_outcrop_2_lod0.glb" lod1-url="/assets/meshes/terrain/form_outcrop_2_lod1.glb" lod2-url="/assets/meshes/terrain/form_outcrop_2_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+        <ResourceNode kind="stone" yield="3" transform="pos: 0 0 0" />
+      </GameObject>
+      <GameObject role="static" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/terrain/form_outcrop_8_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_outcrop_8_lod0.glb" lod1-url="/assets/meshes/terrain/form_outcrop_8_lod1.glb" lod2-url="/assets/meshes/terrain/form_outcrop_8_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+        <ResourceNode kind="stone" yield="3" transform="pos: 0 0 0" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- Troncos caídos + arbustos de baga — path-side props que dão escala
+         e "já aqui passou gente". Tronco: collider + wood; arbusto: cenário. -->
+    <StaticSpawner profile="foliage" count="64" seed="5311" region-min="-150 0 -150" region-max="150 0 150" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="30" max-slope-attempts="96" scale-min="0.8" scale-max="1.3" avoid-overlaps="1" footprint-radius="1.8" cluster-count="12" cluster-radius="16" max-distance="210" random-yaw="true" variation="foliage" pick-strategy="random">
+      <GameObject role="static" destructible="popup-text: Wood; popup-color: #8b4513; preset: leaves; burst-count: 16; hits: 2; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 8; shake-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/farm/fallen_log_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/farm/fallen_log_lod0.glb" lod1-url="/assets/meshes/farm/fallen_log_lod1.glb" lod2-url="/assets/meshes/farm/fallen_log_lod2.glb" lod-threshold-near="36" lod-threshold-mid="100" />
+        <ResourceNode kind="wood" yield="2" transform="pos: 0 0 0" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/farm/berry_bush_lod0.glb" lod1-url="/assets/meshes/farm/berry_bush_lod1.glb" lod2-url="/assets/meshes/farm/berry_bush_lod2.glb" lod-threshold-near="34" lod-threshold-mid="95" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- Tapete de TUFOS do vale: grass_leafsLarge + plant_flatShort em
+         manchas (cluster-count 110 × raio 10 m — nem tapete uniforme, nem
+         nada). A exclusão r=52 e o avoid-road limpam o miolo e as fitas;
+         o prado de flores das diagonais continua a ser a cor. -->
+    <Vegetation meshes="/assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/plant_flatTall.glb" density-per-km2="26000" seed="5312" region-min="-118 0 -118" region-max="118 0 118" scale-min="0.7" scale-max="1.4" max-slope-deg="18" avoid-water="1" avoid-road="1" avoid-overlaps="0" max-distance="200" max-instances="1600" cluster-count="110" cluster-radius="10" random-yaw="true" variation="foliage" smart="1" wind="1" />
   </Group>
 </world>

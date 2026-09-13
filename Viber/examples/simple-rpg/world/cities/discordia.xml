@@ -30,7 +30,14 @@
     <Include src="/world/cities/discordia/portals.xml" />
     <Include src="/world/cities/discordia/skirts.xml" />
     <Include src="/world/cities/discordia/clutter.xml" />
+    <!-- Aproches (loop D-terreno): feira/varal/estandartes no eixo
+         praça→portão N + socalcos de cultivo na subida norte. Depois do
+         clutter: pendura sobre a cidade já vestida. -->
+    <Include src="/world/cities/discordia/approach.xml" />
     <Include src="/world/cities/discordia/grid.xml" />
+    <!-- Vida da cidade (estandartes/lanternas/miudezas): POR ÚLTIMO, para pendurar
+       sobre as bancas e as paredes que os distritos acima já levantaram. -->
+    <Include src="/world/cities/discordia/life.xml" />
   </Group>
   <!-- FIM city -->
 </world>
