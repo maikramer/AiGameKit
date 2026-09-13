@@ -1056,6 +1056,18 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
     help="Força clips procedurais mesmo em humanoides (sem retarget Quaternius).",
 )
 @click.option(
+    "--facing",
+    "facing",
+    default="auto",
+    show_default=True,
+    type=click.Choice(["auto", "+x", "-x", "+z", "-z"], case_sensitive=False),
+    help=(
+        "Eixo glTF em que o focinho aponta HOJE no ficheiro de entrada "
+        "(caminho procedural). ``auto`` = eixo comprido da bbox + cauda "
+        "levandada; se o gait sair andando para trás, force o eixo certo."
+    ),
+)
+@click.option(
     "--anim-pack",
     "anim_pack",
     default="quaternius",
@@ -1079,6 +1091,7 @@ def cmd_game_pack(
     force_preset: bool,
     procedural: bool,
     anim_pack: str,
+    facing: str = "auto",
 ) -> None:
     """Gera todas as animações de um rig num único comando.
 
@@ -1145,7 +1158,19 @@ def cmd_game_pack(
             return
         console.print("[yellow]Fallback:[/yellow] a gerar clips procedurais.")
 
-    # Caminho procedural (criaturas / fallback): renomear chains e aplicar preset.
+    # Caminho procedural (criaturas / fallback): canonicalizar a frente do
+    # modelo (quadrúpedes chegam "de lado" do Hunyuan3D e o classificador/gait
+    # assumem lateral=X), renomear chains e aplicar preset.
+    facing_info = bpy_ops.canonicalize_creature_facing(arm_name, facing=facing)
+    if facing_info.get("rotated_deg"):
+        console.print(
+            f"[cyan]Facing:[/cyan] modelo rodado {facing_info['rotated_deg']:+.0f}° "
+            f"para a frente canónica glTF (+Z) — método [dim]{facing_info['method']}[/dim]. "
+            "Forçar com --facing +x|-x|+z|-z se o auto falhar."
+        )
+    elif facing_info.get("method") == "already-canonical":
+        console.print("[dim]Facing: já canónico (glTF +Z).[/dim]")
+
     bpy_ops.rename_bones_from_chains(arm_name)
 
     steps = _PRESETS[preset.lower()]

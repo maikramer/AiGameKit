@@ -658,8 +658,291 @@ def _classify_bone_chains(armature_name: str) -> dict[str, list[str]]:
 
     # Pós-classificação: dedos (filhos do hand) e acessórios de cabeça (filhos
     # de Head que não pescoço). Estes não tinham chain própria e ficavam rígidos.
+    chains = _recover_quadruped_chains(arm, chains)
     _extract_fingers(arm, chains)
     _extract_head_accessories(arm, chains)
+
+    return chains
+
+
+def canonicalize_creature_facing(armature_name: str, facing: str = "auto") -> dict[str, Any]:
+    """Rodar a cena para a frente canónica glTF (+Z ⇒ −Y no Blender).
+
+    O classificador de cadeias e o gerador de gait assumem o modelo de frente
+    para −Y do Blender (lateral = X). Criaturas do Hunyuan3D chegam
+    frequentemente "de lado" (focinho em ±X do glTF) — as patas saem
+    embaralhadas (cauda vira perna, pata sem classe nenhuma) e o walk anima
+    1 pata só (lobo/escorpião 2026-09). Roda edit bones + mesh data (não os
+    objectos) para `bone.head_local` — espaço que o classificador lê — ver o
+    modelo canónico; o GLB exportado já sai com a frente certa e não precisa
+    de bake de yaw a jusante.
+
+    Args:
+        armature_name: nome do objecto armature.
+        facing: eixo glTF em que o focinho aponta HOJE no ficheiro de entrada:
+            ``+x``/``-x``/``+z``/``-z``, ou ``auto`` — eixo horizontal
+            comprido da bbox e sinal pela cauda levantada (a cadeia cuja
+            ponta fica na zona mais alta do corpo aponta para trás).
+
+    Returns:
+        Dict com ``facing`` (efectiva), ``rotated_deg`` e ``method``
+        (``already-canonical``/``explicit``/``auto``).
+    """
+    bpy = _bpy()
+    import math
+
+    from mathutils import Matrix, Vector
+
+    arm = bpy.data.objects.get(armature_name)
+    if arm is None or arm.type != "ARMATURE":
+        return {"facing": facing, "rotated_deg": 0.0, "method": "no-armature"}
+
+    meshes = [o for o in bpy.data.objects if o.type == "MESH" and o.data]
+
+    def _world_bbox() -> tuple[Vector, Vector]:
+        # bound_box pode vir stale/normalizado com modifier de armature;
+        # ler os vértices do mesh data (foreach_get, O(1) em bpy).
+        import numpy as np
+
+        mn = np.array([1e9, 1e9, 1e9])
+        mx = np.array([-1e9, -1e9, -1e9])
+        for mo in meshes:
+            n = len(mo.data.vertices)
+            if n < 1000:
+                continue  # helpers de debug (icospheres do rig) não são o corpo
+            co = np.empty(n * 3, dtype=np.float32)
+            mo.data.vertices.foreach_get("co", co)
+            pts = co.reshape(-1, 3)
+            mn = np.minimum(mn, pts.min(axis=0))
+            mx = np.maximum(mx, pts.max(axis=0))
+        return Vector(mn.tolist()), Vector(mx.tolist())
+
+    theta = 0.0
+    method = "explicit"
+    f = (facing or "auto").lower()
+    if f in ("+y", "-y", "y"):
+        # Eixo vertical glTF: nada a fazer, mas aceita por conveniência.
+        return {"facing": f, "rotated_deg": 0.0, "method": "already-canonical"}
+    if f in ("+x", "-x", "+z", "-z"):
+        # glTF (x,y,z) → Blender (x,-z,y): frente canónica = Blender −Y.
+        # glTF+z (Blender −y) já é canónico → 0; glTF−z (Blender +y) → 180;
+        # glTF+x (Blender +x) → −90; glTF−x → +90.
+        theta = {"+x": -90.0, "-x": 90.0, "+z": 0.0, "-z": 180.0}[f]
+    else:
+        mn, mx = _world_bbox()
+        span_x, span_y = mx.x - mn.x, mx.y - mn.y
+        if span_y >= span_x:
+            # Já comprido no eixo da frente (±Y): canónico para classificação.
+            return {"facing": "-y", "rotated_deg": 0.0, "method": "already-canonical"}
+        method = "auto"
+        theta = -90.0  # default: focinho em +X do Blender → −Y
+        # Sinal pela cauda levantada: cadeia linear cuja ponta fica na zona
+        # mais alta do corpo aponta para TRÁS.
+        pbones = arm.pose.bones
+        if pbones:
+            zs = [pb.bone.head_local.z for pb in pbones] + [pb.bone.tail_local.z for pb in pbones]
+            z0, z1 = min(zs), max(zs)
+
+            def _chain_dir(start_pb: Any) -> Vector | None:
+                cursor = start_pb
+                while len(cursor.children) == 1:
+                    cursor = cursor.children[0]
+                d = Vector(cursor.bone.tail_local) - Vector(start_pb.bone.head_local)
+                return d if d.length > 1e-4 else None
+
+            best_rise = 0.0
+            back_dir = 0.0
+            for pb in pbones:
+                parent = pb.parent
+                if parent is not None and len(parent.children) != 1:
+                    continue  # só inícios de cadeia (raiz ou ramificação)
+                d = _chain_dir(pb)
+                if d is None:
+                    continue
+                cursor = pb
+                while len(cursor.children) == 1:
+                    cursor = cursor.children[0]
+                rise = max(cursor.bone.tail_local.z, cursor.bone.head_local.z) - pb.bone.head_local.z
+                if rise > 0.10 * max(z1 - z0, 1e-6) and rise > best_rise:
+                    best_rise = rise
+                    back_dir = d.x  # componente no eixo comprido (X)
+            if back_dir > 0:  # cauda aponta +X ⇒ focinho em −X
+                theta = 90.0
+
+    if abs(theta) < 1e-6:
+        return {"facing": "-y", "rotated_deg": 0.0, "method": method}
+
+    rot = Matrix.Rotation(math.radians(theta), 4, "Z")
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    for eb in arm.data.edit_bones:
+        eb.transform(rot, roll=True)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for mo in meshes:
+        mo.data.transform(rot)
+
+    return {"facing": "-y", "rotated_deg": theta, "method": method}
+
+
+def _recover_quadruped_chains(arm: Any, chains: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Pós-passe funcional para rigs de quadrúpedes auto-gerados.
+
+    O layout primário assume membros laterais óbvios (humanoides/asas). Patas
+    de quadrúpedes nascem quase na linha média (dianteiras saem do tronco) e
+    os rigs procedurais usam nomes genéricos (`bone_25..28`, dedos como
+    `RightHandFinger*`) — as cadeias caem em tail/neck/wing erradas ou ficam
+    sem classe nenhuma, e o gait anima 1 pata só (lobo/escorpião 2026-09).
+
+    Teste funcional, não anatómico: cadeia linear cuja PONTA chega perto do
+    chão = pata (par pelo sinal lateral X); ponta que sobe ao topo = cauda;
+    ponta a meia altura à frente (quando falta neck) = pescoço. Ordena as
+    patas por proximidade à raiz (traseiras primeiro) para o trot diagonal
+    de `_gait_phases`.
+
+    Assume lateral = X (modelo canónico; correr
+    [`canonicalize_creature_facing`][] antes em rigs "de lado").
+    """
+    from mathutils import Vector
+
+    pbones = arm.pose.bones
+    if not pbones:
+        return chains
+
+    root = pbones[0]
+
+    def _linear(start_pb: Any) -> tuple[list[str], Any]:
+        chain = [start_pb.name]
+        cursor = start_pb
+        while len(cursor.children) == 1:
+            cursor = cursor.children[0]
+            chain.append(cursor.name)
+        return chain, cursor
+
+    def _flat() -> set[str]:
+        out: set[str] = set()
+        for v in chains.values():
+            if isinstance(v, list) and v and isinstance(v[0], str):
+                out.update(v)
+            elif isinstance(v, list):
+                for sub in v:
+                    if isinstance(sub, list):
+                        out.update(sub)
+        return out
+
+    # Chão pelas CABEÇAS (juntas — as caudas das patas mergulham abaixo do
+    # chão visual); teto por cabeças+caudas (ponta da cauda estende acima).
+    z_floor = min(pb.bone.head_local.z for pb in pbones)
+    z_ceil = max(
+        z for pb in pbones for z in (pb.bone.head_local.z, pb.bone.tail_local.z)
+    )
+    h = max(z_ceil - z_floor, 1e-6)
+    ground_z = z_floor + max(0.12 * h, 0.02)
+    top_z = z_ceil - 0.10 * h
+
+    legs: dict[str, list[list[str]]] = {"r": [], "l": []}
+    tail_best: tuple[float, list[str]] | None = None
+    neck_best: tuple[float, list[str]] | None = None
+    consumed: dict[str, str] = {}  # key anatómica → novo destino
+
+    def _tip_z(names: list[str]) -> float | None:
+        tip = pbones.get(names[-1])
+        if tip is None:
+            return None
+        return max(tip.bone.tail_local.z, tip.bone.head_local.z)
+
+    # 1) Multi-pata existente (legs_r/legs_l): manter o que chega ao chão,
+    #    expulsar caudas classificadas como perna pelo layout humanoide.
+    for side in ("r", "l"):
+        for sub in chains.get(f"legs_{side}", []):
+            if not sub or _tip_z(list(sub)) is None:
+                continue
+            tz = _tip_z(list(sub)) or 0.0
+            if tz <= ground_z:
+                legs[side].append([str(b) for b in sub])
+            elif tz >= top_z:
+                start = pbones.get(sub[0])
+                rise = tz - (start.bone.head_local.z if start else 0.0)
+                if tail_best is None or rise > tail_best[0]:
+                    tail_best = (rise, [str(b) for b in sub])
+
+    seen = {frozenset(c) for lst in legs.values() for c in lst}
+
+    # 2) Cadeias roubadas por chaves anatómicas + as que nunca receberam classe.
+    stolen_keys = ("neck", "tail", "wing_r", "wing_l", "leg_r", "leg_l")
+    candidates: list[tuple[list[str], str]] = []  # (chain, origem)
+    for key in stolen_keys:
+        v = chains.get(key)
+        if isinstance(v, list) and v and isinstance(v[0], str):
+            start = pbones.get(v[0])
+            if start is not None:
+                chain, _tip = _linear(start)
+                if frozenset(chain) not in seen:
+                    candidates.append((chain, key))
+    classified = _flat()
+    for pb in pbones:
+        if pb.name in classified:
+            continue
+        parent = pb.parent
+        if parent is None or parent.name in classified:
+            chain, _tip = _linear(pb)
+            if len(chain) >= 3 and frozenset(chain) not in seen:
+                candidates.append((chain, "unclassified"))
+
+    # 3) Destino funcional de cada cadeia: chão = pata, topo = cauda,
+    #    meia altura órfã = pescoço/cabeça disfarçado.
+    for chain, origin in candidates:
+        tz = _tip_z(chain)
+        start = pbones.get(chain[0])
+        if tz is None or start is None:
+            continue
+        tip = pbones.get(chain[-1])
+        if tz <= ground_z:
+            lateral = tip.bone.head_local.x if abs(tip.bone.head_local.x) > 0.02 else start.bone.head_local.x
+            legs["r" if lateral > 0 else "l"].append(chain)
+            seen.add(frozenset(chain))
+            if origin in stolen_keys:
+                consumed[origin] = "legs"
+        elif tz >= top_z:
+            rise = tz - start.bone.head_local.z
+            if tail_best is None or rise > tail_best[0]:
+                tail_best = (rise, chain)
+            if origin in stolen_keys:
+                consumed[origin] = "tail"
+        elif origin == "neck" or (
+            origin == "wing_l" and (chains.get("neck") is None or consumed.get("neck") == "legs")
+        ):
+            if neck_best is None or tz > neck_best[0]:
+                neck_best = (tz, chain)
+            consumed[origin] = "neck"
+
+    # 4) Aplicar: limpar as chaves cujo conteúdo mudou de destino, escrever
+    #    legs (traseiras primeiro = fases do trot diagonal) e cauda/pescoço.
+    if legs["r"] or legs["l"] or tail_best is not None:
+        for origin in consumed:
+            chains.pop(origin, None)
+        root_z = Vector(root.bone.head_local)
+        for side in ("r", "l"):
+            uniq: list[list[str]] = []
+            seen_side: set[frozenset] = set()
+            for c in legs[side]:
+                fs = frozenset(c)
+                if fs not in seen_side:
+                    seen_side.add(fs)
+                    uniq.append(c)
+            uniq.sort(key=lambda c: (Vector(pbones.get(c[0]).bone.head_local) - root_z).length)
+            chains[f"legs_{side}"] = uniq
+            if uniq:
+                chains[f"leg_{side}"] = list(uniq[0])
+            else:
+                chains.pop(f"leg_{side}", None)
+        if tail_best is not None:
+            chains["tail"] = tail_best[1]
+        if neck_best is not None and not chains.get("neck"):
+            chains["neck"] = neck_best[1]
+        # O braço humanoide que sobrou (wing sem ser pata/cauda/pescoço) não
+        # deve levar flap de asa ao pescoço/cabeça do quadrúpede.
+        if chains.get("neck") and chains.get("wing_l") and set(chains["wing_l"]) == set(chains["neck"]):
+            chains.pop("wing_l")
 
     return chains
 
@@ -774,6 +1057,11 @@ def rename_bones_from_chains(armature_name: str) -> dict[str, list[str]]:
             if bone is None:
                 continue
             if old_name.startswith("bone_"):
+                # Colisão (nome canónico já ocupado por outra cadeia — ex. 2.ª
+                # pata num quadrúpede): preservar o nome original; o runtime
+                # consome clips, não nomes canónicos.
+                if new_name in arm.pose.bones:
+                    continue
                 bone.name = new_name
                 renamed[old_name] = new_name
 

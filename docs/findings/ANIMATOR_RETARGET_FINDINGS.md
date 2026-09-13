@@ -160,6 +160,59 @@ raiz: canonicalizar yaw no caminho creature (game-pack/rig: rodar o root para a
 cadeia dos braços/dianteira ficar em +Z, detetada por FK) ou re-aplicar o bake
 pós-LOD; guard barato: regra `check glb` “frente = +Z” para `category: creature`.
 
+## Creature procedural: gait de 1 pata (rig auto-gerado de lado + classificador), 2026-09-13
+
+Com o yaw resolvido, o lobo ainda animava **1 pata só**. Causa dupla, ambas no
+`Animator3D`:
+
+1. **Rig SkinTokens com papéis embaralhados** — o auto-rig do quadrúpede mapeia
+   a cauda na cadeia `thigh_l` (que SOBE até y≈0.77), a pata traseira esquerda
+   numa cadeia genérica `bone_25..28`, o pescoço/cabeça em `clavicle_l→hand_l`
+   e uma pata dianteira em `RightHandFinger1..4`.
+2. **`_classify_bone_chains` assume lateral = X do Blender** — com o modelo
+   "de lado" (frente em ±X), a classificação primária produziu `leg_l` = cauda,
+   `wing_l` = coluna e ZERO patas reais → `_locomotion_cycle` (que já suporta
+   trot multi-pata via `legs_r/legs_l` e `_gait_phases`) só animava o que
+   recebeu: 1 pata + cauda.
+
+**Fix na raiz (Animator3D, caminho procedural do `game-pack`):**
+
+- `bpy_ops.canonicalize_creature_facing(arm, facing)` — roda edit bones + mesh
+  data (não objectos: o classificador lê `bone.head_local`, espaço do armature)
+  para a frente canónica glTF +Z. `--facing auto` = eixo comprido da bbox
+  (vértices via `foreach_get`; `bound_box` vem lixo com modifier) + sinal pela
+  cauda levantada; `--facing +x|-x|+z|-z` força. Cuidado: rigs destes têm
+  **Icosphere de debug** no GLB — ignorar meshes <1000 verts na bbox.
+- `_recover_quadruped_chains` (pós-passe na classificação) — teste funcional:
+  cadeia linear cuja ponta chega ao chão = pata (par por sinal lateral X,
+  ordena traseiras primeiro → trot diagonal); ponta no topo = cauda (expulsa
+  de `legs_*`); ponta a meia altura órfã = pescoço. O chão mede-se pelas
+  **cabeças** dos ossos — as caudas das patas mergulham abaixo do chão visual.
+- `rename_bones_from_chains` ganhou guarda de colisão (2.ª pata não pode ser
+  renomeada para `thigh_r` já ocupado — Blender criaria `thigh_r.001`).
+
+Regenerado com `animator3d game-pack <id>_rigged.glb <id>_rigged_animated.glb
+--preset creature --procedural --force-preset --clips
+"idle,walk,run,jump,attack,hit,death,roar" --facing auto` (8.9s/4.3s por asset).
+Resultado: 4 cadeias com swing ~22–25° + joelho/tornozelo/dedos, cauda suave;
+GLB sai canónico nativamente (sem bake a jusante). Os LODs públicos
+(manipulados só por JSON) receberam os clips via **swap de canais por nome de
+osso** — legal porque a rotação fica acima do esqueleto inteiro nos dois
+ficheiros (nó raiz vs rest aplicado), logo os canais locais são idênticos
+(FK de validação: Δ = 0.000 cm em todas as juntas). Aliases de nomes:
+`Tail4/5→ball_l_4/5` (lobo), `bone_12/13/14→spine_01.001/spine_02/spine_03`
+(escorpião). `_intermediate/*_rigged_animated.glb` antigos em `/tmp/*.bak`.
+
+Resíduo in-game ("andar de caranguejo") após o gait certo: deslize de lado nas
+**viragens do wander** (re-alvo a cada ~3 s; corpo ainda a virar enquanto as
+4 patas marcham — antes, 3 patas congeladas mascaravam o deslize). Mitigação
+nos scripts (`wolf.lua`/`scorpion.lua`): `viber.set_locomotion(walk, run, 9.0)`
+(pivô mais rápido que o default 7 rad/s) + steering do alvo (6 amostras de
+`viber.wander_target`, escolhe a mais alinhada com o rumo atual). Chase medido
+pelo bridge: yaw−rumo = 0°. Se ainda houver caranguejo no **browser** durante
+combate, é o `strafe: true` do `creature-defs.ts` (orbita o jogador de lado —
+comportamento desenhado, não bug de asset).
+
 ---
 
 ## Motion3D (HML22) → SkinTokens: o rest do source manda
