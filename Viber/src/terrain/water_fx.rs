@@ -304,9 +304,7 @@ fn water_contact_system(
             .water
             .iter()
             .zip(bounds.iter())
-            .filter(|(_, (min, max))| {
-                p.x >= min.x && p.x <= max.x && p.y >= min.y && p.y <= max.y
-            })
+            .filter(|(_, (min, max))| p.x >= min.x && p.x <= max.x && p.y >= min.y && p.y <= max.y)
             .filter_map(|(body, _)| body.surface_y_at(p))
             .fold(None::<f32>, |acc, y| Some(acc.map_or(y, |a| a.max(y))));
         let Some(surface_y) = surface else {
@@ -339,12 +337,7 @@ fn water_contact_system(
             contact.since_ripple = 0.0;
         } else if !wet && contact.wet {
             let at = Vec3::new(pos.x, surface_y, pos.z);
-            spawn_burst(
-                &mut commands,
-                &burst_spec("splash"),
-                at,
-                12,
-            );
+            spawn_burst(&mut commands, &burst_spec("splash"), at, 12);
         } else if wet && planar_speed > WAKE_MIN_SPEED {
             contact.since_ripple += planar_speed * dt;
             if contact.since_ripple >= RIPPLE_INTERVAL {

@@ -740,7 +740,9 @@ pub fn publish_ui_script_view(
                 .or_else(|| bar.map(|bar| bar.value))
                 .or_else(|| cooldown.map(|cd| cd.value))
                 .unwrap_or(0.0);
-            let visible = visibility.get(entity).is_ok_and(|v| *v != Visibility::Hidden);
+            let visible = visibility
+                .get(entity)
+                .is_ok_and(|v| *v != Visibility::Hidden);
             let checked = check.is_some_and(|check| check.checked);
             let disabled = disabled.get(entity).unwrap_or(false);
             if elements.contains_key(id.as_str()) {

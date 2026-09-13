@@ -311,7 +311,6 @@ mod tests {
         }
     }
 
-
     #[derive(Debug)]
     struct Slope;
 
@@ -388,7 +387,10 @@ mod tests {
         let field = super::super::field::VoxelField::new(mods, 256.0, 64.0);
         // Under the crown: air, then the flat ground under the walker.
         let top = field.surface_top(&Flat, 0.0, 0.0);
-        assert!(top > 14.0, "the band must stand well over the ground: {top}");
+        assert!(
+            top > 14.0,
+            "the band must stand well over the ground: {top}"
+        );
         let floor = field
             .surface_below(&Flat, 0.0, 0.0, top - 1.0)
             .expect("ground under the span");
@@ -417,7 +419,10 @@ mod tests {
                 span: Some(span),
                 ..ArchSpec::default()
             };
-            assert!(spec.build(&Flat).is_empty(), "span {span} must build nothing");
+            assert!(
+                spec.build(&Flat).is_empty(),
+                "span {span} must build nothing"
+            );
         }
         let no_height = ArchSpec {
             height: 0.0,

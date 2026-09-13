@@ -695,11 +695,8 @@ pub fn weights_at(
     // é o colar DEBAIXO da pedra, não a encosta toda.) Largura ao vivo:
     // `tuning.gravel_shoulder`.
     let tuning = &ctx.params.tuning;
-    let gravel = smoothstep(
-        rock0 - tuning.gravel_shoulder,
-        rock0 - 0.005,
-        slope,
-    ) * (1.0 - stone)
+    let gravel = smoothstep(rock0 - tuning.gravel_shoulder, rock0 - 0.005, slope)
+        * (1.0 - stone)
         * (1.0 - snow);
     let patch = climate.patchiness * tuning.patchiness;
     // Manchas mais RARAS (limiares subidos em r7): a 0.57–0.66 o fbm abria
@@ -1233,7 +1230,9 @@ pub fn generate_chunk_splats(
             // Idem para a PRAIA: a areia da margem perdia a eleição em
             // chunks de relva e a praia quebrava em costuras retas de chunk.
             let has_shore = weights.iter().any(|w| w[SLOT_SAND] >= 0.25);
-            out.push(pack_chunk_splat(&weights, size, has_core, has_bed, has_shore));
+            out.push(pack_chunk_splat(
+                &weights, size, has_core, has_bed, has_shore,
+            ));
         }
     }
     out
@@ -1243,7 +1242,11 @@ pub fn generate_chunk_splats(
 /// shared patcher; ClampToEdge — UVs are 0..1 over the chunk). `plane` 0/1:
 /// os canais RGBA do plano cobrem os slots 0–3 / 4–7 do [`ChunkSplat`].
 pub fn chunk_splat_plane_image(splat: &ChunkSplat, plane: usize) -> Image {
-    let rgba = if plane == 0 { &splat.rgba } else { &splat.rgba2 };
+    let rgba = if plane == 0 {
+        &splat.rgba
+    } else {
+        &splat.rgba2
+    };
     let mut image = Image::new(
         Extent3d {
             width: splat.size,

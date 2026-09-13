@@ -92,7 +92,10 @@ fn region_at<'a>(regions: &'a BiomeRegions, p: Vec2) -> Option<&'a BiomeRegionDa
 }
 
 /// Escolhe os pads que ganham probe: dentro de região com tint, espaçados.
-fn pick_pads<'a>(pads: &'a [ResolvedPad], regions: &BiomeRegions) -> Vec<(&'a ResolvedPad, [f32; 3])> {
+fn pick_pads<'a>(
+    pads: &'a [ResolvedPad],
+    regions: &BiomeRegions,
+) -> Vec<(&'a ResolvedPad, [f32; 3])> {
     let mut picked: Vec<(&ResolvedPad, [f32; 3])> = Vec::new();
     for pad in pads {
         if picked.len() >= MAX_PROBES {
@@ -119,11 +122,8 @@ fn pick_pads<'a>(pads: &'a [ResolvedPad], regions: &BiomeRegions) -> Vec<(&'a Re
 /// ([`crate::ibl`]); os regionais acompanham para o tint acompanhar a luz.
 fn day_phase(clock: Option<&DayCycleState>) -> Option<u32> {
     let clock = clock?;
-    let day = crate::worldsys::daylight_factor(
-        clock.minute_of_day,
-        clock.dawn_minute,
-        clock.dusk_minute,
-    );
+    let day =
+        crate::worldsys::daylight_factor(clock.minute_of_day, clock.dawn_minute, clock.dusk_minute);
     Some((day.clamp(0.0, 1.0) * 6.0).floor() as u32)
 }
 
@@ -272,7 +272,12 @@ mod tests {
     fn test_pads_com_tint_e_espacamento() {
         let regions = BiomeRegions {
             list: vec![region(
-                &[[-200.0, -200.0], [200.0, -200.0], [200.0, 200.0], [-200.0, 200.0]],
+                &[
+                    [-200.0, -200.0],
+                    [200.0, -200.0],
+                    [200.0, 200.0],
+                    [-200.0, 200.0],
+                ],
                 Some([0.4, 0.5, 0.3]),
             )],
         };
@@ -283,7 +288,12 @@ mod tests {
             corner_radius: 4.0,
             height: 10.0,
         };
-        let pads = vec![mk(0.0, 0.0), mk(10.0, 5.0), mk(120.0, 80.0), mk(500.0, 500.0)];
+        let pads = vec![
+            mk(0.0, 0.0),
+            mk(10.0, 5.0),
+            mk(120.0, 80.0),
+            mk(500.0, 500.0),
+        ];
         let picked = pick_pads(&pads, &regions);
         // colapsa os dois próximos (10,5 fica de fora), apanha o distante,
         // e o pad FORA da região nem entra na conta.

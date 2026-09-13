@@ -881,12 +881,18 @@ pub struct CliffBaked;
 /// `origin` é o XZ de MUNDO do canto mínimo da caixa (as posições do mesh
 /// são relativas à caixa; o `Transform` da entidade carrega o offset).
 /// Devolve quantos vértices foram escritos.
-pub fn bake_cliff_colors(mask: &CliffMask, origin: Vec2, mesh: &mut bevy::render::mesh::Mesh) -> usize {
+pub fn bake_cliff_colors(
+    mask: &CliffMask,
+    origin: Vec2,
+    mesh: &mut bevy::render::mesh::Mesh,
+) -> usize {
     use bevy::render::mesh::VertexAttributeValues;
     // Primeiro lê as posições (borrow imutável) e coleta o XZ de mundo — só
     // depois se pode pedir o attribute MUTÁVEL das cores.
     let mut xz: Vec<Vec2> = Vec::new();
-    if let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(bevy::render::mesh::Mesh::ATTRIBUTE_POSITION) {
+    if let Some(VertexAttributeValues::Float32x3(pos)) =
+        mesh.attribute(bevy::render::mesh::Mesh::ATTRIBUTE_POSITION)
+    {
         xz.reserve(pos.len());
         for p in pos.iter() {
             xz.push(Vec2::new(origin.x + p[0], origin.y + p[2]));
@@ -894,7 +900,9 @@ pub fn bake_cliff_colors(mask: &CliffMask, origin: Vec2, mesh: &mut bevy::render
     } else {
         return 0;
     }
-    let Some(VertexAttributeValues::Float32x4(colors)) = mesh.attribute_mut(bevy::render::mesh::Mesh::ATTRIBUTE_COLOR) else {
+    let Some(VertexAttributeValues::Float32x4(colors)) =
+        mesh.attribute_mut(bevy::render::mesh::Mesh::ATTRIBUTE_COLOR)
+    else {
         return 0;
     };
     let mut baked = 0;

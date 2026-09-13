@@ -310,6 +310,48 @@ enum SessionCommand {
 /// (sem re-delegar em `cargo run` — evita recursão).
 const CARGO_DELEGATE_GUARD: &str = "VIBER_CLI_NO_CARGO_DELEGATE";
 
+/// Tamanho do cube shadow map das PointLight (`VIBER_POINT_SHADOW_SIZE`).
+///
+/// Default 1024 (ver o comentário no recurso); `1536` devolve o valor do
+/// passe visual r1. Tem de ser u32 par e >= 4 — o wgpu recusa tamanhos
+/// ímpares em algumas plataformas.
+/// Tamanho do shadow map da DIRECIONAL (`VIBER_DIR_SHADOW_SIZE`, default
+/// 4096). É UMA textura de 4 camadas (~268 MB a 4096, metade a 2048).
+fn dir_shadow_size() -> usize {
+    std::env::var("VIBER_DIR_SHADOW_SIZE")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .filter(|size| *size >= 256 && size % 2 == 0)
+        .unwrap_or(4096)
+}
+
+fn point_shadow_size() -> usize {
+    std::env::var("VIBER_POINT_SHADOW_SIZE")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .filter(|size| *size >= 4 && size % 2 == 0)
+        .unwrap_or(1024)
+}
+
+/// Profiling do lado do RENDER (`VIBER_PROF_GPU=1`).
+///
+/// Os sistemas instrumentados pelo `timed` somam ~4 ms de um frame de ~44 ms
+/// no `simple-rpg` — os outros 40 ms são o render app (extract, prepare,
+/// queue e os passes na GPU) e não eram observáveis por via nenhuma. Com o gate ON
+/// pedimos os `TIMESTAMP_QUERY` ao wgpu e ligamos o `RenderDiagnosticsPlugin`,
+/// que mede cada span do render graph em CPU **e** GPU; o snapshot do
+/// profiler publica-os em `gpu[]` (`viber debug prof --json`).
+///
+/// OPT-IN de propósito: pedir ao device uma feature que o adapter não tenha
+/// FALHA a criação do renderer (Metal/WebGPU não têm timestamps), e as
+/// próprias queries custam tempo por frame.
+fn gpu_profiling_enabled() -> bool {
+    matches!(
+        std::env::var("VIBER_PROF_GPU").as_deref(),
+        Ok("1" | "true" | "on")
+    )
+}
+
 fn load_world(path: &Path) -> Result<ParsedWorld> {
     let loaded = xml::include::load_world(path)?;
     recipes::parse_world(&loaded.root_attrs, &loaded.nodes)
@@ -423,8 +465,12 @@ fn run_target_housekeeping(active_debug: bool) {
     if std::env::var_os(CARGO_DELEGATE_GUARD).is_some() {
         return;
     }
-    let Ok(cwd) = std::env::current_dir() else { return };
-    let Some(root) = viber_checkout_root(&cwd) else { return };
+    let Ok(cwd) = std::env::current_dir() else {
+        return;
+    };
+    let Some(root) = viber_checkout_root(&cwd) else {
+        return;
+    };
     let report = prune::housekeeping(&root, active_debug);
     if let Some(line) = report.describe() {
         eprintln!("viber: prune: {line}");
@@ -672,7 +718,10 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
         ("water.wgsl", water_config.render_world_shader()),
     ] {
         if let Err(e) = std::fs::write(shaders_dir.join(name), contents) {
-            eprintln!("viber: falha ao escrever {}/{name}: {e}", shaders_dir.display());
+            eprintln!(
+                "viber: falha ao escrever {}/{name}: {e}",
+                shaders_dir.display()
+            );
         }
     }
     if let Some(layers_config) = &layers_config {
@@ -733,7 +782,32 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
         // A layer de logs do bridge tem de ser instalada no LogPlugin no boot.
         plugins = plugins.set(bridge::logs::log_plugin_with_bridge());
     }
+    if gpu_profiling_enabled() {
+        // As queries de timestamp são uma feature do DEVICE: têm de ser
+        // pedidas na criação do renderer, não dá para ligar depois. Partimos
+        // do default (que traz o `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES`
+        // de que o KTX2 depende) e só acrescentamos as três de timestamp.
+        use bevy::render::settings::{WgpuFeatures, WgpuSettings};
+        let base = WgpuSettings::default();
+        plugins = plugins.set(bevy::render::RenderPlugin {
+            render_creation: WgpuSettings {
+                features: base.features
+                    | WgpuFeatures::TIMESTAMP_QUERY
+                    | WgpuFeatures::TIMESTAMP_QUERY_INSIDE_ENCODERS
+                    | WgpuFeatures::TIMESTAMP_QUERY_INSIDE_PASSES,
+                ..base
+            }
+            .into(),
+            ..Default::default()
+        });
+    }
     app.add_plugins(plugins);
+    if gpu_profiling_enabled() {
+        app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin);
+        info!(
+            "profiler: render diagnostics ON (VIBER_PROF_GPU) — `viber debug prof --json` traz gpu[]"
+        );
+    }
     // SSR de reflexões raster (Fase B, src/water_ssr.rs): reflexo de cena na
     // água + chão molhado na chuva por raymarch sobre o depth prepass.
     // OPT-IN (`VIBER_WATER_SSR=1`) enquanto não existir acumulação temporal
@@ -805,12 +879,34 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // `worldsys::sun_drive` aims the directional light from it; nothing was
     // creating it, so that system failed parameter validation.
     app.init_resource::<worldsys::SunState>();
-    // Sombras de qualidade (passe visual r1): mapas 4096 (dir) / 1536 (pontos)
-    // — os defaults (2048/1024) deixavam as sombras das árvores granuladas
-    // mesmo ao pé do herói. Custo de VRAM/fill aceito; KTX2 já devolveu a
-    // margem (docs/PERFORMANCE.md).
-    app.insert_resource(bevy::light::DirectionalLightShadowMap { size: 4096 });
-    app.insert_resource(bevy::light::PointLightShadowMap { size: 1536 });
+    // Luz de interior (ambiente fixo, sem noite) — ver `InteriorLighting`.
+    app.init_resource::<worldsys::InteriorLighting>();
+    // Sombras de qualidade (passe visual r1): mapa DIRECIONAL 4096 — o
+    // default (2048) deixava as sombras das árvores granuladas mesmo ao pé do
+    // herói; é UMA textura (4 cascatas), ~268 MB, e o sol justifica-a.
+    // `VIBER_DIR_SHADOW_SIZE` para o A/B 4096→2048 que o PERFORMANCE.md lista
+    // desde a 1.ª passagem (o default fica 4096 — sombras das árvores ao pé
+    // do herói, decisão do r1). Os gêmeos das point lights e das cascatas:
+    // `VIBER_POINT_SHADOW_SIZE` (aqui) e `VIBER_SHADOW_CASCADES`/
+    // `VIBER_SHADOW_DISTANCE` (recipes::sun_shadow_*).
+    app.insert_resource(bevy::light::DirectionalLightShadowMap {
+        size: dir_shadow_size(),
+    });
+    // Point light: 1024. O array é `size² × 4 B × 6 faces × nº de luzes com
+    // sombra` — a 1536 eram ~56 MB POR LANTERNA, ~680 MB com o orçamento de 12
+    // cheio, e cada mudança de contagem REALOCA o array inteiro com o pico
+    // transitório de ambos (foi o `point_light_shadow_map_texture` a falhar o
+    // OOM que matou uma sessão de 10 h a 2026-09-12 03:06). O r1 subiu para
+    // 1536 pelos GRANULADOS da DIRECIONAL — nas point lights o PCSS
+    // (`soft_shadow_size` = radius da lanterna) desfaz a borda e o mapa
+    // cobre o `range` (20 m): ~2,6 cm/texel a 1024 contra ~1,7 a 1536, numa
+    // sombra cujo caster está a metros da luz. A 1024: ~25 MB/lanterna,
+    // ~300 MB no pior caso. `VIBER_POINT_SHADOW_SIZE=1536` devolve o r1
+    // (A/B visual de QA — os dois valores têm de ser comparados com o
+    // protocolo do controle antes de reclamar diferença nenhuma).
+    app.insert_resource(bevy::light::PointLightShadowMap {
+        size: point_shadow_size(),
+    });
     // `hud_menu_system` corre sempre (main loop), mas o `HudMenuState` só
     // nascia dentro de `build_menu` — mundos sem `TabbedModal` (o HUD é agora
     // declarativo) panicas na validação do `ResMut` todos os frames.
@@ -851,6 +947,8 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // sistema reabria a corrida clamp/REPEAT das texturas de chão).
     app.add_plugins(textures::TexturesPlugin);
     // Fase 2: Luau — scripts do `scripts_dir` do config, com `on_update(dt)`.
+    // O árbitro das interações (`interact::InteractionFocus`) é registado pelo
+    // próprio `LuauScriptPlugin` — quem o lê é o `viber.interacted`.
     app.add_plugins(luau::LuauScriptPlugin {
         scripts_dir: config.scripts_dir_on(&world_dir),
     });
@@ -998,7 +1096,14 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             timed(Group::World, music::audio_loop_starter),
             timed(Group::World, music::mixer_sync),
             timed(Group::World, music::music_driver),
+            // A bandeira de interior é lida pelo `daycycle_drive` e pelo
+            // tint dos props — decidida ANTES deles, no mesmo frame.
+            timed(Group::World, worldsys::interior_lighting_drive).before(worldsys::daycycle_drive),
             timed(Group::World, worldsys::daycycle_drive),
+            // Regime de interior por CIMA dos drivers do mundo (sol/IBL).
+            timed(Group::World, worldsys::interior_lighting_apply)
+                .after(worldsys::sun_drive)
+                .after(worldsys::daycycle_drive),
             timed(Group::World, worldsys::sun_drive),
             // Scheduler do `<Weather cycle>` (chuva alvo determinística) —
             // tem de correr ANTES do `atmosphere_drive` (a intensidade
@@ -1432,6 +1537,29 @@ fn session_up(world: Option<&Path>, port: Option<u16>) -> Result<()> {
     result
 }
 
+/// Identidade de uma engine antes de lhe mandar um sinal: o argv[0] tem de
+/// ter basename `viber` **e** o mundo registado no `engine.json` tem de
+/// aparecer nos argumentos.
+///
+/// As duas condições juntas são mais apertadas do que o basename sozinho (um
+/// `viber debug logs` de outro agente não leva o caminho do mundo) e mais
+/// largas do que a igualdade com o `current_exe()`, que recusava descer uma
+/// engine subida pelo binário instalado a partir de um checkout. Pura para
+/// teste.
+fn looks_like_engine(args: &[String], world: &Path) -> bool {
+    let Some(argv0) = args.first() else {
+        return false;
+    };
+    if Path::new(argv0).file_name() != Some(std::ffi::OsStr::new("viber")) {
+        return false;
+    }
+    let world = std::fs::canonicalize(world).unwrap_or_else(|_| world.to_path_buf());
+    args.iter().skip(1).any(|arg| {
+        let arg_path = std::fs::canonicalize(arg).unwrap_or_else(|_| PathBuf::from(arg));
+        arg_path == world
+    })
+}
+
 /// Desce a engine partilhada (SIGTERM via `kill`; o lease tem de estar livre
 /// ou ser nosso).
 fn session_down(world: Option<&Path>) -> Result<()> {
@@ -1451,41 +1579,29 @@ fn session_down(world: Option<&Path>) -> Result<()> {
     // Identidade antes do sinal: um PID reutilizado pode ser um processo
     // inocente (`tail -f` do log da engine, um editor com o caminho aberto)
     // — procurar "viber" como SUBSTRING do cmdline inteiro batia neles.
-    // Compara o argv[0] (primeiro componente antes do NUL) com o executável
-    // atual canónico; fallback: basename exatamente "viber" (a engine é
-    // sempre spawnada via `current_exe()` no `session up`). Se o /proc nem
-    // existe, o processo já morreu — mantemos o fluxo antigo de limpar os
-    // metadados.
+    //
+    // A regra é "isto É uma engine viber deste mundo", NÃO "isto saiu do MEU
+    // binário": a engine partilhada tanto pode ter sido subida pelo `viber`
+    // instalado (`~/.local/bin`) como por um `target/release/viber` de um
+    // checkout, e exigir igualdade com o `current_exe()` deixava a engine do
+    // outro binário impossível de descer (`session down` recusava, a GPU
+    // ficava ocupada e ninguém conseguia subir a sua — 2026-09-12). Ver
+    // [`looks_like_engine`]. Se o /proc nem existe, o processo já morreu —
+    // mantemos o fluxo antigo de limpar os metadados.
     let cmdline = Path::new("/proc")
         .join(engine.pid.to_string())
         .join("cmdline");
     if let Ok(raw) = std::fs::read(&cmdline) {
-        let argv0 = raw
+        let args: Vec<String> = raw
             .split(|byte| *byte == 0)
-            .next()
-            .map(String::from_utf8_lossy)
-            .unwrap_or_default()
-            .into_owned();
-        let our_exe = std::env::current_exe()
-            .ok()
-            .and_then(|exe| std::fs::canonicalize(exe).ok());
-        let is_engine = match our_exe
-            .as_deref()
-            .map(|exe| std::fs::canonicalize(&argv0).map(|arg| arg == exe))
-        {
-            // argv[0] absoluto e resolvível: tem de ser O NOSSO binário.
-            Some(Ok(same_exe)) => same_exe,
-            // argv[0] relativo, apagado desde o spawn, ou current_exe falhou:
-            // o basename exato "viber" chega (um inocente com o caminho da
-            // engine em qualquer outro argumento já não conta).
-            _ => Path::new(&argv0)
-                .file_name()
-                .is_some_and(|name| name == "viber"),
-        };
-        if !is_engine {
+            .filter(|part| !part.is_empty())
+            .map(|part| String::from_utf8_lossy(part).into_owned())
+            .collect();
+        if !looks_like_engine(&args, Path::new(&engine.world)) {
             bail!(
-                "pid {} não parece uma engine viber (argv[0] `{argv0}`; PID reutilizado?) — engine.json mantido; limpe à mão se confirmar",
-                engine.pid
+                "pid {} não parece uma engine viber deste mundo (argv `{}`; PID reutilizado?) — engine.json mantido; limpe à mão se confirmar",
+                engine.pid,
+                args.join(" ")
             );
         }
     }
@@ -1738,6 +1854,37 @@ fn print_prof(prof: &serde_json::Value) {
     println!("scripts {total} (ativos {active})   uptime {uptime} s");
     if let Some(min) = get("min_fps_window") {
         println!("pior fps (janela ~3 s): {min:.0}");
+    }
+    print_gpu_spans(prof);
+}
+
+/// Passes do render graph, quando a engine corre com `VIBER_PROF_GPU=1`.
+/// Sem o gate o array vem vazio e a secção não aparece — é o resto do frame
+/// que os sistemas do `timed` não cobrem.
+fn print_gpu_spans(prof: &serde_json::Value) {
+    let Some(spans) = prof.get("gpu").and_then(serde_json::Value::as_array) else {
+        return;
+    };
+    if spans.is_empty() {
+        return;
+    }
+    println!("render (VIBER_PROF_GPU) — top passes:");
+    for span in spans.iter().take(12) {
+        let name = span
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("?");
+        let fmt = |key: &str| {
+            span.get(key)
+                .and_then(serde_json::Value::as_f64)
+                .map(|v| format!("{v:.2} ms"))
+                .unwrap_or_else(|| "—".into())
+        };
+        println!(
+            "  {name:<40} gpu {:>9}   cpu {:>9}",
+            fmt("gpu_ms"),
+            fmt("cpu_ms")
+        );
     }
 }
 
@@ -2042,6 +2189,54 @@ fn main() -> std::process::ExitCode {
 
 #[cfg(test)]
 mod tests {
+
+    /// `session down` tem de descer a engine partilhada mesmo quando ela foi
+    /// subida por OUTRO binário viber (instalado vs `target/release`) — a
+    /// regra antiga (igualdade com `current_exe`) deixava a GPU ocupada sem
+    /// ninguém a poder libertá-la (2026-09-12).
+    #[test]
+    fn engine_identity_accepts_any_viber_binary_with_the_right_world() {
+        let world = std::path::PathBuf::from("/m/world.xml");
+        let args = |list: &[&str]| list.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+        assert!(looks_like_engine(
+            &args(&[
+                "/home/u/.local/bin/viber",
+                "run",
+                "/m/world.xml",
+                "--bridge",
+                "15702"
+            ]),
+            &world
+        ));
+        assert!(looks_like_engine(
+            &args(&["/checkout/target/release/viber", "run", "/m/world.xml"]),
+            &world
+        ));
+    }
+
+    /// E tem de RECUSAR um PID reutilizado: outro programa, ou um viber que
+    /// não é a engine deste mundo.
+    #[test]
+    fn engine_identity_rejects_strangers() {
+        let world = std::path::PathBuf::from("/m/world.xml");
+        let args = |list: &[&str]| list.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+        // `tail -f` do log da engine: o caminho aparece, o binário não é viber.
+        assert!(!looks_like_engine(
+            &args(&["/usr/bin/tail", "-f", "/m/world.xml"]),
+            &world
+        ));
+        // viber, mas de OUTRO mundo.
+        assert!(!looks_like_engine(
+            &args(&["/home/u/.local/bin/viber", "run", "/m/outro.xml"]),
+            &world
+        ));
+        // viber sem o mundo nos argumentos (ex. `viber debug logs`).
+        assert!(!looks_like_engine(
+            &args(&["/home/u/.local/bin/viber", "debug", "logs"]),
+            &world
+        ));
+        assert!(!looks_like_engine(&[], &world));
+    }
     use super::*;
 
     /// As três formas de `--bridge`: ausente = sem bridge, nu = porta livre

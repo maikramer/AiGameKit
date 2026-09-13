@@ -593,6 +593,7 @@ fn stream_grass_tiles(
     terrain: Option<Res<TerrainRuntime>>,
     regions: Option<Res<BiomeRegions>>,
     cliffs: Option<Res<crate::terrain::cliffs::CliffMask>>,
+    exclusions: Option<Res<crate::spawner::SpawnExclusions>>,
     cameras: Query<&GlobalTransform, With<Camera3d>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<GrassMaterial>>,
@@ -710,6 +711,7 @@ fn stream_grass_tiles(
             terrain.as_ref(),
             regions.as_deref(),
             cliffs.as_deref(),
+            exclusions.as_deref().map(|e| e.0.as_slice()).unwrap_or(&[]),
         );
         let Some(built) = outcome.tile else {
             // Nothing grows on this square (plaza, lake, road spaghetti).
@@ -823,6 +825,7 @@ fn build_tile(
     terrain: &TerrainRuntime,
     regions: Option<&BiomeRegions>,
     cliffs: Option<&crate::terrain::cliffs::CliffMask>,
+    exclusions: &[crate::spawner::SpawnExclusion],
 ) -> BuildOutcome {
     let mut outcome = BuildOutcome::default();
     let tier_cfg = TIERS[tier as usize];
@@ -854,8 +857,18 @@ fn build_tile(
             // would root on floating rock or interpolate across its vertical
             // edge. Flat world never sets this (the check is free there).
             let roofed = terrain.has_thin_roof(x, z);
-            blocked[iz * LATTICE + ix] = wet || paved || roofed;
-            any_open |= !(wet || paved || roofed);
+            // `<SpawnExclusion>` também vale para a relva: o gesto autoral
+            // "aqui não nasce nada" era lido só pelos spawners, e um
+            // acampamento/ruína posto numa clareira acordava enterrado em
+            // tufos — a relva é um campo procedural, não um spawner, portanto
+            // não passava por lá.
+            let excluded = exclusions.iter().any(|e| {
+                let dx = x - e.center.x;
+                let dz = z - e.center.y;
+                dx * dx + dz * dz <= e.radius * e.radius
+            });
+            blocked[iz * LATTICE + ix] = wet || paved || roofed || excluded;
+            any_open |= !(wet || paved || roofed || excluded);
         }
     }
     if !any_open {

@@ -437,14 +437,7 @@ pub struct RoundConeMod {
 }
 
 impl RoundConeMod {
-    pub fn new(
-        label: impl Into<String>,
-        a: Vec3,
-        b: Vec3,
-        ra: f32,
-        rb: f32,
-        op: ModOp,
-    ) -> Self {
+    pub fn new(label: impl Into<String>, a: Vec3, b: Vec3, ra: f32, rb: f32, op: ModOp) -> Self {
         Self {
             a,
             b,
@@ -518,13 +511,7 @@ pub struct EllipsoidMod {
 }
 
 impl EllipsoidMod {
-    pub fn new(
-        label: impl Into<String>,
-        center: Vec3,
-        radii: Vec3,
-        yaw: f32,
-        op: ModOp,
-    ) -> Self {
+    pub fn new(label: impl Into<String>, center: Vec3, radii: Vec3, yaw: f32, op: ModOp) -> Self {
         Self {
             center,
             radii: radii.max(Vec3::splat(0.01)),
@@ -592,8 +579,14 @@ mod tests {
             std::f32::consts::FRAC_PI_2,
             ModOp::Union,
         );
-        assert!(b.distance(Vec3::new(0.0, 0.0, 1.5)) < 0.0, "long axis is Z now");
-        assert!(b.distance(Vec3::new(1.5, 0.0, 0.0)) > 0.0, "short axis is X now");
+        assert!(
+            b.distance(Vec3::new(0.0, 0.0, 1.5)) < 0.0,
+            "long axis is Z now"
+        );
+        assert!(
+            b.distance(Vec3::new(1.5, 0.0, 0.0)) > 0.0,
+            "short axis is X now"
+        );
         // The conservative bounds must still contain every solid point.
         assert!(b.bounds().contains(Vec3::new(0.0, 0.0, 1.9)));
     }
@@ -645,7 +638,13 @@ mod tests {
         }
         // Anisotropic: sign is exact on the axes, and the estimate stays at or
         // under the true axis distance (never larger — that is the contract).
-        let a = EllipsoidMod::new("a", Vec3::ZERO, Vec3::new(8.0, 2.0, 8.0), 0.0, ModOp::Subtract);
+        let a = EllipsoidMod::new(
+            "a",
+            Vec3::ZERO,
+            Vec3::new(8.0, 2.0, 8.0),
+            0.0,
+            ModOp::Subtract,
+        );
         assert!(a.distance(Vec3::new(7.9, 0.0, 0.0)) < 0.0);
         assert!(a.distance(Vec3::new(8.1, 0.0, 0.0)) > 0.0);
         assert!(a.distance(Vec3::new(0.0, 4.0, 0.0)) <= 2.0 + 1e-4);

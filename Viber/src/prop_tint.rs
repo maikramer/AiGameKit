@@ -40,14 +40,23 @@ struct PropTintState {
     /// relógio mexer 1e-3.
     last_len: usize,
     throttle: f32,
+    /// Passagem em curso: (roster elegível, tint a aplicar, cursor). A
+    /// aplicação é ORÇAMENTADA por frame (ver `PROP_TINT_BUDGET`) — ver o
+    /// mesmo padrão no `CHUNK_MATERIAL_WRITE_BUDGET` do terreno.
+    sweep: Option<(Vec<AssetId<StandardMaterial>>, [f32; 3], usize)>,
 }
 
 pub struct PropTintPlugin;
 
 impl Plugin for PropTintPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PropTintState>()
-            .add_systems(Update, (timed(Group::Fx, prop_daynight_tint), patch_transmissive_gltf));
+        app.init_resource::<PropTintState>().add_systems(
+            Update,
+            (
+                timed(Group::Fx, prop_daynight_tint),
+                patch_transmissive_gltf,
+            ),
+        );
     }
 }
 
@@ -66,7 +75,11 @@ fn patch_transmissive_gltf(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     children: Query<&Children>,
-    roots: Query<(Entity, &bevy::world_serialization::WorldAssetRoot, &TransmissiveGltf)>,
+    roots: Query<(
+        Entity,
+        &bevy::world_serialization::WorldAssetRoot,
+        &TransmissiveGltf,
+    )>,
     mesh_materials: Query<&MeshMaterial3d<StandardMaterial>>,
     mut patched: Local<std::collections::HashSet<bevy::asset::AssetId<StandardMaterial>>>,
 ) {
@@ -113,15 +126,66 @@ fn tinted_base_color(original: LinearRgba, tint: [f32; 3], current_alpha: f32) -
     .with_alpha(current_alpha)
 }
 
+/// Materiais de prop tintados por FRAME durante uma passagem.
+///
+/// Cada `get_mut` num material bindless destrói e recria o bind group (TODO
+/// explícito no upstream do bevy_pbr) — ver o gêmeo
+/// `CHUNK_MATERIAL_WRITE_BUDGET` em `terrain/layer_material.rs`. O mundo tem
+/// centenas de `StandardMaterial` e o amanhecer/anoitecer muda o tint de
+/// forma CONTÍNUA durante minutos: sem orçamento, o sistema reescrevia todos
+/// 4×/s nessa janela, com o pico dos bind groups num único frame.
+const PROP_TINT_BUDGET: usize = 64;
+
 /// Aplica a curva de noite da relva a todos os `StandardMaterial` (glTFs e
-/// primitivas) que não sejam `unlit`/emissivos. Throttle 0,25 s + early-out
-/// quando o factor de dia não mudou — o custo parado é uma subtração.
+/// primitivas) que não sejam `unlit`/emissivos. O alvo recalcula-se ao
+/// throttle de 0,25 s; a APLICAÇÃO é orçamentada por frame
+/// ([`PROP_TINT_BUDGET`]) — parado, o custo é uma subtração.
 fn prop_daynight_tint(
     mut state: ResMut<PropTintState>,
     time: Res<Time>,
     clock: Option<Res<crate::worldsys::DayCycleState>>,
+    interior: Option<Res<crate::worldsys::InteriorLighting>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    // Passagem em curso: aplica o orçamento deste frame e avança o cursor.
+    // (`mem::take` para poder tocar em `state.originals` dentro do loop.)
+    let mut sweep = std::mem::take(&mut state.sweep);
+    let mut finished_tint: Option<[f32; 3]> = None;
+    if let Some((ids, tint, cursor)) = &mut sweep {
+        let (start, end) =
+            crate::terrain::layer_material::sweep_slice(ids.len(), *cursor, PROP_TINT_BUDGET);
+        for id in ids[start..end].iter() {
+            let Some(mut material) = materials.get_mut(*id) else {
+                continue;
+            };
+            // Auto-iluminados ficam de fora: marcadores e vidros acesos. (O
+            // filtro corre ao montar o roster; o re-check protege materiais
+            // que ficaram emissivos desde então.)
+            if material.unlit || material.emissive != LinearRgba::BLACK {
+                continue;
+            }
+            let original = *state
+                .originals
+                .entry(*id)
+                .or_insert_with(|| material.base_color.to_linear());
+            let current_alpha = material.base_color.to_linear().alpha;
+            material.base_color = tinted_base_color(original, *tint, current_alpha);
+        }
+        *cursor = end;
+        if *cursor >= ids.len() {
+            finished_tint = Some(*tint);
+        }
+    }
+    state.sweep = if finished_tint.is_some() { None } else { sweep };
+    if let Some(tint) = finished_tint {
+        state.last_tint = Some(tint);
+    }
+    // Uma passagem por frame: não abre outra no mesmo frame em que ainda
+    // está a aplicar (o throttle abaixo decide a próxima).
+    if state.sweep.is_some() && state.throttle > 0.0 {
+        return;
+    }
+
     state.throttle -= time.delta_secs();
     if state.throttle > 0.0 {
         return;
@@ -133,16 +197,23 @@ fn prop_daynight_tint(
     let roster_changed = ids.len() != state.last_len;
     state.last_len = ids.len();
 
-    let day = clock
-        .as_deref()
-        .map(|clock| {
-            crate::worldsys::daylight_factor(
-                clock.minute_of_day,
-                clock.dawn_minute,
-                clock.dusk_minute,
-            )
-        })
-        .unwrap_or(1.0);
+    // Dentro de um interior o tint fica de DIA: a sala é iluminada pelo
+    // ambiente fixo (ver `worldsys::InteriorLighting`) e escurecer os
+    // materiais com o relógio lá de fora deixava a divisão ilegível.
+    let day = if interior.is_some_and(|state| state.active) {
+        1.0
+    } else {
+        clock
+            .as_deref()
+            .map(|clock| {
+                crate::worldsys::daylight_factor(
+                    clock.minute_of_day,
+                    clock.dawn_minute,
+                    clock.dusk_minute,
+                )
+            })
+            .unwrap_or(1.0)
+    };
     let tint = day_tint(day);
     if let Some(last) = state.last_tint {
         if !roster_changed
@@ -154,22 +225,18 @@ fn prop_daynight_tint(
         }
     }
 
-    for id in ids {
-        let Some(mut material) = materials.get_mut(id) else {
-            continue;
-        };
-        // Auto-iluminados ficam de fora: marcadores e vidros acesos.
-        if material.unlit || material.emissive != LinearRgba::BLACK {
-            continue;
-        }
-        let original = *state
-            .originals
-            .entry(id)
-            .or_insert_with(|| material.base_color.to_linear());
-        let current_alpha = material.base_color.to_linear().alpha;
-        material.base_color = tinted_base_color(original, tint, current_alpha);
-    }
-    state.last_tint = Some(tint);
+    // Monta o roster ELEGÍVEL uma vez (unlit/emissivos fora) e abre a
+    // passagem orçamentada — o `get_mut` do filtro seria de leitura, mas o
+    // roster filtrado poupa o cursor de saltar metade dos ids.
+    let eligible: Vec<AssetId<StandardMaterial>> = ids
+        .into_iter()
+        .filter(|id| {
+            materials
+                .get(*id)
+                .is_some_and(|material| !material.unlit && material.emissive == LinearRgba::BLACK)
+        })
+        .collect();
+    state.sweep = Some((eligible, tint, 0));
 }
 
 #[cfg(test)]

@@ -36,6 +36,15 @@ pub struct ResolvedEmitter {
     /// Particle grows (`>1`) or shrinks (`<1`) linearly to this factor over
     /// its lifetime.
     pub end_size_factor: f32,
+    /// Raio (m) em torno da CÂMARA dentro do qual a partícula se apaga
+    /// (`0` = sem fade). A chuva precisa dele: as gotas nascem 12 m acima do
+    /// herói e caem por cima da câmara de 3.ª pessoa — um streak de 0,5 m a
+    /// 1 m do olho tapa 40 % da altura do ecrã, e 350 desses lêem-se como
+    /// nevoeiro, não como chuva.
+    pub near_fade_m: f32,
+    /// Tecto do alpha (o alpha por vida multiplica-o). Uma cortina de chuva
+    /// translúcida deixa ver a paisagem; a opaca é uma parede.
+    pub max_alpha: f32,
 }
 
 /// Preset library — mirrors `VibeGame/src/plugins/particles/presets.ts` for
@@ -313,6 +322,15 @@ pub fn preset(name: &str) -> ResolvedEmitter {
     } else {
         size
     };
+    // Legibilidade da chuva: sem o fade de proximidade e o tecto de alpha, a
+    // tempestade lê-se como um véu cinzento colado à câmara (repro do
+    // utilizador 2026-09-12: "efeito volumétrico muito intenso, fica muito
+    // difícil ver alguma coisa"). O resto dos presets fica como estava —
+    // uma faísca de fogueira ao pé da câmara DEVE ver-se.
+    let (near_fade_m, max_alpha) = match name {
+        "rain" => (rain_near_fade_m(), rain_max_alpha()),
+        _ => (0.0, 1.0),
+    };
     ResolvedEmitter {
         emission_rate: rate,
         life,
@@ -325,7 +343,38 @@ pub fn preset(name: &str) -> ResolvedEmitter {
         radius,
         additive,
         end_size_factor: end_size,
+        near_fade_m,
+        max_alpha,
     }
+}
+
+/// Distância (m) da câmara em que uma gota chega ao alpha cheio; mais perto
+/// do que isto desvanece linearmente até zero.
+///
+/// A câmara de 3.ª pessoa vive DENTRO da coluna de chuva (o emissor segue o
+/// herói, raio 9 m), por isso há sempre gotas a centímetros do olho.
+pub const RAIN_NEAR_FADE_M: f32 = 5.0;
+
+/// Tecto de alpha das gotas — a cortina é translúcida, não uma parede.
+pub const RAIN_MAX_ALPHA: f32 = 0.5;
+
+/// `VIBER_RAIN_NEAR_FADE` (m) — `0` devolve o comportamento pré-2026-09-12
+/// (gotas opacas coladas à câmara), que é o braço de CONTROLO do A/B.
+pub fn rain_near_fade_m() -> f32 {
+    std::env::var("VIBER_RAIN_NEAR_FADE")
+        .ok()
+        .and_then(|raw| raw.parse::<f32>().ok())
+        .filter(|v| v.is_finite() && *v >= 0.0)
+        .unwrap_or(RAIN_NEAR_FADE_M)
+}
+
+/// `VIBER_RAIN_ALPHA` — tecto de alpha das gotas (`1` = o antigo).
+pub fn rain_max_alpha() -> f32 {
+    std::env::var("VIBER_RAIN_ALPHA")
+        .ok()
+        .and_then(|raw| raw.parse::<f32>().ok())
+        .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
+        .unwrap_or(RAIN_MAX_ALPHA)
 }
 
 /// Warn 1×/processo: o pedido (`rate × vida-máx`) estourou o teto declarativo
@@ -489,6 +538,50 @@ pub fn billboard_corner_offsets(size_x: f32, size_y: f32, right: Vec3, up: Vec3)
     ]
 }
 
+/// Modulação do alpha ao escrever o mesh — o que era um `end_size_factor`
+/// solto mais os dois controlos de legibilidade da chuva.
+#[derive(Debug, Clone, Copy)]
+pub struct BillboardFade {
+    /// Escala do quad ao longo da vida (ver [`end_size_scale`]).
+    pub end_size_factor: f32,
+    /// Raio (m) em torno da câmara onde o alpha rampa de 0 (no olho) a 1.
+    /// `0` desliga.
+    pub near_fade_m: f32,
+    /// Tecto do alpha.
+    pub max_alpha: f32,
+}
+
+impl Default for BillboardFade {
+    fn default() -> Self {
+        Self {
+            end_size_factor: 1.0,
+            near_fade_m: 0.0,
+            max_alpha: 1.0,
+        }
+    }
+}
+
+impl BillboardFade {
+    pub fn from_resolved(resolved: &ResolvedEmitter) -> Self {
+        Self {
+            end_size_factor: resolved.end_size_factor,
+            near_fade_m: resolved.near_fade_m,
+            max_alpha: resolved.max_alpha,
+        }
+    }
+
+    /// Alpha final de uma partícula: fade de vida × tecto × rampa de
+    /// proximidade à câmara. Pura para teste.
+    pub fn alpha(&self, life_t: f32, distance_to_camera: f32) -> f32 {
+        let near = if self.near_fade_m > 0.0 {
+            (distance_to_camera / self.near_fade_m).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        (life_t * self.max_alpha * near).clamp(0.0, 1.0)
+    }
+}
+
 /// Write one emitter's live particles into `mesh` as camera-facing quads.
 ///
 /// The mesh has FIXED capacity (created by [`particle_mesh`]) — buffers are
@@ -501,9 +594,10 @@ pub fn write_billboards(
     particles: &[LiveParticle],
     emitter_pos: Vec3,
     camera_pos: Vec3,
-    end_size_factor: f32,
+    fade: BillboardFade,
     capacity: usize,
 ) -> usize {
+    let end_size_factor = fade.end_size_factor;
     let capacity = capacity.max(1);
     let live = particles.len().min(capacity);
 
@@ -553,11 +647,20 @@ pub fn write_billboards(
         // cor do vértice nascia NaN — epsilon no divisor.
         let t = (p.life / p.max_life.max(f32::EPSILON)).clamp(0.0, 1.0);
         let scale = end_size_scale(t, end_size_factor);
-        let alpha = t;
+        // `p.pos` é LOCAL ao emissor e a entidade do mesh JÁ carrega a
+        // transform do emissor: escrever `emitter_pos + p.pos` no buffer
+        // somava a posição duas vezes e desenhava cada efeito ao DOBRO das
+        // suas coordenadas (uma fogueira na vila a y=39 ardia 39 m no ar, a
+        // chuva ancorada 12 m acima do herói caía de 100 m e morria antes de
+        // chegar ao chão — e por isso "não havia chuva" no `simple-rpg`).
+        // O mesh fica em espaço LOCAL; `emitter_pos` só serve para o eixo
+        // até à câmara e para a distância do fade.
+        let world_pos = emitter_pos + p.pos;
+        let alpha = fade.alpha(t, world_pos.distance(camera_pos));
         let base = index * 4;
         let corners = billboard_corner_offsets(p.size * scale, p.size_y * scale, right, up);
         for (corner, offset) in corners.into_iter().enumerate() {
-            positions[base + corner] = (emitter_pos + p.pos + offset).to_array();
+            positions[base + corner] = (p.pos + offset).to_array();
             colors[base + corner] = [p.color[0], p.color[1], p.color[2], alpha];
         }
     }
@@ -816,7 +919,14 @@ pub fn particle_emitter_update(
                 emitter.sim.particles.clear();
                 if let Some(mut mesh) = meshes.get_mut(&mesh_handle.0) {
                     let capacity = emitter.capacity;
-                    write_billboards(&mut mesh, &[], position, camera_pos, 1.0, capacity);
+                    write_billboards(
+                        &mut mesh,
+                        &[],
+                        position,
+                        camera_pos,
+                        BillboardFade::default(),
+                        capacity,
+                    );
                 }
             }
             emitter.idle = true;
@@ -838,12 +948,13 @@ pub fn particle_emitter_update(
             emitter.idle = false;
         }
         if let Some(mut mesh) = meshes.get_mut(&mesh_handle.0) {
+            let fade = BillboardFade::from_resolved(&emitter.sim.resolved);
             write_billboards(
                 &mut mesh,
                 &emitter.sim.particles,
                 position,
                 camera_pos,
-                emitter.sim.resolved.end_size_factor,
+                fade,
                 emitter.capacity,
             );
         }
@@ -918,12 +1029,11 @@ impl BurstPool {
             .and_then(|pool| pool.pop())
     }
 
-    fn park_mesh(
-        &mut self,
-        capacity: usize,
-        handle: bevy::asset::Handle<bevy::mesh::Mesh>,
-    ) {
-        self.meshes.entry(mesh_bucket(capacity)).or_default().push(handle);
+    fn park_mesh(&mut self, capacity: usize, handle: bevy::asset::Handle<bevy::mesh::Mesh>) {
+        self.meshes
+            .entry(mesh_bucket(capacity))
+            .or_default()
+            .push(handle);
     }
 
     fn material(&self, additive: bool) -> Option<Handle<StandardMaterial>> {
@@ -965,7 +1075,9 @@ pub fn spawn_burst(commands: &mut Commands, spec: &ParticleSpec, position: Vec3,
         let lifetime = burst_lifetime(&sim.resolved);
         let mesh = match world.resource_mut::<BurstPool>().take_mesh(count + 8) {
             Some(handle) => handle,
-            None => world.resource_mut::<Assets<Mesh>>().add(particle_mesh(capacity)),
+            None => world
+                .resource_mut::<Assets<Mesh>>()
+                .add(particle_mesh(capacity)),
         };
         let additive = sim.resolved.additive;
         let material = match world.resource::<BurstPool>().material(additive) {
@@ -974,7 +1086,9 @@ pub fn spawn_burst(commands: &mut Commands, spec: &ParticleSpec, position: Vec3,
                 let handle = world
                     .resource_mut::<Assets<StandardMaterial>>()
                     .add(emitter_material(&sim.resolved));
-                world.resource_mut::<BurstPool>().park_material(additive, handle.clone());
+                world
+                    .resource_mut::<BurstPool>()
+                    .park_material(additive, handle.clone());
                 handle
             }
         };
@@ -1019,8 +1133,8 @@ pub fn spawn_looping(
         ParticleEmitter {
             sim,
             capacity,
-              idle: false,
-          culled: false,
+            idle: false,
+            culled: false,
         },
         Name::new("fx:ambient"),
     ));
@@ -1050,8 +1164,8 @@ pub fn spawn_looping_in_world(world: &mut World, spec: &ParticleSpec, position: 
             NotShadowCaster,
             ParticleEmitter {
                 sim,
-                       idle: false,
-         capacity,
+                idle: false,
+                capacity,
                 culled: false,
             },
             Name::new("fx:ambient"),
@@ -1101,6 +1215,77 @@ impl bevy::app::Plugin for BurstPlugin {
 
 #[cfg(test)]
 mod tests {
+
+    /// O buffer do mesh vive em espaço LOCAL: a entidade já carrega a
+    /// transform do emissor, e somar `emitter_pos` aos vértices desenhava
+    /// cada efeito ao DOBRO das suas coordenadas (fogueiras da vila a arder
+    /// 39 m no ar, chuva a cair de 100 m e a morrer antes do chão —
+    /// 2026-09-12).
+    #[test]
+    fn billboard_positions_are_local_to_the_emitter() {
+        let particle = LiveParticle {
+            pos: Vec3::new(0.0, 2.0, 0.0),
+            vel: Vec3::ZERO,
+            life: 1.0,
+            max_life: 1.0,
+            size: 0.4,
+            size_y: 0.4,
+            color: [1.0, 1.0, 1.0],
+        };
+        let mut mesh = particle_mesh(1);
+        // Emissor a 100 m do origem: os vértices NÃO podem acompanhar.
+        write_billboards(
+            &mut mesh,
+            &[particle],
+            Vec3::new(100.0, 40.0, -30.0),
+            Vec3::new(100.0, 40.0, 20.0),
+            BillboardFade::default(),
+            1,
+        );
+        let bevy::mesh::VertexAttributeValues::Float32x3(positions) = mesh
+            .attribute(bevy::mesh::Mesh::ATTRIBUTE_POSITION)
+            .expect("position")
+        else {
+            panic!("position attribute type");
+        };
+        let center = positions
+            .iter()
+            .fold(Vec3::ZERO, |acc, p| acc + Vec3::from_array(*p))
+            / positions.len() as f32;
+        assert!(
+            (center - particle.pos).length() < 1e-4,
+            "centro do quad em {center:?}, esperado {:?}",
+            particle.pos
+        );
+    }
+
+    /// A cortina de chuva tem de ser translúcida e ABRIR junto da câmara:
+    /// um streak de 0,5 m a 1 m do olho tapa metade do ecrã, e 350 desses
+    /// lêem-se como nevoeiro (repro do utilizador 2026-09-12).
+    #[test]
+    fn rain_fades_out_next_to_the_camera() {
+        let fade = BillboardFade::from_resolved(&preset("rain"));
+        // Gota recém-nascida (life_t = 1) colada ao olho: invisível.
+        assert!(fade.alpha(1.0, 0.2) < 0.05, "{}", fade.alpha(1.0, 0.2));
+        // A meio da rampa: metade do tecto, aproximadamente.
+        let mid = fade.alpha(1.0, RAIN_NEAR_FADE_M * 0.5);
+        assert!((mid - RAIN_MAX_ALPHA * 0.5).abs() < 0.02, "{mid}");
+        // Longe: o tecto de alpha manda — nunca opaca.
+        assert!((fade.alpha(1.0, 40.0) - RAIN_MAX_ALPHA).abs() < 1e-5);
+        // O fade de VIDA continua a valer por cima do tecto.
+        assert!(fade.alpha(0.5, 40.0) < fade.alpha(1.0, 40.0));
+    }
+
+    /// O fade de proximidade é SÓ da chuva — uma faísca de fogueira ao pé da
+    /// câmara tem de continuar a ver-se, e opaca.
+    #[test]
+    fn other_presets_keep_full_alpha() {
+        for name in ["fire", "smoke", "spray", "rain_ripple"] {
+            let fade = BillboardFade::from_resolved(&preset(name));
+            assert_eq!(fade.near_fade_m, 0.0, "{name}");
+            assert_eq!(fade.alpha(1.0, 0.2), 1.0, "{name}");
+        }
+    }
     use super::*;
 
     fn fire_spec() -> ParticleSpec {
@@ -1209,7 +1394,7 @@ mod tests {
             &[particle],
             Vec3::ZERO,
             Vec3::new(0.0, 0.0, 10.0),
-            1.0,
+            BillboardFade::default(),
             1,
         );
         let positions = mesh
@@ -1275,7 +1460,10 @@ mod tests {
             &sim.particles,
             Vec3::ZERO,
             Vec3::new(0.0, 0.0, 10.0),
-            0.1,
+            BillboardFade {
+                end_size_factor: 0.1,
+                ..BillboardFade::default()
+            },
             capacity,
         );
         assert_eq!(written, count);
@@ -1316,7 +1504,14 @@ mod tests {
     #[test]
     fn test_write_billboards_empty_mesh_stays_degenerate() {
         let mut mesh = particle_mesh(8);
-        let written = write_billboards(&mut mesh, &[], Vec3::ZERO, Vec3::Z, 1.0, 8);
+        let written = write_billboards(
+            &mut mesh,
+            &[],
+            Vec3::ZERO,
+            Vec3::Z,
+            BillboardFade::default(),
+            8,
+        );
         assert_eq!(written, 0);
         assert_eq!(mesh.count_vertices(), 32);
     }
@@ -1431,5 +1626,4 @@ mod tests {
             "a malha está PARQUEADA no pool, não abandonada no store"
         );
     }
-
 }

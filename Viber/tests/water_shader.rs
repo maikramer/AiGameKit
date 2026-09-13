@@ -238,14 +238,23 @@ fn water_shader_has_both_entries() {
     use naga::ShaderStage;
     let module = validate(&standalone(
         include_str!("../src/terrain/water.wgsl"),
-        &["VERTEX_POSITIONS", "VERTEX_NORMALS", "VERTEX_UVS_A", "VERTEX_COLORS"],
+        &[
+            "VERTEX_POSITIONS",
+            "VERTEX_NORMALS",
+            "VERTEX_UVS_A",
+            "VERTEX_COLORS",
+        ],
     ));
-    assert!(module
-        .entry_points
-        .iter()
-        .any(|entry| entry.name == "vertex" && entry.stage == ShaderStage::Vertex));
-    assert!(module
-        .entry_points
-        .iter()
-        .any(|entry| entry.name == "fragment" && entry.stage == ShaderStage::Fragment));
+    assert!(
+        module
+            .entry_points
+            .iter()
+            .any(|entry| entry.name == "vertex" && entry.stage == ShaderStage::Vertex)
+    );
+    assert!(
+        module
+            .entry_points
+            .iter()
+            .any(|entry| entry.name == "fragment" && entry.stage == ShaderStage::Fragment)
+    );
 }

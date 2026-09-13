@@ -563,7 +563,7 @@ const CHUNK_MATERIAL_WRITE_BUDGET: usize = 64;
 /// cursor que nunca chega ao fim é o falhanço silencioso que este orçamento
 /// pode introduzir — o mundo ficava com metade dos materiais no valor antigo,
 /// para sempre (ver `test_sweep_slice_covers_every_material_once`).
-fn sweep_slice(total: usize, cursor: usize, budget: usize) -> (usize, usize) {
+pub(crate) fn sweep_slice(total: usize, cursor: usize, budget: usize) -> (usize, usize) {
     let start = cursor.min(total);
     (start, start.saturating_add(budget).min(total))
 }
@@ -638,7 +638,7 @@ pub fn terrain_daynight_tint(
         .map(|a| -a.sun_dir.normalize_or_zero())
         .unwrap_or(Vec3::ZERO);
 
-        let Some(chunks) = chunks else { return };
+    let Some(chunks) = chunks else { return };
     if let Some(layers) = &chunks.layer {
         // Tocar no material marca-o Modified e re-escreve a sua entrada na
         // binding array, com bind group novo por material. A 60 Hz × 3969
@@ -943,7 +943,16 @@ mod tests {
             moss: 0.35,
         };
         let params = TerrainChunkParams::from_slots(
-            [SLOT_GRASS, SLOT_MOUNTAIN_STONE, SLOT_DIRT, SLOT_SNOW_PEAK, 4, 5, 7, 12],
+            [
+                SLOT_GRASS,
+                SLOT_MOUNTAIN_STONE,
+                SLOT_DIRT,
+                SLOT_SNOW_PEAK,
+                4,
+                5,
+                7,
+                12,
+            ],
             [-32.0, 96.0],
             64.0,
             &cfg,

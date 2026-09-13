@@ -42,28 +42,85 @@
 //!    (CAS), a correr no post-process DEPOIS do AA: devolve o detalhe que o
 //!    TAA (e o FXAA do fallback) suavizam.
 //!
+//! LOOP B (hierarquia de valores, gauntlet BOTW) acrescentou:
+//!
+//! 9. **Split-tone pós-tonemap** ([`SplitToneSettings`], passe fullscreen do
+//!    `FullscreenMaterialPlugin`) — sombras frias / highlights quentes pela
+//!    hora: a manhã/tarde baixas deixam de ser um "warm wash" uniforme (o
+//!    `temperature` GLOBAL do ColorGrading aquece tudo) e ganham o par
+//!    quente/frio que faz a leitura BOTW; à noite o azul das sombras aprofunda
+//!    e as poças quentes ganham contraste de MATIZ. Normalizado à luminância:
+//!    nunca mexe na exposição (a LOOP A fica intacta por construção). O braço
+//!    diurno lê a ELEVAÇÃO REAL do sol ([`low_sun_split_weight`]) — a
+//!    gaussiana `golden` da atmosfera é estreita demais (07:30 do gauntlet:
+//!    sol a 26,9°, `golden` ≈ 0,0003 — o split era identidade na própria
+//!    cena do crítico; medido 2026-09-13).
+//! 10. **KEY da lua** ([`moon_key_drive`]) — a luz direcional que o
+//!     `sun_drive` aponta à lua ganha ×[`MOON_KEY_GAIN`] de iluminância e um
+//!     azul mais frio à noite: topo iluminado pela lua lê contra o vale em
+//!     sombra, que é o que desenha SILHUETAS. Zero VRAM extra (mesma luz,
+//!     mesmas cascatas de sombra).
+//!
 //! `VIBER_NO_POSTFX=1` desliga tudo (comparações A/B e GPUs fracas).
+//!
+//! LOOP C (luzes que TRABALHAM + perspetiva aérea, gauntlet BOTW)
+//! acrescentou:
+//!
+//! 11. **Bloom NOCTURNO** ([`NIGHT_BLOOM_THRESHOLD`]) — o prefilter a 700
+//!     matava TODO o bloom à noite (ver o const); à noite o threshold desce
+//!     para 0,70 (rampa com `night`) e a intensidade sobe: as CHAMAS das
+//!     lanternas (~1,0 no buffer) e os MIÚDOS das poças florescem com halo;
+//!     a massa do chão ao luar (0,1..0,3) e o céu ficam fora. O dia mantém
+//!     o 700 histórico intacto.
+//! 12. **Perspetiva aérea** ([`AERIAL_WGSL`], passe fullscreen depth-aware)
+//!     — o longe dessatura e desvia para cinza-azul em vez de branquear:
+//!     lê `dist + profundidade` do prepass, rampa 140→620 m, e mistura o
+//!     píxel para `luminância × tint azul-cinza` com um leve escurecer de
+//!     contraste — as serras viram CAMADAS contra o céu, o look BOTW que o
+//!     crítico pediu contra a "névoa branca de bug".
+
+use std::sync::OnceLock;
 
 use bevy::anti_alias::contrast_adaptive_sharpening::ContrastAdaptiveSharpening;
 use bevy::anti_alias::fxaa::Fxaa;
-use bevy::anti_alias::taa::TemporalAntiAliasing;
+use bevy::anti_alias::taa::{TemporalAntiAliasing, temporal_anti_alias};
 use bevy::camera::Exposure;
-use bevy::core_pipeline::prepass::{DepthPrepass, NormalPrepass};
+use bevy::core_pipeline::fullscreen_material::{FullscreenMaterial, FullscreenMaterialPlugin};
+use bevy::core_pipeline::prepass::{DepthPrepass, NormalPrepass, ViewPrepassTextures};
+use bevy::core_pipeline::schedule::Core3d;
 use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::core_pipeline::tonemapping::tonemapping as tonemapping_pass;
+use bevy::core_pipeline::{Core3dSystems, FullscreenShader};
 use bevy::light::{FogVolume, VolumetricFog};
-use bevy::pbr::{ContactShadows, ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
+use bevy::pbr::{
+    ContactShadows, ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel,
+};
 use bevy::post_process::auto_exposure::{AutoExposure, AutoExposureCompensationCurve};
 use bevy::post_process::bloom::{Bloom, BloomPrefilter};
 use bevy::post_process::dof::{DepthOfField, DepthOfFieldMode};
 use bevy::post_process::effect_stack::{ChromaticAberration, Vignette};
-use bevy::post_process::motion_blur::MotionBlur;
+use bevy::post_process::motion_blur::{MotionBlur, motion_blur};
 use bevy::prelude::*;
-use bevy::render::view::Msaa;
+use bevy::render::extract_component::{ExtractComponent, ExtractComponentPlugin};
+use bevy::render::render_resource::{
+    BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType,
+    Buffer, BufferBindingType, BufferDescriptor, BufferSize, BufferUsages, CachedRenderPipelineId,
+    Canonical, ColorTargetState, ColorWrites, FragmentState, Operations, PipelineCache,
+    RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
+    Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages, ShaderType, Specializer,
+    SpecializerKey, TextureFormat, TextureSampleType, TextureView, TextureViewDimension,
+    TextureViewId, Variants, VertexState,
+};
+use bevy::render::renderer::{RenderContext, RenderDevice, RenderQueue, ViewQuery};
+use bevy::render::view::{ExtractedView, Msaa, ViewTarget};
+use bevy::render::{Extract, ExtractSchedule, Render, RenderApp, RenderStartup, RenderSystems};
+use bevy::shader::Shader;
 
 use crate::ambient::point_in_polygon;
 use crate::player::Player;
 use crate::profiler::{Group, timed};
 use crate::worldsys::BiomeRegions;
+use crate::worldsys::SunLightBase;
 
 /// Exposição base (EV100) — o mesmo default do Bevy (`EV100_BLENDER`).
 ///
@@ -77,6 +134,74 @@ pub const BASE_EV100: f32 = 9.7;
 pub const BASE_BLOOM: f32 = 0.12;
 /// Teto do bloom — o clamp do bioma e o punch de impacto partilham-no.
 pub const MAX_BLOOM: f32 = 0.5;
+
+/// Threshold do prefilter de bloom de DIA — o valor histórico do módulo.
+///
+/// A escala do buffer HDR: os shaders PBR multiplicam por `view.exposure`
+/// (EV100 9,7 ⇒ ÷1505), mas o DOMO do céu e as PARTÍCULAS não — escrevem
+/// valores crus. De dia o domo (paleta 0,05..0,9) é o maior gradiente liso
+/// do frame e o boost de baixa-frequência do preset NATURAL (0,7) transformava
+/// qualquer threshold baixo numa wash de ecrã inteiro — o 700 é o guarda.
+pub const DAY_BLOOM_THRESHOLD: f32 = 700.0;
+
+/// Threshold do prefilter de bloom na NOITE plena (LOOP C).
+///
+/// **Âncoras do buffer HDR a EV100 9,7** (às 23:00 da vila; o bloom lê o
+/// buffer PRÉ-grading — o ND de −2,8 EV da LOOP A e o medidor aplicam-se ao
+/// tonemap, DEPOIS): a MÉDIA da noite mede ≈ **0,21** (o −2,25 EV do
+/// histograma do AutoExposure), o chão ao luar anda 0,1..0,3, o miolo da
+/// poça a 2-3 m de uma lanterna de 330 klm ≈ **0,5..1,0** e a chama
+/// (partícula aditiva, sem `view.exposure`) ≈ **1,0**. O 700 histórico
+/// ficava acima de TUDO — "não há bloom nenhum" era literal. **0,70** com
+/// softness 0,5 (joelho 0,35..0,70) põe as chamas e os miúlos das poças
+/// DENTRO e a massa do chão/céu FORA — o halo fica nas fontes, não no véu.
+/// (Primeira tentativa a 0,30: joelho a meio da massa do frame ⇒ a
+/// baixa-frequência do bloom lavava a noite inteira, média 0,155→0,312 —
+/// medido 2026-09-13.)
+pub const NIGHT_BLOOM_THRESHOLD: f32 = 0.70;
+
+/// Reforço de intensidade do bloom na noite plena (LOOP C). A base do bioma
+/// (0,12) + o `bloom_boost` da atmosfera à noite (0,16) + isto ≈ 0,48 — o
+/// halo das lanternas lê-se a 60+ m sem chegar ao teto [`MAX_BLOOM`].
+pub const NIGHT_BLOOM_INTENSITY: f32 = 0.20;
+
+/// `low_frequency_boost` do bloom na noite plena (LOOP C) — o preset NATURAL
+/// usa 0,7. A baixa frequência é o MILO dos halos: com o threshold nocturno
+/// alto ([`NIGHT_BLOOM_THRESHOLD`], só chamas/poças/moon alimentam o bloom),
+/// subir para 1,1 ALARGA o halo suave sem tocar na massa do frame — é isto
+/// que faz uma chama sub-pixel a 90 m ler como fonte de luz com corpo.
+/// O dia fica nos 0,7 do preset.
+pub const NIGHT_BLOOM_LF_BOOST: f32 = 1.1;
+
+/// `low_frequency_boost` corrente pela fração de noite: 0,7 de dia (o
+/// NATURAL aprovado), [`NIGHT_BLOOM_LF_BOOST`] na noite plena.
+pub fn night_bloom_lf_boost(night: f32) -> f32 {
+    if !night.is_finite() {
+        return 0.7;
+    }
+    0.7 + (NIGHT_BLOOM_LF_BOOST - 0.7) * night.clamp(0.0, 1.0)
+}
+
+/// Intensidade da vinheta na noite plena (LOOP C) — o dia mantém os 0,30 da
+/// r1. A vinheta é um grade ESPACIAL: escurece a PERIFERIA (onde vive a
+/// massa uniforme do chão ao luar) e poupa o CENTRO (o herói, a rua, as
+/// poças) — é o único passe que separa o miolo do frame SEM mexer na
+/// exposição (o medidor do AutoExposure normaliza a média e apaga qualquer
+/// tentativa global de espalhar o histograma; medido 2026-09-13: lanternas
+/// ×1,5 + ambiente −25% mudaram a MÉDIA e não a FORMA, rácio p90/mediana
+/// 1,18→1,18).
+pub const NIGHT_VIGNETTE: f32 = 0.48;
+
+/// Threshold do prefilter pela fração de noite: 700 de dia (o look aprovado
+/// não mexe), [`NIGHT_BLOOM_THRESHOLD`] na noite plena, rampa linear no meio
+/// (o crepúsculo mantém thresholds altos — o céu ainda tem gradiente liso).
+pub fn night_bloom_threshold(night: f32) -> f32 {
+    if !night.is_finite() {
+        return DAY_BLOOM_THRESHOLD;
+    }
+    let n = night.clamp(0.0, 1.0);
+    DAY_BLOOM_THRESHOLD + (NIGHT_BLOOM_THRESHOLD - DAY_BLOOM_THRESHOLD) * n
+}
 /// Piso do escurecimento por punch (EV) — o "ai" do dano recebido não
 /// transforma o ecrã em breu.
 pub const MAX_DARKEN_EV: f32 = 2.5;
@@ -109,6 +234,20 @@ fn taa_enabled() -> bool {
 /// RENDERIZA (bisseção 2026-09-07: glow de scattering na direção do sol
 /// confirmado em qa-visual). Custo: ~+8 ms de raymarch fixo por pixel —
 /// em mundos pesados `VIBER_NO_VOLUMETRICS=1` devolve o orçamento.
+/// Nível do SSAO (`VIBER_SSAO`); sem o env, o histórico: High com TAA,
+/// Medium sem (o ruído de 18 spp sem acumulação temporal não se limpava).
+fn ssao_quality(taa: bool) -> ScreenSpaceAmbientOcclusionQualityLevel {
+    use ScreenSpaceAmbientOcclusionQualityLevel as Q;
+    match std::env::var("VIBER_SSAO").as_deref() {
+        Ok("low") | Ok("baixo") => Q::Low,
+        Ok("medium") | Ok("medio") | Ok("médio") => Q::Medium,
+        Ok("high") | Ok("alto") => Q::High,
+        Ok("ultra") => Q::Ultra,
+        _ if taa => Q::High,
+        _ => Q::Medium,
+    }
+}
+
 fn volumetrics_enabled() -> bool {
     std::env::var_os("VIBER_NO_VOLUMETRICS").is_none()
 }
@@ -202,31 +341,37 @@ pub fn ev100_for_exposure_multiplier(base_ev100: f32, multiplier: f32) -> f32 {
 
 /// Teto do ganho da exposição AUTOMÁTICA nas cenas escuras, em stops.
 ///
-/// O `AutoExposure` expõe para a luminância média da cena. De noite o mundo
-/// físico fica ~6 stops abaixo do meio-cinza e o medidor satura no máximo
-/// (+6 EV) — mas o céu e a névoa vivem na ESCALA DA PALETA (o domo é um
-/// material custom que nunca recebe a exposição física, ver `sky.rs`;
-/// `ambient.rs` usa a mesma escala para o fog se fundir com o horizonte do
-/// domo). Multiplicar a paleta noturna (azul-escuro ~0.04) por 2^6 põe o
-/// frame inteiro a branco — o "chuva à noite = ecrã branco" (repro ao vivo
-/// 2026-09-10 no pântano: fog medido em 0.048 de luminância, frame a 236/255;
-/// com a exposição neutralizada a mesma cena é uma noite azul legível).
+/// **Âncora empírica (2026-09-12, vila do simple-rpg):** o histograma do
+/// `AutoExposure` lê o buffer HDR, onde o fog e o domo escrevem a PALETA em
+/// bruto e as poças/chamas/luas escrevem valores 10..30× acima — a MÉDIA da
+/// noite da vila mede ≈ −2.25 EV e a golden hour ≈ −2.6 EV (derivado de
+/// pares de screenshots com lift conhecido). O "escuro físico" de −6..−12
+/// em que a curva original pensava nunca acontece; a curva até −3 é o que
+/// protege o DIA e a GOLDEN HOUR de serem tocados, e o teto abaixo de −6 é
+/// a rede de segurança para cenas mesmo sem luz nenhuma.
 ///
-/// 0.5 = a noite fica a NOITE (o ganho que resta é o mínimo para as fontes
-/// quentes poparem); medido no simples-rpg, pântano com chuva a 0.9, 23:36 —
-/// frame 127/255 com 2.0, 83/255 com 0.5, 71/255 com 0.0. O dia, o crepúsculo
-/// e os interiores NÃO são tocados: a rampa só começa a apertar em
-/// [`NIGHT_LIFT_KNEE_EV`]. `VIBER_NO_AECURVE=1` devolve a curva plana (o
-/// comportamento sem teto) para A/B.
+/// A legibilidade da NOITE não vive aqui — vive no desvio de grading
+/// [`NIGHT_GRADING_EXPOSURE_EV`], que escurece o frame DEPOIS do medidor
+/// (estável, não é corrigido). Este teto mantém-se 0.5: defensivo, e
+/// intocado pelo look aprovado de dia.
+/// `VIBER_NO_AECURVE=1` devolve a curva plana (o comportamento sem teto)
+/// para A/B.
 pub const NIGHT_LIFT_CAP_EV: f32 = 0.5;
 
-/// Luminância média (log2, a unidade do histograma) a partir da qual o teto
-/// começa a apertar. 3.0 = o comportamento de sempre fica INTACTO para cenas
-/// até 3 stops abaixo do meio-cinza (crepúsculo, sombra funda, interiores) e o
-/// aperto faz-se em rampa até ao dobro (6 stops = noite cheia, onde o medidor
-/// satura). Sem esta folga, o teto escurecia também a alvorada/crepúsculo que
-/// o user aprovou.
-pub const NIGHT_LIFT_KNEE_EV: f32 = 3.0;
+/// Luminância média (log2, a unidade do histograma) a partir da qual a curva
+/// começa a cercear o lift do medidor (rampa até ao teto).
+///
+/// **−6,0 (LOOP C; era −3,0).** A noite da vila MEDIA −2,25 EV quando a curva
+/// foi calibrada (LOOP A, ambiente nocturno 0,13); o lote LOOP C baixou o
+/// ambiente (0,075) e a média desceu para ≈ **−3,9** — CAIU DENTRO da rampa
+/// antiga, que roubava ~1,65 stops ao medidor: com o ND de −2,8 EV por cima,
+/// as poças esmagavam para ~0,15 e liam-se azul (o "no light doing work" do
+/// crítico era em parte ISTO — medido 2026-09-13: brazeiro de 1M lm com a
+/// curva antiga quente −0,09; com o joelho a −6 e a mesma cena, poça a
+/// tonemap(1,5) ≈ 0,55 BLAZING). O joelho a −6 fica ABAIXO da noite mais
+/// escura autorada (−3,9) com margem, e a golden hour (−2,6) e o dia
+/// continuam em medição cheia — exactamente como estavam.
+pub const NIGHT_LIFT_KNEE_EV: f32 = 6.0;
 
 /// Compensação (stops) que o medidor soma ao alvo, para uma cena de
 /// luminância média `x` (log2) — o `y` da curva de
@@ -277,16 +422,27 @@ pub fn night_capped_compensation_curve() -> AutoExposureCompensationCurve {
 /// [`auto_exposure_compensation`] nos cepos (e no escuro fundo, onde o valor
 /// já é constante); separados para o teste poder verificar que a curva é
 /// construível (monótona, sem descontinuidades).
+///
+/// EXACTIDÃO f32 OBRIGATÓRIA: o `from_curve` do Bevy valida a continuidade
+/// com IGUALDADE BIT-A-BIT (`p0 + (p1 − p0) == p1`), o que só acontece em
+/// coordenadas que são frações binárias EXACTAS (múltiplos de 0.25 aqui).
+/// Amostrar em x "arbitrários" (−2.85…) fazia o `LinearSpline` falhar com
+/// `DiscontinuityFound` e a curva caía silenciosamente na LUT PLANA (sem
+/// teto — a noite voltava ao branco). Com `knee` = 2.0 os pontos da rampa
+/// (y = 2x+4) herdam a exactidão dos x escolhidos.
 fn night_capped_curve_points() -> [bevy::math::Vec2; 6] {
     use bevy::math::vec2;
     let knee = NIGHT_LIFT_KNEE_EV;
     let at = |x: f32| vec2(x, auto_exposure_compensation(x));
     [
         // Escuro fundo: o teto já está preso (dois pontos só para a LUT
-        // cobrir toda a gama do histograma).
-        at(-12.0),
+        // cobrir toda a gama do histograma). −15/−12/−9/−6/0/8 são múltiplos
+        // de 0.25 — exactidão f32 obrigatória (ver doc acima). NOTA: com
+        // knee = 6, o 2.º ponto (−2·knee = −12) tem de ser DISTINTO do 1.º
+        // (x duplicado = DiscontinuityFound → LUT plana silenciosa).
+        at(-15.0),
         at(-2.0 * knee),
-        at(-1.5 * knee),
+        at(-9.0),
         at(-knee),
         at(0.0),
         at(8.0),
@@ -330,6 +486,37 @@ impl Plugin for PostFxPlugin {
             return;
         }
         app.add_plugins(bevy::post_process::auto_exposure::AutoExposurePlugin);
+        // LOOP B — split-tone pós-tonemap: o shader é INLINE (const), o
+        // handle vive no OnceLock porque `fragment_shader()` é estática.
+        let shader_handle = app
+            .world_mut()
+            .resource_mut::<Assets<Shader>>()
+            .add(Shader::from_wgsl(SPLIT_TONE_WGSL, "viber_split_tone.wgsl"));
+        let _ = SPLIT_TONE_SHADER.set(shader_handle);
+        app.add_plugins(FullscreenMaterialPlugin::<SplitToneSettings>::default());
+        // LOOP C — perspetiva aérea: passe fullscreen depth-aware (padrão
+        // water_ssr, ANTES do TAA). Default-on, sem env de opt-out (é o
+        // caminho oficial da distância, não um efeito opcional).
+        let aerial_shader =
+            app.world_mut()
+                .resource_mut::<Assets<Shader>>()
+                .add(Shader::from_wgsl(
+                    AERIAL_WGSL,
+                    "viber_aerial_perspective.wgsl",
+                ));
+        let _ = AERIAL_SHADER.set(aerial_shader);
+        app.add_plugins(ExtractComponentPlugin::<AerialPerspective>::default());
+        if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+            render_app
+                .init_resource::<ExtractedAerial>()
+                .add_systems(ExtractSchedule, extract_aerial)
+                .add_systems(RenderStartup, init_aerial_pipeline)
+                .add_systems(
+                    Render,
+                    prepare_aerial.in_set(RenderSystems::PrepareBindGroups),
+                )
+                .add_systems(Core3d, aerial_schedule_configs());
+        }
         app.add_systems(
             bevy::app::Update,
             (
@@ -338,6 +525,19 @@ impl Plugin for PostFxPlugin {
                 // frame (publicada depois de `sun_drive`; o registo/glue vive
                 // no `AmbientPlugin`, que também consome a paleta).
                 timed(Group::Fx, drive_postfx).after(crate::worldsys::atmosphere_drive),
+                timed(Group::Fx, drive_split_tone),
+                // KEY da lua (LOOP B): depois do `sun_drive` (que reescreve a
+                // luz a partir do SunLightBase) e depois da atmosfera (fonte
+                // da fração `night`).
+                timed(Group::Fx, moon_key_drive).after(crate::worldsys::sun_drive),
+                // KEY dourada (LOOP D): mesma cadeia, janela de sol baixo —
+                // depois da da lua para o crepúsculo compor por cima se
+                // algum dia os pesos coexistirem (na prática não coexistem).
+                timed(Group::Fx, golden_key_drive).after(crate::worldsys::sun_drive),
+                // POÇAS de tocha (LOOP D): ganho nocturno ×8 nas PointLights
+                // quentes (base capturada; dia = ganho 1). Depois da
+                // atmosfera (fração `night`).
+                timed(Group::Fx, torch_pool_drive).after(crate::worldsys::atmosphere_drive),
                 timed(Group::Fx, drive_dof_focus),
             )
                 .chain(),
@@ -386,10 +586,11 @@ fn attach_postfx_to_cameras(
                 // directamente no alvo HDR (SKY_RADIANCE = 1, ver sky.rs) —
                 // numa wash de ecrã inteiro (superfícies texturizadas
                 // cancelam-se nos mips; um gradiente liso não). Threshold 700
-                // deixa o glow para o que é realmente brilhante: o disco
-                // solar e fontes emissivas à noite.
+                // deixa o glow para o que é realmente brilhante; à NOITE o
+                // `drive_postfx` desce-o (rampa `night`) — ver
+                // [`NIGHT_BLOOM_THRESHOLD`].
                 prefilter: BloomPrefilter {
-                    threshold: 700.0,
+                    threshold: DAY_BLOOM_THRESHOLD,
                     threshold_softness: 0.5,
                 },
                 ..Bloom::NATURAL
@@ -417,13 +618,11 @@ fn attach_postfx_to_cameras(
             // MESMO prepass, logo os motion vectors são partilhados.
             MotionBlur::default(),
             // SSAO High aproveita o denoise temporal do TAA (r1 era Medium
-            // por causa do ruído sem acumulação).
+            // por causa do ruído sem acumulação). `VIBER_SSAO=medium|low|high|
+            // ultra` sobrepõe para A/B — Medium (8 spp vs 18 do High) é a
+            // alvanca listada no PERFORMANCE.md; o TAA limpa o ruído extra.
             ScreenSpaceAmbientOcclusion {
-                quality_level: if taa_enabled() {
-                    ScreenSpaceAmbientOcclusionQualityLevel::High
-                } else {
-                    ScreenSpaceAmbientOcclusionQualityLevel::Medium
-                },
+                quality_level: ssao_quality(taa_enabled()),
                 ..ScreenSpaceAmbientOcclusion::default()
             },
             // Contact shadows: raymarch na depth por luz com sombras — as
@@ -482,6 +681,13 @@ fn attach_postfx_to_cameras(
             // Color grading (CDL) — o `drive_postfx` conduz-o pela hora do dia.
             bevy::render::view::ColorGrading::default(),
         ));
+        // Split-tone (LOOP B), à parte: o tuple acima já usa os 15 slots do
+        // `Bundle` — sombras frias / highlights quentes pela hora, passe
+        // fullscreen pós-tonemap conduzido pelo `drive_split_tone`.
+        commands.entity(camera).insert(SplitToneSettings::default());
+        // Perspetiva aérea (LOOP C): o marcador liga o passe depth-aware no
+        // render app (as matrizes vêm do `ExtractedView` no prepare).
+        commands.entity(camera).insert(AerialPerspective);
         if taa_enabled() {
             commands.entity(camera).insert((
                 TemporalAntiAliasing::default(),
@@ -525,15 +731,1103 @@ fn attach_postfx_to_cameras(
     }
 }
 
+/// Temperatura do grading CDL pela hora: a golden hour aquece (+0.35), a
+/// noite arrefece (−0.25) — o "film stock" muda com o dia.
+pub fn grade_temperature(golden: f32, night: f32) -> f32 {
+    grade_temperature_full(golden, 0.0, night)
+}
+
+/// Aquecimento GLOBAL do CDL na janela de sol baixo (LOOP D). O `golden` da
+/// atmosfera é a gaussiana estreita (pico 4°, σ 8° — ~0 às 07:30); sem este
+/// braço o stock só aquecia nos ~15 min do nascer. 0.28 pintava o frame
+/// inteiro de laranja (crítica r1-D) — 0.10 mantém o aquecimento na KEY da
+/// luz e no reboco sunlit; o resto do frame preserva o albedo.
+pub const GOLDEN_GRADE_WARMTH: f32 = 0.10;
+
+/// Temperatura do grading CDL pela hora, com o braço de sol baixo (LOOP D).
+/// `low_sun` é [`low_sun_split_weight`] da elevação REAL do sol: a 07:30
+/// (26,9°) soma ~0.10 de aquecimento global — o reboco sunlit aquece pela
+/// KEY da luz e o resto do frame pelo stock; as sombras ficam para o
+/// split-tone arrefecer (B > R medido em sombra a 07:30).
+pub fn grade_temperature_full(golden: f32, low_sun: f32, night: f32) -> f32 {
+    let g = if golden.is_finite() { golden } else { 0.0 };
+    let l = if low_sun.is_finite() { low_sun } else { 0.0 };
+    let n = if night.is_finite() { night } else { 0.0 };
+    g * 0.35 + l * GOLDEN_GRADE_WARMTH - n * 0.25
+}
+
+/// Saturação pós-tonemap do grading CDL pela hora. A golden hour satura
+/// (+0.18); a noite NÃO dessatura (2026-09-12): a paleta noturna (fog/céu)
+/// já é um azul profundo pouco saturado à nascença (B:R ≈ 2.6 no fog) e o
+/// −0.22 antigo esmagava-o a CINZENTO — a "lama" do crítico (saturação
+/// medida 0.07 no frame inteiro às 23:00 da vila). A assinatura BOTW é azul
+/// SATURADO: 1.0 deixa o azul da paleta chegar ao ecrã e as poças de
+/// lanterna ganham o contraste de matiz que as separa do fundo.
+pub fn grade_saturation(golden: f32, _night: f32) -> f32 {
+    1.0 + golden * 0.18
+}
+
+/// Desvio de exposição CDL (stops) aplicado à noite, por [`night`].
+///
+/// A PALETA é que está clara demais para ler como noite: o fog e o domo
+/// escrevem valores crus (fog noturno ≈ 0.05 linear) e o medidor (que lê o
+/// buffer COM essas fontes) abre a cena toda para a média — resultado
+/// medido 2026-09-12, vila às 23:00 pré-correcção: luminância média 0.28,
+/// 92% do frame sem textura local, ZERO píxeis escuros — uma noite "de
+/// estúdio" sem escuridão (a "lama cinzenta" do crítico). O BOTW lê-se
+/// porque a noite É ESCURA: céu 0.05..0.13, chão ao luar ~0.10, poças e
+/// lua por contraste.
+///
+/// Este desvio EMPURRA o frame inteiro para baixo (−2.8 stops na noite
+/// cheia, rampando com `night`) DEPOIS do medidor — um filtro ND estável
+/// que o `AutoExposure` não corrige (o histograma é computado no buffer
+/// HDR pré-grading). As razões preservam-se: o fog e o céu escurecem, e o
+/// que já estava 10..30× acima do fog (chamas emissivas, lua, estrelas e
+/// as poças com as lanternas reforçadas no XML) continua acima e POPA.
+/// Medido: média 0.28 → 0.114, "lama" 0.84 → 0.002, 52% do frame <0.10,
+/// poças quentes visíveis, céu azul B:R ≈ 1.9.
+///
+/// O dia (night=0) fica EXACTAMENTE como estava — desvio 0.
+/// **−6,8 (LOOP C; era −2,8 na LOOP A).** Com o joelho da curva do medidor
+/// alargado (ver [`NIGHT_LIFT_KNEE_EV`]) as POÇAS voltaram a viver — mas o
+/// medidor passa a centrar a noite ~2 stops acima do que a cena da LOOP A
+/// pedia (medido 2026-09-13, vantage do crítico às 23:00: ND −2,8 → média
+/// 0,61 "noite de estúdio"; ND −4,8 → 0,38, ND −6,8 → 0,21 — o ombro do TonyMcMapface come
+/// um stop por cada par de EV). −7,4 pousa a noite na banda escura
+/// (0,08–0,20) COM as poças e os halos por cima (flames ≥0,9 sobrevivem ao
+/// filtro no ombro; o miolo das poças também). O dia (night = 0) fica
+/// EXACTAMENTE como estava — desvio 0.
+pub const NIGHT_GRADING_EXPOSURE_EV: f32 = -7.4;
+
+/// Desvio de exposição (stops) para a fração de noite corrente — rampa
+/// linear até [`NIGHT_GRADING_EXPOSURE_EV`] na noite cheia.
+pub fn grade_night_exposure_offset(night: f32) -> f32 {
+    NIGHT_GRADING_EXPOSURE_EV * night.clamp(0.0, 1.0)
+}
+
+// ── LOOP B: hierarquia de valores (key de lua + split-tone) ─────────────
+//
+// A LOOP A tornou a noite LEGÍVEL (azul escuro em vez de lama) — mas o
+// crítico mantém dois gaps contra o BOTW:
+//
+// 1. **Noite sem âncora focal**: pontos quentes espalhados num vazio, sem
+//    KEY dominante que desenhe silhuetas contra o céu. A luz direcional já
+//    vira lua às 6% (`worldsys::sun_drive`, 600 lux do sol de 10 klx), o
+//    que após o filtro ND de −2.8 EV da LOOP A deixa o chão ao luar NO
+//    MESMO nível do fog — tudo meio-cinza-azulado, nada se destaca.
+// 2. **Sem separação de temperatura**: o `ColorGrading` global aquece a
+//    golden hour INTEIRA (sombras incluídas — "warm wash"), e as sombras
+//    ficam pretos neutros que desligam do caster. O bevy 0.19 só tem
+//    `temperature` GLOBAL (as secções shadows/midtones/highlights são
+//    escalares: saturation/contrast/gamma/gain/lift), portanto o
+//    split-tone quente/frio clássico precisa de um passe próprio.
+
+/// Ganho de iluminância da luz direcional à noite (a KEY da lua).
+///
+/// O `sun_drive` deixa a lua a [`crate::worldsys::MOONLIGHT_RATIO`] = 6% do
+/// sol autorado (600 lux num mundo de 10 klx). Com o filtro ND da LOOP A
+/// (−2.8 EV) isso deixa o chão ao luar ≈ ao nível do fog noturno — sem
+/// contraste entre "topo iluminado pela lua" e "vale em sombra", que é o
+/// que faz uma silhueta ler. Este ganho multiplica POR CIMA do valor do
+/// `sun_drive` (composição por frame, sem acumulação) e rampa com a MESMA
+/// fração `night` da atmosfera, portanto o crepúsculo não dá salto.
+///
+/// **1.8 e não mais alto (medido 2026-09-13, vila às 23:00):** com 2.6 o
+/// chão/treeline ao luar subia ao NÍVEL do céu noturno (0.16 vs 0.18 de
+/// luma — contraste da banda de horizonte 1.09×, silhueta ilegível: a KEY
+/// apagava a separação que devia criar). A 1.8 o chão desce para ~60% do
+/// céu e a linha de árvores/ telhados lê como massa escura contra o brilho
+/// do céu — o look BOTW (céu brilhante, terra escura, poças por contraste).
+/// Ver [`MOON_KEY_COLOR_MIX`].
+pub const MOON_KEY_GAIN: f32 = 1.8;
+
+/// Fração do degrau de cor da key da lua (0 = fica o `MOON_COLOR` do
+/// `sun_drive`, 1 = [`MOON_KEY_COLOR`] cheio à noite plena).
+pub const MOON_KEY_COLOR_MIX: f32 = 0.45;
+
+/// Cor linear da key da lua — mais fria e mais saturada que o
+/// [`crate::worldsys::MOON_COLOR`] (0.40, 0.54, 0.86), que após a
+/// dessaturação do TonyMcMapface nas sombras lia a cinzento-azulado.
+/// O push de azul + a subida de iluminância dão o "banho de luar frio"
+/// contra o qual as poças quentes (0xffb264) POPAM por MATIZ e não só
+/// por brilho.
+pub const MOON_KEY_COLOR: [f32; 3] = [0.30, 0.44, 0.98];
+
+/// Multiplicador de iluminância da lua para a fração de noite corrente —
+/// 1.0 de dia (o sol fica EXACTAMENTE como estava), [`MOON_KEY_GAIN`] na
+/// noite plena, rampa linear no meio.
+pub fn moon_illuminance_factor(night: f32) -> f32 {
+    if !night.is_finite() {
+        return 1.0;
+    }
+    1.0 + (MOON_KEY_GAIN - 1.0) * night.clamp(0.0, 1.0)
+}
+
+/// KEY da lua: reforça a luz direcional que o `sun_drive` já apontou à
+/// lua (direção MOON_ELEVATION_DEG, sombras do sol reaproveitadas — ZERO
+/// VRAM extra: é a mesma luz, o mesmo shadow map 4096²). Corre DEPOIS do
+/// `sun_drive` (composição por frame, nunca acumula) e é no-op total de
+/// dia (`night` = 0), portanto o look aprovado do dia/golden da LOOP A
+/// não mexe.
+fn moon_key_drive(
+    atmosphere: Res<crate::worldsys::AtmosphereState>,
+    mut lights: Query<(&mut DirectionalLight, &SunLightBase)>,
+) {
+    let night = atmosphere.night.clamp(0.0, 1.0);
+    if night <= 0.0 {
+        return;
+    }
+    let gain = moon_illuminance_factor(night);
+    let mix = MOON_KEY_COLOR_MIX * night;
+    for (mut light, _base) in &mut lights {
+        // Multiplicação PURA por cima do que o sun_drive escreveu neste
+        // frame: o blend dia/noite do sun_drive fica intacto e não há
+        // feedback (o SunLightBase nunca é alterado).
+        light.illuminance *= gain;
+        let c = light.color.to_linear();
+        light.color = Color::LinearRgba(bevy::color::LinearRgba::rgb(
+            c.red + (MOON_KEY_COLOR[0] - c.red) * mix,
+            c.green + (MOON_KEY_COLOR[1] - c.green) * mix,
+            c.blue + (MOON_KEY_COLOR[2] - c.blue) * mix,
+        ));
+    }
+}
+
+// ── LOOP D: KEY dourada do sol baixo ─────────────────────────────────────
+//
+// O `sun_drive` escreve a cor da direcional como `mix(MOON_COLOR, base.color,
+// day)` — `base.color` é o valor AUTORADO (branco), não o `sun_tint` da
+// atmosfera (que só pinta o DISCO no domo). Resultado medido pelo crítico da
+// LOOP C às 07:49: "neutral-white overhead sun, warmth on one roof only" —
+// TODA a superfície sunlit recebia a mesma luz branca; o aquecimento vivia
+// só no grading (global, sombras incluídas) e num highlight tint meia-força.
+//
+// A key dourada aquece a LUZ DIRECCIONAL na janela do sol baixo — o mesmo
+// lever físico da key da lua (LOOP B), no sentido oposto: sol rasante =
+// caminho atmosférico longo = âmbar. Assim o aquecimento entra pela
+// ILUMINAÇÃO (todas as superfícies viradas para o sol, cada uma com a sua
+// albedo), o céu continua AZUL (fill frio do próprio domo) e a sombra fica
+// para o split-tone arrefecer — quente/frio por CONSTRUÇÃO, não por tint.
+
+/// Cor linear da key dourada — âmbar de sol rasante, **normalizada à
+/// luminância** (luma = 1): misturar branco autoral para aqui NÃO escurece
+/// a cena (a primeira tentativa com (1.0, 0.56, 0.22) cru — luma 0,61 —
+/// cortava ~23% da luz do sol e o medidor do AutoExposure amplificava o
+/// corte; medido 2026-09-13, golden 07:30: média do frame 0,62 → 0,47).
+/// R > 1 em linear é HDR legítimo — é o que preserva a exposição do dia.
+pub const GOLDEN_KEY_COLOR: [f32; 3] = [1.593, 0.889, 0.352];
+/// Profundidade do degrau de cor da key dourada na janela cheia (0 = fica
+/// a cor do `sun_drive`, 1 = [`GOLDEN_KEY_COLOR`] cheio). 0.40 mantém o
+/// dourado na LUZ (reboco sunlit quente) sem virar lavagem laranja global —
+/// 0.62 pintava o frame INTEIRO de laranja-monocromo (crítica r1-D: "filtro
+/// sépia a 100%", bilhete regressou a "outra liga"); 0.40 preserva o albedo
+/// (céu azul, relva verde, sombras frias) com a key ainda a ler-se dourada.
+pub const GOLDEN_KEY_MIX: f32 = 0.40;
+
+/// Fração do degrau de cor da key dourada pela elevação do sol e pela noite
+/// (fn pura testável): [`GOLDEN_KEY_MIX`] × [`low_sun_split_weight`] na
+/// janela, × (1 − night) para o crepúsculo nunca empilhar a key âmbar com a
+/// key da lua (a lua só acende com elevação < −1°, mas o guard barato
+/// fecha a porta a qualquer sobreposição).
+pub fn golden_key_mix(elevation_deg: f32, night: f32) -> f32 {
+    if !elevation_deg.is_finite() || !night.is_finite() || elevation_deg <= 0.0 {
+        return 0.0;
+    }
+    GOLDEN_KEY_MIX * low_sun_split_weight(elevation_deg) * (1.0 - night.clamp(0.0, 1.0))
+}
+
+/// KEY dourada: aquece a COR da luz direcional na janela do sol baixo (ver
+/// secção LOOP D acima). Corre DEPOIS do `sun_drive` (que reescreve a cor a
+/// partir do `SunLightBase` a cada frame — a composição nunca acumula) e
+/// depois da `moon_key_drive`; é no-op total à noite (elevação ≤ 0 ou
+/// `night` = 1) e ao meio-dia (elevação ≥ [`SPLIT_TONE_LOW_SUN_ZERO_DEG`]),
+/// portanto o look aprovado da noite LOOP C e do dia neutro não mexe.
+fn golden_key_drive(
+    sun: Res<crate::worldsys::SunState>,
+    mut lights: Query<(&mut DirectionalLight, &SunLightBase)>,
+) {
+    let mix = golden_key_mix(sun.elevation_deg, sun.night);
+    if mix <= 0.0 {
+        return;
+    }
+    for (mut light, _base) in &mut lights {
+        let c = light.color.to_linear();
+        light.color = Color::LinearRgba(bevy::color::LinearRgba::rgb(
+            c.red + (GOLDEN_KEY_COLOR[0] - c.red) * mix,
+            c.green + (GOLDEN_KEY_COLOR[1] - c.green) * mix,
+            c.blue + (GOLDEN_KEY_COLOR[2] - c.blue) * mix,
+        ));
+    }
+}
+
+// ── LOOP D: POÇAS de tocha — ganho NOCTURNO sobre as PointLights quentes ──
+//
+// O crítico da LOOP C: "tiny pools". O raio visível de uma poça cresce com
+// a RAIZ CÚBICA da intensidade (falloff 1/d³ no chão: I·h/d³), portanto
+// poças 2× pedem luz ×8. Fazer isso no XML (1M lm por tocha) EMPURRAVA O
+// MEDIDOR do AutoExposure de DIA — os núcleos das tochas subiam a
+// brilho-de-sol no histograma e o servo fechava a golden hour ~1,2 EV
+// (medido 2026-09-13: média do frame 0,62 → 0,20; bissectado com o XML a
+// 120k → 0,47). A solução é o MESMO padrão da key da lua: a base autoral é
+// capturada UMA vez ([`TorchLightBase`]) e um drive compõe por frame —
+// de dia `night` = 0 ⇒ ganho 1 ⇒ o dia aprovado fica EXACTAMENTE como
+// estava; à noite as luzes QUENTES sobem ×[`TORCH_POOL_NIGHT_GAIN`].
+//
+// O gate é COLORIMÉTRICO (R > B linear): apanha tochas/braseiros/janelas
+// (0xffa040, 0xffa83a, 0xffb264…) e poupa os acentos frios autorados
+// (o cristal 0x3f8fff do posto). O teto [`TORCH_POOL_NIGHT_MAX_LUMEN`]
+// guarda a NOITE de lavar (o medidor está preso no lift máximo: luz a mais
+// clareia o display em vez de o servo absorver). Nada mais escreve
+// `PointLight::intensity` no runtime (o orçamento de sombras do ambient.rs
+// só toca `shadow_maps_enabled`/Visibility).
+
+/// Ganho de intensidade das TOCHAS (PointLights quentes COM sombra autoral)
+/// na noite plena (LOOP D).
+///
+/// **8×** às 120k lm das tochas de rua da LOOP C: raio da poça ×2 (6 m →
+/// ~12 m, ainda sob o `range` default de 20 m do Bevy — o clamp não come a
+/// saia). O filtro ND da noite (−7,4 EV) dá folga: mesmo os miolos a
+/// brilho-de-sol ficam no ombro do TonyMcMapface (~0,7 display), não
+/// clipam. A família é discriminada pelo marcador `AuthoredShadowLight`
+/// (os postes de tocha do simple-rpg autoram `shadows="true"`; o marcador
+/// não é removido quando o orçamento desliga a sombra).
+pub const TORCH_POOL_NIGHT_GAIN: f32 = 8.0;
+
+/// Ganho das DEMAIS luzes quentes (janelas/braseiros/faróis, sombra off) —
+/// a luz ambiente quente da vila sobe um pouco (×2), sem competir com as
+/// poças. A variante XML-1M validada usava EXACTAMENTE estes rácios
+/// (tochas ×8, janelas ×2) e media: 11 poças quentes, estrelas visíveis,
+/// noite ainda a ler noite.
+pub const WARM_FILL_NIGHT_GAIN: f32 = 2.0;
+
+/// Intensidade autoral de uma PointLight quente, capturada antes de o
+/// [`torch_pool_drive`] começar a compor (o espelho de `SunLightBase`).
+#[derive(Debug, Clone, Copy, Component)]
+pub struct TorchLightBase {
+    pub intensity: f32,
+}
+
+/// Multiplicador de uma tocha (sombra autoral) pela fração de noite: 1 de
+/// dia (o valor authored fica EXACTAMENTE como estava),
+/// [`TORCH_POOL_NIGHT_GAIN`] na noite plena, rampa linear no meio.
+pub fn torch_pool_gain(night: f32) -> f32 {
+    night_gain(TORCH_POOL_NIGHT_GAIN, night)
+}
+
+/// Multiplicador de uma luz quente SEM sombra autoral (janelas/braseiros):
+/// [`WARM_FILL_NIGHT_GAIN`] na noite plena — ver const.
+pub fn warm_fill_gain(night: f32) -> f32 {
+    night_gain(WARM_FILL_NIGHT_GAIN, night)
+}
+
+fn night_gain(full: f32, night: f32) -> f32 {
+    if !night.is_finite() {
+        return 1.0;
+    }
+    1.0 + (full - 1.0) * night.clamp(0.0, 1.0)
+}
+
+/// Intensidade nocturna composta: `base × gain` — fn pura testável (o gain
+/// já vem da família certa; ver os dois consts).
+pub fn torch_pool_target(base: f32, gain: f32) -> f32 {
+    if !base.is_finite() || base <= 0.0 || !gain.is_finite() || gain <= 0.0 {
+        return base;
+    }
+    base * gain
+}
+
+/// Uma PointLight é "quente" (família tocha/braseiro/janela) pelo seu canal
+/// linear: R acima de B pelo limiar. Fn pura testável.
+pub fn torch_pool_is_warm(color: bevy::color::LinearRgba) -> bool {
+    color.red.is_finite() && color.blue.is_finite() && color.red > color.blue + 0.05
+}
+
+/// Composição por frame do ganho nocturno das poças: captura a base na
+/// primeira observação e escreve `base × torch_pool_gain(night)` — nunca
+/// acumula (a base nunca é alterada). Corre no `Update`, depois da
+/// `atmosphere_drive` (fonte da fração `night`).
+fn torch_pool_drive(
+    atmosphere: Res<crate::worldsys::AtmosphereState>,
+    mut commands: Commands,
+    mut lights: Query<(
+        Entity,
+        &mut PointLight,
+        Option<&TorchLightBase>,
+        Option<&crate::ambient::AuthoredShadowLight>,
+    )>,
+) {
+    let torch = torch_pool_gain(atmosphere.night);
+    let fill = warm_fill_gain(atmosphere.night);
+    if (torch - 1.0).abs() < 1e-4 && (fill - 1.0).abs() < 1e-4 {
+        return;
+    }
+    for (entity, mut light, base, torch_authored) in &mut lights {
+        if !torch_pool_is_warm(light.color.to_linear()) {
+            continue;
+        }
+        let gain = if torch_authored.is_some() {
+            torch
+        } else {
+            fill
+        };
+        match base {
+            Some(base) => {
+                let target = torch_pool_target(base.intensity, gain);
+                if (light.intensity - target).abs() > base.intensity * 1e-3 {
+                    light.intensity = target;
+                }
+            }
+            None => {
+                commands.entity(entity).insert(TorchLightBase {
+                    intensity: light.intensity,
+                });
+            }
+        }
+    }
+}
+
+/// Extremo FRIO do split-tone na hora baixa de sol (sombras) — multiplicador
+/// linear, normalizado à luminância no shader (não escurece: só matiz).
+pub const SPLIT_TONE_GOLDEN_SHADOW: [f32; 3] = [0.78, 0.92, 1.22];
+/// Extremo QUENTE do split-tone na hora baixa de sol (highlights).
+///
+/// **LOOP D** endureceu o braço quente ([1.18, 1.02, 0.80] → [1.24, 1.00,
+/// 0.72]): o crítico mediu "warmth on one roof only" — o par antigo com peso
+/// máximo 0.85 mal empurrava R−B para +0.03 em reboco sunlit a 07:49. Com a
+/// janela alargada (ver [`SPLIT_TONE_LOW_SUN_FULL_DEG`]) o highlight tint mais
+/// saturado é o que faz o par QUENTE/FRIO ler num relance: fachada ao sol
+/// dourada, sombra azul por baixo.
+pub const SPLIT_TONE_GOLDEN_HIGHLIGHT: [f32; 3] = [1.24, 1.00, 0.72];
+/// Extremo FRIO do split-tone na noite (sombras — o azul mais fundo).
+pub const SPLIT_TONE_NIGHT_SHADOW: [f32; 3] = [0.62, 0.82, 1.38];
+/// Extremo do split-tone na noite para highlights: quente PRONUNCIADO
+/// (LOOP D; era [1.12, 1.0, 0.86]) — as poças/braseiros são fontes 0xffa83a
+/// mas o crítico media ~90% do frame num ÚNICO navy: o tint antigo mal
+/// segurava o fim do falloff quente. [1.18, 0.98, 0.78] com o bloom nocturno
+/// da LOOP C faz a POÇA inteira (não só a chama) ler laranja contra o chão
+/// azul — o eixo quente/frio que o crítico pediu.
+pub const SPLIT_TONE_NIGHT_HIGHLIGHT: [f32; 3] = [1.18, 0.98, 0.78];
+
+/// Peso máximo do split-tone na hora baixa de sol (a LOOP A aprovou a golden
+/// como evento QUENTE — o split entra a 85% para não a arrefecer).
+pub const SPLIT_TONE_GOLDEN_WEIGHT: f32 = 0.85;
+/// Peso máximo do split-tone na noite.
+pub const SPLIT_TONE_NIGHT_WEIGHT: f32 = 1.0;
+
+/// Elevação do sol abaixo da qual o split-tone quente/frio pesa MÁXIMO.
+///
+/// **Porquê ler a ELEVAÇÃO e não o `golden` da atmosfera** (medido
+/// 2026-09-13): a gaussiana do `golden` é estreita — pico a 4°, σ = 8° —
+/// pelo que no cenário de golden hour do gauntlet (07:30, sol já a 26,9°)
+/// dá `golden ≈ 0,0003`: o split-tone era IDENTIDADE na própria cena que o
+/// crítico aponta, e a "separação de temperatura" não existia em lado nenhum
+/// fora da janela 05:40–06:15. A janela do SPLIT tem de cobrir a MANHÃ/TARDE
+/// baixas (o "golden event" do BOTW vive no sol rasante, não só nos 10 min
+/// do nascer).
+///
+/// **25° (LOOP D; era 12°).** O crítico da LOOP C mediu o 07:49 (sol a 30,8°)
+/// como "neutral-white overhead sun, warmth on one roof only" — a janela
+/// 12°/45° dava peso 0.57 a 26,9° e ~0.45 a 30,8°, e a multiplicação por
+/// `SPLIT_TONE_GOLDEN_WEIGHT` (0.85) comia-o a 0.48: metade do tinte nunca
+/// chegava ao frame. Com 25° o 07:30 pesa ~0.98 e o 07:49 ~0.87; o
+/// meio-dia (62°) continua em 0 (ver [`SPLIT_TONE_LOW_SUN_ZERO_DEG`]).
+pub const SPLIT_TONE_LOW_SUN_FULL_DEG: f32 = 25.0;
+/// Elevação acima da qual o split-tone desliga por completo (meio-dia
+/// neutro, sem tinte — o crítico pede "midday stays neutral").
+///
+/// **50° (LOOP D; era 45°).** O sol do simple-rpg passa os 62° ao meio-dia;
+/// 50° deixa a manhã alta (07:49 @30,8°) DENTRO da rampa e o meio-dia
+/// inteiro FORA — o dia neutro aprovado não mexe (peso 0 acima de 50°).
+pub const SPLIT_TONE_LOW_SUN_ZERO_DEG: f32 = 50.0;
+
+/// Peso do braço "hora baixa de sol" do split-tone pela elevação REAL do sol
+/// (`SunState.elevation_deg`): 1 a ≤[`SPLIT_TONE_LOW_SUN_FULL_DEG`], 0 a
+/// ≥[`SPLIT_TONE_LOW_SUN_ZERO_DEG`], smoothstep no meio. 07:30 do simple-rpg
+/// (26,9°) ≈ 0,98; 07:49 (30,8°) ≈ 0,87; meio-dia (62°) = 0; alvorada (5°) =
+/// 1. Debaixo do horizonte mantém 1 — a transição para o braço da NOITE é a
+/// rampa `night` (que já rampa suavemente com a elevação negativa).
+pub fn low_sun_split_weight(elevation_deg: f32) -> f32 {
+    if !elevation_deg.is_finite() {
+        return 0.0;
+    }
+    let t = ((SPLIT_TONE_LOW_SUN_ZERO_DEG - elevation_deg)
+        / (SPLIT_TONE_LOW_SUN_ZERO_DEG - SPLIT_TONE_LOW_SUN_FULL_DEG))
+        .clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Limiar inferior (luminância linear pós-tonemap) da banda de transição
+/// sombras→highlights do split-tone. Ponto médio do grey 18% linear.
+pub const SPLIT_TONE_LO: f32 = 0.045;
+/// Limiar superior da banda — highlights "de verdade" (céu ao luar, poças,
+/// fachadas ao sol rasante) ficam acima.
+pub const SPLIT_TONE_HI: f32 = 0.30;
+
+/// Resolve os tints do split-tone para a hora corrente (fn pura testável).
+///
+/// `low_sun` é o peso do braço de hora baixa ([`low_sun_split_weight`], pela
+/// elevação REAL do sol — ver medição no const). Composição em cadeia a
+/// partir do IDENTIDADE (1,1,1): primeiro a hora baixa, depois a noite por
+/// cima — são regimes distintos do dia (o braço de hora baixa morre quando o
+/// sol sobe além de 45°, o `night` só acende depois do horizonte), o
+/// crepúsculo faz a passagem pelos dois com pesos parciais e SEM salto.
+pub fn split_tone_for(low_sun: f32, night: f32) -> ([f32; 3], [f32; 3]) {
+    // `f32::clamp` propaga NaN — sanitizar à mão (padrão do módulo).
+    let frac = |v: f32| {
+        if v.is_finite() {
+            v.clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    };
+    let g = (frac(low_sun) * SPLIT_TONE_GOLDEN_WEIGHT).clamp(0.0, 1.0);
+    let n = (frac(night) * SPLIT_TONE_NIGHT_WEIGHT).clamp(0.0, 1.0);
+    let lerp3 = |a: [f32; 3], b: [f32; 3], t: f32| {
+        [
+            a[0] + (b[0] - a[0]) * t,
+            a[1] + (b[1] - a[1]) * t,
+            a[2] + (b[2] - a[2]) * t,
+        ]
+    };
+    let identity = [1.0, 1.0, 1.0];
+    let shadow = lerp3(
+        lerp3(identity, SPLIT_TONE_GOLDEN_SHADOW, g),
+        SPLIT_TONE_NIGHT_SHADOW,
+        n,
+    );
+    let highlight = lerp3(
+        lerp3(identity, SPLIT_TONE_GOLDEN_HIGHLIGHT, g),
+        SPLIT_TONE_NIGHT_HIGHLIGHT,
+        n,
+    );
+    (shadow, highlight)
+}
+
+/// Uniform do passe de split-tone (uma por câmara, extraído por
+/// [`ExtractComponent`]). O WGSL declara o struct ESPELHADO (mesmos
+/// offsets do encase: vec3×2 + 3×f32).
+#[derive(Component, Clone, Copy, PartialEq, ExtractComponent, ShaderType, Default)]
+pub struct SplitToneSettings {
+    /// Multiplicador linear do extremo das sombras.
+    pub shadow_tint: Vec3,
+    /// Multiplicador linear do extremo dos highlights.
+    pub highlight_tint: Vec3,
+    /// Banda da transição (luminância linear pós-tonemap).
+    pub split_lo: f32,
+    pub split_hi: f32,
+}
+
+/// Handle do shader inline — criado no `PostFxPlugin::build` (antes de
+/// qualquer sistema de render); `fragment_shader()` é uma fn ESTÁTICA e
+/// não pode ler o World, daí o OnceLock.
+static SPLIT_TONE_SHADER: OnceLock<Handle<Shader>> = OnceLock::new();
+
+/// WGSL do split-tone: um triângulo fullscreen PÓS-tonemap (depois do
+/// `tonemapping` e do ColorGrading da LOOP A — lê valores finais de
+/// exibição, portanto os limiares da banda são ESTÁVEIS face à
+/// exposição automática). A multiplicação é NORMALIZADA à luminância
+/// (`tint / dot(tint, LUMA)`): o passe muda MATIZ, nunca exposição — o
+/// medidor e o filtro ND da LOOP A ficam intactos por construção.
+const SPLIT_TONE_WGSL: &str = r#"
+// O vértice vem do `FullscreenShader` embutido do plugin (triângulo
+// fullscreen); o QUE importa aqui é o STRUCT do seu output — no bevy 0.19
+// chama-se `FullscreenVertexOutput` (importar `fullscreen_vertex_out`, como
+// nos exemplos antigos, deixa o identificador fora de scope e o naga REJEITA
+// o shader: o passe salta em silêncio e o split-tone não existe no frame).
+#import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
+
+struct SplitToneSettings {
+    shadow_tint: vec3<f32>,
+    highlight_tint: vec3<f32>,
+    split_lo: f32,
+    split_hi: f32,
+};
+
+@group(0) @binding(0) var source: texture_2d<f32>;
+@group(0) @binding(1) var source_sampler: sampler;
+@group(0) @binding(2) var<uniform> settings: SplitToneSettings;
+
+const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
+
+@fragment
+fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
+    let color = textureSample(source, source_sampler, in.uv).rgb;
+    let luma = dot(color, LUMA);
+    let w = smoothstep(settings.split_lo, settings.split_hi, luma);
+    let tint = mix(settings.shadow_tint, settings.highlight_tint, w);
+    // Normalização à luminância: o split-tone nunca clareia/escurece o
+    // frame — só desloca a temperatura por FAIXA (sombras↔highlights).
+    let norm = max(dot(tint, LUMA), 1e-4);
+    return vec4<f32>(color * tint / norm, 1.0);
+}
+"#;
+
+impl FullscreenMaterial for SplitToneSettings {
+    fn fragment_shader() -> bevy::shader::ShaderRef {
+        // O handle é criado no build do plugin, antes de qualquer render;
+        // se algo correr catastroficamente errado, o handle default deixa
+        // o pipeline não-inicializado (o passe salta em silêncio).
+        bevy::shader::ShaderRef::Handle(SPLIT_TONE_SHADER.get().cloned().unwrap_or_default())
+    }
+
+    fn schedule_configs(
+        system: bevy::ecs::schedule::ScheduleConfigs<bevy::ecs::system::BoxedSystem>,
+    ) -> bevy::ecs::schedule::ScheduleConfigs<bevy::ecs::system::BoxedSystem> {
+        use bevy::ecs::schedule::IntoScheduleConfigs as _;
+        system
+            .in_set(bevy::core_pipeline::Core3dSystems::PostProcess)
+            // DEPOIS do tonemap + ColorGrading: valores de exibição, com
+            // o filtro ND da LOOP A já aplicado — a banda lo..hi é estável.
+            .after(tonemapping_pass)
+    }
+}
+
+/// Conduz o split-tone pela hora: o braço de hora baixa lê a ELEVAÇÃO REAL
+/// do sol ([`SunState`] — a gaussiana `golden` da atmosfera é estreita demais
+/// e dá 0 no próprio cenário 07:30 do gauntlet; ver [`low_sun_split_weight`]),
+/// o braço de noite lê a fração [`AtmosphereState::night`] (como a LOOP A).
+/// Meio-dia (sol alto, night=0): tints no IDENTIDADE — o passe multiplica
+/// por 1 e o dia neutro aprovado fica EXACTAMENTE como estava.
+fn drive_split_tone(
+    sun: Res<crate::worldsys::SunState>,
+    atmosphere: Res<crate::worldsys::AtmosphereState>,
+    mut cameras: Query<&mut SplitToneSettings, With<Camera3d>>,
+) {
+    let (shadow, highlight) =
+        split_tone_for(low_sun_split_weight(sun.elevation_deg), atmosphere.night);
+    for mut settings in &mut cameras {
+        let next = SplitToneSettings {
+            shadow_tint: Vec3::from(shadow),
+            highlight_tint: Vec3::from(highlight),
+            split_lo: SPLIT_TONE_LO,
+            split_hi: SPLIT_TONE_HI,
+        };
+        if *settings != next {
+            *settings = next;
+        }
+    }
+}
+
+// ── LOOP C: perspetiva aérea — desat + blue-shift por PROFUNDIDADE ──────
+//
+// O crítico (golden ticket, 2026-09-13): "BotW grades distance via
+// desaturation + blue shift (aerial perspective). Ours bleaches to white
+// fog — mountains read as a haze bug, not depth." A `DistanceFog` e a sua
+// cor vivem no `ambient.rs` (interdito neste lote), mas o GRADE final do
+// píxel é da lente: um passe fullscreen que lê a profundidade do prepass e,
+// no longe, mistura a cor para `luminância × tint cinza-azul` com um leve
+// escurecer de contraste — a serra vira CAMADA azulada por baixo de um céu
+// mais claro (a silhueta que lê profundidade), em vez de massa branca.
+//
+// Arquitectura igual ao `water_ssr` (triângulo fullscreen + `post_process_write`),
+// mas ANTES do TAA e do tonemap: trabalha em HDR linear (o desat linear é
+// fisicamente correcto) e o TAA acumula os gradientes da rampa (sem shimmer
+// nas silhuetas). O céu NÃO é tocado: o domo opaco (~850 m) oculta todo o
+// terreno além dele, portanto `depth ≥ AERIAL_SKY_SKIP_M` = domo = passthrough.
+
+/// Início da rampa (m): mais perto disto o passe é identidade — a
+/// legibilidade de jogo (combate, leitura de props) não paga a atmosfera.
+pub const AERIAL_START_M: f32 = 140.0;
+/// Fim da rampa (m): fator máximo do grade.
+pub const AERIAL_FULL_M: f32 = 620.0;
+/// Cota (m) a partir da qual o píxel é tratado como DOMO do céu e fica
+/// intocado: o domo está a ~850 m e é opaco (o terreno além dele nunca
+/// aparece), pelo que 790 separa "última serra" de "céu" sem tocar no
+/// gradiente aprovado do domo.
+pub const AERIAL_SKY_SKIP_M: f32 = 790.0;
+/// Peso do passe na noite plena: o fog noturno JÁ é azul profundo (LOOP A) —
+/// dessaturar por cima a noite inteira lavaria a assinatura aprovada.
+pub const AERIAL_NIGHT_WEIGHT: f32 = 0.30;
+/// Tint do haze (linear): cinza-azul, a matiz BotW. A luminância vem do
+/// próprio píxel (`luma × tint`), portanto o haze não clareia — só muda de
+/// cor e mata a saturação.
+pub const AERIAL_TINT: [f32; 3] = [0.84, 0.92, 1.12];
+/// Escurecer máximo do haze (fração): o longe desce abaixo do céu → a
+/// silhueta da serra LÊ contra o horizonte (contraste em vez de bleach).
+pub const AERIAL_CONTRAST_DARKEN: f32 = 0.16;
+/// Teto do mix: mantém 15% da cor original — as serras dessaturam, não
+/// viram monocromo.
+pub const AERIAL_MAX_MIX: f32 = 0.85;
+
+/// Peso global do passe pela fração de noite: 1 de dia (a golden 07:30 do
+/// gauntlet tem `night` = 0 → peso CHEIO, é o cenário do crítico),
+/// [`AERIAL_NIGHT_WEIGHT`] na noite plena, rampa linear no meio.
+pub fn aerial_weight(night: f32) -> f32 {
+    if !night.is_finite() {
+        return 1.0;
+    }
+    1.0 - (1.0 - AERIAL_NIGHT_WEIGHT) * night.clamp(0.0, 1.0)
+}
+
+/// Fator do grade por distância (fn pura espelho do WGSL): 0 abaixo de
+/// [`AERIAL_START_M`], smoothstep até [`AERIAL_FULL_M`], 0 no céu
+/// (dist ≥ [`AERIAL_SKY_SKIP_M`]). O resultado já inclui o `weight` e o
+/// teto [`AERIAL_MAX_MIX`].
+pub fn aerial_factor(dist_m: f32, weight: f32) -> f32 {
+    if !dist_m.is_finite() || dist_m >= AERIAL_SKY_SKIP_M || weight <= 0.0 {
+        return 0.0;
+    }
+    let t = ((dist_m - AERIAL_START_M) / (AERIAL_FULL_M - AERIAL_START_M)).clamp(0.0, 1.0);
+    let s = t * t * (3.0 - 2.0 * t);
+    (s * weight.clamp(0.0, 1.0)).min(1.0) * AERIAL_MAX_MIX
+}
+
+/// Espelho CPU do grade do WGSL (para testes pixel a pixel): dessat +
+/// blue-shift + escurecer de contraste para um fator `f` de
+/// [`aerial_factor`].
+pub fn aerial_grade(color: [f32; 3], f: f32) -> [f32; 3] {
+    const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
+    let luma = color[0] * LUMA[0] + color[1] * LUMA[1] + color[2] * LUMA[2];
+    let mix_t = f.clamp(0.0, 1.0);
+    let dark = 1.0 - AERIAL_CONTRAST_DARKEN * mix_t;
+    let graded = |c: usize| {
+        let haze = luma * AERIAL_TINT[c];
+        (color[c] + (haze - color[c]) * mix_t) * dark
+    };
+    [graded(0), graded(1), graded(2)]
+}
+
+/// Liga o passe de perspetiva aérea numa câmara (default-on; inserido pelo
+/// `attach_postfx_to_cameras` junto do resto da lente).
+#[derive(Component, Clone, Copy, Default, ExtractComponent)]
+pub struct AerialPerspective;
+
+/// Handle do shader inline — criado no `PostFxPlugin::build` (mesmo padrão
+/// do split-tone; `init_aerial_pipeline` corre no render app).
+static AERIAL_SHADER: OnceLock<Handle<Shader>> = OnceLock::new();
+
+/// WGSL do passe — self-contained (zero `#import`, validável pelo harness
+/// naga como o water_ssr). Uniform: 2 mat4 + 3 vec4 = 176 B (o packing CPU
+/// `pack_aerial_uniform` tem de medir EXACTAMENTE isto).
+pub const AERIAL_WGSL: &str = r#"
+// Perspetiva aérea (LOOP C): desat + blue-shift por profundidade.
+struct AerialUniform {
+    inv_clip_from_view: mat4x4<f32>,
+    world_from_view:    mat4x4<f32>,
+    cam_pos: vec4<f32>,   // xyz = câmara no mundo
+    ramp: vec4<f32>,      // start_m, full_m, sky_skip_m, weight
+    tint: vec4<f32>,      // rgb = tint, a = contrast_darken
+};
+
+@group(0) @binding(0) var input_color: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var prepass_depth: texture_depth_2d;
+@group(0) @binding(3) var<uniform> aer: AerialUniform;
+
+struct FullscreenVertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
+const MAX_MIX = 0.85;
+
+@fragment
+fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
+    var color = textureSample(input_color, samp, in.uv).rgb;
+    if (aer.ramp.w <= 0.001) {
+        return vec4<f32>(color, 1.0);
+    }
+    // reverse-Z: clear do depth = 0 (céu sem geometria) — intocado.
+    let d = textureLoad(prepass_depth, vec2<i32>(floor(in.position.xy)), 0);
+    if (d <= 0.0) {
+        return vec4<f32>(color, 1.0);
+    }
+    let ndc = vec4<f32>(in.uv.x * 2.0 - 1.0, 1.0 - 2.0 * in.uv.y, d, 1.0);
+    let v = aer.inv_clip_from_view * ndc;
+    let world = (aer.world_from_view * vec4<f32>(v.xyz / v.w, 1.0)).xyz;
+    let dist = distance(world, aer.cam_pos.xyz);
+    // Domo do céu (~850 m, opaco): além disto é céu — o gradiente aprovado
+    // não é tocado pelo passe.
+    if (dist >= aer.ramp.z) {
+        return vec4<f32>(color, 1.0);
+    }
+    let t = clamp((dist - aer.ramp.x) / max(aer.ramp.y - aer.ramp.x, 1.0), 0.0, 1.0);
+    let s = t * t * (3.0 - 2.0 * t) * clamp(aer.ramp.w, 0.0, 1.0);
+    let f = min(s, 1.0) * MAX_MIX;
+    // O haze é MONOCROMO ao tint à luminância do píxel: dessatura e desvia
+    // para azul-cinza sem clarear (a névoa branca de bug morre aqui).
+    let luma = dot(color, LUMA);
+    let haze = luma * aer.tint.rgb;
+    let mixed = mix(color, haze, f);
+    // Contraste: o longe desce um pouco — silhueta contra o céu mais claro.
+    let out_c = mixed * (1.0 - aer.tint.w * f);
+    return vec4<f32>(out_c, 1.0);
+}
+"#;
+
+/// Tamanho do uniform do passe (B) — mat4×2 + vec4×3; o packing CPU e o
+/// struct WGSL têm de bater EXACTAMENTE (guarda no harness naga).
+pub const AERIAL_UNIFORM_BYTES: usize = 176;
+
+#[derive(Resource, Default)]
+struct ExtractedAerial {
+    weight: f32,
+}
+
+fn extract_aerial(
+    atmosphere: Extract<Res<crate::worldsys::AtmosphereState>>,
+    mut out: ResMut<ExtractedAerial>,
+) {
+    out.weight = aerial_weight(atmosphere.night);
+}
+
+#[derive(Resource)]
+struct AerialPipeline {
+    layout: BindGroupLayoutDescriptor,
+    sampler: Sampler,
+    variants: Variants<RenderPipeline, AerialSpecializer>,
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy, SpecializerKey)]
+struct AerialPipelineKey {
+    target_format: TextureFormat,
+}
+
+struct AerialSpecializer;
+
+impl Specializer<RenderPipeline> for AerialSpecializer {
+    type Key = AerialPipelineKey;
+
+    fn specialize(
+        &self,
+        key: Self::Key,
+        descriptor: &mut RenderPipelineDescriptor,
+    ) -> Result<Canonical<Self::Key>, bevy::ecs::error::BevyError> {
+        let fragment = descriptor.fragment_mut()?;
+        fragment.set_target(
+            0,
+            ColorTargetState {
+                format: key.target_format,
+                blend: None,
+                write_mask: ColorWrites::ALL,
+            },
+        );
+        Ok(key)
+    }
+}
+
+fn init_aerial_pipeline(
+    mut commands: Commands,
+    render_device: Res<RenderDevice>,
+    fullscreen_shader: Res<FullscreenShader>,
+) {
+    let entries = [
+        BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Texture {
+                sample_type: TextureSampleType::Float { filterable: true },
+                view_dimension: TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        },
+        BindGroupLayoutEntry {
+            binding: 1,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Sampler(SamplerBindingType::Filtering),
+            count: None,
+        },
+        BindGroupLayoutEntry {
+            binding: 2,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Texture {
+                sample_type: TextureSampleType::Depth,
+                view_dimension: TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        },
+        BindGroupLayoutEntry {
+            binding: 3,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: BufferSize::new(AERIAL_UNIFORM_BYTES as u64),
+            },
+            count: None,
+        },
+    ];
+    let layout = BindGroupLayoutDescriptor::new("aerial_perspective_layout", &entries);
+    let sampler = render_device.create_sampler(&SamplerDescriptor::default());
+    let vertex_state = VertexState {
+        shader: fullscreen_shader.shader(),
+        shader_defs: Vec::new(),
+        entry_point: Some("fullscreen_vertex_shader".into()),
+        buffers: Vec::new(),
+    };
+    let desc = RenderPipelineDescriptor {
+        label: Some("aerial_perspective_pipeline".into()),
+        layout: vec![layout.clone()],
+        vertex: vertex_state,
+        fragment: Some(FragmentState {
+            shader: AERIAL_SHADER.get().cloned().unwrap_or_default(),
+            targets: vec![Some(ColorTargetState {
+                format: TextureFormat::Rgba16Float,
+                blend: None,
+                write_mask: ColorWrites::ALL,
+            })],
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    commands.insert_resource(AerialPipeline {
+        layout,
+        sampler,
+        variants: Variants::new(AerialSpecializer, desc),
+    });
+}
+
+/// Packing do uniform por view (176 B — ordem EXACTA do struct WGSL).
+fn pack_aerial_uniform(
+    clip_from_view: &bevy::math::Mat4,
+    world_from_view: &bevy::math::Mat4,
+    cam_pos: [f32; 3],
+    weight: f32,
+) -> Vec<u8> {
+    let mut data = Vec::with_capacity(AERIAL_UNIFORM_BYTES);
+    let mut push_mat = |m: &bevy::math::Mat4| {
+        for f in m.to_cols_array() {
+            data.extend_from_slice(&f.to_le_bytes());
+        }
+    };
+    push_mat(&clip_from_view.inverse());
+    push_mat(world_from_view);
+    for f in [cam_pos[0], cam_pos[1], cam_pos[2], 0.0] {
+        data.extend_from_slice(&f.to_le_bytes());
+    }
+    for f in [AERIAL_START_M, AERIAL_FULL_M, AERIAL_SKY_SKIP_M, weight] {
+        data.extend_from_slice(&f.to_le_bytes());
+    }
+    for f in [
+        AERIAL_TINT[0],
+        AERIAL_TINT[1],
+        AERIAL_TINT[2],
+        AERIAL_CONTRAST_DARKEN,
+    ] {
+        data.extend_from_slice(&f.to_le_bytes());
+    }
+    debug_assert_eq!(data.len(), AERIAL_UNIFORM_BYTES);
+    data
+}
+
+#[derive(Component)]
+struct AerialViewGpu {
+    buf: Buffer,
+    a: (TextureViewId, BindGroup),
+    b: (TextureViewId, BindGroup),
+}
+
+#[derive(Component)]
+struct AerialPipelineId(CachedRenderPipelineId);
+
+#[allow(clippy::type_complexity)]
+fn prepare_aerial(
+    mut commands: Commands,
+    pipeline: Option<ResMut<AerialPipeline>>,
+    pipeline_cache: Res<PipelineCache>,
+    render_device: Res<RenderDevice>,
+    queue: Res<RenderQueue>,
+    aerial: Res<ExtractedAerial>,
+    mut views: Query<
+        (
+            Entity,
+            &ExtractedView,
+            &ViewTarget,
+            Option<&ViewPrepassTextures>,
+            Option<&mut AerialViewGpu>,
+        ),
+        With<AerialPerspective>,
+    >,
+) {
+    let Some(mut pipeline) = pipeline else {
+        return;
+    };
+    let bind_group_layout = pipeline_cache.get_bind_group_layout(&pipeline.layout);
+    for (entity, view, target, prepass, existing) in &mut views {
+        let Some(prepass) = prepass else {
+            continue;
+        };
+        let Some(depth) = prepass.depth.as_ref() else {
+            continue;
+        };
+        let key = AerialPipelineKey {
+            target_format: view.target_format,
+        };
+        let Ok(pid) = pipeline.variants.specialize(&pipeline_cache, key) else {
+            continue;
+        };
+        let view_bytes = pack_aerial_uniform(
+            &view.clip_from_view,
+            &view.world_from_view.to_matrix(),
+            view.world_from_view.translation().to_array(),
+            aerial.weight,
+        );
+        let make = |texture: &TextureView, buf: &Buffer| {
+            (
+                texture.id(),
+                render_device.create_bind_group(
+                    "aerial_perspective_bind_group",
+                    &bind_group_layout,
+                    &BindGroupEntries::sequential((
+                        texture,
+                        &pipeline.sampler,
+                        &depth.texture.default_view,
+                        buf.as_entire_binding(),
+                    )),
+                ),
+            )
+        };
+        if let Some(mut gpu) = existing {
+            queue.write_buffer(&gpu.buf, 0, &view_bytes);
+            let buf = gpu.buf.clone();
+            // O ping-pong do ViewTarget troca a textura fonte entre frames:
+            // recria o bind group quando o id não bate.
+            if gpu.a.0 != target.main_texture_view().id() {
+                gpu.a = make(&target.main_texture_view(), &buf);
+            }
+            if gpu.b.0 != target.main_texture_other_view().id() {
+                gpu.b = make(&target.main_texture_other_view(), &buf);
+            }
+        } else {
+            let buf = render_device.create_buffer(&BufferDescriptor {
+                label: Some("aerial_perspective_uniform".into()),
+                size: AERIAL_UNIFORM_BYTES as u64,
+                usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM,
+                mapped_at_creation: false,
+            });
+            queue.write_buffer(&buf, 0, &view_bytes);
+            let a = make(&target.main_texture_view(), &buf);
+            let b = make(&target.main_texture_other_view(), &buf);
+            commands
+                .entity(entity)
+                .insert((AerialPipelineId(pid), AerialViewGpu { buf, a, b }));
+        }
+    }
+}
+
+/// O passe corre DEPOIS do TAA (`VIBER_AERIAL_AFTER_TAA=1`)?
+///
+/// Default **não**: o passe é depth-aware e o prepass de profundidade é
+/// renderizado COM o jitter do TAA, enquanto a cor que sai do TAA já está
+/// estabilizada. Mascarar por essa depth DEPOIS do resolve devolve ao frame
+/// exactamente o aliasing que o TAA tinha tirado: nas cristas contra o céu o
+/// píxel alterna entre "serra" (hazed + 16% mais escuro) e "céu" (intocado)
+/// ao ritmo do Halton — lê-se como VIBRAÇÃO na linha do horizonte. Antes do
+/// TAA o haze entra na history e a rampa acumula limpa (que era a intenção
+/// documentada do módulo desde o início).
+///
+/// O braço `=1` mantém-se para A/B com o histórico — e como rede se esta
+/// stack repetir o sintoma que o `water_ssr` mediu a 2026-09-10 (imagem a
+/// alternar gradientes cinza/castanho com um ping-pong pré-TAA).
+fn aerial_after_taa() -> bool {
+    matches!(
+        std::env::var("VIBER_AERIAL_AFTER_TAA").as_deref(),
+        Ok("1" | "true" | "on")
+    )
+}
+
+/// Ordem do passe no `Core3d` — EXPLÍCITA nos dois braços.
+///
+/// Ordem declarada não é cosmética aqui: os passes do render graph do bevy
+/// 0.19 são sistemas normais, o `RenderContext` é `Deferred` + `Res` (não
+/// conflitua com nada) e portanto dois passes SEM relação de ordem podem
+/// correr em paralelo. `ViewTarget::post_process_write` é um
+/// `main_texture.fetch_xor(1)` GLOBAL: dois passes a fazer o XOR em paralelo
+/// trocam source/destination um do outro e os command buffers ainda são
+/// submetidos por ordem indefinida — frames alternados com o grade no buffer
+/// errado (flashes/piscadelas). O `aerial_pass` nascia com `after(taa)` +
+/// `before(tonemapping)` apenas, ou seja ambíguo contra o `water_ssr_pass`,
+/// o `motion_blur`, o `bloom`, o DOF e o effect stack.
+fn aerial_schedule_configs()
+-> bevy::ecs::schedule::ScheduleConfigs<bevy::ecs::system::ScheduleSystem> {
+    use bevy::ecs::schedule::IntoScheduleConfigs as _;
+    if aerial_after_taa() {
+        // Braço histórico: no MESMO set do `water_ssr_pass`, por isso a ordem
+        // contra ele e contra o primeiro passe built-in (`motion_blur`, que
+        // já está `before(bloom)`) tem de ser dita à mão.
+        aerial_pass
+            .in_set(Core3dSystems::PostProcess)
+            .after(temporal_anti_alias)
+            .before(crate::water_ssr::water_ssr_pass)
+            .before(motion_blur)
+            .before(tonemapping_pass)
+            .into_configs()
+    } else {
+        // Braço default: `EarlyPostProcess` corre inteiro ANTES do
+        // `PostProcess` na chain do `Core3d`, portanto ficar ANTES do TAA
+        // ordena o passe contra TUDO o que vem depois (water SSR, motion
+        // blur, bloom, DOF, effect stack, auto-exposure, tonemap) sem criar o
+        // ciclo que o `before(temporal_anti_alias)` dava a partir do
+        // `PostProcess`.
+        aerial_pass
+            .in_set(Core3dSystems::EarlyPostProcess)
+            .before(temporal_anti_alias)
+            .into_configs()
+    }
+}
+
+/// O passe: triângulo fullscreen com `post_process_write` (padrão
+/// `water_ssr`). DEPOIS do TAA e ANTES do tonemap — o grade corre em HDR
+/// linear (o desat linear é o fisicamente correcto).
+fn aerial_pass(
+    view: ViewQuery<(&ViewTarget, &AerialViewGpu, &AerialPipelineId)>,
+    pipeline_cache: Res<PipelineCache>,
+    mut ctx: RenderContext,
+) {
+    let (view_target, view_gpu, pipeline_id) = view.into_inner();
+    let Some(pipeline) = pipeline_cache.get_render_pipeline(pipeline_id.0) else {
+        return;
+    };
+    let post_process = view_target.post_process_write();
+    let source = post_process.source;
+    let destination = post_process.destination;
+    let (_, bind_group) = if view_gpu.a.0 == source.id() {
+        &view_gpu.a
+    } else {
+        &view_gpu.b
+    };
+    let pass_descriptor = RenderPassDescriptor {
+        label: Some("aerial_perspective_pass".into()),
+        color_attachments: &[Some(RenderPassColorAttachment {
+            view: destination,
+            depth_slice: None,
+            resolve_target: None,
+            ops: Operations::default(),
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    };
+    {
+        let mut render_pass = ctx.command_encoder().begin_render_pass(&pass_descriptor);
+        render_pass.set_pipeline(pipeline);
+        render_pass.set_bind_group(0, bind_group, &[]);
+        render_pass.draw(0..3, 0..1);
+    }
+}
+
 /// Interpola exposição/bloom na direção do bioma onde o herói está.
 #[allow(clippy::type_complexity)]
 fn drive_postfx(
     time: Res<Time>,
+    sun: Res<crate::worldsys::SunState>,
     atmosphere: Res<crate::worldsys::AtmosphereState>,
     biomes: Option<Res<BiomeRegions>>,
     players: Query<&GlobalTransform, With<Player>>,
     mut state: ResMut<PostFxState>,
-    mut cameras: Query<(&mut Bloom, &mut Exposure, Option<&mut bevy::render::view::ColorGrading>), With<Camera3d>>,
+    mut cameras: Query<
+        (
+            &mut Bloom,
+            &mut Exposure,
+            Option<&mut bevy::render::view::ColorGrading>,
+            Option<&mut Vignette>,
+        ),
+        With<Camera3d>,
+    >,
 ) {
     let mut exposure_mult = 1.0;
     let mut bloom = BASE_BLOOM;
@@ -550,12 +1844,15 @@ fn drive_postfx(
     }
     // A HORA manda por cima do bioma: a noite tem de ser mesmo mais escura
     // (senão é "o dia com o brilho baixado") e o bloom sobe onde há fontes
-    // quentes — fogueiras à noite, glare do sol rasante.
+    // quentes — fogueiras à noite, glare do sol rasante. O reforço nocturno
+    // ([`NIGHT_BLOOM_INTENSITY`]) é o LOOP C: halo nas chamas/poças.
     state.target_ev100 = ev100_for_exposure_multiplier(
         BASE_EV100,
         exposure_mult * atmosphere.exposure_scale.max(0.05),
     );
-    state.target_bloom = (bloom + atmosphere.bloom_boost).clamp(0.0, 0.5);
+    let night = atmosphere.night.clamp(0.0, 1.0);
+    state.target_bloom =
+        (bloom + atmosphere.bloom_boost + NIGHT_BLOOM_INTENSITY * night).clamp(0.0, MAX_BLOOM);
 
     let t = (time.delta_secs() * BLEND_RATE).clamp(0.0, 1.0);
     // O kick de juice decai SEMPRE (mesmo com o alvo de bioma atingido) —
@@ -573,17 +1870,36 @@ fn drive_postfx(
         state.bloom += (state.target_bloom - state.bloom) * t;
     }
     let (ev100, bloom) = (ev_with_kick(state.ev100, state.kick), state.bloom);
+    // LOOP C: o joelho do prefilter segue a noite — ver [`NIGHT_BLOOM_THRESHOLD`].
+    let threshold = night_bloom_threshold(night);
+    let lf_boost = night_bloom_lf_boost(night);
     // Grading POR HORA (r3): a golden hour aquece e satura, a noite dessatura
     // e arrefece — o "film stock" muda com o dia. ASC CDL compõe com o
     // TonyMcMapface (aplicado pré-tonemap). O grading por BIOMA precisa de
     // attrs no parser (frente fria do worldsys/recipes) — fica para seguir.
     let golden = atmosphere.golden;
-    let night = atmosphere.night;
-    let temperature = 0.0 + golden * 0.35 - night * 0.25;
-    let saturation = 1.0 + golden * 0.18 - night * 0.22;
-    for (mut camera_bloom, mut exposure, grading) in &mut cameras {
+    // LOOP D: o braço de sol baixo lê a ELEVAÇÃO REAL (a gaussiana `golden`
+    // é ~0 às 07:30) — aquecimento global na manhã/tarde baixas.
+    let low_sun = low_sun_split_weight(sun.elevation_deg);
+    let temperature = grade_temperature_full(golden, low_sun, night);
+    let saturation = grade_saturation(golden, night);
+    for (mut camera_bloom, mut exposure, grading, vignette) in &mut cameras {
         if camera_bloom.intensity != bloom {
             camera_bloom.intensity = bloom;
+        }
+        if camera_bloom.prefilter.threshold != threshold {
+            camera_bloom.prefilter.threshold = threshold;
+        }
+        if (camera_bloom.low_frequency_boost - lf_boost).abs() > 1e-4 {
+            camera_bloom.low_frequency_boost = lf_boost;
+        }
+        // Vinheta nocturna (LOOP C): grade ESPACIAL — periferia para baixo,
+        // centro (herói/rua/poças) intacto. Ver [`NIGHT_VIGNETTE`].
+        if let Some(mut vig) = vignette {
+            let target = 0.30 + (NIGHT_VIGNETTE - 0.30) * night;
+            if (vig.intensity - target).abs() > 1e-4 {
+                vig.intensity = target;
+            }
         }
         if exposure.ev100 != ev100 {
             exposure.ev100 = ev100;
@@ -592,6 +1908,13 @@ fn drive_postfx(
         // resto do pós; defensivo se alguém a spawnar à mão).
         if let Some(mut grading) = grading {
             let g = &mut grading.global;
+            // Filtro ND da noite (ver [`grade_night_exposure_offset`]): o
+            // auto-exposure SOMA a sua compensação a este campo no passe de
+            // render — o desvio entra como base estável.
+            let night_offset = grade_night_exposure_offset(night);
+            if g.exposure != night_offset {
+                g.exposure = night_offset;
+            }
             if g.temperature != temperature {
                 g.temperature = temperature;
             }
@@ -769,7 +2092,8 @@ fn fbm_density_texture() -> Image {
                     for x in 0..size {
                         for c in 0..4 {
                             let texel = |xx: u32, yy: u32, zz: u32| {
-                                let off = src_off + ((zz * parent + yy) * parent + xx) as usize * 4 + c;
+                                let off =
+                                    src_off + ((zz * parent + yy) * parent + xx) as usize * 4 + c;
                                 full[off] as u32
                             };
                             let acc = texel(x * 2, y * 2, z * 2)
@@ -816,8 +2140,7 @@ fn mip3_chain_bytes(n: u32, level: u32) -> usize {
 /// (sem a rotação as oitavas alinham nos eixos e saem prateleiras).
 fn fbm_density(p: [f32; 3]) -> f32 {
     fn hash(x: i32, y: i32, z: i32) -> f32 {
-        let mut h = (x as u32)
-            .wrapping_mul(0x27d4eb2d)
+        let mut h = (x as u32).wrapping_mul(0x27d4eb2d)
             ^ (y as u32).wrapping_mul(0x165667b1)
             ^ (z as u32).wrapping_mul(0x9e3779b1);
         h = h.wrapping_mul(0x85ebca6b);
@@ -903,16 +2226,14 @@ fn drive_fog_texture(
         // contraste da cena sobe ~50 % (sd 3.2 → 4.8) e o frame clareia;
         // no pântano (que leva o bónus) o véu era o pior do mundo.
         let golden_haze = atmosphere.golden * 0.06;
-        let day_att = FOG_VOLUME_NIGHT_ATTENUATION
-            + (1.0 - FOG_VOLUME_NIGHT_ATTENUATION) * atmosphere.day;
+        let day_att =
+            FOG_VOLUME_NIGHT_ATTENUATION + (1.0 - FOG_VOLUME_NIGHT_ATTENUATION) * atmosphere.day;
         let mut density = FOG_VOLUME_DENSITY * day_att + golden_haze;
         if let (Some(biomes), Ok(player)) = (biomes.as_deref(), players.single()) {
             let pos = player.translation();
-            if biomes
-                .list
-                .iter()
-                .any(|b| b.id.contains("swamp") && crate::ambient::point_in_polygon(pos.x, pos.z, &b.polygon))
-            {
+            if biomes.list.iter().any(|b| {
+                b.id.contains("swamp") && crate::ambient::point_in_polygon(pos.x, pos.z, &b.polygon)
+            }) {
                 density += FOG_VOLUME_SWAMP_BONUS * day_att;
             }
         }
@@ -947,6 +2268,20 @@ fn follow_fog_volume(
 mod tests {
     use super::*;
 
+    /// O passe de perspetiva aérea corre ANTES do TAA por omissão: é
+    /// depth-aware e a depth do prepass vem jitterada, por isso mascarar
+    /// DEPOIS do resolve devolve o aliasing às cristas (vibração no
+    /// horizonte). `VIBER_AERIAL_AFTER_TAA=1` é só o braço de A/B.
+    #[test]
+    fn aerial_runs_before_taa_by_default() {
+        if std::env::var_os("VIBER_AERIAL_AFTER_TAA").is_none() {
+            assert!(
+                !aerial_after_taa(),
+                "sem o env o passe tem de ficar no EarlyPostProcess, antes do TAA"
+            );
+        }
+    }
+
     #[test]
     fn test_exposure_multiplier_maps_to_stops() {
         // Multiplicador 1 = sem alteração.
@@ -962,16 +2297,33 @@ mod tests {
 
     #[test]
     fn test_auto_exposure_lift_is_capped_in_the_dark() {
-        // Noite cheia (o medidor satura no fundo do histograma): o ganho fica
-        // preso no teto — era aqui que a noite ia a branco (+6 EV).
-        assert!((auto_exposure_target_lift(-6.0) - NIGHT_LIFT_CAP_EV).abs() < 1e-5);
-        assert!((auto_exposure_target_lift(-12.0) - NIGHT_LIFT_CAP_EV).abs() < 1e-5);
-        // Crepúsculo/sombra funda/interior: comportamento de sempre (expor
-        // para o meio-cinza) — o aperto da noite não lhes toca.
+        // Escuro fundo (rede de segurança): o ganho fica preso no teto.
+        // Com o joelho LOOP C (−6), o piso da rampa é −12.
+        for x in [-13.0, -15.0] {
+            assert!(
+                (auto_exposure_target_lift(x) - NIGHT_LIFT_CAP_EV).abs() < 1e-5,
+                "x={x} deve estar preso no teto"
+            );
+        }
+        // DIA, GOLDEN HOUR (−2.6), a noite da LOOP A (−2.25) E a noite LOOP C
+        // (≈−3.9, ambiente 0,075): medição cheia — o medidor abre como sempre
+        // e as POÇAS sobrevivem ao ND (o bug do joelho a −3: a noite LOOP C
+        // caía DENTRO da rampa e perdia ~1,65 stops — poças esmagadas).
         let knee = -NIGHT_LIFT_KNEE_EV;
         assert!((auto_exposure_target_lift(knee) + knee).abs() < 1e-5);
         assert!((auto_exposure_target_lift(0.0)).abs() < 1e-5);
         assert!((auto_exposure_target_lift(3.0) + 3.0).abs() < 1e-5);
+        assert_eq!(auto_exposure_compensation(-2.6), 0.0, "golden hour intacta");
+        assert_eq!(
+            auto_exposure_compensation(-2.25),
+            0.0,
+            "noite da vila (LOOP A): curva 0"
+        );
+        assert_eq!(
+            auto_exposure_compensation(-3.9),
+            0.0,
+            "noite da vila (LOOP C, ambiente 0,075): curva 0 — as poças vivem"
+        );
         // A rampa é monótona entre o joelho e o dobro (sem degrau no shutter).
         let ramp: Vec<f32> = (0..=10)
             .map(|i| auto_exposure_target_lift(knee - i as f32 * 0.3))
@@ -989,6 +2341,722 @@ mod tests {
             ))
             .is_ok()
         );
+    }
+
+    #[test]
+    fn test_night_readability_lives_in_grading_not_in_the_meter() {
+        // A MÉDIA da noite da vila (−2.25: fog + poças + chamas no buffer)
+        // fica ACIMA do joelho — o medidor abre como sempre (+2.25). A
+        // legibilidade vem do DESVIO de grading, que escurece DEPOIS do
+        // medidor (não é corrigido): net ≈ +2.25 − 2.8 < 0, a noite desce
+        // abaixo da paleta cru.
+        let meter_lift = auto_exposure_target_lift(-2.25);
+        assert!((meter_lift - 2.25).abs() < 1e-5, "medição cheia de noite");
+        let net = meter_lift + grade_night_exposure_offset(1.0);
+        assert!(net < 0.0, "a noite tem de ficar abaixo da paleta: {net}");
+        // E o dia fica EXACTAMENTE como estava: desvio 0, curva 0.
+        assert_eq!(grade_night_exposure_offset(0.0), 0.0);
+        assert_eq!(auto_exposure_compensation(-1.0), 0.0);
+    }
+
+    #[test]
+    fn test_grade_saturation_keeps_night_blue() {
+        // A noite NÃO dessatura: o azul da paleta (fog/céu) tem de chegar ao
+        // ecrã (o −0.22 antigo produzia a "lama cinzenta" medida 0.07 de
+        // saturação às 23:00).
+        assert!((grade_saturation(0.0, 1.0) - 1.0).abs() < 1e-6);
+        assert!((grade_saturation(0.0, 0.0) - 1.0).abs() < 1e-6);
+        // Golden hour continua a saturar.
+        assert!((grade_saturation(1.0, 0.0) - 1.18).abs() < 1e-6);
+        // A noite arrefece e a golden aquece, na mesma proporção de sempre.
+        assert!((grade_temperature(0.0, 1.0) + 0.25).abs() < 1e-6);
+        assert!((grade_temperature(1.0, 0.0) - 0.35).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_night_exposure_offset_ramps_and_spares_day() {
+        // Dia e crepúsculo (night=0): SEM desvio — o look aprovado não mexe.
+        assert_eq!(grade_night_exposure_offset(0.0), 0.0);
+        // Noite cheia: o desvio completo.
+        assert_eq!(grade_night_exposure_offset(1.0), NIGHT_GRADING_EXPOSURE_EV);
+        assert!(NIGHT_GRADING_EXPOSURE_EV < -2.0, "a noite tem de escurecer");
+        // Rampa linear e monotónica com a fração de noite (o shutter não dá
+        // degraus ao anoitecer).
+        let half = grade_night_exposure_offset(0.5);
+        assert!((half - NIGHT_GRADING_EXPOSURE_EV * 0.5).abs() < 1e-6);
+        assert!(half < 0.0 && half > NIGHT_GRADING_EXPOSURE_EV);
+        // Lixo não finito não propaga.
+        assert_eq!(
+            grade_night_exposure_offset(0.3),
+            NIGHT_GRADING_EXPOSURE_EV * 0.3
+        );
+    }
+
+    // ── LOOP C: bloom nocturno + perspetiva aérea ──────────────────────
+
+    #[test]
+    fn test_night_bloom_threshold_ramps_and_spares_day() {
+        // Dia e crepúsculo: o 700 histórico INTACTO — o look aprovado não mexe.
+        assert_eq!(night_bloom_threshold(0.0), DAY_BLOOM_THRESHOLD);
+        assert_eq!(night_bloom_threshold(0.0), 700.0);
+        // Noite plena: o joelho desce ao valor da chama.
+        assert!((night_bloom_threshold(1.0) - NIGHT_BLOOM_THRESHOLD).abs() < 1e-3);
+        // A ÂNCORA: a chama (≈1,0 no buffer) passa o joelho INTEIRA; a massa
+        // do chão ao luar (0,1..0,3, média do frame ≈0,21) fica FORA do
+        // joelho (0,35..0,70 com softness 0,5) — sem véu.
+        assert!(NIGHT_BLOOM_THRESHOLD < 1.0, "chama tem de florescer");
+        assert!(
+            NIGHT_BLOOM_THRESHOLD * 0.5 > 0.3,
+            "o joelho começa acima da massa do chão ao luar"
+        );
+        // Rampa linear e monotónica (o anoitecer não dá salto de bloom).
+        let half = night_bloom_threshold(0.5);
+        assert!((half - (DAY_BLOOM_THRESHOLD + NIGHT_BLOOM_THRESHOLD) * 0.5).abs() < 1e-4);
+        let mut prev = DAY_BLOOM_THRESHOLD;
+        for i in 0..=10 {
+            let t = night_bloom_threshold(i as f32 / 10.0);
+            assert!(t <= prev + 1e-6, "threshold desce com a noite: {t}");
+            prev = t;
+        }
+        // Lixo não finito não propaga.
+        assert_eq!(night_bloom_threshold(f32::NAN), DAY_BLOOM_THRESHOLD);
+    }
+
+    #[test]
+    fn test_night_bloom_target_respects_cap_and_day() {
+        // O reforço nocturno cabe no teto MAX_BLOOM mesmo com o boost da
+        // atmosfera à noite (0,16): 0,12 base + 0,16 + 0,20 = 0,48 ≤ 0,5.
+        let night_target = (BASE_BLOOM + 0.16 + NIGHT_BLOOM_INTENSITY).clamp(0.0, MAX_BLOOM);
+        assert!(
+            (night_target - 0.48).abs() < 1e-4,
+            "noite cheia usa o bloom todo sem clipar: {night_target}"
+        );
+        // De dia o reforço é ZERO (o drive soma × night).
+        assert_eq!(NIGHT_BLOOM_INTENSITY * 0.0, 0.0);
+    }
+
+    #[test]
+    fn test_night_bloom_lf_boost_ramps_and_spares_day() {
+        // Dia: o 0,7 do preset NATURAL — o look aprovado não mexe.
+        assert!((night_bloom_lf_boost(0.0) - 0.7).abs() < 1e-6);
+        // Noite plena: o boost cheio, ACIMA do preset.
+        assert!((night_bloom_lf_boost(1.0) - NIGHT_BLOOM_LF_BOOST).abs() < 1e-6);
+        assert!(NIGHT_BLOOM_LF_BOOST > 0.7, "halo nocturno mais largo");
+        // Rampa linear e lixo não finito não propaga.
+        let half = night_bloom_lf_boost(0.5);
+        assert!((half - (0.7 + (NIGHT_BLOOM_LF_BOOST - 0.7) * 0.5)).abs() < 1e-6);
+        assert!((night_bloom_lf_boost(f32::NAN) - 0.7).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_aerial_factor_ramp_sky_and_monotonic() {
+        // Perto: identidade — a legibilidade de jogo não paga a atmosfera.
+        assert_eq!(aerial_factor(0.0, 1.0), 0.0);
+        assert_eq!(aerial_factor(AERIAL_START_M - 1.0, 1.0), 0.0);
+        // Céu (domo ≥ AERIAL_SKY_SKIP_M): NUNCA é tocado.
+        assert_eq!(aerial_factor(AERIAL_SKY_SKIP_M, 1.0), 0.0);
+        assert_eq!(aerial_factor(5000.0, 1.0), 0.0);
+        // O longe chega ao teto (serra a ~620 m com peso cheio).
+        let full = aerial_factor(AERIAL_FULL_M, 1.0);
+        assert!((full - AERIAL_MAX_MIX).abs() < 1e-5, "teto do mix: {full}");
+        // A serra entre o início e o fim cresce MONOTONICAMENTE.
+        let mut prev = 0.0f32;
+        for d in 0..=40 {
+            let f = aerial_factor(AERIAL_START_M + d as f32 * 12.0, 1.0);
+            assert!(f >= prev - 1e-6, "factor cresce com a distância: {d}");
+            prev = f;
+        }
+        // O peso da noite ESCALA (nunca amplifica) e lixo não propaga.
+        let night_f = aerial_factor(600.0, aerial_weight(1.0));
+        let day_f = aerial_factor(600.0, aerial_weight(0.0));
+        assert!(night_f < day_f, "noite dessatura menos que o dia");
+        assert_eq!(aerial_factor(f32::NAN, 1.0), 0.0);
+        assert!((aerial_weight(f32::NAN) - 1.0).abs() < 1e-6);
+        // A golden 07:30 do gauntlet (night = 0): peso CHEIO.
+        assert_eq!(aerial_weight(0.0), 1.0);
+    }
+
+    #[test]
+    fn test_aerial_grade_desaturates_blueshifts_and_darkens() {
+        // O píxel de névoa BRANCA (o bleach do crítico): dessatura, desvia
+        // para azul-cinza e DESCE (contraste contra o céu mais claro).
+        let white = [0.60, 0.60, 0.60];
+        let g = aerial_grade(white, 0.85);
+        let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        assert!(g[2] > g[0], "blue-shift: {g:?}");
+        assert!(luma(g) < luma(white), "o haze escurece: {:?}", luma(g));
+        // A saturação MORRE: a distância entre canais encolhe.
+        let spread = |c: [f32; 3]| {
+            c.iter().cloned().fold(f32::MIN, f32::max) - c.iter().cloned().fold(f32::MAX, f32::min)
+        };
+        assert!(spread(g) < spread([0.8, 0.3, 0.2]) * 0.5 || spread(g) < 0.1);
+        // Fator 0 = identidade (o primeiro plano fica EXACTAMENTE como era).
+        let fg = aerial_grade([0.7, 0.5, 0.3], 0.0);
+        for c in 0..3 {
+            assert!((fg[c] - [0.7, 0.5, 0.3][c]).abs() < 1e-6);
+        }
+        // Um pixel de serra SATURADO (verde-floresta) à distância: perde a
+        // matiz mas mantém a DIRECÇÃO do tint (azul ≥ vermelho).
+        let far = aerial_grade([0.10, 0.30, 0.12], 0.8);
+        assert!(
+            far[2] >= far[0] - 1e-4,
+            "serra distante lê azulada: {far:?}"
+        );
+    }
+
+    #[test]
+    fn test_aerial_wgsl_layout_matches_packing() {
+        // Guardas de regressão do passe (o harness naga em
+        // tests/aerial_shader.rs valida a compilação e o tamanho):
+        // self-contained, bindings na ordem do pipeline, e o uniform
+        // packado com EXACTAMENTE AERIAL_UNIFORM_BYTES.
+        assert!(
+            !AERIAL_WGSL.contains("#import"),
+            "self-contained: sem imports"
+        );
+        assert!(AERIAL_WGSL.contains("texture_depth_2d"));
+        assert!(AERIAL_WGSL.contains("fn fragment"));
+        let clip = bevy::math::Mat4::IDENTITY;
+        let world = bevy::math::Mat4::IDENTITY;
+        let packed = pack_aerial_uniform(&clip, &world, [1.0, 2.0, 3.0], 0.5);
+        assert_eq!(packed.len(), AERIAL_UNIFORM_BYTES);
+        // O peso vai na posição certa (ramp.w): mats 0..128, cam 128..144,
+        // ramp 144..160 — w no float 3 do vec4 = byte 156.
+        let w_bytes: [u8; 4] = packed[156..160].try_into().unwrap();
+        assert_eq!(f32::from_le_bytes(w_bytes), 0.5);
+    }
+
+    // ── LOOP B: split-tone + key de lua ────────────────────────────────
+
+    /// Espelho do WGSL do split-tone (mesma matemática, f32) para os
+    /// testes poderem verificar o efeito do passe pixel a pixel.
+    fn graded_by_shader(color: [f32; 3], shadow: [f32; 3], highlight: [f32; 3]) -> [f32; 3] {
+        const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
+        let luma = color[0] * LUMA[0] + color[1] * LUMA[1] + color[2] * LUMA[2];
+        let t = ((luma - SPLIT_TONE_LO) / (SPLIT_TONE_HI - SPLIT_TONE_LO)).clamp(0.0, 1.0);
+        let w = t * t * (3.0 - 2.0 * t);
+        let tint = [
+            shadow[0] + (highlight[0] - shadow[0]) * w,
+            shadow[1] + (highlight[1] - shadow[1]) * w,
+            shadow[2] + (highlight[2] - shadow[2]) * w,
+        ];
+        let norm = (tint[0] * LUMA[0] + tint[1] * LUMA[1] + tint[2] * LUMA[2]).max(1e-4);
+        [
+            color[0] * tint[0] / norm,
+            color[1] * tint[1] / norm,
+            color[2] * tint[2] / norm,
+        ]
+    }
+
+    #[test]
+    fn test_split_tone_midday_is_identity() {
+        let (shadow, highlight) = split_tone_for(0.0, 0.0);
+        assert_eq!(shadow, [1.0, 1.0, 1.0]);
+        assert_eq!(highlight, [1.0, 1.0, 1.0]);
+        // E o passe sobre um pixel qualquer é no-op.
+        for color in [[0.01, 0.01, 0.01], [0.2, 0.2, 0.2], [0.6, 0.6, 0.6]] {
+            let graded = graded_by_shader(color, shadow, highlight);
+            for c in 0..3 {
+                assert!((graded[c] - color[c]).abs() < 1e-6);
+            }
+        }
+    }
+
+    #[test]
+    fn test_low_sun_split_weight_covers_morning_and_spares_midday() {
+        // Meio-dia do simple-rpg (62°) e qualquer sol acima de 50°: ZERO —
+        // o dia neutro aprovado não ganha tinte (LOOP D: zero a 50°, era 45°).
+        assert_eq!(low_sun_split_weight(62.0), 0.0);
+        assert_eq!(low_sun_split_weight(50.0), 0.0);
+        // Sol rasante (≤25°) e debaixo do horizonte: MÁXIMO (a transição
+        // para o braço da noite é a rampa `night`).
+        assert_eq!(low_sun_split_weight(25.0), 1.0);
+        assert_eq!(low_sun_split_weight(5.0), 1.0);
+        assert_eq!(low_sun_split_weight(-10.0), 1.0);
+        // O CENÁRIO DO GAUNTLET (LOOP D: a janela ALARGOU para o cobrir —
+        // o crítico da LOOP C mediu 07:30/07:49 como neutro com a janela
+        // 12°/45°): 07:30 (26,9°) ~CHEIO e 07:49 (30,8°) ainda ≥ 0.8.
+        let w0730 = low_sun_split_weight(26.9);
+        assert!(w0730 >= 0.95, "07:30 pesa ~cheio: {w0730}");
+        let w0749 = low_sun_split_weight(30.8);
+        assert!(w0749 >= 0.8, "07:49 pesa forte: {w0749}");
+        // Monotónica descendo com a elevação (o shutter não dá salto ao
+        // sol subir) e lixo não finito não propaga.
+        let mut prev = 1.0f32;
+        for deg in [0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0] {
+            let w = low_sun_split_weight(deg);
+            assert!(w <= prev + 1e-6, "peso desce com a elevação: {deg}°");
+            prev = w;
+        }
+        assert_eq!(low_sun_split_weight(f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn test_golden_key_mix_window_gates_and_caps() {
+        // Meio-dia (62°) e noite: SEM key — o dia neutro e o look nocturno
+        // aprovados não mexem.
+        assert_eq!(golden_key_mix(62.0, 0.0), 0.0);
+        assert_eq!(
+            golden_key_mix(26.9, 1.0),
+            0.0,
+            "noite nunca ganha key âmbar"
+        );
+        // Debaixo do horizonte: a direcional já é a LUA (moon_key_drive).
+        assert_eq!(golden_key_mix(-10.0, 0.0), 0.0);
+        assert_eq!(golden_key_mix(0.0, 0.0), 0.0);
+        // A janela do gauntlet: 07:30 e 07:49 com a key quase cheia.
+        let k0730 = golden_key_mix(26.9, 0.0);
+        assert!(k0730 >= GOLDEN_KEY_MIX * 0.95, "07:30 key ~cheia: {k0730}");
+        let k0749 = golden_key_mix(30.8, 0.0);
+        assert!(k0749 >= GOLDEN_KEY_MIX * 0.8, "07:49 key forte: {k0749}");
+        // Rasante (5°): o máximo, e nunca acima do teto.
+        let klow = golden_key_mix(5.0, 0.0);
+        assert!((klow - GOLDEN_KEY_MIX).abs() < 1e-6);
+        assert!(GOLDEN_KEY_MIX <= 1.0);
+        // Monotónica com a elevação (desce à medida que o sol sobe) e lixo
+        // não finito não propaga.
+        let mut prev = GOLDEN_KEY_MIX;
+        for deg in [1.0, 10.0, 20.0, 30.0, 40.0, 55.0] {
+            let k = golden_key_mix(deg, 0.0);
+            assert!(k <= prev + 1e-6, "key desce com a elevação: {deg}°");
+            prev = k;
+        }
+        assert_eq!(golden_key_mix(f32::NAN, 0.0), 0.0);
+        assert_eq!(golden_key_mix(26.9, f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn test_golden_key_drive_warms_sun_and_spares_night_and_noon() {
+        use bevy::ecs::system::RunSystemOnce as _;
+
+        // 07:30 (26,9°): a cor autoral branca empurra para o âmbar da key.
+        let mut world = bevy::ecs::world::World::default();
+        world.insert_resource(crate::worldsys::SunState {
+            elevation_deg: 26.9,
+            night: 0.0,
+            ..Default::default()
+        });
+        let day_entity = world
+            .spawn((
+                bevy::light::DirectionalLight {
+                    illuminance: 10_000.0,
+                    color: Color::WHITE,
+                    ..Default::default()
+                },
+                crate::worldsys::SunLightBase {
+                    illuminance: 10_000.0,
+                    color: Color::WHITE,
+                },
+            ))
+            .id();
+        world.run_system_once(golden_key_drive).unwrap();
+        let light = world
+            .get::<bevy::light::DirectionalLight>(day_entity)
+            .unwrap();
+        let c = light.color.to_linear();
+        assert!(c.red > c.green && c.green > c.blue, "âmbar: {c:?}");
+        // A iluminância NÃO mexe (a key é de COR, não de força).
+        assert_eq!(light.illuminance, 10_000.0);
+        // E o SunLightBase continua autoral (composição, não acumulação).
+        let base = world
+            .get::<crate::worldsys::SunLightBase>(day_entity)
+            .unwrap();
+        assert_eq!(base.color, Color::WHITE);
+
+        // Meio-dia e noite: EXACTAMENTE como o sun_drive deixou.
+        for (elev, night) in [(62.0, 0.0), (-12.0, 1.0)] {
+            let mut world = bevy::ecs::world::World::default();
+            world.insert_resource(crate::worldsys::SunState {
+                elevation_deg: elev,
+                night,
+                ..Default::default()
+            });
+            let entity = world
+                .spawn((bevy::light::DirectionalLight::default(),))
+                .id();
+            world.run_system_once(golden_key_drive).unwrap();
+            let light = world.get::<bevy::light::DirectionalLight>(entity).unwrap();
+            assert_eq!(light.color, Color::WHITE, "{elev}° fica branco");
+        }
+    }
+
+    #[test]
+    fn test_grade_temperature_full_warms_low_sun_and_spares_midday() {
+        // Meio-dia (peso 0) e a LOOP B pura: iguais — o dia neutro não mexe.
+        assert_eq!(grade_temperature_full(0.0, 0.0, 0.0), 0.0);
+        assert!((grade_temperature_full(0.35, 0.0, 0.0) - 0.35 * 0.35).abs() < 1e-6);
+        // 07:30 do gauntlet (`golden` ~0, peso 26,9° ~1): aquecimento global
+        // ~0.28 — o stock aquece a manhã que a gaussiana não cobria.
+        let t0730 = grade_temperature_full(0.0, low_sun_split_weight(26.9), 0.0);
+        assert!(t0730 >= GOLDEN_GRADE_WARMTH * 0.95, "07:30 aquece: {t0730}");
+        // A noite continua a arrefecer NA MESMA proporção de sempre.
+        assert!((grade_temperature_full(0.0, 0.0, 1.0) + 0.25).abs() < 1e-6);
+        // Lixo não finito não propaga.
+        assert_eq!(grade_temperature_full(f32::NAN, f32::NAN, f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn test_torch_pool_gain_ramps_and_spares_day() {
+        // Dia e crepúsculo: ganho 1 — o valor autoral fica EXACTAMENTE
+        // como estava (o medidor do AutoExposure não vê nada; medido
+        // 2026-09-13, golden 07:30: 1M lm no XML fechava o frame ~1,2 EV).
+        assert_eq!(torch_pool_gain(0.0), 1.0);
+        assert_eq!(warm_fill_gain(0.0), 1.0);
+        // Noite plena: TOCHAS ×8 (raio ×2 vs LOOP C, falloff 1/d³ no chão)
+        // e o fill quente (janelas/braseiros) só ×2 — os rácios da variante
+        // XML-1M validada (11 poças, estrelas vivas, noite ainda noite).
+        assert_eq!(torch_pool_gain(1.0), TORCH_POOL_NIGHT_GAIN);
+        assert_eq!(warm_fill_gain(1.0), WARM_FILL_NIGHT_GAIN);
+        assert!(TORCH_POOL_NIGHT_GAIN >= 8.0, "poças 2×: ganho ≥ 8");
+        assert!(
+            WARM_FILL_NIGHT_GAIN < TORCH_POOL_NIGHT_GAIN,
+            "fill não compete"
+        );
+        // Rampa linear/monotónica e lixo não finito não propaga.
+        let half = torch_pool_gain(0.5);
+        assert!((half - (1.0 + (TORCH_POOL_NIGHT_GAIN - 1.0) * 0.5)).abs() < 1e-6);
+        assert_eq!(torch_pool_gain(f32::NAN), 1.0);
+        assert_eq!(warm_fill_gain(f32::NAN), 1.0);
+        // Composição: tocha 120k→960k, janela 160k→320k.
+        assert_eq!(
+            torch_pool_target(120_000.0, TORCH_POOL_NIGHT_GAIN),
+            960_000.0,
+            "tocha de rua 120k → 960k (raio ×2)"
+        );
+        assert_eq!(
+            torch_pool_target(160_000.0, WARM_FILL_NIGHT_GAIN),
+            320_000.0,
+            "janela 160k → 320k (fill)"
+        );
+        assert_eq!(
+            torch_pool_target(120_000.0, 1.0),
+            120_000.0,
+            "dia: authored"
+        );
+        assert!(
+            torch_pool_target(f32::NAN, 8.0).is_nan(),
+            "base lixo propaga"
+        );
+        assert_eq!(
+            torch_pool_target(-5.0, 8.0),
+            -5.0,
+            "base inválida devolve o base"
+        );
+    }
+
+    #[test]
+    fn test_torch_pool_warm_gate_matches_torch_family() {
+        use bevy::color::LinearRgba;
+        // As tochas/braseiros/janelas do simple-rpg (hex → linear aprox.).
+        for (r, g, b) in [(1.0, 0.63, 0.25), (1.0, 0.66, 0.23), (1.0, 0.70, 0.39)] {
+            assert!(torch_pool_is_warm(LinearRgba::rgb(r, g, b)), "{r},{g},{b}");
+        }
+        // O acento FRIO autoral (cristal 0x3f8fff) fica de fora.
+        assert!(!torch_pool_is_warm(LinearRgba::rgb(0.06, 0.28, 1.0)));
+        // Branco neutro também não é tocha.
+        assert!(!torch_pool_is_warm(LinearRgba::rgb(1.0, 1.0, 1.0)));
+    }
+
+    #[test]
+    fn test_torch_pool_drive_composes_over_captured_base() {
+        use bevy::ecs::system::RunSystemOnce as _;
+
+        // Noite plena: TOCHA (sombra autoral) 120k → ×8; janela quente sem
+        // sombra → ×2 (fill); luz fria intacta; as bases capturadas
+        // preservam os valores autorais.
+        let mut world = bevy::ecs::world::World::default();
+        world.insert_resource(crate::worldsys::AtmosphereState {
+            night: 1.0,
+            ..Default::default()
+        });
+        let torch = world
+            .spawn((
+                bevy::light::PointLight {
+                    intensity: 120_000.0,
+                    color: Color::srgb(1.0, 0.63, 0.25),
+                    ..Default::default()
+                },
+                crate::ambient::AuthoredShadowLight,
+            ))
+            .id();
+        let window = world
+            .spawn(bevy::light::PointLight {
+                intensity: 160_000.0,
+                color: Color::srgb(1.0, 0.70, 0.39),
+                ..Default::default()
+            })
+            .id();
+        let cool = world
+            .spawn(bevy::light::PointLight {
+                intensity: 45_000.0,
+                color: Color::srgb(0.06, 0.28, 1.0),
+                ..Default::default()
+            })
+            .id();
+        // Primeira passada: captura a base (via Commands); a segunda compõe.
+        world.run_system_once(torch_pool_drive).unwrap();
+        world.clear_trackers();
+        world.flush();
+        world.run_system_once(torch_pool_drive).unwrap();
+        let torch_light = world.get::<bevy::light::PointLight>(torch).unwrap();
+        assert!(
+            (torch_light.intensity - torch_pool_target(120_000.0, TORCH_POOL_NIGHT_GAIN)).abs()
+                < 1.0,
+            "tocha composta: {}",
+            torch_light.intensity
+        );
+        let window_light = world.get::<bevy::light::PointLight>(window).unwrap();
+        assert!(
+            (window_light.intensity - torch_pool_target(160_000.0, WARM_FILL_NIGHT_GAIN)).abs()
+                < 1.0,
+            "janela composta: {}",
+            window_light.intensity
+        );
+        assert_eq!(
+            world.get::<TorchLightBase>(torch).unwrap().intensity,
+            120_000.0,
+            "base autoral preservada"
+        );
+        let cool_light = world.get::<bevy::light::PointLight>(cool).unwrap();
+        assert_eq!(cool_light.intensity, 45_000.0, "luz fria intacta");
+        assert!(
+            world.get::<TorchLightBase>(cool).is_none(),
+            "a luz fria nem ganha base"
+        );
+
+        // Dia (night = 0): o drive é no-op (early-out do ganho 1).
+        let mut world = bevy::ecs::world::World::default();
+        world.insert_resource(crate::worldsys::AtmosphereState {
+            night: 0.0,
+            ..Default::default()
+        });
+        let entity = world
+            .spawn((
+                bevy::light::PointLight {
+                    intensity: 120_000.0,
+                    color: Color::srgb(1.0, 0.63, 0.25),
+                    ..Default::default()
+                },
+                crate::ambient::AuthoredShadowLight,
+            ))
+            .id();
+        world.run_system_once(torch_pool_drive).unwrap();
+        world.clear_trackers();
+        world.flush();
+        world.run_system_once(torch_pool_drive).unwrap();
+        let light = world.get::<bevy::light::PointLight>(entity).unwrap();
+        assert_eq!(light.intensity, 120_000.0, "dia: authored");
+    }
+
+    #[test]
+    fn test_golden_key_color_is_luma_normalized() {
+        // O âmbar da key tem de preservar a luminância (luma ≈ 1): a variante
+        // cru (1.0, 0.56, 0.22) — luma 0,61 — escurecia a golden hour ~23%
+        // e o AutoExposure amplificava (medido 2026-09-13).
+        const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
+        let luma: f32 = GOLDEN_KEY_COLOR.iter().zip(LUMA).map(|(c, l)| c * l).sum();
+        assert!(
+            (luma - 1.0).abs() < 0.02,
+            "key âmbar luma-preservante: {luma}"
+        );
+        assert!(GOLDEN_KEY_COLOR[0] > GOLDEN_KEY_COLOR[2] + 1.0, "bem âmbar");
+    }
+
+    #[test]
+    fn test_split_tone_low_sun_cools_shadows_and_warms_highlights() {
+        let (shadow, highlight) = split_tone_for(1.0, 0.0);
+        // Sombras FRIAS (azul > vermelho) e abaixo do identity no R.
+        assert!(shadow[2] > shadow[0], "sombra fria: {shadow:?}");
+        assert!(shadow[0] < 1.0);
+        // Highlights QUENTES (vermelho > azul).
+        assert!(
+            highlight[0] > highlight[2],
+            "highlight quente: {highlight:?}"
+        );
+        // O efeito no PIXEL: sombra escura arrefece, highlight aquece, e a
+        // LUMINÂNCIA se preserva (o passe é de matiz, não de exposição).
+        let dark = [0.02, 0.02, 0.02];
+        let bright = [0.5, 0.5, 0.5];
+        let graded_dark = graded_by_shader(dark, shadow, highlight);
+        let graded_bright = graded_by_shader(bright, shadow, highlight);
+        assert!(graded_dark[2] > graded_dark[0]);
+        assert!(graded_bright[0] > graded_bright[2]);
+        const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
+        for (original, graded) in [(dark, graded_dark), (bright, graded_bright)] {
+            let l0: f32 = original.iter().zip(LUMA).map(|(c, l)| c * l).sum();
+            let l1: f32 = graded.iter().zip(LUMA).map(|(c, l)| c * l).sum();
+            assert!((l0 - l1).abs() < 1e-4, "luma preservada: {l0} vs {l1}");
+        }
+        // A SEPARAÇÃO: o B:R da sombra gradingada excede o do highlight
+        // (é isto que o crítico pede — quente/frio na MESMA cena).
+        let br = |c: [f32; 3]| c[2] / c[0].max(1e-5);
+        assert!(br(graded_dark) > br(graded_bright) + 0.15);
+    }
+
+    #[test]
+    fn test_split_tone_night_has_the_coolest_shadows_and_warm_pools() {
+        let (night_shadow, night_highlight) = split_tone_for(0.0, 1.0);
+        let (golden_shadow, _) = split_tone_for(1.0, 0.0);
+        // A noite empurra o azul das sombras MAIS fundo que a golden.
+        assert!(night_shadow[2] > golden_shadow[2]);
+        assert!(night_shadow[2] > night_shadow[0]);
+        // Highlights noturnos continuam do lado QUENTE (poças/braseiros).
+        assert!(night_highlight[0] > night_highlight[2]);
+        // E um píxel de poça (brilhante) à noite aquece ligeiro.
+        let pool = graded_by_shader([0.45, 0.32, 0.16], night_shadow, night_highlight);
+        assert!(pool[0] > pool[2], "poça quente continua quente: {pool:?}");
+    }
+
+    #[test]
+    fn test_split_tone_ramps_are_monotonic_and_clean() {
+        for golden in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            let (s, h) = split_tone_for(golden, 0.0);
+            assert!(s.iter().all(|v| v.is_finite()));
+            assert!(h.iter().all(|v| v.is_finite()));
+        }
+        let mut prev_b = f32::MIN;
+        for i in 0..=10 {
+            let (s, _) = split_tone_for(i as f32 / 10.0, 0.0);
+            assert!(s[2] >= prev_b, "azul da sombra sobe com o golden");
+            prev_b = s[2];
+        }
+        let mut prev_b = f32::MIN;
+        for i in 0..=10 {
+            let (s, _) = split_tone_for(0.0, i as f32 / 10.0);
+            assert!(s[2] >= prev_b, "azul da sombra sobe com a noite");
+            prev_b = s[2];
+        }
+        // Banda da transição coerente (dentro do alcance útil linear).
+        assert!(SPLIT_TONE_LO < SPLIT_TONE_HI);
+        assert!(SPLIT_TONE_LO > 0.0 && SPLIT_TONE_HI < 1.0);
+        // Lixo não finito não propaga (a rampa faz clamp).
+        let (s, h) = split_tone_for(f32::NAN, f32::NAN);
+        assert!(s.iter().chain(h.iter()).all(|v| v.is_finite()));
+    }
+
+    #[test]
+    fn test_split_tone_shader_imports_the_vertex_struct() {
+        // Guarda de regressão do import do WGSL: no bevy 0.19 o struct do
+        // fullscreen chama-se `FullscreenVertexOutput` — o import antigo
+        // (`fullscreen_vertex_out`) deixava o identificador fora de scope, o
+        // naga rejeitava o shader e o PASSE SALTAVA EM SILÊNCIO (o split-tone
+        // simplesmente não existia no frame; apanhado no boot de QA 2026-09-13).
+        assert!(
+            SPLIT_TONE_WGSL.contains(
+                "#import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput"
+            ),
+            "o WGSL tem de importar o struct FullscreenVertexOutput pelo nome exacto"
+        );
+        assert!(
+            !SPLIT_TONE_WGSL.contains("fullscreen_vertex_shader::fullscreen_vertex_out"),
+            "o nome antigo fullscreen_vertex_out não existe no módulo do bevy 0.19"
+        );
+        // Assinatura do fragment coerente com o struct importado.
+        assert!(SPLIT_TONE_WGSL.contains("fn fragment(in: FullscreenVertexOutput)"));
+    }
+
+    #[test]
+    fn test_moon_illuminance_factor_spares_day() {
+        // Dia: SEM ganho — o sol aprovado fica exactamente como estava.
+        assert_eq!(moon_illuminance_factor(0.0), 1.0);
+        // Noite plena: o ganho cheio.
+        assert_eq!(moon_illuminance_factor(1.0), MOON_KEY_GAIN);
+        assert!(MOON_KEY_GAIN > 1.5, "a key tem de marcar presença");
+        // Rampa linear/monotónica (o crepúsculo não dá salto).
+        let half = moon_illuminance_factor(0.5);
+        assert!((half - (1.0 + (MOON_KEY_GAIN - 1.0) * 0.5)).abs() < 1e-6);
+        // Lixo não finito não propaga.
+        assert_eq!(moon_illuminance_factor(f32::NAN), 1.0);
+    }
+
+    #[test]
+    fn test_moon_key_drive_composes_over_sun_drive() {
+        use bevy::ecs::system::RunSystemOnce as _;
+
+        let mut world = bevy::ecs::world::World::default();
+        world.insert_resource(crate::worldsys::AtmosphereState {
+            night: 1.0,
+            ..Default::default()
+        });
+        // Luz como o sun_drive a deixa à noite: base 10 klx × 0.06 = 600 lux,
+        // cor = MOON_COLOR em LINEAR (é isso que o mix_linear do sun_drive
+        // escreve — Color::LinearRgba, não sRGB).
+        let base = 10_000.0;
+        let sun_night_value = base * crate::worldsys::MOONLIGHT_RATIO;
+        let moon = bevy::color::LinearRgba::rgb(
+            crate::worldsys::MOON_COLOR[0],
+            crate::worldsys::MOON_COLOR[1],
+            crate::worldsys::MOON_COLOR[2],
+        );
+        let light_entity = world
+            .spawn((
+                bevy::light::DirectionalLight {
+                    illuminance: sun_night_value,
+                    color: Color::LinearRgba(moon),
+                    ..Default::default()
+                },
+                crate::worldsys::SunLightBase {
+                    illuminance: base,
+                    color: Color::LinearRgba(moon),
+                },
+            ))
+            .id();
+
+        world.run_system_once(moon_key_drive).unwrap();
+
+        let light = world
+            .get::<bevy::light::DirectionalLight>(light_entity)
+            .unwrap();
+        // Composição: 600 lux × MOON_KEY_GAIN — sem acumulação, sem feedback
+        // no SunLightBase (que continua a guardar o valor autoral).
+        assert!(
+            (light.illuminance - sun_night_value * MOON_KEY_GAIN).abs() < 1e-2,
+            "illuminance composto: {}",
+            light.illuminance
+        );
+        let base_state = world
+            .get::<crate::worldsys::SunLightBase>(light_entity)
+            .unwrap();
+        assert_eq!(base_state.illuminance, base);
+        // A cor empurra para o azul da key.
+        let c = light.color.to_linear();
+        assert!(c.blue > c.red);
+        assert!(
+            c.blue > crate::worldsys::MOON_COLOR[2],
+            "mais azul que MOON_COLOR"
+        );
+    }
+
+    #[test]
+    fn test_moon_key_drive_is_noop_in_day() {
+        use bevy::ecs::system::RunSystemOnce as _;
+
+        let mut world = bevy::ecs::world::World::default();
+        world.insert_resource(crate::worldsys::AtmosphereState {
+            night: 0.0,
+            ..Default::default()
+        });
+        let sun_value = 10_000.0;
+        let light_entity = world
+            .spawn((
+                bevy::light::DirectionalLight {
+                    illuminance: sun_value,
+                    ..Default::default()
+                },
+                crate::worldsys::SunLightBase {
+                    illuminance: sun_value,
+                    color: Color::WHITE,
+                },
+            ))
+            .id();
+
+        world.run_system_once(moon_key_drive).unwrap();
+
+        let light = world
+            .get::<bevy::light::DirectionalLight>(light_entity)
+            .unwrap();
+        assert_eq!(light.illuminance, sun_value);
+        assert_eq!(light.color, Color::WHITE);
     }
 
     #[test]

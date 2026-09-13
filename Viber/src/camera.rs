@@ -73,6 +73,36 @@ pub fn camera_offset(yaw_deg: f32, pitch_deg: f32, distance: f32, height: f32) -
     )
 }
 
+/// Constante de tempo do salto entre salas da câmara de interior (s).
+///
+/// O 16 bits CORTA de sala para sala; em 3D com sombras e TAA o corte seco
+/// lê-se como glitch, por isso fica um ease curto — o suficiente para o olho
+/// perceber que a câmara mudou de sala, não para parecer follow.
+pub const INTERIOR_ROOM_LAG: f32 = 0.12;
+
+/// Pose da câmara de interior: (olho, ponto olhado).
+///
+/// O alvo é o CENTRO DA SALA (`InteriorSceneConfig::room_center`), não o
+/// herói — é isso que faz a câmara parar de seguir e enquadrar a divisão
+/// inteira, à maneira dos JRPG de 16 bits. A altura do alvo acompanha o
+/// herói (o soalho da sala), para uma sala num piso diferente não deixar o
+/// enquadramento no chão errado. Pura para teste.
+pub fn interior_camera_pose(
+    scene: &crate::worldsys::InteriorSceneConfig,
+    player: Vec3,
+) -> (Vec3, Vec3) {
+    let [cx, cz] = scene.room_center(player.x, player.z);
+    let look_at = Vec3::new(cx, player.y + 1.0, cz);
+    let eye = look_at
+        + camera_offset(
+            scene.camera_yaw_deg,
+            scene.camera_pitch_deg,
+            scene.camera_distance,
+            0.0,
+        );
+    (eye, look_at)
+}
+
 /// Frame-rate-independent low-pass blend factor for a time constant `tau`:
 /// `1 - exp(-dt / tau)` (VibeGame `followLag`/`turnLag`, floored at 1e-4).
 pub fn low_pass_factor(dt: f32, tau: f32) -> f32 {
@@ -403,6 +433,7 @@ pub fn kick_spring_step(offset: Vec3, vel: Vec3, dt: f32) -> (Vec3, Vec3) {
 /// `OrbitCamera::yaw_deg` with A/D — this system auto-follows the movement
 /// heading and trails everything smoothly.
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 pub fn third_person_camera(
     time: Res<Time>,
     real: Res<Time<Real>>,
@@ -411,6 +442,7 @@ pub fn third_person_camera(
     mut cameras: Query<(&mut Transform, &mut OrbitCamera)>,
     players: Query<(&GlobalTransform, &Player), With<Player>>,
     runtime: Option<Res<TerrainRuntime>>,
+    interior: Option<Res<crate::worldsys::InteriorSceneConfig>>,
 ) {
     let Some((target, player)) = players.iter().next() else {
         return;
@@ -427,9 +459,33 @@ pub fn third_person_camera(
     let (kick_off, kick_vel) = kick_spring_step(kick.offset, kick.vel, dt);
     kick.offset = kick_off;
     kick.vel = kick_vel;
+    // Dentro de uma bolsa de interior a câmara muda de regime: JRPG de 16
+    // bits — enquadra a SALA, não o herói. Ver [`interior_camera_pose`].
+    let interior_room = interior
+        .as_deref()
+        .filter(|scene| scene.contains(target_pos.x, target_pos.z));
     for (mut transform, mut cam) in &mut cameras {
         if cam.target.is_some() {
             continue; // named-target camera: rigid follow owns it
+        }
+        if let Some(scene) = interior_room {
+            let (eye, look_at) = interior_camera_pose(scene, target_pos);
+            // Salto entre salas com um ease curto: o corte seco do SNES
+            // pisca demasiado numa cena 3D com sombras e TAA.
+            let a = low_pass_factor(dt, INTERIOR_ROOM_LAG);
+            let (pos, point) = (cam.current_pos, cam.follow_point);
+            cam.current_pos = pos + (eye - pos) * a;
+            cam.follow_point = point + (look_at - point) * a;
+            // O estado do terceiro-pessoa fica coerente para o regresso: sem
+            // isto, sair do interior devolvia a câmara à pose de há minutos.
+            cam.smooth_yaw_deg = scene.camera_yaw_deg;
+            cam.yaw_deg = scene.camera_yaw_deg;
+            cam.initialized = true;
+            transform.translation = cam.current_pos + shake_off + kick.offset;
+            let up = Vec3::Y;
+            transform.look_at(cam.follow_point, up);
+            transform.rotate_local_z(shake_roll);
+            continue;
         }
         // TRUE automatic camera (two regimes — see auto_camera_yaw): fast
         // swing behind the movement heading while running; slow drift behind

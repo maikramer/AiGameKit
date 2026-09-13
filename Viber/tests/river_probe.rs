@@ -78,8 +78,8 @@ fn river_channel_stays_below_the_waterline() {
         })
         .map(|(i, _)| i)
         .expect("stations");
-    let crossing_depth =
-        river.surface_y[crossing] - grid.sample(river.stations[crossing].x, river.stations[crossing].y);
+    let crossing_depth = river.surface_y[crossing]
+        - grid.sample(river.stations[crossing].x, river.stations[crossing].y);
     assert!(
         crossing_depth > 2.0,
         "canal na travessia norte com só {crossing_depth:.2} m (worst global {worst:.2})"

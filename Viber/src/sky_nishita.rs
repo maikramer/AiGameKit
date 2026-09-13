@@ -170,8 +170,8 @@ pub fn radiance(dir: Vec3, sun: Vec3, cam_height: f32, model: &NishitaModel) -> 
         i_od_rlh += od_step_rlh;
         i_od_mie += od_step_mie;
 
-        let j_step_size = ray_sphere_intersection(p_sun, i_pos, ATMOSPHERE_RADIUS).1
-            / JSTEPS as f32;
+        let j_step_size =
+            ray_sphere_intersection(p_sun, i_pos, ATMOSPHERE_RADIUS).1 / JSTEPS as f32;
         let mut j_depth = 0.0f32;
         let mut j_od_rlh = 0.0f32;
         let mut j_od_mie = 0.0f32;
@@ -214,7 +214,10 @@ mod tests {
         for v in color {
             assert!(v.is_finite(), "radiância não finita: {color:?}");
         }
-        assert!(color[2] > color[0], "zénite do meio-dia deve ser azul: {color:?}");
+        assert!(
+            color[2] > color[0],
+            "zénite do meio-dia deve ser azul: {color:?}"
+        );
     }
 
     #[test]
@@ -224,7 +227,12 @@ mod tests {
         // ficar bem abaixo — a mesma física que põe o glow à volta do disco.
         let model = NishitaModel::default();
         let at_sun = radiance(Vec3::Y, noon_sun(), 1.0, &model);
-        let off_axis = radiance(Vec3::new(0.2, 0.8, 0.5).normalize(), noon_sun(), 1.0, &model);
+        let off_axis = radiance(
+            Vec3::new(0.2, 0.8, 0.5).normalize(),
+            noon_sun(),
+            1.0,
+            &model,
+        );
         let sun_sum: f32 = at_sun.iter().sum();
         let off_sum: f32 = off_axis.iter().sum();
         assert!(

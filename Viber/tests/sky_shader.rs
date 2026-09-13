@@ -643,7 +643,11 @@ fn sky_gpu_nishita_finite_and_day_night_separation() {
     let day = render(device, queue, &config, atmosphere(false, 0.0, 120.0), false);
     let night = render(device, queue, &config, atmosphere(true, 0.0, 120.0), false);
     let dawn = render(device, queue, &config, dawn_atmosphere(), false);
-    for (label, pixels) in [("nishita-day", &day), ("nishita-night", &night), ("nishita-dawn", &dawn)] {
+    for (label, pixels) in [
+        ("nishita-day", &day),
+        ("nishita-night", &night),
+        ("nishita-dawn", &dawn),
+    ] {
         assert_pixels(label, pixels);
         capture(label, pixels);
     }

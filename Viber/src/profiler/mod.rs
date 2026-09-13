@@ -187,6 +187,9 @@ pub struct GameCounters {
     pub particle_emitters: usize,
     pub terrain_chunks: usize,
     pub colliders: usize,
+    /// PointLights com cube shadow map ACTIVO — cada uma são 6 vistas de
+    /// render. É o contador que explica um frame que dobra ao entrar na vila.
+    pub shadow_lights: usize,
     pub audio_sinks: usize,
 }
 
@@ -244,6 +247,12 @@ pub fn collect_counters(world: &mut World) -> GameCounters {
         world.query_filtered::<(), Or<(With<AudioSink>, With<bevy::audio::SpatialAudioSink>)>>();
     let audio_sinks = q_sinks.iter(world).count();
 
+    let mut q_shadow_lights = world.query::<&PointLight>();
+    let shadow_lights = q_shadow_lights
+        .iter(world)
+        .filter(|light| light.shadow_maps_enabled)
+        .count();
+
     GameCounters {
         entities,
         scripts_total,
@@ -251,6 +260,7 @@ pub fn collect_counters(world: &mut World) -> GameCounters {
         particle_emitters,
         terrain_chunks,
         colliders,
+        shadow_lights,
         audio_sinks,
     }
 }
@@ -267,13 +277,76 @@ fn diagnostics_snapshot(store: &DiagnosticsStore) -> (Option<f64>, Option<f64>) 
     )
 }
 
+/// Linhas das listas `systems`/`scripts_timed` do snapshot.
+///
+/// O corte de 30 esconde precisamente os sistemas baratos que uma
+/// investigação quer CONFIRMAR baratos (fila aberta do `docs/PERFORMANCE.md`).
+/// `VIBER_PROF_SYSTEMS=<n>` sobe o corte, `=all` tira-o.
+const DEFAULT_SYSTEMS_LIMIT: usize = 30;
+
+fn systems_limit() -> usize {
+    match std::env::var("VIBER_PROF_SYSTEMS").as_deref() {
+        Ok("all") | Ok("todos") | Ok("0") => usize::MAX,
+        Ok(raw) => raw.parse().unwrap_or(DEFAULT_SYSTEMS_LIMIT),
+        Err(_) => DEFAULT_SYSTEMS_LIMIT,
+    }
+}
+
+/// Spans do render graph medidos pelo `RenderDiagnosticsPlugin`
+/// (`VIBER_PROF_GPU=1`, ver `gpu_profiling_enabled` no `main.rs`).
+///
+/// Os paths chegam como `render/<span>/…/elapsed_cpu|elapsed_gpu`: o prefixo
+/// sai, o sufixo vira campo e o meio é o nome do span (`main_opaque_pass_3d`,
+/// `shadows`, `bloom`, …). Sem o gate a lista vem VAZIA — é o sinal de que a
+/// medição do render não está ligada, não de que os passes são de graça.
+/// Ordenada pelo maior de (gpu, cpu): o passe que domina fica na 1.ª linha.
+/// `render/<span>/…/elapsed_gpu` → `("<span>/…", "elapsed_gpu")`; qualquer
+/// outro path devolve `None` (o store tem também fps, frame_time, contagens).
+fn split_render_path(path: &str) -> Option<(&str, &str)> {
+    path.strip_prefix("render/")?.rsplit_once('/')
+}
+
+fn gpu_spans(store: &DiagnosticsStore) -> Vec<serde_json::Value> {
+    use std::collections::HashMap;
+
+    let mut rows: HashMap<String, (Option<f64>, Option<f64>)> = HashMap::new();
+    for diagnostic in store.iter() {
+        let Some((name, field)) = split_render_path(diagnostic.path().as_str()) else {
+            continue;
+        };
+        // `smoothed` (EMA) e não `value`: o timestamp de UM frame salta com o
+        // boost da GPU — o mesmo motivo por que se cita `frame_ms_avg`.
+        let value = diagnostic.smoothed();
+        let entry = rows.entry(name.to_string()).or_default();
+        match field {
+            "elapsed_cpu" => entry.0 = value,
+            "elapsed_gpu" => entry.1 = value,
+            _ => {}
+        }
+    }
+    let mut spans: Vec<(String, Option<f64>, Option<f64>)> = rows
+        .into_iter()
+        .filter(|(_, (cpu, gpu))| cpu.is_some() || gpu.is_some())
+        .map(|(name, (cpu, gpu))| (name, cpu, gpu))
+        .collect();
+    let weight = |cpu: Option<f64>, gpu: Option<f64>| cpu.unwrap_or(0.0).max(gpu.unwrap_or(0.0));
+    spans.sort_by(|a, b| weight(b.1, b.2).total_cmp(&weight(a.1, a.2)));
+    spans
+        .into_iter()
+        .map(|(name, cpu, gpu)| json!({ "name": name, "cpu_ms": cpu, "gpu_ms": gpu }))
+        .collect()
+}
+
 /// Snapshot JSON do profiler — o corpo do método `viber.profiler` (compatível
 /// com o formato anterior; campos novos só se acrescentam).
 pub fn snapshot(world: &mut World) -> serde_json::Value {
     let counters = collect_counters(world);
-    let (fps, frame_ms_avg) = match world.get_resource::<DiagnosticsStore>() {
-        Some(store) => diagnostics_snapshot(store),
-        None => (None, None),
+    let (fps, frame_ms_avg, gpu) = match world.get_resource::<DiagnosticsStore>() {
+        Some(store) => {
+            let (fps, frame_ms_avg) = diagnostics_snapshot(store);
+            (fps, frame_ms_avg, gpu_spans(store))
+        }
+        None => (None, None, Vec::new()),
     };
     let (avg, min, max, p95) = world
         .get_resource::<FrameStats>()
@@ -304,14 +377,15 @@ pub fn snapshot(world: &mut World) -> serde_json::Value {
         .unwrap_or(false);
 
     let frame_avg_f32 = avg.unwrap_or(0.0);
+    let limit = systems_limit();
     let systems: Vec<serde_json::Value> = timed::systems_snapshot(frame_avg_f32)
         .into_iter()
-        .take(30)
+        .take(limit)
         .map(|s| serde_json::to_value(s).unwrap_or(json!({})))
         .collect();
     let scripts_timed: Vec<serde_json::Value> = timed::scripts_snapshot(frame_avg_f32)
         .into_iter()
-        .take(30)
+        .take(limit)
         .map(|s| serde_json::to_value(s).unwrap_or(json!({})))
         .collect();
     let groups: Vec<serde_json::Value> = timed::groups_snapshot(frame_avg_f32)
@@ -332,6 +406,8 @@ pub fn snapshot(world: &mut World) -> serde_json::Value {
         "frame_count": frames,
         "frozen": frozen,
         "groups": groups,
+        // Passes do render graph (CPU+GPU). Vazio sem `VIBER_PROF_GPU=1`.
+        "gpu": gpu,
         "systems": systems,
         "scripts_timed": scripts_timed,
         "entities": counters.entities,
@@ -342,6 +418,7 @@ pub fn snapshot(world: &mut World) -> serde_json::Value {
         "particle_emitters": counters.particle_emitters,
         "terrain_chunks": counters.terrain_chunks,
         "colliders": counters.colliders,
+        "shadow_lights": counters.shadow_lights,
         "audio_sinks": counters.audio_sinks,
         // LOD de render: barato (um recurso), ao contrário do `stats()` do
         // bridge — este é o caminho a amostrar em ciclo.
@@ -548,6 +625,41 @@ fn toggle_grass(world: &mut World) {
     }
 }
 
+/// Sombras do sol: o estado do primeiro `DirectionalLight` do mundo é o
+/// estado de todos (o toggle escreve-os todos).
+fn dir_shadows_on(world: &mut World) -> bool {
+    let mut query = world.query::<&DirectionalLight>();
+    query
+        .iter(world)
+        .next()
+        .map(|light| light.shadow_maps_enabled)
+        .unwrap_or(false)
+}
+
+fn toggle_dir_shadows(world: &mut World) {
+    let want = !dir_shadows_on(world);
+    let mut query = world.query::<&mut DirectionalLight>();
+    for mut light in query.iter_mut(world) {
+        light.shadow_maps_enabled = want;
+    }
+}
+
+/// Sombras das lanternas: o flag vive num recurso porque o
+/// `light_budget_system` reescreve `shadow_maps_enabled` a cada segundo —
+/// mexer nas luzes directamente durava um refresh.
+fn point_shadows_on(world: &mut World) -> bool {
+    world
+        .get_resource::<crate::ambient::PointShadowsEnabled>()
+        .map(|state| state.0)
+        .unwrap_or(false)
+}
+
+fn toggle_point_shadows(world: &mut World) {
+    if let Some(mut state) = world.get_resource_mut::<crate::ambient::PointShadowsEnabled>() {
+        state.0 = !state.0;
+    }
+}
+
 fn physics_paused_on(world: &mut World) -> bool {
     // "on" = simulação PAUSADA (o toggle pára o `PhysicsSet::StepSimulation`).
     let mut q = world.query::<&bevy_rapier3d::prelude::RapierConfiguration>();
@@ -571,6 +683,13 @@ fn toggle_physics_paused(world: &mut World) {
 pub struct ProfilerPlugin;
 
 impl Plugin for ProfilerPlugin {
+    /// As âncoras do render app instalam-se no `finish`: o sub-app já existe
+    /// (o `RenderPlugin` criou-o) e a ordem dos plugins do mundo deixa de
+    /// importar.
+    fn finish(&self, app: &mut App) {
+        timed::render_phase_anchors(app);
+    }
+
     fn build(&self, app: &mut App) {
         app.add_plugins((
             FrameTimeDiagnosticsPlugin::default(),
@@ -601,6 +720,20 @@ impl Plugin for ProfilerPlugin {
                     toggle: toggle_grass,
                 },
                 ProfilerExtra {
+                    id: "dir-shadows",
+                    label: "sombras do sol",
+                    description: "shadow maps da DirectionalLight (4 cascatas) — A/B do custo por vista",
+                    is_on: dir_shadows_on,
+                    toggle: toggle_dir_shadows,
+                },
+                ProfilerExtra {
+                    id: "point-shadows",
+                    label: "sombras das lanternas",
+                    description: "cube shadow maps das PointLight (6 vistas por luz)",
+                    is_on: point_shadows_on,
+                    toggle: toggle_point_shadows,
+                },
+                ProfilerExtra {
                     id: "physics-pause",
                     label: "pausar física",
                     description: "congela o solver Rapier (physics_pipeline_active=false)",
@@ -609,6 +742,11 @@ impl Plugin for ProfilerPlugin {
                 },
             ],
         };
+        // Fases do próprio Bevy (transform/visibilidade/luzes) — sem elas o
+        // profiler mostra 4 ms de um frame de 48 e o resto é um buraco.
+        timed::engine_phase_anchors(app);
+        // Linha do tempo por schedule + o buraco entre frames (render/present).
+        timed::frame_timeline(app);
         app.init_resource::<FrameStats>()
             .init_resource::<FrameCounter>()
             .init_resource::<ProfilerState>()
@@ -781,6 +919,32 @@ pub fn overlay_body(
 
 #[cfg(test)]
 mod tests {
+
+    /// Os paths do `RenderDiagnosticsPlugin` chegam como
+    /// `render/<span>/elapsed_cpu|elapsed_gpu`; tudo o resto no store (fps,
+    /// frame_time, contagens de entidades) tem de ficar de fora do `gpu[]`.
+    #[test]
+    fn render_paths_split_into_span_and_field() {
+        assert_eq!(
+            split_render_path("render/main_opaque_pass_3d/elapsed_gpu"),
+            Some(("main_opaque_pass_3d", "elapsed_gpu"))
+        );
+        assert_eq!(
+            split_render_path("render/bloom/downsample/elapsed_cpu"),
+            Some(("bloom/downsample", "elapsed_cpu"))
+        );
+        assert_eq!(split_render_path("fps"), None);
+        assert_eq!(split_render_path("render/sem_campo"), None);
+    }
+
+    /// `VIBER_PROF_SYSTEMS` só muda o CORTE da lista — o default fica nos 30
+    /// (o teste não toca no env: correm testes em paralelo no mesmo processo).
+    #[test]
+    fn systems_limit_defaults_to_thirty() {
+        if std::env::var_os("VIBER_PROF_SYSTEMS").is_none() {
+            assert_eq!(systems_limit(), DEFAULT_SYSTEMS_LIMIT);
+        }
+    }
     use super::*;
 
     #[test]

@@ -298,9 +298,9 @@ impl RockFeaturesSpec {
                 .iter()
                 .find_map(|p| self.reject_reason(*p, bridge.width * 0.5, guards));
             if bad.is_none() {
-                bad = resample(&[a, site.at, b], CAVE_PATH_STEP).into_iter().find_map(
-                    |p| self.reject_solid(p, bridge.width * 0.5, guards),
-                );
+                bad = resample(&[a, site.at, b], CAVE_PATH_STEP)
+                    .into_iter()
+                    .find_map(|p| self.reject_solid(p, bridge.width * 0.5, guards));
             }
             if let Some(reason) = bad {
                 stats.bump(reason);
@@ -659,9 +659,9 @@ impl RockFeaturesSpec {
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::water::{LakeShape, WaterKind};
     use super::*;
     use bevy::math::Vec3;
-    use super::super::super::water::{LakeShape, WaterKind};
 
     /// A ridge running along Z: flat top at x = 0, falling away to both sides,
     /// so every site has slope and relief and the middle is a crossable gap.
@@ -730,7 +730,10 @@ mod tests {
             seed: 8,
             ..spec.clone()
         };
-        assert_ne!(spec.resolve(&Ridge, &guards), other.resolve(&Ridge, &guards));
+        assert_ne!(
+            spec.resolve(&Ridge, &guards),
+            other.resolve(&Ridge, &guards)
+        );
     }
 
     #[test]
@@ -741,12 +744,19 @@ mod tests {
         assert!(got.caves.len() <= 2);
         assert!(got.bridges.len() <= 1);
         assert!(!got.is_empty(), "a ridge with relief must seed something");
-        assert_eq!(got.len(), got.arches.len() + got.caves.len() + got.bridges.len());
+        assert_eq!(
+            got.len(),
+            got.arches.len() + got.caves.len() + got.bridges.len()
+        );
     }
 
     #[test]
     fn test_asking_for_nothing_builds_nothing() {
-        assert!(field(0, 0, 0).resolve(&Ridge, &ScatterGuards::default()).is_empty());
+        assert!(
+            field(0, 0, 0)
+                .resolve(&Ridge, &ScatterGuards::default())
+                .is_empty()
+        );
         let bad = RockFeaturesSpec {
             spacing: 0.0,
             ..field(5, 5, 5)
@@ -772,7 +782,11 @@ mod tests {
         // No slope, no relief: the slope band and the drop test both reject
         // every cell, and the field seeds nothing rather than littering a
         // plain with arches.
-        assert!(field(4, 4, 4).resolve(&Flat, &ScatterGuards::default()).is_empty());
+        assert!(
+            field(4, 4, 4)
+                .resolve(&Flat, &ScatterGuards::default())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -825,11 +839,17 @@ mod tests {
             ..hills.clone()
         };
         assert!(
-            !hills.resolve(&Ridge, &ScatterGuards::default()).caves.is_empty(),
+            !hills
+                .resolve(&Ridge, &ScatterGuards::default())
+                .caves
+                .is_empty(),
             "the ridge offers real hillsides to burrow into"
         );
         assert!(
-            gated.resolve(&Ridge, &ScatterGuards::default()).caves.is_empty(),
+            gated
+                .resolve(&Ridge, &ScatterGuards::default())
+                .caves
+                .is_empty(),
             "an impossible min-rise must leave every cave unseeded"
         );
     }
@@ -851,7 +871,11 @@ mod tests {
         // Burrowing uphill from x = 10, the run would cross the stream at
         // x = 24 head-on. The SITE is dry; the PATH is not.
         let crossing = CaveSpec {
-            path: vec![Vec2::new(10.0, 0.0), Vec2::new(18.0, 3.0), Vec2::new(34.0, 0.0)],
+            path: vec![
+                Vec2::new(10.0, 0.0),
+                Vec2::new(18.0, 3.0),
+                Vec2::new(34.0, 0.0),
+            ],
             radius: vec![3.0],
             ..CaveSpec::default()
         };
@@ -859,7 +883,11 @@ mod tests {
         assert_eq!(stats.water, 1, "the stream, not the site, kills this run");
         // The same run heading away from the water climbs cleanly.
         let away = CaveSpec {
-            path: vec![Vec2::new(-20.0, 0.0), Vec2::new(-35.0, 2.0), Vec2::new(-50.0, 0.0)],
+            path: vec![
+                Vec2::new(-20.0, 0.0),
+                Vec2::new(-35.0, 2.0),
+                Vec2::new(-50.0, 0.0),
+            ],
             radius: vec![3.0],
             ..CaveSpec::default()
         };
@@ -873,7 +901,11 @@ mod tests {
         // Downhill: from the shoulder toward the valley the ground falls —
         // the tube would trench its way down somebody else's ditch.
         let down = CaveSpec {
-            path: vec![Vec2::new(-30.0, 0.0), Vec2::new(-15.0, 0.0), Vec2::new(0.0, 0.0)],
+            path: vec![
+                Vec2::new(-30.0, 0.0),
+                Vec2::new(-15.0, 0.0),
+                Vec2::new(0.0, 0.0),
+            ],
             radius: vec![3.0],
             ..CaveSpec::default()
         };
@@ -881,7 +913,11 @@ mod tests {
         assert_eq!(stats.path, 1, "the descent is what fails this run");
         // Uphill the same ground is a legal burrow.
         let up = CaveSpec {
-            path: vec![Vec2::new(0.0, 0.0), Vec2::new(15.0, 0.0), Vec2::new(30.0, 0.0)],
+            path: vec![
+                Vec2::new(0.0, 0.0),
+                Vec2::new(15.0, 0.0),
+                Vec2::new(30.0, 0.0),
+            ],
             radius: vec![3.0],
             ..CaveSpec::default()
         };

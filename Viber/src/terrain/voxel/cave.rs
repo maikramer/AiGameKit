@@ -348,13 +348,15 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_a_constant_radius_still_builds_plain_capsules() {
         // The profile is opt-in: a world authored before it existed must emit
         // the same mods it always did.
         let mods = spec().build(&Flat(50.0));
-        assert!(mods.iter().all(|m| format!("{m:?}").starts_with("CapsuleMod")));
+        assert!(
+            mods.iter()
+                .all(|m| format!("{m:?}").starts_with("CapsuleMod"))
+        );
     }
 
     #[test]

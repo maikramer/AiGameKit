@@ -723,7 +723,11 @@ impl LakeShape {
     /// entre lagos.
     pub(crate) fn new(at: Vec2) -> Self {
         let s = at.x * 12.989_8_f32 + at.y * 78.233_f32;
-        let h = |salt: f32| ((s * salt + salt * 91.7).sin() * 43_758.55_f32).fract().abs();
+        let h = |salt: f32| {
+            ((s * salt + salt * 91.7).sin() * 43_758.55_f32)
+                .fract()
+                .abs()
+        };
         let harmonics = std::array::from_fn(|i| {
             let amp = LAKE_HARMONIC_MIN[i]
                 + (LAKE_HARMONIC_MAX[i] - LAKE_HARMONIC_MIN[i]) * h(2.3 + i as f32 * 1.37);
@@ -1468,10 +1472,18 @@ fn seg_seg_touch(a0: Vec2, a1: Vec2, b0: Vec2, b1: Vec2, tol: f32) -> Option<Vec
         t = (b * s + f) / e;
         if t < 0.0 {
             t = 0.0;
-            s = if a > 1e-12 { (-c / a).clamp(0.0, 1.0) } else { 0.0 };
+            s = if a > 1e-12 {
+                (-c / a).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
         } else if t > 1.0 {
             t = 1.0;
-            s = if a > 1e-12 { ((b - c) / a).clamp(0.0, 1.0) } else { 0.0 };
+            s = if a > 1e-12 {
+                ((b - c) / a).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
         }
     }
     let (pa, pb) = (a0 + d1 * s, b0 + d2 * t);
@@ -1791,7 +1803,10 @@ mod tests {
         }
         // Todo o lago sai do círculo perfeito (alongamento + harmónicos têm
         // amplitudes mínimas > 0)…
-        assert!(min < 10.0 * 0.9 && max > 10.0 * 1.1, "organic: {min}..{max}");
+        assert!(
+            min < 10.0 * 0.9 && max > 10.0 * 1.1,
+            "organic: {min}..{max}"
+        );
         // …mas fica dentro do pico coberto pelo AABB do carve e pelo audit.
         let trough = 10.0 * (1.0 - LAKE_STRETCH_MAX - LAKE_HARMONIC_MAX.iter().sum::<f32>());
         assert!(
@@ -2102,7 +2117,10 @@ mod tests {
             let frac = (i % 5) as f32 / 4.0; // 0..1 transversal
             let side = side * (frac * 2.0 - 1.0);
             let d = ((p[0] - st.x).powi(2) + (p[2] - st.y).powi(2)).sqrt();
-            assert!((d - side.abs()).abs() < 1e-3, "vertex {i} at expected offset");
+            assert!(
+                (d - side.abs()).abs() < 1e-3,
+                "vertex {i} at expected offset"
+            );
         }
         let edge = mesh.colors[0][3];
         let mid = mesh.colors[2][3];
@@ -2459,7 +2477,10 @@ mod tests {
         assert_eq!(body.cascades.len(), 1);
         let fall = body.cascades[0];
         assert!(fall.waterfall, "14 m of drop is a WATERFALL: {fall:?}");
-        assert!(fall.drop >= spec.waterfall_min_drop, "drop recorded: {fall:?}");
+        assert!(
+            fall.drop >= spec.waterfall_min_drop,
+            "drop recorded: {fall:?}"
+        );
         assert!(!fall.wall, "profile fall starts unannotated");
         assert!((fall.top_y - body.surface_y[fall.lip]).abs() < 1e-4);
         assert!((fall.bot_y - body.surface_y[fall.base]).abs() < 1e-4);
@@ -2591,7 +2612,11 @@ mod tests {
         };
         let hits = river_cliff_crossings(&river, &[cliff.clone()]);
         assert_eq!(hits.len(), 1, "one crossing at x≈0");
-        assert!((hits[0].at.x - 0.0).abs() < 2.0, "at the crest: {:?}", hits[0].at);
+        assert!(
+            (hits[0].at.x - 0.0).abs() < 2.0,
+            "at the crest: {:?}",
+            hits[0].at
+        );
         assert_eq!(hits[0].min_drop, 9.0, "authored height wins");
         // height auto → WATERFALL_DROP.
         cliff.height = None;
@@ -2945,8 +2970,10 @@ mod tests {
                 .clamp(0.5, CONTOUR_PEAK * CARVE_MARGIN);
             (0..LAKE_FAN_SEGMENTS)
                 .map(|i| {
-                    shape.contour(10.0, i as f32 / LAKE_FAN_SEGMENTS as f32 * std::f32::consts::TAU)
-                        * reach
+                    shape.contour(
+                        10.0,
+                        i as f32 / LAKE_FAN_SEGMENTS as f32 * std::f32::consts::TAU,
+                    ) * reach
                 })
                 .fold(f32::NEG_INFINITY, f32::max)
         };
@@ -3061,7 +3088,7 @@ mod tests {
         assert!(
             (wave_height_at(Vec2::new(3.0, 4.0), 1.0, wind, strength, 2.0)
                 - 2.0 * wave_height_at(Vec2::new(3.0, 4.0), 1.0, wind, strength, 1.0))
-                .abs()
+            .abs()
                 < 1e-5,
             "amplitude scales linearly"
         );

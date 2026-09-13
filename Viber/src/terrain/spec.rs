@@ -280,6 +280,32 @@ impl TerrainSpec {
         let chunk = self.chunk_size.max(1.0);
         (DEFAULT_RESIDENT_CHUNK_BUDGET / std::f32::consts::PI).sqrt() * chunk
     }
+
+    /// Runtime override of the streaming/cull radius: `VIBER_RENDER_DISTANCE`
+    /// (finite f32 > 0) wins over the authored `render-distance`. Applied once
+    /// at the terrain bootstrap — a runtime knob for small-VRAM GPUs; headless
+    /// `analyze` never runs the bootstrap and keeps reading the XML value.
+    pub fn apply_env_render_distance(&mut self) {
+        let Some(distance) = env_render_distance() else {
+            return;
+        };
+        bevy::log::info!(
+            "terrain: render-distance sobreposto por env: {distance} (XML tinha {})",
+            self.render_distance
+                .map_or("auto".to_string(), |authored| authored.to_string())
+        );
+        self.render_distance = Some(distance);
+    }
+}
+
+/// `VIBER_RENDER_DISTANCE` value for [`TerrainSpec::apply_env_render_distance`]:
+/// valid when set and parsing as a finite f32 > 0; anything else ("abc", "0",
+/// negative, "inf", "NaN") is ignored so a typo never breaks a boot.
+fn env_render_distance() -> Option<f32> {
+    std::env::var("VIBER_RENDER_DISTANCE")
+        .ok()
+        .and_then(|raw| raw.parse::<f32>().ok())
+        .filter(|distance| distance.is_finite() && *distance > 0.0)
 }
 
 /// Height/slope color tinting, ported from the VibeGame terrain shader
@@ -437,6 +463,40 @@ mod tests {
     fn test_lod_distance_is_ratio_times_chunk() {
         let spec = TerrainSpec::default();
         assert!((spec.lod_distance() - 128.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_env_render_distance_override() {
+        let mut spec = TerrainSpec::default();
+        spec.render_distance = Some(950.0);
+
+        // Env válido: o override ganha ao valor do XML.
+        unsafe { std::env::set_var("VIBER_RENDER_DISTANCE", "450") };
+        spec.apply_env_render_distance();
+        assert_eq!(spec.render_distance, Some(450.0));
+        assert_eq!(spec.effective_render_distance(), 450.0);
+
+        // Env inválido: fica o valor do XML, sem panic.
+        for raw in ["abc", "0", "-120", "inf", "NaN"] {
+            unsafe { std::env::set_var("VIBER_RENDER_DISTANCE", raw) };
+            spec.render_distance = Some(950.0);
+            spec.apply_env_render_distance();
+            assert_eq!(spec.render_distance, Some(950.0), "raw={raw}");
+        }
+
+        // Env por definir: fica o valor do XML.
+        unsafe { std::env::remove_var("VIBER_RENDER_DISTANCE") };
+        spec.apply_env_render_distance();
+        assert_eq!(spec.render_distance, Some(950.0));
+
+        // Sem valor autorado o override também se aplica (sai do orçamento
+        // de chunks e usa o raio do env).
+        unsafe { std::env::set_var("VIBER_RENDER_DISTANCE", "300") };
+        spec.render_distance = None;
+        spec.apply_env_render_distance();
+        assert_eq!(spec.effective_render_distance(), 300.0);
+
+        unsafe { std::env::remove_var("VIBER_RENDER_DISTANCE") };
     }
 
     #[test]

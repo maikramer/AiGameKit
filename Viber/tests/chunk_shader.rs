@@ -177,7 +177,11 @@ fn chunk_shader_validates_in_every_define_combination() {
     for defines in [
         vec!["BINDLESS", "VERTEX_COLORS"], // the live `run` configuration
         vec!["BINDLESS", "VERTEX_COLORS", "DISTANCE_FOG"], // idem, com câmara com `DistanceFog` (default do `run`)
-        vec!["BINDLESS", "VERTEX_COLORS", "SCREEN_SPACE_AMBIENT_OCCLUSION"], // idem, com SSAO na câmara (default do `run`)
+        vec![
+            "BINDLESS",
+            "VERTEX_COLORS",
+            "SCREEN_SPACE_AMBIENT_OCCLUSION",
+        ], // idem, com SSAO na câmara (default do `run`)
         vec!["BINDLESS"], // chunk meshes always carry colors — but the gate compiles either way
         vec!["VERTEX_COLORS"], // portable non-bindless fallback
         vec!["DISTANCE_FOG"], // fog sem bindless (câmara com DistanceFog, driver sem bindless)

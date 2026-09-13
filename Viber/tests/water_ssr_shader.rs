@@ -13,8 +13,8 @@ const WGSL: &str = viber::water_ssr::WATER_SSR_WGSL;
 
 #[test]
 fn shader_validates_under_naga() {
-    let module = naga::front::wgsl::parse_str(WGSL)
-        .unwrap_or_else(|e| panic!("parse WGSL falhou: {e:?}"));
+    let module =
+        naga::front::wgsl::parse_str(WGSL).unwrap_or_else(|e| panic!("parse WGSL falhou: {e:?}"));
     let mut validator = naga::valid::Validator::new(ValidationFlags::all(), Capabilities::all());
     let info = validator
         .validate(&module)
@@ -32,8 +32,7 @@ fn shader_validates_under_naga() {
 /// packing CPU (288 B de view, 160 B de params).
 #[test]
 fn uniform_struct_sizes_match_cpu_packing() {
-    let module =
-        naga::front::wgsl::parse_str(WGSL).expect("parse WGSL falhou no teste de layout");
+    let module = naga::front::wgsl::parse_str(WGSL).expect("parse WGSL falhou no teste de layout");
 
     let size_of = |name: &str| -> Option<u32> {
         module.types.iter().find_map(|(_, ty)| {
@@ -71,13 +70,11 @@ fn surfaces_are_unrolled_fields_no_dynamic_arrays() {
                 continue;
             }
             for member in members {
-                if member
-                        .name
-                        .as_deref()
-                        .is_some_and(|n| {
-                            n.len() == 2 && n.starts_with('s') && n.chars().nth(1).map_or(false, |c| c.is_ascii_digit())
-                        })
-                {
+                if member.name.as_deref().is_some_and(|n| {
+                    n.len() == 2
+                        && n.starts_with('s')
+                        && n.chars().nth(1).map_or(false, |c| c.is_ascii_digit())
+                }) {
                     s_fields += 1;
                 }
                 if matches!(module.types[member.ty].inner, naga::TypeInner::Array { .. }) {

@@ -30,7 +30,7 @@ use crate::vitals::Health;
 use crate::vitals::Xp;
 
 /// Alcance do diálogo com `<DialogueNPC>` (mesmo do prompt do HUD).
-pub const DIALOGUE_RANGE_M: f32 = 3.5;
+pub const DIALOGUE_RANGE_M: f32 = crate::interact::BASE_RANGE_M;
 /// Raio de "visita" a um marco nomeado (m).
 pub const VISIT_RADIUS_M: f32 = 25.0;
 /// Linhas máximas do QuestTracker.
@@ -79,12 +79,15 @@ pub struct QuestRewards {
     pub items: Vec<String>,
 }
 
-const QUEST_JSONS: [&str; 5] = [
+const QUEST_JSONS: [&str; 6] = [
     include_str!("../examples/simple-rpg/quests/city_quests.json"),
     include_str!("../examples/simple-rpg/quests/dark_forest_quests.json"),
     include_str!("../examples/simple-rpg/quests/desert_quests.json"),
     include_str!("../examples/simple-rpg/quests/mountain_quests.json"),
     include_str!("../examples/simple-rpg/quests/swamp_quests.json"),
+    // Cenários de fantasia (world/scenes/): romaria do alto, posto dos
+    // escavadores, campo da última batalha e covil dos contrabandistas.
+    include_str!("../examples/simple-rpg/quests/fantasy_quests.json"),
 ];
 
 /// Parseia todos os JSONs embutidos (falha de parse = warn + skip; o resto
@@ -573,10 +576,12 @@ fn quest_dialogue_system(
     };
     let player_pos = player.translation();
     // O MAIS PRÓXIMO em alcance (o `find` first-hit era order-dependent —
-    // com 2 NPCs a <3,5 m entregava/aceitava a quest do errado).
+    // com 2 NPCs em alcance entregava/aceitava a quest do errado). O alcance
+    // é o EFETIVO (`interact::default_range`, metade do autorado).
+    let range = crate::interact::default_range();
     let Some((_, npc)) = npcs
         .iter()
-        .filter(|(t, _)| t.translation().distance(player_pos) < DIALOGUE_RANGE_M)
+        .filter(|(t, _)| t.translation().distance(player_pos) < range)
         .min_by(|(a, _), (b, _)| {
             a.translation()
                 .distance_squared(player_pos)
@@ -1174,5 +1179,36 @@ mod tests {
         // ordem dos defs: city primeiro (city_quests carregado antes)
         assert_eq!(active[0], "city_wolves");
         assert_eq!(active[1], "forest_wolves");
+    }
+
+    /// Os quatro cenários de fantasia têm de estar carregados.
+    ///
+    /// Um JSON embutido que deixa de parsear não é um erro barulhento: o
+    /// loader faz `warn + skip` e o jogo arranca com MENOS quests, em
+    /// silêncio (aconteceu: faltava `biome` em duas entradas e o ficheiro
+    /// inteiro caiu). Este teste é o gate contra isso — e o `analyze` cruza
+    /// as mesmas defs com o mundo (`audit::audit_quests`), a apanhar o NPC ou
+    /// o marco de `visit` que não exista.
+    #[test]
+    fn test_fantasy_scenario_quests_are_loaded() {
+        let defs = load_quests();
+        for id in [
+            "pilgrimage_vael",
+            "outpost_veins",
+            "citadel_shades",
+            "smugglers_cache",
+        ] {
+            assert!(
+                defs.iter().any(|d| d.id == id),
+                "quest de cenário ausente: {id} (um JSON embutido deixou de parsear?)"
+            );
+        }
+        // 21 do jogo original + 4 dos cenários. Um ficheiro que caia leva
+        // várias de uma vez, portanto o piso apanha a classe.
+        assert!(
+            defs.len() >= 25,
+            "só {} quests carregadas (21 + 4 dos cenários esperadas) — um JSON embutido caiu",
+            defs.len()
+        );
     }
 }

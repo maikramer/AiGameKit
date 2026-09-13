@@ -20,11 +20,13 @@
 //! default e segue; a intensidade compõe com o `GlobalAmbientLight`
 //! existente (que se mantém como chão de ambiente).
 
+use bevy::asset::RenderAssetUsages;
 use bevy::image::Image;
 use bevy::light::{GeneratedEnvironmentMapLight, LightProbe};
 use bevy::prelude::*;
-use bevy::asset::RenderAssetUsages;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension};
+use bevy::render::render_resource::{
+    Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
+};
 
 use crate::worldsys::{AtmosphereState, DayCycleState};
 
@@ -44,7 +46,7 @@ const TINT_MIX_GROUND: f32 = 0.65;
 /// Escala da intensidade do IBL gerado. O filtro integra a RADIÂNCIA do
 /// cubemap — a paleta do `AtmosphereState` vive na mesma escala que o domo
 /// do céu desenha, portanto 1.0 deixa o ambiente proporcional ao céu visível.
-const IBL_INTENSITY: f32 = 1.0;
+pub const IBL_INTENSITY: f32 = 1.0;
 
 /// Marcador do probe do IBL (um só, tamanho do mundo).
 #[derive(Component)]
@@ -86,11 +88,8 @@ fn spawn_sky_probe(mut commands: Commands) {
 /// Fase quantizada do dia (0..DAY_PHASES). `None` até haver relógio útil.
 fn day_phase(clock: Option<&DayCycleState>) -> Option<u32> {
     let clock = clock?;
-    let day = crate::worldsys::daylight_factor(
-        clock.minute_of_day,
-        clock.dawn_minute,
-        clock.dusk_minute,
-    );
+    let day =
+        crate::worldsys::daylight_factor(clock.minute_of_day, clock.dawn_minute, clock.dusk_minute);
     Some((day.clamp(0.0, 1.0) * DAY_PHASES as f32).floor() as u32)
 }
 
@@ -131,11 +130,13 @@ fn update_sky_cubemap(
         .ok()
         .map(|c| c.environment_map.clone())
         .filter(|h| *h != Handle::default());
-    commands.entity(probe_entity).insert(GeneratedEnvironmentMapLight {
-        environment_map: handle,
-        intensity: IBL_INTENSITY,
-        ..Default::default()
-    });
+    commands
+        .entity(probe_entity)
+        .insert(GeneratedEnvironmentMapLight {
+            environment_map: handle,
+            intensity: IBL_INTENSITY,
+            ..Default::default()
+        });
     if let Some(old) = old {
         images.remove(old.id());
     }
@@ -146,7 +147,10 @@ fn update_sky_cubemap(
 /// `GeneratedEnvironmentMapLight` cria views de storage POR MIP do cubemap
 /// fonte — sem mips o render panica ("storage_view_mip_6 … only has 1 total
 /// mip level"), crash real a 2026-09-07 no qa-enriched.
-pub fn sky_cubemap(a: &AtmosphereState, nishita: Option<&crate::sky_nishita::NishitaModel>) -> Image {
+pub fn sky_cubemap(
+    a: &AtmosphereState,
+    nishita: Option<&crate::sky_nishita::NishitaModel>,
+) -> Image {
     sky_cubemap_tinted(a, nishita, None)
 }
 
@@ -206,9 +210,11 @@ pub fn sky_cubemap_tinted(
                         let px = (x * 2 + dx).min(parent_size - 1);
                         let py = (y * 2 + dy).min(parent_size - 1);
                         let base = parent_off
-                            + (face * parent_size * parent_size + py * parent_size + px) as usize * 8;
+                            + (face * parent_size * parent_size + py * parent_size + px) as usize
+                                * 8;
                         for c in 0..4 {
-                            let bits = u16::from_le_bytes([data[base + c * 2], data[base + c * 2 + 1]]);
+                            let bits =
+                                u16::from_le_bytes([data[base + c * 2], data[base + c * 2 + 1]]);
                             acc[c] += f16_to_f32(bits);
                         }
                     }
@@ -258,19 +264,23 @@ pub fn sky_cubemap_tinted(
 /// Tamanho total em BYTES da mip chain de um cubemap `face_size`² com
 /// `mips` níveis (RGBA16Float = 8 B/texel, 6 faces por nível).
 fn mip_chain_bytes(face_size: u32, mips: u32) -> usize {
-    (0..mips).map(|l| {
-        let size = face_size >> l;
-        (size * size * 6) as usize * 8
-    }).sum()
+    (0..mips)
+        .map(|l| {
+            let size = face_size >> l;
+            (size * size * 6) as usize * 8
+        })
+        .sum()
 }
 
 /// Offset (bytes) do início do mip `level` (layout bevy: mip a mip, 6 faces
 /// por mip).
 fn mip_offset(face_size: u32, level: u32) -> usize {
-    (0..level).map(|l| {
-        let size = face_size >> l;
-        (size * size * 6) as usize * 8
-    }).sum()
+    (0..level)
+        .map(|l| {
+            let size = face_size >> l;
+            (size * size * 6) as usize * 8
+        })
+        .sum()
 }
 
 /// f16 → f32 (o inverso de [`f32_to_f16`], para o downsample dos mips).
@@ -400,7 +410,11 @@ fn f32_to_f16(v: f32) -> u16 {
 }
 
 fn mix_rgb(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
-    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
 }
 
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {

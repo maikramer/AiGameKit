@@ -34,20 +34,20 @@
 use bevy::anti_alias::taa::temporal_anti_alias;
 use bevy::core_pipeline::prepass::ViewPrepassTextures;
 use bevy::core_pipeline::schedule::Core3d;
+use bevy::core_pipeline::tonemapping::tonemapping;
 use bevy::core_pipeline::{Core3dSystems, FullscreenShader};
+use bevy::post_process::motion_blur::motion_blur;
 use bevy::prelude::*;
 use bevy::render::extract_component::{ExtractComponent, ExtractComponentPlugin};
 use bevy::render::render_resource::{
     BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType,
-    Buffer, BufferBindingType, BufferDescriptor, BufferSize, BufferUsages,
-    CachedRenderPipelineId, Canonical, ColorTargetState, ColorWrites, Extent3d, FragmentState,
-    Operations, PipelineCache, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline,
-    RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
-    Specializer, SpecializerKey, Texture, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureSampleType, TextureUsages, TextureView, TextureViewDimension, TextureViewId,
-    Variants, VertexState,
+    Buffer, BufferBindingType, BufferDescriptor, BufferSize, BufferUsages, CachedRenderPipelineId,
+    Canonical, ColorTargetState, ColorWrites, Extent3d, FragmentState, Operations, PipelineCache,
+    RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
+    Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages, Specializer, SpecializerKey,
+    Texture, TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType, TextureUsages,
+    TextureView, TextureViewDimension, TextureViewId, Variants, VertexState,
 };
-use bevy::core_pipeline::tonemapping::tonemapping;
 use bevy::render::renderer::{RenderContext, RenderDevice, RenderQueue, ViewQuery};
 use bevy::render::view::{ExtractedView, ViewTarget};
 use bevy::render::{Extract, Render, RenderApp, RenderStartup, RenderSystems};
@@ -388,7 +388,7 @@ struct WaterSsrPipelineKey {
 struct WaterSsrSpecializer;
 
 #[derive(Component)]
-struct WaterSsrPipelineId(CachedRenderPipelineId);
+pub(crate) struct WaterSsrPipelineId(CachedRenderPipelineId);
 
 /// Uma textura de histórico do reflexo (rgb = cor acumulada, a = confiança).
 struct SsrHistory {
@@ -400,7 +400,7 @@ struct SsrHistory {
 /// efeito da cadeia — criamos ambos e escolhemos pelo id no render) + o
 /// histórico temporal do reflexo (duas texturas alternadas por frame).
 #[derive(Component)]
-struct WaterSsrViewGpu {
+pub(crate) struct WaterSsrViewGpu {
     view_buf: Buffer,
     a: (TextureViewId, BindGroup),
     b: (TextureViewId, BindGroup),
@@ -547,11 +547,14 @@ fn init_pipeline(
         fragment: Some(FragmentState {
             shader,
             // alvo 0 = pós-processo (formato especializado), alvo 1 = histórico
-            targets: vec![None, Some(ColorTargetState {
-                format: TextureFormat::Rgba16Float,
-                blend: None,
-                write_mask: ColorWrites::ALL,
-            })],
+            targets: vec![
+                None,
+                Some(ColorTargetState {
+                    format: TextureFormat::Rgba16Float,
+                    blend: None,
+                    write_mask: ColorWrites::ALL,
+                }),
+            ],
             ..Default::default()
         }),
         ..Default::default()
@@ -582,7 +585,11 @@ fn extract_scene(
             out.surfaces.push(body.water_y);
         }
     }
-    out.rain = weather.as_deref().map(|w| w.rain).unwrap_or(0.0).clamp(0.0, 1.0);
+    out.rain = weather
+        .as_deref()
+        .map(|w| w.rain)
+        .unwrap_or(0.0)
+        .clamp(0.0, 1.0);
 }
 
 /// Pack do uniform de view (288 B: 4 mat4 + 2 vec4 — ordem EXATA do WGSL).
@@ -678,8 +685,12 @@ fn prepare_bind_groups(
 
     for (entity, view, target, prepass_opt, mut gpu) in &mut views {
         let Some(prepass) = prepass_opt else { continue };
-        let Some(depth) = prepass.depth.as_ref() else { continue };
-        let Some(normal) = prepass.normal.as_ref() else { continue };
+        let Some(depth) = prepass.depth.as_ref() else {
+            continue;
+        };
+        let Some(normal) = prepass.normal.as_ref() else {
+            continue;
+        };
         let key = WaterSsrPipelineKey {
             target_format: view.target_format,
         };
@@ -775,12 +786,8 @@ fn prepare_bind_groups(
 /// `fullscreen_material` do bevy). ANTES do TAA: o raymarch lê o depth com
 /// jitter temporal — composto depois do TAA, o reflexo vibra (nunca é
 /// acumulado); antes, o TAA denoiza o reflexo como o resto da imagem.
-fn water_ssr_pass(
-    view: ViewQuery<(
-        &ViewTarget,
-        &WaterSsrViewGpu,
-        &WaterSsrPipelineId,
-    )>,
+pub(crate) fn water_ssr_pass(
+    view: ViewQuery<(&ViewTarget, &WaterSsrViewGpu, &WaterSsrPipelineId)>,
     pipeline_cache: Res<PipelineCache>,
     mut ctx: RenderContext,
 ) {
@@ -862,11 +869,23 @@ impl Plugin for WaterSsrPlugin {
             // alternando gradientes cinza/castanho). Anti-flicker aqui é
             // feito DENTRO do passe: hash de jitter estável por píxel + hit
             // com confiança suave (sem cortes binários).
+            // `before(motion_blur)`: o `motion_blur` é o primeiro passe
+            // built-in da chain (`motion_blur` → `bloom` → DOF → effect
+            // stack → tonemap), portanto amarrar-lhe a frente dá ordem
+            // determinística contra TODOS eles. Sem isto o passe só dizia
+            // `after(taa)` + `before(tonemapping)` e ficava AMBÍGUO com os
+            // built-ins e com o `aerial_pass`: os passes do render graph são
+            // sistemas normais com `RenderContext` `Deferred` (não
+            // conflituam), correm em paralelo, e o `post_process_write` é um
+            // `fetch_xor` GLOBAL no `ViewTarget` — dois XOR concorrentes
+            // trocam os buffers um do outro e o frame sai com o passe no
+            // alvo errado (flashes/piscadelas).
             .add_systems(
                 Core3d,
                 water_ssr_pass
                     .in_set(Core3dSystems::PostProcess)
                     .after(temporal_anti_alias)
+                    .before(motion_blur)
                     .before(tonemapping),
             );
     }
@@ -883,7 +902,10 @@ mod tests {
     fn test_requested_parse() {
         let parse = |v: Option<String>| -> bool {
             matches!(
-                v.as_deref().map(str::trim).map(str::to_ascii_lowercase).as_deref(),
+                v.as_deref()
+                    .map(str::trim)
+                    .map(str::to_ascii_lowercase)
+                    .as_deref(),
                 Some("1" | "true" | "yes" | "on")
             )
         };
@@ -939,11 +961,17 @@ mod tests {
     /// O WGSL não pode ter imports (o harness naga valida-o cru) nem overlays.
     #[test]
     fn test_shader_template_contract() {
-        assert!(!WATER_SSR_WGSL.contains("#import"), "self-contained: sem #import");
+        assert!(
+            !WATER_SSR_WGSL.contains("#import"),
+            "self-contained: sem #import"
+        );
         assert!(WATER_SSR_WGSL.contains("fn fragment"));
         assert!(WATER_SSR_WGSL.contains("prepass_depth"));
         for marker in ["DEBUG SPLIT", "DEBUG OVERLAY"] {
-            assert!(!WATER_SSR_WGSL.contains(marker), "overlay {marker} esquecido");
+            assert!(
+                !WATER_SSR_WGSL.contains(marker),
+                "overlay {marker} esquecido"
+            );
         }
     }
 }

@@ -14,7 +14,7 @@
 
 use bevy::math::Vec2;
 
-use super::water::{LakeShape, CARVE_MARGIN, waterline_reach};
+use super::water::{CARVE_MARGIN, LakeShape, waterline_reach};
 
 /// GLBs de pedra do pool, em ordem de "pretensão" (boulder > musgo > seixo).
 /// Um é escolhido por instância pelo RNG do grupo de spawner.

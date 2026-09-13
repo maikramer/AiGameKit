@@ -4,8 +4,10 @@
 //! - **Perspetiva aérea**: a câmara tem SEMPRE [`DistanceFog`], com a cor da
 //!   hora ([`crate::worldsys::AtmosphereState`]) e inscattering do sol; a
 //!   `<BiomeRegion>` só modula densidade e tinta.
-//! - **Orçamento de PointLights**: só as 12 luzes mais próximas da câmara
-//!   ficam acesas (o mundo tem 69 tochas/lanternas).
+//! - **Orçamento de SOMBRAS de PointLight** (não de luz): todas as luzes
+//!   iluminam (o cluster do Bevy aguenta 204); só os cube shadow maps são
+//!   orçamentados às [`SHADOW_LIGHT_BUDGET`] mais próximas com sombra autorada
+//!   — ver `light_budget_system`.
 //! - **Gestos idle de NPC**: os NPCs de quest (sem script) tocam um clip de
 //!   gesto (`talk`/`wave`/`call`) de vez em quando, se o rig tiver.
 //! - **SFX espaciais mínimos**: eventos [`SfxEvent`] tocam WAVs curtos com
@@ -23,10 +25,90 @@ use crate::animation::CharacterAnimator;
 use crate::luau::{LuaScriptRef, ScriptToast};
 use crate::player::Player;
 
-/// Número máximo de PointLights acesas em simultâneo.
+/// Número máximo de PointLights com SHADOW MAP (cube de 6 faces) em
+/// simultâneo — as mais próximas da câmara (ver `light_budget_system`).
+///
+/// Cada luz com sombra é SEIS vistas para o renderer: seis frusta, seis
+/// culls, seis filas de draw e mais 25 MB no array do shadow map (1024²).
+/// `VIBER_SHADOW_LIGHTS=<n>` afina-o sem recompilar — `0` desliga as sombras
+/// de ponto (a luz continua a iluminar).
+pub const SHADOW_LIGHT_BUDGET: usize = 12;
+
+/// Orçamento efectivo: `VIBER_SHADOW_LIGHTS` ou [`SHADOW_LIGHT_BUDGET`].
+pub fn shadow_light_budget() -> usize {
+    std::env::var("VIBER_SHADOW_LIGHTS")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .unwrap_or(SHADOW_LIGHT_BUDGET)
+}
+
+/// Distância máxima (m) a que uma PointLight ainda ganha shadow map, medida
+/// da câmara à SUPERFÍCIE da esfera de influência (`distância − range`).
+///
+/// O orçamento antigo dava sombra às 12 mais próximas **fosse qual fosse a
+/// distância**: no campo aberto do `simple-rpg` isso eram 12 lanternas a
+/// centenas de metros, invisíveis, a pagar 6 vistas de render cada uma.
+/// Medido no spawn: 44,5 ms de frame com as sombras de ponto, 22,5 ms sem
+/// elas — metade do frame ia para sombras que não se viam.
+pub const SHADOW_LIGHT_MAX_DISTANCE: f32 = 60.0;
+
+/// Distância efectiva: `VIBER_SHADOW_LIGHT_DISTANCE` ou o default.
+pub fn shadow_light_max_distance() -> f32 {
+    std::env::var("VIBER_SHADOW_LIGHT_DISTANCE")
+        .ok()
+        .and_then(|raw| raw.parse::<f32>().ok())
+        .filter(|value| *value >= 0.0)
+        .unwrap_or(SHADOW_LIGHT_MAX_DISTANCE)
+}
+
+/// Luz do dia acima da qual as PointLight perdem o shadow map.
+///
+/// Ao meio-dia a contribuição de uma lanterna é ordens de grandeza abaixo do
+/// sol: a sombra dela não se lê em píxel nenhum, mas custa as mesmas 6 vistas
+/// de render. O gate solta-as ao anoitecer, que é quando se veem.
+/// `VIBER_SHADOW_LIGHT_DAYLIGHT=1` desliga o gate (sombras sempre).
+pub const SHADOW_LIGHT_DAYLIGHT_MAX: f32 = 0.35;
+
+/// Histerese do gate de luz do dia — sem ela o crepúsculo liga/desliga as
+/// sombras a cada refresh do orçamento.
+const SHADOW_LIGHT_DAYLIGHT_BAND: f32 = 0.1;
+
+/// Limiar efectivo: `VIBER_SHADOW_LIGHT_DAYLIGHT` ou o default.
+pub fn shadow_light_daylight_max() -> f32 {
+    std::env::var("VIBER_SHADOW_LIGHT_DAYLIGHT")
+        .ok()
+        .and_then(|raw| raw.parse::<f32>().ok())
+        .unwrap_or(SHADOW_LIGHT_DAYLIGHT_MAX)
+}
+
+/// Interruptor de QA das sombras de ponto (extra `point-shadows` do
+/// profiler). Desligado, o `light_budget_system` tira a sombra a TODAS as
+/// lanternas — o A/B mede o custo das 6 vistas por luz sem reiniciar a
+/// engine.
+#[derive(Resource)]
+pub struct PointShadowsEnabled(pub bool);
+
+impl Default for PointShadowsEnabled {
+    fn default() -> Self {
+        Self(shadow_light_budget() > 0)
+    }
+}
+/// Histerese de rank: uma luz só PERDE a sombra acima de
+/// BUDGET+BAND e só a ganha abaixo de BUDGET.
+const SHADOW_LIGHT_BAND: usize = 4;
+/// Política antiga, só para A/B: `VIBER_LIGHT_BUDGET=12` apaga (Visibility
+/// hidden) tudo além das N luzes mais próximas — o comportamento pré-ronda
+/// "prettier".
 pub const LIGHT_BUDGET: usize = 12;
 /// Intervalo de refrescamento do orçamento de luzes (s).
 pub const LIGHT_BUDGET_INTERVAL: f32 = 1.0;
+
+/// Marcador das PointLight AUTORADAS com `shadows="true"`: o orçamento de
+/// sombras só gere estas. Sem o marcador não havia como distinguir "autorada
+/// sem sombra" de "autorada com sombra que o orçamento desligou" — o
+/// `shadow_maps_enabled` perde a informação original no primeiro toggle.
+#[derive(Debug, Clone, Copy, Component)]
+pub struct AuthoredShadowLight;
 /// Intervalo entre gestos idle de NPC (s, ±jitter).
 pub const GESTURE_MIN_INTERVAL: f32 = 7.0;
 
@@ -239,6 +321,8 @@ pub struct AmbientPlugin;
 impl Plugin for AmbientPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CurrentBiome>()
+            .init_resource::<PointShadowsEnabled>()
+            .init_resource::<RainLook>()
             // GLUE da atmosfera (peça céu): [`crate::worldsys::AtmosphereState`]
             // é a paleta da hora partilhada por céu/fog/grading. Era escrita
             // por `atmosphere_drive` e lida por três sistemas — mas NINGUÉM a
@@ -389,13 +473,14 @@ fn biome_fog_system(
     // vale se aplicar lá era a posição no plano. Sem isto a sala herda a
     // névoa, a tinta e a exposição de um bioma onde não está — o exterior
     // pinta-se por cima do interior.
-    let inside_scene = scene
-        .as_deref()
-        .zip(players.iter().next())
-        .is_some_and(|(scene, player)| {
-            let pos = player.translation();
-            scene.contains(pos.x, pos.z)
-        });
+    let inside_scene =
+        scene
+            .as_deref()
+            .zip(players.iter().next())
+            .is_some_and(|(scene, player)| {
+                let pos = player.translation();
+                scene.contains(pos.x, pos.z)
+            });
     let region = if inside_scene {
         None
     } else {
@@ -441,8 +526,7 @@ fn biome_fog_system(
     let target_mult = density_mult;
     let target_tint = tint.unwrap_or([1.0, 1.0, 1.0]);
     let target_weight = if tint.is_some() { 1.0 } else { 0.0 };
-    let blend = biome_blend
-        .get_or_insert((target_mult, target_tint, target_weight));
+    let blend = biome_blend.get_or_insert((target_mult, target_tint, target_weight));
     const BLEND_K: f32 = 0.35;
     blend.0 += (target_mult - blend.0) * BLEND_K;
     for c in 0..3 {
@@ -529,14 +613,50 @@ use bevy::pbr::{DistanceFog, FogFalloff};
 
 // ── orçamento de PointLights ────────────────────────────────────────────
 
-/// Só as [`LIGHT_BUDGET`] luzes mais próximas da câmara ficam visíveis.
-#[allow(clippy::type_complexity)]
+/// Orçamento de SOMBRAS de PointLight — não de luz.
+///
+/// Política: TODAS as luzes iluminam. O cluster do Bevy aguenta 204 objetos
+/// (`MAX_UNIFORM_BUFFER_CLUSTERABLE_OBJECTS`) e o `range` por omissão (20 m)
+/// limita o custo por pixel às luzes que tocam o pixel; o que é caro é o cube
+/// shadow map (6 faces de cena por luz), e é isso que fica orçamentado às
+/// [`SHADOW_LIGHT_BUDGET`] mais próximas COM sombra autorada
+/// ([`AuthoredShadowLight`]), com a banda [`SHADOW_LIGHT_BAND`] de histerese.
+///
+/// A política antiga — ESCONDER tudo além das 12 mais próximas — apagava o
+/// resto da vila e fazia as lanternas piscar ON/OFF ao andar (refresh de 1 s).
+/// Sombras a 20+ m não se leem; luz a 20 m lê-se. Mantém-se acessível por
+/// `VIBER_LIGHT_BUDGET=12` para o A/B.
+/// Decide se ESTA luz fica com shadow map — parte pura do orçamento
+/// (`rank`/distância/histerese), para testar sem mundo.
+///
+/// Ganha a sombra abaixo do orçamento e dentro da distância; só a PERDE
+/// acima de orçamento+banda ou distância+banda. Sem a histerese nos dois
+/// eixos, a fronteira trocava a cada refresh (1 s) e a lanterna piscava ao
+/// andar para a frente e para trás.
+pub fn wants_point_shadow(
+    rank: usize,
+    gap_m: f32,
+    budget: usize,
+    max_distance: f32,
+    already_on: bool,
+) -> bool {
+    let near =
+        gap_m <= max_distance || (already_on && gap_m <= max_distance + SHADOW_LIGHT_BAND as f32);
+    let ranked_in = rank < budget || (already_on && rank < budget + SHADOW_LIGHT_BAND);
+    near && ranked_in
+}
+
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn light_budget_system(
     mut throttle: Local<f32>,
     time: Res<Time>,
     cameras: Query<&GlobalTransform, With<Camera3d>>,
     lights: Query<(Entity, &GlobalTransform), (With<PointLight>, Without<Camera3d>)>,
+    shadow_lights: Query<(Entity, &GlobalTransform), (With<PointLight>, With<AuthoredShadowLight>)>,
     mut visibilities: Query<&mut Visibility, With<PointLight>>,
+    mut shadow_state: Query<&mut PointLight, With<AuthoredShadowLight>>,
+    enabled: Res<PointShadowsEnabled>,
+    clock: Option<Res<crate::worldsys::DayCycleState>>,
 ) {
     *throttle -= time.delta_secs();
     if *throttle > 0.0 {
@@ -549,20 +669,76 @@ fn light_budget_system(
         return;
     };
     let cam_pos = cam.translation();
-    let mut by_distance: Vec<(Entity, f32)> = lights
-        .iter()
-        .map(|(entity, t)| (entity, t.translation().distance_squared(cam_pos)))
-        .collect();
-    by_distance.sort_by(|a, b| a.1.total_cmp(&b.1));
-    for (i, (entity, _)) in by_distance.iter().enumerate() {
-        if let Ok(mut visibility) = visibilities.get_mut(*entity) {
-            let wanted = if i < LIGHT_BUDGET {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            };
-            if *visibility != wanted {
-                *visibility = wanted;
+
+    // Braço de controlo (QA): a política antiga — luzes APAGADAS além de N.
+    if std::env::var("VIBER_LIGHT_BUDGET").as_deref() == Ok("12") {
+        let mut by_distance: Vec<(Entity, f32)> = lights
+            .iter()
+            .map(|(entity, t)| (entity, t.translation().distance_squared(cam_pos)))
+            .collect();
+        by_distance.sort_by(|a, b| a.1.total_cmp(&b.1));
+        for (i, (entity, _)) in by_distance.iter().enumerate() {
+            if let Ok(mut visibility) = visibilities.get_mut(*entity) {
+                let wanted = if i < LIGHT_BUDGET {
+                    Visibility::Visible
+                } else {
+                    Visibility::Hidden
+                };
+                if *visibility != wanted {
+                    *visibility = wanted;
+                }
+            }
+        }
+        return;
+    }
+
+    // Ranking por distância à SUPERFÍCIE da esfera de influência (distância
+    // menos `range`): uma lanterna de `range` 20 m a 300 m da câmara não
+    // ilumina um único pixel, e o cube shadow map dela custava as mesmas 6
+    // vistas que a do candeeiro em cima do herói.
+    let mut ranked: Vec<(Entity, f32)> = Vec::with_capacity(shadow_lights.iter().len());
+    for (entity, transform) in shadow_lights.iter() {
+        let range = shadow_state.get(entity).map(|l| l.range).unwrap_or(0.0);
+        let gap = (transform.translation().distance(cam_pos) - range).max(0.0);
+        ranked.push((entity, gap));
+    }
+    ranked.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let max_distance = shadow_light_max_distance();
+    let budget = shadow_light_budget();
+    // Gate de luz do dia: de dia a sombra da lanterna não se lê (ver
+    // `SHADOW_LIGHT_DAYLIGHT_MAX`). A banda usa o estado ACTUAL de uma luz
+    // qualquer — a decisão é global, por isso basta o limiar deslocar-se
+    // conforme já estejam ou não ligadas.
+    let daylight = clock
+        .as_deref()
+        .map(|clock| {
+            crate::worldsys::daylight_factor(
+                clock.minute_of_day,
+                clock.dawn_minute,
+                clock.dusk_minute,
+            )
+        })
+        .unwrap_or(0.0);
+    let any_shadow_on = shadow_state.iter().any(|light| light.shadow_maps_enabled);
+    let daylight_limit = shadow_light_daylight_max()
+        + if any_shadow_on {
+            SHADOW_LIGHT_DAYLIGHT_BAND
+        } else {
+            0.0
+        };
+    let dark_enough = daylight <= daylight_limit;
+    for (rank, (entity, gap)) in ranked.iter().enumerate() {
+        let Ok(mut light) = shadow_state.get_mut(*entity) else {
+            continue;
+        };
+        let want = enabled.0
+            && dark_enough
+            && wants_point_shadow(rank, *gap, budget, max_distance, light.shadow_maps_enabled);
+        if light.shadow_maps_enabled != want {
+            light.shadow_maps_enabled = want;
+            #[cfg(feature = "experimental_pbr_pcss")]
+            {
+                light.soft_shadows_enabled = want;
             }
         }
     }
@@ -657,7 +833,11 @@ impl SfxHandles {
     }
 }
 
-fn load_sfx_assets(mut commands: Commands, server: Res<AssetServer>, config: Res<crate::config::GameConfig>) {
+fn load_sfx_assets(
+    mut commands: Commands,
+    server: Res<AssetServer>,
+    config: Res<crate::config::GameConfig>,
+) {
     commands.insert_resource(SfxHandles::load(&server, &config));
 }
 
@@ -779,9 +959,11 @@ fn water_ambience_driver(
     time: Res<Time>,
     runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     players: Query<&GlobalTransform, With<crate::player::Player>>,
-    mut loops: Query<
-        (&WaterAmbienceLoop, &crate::music::LoopInstance, &mut crate::music::LoopVolume),
-    >,
+    mut loops: Query<(
+        &WaterAmbienceLoop,
+        &crate::music::LoopInstance,
+        &mut crate::music::LoopVolume,
+    )>,
     mut instances: ResMut<Assets<bevy_kira_audio::AudioInstance>>,
 ) {
     // `iter().next()` e não `single()`: ≥2 players não pode matar o áudio.
@@ -890,7 +1072,11 @@ fn setup_waterfall_ambience(
 fn waterfall_ambience_driver(
     time: Res<Time>,
     players: Query<&GlobalTransform, With<crate::player::Player>>,
-    mut loops: Query<(&WaterfallLoop, &crate::music::LoopInstance, &mut crate::music::LoopVolume)>,
+    mut loops: Query<(
+        &WaterfallLoop,
+        &crate::music::LoopInstance,
+        &mut crate::music::LoopVolume,
+    )>,
     mut instances: ResMut<Assets<bevy_kira_audio::AudioInstance>>,
 ) {
     if loops.is_empty() {
@@ -948,6 +1134,36 @@ const RAIN_RIPPLE_RADIUS: f32 = 8.0;
 /// Ganho máximo do loop de chuva (antes dos buses do mixer).
 const RAIN_MAX_GAIN: f32 = 0.4;
 
+/// Look da chuva, aplicado ao emissor a cada frame — os números que decidem
+/// se a tempestade se LÊ ou se vira um véu.
+///
+/// Vive num recurso (e não só no preset) porque a afinação é visual e
+/// iterativa: `viber.debug.rain_look{...}` muda-os na engine viva, sem
+/// recompilar nem reiniciar. Os defaults vêm do preset/env.
+#[derive(Debug, Clone, Resource)]
+pub struct RainLook {
+    /// Raio (m) do fade junto da câmara (ver `particles::RAIN_NEAR_FADE_M`).
+    pub near_fade_m: f32,
+    /// Tecto de alpha das gotas.
+    pub max_alpha: f32,
+    /// Multiplicador da LARGURA do streak (o preset é fino de propósito; o
+    /// motion blur come os streaks finos a 20 m/s).
+    pub width_scale: f32,
+    /// Multiplicador do rate do emissor.
+    pub rate_scale: f32,
+}
+
+impl Default for RainLook {
+    fn default() -> Self {
+        Self {
+            near_fade_m: crate::particles::rain_near_fade_m(),
+            max_alpha: crate::particles::rain_max_alpha(),
+            width_scale: 1.0,
+            rate_scale: 1.0,
+        }
+    }
+}
+
 /// Marker do emissor de chuva âncora do herói (uma instância por mundo).
 /// A posição âncora vive no próprio `Transform` (a compensação do espaço
 /// local das gotas compara com ela a cada frame).
@@ -990,6 +1206,7 @@ fn ripple_spec() -> crate::recipes::ParticleSpec {
 #[allow(clippy::type_complexity)]
 fn rain_emitter_driver(
     mut commands: Commands,
+    look: Res<RainLook>,
     scene: Option<Res<crate::worldsys::InteriorSceneConfig>>,
     weather: Option<Res<crate::worldsys::WeatherState>>,
     players: Query<&GlobalTransform, With<Player>>,
@@ -1038,7 +1255,16 @@ fn rain_emitter_driver(
     }
     transform.translation = anchor;
     // Rate ∝ intensidade; sem chuva o emissor desliga E esconde-se.
-    emitter.sim.resolved.emission_rate = RAIN_MAX_RATE * intensity;
+    emitter.sim.resolved.emission_rate = RAIN_MAX_RATE * intensity * look.rate_scale;
+    // Look ao vivo (`viber.debug.rain_look`): o preset dá o default, o
+    // recurso manda. Reaplicado todos os frames — é uma escrita de 4 f32.
+    emitter.sim.resolved.near_fade_m = look.near_fade_m;
+    emitter.sim.resolved.max_alpha = look.max_alpha;
+    let base = crate::particles::preset("rain");
+    emitter.sim.resolved.size = (
+        base.size.0 * look.width_scale,
+        base.size.1 * look.width_scale,
+    );
     let wanted = if intensity <= 0.01 {
         Visibility::Hidden
     } else {
@@ -1099,12 +1325,7 @@ fn rain_ripple_spawner(
             .as_ref()
             .map(|r| r.sample(x, z))
             .unwrap_or(origin.y - RAIN_EMITTER_HEIGHT);
-        crate::particles::spawn_burst(
-            &mut commands,
-            &ripple_spec(),
-            Vec3::new(x, y + 0.03, z),
-            2,
-        );
+        crate::particles::spawn_burst(&mut commands, &ripple_spec(), Vec3::new(x, y + 0.03, z), 2);
     }
 }
 
@@ -1229,6 +1450,69 @@ fn lantern_driver(
 
 #[cfg(test)]
 mod tests {
+
+    /// Orçamento de sombras de ponto: dentro do orçamento E dentro da
+    /// distância. Uma lanterna a 300 m era a 12.ª mais próxima no campo
+    /// aberto e pagava 6 vistas de render por uma sombra invisível.
+    #[test]
+    fn point_shadow_needs_rank_and_distance() {
+        // 1.ª do ranking, colada ao jogador: sim.
+        assert!(wants_point_shadow(
+            0,
+            5.0,
+            12,
+            SHADOW_LIGHT_MAX_DISTANCE,
+            false
+        ));
+        // 1.ª do ranking mas a 300 m da esfera de influência: não.
+        assert!(!wants_point_shadow(
+            0,
+            300.0,
+            12,
+            SHADOW_LIGHT_MAX_DISTANCE,
+            false
+        ));
+        // Perto, mas fora do orçamento: não.
+        assert!(!wants_point_shadow(
+            20,
+            5.0,
+            12,
+            SHADOW_LIGHT_MAX_DISTANCE,
+            false
+        ));
+        // Orçamento 0 (VIBER_SHADOW_LIGHTS=0) desliga tudo.
+        assert!(!wants_point_shadow(
+            0,
+            1.0,
+            0,
+            SHADOW_LIGHT_MAX_DISTANCE,
+            false
+        ));
+    }
+
+    /// Histerese nos DOIS eixos: quem já tem sombra aguenta a banda antes de
+    /// a perder (senão pisca ao andar na fronteira, refresh de 1 s).
+    #[test]
+    fn point_shadow_hysteresis_holds_the_border() {
+        let max = SHADOW_LIGHT_MAX_DISTANCE;
+        // Distância: 2 m para lá do limite.
+        assert!(wants_point_shadow(0, max + 2.0, 12, max, true));
+        assert!(!wants_point_shadow(0, max + 2.0, 12, max, false));
+        // Distância: muito para lá da banda — perde de qualquer forma.
+        assert!(!wants_point_shadow(0, max + 50.0, 12, max, true));
+        // Rank: 13.ª mantém-se acesa, 17.ª (12 + banda) já não.
+        assert!(wants_point_shadow(13, 5.0, 12, max, true));
+        assert!(!wants_point_shadow(16, 5.0, 12, max, true));
+    }
+
+    /// O gate de luz do dia usa a mesma curva do tint (`daylight_factor`):
+    /// ao meio-dia 1.0 (acima do limiar), à meia-noite 0.0.
+    #[test]
+    fn daylight_gate_closes_at_noon_and_opens_at_night() {
+        let (dawn, dusk) = (330.0, 1170.0);
+        assert!(crate::worldsys::daylight_factor(720.0, dawn, dusk) > SHADOW_LIGHT_DAYLIGHT_MAX);
+        assert!(crate::worldsys::daylight_factor(1320.0, dawn, dusk) <= SHADOW_LIGHT_DAYLIGHT_MAX);
+    }
     use super::*;
 
     #[test]

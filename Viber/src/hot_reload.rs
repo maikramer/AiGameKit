@@ -16,7 +16,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
@@ -25,6 +25,21 @@ use crate::luau::{LuaScriptHost, LuaScriptRef};
 
 /// Quiet-period mínimo entre o último evento de um ficheiro e a recarga.
 const DEBOUNCE: Duration = Duration::from_millis(250);
+
+/// Um evento do watcher que representa ESCRITA (o único que deve recarregar).
+///
+/// `Access` fica de fora de propósito: a própria recarga abre e lê o ficheiro,
+/// e num inotify com acessos ligados isso realimenta o watcher — a recarga
+/// dispara a recarga seguinte. `Any`/`Other` contam como escrita (é o que os
+/// backends que não classificam emitem; o debounce trata do resto).
+pub fn is_write_event(kind: &notify::EventKind) -> bool {
+    use notify::EventKind;
+    match kind {
+        EventKind::Access(_) => false,
+        EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_) => true,
+        EventKind::Any | EventKind::Other => true,
+    }
+}
 
 /// Estado do watcher — recurso só inserido quando o hot-reload está ON e o
 /// watcher arrancou com sucesso.
@@ -45,10 +60,21 @@ pub struct HotReloadState {
 impl HotReloadState {
     /// Arranca o watcher recursivo sobre `scripts_dir`.
     pub fn new(scripts_dir: &Path) -> Result<Self, notify::Error> {
-        let root = scripts_dir.canonicalize().unwrap_or_else(|_| scripts_dir.to_path_buf());
+        let root = scripts_dir
+            .canonicalize()
+            .unwrap_or_else(|_| scripts_dir.to_path_buf());
         let (tx, rx) = std::sync::mpsc::channel();
         let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
             if let Ok(event) = res {
+                // SÓ escritas. O inotify também emite ACESSO, e a recarga LÊ o
+                // ficheiro (`reload_script`) — o evento de leitura voltava
+                // como "o ficheiro mudou" e fechava o ciclo: no `simple-rpg`
+                // os ~38 scripts recarregavam 3×/s PARA SEMPRE, sem ninguém
+                // editar nada (diagnosticado 2026-09-12; o log da sessão era
+                // uma tempestade de `hot-reload: '…' recarregado`).
+                if !is_write_event(&event.kind) {
+                    return;
+                }
                 // Canal cheio = editor a fazer spam; a próxima recarga apanha
                 // o ficheiro final. Nunca bloquear a thread do watcher.
                 let _ = tx.send(event);
@@ -70,16 +96,11 @@ impl HotReloadState {
         let Ok(rx) = self.rx.lock() else {
             return Vec::new();
         };
-        loop {
-            match rx.try_recv() {
-                Ok(event) => {
-                    for path in event.paths {
-                        if path.extension().is_some_and(|e| e == "lua") {
-                            self.pending.insert(path, now);
-                        }
-                    }
+        while let Ok(event) = rx.try_recv() {
+            for path in event.paths {
+                if path.extension().is_some_and(|e| e == "lua") {
+                    self.pending.insert(path, now);
                 }
-                Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => break,
             }
         }
         let ready: Vec<PathBuf> = self
@@ -136,9 +157,11 @@ pub fn hot_reload_poll(
         // O watcher entrega caminhos absolutos com o prefixo da raiz
         // canónica; o registry indexa caminhos relativos (com `/` — o
         // mesmo formato dos paths no XML).
-        let Some(rel) = abs.strip_prefix(&state.root).ok().map(|rel| {
-            rel.to_string_lossy().replace('\\', "/")
-        }) else {
+        let Some(rel) = abs
+            .strip_prefix(&state.root)
+            .ok()
+            .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+        else {
             continue;
         };
         // Só chunks que a engine já carregou (ficheiros novos não referem
@@ -177,14 +200,30 @@ pub fn enabled_from_env() -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    /// O watcher só pode reagir a ESCRITAS: a própria recarga lê o ficheiro,
+    /// e um evento de ACESSO fechava o ciclo (recarga → leitura → evento →
+    /// recarga, 3×/s para sempre no `simple-rpg`).
+    #[test]
+    fn access_events_never_trigger_a_reload() {
+        use notify::EventKind;
+        use notify::event::{AccessKind, CreateKind, ModifyKind, RemoveKind};
+        assert!(!is_write_event(&EventKind::Access(AccessKind::Read)));
+        assert!(!is_write_event(&EventKind::Access(AccessKind::Open(
+            notify::event::AccessMode::Read
+        ))));
+        assert!(is_write_event(&EventKind::Modify(ModifyKind::Any)));
+        assert!(is_write_event(&EventKind::Create(CreateKind::File)));
+        assert!(is_write_event(&EventKind::Remove(RemoveKind::File)));
+        // Backends que não classificam continuam a recarregar.
+        assert!(is_write_event(&EventKind::Any));
+    }
     use super::*;
     use std::fs;
 
     fn temp_scripts_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "viber-hot-reload-{tag}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("viber-hot-reload-{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("criar pasta temporária de scripts");
         dir

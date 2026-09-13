@@ -34,9 +34,8 @@ use super::roads::RoadPath;
 use super::sampler::ResolvedPad;
 use super::spec::TerrainSpec;
 use super::splat::{
-    SLOT_GRAVEL, SLOT_RIVERBED, SplatParams, chunk_splat2_image, chunk_splat_image,
-    flat_ao_image, flat_height_image, flat_normal_image, generate_chunk_splats,
-    solid_white_image,
+    SLOT_GRAVEL, SLOT_RIVERBED, SplatParams, chunk_splat_image, chunk_splat2_image, flat_ao_image,
+    flat_height_image, flat_normal_image, generate_chunk_splats, solid_white_image,
 };
 use super::voxel::{Span, VoxelField};
 use super::water::{WaterBody, lake_water_mesh, river_water_mesh};
@@ -501,12 +500,7 @@ impl bevy::app::Plugin for TerrainFeaturesPlugin {
 /// tubo e as suas salas e chaminés. O scatter e os campos irmãos mantêm-se
 /// fora deles.
 fn claim_cave_discs(cave: &super::voxel::CaveSpec, out: &mut Vec<super::voxel::TakenDisc>) {
-    let r = cave
-        .radius
-        .iter()
-        .copied()
-        .fold(0.0_f32, f32::max)
-        .max(2.0);
+    let r = cave.radius.iter().copied().fold(0.0_f32, f32::max).max(2.0);
     for p in super::paths::resample(&cave.path, 8.0) {
         out.push(super::voxel::TakenDisc { at: p, radius: r });
     }
@@ -526,9 +520,7 @@ fn claim_cave_discs(cave: &super::voxel::CaveSpec, out: &mut Vec<super::voxel::T
 
 /// Discos de um portal (`<Arch>`): a banda inteira, do pé ao pé.
 fn claim_arch_discs(arch: &super::voxel::ArchSpec, out: &mut Vec<super::voxel::TakenDisc>) {
-    let span = arch
-        .span
-        .unwrap_or(super::voxel::arch::DEFAULT_ARCH_SPAN);
+    let span = arch.span.unwrap_or(super::voxel::arch::DEFAULT_ARCH_SPAN);
     let r = arch.thickness + span * 0.5;
     let pts: Vec<Vec2> = if arch.path.is_empty() {
         vec![arch.at]
@@ -566,6 +558,10 @@ pub fn bootstrap(world: &mut World) {
         None => Vec::new(),
     };
     let mut spec = spec.clone();
+    // 0. Runtime knob `VIBER_RENDER_DISTANCE` (GPU de 6 GB rebenta com o
+    // render-distance=950 do simple-rpg): encolhe o raio de streaming sem
+    // editar o XML. O analyze nunca corre o bootstrap — lê o valor autorado.
+    spec.apply_env_render_distance();
     let map = match &spec.heightmap {
         Some(path) => match load_heightmap(pending.base_dir.as_deref(), &asset_roots, path) {
             Ok(loaded) => {
@@ -743,11 +739,7 @@ pub fn bootstrap(world: &mut World) {
         }
         let falls = body.cascades.iter().filter(|c| c.waterfall).count();
         if falls > 0 {
-            let max_drop = body
-                .cascades
-                .iter()
-                .map(|c| c.drop)
-                .fold(0.0f32, f32::max);
+            let max_drop = body.cascades.iter().map(|c| c.drop).fold(0.0f32, f32::max);
             info!(
                 "água 'rio:{i}': {} cascatas / {} cachoeiras (queda até {max_drop:.1} m)",
                 body.cascades.len(),
@@ -1201,7 +1193,12 @@ fn spawn_chunk_materials(
     // alias vazio/fora do pool → normal plana logo, sem watch.
     let flat_normal = images.add(flat_normal_image());
     let mut layer_normals = vec![flat_normal.clone(); super::splat::LAYER_COUNT];
-    for (slot, entry) in spec.layers.iter().enumerate().take(super::splat::LAYER_COUNT) {
+    for (slot, entry) in spec
+        .layers
+        .iter()
+        .enumerate()
+        .take(super::splat::LAYER_COUNT)
+    {
         if entry.is_empty() {
             continue;
         }
@@ -1223,7 +1220,12 @@ fn spawn_chunk_materials(
     // escurece nada: mundos sem os mapas degradam sem costura.
     let flat_height = images.add(flat_height_image());
     let mut layer_heights = vec![flat_height.clone(); super::splat::LAYER_COUNT];
-    for (slot, entry) in spec.layers.iter().enumerate().take(super::splat::LAYER_COUNT) {
+    for (slot, entry) in spec
+        .layers
+        .iter()
+        .enumerate()
+        .take(super::splat::LAYER_COUNT)
+    {
         if entry.is_empty() {
             continue;
         }
@@ -1239,7 +1241,12 @@ fn spawn_chunk_materials(
     }
     let flat_ao = images.add(flat_ao_image());
     let mut layer_aos = vec![flat_ao.clone(); super::splat::LAYER_COUNT];
-    for (slot, entry) in spec.layers.iter().enumerate().take(super::splat::LAYER_COUNT) {
+    for (slot, entry) in spec
+        .layers
+        .iter()
+        .enumerate()
+        .take(super::splat::LAYER_COUNT)
+    {
         if entry.is_empty() {
             continue;
         }
@@ -1638,9 +1645,7 @@ fn spawn_water(
                     let spray = crate::recipes::ParticleSpec {
                         preset: "spray".into(),
                         shape_radius: Some(
-                            body.half_width_at(c.lip)
-                                * super::water::WATERFALL_CURTAIN
-                                * 0.8,
+                            body.half_width_at(c.lip) * super::water::WATERFALL_CURTAIN * 0.8,
                         ),
                         ..foam_spec.clone()
                     };

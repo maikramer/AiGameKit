@@ -662,9 +662,11 @@ mod tests {
             crate::sky_nishita::MIE_BASE * 1.5
         )));
         // O default continua analytic.
-        assert!(SkyConfig::default()
-            .render_world_shader()
-            .contains("const CFG_SKY_MODEL: f32 = 0;"));
+        assert!(
+            SkyConfig::default()
+                .render_world_shader()
+                .contains("const CFG_SKY_MODEL: f32 = 0;")
+        );
     }
 
     /// `from_world` lê `<Sky>`, `<DayCycle>` e `<Weather>` (incl. filhos).

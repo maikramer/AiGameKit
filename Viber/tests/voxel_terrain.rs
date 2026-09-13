@@ -70,7 +70,10 @@ fn carve(world_file: &str) -> (BrushGrid, VoxelField, viber::terrain::spec::Terr
 }
 
 /// The discs an authored cave claims — the tunnel line plus its rooms.
-fn claim_cave(cave: &viber::terrain::voxel::CaveSpec, out: &mut Vec<viber::terrain::voxel::TakenDisc>) {
+fn claim_cave(
+    cave: &viber::terrain::voxel::CaveSpec,
+    out: &mut Vec<viber::terrain::voxel::TakenDisc>,
+) {
     let r = cave.radius.iter().copied().fold(0.0_f32, f32::max).max(2.0);
     for p in viber::terrain::paths::resample(&cave.path, 8.0) {
         out.push(viber::terrain::voxel::TakenDisc { at: p, radius: r });
@@ -182,9 +185,7 @@ fn bootstrap_to_scatter(
     for arch in &features.arches {
         claim_arch(arch, &mut taken);
     }
-    (
-        grid, features, spec, result, cliff_mask, cliff_bands, taken,
-    )
+    (grid, features, spec, result, cliff_mask, cliff_bands, taken)
 }
 
 /// The seeded specs of the QA world's one `<RockFeatures>` field, resolved
@@ -783,7 +784,10 @@ fn test_the_stone_bridge_has_piers_between_its_arcades() {
         }
     }
     assert!(open > 20, "the arcades never opened ({open} air samples)");
-    assert!(solid > 5, "no masonry between the arcades ({solid} rock samples)");
+    assert!(
+        solid > 5,
+        "no masonry between the arcades ({solid} rock samples)"
+    );
 }
 
 #[test]
@@ -982,7 +986,10 @@ fn test_the_viaduct_repeats_its_opening_along_the_path() {
         }
         was_open = open;
     }
-    assert_eq!(openings, 4, "expected four distinct openings, found {openings}");
+    assert_eq!(
+        openings, 4,
+        "expected four distinct openings, found {openings}"
+    );
 }
 
 // --------------------------------------------------------------- dispersão
@@ -1158,4 +1165,3 @@ fn test_seeded_caves_stay_clear_of_every_feature_along_the_whole_path() {
         );
     }
 }
-

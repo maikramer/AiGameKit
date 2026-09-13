@@ -19,7 +19,7 @@ use crate::recipes::{EntityKind, EntitySpec, ParsedWorld};
 use crate::terrain::cliffs::CliffSpec;
 use crate::terrain::paths::{nearest_on_path, resample};
 use crate::terrain::roads::{RoadProfile, RoadSpec};
-use crate::terrain::water::{LakeShape, LakeSpec, RiverSpec, CONTOUR_PEAK, river_cliff_crossings};
+use crate::terrain::water::{CONTOUR_PEAK, LakeShape, LakeSpec, RiverSpec, river_cliff_crossings};
 
 /// Severidade de um achado: `Missing` vira ERRO com `analyze --strict`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,6 +137,7 @@ pub fn audit(
     // Conflitos entre features de terreno — ver [`FeatureIndex`].
     let mut features = FeatureIndex::default();
     collect_features(&world.entities, [0.0, 0.0], &mut features);
+    audit_quests(world, &mut report);
     report.issues.extend(audit_feature_conflicts(&features));
 
     // SFX carregados por path HARDCODED na engine — ver
@@ -214,6 +215,70 @@ pub fn audit(
         }
     }
     report
+}
+
+/// Quest × mundo montado: conteúdo morto é bug de conteúdo.
+///
+/// Duas ligações do `simple-rpg` só existem por NOME, e ambas falham em
+/// silêncio — a quest fica no diário e nunca pode ser aceita (`<DialogueNPC
+/// dialogue-id="X">` sem par) ou nunca pode ser cumprida (um marco de
+/// `visit` que não existe no mundo). O `analyze` era cego às duas: o JSON é
+/// embutido na engine (`src/quests.rs`) e o mundo é XML, e nada os cruzava.
+///
+/// `notice_board` é a exceção documentada (a quest aceita-se pelo quadro).
+fn audit_quests(world: &ParsedWorld, report: &mut AuditReport) {
+    use std::collections::HashSet;
+
+    fn walk(specs: &[EntitySpec], names: &mut HashSet<String>, givers: &mut HashSet<String>) {
+        for spec in specs {
+            if let Some(name) = &spec.name {
+                names.insert(name.clone());
+            }
+            if let EntityKind::DialogueNpc { dialogue_id, .. } = &spec.kind {
+                givers.insert(dialogue_id.clone());
+            }
+            walk(&spec.children, names, givers);
+        }
+    }
+    let mut names = HashSet::new();
+    let mut givers = HashSet::new();
+    walk(&world.entities, &mut names, &mut givers);
+
+    // Um mundo SEM nenhum `<DialogueNPC>` não tem sistema de quests para
+    // auditar: as definições vivem embutidas na engine (`src/quests.rs`) e
+    // são partilhadas por todos os mundos, portanto num QA mínimo ou num
+    // mundo antigo isto acusaria as 25 quests de não terem dador. O gate é o
+    // mundo ter optado pelo sistema (≥1 NPC de diálogo).
+    if givers.is_empty() && !names.contains("notice_board") {
+        return;
+    }
+
+    for def in crate::quests::load_quests() {
+        // O NPC da quest tem de existir E ter um `<DialogueNPC dialogue-id>`
+        // igual ao id da quest — é assim que o [E] encontra a definição.
+        if !givers.contains(&def.id) && def.npc != "notice_board" {
+            report.issues.push(AuditIssue {
+                severity: Severity::Warning,
+                message: format!(
+                    "quest `{}`: nenhum `<DialogueNPC dialogue-id=\"{}\">` no mundo — a quest fica no diário sem poder ser aceita",
+                    def.id, def.id
+                ),
+            });
+        }
+        if def.objective.kind == "visit" {
+            for marco in def.objective.target.split_whitespace() {
+                if !names.contains(marco) {
+                    report.issues.push(AuditIssue {
+                        severity: Severity::Warning,
+                        message: format!(
+                            "quest `{}`: marco de `visit` inexistente no mundo: `{marco}` — objetivo impossível",
+                            def.id
+                        ),
+                    });
+                }
+            }
+        }
+    }
 }
 
 /// Recursão pela árvore de entidades recolhendo refs + GLBs sem collider.
@@ -494,11 +559,10 @@ fn collect_features(entities: &[EntitySpec], offset: [f32; 2], out: &mut Feature
                     .iter()
                     .map(|w| (w.id.as_str(), (w.at + Vec2::new(off[0], off[1]), w.width)))
                     .collect();
-                let net_label = spec.name.clone().unwrap_or(if named {
-                    label
-                } else {
-                    String::new()
-                });
+                let net_label =
+                    spec.name
+                        .clone()
+                        .unwrap_or(if named { label } else { String::new() });
                 for seg in &spec.segments {
                     let (Some(&(a_at, a_w)), Some(&(b_at, _))) =
                         (ways.get(seg.a.as_str()), ways.get(seg.b.as_str()))
@@ -561,7 +625,14 @@ fn collect_features(entities: &[EntitySpec], offset: [f32; 2], out: &mut Feature
 fn audit_feature_conflicts(idx: &FeatureIndex) -> Vec<AuditIssue> {
     let mut issues = Vec::new();
     for (label, spec) in &idx.roads {
-        audit_road_line(label, &spec.path, spec.width, spec.profile, idx, &mut issues);
+        audit_road_line(
+            label,
+            &spec.path,
+            spec.width,
+            spec.profile,
+            idx,
+            &mut issues,
+        );
     }
     for (label, pts, width, profile) in &idx.segments {
         audit_road_line(label, pts, *width, *profile, idx, &mut issues);
@@ -651,9 +722,7 @@ fn audit_road_line(
                          deck é ribbon plana SEM collider no terreno voxel: o herói não tem por \
                          onde atravessar; usa uma <Bridge> volumétrica no vão e garante pontas \
                          fora da lâmina (worst-case r={:.0} m)",
-                        worst.x,
-                        worst.y,
-                        reach,
+                        worst.x, worst.y, reach,
                     ),
                 });
             }
@@ -706,8 +775,7 @@ fn audit_road_line(
             };
             let clear = water_half + river.bank_width;
             let tips_clear = path.iter().all(|tip| {
-                nearest_on_path(&river.path, *tip)
-                    .is_some_and(|h| tip.distance(h.point) >= clear)
+                nearest_on_path(&river.path, *tip).is_some_and(|h| tip.distance(h.point) >= clear)
             });
             if tips_clear {
                 issues.push(AuditIssue {
@@ -988,7 +1056,9 @@ fn ktx2_payload_problem(bytes: &[u8]) -> Option<String> {
     if vk_format == 0 && ktx2_dfd_color_model(bytes) == Some(KTX2_DFD_MODEL_ETC1S) {
         // ETC1S fora do BasisLZ não devia existir: se aparecer, é sinal de
         // um encode a meio caminho.
-        return Some("ETC1S sem BasisLZ (colorModel 163) — reexporta em UASTC (`text3d finish`)".to_string());
+        return Some(
+            "ETC1S sem BasisLZ (colorModel 163) — reexporta em UASTC (`text3d finish`)".to_string(),
+        );
     }
     if (147..=156).contains(&vk_format) {
         // Família ETC2/EAC crua: VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK
@@ -1382,13 +1452,13 @@ mod tests {
         std::fs::create_dir_all(world_dir.join("assets/meshes")).unwrap();
         std::fs::create_dir_all(pool.join("assets/meshes")).unwrap();
         // Só no pool → resolvido pelo fallback.
+        std::fs::write(pool.join("assets/meshes/do_pool.glb"), glb_bytes(None)).unwrap();
+        // Nas DUAS (override local ganha; basta existir para não faltar).
         std::fs::write(
-            pool.join("assets/meshes/do_pool.glb"),
+            world_dir.join("assets/meshes/override.glb"),
             glb_bytes(None),
         )
         .unwrap();
-        // Nas DUAS (override local ganha; basta existir para não faltar).
-        std::fs::write(world_dir.join("assets/meshes/override.glb"), glb_bytes(None)).unwrap();
         std::fs::write(pool.join("assets/meshes/override.glb"), glb_bytes(None)).unwrap();
         // Os SFX da engine são auditados por HARDCODE (nunca aparecem no
         // XML) — fixture no POOL prova que o fallback também os resolve.
@@ -1429,9 +1499,12 @@ mod tests {
         // Só fantasma falta — e a mensagem aponta à root do MUNDO.
         assert_eq!(report.missing_count(), 1, "{:?}", report.issues);
         assert!(
-            report.issues[0]
-                .message
-                .contains(&world_dir.join("assets/meshes/fantasma.glb").display().to_string()),
+            report.issues[0].message.contains(
+                &world_dir
+                    .join("assets/meshes/fantasma.glb")
+                    .display()
+                    .to_string()
+            ),
             "{:?}",
             report.issues
         );
@@ -1562,8 +1635,8 @@ mod tests {
         let path = dir.path().join("world.xml");
         std::fs::write(&path, src).unwrap();
         let loaded = crate::xml::include::load_world(&path).expect("parse xml");
-        let world = crate::recipes::parse_world(&loaded.root_attrs, &loaded.nodes)
-            .expect("parse ir");
+        let world =
+            crate::recipes::parse_world(&loaded.root_attrs, &loaded.nodes).expect("parse ir");
         let mut idx = FeatureIndex::default();
         collect_features(&world.entities, [0.0, 0.0], &mut idx);
         idx

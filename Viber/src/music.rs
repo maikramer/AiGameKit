@@ -89,7 +89,11 @@ pub struct LoopInstance(pub Handle<AudioInstance>);
 pub struct LoopVolume(pub f32);
 
 /// Player context marker for the driver (reuses the `Player` component).
-pub fn bgm_zone(x: f32, z: f32, scene: Option<&crate::worldsys::InteriorSceneConfig>) -> &'static str {
+pub fn bgm_zone(
+    x: f32,
+    z: f32,
+    scene: Option<&crate::worldsys::InteriorSceneConfig>,
+) -> &'static str {
     // Bolsa de interior DECLARADA (fora da área do mapa). A zona de masmorra
     // seguia uma caixa copiada à mão (770..950 × 205..355) que ficava para
     // trás de cada vez que a grelha de interiores se movia — e a grelha mudou
@@ -155,11 +159,7 @@ impl CombatMusicState {
 /// (music×master agora vivem no [`MusicBus`], aplicados pelo kira a tudo o
 /// que está a tocar).
 pub fn layer_target(layer: &str, zone: &str, base_volume: f32) -> f32 {
-    if layer == zone {
-        base_volume
-    } else {
-        0.0
-    }
+    if layer == zone { base_volume } else { 0.0 }
 }
 
 /// Crossfade one step: move `current` toward `target` by `speed` per second.
@@ -316,6 +316,7 @@ mod tests {
         let scene = crate::worldsys::InteriorSceneConfig {
             min: [2500.0, 2500.0],
             max: [2900.0, 2830.0],
+            ..crate::worldsys::InteriorSceneConfig::default()
         };
         assert_eq!(bgm_zone(2700.0, 2700.0, Some(&scene)), "dungeon");
         assert_eq!(bgm_zone(2510.0, 2820.0, Some(&scene)), "dungeon");

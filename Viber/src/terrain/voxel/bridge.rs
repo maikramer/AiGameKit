@@ -274,7 +274,11 @@ impl BridgeSpec {
             let mid_xz = (a.xz + b.xz) * 0.5;
             let top = (a.deck_top + b.deck_top) * 0.5;
             let yaw = yaw_for(unit);
-            let half = Vec3::new(len * 0.5 + SEGMENT_OVERLAP, self.parapet * 0.5, PARAPET_HALF);
+            let half = Vec3::new(
+                len * 0.5 + SEGMENT_OVERLAP,
+                self.parapet * 0.5,
+                PARAPET_HALF,
+            );
             for (side, sign) in [("l", 1.0f32), ("r", -1.0f32)] {
                 let c = mid_xz + perp * (offset * sign);
                 out.push(Box::new(OrientedBoxMod::new(
@@ -345,7 +349,8 @@ impl BridgeSpec {
                 let i = (f.floor() as usize).min(clear.len() - 1);
                 let j = (i + 1).min(clear.len() - 1);
                 let frac = f - i as f32;
-                (clear[i].deck_top + (clear[j].deck_top - clear[i].deck_top) * frac) - self.thickness
+                (clear[i].deck_top + (clear[j].deck_top - clear[i].deck_top) * frac)
+                    - self.thickness
             };
 
             // Piers: from the deck down past the ground under each foot.
@@ -406,10 +411,7 @@ impl BridgeSpec {
         if let Some(n) = self.spans {
             return n.max(1);
         }
-        let foot = stations
-            .iter()
-            .fold(f32::INFINITY, |m, s| m.min(s.ground))
-            - FOOT_EMBED;
+        let foot = stations.iter().fold(f32::INFINITY, |m, s| m.min(s.ground)) - FOOT_EMBED;
         let mean_height = (stations.iter().map(|s| s.deck_top - foot).sum::<f32>()
             / stations.len() as f32)
             .max(1.0);
@@ -538,12 +540,18 @@ mod tests {
 
     #[test]
     fn test_the_deck_is_solid_over_the_gorge_and_air_hangs_under_it() {
-        let field =
-            super::super::field::VoxelField::new(spec(BridgeStyle::Stone).build(&Gorge), 256.0, 64.0);
+        let field = super::super::field::VoxelField::new(
+            spec(BridgeStyle::Stone).build(&Gorge),
+            256.0,
+            64.0,
+        );
         // Mid-span: the deck is rock, and there is open air between it and the
         // gorge floor at y = 2.
         let deck_top = field.surface_top(&Gorge, 0.0, 0.0);
-        assert!(deck_top > 20.0, "deck at {deck_top:.2} is not over the gorge");
+        assert!(
+            deck_top > 20.0,
+            "deck at {deck_top:.2} is not over the gorge"
+        );
         assert!(
             field.density(&Gorge, Vec3::new(0.0, deck_top - 0.5, 0.0)) < 0.0,
             "just under the deck surface must be rock"
@@ -584,7 +592,8 @@ mod tests {
         let mods = three.build(&Gorge);
         for k in 0..3 {
             assert!(
-                mods.iter().any(|m| m.label().contains(&format!("pier:{k}"))),
+                mods.iter()
+                    .any(|m| m.label().contains(&format!("pier:{k}"))),
                 "span {k} has no piers"
             );
         }
@@ -618,8 +627,11 @@ mod tests {
     fn test_the_arch_leaves_air_under_its_crown() {
         // Between the intrados and the bed there must be open air, or the span
         // is a dam with a deck on top.
-        let field =
-            super::super::field::VoxelField::new(spec(BridgeStyle::Stone).build(&Gorge), 256.0, 64.0);
+        let field = super::super::field::VoxelField::new(
+            spec(BridgeStyle::Stone).build(&Gorge),
+            256.0,
+            64.0,
+        );
         let spans = field.column(&Gorge, 0.0, 0.0);
         assert_eq!(spans.len(), 2, "deck-and-bed, got {spans:?}");
         assert!(

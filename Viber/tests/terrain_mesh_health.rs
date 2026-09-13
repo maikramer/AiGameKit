@@ -400,7 +400,10 @@ fn test_the_crossings_world_meshes_as_cleanly_as_the_bare_terrain() {
         field.mods().len()
     );
     let boxes = build_boxes_with_field(&spec, &grid, &field, &features);
-    assert!(!boxes.is_empty(), "the crossings world produced voxel boxes");
+    assert!(
+        !boxes.is_empty(),
+        "the crossings world produced voxel boxes"
+    );
 
     let mut degenerate = 0usize;
     let mut total = 0usize;

@@ -21,11 +21,11 @@
 
 use bevy::math::{Vec2, Vec3};
 
-use super::mods::{CapsuleMod, ModOp, VoxelMod};
 use super::super::cliffs::{CliffProfile, hash01};
 use super::super::mesh::HeightField;
 use super::super::paths::{PathHit, nearest_on_path};
 use super::cliff::CliffBand;
+use super::mods::{CapsuleMod, ModOp, VoxelMod};
 use crate::terrain::water::{BankStyle, LakeSpec, RiverSpec, WaterBody};
 
 /// Seed determinística para as bandas, derivada do ANCORAGEM do corpo
@@ -332,8 +332,7 @@ pub fn wall_waterfalls(
         let stations = body.stations.clone();
         let halfs = body.half_width.clone();
         let water_width = body.water_width;
-        let half_at =
-            |i: usize| halfs.get(i).copied().unwrap_or(water_width * 0.5);
+        let half_at = |i: usize| halfs.get(i).copied().unwrap_or(water_width * 0.5);
         for c in body.cascades.iter_mut() {
             if !c.waterfall || c.wall {
                 continue;
@@ -358,8 +357,8 @@ pub fn wall_waterfalls(
             };
             let band = &bands[bi];
             // Leituras na estação da banda mais próxima do cruzamento.
-            let idx = (hit.station(band.stations.len()).round() as usize)
-                .min(band.stations.len() - 1);
+            let idx =
+                (hit.station(band.stations.len()).round() as usize).min(band.stations.len() - 1);
             let band_w = band.width[idx];
             if dist > band_w * 0.5 + half_at(mid) + WALL_MATCH_MARGIN {
                 continue;
@@ -632,7 +631,11 @@ mod tests {
             c.bot_y,
             top - 9.0
         );
-        assert!((c.drop - 9.0).abs() < 1e-4, "drop follows the face: {}", c.drop);
+        assert!(
+            (c.drop - 9.0).abs() < 1e-4,
+            "drop follows the face: {}",
+            c.drop
+        );
         assert_eq!(mods.len(), 1, "one spill capsule for one fall");
     }
 }

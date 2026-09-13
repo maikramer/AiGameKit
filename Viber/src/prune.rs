@@ -124,16 +124,25 @@ pub fn housekeeping(checkout_root: &Path, active_debug: bool) -> PruneReport {
 /// ficam de fora. `.fingerprint`/`build` não são tocados. Subdiretórios
 /// ausentes (perfil sem `examples/`) contam como zero vítimas.
 fn collect_binaries(profile_dir: &Path, out: &mut Vec<PathBuf>) {
-    for dir in [profile_dir.to_path_buf(), profile_dir.join("deps"), profile_dir.join("examples")]
-    {
-        let Ok(entries) = fs::read_dir(&dir) else { continue };
+    for dir in [
+        profile_dir.to_path_buf(),
+        profile_dir.join("deps"),
+        profile_dir.join("examples"),
+    ] {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
         for entry in entries.flatten() {
-            let Ok(metadata) = entry.metadata() else { continue };
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
             if !metadata.is_file() {
                 continue;
             }
             let file_name = entry.file_name();
-            let Some(name) = file_name.to_str() else { continue };
+            let Some(name) = file_name.to_str() else {
+                continue;
+            };
             if name.contains('.') {
                 continue;
             }
@@ -155,7 +164,9 @@ fn remove_files(paths: &[PathBuf], live: &HashSet<PathBuf>) -> (u64, u64) {
         if live.contains(path) {
             continue;
         }
-        let Ok(metadata) = fs::metadata(path) else { continue };
+        let Ok(metadata) = fs::metadata(path) else {
+            continue;
+        };
         let first_copy = seen_inodes.insert((metadata.dev(), metadata.ino()));
         if fs::remove_file(path).is_ok() {
             removed += 1;
@@ -171,9 +182,13 @@ fn dir_size(path: &Path) -> u64 {
     let mut total = 0u64;
     let mut stack = vec![path.to_path_buf()];
     while let Some(current) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&current) else { continue };
+        let Ok(entries) = fs::read_dir(&current) else {
+            continue;
+        };
         for entry in entries.flatten() {
-            let Ok(metadata) = entry.metadata() else { continue };
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
             if metadata.is_dir() {
                 stack.push(entry.path());
             } else {
@@ -199,7 +214,11 @@ fn own_process_tree() -> HashSet<u32> {
         let Some(fields) = stat.rsplit(')').next() else {
             break;
         };
-        let Some(ppid) = fields.split_whitespace().nth(1).and_then(|f| f.parse().ok()) else {
+        let Some(ppid) = fields
+            .split_whitespace()
+            .nth(1)
+            .and_then(|f| f.parse().ok())
+        else {
             break;
         };
         if ppid == 0 || ppid == pid {
@@ -217,7 +236,11 @@ fn any_foreign_build_running(skip: &HashSet<u32>) -> bool {
         return false;
     };
     for entry in entries.flatten() {
-        let Some(pid) = entry.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|n| n.parse::<u32>().ok())
+        else {
             continue;
         };
         if skip.contains(&pid) {
@@ -246,7 +269,11 @@ fn live_exes_under(dir: &Path, skip: &HashSet<u32>) -> HashSet<PathBuf> {
         return live;
     };
     for entry in entries.flatten() {
-        let Some(pid) = entry.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|n| n.parse::<u32>().ok())
+        else {
             continue;
         };
         if skip.contains(&pid) {
@@ -292,8 +319,16 @@ mod tests {
         write(&debug.join("viber"), b"x", true);
         write(&debug.join("viber.d"), b"x", false);
         write(&debug.join("libviber.rlib"), b"x", false);
-        write(&debug.join("deps/hud_contract-6a30a0a1f7fb47f0"), b"x", true);
-        write(&debug.join("deps/libviber-bbd8b3e311499d44.rlib"), b"x", false);
+        write(
+            &debug.join("deps/hud_contract-6a30a0a1f7fb47f0"),
+            b"x",
+            true,
+        );
+        write(
+            &debug.join("deps/libviber-bbd8b3e311499d44.rlib"),
+            b"x",
+            false,
+        );
         write(&debug.join("deps/some.rmeta"), b"x", false);
         write(&debug.join("deps/notes.d"), b"x", false);
         write(&debug.join("examples/demo-1234"), b"x", true);
@@ -324,11 +359,23 @@ mod tests {
         let debug = root.join("target/debug");
         let release = root.join("target/release");
         write(&debug.join("viber"), &[7u8; 4096], true);
-        write(&debug.join("deps/viber-fb9bf3c6459c9da0"), &[7u8; 8192], true);
-        write(&debug.join("deps/libviber-bbd8b3e311499d44.rlib"), &[7u8; 512], false);
+        write(
+            &debug.join("deps/viber-fb9bf3c6459c9da0"),
+            &[7u8; 8192],
+            true,
+        );
+        write(
+            &debug.join("deps/libviber-bbd8b3e311499d44.rlib"),
+            &[7u8; 512],
+            false,
+        );
         write(&debug.join(".fingerprint/abc/f1"), b"keep", false);
         write(&debug.join("build/pkg/out/o.txt"), b"keep", false);
-        write(&debug.join("incremental/viber-abc/session.d"), b"cache", false);
+        write(
+            &debug.join("incremental/viber-abc/session.d"),
+            b"cache",
+            false,
+        );
         write(&release.join("viber"), &[7u8; 2048], true);
         write(&release.join("deps/libviber-xyz.rlib"), &[7u8; 256], false);
 
@@ -359,7 +406,11 @@ mod tests {
     fn hardlinked_binaries_count_once_but_both_names_go() {
         let root = fixture_root("hardlink");
         let debug = root.join("target/debug");
-        write(&debug.join("deps/viber-6a30a0a1f7fb47f0"), &[3u8; 100], true);
+        write(
+            &debug.join("deps/viber-6a30a0a1f7fb47f0"),
+            &[3u8; 100],
+            true,
+        );
         fs::hard_link(
             debug.join("deps/viber-6a30a0a1f7fb47f0"),
             debug.join("viber"),

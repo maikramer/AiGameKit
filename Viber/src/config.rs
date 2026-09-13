@@ -128,30 +128,26 @@ impl GameConfig {
     /// Layer de terreno (`grass`) → path de albedo contra as roots; None se
     /// o valor não é um alias mas um caminho cru de textura.
     pub fn terrain_albedo(&self, layer: &str) -> Option<String> {
-        crate::terrain::splat::pool_albedo(layer).map(|rel| {
-            Self::asset_string(&self.assets.terrain_textures_dir, &rel)
-        })
+        crate::terrain::splat::pool_albedo(layer)
+            .map(|rel| Self::asset_string(&self.assets.terrain_textures_dir, &rel))
     }
 
     /// O mesmo para a normal map.
     pub fn terrain_normal(&self, layer: &str) -> Option<String> {
-        crate::terrain::splat::pool_normal(layer).map(|rel| {
-            Self::asset_string(&self.assets.terrain_textures_dir, &rel)
-        })
+        crate::terrain::splat::pool_normal(layer)
+            .map(|rel| Self::asset_string(&self.assets.terrain_textures_dir, &rel))
     }
 
     /// O mesmo para o height map (escalar, height-blend do chunk).
     pub fn terrain_height(&self, layer: &str) -> Option<String> {
-        crate::terrain::splat::pool_height(layer).map(|rel| {
-            Self::asset_string(&self.assets.terrain_textures_dir, &rel)
-        })
+        crate::terrain::splat::pool_height(layer)
+            .map(|rel| Self::asset_string(&self.assets.terrain_textures_dir, &rel))
     }
 
     /// O mesmo para o AO map (escalar, oclusão por texel do chunk).
     pub fn terrain_ao(&self, layer: &str) -> Option<String> {
-        crate::terrain::splat::pool_ao(layer).map(|rel| {
-            Self::asset_string(&self.assets.terrain_textures_dir, &rel)
-        })
+        crate::terrain::splat::pool_ao(layer)
+            .map(|rel| Self::asset_string(&self.assets.terrain_textures_dir, &rel))
     }
 
     /// Pasta de scripts (filesystem, contra a pasta do jogo).
@@ -177,8 +173,8 @@ pub fn load(world_dir: &Path) -> Result<GameConfig> {
             CONFIG_FILE
         )
     })?;
-    let value: serde_yaml::Value =
-        serde_yaml::from_str(&text).with_context(|| format!("{}: YAML inválido", path.display()))?;
+    let value: serde_yaml::Value = serde_yaml::from_str(&text)
+        .with_context(|| format!("{}: YAML inválido", path.display()))?;
     warn_unknown_keys(&path, &value);
     let mut config: GameConfig = serde_yaml::from_value(value).map_err(|error| {
         anyhow::anyhow!(
@@ -209,13 +205,7 @@ pub fn load(world_dir: &Path) -> Result<GameConfig> {
 /// um campo futuro não deve rebentar numa engine antiga (igual aos attrs XML).
 fn warn_unknown_keys(path: &Path, value: &serde_yaml::Value) {
     const TOP: &[&str] = &["title", "assets", "game", "save"];
-    const ASSETS: &[&str] = &[
-        "roots",
-        "bgm_dir",
-        "sfx_dir",
-        "terrain_textures_dir",
-        
-    ];
+    const ASSETS: &[&str] = &["roots", "bgm_dir", "sfx_dir", "terrain_textures_dir"];
     const GAME: &[&str] = &["scripts_dir"];
     const SAVE: &[&str] = &["dir"];
     let Some(map) = value.as_mapping() else {
@@ -226,7 +216,10 @@ fn warn_unknown_keys(path: &Path, value: &serde_yaml::Value) {
             continue;
         };
         if !TOP.contains(&key) {
-            eprintln!("warning: {}: chave desconhecida `{key}` — ignorada", path.display());
+            eprintln!(
+                "warning: {}: chave desconhecida `{key}` — ignorada",
+                path.display()
+            );
             continue;
         }
         let allowed: &[&str] = match key {
@@ -318,7 +311,10 @@ mod tests {
         let config = load(dir.path()).unwrap();
         assert_eq!(config.title.as_deref(), Some("Jogo Teste"));
         assert_eq!(config.bgm_path("explore"), "assets/audio/bgm/explore.ogg");
-        assert_eq!(config.sfx_path("combat/swing.ogg"), "assets/audio/sfx/combat/swing.ogg");
+        assert_eq!(
+            config.sfx_path("combat/swing.ogg"),
+            "assets/audio/sfx/combat/swing.ogg"
+        );
         assert_eq!(
             config.terrain_albedo("grass").as_deref(),
             Some("assets/textures/grass/albedo.ktx2")

@@ -35,6 +35,11 @@ pub enum Group {
     Ai,
     Camera,
     Combat,
+    /// Fases do PRÓPRIO Bevy medidas por âncoras (`engine_phase_anchors`):
+    /// propagação de transforms, visibilidade, visibilidade por luz. Não são
+    /// código nosso, mas dominam o frame num mundo de 58 k entidades e sem
+    /// elas o profiler mostra 4 ms de um frame de 48.
+    Engine,
     Fx,
     Hud,
     Player,
@@ -53,6 +58,7 @@ impl Group {
             Group::Ai => "ai",
             Group::Camera => "camera",
             Group::Combat => "combat",
+            Group::Engine => "engine",
             Group::Fx => "fx",
             Group::Hud => "hud",
             Group::Player => "player",
@@ -66,10 +72,11 @@ impl Group {
         }
     }
 
-    pub const ALL: [Group; 13] = [
+    pub const ALL: [Group; 14] = [
         Group::Ai,
         Group::Camera,
         Group::Combat,
+        Group::Engine,
         Group::Fx,
         Group::Hud,
         Group::Player,
@@ -419,6 +426,248 @@ fn physics_step_end(mut clock: ResMut<PhysicsStepClock>) {
             t0.elapsed().as_secs_f32() * 1000.0,
         );
     }
+}
+
+// ------------------------------------------------- âncoras das fases do Bevy
+
+/// Fases do Bevy medidas por âncoras — nome publicado no profiler.
+///
+/// O `timed` só mede sistemas NOSSOS: no `simple-rpg` isso são ~4 ms de um
+/// frame de 48, e os outros 44 eram invisíveis (a GPU mede 3 ms com
+/// `VIBER_PROF_GPU=1`, portanto o frame é CPU no main schedule). Estas são as
+/// fases do próprio Bevy que escalam com o nº de entidades e de VISTAS
+/// (câmara + 4 cascatas + 6 faces por point light com sombra).
+const PHASES: [&str; 6] = [
+    "bevy.transform_propagate",
+    "bevy.visibility_propagate",
+    "bevy.check_visibility",
+    "bevy.assign_lights_to_clusters",
+    "bevy.update_light_frusta",
+    "bevy.light_visibility",
+];
+
+/// Marca corrente da cadeia de fases: cada âncora regista o tempo desde a
+/// marca anterior e passa a ser a nova marca.
+///
+/// Medir cada set com um par `before`/`after` INDEPENDENTE dá números
+/// cumulativos e sobrepostos (o executor paralelo corre os `phase_start`
+/// todos no início do `PostUpdate`, e o `after` de cada set fecha num
+/// instante diferente — as seis leituras eram todas "desde o início do
+/// PostUpdate" e somavam 27 ms num frame de 44). Com uma marca ÚNICA e
+/// encadeada, cada linha é a fatia daquele set e a soma é o `PostUpdate`.
+#[derive(Resource, Default)]
+pub struct PhaseClocks {
+    mark: Option<Instant>,
+}
+
+/// Abre a cadeia no início do `PostUpdate` (antes do primeiro set medido).
+fn phase_chain_start(mut clocks: ResMut<PhaseClocks>) {
+    clocks.mark = Some(Instant::now());
+}
+
+/// Fecha a fatia do set `I` e reabre a marca para o set seguinte.
+fn phase_end<const I: usize>(mut clocks: ResMut<PhaseClocks>) {
+    let now = Instant::now();
+    if let Some(mark) = clocks.mark.replace(now) {
+        record_system(
+            Group::Engine,
+            PHASES[I],
+            now.duration_since(mark).as_secs_f32() * 1000.0,
+        );
+    }
+}
+
+/// Mede as fases pesadas do Bevy em `PostUpdate`, na ordem em que o Bevy as
+/// encadeia (transform → visibilidade → luzes). Custa uma leitura de relógio
+/// por fase e por frame.
+pub fn engine_phase_anchors(app: &mut App) {
+    use bevy::camera::visibility::VisibilitySystems;
+    use bevy::light::SimulationLightSystems;
+    use bevy::transform::TransformSystems;
+
+    app.init_resource::<PhaseClocks>();
+    app.add_systems(
+        PostUpdate,
+        phase_chain_start
+            .before(TransformSystems::Propagate)
+            .before(VisibilitySystems::VisibilityPropagate)
+            .before(VisibilitySystems::CheckVisibility)
+            .before(SimulationLightSystems::AssignLightsToClusters)
+            .before(SimulationLightSystems::UpdateLightFrusta)
+            .before(SimulationLightSystems::CheckLightVisibility),
+    );
+    macro_rules! anchor {
+        ($index:expr, $set:expr) => {
+            app.add_systems(PostUpdate, phase_end::<$index>.after($set));
+        };
+    }
+    anchor!(0, TransformSystems::Propagate);
+    anchor!(1, VisibilitySystems::VisibilityPropagate);
+    anchor!(2, VisibilitySystems::CheckVisibility);
+    anchor!(3, SimulationLightSystems::AssignLightsToClusters);
+    anchor!(4, SimulationLightSystems::UpdateLightFrusta);
+    anchor!(5, SimulationLightSystems::CheckLightVisibility);
+}
+
+// ------------------------------------------------ linha do tempo do frame
+
+/// Fatias do frame por SCHEDULE, na ordem do `MainScheduleOrder`.
+///
+/// A última linha, `sched.render_wait`, é o buraco entre o fim do `Last` e o
+/// início do `First` seguinte: extract + sincronização com o render app +
+/// present/vsync. Num frame CPU-bound no main schedule ela é pequena; num
+/// frame preso no render (ou no vsync) é ela que come o frame. Sem esta
+/// linha, um frame de 44 ms com 10 ms de sistemas não tinha explicação.
+const SCHEDULES: [&str; 7] = [
+    "sched.first",
+    "sched.pre_update",
+    "sched.fixed_main",
+    "sched.update",
+    "sched.spawn_scene",
+    "sched.post_update",
+    "sched.last",
+];
+
+/// Nome da fatia entre frames (fim do `Last` → início do `First`).
+const RENDER_WAIT: &str = "sched.render_wait";
+
+#[derive(Resource, Default)]
+pub struct FrameTimeline {
+    mark: Option<Instant>,
+}
+
+/// Marca inserida entre schedules: fecha a fatia anterior com o nome `I`.
+fn timeline_mark<const I: usize>(mut timeline: ResMut<FrameTimeline>) {
+    let now = Instant::now();
+    if let Some(mark) = timeline.mark.replace(now) {
+        let ms = now.duration_since(mark).as_secs_f32() * 1000.0;
+        // `I == SCHEDULES.len()` é a marca de abertura do frame: o que ela
+        // fecha é o intervalo ENTRE frames (render/present), não um schedule.
+        let name = SCHEDULES.get(I).copied().unwrap_or(RENDER_WAIT);
+        record_system(Group::Engine, name, ms);
+    }
+}
+
+/// Insere as marcas na ordem do `Main` — uma antes do `First` (abre o frame)
+/// e uma depois de cada schedule. Cada marca é um schedule próprio com um
+/// único sistema: é a única forma de garantir a ordem (dentro de um schedule
+/// o executor é livre de correr as âncoras quando quiser).
+pub fn frame_timeline(app: &mut App) {
+    use bevy::app::{First, Last, PostUpdate, PreUpdate, RunFixedMainLoop, SpawnScene, Update};
+    use bevy::ecs::schedule::ScheduleLabel;
+
+    macro_rules! mark_schedule {
+        ($name:ident) => {
+            #[derive(ScheduleLabel, Clone, Debug, PartialEq, Eq, Hash)]
+            struct $name;
+        };
+    }
+    mark_schedule!(MarkFrameStart);
+    mark_schedule!(MarkFirst);
+    mark_schedule!(MarkPreUpdate);
+    mark_schedule!(MarkFixedMain);
+    mark_schedule!(MarkUpdate);
+    mark_schedule!(MarkSpawnScene);
+    mark_schedule!(MarkPostUpdate);
+    mark_schedule!(MarkLast);
+
+    app.init_resource::<FrameTimeline>();
+    app.add_systems(MarkFrameStart, timeline_mark::<{ SCHEDULES.len() }>);
+    app.add_systems(MarkFirst, timeline_mark::<0>);
+    app.add_systems(MarkPreUpdate, timeline_mark::<1>);
+    app.add_systems(MarkFixedMain, timeline_mark::<2>);
+    app.add_systems(MarkUpdate, timeline_mark::<3>);
+    app.add_systems(MarkSpawnScene, timeline_mark::<4>);
+    app.add_systems(MarkPostUpdate, timeline_mark::<5>);
+    app.add_systems(MarkLast, timeline_mark::<6>);
+
+    let mut order = app
+        .world_mut()
+        .resource_mut::<bevy::app::MainScheduleOrder>();
+    order.insert_before(First, MarkFrameStart);
+    order.insert_after(First, MarkFirst);
+    order.insert_after(PreUpdate, MarkPreUpdate);
+    order.insert_after(RunFixedMainLoop, MarkFixedMain);
+    order.insert_after(Update, MarkUpdate);
+    order.insert_after(SpawnScene, MarkSpawnScene);
+    order.insert_after(PostUpdate, MarkPostUpdate);
+    order.insert_after(Last, MarkLast);
+}
+
+// -------------------------------------------- âncoras do RENDER APP (sub-app)
+
+/// Fases do schedule `Render` (sub-app do render), medidas com a mesma
+/// cadeia de marcas do `PostUpdate`.
+///
+/// Com o `PipelinedRenderingPlugin` o render app corre numa thread própria e
+/// o main schedule bloqueia à espera dele — é o `sched.render_wait`. Sem
+/// estas linhas, esse bloco (22 dos 30 ms do `simple-rpg` de dia) era uma
+/// caixa preta: a GPU mede 7 ms nos passes, o resto é CPU aqui.
+const RENDER_PHASES: [&str; 11] = [
+    "render.extract_commands",
+    "render.prepare_assets",
+    "render.prepare_meshes",
+    "render.create_views",
+    "render.specialize",
+    "render.prepare_views",
+    "render.queue",
+    "render.phase_sort",
+    "render.prepare",
+    "render.bind_groups",
+    "render.render",
+];
+
+/// Marca da cadeia do render app (vive no mundo do sub-app).
+#[derive(Resource, Default)]
+pub struct RenderPhaseClock {
+    mark: Option<Instant>,
+}
+
+fn render_phase_start(mut clock: ResMut<RenderPhaseClock>) {
+    clock.mark = Some(Instant::now());
+}
+
+fn render_phase_end<const I: usize>(mut clock: ResMut<RenderPhaseClock>) {
+    let now = Instant::now();
+    if let Some(mark) = clock.mark.replace(now) {
+        record_system(
+            Group::Engine,
+            RENDER_PHASES[I],
+            now.duration_since(mark).as_secs_f32() * 1000.0,
+        );
+    }
+}
+
+/// Instala as âncoras no sub-app do render. Os registos são os MESMOS
+/// globais do `timed` (um `Mutex` por fase por frame), por isso aparecem no
+/// snapshot do profiler sem ponte nenhuma entre mundos.
+pub fn render_phase_anchors(app: &mut App) {
+    use bevy::render::{Render, RenderApp, RenderSystems};
+
+    let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
+        return;
+    };
+    render_app.init_resource::<RenderPhaseClock>();
+    render_app.add_systems(
+        Render,
+        render_phase_start.before(RenderSystems::ExtractCommands),
+    );
+    macro_rules! anchor {
+        ($index:expr, $set:expr) => {
+            render_app.add_systems(Render, render_phase_end::<$index>.after($set));
+        };
+    }
+    anchor!(0, RenderSystems::ExtractCommands);
+    anchor!(1, RenderSystems::PrepareAssets);
+    anchor!(2, RenderSystems::PrepareMeshes);
+    anchor!(3, RenderSystems::CreateViews);
+    anchor!(4, RenderSystems::Specialize);
+    anchor!(5, RenderSystems::PrepareViews);
+    anchor!(6, RenderSystems::QueueSweep);
+    anchor!(7, RenderSystems::PhaseSort);
+    anchor!(8, RenderSystems::PrepareResourcesFlush);
+    anchor!(9, RenderSystems::PrepareBindGroups);
+    anchor!(10, RenderSystems::Render);
 }
 
 /// Regista as âncoras do step de física no mesmo schedule do

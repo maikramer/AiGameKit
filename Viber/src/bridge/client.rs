@@ -457,8 +457,7 @@ pub enum Candidates {
 /// Escolha pura (sem I/O) — testável sem env nem sockets.
 fn pick_engines(cwd: Option<&Path>, engines: &[LiveEngine]) -> Candidates {
     let rank = |engine: &LiveEngine| {
-        let local = cwd
-            .is_some_and(|cwd| Path::new(&engine.world).starts_with(cwd));
+        let local = cwd.is_some_and(|cwd| Path::new(&engine.world).starts_with(cwd));
         (!local, engine.port)
     };
     let mut local: Vec<LiveEngine> = Vec::new();
@@ -587,9 +586,7 @@ fn resolve_world_port(query: &Path) -> Result<u16> {
             "`{}` casa {} engines vivas — sê mais específico:\n{}",
             query.display(),
             matches.len(),
-            format_engines(
-                &matches.into_iter().cloned().collect::<Vec<_>>()
-            )
+            format_engines(&matches.into_iter().cloned().collect::<Vec<_>>())
         ),
     }
 }
@@ -659,10 +656,7 @@ fn same_world(a: &str, b: &str) -> bool {
     if a == b {
         return true;
     }
-    match (
-        std::fs::canonicalize(a),
-        std::fs::canonicalize(b),
-    ) {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
         (Ok(ca), Ok(cb)) => ca == cb,
         _ => false,
     }
@@ -737,10 +731,7 @@ mod tests {
 
     #[test]
     fn test_pick_no_locals_uses_lowest_port() {
-        let engines = [
-            engine(15705, "/a.xml"),
-            engine(15703, "/b.xml"),
-        ];
+        let engines = [engine(15705, "/a.xml"), engine(15703, "/b.xml")];
         // Sem cwd conhecido, tudo é remoto — ordem determinística por porta.
         assert_eq!(
             pick_engines(None, &engines),
@@ -750,7 +741,10 @@ mod tests {
 
     #[test]
     fn test_pick_no_engines() {
-        assert_eq!(pick_engines(Some(Path::new("/repo")), &[]), Candidates::Ordered(vec![]));
+        assert_eq!(
+            pick_engines(Some(Path::new("/repo")), &[]),
+            Candidates::Ordered(vec![])
+        );
     }
 
     #[test]
