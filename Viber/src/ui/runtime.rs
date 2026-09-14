@@ -9,13 +9,20 @@
 
 use std::collections::HashMap;
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy::text::{FontWeight, Strikethrough, StrikethroughColor, Underline, UnderlineColor};
+use bevy::text::{
+    FontWeight, LetterSpacing, LineBreak, Strikethrough, StrikethroughColor, Underline,
+    UnderlineColor,
+};
 use bevy::ui::widget::ImageNode;
 use bevy::ui::{BoxShadow, FocusPolicy, Val2};
 use bevy::window::PrimaryWindow;
 
-use super::style::{Decoration, StyleProps, StyleSheet, StyleState, fade};
+use super::style::{
+    Decoration, GradientSpec, GradientStop, LetterSpacingSpec, StyleProps, StyleSheet, StyleState,
+    fade,
+};
 
 /// Author-facing id (`id="hp-fill"`), unique per world.
 #[derive(Debug, Clone, Component)]
@@ -96,10 +103,13 @@ pub struct UiBind(pub String);
 pub struct UiStyleDirty;
 
 /// O estilo FINAL de um elemento — cascata + inline + viewport + herança já
-/// fechados. É o "computed style" da engine: os descendentes é que o leem
-/// para herdar (via [`StyleProps::apply_inherited`]), na passada de aplicação.
+/// fechados, mais a opacidade EFETIVA (a própria × ancestrais CSS × fades).
+/// É o "computed style" da engine: os descendentes é que o leem para herdar
+/// (via [`StyleProps::apply_inherited`]), na passada de aplicação — e o motor
+/// de motion (`ui::tween`) escreve aqui os valores interpolados, deixando o
+/// fan-out para os componentes por conta do re-estilo.
 #[derive(Debug, Clone, Component)]
-pub struct UiComputed(pub super::style::StyleProps);
+pub struct UiComputed(pub super::style::StyleProps, pub f32);
 
 /// Folhas de estilo que alimentam ESTA raiz (índices [`StyleSheet::parse_into`]).
 ///
@@ -230,6 +240,7 @@ type StyleLookup<'w, 's> = Query<
         Has<UiDisabled>,
         Has<UiPointerNone>,
         Option<&'static ChildOf>,
+        Option<&'static super::widgets::UiCheck>,
     ),
 >;
 
@@ -258,6 +269,62 @@ type PaintQuery<'w, 's> = Query<
     ),
 >;
 
+/// O texto ORIGINAL de um elemento com `text-transform` — o espelho escreve a
+/// forma transformada no `Text` e guarda aqui o que o autor (ou script)
+/// escreveu. `written` é a última coisa que O ESPELHO escreveu: qualquer
+/// divergência entre `Text` e `written` é escrita externa (novo original).
+#[derive(Debug, Clone, Component)]
+pub struct UiTextMirror {
+    pub original: String,
+    pub written: String,
+}
+
+/// Aplica o `text-transform` computado aos textos, idempotente.
+///
+/// Corre DEPOIS do re-estilo (o `UiComputed` via commands já aplicou). Um
+/// `set_text`/XML que muda o texto sob um transform é detectado pela
+/// divergência com `written` — o novo texto torna-se o original e re-transforma.
+#[allow(clippy::type_complexity)]
+pub fn sync_text_transforms(
+    mut query: Query<(Entity, &mut Text, &UiComputed, Option<&mut UiTextMirror>)>,
+    mut commands: Commands,
+) {
+    for (entity, mut text, computed, mut mirror) in &mut query {
+        let Some(transform) = computed.0.text_transform else {
+            // A declaração saiu (classe/media) — restaura o original e desarma.
+            if let Some(mirror) = mirror.as_deref_mut() {
+                if **text != mirror.original {
+                    **text = mirror.original.clone();
+                }
+            }
+            if mirror.is_some() {
+                commands.entity(entity).remove::<UiTextMirror>();
+            }
+            continue;
+        };
+        if let Some(mirror) = mirror.as_deref_mut() {
+            if **text != mirror.written {
+                mirror.original = (**text).clone();
+            }
+            let desired = transform.apply(&mirror.original);
+            if **text != desired {
+                **text = desired.clone();
+            }
+            mirror.written = desired;
+        } else {
+            let original = (**text).clone();
+            let desired = transform.apply(&original);
+            commands.entity(entity).insert(UiTextMirror {
+                original,
+                written: desired.clone(),
+            });
+            if **text != desired {
+                **text = desired;
+            }
+        }
+    }
+}
+
 /// Depth at which a HUD stops being a HUD; guards against a cycle in the
 /// hierarchy turning the walk into a hang.
 const MAX_ANCESTRY: usize = 32;
@@ -267,7 +334,8 @@ fn ancestry(entity: Entity, lookup: &StyleLookup) -> Vec<Entity> {
     let mut chain = vec![entity];
     let mut current = entity;
     while chain.len() < MAX_ANCESTRY {
-        let Ok((.., Some(parent))) = lookup.get(current) else {
+        // (…, ChildOf, UiCheck) — o último campo é o check; o pai é o penúltimo.
+        let Ok((.., Some(parent), _)) = lookup.get(current) else {
             break;
         };
         current = parent.parent();
@@ -278,6 +346,22 @@ fn ancestry(entity: Entity, lookup: &StyleLookup) -> Vec<Entity> {
     }
     chain.reverse();
     chain
+}
+
+/// Queries auxiliares do re-estilo, agrupadas num `SystemParam` — a função
+/// principal chegou ao tecto de 16 parâmetros de sistema do Bevy.
+#[derive(SystemParam)]
+pub struct UiStyleInfo<'w, 's> {
+    /// Filhos de cada elemento — índice de irmão (`:nth-child`) e `:empty`.
+    pub children: Query<'w, 's, &'static Children>,
+    /// Texto do próprio elemento (um `uitext` com texto não é `:empty`).
+    pub texts: Query<'w, 's, &'static Text>,
+    /// Tamanho computado do PAI (frame anterior) — `%` dentro de `calc()`.
+    pub computed_nodes: Query<'w, 's, &'static ComputedNode>,
+    /// `letter-spacing` anterior, para o reset honesto a 0.
+    pub letters: Query<'w, 's, &'static mut LetterSpacing>,
+    /// Estado de transição por elemento — diff de alvos e valores exibidos.
+    pub tweens: Query<'w, 's, &'static mut super::tween::UiTransitions>,
 }
 
 /// Recomputes and writes the style of every dirty element.
@@ -313,6 +397,7 @@ pub fn apply_ui_styles(
     scale: Res<UiScale>,
     computed: Query<&UiComputed>,
     root_sheets: Query<&UiRootSheets>,
+    mut info: UiStyleInfo,
 ) {
     // Tudo no espaço autoral (ver `scale::ui_viewport`): a janela dividida
     // pela escala do HUD. É o espaço em que os píxeis do CSS vivem — e o
@@ -330,7 +415,7 @@ pub fn apply_ui_styles(
     // O dirty set não tem ordem de documento, por isso PRIMEIRO resolvo
     // tudo (cascata + inline + viewport + fade), DEPOIS aplico dos pais
     // para os filhos, com o estilo computado do pai já fechado à mão.
-    let mut resolved: Vec<(Entity, StyleProps, f32, Vec<Entity>)> = Vec::new();
+    let mut resolved: Vec<(Entity, StyleProps, Vec<Entity>)> = Vec::new();
     for entity in &dirty {
         let chain = ancestry(entity, &lookup);
         // Shadow-DOM-lite: a folha visível é a que a RAIZ do ramo carrega.
@@ -340,28 +425,74 @@ pub fn apply_ui_styles(
             .map(|s| s.0.as_slice());
         // The borrow checker needs the parts before the refs: each `ElementRef`
         // points into the query's data, so collect the tuples first.
-        let parts: Vec<(String, Option<String>, Vec<String>, StyleState)> = chain
+        let parts: Vec<(
+            String,
+            Option<String>,
+            Vec<String>,
+            StyleState,
+            bool,
+            bool,
+            bool,
+            usize,
+            usize,
+        )> = chain
             .iter()
-            .filter_map(|e| lookup.get(*e).ok())
+            .filter_map(|e| lookup.get(*e).ok().map(|item| (*e, item)))
             .map(
-                |(tag, id, classes, interaction, disabled, pointer_none, _)| {
+                |(element, (tag, id, classes, interaction, disabled, pointer_none, parent, check))| {
+                    // Posição entre irmãos: índice no Children do PAI, na
+                    // ordem do DOM (a que `:nth-child` fala).
+                    let (sibling_index, sibling_count) = parent
+                        .and_then(|p| info.children.get(p.parent()).ok())
+                        .and_then(|kids| {
+                            kids.iter()
+                                .position(|kid| kid == element)
+                                .map(|index| (index, kids.len()))
+                        })
+                        .unwrap_or((0, 1));
+                    let focused = classes.is_some_and(|c| c.has("focused"));
+                    let checked = check.is_some_and(|c| c.checked);
+                    let empty = info
+                        .children
+                        .get(element)
+                        .map(|kids| kids.is_empty())
+                        .unwrap_or(true)
+                        && info
+                            .texts
+                            .get(element)
+                            .map(|t| t.0.trim().is_empty())
+                            .unwrap_or(true);
                     (
                         tag.0.clone(),
                         id.map(|i| i.0.clone()),
                         classes.map(|c| c.0.clone()).unwrap_or_default(),
                         state_of(interaction, disabled, pointer_none),
+                        focused,
+                        checked,
+                        empty,
+                        sibling_index,
+                        sibling_count,
                     )
                 },
             )
             .collect();
         let refs: Vec<super::style::ElementRef<'_>> = parts
             .iter()
-            .map(|(tag, id, classes, state)| super::style::ElementRef {
-                tag,
-                id: id.as_deref(),
-                classes,
-                state: *state,
-            })
+            .map(
+                |(tag, id, classes, state, focused, checked, empty, sibling_index, sibling_count)| {
+                    super::style::ElementRef {
+                        tag,
+                        id: id.as_deref(),
+                        classes,
+                        state: *state,
+                        focused: *focused,
+                        checked: *checked,
+                        empty: *empty,
+                        sibling_index: *sibling_index,
+                        sibling_count: *sibling_count,
+                    }
+                },
+            )
             .collect();
         let mut props = sheet.resolve(&refs, viewport, allowed);
         if let Ok(inline) = inlines.get(entity) {
@@ -370,17 +501,15 @@ pub fn apply_ui_styles(
         // Viewport units já resolvem contra o espaço autoral (o próprio
         // viewport chegou dividido pela escala); píxeis autorais e %
         // passam intactos e o caminho normal do Taffy aplica-lhes a escala.
-        props.resolve_viewport(viewport);
-        // A fade is inherited: the chain is already built for the cascade, so
-        // an ancestor dissolving takes its whole widget with it instead of
-        // leaving the labels and icons at full strength.
-        let mut opacity = props.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
-        for ancestor in &chain {
-            if let Ok(fade) = fades.get(*ancestor) {
-                opacity *= fade.alpha.clamp(0.0, 1.0);
-            }
-        }
-        resolved.push((entity, props, opacity, chain));
+        // O `%` dentro de calc() fecha contra a LARGURA do pai — o
+        // `ComputedNode` do frame anterior, repartido pela escala de volta ao
+        // espaço autoral (um frame de atraso, como num browser a re-layout).
+        let parent_size = (chain.len() > 1)
+            .then(|| chain[chain.len() - 2])
+            .and_then(|parent| info.computed_nodes.get(parent).ok())
+            .map(|node| node.size / scale.0);
+        props.resolve_viewport(viewport, parent_size);
+        resolved.push((entity, props, chain));
     }
     // `chain` inclui o próprio elemento, por isso é também a profundidade —
     // ascendentes primeiro é o que a herança precisa.
@@ -388,7 +517,7 @@ pub fn apply_ui_styles(
 
     // ── passada B — herdar e escrever ───────────────────────────────────
     let mut fresh: HashMap<Entity, StyleProps> = HashMap::new();
-    for (entity, mut props, opacity, chain) in resolved {
+    for (entity, mut props, chain) in resolved {
         // Base herdada: o computed do ancestral MAIS PRÓXIMO que o tenha. O
         // computed de um pai já contém o que ELE herdou (semântica CSS), por
         // isso basta o primeiro; o `fresh` cobre pais re-estilizados NESTE
@@ -421,7 +550,82 @@ pub fn apply_ui_styles(
         };
         props.apply_inherited(&base);
         resolve_relative_font(&mut props, parent_font, root_font);
-        commands.entity(entity).insert(UiComputed(props.clone()));
+        // Opacidade efetiva = a PRÓPRIA × a CSS dos ancestrais (GRUPO — uma
+        // `opacity: 0.4` num pai esbate tudo lá dentro, como no browser) × os
+        // fades de toda a cadeia. A fade is inherited: an ancestor dissolving
+        // takes its whole widget with it instead of leaving the labels at
+        // full strength.
+        let mut opacity = props.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+        for (index, ancestor) in chain.iter().enumerate() {
+            if index + 1 < chain.len() {
+                let ancestor_css = fresh
+                    .get(ancestor)
+                    .and_then(|props| props.opacity)
+                    .or_else(|| {
+                        computed
+                            .get(*ancestor)
+                            .ok()
+                            .and_then(|computed| computed.0.opacity)
+                    })
+                    .unwrap_or(1.0);
+                opacity *= ancestor_css.clamp(0.0, 1.0);
+            }
+            if let Ok(fade) = fades.get(*ancestor) {
+                opacity *= fade.alpha.clamp(0.0, 1.0);
+            }
+        }
+        // ── transitions: diff de alvos + inject do valor exibido ──────────
+        // O diff corre contra os ALVOS guardados (não contra o `UiComputed`,
+        // que contém valores interpolados a meio de um tween). Um tween
+        // recém-iniciado escreve já o valor DE PARTIDA — o frame do re-estilo
+        // mostra o estado antigo, e o driver anima a partir dele (sem salto).
+        if let Ok(mut transitions) = info.tweens.get_mut(entity) {
+            transitions.specs = props.transition.clone().unwrap_or_default();
+            let specs = transitions.specs.clone();
+            for spec in &specs {
+                let Some(new_value) = spec.property.get(&props) else {
+                    continue;
+                };
+                match transitions.targets.get(&spec.property) {
+                    None => {
+                        transitions.targets.insert(spec.property, new_value);
+                    }
+                    Some(old) if *old != new_value => {
+                        transitions.start(
+                            spec.property,
+                            new_value,
+                            spec.easing,
+                            spec.duration,
+                            spec.delay,
+                            false,
+                        );
+                    }
+                    Some(_) => {}
+                }
+            }
+            let runs: Vec<super::tween::TweenRun> = transitions.tweens.clone();
+            for run in &runs {
+                if let Some(value) = run.current() {
+                    run.field.set(&mut props, value);
+                }
+            }
+        } else if let Some(specs) = props
+            .transition
+            .clone()
+            .filter(|specs| !specs.is_empty())
+        {
+            // Primeiro estilo com `transition`: registra os alvos sem tween —
+            // o estilo inicial NÃO transita (semântica do browser).
+            let mut created = super::tween::UiTransitions::default();
+            created.specs = specs;
+            for spec in &created.specs {
+                if let Some(value) = spec.property.get(&props) {
+                    created.targets.insert(spec.property, value);
+                }
+            }
+            commands.entity(entity).insert(created);
+        }
+        commands.entity(entity).insert(UiComputed(props.clone(), opacity));
         fresh.insert(entity, props.clone());
 
         if let Ok((mut node, background, border_color, z_index, transform)) = nodes.get_mut(entity)
@@ -432,8 +636,41 @@ pub fn apply_ui_styles(
             if let (Some(mut background), Some(color)) = (background, props.background) {
                 *background = BackgroundColor(fade(color, opacity));
             }
-            if let (Some(mut border), Some(color)) = (border_color, props.border_color) {
-                *border = BorderColor::all(fade(color, opacity));
+            // Gradiente: `Some(Some)` pinta (por cima da cor); qualquer outra
+            // coisa REMOVE — um @media que deixou de valer não pode deixar o
+            // gradiente preso, e quem nunca o declarou não sente o no-op.
+            match &props.background_gradient {
+                Some(Some(spec)) => {
+                    commands
+                        .entity(entity)
+                        .insert(BackgroundGradient(vec![to_bevy_gradient(spec, opacity)]));
+                }
+                _ => {
+                    commands.entity(entity).remove::<BackgroundGradient>();
+                }
+            }
+            // Cor da borda por lado: cada lado aceita o longhand próprio ou o
+            // uniforme; um lado sem NENHUM dos dois mantém o que já lá estava
+            // (compondo com a nova opacidade do frame).
+            if let Some(mut border) = border_color {
+                let uniform = props.border_color;
+                let declared = [
+                    props.border_top_color.or(uniform),
+                    props.border_right_color.or(uniform),
+                    props.border_bottom_color.or(uniform),
+                    props.border_left_color.or(uniform),
+                ];
+                if declared.iter().any(|side| side.is_some()) {
+                    let current: &BorderColor = border.as_ref();
+                    let pick =
+                        |side: Option<Color>, fallback: Color| fade(side.unwrap_or(fallback), opacity);
+                    *border = BorderColor {
+                        top: pick(declared[0], current.top),
+                        right: pick(declared[1], current.right),
+                        bottom: pick(declared[2], current.bottom),
+                        left: pick(declared[3], current.left),
+                    };
+                }
             }
             // Contorno escuro garantido (regra do crítico, r5): via commands
             // porque `Outline` nem sempre existe no entity (mesmo padrão do
@@ -509,12 +746,32 @@ pub fn apply_ui_styles(
             if let Some(value) = props.color {
                 *color = TextColor(fade(value, opacity));
             }
-            if let Some(size) = props.font_size {
+            if let Some(size) = &props.font_size {
                 // Pós-resolução é sempre Plain; exprs já fecharam em px.
                 font.font_size = size.to_val().into();
             }
             if let Some(weight) = props.font_weight {
                 font.weight = FontWeight(weight.clamp(1.0, 1000.0) as u16);
+            }
+            // letter-spacing: `em` fecha contra a fonte computada do próprio
+            // elemento; sem declaração, o espaçamento volta a 0 (um class-swap
+            // que o tira tem de o desfazer — semântica apply-fresh).
+            match props.letter_spacing {
+                Some(LetterSpacingSpec::Px(px)) => {
+                    commands.entity(entity).insert(LetterSpacing::Px(px));
+                }
+                Some(LetterSpacingSpec::Em(em)) => {
+                    let size = font_px(props.font_size.as_ref())
+                        .unwrap_or(super::style::DEFAULT_FONT_PX);
+                    commands.entity(entity).insert(LetterSpacing::Px(size * em));
+                }
+                None => {
+                    if let Ok(mut spacing) = info.letters.get_mut(entity) {
+                        if !matches!(*spacing, LetterSpacing::Px(0.0)) {
+                            *spacing = LetterSpacing::Px(0.0);
+                        }
+                    }
+                }
             }
             // `LineHeight` é componente próprio no Bevy 0.19 (não campo do
             // `TextFont`) — entra via commands, como as decorações.
@@ -595,6 +852,167 @@ pub fn apply_ui_styles(
             }
         }
         commands.entity(entity).remove::<UiStyleDirty>();
+    }
+}
+
+/// Converte o spec autoral no gradiente da Bevy, já com a opacidade efetiva
+/// nos stops (a mesma que baña as cores sólidas). O ângulo fala a convenção
+/// CSS (0° = para cima, crescente no sentido horário) — a mesma da Bevy.
+fn to_bevy_gradient(spec: &GradientSpec, opacity: f32) -> bevy::ui::Gradient {
+    let stops = |list: &[GradientStop]| -> Vec<bevy::ui::ColorStop> {
+        list.iter()
+            .map(|stop| {
+                let color = fade(stop.color, opacity);
+                match stop.point {
+                    Some(point) => bevy::ui::ColorStop::new(color, point),
+                    None => bevy::ui::ColorStop::auto(color),
+                }
+            })
+            .collect()
+    };
+    match spec {
+        GradientSpec::Linear {
+            angle_deg,
+            stops: list,
+        } => bevy::ui::Gradient::Linear(bevy::ui::LinearGradient::new(
+            angle_deg.to_radians(),
+            stops(list),
+        )),
+        GradientSpec::Radial {
+            farthest,
+            stops: list,
+        } => {
+            let shape = if *farthest {
+                bevy::ui::RadialGradientShape::FarthestCorner
+            } else {
+                bevy::ui::RadialGradientShape::ClosestSide
+            };
+            bevy::ui::Gradient::Radial(bevy::ui::RadialGradient::new(
+                bevy::ui::UiPosition::CENTER,
+                shape,
+                stops(list),
+            ))
+        }
+    }
+}
+
+/// O texto completo de um elemento com `text-overflow: ellipsis`, a truncagem
+/// em curso e a largura de conteúdo medida do texto COMPLETO (para saber
+/// restaurar quando a caixa cresce).
+#[derive(Debug, Clone, Component)]
+pub struct UiTextOverflowMirror {
+    pub full: String,
+    /// A última coisa que ESTE sistema escreveu — divergência = escrita
+    /// externa (set_text/transform/…), que recomeça a medição.
+    pub written: String,
+    /// Chars mantidos do `full` (`keep == chars` = texto inteiro à mostra).
+    pub keep: usize,
+    /// Largura de conteúdo medida com o full visível (0 = desconhecida).
+    pub full_w: f32,
+}
+
+/// Aplica `text-overflow: ellipsis` — pós-LAYOUT, num circuito de retorno:
+/// o `ComputedNode` lido aqui é do frame anterior; a truncagem estima pela
+/// razão largura-caixa ÷ largura-conteúdo e o frame seguinte verifica. Estável
+/// (sem transbordo em curso = zero escritas), como o resto da cadeia.
+///
+/// Só atua em texto de UMA linha (`line-break: none` no estilo) — texto que
+/// quebra em linhas transborda na vertical e não é cortado. Corre DEPOIS do
+/// `sync_text_transforms` (a truncagem parte do texto já transformado).
+#[allow(clippy::type_complexity)]
+pub fn sync_text_overflow(
+    mut query: Query<(
+        Entity,
+        &mut Text,
+        &UiComputed,
+        &ComputedNode,
+        Option<&mut UiTextOverflowMirror>,
+    )>,
+    mut commands: Commands,
+) {
+    const SLACK: f32 = 0.5;
+    const MARGIN: f32 = 0.9; // margem para o `…` e para variação de glifos
+    for (entity, mut text, computed, node, mut mirror) in &mut query {
+        let Some(super::style::TextOverflowKind::Ellipsis) = computed.0.text_overflow else {
+            // A declaração saiu — restaura o texto completo e desarma.
+            if let Some(m) = mirror.as_deref_mut() {
+                let full = m.full.clone();
+                if **text != full {
+                    **text = full;
+                }
+            }
+            if mirror.is_some() {
+                commands.entity(entity).remove::<UiTextOverflowMirror>();
+            }
+            continue;
+        };
+        // Uma linha só: com quebra, o texto transborda na vertical.
+        if computed.0.linebreak != Some(LineBreak::NoWrap) {
+            continue;
+        }
+        let node_w = node.size.x;
+        if node_w <= SLACK {
+            continue; // ainda sem layout (ou largura nula — nada a decidir)
+        }
+        let content_w = node.content_size.x;
+
+        // Espelho: primeira passagem apenas regista o estado; a decisão de
+        // truncagem começa no frame seguinte, com o `written` a valer o
+        // texto atual (senão a detecção de escrita externa disparava à toa).
+        if mirror.is_none() {
+            let full = (**text).clone();
+            commands.entity(entity).insert(UiTextOverflowMirror {
+                written: full.clone(),
+                keep: full.chars().count(),
+                full,
+                full_w: 0.0,
+            });
+            continue;
+        }
+        let m = mirror.as_deref_mut().expect("is_some acima");
+        if **text != m.written {
+            // Escrita externa (set_text/transform/…): novo original.
+            m.full = (**text).clone();
+            m.keep = m.full.chars().count();
+            m.full_w = 0.0;
+        }
+        let chars = m.full.chars().count();
+        let mut full_w = m.full_w;
+
+        // Decisão do frame.
+        let overflow = content_w > node_w + SLACK;
+        let mut desired: Option<(String, usize)> = None;
+        if overflow {
+            if m.keep == chars {
+                full_w = content_w; // primeira medição do texto completo
+            }
+            let reference = if m.keep == chars { content_w } else { full_w };
+            if reference > 0.0 {
+                let ratio = ((node_w / reference) * MARGIN).clamp(0.0, 1.0);
+                let new_keep = ((chars as f32 * ratio) as usize).clamp(1, chars.saturating_sub(1));
+                let cut: String = m.full.chars().take(new_keep).collect();
+                desired = Some((format!("{cut}…"), new_keep));
+            }
+        } else if m.keep < chars {
+            // Cabe truncado. Restaura o full SÓ quando a caixa já tem espaço
+            // para ele na última medida — sem isto oscilava (cortar faz caber,
+            // caber restaura, o full volta a transborda…).
+            if full_w > 0.0 && node_w >= full_w - SLACK {
+                desired = Some((m.full.clone(), chars));
+            }
+        } else {
+            // Full à mostra e a caber: mede e guarda.
+            full_w = content_w;
+        }
+
+        if let Some((written, keep)) = desired {
+            if **text != written {
+                **text = written.clone();
+            }
+            m.written = written;
+            m.keep = keep;
+        }
+        m.full_w = full_w;
     }
 }
 
@@ -729,6 +1147,8 @@ pub fn sync_ui_cooldowns(cooldowns: Query<&UiCooldown>, mut nodes: Query<&mut No
 #[allow(clippy::type_complexity)]
 pub fn collect_ui_clicks(
     mut clicks: ResMut<UiClicks>,
+    // Option: apps mínimas de teste não registam o recurso de eventos.
+    mut events: Option<ResMut<super::events::UiEvents>>,
     pressed: Query<
         (&Interaction, &UiId),
         (
@@ -741,6 +1161,12 @@ pub fn collect_ui_clicks(
     for (interaction, id) in &pressed {
         if *interaction == Interaction::Pressed && !clicks.0.contains(&id.0) {
             clicks.0.push(id.0.clone());
+            // O mesmo clique entra na fila de eventos — o `viber.ui.events()`
+            // drena o lote (o `clicked()` de 1 frame perdia cliques com
+            // polling lento; aqui nada se perde enquanto o script ler).
+            if let Some(ref mut events) = events {
+                events.push_click(&id.0);
+            }
         }
     }
 }
@@ -1269,6 +1695,75 @@ mod tests {
         sync_ui_cooldowns(cooldowns, nodes);
         let node = world.get::<Node>(veil).unwrap();
         assert_eq!(node.display, Display::None, "a ready ability shows no veil");
+    }
+
+    #[test]
+    fn test_text_overflow_truncates_and_restores() {
+        let mut world = World::new();
+        let full = "um texto bem comprido para transbordar a caixa".to_string();
+        let props = StyleProps {
+            text_overflow: Some(super::super::style::TextOverflowKind::Ellipsis),
+            linebreak: Some(LineBreak::NoWrap),
+            ..Default::default()
+        };
+        let entity = world
+            .spawn((
+                Text::new(full.clone()),
+                UiComputed(props, 1.0),
+                ComputedNode {
+                    size: Vec2::new(50.0, 20.0),
+                    content_size: Vec2::new(200.0, 20.0),
+                    ..Default::default()
+                },
+            ))
+            .id();
+
+        #[allow(clippy::type_complexity)]
+        let mut state: bevy::ecs::system::SystemState<(
+            Query<
+                (
+                    Entity,
+                    &mut Text,
+                    &UiComputed,
+                    &ComputedNode,
+                    Option<&mut UiTextOverflowMirror>,
+                ),
+            >,
+            Commands,
+        )> = bevy::ecs::system::SystemState::new(&mut world);
+
+        // 1.º frame: primeiro contacto — o espelho só nasce (sem escrita).
+        {
+            let (mut query, mut commands) = state.get_mut(&mut world).expect("system state");
+            sync_text_overflow(query.reborrow(), commands.reborrow());
+            state.apply(&mut world);
+            let mirror = world.get::<UiTextOverflowMirror>(entity).expect("espelho criado");
+            assert_eq!(mirror.keep, full.chars().count());
+        }
+
+        // 2.º frame: transborda (200 de conteúdo numa caixa de 50) — corta.
+        {
+            let (mut query, mut commands) = state.get_mut(&mut world).expect("system state");
+            sync_text_overflow(query.reborrow(), commands.reborrow());
+            state.apply(&mut world);
+            let text = world.get::<Text>(entity).unwrap();
+            let mirror = world.get::<UiTextOverflowMirror>(entity).unwrap();
+            assert!(text.0.ends_with('…'), "cortou: {}", text.0);
+            assert!(text.0.chars().count() < full.chars().count());
+            assert!((mirror.full_w - 200.0).abs() < 1e-4, "mede o full");
+        }
+
+        // 3.º frame: a caixa cresce o suficiente para o full (300 >= 200) — restaura.
+        world.get_mut::<ComputedNode>(entity).unwrap().size = Vec2::new(300.0, 20.0);
+        {
+            let (mut query, mut commands) = state.get_mut(&mut world).expect("system state");
+            sync_text_overflow(query.reborrow(), commands.reborrow());
+            state.apply(&mut world);
+            let text = world.get::<Text>(entity).unwrap();
+            assert_eq!(text.0, full, "restaura o texto completo");
+            let mirror = world.get::<UiTextOverflowMirror>(entity).unwrap();
+            assert_eq!(mirror.keep, full.chars().count());
+        }
     }
 
     #[test]

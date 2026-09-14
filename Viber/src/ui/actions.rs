@@ -64,24 +64,63 @@ pub fn shop_message(action: &ShopAction) -> String {
     }
 }
 
+/// Ações da UI reclamadas por scripts (`viber.ui.own_action("buy")`): o
+/// handler nativo correspondente SALTASSE essas ações — chegam a Lua via
+/// `viber.events()` (`{type="ui_action"}`) e a lógica vive no jogo. Sem
+/// owner, o comportamento nativo é o de sempre (compat).
+#[derive(Debug, Default, Resource)]
+pub struct UiActionOwners(pub std::collections::HashSet<String>);
+
 /// Applies the economy actions (`buy` / `sell`).
 pub fn apply_shop_actions(
     mut actions: bevy::ecs::message::MessageReader<UiAction>,
-    mut vault: ResMut<Vault>,
+    mut vault: Option<ResMut<Vault>>,
     mut toasts: bevy::ecs::message::MessageWriter<ScriptToast>,
+    owners: Option<Res<UiActionOwners>>,
 ) {
+    // `gameplay: none` não tem EconomyPlugin → sem Vault → sem loja nativa
+    // (um jogo nesse preset negocia inteiramente por Lua, ver lua-demo/shop).
+    let Some(vault) = vault.as_deref_mut() else {
+        return;
+    };
     for action in actions.read() {
         let buying = match action.name.as_str() {
             "buy" => true,
             "sell" => false,
             _ => continue,
         };
+        // Ação reclamada por script: o catálogo nativo não lhe toca (o jogo
+        // em Lua implementa a sua própria negociação).
+        if owners
+            .as_deref()
+            .is_some_and(|o| o.0.contains(action.name.as_str()))
+        {
+            continue;
+        }
         let Some(index) = shop_index(&action.arg, buying) else {
             warn!("ui: `{}` is not in the shop catalogue", action.arg);
             continue;
         };
-        let outcome = shop_apply(&mut vault, index);
+        let outcome = shop_apply(vault, index);
         toasts.write(ScriptToast(shop_message(&outcome)));
+    }
+}
+
+/// Encaminha TODAS as ações da UI para a fila de eventos dos scripts
+/// (`viber.events()` → `{type="ui_action", name=..., arg=...}`). Os handlers
+/// nativos correm à mesma — a ação é lida por ambos os consumidores.
+pub fn forward_ui_actions(
+    mut actions: bevy::ecs::message::MessageReader<UiAction>,
+    mut events: Option<ResMut<crate::luau::ScriptEventQueue>>,
+) {
+    let Some(events) = events.as_deref_mut() else {
+        return;
+    };
+    for action in actions.read() {
+        events.push(crate::luau::ScriptGameEvent::UiAction {
+            name: action.name.clone(),
+            arg: action.arg.clone(),
+        });
     }
 }
 
@@ -165,5 +204,51 @@ mod tests {
         });
         assert!(broke.contains("Bomba") && broke.contains("40"), "{broke}");
         assert!(!shop_message(&ShopAction::Nothing).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod script_ownership_tests {
+    use super::*;
+    use bevy::ecs::message::Messages;
+
+    /// Ação reclamada por script (`viber.own_action`) cala o handler nativo;
+    /// sem dono, o catálogo da engine responde como sempre (compat).
+    #[test]
+    fn test_shop_actions_respect_script_ownership() {
+        let mut app = bevy::app::App::new();
+        app.add_message::<UiAction>();
+        app.add_message::<ScriptToast>();
+        app.init_resource::<Vault>();
+        app.init_resource::<UiActionOwners>();
+        app.add_systems(bevy::app::Update, apply_shop_actions);
+        app.world_mut().resource_mut::<Vault>().gold = 100;
+        // Reclamada: o handler nativo salta (a negociação é do Lua).
+        app.world_mut()
+            .resource_mut::<UiActionOwners>()
+            .0
+            .insert("buy".to_string());
+        app.world_mut()
+            .resource_mut::<Messages<UiAction>>()
+            .write(UiAction {
+                name: "buy".into(),
+                arg: "potion".into(),
+            });
+        app.update();
+        assert_eq!(
+            app.world().resource::<Vault>().gold,
+            100,
+            "compra reclamada não toca no vault"
+        );
+        // Sem dono: compra nativa (poção custa 25).
+        app.world_mut().resource_mut::<UiActionOwners>().0.clear();
+        app.world_mut()
+            .resource_mut::<Messages<UiAction>>()
+            .write(UiAction {
+                name: "buy".into(),
+                arg: "potion".into(),
+            });
+        app.update();
+        assert_eq!(app.world().resource::<Vault>().gold, 75);
     }
 }

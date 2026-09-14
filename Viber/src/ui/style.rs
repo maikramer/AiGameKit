@@ -48,17 +48,39 @@ pub enum StyleState {
 /// One compound selector: an optional tag, any number of classes, an optional
 /// id and an optional state — `UiPanel.card.wide#hero:hover`.
 ///
-/// Empty everywhere means `*`.
+/// Empty everywhere means `*`. Pseudo-classes compound: `.btn:hover:focus` é
+/// hover E foco ao mesmo tempo.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Compound {
     pub tag: Option<String>,
     pub classes: Vec<String>,
     pub id: Option<String>,
     pub state: StyleState,
+    /// `:focus` — o elemento tem o teclado (o runtime marca-o com a classe
+    /// `focused`; é o mesmo sítio, escrito como pseudo como num browser).
+    pub focused: bool,
+    /// `:checked` — um `<UiCheck>` ligado.
+    pub checked: bool,
+    /// `:empty` — sem filhos nem texto.
+    pub empty: bool,
+    /// `:first-child` / `:last-child` / `:nth-child(an+b)`.
+    pub position: Option<Position>,
+    /// `:not(.a)`, `:not(#x)`, `:not(uibutton)` — o composto NÃO pode casar
+    /// nenhum destes (a planície do dialeto: um composto por argumento).
+    pub negations: Vec<Compound>,
+}
+
+/// Posição entre irmãos que um composto pode exigir.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Position {
+    FirstChild,
+    LastChild,
+    /// `:nth-child(an+b)` — `odd` é `{a: 2, b: 1}`, `even` `{a: 2, b: 0}`.
+    Nth { a: i32, b: i32 },
 }
 
 impl Compound {
-    /// CSS specificity: id 100, class (and state pseudo) 10, tag 1.
+    /// CSS specificity: id 100, class (and every pseudo-class) 10, tag 1.
     pub fn specificity(&self) -> u32 {
         let mut score = 0;
         if self.id.is_some() {
@@ -68,6 +90,13 @@ impl Compound {
         if self.state != StyleState::Normal {
             score += 10;
         }
+        score += 10 * (self.focused as u32
+            + self.checked as u32
+            + self.empty as u32
+            + self.position.is_some() as u32);
+        // Cada `:not(…)` pesa como uma classe (flat, não a especificidade do
+        // argumento — subconjunto documentado).
+        score += 10 * self.negations.len() as u32;
         if self.tag.is_some() {
             score += 1;
         }
@@ -78,6 +107,38 @@ impl Compound {
     pub fn matches(&self, element: &ElementRef<'_>) -> bool {
         if self.state != StyleState::Normal && self.state != element.state {
             return false;
+        }
+        // `:not(…)`: BASTA um negado casar para o composto inteiro falhar.
+        if self.negations.iter().any(|neg| neg.matches(element)) {
+            return false;
+        }
+        if self.focused && !element.focused {
+            return false;
+        }
+        if self.checked && !element.checked {
+            return false;
+        }
+        if self.empty && !element.empty {
+            return false;
+        }
+        if let Some(position) = self.position {
+            // nth-child fala em 1-based, como no browser.
+            let index = element.sibling_index as i32 + 1;
+            let ok = match position {
+                Position::FirstChild => element.sibling_index == 0,
+                Position::LastChild => element.sibling_index + 1 == element.sibling_count,
+                Position::Nth { a, b } => {
+                    if a == 0 {
+                        index == b
+                    } else {
+                        let delta = index - b;
+                        delta % a == 0 && delta / a >= 0
+                    }
+                }
+            };
+            if !ok {
+                return false;
+            }
         }
         if let Some(tag) = &self.tag {
             if tag != element.tag {
@@ -102,18 +163,42 @@ pub struct ElementRef<'a> {
     pub id: Option<&'a str>,
     pub classes: &'a [String],
     pub state: StyleState,
+    /// O teclado está neste elemento (classe `focused`).
+    pub focused: bool,
+    /// `<UiCheck>` ligado.
+    pub checked: bool,
+    /// Sem filhos e sem texto.
+    pub empty: bool,
+    /// Índice entre irmãos, 0-based, na ordem do DOM.
+    pub sibling_index: usize,
+    /// Quantos irmãos tem o pai (o próprio incluído).
+    pub sibling_count: usize,
 }
 
-/// A full selector: compounds separated by whitespace, read as the CSS
-/// descendant combinator (`.panel .fill` = a `.fill` anywhere inside a
-/// `.panel`). The last compound describes the element itself.
+/// Como um composto se liga ao anterior num selector.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Combinator {
+    /// Espaço — descendente a qualquer profundidade.
+    #[default]
+    Descendant,
+    /// `>` — filho DIRECTO.
+    Child,
+}
+
+/// A full selector: compounds separated by combinators — whitespace reads as
+/// the CSS descendant combinator (`.panel .fill` = a `.fill` anywhere inside a
+/// `.panel`), `>` as the child combinator (`.panel > .fill` = filho directo).
+/// The last compound describes the element itself.
 ///
-/// Child (`>`), sibling and attribute combinators are deliberately absent: a
-/// HUD is a shallow tree, and descendant matching plus classes has covered
-/// every rule the example needed without the cost of a real selector engine.
+/// Sibling (`+`/`~`) and attribute (`[…]`) combinators remain deliberately
+/// absent: descendant + child + classes has covered every rule the examples
+/// needed without the cost of a real selector engine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selector {
     pub parts: Vec<Compound>,
+    /// `parts.len() - 1` combinadores; `combinators[i]` liga `parts[i]` a
+    /// `parts[i + 1]`.
+    pub combinators: Vec<Combinator>,
 }
 
 impl Selector {
@@ -124,26 +209,42 @@ impl Selector {
     /// Matches against an ancestor chain ordered root-first, with the element
     /// itself last.
     ///
-    /// Walks both back-to-front so the ancestors can be skipped freely, which
-    /// is exactly what "descendant, at any depth" means.
+    /// Walks both back-to-front. `matched` é o índice na chain do elemento que
+    /// o composto corrente já casou: um `>` obriga o composto anterior a casar
+    /// com o PAI imediato (`matched - 1`); um descendente pode saltar à vontade.
     pub fn matches(&self, chain: &[ElementRef<'_>]) -> bool {
-        let Some((last, ancestors)) = self.parts.split_last() else {
+        let Some((last, _)) = self.parts.split_last() else {
             return false;
         };
-        let Some((element, chain_ancestors)) = chain.split_last() else {
+        let Some((element, _)) = chain.split_last() else {
             return false;
         };
         if !last.matches(element) {
             return false;
         }
-        let mut remaining = chain_ancestors;
-        for part in ancestors.iter().rev() {
-            match remaining
-                .iter()
-                .rposition(|candidate| part.matches(candidate))
+        let mut matched = chain.len() - 1;
+        for index in (0..self.parts.len().saturating_sub(1)).rev() {
+            match self
+                .combinators
+                .get(index)
+                .copied()
+                .unwrap_or(Combinator::Descendant)
             {
-                Some(index) => remaining = &remaining[..index],
-                None => return false,
+                Combinator::Child => {
+                    if matched == 0 || !self.parts[index].matches(&chain[matched - 1]) {
+                        return false;
+                    }
+                    matched -= 1;
+                }
+                Combinator::Descendant => {
+                    match chain[..matched]
+                        .iter()
+                        .rposition(|candidate| self.parts[index].matches(candidate))
+                    {
+                        Some(found) => matched = found,
+                        None => return false,
+                    }
+                }
             }
         }
         true
@@ -198,9 +299,124 @@ impl MediaCond {
     }
 }
 
+/// Cabeçalho de frame de keyframes: `from` = 0, `to` = 1, `50%` = 0.5.
+fn parse_keyframe_offset(text: &str) -> Option<f32> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "from" => Some(0.0),
+        "to" => Some(1.0),
+        other => other
+            .strip_suffix('%')?
+            .trim()
+            .parse::<f32>()
+            .ok()
+            .map(|p| p / 100.0),
+    }
+}
+
+/// Tempo de motion: `0.3s`, `300ms`, número nu = segundos.
+fn parse_time(word: &str) -> Option<f32> {
+    if let Some(ms) = word.strip_suffix("ms") {
+        return ms.trim().parse::<f32>().ok().map(|v| v / 1000.0);
+    }
+    if let Some(seconds) = word.strip_suffix('s') {
+        return seconds.trim().parse().ok();
+    }
+    word.parse().ok()
+}
+
+/// `transition: width .3s ease-out, opacity 1s` — propriedade + duração
+/// (omissão `ease` como no CSS), easing e atraso opcionais.
+fn parse_transition(value: &str) -> Option<Vec<TransitionSpec>> {
+    let specs: Vec<TransitionSpec> = value
+        .split(',')
+        .filter_map(|entry| {
+            let entry = entry.trim();
+            if entry.is_empty() || entry.eq_ignore_ascii_case("none") {
+                return None;
+            }
+            let mut words = entry.split_whitespace();
+            let field = super::tween::StyleField::parse(words.next()?)?;
+            let mut duration = 0.0;
+            let mut delay = 0.0;
+            let mut easing = super::tween::Easing::Ease;
+            let mut times = 0;
+            let mut seen_easing = false;
+            for word in words {
+                if let Some(seconds) = parse_time(word) {
+                    if times == 0 {
+                        duration = seconds;
+                    } else if times == 1 {
+                        delay = seconds;
+                    }
+                    times += 1;
+                } else if !seen_easing {
+                    if let Some(parsed) = super::tween::Easing::parse(word) {
+                        easing = parsed;
+                        seen_easing = true;
+                    }
+                }
+            }
+            Some(TransitionSpec {
+                property: field,
+                duration,
+                easing,
+                delay,
+            })
+        })
+        .collect();
+    (!specs.is_empty()).then_some(specs)
+}
+
+/// `animation: pulse 2s linear infinite alternate [delay] [forwards]`.
+fn parse_animation(value: &str) -> Option<AnimationSpec> {
+    let mut words = value.split_whitespace();
+    let name = words.next()?.to_string();
+    let mut duration = 1.0;
+    let mut delay = 0.0;
+    let mut easing = super::tween::Easing::Ease;
+    let mut iterations = Iterations::Count(1.0);
+    let mut alternate = false;
+    let mut reverse = false;
+    let mut fill_forwards = false;
+    let mut times = 0;
+    let mut seen_easing = false;
+    for word in words {
+        match word {
+            "infinite" => iterations = Iterations::Infinite,
+            "alternate" => alternate = true,
+            "reverse" => reverse = true,
+            "forwards" => fill_forwards = true,
+            word => {
+                if let Some(seconds) = parse_time(word) {
+                    if times == 0 {
+                        duration = seconds;
+                    } else if times == 1 {
+                        delay = seconds;
+                    }
+                    times += 1;
+                } else if !seen_easing {
+                    if let Some(parsed) = super::tween::Easing::parse(word) {
+                        easing = parsed;
+                        seen_easing = true;
+                    }
+                }
+            }
+        }
+    }
+    Some(AnimationSpec {
+        name,
+        duration,
+        easing,
+        delay,
+        iterations,
+        alternate,
+        reverse,
+        fill_forwards,
+    })
+}
+
 /// `(min-width: 900) and (portrait)` → [`MediaCond`]; `None` = ilegível.
-pub fn parse_media_cond(text: &str) -> Option<MediaCond> {
-    let mut cond = MediaCond::default();
+pub fn parse_media_cond(text: &str) -> Option<MediaCond> {    let mut cond = MediaCond::default();
     // " and " com espaços — um split por "and" a seco partia "landscape".
     for part in text.split(" and ") {
         let part = part
@@ -238,10 +454,10 @@ pub fn parse_media_cond(text: &str) -> Option<MediaCond> {
 pub const DEFAULT_FONT_PX: f32 = 16.0;
 
 /// Uma medida de estilo: um [`Val`] simples ou uma EXPRESSÃO (`calc(…)`,
-/// `min(…)`, `max(…)`, `clamp(…)`) avaliada contra o viewport autoral no
-/// `resolve_viewport` — os píxeis da expressão falam o MESMO espaço
-/// (janela÷escala) que tudo o resto. Subconjunto do CSS documentado: número
-/// nu = px; `%` dentro de expressões não é suportado (depende do pai).
+/// `min(…)`, `max(…)`, `clamp(…)`) avaliada contra o viewport autoral (e a
+/// largura do pai, para `%`) no `resolve_viewport` — os píxeis da expressão
+/// falam o MESMO espaço (janela÷escala) que tudo o resto. Subconjunto do CSS
+/// documentado: número nu = px.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Measure {
     Plain(Val),
@@ -272,6 +488,10 @@ pub enum Expr {
     Vh(f32),
     VMin(f32),
     VMax(f32),
+    /// `%` dentro de expressão — fecha contra a LARGURA do pai (como no CSS
+    /// para width/padding/margin/gaps; um `height` com `%` em calc() é a
+    /// divergência documentada).
+    Percent(f32),
     Add(Box<Expr>, Box<Expr>),
     Sub(Box<Expr>, Box<Expr>),
     /// CSS exige número × medida; aqui multiplica-se o que vier (subconjunto).
@@ -284,8 +504,9 @@ pub enum Expr {
 }
 
 impl Expr {
-    /// Avalia contra o viewport autoral; `None` = divisão por zero.
-    pub fn eval(&self, viewport: (f32, f32)) -> Option<f32> {
+    /// Avalia contra o viewport autoral e o tamanho computado do PAI (do frame
+    /// anterior); `None` = divisão por zero ou `%` sem pai conhecido.
+    pub fn eval(&self, viewport: (f32, f32), parent: Option<Vec2>) -> Option<f32> {
         let (vw, vh) = (viewport.0.max(1.0), viewport.1.max(1.0));
         match self {
             Self::Px(v) => Some(*v),
@@ -293,34 +514,38 @@ impl Expr {
             Self::Vh(v) => Some(vh * v / 100.0),
             Self::VMin(v) => Some(vw.min(vh) * v / 100.0),
             Self::VMax(v) => Some(vw.max(vh) * v / 100.0),
-            Self::Add(a, b) => Some(a.eval(viewport)? + b.eval(viewport)?),
-            Self::Sub(a, b) => Some(a.eval(viewport)? - b.eval(viewport)?),
-            Self::Mul(a, b) => Some(a.eval(viewport)? * b.eval(viewport)?),
+            Self::Percent(v) => {
+                let width = parent.map(|p| p.x).unwrap_or(0.0);
+                Some(width * v / 100.0)
+            }
+            Self::Add(a, b) => Some(a.eval(viewport, parent)? + b.eval(viewport, parent)?),
+            Self::Sub(a, b) => Some(a.eval(viewport, parent)? - b.eval(viewport, parent)?),
+            Self::Mul(a, b) => Some(a.eval(viewport, parent)? * b.eval(viewport, parent)?),
             Self::Div(a, b) => {
-                let divisor = b.eval(viewport)?;
+                let divisor = b.eval(viewport, parent)?;
                 if divisor.abs() < 1e-6 {
                     warn!("ui style: divisão por zero em calc() — declaração descartada");
                     None
                 } else {
-                    Some(a.eval(viewport)? / divisor)
+                    Some(a.eval(viewport, parent)? / divisor)
                 }
             }
             Self::Min(args) => args
                 .iter()
-                .map(|a| a.eval(viewport))
+                .map(|a| a.eval(viewport, parent))
                 .collect::<Option<Vec<_>>>()?
                 .into_iter()
                 .reduce(f32::min),
             Self::Max(args) => args
                 .iter()
-                .map(|a| a.eval(viewport))
+                .map(|a| a.eval(viewport, parent))
                 .collect::<Option<Vec<_>>>()?
                 .into_iter()
                 .reduce(f32::max),
             Self::Clamp(min, value, max) => {
-                let low = min.eval(viewport)?;
-                let mid = value.eval(viewport)?;
-                let high = max.eval(viewport)?;
+                let low = min.eval(viewport, parent)?;
+                let mid = value.eval(viewport, parent)?;
+                let high = max.eval(viewport, parent)?;
                 Some(mid.max(low).min(high))
             }
         }
@@ -532,12 +757,7 @@ impl ExprParser<'_> {
             "vh" => Some(Expr::Vh(number)),
             "vmin" => Some(Expr::VMin(number)),
             "vmax" => Some(Expr::VMax(number)),
-            "%" => {
-                warn!(
-                    "ui style: `%` dentro de calc() precisa do tamanho do PAI — não suportado; use vw/vh/px"
-                );
-                None
-            }
+            "%" => Some(Expr::Percent(number)),
             other => {
                 warn!(
                     "ui style: unidade `{other}` desconhecida numa expressão — declaração saltada"
@@ -594,7 +814,15 @@ pub struct StyleProps {
     pub grid_row: Option<GridPlacement>,
     // ── paint ───────────────────────────────────────────────────────────
     pub background: Option<Color>,
+    /// `linear-gradient(…)`/`radial-gradient(…)` — pintado PELO BEVY
+    /// (`BackgroundGradient`) por cima do `background` color.
+    /// `Some(None)` é um `background-image: none` explícito (tira um herdado).
+    pub background_gradient: Option<Option<GradientSpec>>,
     pub border_color: Option<Color>,
+    pub border_top_color: Option<Color>,
+    pub border_right_color: Option<Color>,
+    pub border_bottom_color: Option<Color>,
+    pub border_left_color: Option<Color>,
     pub border_radius: Option<BorderRadius>,
     /// `outline: <width> <colour>` — o contorno escuro que garante que um
     /// widget se lê sobre QUALQUER fundo (regra do crítico, r5).
@@ -634,6 +862,15 @@ pub struct StyleProps {
     pub text_align: Option<bevy::text::Justify>,
     /// `line-height` — px (`18px`) ou múltiplo do font-size (`1.35`, `120%`).
     pub line_height: Option<bevy::text::LineHeight>,
+    /// Espaço entre letras (`letter-spacing: 1px`, `0.1em`) — HERDA, como no
+    /// browser. `em`/`%` fecham contra a fonte herdada no runtime.
+    pub letter_spacing: Option<LetterSpacingSpec>,
+    /// `text-transform: uppercase/lowercase/capitalize` — HERDA.
+    pub text_transform: Option<TextTransform>,
+    /// `text-overflow: ellipsis` — corta com `…` quando o texto transborda a
+    /// caixa. NÃO herda (como no CSS); pede `line-break: none` e largura
+    /// limitada para fazer sentido (o omissão `clip`/`visible` é `None`).
+    pub text_overflow: Option<TextOverflowKind>,
     /// `align-content` — alinhamento das LINHAS num flex com `wrap` ou grelha.
     pub align_content: Option<AlignContent>,
     /// Como o texto quebra ao ultrapassar a largura (`word`/`char`/`none`).
@@ -648,6 +885,132 @@ pub struct StyleProps {
     // ── image ───────────────────────────────────────────────────────────
     pub image_tint: Option<Color>,
     pub image_mode: Option<NodeImageMode>,
+    // ── motion ──────────────────────────────────────────────────────────
+    /// `transition: width .3s ease-out, opacity 1s` — NÃO herda (o CSS diz o
+    /// mesmo). Os campos animáveis estão em [`super::tween::StyleField`].
+    pub transition: Option<Vec<TransitionSpec>>,
+    /// `animation: pulse 2s linear infinite alternate` — NÃO herda.
+    pub animation: Option<AnimationSpec>,
+}
+
+/// Uma entrada de `transition: <prop> <duração> [easing] [atraso]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TransitionSpec {
+    pub property: super::tween::StyleField,
+    pub duration: f32,
+    pub easing: super::tween::Easing,
+    pub delay: f32,
+}
+
+/// Quantas vezes uma `animation` corre.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Iterations {
+    Count(f32),
+    Infinite,
+}
+
+/// A spec de `animation: <nome> <duração> [easing] [atraso] [infinite|n]
+/// [alternate] [reverse] [forwards]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnimationSpec {
+    pub name: String,
+    pub duration: f32,
+    pub easing: super::tween::Easing,
+    pub delay: f32,
+    pub iterations: Iterations,
+    pub alternate: bool,
+    pub reverse: bool,
+    pub fill_forwards: bool,
+}
+
+/// Um frame de `@keyframes`: offset 0..1 + as declarações desse ponto.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Keyframe {
+    pub offset: f32,
+    pub props: StyleProps,
+}
+
+/// Um bloco `@keyframes nome { … }` — associado à folha que o declarou
+/// (mesmo scoping das regras).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Keyframes {
+    pub name: String,
+    pub frames: Vec<Keyframe>,
+    pub sheet: usize,
+}
+
+/// Espaçamento entre letras: píxeis absolutos ou fração da fonte (`0.1em`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LetterSpacingSpec {
+    Px(f32),
+    Em(f32),
+}
+
+/// Transformação de caixa do texto (`text-transform`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextTransform {
+    Uppercase,
+    Lowercase,
+    Capitalize,
+}
+
+/// Omissão de transbordo do texto.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextOverflowKind {
+    /// Trunca com `…` quando o texto não cabe na largura da caixa.
+    Ellipsis,
+}
+
+impl TextTransform {
+    /// Aplica a transformação — o `capitalize` do CSS leva a maiúscula à
+    /// primeira letra alfabética de cada palavra.
+    pub fn apply(self, text: &str) -> String {
+        match self {
+            Self::Uppercase => text.to_uppercase(),
+            Self::Lowercase => text.to_lowercase(),
+            Self::Capitalize => {
+                let mut out = String::with_capacity(text.len());
+                let mut at_word_start = true;
+                for ch in text.chars() {
+                    if at_word_start && ch.is_alphabetic() {
+                        out.extend(ch.to_uppercase());
+                        at_word_start = false;
+                    } else {
+                        out.push(ch);
+                        if !ch.is_alphanumeric() && ch != '\'' {
+                            at_word_start = true;
+                        }
+                    }
+                }
+                out
+            }
+        }
+    }
+}
+
+/// Gradiente autoral — o subconjunto do CSS que o `BackgroundGradient` da
+/// Bevy pinta: linear (ângulo + stops) e radial (forma + stops). Os stops sem
+/// posição ficam espaçados uniformemente pela Bevy, como no browser.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GradientSpec {
+    Linear {
+        /// Graus CSS: 0 = para cima, 90 = para a direita (`to right`).
+        angle_deg: f32,
+        stops: Vec<GradientStop>,
+    },
+    Radial {
+        /// `false` = `closest-side` (elipse aperta-se à caixa), `true` =
+        /// `farthest-corner` (o omissão do CSS quando a forma é dita).
+        farthest: bool,
+        stops: Vec<GradientStop>,
+    },
+}
+
+/// Um stop: cor + posição opcional (`red 30%`, `#fff 40px`, `blue`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct GradientStop {
+    pub color: Color,
+    pub point: Option<Val>,
 }
 
 /// Estado de um sublinhado/riscado: desligado, ligado com a cor do texto, ou
@@ -666,7 +1029,9 @@ macro_rules! merge_fields {
 
 impl StyleProps {
     /// Converte TODAS as unidades de viewport (vw/vh/vmin/vmax) em píxeis
-    /// lógicos contra a janela dada, in-place.
+    /// lógicos contra a janela dada, in-place. `%` dentro de expressões fecha
+    /// contra a largura do PAI (`parent` — `ComputedNode` do frame anterior;
+    /// `None` = sem pai conhecido e o `%` vale 0, como num browser sem layout).
     ///
     /// Porquê aqui e não no layout: o caminho de layout da Bevy 0.19 resolve
     /// `VMin` com um tamanho de alvo que não acompanha a janela em runtime
@@ -675,7 +1040,7 @@ impl StyleProps {
     /// viewport que JÁ uso para `@media`, as unidades significam o mesmo em
     /// todo o lado. Píxeis resultantes seguem o caminho normal (o scale
     /// factor do taffy aplica-se-lhes como a qualquer px autoral).
-    pub fn resolve_viewport(&mut self, viewport: (f32, f32)) {
+    pub fn resolve_viewport(&mut self, viewport: (f32, f32), parent: Option<Vec2>) {
         let (vw, vh) = (viewport.0.max(1.0), viewport.1.max(1.0));
         let vmin = vw.min(vh);
         let vmax = vw.max(vh);
@@ -713,7 +1078,9 @@ impl StyleProps {
             // media queries — e saem como px simples para o resto do pipeline.
             *val = val.take().and_then(|measure| match measure {
                 Measure::Plain(v) => Some(Measure::Plain(to_px(v))),
-                Measure::Expr(expr) => expr.eval(viewport).map(|px| Measure::Plain(Val::Px(px))),
+                Measure::Expr(expr) => expr
+                    .eval(viewport, parent)
+                    .map(|px| Measure::Plain(Val::Px(px))),
             });
         }
         if let Some(r) = &mut self.padding {
@@ -778,7 +1145,12 @@ impl StyleProps {
             grid_column,
             grid_row,
             background,
+            background_gradient,
             border_color,
+            border_top_color,
+            border_right_color,
+            border_bottom_color,
+            border_left_color,
             border_radius,
             outline,
             box_shadow,
@@ -796,6 +1168,9 @@ impl StyleProps {
             font_weight,
             text_align,
             line_height,
+            letter_spacing,
+            text_transform,
+            text_overflow,
             align_content,
             linebreak,
             text_underline,
@@ -803,6 +1178,8 @@ impl StyleProps {
             text_shadow,
             image_tint,
             image_mode,
+            transition,
+            animation,
         );
     }
 
@@ -823,7 +1200,9 @@ impl StyleProps {
             text_align,
             line_height,
             linebreak,
-            text_shadow
+            text_shadow,
+            letter_spacing,
+            text_transform
         );
     }
 
@@ -943,18 +1322,36 @@ impl StyleProps {
 #[derive(Debug, Clone, Default, Resource)]
 pub struct StyleSheet {
     pub rules: Vec<Rule>,
+    /// Blocos `@keyframes` declarados (mesma folha/scoping das regras).
+    pub keyframes: Vec<Keyframes>,
     /// Próximo índice de folha a atribuir (`parse_into`).
     next_sheet: usize,
 }
 
 impl StyleSheet {
+    /// Os frames de um `@keyframes` pelo nome (case-insensitive, como o CSS).
+    pub fn keyframes(&self, name: &str) -> Option<&[Keyframe]> {
+        self.keyframes
+            .iter()
+            .find(|block| block.name.eq_ignore_ascii_case(name))
+            .map(|block| block.frames.as_slice())
+    }
+
+    /// Existe um bloco com este nome?
+    pub fn has_keyframes(&self, name: &str) -> bool {
+        self.keyframes
+            .iter()
+            .any(|block| block.name.eq_ignore_ascii_case(name))
+    }
+
     /// Parses a stylesheet, appending its rules after any already present.
     ///
     /// Devolve o índice da folha criada — é ele que vai no `UiRootSheets` da
     /// raiz que a declarou. Unknown properties and malformed rules are
     /// reported and skipped: a typo in one colour must not take the whole HUD
     /// down. `@media (…) { … }` blocks nest their rules under a [`MediaCond`];
-    /// nothing else nests.
+    /// `@keyframes nome { … }` alimenta os blocos de animação; nothing else
+    /// nests.
     pub fn parse_into(&mut self, source: &str) -> usize {
         let sheet = self.next_sheet;
         self.next_sheet += 1;
@@ -986,6 +1383,15 @@ impl StyleSheet {
                 }
                 continue;
             }
+            if let Some(name_text) = head.strip_prefix("@keyframes") {
+                let name = name_text.trim().trim_matches('"').trim();
+                if name.is_empty() || name.contains(' ') {
+                    warn!("ui style: @keyframes com nome inválido `{name_text}` — bloco saltado");
+                } else {
+                    self.parse_keyframes(name, body, sheet);
+                }
+                continue;
+            }
             let props = parse_declarations(body, head);
             for selector_text in head.split(',') {
                 let selector_text = selector_text.trim();
@@ -1007,6 +1413,49 @@ impl StyleSheet {
                 }
             }
         }
+    }
+
+    /// Parseia um bloco `@keyframes nome { from {…} 50% {…} to {…} }` — os
+    /// cabeçalhos podem ser `from`/`to`/percentagens, separados por vírgulas.
+    fn parse_keyframes(&mut self, name: &str, body: &str, sheet: usize) {
+        let mut frames: Vec<Keyframe> = Vec::new();
+        let mut rest = body;
+        while let Some(open) = rest.find('{') {
+            let head = rest[..open].trim();
+            let after = &rest[open + 1..];
+            let Some(close) = find_matching_brace(after) else {
+                warn!("ui style: @keyframes `{name}` com bloco por fechar");
+                return;
+            };
+            let decls = &after[..close];
+            rest = &after[close + 1..];
+            let props = parse_declarations(decls, &format!("@keyframes {name} {head}"));
+            for part in head.split(',') {
+                match parse_keyframe_offset(part) {
+                    Some(offset) => frames.push(Keyframe {
+                        offset,
+                        props: props.clone(),
+                    }),
+                    None => warn!(
+                        "ui style: cabeçalho de frame `{part}` ilegível em @keyframes {name} — saltado"
+                    ),
+                }
+            }
+        }
+        if frames.is_empty() {
+            warn!("ui style: @keyframes `{name}` sem frames — bloco saltado");
+            return;
+        }
+        frames.sort_by(|a, b| {
+            a.offset
+                .partial_cmp(&b.offset)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        self.keyframes.push(Keyframes {
+            name: name.to_string(),
+            frames,
+            sheet,
+        });
     }
 
     /// Cascade for one element: every matching rule merged by specificity, then
@@ -1057,6 +1506,11 @@ impl StyleSheet {
                 id,
                 classes,
                 state,
+                focused: false,
+                checked: false,
+                empty: false,
+                sibling_index: 0,
+                sibling_count: 1,
             }],
             viewport,
             None,
@@ -1151,37 +1605,86 @@ fn strip_comments(source: &str) -> String {
     out
 }
 
-/// `.card .fill:hover` → two compounds, the second scoped to hover.
+/// `.card > .fill:hover` → compounds ligados por combinators (espaço =
+/// descendente, `>` = filho directo).
 pub fn parse_selector(text: &str) -> Option<Selector> {
-    let parts: Vec<Compound> = text
-        .split_whitespace()
-        .map(parse_compound)
-        .collect::<Option<Vec<_>>>()?;
-    if parts.is_empty() {
+    // Espaço em volta de `>` para o split simples valer `a>b` e `a > b`.
+    let spaced = text.replace('>', " > ");
+    let mut parts: Vec<Compound> = Vec::new();
+    let mut combinators: Vec<Combinator> = Vec::new();
+    let mut pending = Combinator::Descendant;
+    for token in spaced.split_whitespace() {
+        if token == ">" {
+            if parts.is_empty() {
+                warn!("ui style: seletor `{text}` começa em `>` — saltado");
+                return None;
+            }
+            pending = Combinator::Child;
+            continue;
+        }
+        if !parts.is_empty() {
+            combinators.push(pending);
+        }
+        pending = Combinator::Descendant;
+        match parse_compound(token) {
+            Some(compound) => parts.push(compound),
+            None => {
+                warn!("ui style: unparsable selector `{token}` — skipped");
+                return None;
+            }
+        }
+    }
+    if parts.is_empty() || pending == Combinator::Child {
+        if !parts.is_empty() {
+            warn!("ui style: seletor `{text}` termina em `>` — saltado");
+        }
         return None;
     }
-    Some(Selector { parts })
+    Some(Selector {
+        parts,
+        combinators,
+    })
 }
 
-/// One whitespace-free chunk: `UiPanel.card#hero:hover`.
+/// One whitespace-free chunk: `UiPanel.card#hero:hover:focus` — os pseudos
+/// compõem-se (o `:` separa; o último já não é obrigatoriamente estado).
 fn parse_compound(text: &str) -> Option<Compound> {
     let mut compound = Compound::default();
-    // The state pseudo is always last, so peel it off before the rest.
-    let head = match text.split_once(':') {
-        Some((head, pseudo)) => {
-            compound.state = match pseudo {
-                "hover" => StyleState::Hover,
-                "active" | "pressed" => StyleState::Active,
-                "disabled" => StyleState::Disabled,
-                other => {
-                    warn!("ui style: unknown pseudo-class `:{other}` — treated as normal");
-                    StyleState::Normal
+    let mut chunks = text.split(':');
+    let head = chunks.next().unwrap_or_default();
+    for pseudo in chunks {
+        match pseudo.to_ascii_lowercase().as_str() {
+            "hover" => compound.state = StyleState::Hover,
+            "active" | "pressed" => compound.state = StyleState::Active,
+            "disabled" => compound.state = StyleState::Disabled,
+            "focus" | "focused" => compound.focused = true,
+            "checked" => compound.checked = true,
+            "empty" => compound.empty = true,
+            "first-child" => compound.position = Some(Position::FirstChild),
+            "last-child" => compound.position = Some(Position::LastChild),
+            other => {
+                if let Some(arg) = other
+                    .strip_prefix("nth-child(")
+                    .and_then(|rest| rest.strip_suffix(')'))
+                {
+                    match parse_nth(arg) {
+                        Some((a, b)) => compound.position = Some(Position::Nth { a, b }),
+                        None => warn!("ui style: `:{other}` ilegível — ignorado"),
+                    }
+                } else if let Some(arg) = other
+                    .strip_prefix("not(")
+                    .and_then(|rest| rest.strip_suffix(')'))
+                {
+                    match parse_compound(arg.trim()) {
+                        Some(negated) => compound.negations.push(negated),
+                        None => warn!("ui style: `:{other}` ilegível — ignorado"),
+                    }
+                } else {
+                    warn!("ui style: unknown pseudo-class `:{pseudo}` — treated as normal");
                 }
-            };
-            head
+            }
         }
-        None => text,
-    };
+    }
     if head.is_empty() || head == "*" {
         return Some(compound);
     }
@@ -1226,10 +1729,41 @@ fn parse_compound(text: &str) -> Option<Compound> {
         && compound.id.is_none()
         && compound.classes.is_empty()
         && compound.state == StyleState::Normal
+        && !compound.focused
+        && !compound.checked
+        && !compound.empty
+        && compound.position.is_none()
+        && compound.negations.is_empty()
     {
         return None;
     }
     Some(compound)
+}
+
+/// Argumento de `:nth-child(an+b)` — `odd`, `even`, `3`, `2n`, `2n+1`, `-n+3`.
+/// Devolve `(a, b)`; sem `n`, tudo vai para `b`.
+fn parse_nth(arg: &str) -> Option<(i32, i32)> {
+    let arg = arg.trim().to_ascii_lowercase();
+    match arg.as_str() {
+        "odd" => return Some((2, 1)),
+        "even" => return Some((2, 0)),
+        _ => {}
+    }
+    let (a_text, b_text) = match arg.split_once('n') {
+        Some((a, b)) => (a, b),
+        None => return arg.parse::<i32>().ok().map(|b| (0, b)),
+    };
+    let a = match a_text.trim() {
+        "" | "+" => 1,
+        "-" => -1,
+        other => other.parse().ok()?,
+    };
+    let b = match b_text.trim() {
+        "" => 0,
+        // `+1` e `-1` — `i32` parse aceita o `+` à mesma.
+        rest => rest.parse().ok()?,
+    };
+    Some((a, b))
 }
 
 /// Parses a `prop: value; prop: value` body. `origin` only names the rule in
@@ -1318,14 +1852,23 @@ fn apply_declaration(props: &mut StyleProps, name: &str, value: &str) -> bool {
             props.flex_wrap = Some(match value {
                 "wrap" => FlexWrap::Wrap,
                 "wrap-reverse" => FlexWrap::WrapReverse,
-                _ => FlexWrap::NoWrap,
+                "nowrap" | "" => FlexWrap::NoWrap,
+                other => {
+                    warn!("ui style: wrap `{other}` desconhecido — a usar nowrap");
+                    FlexWrap::NoWrap
+                }
             })
         }
         "grow" | "flex-grow" => props.flex_grow = value.parse().ok(),
         "shrink" | "flex-shrink" => props.flex_shrink = value.parse().ok(),
         "align" | "align-items" => props.align_items = parse_align_items(value),
         "align-self" => props.align_self = parse_align_self(value),
-        "justify" | "justify-content" => props.justify_content = parse_justify(value),
+        "justify" | "justify-content" => {
+            props.justify_content = parse_justify(value);
+            if props.justify_content.is_none() && !value.is_empty() {
+                warn!("ui style: valor `{value}` ilegível para `justify-content` — declaração saltada");
+            }
+        }
         "width" => assign(&mut props.width, parse_measure_in(value, name)),
         "height" => assign(&mut props.height, parse_measure_in(value, name)),
         "min-width" => assign(&mut props.min_width, parse_measure_in(value, name)),
@@ -1380,10 +1923,39 @@ fn apply_declaration(props: &mut StyleProps, name: &str, value: &str) -> bool {
         "grid-column" => props.grid_column = parse_placement(value),
         "grid-row" => props.grid_row = parse_placement(value),
         // paint
-        "background" | "background-color" => {
-            assign(&mut props.background, parse_color_in(value, name))
+        // `background` aceita cor OU gradiente; `background-color` é só cor
+        // (como no CSS). O gradiente é pintado por cima da cor.
+        "background" => {
+            if is_gradient(value) {
+                assign(
+                    &mut props.background_gradient,
+                    parse_gradient_in(value, name).map(Some),
+                );
+            } else {
+                assign(&mut props.background, parse_color_in(value, name));
+            }
         }
-        "border-color" => assign(&mut props.border_color, parse_color_in(value, name)),
+        "background-color" => assign(&mut props.background, parse_color_in(value, name)),
+        "background-image" => {
+            // `none` é um "sem gradiente" EXPLÍCITO (Some(None)) — o mesmo
+            // padrão do text-shadow, para uma classe poder desfazer a de cima.
+            if value.eq_ignore_ascii_case("none") {
+                props.background_gradient = Some(None);
+            } else {
+                assign(
+                    &mut props.background_gradient,
+                    parse_gradient_in(value, name).map(Some),
+                );
+            }
+        }
+        // 1-4 cores (CSS box shorthand: top right bottom left).
+        "border-color" => parse_border_colors(props, value),
+        "border-top-color" => assign(&mut props.border_top_color, parse_color_in(value, name)),
+        "border-right-color" => assign(&mut props.border_right_color, parse_color_in(value, name)),
+        "border-bottom-color" => {
+            assign(&mut props.border_bottom_color, parse_color_in(value, name))
+        }
+        "border-left-color" => assign(&mut props.border_left_color, parse_color_in(value, name)),
         // `border: 1.5 #aabbcc` — width and colour together, like CSS shorthand.
         "border" => return parse_border_shorthand(props, value),
         "radius" | "border-radius" => props.border_radius = parse_radius(value),
@@ -1426,6 +1998,39 @@ fn apply_declaration(props: &mut StyleProps, name: &str, value: &str) -> bool {
             }
         }
         "font-weight" | "weight" => props.font_weight = parse_font_weight(value),
+        // `1px`, `1`, `0.1em`, `0.05rem` — em/rem fecham contra a fonte
+        // herdada no runtime (como o font-size).
+        "letter-spacing" => {
+            let value = value.trim();
+            let parsed = if let Some(n) = value
+                .strip_suffix("rem")
+                .and_then(|n| n.trim().parse().ok())
+            {
+                Some(LetterSpacingSpec::Em(n))
+            } else if let Some(n) = value.strip_suffix("em").and_then(|n| n.trim().parse().ok()) {
+                Some(LetterSpacingSpec::Em(n))
+            } else {
+                parse_number_in(value, name).map(LetterSpacingSpec::Px)
+            };
+            assign(&mut props.letter_spacing, parsed);
+        }
+        "text-transform" => {
+            props.text_transform = parse_text_transform(value);
+            if props.text_transform.is_none() && !value.is_empty() {
+                warn!("ui style: valor `{value}` ilegível para `text-transform` — declaração saltada");
+            }
+        }
+        // `ellipsis` corta com …; `clip`/`visible`/`none` são o omissão.
+        "text-overflow" => {
+            props.text_overflow = match value.trim().to_ascii_lowercase().as_str() {
+                "ellipsis" => Some(TextOverflowKind::Ellipsis),
+                "clip" | "visible" | "none" | "" => None,
+                other => {
+                    warn!("ui style: text-overflow `{other}` desconhecido — declaração saltada");
+                    None
+                }
+            };
+        }
         "text-decoration" => {
             // `underline`, `line-through [#cor]`, `none` — dois traços de uma vez.
             let mut underline = Decoration::Off;
@@ -1492,7 +2097,11 @@ fn apply_declaration(props: &mut StyleProps, name: &str, value: &str) -> bool {
                 "center" => bevy::text::Justify::Center,
                 "right" => bevy::text::Justify::Right,
                 "justify" => bevy::text::Justify::Justified,
-                _ => bevy::text::Justify::Left,
+                "left" | "start" => bevy::text::Justify::Left,
+                other => {
+                    warn!("ui style: text-align `{other}` desconhecido — a usar left");
+                    bevy::text::Justify::Left
+                }
             })
         }
         // image
@@ -1502,6 +2111,17 @@ fn apply_declaration(props: &mut StyleProps, name: &str, value: &str) -> bool {
                 "stretch" => NodeImageMode::Stretch,
                 _ => NodeImageMode::Auto,
             })
+        }
+        // motion
+        "transition" => {
+            assign(&mut props.transition, parse_transition(value));
+            if props.transition.is_none() && !value.is_empty() && !value.eq_ignore_ascii_case("none")
+            {
+                warn!("ui style: `transition: {value}` sem nenhum campo animável — declaração saltada");
+            }
+        }
+        "animation" => {
+            assign(&mut props.animation, parse_animation(value));
         }
         _ => return false,
     }
@@ -1848,29 +2468,237 @@ fn parse_border_shorthand(props: &mut StyleProps, value: &str) -> bool {
     true
 }
 
+/// `border-color: 1-4 cores` — CSS box shorthand (top right bottom left).
+fn parse_border_colors(props: &mut StyleProps, value: &str) {
+    let colors: Vec<Color> = value
+        .split_whitespace()
+        .map(parse_color)
+        .collect::<Option<Vec<_>>>()
+        .unwrap_or_default();
+    let (top, right, bottom, left) = match colors.as_slice() {
+        [one] => (*one, *one, *one, *one),
+        [vertical, horizontal] => (*vertical, *horizontal, *vertical, *horizontal),
+        [t, h, b] => (*t, *h, *b, *h),
+        [t, r, b, l] => (*t, *r, *b, *l),
+        _ => {
+            if !value.is_empty() {
+                warn!("ui style: `border-color: {value}` precisa de 1-4 cores — declaração saltada");
+            }
+            return;
+        }
+    };
+    props.border_top_color = Some(top);
+    props.border_right_color = Some(right);
+    props.border_bottom_color = Some(bottom);
+    props.border_left_color = Some(left);
+}
+
+fn parse_text_transform(value: &str) -> Option<TextTransform> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "uppercase" => Some(TextTransform::Uppercase),
+        "lowercase" => Some(TextTransform::Lowercase),
+        "capitalize" => Some(TextTransform::Capitalize),
+        "none" | "" => None,
+        _ => None,
+    }
+}
+
+/// É um gradiente sem o parse completo (`linear-gradient(…)`/`radial-gradient(…)`,
+/// também na forma `repeating-` aceite como o normal — a Bevy não repete).
+fn is_gradient(value: &str) -> bool {
+    let lower = value.trim_start().to_ascii_lowercase();
+    ["linear-gradient(", "radial-gradient(", "conic-gradient("]
+        .iter()
+        .any(|name| lower.starts_with(name))
+}
+
+/// `none` calado; senão o mesmo contrato dos outros `parse_*_in`.
+fn parse_gradient_in(value: &str, prop: &str) -> Option<GradientSpec> {
+    let parsed = parse_gradient(value);
+    if parsed.is_none() && !value.is_empty() {
+        warn!("ui style: gradiente `{value}` ilegível para `{prop}` — declaração saltada");
+    }
+    parsed
+}
+
+/// `linear-gradient(45deg, #000 0%, #fff 100%)`, `linear-gradient(to right, red, blue)`,
+/// `radial-gradient(closest-side, white, black)`.
+pub fn parse_gradient(value: &str) -> Option<GradientSpec> {
+    let trimmed = value.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    let linear = if lower.starts_with("linear-gradient(") {
+        true
+    } else if lower.starts_with("radial-gradient(") {
+        false
+    } else if lower.starts_with("conic-gradient(") {
+        // Sem conic próprio: um conic lê-se como radial (melhor que recusar a
+        // declaração inteira).
+        false
+    } else {
+        return None;
+    };
+    // Corto no ÚLTIMO ')' — stops podem trazer parêntesis dentro (rgba(), calc()).
+    let open = trimmed.find('(')?;
+    let close = trimmed.rfind(')')?;
+    if close < open {
+        return None;
+    }
+    let args_text = &trimmed[open + 1..close];
+    let args = split_top_level_commas(args_text);
+    if linear {
+        parse_linear_gradient_args(&args)
+    } else {
+        parse_radial_gradient_args(&args)
+    }
+}
+
+/// Ângulos/palavras CSS para o primeiro argumento de um linear-gradient.
+/// `45deg`, `90` (número nu = graus), `to right`, `to bottom left`.
+fn parse_linear_angle(arg: &str) -> Option<f32> {
+    let arg = arg.trim().to_ascii_lowercase();
+    if let Some(degrees) = arg.strip_suffix("deg") {
+        return degrees.trim().parse().ok();
+    }
+    match arg.as_str() {
+        "to top" => Some(0.0),
+        "to right" => Some(90.0),
+        "to bottom" => Some(180.0),
+        "to left" => Some(270.0),
+        "to top right" | "to right top" => Some(45.0),
+        "to bottom right" | "to right bottom" => Some(135.0),
+        "to bottom left" | "to left bottom" => Some(225.0),
+        "to top left" | "to left top" => Some(315.0),
+        _ => arg.parse().ok(),
+    }
+}
+
+/// Um stop: cor + posição opcional — `red`, `#fff 30%`, `rgba(0,0,0,.5) 40px`.
+fn parse_gradient_stop(text: &str) -> Option<GradientStop> {
+    let text = text.trim();
+    // A cor pode vir primeiro OU depois da posição; a posição é 1-2 tokens
+    // (aqui só o primeiro valor: double-position `red 30% 60%` fica fora).
+    let mut color = None;
+    let mut point = None;
+    for token in text.split_whitespace() {
+        if color.is_none() && point.is_none() {
+            if let Some(parsed) = parse_color(token) {
+                color = Some(parsed);
+                continue;
+            }
+        }
+        if point.is_none() {
+            if let Some(val) = parse_val(token) {
+                point = Some(val);
+                continue;
+            }
+        }
+        if color.is_none() {
+            color = parse_color(token);
+        }
+    }
+    Some(GradientStop {
+        color: color?,
+        point,
+    })
+}
+
+fn parse_linear_gradient_args(args: &[&str]) -> Option<GradientSpec> {
+    let mut stops_text = args;
+    let mut angle_deg = 180.0; // `to bottom` — o omissão do CSS.
+    if let Some(first) = args.first() {
+        // O primeiro argumento é ângulo quando não é um stop legível.
+        let looks_like_angle = {
+            let first = first.trim().to_ascii_lowercase();
+            first.starts_with("to ") || first.ends_with("deg") || first.parse::<f32>().is_ok()
+        };
+        if looks_like_angle {
+            angle_deg = parse_linear_angle(first).unwrap_or(180.0);
+            stops_text = &args[1..];
+        }
+    }
+    let stops: Vec<GradientStop> = stops_text
+        .iter()
+        .filter_map(|stop| parse_gradient_stop(stop))
+        .collect();
+    if stops.len() < 2 {
+        return None;
+    }
+    Some(GradientSpec::Linear { angle_deg, stops })
+}
+
+fn parse_radial_gradient_args(args: &[&str]) -> Option<GradientSpec> {
+    let mut stops_text = args;
+    let mut farthest = true;
+    if let Some(first) = args.first() {
+        let shape = first.trim().to_ascii_lowercase();
+        let is_shape = matches!(
+            shape.as_str(),
+            "circle"
+                | "ellipse"
+                | "closest-side"
+                | "closest-corner"
+                | "farthest-side"
+                | "farthest-corner"
+        ) || shape.starts_with("circle ")
+            || shape.starts_with("ellipse ")
+            || shape.starts_with("at ");
+        if is_shape {
+            farthest = !(shape.contains("closest")
+                || shape == "circle"
+                || shape == "ellipse");
+            stops_text = &args[1..];
+        }
+    }
+    let stops: Vec<GradientStop> = stops_text
+        .iter()
+        .filter_map(|stop| parse_gradient_stop(stop))
+        .collect();
+    if stops.len() < 2 {
+        return None;
+    }
+    Some(GradientSpec::Radial { farthest, stops })
+}
+
 fn parse_display(value: &str) -> Option<Display> {
-    Some(match value {
+    let known = match value {
         "none" => Display::None,
         "block" => Display::Block,
         "grid" => Display::Grid,
-        _ => Display::Flex,
-    })
+        "flex" | "" => Display::Flex,
+        other => {
+            warn!("ui style: display `{other}` desconhecido — a usar flex (vale flex/none/grid/block)");
+            Display::Flex
+        }
+    };
+    Some(known)
 }
 
 fn parse_position(value: &str) -> Option<PositionType> {
-    Some(match value {
+    let known = match value {
         "absolute" | "fixed" => PositionType::Absolute,
-        _ => PositionType::Relative,
-    })
+        "relative" | "" => PositionType::Relative,
+        other => {
+            warn!(
+                "ui style: position `{other}` desconhecido — a usar relative (vale relative/absolute/fixed)"
+            );
+            PositionType::Relative
+        }
+    };
+    Some(known)
 }
 
 fn parse_direction(value: &str) -> Option<FlexDirection> {
-    Some(match value {
+    let known = match value {
+        "row" | "" => FlexDirection::Row,
         "column" => FlexDirection::Column,
         "row-reverse" => FlexDirection::RowReverse,
         "column-reverse" => FlexDirection::ColumnReverse,
-        _ => FlexDirection::Row,
-    })
+        other => {
+            warn!("ui style: direction `{other}` desconhecida — a usar row");
+            FlexDirection::Row
+        }
+    };
+    Some(known)
 }
 
 fn parse_align_items(value: &str) -> Option<AlignItems> {
@@ -2008,6 +2836,19 @@ fn parse_radius(value: &str) -> Option<BorderRadius> {
         .collect::<Option<Vec<_>>>()?;
     Some(match parts.len() {
         1 => BorderRadius::all(parts[0]),
+        // 2 = pares diagonais (tl+br, tr+bl); 3 = (tl, tr+bl, br) — o CSS box.
+        2 => BorderRadius {
+            top_left: parts[0],
+            top_right: parts[1],
+            bottom_right: parts[0],
+            bottom_left: parts[1],
+        },
+        3 => BorderRadius {
+            top_left: parts[0],
+            top_right: parts[1],
+            bottom_right: parts[2],
+            bottom_left: parts[1],
+        },
         4 => BorderRadius {
             top_left: parts[0],
             top_right: parts[1],
@@ -2068,8 +2909,112 @@ pub fn parse_color(value: &str) -> Option<Color> {
             if alpha > 1.0 { alpha / 255.0 } else { alpha },
         ));
     }
+    if let Some(args) = value
+        .strip_prefix("hsla(")
+        .or_else(|| value.strip_prefix("hsl("))
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        // `hsl(120, 50%, 50%)` e o moderno `hsl(120 50% 50%)` — separadores
+        // vírgula ou espaço; `%` opcional em s/l.
+        let tokens: Vec<f32> = args
+            .split(|c| c == ',' || c == ' ')
+            .filter_map(|p| {
+                let p = p.trim().strip_suffix('%').unwrap_or(p.trim());
+                p.parse::<f32>().ok()
+            })
+            .collect();
+        if tokens.len() < 3 {
+            return None;
+        }
+        let alpha = tokens.get(3).copied().unwrap_or(1.0);
+        let (r, g, b) = hsl_to_rgb(tokens[0], tokens[1] / 100.0, tokens[2] / 100.0);
+        return Some(Color::srgba(r, g, b, alpha.clamp(0.0, 1.0)));
+    }
+    // Nomes do CSS — depois dos numéricos, antes da paleta Tailwind.
+    if let Some((r, g, b)) = named_color(value) {
+        let f = |c: u8| c as f32 / 255.0;
+        return Some(Color::srgb(f(r), f(g), f(b)));
+    }
     // Última tentativa: a paleta Tailwind (`slate-900`, `rose-400/80`).
     palette::resolve(value)
+}
+
+/// `hsl(hue°, sat%, light%)` → `(r, g, b)` 0..1. Fórmula padrão; hue em graus
+/// modula (`-30°` e `330°` são a mesma cor).
+fn hsl_to_rgb(hue: f32, saturation: f32, lightness: f32) -> (f32, f32, f32) {
+    let c = (1.0 - (2.0 * lightness - 1.0).abs()) * saturation.clamp(0.0, 1.0);
+    let hp = ((hue % 360.0) + 360.0) % 360.0 / 60.0;
+    let x = c * (1.0 - (hp % 2.0 - 1.0).abs());
+    let (r1, g1, b1) = match hp as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    let m = lightness - c / 2.0;
+    (r1 + m, g1 + m, b1 + m)
+}
+
+/// Subconjunto dos nomes de cores do CSS — os que uma paleta de jogo usa de
+/// facto. Exactos, minúsculas (o parser já normaliza a caixa nos seletores,
+/// mas as cores chegam cruas).
+fn named_color(name: &str) -> Option<(u8, u8, u8)> {
+    let (r, g, b) = match name.trim().to_ascii_lowercase().as_str() {
+        "white" => (255, 255, 255),
+        "black" => (0, 0, 0),
+        "red" => (255, 0, 0),
+        "green" => (0, 128, 0),
+        "lime" => (0, 255, 0),
+        "blue" => (0, 0, 255),
+        "yellow" => (255, 255, 0),
+        "cyan" | "aqua" => (0, 255, 255),
+        "magenta" | "fuchsia" => (255, 0, 255),
+        "orange" => (255, 165, 0),
+        "purple" => (128, 0, 128),
+        "violet" => (238, 130, 238),
+        "indigo" => (75, 0, 130),
+        "pink" => (255, 192, 203),
+        "brown" => (165, 42, 42),
+        "maroon" => (128, 0, 0),
+        "navy" => (0, 0, 128),
+        "olive" => (128, 128, 0),
+        "teal" => (0, 128, 128),
+        "silver" => (192, 192, 192),
+        "gold" => (255, 215, 0),
+        "coral" => (255, 127, 80),
+        "crimson" => (220, 20, 60),
+        "khaki" => (240, 230, 140),
+        "plum" => (221, 160, 221),
+        "salmon" => (250, 128, 114),
+        "tan" => (210, 180, 140),
+        "thistle" => (216, 191, 216),
+        "tomato" => (255, 99, 71),
+        "turquoise" => (64, 224, 208),
+        "wheat" => (245, 222, 179),
+        "orchid" => (218, 112, 214),
+        "azure" => (240, 255, 255),
+        "beige" => (245, 245, 220),
+        "chartreuse" => (127, 255, 0),
+        "chocolate" => (210, 105, 30),
+        "goldenrod" => (218, 165, 32),
+        "hotpink" => (255, 105, 180),
+        "ivory" => (255, 255, 240),
+        "lavender" => (230, 230, 250),
+        "rebeccapurple" => (102, 51, 153),
+        "seagreen" => (46, 139, 87),
+        "skyblue" => (135, 206, 235),
+        "slateblue" => (106, 90, 205),
+        "steelblue" => (70, 130, 180),
+        "whitesmoke" => (245, 245, 245),
+        "gray" | "grey" => (128, 128, 128),
+        "darkgray" | "darkgrey" => (169, 169, 169),
+        "dimgray" | "dimgrey" => (105, 105, 105),
+        "lightgray" | "lightgrey" => (211, 211, 211),
+        _ => return None,
+    };
+    Some((r, g, b))
 }
 
 /// Multiplies a colour's alpha (used by the `opacity` property).
@@ -2215,8 +3160,15 @@ mod tests {
         );
         assert_eq!(parse_measure("24"), Some(Measure::plain(Val::Px(24.0))));
         assert_eq!(parse_measure("40vw"), Some(Measure::plain(Val::Vw(40.0))));
-        // `%` precisa do tamanho do PAI — recusado com warn, declaração nula.
-        assert_eq!(parse_measure("calc(10% + 2px)"), None);
+        // UI v2: `%` em expressão é aceite e fecha contra a LARGURA do pai
+        // no `resolve_viewport` (ver test_calc_percent_resolves_against_parent_width).
+        assert_eq!(
+            parse_measure("calc(10% + 2px)"),
+            Some(Measure::Expr(Expr::Add(
+                Box::new(Expr::Percent(10.0)),
+                Box::new(Expr::Px(2.0))
+            )))
+        );
     }
 
     #[test]
@@ -2267,7 +3219,7 @@ mod tests {
             "t",
         );
         // Janela 1280×720: vw=12.8, vmin=7.2.
-        props.resolve_viewport((1280.0, 720.0));
+        props.resolve_viewport((1280.0, 720.0), None);
         assert_eq!(props.width, Some(Measure::plain(Val::Px(627.0))));
         assert_eq!(props.row_gap, Some(Measure::plain(Val::Px(7.2))));
         assert_eq!(props.column_gap, props.row_gap);
@@ -2282,7 +3234,7 @@ mod tests {
              bottom: calc(-4px + 10px)",
             "t",
         );
-        props.resolve_viewport((1280.0, 720.0));
+        props.resolve_viewport((1280.0, 720.0), None);
         assert_eq!(props.width, Some(Measure::plain(Val::Px(206.0))));
         assert_eq!(props.top, Some(Measure::plain(Val::Px(15.0))));
         assert_eq!(props.bottom, Some(Measure::plain(Val::Px(6.0))));
@@ -2291,7 +3243,7 @@ mod tests {
     #[test]
     fn test_division_by_zero_drops_the_declaration() {
         let mut props = parse_declarations("width: calc(10px / 0)", "t");
-        props.resolve_viewport((1280.0, 720.0));
+        props.resolve_viewport((1280.0, 720.0), None);
         assert_eq!(props.width, None);
     }
 
@@ -2318,7 +3270,7 @@ mod tests {
             "t",
         );
         // Janela 1280×720: vmin=7.2, vmax=12.8. (f32: comparação com folga)
-        props.resolve_viewport((1280.0, 720.0));
+        props.resolve_viewport((1280.0, 720.0), None);
         let px = |v: f32| Val::Px(v);
         let close = |a: Option<Measure>, b: f32| match a {
             Some(Measure::Plain(Val::Px(v))) => (v - b).abs() < 0.01,
@@ -2336,11 +3288,11 @@ mod tests {
         assert!(matches!(shadow.blur_radius, Val::Px(v) if (v - 21.6).abs() < 0.01));
         // Janela ESTREITA (600×1200): vmin=6 — o mesmo CSS adapta-se.
         let mut tall = parse_declarations("width: 44vmin", "t");
-        tall.resolve_viewport((600.0, 1200.0));
+        tall.resolve_viewport((600.0, 1200.0), None);
         assert!(close(tall.width, 264.0));
         // Px e % passam intactos.
         let mut flat = parse_declarations("width: 200; height: 50%", "t");
-        flat.resolve_viewport((1280.0, 720.0));
+        flat.resolve_viewport((1280.0, 720.0), None);
         assert_eq!(flat.width, Some(Measure::plain(px(200.0))));
         assert_eq!(flat.height, Some(Measure::plain(Val::Percent(50.0))));
     }
@@ -2509,6 +3461,11 @@ mod tests {
             id: None,
             classes,
             state: StyleState::Normal,
+            focused: false,
+            checked: false,
+            empty: false,
+            sibling_index: 0,
+            sibling_count: 1,
         }
     }
 
@@ -2519,11 +3476,17 @@ mod tests {
         sheet.parse_into(include_str!("../../examples/simple-rpg/ui/hud.css"));
         sheet.parse_into(include_str!("../../examples/simple-rpg/ui/theme.css"));
         sheet.parse_into(include_str!("../../examples/simple-rpg/ui/menu.css"));
+        // A raiz do HUD tem o id `hud` — os seletores `#hud …` casam nela.
         let root = ElementRef {
             tag: "uiroot",
             id: Some("hud"),
             classes: &[],
             state: StyleState::Normal,
+            focused: false,
+            checked: false,
+            empty: false,
+            sibling_index: 0,
+            sibling_count: 1,
         };
         let resolve = |class: &str, viewport| {
             let classes = vec![class.to_string()];
@@ -2731,7 +3694,10 @@ mod tests {
         assert!(parse_selector(".").is_none());
         assert!(parse_selector("#").is_none());
         assert!(parse_selector("#a#b").is_none(), "two ids is nonsense");
-        assert!(parse_selector(".a > .b").is_none(), "no child combinator");
+        // `>` virou combinador legal (UI v2); um `>` SEM composto à frente
+        // continua ilegível.
+        assert!(parse_selector("> .a").is_none());
+        assert!(parse_selector(".a >").is_none());
     }
 
     #[test]
@@ -2917,5 +3883,332 @@ mod tests {
             None,
             "cursor desconhecido é recusado, não silenciosamente default"
         );
+    }
+
+    // ── UI v2: seletores, cores, gradientes, texto ─────────────────────────
+
+    /// `&'static [String]` para encher `ElementRef` nos testes (leak aceitável).
+    fn static_classes(classes: &[&str]) -> &'static [String] {
+        Box::leak(
+            classes
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        )
+    }
+
+    fn static_el(
+        tag: &'static str,
+        id: Option<&'static str>,
+        classes: &[&str],
+    ) -> super::ElementRef<'static> {
+        super::ElementRef {
+            tag,
+            id,
+            classes: static_classes(classes),
+            state: StyleState::Normal,
+            focused: false,
+            checked: false,
+            empty: false,
+            sibling_index: 0,
+            sibling_count: 1,
+        }
+    }
+
+    #[test]
+    fn test_child_combinator_matches_only_direct_children() {
+        let mut styles = StyleSheet::default();
+        styles.parse_into(".panel > .fill { width: 10 } .panel .deep { width: 20 }");
+        let panel = static_el("uipanel", None, &["panel"]);
+        // Filho DIRECTO de .panel — o `>` casa.
+        let fill = super::ElementRef {
+            classes: static_classes(&["fill"]),
+            ..static_el("uipanel", None, &["fill"])
+        };
+        assert!(
+            styles
+                .resolve(&[panel, fill], VIEW, None)
+                .width
+                .is_some(),
+            "filho directo casa o combinador `>`"
+        );
+        // Neto de .panel — o `>` NÃO casa; só o descendente `.deep`.
+        let deep = super::ElementRef {
+            classes: static_classes(&["deep"]),
+            ..static_el("uipanel", None, &["deep"])
+        };
+        let resolved = styles.resolve(&[panel, fill, deep], VIEW, None);
+        assert_eq!(
+            resolved.width,
+            Some(Measure::plain(Val::Px(20.0))),
+            "`>` não pode saltar gerações"
+        );
+    }
+
+    #[test]
+    fn test_structural_pseudo_classes() {
+        let mut styles = StyleSheet::default();
+        styles.parse_into(
+            "uitext:first-child { width: 1 }
+             uitext:last-child { width: 2 }
+             uitext:nth-child(2) { width: 3 }
+             uitext:nth-child(odd) { height: 4 }
+             uitext:nth-child(2n+1) { height: 5 }
+             uitext:nth-child(-n+2) { min-width: 6 }
+             uitext:focus { min-height: 7 }
+             uitext:checked { max-width: 8 }
+             uitext:empty { max-height: 9 }",
+        );
+        let make = |index: usize, count: usize, extra: fn(&mut super::ElementRef)| {
+            let mut el = super::ElementRef {
+                tag: "uitext",
+                id: None,
+                classes: &[],
+                state: StyleState::Normal,
+                focused: false,
+                checked: false,
+                empty: false,
+                sibling_index: index,
+                sibling_count: count,
+            };
+            extra(&mut el);
+            el
+        };
+        let first = make(0, 3, |_| {});
+        let second = make(1, 3, |_| {});
+        let third = make(2, 3, |_| {});
+        let resolved_first = styles.resolve(&[first], VIEW, None);
+        let resolved_second = styles.resolve(&[second], VIEW, None);
+        let resolved_third = styles.resolve(&[third], VIEW, None);
+        // first: :first-child (1) + odd/2n+1 (4+5) + -n+2 (6)
+        assert_eq!(resolved_first.width, Some(Measure::plain(Val::Px(1.0))));
+        assert_eq!(resolved_first.height, Some(Measure::plain(Val::Px(5.0))));
+        assert_eq!(
+            resolved_first.min_width,
+            Some(Measure::plain(Val::Px(6.0))),
+            "-n+2 casa os dois primeiros"
+        );
+        // second: :nth-child(2) (3) + -n+2 (6); não é odd nem first/last
+        assert_eq!(resolved_second.width, Some(Measure::plain(Val::Px(3.0))));
+        assert!(resolved_second.height.is_none());
+        assert_eq!(resolved_second.min_width, Some(Measure::plain(Val::Px(6.0))));
+        // third: :last-child (2) + odd/2n+1 (4+5); fora de -n+2
+        assert_eq!(resolved_third.width, Some(Measure::plain(Val::Px(2.0))));
+        assert_eq!(resolved_third.height, Some(Measure::plain(Val::Px(5.0))));
+        assert!(resolved_third.min_width.is_none());
+
+        // :focus / :checked / :empty
+        let focused = make(0, 1, |el| el.focused = true);
+        assert_eq!(
+            styles.resolve(&[focused], VIEW, None).min_height,
+            Some(Measure::plain(Val::Px(7.0)))
+        );
+        let checked = make(0, 1, |el| el.checked = true);
+        assert_eq!(
+            styles.resolve(&[checked], VIEW, None).max_width,
+            Some(Measure::plain(Val::Px(8.0)))
+        );
+        let empty = make(0, 1, |el| el.empty = true);
+        assert_eq!(
+            styles.resolve(&[empty], VIEW, None).max_height,
+            Some(Measure::plain(Val::Px(9.0)))
+        );
+    }
+
+    #[test]
+    fn test_hsl_and_named_colors() {
+        // hsl(0°, 100%, 50%) = vermelho puro; 120 = verde; 240 = azul.
+        let red = parse_color("hsl(0, 100%, 50%)").expect("hsl red");
+        let srgba = red.to_srgba();
+        assert!(srgba.red > 0.99 && srgba.green < 0.01 && srgba.blue < 0.01);
+        let green = parse_color("hsl(120 100% 50%)").expect("hsl sem vírgulas");
+        assert!(green.to_srgba().green > 0.99);
+        let half_blue = parse_color("hsla(240, 100%, 50%, 0.5)").expect("hsla");
+        assert!((half_blue.alpha() - 0.5).abs() < 1e-6);
+        // Nomes CSS.
+        assert_eq!(parse_color("red"), Some(Color::srgb(1.0, 0.0, 0.0)));
+        assert_eq!(
+            parse_color("rebeccapurple"),
+            Some(Color::srgb(102.0 / 255.0, 51.0 / 255.0, 153.0 / 255.0))
+        );
+        assert!(parse_color("teal").is_some());
+        assert!(parse_color("notacolor").is_none());
+    }
+
+    #[test]
+    fn test_gradients_parse() {
+        let linear = parse_gradient("linear-gradient(45deg, #000 0%, #fff 100%)").expect("linear");
+        match linear {
+            GradientSpec::Linear {
+                angle_deg,
+                stops,
+            } => {
+                assert!((angle_deg - 45.0).abs() < 1e-6);
+                assert_eq!(stops.len(), 2);
+                assert_eq!(stops[0].point, Some(Val::Percent(0.0)));
+                assert_eq!(stops[1].point, Some(Val::Percent(100.0)));
+            }
+            other => panic!("esperava linear, tinha {other:?}"),
+        }
+        let words =
+            parse_gradient("linear-gradient(to right, red, blue)").expect("to right");
+        match words {
+            GradientSpec::Linear { angle_deg, stops } => {
+                assert!((angle_deg - 90.0).abs() < 1e-6, "to right = 90deg");
+                assert_eq!(stops.len(), 2);
+                assert!(stops.iter().all(|stop| stop.point.is_none()));
+            }
+            other => panic!("esperava linear, tinha {other:?}"),
+        }
+        let radial = parse_gradient("radial-gradient(closest-side, white, black)").expect("radial");
+        assert!(matches!(radial, GradientSpec::Radial { farthest: false, .. }));
+        // Por declaração: background aceita gradiente, background-color não.
+        let props = parse_declarations(
+            "background: linear-gradient(to bottom, black, white); background-color: red",
+            "t",
+        );
+        assert!(props.background_gradient.is_some());
+        assert!(props.background.is_some(), "as duas podem coexistir");
+        let props = parse_declarations(
+            "background-color: linear-gradient(to bottom, black, white)",
+            "t",
+        );
+        assert!(
+            props.background_gradient.is_none(),
+            "background-color não leva imagem"
+        );
+    }
+
+    #[test]
+    fn test_border_colors_per_side_and_radius_forms() {
+        // Shorthand de 4 cores.
+        let props = parse_declarations("border-color: red green blue yellow", "t");
+        assert_eq!(props.border_top_color, Some(Color::srgb(1.0, 0.0, 0.0)));
+        assert_eq!(
+            props.border_right_color,
+            Some(Color::srgb(0.0, 128.0 / 255.0, 0.0)),
+            "green = 008000"
+        );
+        assert_eq!(
+            props.border_bottom_color,
+            Some(Color::srgb(0.0, 0.0, 1.0))
+        );
+        assert_eq!(props.border_left_color, Some(Color::srgb(1.0, 1.0, 0.0)));
+        // Longhands com o uniforme por baixo.
+        let props = parse_declarations("border-color: white; border-top-color: black", "t");
+        assert_eq!(props.border_top_color, parse_color("black"));
+        // O shorthand 1-4 cores escreve os lados; o uniforme fica para o
+        // shorthand `border: …` e para o legado.
+        assert_eq!(props.border_right_color, parse_color("white"));
+        assert_eq!(props.border_color, None);
+        // Radius 2 = diagonais; 3 = (tl, tr+bl, br).
+        let radius = parse_declarations("radius: 4 8", "t").border_radius.expect("2");
+        assert_eq!(radius.top_left, Val::Px(4.0));
+        assert_eq!(radius.top_right, Val::Px(8.0));
+        assert_eq!(radius.bottom_right, Val::Px(4.0));
+        assert_eq!(radius.bottom_left, Val::Px(8.0));
+        let radius = parse_declarations("radius: 1 2 3", "t").border_radius.expect("3");
+        assert_eq!(radius.top_left, Val::Px(1.0));
+        assert_eq!(radius.top_right, Val::Px(2.0));
+        assert_eq!(radius.bottom_right, Val::Px(3.0));
+        assert_eq!(radius.bottom_left, Val::Px(2.0));
+    }
+
+    #[test]
+    fn test_text_transform_and_letter_spacing_parse() {
+        let props = parse_declarations(
+            "text-transform: uppercase; letter-spacing: 1px; letter-spacing: 0.1em",
+            "t",
+        );
+        assert_eq!(props.text_transform, Some(TextTransform::Uppercase));
+        assert_eq!(
+            props.letter_spacing,
+            Some(LetterSpacingSpec::Em(0.1)),
+            "o último ganha"
+        );
+        assert_eq!(
+            TextTransform::Capitalize.apply("olá mundo bom"),
+            "Olá Mundo Bom"
+        );
+        assert_eq!(TextTransform::Uppercase.apply("abc"), "ABC");
+        assert_eq!(
+            TextTransform::Capitalize.apply("e-mail do joão"),
+            "E-Mail Do João"
+        );
+        // Herança: transform e espaçamento descem a árvore com o texto.
+        let parent = StyleProps {
+            text_transform: Some(TextTransform::Lowercase),
+            letter_spacing: Some(LetterSpacingSpec::Px(2.0)),
+            ..Default::default()
+        };
+        let mut child = StyleProps::default();
+        child.apply_inherited(&parent);
+        assert_eq!(child.text_transform, parent.text_transform);
+        assert_eq!(child.letter_spacing, parent.letter_spacing);
+    }
+
+    #[test]
+    fn test_not_negation_matches() {
+        let mut styles = StyleSheet::default();
+        styles.parse_into(
+            ".slot:not(.rare) { width: 1 }
+             .slot:not(#x) { height: 2 }
+             .slot:not(.a.b) { min-width: 3 }
+             .slot:not(.rare):hover { width: 4 }",
+        );
+        let slot = static_el("uipanel", None, &["slot"]);
+        let rare = super::ElementRef {
+            classes: static_classes(&["slot", "rare"]),
+            ..static_el("uipanel", None, &["slot", "rare"])
+        };
+        let plain = styles.resolve(&[slot], VIEW, None);
+        let resolved_rare = styles.resolve(&[rare], VIEW, None);
+        // :not(.rare) e :not(.a.b) casam o slot simples; :not(#x) também.
+        assert_eq!(plain.width, Some(Measure::plain(Val::Px(1.0))));
+        assert_eq!(plain.height, Some(Measure::plain(Val::Px(2.0))));
+        assert_eq!(plain.min_width, Some(Measure::plain(Val::Px(3.0))));
+        // O raro é excluído por :not(.rare) — mas :not(.a.b) CASA nele
+        // (rare não tem as classes a nem b).
+        assert!(resolved_rare.width.is_none());
+        assert_eq!(resolved_rare.min_width, Some(Measure::plain(Val::Px(3.0))));
+        // :not composto com estado: o hover vence a exclusão no slot simples.
+        let hovered = super::ElementRef {
+            state: StyleState::Hover,
+            ..static_el("uipanel", None, &["slot"])
+        };
+        assert_eq!(
+            styles.resolve(&[hovered], VIEW, None).width,
+            Some(Measure::plain(Val::Px(4.0))),
+            ".slot:not(.rare):hover casa com hover"
+        );
+    }
+
+    #[test]
+    fn test_text_overflow_parses() {
+        let props = parse_declarations("text-overflow: ellipsis", "t");
+        assert_eq!(
+            props.text_overflow,
+            Some(TextOverflowKind::Ellipsis)
+        );
+        // clip/visible/none são o omissão — recusam sem warn.
+        assert_eq!(parse_declarations("text-overflow: clip", "t").text_overflow, None);
+        // NÃO herda: o filho não recebe do pai.
+        let parent = parse_declarations("text-overflow: ellipsis", "t");
+        let mut child = StyleProps::default();
+        child.apply_inherited(&parent);
+        assert!(child.text_overflow.is_none());
+    }
+
+    #[test]
+    fn test_calc_percent_resolves_against_parent_width() {
+        let mut props = parse_declarations("width: calc(50% - 20px)", "t");
+        // Sem pai, o % vale 0 — 50% de 0 - 20 é negativo, mas ainda px.
+        props.resolve_viewport(VIEW, None);
+        assert_eq!(props.width, Some(Measure::plain(Val::Px(-20.0))));
+        // Com pai de 400 px: 50% de 400 - 20 = 180.
+        let mut props = parse_declarations("width: calc(50% - 20px)", "t");
+        props.resolve_viewport(VIEW, Some(Vec2::new(400.0, 300.0)));
+        assert_eq!(props.width, Some(Measure::plain(Val::Px(180.0))));
     }
 }

@@ -19,6 +19,7 @@ pub mod actions;
 pub mod anim;
 pub mod bind;
 pub mod collect;
+pub mod events;
 pub mod fade;
 pub mod list;
 pub mod menu_data;
@@ -29,10 +30,12 @@ pub mod scale;
 pub mod script;
 pub mod style;
 pub mod tree;
+pub mod tween;
 pub mod widgets;
 
 pub use bind::{UiBindWarnings, UiData};
 pub use collect::{UiPrompt, UiToast};
+pub use events::{UiEvent, UiEvents};
 pub use fade::UiFade;
 pub use list::{ListRow, UiList, UiLists};
 pub use modal::{UiModal, UiModalsOpen, UiScroll, UiTabButton, UiTabPage, UiTabs};
@@ -44,6 +47,7 @@ pub use scale::hud_scale_for_height;
 pub use script::{UiCommandQueue, UiScriptState};
 pub use style::{StyleProps, StyleSheet, StyleState};
 pub use tree::{build_ui_tree, is_ui_tag};
+pub use tween::{UiAnimation, UiTransitions};
 
 use bevy::prelude::*;
 
@@ -64,6 +68,10 @@ pub enum UiSet {
     Script,
     /// Recompute styles and mirror widget values into their child nodes.
     Style,
+    /// A segunda metade do estilo (syncs de widgets e motion); existe porque o
+    /// tuplo de sistemas de uma cadeia tem tecto no Bevy e o estilo ficou
+    /// grande de mais para uma cadeia só.
+    StyleLate,
 }
 
 /// Registers the declarative UI.
@@ -85,6 +93,9 @@ impl bevy::app::Plugin for UiPlugin {
             .init_resource::<UiTabs>()
             .init_resource::<widgets::UiFocusedInput>()
             .init_resource::<widgets::UiTooltipLayer>()
+            .init_resource::<actions::UiActionOwners>()
+            .init_resource::<UiEvents>()
+            .init_resource::<script::UiScriptBinds>()
             .add_message::<actions::UiAction>()
             .configure_sets(
                 Update,
@@ -94,6 +105,7 @@ impl bevy::app::Plugin for UiPlugin {
                     UiSet::Bind,
                     UiSet::Script,
                     UiSet::Style,
+                    UiSet::StyleLate,
                 )
                     .chain(),
             )
@@ -130,6 +142,8 @@ impl bevy::app::Plugin for UiPlugin {
                 Update,
                 (
                     runtime::collect_ui_clicks,
+                    // Emissores de eventos de widget (value/text/check/focus/tab).
+                    events::collect_ui_widget_events,
                     bind::apply_ui_bindings,
                     // Class binds (`bind="nome:classe"`) — o toggle de estado
                     // engine-driven que antes vivia em Luau.
@@ -144,8 +158,14 @@ impl bevy::app::Plugin for UiPlugin {
                 Update,
                 (
                     script::apply_ui_commands,
+                    // Criação de elementos: EXCLUSIVA (o construtor da árvore
+                    // lê recursos do World e spawna diretamente).
+                    script::apply_ui_creates,
+                    script::apply_ui_script_binds,
                     actions::apply_shop_actions,
                     actions::apply_skill_actions,
+                    // Ações → fila de eventos dos scripts (`viber.events()`).
+                    actions::forward_ui_actions,
                 )
                     .chain()
                     .in_set(UiSet::Script),
@@ -159,6 +179,31 @@ impl bevy::app::Plugin for UiPlugin {
                     runtime::mark_sheet_dirty,
                     runtime::propagate_style_dirty,
                     runtime::apply_ui_styles,
+                    // text-transform escreve no `Text` lendo o `UiComputed`
+                    // que o re-estilo acabou de publicar (sync point entre
+                    // sistemas em cadeia aplica-o primeiro).
+                    runtime::sync_text_transforms,
+                    // text-overflow: ellipsis parte do texto já transformado
+                    // (corre depois do espelho do transform) e usa o layout do
+                    // frame anterior — circuito de retorno, estável quando
+                    // nada muda.
+                    runtime::sync_text_overflow,
+                    // Motion CSS: o sync liga o componente `UiAnimation` ao
+                    // `animation` do computed; os drivers escrevem valores
+                    // interpolados no `UiComputed` + dirty — o fan-out para os
+                    // componentes é do re-estilo do frame seguinte (1 frame de
+                    // latência, invisível a 60 fps; o valor DE PARTIDA já é
+                    // escrito pelo re-estilo que iniciou o tween).
+                    tween::sync_ui_animations,
+                    tween::drive_ui_transitions,
+                    tween::drive_ui_animations,
+                )
+                    .chain()
+                    .in_set(UiSet::Style),
+            )
+            .add_systems(
+                Update,
+                (
                     runtime::sync_ui_bars,
                     runtime::sync_ui_cooldowns,
                     // Tab pages are owned by the selection, not by the
@@ -181,12 +226,12 @@ impl bevy::app::Plugin for UiPlugin {
                     anim::drive_ui_anims,
                 )
                     .chain()
-                    .in_set(UiSet::Style),
+                    .in_set(UiSet::StyleLate),
             );
         // Cliques sintéticos e reais acumulam DURANTE o frame (o luau_update
         // pode correr antes ou depois da UI) e limpa no FIM — ver
-        // collect::clear_ui_clicks.
-        app.add_systems(Last, runtime::clear_ui_clicks);
+        // collect::clear_ui_clicks. O mesmo contrato para a fila de eventos.
+        app.add_systems(Last, (runtime::clear_ui_clicks, events::clear_ui_events));
     }
 }
 

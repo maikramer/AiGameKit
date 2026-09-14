@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn test_quest_rows_put_the_actionable_ones_first() {
-        let quests = QuestLog::default();
+        let quests = QuestLog::with_dir(&crate::quests::example_quests_dir());
         let rows = quest_rows(Some(&quests), None);
         assert!(!rows.is_empty(), "the example ships quests");
         // Nothing accepted yet, so everything is pending — and every row has

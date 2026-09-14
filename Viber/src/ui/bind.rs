@@ -44,6 +44,7 @@ use std::collections::HashSet;
 use bevy::prelude::*;
 
 use super::runtime::{UiBar, UiBind, UiClasses, UiCooldown, UiStyleDirty};
+use super::script::UiScriptBinds;
 
 /// One frame's snapshot of everything bindings can read.
 ///
@@ -282,17 +283,36 @@ pub fn split_class_bind(bind: &str) -> Option<(&str, &str)> {
 /// [`UiStyleDirty`] para a cascata repintar (padrão apply-fresh: o estado
 /// novo é recalculado do zero a cada frame, a escrita é que é rara).
 #[allow(clippy::type_complexity)]
+/// Resolve um nome: ENGINE primeiro, binds de script (`viber.ui.set`)
+/// depois. `None` = desconhecido nos dois.
+fn resolve_binding(
+    data: &UiData,
+    script_binds: Option<&UiScriptBinds>,
+    name: &str,
+) -> Option<BoundValue> {
+    data.get(name).or_else(|| {
+        script_binds.and_then(|binds| binds.get(name)).map(|value| BoundValue {
+            fraction: value.number() as f32,
+            text: value.text(),
+            truthy: value.flag(),
+        })
+    })
+}
+
 pub fn apply_bind_classes(
     mut commands: Commands,
     data: Res<UiData>,
+    // Option: apps mínimas de teste não registam os binds de script.
+    script_binds: Option<Res<UiScriptBinds>>,
     mut warned: ResMut<UiBindWarnings>,
     mut binds: Query<(Entity, &UiBind, &mut UiClasses)>,
 ) {
+    let script_binds = script_binds.as_deref();
     for (entity, bind, mut classes) in &mut binds {
         let Some((name, class)) = split_class_bind(&bind.0) else {
             continue;
         };
-        let Some(value) = data.get(name) else {
+        let Some(value) = resolve_binding(&data, script_binds, name) else {
             if warned.0.insert(bind.0.clone()) {
                 warn!("ui: unknown binding `{name}` — class `{class}` left untouched");
             }
@@ -308,6 +328,7 @@ pub fn apply_bind_classes(
 #[allow(clippy::type_complexity)]
 pub fn apply_ui_bindings(
     data: Res<UiData>,
+    script_binds: Option<Res<UiScriptBinds>>,
     mut warned: ResMut<UiBindWarnings>,
     mut bars: Query<(&UiBind, &mut UiBar)>,
     mut cooldowns: Query<(&UiBind, &mut UiCooldown)>,
@@ -324,13 +345,14 @@ pub fn apply_ui_bindings(
         ),
     >,
 ) {
+    let script_binds = script_binds.as_deref();
     let mut resolve = |name: &str| -> Option<BoundValue> {
         // Class binds (`nome:classe`) são do `apply_bind_classes`, não de
         // valor — nunca chegam a "unknown binding".
         if split_class_bind(name).is_some() {
             return None;
         }
-        match data.get(name) {
+        match resolve_binding(&data, script_binds, name) {
             Some(value) => Some(value),
             None => {
                 if warned.0.insert(name.to_string()) {
