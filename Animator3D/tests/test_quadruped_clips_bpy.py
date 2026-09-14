@@ -297,6 +297,8 @@ def test_gallop_run_asymmetric_feet(quad: str) -> None:
     scene = bpy.context.scene
 
     def lift_peak_phase(foot: str) -> float:
+        """Fase φ do pico de elevação — dobrada por `cycles` (2): o mesmo φ
+        repete em t e t+0.5, por isso mede-se em φ e não em t."""
         best_i, best_z = 0, -9.0
         for fi in range(37):
             scene.frame_set(fi + 1)
@@ -304,7 +306,7 @@ def test_gallop_run_asymmetric_feet(quad: str) -> None:
             z = float(arm.pose.bones[foot].matrix.translation.z)
             if z > best_z:
                 best_z, best_i = z, fi
-        return best_i / 36.0
+        return ((best_i / 36.0) * 2.0) % 1.0  # cycles=2
 
     phases = {f: lift_peak_phase(f) for f in ("foot_r", "foot_l", "foot_r2", "foot_l2")}
     ad.action = saved
@@ -315,7 +317,7 @@ def test_gallop_run_asymmetric_feet(quad: str) -> None:
         d = abs(a - b) % 1.0
         return min(d, 1.0 - d)
 
-    # Par traseiro em sequência rápida (Δ pequeno), par dianteiro idem.
+    # Par traseiro em sequência rápida (Δφ pequeno), par dianteiro idem.
     assert cyc_delta(phases["foot_r"], phases["foot_l"]) < 0.3
     assert cyc_delta(phases["foot_r2"], phases["foot_l2"]) < 0.3
     # Dianteiras ~meio ciclo depois das traseiras (suspensão entre os pares).
