@@ -5,7 +5,10 @@
 //! Activar com `viber run --bridge` (porta por omissão: 15702, a porta BRP).
 //! Cliente: `viber debug screenshot|click|key|text|move|tree|logs|probe`.
 
+pub mod burst;
 pub mod client;
+pub mod diff;
+pub mod events;
 pub mod logs;
 pub mod lua;
 
@@ -35,6 +38,8 @@ pub const DEFAULT_BRIDGE_PORT: u16 = 15702;
 pub const METHOD_PING: &str = "viber.ping";
 pub const METHOD_SCREENSHOT: &str = "viber.screenshot";
 pub const METHOD_SCREENSHOT_STATUS: &str = "viber.screenshot_status";
+pub const METHOD_BURST: &str = "viber.burst";
+pub const METHOD_BURST_STATUS: &str = "viber.burst_status";
 pub const METHOD_TREE: &str = "viber.tree";
 pub const METHOD_LOGS: &str = "viber.logs";
 pub const METHOD_PROFILER: &str = "viber.profiler";
@@ -46,11 +51,13 @@ pub const METHOD_KEY: &str = "viber.input.key";
 pub const METHOD_TEXT: &str = "viber.input.text";
 pub const METHOD_CLICK: &str = "viber.input.click";
 pub const METHOD_MOVE: &str = "viber.input.move";
+pub const METHOD_RAYCAST: &str = "viber.raycast";
 
 /// Estado partilhado entre os handlers BRP (PreUpdate) e os sistemas (Update).
 #[derive(Resource, Default)]
 pub struct BridgeShared {
     pub captures: Arc<Mutex<CaptureStore>>,
+    pub bursts: Arc<Mutex<burst::BurstStore>>,
     pub logs: Arc<Mutex<VecDeque<logs::LogEntry>>>,
 }
 
@@ -58,6 +65,7 @@ impl BridgeShared {
     pub fn new() -> Self {
         Self {
             captures: Arc::new(Mutex::new(CaptureStore::default())),
+            bursts: Arc::new(Mutex::new(burst::BurstStore::default())),
             logs: logs::global_log_buffer(),
         }
     }
@@ -174,6 +182,8 @@ impl Plugin for BridgePlugin {
                     .with_method_main(METHOD_PING, ping)
                     .with_method_main(METHOD_SCREENSHOT, screenshot_request)
                     .with_method_main(METHOD_SCREENSHOT_STATUS, screenshot_status)
+                    .with_method_main(METHOD_BURST, burst_request)
+                    .with_method_main(METHOD_BURST_STATUS, burst_status)
                     .with_method_main(METHOD_TREE, tree)
                     .with_method_main(METHOD_LOGS, logs_method)
                     .with_method_main(METHOD_PROFILER, profiler_snapshot)
@@ -184,11 +194,24 @@ impl Plugin for BridgePlugin {
                     .with_method_main(METHOD_KEY, input_key)
                     .with_method_main(METHOD_TEXT, input_text)
                     .with_method_main(METHOD_CLICK, input_click)
-                    .with_method_main(METHOD_MOVE, input_move),
+                    .with_method_main(METHOD_MOVE, input_move)
+                    .with_method_main(METHOD_RAYCAST, raycast_method),
             )
             .add_plugins(RemoteHttpPlugin::default().with_port(self.port))
             .add_systems(Update, process_capture_requests)
             .init_resource::<PendingMouseClick>()
+            // Event log estruturado: os messages têm de existir (apps mínimas
+            // de teste ficam auto-suficientes — add_message é idempotente).
+            .add_message::<crate::feedback::PlayerHurt>()
+            .add_message::<crate::feedback::DamageNumberEvent>()
+            .add_message::<crate::vitals::LevelUpEvent>()
+            .add_message::<crate::ui::actions::UiAction>()
+            .add_message::<crate::travel::TravelPing>()
+            .add_message::<crate::luau::ScriptToast>()
+            .init_resource::<events::BridgeEventLog>()
+            .init_resource::<FrameStepper>()
+            .add_systems(bevy::app::PostUpdate, events::collect_bridge_events)
+            .add_systems(bevy::app::PostUpdate, frame_stepper_system)
             // Depois dos sistemas de input (processam mensagens) e ANTES do
             // ui_focus_system (que lê just_pressed e a posição do cursor).
             .add_systems(
@@ -197,6 +220,45 @@ impl Plugin for BridgePlugin {
                     .after(bevy::input::InputSystems)
                     .before(bevy::ui::UiSystems::Focus),
             );
+    }
+}
+
+/// QA determinístico frame a frame (`viber.debug.step(n)`): pausa o jogo e
+/// avança EXATAMENTE N frames à speed 1. O flag `skip` consome o PostUpdate
+/// do frame em que a op aplicou (esse frame já correu com a speed antiga).
+#[derive(Debug, Default, Resource)]
+pub struct FrameStepper {
+    pub remaining: u32,
+    pub restore: f32,
+    pub skip: bool,
+    pub active: bool,
+}
+
+/// Consome o orçamento de frames do [`FrameStepper`] (PostUpdate: depois de
+/// o frame ter corrido com a speed que o `step` fixou).
+fn frame_stepper_system(world: &mut World) {
+    let Some(mut stepper) = world.get_resource_mut::<FrameStepper>() else {
+        return;
+    };
+    if !stepper.active {
+        return;
+    }
+    if stepper.skip {
+        stepper.skip = false;
+        return;
+    }
+    stepper.remaining = stepper.remaining.saturating_sub(1);
+    if stepper.remaining == 0 {
+        // Fica PAUSADO (speed 0); `viber.debug.play()` restaura
+        // `stepper.restore` — o valor guardado na primeira chamada da cadeia.
+        stepper.active = false;
+        drop(stepper);
+        if let Some(mut base) = world.get_resource_mut::<crate::combat::BaseTimeScale>() {
+            base.0 = 0.0;
+        }
+        world
+            .resource_mut::<bevy::time::Time<bevy::time::Virtual>>()
+            .set_relative_speed(0.0);
     }
 }
 
@@ -292,6 +354,7 @@ fn process_capture_requests(world: &mut World) {
             .id();
         spawned.push((id, entity));
     }
+    let single_shot_spawned = !spawned.is_empty();
     if !spawned.is_empty() {
         let shared = world.resource::<BridgeShared>();
         let mut store = shared
@@ -300,6 +363,11 @@ fn process_capture_requests(world: &mut World) {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         store.screenshot_entities.extend(spawned);
     }
+    // Burst (ver `burst::drive`): no máx UMA captura a mais por frame — o
+    // `extract_screenshots` do bevy rejeita (warn + despawn) um 2.º
+    // `Screenshot` da mesma janela no mesmo frame, portanto o burst só
+    // spawna em frames sem single-shot novo.
+    burst::drive(world, single_shot_spawned);
     // Captura terminada (ou já evitada do store) → despawn da entidade
     // `Screenshot`: sem isto cada screenshot deixava uma entidade zombie
     // com observer para sempre.
@@ -401,6 +469,102 @@ fn screenshot_request(_params: In<Option<Value>>, world: &mut World) -> BrpResul
     Ok(json!({ "id": id, "path": path.display().to_string() }))
 }
 
+/// `viber.burst` — enfileira um burst de N frames seguidos numa folha
+/// 4096×4096 (`{"frames": 4|9|16, "skip": u32, "output": path?}`). O
+/// `skip` são frames renderizados entre capturas (`0` = consecutivos).
+fn burst_request(params: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        frames: Option<u32>,
+        skip: Option<u32>,
+        output: Option<String>,
+    }
+    let params: Params = parse_params(params.0)?;
+    let frames = params.frames.unwrap_or(burst::DEFAULT_FRAMES);
+    let skip = params.skip.unwrap_or(0);
+    let output = params.output.map(PathBuf::from);
+    let (id, path) = {
+        let shared = world.resource::<BridgeShared>();
+        let mut store = shared
+            .bursts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        store
+            .request(frames, skip, output)
+            .map_err(invalid)?
+    };
+    Ok(json!({
+        "id": id,
+        "frames": frames,
+        "skip": skip,
+        "path": path.display().to_string(),
+    }))
+}
+
+/// `viber.burst_status` — `{"id"}` → estado do burst; com `status`
+/// `captured` vem `png_base64` + `bytes` + geometria em `sheet`.
+fn burst_status(params: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        id: u64,
+    }
+    let params: Params = parse_params(params.0)?;
+    let shared = world.resource::<BridgeShared>();
+    let store = shared
+        .bursts
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some(info) = store.get(params.id) else {
+        return Err(invalid(format!("unknown burst id {}", params.id)));
+    };
+    let mut out = json!({
+        "id": info.id,
+        "status": info.status.as_str(),
+        "frames": info.frames,
+        "skip": info.skip,
+        "path": info.path.display().to_string(),
+        "captured": info.collected_count,
+        "spawned": info.spawned,
+    });
+    // Veredicto numérico por frame (luma média/desvio): flicker lê-se nas
+    // OSCILAÇÕES entre células sem abrir o PNG.
+    let stats: Vec<&burst::FrameStat> = info
+        .frame_stats
+        .iter()
+        .flatten()
+        .collect();
+    if !stats.is_empty() {
+        let means: Vec<f32> = stats.iter().map(|s| s.mean).collect();
+        let stds: Vec<f32> = stats.iter().map(|s| s.std).collect();
+        let mean_of_means = means.iter().sum::<f32>() / means.len() as f32;
+        let max_mean_swing = means
+            .iter()
+            .fold(0.0_f32, |acc, m| acc.max((m - mean_of_means).abs()));
+        let max_consecutive_delta = means
+            .windows(2)
+            .map(|pair| (pair[1] - pair[0]).abs())
+            .fold(0.0_f32, f32::max);
+        out["frame_stats"] = json!(stats.iter().map(|s| json!({
+            "index": s.index, "mean": s.mean, "std": s.std,
+        })).collect::<Vec<_>>());
+        out["flicker"] = json!({
+            "max_mean_swing": max_mean_swing,
+            "max_consecutive_delta": max_consecutive_delta,
+            "std_range": [stds.iter().cloned().fold(f32::MAX, f32::min),
+                          stds.iter().cloned().fold(f32::MIN, f32::max)],
+        });
+    }
+    if let Some(result) = &info.result {
+        out["bytes"] = json!(result.bytes);
+        out["png_base64"] = json!(result.png_base64);
+        out["sheet"] = serde_json::to_value(result.layout).expect("serialize");
+    }
+    if let Some(error) = &info.error {
+        out["error"] = json!(error);
+    }
+    Ok(out)
+}
+
 fn screenshot_status(params: In<Option<Value>>, world: &mut World) -> BrpResult {
     #[derive(Deserialize)]
     struct Params {
@@ -446,6 +610,86 @@ fn screenshot_status(params: In<Option<Value>>, world: &mut World) -> BrpResult 
     }
     let info = store.get(params.id).expect("id existe").clone();
     Ok(serde_json::to_value(info).expect("serialize"))
+}
+
+/// Cast de raio CONTRA A FÍSICA (`viber.raycast`) — a query que as closures
+/// Lua não conseguem fazer (o contexto Rapier vive no World). Params:
+/// `{x,y,z, dx,dy,dz, max_toi?, solid?}` (dir normalizado dentro; `max_toi`
+/// default 100 m). Resposta: `{hit: false}` ou `{hit: true, entity, name?,
+/// toi, point, normal}`.
+fn raycast_method(params: In<Option<Value>>, world: &mut World) -> BrpResult {
+    use bevy_rapier3d::prelude::{
+        QueryFilter, RapierContextColliders, RapierContextSimulation, RapierQueryPipeline,
+        RapierRigidBodySet,
+    };
+    use bevy_rapier3d::rapier::parry::query::DefaultQueryDispatcher;
+
+    #[derive(Deserialize)]
+    struct Params {
+        x: f32,
+        y: f32,
+        z: f32,
+        dx: f32,
+        dy: f32,
+        dz: f32,
+        max_toi: Option<f32>,
+        solid: Option<bool>,
+    }
+    let params: Params = parse_params(params.0)?;
+    let dir = Vec3::new(params.dx, params.dy, params.dz);
+    if !dir.is_finite() || dir.length_squared() < 1e-12 {
+        return Err(invalid("raycast: direção inválida (NaN/inf/zero)".into()));
+    }
+    let dir = dir.normalize();
+    let origin = Vec3::new(params.x, params.y, params.z);
+    let max_toi = params.max_toi.unwrap_or(100.0).max(0.0);
+    let solid = params.solid.unwrap_or(true);
+    let Some(ctx_entity) = world
+        .iter_entities()
+        .find(|e| e.contains::<RapierContextSimulation>())
+        .map(|e| e.id())
+    else {
+        return Err(invalid("sem contexto de física (PhysicsPlugin?)".into()));
+    };
+    // Tudo por referência imutável: as três Ref coexistem (e o World fica
+    // livre para o `get::<Name>` depois).
+    let hit = {
+        let Some(sim) = world.get::<RapierContextSimulation>(ctx_entity) else {
+            return Err(invalid("sem contexto de física (PhysicsPlugin?)".into()));
+        };
+        let Some(colliders) = world.get::<RapierContextColliders>(ctx_entity) else {
+            return Err(invalid("sem colliders de física".into()));
+        };
+        let Some(bodies) = world.get::<RapierRigidBodySet>(ctx_entity) else {
+            return Err(invalid("sem corpos de física".into()));
+        };
+        RapierQueryPipeline::new_scoped(
+            &sim.broad_phase,
+            &colliders,
+            &bodies,
+            &QueryFilter::default(),
+            &DefaultQueryDispatcher,
+            |pipeline| pipeline.cast_ray_and_get_normal(origin, dir, max_toi, solid),
+        )
+    };
+    let Some((entity, hit)) = hit else {
+        return Ok(json!({ "hit": false }));
+    };
+    let toi = hit.time_of_impact;
+    let normal = hit.normal;
+    let name = world.get::<Name>(entity).map(|n| n.to_string());
+    let point = origin + dir * toi;
+    let mut out = json!({
+        "hit": true,
+        "entity": entity.to_bits() as u64,
+        "toi": toi,
+        "point": [point.x, point.y, point.z],
+        "normal": [normal.x, normal.y, normal.z],
+    });
+    if let Some(name) = name {
+        out["name"] = json!(name);
+    }
+    Ok(out)
 }
 
 /// Árvore de entidades — o "a11y snapshot" do bridge: id, nome, pai,

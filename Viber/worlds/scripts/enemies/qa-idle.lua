@@ -1,0 +1,4 @@
+-- qa-idle — criatura parada para QA do bridge (qa-bridge.xml).
+-- Sem on_update: fica em idle com vitals (hostil pelo caminho enemies/),
+-- perfeita para ler health()/ai() e testar ai_aggro/set_entity_hp sem
+-- a criatura fugir do sítio.

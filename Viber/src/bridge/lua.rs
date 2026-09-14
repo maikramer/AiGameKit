@@ -28,6 +28,7 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Collider, RapierContextSimulation, RigidBody};
 
 use crate::terrain::TerrainChunkMaterial;
+use bevy_landmass::AgentState;
 use mlua::{FromLua, Lua, Table, Value};
 use serde::Deserialize;
 use serde_json::{Value as Json, json};
@@ -64,6 +65,14 @@ pub struct EntityInfo {
     pub light: Option<LightInfo>,
     /// Tem `LuaScriptRef` (script de jogo na entidade).
     pub scripted: bool,
+    /// Path do script de jogo (`enemies/wolf.lua`), quando `scripted`.
+    pub script: Option<String>,
+    /// `(atual, máximo)` do `Health` — de QUALQUER entidade (o snapshot era
+    /// hero-cêntrico; criaturas também têm vitals).
+    pub health: Option<(f32, f32)>,
+    /// Estado de IA da criatura (`EnemyCreature` + `AiLocomotion` +
+    /// perfil de nav), quando existe.
+    pub ai: Option<AiInfo>,
 }
 
 /// Luz na entidade (`viber.debug.lights`/`stats`) — sombras são o maior
@@ -199,6 +208,170 @@ pub struct PlayerInfo {
     pub speed: f32,
 }
 
+/// IA de uma criatura no snapshot (`viber.debug.ai`/`info`) — FSM da engine
+/// (`EnemyCreature`), pedidos de locomoção (`AiLocomotion`) e perfil de nav.
+pub struct AiInfo {
+    /// "wander" | "chase" — só criaturas da FSM da engine.
+    pub state: Option<String>,
+    pub speed: f32,
+    pub aggro_radius: f32,
+    pub attack_radius: f32,
+    pub home: Option<[f32; 2]>,
+    /// Velocidade pedida este frame (m/s, XZ) — o que o script/FSM pediu.
+    pub desired: [f32; 2],
+    /// Velocidade integrada atual (m/s, XZ).
+    pub velocity: [f32; 2],
+    /// Destino declarado pelo produtor (`drive_to`), quando existe.
+    pub goal: Option<[f32; 2]>,
+    /// "civil" | "wild" — o preço fora-de-estrada que a navmesh cobra.
+    pub nav_profile: Option<String>,
+}
+
+/// Estado da pilha de navegação no snapshot (`viber.debug.nav`).
+pub struct NavInfo {
+    pub enabled: bool,
+    pub agent_radius: f32,
+    pub agent_height: f32,
+    pub tile_size: f32,
+    pub offroad_cost: f32,
+    /// Centro do tile vivo/gerando (XZ), quando há tile.
+    pub tile_center: Option<[f32; 2]>,
+    pub tile_generating: bool,
+    pub tile_generations: u32,
+    /// Obstáculos estáticos com que o tile vivo foi cozido.
+    pub tile_obstacles: Option<u64>,
+    /// Census de estados dos agentes landmass — a resposta a "porque é que
+    /// a criatura não anda" (`fora-da-mesh`/`sem-caminho`/`alvo-fora`).
+    pub census: Vec<(&'static str, usize)>,
+}
+
+/// Uma quest com definição + estado (`viber.debug.quest`).
+pub struct QuestInfo {
+    pub id: String,
+    pub title: String,
+    pub npc: String,
+    pub biome: String,
+    /// "not_taken" | "active" | "ready" | "done".
+    pub status: String,
+    pub objective_kind: String,
+    pub objective_target: String,
+    pub objective_count: u32,
+    /// Texto "x/y" do objetivo (collect lê o vault).
+    pub progress_text: String,
+    /// Marcos de visita já alcançados (objetivo visit).
+    pub visited: Vec<String>,
+    pub rewards_gold: u32,
+    pub rewards_xp: u32,
+    pub rewards_items: Vec<String>,
+}
+
+/// Uma `<BiomeRegion>` no snapshot (`viber.debug.regions`/`biome_at`).
+pub struct RegionInfo {
+    pub id: String,
+    pub display_name: String,
+    pub polygon: Vec<[f32; 2]>,
+    pub fog_density: f32,
+    pub tint: Option<[f32; 3]>,
+    pub pp_exposure: Option<f32>,
+    pub pp_bloom_strength: Option<f32>,
+}
+
+/// Névoa + atmosfera vivos no snapshot (`viber.debug.atmosphere`).
+pub struct AtmosphereInfo {
+    /// 1 dia pleno, 0 noite plena.
+    pub day: f32,
+    pub night: f32,
+    /// Pico na hora dourada/crepúsculo.
+    pub golden: f32,
+    /// Densidade corrente da névoa exponencial-quadrática da câmara.
+    pub fog_density: Option<f32>,
+    /// Cor da névoa (linear).
+    pub fog_color: [f32; 3],
+    pub exposure_scale: f32,
+    pub bloom_boost: f32,
+}
+
+/// `<WorldBorder>` no snapshot (`viber.debug.border`).
+pub struct BorderInfo {
+    pub radius: f32,
+    pub warn_seconds: f32,
+    pub margin: f32,
+}
+
+/// Bolsa de interior no snapshot (`viber.debug.interior`).
+pub struct InteriorInfo {
+    /// O herói está lá dentro agora (`InteriorLighting.active`).
+    pub active: bool,
+    /// Retângulo da bolsa (min/max XZ) + grelha de salas, quando declarada.
+    pub min: Option<[f32; 2]>,
+    pub max: Option<[f32; 2]>,
+    pub room_size: [f32; 2],
+    pub room_origin: [f32; 2],
+    pub camera_distance: f32,
+    pub camera_pitch_deg: f32,
+    pub camera_yaw_deg: f32,
+}
+
+/// Um nó da UI endereçável no snapshot (`viber.debug.ui_tree`).
+pub struct UiNodeInfo {
+    /// id autoral da UI declarativa OU `Name` (`hud:health`, `chip:gold`…).
+    pub id: String,
+    /// Rect computado (píxeis físicos) — dá o clique exato via `input.click`.
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub visible: bool,
+    pub disabled: bool,
+    /// Texto próprio + descendentes (spans concatenados).
+    pub text: Option<String>,
+    /// Classes CSS-like (`UiClasses`).
+    pub classes: Vec<String>,
+}
+
+/// Skills/cooldowns do herói no snapshot (`viber.debug.skills`).
+pub struct SkillsInfo {
+    pub learned: Vec<String>,
+    pub points: u32,
+    pub level: Option<u32>,
+    pub level_points: Option<u32>,
+    pub cooldowns: Option<[f32; 3]>,
+    pub bonus_damage: Option<f32>,
+    pub speed_mult: Option<f32>,
+    pub max_hp_bonus: Option<f32>,
+    pub crit_bonus: Option<f32>,
+}
+
+/// Seeds vivos do mundo no snapshot (`viber.debug.seeds`) — a metade da
+/// promessa "mesma seed, mesmo mundo" que se pode INSPECIONAR.
+#[derive(Default)]
+pub struct SeedInfo {
+    pub terrain_seed: Option<u64>,
+    pub world_size: Option<f32>,
+    pub weather_seed: Option<u64>,
+}
+
+/// Waypoints/marcos no snapshot (`viber.debug.waypoints`).
+#[derive(Default)]
+pub struct WaypointInfo {
+    /// Marcos da Nota já assinados.
+    pub marked: Vec<String>,
+    /// Waypoint atual (último assinado).
+    pub label: Option<String>,
+    pub position: Option<[f32; 3]>,
+    /// Catálogo estático dos 12 marcos.
+    pub landmarks: Vec<(&'static str, &'static str)>,
+}
+
+/// Estado do save no snapshot (`viber.debug.save_info`).
+pub struct SaveInfo {
+    pub path: String,
+    pub exists: bool,
+    pub bytes: Option<u64>,
+    /// Unix mtime (s) do ficheiro, quando existe.
+    pub mtime: Option<f64>,
+}
+
 /// Estado da câmara orbital no snapshot (`viber.debug.camera`).
 pub struct CameraInfo {
     pub position: Vec3,
@@ -247,6 +420,61 @@ pub struct DebugView {
     /// Chão ao vivo: tuning de splat + pele das paredes do primeiro chunk
     /// (snapshot de `viber.debug.ground()`).
     pub ground: Option<GroundInfo>,
+    /// Pilha de navegação (`viber.debug.nav`).
+    pub nav: Option<NavInfo>,
+    /// Quests com definição + estado (`viber.debug.quest`/`quest_defs`).
+    pub quests_deep: Vec<QuestInfo>,
+    /// `<BiomeRegion>` do mundo (`viber.debug.regions`/`biome_at`).
+    pub regions: Vec<RegionInfo>,
+    /// Atmosfera/névoa vivos (`viber.debug.atmosphere`).
+    pub atmosphere: Option<AtmosphereInfo>,
+    /// Tempo completo, com o scheduler (`viber.debug.weather_full`).
+    pub weather: Option<WeatherInfo>,
+    /// `<WorldBorder>` (`viber.debug.border`).
+    pub border: Option<BorderInfo>,
+    /// Bolsa de interior (`viber.debug.interior`).
+    pub interior: Option<InteriorInfo>,
+    /// UI endereçável com rects (`viber.debug.ui_tree`).
+    pub ui: Vec<UiNodeInfo>,
+    /// Snapshot de áudio do profiler (`viber.debug.audio`), já em JSON.
+    pub audio: Option<Json>,
+    /// Seeds (`viber.debug.seeds`).
+    pub seeds: SeedInfo,
+    /// Skills/cooldowns (`viber.debug.skills`).
+    pub skills: Option<SkillsInfo>,
+    /// Waypoints/marcos (`viber.debug.waypoints`).
+    pub waypoints: WaypointInfo,
+    /// Save em disco (`viber.debug.save_info`).
+    pub save: Option<SaveInfo>,
+    /// Terreno partilhado para queries posicionais ao vivo
+    /// (`viber.debug.terrain(x, z)`) — Arc clones, barato.
+    pub terrain: Option<crate::terrain::runtime::TerrainReader>,
+    /// Registos de estrada/água para as mesmas queries.
+    pub surfaces: Option<crate::luau::SurfaceRegistries>,
+    /// Hash FNV-1a do conteúdo do mundo (entidades ordenadas) — A/B de
+    /// determinismo "mesma seed, mesmo mundo" (`viber.debug.world_hash`).
+    pub world_hash: u64,
+    /// Cauda do event log estruturado (`viber.debug.events`).
+    pub events: Json,
+}
+
+/// `viber.debug.weather_full` — `WeatherState` + o scheduler do ciclo.
+pub struct WeatherInfo {
+    pub wind: [f32; 2],
+    pub wind_strength: f32,
+    pub clouds: f32,
+    pub rain: f32,
+    pub cycle: bool,
+    pub scheduler: Option<SchedulerInfo>,
+}
+
+/// O scheduler do `<Weather cycle>` — o que o ciclo VAI fazer.
+pub struct SchedulerInfo {
+    pub seed: u64,
+    pub index: u64,
+    pub period: f32,
+    pub timer: f32,
+    pub target: f32,
 }
 
 /// Estado do chão ao vivo (`viber.debug.ground{...}`): o tuning de splat
@@ -313,10 +541,11 @@ pub enum DebugOp {
     Rotate(Entity, f32),
     /// Escala uniforme.
     SetScale(Entity, f32),
-    /// Câmara orbital: distância, pitch (graus) e/ou alvo (nome de entidade).
+    /// Câmara orbital: distância, pitch, yaw (graus) e/ou alvo (nome).
     SetCamera {
         distance: Option<f32>,
         pitch: Option<f32>,
+        yaw: Option<f32>,
         target: Option<String>,
     },
     /// Minuto do dia (0–1440, wrap).
@@ -371,6 +600,104 @@ pub enum DebugOp {
         dirt: Option<f32>,
         forest: Option<f32>,
         shore_width: Option<f32>,
+    },
+    /// HP absoluto de QUALQUER entidade (clamp a [0, max]) — `set_hp(n)`
+    /// continua a ser o atalho do player.
+    SetEntityHp(Entity, f32),
+    /// HP máximo de qualquer entidade (mín. 1; atual clampado).
+    SetMaxHp(Entity, f32),
+    /// Força o estado de uma quest: "active" | "ready" | "done" | "not_taken".
+    QuestForce(String, String),
+    /// Fixa o progresso do objetivo (kill: contador; visit: primeiros N
+    /// marcos; collect é vault-driven → warning).
+    QuestProgress(String, u32),
+    /// Valor ABSOLUTO de um recurso (gold/wood/stone) ou item do vault.
+    VaultSet(String, u32),
+    /// Tira N do vault (recurso ou item) — `false` vira warning.
+    Take(String, u32),
+    /// Aprende uma passiva (respeita pré-requisitos/pontos; aplica o delta
+    /// ao herói, igual à compra na UI).
+    SkillLearn(String),
+    /// Pontos disponíveis (absoluto).
+    SkillPoints(u32),
+    /// Esquece TUDO (devolve os pontos gastos) e reverte os bónus do herói.
+    SkillReset,
+    /// Estado da FSM da criatura: "wander" | "chase" (a FSM reavalia por
+    /// distância a cada frame — o aggro_radius é o lever que persiste).
+    AiState(Entity, String),
+    /// Raio de aggro da criatura (m).
+    AiAggro(Entity, f32),
+    /// Todas as criaturas da FSM → Wander.
+    AiCalmAll,
+    /// Navmesh ao vivo: liga/desliga a pilha, custo fora-de-estrada e lado
+    /// do tile (afetam a próxima geração/attach).
+    NavSet {
+        enabled: Option<bool>,
+        offroad_cost: Option<f32>,
+        tile_size: Option<f32>,
+    },
+    /// Gate de postfx FORÇADO ao vivo (`VIBER_NO_<KEY>` sem restart).
+    PostFx { key: &'static str, on: bool },
+    /// Volumes do mixer (mixer_sync aplica aos buses ao vivo).
+    AudioSet {
+        master: Option<f32>,
+        music: Option<f32>,
+        sfx: Option<f32>,
+    },
+    /// Música de combate: "battle" | "boss" | "off" (A/B de BGM sem esperar
+    /// os 8 s de hold).
+    CombatMusic(String),
+    /// Física ao vivo: gravidade do mundo e/ou pausa do pipeline Rapier.
+    PhysicsSet {
+        gravity: Option<Vec3Arg>,
+        paused: Option<bool>,
+    },
+    /// Grava/carrega pelo caminho da UI (`UiAction "save"/"load"`).
+    Save,
+    Load,
+    /// Teleporta o PLAYER ao primeiro entidade com esse nome (marco, NPC…).
+    TeleportTo(String),
+    /// Spawn runtime: primitiva FÍSICA (`box:w,h,d`, `sphere:r`,
+    /// `cylinder:r,h`) ou GLB do pool (load assíncrono via GltfScenePending).
+    Spawn {
+        url: String,
+        pos: Vec3,
+        yaw: Option<f32>,
+        scale: Option<f32>,
+        color: Option<[f32; 3]>,
+        collider: bool,
+        snap: bool,
+    },
+    /// PointLight de debug (`debug:light:N`).
+    SpawnLight {
+        pos: Vec3,
+        intensity: Option<f32>,
+        color: Option<[f32; 3]>,
+        shadows: bool,
+        range: Option<f32>,
+    },
+    /// Material PBR AO VIVO (só materiais STANDARD de primitivas/GLB — os
+    /// bindless do terreno destruíam o bind group num get_mut).
+    SetMaterial {
+        entity: Entity,
+        base_color: Option<[f32; 4]>,
+        metallic: Option<f32>,
+        roughness: Option<f32>,
+        unlit: Option<bool>,
+        emissive: Option<[f32; 3]>,
+    },
+    /// QA determinístico: pausa, avança EXATAMENTE N frames (a speed 1) e
+    /// volta a pausar (`viber.debug.step(n)`).
+    StepFrames(u32),
+    /// Restaura a speed anterior ao `step` (`viber.debug.play()`).
+    ResumePlay,
+    /// Luz AO VIVO (PointLight/SpotLight; DirectionalLight só illuminance).
+    SetLight {
+        entity: Entity,
+        intensity: Option<f32>,
+        color: Option<[f32; 3]>,
+        shadows: Option<bool>,
+        range: Option<f32>,
     },
 }
 
@@ -456,6 +783,7 @@ impl FromLua for GroundOpts {
 pub struct CameraOpts {
     pub distance: Option<f32>,
     pub pitch: Option<f32>,
+    pub yaw: Option<f32>,
     pub target: Option<String>,
 }
 
@@ -466,11 +794,267 @@ impl FromLua for CameraOpts {
             Value::Table(t) => Ok(Self {
                 distance: t.get("distance")?,
                 pitch: t.get("pitch")?,
+                yaw: t.get("yaw")?,
                 target: t.get("target")?,
             }),
             other => Err(mlua::Error::FromLuaConversionError {
                 from: other.type_name(),
-                to: "camera opts {distance=?, pitch=?, target=?}".into(),
+                to: "camera opts {distance=?, pitch=?, yaw=?, target=?}".into(),
+                message: None,
+            }),
+        }
+    }
+}
+
+/// Opções de `viber.debug.nav_set{...}` (campos ausentes = sem mudança).
+#[derive(Default)]
+pub struct NavSetOpts {
+    pub enabled: Option<bool>,
+    pub offroad_cost: Option<f32>,
+    pub tile_size: Option<f32>,
+}
+
+impl FromLua for NavSetOpts {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            Value::Nil => Err(mlua::Error::runtime(
+                "nav_set{}: passa pelo menos um campo (enabled, offroad_cost, tile_size)",
+            )),
+            Value::Table(t) => Ok(Self {
+                enabled: t.get("enabled")?,
+                offroad_cost: t.get("offroad_cost")?,
+                tile_size: t.get("tile_size")?,
+            }),
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "nav opts {enabled=?, offroad_cost=?, tile_size=?}".into(),
+                message: None,
+            }),
+        }
+    }
+}
+
+/// Opções de `viber.debug.postfx{taa=?, bloom=?, ...}` — cada campo presente
+/// força o gate desse efeito (true = ligado, false = cortado).
+#[derive(Default)]
+pub struct PostFxOpts {
+    pub autoexposure: Option<bool>,
+    pub bloom: Option<bool>,
+    pub dof: Option<bool>,
+    pub ssao: Option<bool>,
+    pub contact_shadows: Option<bool>,
+    pub aerial: Option<bool>,
+    pub splittone: Option<bool>,
+    pub vignette: Option<bool>,
+    pub chromatic: Option<bool>,
+    pub cas: Option<bool>,
+    pub motion_blur: Option<bool>,
+    pub taa: Option<bool>,
+    pub volumetrics: Option<bool>,
+}
+
+impl FromLua for PostFxOpts {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            Value::Nil => Err(mlua::Error::runtime(
+                "postfx{}: passa pelo menos um gate (autoexposure, bloom, dof, ssao,                  contact_shadows, aerial, splittone, vignette, chromatic, cas,                  motion_blur, taa, volumetrics)",
+            )),
+            Value::Table(t) => Ok(Self {
+                autoexposure: t.get("autoexposure")?,
+                bloom: t.get("bloom")?,
+                dof: t.get("dof")?,
+                ssao: t.get("ssao")?,
+                contact_shadows: t.get("contact_shadows")?,
+                aerial: t.get("aerial")?,
+                splittone: t.get("splittone")?,
+                vignette: t.get("vignette")?,
+                chromatic: t.get("chromatic")?,
+                cas: t.get("cas")?,
+                motion_blur: t.get("motion_blur")?,
+                taa: t.get("taa")?,
+                volumetrics: t.get("volumetrics")?,
+            }),
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "postfx opts {bloom=?, ssao=?, taa=?, ...}".into(),
+                message: None,
+            }),
+        }
+    }
+}
+
+/// Opções de `viber.debug.audio_set{...}` (volumes 0..1).
+#[derive(Default)]
+pub struct AudioSetOpts {
+    pub master: Option<f32>,
+    pub music: Option<f32>,
+    pub sfx: Option<f32>,
+}
+
+impl FromLua for AudioSetOpts {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            Value::Nil => Err(mlua::Error::runtime(
+                "audio_set{}: passa pelo menos um volume (master, music, sfx)",
+            )),
+            Value::Table(t) => Ok(Self {
+                master: t.get("master")?,
+                music: t.get("music")?,
+                sfx: t.get("sfx")?,
+            }),
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "audio opts {master=?, music=?, sfx=?}".into(),
+                message: None,
+            }),
+        }
+    }
+}
+
+/// Opções de `viber.debug.physics_set{gravity=?, paused=?}`.
+#[derive(Default)]
+pub struct PhysicsSetOpts {
+    pub gravity: Option<Vec3Arg>,
+    pub paused: Option<bool>,
+}
+
+impl FromLua for PhysicsSetOpts {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            Value::Nil => Err(mlua::Error::runtime(
+                "physics_set{}: passa pelo menos um campo (gravity={x,y,z}?, paused=?)",
+            )),
+            Value::Table(t) => Ok(Self {
+                gravity: t.get("gravity")?,
+                paused: t.get("paused")?,
+            }),
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "physics opts {gravity=?, paused=?}".into(),
+                message: None,
+            }),
+        }
+    }
+}
+
+/// Opções de `viber.debug.spawn(url, x, y, z, {...})`.
+#[derive(Default)]
+pub struct SpawnOpts {
+    pub yaw: Option<f32>,
+    pub scale: Option<f32>,
+    /// Cor `#rrggbb` (primitivas; GLB ignora).
+    pub color: Option<String>,
+    /// Collider + corpo fixo nas primitivas (default TRUE — o valor do debug
+    /// é poder pôr algo COM colisão no mundo; markers visuais são os outros).
+    pub collider: Option<bool>,
+    /// Assenta o Y no terreno (default TRUE).
+    pub snap: Option<bool>,
+}
+
+impl FromLua for SpawnOpts {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            Value::Nil => Ok(Self::default()),
+            Value::Table(t) => Ok(Self {
+                yaw: t.get("yaw")?,
+                scale: t.get("scale")?,
+                color: t.get("color")?,
+                collider: t.get("collider")?,
+                snap: t.get("snap")?,
+            }),
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "spawn opts {yaw=?, scale=?, color=?, collider=?, snap=?}".into(),
+                message: None,
+            }),
+        }
+    }
+}
+
+/// Opções de `viber.debug.spawn_light(x, y, z, {...})`.
+#[derive(Default)]
+pub struct SpawnLightOpts {
+    pub intensity: Option<f32>,
+    pub color: Option<String>,
+    pub shadows: Option<bool>,
+    pub range: Option<f32>,
+}
+
+impl FromLua for SpawnLightOpts {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            Value::Nil => Ok(Self::default()),
+            Value::Table(t) => Ok(Self {
+                intensity: t.get("intensity")?,
+                color: t.get("color")?,
+                shadows: t.get("shadows")?,
+                range: t.get("range")?,
+            }),
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "light opts {intensity=?, color=?, shadows=?, range=?}".into(),
+                message: None,
+            }),
+        }
+    }
+}
+
+/// Opções de `viber.debug.set_material(id, {...})` — campos ausentes ficam.
+#[derive(Default)]
+pub struct MaterialOpts {
+    pub base_color: Option<String>,
+    pub metallic: Option<f32>,
+    pub roughness: Option<f32>,
+    pub unlit: Option<bool>,
+    pub emissive: Option<String>,
+}
+
+impl FromLua for MaterialOpts {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            Value::Nil => Err(mlua::Error::runtime(
+                "set_material{}: passa pelo menos um campo (base_color, metallic,                  roughness, unlit, emissive)",
+            )),
+            Value::Table(t) => Ok(Self {
+                base_color: t.get("base_color")?,
+                metallic: t.get("metallic")?,
+                roughness: t.get("roughness")?,
+                unlit: t.get("unlit")?,
+                emissive: t.get("emissive")?,
+            }),
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "material opts {base_color=?, metallic=?, roughness=?, unlit=?,                      emissive=?}".into(),
+                message: None,
+            }),
+        }
+    }
+}
+
+/// Opções de `viber.debug.set_light(id, {...})` — campos ausentes ficam.
+#[derive(Default)]
+pub struct LightOpts {
+    pub intensity: Option<f32>,
+    pub color: Option<String>,
+    pub shadows: Option<bool>,
+    pub range: Option<f32>,
+}
+
+impl FromLua for LightOpts {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            Value::Nil => Err(mlua::Error::runtime(
+                "set_light{}: passa pelo menos um campo (intensity, color, shadows, range)",
+            )),
+            Value::Table(t) => Ok(Self {
+                intensity: t.get("intensity")?,
+                color: t.get("color")?,
+                shadows: t.get("shadows")?,
+                range: t.get("range")?,
+            }),
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "light opts {intensity=?, color=?, shadows=?, range=?}".into(),
                 message: None,
             }),
         }
@@ -525,6 +1109,28 @@ impl FromLua for RainLookOpts {
             other => Err(mlua::Error::FromLuaConversionError {
                 from: other.type_name(),
                 to: "rain look {near_fade=?, alpha=?, width=?, rate=?}".into(),
+                message: None,
+            }),
+        }
+    }
+}
+
+/// `{x,y,z}` (tabela nomeada) ou `{x, y, z}` (array) → [`Vec3`] — tabelas
+/// Lua não convertem sozinhas para o tipo da Bevy.
+pub struct Vec3Arg(pub Vec3);
+
+impl FromLua for Vec3Arg {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            Value::Table(t) => {
+                let x: f32 = t.get("x").or_else(|_| t.get(1))?;
+                let y: f32 = t.get("y").or_else(|_| t.get(2))?;
+                let z: f32 = t.get("z").or_else(|_| t.get(3))?;
+                Ok(Self(Vec3::new(x, y, z)))
+            }
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "vec3 {x, y, z}".into(),
                 message: None,
             }),
         }
@@ -659,6 +1265,7 @@ fn build_view(world: &mut World) -> DebugView {
     let mut infos: Vec<EntityInfo> = Vec::new();
     let mut by_name = HashMap::new();
     let mut stats = WorldStats::default();
+    let mut world_hash: u64 = 0xcbf2_9ce4_8422_2325; // offset FNV-1a
     // Contadores da ladder de LOD: recurso, não varrimento de entidades.
     if let Some(lod) = world.get_resource::<crate::render_lod::MeshLodStats>() {
         stats.lod_swaps = lod.swaps_last_frame;
@@ -789,11 +1396,25 @@ fn build_view(world: &mut World) -> DebugView {
             })
         };
         let scripted = e.get::<crate::luau::LuaScriptRef>().is_some();
+        let script = e
+            .get::<crate::luau::LuaScriptRef>()
+            .map(|s| s.path.clone());
+        let health = e.get::<Health>().map(|h| (h.current, h.max));
+        let ai = ai_info(&e);
 
         // Agregados sobre o mundo INTEIRO (antes do cap do snapshot).
         stats.entities += 1;
         stats.disabled += usize::from(disabled);
         stats.scripted += usize::from(scripted);
+        // Hash do conteúdo por entidade (FNV-1a) acumulado por SOMA —
+        // independente de ordem e de reusos de índice de entidade: mundos
+        // com o mesmo conteúdo têm o mesmo `world_hash`.
+        world_hash = world_hash.wrapping_add(entity_hash(
+            name.as_deref(),
+            position,
+            health,
+            disabled,
+        ));
         stats.meshes += usize::from(mesh.is_some());
         if let Some(collider) = &collider {
             stats.colliders_total += 1;
@@ -854,6 +1475,9 @@ fn build_view(world: &mut World) -> DebugView {
             material,
             light,
             scripted,
+            script,
+            health,
+            ai,
         });
     }
     // Cap nearest-first: sem player, fica a ordem natural do mundo.
@@ -872,6 +1496,25 @@ fn build_view(world: &mut World) -> DebugView {
     }
     infos.truncate(SNAPSHOT_CAP);
 
+    // Áudio: snapshot do profiler (buses/layers/sinks) — barato (5 Hz lá).
+    let audio = crate::profiler::audio_tab::snapshot(world);
+    let audio = serde_json::to_value(&audio).ok();
+
+    // Terreno partilhado (Arc clones) + registos de estrada/água para as
+    // queries posicionais ao vivo de `viber.debug.terrain(x, z)`.
+    let (terrain, surfaces) = world
+        .get_resource::<crate::terrain::runtime::TerrainRuntime>()
+        .map(|rt| {
+            (
+                Some(rt.reader()),
+                Some(crate::luau::SurfaceRegistries {
+                    roads: rt.roads.clone(),
+                    water: rt.water.clone(),
+                }),
+            )
+        })
+        .unwrap_or((None, None));
+
     DebugView {
         entities: infos,
         player,
@@ -885,7 +1528,384 @@ fn build_view(world: &mut World) -> DebugView {
         physics,
         stats,
         ground,
+        nav: build_nav(world),
+        quests_deep: build_quests_deep(world),
+        regions: build_regions(world),
+        atmosphere: build_atmosphere(world),
+        weather: build_weather(world),
+        border: build_border(world),
+        interior: build_interior(world),
+        ui: build_ui(world),
+        audio,
+        seeds: build_seeds(world),
+        skills: build_skills(world),
+        waypoints: build_waypoints(world),
+        save: build_save(world),
+        terrain,
+        surfaces,
+        world_hash,
+        events: world
+            .get_resource::<super::events::BridgeEventLog>()
+            .map(|log| log.tail_json())
+            .unwrap_or(Json::Null),
     }
+}
+
+/// IA de uma entidade no snapshot — FSM da engine + locomoção + perfil nav.
+fn ai_info(e: &bevy::ecs::world::EntityRef) -> Option<AiInfo> {
+    let fsm = e.get::<crate::ai::EnemyCreature>();
+    let loco = e.get::<crate::ai::AiLocomotion>();
+    let profile = e
+        .get::<crate::nav::NavProfile>()
+        .map(|p| match p {
+            crate::nav::NavProfile::Civil => "civil",
+            crate::nav::NavProfile::Wild => "wild",
+        });
+    (fsm.is_some() || loco.is_some() || profile.is_some()).then(|| AiInfo {
+        state: fsm.map(|f| match f.state {
+            crate::ai::EnemyState::Wander => "wander",
+            crate::ai::EnemyState::Chase => "chase",
+        }).map(str::to_string),
+        speed: fsm.map(|f| f.speed).unwrap_or(0.0),
+        aggro_radius: fsm.map(|f| f.aggro_radius).unwrap_or(0.0),
+        attack_radius: fsm.map(|f| f.attack_radius).unwrap_or(0.0),
+        home: fsm.and_then(|f| f.home).map(|h| [h.x, h.y]),
+        desired: loco.map(|l| l.desired()).unwrap_or_default().to_array(),
+        velocity: loco.map(|l| [l.velocity.x, l.velocity.y]).unwrap_or_default(),
+        goal: loco.and_then(|l| l.goal()).map(|g| [g.x, g.y]),
+        nav_profile: profile.map(str::to_string),
+    })
+}
+
+/// FNV-1a de uma entidade (nome + posição + hp + disabled), para o
+/// `world_hash` — soma wrapping de todos os hashes é independente de ordem.
+fn entity_hash(
+    name: Option<&str>,
+    position: Option<Vec3>,
+    health: Option<(f32, f32)>,
+    disabled: bool,
+) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    let mut feed = |bytes: &[u8]| {
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01B3);
+        }
+    };
+    feed(name.unwrap_or("").as_bytes());
+    feed(&[disabled as u8]);
+    if let Some(p) = position {
+        feed(&p.x.to_bits().to_le_bytes());
+        feed(&p.y.to_bits().to_le_bytes());
+        feed(&p.z.to_bits().to_le_bytes());
+    }
+    if let Some((current, max)) = health {
+        feed(&current.to_bits().to_le_bytes());
+        feed(&max.to_bits().to_le_bytes());
+    }
+    hash
+}
+
+/// Pilha de navegação no snapshot — config + tile + census de estados.
+fn build_nav(world: &mut World) -> Option<NavInfo> {
+    world.get_resource::<crate::nav::NavConfig>()?;
+    let mut census: HashMap<&'static str, usize> = HashMap::new();
+    {
+        let mut q = world.query::<&AgentState>();
+        for state in q.iter(world) {
+            *census.entry(crate::nav::agent::state_name(state)).or_insert(0) += 1;
+        }
+    }
+    let mut census: Vec<(&'static str, usize)> = census.into_iter().collect();
+    census.sort();
+    let config = world.resource::<crate::nav::NavConfig>();
+    let tile = world.get_resource::<crate::nav::NavTile>();
+    Some(NavInfo {
+        enabled: config.enabled,
+        agent_radius: config.agent_radius,
+        agent_height: config.agent_height,
+        tile_size: config.tile_size,
+        offroad_cost: config.offroad_cost,
+        tile_center: tile.and_then(|t| t.center).map(|c| [c.x, c.y]),
+        tile_generating: tile.is_some_and(|t| t.generating),
+        tile_generations: tile.map(|t| t.generations).unwrap_or(0),
+        tile_obstacles: tile.and_then(|t| t.baked_obstacles).map(|n| n as u64),
+        census,
+    })
+}
+
+/// Quests com definição + estado vivo (o `quests()` simples é só o mapa de
+/// estados — este traz título/objetivo/progresso para o agente decidir).
+fn build_quests_deep(world: &World) -> Vec<QuestInfo> {
+    let Some(log) = world.get_resource::<crate::quests::QuestLog>() else {
+        return Vec::new();
+    };
+    let vault = world.get_resource::<crate::economy::Vault>();
+    let mut out: Vec<QuestInfo> = log
+        .defs
+        .iter()
+        .map(|def| QuestInfo {
+            id: def.id.clone(),
+            title: def.title.clone(),
+            npc: def.npc.clone(),
+            biome: def.biome.clone(),
+            status: crate::quests::status_name(log.status(&def.id, vault)).to_string(),
+            objective_kind: def.objective.kind.clone(),
+            objective_target: def.objective.target.clone(),
+            objective_count: def.objective.count,
+            progress_text: log.progress_text(&def.id, vault),
+            visited: log
+                .states
+                .get(&def.id)
+                .map(|a| a.visited.clone())
+                .unwrap_or_default(),
+            rewards_gold: def.rewards.gold,
+            rewards_xp: def.rewards.xp,
+            rewards_items: def.rewards.items.clone(),
+        })
+        .collect();
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    out
+}
+
+/// `<BiomeRegion>` do mundo — polígonos são pequenos (dezenas de pontos).
+fn build_regions(world: &World) -> Vec<RegionInfo> {
+    world
+        .get_resource::<crate::worldsys::BiomeRegions>()
+        .map(|regions| {
+            regions
+                .list
+                .iter()
+                .map(|b| RegionInfo {
+                    id: b.id.clone(),
+                    display_name: b.display_name.clone(),
+                    polygon: b.polygon.clone(),
+                    fog_density: b.fog_density,
+                    tint: b.tint,
+                    pp_exposure: b.pp_exposure,
+                    pp_bloom_strength: b.pp_bloom_strength,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Atmosfera + névoa vivos (o `AtmosphereState` é o estado do grading; a
+/// densidade da névoa vive no `DistanceFog` da câmara).
+fn build_atmosphere(world: &World) -> Option<AtmosphereInfo> {
+    let at = world.get_resource::<crate::worldsys::AtmosphereState>()?;
+    let fog_density = world.iter_entities().find_map(|e| {
+        let fog = e.get::<bevy::pbr::DistanceFog>()?;
+        match fog.falloff {
+            bevy::pbr::FogFalloff::ExponentialSquared { density } => Some(density),
+            _ => None,
+        }
+    });
+    Some(AtmosphereInfo {
+        day: at.day,
+        night: at.night,
+        golden: at.golden,
+        fog_density,
+        fog_color: [at.fog[0], at.fog[1], at.fog[2]],
+        exposure_scale: at.exposure_scale,
+        bloom_boost: at.bloom_boost,
+    })
+}
+
+/// Tempo completo — `WeatherState` + scheduler do ciclo (o que VAI acontecer).
+fn build_weather(world: &World) -> Option<WeatherInfo> {
+    let weather = world.get_resource::<crate::worldsys::WeatherState>()?;
+    let scheduler = world
+        .get_resource::<crate::worldsys::WeatherScheduler>()
+        .map(|s| SchedulerInfo {
+            seed: s.seed,
+            index: s.index,
+            period: s.period,
+            timer: s.timer,
+            target: s.target,
+        });
+    Some(WeatherInfo {
+        wind: weather.wind,
+        wind_strength: weather.wind_strength,
+        clouds: weather.clouds,
+        rain: weather.rain,
+        cycle: weather.cycle,
+        scheduler,
+    })
+}
+
+fn build_border(world: &World) -> Option<BorderInfo> {
+    world
+        .get_resource::<crate::worldsys::WorldBorderConfig>()
+        .map(|b| BorderInfo {
+            radius: b.radius,
+            warn_seconds: b.warn_seconds,
+            margin: b.margin,
+        })
+}
+
+fn build_interior(world: &World) -> Option<InteriorInfo> {
+    let active = world
+        .get_resource::<crate::worldsys::InteriorLighting>()
+        .is_some_and(|i| i.active);
+    let config = world.get_resource::<crate::worldsys::InteriorSceneConfig>();
+    (config.is_some() || active).then(|| InteriorInfo {
+        active,
+        min: config.map(|c| c.min),
+        max: config.map(|c| c.max),
+        room_size: config.map(|c| c.room_size).unwrap_or([0.0, 0.0]),
+        room_origin: config.map(|c| c.room_origin).unwrap_or([0.0, 0.0]),
+        camera_distance: config.map(|c| c.camera_distance).unwrap_or(0.0),
+        camera_pitch_deg: config.map(|c| c.camera_pitch_deg).unwrap_or(0.0),
+        camera_yaw_deg: config.map(|c| c.camera_yaw_deg).unwrap_or(0.0),
+    })
+}
+
+/// Rect + estado de um nó de UI (rect = GlobalTransform XY + ComputedNode).
+fn ui_node_info(world: &World, entity: Entity, id: String) -> Option<UiNodeInfo> {
+    let e = world.get_entity(entity).ok()?;
+    let node = e.get::<bevy::ui::ComputedNode>()?;
+    let g = e.get::<GlobalTransform>()?;
+    let pos = g.translation().xy();
+    // Texto próprio + descendentes (o Bevy 0.19 põe spans nos filhos).
+    let mut text = String::new();
+    if let Some(span) = e.get::<bevy::text::TextSpan>() {
+        text.push_str(&span.0);
+    }
+    if let Some(children) = e.get::<Children>() {
+        for child in children.iter() {
+            if let Ok(child) = world.get_entity(child)
+                && let Some(span) = child.get::<bevy::text::TextSpan>()
+            {
+                text.push_str(&span.0);
+            }
+        }
+    }
+    Some(UiNodeInfo {
+        id,
+        x: pos.x,
+        y: pos.y,
+        w: node.size.x,
+        h: node.size.y,
+        visible: e.get::<Visibility>() != Some(&Visibility::Hidden),
+        disabled: e.get::<crate::ui::runtime::UiDisabled>().is_some(),
+        text: (!text.is_empty()).then_some(text),
+        classes: e
+            .get::<crate::ui::runtime::UiClasses>()
+            .map(|c| c.0.clone())
+            .unwrap_or_default(),
+    })
+}
+
+/// UI endereçável: ids declarativos do registry + nós nomeados `hud:*`/`chip:*`.
+fn build_ui(world: &World) -> Vec<UiNodeInfo> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    if let Some(registry) = world.get_resource::<crate::ui::runtime::UiRegistry>() {
+        let mut ids: Vec<(&String, Entity)> =
+            registry.by_id.iter().map(|(id, e)| (id, *e)).collect();
+        ids.sort_by(|a, b| a.0.cmp(b.0));
+        for (id, entity) in ids {
+            seen.insert(entity);
+            if let Some(info) = ui_node_info(world, entity, id.clone()) {
+                out.push(info);
+            }
+        }
+    }
+    // HUD da engine não passa pelo registry declarativo — nomeia-se com
+    // `Name` (`hud:health`, `chip:gold`…).
+    for e in world.iter_entities() {
+        if seen.contains(&e.id()) {
+            continue;
+        }
+        let Some(name) = e.get::<Name>() else {
+            continue;
+        };
+        let name = name.as_str();
+        if !name.starts_with("hud:") && !name.starts_with("chip:") {
+            continue;
+        }
+        if let Some(info) = ui_node_info(world, e.id(), name.to_string()) {
+            out.push(info);
+        }
+    }
+    out
+}
+
+fn build_skills(world: &World) -> Option<SkillsInfo> {
+    let tree = world.get_resource::<crate::skills::SkillTree>()?;
+    let cooldowns = world
+        .get_resource::<crate::skills::AbilityCooldowns>()
+        .map(|c| [c.dash, c.heal, c.strike]);
+    let stats = world.get_resource::<crate::skills::PlayerStatsResource>();
+    let level = world
+        .iter_entities()
+        .find_map(|e| e.get::<crate::skills::LevelState>().map(|l| (l.level, l.points)));
+    Some(SkillsInfo {
+        learned: tree.learned.clone(),
+        points: tree.points,
+        level: level.map(|l| l.0),
+        level_points: level.map(|l| l.1),
+        cooldowns,
+        bonus_damage: stats.map(|s| s.0.bonus_damage),
+        speed_mult: stats.map(|s| s.0.speed_mult),
+        max_hp_bonus: stats.map(|s| s.0.max_hp_bonus),
+        crit_bonus: stats.map(|s| s.0.crit_bonus),
+    })
+}
+
+fn build_seeds(world: &World) -> SeedInfo {
+    let terrain = world.get_resource::<crate::terrain::runtime::TerrainRuntime>();
+    let weather_seed = world
+        .get_resource::<crate::worldsys::WeatherScheduler>()
+        .map(|s| s.seed);
+    SeedInfo {
+        terrain_seed: terrain.map(|t| t.spec.seed),
+        world_size: terrain.map(|t| t.spec.world_size),
+        weather_seed,
+    }
+}
+
+fn build_waypoints(world: &World) -> WaypointInfo {
+    let marked = world
+        .get_resource::<crate::travel::NotaLog>()
+        .map(|log| {
+            let mut marked: Vec<String> = log.marked.iter().cloned().collect();
+            marked.sort();
+            marked
+        })
+        .unwrap_or_default();
+    let waypoint = world.get_resource::<crate::travel::Waypoint>();
+    WaypointInfo {
+        marked,
+        // Fase B2: o label é String (catálogo declarável) — clone, não borrow.
+        label: waypoint.and_then(|w| w.label.clone()),
+        position: waypoint.and_then(|w| w.position).map(|p| p.to_array()),
+        landmarks: crate::travel::LANDMARKS
+            .iter()
+            .map(|l| (l.name, l.biome.label()))
+            .collect(),
+    }
+}
+
+fn build_save(world: &World) -> Option<SaveInfo> {
+    let base_dir = world
+        .get_resource::<crate::save::WorldBaseDir>()
+        .and_then(|w| w.0.as_deref());
+    let save_dir = world
+        .get_resource::<crate::save::SaveDir>()
+        .and_then(|d| d.0.as_deref());
+    let path = crate::save::save_path_for(base_dir, save_dir);
+    let meta = std::fs::metadata(&path).ok();
+    Some(SaveInfo {
+        path: path.display().to_string(),
+        exists: meta.is_some(),
+        bytes: meta.as_ref().map(|m| m.len()),
+        mtime: meta
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs_f64()),
+    })
 }
 
 /// RGB de um `Color` (sRGB, 0..1).
@@ -1124,6 +2144,120 @@ pub fn eval(params: In<Option<Json>>, world: &mut World) -> BrpResult {
 }
 
 // ---------------------------------------------------------------- API Lua
+
+/// Documentação de `viber.debug.*`: `(nome, assinatura, descrição)`.
+///
+/// A fonte da VERDADE é a tabela construída em [`ensure_debug_api`]; esta
+/// lista é a documentação e o guard test
+/// (`test_apidoc_covers_registered_functions`) garante a paridade exata nos
+/// dois sentidos — função nova sem doc falha o teste, doc órfã também.
+pub const DEBUG_API_DOCS: &[(&str, &str, &str)] = &[
+    ("entities", "entities(radius?)", "entidades no snapshot {id,name?,x,y,z,disabled} (cap 4096, mais perto 1.º)"),
+    ("find", "find(name)", "id (bits) por nome exato → substring case-insensitive"),
+    ("find_all", "find_all(name)", "ids (bits) de todas as entidades que casam (substring)"),
+    ("pos", "pos(id)", "(x, y, z) da entidade"),
+    ("info", "info(id)", "tudo: transform, mesh, material, collider, luz, hp, script, ai"),
+    ("components", "components(id)", "nomes dos componentes (por arquétipo)"),
+    ("transform", "transform(id)", "{x,y,z,pitch,yaw,roll,sx,sy,sz,gx?,gy?,gz?}"),
+    ("mesh", "mesh(id)", "{topology,vertices,indices,has_normals,has_uvs,uv_bounds}"),
+    ("material", "material(id)", "{base_color,metallic,roughness,unlit,texturas{w,h}}"),
+    ("collider", "collider(id)", "resumo do shape Rapier"),
+    ("health", "health(id)", "{current,max,dead} de QUALQUER entidade"),
+    ("ai", "ai(id)", "FSM+locomoção da criatura {state,speed,aggro,goal,nav_profile}"),
+    ("nav", "nav()", "estado da pilha de navegação {enabled,tile,census}"),
+    ("player", "player()", "{id,x,y,z,hp,max_hp,xp,xp_next,speed}"),
+    ("camera", "camera()", "pose da OrbitCamera"),
+    ("clock", "clock()", "{minute,dawn,dusk,minutes_per_real_second}"),
+    ("vault", "vault()", "{gold,wood,stone,items{}}"),
+    ("quests", "quests()", "{id = estado}"),
+    ("quest", "quest(id)", "quest FUNDA: título, objetivo com progresso, rewards"),
+    ("quest_defs", "quest_defs()", "[{id,title,status,kind,npc}] das quests embutidas"),
+    ("regions", "regions()", "<BiomeRegion> com fog/tint/exposure"),
+    ("biome_at", "biome_at(x, z)", "região do ponto (polígono)"),
+    ("terrain", "terrain(x, z)", "queries AO VIVO: altura, estrada, água, distância a estrada"),
+    ("weather_full", "weather_full()", "tempo + scheduler do ciclo (o que VAI acontecer)"),
+    ("atmosphere", "atmosphere()", "grading/névoa vivos {day,night,fog_density,exposure}"),
+    ("border", "border()", "<WorldBorder> {radius,warn_seconds,margin}"),
+    ("interior", "interior()", "bolsa de interior {active,min,max,room_*}"),
+    ("ui_tree", "ui_tree()", "UI endereçável com RECTS (clique exato via input.click)"),
+    ("audio", "audio()", "buses/layers/sinks do mixer"),
+    ("seeds", "seeds()", "{terrain_seed,world_size,weather_seed} (determinismo)"),
+    ("world_hash", "world_hash()", "hash hex do conteúdo do mundo (A/B de determinismo)"),
+    ("skills", "skills()", "árvore, pontos, nível, cooldowns, bónus"),
+    ("waypoints", "waypoints()", "Nota marcada + waypoint + 12 marcos"),
+    ("save_info", "save_info()", "{path,exists,bytes,mtime} do save"),
+    ("stats", "stats()", "agregados do mundo inteiro (cap-free)"),
+    ("physics", "physics()", "tempos do último step do Rapier"),
+    ("colliders", "colliders(radius?)", "dump de colliders (cap 256)"),
+    ("lights", "lights(radius?)", "dump de luzes (com shadows destacado)"),
+    ("around", "around(radius, limit?)", "resumo compacto do que está perto do player"),
+    ("prof", "prof()", "snapshot do profiler"),
+    ("fps", "fps()", "fps instantâneo"),
+    ("time_scale", "time_scale()", "speed virtual atual"),
+    ("distance", "distance(a, b)", "metros entre duas entidades"),
+    ("ground_state", "ground_state()", "tuning de splat + pele das paredes correntes"),
+    ("events", "events(since?)", "eventos de jogo estruturados desde o cursor seq"),
+    ("apidoc", "apidoc()", "ESTA tabela: assinaturas + descrições de toda a API"),
+    ("set_pos", "set_pos(id, x, y, z)", "posição absoluta, sem snap"),
+    ("teleport", "teleport(x, y, z)", "player, Y explícito"),
+    ("tp", "tp(x, z)", "player, Y sentado no terreno"),
+    ("move_to", "move_to(id, x, z)", "qualquer entidade, Y no terreno"),
+    ("move_player", "move_player(dx, dz)", "delta XZ do player, Y no terreno"),
+    ("face", "face(x, z)", "player olha para o ponto"),
+    ("teleport_to", "teleport_to(name)", "player → primeira entidade com esse nome"),
+    ("rotate", "rotate(id, graus)", "soma yaw em graus em torno do Y"),
+    ("set_scale", "set_scale(id, s)", "escala uniforme (mín. 0.001)"),
+    ("hide", "hide(id)", "esconde"),
+    ("show", "show(id)", "mostra"),
+    ("toggle_vis", "toggle_vis(id)", "alterna visibilidade"),
+    ("disable", "disable(id)", "insere Disabled (sai de TODAS as queries)"),
+    ("enable", "enable(id)", "remove Disabled"),
+    ("despawn", "despawn(id)", "remove a entidade"),
+    ("heal", "heal(n)", "cura o player"),
+    ("damage", "damage(n)", "dano no player"),
+    ("xp", "xp(n)", "XP ao player"),
+    ("give", "give(what, n)", "recurso/item → vault (aditivo)"),
+    ("take", "take(what, n)", "tira do vault (recurso ou item)"),
+    ("vault_set", "vault_set(what, n)", "valor ABSOLUTO de recurso/item"),
+    ("set_speed", "set_speed(n)", "velocidade do player"),
+    ("set_time_scale", "set_time_scale(n)", "slow-mo; 0 = pausa"),
+    ("set_entity_hp", "set_entity_hp(id, hp)", "HP absoluto de QUALQUER entidade"),
+    ("set_max_hp", "set_max_hp(id, max)", "HP máximo de qualquer entidade"),
+    ("kill", "kill(id)", "HP a zero (sem i-frames)"),
+    ("set_hp", "set_hp(hp)", "HP do player (absoluto, clamp)"),
+    ("quest_force", "quest_force(id, state)", "força active|ready|done|not_taken"),
+    ("quest_progress", "quest_progress(id, n)", "fixa o progresso (kill/visit)"),
+    ("skill_learn", "skill_learn(id)", "aprende passiva (aplica o delta ao herói)"),
+    ("skill_points", "skill_points(n)", "pontos disponíveis (absoluto)"),
+    ("skill_reset", "skill_reset()", "esquece tudo, devolve pontos, reverte bónus"),
+    ("ai_state", "ai_state(id, s)", "força wander|chase (a FSM reavalia por distância)"),
+    ("ai_aggro", "ai_aggro(id, r)", "raio de aggro (o lever que persiste)"),
+    ("ai_calm_all", "ai_calm_all()", "todas as criaturas → Wander"),
+    ("nav_set", "nav_set{...}", "navmesh ao vivo: enabled/offroad_cost/tile_size"),
+    ("postfx", "postfx{...}", "gates de efeito AO VIVO (bloom, ssao, taa, …)"),
+    ("audio_set", "audio_set{...}", "volumes master/music/sfx ao vivo"),
+    ("combat_music", "combat_music(s)", "battle|boss|off (A/B de BGM)"),
+    ("physics_set", "physics_set{...}", "gravidade e/ou pausa do pipeline Rapier"),
+    ("set_camera", "set_camera{...}", "distance/pitch/yaw/target da OrbitCamera"),
+    ("set_clock", "set_clock(minute)", "0–1440 (1380 = noite)"),
+    ("set_weather", "set_weather{...}", "rain/clouds/wind (congela o ciclo)"),
+    ("rain_look", "rain_look{...}", "look da chuva ao vivo"),
+    ("set_window", "set_window(w, h)", "resize p/ QA responsivo"),
+    ("sun", "sun{...}", "sol da cena E do shader do terreno"),
+    ("ground", "ground{...}", "splat + pele das paredes ao vivo"),
+    ("save", "save()", "grava (mesmo caminho da UI)"),
+    ("load", "load()", "carrega o save"),
+    ("toast", "toast(msg)", "mensagem no HUD"),
+    ("spawn_sphere", "spawn_sphere(x, y, z, r, hex?)", "marker debug:sphere:N (visual)"),
+    ("spawn_box", "spawn_box(x, y, z, size, hex?)", "marker debug:box:N (visual)"),
+    ("spawn_light", "spawn_light(x, y, z, {...})", "PointLight debug:light:N"),
+    ("spawn", "spawn(url, x, y, z, {...})", "primitiva FÍSICA (box/sphere/cylinder) ou GLB do pool"),
+    ("set_material", "set_material(id, {...})", "material PBR ao vivo (só standard)"),
+    ("set_light", "set_light(id, {...})", "intensity/color/shadows/range ao vivo"),
+    ("clear_markers", "clear_markers()", "remove TODO o namespace debug:*"),
+    ("step", "step(n)", "pausa e avança EXATAMENTE n frames (QA determinístico)"),
+    ("play", "play()", "restaura a speed anterior ao step"),
+];
 
 /// Instala `viber.debug` uma vez (idempotente) — leituras do [`DebugView`],
 /// escritas para a fila [`DebugOps`].
@@ -1784,6 +2918,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                 DebugOp::SetCamera {
                     distance: opts.distance,
                     pitch: opts.pitch,
+                    yaw: opts.yaw,
                     target: opts.target,
                 },
             )
@@ -1889,6 +3024,858 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                     "moss": g.walls_b[2],
                 }),
             )?)
+        })?,
+    )?;
+
+    // ── Introspecção profunda (vitals de qualquer entidade, IA, nav, …) ──
+    api.set(
+        "health",
+        lua.create_function(|lua, arg: EntityArg| {
+            let entity = resolve(lua, arg)?;
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some((current, max)) = view
+                .entities
+                .iter()
+                .find(|info| info.id == entity)
+                .and_then(|info| info.health)
+            else {
+                return Ok(Value::Nil);
+            };
+            Ok(json_to_lua(
+                lua,
+                &json!({ "current": current, "max": max, "dead": current <= 0.0 }),
+            )?)
+        })?,
+    )?;
+
+    api.set(
+        "ai",
+        lua.create_function(|lua, arg: EntityArg| {
+            let entity = resolve(lua, arg)?;
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some(ai) = view
+                .entities
+                .iter()
+                .find(|info| info.id == entity)
+                .and_then(|info| info.ai.as_ref())
+            else {
+                return Ok(Value::Nil);
+            };
+            Ok(json_to_lua(
+                lua,
+                &json!({
+                    "state": ai.state,
+                    "speed": ai.speed,
+                    "aggro_radius": ai.aggro_radius,
+                    "attack_radius": ai.attack_radius,
+                    "home": ai.home,
+                    "desired": ai.desired,
+                    "velocity": ai.velocity,
+                    "goal": ai.goal,
+                    "nav_profile": ai.nav_profile,
+                }),
+            )?)
+        })?,
+    )?;
+
+    api.set(
+        "nav",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some(nav) = view.nav.as_ref() else {
+                return Ok(Value::Nil);
+            };
+            let census = lua.create_table()?;
+            for (name, count) in &nav.census {
+                census.raw_set(*name, *count)?;
+            }
+            let table = json_to_lua(
+                lua,
+                &json!({
+                    "enabled": nav.enabled,
+                    "agent_radius": nav.agent_radius,
+                    "agent_height": nav.agent_height,
+                    "tile_size": nav.tile_size,
+                    "offroad_cost": nav.offroad_cost,
+                    "tile_center": nav.tile_center,
+                    "tile_generating": nav.tile_generating,
+                    "tile_generations": nav.tile_generations,
+                    "tile_obstacles": nav.tile_obstacles,
+                }),
+            )?;
+            if let Value::Table(table) = &table {
+                table.raw_set("census", census)?;
+            }
+            Ok(table)
+        })?,
+    )?;
+
+    api.set(
+        "quest",
+        lua.create_function(|lua, id: String| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some(quest) = view.quests_deep.iter().find(|q| q.id == id) else {
+                return Ok(Value::Nil);
+            };
+            Ok(json_to_lua(
+                lua,
+                &json!({
+                    "id": quest.id,
+                    "title": quest.title,
+                    "npc": quest.npc,
+                    "biome": quest.biome,
+                    "status": quest.status,
+                    "objective": {
+                        "kind": quest.objective_kind,
+                        "target": quest.objective_target,
+                        "count": quest.objective_count,
+                        "progress_text": quest.progress_text,
+                    },
+                    "visited": quest.visited,
+                    "rewards": {
+                        "gold": quest.rewards_gold,
+                        "xp": quest.rewards_xp,
+                        "items": quest.rewards_items,
+                    },
+                }),
+            )?)
+        })?,
+    )?;
+
+    api.set(
+        "quest_defs",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let list: Vec<Json> = view
+                .quests_deep
+                .iter()
+                .map(|q| {
+                    json!({ "id": q.id, "title": q.title, "status": q.status,
+                            "kind": q.objective_kind, "npc": q.npc })
+                })
+                .collect();
+            Ok(json_to_lua(lua, &Json::Array(list))?)
+        })?,
+    )?;
+
+    api.set(
+        "regions",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let list: Vec<Json> = view
+                .regions
+                .iter()
+                .map(|r| {
+                    json!({
+                        "id": r.id, "display_name": r.display_name,
+                        "fog_density": r.fog_density, "tint": r.tint,
+                        "pp_exposure": r.pp_exposure,
+                        "pp_bloom_strength": r.pp_bloom_strength,
+                    })
+                })
+                .collect();
+            Ok(json_to_lua(lua, &Json::Array(list))?)
+        })?,
+    )?;
+
+    api.set(
+        "biome_at",
+        lua.create_function(|lua, (x, z): (f32, f32)| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some(region) = view
+                .regions
+                .iter()
+                .find(|r| crate::ambient::point_in_polygon(x, z, &r.polygon))
+            else {
+                return Ok(Value::Nil);
+            };
+            Ok(json_to_lua(
+                lua,
+                &json!({
+                    "id": region.id,
+                    "display_name": region.display_name,
+                    "fog_density": region.fog_density,
+                    "tint": region.tint,
+                    "pp_exposure": region.pp_exposure,
+                    "pp_bloom_strength": region.pp_bloom_strength,
+                }),
+            )?)
+        })?,
+    )?;
+
+    // `terrain(x, z)` — queries posicionais AO VIVO (o terreno vive atrás de
+    // Arcs: o snapshot só guarda os handles).
+    api.set(
+        "terrain",
+        lua.create_function(|lua, (x, z): (f32, f32)| {
+            if !(x.is_finite() && z.is_finite()) {
+                return Err(mlua::Error::runtime("terrain: x/z não finitos (NaN/inf)"));
+            }
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some(terrain) = view.terrain.as_ref() else {
+                return Ok(Value::Nil);
+            };
+            let height = if terrain.voxel.is_flat() {
+                terrain.grid.sample(x, z)
+            } else {
+                terrain.voxel.surface_top(&*terrain.grid, x, z)
+            };
+            let water_surface = view.surfaces.as_ref().and_then(|s| {
+                let p = Vec2::new(x, z);
+                s.water
+                    .iter()
+                    .filter(|w| w.contains(p))
+                    .filter_map(|w| w.surface_y_at(p))
+                    .fold(None::<f32>, |acc, y| Some(acc.map_or(y, |max| max.max(y))))
+            });
+            let distance_to_road = view.surfaces.as_ref().map(|s| {
+                let p = Vec2::new(x, z);
+                s.roads
+                    .iter()
+                    .map(|r| r.distance_to_road(p))
+                    .fold(f32::MAX, f32::min)
+            });
+            Ok(json_to_lua(
+                lua,
+                &json!({
+                    "height": height,
+                    "in_field": view.seeds.world_size.is_some_and(|half| {
+                        let half = half * 0.5;
+                        x >= -half && x <= half && z >= -half && z <= half
+                    }),
+                    "on_road": view.surfaces.as_ref().is_some_and(|s| s.on_road(x, z)),
+                    "in_water": view.surfaces.as_ref().is_some_and(|s| s.in_water(x, z)),
+                    "water_surface": water_surface,
+                    "distance_to_road": distance_to_road,
+                }),
+            )?)
+        })?,
+    )?;
+
+    api.set(
+        "weather_full",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some(w) = view.weather.as_ref() else {
+                return Ok(Value::Nil);
+            };
+            Ok(json_to_lua(
+                lua,
+                &json!({
+                    "wind": w.wind,
+                    "wind_strength": w.wind_strength,
+                    "clouds": w.clouds,
+                    "rain": w.rain,
+                    "cycle": w.cycle,
+                    "scheduler": w.scheduler.as_ref().map(|s| json!({
+                        "seed": s.seed, "index": s.index, "period": s.period,
+                        "timer": s.timer, "target": s.target,
+                    })),
+                }),
+            )?)
+        })?,
+    )?;
+
+    api.set(
+        "atmosphere",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some(a) = view.atmosphere.as_ref() else {
+                return Ok(Value::Nil);
+            };
+            Ok(json_to_lua(
+                lua,
+                &json!({
+                    "day": a.day, "night": a.night, "golden": a.golden,
+                    "fog_density": a.fog_density, "fog_color": a.fog_color,
+                    "exposure_scale": a.exposure_scale, "bloom_boost": a.bloom_boost,
+                }),
+            )?)
+        })?,
+    )?;
+
+    api.set(
+        "border",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some(b) = view.border.as_ref() else {
+                return Ok(Value::Nil);
+            };
+            Ok(json_to_lua(
+                lua,
+                &json!({ "radius": b.radius, "warn_seconds": b.warn_seconds, "margin": b.margin }),
+            )?)
+        })?,
+    )?;
+
+    api.set(
+        "interior",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some(i) = view.interior.as_ref() else {
+                return Ok(Value::Nil);
+            };
+            Ok(json_to_lua(
+                lua,
+                &json!({
+                    "active": i.active, "min": i.min, "max": i.max,
+                    "room_size": i.room_size, "room_origin": i.room_origin,
+                    "camera_distance": i.camera_distance,
+                    "camera_pitch_deg": i.camera_pitch_deg,
+                    "camera_yaw_deg": i.camera_yaw_deg,
+                }),
+            )?)
+        })?,
+    )?;
+
+    // `ui_tree()` — ids declarativos + hud:* com RECTS: dá o clique exato
+    // (`viber.input.click`) sem adivinhar coordenadas no screenshot.
+    api.set(
+        "ui_tree",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let list: Vec<Json> = view
+                .ui
+                .iter()
+                .map(|n| {
+                    json!({
+                        "id": n.id, "x": n.x, "y": n.y, "w": n.w, "h": n.h,
+                        "visible": n.visible, "disabled": n.disabled,
+                        "text": n.text, "classes": n.classes,
+                    })
+                })
+                .collect();
+            Ok(json_to_lua(lua, &Json::Array(list))?)
+        })?,
+    )?;
+
+    api.set(
+        "audio",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            match view.audio.as_ref() {
+                Some(audio) => json_to_lua(lua, audio),
+                None => Ok(Value::Nil),
+            }
+        })?,
+    )?;
+
+    api.set(
+        "seeds",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            Ok(json_to_lua(
+                lua,
+                &json!({
+                    "terrain_seed": view.seeds.terrain_seed,
+                    "world_size": view.seeds.world_size,
+                    "weather_seed": view.seeds.weather_seed,
+                }),
+            )?)
+        })?,
+    )?;
+
+    // Hash do CONTEÚDO do mundo (soma FNV-1a por entidade, independente de
+    // ordem/ids): dois boots da mesma seed do mesmo binário têm o MESMO hash.
+    // STRING hex — u64 não sobrevive ao f64 do Lua.
+    api.set(
+        "world_hash",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            Ok(format!("{:016x}", view.world_hash))
+        })?,
+    )?;
+
+    // Event log estruturado (cauda do ring no snapshot; `since` = cursor).
+    api.set(
+        "events",
+        lua.create_function(|lua, since: Option<f64>| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let since = since.unwrap_or(0.0);
+            let Some(list) = view.events.as_array() else {
+                return Ok(Value::Nil);
+            };
+            let filtered: Vec<Json> = list
+                .iter()
+                .filter(|event| {
+                    event.get("seq").and_then(Json::as_f64).unwrap_or(0.0) > since
+                })
+                .cloned()
+                .collect();
+            Ok(json_to_lua(lua, &Json::Array(filtered))?)
+        })?,
+    )?;
+
+    api.set(
+        "step",
+        lua.create_function(|lua, frames: u32| push(lua, DebugOp::StepFrames(frames)))?,
+    )?;
+    api.set(
+        "play",
+        lua.create_function(|lua, ()| push(lua, DebugOp::ResumePlay))?,
+    )?;
+
+    // ── Auto-descoberta (M4): apidoc — assinatura + 1 linha por função ──
+    // A tabela DEBUG_API_DOCS é a fonte; o guard test garante que cobre
+    // EXATAMENTE as chaves registadas acima (nenhuma a menos, nenhuma
+    // esquecida) — o `test_apidoc_covers_registered_functions`.
+    api.set(
+        "apidoc",
+        lua.create_function(|lua, ()| {
+            let view = lua.app_data_ref::<DebugView>();
+            let _ = view; // (docs são estáticas; a view não é precisa)
+            let mut out = lua.create_table()?;
+
+            // 1) viber.debug.* — documentação estática.
+            let debug_docs = lua.create_table()?;
+            for (name, signature, desc) in DEBUG_API_DOCS {
+                let entry = lua.create_table()?;
+                entry.raw_set("signature", *signature)?;
+                entry.raw_set("description", *desc)?;
+                entry.raw_set("group", "debug")?;
+                debug_docs.raw_set(*name, entry)?;
+            }
+            out.raw_set("debug", debug_docs)?;
+
+            // 2) viber.* dos scripts de jogo + ui/profiler — ENUMERADOS da
+            //    tabela viva (a verdade do binário, não de docs antigas).
+            let enumerate = |lua: &Lua, table: Value| -> mlua::Result<Vec<String>> {
+                let mut names = Vec::new();
+                if let Value::Table(t) = table {
+                    for pair in t.clone().pairs::<Value, Value>() {
+                        if let (Value::String(k), Value::Function(_)) = pair? {
+                            names.push(k.to_str()?.to_string());
+                        }
+                    }
+                }
+                names.sort();
+                Ok(names)
+            };
+            let viber_table: Value = lua.globals().get("viber")?;
+            let game_api = enumerate(lua, viber_table.clone())?;
+            let game = lua.create_table()?;
+            for name in game_api {
+                game.raw_set(name.as_str(), true)?;
+            }
+            out.raw_set("game", game)?;
+            if let Value::Table(t) = &viber_table {
+                if let Ok(ui) = t.get::<Value>("ui")
+                    && let Ok(names) = enumerate(lua, ui)
+                {
+                    let ui_table = lua.create_table()?;
+                    for name in names {
+                        ui_table.raw_set(name.as_str(), true)?;
+                    }
+                    out.raw_set("ui", ui_table)?;
+                }
+                if let Ok(profiler) = t.get::<Value>("profiler")
+                    && let Ok(names) = enumerate(lua, profiler)
+                {
+                    let prof = lua.create_table()?;
+                    for name in names {
+                        prof.raw_set(name.as_str(), true)?;
+                    }
+                    out.raw_set("profiler", prof)?;
+                }
+            }
+            Ok(Value::Table(out))
+        })?,
+    )?;
+
+    api.set(
+        "skills",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some(s) = view.skills.as_ref() else {
+                return Ok(Value::Nil);
+            };
+            let learned = lua.create_sequence_from(s.learned.iter().map(String::as_str))?;
+            let table = json_to_lua(
+                lua,
+                &json!({
+                    "points": s.points,
+                    "level": s.level,
+                    "level_points": s.level_points,
+                    "cooldowns": s.cooldowns.map(|c| json!({ "dash": c[0], "heal": c[1], "strike": c[2] })),
+                    "bonus_damage": s.bonus_damage,
+                    "speed_mult": s.speed_mult,
+                    "max_hp_bonus": s.max_hp_bonus,
+                    "crit_bonus": s.crit_bonus,
+                }),
+            )?;
+            if let Value::Table(table) = &table {
+                table.raw_set("learned", learned)?;
+            }
+            Ok(table)
+        })?,
+    )?;
+
+    api.set(
+        "waypoints",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let marked = lua.create_sequence_from(view.waypoints.marked.iter().map(String::as_str))?;
+            let landmarks = lua.create_sequence_from(
+                view.waypoints
+                    .landmarks
+                    .iter()
+                    .map(|(name, label)| {
+                        let t = lua.create_table()?;
+                        t.raw_set("name", *name)?;
+                        t.raw_set("biome", *label)?;
+                        Ok(Value::Table(t))
+                    })
+                    .collect::<mlua::Result<Vec<Value>>>()?,
+            )?;
+            let table = lua.create_table()?;
+            table.raw_set("marked", marked)?;
+            if let Some(label) = &view.waypoints.label {
+                table.raw_set("label", label.as_str())?;
+            }
+            if let Some(p) = view.waypoints.position {
+                table.raw_set("x", p[0])?;
+                table.raw_set("y", p[1])?;
+                table.raw_set("z", p[2])?;
+            }
+            table.raw_set("landmarks", landmarks)?;
+            Ok(Value::Table(table))
+        })?,
+    )?;
+
+    api.set(
+        "save_info",
+        lua.create_function(|lua, ()| {
+            let view = lua
+                .app_data_ref::<DebugView>()
+                .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
+            let Some(s) = view.save.as_ref() else {
+                return Ok(Value::Nil);
+            };
+            Ok(json_to_lua(
+                lua,
+                &json!({
+                    "path": s.path, "exists": s.exists,
+                    "bytes": s.bytes, "mtime": s.mtime,
+                }),
+            )?)
+        })?,
+    )?;
+
+    // ── Escrita M2: controlo total (vitals, quests, vault, skills, IA…) ──
+    api.set(
+        "set_entity_hp",
+        lua.create_function(|lua, (arg, hp): (EntityArg, f32)| {
+            let entity = resolve(lua, arg)?;
+            push(lua, DebugOp::SetEntityHp(entity, hp))
+        })?,
+    )?;
+    api.set(
+        "set_max_hp",
+        lua.create_function(|lua, (arg, max): (EntityArg, f32)| {
+            let entity = resolve(lua, arg)?;
+            push(lua, DebugOp::SetMaxHp(entity, max))
+        })?,
+    )?;
+
+    api.set(
+        "quest_force",
+        lua.create_function(|lua, (id, state): (String, String)| {
+            push(lua, DebugOp::QuestForce(id, state))
+        })?,
+    )?;
+    api.set(
+        "quest_progress",
+        lua.create_function(|lua, (id, n): (String, u32)| {
+            push(lua, DebugOp::QuestProgress(id, n))
+        })?,
+    )?;
+
+    api.set(
+        "vault_set",
+        lua.create_function(|lua, (what, n): (String, u32)| {
+            push(lua, DebugOp::VaultSet(what, n))
+        })?,
+    )?;
+    api.set(
+        "take",
+        lua.create_function(|lua, (what, n): (String, u32)| {
+            push(lua, DebugOp::Take(what, n))
+        })?,
+    )?;
+
+    api.set(
+        "skill_learn",
+        lua.create_function(|lua, id: String| push(lua, DebugOp::SkillLearn(id)))?,
+    )?;
+    api.set(
+        "skill_points",
+        lua.create_function(|lua, n: u32| push(lua, DebugOp::SkillPoints(n)))?,
+    )?;
+    api.set(
+        "skill_reset",
+        lua.create_function(|lua, ()| push(lua, DebugOp::SkillReset))?,
+    )?;
+
+    api.set(
+        "ai_state",
+        lua.create_function(|lua, (arg, state): (EntityArg, String)| {
+            let entity = resolve(lua, arg)?;
+            push(lua, DebugOp::AiState(entity, state))
+        })?,
+    )?;
+    api.set(
+        "ai_aggro",
+        lua.create_function(|lua, (arg, radius): (EntityArg, f32)| {
+            let entity = resolve(lua, arg)?;
+            push(lua, DebugOp::AiAggro(entity, radius))
+        })?,
+    )?;
+    api.set(
+        "ai_calm_all",
+        lua.create_function(|lua, ()| push(lua, DebugOp::AiCalmAll))?,
+    )?;
+
+    api.set(
+        "nav_set",
+        lua.create_function(|lua, opts: NavSetOpts| {
+            push(
+                lua,
+                DebugOp::NavSet {
+                    enabled: opts.enabled,
+                    offroad_cost: opts.offroad_cost,
+                    tile_size: opts.tile_size,
+                },
+            )
+        })?,
+    )?;
+
+    api.set(
+        "postfx",
+        lua.create_function(|lua, opts: PostFxOpts| {
+            // Cada campo presente força o SEU gate; um op por efeito.
+            const GATES: &[(&str, &str)] = &[
+                ("autoexposure", "AUTOEXPOSURE"),
+                ("bloom", "BLOOM"),
+                ("dof", "DOF"),
+                ("ssao", "SSAO"),
+                ("contact_shadows", "CONTACT_SHADOWS"),
+                ("aerial", "AERIAL"),
+                ("splittone", "SPLITTONE"),
+                ("vignette", "VIGNETTE"),
+                ("chromatic", "CHROMATIC"),
+                ("cas", "CAS"),
+                ("motion_blur", "MOTION_BLUR"),
+                ("taa", "TAA"),
+                ("volumetrics", "VOLUMETRICS"),
+            ];
+            let values = [
+                opts.autoexposure,
+                opts.bloom,
+                opts.dof,
+                opts.ssao,
+                opts.contact_shadows,
+                opts.aerial,
+                opts.splittone,
+                opts.vignette,
+                opts.chromatic,
+                opts.cas,
+                opts.motion_blur,
+                opts.taa,
+                opts.volumetrics,
+            ];
+            for ((_, key), on) in GATES.iter().zip(values) {
+                if let Some(on) = on {
+                    // &'static str das consts — safe para o op.
+                    let key: &'static str = key;
+                    push(lua, DebugOp::PostFx { key, on })?;
+                }
+            }
+            Ok(())
+        })?,
+    )?;
+
+    api.set(
+        "audio_set",
+        lua.create_function(|lua, opts: AudioSetOpts| {
+            push(
+                lua,
+                DebugOp::AudioSet {
+                    master: opts.master,
+                    music: opts.music,
+                    sfx: opts.sfx,
+                },
+            )
+        })?,
+    )?;
+
+    api.set(
+        "combat_music",
+        lua.create_function(|lua, state: String| push(lua, DebugOp::CombatMusic(state)))?,
+    )?;
+
+    api.set(
+        "physics_set",
+        lua.create_function(|lua, opts: PhysicsSetOpts| {
+            push(
+                lua,
+                DebugOp::PhysicsSet {
+                    gravity: opts.gravity,
+                    paused: opts.paused,
+                },
+            )
+        })?,
+    )?;
+
+    api.set("save", lua.create_function(|lua, ()| push(lua, DebugOp::Save))?)?;
+    api.set("load", lua.create_function(|lua, ()| push(lua, DebugOp::Load))?)?;
+
+    api.set(
+        "teleport_to",
+        lua.create_function(|lua, name: String| push(lua, DebugOp::TeleportTo(name)))?,
+    )?;
+
+    api.set(
+        "spawn",
+        lua.create_function(
+            |lua, (url, x, y, z, opts): (String, f32, f32, f32, SpawnOpts)| {
+                let color = match opts.color {
+                    Some(hex) => Some(
+                        crate::xml::values::parse_color(&hex, "viber.debug.spawn")
+                            .map_err(mlua::Error::runtime)?,
+                    ),
+                    None => None,
+                };
+                push(
+                    lua,
+                    DebugOp::Spawn {
+                        url,
+                        pos: Vec3::new(x, y, z),
+                        yaw: opts.yaw,
+                        scale: opts.scale,
+                        color,
+                        collider: opts.collider.unwrap_or(true),
+                        snap: opts.snap.unwrap_or(true),
+                    },
+                )
+            },
+        )?,
+    )?;
+
+    api.set(
+        "spawn_light",
+        lua.create_function(|lua, (x, y, z, opts): (f32, f32, f32, SpawnLightOpts)| {
+            let color = match opts.color {
+                Some(hex) => Some(
+                    crate::xml::values::parse_color(&hex, "viber.debug.spawn_light")
+                        .map_err(mlua::Error::runtime)?,
+                ),
+                None => None,
+            };
+            push(
+                lua,
+                DebugOp::SpawnLight {
+                    pos: Vec3::new(x, y, z),
+                    intensity: opts.intensity,
+                    color,
+                    shadows: opts.shadows.unwrap_or(false),
+                    range: opts.range,
+                },
+            )
+        })?,
+    )?;
+
+    api.set(
+        "set_material",
+        lua.create_function(|lua, (arg, opts): (EntityArg, MaterialOpts)| {
+            let entity = resolve(lua, arg)?;
+            let base_color = match opts.base_color {
+                Some(hex) => {
+                    let c = crate::xml::values::parse_color(&hex, "viber.debug.set_material")
+                        .map_err(mlua::Error::runtime)?;
+                    Some([c[0], c[1], c[2], 1.0])
+                }
+                None => None,
+            };
+            let emissive = match opts.emissive {
+                Some(hex) => Some(
+                    crate::xml::values::parse_color(&hex, "viber.debug.set_material")
+                        .map_err(mlua::Error::runtime)?,
+                ),
+                None => None,
+            };
+            push(
+                lua,
+                DebugOp::SetMaterial {
+                    entity,
+                    base_color,
+                    metallic: opts.metallic,
+                    roughness: opts.roughness,
+                    unlit: opts.unlit,
+                    emissive,
+                },
+            )
+        })?,
+    )?;
+
+    api.set(
+        "set_light",
+        lua.create_function(|lua, (arg, opts): (EntityArg, LightOpts)| {
+            let entity = resolve(lua, arg)?;
+            let color = match opts.color {
+                Some(hex) => Some(
+                    crate::xml::values::parse_color(&hex, "viber.debug.set_light")
+                        .map_err(mlua::Error::runtime)?,
+                ),
+                None => None,
+            };
+            push(
+                lua,
+                DebugOp::SetLight {
+                    entity,
+                    intensity: opts.intensity,
+                    color,
+                    shadows: opts.shadows,
+                    range: opts.range,
+                },
+            )
         })?,
     )?;
 
@@ -2057,8 +4044,14 @@ fn op_non_finite(op: &DebugOp) -> Option<&'static str> {
         DebugOp::Rotate(_, deg) if !deg.is_finite() => Some("rotate"),
         DebugOp::SetScale(_, s) if !s.is_finite() => Some("set_scale"),
         DebugOp::SetCamera {
-            distance, pitch, ..
-        } if distance.is_some_and(|d| !d.is_finite()) || pitch.is_some_and(|p| !p.is_finite()) => {
+            distance,
+            pitch,
+            yaw,
+            ..
+        } if distance.is_some_and(|d| !d.is_finite())
+            || pitch.is_some_and(|p| !p.is_finite())
+            || yaw.is_some_and(|y| !y.is_finite()) =>
+        {
             Some("set_camera")
         }
         DebugOp::SetClock(minute) if !minute.is_finite() => Some("set_clock"),
@@ -2128,6 +4121,70 @@ fn op_non_finite(op: &DebugOp) -> Option<&'static str> {
         }
         DebugOp::SpawnMarker { pos, size, .. } if !finite3(*pos) || !finite3(*size) => {
             Some("spawn_marker")
+        }
+        DebugOp::SetEntityHp(_, hp) | DebugOp::SetMaxHp(_, hp) if !hp.is_finite() => {
+            Some("set_entity_hp/set_max_hp")
+        }
+        DebugOp::QuestProgress(_, n) => {
+            (*n > 1_000_000).then_some("quest_progress")
+        }
+        DebugOp::AiAggro(_, r) if !r.is_finite() => Some("ai_aggro"),
+        DebugOp::NavSet {
+            offroad_cost,
+            tile_size,
+            ..
+        } if offroad_cost.is_some_and(|v| !v.is_finite())
+            || tile_size.is_some_and(|v| !v.is_finite()) =>
+        {
+            Some("nav_set")
+        }
+        DebugOp::AudioSet {
+            master,
+            music,
+            sfx,
+        } if [master, music, sfx]
+            .into_iter()
+            .any(|v| v.is_some_and(|x| !x.is_finite())) =>
+        {
+            Some("audio_set")
+        }
+        DebugOp::PhysicsSet {
+            gravity: Some(g), ..
+        } if !finite3(g.0) => Some("physics_set"),
+        DebugOp::Spawn {
+            pos, yaw, scale, ..
+        } if !finite3(*pos)
+            || yaw.is_some_and(|v| !v.is_finite())
+            || scale.is_some_and(|v| !v.is_finite()) =>
+        {
+            Some("spawn")
+        }
+        DebugOp::SpawnLight {
+            pos,
+            intensity,
+            range,
+            ..
+        } if !finite3(*pos)
+            || intensity.is_some_and(|v| !v.is_finite())
+            || range.is_some_and(|v| !v.is_finite()) =>
+        {
+            Some("spawn_light")
+        }
+        DebugOp::SetMaterial {
+            metallic,
+            roughness,
+            ..
+        } if metallic.is_some_and(|v| !v.is_finite())
+            || roughness.is_some_and(|v| !v.is_finite()) =>
+        {
+            Some("set_material")
+        }
+        DebugOp::SetLight {
+            intensity, range, ..
+        } if intensity.is_some_and(|v| !v.is_finite())
+            || range.is_some_and(|v| !v.is_finite()) =>
+        {
+            Some("set_light")
         }
         _ => None,
     }
@@ -2302,10 +4359,8 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
             let markers: Vec<Entity> = world
                 .iter_entities()
                 .filter(|e| {
-                    e.get::<Name>().is_some_and(|n| {
-                        let n = n.as_str();
-                        n.starts_with("debug:sphere:") || n.starts_with("debug:box:")
-                    })
+                    e.get::<Name>()
+                        .is_some_and(|n| n.as_str().starts_with("debug:"))
                 })
                 .map(|e| e.id())
                 .collect();
@@ -2364,6 +4419,7 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
         DebugOp::SetCamera {
             distance,
             pitch,
+            yaw,
             target,
         } => {
             let cam_entity = world
@@ -2384,6 +4440,9 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
                 if let Some(pitch) = pitch {
                     cam.pitch_deg = Some(pitch);
                     cam.pitch_state_deg = pitch;
+                }
+                if let Some(yaw) = yaw {
+                    cam.yaw_deg = yaw;
                 }
                 if let Some(target) = target {
                     cam.target = Some(target);
@@ -2623,7 +4682,755 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
                 .set_physical_resolution(width.max(64.0) as u32, height.max(64.0) as u32);
             true
         }
+        DebugOp::SetEntityHp(entity, hp) => set_entity_health(world, entity, Some(hp), None, warnings),
+        DebugOp::SetMaxHp(entity, max) => set_entity_health(world, entity, None, Some(max), warnings),
+        DebugOp::QuestForce(id, state) => {
+            let Some(mut log) = world.get_resource_mut::<crate::quests::QuestLog>() else {
+                warnings.push("sem QuestLog — quest_force ignorado".into());
+                return false;
+            };
+            let Some(def) = log.def(&id).cloned() else {
+                warnings.push(format!("quest '{id}' não existe (quest_defs() lista)"));
+                return false;
+            };
+            match state.as_str() {
+                "active" => {
+                    if !log.accept(&id) {
+                        warnings.push(format!("quest '{id}': só se aceita de not_taken"));
+                        return false;
+                    }
+                }
+                "ready" => match def.objective.kind.as_str() {
+                    "collect" => {
+                        // O vault é a autoridade do collect — aceita e avisa
+                        // que o READY vem do inventário.
+                        log.accept(&id);
+                        warnings.push(
+                            "collect é vault-driven: ready = encher o vault                              (viber.debug.vault_set)"
+                                .into(),
+                        );
+                    }
+                    kind => {
+                        let count = def.objective.count;
+                        let mut active = crate::quests::ActiveQuest::default();
+                        if kind == "visit" {
+                            active.visited = def
+                                .objective
+                                .target
+                                .split_whitespace()
+                                .take(count as usize)
+                                .map(crate::quests::normalize_target)
+                                .collect();
+                        } else {
+                            active.progress = count;
+                        }
+                        log.accept(&id);
+                        if let Some(entry) = log.states.get_mut(&id) {
+                            *entry = active;
+                        }
+                    }
+                },
+                "done" => {
+                    log.states.remove(&id);
+                    if !log.done.iter().any(|d| d == &id) {
+                        log.done.push(id.clone());
+                    }
+                }
+                "not_taken" | "reset" => {
+                    log.states.remove(&id);
+                    log.done.retain(|d| d != &id);
+                }
+                other => {
+                    warnings.push(format!(
+                        "quest_force: estado '{other}' inválido (active|ready|done|not_taken)"
+                    ));
+                    return false;
+                }
+            }
+            true
+        }
+        DebugOp::QuestProgress(id, n) => {
+            let Some(mut log) = world.get_resource_mut::<crate::quests::QuestLog>() else {
+                warnings.push("sem QuestLog — quest_progress ignorado".into());
+                return false;
+            };
+            let Some(def) = log.def(&id).cloned() else {
+                warnings.push(format!("quest '{id}' não existe"));
+                return false;
+            };
+            let Some(active) = log.states.get_mut(&id) else {
+                warnings.push(format!(
+                    "quest '{id}' não está ativa (quest_force '{id}', 'active')"
+                ));
+                return false;
+            };
+            match def.objective.kind.as_str() {
+                "kill" => active.progress = n,
+                "visit" => {
+                    active.visited = def
+                        .objective
+                        .target
+                        .split_whitespace()
+                        .take(n as usize)
+                        .map(crate::quests::normalize_target)
+                        .collect();
+                }
+                _ => {
+                    warnings.push(
+                        "collect é vault-driven: usa viber.debug.vault_set".into(),
+                    );
+                    return false;
+                }
+            }
+            true
+        }
+        DebugOp::VaultSet(what, n) => match world.get_resource_mut::<crate::economy::Vault>() {
+            Some(mut vault) => {
+                match what.as_str() {
+                    "gold" => vault.gold = n,
+                    "wood" => vault.wood = n,
+                    "stone" => vault.stone = n,
+                    _ => {
+                        vault.items.insert(what, n.min(99));
+                    }
+                }
+                true
+            }
+            None => {
+                warnings.push("vault indisponível — vault_set ignorado".into());
+                false
+            }
+        },
+        DebugOp::Take(what, n) => match world.get_resource_mut::<crate::economy::Vault>() {
+            Some(mut vault) => {
+                if vault.take(&what, n) {
+                    true
+                } else {
+                    warnings.push(format!("take: '{what}'×{n} — stock insuficiente"));
+                    false
+                }
+            }
+            None => {
+                warnings.push("vault indisponível — take ignorado".into());
+                false
+            }
+        },
+        DebugOp::SkillLearn(id) => {
+            // Delta derivado da ÁRVORE (fonte da verdade) — o resource
+            // PlayerStatsResource pode nem existir numa app mínima.
+            let (old_stats, learned) = {
+                let Some(mut tree) = world.get_resource_mut::<crate::skills::SkillTree>() else {
+                    warnings.push("sem SkillTree — skill_learn ignorado".into());
+                    return false;
+                };
+                let old_stats = crate::skills::stats_from_learned(&tree.learned);
+                (old_stats, tree.learn(&id))
+            };
+            match learned {
+                Some(new_stats) => {
+                    apply_stats_delta(world, &old_stats, &new_stats, warnings);
+                    if let Some(mut res) =
+                        world.get_resource_mut::<crate::skills::PlayerStatsResource>()
+                    {
+                        res.0 = new_stats;
+                    }
+                    true
+                }
+                None => {
+                    warnings.push(format!(
+                        "skill '{id}': id desconhecido, sem pontos ou sem pré-requisitos"
+                    ));
+                    false
+                }
+            }
+        }
+        DebugOp::SkillPoints(n) => match world.get_resource_mut::<crate::skills::SkillTree>() {
+            Some(mut tree) => {
+                tree.points = n;
+                true
+            }
+            None => {
+                warnings.push("sem SkillTree — skill_points ignorado".into());
+                false
+            }
+        },
+        DebugOp::SkillReset => {
+            let (old_stats, new_stats) = {
+                let Some(mut tree) = world.get_resource_mut::<crate::skills::SkillTree>() else {
+                    warnings.push("sem SkillTree — skill_reset ignorado".into());
+                    return false;
+                };
+                let old_stats = crate::skills::stats_from_learned(&tree.learned);
+                let forgotten = tree.learned.len() as u32;
+                tree.learned.clear();
+                tree.points += forgotten;
+                (old_stats, crate::skills::PlayerStats::default())
+            };
+            apply_stats_delta(world, &old_stats, &new_stats, warnings);
+            if let Some(mut res) = world.get_resource_mut::<crate::skills::PlayerStatsResource>() {
+                res.0 = new_stats;
+            }
+            true
+        }
+        DebugOp::AiState(entity, state) => {
+            let state = match state.as_str() {
+                "wander" => crate::ai::EnemyState::Wander,
+                "chase" => crate::ai::EnemyState::Chase,
+                other => {
+                    warnings.push(format!("ai_state: '{other}' inválido (wander|chase)"));
+                    return false;
+                }
+            };
+            let applied = with_entity(world, entity, warnings, |e| {
+                e.get_mut::<crate::ai::EnemyCreature>()
+                    .map(|mut fsm| fsm.state = state)
+                    .is_some()
+            })
+            .unwrap_or(false);
+            if !applied {
+                warnings.push("ai_state: entidade sem EnemyCreature (FSM da engine)".into());
+            }
+            applied
+        }
+        DebugOp::AiAggro(entity, radius) => {
+            with_entity(world, entity, warnings, |e| {
+                e.get_mut::<crate::ai::EnemyCreature>()
+                    .map(|mut fsm| fsm.aggro_radius = radius.max(0.0))
+                    .is_some()
+            })
+            .unwrap_or_else(|| {
+                warnings.push("ai_aggro: entidade sem EnemyCreature".into());
+                false
+            })
+        }
+        DebugOp::AiCalmAll => {
+            let mut q = world.query::<&mut crate::ai::EnemyCreature>();
+            let mut n = 0;
+            for mut fsm in q.iter_mut(world) {
+                fsm.state = crate::ai::EnemyState::Wander;
+                n += 1;
+            }
+            warnings.push(format!("ai_calm_all: {n} criaturas em Wander"));
+            true
+        }
+        DebugOp::NavSet {
+            enabled,
+            offroad_cost,
+            tile_size,
+        } => match world.get_resource_mut::<crate::nav::NavConfig>() {
+            Some(mut config) => {
+                if let Some(v) = enabled {
+                    config.enabled = v;
+                }
+                if let Some(v) = offroad_cost {
+                    config.offroad_cost = v.max(1.0);
+                }
+                if let Some(v) = tile_size {
+                    config.tile_size = v.max(16.0);
+                }
+                true
+            }
+            None => {
+                warnings.push("sem NavConfig (NavPlugin não está no mundo?)".into());
+                false
+            }
+        },
+        DebugOp::PostFx { key, on } => {
+            crate::postfx::fx_runtime_toggle(key, on);
+            true
+        }
+        DebugOp::AudioSet {
+            master,
+            music,
+            sfx,
+        } => match world.get_resource_mut::<crate::music::AudioMixerSettings>() {
+            Some(mut mixer) => {
+                if let Some(v) = master {
+                    mixer.master = v.clamp(0.0, 1.0);
+                }
+                if let Some(v) = music {
+                    mixer.music = v.clamp(0.0, 1.0);
+                }
+                if let Some(v) = sfx {
+                    mixer.sfx = v.clamp(0.0, 1.0);
+                }
+                true
+            }
+            None => {
+                warnings.push("sem AudioMixerSettings (MusicPlugin?)".into());
+                false
+            }
+        },
+        DebugOp::CombatMusic(state) => {
+            let now = world.resource::<Time>().elapsed_secs_f64();
+            match world.get_resource_mut::<crate::music::CombatMusicState>() {
+                Some(mut music) => match state.as_str() {
+                    "battle" => {
+                        music.clear();
+                        music.engage(now, false);
+                        true
+                    }
+                    "boss" => {
+                        music.clear();
+                        music.engage(now, true);
+                        true
+                    }
+                    "off" => {
+                        music.clear();
+                        true
+                    }
+                    other => {
+                        warnings.push(format!(
+                            "combat_music: '{other}' inválido (battle|boss|off)"
+                        ));
+                        false
+                    }
+                },
+                None => {
+                    warnings.push("sem CombatMusicState (MusicPlugin?)".into());
+                    false
+                }
+            }
+        }
+        DebugOp::PhysicsSet { gravity, paused } => {
+            let mut q = world.query::<&mut bevy_rapier3d::prelude::RapierConfiguration>();
+            if let Some(mut conf) = q.iter_mut(world).next() {
+                if let Some(g) = gravity {
+                    conf.gravity = g.0;
+                }
+                if let Some(p) = paused {
+                    conf.physics_pipeline_active = !p;
+                }
+                true
+            } else {
+                warnings.push("sem RapierConfiguration (PhysicsPlugin?)".into());
+                false
+            }
+        }
+        DebugOp::Save => queue_ui_action(world, "save", warnings),
+        DebugOp::Load => queue_ui_action(world, "load", warnings),
+        DebugOp::StepFrames(frames) => {
+            // Semântica (afinada no smoke ao vivo): PÁRA e FICA parado — cada
+            // `step(n)` avança n frames à speed 1 e volta a congelar; `play`
+            // retoma a speed que estava ANTES da primeira chamada da cadeia.
+            // (A 1.ª versão retomava a speed antiga no fim do orçamento: o
+            // mundo voltava a correr e as medições/hash deixavam de ser
+            // determinísticos a seguir ao step.)
+            let current = world
+                .get_resource::<crate::combat::BaseTimeScale>()
+                .map(|b| b.0)
+                .unwrap_or_else(|| world.resource::<Time<Virtual>>().relative_speed());
+            // A speed a restaurar é a da PRIMEIRA chamada da cadeia — um
+            // `step` a seguir a outro não a clobber (ficaria 0 e o `play`
+            // não despausava).
+            let restore = world
+                .get_resource::<super::FrameStepper>()
+                .map(|stepper| stepper.restore)
+                .unwrap_or(current);
+            world.insert_resource(super::FrameStepper {
+                remaining: frames,
+                restore,
+                skip: true,
+                active: true,
+            });
+            set_time_scale_value(world, 0.0);
+            true
+        }
+        DebugOp::ResumePlay => {
+            if let Some(stepper) = world.remove_resource::<super::FrameStepper>() {
+                set_time_scale_value(world, stepper.restore);
+            }
+            true
+        }
+        DebugOp::TeleportTo(name) => {
+            // Resolve por nome contra o MUNDO (não o snapshot — o alvo pode
+            // ter nascido de um spawn recente).
+            let needle = name.to_ascii_lowercase();
+            let target = world
+                .iter_entities()
+                .filter_map(|e| {
+                    let n = e.get::<Name>()?.to_string().to_ascii_lowercase();
+                    (n == needle || n.contains(&needle)).then_some(e.id())
+                })
+                .next();
+            let Some(target) = target else {
+                warnings.push(format!("teleport_to: '{name}' não encontrado"));
+                return false;
+            };
+            let pos = world
+                .get::<Transform>(target)
+                .map(|t| t.translation)
+                .or_else(|| world.get::<GlobalTransform>(target).map(|t| t.translation()));
+            let Some(mut pos) = pos else {
+                warnings.push(format!("teleport_to: '{name}' sem posição"));
+                return false;
+            };
+            if let Some(terrain) = world.get_resource::<crate::terrain::runtime::TerrainRuntime>()
+            {
+                pos.y = terrain.sample(pos.x, pos.z);
+            }
+            let Some(player) = find_player(world).map(|p| p.entity) else {
+                warnings.push("sem player — teleport_to ignorado".into());
+                return false;
+            };
+            set_translation(world, player, pos, warnings)
+        }
+        DebugOp::Spawn {
+            url,
+            mut pos,
+            yaw,
+            scale,
+            color,
+            collider,
+            snap,
+        } => {
+            if snap
+                && let Some(terrain) =
+                    world.get_resource::<crate::terrain::runtime::TerrainRuntime>()
+            {
+                pos.y = terrain.sample(pos.x, pos.z);
+            }
+            let transform = Transform {
+                translation: pos,
+                rotation: Quat::from_rotation_y(yaw.unwrap_or(0.0).to_radians()),
+                scale: Vec3::splat(scale.unwrap_or(1.0).max(0.001)),
+            };
+            static NEXT_SPAWN: std::sync::atomic::AtomicU64 =
+                std::sync::atomic::AtomicU64::new(1);
+            let n = NEXT_SPAWN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let name = format!("debug:spawn:{n}");
+            if let Some(shape) = parse_primitive(&url) {
+                spawn_primitive(world, shape, name, transform, color, collider, warnings)
+            } else {
+                // GLB do pool: handle assíncrono — o `gltf_scene_spawner` da
+                // engine troca pelo SceneRoot quando aterrar (igual ao XML).
+                let Some(server) = world.get_resource::<bevy::asset::AssetServer>() else {
+                    warnings.push("sem AssetServer — spawn GLB ignorado".into());
+                    return false;
+                };
+                let handle =
+                    crate::meshopt::load_gltf(&server, url.trim_start_matches('/').to_owned());
+                world.spawn((
+                    Name::new(name),
+                    transform,
+                    Visibility::default(),
+                    crate::recipes::spawn::GltfScenePending { handle },
+                ));
+                true
+            }
+        }
+        DebugOp::SpawnLight {
+            pos,
+            intensity,
+            color,
+            shadows,
+            range,
+        } => {
+            static NEXT_LIGHT: std::sync::atomic::AtomicU64 =
+                std::sync::atomic::AtomicU64::new(1);
+            let n = NEXT_LIGHT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let light = PointLight {
+                intensity: intensity.unwrap_or(1200.0).max(0.0),
+                color: color
+                    .map(|c| Color::srgb(c[0], c[1], c[2]))
+                    .unwrap_or_default(),
+                shadow_maps_enabled: shadows,
+                range: range.unwrap_or(20.0).max(0.1),
+                ..Default::default()
+            };
+            world.spawn((
+                Name::new(format!("debug:light:{n}")),
+                light,
+                Transform::from_translation(pos),
+                Visibility::default(),
+            ));
+            true
+        }
+        DebugOp::SetMaterial {
+            entity,
+            base_color,
+            metallic,
+            roughness,
+            unlit,
+            emissive,
+        } => {
+            let handle = with_entity(world, entity, warnings, |e| {
+                e.get::<MeshMaterial3d<StandardMaterial>>()
+                    .map(|m| m.0.clone())
+            })
+            .flatten();
+            let Some(handle) = handle else {
+                warnings.push(
+                    "set_material: entidade sem StandardMaterial (os materiais BINDLESS do                      terreno não são mutáveis — só primitivas/GLB)"
+                        .into(),
+                );
+                return false;
+            };
+            let Some(mut assets) = world.get_resource_mut::<bevy::asset::Assets<StandardMaterial>>()
+            else {
+                warnings.push("Assets<StandardMaterial> indisponível".into());
+                return false;
+            };
+            let Some(mut mat) = assets.get_mut(&handle) else {
+                warnings.push("material já não existe nos assets".into());
+                return false;
+            };
+            if let Some(c) = base_color {
+                mat.base_color = Color::srgba(c[0], c[1], c[2], c[3]);
+            }
+            if let Some(v) = metallic {
+                mat.metallic = v.clamp(0.0, 1.0);
+            }
+            if let Some(v) = roughness {
+                mat.perceptual_roughness = v.clamp(0.0, 1.0);
+            }
+            if let Some(v) = unlit {
+                mat.unlit = v;
+            }
+            if let Some(e) = emissive {
+                mat.emissive = bevy::color::LinearRgba::rgb(e[0], e[1], e[2]);
+            }
+            true
+        }
+        DebugOp::SetLight {
+            entity,
+            intensity,
+            color,
+            shadows,
+            range,
+        } => {
+            let applied = with_entity(world, entity, warnings, |e| -> Result<(), ()> {
+                if let Some(mut point) = e.get_mut::<PointLight>() {
+                    if let Some(v) = intensity {
+                        point.intensity = v.max(0.0);
+                    }
+                    if let Some(c) = color {
+                        point.color = Color::srgb(c[0], c[1], c[2]);
+                    }
+                    if let Some(v) = shadows {
+                        point.shadow_maps_enabled = v;
+                    }
+                    if let Some(v) = range {
+                        point.range = v.max(0.1);
+                    }
+                    return Ok(());
+                }
+                if let Some(mut spot) = e.get_mut::<SpotLight>() {
+                    if let Some(v) = intensity {
+                        spot.intensity = v.max(0.0);
+                    }
+                    if let Some(c) = color {
+                        spot.color = Color::srgb(c[0], c[1], c[2]);
+                    }
+                    if let Some(v) = shadows {
+                        spot.shadow_maps_enabled = v;
+                    }
+                    if let Some(v) = range {
+                        spot.range = v.max(0.1);
+                    }
+                    return Ok(());
+                }
+                if let Some(mut dir) = e.get_mut::<DirectionalLight>() {
+                    // DirectionalLight não tem range; intensity = illuminance.
+                    if let Some(v) = intensity {
+                        dir.illuminance = v.max(0.0);
+                    }
+                    if let Some(c) = color {
+                        dir.color = Color::srgb(c[0], c[1], c[2]);
+                    }
+                    if let Some(v) = shadows {
+                        dir.shadow_maps_enabled = v;
+                    }
+                    return Ok(());
+                }
+                Err(())
+            })
+            .map(|result| result.is_ok())
+            .unwrap_or(false);
+            if !applied {
+                warnings.push("set_light: entidade sem luz".into());
+            }
+            applied
+        }
     }
+}
+
+/// Speed base do jogo (o mesmo par Time/BaseTimeScale do `set_time_scale`).
+fn set_time_scale_value(world: &mut World, scale: f32) {
+    if let Some(mut base) = world.get_resource_mut::<crate::combat::BaseTimeScale>() {
+        base.0 = scale;
+    }
+    world.resource_mut::<Time<Virtual>>().set_relative_speed(scale);
+}
+
+/// `UiAction` para a engine (save/load passam pelo mesmo caminho da UI).
+fn queue_ui_action(
+    world: &mut World,
+    name: &str,
+    warnings: &mut Vec<String>,
+) -> bool {
+    match world.get_resource_mut::<Messages<crate::ui::actions::UiAction>>() {
+        Some(mut msgs) => {
+            msgs.write(crate::ui::actions::UiAction {
+                name: name.to_string(),
+                arg: String::new(),
+            });
+            true
+        }
+        None => {
+            warnings.push("sem Messages<UiAction> (UIPlugin?)".into());
+            false
+        }
+    }
+}
+
+/// HP/máximo de QUALQUER entidade com `Health` — um braço para os dois ops.
+fn set_entity_health(
+    world: &mut World,
+    entity: Entity,
+    hp: Option<f32>,
+    max: Option<f32>,
+    warnings: &mut Vec<String>,
+) -> bool {
+    let applied = with_entity(world, entity, warnings, |e| {
+        e.get_mut::<Health>()
+            .map(|mut health| {
+                if let Some(max) = max {
+                    health.max = max.max(1.0);
+                }
+                if let Some(hp) = hp {
+                    health.current = hp.clamp(0.0, health.max);
+                } else {
+                    health.current = health.current.clamp(0.0, health.max);
+                }
+            })
+            .is_some()
+    })
+    .unwrap_or(false);
+    if !applied {
+        warnings.push(format!("{entity}: sem Health"));
+    }
+    applied
+}
+
+/// Delta de passivas ao herói (aprender/esquecer) — o mesmo caminho da
+/// compra na UI, para o speed/max_hp não ficarem órfãos do reset.
+fn apply_stats_delta(
+    world: &mut World,
+    old: &crate::skills::PlayerStats,
+    new: &crate::skills::PlayerStats,
+    warnings: &mut Vec<String>,
+) -> bool {
+    let Some(player) = find_player(world).map(|p| p.entity) else {
+        warnings.push("sem player — delta de skills ignorado".into());
+        return false;
+    };
+    // `apply_passive_delta` pede &mut Health E &mut Player — um EntityWorldMut
+    // não empresta os dois ao mesmo tempo; o delta espelha-se aqui por campo.
+    let applied = with_entity(world, player, warnings, |e| {
+        let hp_delta = new.max_hp_bonus - old.max_hp_bonus;
+        if hp_delta != 0.0
+            && let Some(mut health) = e.get_mut::<Health>()
+        {
+            health.max += hp_delta;
+            health.current = (health.current + hp_delta).clamp(0.0, health.max);
+        }
+        let ratio = new.speed_mult / old.speed_mult.max(f32::EPSILON);
+        if ratio != 1.0
+            && ratio.is_finite()
+            && let Some(mut player) = e.get_mut::<crate::player::Player>()
+        {
+            player.speed *= ratio;
+        }
+        true
+    })
+    .unwrap_or(false);
+    if !applied {
+        warnings.push("sem player — delta de skills ignorado".into());
+    }
+    applied
+}
+
+/// Primitivas do `viber.debug.spawn`: `"box:w,h,d"`, `"sphere:r"`,
+/// `"cylinder:r,h"` — dimensões COMPLETAS (como no XML).
+#[derive(Debug, Clone, Copy)]
+enum PrimitiveShape {
+    Box(Vec3),
+    Sphere(f32),
+    Cylinder(f32, f32),
+}
+
+fn parse_primitive(url: &str) -> Option<PrimitiveShape> {
+    let (kind, dims) = url.split_once(':')?;
+    let nums: Vec<f32> = dims
+        .split(',')
+        .map(|v| v.trim().parse::<f32>().ok())
+        .collect::<Option<_>>()?;
+    match kind.trim().to_ascii_lowercase().as_str() {
+        "box" if nums.len() == 3 && nums.iter().all(|v| *v > 0.0) => {
+            Some(PrimitiveShape::Box(Vec3::new(nums[0], nums[1], nums[2])))
+        }
+        "sphere" if nums.len() == 1 && nums[0] > 0.0 => Some(PrimitiveShape::Sphere(nums[0])),
+        "cylinder" if nums.len() == 2 && nums.iter().all(|v| *v > 0.0) => {
+            Some(PrimitiveShape::Cylinder(nums[0], nums[1]))
+        }
+        _ => None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_primitive(
+    world: &mut World,
+    shape: PrimitiveShape,
+    name: String,
+    transform: Transform,
+    color: Option<[f32; 3]>,
+    collider: bool,
+    warnings: &mut Vec<String>,
+) -> bool {
+    use bevy::asset::Assets;
+    use bevy::math::primitives::Cylinder;
+    let Some(mut meshes) = world.get_resource_mut::<Assets<Mesh>>() else {
+        warnings.push("Assets<Mesh> indisponível — spawn ignorado".into());
+        return false;
+    };
+    let (mesh, rapier) = match shape {
+        PrimitiveShape::Box(dims) => (
+            Mesh::from(Cuboid::new(dims.x, dims.y, dims.z)),
+            Collider::cuboid(dims.x * 0.5, dims.y * 0.5, dims.z * 0.5),
+        ),
+        PrimitiveShape::Sphere(radius) => {
+            (Mesh::from(Sphere::new(radius)), Collider::ball(radius))
+        }
+        PrimitiveShape::Cylinder(radius, height) => (
+            Mesh::from(Cylinder::new(radius, height)),
+            Collider::cylinder(height * 0.5, radius),
+        ),
+    };
+    let mesh = meshes.add(mesh);
+    drop(meshes);
+    let Some(mut materials) = world.get_resource_mut::<Assets<StandardMaterial>>() else {
+        warnings.push("Assets<StandardMaterial> indisponível".into());
+        return false;
+    };
+    let material = materials.add(StandardMaterial {
+        base_color: color
+            .map(|c| Color::srgb(c[0], c[1], c[2]))
+            .unwrap_or(Color::srgb(0.65, 0.65, 0.7)),
+        ..Default::default()
+    });
+    drop(materials);
+    let mut entity = world.spawn((
+        Name::new(name),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        transform,
+        Visibility::default(),
+    ));
+    if collider {
+        entity.insert((rapier, RigidBody::Fixed));
+    }
+    true
 }
 
 /// Escrita absoluta de translation, com warning se a entidade não tiver
@@ -2916,6 +5723,37 @@ fn info_table(lua: &Lua, info: &EntityInfo) -> mlua::Result<Value> {
     }
     if let Some(material) = &info.material {
         table.raw_set("material", material_table(lua, material)?)?;
+    }
+    if let Some(light) = &info.light {
+        table.raw_set("light", light.kind.as_str())?;
+        if light.shadows {
+            // Sombras de luz são o custo que mais interessa ver de relance.
+            table.raw_set("light_shadows", true)?;
+        }
+    }
+    if let Some(script) = &info.script {
+        table.raw_set("script", script.as_str())?;
+    }
+    if let Some((current, max)) = info.health {
+        table.raw_set("hp", current)?;
+        table.raw_set("max_hp", max)?;
+    }
+    if let Some(ai) = &info.ai {
+        table.raw_set(
+            "ai",
+            json_to_lua(
+                lua,
+                &json!({
+                    "state": ai.state,
+                    "speed": ai.speed,
+                    "aggro_radius": ai.aggro_radius,
+                    "attack_radius": ai.attack_radius,
+                    "home": ai.home,
+                    "goal": ai.goal,
+                    "nav_profile": ai.nav_profile,
+                }),
+            )?,
+        )?;
     }
     table.raw_set(
         "components",

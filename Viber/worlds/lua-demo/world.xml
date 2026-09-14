@@ -1,0 +1,33 @@
+<world clear-color="#a8d8ef">
+  <!-- ═══ lua-demo: um jogo que NÃO é um RPG ═══════════════════════════
+       config.yaml declara `gameplay: none` — sem combate [J], skills
+       [C/R/B/L], hotbar, vault, quests, travel nem save RPG. O que sobra
+       é a engine: terreno, céu, player, câmara, UI declarativa e a API
+       Lua genérica. O jogo (colher 6 cristais) são ~60 linhas de Luau. -->
+
+  <Terrain seed="42" world-size="192" max-height="14" chunk-size="64"
+           layers="grass dirt mountain_stone sand pebbles"
+           shore-width="4" cliff-angle="52" />
+  <Sky />
+  <DayCycle minute-of-day="570" minutes-per-real-second="0.4" />
+  <Weather wind="0.5 0.3" clouds="0.25" />
+  <WorldBorder radius="70" />
+
+  <PlayerGLTF name="player" pos="0 60 0" model-url="/assets/meshes/characters/hero_lod0.glb" />
+  <OrbitCamera distance="4" height="1.6" pitch="16" fov="64" target="player" />
+
+  <!-- O cristal é um <Prototype>: game.lua instancia-os em runtime com
+       viber.spawn_prototype; o script vai colado ao prototype — cada
+       instância nasce viva (luau_on_add corre no spawn). -->
+  <Prototype id="crystal">
+    <Entity name="crystal" script="crystal.lua">
+      <Cylinder radius="0.42" half-height="1.0" base-color="#8fe8ff"
+                emissive="#2fb8e8" opacity="0.94" />
+      <PointLight color="#7de3ff" intensity="400" radius="7" />
+    </Entity>
+  </Prototype>
+
+  <Entity name="game-controller" script="game.lua" />
+
+  <Include src="ui/hud.xml" />
+</world>

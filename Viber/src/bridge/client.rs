@@ -196,6 +196,79 @@ impl BridgeClient {
         Ok(source_path)
     }
 
+    /// Pede um burst — N frames seguidos compostos numa única folha na
+    /// engine (4096 no lado comprido, células com o formato do frame) — e
+    /// faz polling de `viber.burst_status` até a folha chegar. `skip` são
+    /// frames renderizados entre capturas (`0` = consecutivos). Devolve
+    /// (png, caminho do PNG na engine, largura e altura da folha).
+    pub fn burst(
+        &self,
+        frames: u32,
+        skip: u32,
+        timeout_ms: u64,
+    ) -> Result<(Vec<u8>, String, u32, u32, Value)> {
+        let request = self.call("viber.burst", json!({ "frames": frames, "skip": skip }))?;
+        let id = request
+            .get("id")
+            .and_then(Value::as_u64)
+            .context("resposta sem burst id")?;
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        let mut last_captured = 0u64;
+        loop {
+            if Instant::now() >= deadline {
+                bail!("timeout ({timeout_ms} ms) à espera do burst de {frames} frames");
+            }
+            std::thread::sleep(Duration::from_millis(50));
+            let status = match self.call("viber.burst_status", json!({ "id": id })) {
+                Ok(status) => status,
+                Err(error) => {
+                    if Instant::now() < deadline {
+                        continue;
+                    }
+                    return Err(error);
+                }
+            };
+            // Progresso no stderr (o stdout fica para o resultado final).
+            if let Some(count) = status.get("captured").and_then(Value::as_u64) {
+                if count > last_captured {
+                    last_captured = count;
+                    eprintln!("viber: burst {count}/{frames} frames capturados");
+                }
+            }
+            match status.get("status").and_then(Value::as_str) {
+                Some("captured") => {
+                    let b64 = status
+                        .get("png_base64")
+                        .and_then(Value::as_str)
+                        .context("burst capturado sem png")?;
+                    let bytes = base64::engine::general_purpose::STANDARD.decode(b64)?;
+                    let path = status
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .unwrap_or("?")
+                        .to_string();
+                    let sheet = status.get("sheet");
+                    let dim = |key: &str| -> u32 {
+                        sheet
+                            .and_then(|s| s.get(key))
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0) as u32
+                    };
+                    return Ok((bytes, path, dim("sheet_w"), dim("sheet_h"), status));
+                }
+                Some("capturing" | "composing" | "pending") => continue,
+                Some("error") => {
+                    let cause = status
+                        .get("error")
+                        .and_then(Value::as_str)
+                        .unwrap_or("desconhecida");
+                    bail!("burst falhou: {cause}");
+                }
+                other => bail!("estado inesperado do burst: {other:?}"),
+            }
+        }
+    }
+
     pub fn probe(&self) -> Result<Value> {
         self.call("viber.ping", json!({}))
     }
@@ -425,6 +498,7 @@ fn normalize_mouse(raw: &str) -> String {
 pub struct LiveEngine {
     pub port: u16,
     pub world: String,
+    pub pid: u32,
 }
 
 /// Todas as engines registadas com a porta a responder a TCP. Sem probe HTTP
@@ -435,12 +509,23 @@ pub fn list_live_engines() -> Vec<LiveEngine> {
         .iter()
         .filter_map(|(_, paths)| paths.engine_info())
         .filter(|engine| port_alive(engine.port))
+        // IDENTIDADE, não só TCP: uma porta viva pode servir OUTRO mundo (o
+        // registo fica stale quando a sessão morre e outra engine sobe na
+        // mesma porta — observado ao vivo: 3 mundos listados no :15702,
+        // dois deles mortos). Um ping confirma quem lá está; sem campo
+        // `world` (binário antigo) mantém-se — não há como validar.
+        .filter(|engine| match BridgeClient::localhost(engine.port).probe_world() {
+            Some(served) => same_world(&served, &engine.world),
+            None => true,
+        })
         .map(|engine| LiveEngine {
             port: engine.port,
             world: engine.world,
+            pid: engine.pid,
         })
         .collect()
 }
+
 
 /// Candidatas à descoberta implícita, por ordem de preferência — ou as locais
 /// em conflito, quando há ≥2 debaixo do cwd (não há como adivinhar qual é a
@@ -595,6 +680,7 @@ fn confirm_engine(engine: &crate::session::EngineInfo) -> Result<u16> {
     confirm_engine_engine(&LiveEngine {
         port: engine.port,
         world: engine.world.clone(),
+        pid: engine.pid,
     })
 }
 
@@ -694,6 +780,7 @@ mod tests {
         LiveEngine {
             port,
             world: world.to_string(),
+            pid: 0,
         }
     }
 

@@ -1,0 +1,10 @@
+/* lua-demo — HUD mínimo: pintura apenas; os valores vêm de Lua. */
+#hud uitext { font-size: 14; color: #eee9dc }
+#hud .anchor { position: absolute; top: 20; left: 20; direction: column; gap: 8 }
+#hud .title { font-size: 12; color: #baa987 }
+#hud .card {
+  direction: column; gap: 4; padding: 10 14;
+  background: #171d20ed; border: 1 #7de3ff55; radius: 8;
+}
+#hud .score { font-size: 22; color: #8fe8ff }
+#hud .hint { font-size: 11; color: #8b9aa3 }

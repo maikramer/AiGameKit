@@ -1,0 +1,14 @@
+<!-- HUD mínimo do demo: um card com o contador — alimentado por Lua
+     (viber.ui.set_text), sem binds engine (não há RPG aqui). -->
+<world>
+  <UiStyle src="ui/hud.css" />
+  <UiRoot id="hud" script="ui/hud.lua">
+    <UiColumn class="anchor">
+      <UiText class="title">COLHEITA DE CRISTAIS</UiText>
+      <UiPanel class="card">
+        <UiText id="score" class="score">0 / 6</UiText>
+        <UiText class="hint">[E] junto a um cristal brilhante</UiText>
+      </UiPanel>
+    </UiColumn>
+  </UiRoot>
+</world>

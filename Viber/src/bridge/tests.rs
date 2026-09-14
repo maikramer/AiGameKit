@@ -38,6 +38,12 @@ fn call_async(method: &'static str, params: Value) -> JoinHandle<Result<Value, S
     call_async_on(TEST_PORT, method, params)
 }
 
+/// Chamada `viber.lua` síncrona para testes (bombeia frames até responder).
+fn lua_call(app: &mut App, port: u16, code: &str) -> Value {
+    let handle = call_async_on(port, METHOD_LUA, serde_json::json!({ "code": code }));
+    settle(app, handle)
+}
+
 /// Variante com porta explícita — cada App de teste tem a sua, porque os
 /// testes correm em paralelo no mesmo binário.
 fn call_async_on(
@@ -739,5 +745,787 @@ fn test_ping_reports_world_identity() {
     assert_eq!(
         pong["world"],
         serde_json::json!("/repo/worlds/qa-pontes.xml")
+    );
+}
+
+const BURST_TEST_PORT: u16 = 35708;
+
+/// O `viber.burst` valida params cedo (frames fora da lista = erro BRP), e
+/// um burst válido enfileira, spawna capturas (o sistema `Update`) e fica
+/// `capturing` no status — headless (sem render) o guard de stall é quem
+/// eventualmente o falha; aqui só se verifica o contrato do protocolo.
+#[test]
+fn test_bridge_burst_headless() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .add_plugins(bevy::input::InputPlugin)
+        .add_plugins(BridgePlugin {
+            port: BURST_TEST_PORT,
+        });
+    app.add_message::<CursorMoved>();
+    app.update();
+
+    // frames inválido → invalid params com a lista aceite na mensagem
+    let error = settle_err(
+        &mut app,
+        call_async_on(
+            BURST_TEST_PORT,
+            METHOD_BURST,
+            serde_json::json!({ "frames": 5 }),
+        ),
+    );
+    assert!(error.contains("4, 9 ou 16"), "erro devia listar os aceites: {error}");
+
+    // skip acima do teto → idem
+    let error = settle_err(
+        &mut app,
+        call_async_on(
+            BURST_TEST_PORT,
+            METHOD_BURST,
+            serde_json::json!({ "frames": 9, "skip": 10_000 }),
+        ),
+    );
+    assert!(error.contains("skip"), "erro devia falar do skip: {error}");
+
+    // burst válido → id + path; o status começa capturing com 0 capturados.
+    // skip alto de propósito: garante que, não importa quantos updates o
+    // pump do settle faça, só UMA captura chega a spawnar (determinismo).
+    let started = settle(
+        &mut app,
+        call_async_on(
+            BURST_TEST_PORT,
+            METHOD_BURST,
+            serde_json::json!({ "frames": 4, "skip": 500 }),
+        ),
+    );
+    let id = started["id"].as_u64().expect("id do burst");
+    assert_eq!(started["frames"], serde_json::json!(4));
+    assert_eq!(started["skip"], serde_json::json!(500));
+    assert!(started["path"].as_str().expect("path").contains("burst-"));
+
+    // Um frame da app depois, a spawn já correu (Update) — status capturing.
+    app.update();
+    let status = settle(
+        &mut app,
+        call_async_on(
+            BURST_TEST_PORT,
+            METHOD_BURST_STATUS,
+            serde_json::json!({ "id": id }),
+        ),
+    );
+    assert_eq!(status["status"], serde_json::json!("capturing"));
+    assert_eq!(status["captured"], serde_json::json!(0));
+    assert_eq!(status["spawned"], serde_json::json!(1), "1.ª captura spawna no 1.º tick");
+    assert!(
+        status.get("png_base64").is_none(),
+        "sem folha enquanto não capturado"
+    );
+
+    // id desconhecido → erro claro
+    let error = settle_err(
+        &mut app,
+        call_async_on(
+            BURST_TEST_PORT,
+            METHOD_BURST_STATUS,
+            serde_json::json!({ "id": 9999 }),
+        ),
+    );
+    assert!(error.contains("unknown burst id"), "erro devia ser de id: {error}");
+}
+
+// ── M1: introspecção profunda (vitals de qualquer entidade, IA, nav, …) ──
+
+const LUA5_TEST_PORT: u16 = 35709;
+
+/// `viber.debug.*` do M1: health/ai por entidade, nav, quests fundas, seeds,
+/// world_hash, waypoints, save_info, audio — nil-safe sem os plugins de jogo.
+#[test]
+fn test_bridge_lua_introspection_round3() {
+    let mut app = lua_app(LUA5_TEST_PORT);
+    {
+        let world = app.world_mut();
+        // Criatura da FSM com vitals, locomoção e perfil de nav.
+        world.spawn((
+            Name::new("mob"),
+            Transform::from_xyz(-4.0, 0.5, 2.0),
+            crate::vitals::Health {
+                current: 30.0,
+                max: 90.0,
+            },
+            crate::ai::EnemyCreature {
+                speed: 3.5,
+                ..Default::default()
+            },
+            crate::ai::AiLocomotion::default(),
+            crate::nav::NavProfile::Wild,
+        ));
+        // Pilha de nav: config + tile (census fica vazio — sem landmass).
+        world.insert_resource(crate::nav::NavConfig::default());
+        world.insert_resource(crate::nav::NavTile::default());
+        // Diário de quests (lidas do DISCO: dir das quests do exemplo).
+        world.insert_resource(crate::quests::QuestLog::with_dir(
+            &crate::quests::example_quests_dir(),
+        ));
+        // Skills sem nada aprendido.
+        world.insert_resource(crate::skills::SkillTree::default());
+    }
+    app.update();
+
+    // health() de QUALQUER entidade — não só do player.
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "local h = viber.debug.health('mob') return { h.current, h.max, h.dead }");
+    assert_eq!(r["ok"], serde_json::json!(true));
+    assert_eq!(r["result"][0].as_f64(), Some(30.0));
+    assert_eq!(r["result"][1].as_f64(), Some(90.0));
+    assert_eq!(r["result"][2], serde_json::json!(false));
+
+    // Sem Health → nil (e não erro).
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "return viber.debug.health('goblin') == nil");
+    assert_eq!(r["result"], serde_json::json!(true));
+
+    // ai() — FSM + locomoção + perfil.
+    let r = lua_call(&mut app, LUA5_TEST_PORT, 
+        "local a = viber.debug.ai('mob') return { a.state, a.speed, a.nav_profile, a.aggro_radius }",
+    );
+    assert_eq!(r["result"][0], serde_json::json!("wander"));
+    assert_eq!(r["result"][1].as_f64(), Some(3.5));
+    assert_eq!(r["result"][2], serde_json::json!("wild"));
+    assert_eq!(r["result"][3].as_f64(), Some(18.0));
+
+    // info() enriquecido: hp/max_hp + ai + script na mesma tabela.
+    let r = lua_call(&mut app, LUA5_TEST_PORT, 
+        "local i = viber.debug.info('mob') local g = viber.debug.info('goblin')
+         return { i.hp, i.max_hp, i.ai.nav_profile, g.script }",
+    );
+    assert_eq!(r["result"][0].as_f64(), Some(30.0));
+    assert_eq!(r["result"][3], serde_json::json!("ghost.lua"));
+
+    // nav() — config inserida, sem tile ainda.
+    let r = lua_call(&mut app, LUA5_TEST_PORT, 
+        "local n = viber.debug.nav() return { n.enabled, n.tile_size, n.offroad_cost, n.tile_generations }",
+    );
+    assert_eq!(r["result"][0], serde_json::json!(true));
+    assert_eq!(r["result"][1].as_f64(), Some(256.0));
+    assert_eq!(r["result"][2].as_f64(), Some(2.5));
+    assert_eq!(r["result"][3].as_i64(), Some(0));
+
+    // Quest funda: defs embutidos + título + objetivo.
+    let r = lua_call(&mut app, LUA5_TEST_PORT, 
+        "local q = viber.debug.quest('forest_survey') return { q.title ~= nil, q.objective.kind, q.status }",
+    );
+    assert_eq!(r["result"][0], serde_json::json!(true));
+    assert_eq!(r["result"][1], serde_json::json!("visit"));
+    assert_eq!(r["result"][2], serde_json::json!("not_taken"));
+
+    // quest_defs() cobre os JSONs embutidos (25 quests).
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "return #viber.debug.quest_defs()");
+    assert!(
+        r["result"].as_i64().unwrap_or(0) >= 20,
+        "defs embutidos: {}",
+        r["result"]
+    );
+
+    // skills() com árvore vazia.
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "local s = viber.debug.skills() return { #s.learned, s.points }");
+    assert_eq!(r["result"][0], serde_json::json!(0));
+    assert_eq!(r["result"][1], serde_json::json!(0));
+
+    // waypoints() — catálogo estático dos 12 marcos.
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "return #viber.debug.waypoints().landmarks");
+    assert_eq!(r["result"], serde_json::json!(12));
+
+    // save_info() — path não vazio (exists depende da máquina).
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "local s = viber.debug.save_info() return #s.path > 0");
+    assert_eq!(r["result"], serde_json::json!(true));
+
+    // audio() — buses default sem kira; nil-safe.
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "local a = viber.debug.audio() return a ~= nil and a.buses.master");
+    assert_eq!(r["result"].as_f64(), Some(1.0));
+
+    // Seeds/terreno/atmosfera ausentes → nil, NUNCA erro.
+    let r = lua_call(&mut app, LUA5_TEST_PORT, 
+        "return { viber.debug.terrain(0, 0) == nil, viber.debug.atmosphere() == nil,
+                  viber.debug.weather_full() == nil, viber.debug.border() == nil,
+                  viber.debug.interior() == nil, viber.debug.biome_at(0, 0) == nil }",
+    );
+    for (i, v) in r["result"].as_array().unwrap().iter().enumerate() {
+        assert_eq!(v, &serde_json::json!(true), "índice {i} devia ser nil-safe");
+    }
+
+    // ui_tree() vazio headless (array, não nil).
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "return #viber.debug.ui_tree()");
+    assert_eq!(r["result"], serde_json::json!(0));
+
+    // world_hash: estável entre chamadas sem mutação, muda com o conteúdo.
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "return viber.debug.world_hash()");
+    let hash_a = r["result"].as_str().expect("hash hex").to_string();
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "return viber.debug.world_hash()");
+    assert_eq!(r["result"].as_str(), Some(hash_a.as_str()), "hash estável sem mutação");
+    app.world_mut().spawn((Name::new("hash-bait"), Transform::IDENTITY));
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "return viber.debug.world_hash()");
+    assert_ne!(
+        r["result"].as_str(),
+        Some(hash_a.as_str()),
+        "entidade nova muda o hash"
+    );
+
+    // seeds() — sem terreno nem ciclo, tudo nil (e nunca erro).
+    let r = lua_call(&mut app, LUA5_TEST_PORT, "local s = viber.debug.seeds() return s ~= nil and s.terrain_seed == nil");
+    assert_eq!(r["result"], serde_json::json!(true));
+}
+
+// ── M2: controlo total (vitals/quests/vault/skills/IA/postfx/spawn…) ─────
+
+const LUA6_TEST_PORT: u16 = 35710;
+const RAYCAST_TEST_PORT: u16 = 35711;
+
+#[test]
+fn test_bridge_lua_control_round4() {
+    let mut app = lua_app(LUA6_TEST_PORT);
+    {
+        let world = app.world_mut();
+        world.spawn((
+            Name::new("mob"),
+            Transform::from_xyz(-4.0, 0.5, 2.0),
+            crate::vitals::Health {
+                current: 30.0,
+                max: 90.0,
+            },
+            crate::ai::EnemyCreature {
+                speed: 3.5,
+                ..Default::default()
+            },
+        ));
+        world.insert_resource(crate::quests::QuestLog::with_dir(
+            &crate::quests::example_quests_dir(),
+        ));
+        world.insert_resource(crate::economy::Vault::default());
+        world.insert_resource(crate::skills::SkillTree::default());
+        world.insert_resource(crate::nav::NavConfig::default());
+        world.insert_resource(crate::music::AudioMixerSettings::default());
+        world.insert_resource(crate::music::CombatMusicState::default());
+        world.insert_resource(bevy::ecs::message::Messages::<crate::ui::actions::UiAction>::default());
+    }
+    app.update();
+
+    let lua = |code: &'static str, app: &mut App| {
+        let code = code.to_string();
+        let handle = std::thread::spawn(move || {
+            BridgeClient::localhost(LUA6_TEST_PORT)
+                .call(METHOD_LUA, serde_json::json!({ "code": code }))
+                .map_err(|error| error.to_string())
+        });
+        for _ in 0..600 {
+            app.update();
+            if handle.is_finished() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        handle.join().unwrap().expect("bridge call responde")
+    };
+
+    // HP de QUALQUER entidade.
+    let r = lua("viber.debug.set_entity_hp('mob', 5) return true", &mut app);
+    assert_eq!(r["applied"], serde_json::json!(1));
+    let mut query = app.world_mut().query::<(
+        &Name,
+        &crate::vitals::Health,
+    )>();
+    let found = query
+        .iter(app.world())
+        .find(|(name, _)| name.as_str() == "mob")
+        .expect("mob");
+    assert_eq!(found.1.current, 5.0);
+
+    // set_max_hp baixa o teto e clampa o atual.
+    let r = lua("viber.debug.set_max_hp('mob', 10) return true", &mut app);
+    assert_eq!(r["applied"], serde_json::json!(1));
+    let mut query = app.world_mut().query::<(&Name, &crate::vitals::Health)>();
+    let (_, health) = query
+        .iter(app.world())
+        .find(|(name, _)| name.as_str() == "mob")
+        .unwrap();
+    assert_eq!((health.max, health.current), (10.0, 5.0));
+
+    // Quests: force active → progress → done → reset. Escritas e leituras
+    // em chamadas SEPARADAS (o snapshot é do início da chamada — semântica
+    // documentada da REPL).
+    let r = lua(
+        "viber.debug.quest_force('forest_survey', 'active')
+         viber.debug.quest_progress('forest_survey', 2)
+         return true",
+        &mut app,
+    );
+    assert_eq!(r["applied"], serde_json::json!(2));
+    let r = lua(
+        "local q = viber.debug.quest('forest_survey')
+         return { q.status, q.objective.progress_text, #q.visited }",
+        &mut app,
+    );
+    assert_eq!(r["result"][0], serde_json::json!("active"));
+    let expected = format!(
+        "2/{}",
+        r["result"]
+            .pointer("/2")
+            .and_then(Value::as_i64)
+            .unwrap_or_default()
+    );
+    // progress_text = "2/<count do def>" — o count exato vem dos JSONs
+    assert!(
+        r["result"][1].as_str().unwrap_or("").starts_with("2/"),
+        "progress_text: {}",
+        r["result"][1]
+    );
+    let _ = expected;
+    assert_eq!(r["result"][2], serde_json::json!(2));
+    let r = lua(
+        "viber.debug.quest_force('forest_survey', 'done') return true",
+        &mut app,
+    );
+    assert_eq!(r["applied"], serde_json::json!(1));
+    let r = lua(
+        "return viber.debug.quest('forest_survey').status",
+        &mut app,
+    );
+    assert_eq!(r["result"], serde_json::json!("done"));
+    let r = lua(
+        "viber.debug.quest_force('forest_survey', 'reset') return true",
+        &mut app,
+    );
+    let r = lua("return viber.debug.quest('forest_survey').status", &mut app);
+    assert_eq!(r["result"], serde_json::json!("not_taken"));
+
+    // Vault: valor absoluto + take (escritas e leitura em chamadas separadas).
+    let r = lua(
+        "viber.debug.vault_set('gold', 500)
+         viber.debug.vault_set('potion', 3)
+         viber.debug.take('potion', 1)
+         return true",
+        &mut app,
+    );
+    assert_eq!(r["applied"], serde_json::json!(3));
+    let r = lua(
+        "local v = viber.debug.vault()
+         return { v.gold, v.items.potion }",
+        &mut app,
+    );
+    assert_eq!(r["result"][0], serde_json::json!(500));
+    assert_eq!(r["result"][1], serde_json::json!(2));
+
+    // Skills: pontos → aprender → herói ganha max_hp → reset devolve.
+    let r = lua(
+        "viber.debug.skill_points(5)
+         viber.debug.skill_learn('vitality1')
+         return true",
+        &mut app,
+    );
+    assert_eq!(r["applied"], serde_json::json!(2));
+    let r = lua(
+        "local s = viber.debug.skills()
+         local p = viber.debug.player()
+         return { #s.learned, s.points, p.max_hp }",
+        &mut app,
+    );
+    assert_eq!(r["result"][0], serde_json::json!(1));
+    assert_eq!(r["result"][1], serde_json::json!(4));
+    assert_eq!(r["result"][2].as_f64(), Some(120.0));
+    let r = lua("viber.debug.skill_reset() return true", &mut app);
+    let r = lua(
+        "local s = viber.debug.skills()
+         return { #s.learned, s.points, viber.debug.player().max_hp }",
+        &mut app,
+    );
+    assert_eq!(r["result"][0], serde_json::json!(0));
+    assert_eq!(r["result"][1], serde_json::json!(5));
+    assert_eq!(r["result"][2].as_f64(), Some(100.0));
+
+    // IA: aggro persiste; state valida input.
+    let r = lua("viber.debug.ai_aggro('mob', 42) return true", &mut app);
+    assert_eq!(r["applied"], serde_json::json!(1));
+    let r = lua("return viber.debug.ai('mob').aggro_radius", &mut app);
+    assert_eq!(r["result"].as_f64(), Some(42.0));
+    let r = lua(
+        "viber.debug.ai_state('mob', 'banana') return true",
+        &mut app,
+    );
+    assert_eq!(r["applied"], serde_json::json!(0));
+    assert!(
+        serde_json::to_string(&r["warnings"])
+            .unwrap()
+            .contains("inválido"),
+        "warning de estado inválido"
+    );
+
+    // nav_set ao vivo.
+    let r = lua(
+        "viber.debug.nav_set{offroad_cost = 9.5, tile_size = 128} return true",
+        &mut app,
+    );
+    let r = lua("return viber.debug.nav().offroad_cost", &mut app);
+    assert_eq!(r["result"].as_f64(), Some(9.5));
+
+    // postfx: gate FORA da resposta — observável do lado Rust.
+    let r = lua("viber.debug.postfx{bloom = false} return true", &mut app);
+    assert_eq!(r["applied"], serde_json::json!(1));
+    assert!(crate::postfx::fx_off("BLOOM"), "bloom forçado OFF");
+    let r = lua("viber.debug.postfx{bloom = true} return true", &mut app);
+    assert_eq!(r["applied"], serde_json::json!(1));
+    assert!(
+        !crate::postfx::fx_off("BLOOM"),
+        "bloom restaurado (sem env)"
+    );
+
+    // audio_set reflete no mixer (lido pelo snapshot de áudio).
+    let r = lua("viber.debug.audio_set{music = 0.25} return true", &mut app);
+    let r = lua("return viber.debug.audio().buses.music", &mut app);
+    assert_eq!(r["result"].as_f64(), Some(0.25));
+
+    // combat_music battle → layer ativa; off → apaga.
+    let r = lua(
+        "viber.debug.combat_music('boss') return true",
+        &mut app,
+    );
+    assert_eq!(r["applied"], serde_json::json!(1));
+    {
+        let world = app.world();
+        let music = world.resource::<crate::music::CombatMusicState>();
+        let mut probe = music.clone();
+        assert_eq!(probe.active_layer(0.0), Some("boss"));
+    }
+    let r = lua("viber.debug.combat_music('off') return true", &mut app);
+    assert_eq!(r["applied"], serde_json::json!(1));
+
+    // save/load: UiAction escrevida (applied=1 chega — o handler da UI é que
+    // consome; sem UIPlugin a mensagem fica na fila sem efeito).
+    let r = lua("viber.debug.save() return true", &mut app);
+    assert_eq!(r["applied"], serde_json::json!(1));
+
+    // teleport_to: player vai ao goblin (sem terreno, Y = o do alvo).
+    let r = lua("viber.debug.teleport_to('goblin') return true", &mut app);
+    assert_eq!(r["applied"], serde_json::json!(1));
+    let mut query = app
+        .world_mut()
+        .query_filtered::<&Transform, bevy::ecs::query::With<crate::player::Player>>();
+    let transform = query.single(app.world()).unwrap();
+    assert_eq!(transform.translation.x, 5.0);
+    assert_eq!(transform.translation.z, 0.0);
+
+    // spawn de primitiva FÍSICA: collider + corpo fixo.
+    let r = lua(
+        "viber.debug.spawn('box:2,2,2', 10, 0, 10, {color = '#ff0000'}) return true",
+        &mut app,
+    );
+    assert_eq!(r["applied"], serde_json::json!(1));
+    let mut query = app.world_mut().query::<(
+        &Name,
+        Option<&bevy_rapier3d::prelude::Collider>,
+        Option<&bevy_rapier3d::prelude::RigidBody>,
+    )>();
+    let spawned = query
+        .iter(app.world())
+        .find(|(name, _, _)| name.as_str().starts_with("debug:spawn:"))
+        .expect("primitiva spawnada");
+    assert!(spawned.1.is_some(), "tem collider");
+    assert!(spawned.2.is_some(), "tem rigidbody");
+
+    // spawn_light.
+    let r = lua(
+        "viber.debug.spawn_light(1, 3, 1, {intensity = 900, shadows = true}) return true",
+        &mut app,
+    );
+    assert_eq!(r["applied"], serde_json::json!(1));
+    let mut query = app
+        .world_mut()
+        .query_filtered::<(&Name, &bevy::light::PointLight), ()>();
+    let light = query
+        .iter(app.world())
+        .find(|(name, _)| name.as_str().starts_with("debug:light:"))
+        .expect("luz spawnada");
+    assert_eq!(light.1.intensity, 900.0);
+    assert!(light.1.shadow_maps_enabled);
+
+    // set_material ao vivo (rich tem StandardMaterial).
+    let r = lua(
+        "viber.debug.set_material('rich', {base_color = '#00ff00', metallic = 1}) return true",
+        &mut app,
+    );
+    assert_eq!(r["applied"], serde_json::json!(1));
+    {
+        let mut query = app.world_mut().query::<(
+            Option<&Name>,
+            &bevy::pbr::MeshMaterial3d<bevy::pbr::StandardMaterial>,
+        )>();
+        let world = app.world();
+        // O rich pelo NOME — depois do spawn do box há ≥2 materiais.
+        let handle = query
+            .iter(world)
+            .find(|(name, _)| {
+                name.map(|n| n.as_str() == "rich").unwrap_or(false)
+            })
+            .expect("rich material")
+            .1
+            .0
+            .clone();
+        let assets = world.resource::<bevy::asset::Assets<bevy::pbr::StandardMaterial>>();
+        let mat = assets.get(&handle).unwrap();
+        let srgba = mat.base_color.to_srgba();
+        assert!((srgba.green - 1.0).abs() < 1e-3, "base_color verde");
+        assert_eq!(mat.metallic, 1.0);
+    }
+
+    // set_light ao vivo.
+    let r = lua("viber.debug.set_light('rich', {intensity = 77}) return true", &mut app);
+    assert_eq!(r["applied"], serde_json::json!(1));
+    let mut query = app
+        .world_mut()
+        .query_filtered::<&bevy::light::PointLight, ()>();
+    let rich_light = query
+        .iter(app.world())
+        .find(|l| (l.intensity - 77.0).abs() < 1e-3)
+        .expect("luz do rich a 77");
+    assert_eq!(rich_light.intensity, 77.0);
+
+    // GLB sem AssetServer → warning, sem crash.
+    let r = lua(
+        "viber.debug.spawn('/assets/nao-existe.glb', 0, 0, 0, {snap = false}) return true",
+        &mut app,
+    );
+    assert_eq!(r["applied"], serde_json::json!(0));
+    assert!(
+        serde_json::to_string(&r["warnings"]).unwrap().contains("AssetServer"),
+        "warning de AssetServer ausente"
+    );
+
+    // clear_markers limpa TODO o namespace debug:*.
+    let r = lua("viber.debug.clear_markers() return true", &mut app);
+    assert_eq!(r["applied"], serde_json::json!(1));
+    let mut query = app.world_mut().query::<&Name>();
+    let leftovers = query
+        .iter(app.world())
+        .filter(|name| name.as_str().starts_with("debug:"))
+        .count();
+    assert_eq!(leftovers, 0, "nenhum debug:* sobrevive");
+}
+
+#[test]
+fn test_bridge_raycast_headless() {
+    let mut app = lua_app(RAYCAST_TEST_PORT);
+    // PhysicsPlugin REAL: é ele que constrói o collider set do Rapier a
+    // partir dos componentes `Collider` (um contexto manual ficaria vazio e
+    // o raio nunca apanhava nada). O `resolve_pending_colliders` quer um
+    // AssetServer — entra o AssetPlugin mínimo.
+    app.add_plugins(bevy::asset::AssetPlugin::default());
+    app.add_plugins(bevy::transform::TransformPlugin);
+    // Stores que o `resolve_pending_colliders` toca por caminho de asset.
+    app.init_asset::<bevy::gltf::Gltf>();
+    app.init_asset::<bevy::gltf::GltfMesh>();
+    app.init_asset::<bevy::gltf::GltfPrimitive>();
+    app.init_asset::<bevy::gltf::GltfNode>();
+    app.init_asset::<bevy::image::Image>();
+    app.add_plugins(crate::physics::PhysicsPlugin { debug: false });
+    {
+        let world = app.world_mut();
+        // O plugin insere o contexto em PreStartup, que já correu antes de
+        // plugins pós-primeiro-update — spawnamos à mão o mesmo par; os
+        // sistemas Sync do Rapier (Update) registam os colliders no set.
+        world.spawn((
+            bevy_rapier3d::prelude::RapierContextSimulation::default(),
+            bevy_rapier3d::prelude::RapierConfiguration::new(1.0),
+        ));
+        // Cubo collider a 5 m de altura — raio de cima deve apanhar o TOPO.
+        let mut meshes = world
+            .resource_mut::<bevy::asset::Assets<bevy::mesh::Mesh>>();
+        let cube = meshes.add(bevy::mesh::Mesh::from(bevy::math::primitives::Cuboid::new(
+            1.0, 1.0, 1.0,
+        )));
+        drop(meshes);
+        world.spawn((
+            Name::new("alvo"),
+            Transform::from_xyz(0.0, 5.0, 0.0),
+            bevy::render::mesh::Mesh3d(cube),
+            bevy_rapier3d::prelude::Collider::cuboid(0.5, 0.5, 0.5),
+        ));
+    }
+    app.update();
+
+    let handle = std::thread::spawn(|| {
+        BridgeClient::localhost(RAYCAST_TEST_PORT)
+            .call(
+                METHOD_RAYCAST,
+                serde_json::json!({ "x": 0.0, "y": 10.0, "z": 0.0, "dx": 0.0, "dy": -1.0, "dz": 0.0 }),
+            )
+            .map_err(|error| error.to_string())
+    });
+    for _ in 0..600 {
+        app.update();
+        if handle.is_finished() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    // NOTA: o caminho de sync completo do Rapier (collider COMPONENTE → set
+    // interno) precisa de FixedUpdate + escada de sistemas que só o mundo
+    // inteiro tem; o hit GEOMÉTRICO valida-se no fumo ao vivo (qa-bridge).
+    // Headless garante: params/normalização, resposta estruturada e os dois
+    // caminhos "sem contexto" (erro) e "contexto vazio" (hit=false).
+    let r = handle.join().unwrap().expect("raycast responde");
+    assert_eq!(r["hit"], serde_json::json!(false));
+}
+
+// ── M4: apidoc cobre EXATAMENTE as funções registadas (guard) ────────────
+
+#[test]
+fn test_apidoc_covers_registered_functions() {
+    let mut app = lua_app(35712);
+    app.update();
+    // Chaves REAIS de viber.debug na VM.
+    let handle = std::thread::spawn(|| {
+        BridgeClient::localhost(35712)
+            .call(
+                METHOD_LUA,
+                serde_json::json!({
+                    "code": "local keys = {} for k in pairs(viber.debug) do table.insert(keys, k) end table.sort(keys) return keys"
+                }),
+            )
+            .map_err(|error| error.to_string())
+    });
+    for _ in 0..600 {
+        app.update();
+        if handle.is_finished() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let response = handle.join().unwrap().expect("chamada responde");
+    let registered: Vec<String> = response["result"]
+        .as_array()
+        .expect("lista de chaves")
+        .iter()
+        .map(|v| v.as_str().unwrap_or("?").to_string())
+        .collect();
+    let documented: Vec<&str> = crate::bridge::lua::DEBUG_API_DOCS
+        .iter()
+        .map(|(name, _, _)| *name)
+        .collect();
+
+    let undocumented: Vec<&String> = registered
+        .iter()
+        .filter(|name| !documented.contains(&name.as_str()))
+        .collect();
+    assert!(
+        undocumented.is_empty(),
+        "funções SEM doc no DEBUG_API_DOCS: {undocumented:?} — acrescenta a entrada \
+         (a auto-descoberta do agente depende disto)"
+    );
+
+    let phantom: Vec<&&str> = documented
+        .iter()
+        .filter(|name| !registered.iter().any(|r| r == *name))
+        .collect();
+    assert!(
+        phantom.is_empty(),
+        "docs SEM função registada: {phantom:?} — remove a entrada órfã"
+    );
+
+    // apidoc() responde e traz os grupos.
+    let handle = std::thread::spawn(|| {
+        BridgeClient::localhost(35712)
+            .call(
+                METHOD_LUA,
+                serde_json::json!({ "code": "local d = viber.debug.apidoc() return { has_debug = d.debug ~= nil, has_game = d.game ~= nil, doc_health = d.debug.health ~= nil }" }),
+            )
+            .map_err(|error| error.to_string())
+    });
+    for _ in 0..600 {
+        app.update();
+        if handle.is_finished() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let response = handle.join().unwrap().expect("apidoc responde");
+    assert_eq!(response["result"]["has_debug"], serde_json::json!(true));
+    assert_eq!(response["result"]["has_game"], serde_json::json!(true));
+    assert_eq!(response["result"]["doc_health"], serde_json::json!(true));
+}
+
+// ── registry.schema / rpc.discover (builtin do bevy_remote) ──────────────
+
+const SCHEMA_TEST_PORT: u16 = 35713;
+
+/// O método builtin `registry.schema` responde com os campos dos tipos
+/// refletidos — a base do `viber debug schema` (os fields vivem em
+/// `/properties` como `$ref`s JSON-schema, não em `/fields`).
+#[test]
+fn test_bridge_registry_schema_headless() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .add_plugins(BridgePlugin {
+            port: SCHEMA_TEST_PORT,
+        })
+        .register_type::<Transform>();
+    app.update();
+
+    let handle = std::thread::spawn(|| {
+        BridgeClient::localhost(SCHEMA_TEST_PORT)
+            .call(
+                "registry.schema",
+                serde_json::json!({ "with_crates": ["bevy_transform"] }),
+            )
+            .map_err(|error| error.to_string())
+    });
+    for _ in 0..600 {
+        app.update();
+        if handle.is_finished() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let response = handle.join().unwrap().expect("registry.schema responde");
+    let types = response.as_object().expect("mapa tipo→schema");
+    // Nem todo o tipo que "termina em Transform" é a struct com campos
+    // (HashMap → ordem arbitrária); procura-se o que TEM o campo.
+    let with_translation: Vec<&String> = types
+        .iter()
+        .filter(|(_, entry)| {
+            entry
+                .get("properties")
+                .and_then(Value::as_object)
+                .is_some_and(|properties| properties.contains_key("translation"))
+        })
+        .map(|(name, _)| name)
+        .collect();
+    assert!(
+        with_translation.iter().any(|name| name.ends_with("Transform")),
+        "algum tipo Transform com campo translation no schema; candidatos: {with_translation:?}"
+    );
+
+    // `rpc.discover` lista os métodos (builtin + viber.*).
+    let handle = std::thread::spawn(|| {
+        BridgeClient::localhost(SCHEMA_TEST_PORT)
+            .call("rpc.discover", serde_json::json!({}))
+            .map_err(|error| error.to_string())
+    });
+    for _ in 0..600 {
+        app.update();
+        if handle.is_finished() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let discover = handle.join().unwrap().expect("rpc.discover responde");
+    let names: Vec<&str> = discover
+        .get("methods")
+        .and_then(Value::as_array)
+        .map(|methods| {
+            methods
+                .iter()
+                .filter_map(|m| m.get("name").and_then(Value::as_str))
+                .collect()
+        })
+        .unwrap_or_default();
+    assert!(
+        names.contains(&METHOD_LUA),
+        "rpc.discover inclui {METHOD_LUA}: {names:?}"
     );
 }

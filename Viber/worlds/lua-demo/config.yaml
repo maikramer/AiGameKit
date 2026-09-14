@@ -1,0 +1,16 @@
+# lua-demo — micro-jogo de coleta que prova o desacoplamento: a engine arranca
+# SEM os plugins RPG (combate/skills/economia/quests/travel/save) e o jogo
+# inteiro vive em scripts/ sobre a API genérica (viber.game, events, timers,
+# spawn_prototype, entity_*). `gameplay: none` é o gate novo do config.yaml.
+title: "Lua Demo — Colheita de Cristais"
+gameplay: none
+assets:
+  roots:
+    - ../../examples/shared-assets/public
+  bgm_dir: assets/audio/bgm
+  sfx_dir: assets/audio/sfx
+  terrain_textures_dir: assets/textures
+game:
+  scripts_dir: scripts
+save:
+  dir: ~/.local/share/viber

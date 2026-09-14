@@ -1,0 +1,50 @@
+<!--
+  qa-bridge — bancada de validação do DEBUG BRIDGE (docs/BRIDGE.md).
+
+  Um pouco de tudo o que o bridge consegue ver e mexer, com nomes estáveis
+  para `viber.debug.find` e sem aleatoriedade (relógio congelado). É o mundo
+  do fumo ao vivo das features do bridge; o passo a passo dos comandos vive
+  em docs/BRIDGE.md (receitas), não aqui — comentários XML não aceitam "‑‑".
+-->
+
+<world clear-color="#87b5d4">
+
+  <!-- Terreno pequeno: chunk único a carregar rápido, nav a cozer cedo -->
+  <Terrain world-size="128" max-height="8" chunk-size="64"
+           seed="77"
+           layers="grass dirt gravel" />
+
+  <Sky />
+  <DayCycle minute-of-day="600" minutes-per-real-second="0" />
+  <Weather clouds="0.3" wind="0.2 0.4" wind-strength="0.5" />
+
+  <WorldBorder radius="60" />
+
+  <Road path="-30 10 0 10 30 10" width="3" texture-scale="4" />
+
+  <NavMesh offroad-cost="3" />
+
+  <PlayerGLTF model-url="/assets/meshes/characters/hero_lod0.glb"
+              name="player" pos="0 0 0" speed="4" />
+  <ThirdPersonCamera distance="6" height="2.2" />
+
+  <!-- Criaturas da FSM com nome estável: alvo de ai()/ai_aggro/health -->
+  <DynamicSpawner count="2" seed="11"
+                  region-min="-20 0 -20" region-max="20 0 20"
+                  random-yaw="true" avoid-overlaps="false">
+    <Creature name="wolf-a" script="enemies/qa-idle.lua">
+      <GLTFLoader role="visual" url="/assets/meshes/characters/wolf_lod0.glb" />
+    </Creature>
+  </DynamicSpawner>
+
+  <!-- Luzes com nome: alvo de set_light/spawn_light -->
+  <Entity name="lanterna" translation="4 2.5 4">
+    <PointLight color="#ffd9a0" intensity="900" shadows="true" range="14" />
+  </Entity>
+
+  <!-- Prop material padrão: alvo de set_material -->
+  <Entity name="caixote" translation="-6 0 3">
+    <Cuboid half-size="0.6 0.6 0.6" base-color="#8a5a33"
+            collider="auto" />
+  </Entity>
+</world>
