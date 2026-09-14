@@ -86,6 +86,53 @@ Nomes mantêm `Animator3D_*`: ambos os runtimes resolvem por normalização
 4. Dependência implícita da ordem de `_recover_quadruped_chains` para o trot
    diagonal — agora a frente/trás é anatómica e explícita.
 
+## Regeneração do pool (assets publicados)
+
+Os assets vivem em `Viber/examples/shared-assets/public/assets/meshes/characters/`
+(gitignored). Depois de mudar geradores, regenerar **pelo pipeline** (não à mão):
+
+1. Manifesto temporário com só os assets alvo (o `resume` não tem `--only`):
+   copiar o cabeçalho de `manifests/characters.yaml` + os blocos `- id: …`
+   desejados para `manifests/_regen.yaml`.
+2. Mover (backup, não apagar) os artefactos que se quer refazer:
+   `_intermediate/{id}_rigged_animated.glb` e `{id}_lod{0,1,2}.glb`.
+3. `cd Viber/examples/shared-assets && gameassets resume --profile game.yaml
+   --manifest manifests/_regen.yaml --no-vramd` (o animate é bpy/CPU; `--no-vramd`
+   evita tocar na GPU). O pipeline re-corre animate → lod e re-valida.
+4. Apagar o manifesto temporário.
+
+**Regenerado (2026-09-14):** `wolf` (8 clips), `scorpion` (8), `sand_worm` (7) —
+todos com death a colapsar (pelve −0.349) em vez do golpe.
+
+### Verificação (o que checar sempre)
+
+- **Conteúdo**: pelve Z no primeiro vs último frame do Death — antigo = 0.000
+  (golpe rotativo, corpo imóvel), novo ≈ `-drop` (colapso real).
+- **Orientação**: bbox em **espaço de cena** (compor translation/rotation/scale
+  dos nós até ao mesh — ler `accessor.min/max` local engana: os LODs do pool têm
+  o bake de yaw no nó raiz). Canónico = eixo comprido em **Z**.
+- **Consistência visual ↔ colisão ↔ precompute**: `{id}_collision.glb` e o
+  `aabb` do `{id}_precompute.json` têm de partilhar a mesma orientação do
+  `{id}_lod0.glb` (a cápsula vertical é insensível ao yaw; o AABB não).
+
+### Casos encontrados nesta regeneração
+
+- `sand_worm` (Sep 8, pré-canonicalização) estava **de lado** (X-longo) e a
+  regeneração corrigiu-o para Z — mas a colisão/precompute ficaram de lado:
+  re-aplicado o bake documentado (**−90° yaw** = `[0,−√½,0,√½]` xyzw no nó raiz
+  `Mesh`, só chunk JSON) e rodados os cantos do AABB pelo mesmo quaternion.
+  **Cuidado com a ordem do quaternion**: glTF usa xyzw; a matemática (Hamilton)
+  usa wxyz — trocar a ordem dá uma rotação 180° errada.
+- `wolf`/`scorpion` regeneraram já canónicos (o `canonicalize_creature_facing`
+  do game-pack roda o mesh nos dados, não o nó) — colisão/precompute intactos ✔.
+- **Quirk pré-existente do gate**: o `check glb` de `animated.yaml` falha nos
+  intermediates de todos estes assets (`armatures: 0`, `actions: 0`,
+  `texture_format: jpeg`) — **antes e depois** da regeneração (o parser binário
+  do lab não reconhece estes rigs e os intermediates são JPEG por design; o KTX2
+  vive no LOD entregável). O `resume` reporta falha do gate mas os entregáveis
+  `lod{0,1,2}` passam as regras próprias — validar o LOD0 com
+  `aigamekit-lab check glb {id}_lod0.glb .../rules/lod0.yaml`.
+
 ## Fora do âmbito (futuro)
 
 IK de pés com contacto real no chão (foot-planting por pata), 4-beat lateral
