@@ -98,9 +98,12 @@
       </GameObject>
     </StaticSpawner>
     <!-- §4 Pedregulhos musgosos entre as raízes (coletáveis: stone).
-        LOOP E: 5 colocados de 160 (occupancy 2365, cliff 2278);
-        count 300 + attempts 64 + footprint 2.2. -->
-    <StaticSpawner profile="tree" count="300" seed="6105" region-min="-190 0 120" region-max="190 0 420" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="55" max-slope-attempts="64" scale-min="0.9" scale-max="2.6" avoid-overlaps="1" pick-strategy="random" footprint-radius="1.8" cluster-count="24" cluster-radius="30" max-distance="473" scale-axis-min="0.85" scale-axis-max="1.15" random-yaw="true" variation="rock">
+        LOOP E: 5 colocados de 160 no original; 34 com footprint 1.4 +
+        attempts 64 + 32 groves. Região mantida LARGA: estreitá-la
+        concentrava os candidatos nas células já saturadas do registo
+        partilhado (4 colocados — a equidade entre grupos é limite da
+        engine, ver backlog). -->
+    <StaticSpawner profile="tree" count="260" seed="6105" region-min="-190 0 120" region-max="190 0 420" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="55" max-slope-attempts="64" scale-min="0.9" scale-max="2.2" avoid-overlaps="1" pick-strategy="random" footprint-radius="1.4" cluster-count="32" cluster-radius="26" max-distance="473" scale-axis-min="0.85" scale-axis-max="1.15" random-yaw="true" variation="rock">
       <GameObject role="static" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="34" lod-threshold-mid="90" />
         <ResourceNode kind="stone" yield="4" transform="pos: 0 0 0" />
@@ -114,7 +117,7 @@
         cilindro pré-calculado mantém o carve de NavMesh barato).
         LOOP E: 0 colocados de 24 (footprint 9 × escala 3 = disco de 27 m
         que não cabia em lado nenhum). footprint 5.5 + attempts 96. -->
-    <StaticSpawner profile="tree" count="36" seed="6106" region-min="-170 0 132" region-max="170 0 350" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="45" max-slope-attempts="96" scale-min="0.9" scale-max="1.25" avoid-overlaps="1" footprint-radius="3.5" max-distance="402" random-yaw="true" variation="rock">
+    <StaticSpawner profile="tree" count="30" seed="6106" region-min="-170 0 140" region-max="170 0 320" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="45" max-slope-attempts="96" scale-min="0.9" scale-max="1.25" avoid-overlaps="1" footprint-radius="2.5" max-distance="402" random-yaw="true" variation="rock">
       <GameObject role="static" transform="scale: 2.2 2.2 2.2" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 26; hits: 5; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 14; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb">
         <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="45" lod-threshold-mid="120" />
         <ResourceNode kind="stone" yield="6" transform="pos: 0 0 0" />

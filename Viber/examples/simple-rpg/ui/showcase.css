@@ -384,3 +384,92 @@
   color: slate-100;
   font-size: 1.9vmin;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   UI v2 — gradientes, motion (transition/@keyframes), seletores
+   novos (:nth-child, :focus) e texto (text-transform,
+   letter-spacing). Vitrina das capacidades novas do dialeto.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Banner: linear-gradient por cima da cor (a cor é a reserva).
+   Enquanto o bind de script não acende, fica esbatido — a
+   `transition` faz o acender ser um fade, não um salto. */
+.banner {
+  background: linear-gradient(90deg, sky-800 0%, violet-600 55%, rose-500 100%);
+  radius: 8;
+  padding: 8 12;
+  opacity: 0.35;
+  transition: opacity 0.4s ease-out;
+}
+
+.banner.on-tag {
+  opacity: 1;
+}
+
+.banner-text {
+  color: white;
+  font-size: 1.8vmin;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+/* Botão de demonstração: o hover NÃO salta — interpola. */
+.demo-btn {
+  background: slate-700;
+  radius: 6;
+  padding: 4 10;
+  transition: background 0.25s ease-out, scale 0.25s ease-out;
+}
+
+.demo-btn:hover {
+  background: emerald-600;
+  scale: 1.08;
+}
+
+.demo-btn:active {
+  scale: 0.96;
+}
+
+.demo-btn UiText {
+  color: stone-100;
+  font-size: 1.9vmin;
+}
+
+/* Painel de perigo: @keyframes em loop com alternate. */
+.danger-demo {
+  width: 36;
+  height: 36;
+  radius: 8;
+  background: #7f1d1d;
+  align-items: center;
+  justify-content: center;
+  animation: danger-pulse 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes danger-pulse {
+  from { background: #7f1d1d; scale: 1 }
+  to   { background: rose-500; scale: 1.08 }
+}
+
+/* Grelha de inventário listrada por :nth-child — zero marcação
+   extra no XML. */
+.inv .slot:nth-child(odd)  { background: slate-80066 }
+.inv .slot:nth-child(even) { background: slate-90066 }
+
+/* Foco visível no campo de texto (:focus = a classe `focused`). */
+.input:focus {
+  outline: 2 amber-400;
+}
+
+/* Linhas criadas por script: entrada com tween de opacity. */
+.dynamic .linha-dinamica {
+  background: slate-700cc;
+  radius: 6;
+  padding: 4 10;
+}
+
+.dynamic .linha-dinamica UiText {
+  color: stone-100;
+  font-size: 1.8vmin;
+}

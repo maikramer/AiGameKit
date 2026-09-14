@@ -112,7 +112,7 @@
 #hud .weather-icon { width: 13; height: 13 }
 #hud .weather-row .track.rain { flex-grow: 1; min-width: 0; height: 3 }
 
-/* ── dock: surge em combate; slots com ícone + tecla em selo ──────── */
+/* ── dock: sempre no ecrã; só o slot INACTIVO (em recarga) esbate ── */
 #hud .anchor-dock { position: absolute; bottom: 18; right: 18; width: 426; max-width: 60vw; gap: 7 }
 #hud .dock-caption { width: 100%; padding: 0 4 }
 #hud .dock-caption uitext { font-size: 10; color: #fff1d2; text-shadow: 1 1 #171d20 }
@@ -120,8 +120,18 @@
 #hud .action-cell { direction: column; align: center; gap: 5; flex-grow: 1; min-width: 0 }
 #hud .action-slot { width: 48; height: 46; max-width: 100%; align: center; justify: center; background: #293338; border: 1 #73878d; radius: 5; overflow: clip; flex-shrink: 0 }
 #hud .slot-icon { width: 30; height: 30 }
-/* Prontidão vem do class-bind `cd.*.ready:ready` no cell (sem Lua). */
-#hud .action-cell.ready .action-slot { border-color: #c6ac74; background: #343b38 }
+/* Slot inactivo (a recarregar) esbate por parte — slot, ícone, selo e nome
+   (`opacity` não herda para filhos; é o mesmo gesto do `.consumable.depleted`).
+   O class-bind `cd.*.ready:ready` no cell acende o slot pronto (aro de ouro). */
+#hud .action-cell.ability .action-slot { background: #20282d; border-color: #4d5a60 }
+#hud .action-cell.ability .slot-icon { opacity: 0.4 }
+#hud .action-cell.ability .slot-key { opacity: 0.55 }
+#hud .action-cell.ability .slot-key .action-key { opacity: 0.55 }
+#hud .action-cell.ability .action-name { color: #82887f }
+#hud .action-cell.ability.ready .action-slot { border-color: #c6ac74; background: #343b38 }
+#hud .action-cell.ability.ready .slot-icon { opacity: 1 }
+#hud .action-cell.ability.ready .slot-key { opacity: 1 }
+#hud .action-cell.ability.ready .action-name { color: #d1cfc3 }
 #hud .action-slot .veil { background: #060c13b8 }
 #hud .slot-key {
   position: absolute; right: 2; bottom: 2;

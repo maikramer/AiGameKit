@@ -1,0 +1,34 @@
+<!--
+  Catálogos RPG declaráveis (Fases B2+B3) — o fallback hardcoded da engine
+  escrito em XML. MESMOS nomes/labels/biomas/raios e MESMAS coordenadas/labels
+  das tabelas em src/travel.rs (LANDMARKS) e src/feedback.rs (RESPAWN_POINTS):
+  o comportamento é idêntico com ou sem este ficheiro (política aditiva — o
+  catálogo só substitui o fallback quando o mundo declara entradas).
+
+  <Landmark> NÃO spawna entidade: cada entrada descreve a entidade com aquele
+  `name`, spawnavda por world/landmarks/{forest,desert,swamp,peaks}.xml. É o
+  mesmo contrato dos `objective.target` das quests *_survey (quests/*.json).
+  <SpawnPoint> idem — só alimenta o respawn mais próximo do feedback.
+-->
+<world>
+  <!-- ── A Nota: 12 marcos de traçado (3 por bioma) ─────────────────── -->
+  <Landmark name="forest-outpost-tower" biome="dark_forest" label="Torre do Posto Avançado" survey-quest="forest_survey" mark-radius="10"/>
+  <Landmark name="forest-crossroads-well" biome="dark_forest" label="Poço da Encruzilhada" survey-quest="forest_survey" mark-radius="10"/>
+  <Landmark name="forest-stone-circle" biome="dark_forest" label="Círculo de Menires" survey-quest="forest_survey" mark-radius="10"/>
+  <Landmark name="desert-arch" biome="desert" label="Arco do Deserto" survey-quest="desert_survey" mark-radius="12"/>
+  <Landmark name="desert-caravan-wreck" biome="desert" label="Caravana Encalhada" survey-quest="desert_survey" mark-radius="12"/>
+  <Landmark name="desert-sun-obelisk" biome="desert" label="Obelisco do Sol" survey-quest="desert_survey" mark-radius="12"/>
+  <Landmark name="swamp-wrecked-boat" biome="swamp" label="Barco Naufragado" survey-quest="swamp_survey" mark-radius="11"/>
+  <Landmark name="swamp-sunken-graves" biome="swamp" label="Covas Submersas" survey-quest="swamp_survey" mark-radius="11"/>
+  <Landmark name="swamp-bone-altar" biome="swamp" label="Altar de Ossos" survey-quest="swamp_survey" mark-radius="11"/>
+  <Landmark name="peaks-cairn-1" biome="frozen_peaks" label="Primeiro Mojão" survey-quest="peaks_survey" mark-radius="9"/>
+  <Landmark name="peaks-cairn-2" biome="frozen_peaks" label="Segundo Mojão" survey-quest="peaks_survey" mark-radius="9"/>
+  <Landmark name="peaks-cairn-3" biome="frozen_peaks" label="Terceiro Mojão" survey-quest="peaks_survey" mark-radius="9"/>
+
+  <!-- ── Respawn: praça + 4 portões cardeais ────────────────────────── -->
+  <SpawnPoint at="0 0" label="praça"/>
+  <SpawnPoint at="0 -50" label="portão sul"/>
+  <SpawnPoint at="0 50" label="portão norte"/>
+  <SpawnPoint at="-50 0" label="portão oeste"/>
+  <SpawnPoint at="50 0" label="portão leste"/>
+</world>

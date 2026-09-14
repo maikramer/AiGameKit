@@ -93,6 +93,33 @@
           </UiPanel>
         </UiRow>
       </UiColumn>
+
+      <!-- ── UI v2: gradientes, motion CSS, seletores novos ────
+           O banner é um linear-gradient; o texto tem
+           text-transform + letter-spacing; o botão tem
+           transition (hover suave); o painel de perigo corre
+           um @keyframes em loop; a grelha de slots é listrada por
+           :nth-child no CSS. -->
+      <UiColumn class="group">
+        <UiPanel id="banner" class="banner" bind="demo.gradiente:on-tag">
+          <UiText class="banner-text">gradiente + transição</UiText>
+        </UiPanel>
+        <UiRow class="slots">
+          <UiButton id="demo-btn" class="demo-btn" tooltip="hover suave por `transition`">
+            <UiText>hover em mim</UiText>
+          </UiButton>
+          <UiPanel id="danger-demo" class="danger-demo" tooltip="@keyframes danger-pulse em loop">
+            <UiText class="slot-glyph">!</UiText>
+          </UiPanel>
+        </UiRow>
+      </UiColumn>
+
+      <!-- ── UI v2: área dinâmica — o script CRIA linhas aqui
+           (viber.ui.create + tween de entrada) e conta-as com
+           viber.ui.query(".linha-dinamica"). -->
+      <UiColumn id="dynamic-area" class="group dynamic">
+        <UiText class="label">Área dinâmica (create/destroy por script):</UiText>
+      </UiColumn>
     </UiColumn>
 
     <!-- Cartão de leitura: o script escreve aqui o estado dos widgets

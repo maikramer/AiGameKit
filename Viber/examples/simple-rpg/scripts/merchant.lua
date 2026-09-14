@@ -1,5 +1,11 @@
--- merchant.lua: [E] gira o player, fala com gesto e som; fora de alcance a
--- banter recomeça (loja completa chega com a Fase de inventário).
+-- merchant.lua: Bram, o mercador. [E] gira o player, fala com gesto e som;
+-- fora de alcance a banter recomeça.
+--
+-- A LOJA vive em game/shop.lua (catálogo, preços e negociação em Lua) —
+-- carregada como módulo e actualizada daqui: negociação acontece perto do
+-- mercador, que é onde o seu script está vivo (LOD de IA).
+local shop = viber.load("game/shop.lua")
+
 local lines = {
   "“Ferro bom não se negocia barato, forasteiro.”",
   "“Precisa de uma lâmina? Chegou na hora certa.”",
@@ -26,4 +32,6 @@ function on_update(dt)
     end
     viber.toast(lines[st.i])
   end
+  -- A loja (lista + cliques + ações buy/sell) é atualizada daqui.
+  shop.update(dt)
 end

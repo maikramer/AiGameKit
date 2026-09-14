@@ -94,26 +94,27 @@
       </UiPanel>
     </UiColumn>
 
-    <!-- ── DOCK: surge em combate/recarga; fora dele fica fantasma a 12% ── -->
-    <UiColumn id="dock-anchor" class="anchor-dock" bind="abilities.active" fade="0.45 0.9 0.12">
+    <!-- ── DOCK: barra sempre legível no ecrã; quem esbate são os SLOTS
+         INACTIVOS (em recarga) via class-bind `cd.*.ready:ready` no cell ── -->
+    <UiColumn id="dock-anchor" class="anchor-dock">
       <UiRow class="dock-caption"><UiText>J  ATACAR</UiText><UiSpacer /><UiText>L  DEFENDER</UiText></UiRow>
       <UiRow id="dock" class="hud-card dock">
         <!-- `cd.*.ready` acende o slot (fio de ouro) via class-bind no cell. -->
-        <UiColumn class="action-cell" bind="cd.dash.ready:ready">
+        <UiColumn class="action-cell ability" bind="cd.dash.ready:ready">
           <UiCooldown id="cd-dash" class="action-slot" bind="cd.dash" value="0" tooltip="Investida [C]">
             <UiIcon class="slot-icon" src="/assets/icons/ability_dash.png" />
             <UiPanel class="slot-key"><UiText class="action-key">C</UiText></UiPanel>
             <UiBar class="cooldown-track" bind="cd.dash" />
           </UiCooldown><UiText class="action-name">Esquiva</UiText>
         </UiColumn>
-        <UiColumn class="action-cell" bind="cd.heal.ready:ready">
+        <UiColumn class="action-cell ability" bind="cd.heal.ready:ready">
           <UiCooldown id="cd-heal" class="action-slot" bind="cd.heal" value="0" tooltip="Curar [E], longe de personagens e interações">
             <UiIcon class="slot-icon" src="/assets/icons/ability_heal.png" />
             <UiPanel class="slot-key"><UiText class="action-key">E</UiText></UiPanel>
             <UiBar class="cooldown-track" bind="cd.heal" />
           </UiCooldown><UiText class="action-name">Cura</UiText>
         </UiColumn>
-        <UiColumn class="action-cell" bind="cd.strike.ready:ready">
+        <UiColumn class="action-cell ability" bind="cd.strike.ready:ready">
           <UiCooldown id="cd-strike" class="action-slot" bind="cd.strike" value="0" tooltip="Golpe radial [R]">
             <UiIcon class="slot-icon" src="/assets/icons/ability_power.png" />
             <UiPanel class="slot-key"><UiText class="action-key">R</UiText></UiPanel>

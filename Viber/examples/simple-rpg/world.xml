@@ -71,6 +71,7 @@
        travessia: a artéria contorna-a por terra (decisão autoral — o
        contorno lê-se melhor que um viaduto no canto da lagoa). -->
   <Include src="/world/bridges/ponte-norte.xml" />
+  <Include src="/world/gameplay.xml" />
   <Include src="/world/bridges/passadeira-da-bruxa.xml" />
   <!-- Aleia de lanternas nas quatro artérias (postes + chama + luz
            quente). Depois de network.xml: o poste assenta no leito já
@@ -90,6 +91,10 @@
   <!-- Vida noturna de Discordia (peça exploração): janelas, mercado,
        braseiros nos portões, faróis dos POIs. Só luzes/parts aditivas. -->
   <Include src="/world/landmarks/village.xml" />
+  <!-- Catálogos declaráveis da Nota + respawn (Fases B2/B3): 12 <Landmark> e
+       5 <SpawnPoint> que espelham as tabelas hardcoded da engine. DEPOIS dos
+       landmarks físicos (que os `name` descrevem). -->
+  <Include src="/world/landmarks.xml" />
   <!-- Cena separada: ambientes internos (portais das portas → salas em
            (-410, 120); saídas teleportam de volta para as portas exteriores). -->
   <Include src="/world/interiors.xml" />

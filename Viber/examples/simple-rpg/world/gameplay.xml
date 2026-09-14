@@ -1,0 +1,22 @@
+<world>
+  <!-- ═══ Gameplay em LUA (desacoplamento) ═════════════════════════════
+       O jogo reclama os sistemas nativos que lhe pertencem e reimplementa-os
+       em scripts: [C]/[E]/[R] e [B] (game/abilities.lua), a hotbar [1]/[2]
+       (game/hotbar.lua) e o diálogo de um NPC (scripts/npc/forest-wolves.lua).
+       Continuam da engine: melee [J], guarda [L] (precisa do componente
+       nativo), quests/tracker, colheita, travel, economia. -->
+
+  <!-- A bomba das habilidades Lua: largada à frente do herói, detona com
+       fuse (o script vive colado ao prototype — cada instância nasce viva). -->
+  <Prototype id="bomb-lua">
+    <Entity name="bomb-lua" script="game/bomb-lua.lua">
+      <Sphere radius="0.22" base-color="#2c2f33" emissive="#ff5a1f" />
+      <PointLight color="#ff8a3d" intensity="300" radius="6" />
+    </Entity>
+  </Prototype>
+
+  <!-- Controller do gameplay: `tag="always-active"` mantém o script a correr
+       onde o herói andar (sem o LOD de ativação de 45 m). -->
+  <Entity name="game-lua-controller" tag="always-active" script="game/abilities.lua" />
+  <Entity name="game-lua-hotbar" tag="always-active" script="game/hotbar.lua" />
+</world>

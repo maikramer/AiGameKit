@@ -37,12 +37,9 @@
     <GroundDecal name="city.gate.n.e" at="7.5 48" size="8 18" feather="3" noise="0.16" seed="72"
                  texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5"
                  base-color="#9c8666" roughness="0.95" />
-    <GroundDecal name="city.gate.s.w" at="-7.5 -48" size="8 18" feather="3" noise="0.16" seed="73"
-                 texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5"
-                 base-color="#9e8868" roughness="0.95" />
-    <GroundDecal name="city.gate.s.e" at="7.5 -48" size="8 18" feather="3" noise="0.16" seed="74"
-                 texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5"
-                 base-color="#a48c6c" roughness="0.95" />
+    <!-- Par SUL removido (2026-09-13): na saída sul, relva clara + elipses
+       8x18 sem contexto liam-se como "2 buracos" (report do autor). As
+       ombreiras sobrevivem onde há transição para caminho (N/E/W). -->
     <GroundDecal name="city.gate.e.n" at="48 7.5" size="18 8" feather="3" noise="0.16" seed="75"
                  texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5"
                  base-color="#a08a6a" roughness="0.95" />

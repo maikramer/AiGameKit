@@ -49,6 +49,11 @@ end
 
 local st = viber.state() -- estado desta entidade UiRoot
 
+-- ── UI v2: bind por script — a tag do banner acende via class-bind
+-- (`<UiPanel class="banner" bind="demo.gradiente:on-tag">` + `.banner.on`).
+-- Nomes da engine têm prioridade; "demo.gradiente" é nosso.
+viber.ui.set("demo.gradiente", true)
+
 function on_update(dt)
   viber.ui.set_text("readout-text", descreve())
 
@@ -60,9 +65,46 @@ function on_update(dt)
     viber.ui.set_anim("seal", a_ligar and "spin 6" or "none")
   end
 
-  -- Cliques nos checks: feedback na consola de QA (log 1× por mudança).
-  if viber.ui.clicked("check-sfx") then
-    local sfx = viber.ui.read("check-sfx")
-    viber.log("check-sfx -> " .. tostring(sfx and sfx.checked))
+  -- ── Eventos: o lote do frame drenado UMA vez. Substitui o padrão
+  --    `clicked()` de 1 frame (que perdia cliques com polling lento)
+  --    e a detecção de mudança manual. Sem prefixo: vem tudo.
+  for _, ev in ipairs(viber.ui.events()) do
+    if ev.type == "click" and ev.id == "demo-btn" then
+      -- Tween explícito: o banner esbate — a volta começa no tween_done.
+      viber.ui.tween("banner", { property = "opacity", to = 0.25,
+                                 duration = 0.3, easing = "ease-out" })
+    elseif ev.type == "tween_done" and ev.id == "banner"
+           and ev.property == "opacity" then
+      viber.ui.tween("banner", { property = "opacity", to = 1,
+                                 duration = 0.5, easing = "ease-in-out" })
+    elseif ev.type == "text_changed" then
+      viber.log("hero-name mudou -> " .. tostring(ev.text))
+    elseif ev.type == "value_changed" then
+      viber.log("volume -> " .. tostring(ev.value))
+    end
+  end
+
+  -- ── Criação dinâmica: uma linha nova a cada 4 s (cap 3), com tween
+  --    de entrada; contada por viber.ui.query(".linha-dinamica").
+  st.spawn_timer = (st.spawn_timer or 3.5) + dt
+  if st.spawn_timer >= 4.0 then
+    st.spawn_timer = 0.0
+    local linhas = viber.ui.query(".linha-dinamica")
+    if #linhas >= 3 then
+      -- cheio: remove a mais antiga (destroy tira a subárvore do registry)
+      viber.ui.destroy(linhas[1])
+    end
+    local id = viber.ui.create{
+      tag = "uipanel", parent = "dynamic-area", class = "linha-dinamica",
+      id = "dyn-" .. tostring((st.linhas or 0) + 1),
+    }
+    viber.ui.create{
+      tag = "uitext", parent = id,
+      text = "linha dinâmica #" .. tostring((st.linhas or 0) + 1),
+    }
+    st.linhas = (st.linhas or 0) + 1
+    viber.ui.tween(id, { property = "opacity", from = 0, to = 1, duration = 0.4 })
+    viber.log("criado " .. id .. " — query conta "
+              .. tostring(#viber.ui.query(".linha-dinamica")) .. " linha(s)")
   end
 end

@@ -32,7 +32,10 @@
            marker-height = altura do balão !/?/✓ acima da origem (pés).
            ============================================================ -->
     <!-- Floresta (norte) -->
-    <Entity name="npc_forest_wolves" translation="-16 0 60">
+    <Entity name="npc_forest_wolves" translation="-16 0 60" script="npc/forest-wolves.lua">
+      <!-- Diálogo 100% Lua (scripts/npc/forest-wolves.lua): o script reclama
+           o [E] via viber.own_system("dialogue") e escreve no balão nativo
+           com viber.say; o dialogue-id continua a identificar a quest no JSON. -->
       <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
       <DialogueNPC dialogue-id="forest_wolves" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
