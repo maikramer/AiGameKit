@@ -5,6 +5,7 @@ Happy path: rigged GLB → `animator3d game-pack` → animated GLB → (GameAsse
 Package docs: [`Animator3D/README.md`](../Animator3D/README.md).  
 Retarget bugs / biped vs creature: [`findings/ANIMATOR_RETARGET_FINDINGS.md`](findings/ANIMATOR_RETARGET_FINDINGS.md).  
 IK 2-ossos + limites de juntas (joelho nunca vira para a frente): [`findings/ANIMATOR_IK_LIMITS_FINDINGS.md`](findings/ANIMATOR_IK_LIMITS_FINDINGS.md).  
+Quadrúpedes (galope/idle/attack/death/hit procedurais): [`findings/ANIMATOR_QUADRUPED_CLIPS_FINDINGS.md`](findings/ANIMATOR_QUADRUPED_CLIPS_FINDINGS.md).  
 Text-to-motion → SkinTokens (`motion3d apply-rigged`, perfil `hml22`): [`findings/MOTION3D_FINDINGS.md`](findings/MOTION3D_FINDINGS.md).  
 Clip inventory: [`quaternius_inventory.md`](quaternius_inventory.md).
 
@@ -28,7 +29,7 @@ GameAssets batch/resume runs this **once** on `_intermediate/{id}_rigged.glb`
 |------|------|-------------------|
 | **Quaternius** (default `humanoid`) | Bipeds, humanoids, “fantasma” bipeds | `idle`, `walk`, `run`, `jump`, `attack`, `hit`, `death`, … |
 | **Villager** (`--anim-pack villager`) | Trabalhos/crafting (arado, pesca, mining, martelo — Kevin Iglesias, FBX por clip, EULA free) | `plow`, `fish`, `gather`, `hammer`, `mineground`, `minewall`, … |
-| **Procedural** (`creature` / `flying` / `--procedural`) | Non-humanoid / multi-limb | `Animator3D_BreatheIdle`, `Animator3D_Walk`, … |
+| **Procedural** (`creature` / `flying` / `--procedural`) | Non-humanoid / multi-limb | `Animator3D_BreatheIdle`, `Animator3D_Walk`, `Animator3D_Run` (galope), `Animator3D_Attack/Hit/Death`, … |
 
 VibeGame enemy scripts (`creature.ts`, `enemies/*.ts`) expect the **clean**
 Quaternius names for bipeds. Procedural names need matching TS.

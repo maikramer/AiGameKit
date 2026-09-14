@@ -1006,10 +1006,11 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
         ("sword_keyframes", {"frame_end": 32, "action_name": "Animator3D_SwordAttack"}),
         ("gather_keyframes", {"frame_end": 40, "action_name": "Animator3D_Gather"}),
         ("victory_roar_keyframes", {"frame_end": 60, "action_name": "Animator3D_Roar"}),
-        # Explicit hit/death so ``--clips idle,...,hit,death`` fills game scripts
-        # (mine/chop alone never matched the hit/death filter).
-        ("mine_keyframes", {"frame_end": 24, "action_name": "Animator3D_Hit"}),
-        ("chop_keyframes", {"frame_end": 48, "action_name": "Animator3D_Death"}),
+        # Hit/death REAIS (antes: aliases de mine/chop — um GOLPE como morte!).
+        # Hit = flinch one-shot; Death = colapso de lado terminal (o runtime
+        # segura a última pose).
+        ("hit_keyframes", {"frame_end": 16, "action_name": "Animator3D_Hit"}),
+        ("death_keyframes", {"frame_end": 48, "action_name": "Animator3D_Death"}),
     ],
     "flying": [
         ("breathe_idle_keyframes", {"frame_end": 72, "action_name": "Animator3D_BreatheIdle"}),

@@ -832,9 +832,7 @@ def _recover_quadruped_chains(arm: Any, chains: dict[str, list[str]]) -> dict[st
     # Chão pelas CABEÇAS (juntas — as caudas das patas mergulham abaixo do
     # chão visual); teto por cabeças+caudas (ponta da cauda estende acima).
     z_floor = min(pb.bone.head_local.z for pb in pbones)
-    z_ceil = max(
-        z for pb in pbones for z in (pb.bone.head_local.z, pb.bone.tail_local.z)
-    )
+    z_ceil = max(z for pb in pbones for z in (pb.bone.head_local.z, pb.bone.tail_local.z))
     h = max(z_ceil - z_floor, 1e-6)
     ground_z = z_floor + max(0.12 * h, 0.02)
     top_z = z_ceil - 0.10 * h
@@ -1227,6 +1225,67 @@ def _gait_phases(n_legs_per_side: int) -> list[float]:
     return [0.0 if i % 2 == 0 else 0.5 for i in range(n_legs_per_side)]
 
 
+def _split_front_hind_legs(
+    arm_obj: Any,
+    chains: dict[str, list],
+    forward: Any,
+) -> tuple[dict[str, list], dict[str, list]]:
+    """Classifica as patas de ``legs_r``/``legs_l`` em DIANTEIRAS vs TRASEIRAS.
+
+    Critério anatómico: projeção do anexo da pata (head do 1.º osso) no eixo
+    forward do rig — dianteiras têm maior projeção (perto do pescoço/ombro),
+    traseiras menor (perto da pelvis/cauda). Devolve ``(front, hind)`` com
+    ``{"r": [leg, ...], "l": [leg, ...]}`` ordenados (dianteiras primeiro
+    dentro de cada lado). Rigs com 1 pata/lado ficam tudo em ``front``
+    (sem noção frente/trás); com N ímpar por lado, o sobrante vai para trás.
+    """
+    fx = float(getattr(forward, "x", 0.0))
+    fy = float(getattr(forward, "y", 0.0))
+    front: dict[str, list] = {"r": [], "l": []}
+    hind: dict[str, list] = {"r": [], "l": []}
+
+    def proj(names: list) -> float:
+        b = arm_obj.data.bones.get(names[0]) if names else None
+        if b is None:
+            return 0.0
+        h = b.head_local
+        return float(h.x) * fx + float(h.y) * fy
+
+    for side in ("r", "l"):
+        legs = list(chains.get(f"legs_{side}", []) or [])
+        if not legs:
+            main = chains.get(f"leg_{side}", [])
+            if main:
+                legs = [main]
+        ordered = sorted(legs, key=proj, reverse=True)
+        n = len(ordered)
+        if n >= 2:
+            front[side] = ordered[: n // 2]
+            hind[side] = ordered[n // 2 :]
+        else:
+            front[side] = ordered
+    return front, hind
+
+
+def _gallop_phases(front: dict[str, list], hind: dict[str, list]) -> dict[tuple[str, ...], float] | None:
+    """Fases do GALOPE TRANSVERSO para 2+2 patas — None fora desse caso.
+
+    Traseiras arrancam em sequência rápida (Δ0.10), dianteiras a meio ciclo
+    (Δ0.10 entre si), suspensão no último quarto — o walk fica com o trot
+    diagonal (legível às velocidades de jogo) e o run ganha o gait assimétrico
+    real dos quadrúpedes. Aracnídeos/insetos (>2 patas/lado) devolvem None e
+    mantêm o gait alternado.
+    """
+    if len(front["r"]) == len(front["l"]) == len(hind["r"]) == len(hind["l"]) == 1:
+        return {
+            tuple(hind["r"][0]): 0.0,
+            tuple(hind["l"][0]): 0.10,
+            tuple(front["r"][0]): 0.50,
+            tuple(front["l"][0]): 0.60,
+        }
+    return None
+
+
 def _locomotion_cycle(
     arm_obj: Any,
     chains: dict[str, list[str]],
@@ -1245,9 +1304,21 @@ def _locomotion_cycle(
     body_lean: float,
     spine_twist: float,
     body_bob: float = 0.0,
+    leg_phase_by_leg: dict[tuple[str, ...], float] | None = None,
+    spine_flex_amp: float = 0.0,
+    bob_freq: float = 2.0,
+    bob_phase: float = 0.0,
 ) -> None:
     """Shared walk/run engine: anatomically-correct hip swing + knee flexion +
-    contralateral arm swing, all on rig-resolved axes."""
+    contralateral arm swing, all on rig-resolved axes.
+
+    ``leg_phase_by_leg`` (galope): fases EXPLÍCITAS por pata — ignoram a
+    anti-fase de lado (o galope transverso tem ambos os pares do mesmo lado a
+    ~0.1 de distância, não 0.5). ``spine_flex_amp``: flexão/estiramento da
+    espinha a 1× ciclo (recolha/estiramento do galope). ``bob_freq``/``bob_phase``:
+    o bob do quadrúpede trotador tem 2 dips/ciclo (default); o galope tem 1
+    arco de voo/ciclo (``bob_freq=1.0``, desfasado para o pico na suspensão).
+    """
     import math
 
     bpy = _bpy()
@@ -1267,16 +1338,16 @@ def _locomotion_cycle(
         # shaped_cos desacelera nos picos (weight shift natural) vs cos puro.
         return hip_amp * shaped_cos(phi)
 
-    def knee_flex(phi: float) -> float:
+    def knee_flex(phi: float, cushion: float = 1.0) -> float:
         # Slight cushion in stance, large flexion mid-swing to clear the ground.
         # Stance onset envolvido em smoothstep para evitar joelho "duro".
         if phi < 0.5:
             w = phi / 0.5
-            return knee_stance * (0.5 - 0.5 * math.cos(w * two_pi)) * _smoothstep01(w)
+            return knee_stance * cushion * (0.5 - 0.5 * math.cos(w * two_pi)) * _smoothstep01(w)
         w = (phi - 0.5) / 0.5
         return knee_swing * math.sin(w * math.pi)
 
-    def anim_leg(names: list[str], phase: float) -> None:
+    def anim_leg(names: list[str], phase: float, gain: float = 1.0, cushion: float = 1.0) -> None:
         for ci, bn in enumerate(names):
             pb = arm_obj.pose.bones.get(bn)
             ax = axes.get(bn)
@@ -1290,13 +1361,13 @@ def _locomotion_cycle(
                 # Jitter orgânico por stride (±1% no hip, ±0.5% no knee).
                 noise_hip = hip_amp * 0.01 * fbm(t * cycles, seed=ci)
                 if ci == 0:  # hip
-                    _key_humanoid_bone(pb, ax, frame, swing=hip_swing(phi) + noise_hip)
+                    _key_humanoid_bone(pb, ax, frame, swing=hip_swing(phi) * gain + noise_hip)
                 elif ci == 1:  # knee
                     _key_humanoid_bone(
                         pb,
                         ax,
                         frame,
-                        bend=knee_flex(phi),
+                        bend=knee_flex(phi, cushion),
                         swing=(hip_swing(phi) + noise_hip) * 0.12,
                     )
                 elif ci == 2:  # ankle/foot: counter-rotate (shaped_cos) to stay roughly flat
@@ -1351,11 +1422,14 @@ def _locomotion_cycle(
                 frame = frame_start + fi
                 phi = (t * cycles) % 1.0
                 bpy.context.scene.frame_set(frame)
+                # Flexão 1× ciclo (galope): recolhe na compressão, estica no
+                # estiramento — a espinha é a mola do galope.
+                flex = spine_flex_amp * scale * math.cos(phi * two_pi)
                 _key_humanoid_bone(
                     pb,
                     ax,
                     frame,
-                    swing=body_lean * scale,
+                    swing=body_lean * scale + flex,
                     yaw=spine_twist * scale * shaped_cos(phi),
                 )
 
@@ -1383,7 +1457,7 @@ def _locomotion_cycle(
                 # Jitter no bob (±10%) para cada stride variar ligeiramente.
                 bob_noise = 1.0 + 0.1 * fbm(t * cycles, seed=99)
                 loc = [0.0, 0.0, 0.0]
-                loc[ui] = us * (-body_bob * math.cos(phi * two_pi * 2.0) * bob_noise)
+                loc[ui] = us * (-body_bob * math.cos(phi * two_pi * bob_freq + bob_phase) * bob_noise)
                 pb.location = (loc[0], loc[1], loc[2])
                 pb.keyframe_insert(data_path="location", frame=frame)
 
@@ -1394,13 +1468,33 @@ def _locomotion_cycle(
     legs_r = chains.get("legs_r", [])
     legs_l = chains.get("legs_l", [])
     if legs_r or legs_l:
-        n = max(len(legs_r), len(legs_l), 1)
-        phases = _gait_phases(n)
-        for i, leg in enumerate(legs_r):
-            anim_leg(leg, phase=phases[min(i, len(phases) - 1)])
-        for i, leg in enumerate(legs_l):
-            ph = phases[min(i, len(phases) - 1)] + 0.5  # lado oposto: anti-fase
-            anim_leg(leg, phase=ph % 1.0)
+        # Papel anatómico por pata: traseiras têm mais drive (impulso),
+        # dianteiras mais cushion (travão/amortecimento).
+        front, hind = _split_front_hind_legs(arm_obj, chains, forward)
+        roles: dict[tuple[str, ...], tuple[float, float]] = {}
+        for leg in front["r"] + front["l"]:
+            roles[tuple(leg)] = (0.95, 1.15)  # (gain hip, cushion knee)
+        for leg in hind["r"] + hind["l"]:
+            roles[tuple(leg)] = (1.12, 0.9)
+
+        def _anim_role(leg: list[str], phase: float) -> None:
+            gain, cushion = roles.get(tuple(leg), (1.0, 1.0))
+            anim_leg(leg, phase=phase, gain=gain, cushion=cushion)
+
+        if leg_phase_by_leg is not None:
+            # Galope: fases EXPLÍCITAS por pata (sem anti-fase de lado).
+            for leg in legs_r + legs_l:
+                ph = leg_phase_by_leg.get(tuple(leg))
+                if ph is not None:
+                    _anim_role(leg, phase=ph)
+        else:
+            n = max(len(legs_r), len(legs_l), 1)
+            phases = _gait_phases(n)
+            for i, leg in enumerate(legs_r):
+                _anim_role(leg, phase=phases[min(i, len(phases) - 1)])
+            for i, leg in enumerate(legs_l):
+                ph = phases[min(i, len(phases) - 1)] + 0.5  # lado oposto: anti-fase
+                _anim_role(leg, phase=ph % 1.0)
     else:
         # Fallback: pata principal (leg_r/leg_l) para rigs sem legs_r/legs_l.
         anim_leg(chains.get("leg_r", []), phase=0.0)
@@ -1763,7 +1857,66 @@ def breathe_idle_keyframes(
                 max_bones=6,
             )
 
-    # Patas ficam paradas no chao (idle = pousado).
+    # Idle v2 (pousado): shift de peso nas ancas + look-around da cabeça +
+    # micro-pressão nas patas — as patas deixam de estar 100% congeladas.
+    forward = _detect_forward(arm, chains)
+    axes_idle = _build_axes_map(arm, chains, forward, ("body", "neck", "legs_r", "legs_l", "leg_r", "leg_l"))
+
+    def _idle_weight_shift() -> None:
+        from ._motion import shaped_cos as _s_cos
+
+        # Corpo balança lentamente para um lado e volta (1 vez por clip);
+        # ancas contrabalançam; patas fazem micro-pressão no chão.
+        body_names = chains.get("body", [])
+        body_pb = arm.pose.bones.get(body_names[0]) if body_names else None
+        bax = axes_idle.get(body_names[0]) if body_names else None
+        leg_sets = [("r", leg) for leg in chains.get("legs_r", [])] + [("l", leg) for leg in chains.get("legs_l", [])]
+        if not leg_sets and (chains.get("leg_r") or chains.get("leg_l")):
+            leg_sets = [("r", chains["leg_r"]), ("l", chains["leg_l"])]
+        for fi in range(total):
+            t = fi / max(total - 1, 1)
+            frame = frame_start + fi
+            bpy.context.scene.frame_set(frame)
+            sway = 0.055 * _s_cos(t * math.pi)  # ±3° lento
+            if body_pb is not None and bax is not None:
+                mi, ms = bax["medio"]  # eixo local ~ world X (lateral)
+                loc = list(body_pb.location)
+                loc[mi] = ms * sway * 0.35
+                body_pb.location = tuple(loc)
+                body_pb.keyframe_insert(data_path="location", frame=frame)
+            for side_key, leg in leg_sets:
+                sign = 1.0 if side_key == "r" else -1.0
+                for ci, bn in enumerate(leg[:2]):
+                    pb = arm.pose.bones.get(bn)
+                    ax = axes_idle.get(bn)
+                    if pb is None or ax is None:
+                        continue
+                    # Anca contrabalança, joelho absorve (micro).
+                    if ci == 0:
+                        _key_humanoid_bone(pb, ax, frame, medio=sign * sway * 1.6)
+                    else:
+                        _key_humanoid_bone(pb, ax, frame, bend=-sign * sway * 0.5)
+
+    def _idle_look_around() -> None:
+        from ._motion import fbm as _fbm
+
+        # Cabeça/pescoço exploram o ambiente com noise lento (não metronómico).
+        for ci, bn in enumerate(chains.get("neck", [])):
+            pb = arm.pose.bones.get(bn)
+            ax = axes_idle.get(bn)
+            if pb is None or ax is None:
+                continue
+            s = max(0.3, 1.0 - ci * 0.2)
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                bpy.context.scene.frame_set(frame)
+                yaw = (0.14 * _fbm(t * 3.0, seed=ci + 21) - 0.07) * s
+                swing = 0.05 * _fbm(t * 2.0, seed=ci + 22) * s
+                _key_humanoid_bone(pb, ax, frame, swing=swing, yaw=yaw)
+
+    _idle_weight_shift()
+    _idle_look_around()
 
     finalize_current_action_to_nla(armature_name)
     return chains
@@ -1848,7 +2001,12 @@ def attack_keyframes(
     total = frame_end - frame_start + 1
     strikes = max(1, int(strikes))
     forward = _detect_forward(arm, chains)
-    axes = _build_axes_map(arm, chains, forward, ("arm_r", "arm_l"))
+    axes = _build_axes_map(
+        arm,
+        chains,
+        forward,
+        ("arm_r", "arm_l", "body", "legs_r", "legs_l", "leg_r", "leg_l"),
+    )
 
     def _strike_swing(chain_key: str, amp: float, sign: float, decay: float) -> None:
         """Forward arm swing through the strike profile on rig-resolved axes."""
@@ -1978,6 +2136,323 @@ def attack_keyframes(
                 decay=0.2,
                 max_bones=8,
             )
+
+    # Investida com patas (v2): traseiras enrolam no anticipation e ESTENDEM no
+    # strike (impulso), dianteiras travam/amortecem — o corpo avança no eixo
+    # forward no pico (lunge) e regressa no settle. Sem isto o ataque de
+    # criatura era só cabeça/espinha com as patas pregadas ao chão.
+    front, hind = _split_front_hind_legs(arm, chains, forward)
+
+    def _leg_strike(leg: list[str], role: str) -> None:
+        coil = 0.5 if role == "hind" else 0.28  # enrolar no anticipation
+        push = -0.65 if role == "hind" else -0.22  # extensão no strike
+        for ci, bn in enumerate(leg):
+            pb = arm.pose.bones.get(bn)
+            ax = axes.get(bn)
+            if pb is None or ax is None:
+                continue
+            s = max(0.4, 1.0 - ci * 0.15)
+            for fi in range(total):
+                td = max(0.0, min(1.0, _strike_t(fi)))
+                frame = frame_start + fi
+                bpy.context.scene.frame_set(frame)
+                if td < 0.15:
+                    w = _smoothstep01(td / 0.15)
+                    bend = coil * w
+                elif td < 0.42:
+                    w = _smoothstep01((td - 0.15) / 0.27)
+                    bend = coil + (push - coil) * w
+                elif td < 0.58:
+                    bend = push
+                else:
+                    w = _smoothstep01((td - 0.58) / 0.42)
+                    bend = push * (1.0 - w)
+                _key_humanoid_bone(pb, ax, frame, bend=bend * s)
+
+    for leg in hind["r"] + hind["l"]:
+        _leg_strike(leg, "hind")
+    for leg in front["r"] + front["l"]:
+        _leg_strike(leg, "front")
+
+    # Lunge do corpo: avanço ao longo do eixo forward no pico do perfil (a
+    # location regressa a ~0 no settle — o perfil termina em 0).
+    body_names = chains.get("body", [])
+    if body_names:
+        bpb = arm.pose.bones.get(body_names[0])
+        bax = axes.get(body_names[0])
+        if bpb is not None and bax is not None:
+            li, ls = bax["lift"]  # eixo local alinhado com world forward
+            for fi in range(total):
+                td = max(0.0, min(1.0, _strike_t(fi)))
+                prof = _attack_strike_profile(td)
+                frame = frame_start + fi
+                bpy.context.scene.frame_set(frame)
+                loc = [0.0, 0.0, 0.0]
+                loc[li] = ls * 0.15 * max(prof, 0.0)
+                bpb.location = (loc[0], loc[1], loc[2])
+                bpb.keyframe_insert(data_path="location", frame=frame)
+
+    finalize_current_action_to_nla(armature_name)
+    return chains
+
+
+def death_keyframes(
+    armature_name: str,
+    *,
+    frame_start: int = 1,
+    frame_end: int = 48,
+    side: float = 1.0,
+    drop: float = 0.35,
+    action_name: str = "Animator3D_Death",
+) -> dict[str, list[str]]:
+    """Morte de criatura: stagger -> colapso de lado -> settle. TERMINAL (não cíclica).
+
+    Fases: (0-0.20) stagger — cabeça cai, traseiras cedem primeiro; (0.20-0.60)
+    colapso — pelve desce ``drop`` no eixo up, corpo roda para ``side``, patas
+    dobram progressivamente (traseiras antes das dianteiras); (0.60-0.80)
+    bounce amortecido; (0.80-1.00) repouso com micro-respiração em decaimento.
+    A última frame iguala a anterior — o runtime segura a pose final
+    (Viber: play_death_animation terminal; VibeGame: loop=false).
+
+    Substitui o alias histórico (Death = chop_keyframes — um GOLPE como morte).
+    """
+    import math
+
+    from . import humanoid
+    from ._motion import fbm
+
+    chains = _classify_bone_chains(armature_name)
+    if humanoid.try_humanoid_clip(
+        "death",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+    ):
+        return chains
+
+    bpy = _bpy()
+    normalize_armature_before_animation(armature_name)
+    stash_if_needed_for_action(armature_name, action_name)
+    ensure_action(armature_name, action_name)
+    bpy.context.scene.frame_start = frame_start
+    bpy.context.scene.frame_end = frame_end
+    _ensure_pose_mode(armature_name)
+
+    chains = _classify_bone_chains(armature_name)
+    arm_obj = bpy.data.objects[armature_name]
+    total = frame_end - frame_start + 1
+    forward = _detect_forward(arm_obj, chains)
+    axes = _build_axes_map(
+        arm_obj,
+        chains,
+        forward,
+        ("body", "spine", "neck", "tail", "leg_r", "leg_l", "legs_r", "legs_l"),
+    )
+    front, hind = _split_front_hind_legs(arm_obj, chains, forward)
+
+    side = 1.0 if side >= 0 else -1.0
+
+    def _env(t: float, start: float, dur: float) -> float:
+        """Rampa smoothstep de 0→1 entre start e start+dur."""
+        if t <= start:
+            return 0.0
+        return _smoothstep01(min((t - start) / max(dur, 1e-6), 1.0))
+
+    def _bouncy(t: float, start: float) -> float:
+        """Envolvente do colapso com bounce amortecido no fim (settle)."""
+        if t <= start:
+            return 0.0
+        w = (t - start) / max(1.0 - start, 1e-6)
+        base = _smoothstep01(min(w / 0.55, 1.0))
+        if w <= 0.55:
+            return base
+        bounce = 0.08 * math.exp(-(w - 0.55) * 6.0) * math.cos((w - 0.55) * math.pi * 3.0)
+        return base + bounce
+
+    # Envolventes por sistema (delays: energia desce do tronco para as patas).
+    env_body = lambda t: _bouncy(t, 0.10)  # noqa: E731
+    env_roll = lambda t: _env(t, 0.25, 0.35)  # noqa: E731
+    env_hind = lambda t: _bouncy(t, 0.12)  # noqa: E731
+    env_front = lambda t: _bouncy(t, 0.28)  # noqa: E731
+
+    def _chain_keys(chain_key: str, fn) -> None:
+        for ci, bname in enumerate(chains.get(chain_key, [])):
+            pb = arm_obj.pose.bones.get(bname)
+            ax = axes.get(bname)
+            if pb is None or ax is None:
+                continue
+            s = max(0.35, 1.0 - ci * 0.18)
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                bpy.context.scene.frame_set(frame)
+                swing, medio, yaw, bend = fn(t, ci, s)
+                _key_humanoid_bone(pb, ax, frame, swing=swing, medio=medio, yaw=yaw, bend=bend)
+
+    # Tronco: desaba para a frente + rola para o lado; micro-respiração final.
+    def _body_pose(t: float, ci: int, s: float):  # noqa: ANN001, ANN202
+        e = env_body(t) * s
+        droop = 0.30 * e  # pitch para a frente (desabar)
+        roll = side * 0.55 * env_roll(t) * s
+        decay_tail = max(0.0, 1.0 - max(0.0, t - 0.8) / 0.2)
+        breath = 0.012 * math.sin(t * math.pi * 6.0) * decay_tail
+        return droop + breath, roll, 0.0, 0.0
+
+    def _spine_pose(t: float, ci: int, s: float):  # noqa: ANN001, ANN202
+        e = env_body(t) * s
+        return 0.22 * e, side * 0.35 * env_roll(t) * s, 0.0, 0.0
+
+    def _neck_pose(t: float, ci: int, s: float):  # noqa: ANN001, ANN202
+        e = env_body(t) * s
+        wobble = 0.06 * fbm(t * 5.0, seed=7) * max(0.0, 1.0 - t / 0.7)
+        return 0.42 * e + wobble, side * 0.20 * env_roll(t) * s, 0.0, 0.0
+
+    def _tail_pose(t: float, ci: int, s: float):  # noqa: ANN001, ANN202
+        e = env_body(t) * s
+        decay_tail = max(0.0, 1.0 - max(0.0, t - 0.55) / 0.45)
+        limp = 0.18 * fbm(t * 4.0, seed=ci + 3) * decay_tail
+        return 0.25 * e + limp, 0.0, side * 0.1 * e, 0.0
+
+    _chain_keys("body", _body_pose)
+    _chain_keys("spine", _spine_pose)
+    _chain_keys("neck", _neck_pose)
+    _chain_keys("tail", _tail_pose)
+
+    # Patas: dobram progressivamente (traseiras cedem primeiro) + encolhem
+    # para debaixo do corpo (swing para dentro).
+    def _leg_keys(leg: list[str], env) -> None:
+        for ci, bn in enumerate(leg):
+            pb = arm_obj.pose.bones.get(bn)
+            ax = axes.get(bn)
+            if pb is None or ax is None:
+                continue
+            s = max(0.4, 1.0 - ci * 0.12)
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                bpy.context.scene.frame_set(frame)
+                e = env(t) * s
+                _key_humanoid_bone(pb, ax, frame, swing=-0.22 * e, bend=1.15 * e)
+
+    for leg in hind["r"] + hind["l"]:
+        _leg_keys(leg, env_hind)
+    for leg in front["r"] + front["l"]:
+        _leg_keys(leg, env_front)
+    if not (chains.get("legs_r") or chains.get("legs_l")):
+        _leg_keys(chains.get("leg_r", []), env_hind)
+        _leg_keys(chains.get("leg_l", []), env_front)
+
+    # Pelve desce no eixo up (colapso) e fica em baixo — a pose terminal é o
+    # corpo deitado no chão.
+    body_names = chains.get("body", [])
+    if body_names:
+        bpb = arm_obj.pose.bones.get(body_names[0])
+        bax = axes.get(body_names[0])
+        if bpb is not None and bax is not None:
+            ui, us = bax["yaw"]  # eixo local alinhado com world up
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                bpy.context.scene.frame_set(frame)
+                loc = [0.0, 0.0, 0.0]
+                loc[ui] = us * (-drop * env_body(t))
+                bpb.location = (loc[0], loc[1], loc[2])
+                bpb.keyframe_insert(data_path="location", frame=frame)
+
+    finalize_current_action_to_nla(armature_name)
+    return chains
+
+
+def hit_keyframes(
+    armature_name: str,
+    *,
+    frame_start: int = 1,
+    frame_end: int = 16,
+    intensity: float = 1.0,
+    action_name: str = "Animator3D_Hit",
+) -> dict[str, list[str]]:
+    """Flinch de dano: recoil rápido no impacto (~t0.25) + recuperação com
+    overshoot amortecido. One-shot, não cíclica.
+
+    Substitui o alias histórico (Hit = mine_keyframes — um GOLPE como dano).
+    """
+    import math
+
+    from . import humanoid
+
+    chains = _classify_bone_chains(armature_name)
+    if humanoid.try_humanoid_clip(
+        "hit",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+    ):
+        return chains
+
+    bpy = _bpy()
+    normalize_armature_before_animation(armature_name)
+    stash_if_needed_for_action(armature_name, action_name)
+    ensure_action(armature_name, action_name)
+    bpy.context.scene.frame_start = frame_start
+    bpy.context.scene.frame_end = frame_end
+    _ensure_pose_mode(armature_name)
+
+    chains = _classify_bone_chains(armature_name)
+    arm_obj = bpy.data.objects[armature_name]
+    total = frame_end - frame_start + 1
+    forward = _detect_forward(arm_obj, chains)
+    axes = _build_axes_map(
+        arm_obj,
+        chains,
+        forward,
+        ("body", "spine", "neck", "tail", "leg_r", "leg_l", "legs_r", "legs_l"),
+    )
+
+    def _recoil(t: float) -> float:
+        """Impacto em ~0.25, recuperação com overshoot amortecido."""
+        if t < 0.25:
+            return _smoothstep01(t / 0.25)
+        w = (t - 0.25) / 0.75
+        return math.exp(-w * 3.2) * math.cos(w * math.pi * 1.6)
+
+    def _key_all(chain_key: str, swing: float, medio: float = 0.0, bend: float = 0.0, decay: float = 0.15) -> None:
+        for ci, bname in enumerate(chains.get(chain_key, [])):
+            pb = arm_obj.pose.bones.get(bname)
+            ax = axes.get(bname)
+            if pb is None or ax is None:
+                continue
+            s = max(0.35, 1.0 - ci * decay) * intensity
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                bpy.context.scene.frame_set(frame)
+                r = _recoil(t)
+                _key_humanoid_bone(pb, ax, frame, swing=swing * s * r, medio=medio * s * r, bend=bend * s * r)
+
+    _key_all("body", -0.20)  # tronco recua para cima
+    _key_all("spine", -0.14)
+    _key_all("neck", -0.30, medio=0.10)  # cabeça parte para trás
+    _key_all("tail", 0.22, decay=0.1)  # cauda chicoteia para a frente
+
+    # Pernas cedem um pouco no impacto (crouch reflexo) e recuperam.
+    legs_r = chains.get("legs_r", []) or ([chains["leg_r"]] if chains.get("leg_r") else [])
+    legs_l = chains.get("legs_l", []) or ([chains["leg_l"]] if chains.get("leg_l") else [])
+    for leg in legs_r + legs_l:
+        for ci, bn in enumerate(leg):
+            pb = arm_obj.pose.bones.get(bn)
+            ax = axes.get(bn)
+            if pb is None or ax is None or ci > 1:
+                continue
+            s = max(0.4, 1.0 - ci * 0.3) * intensity
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                bpy.context.scene.frame_set(frame)
+                _key_humanoid_bone(pb, ax, frame, bend=0.35 * s * _recoil(t))
 
     finalize_current_action_to_nla(armature_name)
     return chains
@@ -2972,6 +3447,13 @@ def run_cycle_keyframes(
     total = frame_end - frame_start + 1
     forward = _detect_forward(arm_obj, chains)
 
+    # Galope transverso em quadrúpedes (2+2 patas): traseiras arrancam em
+    # sequência rápida, dianteiras a meio ciclo, suspensão no fim — em vez do
+    # trot com amplitudes maiores. Outros rigs (bípedes, aracnídeos) mantêm o
+    # gait alternado.
+    front, hind = _split_front_hind_legs(arm_obj, chains, forward)
+    leg_phase_by_leg = _gallop_phases(front, hind)
+
     _locomotion_cycle(
         arm_obj,
         chains,
@@ -2989,6 +3471,12 @@ def run_cycle_keyframes(
         body_lean=body_amp * 2.2,  # pronounced forward lean
         spine_twist=body_amp * 2.0,
         body_bob=0.06,
+        leg_phase_by_leg=leg_phase_by_leg,
+        # Galope: espinha é a mola (recolha/estiramento) + arco de voo 1× ciclo
+        # (pico na suspensão ~φ0.8).
+        spine_flex_amp=body_amp * 2.0 if leg_phase_by_leg else 0.0,
+        bob_freq=1.0 if leg_phase_by_leg else 2.0,
+        bob_phase=1.26 if leg_phase_by_leg else 0.0,
     )
 
     _legacy_secondary_motion(

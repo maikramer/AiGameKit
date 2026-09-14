@@ -18,6 +18,7 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [KERNEL_OPTS_FINDINGS.md](KERNEL_OPTS_FINDINGS.md) | compile / channels-last / flashvdm defaults |
 | [ANIMATOR_RETARGET_FINDINGS.md](ANIMATOR_RETARGET_FINDINGS.md) | Quaternius retarget: loc_conv, `_bone_rest_dir`, QA; bipeds → `humanoid` (não `creature`); tabela HML22 |
 | [ANIMATOR_IK_LIMITS_FINDINGS.md](ANIMATOR_IK_LIMITS_FINDINGS.md) | IK 2-ossos + limites de juntas: pole por eixo de flexão, identidade `W=Wp·Rp⁻¹·R·B`, subframe, maioria-voto; `ik-limits` CLI |
+| [ANIMATOR_QUADRUPED_CLIPS_FINDINGS.md](ANIMATOR_QUADRUPED_CLIPS_FINDINGS.md) | Quadrúpedes: galope transverso (fases por pata, spine flex, voo), front/hind anatómico, death colapso terminal, hit flinch, attack com patas+lunge; Death≠chop / Hit≠mine |
 | [MOTION3D_FINDINGS.md](MOTION3D_FINDINGS.md) | Text-to-motion → SkinTokens: `apply-rigged`, aim/rest/folhas, neutro A-pose vs pés do alvo, in-place, venv |
 | [PRECOMPUTE_COLLIDERS_FINDINGS.md](PRECOMPUTE_COLLIDERS_FINDINGS.md) | Colisores cápsula/cilindro pré-calculados (tronco); `aigamekit-lab precompute` → `gameassets_handoff.json` → `PrecomputePlugin`; carve procedural |
 
