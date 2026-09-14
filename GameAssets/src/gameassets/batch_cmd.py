@@ -850,7 +850,12 @@ def batch_cmd(
                 anim_prof = profile.animator3d or Animator3DProfile()
                 preset = (anim_prof.preset or "humanoid").strip().lower()
                 ap_args = _animator3d_game_pack_argv(
-                    animator3d_bin, rig_out, anim_out, preset=preset, anim_pack=anim_prof.anim_pack
+                    animator3d_bin,
+                    rig_out,
+                    anim_out,
+                    preset=preset,
+                    anim_pack=anim_prof.anim_pack,
+                    ik_limits=anim_prof.ik_limits,
                 )
                 _dry_run_emit(dry_plan, phase="animator3d", row_id=row.id, argv=ap_args)
         if dry_run_json is not None and dry_plan is not None:

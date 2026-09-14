@@ -149,3 +149,42 @@ class TestCompositeAnimPackGrammar:
         )
         i = argv.index("--anim-pack")
         assert argv[i + 1] == "both,villager"
+
+
+class TestIkLimitsPlumbing:
+    """animator3d.ik_limits: None = default ON do CLI; False emite --no-ik-limits."""
+
+    def test_argv_default_omits_flag(self) -> None:
+        argv = _animator3d_game_pack_argv("animator3d", Path("a.glb"), Path("b.glb"), preset="humanoid")
+        assert "--no-ik-limits" not in argv
+        assert "--ik-limits" not in argv
+
+    def test_argv_none_omits_flag(self) -> None:
+        argv = _animator3d_game_pack_argv("animator3d", Path("a.glb"), Path("b.glb"), preset="humanoid", ik_limits=None)
+        assert "--no-ik-limits" not in argv
+
+    def test_argv_true_omits_flag(self) -> None:
+        argv = _animator3d_game_pack_argv("animator3d", Path("a.glb"), Path("b.glb"), preset="humanoid", ik_limits=True)
+        assert "--no-ik-limits" not in argv
+
+    def test_argv_false_emits_no_ik_limits(self) -> None:
+        argv = _animator3d_game_pack_argv(
+            "animator3d", Path("a.glb"), Path("b.glb"), preset="humanoid", ik_limits=False
+        )
+        assert "--no-ik-limits" in argv
+
+    def _profile(self, anim3d: dict) -> Animator3DProfile:
+        p = GameProfile.from_dict(
+            {"title": "A", "genre": "B", "tone": "C", "style_preset": "lowpoly", "animator3d": anim3d}
+        )
+        assert p.animator3d is not None
+        return p.animator3d
+
+    def test_profile_default_is_none(self) -> None:
+        assert self._profile({"preset": "humanoid"}).ik_limits is None
+
+    def test_profile_false(self) -> None:
+        assert self._profile({"ik_limits": False}).ik_limits is False
+
+    def test_profile_true(self) -> None:
+        assert self._profile({"ik_limits": True}).ik_limits is True

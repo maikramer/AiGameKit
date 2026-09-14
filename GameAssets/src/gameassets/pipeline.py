@@ -195,6 +195,7 @@ def _animator3d_game_pack_argv(
     procedural: bool = False,
     force_preset: bool = False,
     anim_pack: str = "quaternius",
+    ik_limits: bool | None = None,
 ) -> list[str]:
     args = [
         animator3d_bin,
@@ -212,6 +213,8 @@ def _animator3d_game_pack_argv(
         args.append("--force-preset")
     if anim_pack and anim_pack != "quaternius":
         args.extend(["--anim-pack", anim_pack])
+    if ik_limits is False:
+        args.append("--no-ik-limits")
     return args
 
 
@@ -2526,6 +2529,7 @@ def run_master_pipeline(
                     procedural=eff_procedural,
                     force_preset=eff_force_preset,
                     anim_pack=eff_anim_pack,
+                    ik_limits=anim_prof.ik_limits,
                 )
                 _release_vramd_before_external_stage("animate")
                 s = _run("animate", an_argv, animated_p)

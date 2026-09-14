@@ -152,6 +152,8 @@ class Animator3DProfile:
       (Kevin Iglesias: farming/pesca/mining — FBX por clip) ou ``all``
       (villager + UAL1 + UAL2 nessa ordem; os clips exclusivos do villager —
       mine, hammer, pesca — sobrevivem, os partilhados ficam com a UAL).
+    - ``ik_limits``: passe IK/limites de juntas pós-animção (repara joelhos
+      invertidos, clampa o curso anatómico). None = default do CLI (ON).
     """
 
     preset: str = "humanoid"
@@ -159,6 +161,7 @@ class Animator3DProfile:
     procedural: bool = False
     force_preset: bool = False
     anim_pack: str = "quaternius"
+    ik_limits: bool | None = None
 
 
 @dataclass
@@ -748,12 +751,16 @@ class GameProfile:
                 expand_anim_packs(anim_pack)
             except AnimPackError as e:
                 raise ValueError(f"animator3d.{e}") from e
+            # Passe IK/limites de juntas: None = default do CLI (ON).
+            ik_limits_raw = raw_anim.get("ik_limits")
+            ik_limits = None if ik_limits_raw is None else bool(ik_limits_raw)
             anim3 = Animator3DProfile(
                 preset=pr_as,
                 clips=clips_s,
                 procedural=procedural,
                 force_preset=force_preset,
                 anim_pack=anim_pack,
+                ik_limits=ik_limits,
             )
         lod: LODProfile | None = None
         raw_lod = data.get("lod")
