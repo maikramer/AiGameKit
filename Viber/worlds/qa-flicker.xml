@@ -1,0 +1,183 @@
+<!--
+  qa-flicker: repro mínimo do "ecrã pisca à noite" — muitas PointLights COM
+  sombra autorada (mais do que o orçamento de 12), noite FIXA (o relógio não
+  anda: minutes-per-real-second=0) e terreno para as sombras caírem.
+
+  O mundo é de DIAGNÓSTICO: mede-se `mean` de N screenshots com o relógio
+  parado. Estável = o pisca não vem daqui; a oscilar = vem.
+-->
+<world clear-color="#0b1020">
+  <Terrain
+    world-size="512" max-height="40" chunk-size="64" resolution="64" levels="3"
+    height-smoothing="1" cliff-angle="50"
+    layers="grass vale_grass dirt forest_floor gravel mountain_stone sand dirt_trail"
+    cliff-streaks="0.5" cliff-moss="0.35" />
+  <AmbientLight color="0x8090b0" brightness="60" />
+  <DirectionalLight illuminance="800" direction="-0.3 -1 -0.4" shadows="true" />
+  <DayCycle minute-of-day="1380" minutes-per-real-second="0" drive-ambient="1" ambient-day-intensity="0.26" ambient-night-intensity="0.2" />
+  <Sky cloud-coverage="0.25" cloud-density="0.4" star-density="1.0" />
+  <ThirdPersonCamera distance="6" height="2.2" pitch="16" />
+  <Entity name="muro" translation="-6 0 -8">
+    <Cuboid half-size="10 2 0.6" base-color="#6b6f76" collider="shape: box" />
+  </Entity>
+  <Group name="lanterna-00" translation="12.00 0 0.00">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-01" translation="17.78 0 2.82">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-02" translation="22.83 0 7.42">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-03" translation="26.73 0 13.62">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-04" translation="29.12 0 21.16">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-05" translation="29.70 0 29.70">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-06" translation="28.21 0 38.83">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-07" translation="24.52 0 48.11">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-08" translation="18.54 0 57.06">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-09" translation="10.32 0 65.19">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-10" translation="0.00 0 12.00">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-11" translation="-2.82 0 17.78">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-12" translation="-7.42 0 22.83">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-13" translation="-13.62 0 26.73">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-14" translation="-21.16 0 29.12">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-15" translation="-29.70 0 29.70">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-16" translation="-38.83 0 28.21">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-17" translation="-48.11 0 24.52">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-18" translation="-57.06 0 18.54">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-19" translation="-65.19 0 10.32">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-20" translation="-12.00 0 0.00">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-21" translation="-17.78 0 -2.82">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-22" translation="-22.83 0 -7.42">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-23" translation="-26.73 0 -13.62">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-24" translation="-29.12 0 -21.16">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-25" translation="-29.70 0 -29.70">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-26" translation="-28.21 0 -38.83">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-27" translation="-24.52 0 -48.11">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-28" translation="-18.54 0 -57.06">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-29" translation="-10.32 0 -65.19">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-30" translation="-0.00 0 -12.00">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-31" translation="2.82 0 -17.78">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-32" translation="7.42 0 -22.83">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-33" translation="13.62 0 -26.73">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-34" translation="21.16 0 -29.12">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-35" translation="29.70 0 -29.70">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-36" translation="38.83 0 -28.21">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-37" translation="48.11 0 -24.52">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-38" translation="57.06 0 -18.54">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+  <Group name="lanterna-39" translation="65.19 0 -10.32">
+    <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
+  </Group>
+</world>

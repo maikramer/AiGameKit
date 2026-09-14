@@ -81,7 +81,7 @@
 
 use std::sync::OnceLock;
 
-use bevy::anti_alias::contrast_adaptive_sharpening::ContrastAdaptiveSharpening;
+use bevy::anti_alias::contrast_adaptive_sharpening::{ContrastAdaptiveSharpening, cas};
 use bevy::anti_alias::fxaa::Fxaa;
 use bevy::anti_alias::taa::{TemporalAntiAliasing, temporal_anti_alias};
 use bevy::camera::Exposure;
@@ -222,7 +222,78 @@ const KICK_EPS: f32 = 1e-3;
 /// não lida bem com meshes alpha-blended (a água), portanto `VIBER_NO_TAA=1`
 /// devolve o FXAA + Gaussian e desce o SSAO a Medium (o fallback r1).
 fn taa_enabled() -> bool {
-    std::env::var_os("VIBER_NO_TAA").is_none()
+    !fx_off("TAA")
+}
+
+/// Interruptores AO VIVO do bridge (`viber.debug.postfx{...}`) — o mesmo
+/// efeito dos `VIBER_NO_*`, sem restart: a bisseção do estudo do flicker
+/// (VIBER_POSTFX_ORDER_FLICKER.md) deixa de precisar de reboot por braço.
+/// Estático de processo: uma engine = um mundo.
+static FX_RUNTIME_OFF: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashSet<&'static str>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));
+
+/// Força um gate OFF/ON ao vivo. `on=false` força o corte (o env também pode
+/// cortar, mas não pode LIGAR por cima de um corte runtime); `on=true`
+/// restaura o comportamento do env/default. Keys: os mesmos de `fx_off`
+/// (`AUTOEXPOSURE`, `BLOOM`, `DOF`, `SSAO`, `CONTACT_SHADOWS`, `AERIAL`,
+/// `SPLITTONE`, `VIGNETTE`, `CHROMATIC`, `CAS`, `MOTION_BLUR`, `TAA`,
+/// `VOLUMETRICS`).
+pub fn fx_runtime_toggle(key: &'static str, on: bool) {
+    let mut set = FX_RUNTIME_OFF.lock().expect("FX_RUNTIME_OFF");
+    if on {
+        set.remove(key);
+    } else {
+        set.insert(key);
+    }
+}
+
+/// O gate está forçado OFF pelo bridge?
+fn fx_forced_off(key: &str) -> bool {
+    FX_RUNTIME_OFF.lock().is_ok_and(|set| set.contains(key))
+}
+
+/// Gate de A/B por efeito: `VIBER_NO_<KEY>=1` tira ESSE efeito da câmara e
+/// deixa o resto da lente intacto.
+///
+/// Existe para BISSECÇÃO: quando o sintoma é visual ("pisca", "vibra") e não
+/// aparece nas capturas do bridge (que saem a ~0,5 Hz e não apanham um flash
+/// de 1–3 frames), a única medição fiável é o olho de quem está à frente do
+/// ecrã — e para isso é preciso poder ligar/desligar um efeito de cada vez sem
+/// recompilar. `VIBER_NO_POSTFX=1` continua a ser o corte grosso (tira tudo).
+///
+/// Keys: `AUTOEXPOSURE`, `BLOOM`, `DOF`, `SSAO`, `CONTACT_SHADOWS`, `AERIAL`,
+/// `SPLITTONE`, `LENS` (vinheta + aberração cromática + CAS) ou cada um por si
+/// (`VIGNETTE`, `CHROMATIC`, `CAS`), `MOTION_BLUR`, `TAA`, `VOLUMETRICS`.
+/// O bridge (`viber.debug.postfx{...}`) força os mesmos keys AO VIVO.
+pub fn fx_off(key: &str) -> bool {
+    fx_forced_off(key) || std::env::var_os(format!("VIBER_NO_{key}")).is_some()
+}
+
+/// Motion blur LIGADO por omissão; `VIBER_NO_MOTION_BLUR=1` desliga-o.
+///
+/// O desfoque é proporcional ao movimento POR FRAME, não por segundo: a 30 fps
+/// cada frame cobre o dobro do deslocamento de um frame a 60, e com o
+/// frame-time a saltar (medido no `simple-rpg`: média 35 ms, mínimos de ~100 ms
+/// na janela) o comprimento do rasto muda de frame para frame — a imagem
+/// "vibra" mesmo com a câmara a andar de forma suave. É o primeiro interruptor
+/// a experimentar quando o sintoma é tremura/latejo e não um artefacto de cor.
+fn motion_blur_enabled() -> bool {
+    !fx_off("MOTION_BLUR")
+}
+
+/// `MotionBlur` com `shutter_angle` a zero quando o gate está desligado — o
+/// componente fica na câmara (o prepass de motion vectors é partilhado com o
+/// TAA e não muda), mas o passe não desfoca nada.
+fn motion_blur_component() -> MotionBlur {
+    if motion_blur_enabled() {
+        MotionBlur::default()
+    } else {
+        MotionBlur {
+            shutter_angle: 0.0,
+            ..MotionBlur::default()
+        }
+    }
 }
 
 /// Volumetrics (god-rays + volume de névoa) LIGADOS por omissão; desligar com
@@ -249,7 +320,7 @@ fn ssao_quality(taa: bool) -> ScreenSpaceAmbientOcclusionQualityLevel {
 }
 
 fn volumetrics_enabled() -> bool {
-    std::env::var_os("VIBER_NO_VOLUMETRICS").is_none()
+    !fx_off("VOLUMETRICS")
 }
 
 /// Passos do raymarch volumétrico (`VIBER_VOLUMETRIC_STEPS`).
@@ -616,7 +687,8 @@ fn attach_postfx_to_cameras(
             // defaults cinematográficos (shutter 180°, 1 amostra). O
             // `#[require]` insere o MotionVectorPrepass; o TAA já exige o
             // MESMO prepass, logo os motion vectors são partilhados.
-            MotionBlur::default(),
+            // `VIBER_NO_MOTION_BLUR=1` tira-o (ver [`motion_blur_enabled`]).
+            motion_blur_component(),
             // SSAO High aproveita o denoise temporal do TAA (r1 era Medium
             // por causa do ruído sem acumulação). `VIBER_SSAO=medium|low|high|
             // ultra` sobrepõe para A/B — Medium (8 spp vs 18 do High) é a
@@ -681,13 +753,50 @@ fn attach_postfx_to_cameras(
             // Color grading (CDL) — o `drive_postfx` conduz-o pela hora do dia.
             bevy::render::view::ColorGrading::default(),
         ));
+        // Gates de bissecção (`VIBER_NO_<KEY>=1`, ver [`fx_off`]): o bundle
+        // entra inteiro e o que estiver desligado sai a seguir — remover é
+        // mais barato do que 8 ramos de inserção (o `Bundle` já esgota os 15
+        // slots). O `Bloom` NÃO se remove: o filtro deste sistema é
+        // `Without<Bloom>` e a remoção fazia-o reentrar todos os frames; a
+        // intensidade fica a zero e o `drive_postfx` respeita o gate.
+        if fx_off("AUTOEXPOSURE") {
+            commands.entity(camera).remove::<AutoExposure>();
+        }
+        if fx_off("DOF") {
+            commands.entity(camera).remove::<DepthOfField>();
+        }
+        if fx_off("SSAO") {
+            commands
+                .entity(camera)
+                .remove::<ScreenSpaceAmbientOcclusion>();
+        }
+        if fx_off("CONTACT_SHADOWS") {
+            commands.entity(camera).remove::<ContactShadows>();
+        }
+        // `LENS` = o trio todo; as três keys finas separam-no sem recompilar
+        // (bissecção de 2026-09-13: o pisca vive AQUI).
+        if fx_off("LENS") || fx_off("VIGNETTE") {
+            commands.entity(camera).remove::<Vignette>();
+        }
+        if fx_off("LENS") || fx_off("CHROMATIC") {
+            commands.entity(camera).remove::<ChromaticAberration>();
+        }
+        if fx_off("LENS") || fx_off("CAS") {
+            commands
+                .entity(camera)
+                .remove::<ContrastAdaptiveSharpening>();
+        }
         // Split-tone (LOOP B), à parte: o tuple acima já usa os 15 slots do
         // `Bundle` — sombras frias / highlights quentes pela hora, passe
         // fullscreen pós-tonemap conduzido pelo `drive_split_tone`.
-        commands.entity(camera).insert(SplitToneSettings::default());
+        if !fx_off("SPLITTONE") {
+            commands.entity(camera).insert(SplitToneSettings::default());
+        }
         // Perspetiva aérea (LOOP C): o marcador liga o passe depth-aware no
         // render app (as matrizes vêm do `ExtractedView` no prepare).
-        commands.entity(camera).insert(AerialPerspective);
+        if !fx_off("AERIAL") {
+            commands.entity(camera).insert(AerialPerspective);
+        }
         if taa_enabled() {
             commands.entity(camera).insert((
                 TemporalAntiAliasing::default(),
@@ -1279,6 +1388,29 @@ impl FullscreenMaterial for SplitToneSettings {
             // DEPOIS do tonemap + ColorGrading: valores de exibição, com
             // o filtro ND da LOOP A já aplicado — a banda lo..hi é estável.
             .after(tonemapping_pass)
+            // E DEPOIS do CAS. **Esta aresta é o fix do "ecrã pisca"**
+            // (bissecção ao vivo, 2026-09-13: CAS sozinho estável, split-tone
+            // sozinho estável, os dois ao mesmo tempo a piscar).
+            //
+            // O bevy regista o CAS sem relação nenhuma com o tonemap nem com
+            // mais nada (`bevy_anti_alias 0.19.1`,
+            // `contrast_adaptive_sharpening/mod.rs:122`):
+            //     cas.after(fxaa).after(smaa).in_set(Core3dSystems::PostProcess)
+            // Os passes do render graph são sistemas normais e o
+            // `RenderContext` é `Deferred` + `Res` (não conflitua), portanto
+            // dois passes SEM ordem correm em paralelo — e o
+            // `ViewTarget::post_process_write` é um `fetch_xor(1)` GLOBAL:
+            // dois XOR concorrentes trocam source/destination um do outro e os
+            // command buffers são submetidos por ordem indefinida. A imagem
+            // alterna de frame para frame.
+            //
+            // Não dá para resolver pelo outro lado: `configure_sets` sobre um
+            // system type set do upstream PANICA no bevy 0.19
+            // ("configuring system type sets is not allowed"), e a função
+            // `auto_exposure` — que tem o mesmo defeito, só declara
+            // `before(tonemapping)` — é privada. O que está na nossa mão é
+            // pendurar o NOSSO passe na cadeia: tonemapping → cas → split-tone.
+            .after(cas)
     }
 }
 
@@ -1869,7 +2001,12 @@ fn drive_postfx(
     if (state.target_bloom - state.bloom).abs() > 1e-4 {
         state.bloom += (state.target_bloom - state.bloom) * t;
     }
-    let (ev100, bloom) = (ev_with_kick(state.ev100, state.kick), state.bloom);
+    // `VIBER_NO_BLOOM=1`: o componente fica (o filtro `Without<Bloom>` do
+    // attach depende dele), mas a intensidade vai a zero todos os frames.
+    let (ev100, bloom) = (
+        ev_with_kick(state.ev100, state.kick),
+        if fx_off("BLOOM") { 0.0 } else { state.bloom },
+    );
     // LOOP C: o joelho do prefilter segue a noite — ver [`NIGHT_BLOOM_THRESHOLD`].
     let threshold = night_bloom_threshold(night);
     let lf_boost = night_bloom_lf_boost(night);
