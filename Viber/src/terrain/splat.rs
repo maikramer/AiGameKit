@@ -110,6 +110,27 @@ pub fn pool_ao(alias: &str) -> Option<String> {
     }
 }
 
+/// Pool alias → roughness map path (escalar, LINEAR). Nem todos os aliases
+/// o têm — a fonte de cada slot vem de
+/// [`crate::terrain::layer_material::RoughMap`].
+pub fn pool_roughness(alias: &str) -> Option<String> {
+    if DEFAULT_LAYERS.contains(&alias) {
+        Some(format!("{alias}/roughness.ktx2"))
+    } else {
+        None
+    }
+}
+
+/// Pool alias → SMOOTHNESS map path (escalar, LINEAR — o material inverte:
+/// roughness = 1 − smoothness).
+pub fn pool_smoothness(alias: &str) -> Option<String> {
+    if DEFAULT_LAYERS.contains(&alias) {
+        Some(format!("{alias}/smoothness.ktx2"))
+    } else {
+        None
+    }
+}
+
 /// Canonical layer list: position = splat slot ([`DEFAULT_LAYERS`] order).
 ///
 /// Os pesos do splat e os materiais de chunk são indexados por slot DEFAULT,
@@ -984,6 +1005,23 @@ pub fn flat_height_image() -> Image {
 /// AO neutro (1.0) — o fallback dos slots sem `ao.ktx2`: oclusão nenhuma,
 /// albedo intacto.
 pub fn flat_ao_image() -> Image {
+    Image::new(
+        Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        vec![255, 255, 255, 255],
+        TextureFormat::Rgba8Unorm,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    )
+}
+
+/// Roughness plana (1.0) — o fallback dos slots sem mapa. No caminho normal
+/// `roughs[i].y = 0` faz o WGSL devolver a constante (o conteúdo aqui é
+/// irrelevante); 1.0 é o neutro se algum caminho o ler.
+pub fn flat_rough_image() -> Image {
     Image::new(
         Extent3d {
             width: 1,

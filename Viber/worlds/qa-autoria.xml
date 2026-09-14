@@ -1,0 +1,54 @@
+<!--
+  QA das features de AUTORIA de terreno: Cut (trincheira seca com
+  paredes voxel + road cut), Plateau (mesa autoral com anel de parede)
+  e a forma autoral de Lake (seed/stretch/axis/lobes).
+
+  Correr:
+    viber analyze worlds/qa-autoria.xml
+    viber session up (protocolo de sessão; apontar este mundo)
+
+  O relevo procedural faz uma crista no eixo Z=0: o cut "desfiladeiro"
+  atravessa-a (a estrada "passagem" entra na vala e segue o piso, o
+  road cut); o plateau "cidadela" sobe no planalto norte com parede
+  vertical e um pad a aplainar o topo; o lago "oval" tem forma autoral
+  (seed + stretch + axis + lobes): mudar a seed muda a silhueta, a mesma
+  seed reproduz-na em qualquer posição.
+-->
+<world clear-color="#87ceeb">
+  <AmbientLight color="#bfd4e0" brightness="400" />
+  <DirectionalLight direction="-0.5 -1 -0.3" illuminance="28000" shadows="true" />
+
+  <Terrain name="colina" world-size="256" max-height="45" chunk-size="64"
+           levels="3" resolution="64" collision-resolution="32"
+           height-smoothing="1" seed="11"
+           base-color="#c9c5ba" cliff-angle="50" />
+
+  <!-- Trincheira/cânion SECO: o piso desce 6 m, as paredes ficam a prumo
+       (wall="vertical"). Sem água — a vala "morre" na encosta a jusante
+       (carve lower-only). -->
+  <Cut name="desfiladeiro" path="-95 0  -40 3  10 -2  60 2  95 -4"
+       width="10" depth="6" wall="vertical" seed="5" />
+
+  <!-- Road cut: a estrada é surveyada DEPOIS do cut, por isso pina o piso
+       da vala em vez de trepar a crista. -->
+  <Road name="passagem" path="-95 0  -40 3  10 -2  60 2  95 -4" width="4" />
+
+  <!-- Mesa autoral: topo plano +6 m, parede columnar; o pad aplaina o topo
+       (pads correm DEPOIS dos plateaus) e o decal veste a praça. -->
+  <Plateau name="cidadela" at="0 -75" size="40 32" height="7"
+           corner-radius="6" wall="columnar" seed="3" />
+  <TerrainPad at="0 -75" size="24 18" falloff="5" corner-radius="4" />
+  <GroundDecal at="0 -75" size="22 16" texture="/assets/textures/dirt_trail/albedo.webp"
+               texture-scale="6" />
+
+  <!-- Lago com FORMA AUTORAL: seed fixa (não o hash da posição), oval
+       apontado a 25°, lobulado a 1.4. Mesma seed em qualquer canto do
+       mundo reproduz a silhueta. -->
+  <Lake name="oval" at="70 55" radius="22" depth="3.5" seed="77"
+        stretch="0.35" axis="25" lobes="1.4" rocks="1" />
+
+  <!-- Câmaras QA: a crista no desfiladeiro e a cidadela. -->
+  <Entity name="mirante-vala" translation="-30 22 0" />
+  <Entity name="mirante-cidadela" translation="0 30 -55" />
+  <OrbitCamera target="mirante-vala" distance="30" height="6" pitch="14" />
+</world>

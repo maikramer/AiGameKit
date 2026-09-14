@@ -28,6 +28,7 @@ use bevy::render::mesh::{Indices, PrimitiveTopology};
 use super::brush::BrushGrid;
 use super::features::{FeatureResult, apply_features};
 use super::heightmap::HeightMapU16;
+use super::mesh::HeightField as _;
 
 use super::layer_material::{TerrainChunkConfig, TerrainChunkMaterial, TerrainChunkParams};
 use super::roads::RoadPath;
@@ -35,7 +36,7 @@ use super::sampler::ResolvedPad;
 use super::spec::TerrainSpec;
 use super::splat::{
     SLOT_GRAVEL, SLOT_RIVERBED, SplatParams, chunk_splat_image, chunk_splat2_image, flat_ao_image,
-    flat_height_image, flat_normal_image, generate_chunk_splats, solid_white_image,
+    flat_height_image, flat_normal_image, flat_rough_image, generate_chunk_splats, solid_white_image,
 };
 use super::voxel::{Span, VoxelField};
 use super::water::{WaterBody, lake_water_mesh, river_water_mesh};
@@ -79,6 +80,14 @@ pub enum WatchedTexture {
     /// AO map escalar do slot `slot` (0..8). Falha de carga reponta para o
     /// AO neutro (1.0) — oclusão nenhuma.
     LayerAo {
+        material: Handle<TerrainChunkMaterial>,
+        slot: usize,
+        texture: Handle<Image>,
+    },
+    /// Roughness map escalar do slot `slot` (0..8). Falha de carga reponta
+    /// para a rough PLANA e zera o mix (`roughs[slot].y = 0`) — o slot
+    /// volta à constante do [`SLOT_STYLES`].
+    LayerRough {
         material: Handle<TerrainChunkMaterial>,
         slot: usize,
         texture: Handle<Image>,
@@ -127,6 +136,8 @@ pub fn drop_failed_terrain_textures(
     mut flat_height_handle: Local<Option<Handle<Image>>>,
     mut ao_warned: Local<std::collections::HashSet<bevy::asset::AssetId<Image>>>,
     mut flat_ao_handle: Local<Option<Handle<Image>>>,
+    mut rough_warned: Local<std::collections::HashSet<bevy::asset::AssetId<Image>>>,
+    mut flat_rough_handle: Local<Option<Handle<Image>>>,
 ) {
     if pending.watched.is_empty() {
         return;
@@ -257,6 +268,32 @@ pub fn drop_failed_terrain_textures(
             Some(bevy::asset::LoadState::Loaded) => false,
             _ => true,
         },
+        WatchedTexture::LayerRough {
+            material,
+            slot,
+            texture,
+        } => match server.get_load_state(texture) {
+            Some(bevy::asset::LoadState::Failed(error)) => {
+                if rough_warned.insert(texture.id()) {
+                    warn!(
+                        "terrain chunk rough {slot} failed to load ({error}); falling \
+                         back to the constant roughness (mix do mapa a zero)"
+                    );
+                }
+                if let Some(chunk_materials) = chunk_materials.as_mut() {
+                    if let Some(mut layer) = chunk_materials.get_mut(material) {
+                        let flat = flat_rough_handle
+                            .get_or_insert_with(|| images.add(flat_rough_image()))
+                            .clone();
+                        *layer.rough_mut(*slot) = flat;
+                        layer.params.roughs[*slot].y = 0.0;
+                    }
+                }
+                false
+            }
+            Some(bevy::asset::LoadState::Loaded) => false,
+            _ => true,
+        },
     });
 }
 
@@ -346,6 +383,14 @@ pub struct TerrainRuntime {
     /// Empty in a world that authors no 3D feature, and empty is free — every
     /// query below then costs exactly what it cost before this field existed.
     pub voxel: std::sync::Arc<VoxelField>,
+    /// Edições VIVAS (Fase 3): recortes densos de altura sobre a grid
+    /// carvada — crateras/valas/aterros pedidos em runtime por Lua/bridge.
+    ///
+    /// Vazio por omissão e vazio é grátis: sem recortes, [`Self::base`] cai
+    /// sempre na grid (uma leitura de `len` por amostra). A grid do
+    /// bootstrap NUNCA é mutada; o overlay é a única diferença entre
+    /// "mundo como autorado" e "mundo como ficou".
+    pub deltas: std::sync::Arc<crate::terrain::delta::DeltaGrid>,
 }
 
 /// Shared read handle over the carved world, for readers outside the ECS
@@ -355,6 +400,10 @@ pub struct TerrainRuntime {
 pub struct TerrainReader {
     pub grid: std::sync::Arc<BrushGrid>,
     pub voxel: std::sync::Arc<VoxelField>,
+    /// Overlay de edições vivas — o leitor do Luau vê as MESMAS alturas que
+    /// o mesher (um script que abre uma cratera vê-a no `ground_below` do
+    /// frame seguinte).
+    pub deltas: std::sync::Arc<crate::terrain::delta::DeltaGrid>,
 }
 
 /// A standing surface thinner than this with hollow ground below is a slab
@@ -362,11 +411,21 @@ pub struct TerrainReader {
 const MIN_STAND_THICKNESS: f32 = 4.0;
 
 impl TerrainRuntime {
-    /// Shared read handle over this runtime (two `Arc` clones).
+    /// Shared read handle over this runtime (three `Arc` clones).
     pub fn reader(&self) -> TerrainReader {
         TerrainReader {
             grid: self.grid.clone(),
             voxel: self.voxel.clone(),
+            deltas: self.deltas.clone(),
+        }
+    }
+
+    /// Grid + edições como um só [`HeightField`] — a vista que TODOS os
+    /// consumidores usam (mesher, `VoxelField`, queries de gameplay).
+    pub fn base(&self) -> crate::terrain::delta::EditedBase<'_> {
+        crate::terrain::delta::EditedBase {
+            grid: &self.grid,
+            deltas: &self.deltas,
         }
     }
 
@@ -378,7 +437,7 @@ impl TerrainRuntime {
         if self.voxel.is_flat() {
             return false;
         }
-        let spans = self.voxel.column(&*self.grid, x, z);
+        let spans = self.voxel.column(&self.base(), x, z);
         spans.len() >= 2 && spans[0].thickness() < MIN_STAND_THICKNESS
     }
     /// O XZ cai dentro da pegada do heightmap?
@@ -404,26 +463,26 @@ impl TerrainRuntime {
     /// [`Self::surface_below`] instead.
     pub fn sample(&self, x: f32, z: f32) -> f32 {
         if self.voxel.is_flat() {
-            return self.grid.sample(x, z);
+            return self.base().sample(x, z);
         }
-        self.voxel.surface_top(&*self.grid, x, z)
+        self.voxel.surface_top(&self.base(), x, z)
     }
 
     /// Topmost solid surface at or below `from_y`, or `None` when there is
     /// none — the query for anything standing inside a cave or under a ledge.
     pub fn surface_below(&self, x: f32, z: f32, from_y: f32) -> Option<f32> {
-        self.voxel.surface_below(&*self.grid, x, z, from_y)
+        self.voxel.surface_below(&self.base(), x, z, from_y)
     }
 
     /// Every solid interval in this column, top-down. One span is ordinary
     /// ground; two or more mean an overhang, an arch or a cave.
     pub fn column(&self, x: f32, z: f32) -> Vec<Span> {
-        self.voxel.column(&*self.grid, x, z)
+        self.voxel.column(&self.base(), x, z)
     }
 
     /// True when `p` is inside solid rock.
     pub fn is_solid(&self, p: Vec3) -> bool {
-        self.voxel.density(&*self.grid, p) < 0.0
+        self.voxel.density(&self.base(), p) < 0.0
     }
 
     /// Point is inside a water carve zone (`avoid-water`).
@@ -458,7 +517,7 @@ impl TerrainRuntime {
     /// bisseccionado é a resposta, sempre. Queries que precisam do chão SOB
     /// um teto (interior de gruta, vão de arco) usam [`Self::surface_below`].
     pub fn sample_mesh_surface(&self, x: f32, z: f32) -> f32 {
-        self.voxel.surface_top(&*self.grid, x, z)
+        self.voxel.surface_top(&self.base(), x, z)
     }
 }
 
@@ -471,6 +530,16 @@ pub struct TerrainFeaturesPlugin;
 impl bevy::app::Plugin for TerrainFeaturesPlugin {
     fn build(&self, app: &mut bevy::app::App) {
         app.init_resource::<PendingTerrainTextures>()
+            // Fila das edições vivas (Lua/bridge → overlay). Vive fora do
+            // `TerrainRuntime` para o sistema aplicador ter o seu `ResMut`.
+            .init_resource::<super::delta::TerrainEditQueue>()
+            .add_systems(
+                // PreUpdate: as edições entram ANTES do passe de LOD do
+                // `TerrainPlugin` (Update), portanto o rebuild da coluna
+                // começa no MESMO frame em que a cratera nasce.
+                bevy::app::PreUpdate,
+                timed(Group::Terrain, apply_terrain_edits),
+            )
             // Idempotente com `textures::TexturesPlugin`: o bootstrap regista
             // texturas world-tiled mesmo em apps headless de teste.
             .init_resource::<crate::textures::WorldTiledTextures>()
@@ -493,6 +562,54 @@ impl bevy::app::Plugin for TerrainFeaturesPlugin {
                     timed(Group::Terrain, super::layer_material::terrain_rain_wetness),
                 ),
             );
+    }
+}
+
+/// Aplica as edições vivas enfileiradas (Lua/bridge) ao overlay do
+/// [`TerrainRuntime`], no máximo [`super::delta::EDITS_PER_FRAME`] por frame
+/// — um script em loop não transforma um frame num carve de mundo.
+///
+/// O overlay é mutado através de `Arc::make_mut`: enquanto ninguém segura um
+/// [`TerrainReader`] antigo o clone é grátis; com leitores vivos, copia só
+/// os recortes (KBs), NUNCA a grid (o `Arc<BrushGrid>` do bootstrap fica
+/// onde está).
+pub fn apply_terrain_edits(
+    runtime: Option<ResMut<TerrainRuntime>>,
+    mut queue: ResMut<super::delta::TerrainEditQueue>,
+) {
+    if queue.pending.is_empty() {
+        return;
+    }
+    let Some(mut runtime) = runtime else {
+        // Sem terreno (apps mínimas de teste): a fila não pode crescer sem
+        // fim — descarta com contabilidade.
+        queue.rejected += queue.pending.len() as u64;
+        queue.pending.clear();
+        return;
+    };
+    // Clone barato do Arc da grid: o `make_mut` precisa do runtime mutável
+    // e a grid é imutável por contrato (o `Arc` é a fonte partilhada).
+    let grid = runtime.grid.clone();
+    let mut applied = 0usize;
+    while applied < super::delta::EDITS_PER_FRAME {
+        let Some(edit) = queue.pending.pop_front() else {
+            break;
+        };
+        let deltas = Arc::make_mut(&mut runtime.deltas);
+        if super::delta::apply_edit(&grid, deltas, &edit) {
+            applied += 1;
+            queue.applied += 1;
+        } else {
+            queue.rejected += 1;
+            warn!("terrain edit rejected (invalid or degenerate request): {edit:?}");
+        }
+    }
+    if applied > 0 {
+        debug!(
+            "terrain edits: {applied} applied (revision {}, {} queued)",
+            runtime.deltas.revision(),
+            queue.pending.len()
+        );
     }
 }
 
@@ -703,6 +820,25 @@ pub fn bootstrap(world: &mut World) {
     }
     if !bank_bands.is_empty() {
         cliff_mask.add_authored_bands(&bank_bands);
+    }
+
+    // 2.55 Paredes de cut/plateau — as valas secas e os planaltos escrevem
+    // o PISO/TOPO no heightfield (apply_features), mas as PAREDES são
+    // sólidos voxel: bandas construídas contra a grid carvada (o piso do
+    // cut já afiado por estradas posteriores é o que as bandas leem).
+    // Mesma entrega das margens: máscara (pedra no splat + exclusão de
+    // relva/spawners) + mods no campo.
+    let mut wall_bands: Vec<super::voxel::CliffBand> = Vec::new();
+    for cut in &pending.features.cuts {
+        wall_bands.extend(super::cut::cut_wall_bands(cut, &grid, texel));
+    }
+    for plateau in &pending.features.plateaus {
+        if let Some(band) = super::plateau::plateau_wall_band(plateau, &grid, texel) {
+            wall_bands.push(band);
+        }
+    }
+    if !wall_bands.is_empty() {
+        cliff_mask.add_authored_bands(&wall_bands);
     }
     if spec.sharpen {
         let changed =
@@ -954,17 +1090,22 @@ pub fn bootstrap(world: &mut World) {
     for (i, band) in bank_bands.iter().enumerate() {
         voxel_mods.extend(band.clone().into_mods(&format!("riverbank:{i}")));
     }
+    // Paredes de cut/plateau — as mesmas bandas da máscara (acima).
+    for (i, band) in wall_bands.iter().enumerate() {
+        voxel_mods.extend(band.clone().into_mods(&format!("wall:{i}")));
+    }
     // Fendas de spill das cachoeiras de parede (rio × cliff).
     voxel_mods.extend(spill_mods);
     if !voxel_mods.is_empty() {
         info!(
-            "terrain: {} cliff(s) + {} cave(s) + {} arch(es) + {} bridge(s) + {} bank wall(s) -> \
-             {} voxel mods",
+            "terrain: {} cliff(s) + {} cave(s) + {} arch(es) + {} bridge(s) + {} bank wall(s) + \
+             {} cut/plateau wall(s) -> {} voxel mods",
             cliff_bands.len(),
             pending.features.caves.len() + seeded.caves.len(),
             pending.features.arches.len() + seeded.arches.len(),
             pending.features.bridges.len() + seeded.bridges.len(),
             bank_bands.len(),
+            wall_bands.len(),
             voxel_mods.len()
         );
     }
@@ -1041,6 +1182,7 @@ pub fn bootstrap(world: &mut World) {
         roads: result.roads,
         pads: result.pads,
         voxel: Arc::new(voxel),
+        deltas: Arc::new(crate::terrain::delta::DeltaGrid::default()),
     });
 }
 
@@ -1261,6 +1403,39 @@ fn spawn_chunk_materials(
         layer_aos[slot] = load_world_texture(server, world, &path);
     }
 
+    // Roughness do pool, por SLOT — a fonte vem da tabela estática
+    // ([`RoughMap`]): `roughness.ktx2` direto, `smoothness.ktx2` invertido
+    // no shader (`roughs[i].z = 1`), e quem não tem nenhum fica com a plana
+    // + mix 0 (o WGSL devolve a constante — idêntico ao caminho antigo).
+    let flat_rough = images.add(flat_rough_image());
+    let mut layer_roughs = vec![flat_rough.clone(); super::splat::LAYER_COUNT];
+    for (slot, entry) in spec
+        .layers
+        .iter()
+        .enumerate()
+        .take(super::splat::LAYER_COUNT)
+    {
+        if entry.is_empty() {
+            continue;
+        }
+        let path = match crate::terrain::layer_material::SLOT_STYLES[slot].rough_map {
+            crate::terrain::layer_material::RoughMap::Rough => {
+                game_config.terrain_roughness(entry)
+            }
+            crate::terrain::layer_material::RoughMap::Smooth => {
+                game_config.terrain_smoothness(entry)
+            }
+            crate::terrain::layer_material::RoughMap::None => continue,
+        };
+        let Some(path) = path else {
+            continue;
+        };
+        if !asset_present(asset_roots, &path) {
+            continue;
+        }
+        layer_roughs[slot] = load_world_texture(server, world, &path);
+    }
+
     let params = SplatParams {
         shore_width: spec.shore_width,
         snow_height: spec.tint.snow_height,
@@ -1329,6 +1504,14 @@ fn spawn_chunk_materials(
             layer5_ao: layer_aos[slots[5]].clone(),
             layer6_ao: layer_aos[slots[6]].clone(),
             layer7_ao: layer_aos[slots[7]].clone(),
+            layer0_rough: layer_roughs[slots[0]].clone(),
+            layer1_rough: layer_roughs[slots[1]].clone(),
+            layer2_rough: layer_roughs[slots[2]].clone(),
+            layer3_rough: layer_roughs[slots[3]].clone(),
+            layer4_rough: layer_roughs[slots[4]].clone(),
+            layer5_rough: layer_roughs[slots[5]].clone(),
+            layer6_rough: layer_roughs[slots[6]].clone(),
+            layer7_rough: layer_roughs[slots[7]].clone(),
             params,
         });
         // Watch EVERY layer of the material: a texture that never lands is
@@ -1383,6 +1566,15 @@ fn spawn_chunk_materials(
                     material: material.clone(),
                     slot: slot_index,
                     texture: ao,
+                });
+            }
+            // Idem para o rough: plana é o fallback dela própria.
+            let rough = layer_roughs[pool_slot].clone();
+            if rough != flat_rough {
+                watched.push(WatchedTexture::LayerRough {
+                    material: material.clone(),
+                    slot: slot_index,
+                    texture: rough,
                 });
             }
         }
@@ -1562,7 +1754,7 @@ fn spawn_water(
         // ── Espuma da margem ─────────────────────────────────────────
         let foam_positions: Vec<(Vec2, f32)> = if is_lake {
             let lake = &features.lakes[spec_i];
-            let shape = super::water::LakeShape::new(lake.at);
+            let shape = super::water::LakeShape::from_authoring(lake.at, &lake.shape);
             let reach = (super::water::waterline_reach(lake.depth, lake.water_offset)
                 * super::water::CARVE_MARGIN)
                 .clamp(0.5, 1.6);
@@ -1922,6 +2114,102 @@ fn load_heightmap(
 
 #[cfg(test)]
 mod tests {
+    /// A fila das edições vivas: o applier aplica no máximo
+    /// [`super::delta::EDITS_PER_FRAME`] por frame (o resto fica em fila) e
+    /// a revisão do overlay avança por commit.
+    #[test]
+    fn test_apply_terrain_edits_caps_per_frame_and_versions() {
+        use crate::terrain::delta::{EDITS_PER_FRAME, TerrainEdit, TerrainEditQueue};
+        use bevy::ecs::system::RunSystemOnce as _;
+        let mut app = bevy::app::App::new();
+        app.add_plugins(bevy::MinimalPlugins);
+        let raw: Vec<u16> = (0..64 * 64).map(|_| 6553u16).collect(); // ~10 m
+        let grid = crate::terrain::brush::BrushGrid::new(raw, 64, 64, 64.0, 50.0, 0.0)
+            .expect("grid");
+        app.insert_resource(TerrainRuntime {
+            spec: TerrainSpec {
+                world_size: 64.0,
+                ..TerrainSpec::default()
+            },
+            grid: std::sync::Arc::new(grid),
+            water: Vec::new(),
+            roads: Vec::new(),
+            pads: Vec::new(),
+            voxel: std::sync::Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+        });
+        app.init_resource::<TerrainEditQueue>();
+
+        for i in 0..(EDITS_PER_FRAME + 2) {
+            app.world_mut()
+                .resource_mut::<TerrainEditQueue>()
+                .pending
+                .push_back(TerrainEdit::Raise {
+                    at: bevy::math::Vec2::new(i as f32 * 4.0 - 16.0, 0.0),
+                    radius: 2.0,
+                    height: 2.0,
+                });
+        }
+        app.world_mut()
+            .run_system_once(super::apply_terrain_edits)
+            .expect("applier");
+        let (rev, queued) = {
+            let rt = app.world().resource::<TerrainRuntime>();
+            let q = app.world().resource::<TerrainEditQueue>();
+            (rt.deltas.revision(), q.pending.len())
+        };
+        assert_eq!(rev, EDITS_PER_FRAME as u64, "cap por frame");
+        assert_eq!(queued, 2, "o resto fica em fila");
+        // Segundo frame: drena o resto.
+        app.world_mut()
+            .run_system_once(super::apply_terrain_edits)
+            .expect("applier");
+        let q = app.world().resource::<TerrainEditQueue>();
+        assert!(q.pending.is_empty(), "a fila drena");
+        assert_eq!(q.applied, (EDITS_PER_FRAME + 2) as u64);
+    }
+
+    /// Pedidos inválidos (NaN, raio 0) não escrevem nada e contam em
+    /// `rejected` — a fila não cresce com lixo.
+    #[test]
+    fn test_apply_terrain_edits_rejects_invalid() {
+        use crate::terrain::delta::{TerrainEdit, TerrainEditQueue};
+        use bevy::ecs::system::RunSystemOnce as _;
+        let mut app = bevy::app::App::new();
+        app.add_plugins(bevy::MinimalPlugins);
+        let raw: Vec<u16> = (0..64 * 64).map(|_| 6553u16).collect();
+        let grid = crate::terrain::brush::BrushGrid::new(raw, 64, 64, 64.0, 50.0, 0.0)
+            .expect("grid");
+        app.insert_resource(TerrainRuntime {
+            spec: TerrainSpec {
+                world_size: 64.0,
+                ..TerrainSpec::default()
+            },
+            grid: std::sync::Arc::new(grid),
+            water: Vec::new(),
+            roads: Vec::new(),
+            pads: Vec::new(),
+            voxel: std::sync::Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+        });
+        app.init_resource::<TerrainEditQueue>();
+        app.world_mut()
+            .resource_mut::<TerrainEditQueue>()
+            .pending
+            .push_back(TerrainEdit::Lower {
+                at: bevy::math::Vec2::new(f32::NAN, 0.0),
+                radius: 4.0,
+                depth: 2.0,
+            });
+        app.world_mut()
+            .run_system_once(super::apply_terrain_edits)
+            .expect("applier");
+        let rt = app.world().resource::<TerrainRuntime>();
+        let q = app.world().resource::<TerrainEditQueue>();
+        assert_eq!(rt.deltas.revision(), 0, "inválido não commita");
+        assert_eq!(q.rejected, 1);
+    }
+
     use super::*;
     use crate::terrain::spec::TerrainSpec;
 
@@ -1965,6 +2253,7 @@ mod tests {
             roads: Vec::new(),
             pads: Vec::new(),
             voxel: Arc::new(VoxelField::default()),
+            deltas: Arc::new(crate::terrain::delta::DeltaGrid::default()),
         };
         for i in 0..8 {
             let x = -14.0 + 4.0 * i as f32;
@@ -1997,6 +2286,8 @@ mod tests {
             arches: Vec::new(),
             bridges: Vec::new(),
             rock_fields: Vec::new(),
+            plateaus: Vec::new(),
+            cuts: Vec::new(),
             pads: vec![crate::terrain::TerrainPadSpec {
                 at: Vec2::ZERO,
                 size: Vec2::splat(24.0),

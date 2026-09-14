@@ -50,6 +50,11 @@ pub struct TerrainChunk {
     /// se construiu, a costura ficava selada contra um LOD que já não existe —
     /// um buraco que nada voltava a fechar.
     pub built_neighbours: [u8; 4],
+    /// Revisão do overlay de edições vivas ([`super::delta::DeltaGrid`])
+    /// com que a mesh desta coluna foi construída — uma coluna cujo rect
+    /// cruza uma edição mais nova re-mesha (mesh + collider trimesh, pelo
+    /// swap atómico de sempre).
+    pub built_edit_rev: u64,
 }
 
 /// Per-terrain tracking state for the LOD plugin.
@@ -67,6 +72,9 @@ pub struct ChunkLodState {
     last_cam: Option<Vec2>,
     /// Work remained when the frame budget ran out (keeps draining).
     pending: bool,
+    /// Revisão do overlay de edições vista no último passe — mudar força o
+    /// passe mesmo com a câmara parada (uma cratera não move a câmara).
+    last_edit_rev: u64,
     /// Live chunk index by grid coords (despawn removes the entry).
     chunks: HashMap<UVec2, Entity>,
 }
@@ -216,6 +224,7 @@ fn adopt_chunks(
                 lod: 0,
                 built_lod: 0,
                 built_neighbours: [super::voxel::spawn::NO_NEIGHBOUR; 4],
+                built_edit_rev: 0,
             });
         }
     }
@@ -239,6 +248,8 @@ struct ColumnBuild {
     target: u8,
     /// Vizinhança com que as caixas `staged` estão a ser meshadas.
     neighbours: [u8; 4],
+    /// Revisão de edições com que a fila foi computada.
+    edit_rev: u64,
     staged: Vec<Entity>,
     remaining: Vec<super::voxel::VoxelBoxSpec>,
     /// Triângulos das caixas já staged — no swap assa o trimesh da coluna,
@@ -280,6 +291,14 @@ fn update_voxel_columns(
         .next()
         .map(|t| Vec2::new(t.translation().x, t.translation().z));
     let collision_keep = crate::physics::collision_keep_within(&runtime.spec);
+    let edit_rev = runtime.deltas.revision();
+
+    // Uma edição viva (cratera/vala) força o passe mesmo com a câmara parada
+    // — a revisão do overlay é o "movimento" que falta.
+    if edit_rev != state.last_edit_rev {
+        state.last_edit_rev = edit_rev;
+        state.pending = true;
+    }
 
     // Reselect gate — idêntico ao caminho heightfield.
     let moved = state
@@ -316,7 +335,10 @@ fn update_voxel_columns(
     let margin = hysteresis_margin(spec);
     let render_distance = spec.effective_render_distance();
     let lod0_cell = lod0_step(spec) as f32;
-    let grid = &runtime.grid;
+    // A vista GRID + EDIÇÕES: o mesher e o `region_state` leem esta base,
+    // portanto uma cratera entra no próximo rebuild sem tocar na grid.
+    let base = runtime.base();
+    let grid = &runtime.grid; // (testes/legado)
     let voxel = &runtime.voxel;
     // Captura ANTES do loop de colunas (o índice usa `state` mutável).
     let standard = state.material.clone();
@@ -405,28 +427,48 @@ fn update_voxel_columns(
             select_lod(dist, spec.lod_distance(), chunk.built_lod, max_lod, margin)
         });
         let neighbours = lod_field.neighbours(chunk.coords);
-        // Reconstruir também quando SÓ a vizinhança mudou: o LOD é o mesmo, as
-        // faces de transição não.
-        let stale = chunk.lod != chunk.built_lod || neighbours != chunk.built_neighbours;
+        let refined =
+            super::voxel::spawn::refined_neighbours(&lod_field, voxel, spec, edge, chunk.coords);
+        // Chave de vizinhança p/ staleness: lod | 0x80·refinado — o estado
+        // refinado de um vizinho muda as minhas faces de transição (a
+        // comparação é em célula efetiva) sem mudar o LOD dele. O
+        // NO_NEIGHBOUR já tem o bit alto; | 0x80 é identidade aí.
+        let nkey: [u8; 4] = std::array::from_fn(|i| neighbours[i] | ((refined[i] as u8) << 7));
+        // Reconstruir também quando SÓ a vizinhança mudou (LOD ou refinado): o
+        // LOD é o mesmo, as faces de transição não.
+        // Edição viva: só as colunas cujo rect cruza a bounding das edições
+        // re-mesham (as outras ficam com a revisão velha e não pagam nada).
+        let edit_stale = chunk.built_edit_rev != edit_rev && {
+            let half = edge * 0.5;
+            let cx = -runtime.spec.world_size * 0.5 + chunk.coords.x as f32 * edge + half;
+            let cz = -runtime.spec.world_size * 0.5 + chunk.coords.y as f32 * edge + half;
+            runtime.deltas.bounds().is_some_and(|(min, max)| {
+                cx + half >= min.x && cx - half <= max.x && cz + half >= min.y && cz - half <= max.y
+            })
+        };
+        let stale =
+            chunk.lod != chunk.built_lod || nkey != chunk.built_neighbours || edit_stale;
         match build.as_mut() {
             // O alvo mudou a meio da construção: as staged (escondidas)
             // morrem e a fila recomputa para o novo alvo.
-            Some(b) if b.target != chunk.lod || b.neighbours != neighbours => {
+            Some(b) if b.target != chunk.lod || b.neighbours != nkey || b.edit_rev != edit_rev => {
                 for e in b.staged.drain(..) {
                     commands.entity(e).despawn();
                 }
                 b.remaining = super::voxel::column_boxes(
                     spec,
-                    grid,
+                    &base,
                     voxel,
                     edge,
                     lod0_cell,
                     chunk.lod,
                     chunk.coords,
                     neighbours,
+                    refined,
                 );
                 b.target = chunk.lod;
-                b.neighbours = neighbours;
+                b.neighbours = nkey;
+                b.edit_rev = edit_rev;
                 b.bake = crate::physics::ColumnColliderBake::new();
                 state.pending = true;
             }
@@ -444,7 +486,7 @@ fn update_voxel_columns(
                     let Some(box_spec) = b.remaining.pop() else {
                         break;
                     };
-                    let Some(data) = super::voxel::build_box_mesh(spec, grid, voxel, &box_spec)
+                    let Some(data) = super::voxel::build_box_mesh(spec, &base, voxel, &box_spec)
                     else {
                         // Provou-se vazio depois de tudo — sem custo de
                         // orçamento, segue para a próxima caixa.
@@ -460,7 +502,9 @@ fn update_voxel_columns(
                         &material,
                         false,
                     ));
-                    budget -= 1;
+                    // Caixa REFINADA: 8× as amostras do transvoxel — consome
+                    // a frame inteira de orçamento (uma por frame no máximo).
+                    budget = if box_spec.refined { 0 } else { budget - 1 };
                 }
                 if b.remaining.is_empty() {
                     // Swap atómico: caixas do LOD velho morrem, staged ficam
@@ -499,23 +543,27 @@ fn update_voxel_columns(
                     }
                     chunk.built_lod = b.target;
                     chunk.built_neighbours = b.neighbours;
+                    chunk.built_edit_rev = b.edit_rev;
+
                     commands.entity(entity).remove::<ColumnBuild>();
                 }
             }
             None if stale => {
                 let remaining = super::voxel::column_boxes(
                     spec,
-                    grid,
+                    &base,
                     voxel,
                     edge,
                     lod0_cell,
                     chunk.lod,
                     chunk.coords,
                     neighbours,
+                    refined,
                 );
                 commands.entity(entity).insert(ColumnBuild {
                     target: chunk.lod,
-                    neighbours,
+                    neighbours: nkey,
+                    edit_rev,
                     staged: Vec::new(),
                     remaining,
                     bake: crate::physics::ColumnColliderBake::new(),
@@ -571,8 +619,18 @@ fn update_voxel_columns(
                 .get(coords)
                 .unwrap_or_else(|| raw_lod(dist, spec.lod_distance(), max_lod));
             let neighbours = lod_field.neighbours(coords);
+            let refined =
+                super::voxel::spawn::refined_neighbours(&lod_field, voxel, spec, edge, coords);
             let column_boxes = super::voxel::column_boxes(
-                spec, grid, voxel, edge, lod0_cell, lod, coords, neighbours,
+                spec,
+                &base,
+                voxel,
+                edge,
+                lod0_cell,
+                lod,
+                coords,
+                neighbours,
+                refined,
             );
             budget = budget.saturating_sub(column_boxes.len() as u32);
             let (entity, built) = super::voxel::spawn_column(
@@ -583,10 +641,11 @@ fn update_voxel_columns(
                 lod,
                 &material,
                 &column_boxes,
-                grid,
+                &base,
                 voxel,
                 spec,
-                neighbours,
+                std::array::from_fn(|i| neighbours[i] | ((refined[i] as u8) << 7)),
+                edit_rev,
                 Some(cam_xz),
             );
             if built > 0 {
@@ -920,6 +979,7 @@ mod tests {
             roads: Vec::new(),
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
         });
 
         let root = app
@@ -957,6 +1017,7 @@ mod tests {
                             lod: 0,
                             built_lod: 0,
                             built_neighbours: [0; 4],
+                            built_edit_rev: 0,
                         },
                     ))
                     .id();
@@ -991,6 +1052,109 @@ mod tests {
         cam.1.translation = Vec3::new(x, 20.0, z);
         app.update();
         app.update();
+    }
+
+    /// Uma edição viva (cratera) re-mesha SÓ as colunas cujo rect cobre — e
+    /// o passe corre mesmo com a câmara PARADA (a revisão do overlay é o
+    /// "movimento" que falta). As colunas fora da bounding ficam com a
+    /// revisão velha e não pagam nada.
+    #[test]
+    fn test_an_edit_rebuilds_only_the_covered_columns() {
+        use crate::terrain::delta::{TerrainEdit, TerrainEditQueue};
+        use crate::terrain::runtime::apply_terrain_edits;
+        use bevy::ecs::system::RunSystemOnce as _;
+        let mut app = lod_app(80.0);
+        app.init_resource::<TerrainEditQueue>();
+        app.world_mut().spawn((
+            Camera3d::default(),
+            Transform::from_xyz(8.0, 20.0, 8.0),
+            GlobalTransform::default(),
+        ));
+        // As colunas dummy do harness nascem com `built_neighbours [0;4]` e o
+        // passe inicial re-mesha-as (bordas NO_NEIGHBOUR) — deixa ESSE
+        // rebuild drenar antes de medir a edição. Aquece primeiro: no 1.º
+        // frame o passe ainda corre ANTES do adopt e sai cedo (o "sem
+        // builds" dessa altura é falso-positivo).
+        for _ in 0..4 {
+            app.update();
+        }
+        for _ in 0..120 {
+            app.update();
+            let adopted = app.world().resource::<ChunkLodState>().adopted;
+            let quiet = {
+                let mut q = app.world_mut().query::<&ColumnBuild>();
+                q.iter(app.world()).count() == 0
+            };
+            if adopted && quiet {
+                break;
+            }
+        }
+        {
+            let mut q = app.world_mut().query::<&TerrainChunk>();
+            assert!(
+                q.iter(app.world()).all(|c| c.built_edit_rev == 0),
+                "bootstrap constrói na revisão 0"
+            );
+        }
+
+        // Raise no canto do chunk (0,0) — centro (−8,−8) da grelha 32 m.
+        // (O heightmap do harness é raso: um lower clampava a zero e não
+        // mudava nada; o raise prova a mesma cadeia sem o clamp.)
+        app.world_mut()
+            .resource_mut::<TerrainEditQueue>()
+            .pending
+            .push_back(TerrainEdit::Raise {
+                at: Vec2::new(-8.0, -8.0),
+                radius: 4.0,
+                height: 3.0,
+            });
+        app.world_mut()
+            .run_system_once(apply_terrain_edits)
+            .expect("apply_terrain_edits runs");
+        {
+            let rt = app.world().resource::<TerrainRuntime>();
+            assert_eq!(rt.deltas.revision(), 1, "a edição commitou");
+            assert!(
+                rt.deltas.sample(-8.0, -8.0).expect("editado") > rt.grid.sample(-8.0, -8.0) + 1.0,
+                "a colina subiu a altura"
+            );
+            assert!(
+                rt.sample(-8.0, -8.0) > rt.grid.sample(-8.0, -8.0) + 1.0,
+                "a query de gameplay vê a edição"
+            );
+        }
+
+        // Câmara PARADA: só a revisão nova faz o passe correr; a coluna
+        // coberta re-mesha em poucos frames (orçamento 4 caixas/frame).
+        for _ in 0..60 {
+            app.update();
+            let done = {
+                let mut q = app.world_mut().query::<&TerrainChunk>();
+                q.iter(app.world())
+                    .any(|c| c.coords == UVec2::new(0, 0) && c.built_edit_rev == 1)
+            };
+            if done {
+                break;
+            }
+        }
+        let mut q = app.world_mut().query::<&TerrainChunk>();
+        let mut rebuilt = Vec::new();
+        let mut untouched = Vec::new();
+        for chunk in q.iter(app.world()) {
+            if chunk.built_edit_rev == 1 {
+                rebuilt.push(chunk.coords);
+            } else {
+                untouched.push(chunk.coords);
+            }
+        }
+        assert!(
+            rebuilt.contains(&UVec2::new(0, 0)),
+            "a coluna coberta re-meshou: {rebuilt:?} (intocadas: {untouched:?})"
+        );
+        assert!(
+            !untouched.is_empty() && untouched.iter().all(|c| *c != UVec2::new(0, 0)),
+            "as colunas fora da bounding não re-mesham: {untouched:?}"
+        );
     }
 
     #[test]
@@ -1095,6 +1259,7 @@ mod tests {
             roads: Vec::new(),
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
         });
 
         let root = app
@@ -1132,6 +1297,7 @@ mod tests {
                             lod: 0,
                             built_lod: 0,
                             built_neighbours: [0; 4],
+                            built_edit_rev: 0,
                         },
                     ))
                     .id();

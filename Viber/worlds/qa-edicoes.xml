@@ -1,0 +1,34 @@
+<!--
+  QA das EDICOES VIVAS do terreno (Fase 3): o script abre uma cratera e
+  levanta uma colina no arranque; a engine re-mesha as colunas afetadas
+  (mesh + collider trimesh) pelo caminho staged do LOD.
+
+  Correr:
+    viber analyze worlds/qa-edicoes.xml
+    viber session up (apontar este mundo)   [protocolo de sessao]
+
+  Receita de QA ao vivo (depois da sessao presa):
+    viber debug (apontando o mundo) lua 'viber.debug.tp(20, 8) return true'
+    viber debug screenshot -o cratera.png
+    viber debug (apontando o mundo) lua 'viber.terrain.raise(0, 0, 8, 5) return viber.terrain.revision()'
+    viber debug (apontando o mundo) lua 'return viber.ground_below(0, 0, 100)'
+  A cratera do script fica em (20, 0) (raio 12, fundo 5 m); a colina em
+  (-20, 0) (raio 8, +4 m). O heroi nasce 30 m a sul, em (0, 30).
+-->
+<world clear-color="#87ceeb">
+  <AmbientLight color="#bfd4e0" brightness="400" />
+  <DirectionalLight direction="-0.5 -1 -0.3" illuminance="28000" shadows="true" />
+
+  <Terrain name="campo" world-size="256" max-height="45" chunk-size="64"
+           levels="3" resolution="64" collision-resolution="32"
+           height-smoothing="1" seed="7"
+           base-color="#c9c5ba" cliff-angle="50" />
+
+  <PlayerGLTF model-url="/assets/meshes/characters/hero_lod0.glb" pos="0 0 30" />
+
+  <!-- O script das edicoes (corre uma vez, no primeiro update). -->
+  <Entity name="qa-edicoes" script="qa-edicoes.lua" />
+
+  <Entity name="mirante" translation="20 26 30" />
+  <OrbitCamera target="mirante" distance="40" height="10" pitch="20" />
+</world>

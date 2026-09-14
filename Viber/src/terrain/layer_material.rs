@@ -72,7 +72,7 @@ const CONFIG_END: &str = "// === END WORLD CONFIG ===";
 /// senão volta o SIGSEGV, e ele não vem com mensagem nenhuma.
 #[derive(Debug, Clone, Asset, TypePath, AsBindGroup)]
 #[data(0, TerrainChunkParams, binding_array(10))]
-#[bindless(index_table(range(0..69)))]
+#[bindless(index_table(range(0..85)))]
 pub struct TerrainChunkMaterial {
     #[texture(1)]
     #[sampler(2)]
@@ -190,6 +190,37 @@ pub struct TerrainChunkMaterial {
     #[texture(67)]
     #[sampler(68)]
     pub layer7_ao: Handle<Image>,
+    /// Roughness maps do pool (`roughness.ktx2`; `smoothness.ktx2` entra
+    /// INVERTIDO via `roughs[i].z`), um por layer — a micro-variação do
+    /// brilho especular por texel (juntas de cascalho brilham menos que as
+    /// pedras, lama molhada lê-se mate). Slots sem mapa carregam a plana
+    /// partilhada (`flat_rough_image`) com `roughs[i].y = 0` — o WGSL
+    /// devolve a constante do [`SLOT_STYLES`] e o resultado é idêntico ao
+    /// anterior. A ORDEM segue a tabela de índices bindless (69–84).
+    #[texture(69)]
+    #[sampler(70)]
+    pub layer0_rough: Handle<Image>,
+    #[texture(71)]
+    #[sampler(72)]
+    pub layer1_rough: Handle<Image>,
+    #[texture(73)]
+    #[sampler(74)]
+    pub layer2_rough: Handle<Image>,
+    #[texture(75)]
+    #[sampler(76)]
+    pub layer3_rough: Handle<Image>,
+    #[texture(77)]
+    #[sampler(78)]
+    pub layer4_rough: Handle<Image>,
+    #[texture(79)]
+    #[sampler(80)]
+    pub layer5_rough: Handle<Image>,
+    #[texture(81)]
+    #[sampler(82)]
+    pub layer6_rough: Handle<Image>,
+    #[texture(83)]
+    #[sampler(84)]
+    pub layer7_rough: Handle<Image>,
     /// Tabela do chunk. Sem `#[uniform]`/`#[storage]` de campo: o
     /// `#[data(...)]` da struct manda-a para a binding array partilhada dos
     /// materiais bindless (índice 0 da tabela de índices).
@@ -265,6 +296,21 @@ impl TerrainChunkMaterial {
             _ => &mut self.layer7_ao,
         }
     }
+
+    /// Mutable roughness-map handle of layer `i` (0..8); the failed-rough
+    /// repointing walks this.
+    pub fn rough_mut(&mut self, i: usize) -> &mut Handle<Image> {
+        match i {
+            0 => &mut self.layer0_rough,
+            1 => &mut self.layer1_rough,
+            2 => &mut self.layer2_rough,
+            3 => &mut self.layer3_rough,
+            4 => &mut self.layer4_rough,
+            5 => &mut self.layer5_rough,
+            6 => &mut self.layer6_rough,
+            _ => &mut self.layer7_rough,
+        }
+    }
 }
 
 impl bevy::pbr::Material for TerrainChunkMaterial {
@@ -291,9 +337,11 @@ impl bevy::pbr::Material for TerrainChunkMaterial {
 
 /// Per-chunk style + placement table (uniform binding 50). `tiles[i].x` is
 /// the tile size in meters of layer i, `tints/flats/roughs` its color
-/// correction, flat far color and perceptual roughness; `chunk` places the
-/// splat planes (xy = origin XZ, z = edge size) and names the rock layer for
-/// the triplanar walls (w = 0..7, -1 = no rock layer in this chunk).
+/// correction, flat far color and perceptual roughness (`roughs[i].y` =
+/// mix do MAPA de roughness, `.z` = inverter — smoothness, `.w` livre);
+/// `chunk` places the splat planes (xy = origin XZ, z = edge size) and
+/// names the rock layer for the triplanar walls (w = 0..7, -1 = no rock
+/// layer in this chunk).
 #[derive(Debug, Clone, Copy, ShaderType)]
 pub struct TerrainChunkParams {
     pub tiles: [Vec4; 8],
@@ -317,6 +365,25 @@ pub struct TerrainChunkParams {
     /// `x` = rock_darken, `y` = streaks, `z` = moss, `w` = livre.
     pub walls_b: Vec4,
 }
+
+/// Fonte do mapa de roughness de um slot do pool (inventário ESTÁTICO — o
+/// pool publica `roughness.ktx2` nos PBR de material granular e
+/// `smoothness.ktx2` nos de superfície; alguns aliases não têm nenhum).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RoughMap {
+    /// Sem mapa: o WGSL usa a constante (`roughs[i].y = 0`).
+    None,
+    /// `roughness.ktx2` — o valor do texel É a roughness.
+    Rough,
+    /// `smoothness.ktx2` — o valor do texel é a SMOOTHNESS; o WGSL inverte
+    /// (`1 − s`) via `roughs[i].z = 1`.
+    Smooth,
+}
+
+/// Quanto do rough final vem do mapa (0 = só a constante). Mapas
+/// fotográficos têm contraste exagerado para o look estilizado — o mix
+/// mantém parte da constante afinada à mão.
+pub const ROUGH_MAP_MIX: f32 = 0.85;
 
 impl TerrainChunkParams {
     /// Builds the table from eight pool slots (`super::splat` indices) plus
@@ -351,7 +418,15 @@ impl TerrainChunkParams {
                 let f = SLOT_STYLES[slot].flat;
                 Vec4::new(f[0], f[1], f[2], 0.0)
             }),
-            roughs: pick(|s| s.rough),
+            roughs: slots.map(|slot| {
+                let s = &SLOT_STYLES[slot];
+                let (mix, invert) = match s.rough_map {
+                    RoughMap::Rough => (ROUGH_MAP_MIX, 0.0),
+                    RoughMap::Smooth => (ROUGH_MAP_MIX, 1.0),
+                    RoughMap::None => (0.0, 0.0),
+                };
+                Vec4::new(s.rough, mix, invert, 0.0)
+            }),
             chunk: Vec4::new(origin[0], origin[1], edge, rock),
             // w = 0: a aerial perspective só liga quando o publicador da
             // atmosfera escreve o tint do horizonte (mundos sem DayCycle
@@ -381,16 +456,26 @@ pub struct LayerStyle {
     pub tint: [f32; 3],
     /// Flat far color (already tinted) the detail fades into with distance.
     pub flat: [f32; 3],
-    /// Perceptual roughness.
+    /// Perceptual roughness (the CONSTANT; the map, quando existe, mistura
+    /// por cima com [`ROUGH_MAP_MIX`]).
     pub rough: f32,
+    /// Fonte do mapa de roughness deste alias no pool.
+    pub rough_map: RoughMap,
 }
 
-const fn style(tile: f32, tint: [f32; 3], flat: [f32; 3], rough: f32) -> LayerStyle {
+const fn style(
+    tile: f32,
+    tint: [f32; 3],
+    flat: [f32; 3],
+    rough: f32,
+    rough_map: RoughMap,
+) -> LayerStyle {
     LayerStyle {
         tile,
         tint,
         flat,
         rough,
+        rough_map,
     }
 }
 
@@ -401,19 +486,19 @@ const fn style(tile: f32, tint: [f32; 3], flat: [f32; 3], rough: f32) -> LayerSt
 /// see material, far you see COLOR, the way BOTW reads at distance.
 #[rustfmt::skip]
 pub const SLOT_STYLES: [LayerStyle; super::splat::LAYER_COUNT] = [
-    /* grass         */ style(5.0, [2.684, 2.793, 2.124], [0.1620, 0.3050, 0.0482], 0.95),
-    /* vale_grass    */ style(6.0, [1.617, 1.323, 0.876], [0.3231, 0.5647, 0.1221], 0.95),
-    /* dirt          */ style(4.0, [1.429, 1.403, 1.137], [0.1441, 0.0802, 0.0452], 0.95),
-    /* dirt_trail    */ style(3.0, [1.384, 1.364, 1.460], [0.2961, 0.1946, 0.0802], 0.92),
-    /* forest_floor  */ style(4.5, [0.794, 1.142, 0.692], [0.0976, 0.1441, 0.0545], 0.95),
-    /* gravel        */ style(3.5, [0.870, 1.010, 1.246], [0.4020, 0.3231, 0.2159], 0.90),
-    /* mountain_stone*/ style(7.0, [1.356, 1.346, 1.299], [0.2623, 0.2542, 0.2307], 0.85),
-    /* sand          */ style(4.0, [1.148, 1.350, 1.590], [0.6867, 0.4452, 0.2086], 0.92),
-    /* desert_sand   */ style(6.0, [2.282, 1.942, 1.325], [0.6308, 0.4125, 0.1878], 0.92),
-    /* snow_peak     */ style(8.0, [2.637, 2.687, 2.739], [0.8879, 0.9216, 0.9734], 0.65),
-    /* swamp_mud     */ style(3.5, [0.882, 0.817, 0.864], [0.0612, 0.0762, 0.0343], 0.70),
-    /* dirt_road     */ style(3.0, [1.094, 1.148, 1.102], [0.3140, 0.2384, 0.1620], 0.92),
-    /* pebbles       */ style(2.5, [0.880, 0.920, 1.020], [0.2262, 0.2476, 0.2701], 0.85),
+    /* grass         */ style(5.0, [2.684, 2.793, 2.124], [0.1620, 0.3050, 0.0482], 0.95, RoughMap::Rough),
+    /* vale_grass    */ style(6.0, [1.617, 1.323, 0.876], [0.3231, 0.5647, 0.1221], 0.95, RoughMap::Smooth),
+    /* dirt          */ style(4.0, [1.429, 1.403, 1.137], [0.1441, 0.0802, 0.0452], 0.95, RoughMap::Rough),
+    /* dirt_trail    */ style(3.0, [1.384, 1.364, 1.460], [0.2961, 0.1946, 0.0802], 0.92, RoughMap::None),
+    /* forest_floor  */ style(4.5, [0.794, 1.142, 0.692], [0.0976, 0.1441, 0.0545], 0.95, RoughMap::Smooth),
+    /* gravel        */ style(3.5, [0.870, 1.010, 1.246], [0.4020, 0.3231, 0.2159], 0.90, RoughMap::Rough),
+    /* mountain_stone*/ style(7.0, [1.356, 1.346, 1.299], [0.2623, 0.2542, 0.2307], 0.85, RoughMap::Smooth),
+    /* sand          */ style(4.0, [1.148, 1.350, 1.590], [0.6867, 0.4452, 0.2086], 0.92, RoughMap::Rough),
+    /* desert_sand   */ style(6.0, [2.282, 1.942, 1.325], [0.6308, 0.4125, 0.1878], 0.92, RoughMap::Smooth),
+    /* snow_peak     */ style(8.0, [2.637, 2.687, 2.739], [0.8879, 0.9216, 0.9734], 0.65, RoughMap::Smooth),
+    /* swamp_mud     */ style(3.5, [0.882, 0.817, 0.864], [0.0612, 0.0762, 0.0343], 0.70, RoughMap::Smooth),
+    /* dirt_road     */ style(3.0, [1.094, 1.148, 1.102], [0.3140, 0.2384, 0.1620], 0.92, RoughMap::None),
+    /* pebbles       */ style(2.5, [0.880, 0.920, 1.020], [0.2262, 0.2476, 0.2701], 0.85, RoughMap::Rough),
 ];
 
 /// Per-world chunk shader configuration: the cliff-wall constants (triplanar
@@ -820,8 +905,8 @@ mod tests {
     fn test_chunk_material_stays_bindless() {
         let source = include_str!("layer_material.rs");
         assert!(
-            source.contains("#[bindless(index_table(range(0..69)))]"),
-            "TerrainChunkMaterial tem de continuar bindless (69 entradas: data + 34 pares)"
+            source.contains("#[bindless(index_table(range(0..85)))]"),
+            "TerrainChunkMaterial tem de continuar bindless (85 entradas: data + 42 pares)"
         );
         assert!(
             source.contains("#[data(0, TerrainChunkParams, binding_array(10))]"),
@@ -971,6 +1056,47 @@ mod tests {
             &cfg,
         );
         assert_eq!(no_rock.chunk.w, -1.0, "sem mountain_stone → sem triplanar");
+    }
+
+    /// As flags de roughness por slot saem da tabela estática:
+    /// `roughness.ktx2` → mix [`ROUGH_MAP_MIX`], `smoothness.ktx2` → mix +
+    /// INVERT, sem mapa → mix 0 (o WGSL devolve a constante `.x`).
+    #[test]
+    fn test_chunk_params_rough_flags_follow_the_pool_inventory() {
+        use super::super::splat::{SLOT_DIRT_TRAIL, SLOT_GRASS, SLOT_VALE_GRASS};
+        let cfg = TerrainChunkConfig {
+            tri_slope: 0.36,
+            tri_soft: 0.12,
+            strata_spacing: 4.0,
+            strata_strength: 0.25,
+            rock_darken: 0.45,
+            streaks: 0.5,
+            moss: 0.35,
+        };
+        let params = TerrainChunkParams::from_slots(
+            [
+                SLOT_GRASS,
+                SLOT_VALE_GRASS,
+                SLOT_DIRT_TRAIL,
+                3,
+                4,
+                5,
+                7,
+                12,
+            ],
+            [0.0, 0.0],
+            64.0,
+            &cfg,
+        );
+        // grass tem roughness.ktx2: mix on, sem inverter.
+        assert_eq!(params.roughs[0].x, SLOT_STYLES[SLOT_GRASS].rough);
+        assert!((params.roughs[0].y - ROUGH_MAP_MIX).abs() < 1e-6);
+        assert_eq!(params.roughs[0].z, 0.0);
+        // vale_grass só tem smoothness.ktx2: mix on + INVERT.
+        assert_eq!(params.roughs[1].z, 1.0, "smoothness entra invertido");
+        // dirt_trail não tem mapa nenhum: mix 0 → constante.
+        assert_eq!(params.roughs[2].y, 0.0, "sem mapa → só a constante");
+        assert_eq!(params.roughs[2].x, SLOT_STYLES[SLOT_DIRT_TRAIL].rough);
     }
 
     impl EntitySpec {

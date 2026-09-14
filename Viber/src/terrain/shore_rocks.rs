@@ -14,7 +14,7 @@
 
 use bevy::math::Vec2;
 
-use super::water::{CARVE_MARGIN, LakeShape, waterline_reach};
+use super::water::{CARVE_MARGIN, LakeShape, LakeSpec, waterline_reach};
 
 /// GLBs de pedra do pool, em ordem de "pretensão" (boulder > musgo > seixo).
 /// Um é escolhido por instância pelo RNG do grupo de spawner.
@@ -91,46 +91,46 @@ const SHORE_SEED_SALT: u64 = 0x5EED_5EED_5EED_5EED;
 
 /// Candidatos ao longo do contorno orgânico de um lago (espaçamento angular
 /// uniforme + jitter em θ e raio — o contorno varia ±28%, o que já quebra
-/// qualquer ritmo visível).
-pub fn lake_candidates(
-    at: Vec2,
-    radius: f32,
-    depth: f32,
-    water_offset: f32,
-    rocks: &ShoreRocksSpec,
-    index: usize,
-) -> Vec<Vec2> {
-    if radius <= 0.0 {
+/// qualquer ritmo visível). Lê a SPEC inteira: a forma autoral
+/// ([`LakeSpec::shape`]) muda o contorno E a seed das pedras.
+pub fn lake_candidates(spec: &LakeSpec, index: usize) -> Vec<Vec2> {
+    let at = spec.at;
+    if spec.radius <= 0.0 {
         return Vec::new();
     }
-    let shape = LakeShape::new(at);
-    let reach = (waterline_reach(depth, water_offset) * CARVE_MARGIN).clamp(0.5, 1.6);
+    let shape = LakeShape::from_authoring(at, &spec.shape);
+    let reach = (waterline_reach(spec.depth, spec.water_offset) * CARVE_MARGIN).clamp(0.5, 1.6);
     // Perímetro do contorno amostrado — de onde vem a contagem.
     let samples = 96;
     let mut perimeter = 0.0;
     let mut prev: Option<Vec2> = None;
     for i in 0..=samples {
         let theta = i as f32 / samples as f32 * std::f32::consts::TAU;
-        let r = shape.contour(radius, theta) * reach;
+        let r = shape.contour(spec.radius, theta) * reach;
         let p = at + Vec2::new(theta.cos(), theta.sin()) * r;
         if let Some(q) = prev {
             perimeter += p.distance(q);
         }
         prev = Some(p);
     }
-    let step = 1.0 / rocks.density.max(0.01);
+    let step = 1.0 / spec.rocks_spec.density.max(0.01);
     let count = ((perimeter / step) as usize).min(MAX_PER_BODY);
     if count == 0 {
         return Vec::new();
     }
-    let mut rng = Rng::new(body_seed(at, index) ^ SHORE_SEED_SALT);
+    let seed = spec
+        .shape
+        .seed
+        .map(|s| s ^ (index as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9))
+        .unwrap_or_else(|| body_seed(at, index));
+    let mut rng = Rng::new(seed ^ SHORE_SEED_SALT);
     let mut out = Vec::with_capacity(count);
     for i in 0..count {
         let theta = i as f32 / count as f32 * std::f32::consts::TAU
             + rng.range(-0.5, 0.5) / count as f32 * std::f32::consts::TAU;
         // Jitter radial: do lado húmido (dentro do espelho, água rasa) até
         // DRY_SPREAD metros em seco, em torno da linha de água real.
-        let waterline = shape.contour(radius, theta) * reach;
+        let waterline = shape.contour(spec.radius, theta) * reach;
         let radial = waterline + rng.range(-WET_DEPTH, DRY_SPREAD);
         out.push(at + Vec2::new(theta.cos(), theta.sin()) * radial);
     }
@@ -199,25 +199,64 @@ mod tests {
     #[test]
     fn test_lake_candidates_ring_the_shore() {
         let rocks = ShoreRocksSpec::default();
-        let a = lake_candidates(Vec2::new(-40.0, 20.0), 12.0, 3.0, 0.5, &rocks, 0);
-        let b = lake_candidates(Vec2::new(-40.0, 20.0), 12.0, 3.0, 0.5, &rocks, 0);
+        let spec = LakeSpec {
+            at: Vec2::new(-40.0, 20.0),
+            radius: 12.0,
+            depth: 3.0,
+            ..LakeSpec::default()
+        };
+        let a = lake_candidates(&spec, 0);
+        let b = lake_candidates(&spec, 0);
         assert_eq!(a, b, "same body → same candidates");
         assert!(!a.is_empty(), "a 12 m lake has shore rocks");
         // Todos os candidatos ficam perto do contorno (banda húmida+seca).
         for p in &a {
-            let d = p.distance(Vec2::new(-40.0, 20.0));
+            let d = p.distance(spec.at);
             assert!(
                 d > 6.0 && d < 12.0 * 1.25 + DRY_SPREAD + 1.0,
                 "candidate {p} off the shore band (d={d})"
             );
         }
         // Densidade maior → mais pedras.
-        let dense = ShoreRocksSpec {
-            density: 0.4,
-            ..rocks
+        let dense = LakeSpec {
+            rocks_spec: ShoreRocksSpec {
+                density: 0.4,
+                ..rocks
+            },
+            ..spec.clone()
         };
-        let more = lake_candidates(Vec2::new(-40.0, 20.0), 12.0, 3.0, 0.5, &dense, 0);
+        let more = lake_candidates(&dense, 0);
         assert!(more.len() > a.len(), "density drives count");
+    }
+
+    /// A autoria da forma (`seed` + `lobes`) muda o contorno que as pedras
+    /// seguem — e a mesma seed reproduz exatamente o mesmo anel.
+    #[test]
+    fn test_lake_candidates_follow_the_authored_shape() {
+        let authored = LakeSpec {
+            at: Vec2::new(-40.0, 20.0),
+            radius: 12.0,
+            depth: 3.0,
+            shape: super::super::water::LakeAuthoring {
+                seed: Some(77),
+                lobes: Some(1.5),
+                ..Default::default()
+            },
+            ..LakeSpec::default()
+        };
+        let a = lake_candidates(&authored, 0);
+        let b = lake_candidates(&authored, 0);
+        assert_eq!(a, b, "authored seed is reproducible");
+        let natural = lake_candidates(
+            &LakeSpec {
+                at: authored.at,
+                radius: authored.radius,
+                depth: authored.depth,
+                ..LakeSpec::default()
+            },
+            0,
+        );
+        assert_ne!(a, natural, "authored shape moves the rock ring");
     }
 
     #[test]
@@ -239,7 +278,19 @@ mod tests {
     #[test]
     fn test_degenerate_bodies_give_no_candidates() {
         let rocks = ShoreRocksSpec::default();
-        assert!(lake_candidates(Vec2::ZERO, 0.0, 2.0, 0.5, &rocks, 0).is_empty());
+        assert!(
+            lake_candidates(
+                &LakeSpec {
+                    at: Vec2::ZERO,
+                    radius: 0.0,
+                    depth: 2.0,
+                    rocks_spec: rocks,
+                    ..LakeSpec::default()
+                },
+                0
+            )
+            .is_empty()
+        );
         assert!(river_candidates(&[], 6.0, 2.0, 0.4, 2.0, &rocks, 0).is_empty());
     }
 }

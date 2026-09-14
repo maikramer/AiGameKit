@@ -83,9 +83,9 @@ struct TerrainChunkParams {
 
 // Bindless index table — one entry per material slot; the field order is the
 // bindless-index order declared by `TerrainChunkMaterial`
-// (`#[data(0, …)]` then the thirty-four texture/sampler pairs at 1..68: eight
+// (`#[data(0, …)]` then the forty-two texture/sampler pairs at 1..84: eight
 // albedos, two splat planes, eight normal maps, eight height maps, eight AO
-// maps).
+// maps, eight roughness maps).
 struct TerrainChunkBindings {
     material: u32,         // 0
     layer0_texture: u32,   // 1
@@ -156,6 +156,22 @@ struct TerrainChunkBindings {
     layer6_ao_sampler: u32, // 66
     layer7_ao_texture: u32, // 67
     layer7_ao_sampler: u32, // 68
+    layer0_rough_texture: u32, // 69
+    layer0_rough_sampler: u32, // 70
+    layer1_rough_texture: u32, // 71
+    layer1_rough_sampler: u32, // 72
+    layer2_rough_texture: u32, // 73
+    layer2_rough_sampler: u32, // 74
+    layer3_rough_texture: u32, // 75
+    layer3_rough_sampler: u32, // 76
+    layer4_rough_texture: u32, // 77
+    layer4_rough_sampler: u32, // 78
+    layer5_rough_texture: u32, // 79
+    layer5_rough_sampler: u32, // 80
+    layer6_rough_texture: u32, // 81
+    layer6_rough_sampler: u32, // 82
+    layer7_rough_texture: u32, // 83
+    layer7_rough_sampler: u32, // 84
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<storage> material_indices: array<TerrainChunkBindings>;
@@ -232,6 +248,22 @@ struct TerrainChunkBindings {
 @group(#{MATERIAL_BIND_GROUP}) @binding(66) var layer6_ao_sampler: sampler;
 @group(#{MATERIAL_BIND_GROUP}) @binding(67) var layer7_ao: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(68) var layer7_ao_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(69) var layer0_rough: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(70) var layer0_rough_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(71) var layer1_rough: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(72) var layer1_rough_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(73) var layer2_rough: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(74) var layer2_rough_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(75) var layer3_rough: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(76) var layer3_rough_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(77) var layer4_rough: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(78) var layer4_rough_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(79) var layer5_rough: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(80) var layer5_rough_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(81) var layer6_rough: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(82) var layer6_rough_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(83) var layer7_rough: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(84) var layer7_rough_sampler: sampler;
 
 #endif  // BINDLESS
 
@@ -501,6 +533,71 @@ fn layer_scalar_sample(i: i32, slot: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2
 #endif  // BINDLESS
 }
 
+/// Roughness map do slot `i` (0..7) — o mesmo padrão do
+/// `layer_scalar_sample`: cada ramo devolve DIRECTAMENTE (o naga rejeita
+/// `var tex` local selecionada por if/else como argumento de
+/// textureSampleGrad). Quem não tem mapa tem `roughs[i].y = 0` e o valor
+/// aqui é ignorado pelo mix.
+fn layer_rough_sample(i: i32, slot: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> f32 {
+#ifdef BINDLESS
+    let idx = material_indices[slot];
+    var tex = idx.layer0_rough_texture;
+    var samp = idx.layer0_rough_sampler;
+    if (i == 1) {
+        tex = idx.layer1_rough_texture;
+        samp = idx.layer1_rough_sampler;
+    } else if (i == 2) {
+        tex = idx.layer2_rough_texture;
+        samp = idx.layer2_rough_sampler;
+    } else if (i == 3) {
+        tex = idx.layer3_rough_texture;
+        samp = idx.layer3_rough_sampler;
+    } else if (i == 4) {
+        tex = idx.layer4_rough_texture;
+        samp = idx.layer4_rough_sampler;
+    } else if (i == 5) {
+        tex = idx.layer5_rough_texture;
+        samp = idx.layer5_rough_sampler;
+    } else if (i == 6) {
+        tex = idx.layer6_rough_texture;
+        samp = idx.layer6_rough_sampler;
+    } else if (i == 7) {
+        tex = idx.layer7_rough_texture;
+        samp = idx.layer7_rough_sampler;
+    }
+    return textureSampleGrad(
+        bindless_textures_2d[tex],
+        bindless_samplers_filtering[samp],
+        uv,
+        dx,
+        dy,
+    ).r;
+#else   // BINDLESS
+    if (i == 0) {
+        return textureSampleGrad(layer0_rough, layer0_rough_sampler, uv, dx, dy).r;
+    }
+    if (i == 1) {
+        return textureSampleGrad(layer1_rough, layer1_rough_sampler, uv, dx, dy).r;
+    }
+    if (i == 2) {
+        return textureSampleGrad(layer2_rough, layer2_rough_sampler, uv, dx, dy).r;
+    }
+    if (i == 3) {
+        return textureSampleGrad(layer3_rough, layer3_rough_sampler, uv, dx, dy).r;
+    }
+    if (i == 4) {
+        return textureSampleGrad(layer4_rough, layer4_rough_sampler, uv, dx, dy).r;
+    }
+    if (i == 5) {
+        return textureSampleGrad(layer5_rough, layer5_rough_sampler, uv, dx, dy).r;
+    }
+    if (i == 6) {
+        return textureSampleGrad(layer6_rough, layer6_rough_sampler, uv, dx, dy).r;
+    }
+    return textureSampleGrad(layer7_rough, layer7_rough_sampler, uv, dx, dy).r;
+#endif  // BINDLESS
+}
+
 /// The chunk's splat planes (local 0..1 UVs over the chunk); plane 1 weights
 /// slots 4–7.
 fn splat_sample(slot: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec4<f32> {
@@ -612,7 +709,9 @@ fn fragment(
         let h = layer_scalar_sample(0, slot, uv_t, wdx / t, wdy / t, true);
         let wb0 = s.r * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
         albedo += wb0 * mix(tex, params.flats[0].rgb, flat_mix);
-        rough += wb0 * params.roughs[0].x;
+        let rmap0 = layer_rough_sample(0, slot, uv_t, wdx / t, wdy / t);
+        let rinv0 = select(rmap0, 1.0 - rmap0, params.roughs[0].z > 0.5);
+        rough += wb0 * mix(params.roughs[0].x, rinv0, params.roughs[0].y);
         ao += wb0 * layer_scalar_sample(0, slot, uv_t, wdx / t, wdy / t, false);
         wsum += wb0;
         let k = 1.0 - flat_mix;
@@ -635,7 +734,9 @@ fn fragment(
         let h = layer_scalar_sample(1, slot, uv_t, wdx / t, wdy / t, true);
         let wb1 = s.g * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
         albedo += wb1 * mix(tex, params.flats[1].rgb, flat_mix);
-        rough += wb1 * params.roughs[1].x;
+        let rmap1 = layer_rough_sample(1, slot, uv_t, wdx / t, wdy / t);
+        let rinv1 = select(rmap1, 1.0 - rmap1, params.roughs[1].z > 0.5);
+        rough += wb1 * mix(params.roughs[1].x, rinv1, params.roughs[1].y);
         ao += wb1 * layer_scalar_sample(1, slot, uv_t, wdx / t, wdy / t, false);
         wsum += wb1;
         let k = 1.0 - flat_mix;
@@ -658,7 +759,9 @@ fn fragment(
         let h = layer_scalar_sample(2, slot, uv_t, wdx / t, wdy / t, true);
         let wb2 = s.b * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
         albedo += wb2 * mix(tex, params.flats[2].rgb, flat_mix);
-        rough += wb2 * params.roughs[2].x;
+        let rmap2 = layer_rough_sample(2, slot, uv_t, wdx / t, wdy / t);
+        let rinv2 = select(rmap2, 1.0 - rmap2, params.roughs[2].z > 0.5);
+        rough += wb2 * mix(params.roughs[2].x, rinv2, params.roughs[2].y);
         ao += wb2 * layer_scalar_sample(2, slot, uv_t, wdx / t, wdy / t, false);
         wsum += wb2;
         let k = 1.0 - flat_mix;
@@ -681,7 +784,9 @@ fn fragment(
         let h = layer_scalar_sample(3, slot, uv_t, wdx / t, wdy / t, true);
         let wb3 = s.a * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
         albedo += wb3 * mix(tex, params.flats[3].rgb, flat_mix);
-        rough += wb3 * params.roughs[3].x;
+        let rmap3 = layer_rough_sample(3, slot, uv_t, wdx / t, wdy / t);
+        let rinv3 = select(rmap3, 1.0 - rmap3, params.roughs[3].z > 0.5);
+        rough += wb3 * mix(params.roughs[3].x, rinv3, params.roughs[3].y);
         ao += wb3 * layer_scalar_sample(3, slot, uv_t, wdx / t, wdy / t, false);
         wsum += wb3;
         let k = 1.0 - flat_mix;
@@ -704,7 +809,9 @@ fn fragment(
         let h = layer_scalar_sample(4, slot, uv_t, wdx / t, wdy / t, true);
         let wb4 = s2.r * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
         albedo += wb4 * mix(tex, params.flats[4].rgb, flat_mix);
-        rough += wb4 * params.roughs[4].x;
+        let rmap4 = layer_rough_sample(4, slot, uv_t, wdx / t, wdy / t);
+        let rinv4 = select(rmap4, 1.0 - rmap4, params.roughs[4].z > 0.5);
+        rough += wb4 * mix(params.roughs[4].x, rinv4, params.roughs[4].y);
         ao += wb4 * layer_scalar_sample(4, slot, uv_t, wdx / t, wdy / t, false);
         wsum += wb4;
         let k = 1.0 - flat_mix;
@@ -727,7 +834,9 @@ fn fragment(
         let h = layer_scalar_sample(5, slot, uv_t, wdx / t, wdy / t, true);
         let wb5 = s2.g * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
         albedo += wb5 * mix(tex, params.flats[5].rgb, flat_mix);
-        rough += wb5 * params.roughs[5].x;
+        let rmap5 = layer_rough_sample(5, slot, uv_t, wdx / t, wdy / t);
+        let rinv5 = select(rmap5, 1.0 - rmap5, params.roughs[5].z > 0.5);
+        rough += wb5 * mix(params.roughs[5].x, rinv5, params.roughs[5].y);
         ao += wb5 * layer_scalar_sample(5, slot, uv_t, wdx / t, wdy / t, false);
         wsum += wb5;
         let k = 1.0 - flat_mix;
@@ -750,7 +859,9 @@ fn fragment(
         let h = layer_scalar_sample(6, slot, uv_t, wdx / t, wdy / t, true);
         let wb6 = s2.b * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
         albedo += wb6 * mix(tex, params.flats[6].rgb, flat_mix);
-        rough += wb6 * params.roughs[6].x;
+        let rmap6 = layer_rough_sample(6, slot, uv_t, wdx / t, wdy / t);
+        let rinv6 = select(rmap6, 1.0 - rmap6, params.roughs[6].z > 0.5);
+        rough += wb6 * mix(params.roughs[6].x, rinv6, params.roughs[6].y);
         ao += wb6 * layer_scalar_sample(6, slot, uv_t, wdx / t, wdy / t, false);
         wsum += wb6;
         let k = 1.0 - flat_mix;
@@ -773,7 +884,9 @@ fn fragment(
         let h = layer_scalar_sample(7, slot, uv_t, wdx / t, wdy / t, true);
         let wb7 = s2.a * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
         albedo += wb7 * mix(tex, params.flats[7].rgb, flat_mix);
-        rough += wb7 * params.roughs[7].x;
+        let rmap7 = layer_rough_sample(7, slot, uv_t, wdx / t, wdy / t);
+        let rinv7 = select(rmap7, 1.0 - rmap7, params.roughs[7].z > 0.5);
+        rough += wb7 * mix(params.roughs[7].x, rinv7, params.roughs[7].y);
         ao += wb7 * layer_scalar_sample(7, slot, uv_t, wdx / t, wdy / t, false);
         wsum += wb7;
         let k = 1.0 - flat_mix;

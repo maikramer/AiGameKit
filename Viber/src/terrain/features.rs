@@ -18,7 +18,9 @@ use bevy::math::Vec2;
 
 use super::brush::BrushGrid;
 use super::cliffs::CliffSpec;
+use super::cut::{CutSpec, carve_cut};
 use super::decal::GroundDecalSpec;
+use super::plateau::{PlateauSpec, carve_plateau};
 use super::roads::{RoadGuards, RoadNetworkSpec, RoadPath, RoadProfile, RoadSpec, carve_road};
 use super::sampler::ResolvedPad;
 use super::spec::TerrainPadSpec;
@@ -30,9 +32,18 @@ use super::water::{
 /// All declarative ground features of a world.
 #[derive(Debug, Clone, Default)]
 pub struct TerrainFeatures {
+    /// Mesas autorais (`<Plateau>`) — RAISE no heightfield + anel de parede
+    /// voxel (banda construída no bootstrap). Antes dos pads: um pad sobre
+    /// o planalto aplaina o topo por cima do raise.
+    pub plateaus: Vec<PlateauSpec>,
     pub pads: Vec<TerrainPadSpec>,
     pub lakes: Vec<LakeSpec>,
     pub rivers: Vec<RiverSpec>,
+    /// Trincheiras/cânions secos (`<Cut>`) — LOWER no heightfield + paredes
+    /// voxel. Depois da água (a vala pode abrir num vale) e ANTES das
+    /// estradas: o survey lê o piso da vala e pina a estrada lá dentro
+    /// (o "road cut").
+    pub cuts: Vec<CutSpec>,
     /// Cliff walls (`<Cliff>`) — the carve that wants the vertical step.
     pub cliffs: Vec<CliffSpec>,
     /// Tunnels (`<Cave>`) — NOT a carve. These never touch the heightfield;
@@ -60,9 +71,11 @@ pub struct TerrainFeatures {
 impl TerrainFeatures {
     /// No features at all — the runtime can skip the feature pass entirely.
     pub fn is_empty(&self) -> bool {
-        self.pads.is_empty()
+        self.plateaus.is_empty()
+            && self.pads.is_empty()
             && self.lakes.is_empty()
             && self.rivers.is_empty()
+            && self.cuts.is_empty()
             && self.cliffs.is_empty()
             && self.caves.is_empty()
             && self.arches.is_empty()
@@ -110,6 +123,12 @@ pub struct FeatureResult {
 /// Applies all features in the canonical order and returns the registries.
 pub fn apply_features(grid: &mut BrushGrid, features: &TerrainFeatures) -> FeatureResult {
     let mut result = FeatureResult::default();
+
+    // 0. Plateaus — RAISE the mesa volume first, so a pad authored on top
+    //    flattens the plateau surface and water still cuts lower-only.
+    for (i, plateau) in features.plateaus.iter().enumerate() {
+        carve_plateau(grid, plateau, i);
+    }
 
     // 1. Pads — flatten (cut and fill), resolve auto heights in order.
     for (i, pad) in features.pads.iter().enumerate() {
@@ -171,6 +190,16 @@ pub fn apply_features(grid: &mut BrushGrid, features: &TerrainFeatures) -> Featu
     // cliff no longer sees it. No shipped world does that — `simple-rpg` keeps
     // its cliffs a documented ~30 m clear of every arterial — but a world that
     // tried would drive its ribbon under the rock.
+
+    // 2.6 Cuts — dry trenches. Lower-only (a vala morre na encosta em vez
+    //     de aterrar o vale), ANTES das estradas: o survey lê o piso da
+    //     vala — a estrada entra nela e as paredes (bandas voxel do
+    //     bootstrap) ficam-lhe dos lados. As PAREDES são sólidos voxel:
+    //     como os cliffs, o survey não as vê (ver a nota 2.5) — mantenha
+    //     estradas cruzadas afastadas das margens; o audit avisa.
+    for (i, cut) in features.cuts.iter().enumerate() {
+        carve_cut(grid, cut, i);
+    }
 
     // 3. Roads — expand networks, plain roads first, bridges last.
     let mut specs: Vec<RoadSpec> = features.roads.clone();
@@ -244,6 +273,8 @@ mod tests {
             arches: Vec::new(),
             bridges: Vec::new(),
             rock_fields: Vec::new(),
+            plateaus: Vec::new(),
+            cuts: Vec::new(),
             cliffs: Vec::new(),
             pads: vec![TerrainPadSpec {
                 at: Vec2::ZERO,

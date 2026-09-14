@@ -31,7 +31,9 @@ Contrato XML completo: `AGENTS.md` da raiz.
 | `sampler.rs` | `HeightSampler` + guard `apply_pads` (só para testes) |
 | `heightmap.rs` | PNG 8/16-bit ou `.ahgt` (header JSON + grid u16 deflate); sem ficheiro → procedural determinístico via `seed` |
 | `brush.rs` | brush engine: modos blend/lower/raise, **journal por owner** (`pad:0`, `road:3`…) com revert para re-carve idempotente, `min_effective` (larguras < 1.5 texéis promovidas). O produção é deliberadamente **unguarded** |
-| `features.rs` | **ordem de carve:** Pads → Lakes → Rivers → Roads (arteriais primeiro, **pontes por último**); estradas saltam núcleos de pads e zonas de água. Cliffs não carvam — são sólidos voxel |
+| `features.rs` | **ordem de carve:** Plateaus (raise) → Pads → Lakes → Rivers → Cuts → Roads (arteriais primeiro, **pontes por último**); estradas saltam núcleos de pads e zonas de água. Cliffs não carvam — são sólidos voxel |
+| `cut.rs` | `<Cut>` — trincheira/cânion SECO: piso LOWER-only no heightfield (Chaikin ×2 + resample, média móvel no perfil, sem RNG) + duas bandas de parede voxel ([`cut_wall_bands`]) lidas contra a grid carvada. O "road cut": a estrada autorada depois é surveyada dentro da vala |
+| `plateau.rs` | `<Plateau>` — mesa autoral: RAISE do topo (SDF rounded-rect, `carve_plateau`) + anel de parede voxel FECHADO ([`plateau_wall_band`], perímetro analítico 4 arestas + 4 arcos). `wall_profile_from_name` é o vocabulário de muro partilhado (Cliff menos `arch`). Antes dos pads: um pad sobre a mesa aplaina o topo |
 | `cliffs.rs` | `CliffSpec` (parser) + **`CliffMask`** — scan de declive → abertura morfológica → BFS → filtro regional (área/queda/extent) → camadas core/dilatada + wall space (canal R). Consumidores: splat (pedra no core), relva/spawners (exclusão), shader (gate triplanar). `sharpen_terrain` (opt-in): terraceia rampas > `sharpen-angle` do campo FINAL dentro do core da máscara |
 | `water.rs` | `LakeSpec`/`RiverSpec` + `WaterBody` (queries `contains`/`is_near`/`surface_y_at`/`distance_to_waterline`); lake = contorno orgânico lower-only; river = Chaikin + prefixo-mínimo (água nunca sobe). **Quedas**: o scan contíguo produz `CascadeInfo { lip, base, drop, waterfall, wall, top_y, bot_y }` — queda ≥ `waterfall_min_drop` é CACHOEIRA (cortina ×`WATERFALL_CURTAIN`, caldeirão ∝ queda); `river_cliff_crossings` cruza rio×cliff em specs (2D) e `carve_river_with_falls` conduz o perfil pelo cruzamento (hold a montante + queda garantida) |
 | `splat.rs` | **blend de solo** (`layers="…"`): gerador puro do splat map por chunk (top-4 slots), leito forçado a `pebbles`. Aliases → `/assets/textures/<alias>/albedo.ktx2` |
@@ -40,6 +42,7 @@ Contrato XML completo: `AGENTS.md` da raiz.
 | `roads.rs` | `RoadSpec`/`RoadNetworkSpec` + `RoadPath`; profiles, flatten com teto de grade, ribbons + discos de junção |
 | `decal.rs` | `GroundDecalSpec` + `ground_decal_mesh` — manchas de chão drapejadas, só visuais |
 | `voxel/` | **a forma 3D inteira.** `field.rs` (`VoxelField` SDF: `surface_top`/`surface_below`/`column`/`region_state`), `mods.rs` (trait `VoxelMod` + primitivas `BoxMod`/`CapsuleMod`/`OrientedBoxMod`/`RoundConeMod`/`EllipsoidMod`/`ArchMod`, mais os helpers partilhados `yaw_local`/`box_distance`/`yawed_bounds`), `index.rs` (`ModIndex` bucket XZ O(1)), `cliff.rs` (`<Cliff>` 3D — `CliffBand` + `profile_offset` negativo = undercut), `cave.rs` (`<Cave>` cápsulas/cones subtractivos, `<Chamber>`, `<Shaft>`, perfil de raio por comprimento de arco), `arch.rs` (`<Arch>` união com vão; `at` ou `path`, `spans`, `profile=portal|natural`), `bridge.rs` (`<Bridge>` — travessia 100% aditiva: tabuleiro, pilares, intradorso e tímpano, ou span natural em cones), `scatter.rs` (`<RockFeatures>` — semeia arcos/grutas/pontes e resolve em specs normais; guards ao sítio E ao path inteiro: água/estradas/CliffMask/pads/discos de features já no mundo, caves só no pé de encostas com `min-rise`, contabilidade de rejeições em `ScatterStats`), `riverbank.rs` (margens gorge/overhang + nascente + `wall_waterfalls` — anota quedas rio×cliff como `wall` e emite a fenda de spill no brow), `transvoxel_mesh.rs` (marching cubes com células de transição — costura de LOD sem saias), `spawn.rs` (`lod_shape`/`column_boxes`/`build_box_mesh`/spawn de colunas) |
+| `delta.rs` | **Terreno vivo (Fase 3):** `DeltaGrid` (recortes densos f32 sobre o lattice da grid, fusão ao tocar, `revision`), `EditedBase` (grid+recortes como um `HeightField`), `TerrainEdit` (lower/raise/flatten/crater com falloff; tetos de raio 96 m / profundidade 64 m; clamp a `[0, max-height]`) e `TerrainEditQueue` (cap `EDITS_PER_FRAME`=4/frame; `applied`/`rejected`) |
 | `paths.rs` | `chaikin_smooth` / `resample` |
 | `mesh.rs` | infraestrutura partilhada: `HeightField` (termo-base), `ChunkMeshData`, `TintParams`/`tint_vertex_color` (tint legado + canais R/A de parede no caminho layers) |
 | `plugin.rs` | `TerrainPlugin`: ladder de COLUNAS voxel — adopt → select com histerese → construção staged sob budget de CAIXAS (4/frame) → swap atómico → cull por `render-distance` → respawn no LOD cru |
@@ -99,6 +102,21 @@ Contrato XML completo: `AGENTS.md` da raiz.
   errado.
 - Todo o mutate passa pelo brush engine com journal — carve tem de ser
   **idempotente**.
+- **O terreno vivo NUNCA muta a grid:** as edições vivem no overlay
+  (`delta.rs`) e TUDO lê por `TerrainRuntime::base()`/`EditedBase` — o
+  mesher, o `VoxelField::density`, as queries e o leitor do Luau. Quem
+  acrescentar um consumidor de altura passa a VIEW editada, nunca
+  `&*runtime.grid` cru (senão vê o mundo como autorado). O rebuild das
+  colunas é por revisão (`chunk.built_edit_rev` + interseção com
+  `DeltaGrid::bounds()`), com a revisão a forçar o passe de LOD mesmo com a
+  câmara parada.
+- **Paredes de cut/plateau são o mesmo partido das margens gorge:** o
+  heightfield escreve o PISO/TOPO (o que roads/splat/spawners leem) e a
+  banda voxel fatia o sólido natural a prumo. As bandas constroem-se no
+  bootstrap contra a grid carvada (o piso já afiado por estradas é o que
+  conta) e entram na `CliffMask` via `add_authored_bands` — pedra no splat,
+  exclusão de relva/spawners, sem nada disto a parede é invisível para os
+  consumidores.
 - **Decals são só visuais** — `GroundDecal` nunca toca no heightfield.
 - **Camadas transparentes de chão têm ordem fixa:** `DECAL_LIFT` (0.04) <
   `RIBBON_LIFT` (0.06) < `JUNCTION_LIFT` (0.10).
@@ -122,6 +140,21 @@ Contrato XML completo: `AGENTS.md` da raiz.
   LOD2 16³ @4 m (chunk 64 m). Determinístico e global: vizinhos ao mesmo LOD
   derivam o MESMO shape — é isso que fecha costuras por coincidência de
   vértices.
+- **Refinamento perto de mods (`VIBER_VOXEL_REFINE=1`, OPT-IN):** coluna ao
+  LOD 0 cujo rect toca a bounding dos mods E com TODOS os vizinhos ao LOD 0
+  amostra a MEIA célula (0.5 m) — o "fix real" das folhas finas sub-voxel
+  (medido na qa-cliffs: triângulos VIRADOS caem; os degenerados de área
+  zero — invisíveis — crescem com a contagem e têm teto proporcional em
+  teste). A comparação de transições é em CÉLULA EFETIVA
+  (`effective_cell`): um refinado ponteia como um nível do ladder, e o teto
+  2:1 mantém-se por construção — refinar exige vizinhos a LOD 0, logo um
+  refinado nunca encosta a um LOD 1. A pureza é contrato: o estado
+  refinado dos vizinhos é avaliado NA VIZINHANÇA DELES sobre o mesmo
+  `LodField` ([`refined_neighbours`]), e a chave de staleness codifica
+  `lod | 0x80·refinado`. PORQUÊ OPT-IN: caixa refinada = 8× amostras,
+  60-590 ms MEDIDOS (superlinear — cache + candidates) = ~10 frames por
+  caixa no stream-in; sem amostragem só-superfície no mesher, fica para QA
+  visual e shots (o `cull_mode = None` é a rede default).
 - **`region_state` antes de amostrar** — céu/bedrock provados em O(1) pelo
   `range_over` da grid; sem isso uma coluna de 200 m de relevo custa ~1 M
   avaliações.
@@ -142,9 +175,10 @@ Contrato XML completo: `AGENTS.md` da raiz.
 - **Normais vêm do gradiente do campo** — contínuas através das fronteiras,
   sem estado partilhado entre builds.
 - **Flaps sub-voxel conhecidos:** folhas finas (lips de carve a centímetros)
-  produzem ~0,4% de triângulos degenerados num mundo carvado — teto honesto
-  em `test_carved_boxes_have_no_degenerate_triangles`; o fix real é
-  refinamento de voxel perto de features, não mesher novo.
+  produzem ~0,4% de triângulos degenerados num mundo carvado ao passo de
+  1 m — o REFINAMENTO perto de mods (acima) é o fix real e está ligado por
+  omissão; o `cull_mode = None` do material continua como rede (folhas
+  remanescentes com culling leem-se como buracos).
 
 ## Desvios conhecidos vs VibeGame (documentados, não afetam o simple-rpg)
 
@@ -162,4 +196,5 @@ cargo test --release --test chunk_build_bench -- --nocapture
 cargo run -- analyze worlds/terrain.xml    # mundo demo de terreno
 cargo run -- analyze worlds/qa-voxel.xml   # grutas, arcos, overhangs
 cargo run -- analyze worlds/qa-pontes.xml  # travessias, salas, viaduto, dispersão
+cargo run -- analyze worlds/qa-autoria.xml # cut/road-cut, plateau, lago autoral
 ```

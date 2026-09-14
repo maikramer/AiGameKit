@@ -106,6 +106,10 @@ pub struct VoxelBoxSpec {
     pub cells: usize,
     /// Aresta de uma célula em metros.
     pub voxel_size: f32,
+    /// Caixa REFINADA (célula a meio do passo do LOD, perto de mods) —
+    /// amostra 8× o volume; o orçamento de construção conta-a como uma
+    /// frame inteira.
+    pub refined: bool,
     /// Faces cujo vizinho está ao DOBRO da resolução desta caixa, em
     /// `[-X, +X, -Z, +Z]` — as células de transição do transvoxel.
     ///
@@ -119,21 +123,112 @@ pub struct VoxelBoxSpec {
 /// nascer): trata-se como "igual a mim", que não pede transição nenhuma.
 pub const NO_NEIGHBOUR: u8 = u8::MAX;
 
+/// Gate do REFINAMENTO de voxel perto de mods — o "fix real" das folhas
+/// finas sub-voxel (lips de carve a centímetros produzem ~0,4% de
+/// triângulos degenerados ao passo de 1 m; a meio célula a superfície
+/// segue a folha e os flaps virados caem). **OPT-IN**
+/// (`VIBER_VOXEL_REFINE=1`): uma caixa refinada (64³) amostra 8× o volume
+/// e mede 60-590 ms (pior caso: a coluna da ponte da qa-pontes, cache
+/// superlinear) — default-ON seriam ~10 frames perdidos por caixa no
+/// stream-in. Enquanto o mesher não amostro SÓ a superfície, fica para QA
+/// visual e shots.
+fn refine_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var("VIBER_VOXEL_REFINE").as_deref() == Ok("1"))
+}
+
+/// A coluna `coords` refina? Gate ON, ao LOD 0, TODOS os vizinhos também ao
+/// LOD 0 (um refinado ao lado de um LOD 1 dava 4:1 — a ponte de transição
+/// do transvoxel só sabe 2:1) e o retângulo do chunk toca a bounding XZ dos
+/// mods (query aos buckets do [`ModIndex`]; mundo sem mods devolve vazio
+/// logo). Precisa do [`LodField`] porque a condição dos VIZINHOS é avaliada
+/// na vizinhança DELES — ver [`refined_neighbours`].
+pub(crate) fn column_refines(
+    lod_field: &super::super::plugin::LodField,
+    field: &VoxelField,
+    spec: &TerrainSpec,
+    chunk_edge: f32,
+    lod: u8,
+    coords: UVec2,
+) -> bool {
+    if !refine_enabled() || lod != 0 {
+        return false;
+    }
+    let n = lod_field.neighbours(coords);
+    if !n.iter().all(|&l| l == 0 || l == NO_NEIGHBOUR) {
+        return false;
+    }
+    let mods_y = field.index().bounds();
+    if mods_y.min.x > mods_y.max.x {
+        return false; // mundo sem mods — nada a refinar
+    }
+    let half = spec.world_size * 0.5;
+    let x0 = -half + coords.x as f32 * chunk_edge;
+    let z0 = -half + coords.y as f32 * chunk_edge;
+    let rect = Bounds3::from_corners(
+        Vec3::new(x0, mods_y.min.y, z0),
+        Vec3::new(x0 + chunk_edge, mods_y.max.y, z0 + chunk_edge),
+    );
+    !field.index().candidates_in(&rect).is_empty()
+}
+
+/// Estado refinado dos 4 vizinhos de `coords`, avaliado na vizinhança DELES
+/// (a pureza da função exige que os dois lados de uma costura vejam o mesmo
+/// campo de LOD — é o mesmo contrato do clamp 2:1).
+pub(crate) fn refined_neighbours(
+    lod_field: &super::super::plugin::LodField,
+    field: &VoxelField,
+    spec: &TerrainSpec,
+    chunk_edge: f32,
+    coords: UVec2,
+) -> [bool; 4] {
+    std::array::from_fn(|i| {
+        let (dx, dz) = side_delta(i);
+        let nc = UVec2::new(
+            (coords.x as i64 + dx).max(0) as u32,
+            (coords.y as i64 + dz).max(0) as u32,
+        );
+        column_refines(lod_field, field, spec, chunk_edge, lod_field.get(nc).unwrap_or(NO_NEIGHBOUR), nc)
+    })
+}
+
+fn side_delta(i: usize) -> (i64, i64) {
+    match i {
+        0 => (-1, 0),
+        1 => (1, 0),
+        2 => (0, -1),
+        _ => (0, 1),
+    }
+}
+
+/// Célula EFETIVA da coluna — o refinamento conta como meia célula (um
+/// "meio-nível" do ladder): é esta grandeza que as transições comparam, e o
+/// teto de 2:1 mantém-se por construção (refinar exige vizinhos a LOD 0).
+fn effective_cell(lod0_cell: f32, lod: u8, refined: bool) -> f32 {
+    lod0_cell * (1u32 << lod.min(8)) as f32 * if refined { 0.5 } else { 1.0 }
+}
+
 /// As caixas que renderizam UMA coluna ao `lod` dado.
 ///
 /// A pilha vertical é o envelope do chunk: o intervalo de alturas da grelha
 /// (`range_over`, O(1)) mais o alcance dos mods — o resto é céu ou bedrock
 /// provados (`region_state`) e nunca chega a ser amostrado.
+///
+/// `neighbour_refined` é o estado de REFINAMENTO dos 4 vizinhos
+/// ([`refined_neighbours`], avaliado no mesmo `LodField` que decidiu os
+/// LODs) — as transições comparam a CÉLULA EFETIVA, e um LOD0 refinado
+/// (meia célula) ao lado de um LOD0 normal ponteia como um nível do ladder.
 #[allow(clippy::too_many_arguments)]
 pub fn column_boxes(
     spec: &TerrainSpec,
-    grid: &BrushGrid,
+    base: &dyn HeightField,
     field: &VoxelField,
     chunk_edge: f32,
     lod0_cell: f32,
     lod: u8,
     coords: UVec2,
     neighbour_lods: [u8; 4],
+    neighbour_refined: [bool; 4],
 ) -> Vec<VoxelBoxSpec> {
     let shape = lod_shape(lod0_cell, chunk_edge, lod);
     let extent = chunk_edge / shape.per_edge as f32;
@@ -142,7 +237,7 @@ pub fn column_boxes(
     let x0 = -half + coords.x as f32 * chunk_edge;
     let z0 = -half + coords.y as f32 * chunk_edge;
     let mods_y = field.index().bounds();
-    let (gmin, gmax) = grid
+    let (gmin, gmax) = base
         .range_over(x0, z0, x0 + chunk_edge, z0 + chunk_edge)
         .unwrap_or((0.0, spec.max_height));
     let y_lo = gmin.min(mods_y.min.y) - 1.0;
@@ -150,15 +245,45 @@ pub fn column_boxes(
     let iy0 = (y_lo / extent).floor() as i32;
     let iy1 = (y_hi / extent).ceil() as i32;
 
-    // Uma face pede transição quando o vizinho desse lado é mais FINO. O
-    // clamp 2:1 do `plugin.rs` garante que a diferença nunca passa de um
-    // nível, que é a única ponte que o transvoxel sabe construir.
+    // Uma face pede transição quando o vizinho desse lado é mais FINO — em
+    // CÉLULA EFETIVA: o refinamento conta como meia célula (um
+    // "meio-nível"), e o teto de 2:1 mantém-se por construção (refinar
+    // exige vizinhos a LOD 0, logo um refinado nunca encosta a um LOD 1).
+    let self_refines = lod == 0
+        && refine_enabled()
+        && neighbour_lods.iter().all(|&l| l == 0 || l == NO_NEIGHBOUR)
+        && {
+            let mods_y = field.index().bounds();
+            mods_y.min.x <= mods_y.max.x && {
+                let rect = Bounds3::from_corners(
+                    Vec3::new(x0, mods_y.min.y, z0),
+                    Vec3::new(x0 + chunk_edge, mods_y.max.y, z0 + chunk_edge),
+                );
+                !field.index().candidates_in(&rect).is_empty()
+            }
+        };
+    let my_cell = effective_cell(lod0_cell, lod, self_refines);
     let finer = [
-        neighbour_lods[0] != NO_NEIGHBOUR && neighbour_lods[0] < lod,
-        neighbour_lods[1] != NO_NEIGHBOUR && neighbour_lods[1] < lod,
-        neighbour_lods[2] != NO_NEIGHBOUR && neighbour_lods[2] < lod,
-        neighbour_lods[3] != NO_NEIGHBOUR && neighbour_lods[3] < lod,
+        neighbour_lods[0] != NO_NEIGHBOUR
+            && effective_cell(lod0_cell, neighbour_lods[0], neighbour_refined[0]) < my_cell,
+        neighbour_lods[1] != NO_NEIGHBOUR
+            && effective_cell(lod0_cell, neighbour_lods[1], neighbour_refined[1]) < my_cell,
+        neighbour_lods[2] != NO_NEIGHBOUR
+            && effective_cell(lod0_cell, neighbour_lods[2], neighbour_refined[2]) < my_cell,
+        neighbour_lods[3] != NO_NEIGHBOUR
+            && effective_cell(lod0_cell, neighbour_lods[3], neighbour_refined[3]) < my_cell,
     ];
+
+    let cells = if self_refines {
+        shape.cells * 2
+    } else {
+        shape.cells
+    };
+    let cell_size = if self_refines {
+        voxel_size * 0.5
+    } else {
+        voxel_size
+    };
 
     let mut boxes = Vec::new();
     for iz in 0..shape.per_edge {
@@ -170,7 +295,7 @@ pub fn column_boxes(
                     z0 + iz as f32 * extent,
                 );
                 let bounds = Bounds3::from_corners(origin, origin + Vec3::splat(extent));
-                if field.region_state(grid, &bounds).is_some() {
+                if field.region_state(base, &bounds).is_some() {
                     continue;
                 }
                 boxes.push(VoxelBoxSpec {
@@ -181,8 +306,9 @@ pub fn column_boxes(
                     ),
                     origin,
                     extent,
-                    cells: shape.cells,
-                    voxel_size,
+                    cells,
+                    voxel_size: cell_size,
+                    refined: self_refines,
                     transitions: [
                         ix == 0 && finer[0],
                         ix == shape.per_edge - 1 && finer[1],
@@ -199,7 +325,7 @@ pub fn column_boxes(
 /// Mesa UMA caixa da coluna (SDF → transvoxel → buffers).
 pub fn build_box_mesh(
     spec: &TerrainSpec,
-    grid: &BrushGrid,
+    base: &dyn HeightField,
     field: &VoxelField,
     b: &VoxelBoxSpec,
 ) -> Option<super::super::mesh::ChunkMeshData> {
@@ -213,7 +339,7 @@ pub fn build_box_mesh(
         uses_layer_material: !spec.layers.is_empty(),
         transitions: b.transitions,
     };
-    let density = |p: Vec3| field.density(grid, p);
+    let density = |p: Vec3| field.density(base, p);
     build_voxel_mesh(&density, &params)
 }
 
@@ -278,10 +404,11 @@ pub(crate) fn spawn_column(
     lod: u8,
     material: &ChunkMaterialHandle,
     boxes: &[VoxelBoxSpec],
-    grid: &BrushGrid,
+    base: &dyn HeightField,
     field: &VoxelField,
     spec: &TerrainSpec,
     neighbour_lods: [u8; 4],
+    edit_rev: u64,
     collision_anchor: Option<Vec2>,
 ) -> (Entity, usize) {
     let column = commands
@@ -295,13 +422,14 @@ pub(crate) fn spawn_column(
                 lod,
                 built_lod: lod,
                 built_neighbours: neighbour_lods,
+                built_edit_rev: edit_rev,
             },
         ))
         .id();
     let mut meshed = 0;
     let mut bake = crate::physics::ColumnColliderBake::new();
     for b in boxes {
-        if let Some(data) = build_box_mesh(spec, grid, field, b) {
+        if let Some(data) = build_box_mesh(spec, base, field, b) {
             bake.add_mesh_data(b.origin, &data);
             spawn_box_entity(commands, meshes, column, b, data, material, true);
             meshed += 1;
@@ -405,7 +533,14 @@ pub fn spawn_voxel_columns(
                 continue;
             };
             let neighbours = lod_field.neighbours(coords);
-            let boxes = column_boxes(spec, grid, field, edge, lod0_cell, lod, coords, neighbours);
+            let refined = refined_neighbours(&lod_field, field, spec, edge, coords);
+            let boxes =
+                column_boxes(spec, grid, field, edge, lod0_cell, lod, coords, neighbours, refined);
+            // Mesma codificação do plugin (`lod | 0x80·refinado`) — o passe
+            // de LOD compara contra ISTO; guardar o array cru fazia toda
+            // coluna refinada reconstruir uma vez à toa no primeiro frame.
+            let nkey: [u8; 4] =
+                std::array::from_fn(|i| neighbours[i] | ((refined[i] as u8) << 7));
             stats.chunks += 1;
             let material = layer_map
                 .and_then(|m| m.get(cx, cz).cloned())
@@ -422,7 +557,8 @@ pub fn spawn_voxel_columns(
                 grid,
                 field,
                 spec,
-                neighbours,
+                nkey,
+                0, // bootstrap: a revisão de edições ainda é 0
                 camera_xz,
             );
             stats.meshed += built;
@@ -475,6 +611,116 @@ mod tests {
             ModOp::Union,
         ));
         VoxelField::new(vec![shelf], world_size, 64.0)
+    }
+
+    /// Gate de refinamento: colunas sobre mods, ao LOD 0 com vizinhos a
+    /// LOD 0, dobram as células; longe dos mods ou ao LOD 1, não.
+    #[test]
+    fn test_refinement_halves_the_cell_only_near_mods() {
+        if std::env::var("VIBER_VOXEL_REFINE").as_deref() != Ok("1") {
+            return; // gate é opt-in: sem a env, nada a provar aqui
+        }
+        let world_size = 256.0_f32;
+        let grid = flat_grid(world_size, 10.0, 100.0);
+        let spec = TerrainSpec {
+            world_size,
+            ..TerrainSpec::default()
+        };
+        let field = shelf_field(world_size); // mod em [-16..16]² → chunk (2,2)
+        let edge = 64.0_f32;
+        let coords = UVec2::new(2, 2);
+        let boxes = column_boxes(
+            &spec,
+            &grid,
+            &field,
+            edge,
+            1.0,
+            0,
+            coords,
+            [NO_NEIGHBOUR; 4],
+            [false; 4],
+        );
+        assert!(
+            boxes.iter().any(|b| b.refined && b.cells == 64 && b.voxel_size == 0.5),
+            "coluna sobre o mod refina a meio célula: {:?}",
+            boxes.first().map(|b| (b.cells, b.voxel_size, b.refined))
+        );
+        // Chunk SEM mods: o passo normal mantém-se.
+        let far = column_boxes(
+            &spec,
+            &grid,
+            &field,
+            edge,
+            1.0,
+            0,
+            UVec2::new(0, 0),
+            [NO_NEIGHBOUR; 4],
+            [false; 4],
+        );
+        assert!(
+            far.iter().all(|b| !b.refined && b.cells == 32),
+            "coluna longa dos mods não refina"
+        );
+        // Ao LOD 1: nunca refina (o teto 2:1 proíbe).
+        let coarse = column_boxes(
+            &spec,
+            &grid,
+            &field,
+            edge,
+            1.0,
+            1,
+            coords,
+            [NO_NEIGHBOUR; 4],
+            [false; 4],
+        );
+        assert!(coarse.iter().all(|b| !b.refined), "LOD 1 não refina");
+        let _ = coords; // (o comentário acima explica a escolha)
+    }
+
+    /// Um vizinho REFINADO é mais fino em célula efetiva: a coluna
+    /// normal (grosseira) constrói a ponte — e só na caixa da face.
+    #[test]
+    fn test_unrefined_column_bridges_to_a_refined_neighbour() {
+        // Campo SEM mods na coluna sob teste (a coluna refinada é a
+        // vizinha — o caso real: a borda do blob de mods).
+        let grid = flat_grid(256.0, 10.0, 100.0);
+        let spec = TerrainSpec::default();
+        let field: VoxelField = VoxelField::new(Vec::new(), 256.0, 64.0);
+        let boxes = column_boxes(
+            &spec,
+            &grid,
+            &field,
+            64.0,
+            1.0,
+            0,
+            UVec2::new(1, 1),
+            [0, 0, 0, 0],
+            [true, false, false, false],
+        );
+        assert!(!boxes.is_empty());
+        for b in &boxes {
+            let lx = ((b.origin.x - (-128.0 + 64.0)) / b.extent).round() as i32;
+            if lx == 0 {
+                assert!(b.transitions[0], "face −X ponteia o vizinho refinado: {b:?}");
+            } else {
+                assert!(!b.transitions[0], "fiada interior não ponteia: {b:?}");
+            }
+        }
+        // Sem refinamento do vizinho: igual LOD, nenhuma ponte.
+        let plain = column_boxes(
+            &spec,
+            &grid,
+            &field,
+            64.0,
+            1.0,
+            0,
+            UVec2::new(1, 1),
+            [0, 0, 0, 0],
+            [false; 4],
+        );
+        for b in &plain {
+            assert!(!b.transitions[0]);
+        }
     }
 
     #[test]
@@ -544,6 +790,7 @@ mod tests {
                 0,
                 coords,
                 [NO_NEIGHBOUR; 4],
+                [false; 4],
             );
             assert!(!boxes.is_empty(), "world {world_size}: nothing planned");
 
@@ -582,6 +829,7 @@ mod tests {
             0,
             UVec2::new(1, 1),
             [NO_NEIGHBOUR; 4],
+            [false; 4],
         );
         assert!(!boxes.is_empty(), "flat ground must still be meshed");
         let mut meshed = 0;
@@ -629,6 +877,7 @@ mod tests {
             0,
             UVec2::new(1, 1),
             [NO_NEIGHBOUR; 4],
+            [false; 4],
         );
         assert!(!boxes.is_empty(), "the wall column must plan boxes");
         // Sem a prova seriam 2×2×(200/32) ≈ 26 caixas por coluna.
@@ -665,6 +914,7 @@ mod tests {
             0,
             UVec2::new(1, 1),
             [NO_NEIGHBOUR; 4],
+            [false; 4],
         );
         let mut downward = 0usize;
         for b in &boxes {
@@ -695,6 +945,7 @@ mod tests {
                 1,
                 UVec2::new(1, 1),
                 neighbours,
+                [false; 4],
             );
             assert!(!boxes.is_empty());
             for b in &boxes {
@@ -720,6 +971,7 @@ mod tests {
             1,
             UVec2::new(1, 1),
             [0, 1, 1, 1],
+            [false; 4],
         );
         assert!(!boxes.is_empty());
         for b in &boxes {
@@ -737,6 +989,7 @@ mod tests {
             0,
             UVec2::new(1, 1),
             [0, 0, 0, 0],
+            [false; 4],
         );
         let half = 128.0_f32;
         let x0 = -half + 64.0;

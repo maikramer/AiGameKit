@@ -591,6 +591,111 @@ fn test_the_free_standing_arch_gives_a_walker_two_spans() {
     );
 }
 
+/// O refinamento perto de mods é o "fix real" das folhas finas: a mesma
+/// caixa sobre uma parede de cliff, meshada a célula inteira (1 m) e a MEIA
+/// célula (0.5 m), tem de dar menos (ou igual) triângulos virados/degenerados
+/// — a superfície segue a folha em vez de os dois cruzamentos colapsarem
+/// numa célula. Sem regressão: nunca pode ser PIORE.
+#[test]
+fn test_refined_cells_do_not_increase_flipped_triangles() {
+    let (grid, field, spec) = carve("qa-cliffs.xml");
+    let extent = VOXEL_CHUNK_CELLS as f32;
+
+    // Um box sobre a banda de cliff do mundo QA (as bandas vivem nas
+    // encostas; o campo tem mods em todo o lado onde há parede).
+    let flipped_degenerate = |cells: usize| -> (usize, usize) {
+        let voxel_size = extent / cells as f32;
+        let mut flipped = 0usize;
+        let mut degenerate = 0usize;
+        let xs: Vec<f32> = (-2i32..3).map(|i| i as f32 * extent).collect();
+        for z0 in &xs {
+            for x0 in &xs {
+                let origin = Vec3::new(*x0, extent, *z0);
+                let params = VoxelChunkParams {
+                    origin,
+                    cells,
+                    voxel_size,
+                    texture_tile_size: spec.texture_tile_size,
+                    tint: spec.chunk_tint(),
+                    max_height: spec.max_height,
+                    uses_layer_material: true,
+                    transitions: [false; 4],
+                };
+                let Some(data) = build_voxel_mesh(&|p| field.density(&grid, p), &params) else {
+                    continue;
+                };
+                for tri in data.indices.chunks_exact(3) {
+                    let (a, b, c) = (
+                        Vec3::from(data.positions[tri[0] as usize]),
+                        Vec3::from(data.positions[tri[1] as usize]),
+                        Vec3::from(data.positions[tri[2] as usize]),
+                    );
+                    let gn = (b - a).cross(c - a);
+                    if gn.length_squared() < 1e-12 {
+                        degenerate += 1;
+                        continue;
+                    }
+                    let centroid = origin + (a + b + c) / 3.0;
+                    let g = Vec3::new(
+                        field.density(&grid, centroid + Vec3::X * 0.25)
+                            - field.density(&grid, centroid - Vec3::X * 0.25),
+                        field.density(&grid, centroid + Vec3::Y * 0.25)
+                            - field.density(&grid, centroid - Vec3::Y * 0.25),
+                        field.density(&grid, centroid + Vec3::Z * 0.25)
+                            - field.density(&grid, centroid - Vec3::Z * 0.25),
+                    );
+                    if gn.normalize().dot(g.normalize()) < 0.0 {
+                        flipped += 1;
+                    }
+                }
+            }
+        }
+        (flipped, degenerate)
+    };
+
+    let (coarse_flipped, coarse_degenerate) = flipped_degenerate(VOXEL_CHUNK_CELLS);
+    let (fine_flipped, fine_degenerate) = flipped_degenerate(VOXEL_CHUNK_CELLS * 2);
+    assert!(
+        fine_flipped <= coarse_flipped,
+        "refinamento não pode aumentar triângulos VIRADOS (o buraco visível): \
+         {fine_flipped} vs {coarse_flipped}"
+    );
+    // Degenerados de área ZERO não desenham píxeis (invisíveis) e crescem
+    // com a CONTAGEM de triângulos: mais células ⇒ mais ocasiões de vértice
+    // coincidente (medido na qa-cliffs: 7 a 1 m, 53 a 0.5 m — todos de área
+    // nula). O teto é proporcional ao detalhe, não proíbe-o.
+    assert!(
+        fine_degenerate <= coarse_degenerate * 8 + 128,
+        "degenerados explodiram para lá do crescimento de detalhe: \
+         {fine_degenerate} vs {coarse_degenerate}"
+    );
+    // Sanity: o mesh fino tem de ter pelo menos tanto detalhe.
+    let count = |cells: usize| -> usize {
+        let mut total = 0usize;
+        let voxel_size = extent / cells as f32;
+        let xs: Vec<f32> = (-2i32..3).map(|i| i as f32 * extent).collect();
+        for z0 in &xs {
+            for x0 in &xs {
+                let params = VoxelChunkParams {
+                    origin: Vec3::new(*x0, extent, *z0),
+                    cells,
+                    voxel_size,
+                    texture_tile_size: spec.texture_tile_size,
+                    tint: spec.chunk_tint(),
+                    max_height: spec.max_height,
+                    uses_layer_material: true,
+                    transitions: [false; 4],
+                };
+                if let Some(data) = build_voxel_mesh(&|p| field.density(&grid, p), &params) {
+                    total += data.indices.len() / 3;
+                }
+            }
+        }
+        total
+    };
+    assert!(count(VOXEL_CHUNK_CELLS * 2) >= count(VOXEL_CHUNK_CELLS), "refino = mais detalhe");
+}
+
 #[test]
 fn test_folded_cliff_walls_have_no_holes_and_bounded_flips() {
     // The visual gate that caught the wall-speckling: a cliff wall meshed

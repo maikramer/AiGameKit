@@ -340,6 +340,27 @@ impl Default for IslandSpec {
     }
 }
 
+/// Autoria da forma de um lago (`<Lake seed stretch axis lobes>`) — os
+/// quatro knobs opcionais sobre o contorno orgânico. Tudo `None` = o
+/// comportamento histórico (uniformes sorteados pelo hash da posição), pelo
+/// que mundos existentes ficam bit-exact.
+///
+/// * `seed` — troca a FONTE dos uniformes para o SplitMix64 da engine
+///   ([`crate::rng`]): mesma seed, mesma forma, em qualquer posição.
+/// * `stretch` — amplitude do alongamento (0 = redondo, clamp 0..0.45).
+/// * `axis` — direção do alongamento, em GRAUS (o hash sorteava-a).
+/// * `lobes` — multiplicador das amplitudes harmónicas (0 = sem baías,
+///   1 = o natural sorteado, até 1.6; acima reescala o contorno para
+///   continuar dentro do envelope [`CONTOUR_PEAK`], ver
+///   [`LakeShape::fit_to_contour_envelope`]).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct LakeAuthoring {
+    pub seed: Option<u64>,
+    pub stretch: Option<f32>,
+    pub axis_deg: Option<f32>,
+    pub lobes: Option<f32>,
+}
+
 /// Declarative lake (`<Lake at radius depth water-offset color opacity>`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LakeSpec {
@@ -365,6 +386,9 @@ pub struct LakeSpec {
     pub rocks_spec: super::shore_rocks::ShoreRocksSpec,
     /// Ilhas na bacia (filhos `<Island/>`).
     pub islands: Vec<IslandSpec>,
+    /// Autoria da forma (`seed`/`stretch`/`axis`/`lobes`) — ver
+    /// [`LakeAuthoring`].
+    pub shape: LakeAuthoring,
 }
 
 impl Default for LakeSpec {
@@ -385,6 +409,7 @@ impl Default for LakeSpec {
             rocks: false,
             rocks_spec: super::shore_rocks::ShoreRocksSpec::default(),
             islands: Vec::new(),
+            shape: LakeAuthoring::default(),
         }
     }
 }
@@ -722,22 +747,94 @@ impl LakeShape {
     /// antigas derivavam todas de UM `base` e as silhuetas repetiam-se
     /// entre lagos.
     pub(crate) fn new(at: Vec2) -> Self {
-        let s = at.x * 12.989_8_f32 + at.y * 78.233_f32;
-        let h = |salt: f32| {
+        Self::from_authoring(at, &LakeAuthoring::default())
+    }
+
+    /// Contorno com autoria opcional ([`LakeAuthoring`]). Sem autoria é o
+    /// caminho histórico do [`Self::new`] — bit-exact em mundos existentes.
+    /// Com `seed`, os uniformes saem do SplitMix64 da engine
+    /// ([`crate::rng::splitmix64`], topo 24 bits → f32 [0,1)): mesma seed,
+    /// mesma forma, em qualquer canto do mundo.
+    pub(crate) fn from_authoring(at: Vec2, a: &LakeAuthoring) -> Self {
+        let h = |salt: f32| -> f32 {
+            let s = at.x * 12.989_8_f32 + at.y * 78.233_f32;
             ((s * salt + salt * 91.7).sin() * 43_758.55_f32)
                 .fract()
                 .abs()
         };
-        let harmonics = std::array::from_fn(|i| {
+        let g = |salt: u64| -> f32 {
+            let mut state = a
+                .seed
+                .unwrap_or(0)
+                ^ salt.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            ((crate::rng::splitmix64(&mut state) >> 40) as f32) / 16_777_216.0
+        };
+        // Um uniforme por parâmetro, da fonte que a autoria escolher.
+        let pick = |fsalt: f32, usalt: u64| -> f32 {
+            if a.seed.is_some() {
+                g(usalt)
+            } else {
+                h(fsalt)
+            }
+        };
+        let mut harmonics = std::array::from_fn(|i| {
             let amp = LAKE_HARMONIC_MIN[i]
-                + (LAKE_HARMONIC_MAX[i] - LAKE_HARMONIC_MIN[i]) * h(2.3 + i as f32 * 1.37);
-            let phase = h(3.7 + i as f32 * 1.73) * std::f32::consts::TAU;
+                + (LAKE_HARMONIC_MAX[i] - LAKE_HARMONIC_MIN[i])
+                    * pick(2.3 + i as f32 * 1.37, 11 + i as u64);
+            let phase = pick(3.7 + i as f32 * 1.73, 21 + i as u64) * std::f32::consts::TAU;
             ([1.0_f32, 3.0, 5.0, 7.0][i], amp, phase)
         });
-        Self {
-            axis: h(0.77) * std::f32::consts::TAU,
-            stretch: LAKE_STRETCH_MIN + (LAKE_STRETCH_MAX - LAKE_STRETCH_MIN) * h(1.31),
+        let mut axis = pick(0.77, 1) * std::f32::consts::TAU;
+        let mut stretch = LAKE_STRETCH_MIN + (LAKE_STRETCH_MAX - LAKE_STRETCH_MIN) * pick(1.31, 2);
+        if let Some(deg) = a.axis_deg {
+            axis = deg.to_radians();
+        }
+        if let Some(s) = a.stretch {
+            stretch = s.clamp(0.0, 0.45);
+        }
+        if let Some(lobes) = a.lobes {
+            let m = lobes.clamp(0.0, 1.6);
+            for h_ in &mut harmonics {
+                h_.1 *= m;
+            }
+        }
+        let mut shape = Self {
+            axis,
+            stretch,
             harmonics,
+        };
+        shape.fit_to_contour_envelope();
+        shape
+    }
+
+    /// Reescala os desvios do círculo para o contorno caber no envelope
+    /// `[1 − CONTOUR_PEAK, CONTOUR_PEAK]` — o MESMO pior caso que o carve
+    /// (`carve_r`), o espelho (`lake_mirror_reach`) e o audit assumem.
+    /// Autorias agressivas (`stretch` alto × `lobes` alto) são comprimidas
+    /// proporcionalmente, nunca rejeitadas: o lago fica menos exuberante em
+    /// vez de partir os consumidores que contam com o envelope.
+    fn fit_to_contour_envelope(&mut self) {
+        let (mut max, mut min) = (f32::NEG_INFINITY, f32::INFINITY);
+        for i in 0..128 {
+            let r = self.radius_frac(i as f32 / 128.0 * std::f32::consts::TAU);
+            max = max.max(r);
+            min = min.min(r);
+        }
+        let mut scale = 1.0_f32;
+        if max > CONTOUR_PEAK {
+            scale = scale.min((CONTOUR_PEAK - 1.0) / (max - 1.0));
+        }
+        if min < 1.0 - CONTOUR_PEAK {
+            scale = scale.min((1.0 - CONTOUR_PEAK) / (min - 1.0));
+        }
+        if scale < 1.0 {
+            // 0.995 = margem para o máximo verdadeiro cair ENTRE as amostras
+            // da sondagem (subavaliação ≲0,1% do desvio).
+            let scale = scale * 0.995;
+            self.stretch *= scale;
+            for h in &mut self.harmonics {
+                h.1 *= scale;
+            }
         }
     }
 
@@ -776,7 +873,7 @@ impl Default for LakeShape {
 
 /// Lake mirror height: the 64-ray rim minimum minus `water_offset`.
 pub fn lake_water_height(grid: &BrushGrid, spec: &LakeSpec) -> f32 {
-    let shape = LakeShape::new(spec.at);
+    let shape = LakeShape::from_authoring(spec.at, &spec.shape);
     let mut rim = f32::INFINITY;
     for i in 0..RIM_RAYS {
         let theta = i as f32 / RIM_RAYS as f32 * std::f32::consts::TAU;
@@ -794,7 +891,7 @@ pub fn carve_lake(grid: &mut BrushGrid, spec: &LakeSpec, index: usize) -> Option
         return None;
     }
     let texel = grid.texel();
-    let shape = LakeShape::new(spec.at);
+    let shape = LakeShape::from_authoring(spec.at, &spec.shape);
     let water_y = lake_water_height(grid, spec);
     // Reach do espelho sobre o contorno — o MESMO fator que o mesh aplica
     // (ver `lake_water_mesh`); o registry guarda-o para que
@@ -1520,7 +1617,7 @@ fn box_smooth(values: &mut [f32], half: usize) {
 /// vértice): o shader usa-a como coluna analítica em vez do depth prepass —
 /// LOD-independente, sem faixas nas fronteiras de chunk.
 pub fn lake_water_mesh(spec: &LakeSpec, water_y: f32, grid: &BrushGrid) -> ChunkMeshData {
-    let shape = LakeShape::new(spec.at);
+    let shape = LakeShape::from_authoring(spec.at, &spec.shape);
     let y = water_y;
     let murk = spec.opacity;
     // O espelho acaba na linha de água REAL da taça (onde o perfil cruza a
@@ -1793,8 +1890,7 @@ mod tests {
             shape.contour(10.0, 0.3),
             shape.contour(10.0, 0.3),
             "same position -> same contour"
-        );
-        let mut min = f32::INFINITY;
+        );        let mut min = f32::INFINITY;
         let mut max = f32::NEG_INFINITY;
         for i in 0..64 {
             let r = shape.contour(10.0, i as f32 / 64.0 * std::f32::consts::TAU);
@@ -1858,6 +1954,91 @@ mod tests {
             along > across * 1.05,
             "lake reads elongated: along {along} vs across {across}"
         );
+    }
+
+    /// Autoria com `seed`: mesma seed → mesma forma EM QUALQUER posição
+    /// (o hash histórico era por posição), seeds diferentes → formas
+    /// diferentes. Sem autoria, o caminho antigo fica intacto.
+    #[test]
+    fn test_lake_authoring_seed_is_portable_and_varies() {
+        let a = LakeAuthoring {
+            seed: Some(4242),
+            ..Default::default()
+        };
+        let s1 = LakeShape::from_authoring(Vec2::new(-300.0, 900.0), &a);
+        let s2 = LakeShape::from_authoring(Vec2::new(1200.0, -50.0), &a);
+        for i in 0..16 {
+            let theta = i as f32 / 16.0 * std::f32::consts::TAU;
+            assert!(
+                (s1.radius_frac(theta) - s2.radius_frac(theta)).abs() < 1e-5,
+                "seed travels across the map (θ={theta})"
+            );
+        }
+        let other = LakeAuthoring {
+            seed: Some(4243),
+            ..Default::default()
+        };
+        let s3 = LakeShape::from_authoring(Vec2::new(-300.0, 900.0), &other);
+        assert_ne!(
+            (s1.axis, s1.harmonics),
+            (s3.axis, s3.harmonics),
+            "different seeds differ"
+        );
+        // Sem autoria: o contorno é o do hash de posição (bit-exact).
+        let natural = LakeShape::new(Vec2::new(3.0, -7.0));
+        let same = LakeShape::from_authoring(Vec2::new(3.0, -7.0), &LakeAuthoring::default());
+        assert_eq!(natural, same, "default authoring keeps the historic path");
+    }
+
+    /// `lobes` e `stretch` autorais: `lobes: 0` dá contorno de círculo
+    /// perfeito (com stretch 0), `axis` aponta o alongamento onde o autor
+    /// mandou — e qualquer combinação fica dentro do envelope
+    /// [`CONTOUR_PEAK`] (o teto que carve/espelho/audit assumem).
+    #[test]
+    fn test_lake_authoring_knobs_and_envelope() {
+        let round = LakeAuthoring {
+            seed: Some(9),
+            stretch: Some(0.0),
+            lobes: Some(0.0),
+            ..Default::default()
+        };
+        let s = LakeShape::from_authoring(Vec2::ZERO, &round);
+        for i in 0..64 {
+            let r = s.radius_frac(i as f32 / 64.0 * std::f32::consts::TAU);
+            assert!((r - 1.0).abs() < 1e-4, "lobes 0 + stretch 0 = circle ({r})");
+        }
+
+        let aimed = LakeAuthoring {
+            seed: Some(9),
+            stretch: Some(0.45),
+            axis_deg: Some(90.0),
+            ..Default::default()
+        };
+        let s = LakeShape::from_authoring(Vec2::ZERO, &aimed);
+        let along = s.radius_frac(s.axis);
+        let across = s.radius_frac(s.axis + std::f32::consts::FRAC_PI_2);
+        assert!(along > across + 0.2, "authored axis aims the stretch");
+
+        // Pior caso: stretch máximo × lobes máximo, varrido a 512 ângulos.
+        for seed in 1..8u64 {
+            let s = LakeShape::from_authoring(
+                Vec2::new(seed as f32 * 13.0, -(seed as f32) * 7.0),
+                &LakeAuthoring {
+                    seed: Some(seed),
+                    stretch: Some(0.45),
+                    lobes: Some(1.6),
+                    ..Default::default()
+                },
+            );
+            let (mn, mx) = (0..512).fold((f32::INFINITY, f32::NEG_INFINITY), |(mn, mx), i| {
+                let r = s.radius_frac(i as f32 / 512.0 * std::f32::consts::TAU);
+                (mn.min(r), mx.max(r))
+            });
+            assert!(
+                mx <= CONTOUR_PEAK + 1e-3 && mn >= 1.0 - CONTOUR_PEAK - 1e-3,
+                "envelope holds under wild authoring: {mn}..{mx}"
+            );
+        }
     }
 
     #[test]
