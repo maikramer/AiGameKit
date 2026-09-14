@@ -17,9 +17,11 @@ use bevy::math::Vec2;
 
 use crate::recipes::{EntityKind, EntitySpec, ParsedWorld};
 use crate::terrain::cliffs::CliffSpec;
-use crate::terrain::paths::{nearest_on_path, resample};
+use crate::terrain::cut::CutSpec;
+use crate::terrain::paths::{distance_to_path, nearest_on_path, resample};
+use crate::terrain::plateau::PlateauSpec;
 use crate::terrain::roads::{RoadProfile, RoadSpec};
-use crate::terrain::water::{CONTOUR_PEAK, LakeShape, LakeSpec, RiverSpec, river_cliff_crossings};
+use crate::terrain::water::{CONTOUR_PEAK, CARVE_MARGIN, LakeShape, LakeSpec, RiverSpec, river_cliff_crossings};
 
 /// Severidade de um achado: `Missing` vira ERRO com `analyze --strict`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,7 +139,7 @@ pub fn audit(
     // Conflitos entre features de terreno — ver [`FeatureIndex`].
     let mut features = FeatureIndex::default();
     collect_features(&world.entities, [0.0, 0.0], &mut features);
-    audit_quests(world, &mut report);
+    audit_quests(world, &config.quests_dir_on(world_dir), &mut report);
     report.issues.extend(audit_feature_conflicts(&features));
 
     // SFX carregados por path HARDCODED na engine — ver
@@ -222,11 +224,12 @@ pub fn audit(
 /// Duas ligações do `simple-rpg` só existem por NOME, e ambas falham em
 /// silêncio — a quest fica no diário e nunca pode ser aceita (`<DialogueNPC
 /// dialogue-id="X">` sem par) ou nunca pode ser cumprida (um marco de
-/// `visit` que não existe no mundo). O `analyze` era cego às duas: o JSON é
-/// embutido na engine (`src/quests.rs`) e o mundo é XML, e nada os cruzava.
+/// `visit` que não existe no mundo). O `analyze` era cego às duas: os JSONs
+/// vivem no disco do jogo (`game.quests_dir`) e o mundo é XML, e nada os
+/// cruzava.
 ///
 /// `notice_board` é a exceção documentada (a quest aceita-se pelo quadro).
-fn audit_quests(world: &ParsedWorld, report: &mut AuditReport) {
+fn audit_quests(world: &ParsedWorld, quests_dir: &Path, report: &mut AuditReport) {
     use std::collections::HashSet;
 
     fn walk(specs: &[EntitySpec], names: &mut HashSet<String>, givers: &mut HashSet<String>) {
@@ -245,15 +248,15 @@ fn audit_quests(world: &ParsedWorld, report: &mut AuditReport) {
     walk(&world.entities, &mut names, &mut givers);
 
     // Um mundo SEM nenhum `<DialogueNPC>` não tem sistema de quests para
-    // auditar: as definições vivem embutidas na engine (`src/quests.rs`) e
-    // são partilhadas por todos os mundos, portanto num QA mínimo ou num
-    // mundo antigo isto acusaria as 25 quests de não terem dador. O gate é o
-    // mundo ter optado pelo sistema (≥1 NPC de diálogo).
+    // auditar: as definições vivem no DISCO do jogo (`game.quests_dir`) e
+    // são próprias de cada mundo, portanto num QA mínimo ou num mundo antigo
+    // isto acusaria as quests de não terem dador. O gate é o mundo ter
+    // optado pelo sistema (≥1 NPC de diálogo).
     if givers.is_empty() && !names.contains("notice_board") {
         return;
     }
 
-    for def in crate::quests::load_quests() {
+    for def in crate::quests::load_quests_from_dir(quests_dir) {
         // O NPC da quest tem de existir E ter um `<DialogueNPC dialogue-id>`
         // igual ao id da quest — é assim que o [E] encontra a definição.
         if !givers.contains(&def.id) && def.npc != "notice_board" {
@@ -516,6 +519,8 @@ struct FeatureIndex {
     segments: Vec<(String, Vec<Vec2>, f32, RoadProfile)>,
     lakes: Vec<(String, LakeSpec)>,
     rivers: Vec<(String, RiverSpec)>,
+    cuts: Vec<(String, CutSpec)>,
+    plateaus: Vec<(String, PlateauSpec)>,
     cliffs: Vec<(String, CliffSpec)>,
 }
 
@@ -604,6 +609,28 @@ fn collect_features(entities: &[EntitySpec], offset: [f32; 2], out: &mut Feature
                 };
                 out.rivers.push((label, spec));
             }
+            EntityKind::Cut { spec } => {
+                let mut spec = spec.clone();
+                spec.path = shift(&spec.path);
+                let label = if named {
+                    label
+                } else if let Some(p) = spec.path.first() {
+                    format!("cut {}", where_at(*p))
+                } else {
+                    label
+                };
+                out.cuts.push((label, spec));
+            }
+            EntityKind::Plateau { spec } => {
+                let mut spec = spec.clone();
+                spec.at += Vec2::new(off[0], off[1]);
+                let label = if named {
+                    label
+                } else {
+                    format!("plateau {}", where_at(spec.at))
+                };
+                out.plateaus.push((label, spec));
+            }
             EntityKind::Cliff { spec } => {
                 let mut spec = spec.clone();
                 spec.path = shift(&spec.path);
@@ -656,6 +683,163 @@ fn audit_feature_conflicts(idx: &FeatureIndex) -> Vec<AuditIssue> {
             }
         }
     }
+    // Cut × água — a vala descendo à lâmina rasga as paredes voxel na água
+    // e lê-se como fenda; cruzar um cliff é parede contra parede.
+    for (clabel, cut) in &idx.cuts {
+        if cut.path.len() < 2 {
+            continue;
+        }
+        let samples = resample(&cut.path, ROAD_SAMPLE_STEP);
+        let half = cut.width * 0.5;
+        for (llabel, lake) in &idx.lakes {
+            let shape = LakeShape::from_authoring(lake.at, &lake.shape);
+            let mut depth_in = 0.0_f32;
+            let mut worst = cut.path[0];
+            for p in &samples {
+                let d = p.distance(lake.at);
+                let delta = *p - lake.at;
+                let theta = delta.y.atan2(delta.x);
+                let inside = shape.contour(lake.radius, theta) - (d - half);
+                if inside > depth_in {
+                    depth_in = inside;
+                    worst = *p;
+                }
+            }
+            if depth_in > 0.0 {
+                issues.push(AuditIssue {
+                    severity: Severity::Warning,
+                    message: format!(
+                        "cut `{clabel}` entra na lâmina do lago `{llabel}` perto de ({:.0}, \
+                         {:.0}) (até {depth_in:.1} m para dentro, contando a meia-largura do \
+                         piso) — as paredes da vala descem à água",
+                        worst.x, worst.y
+                    ),
+                });
+            }
+        }
+        for (rlabel, river) in &idx.rivers {
+            if river.path.len() < 2 {
+                continue;
+            }
+            let mut dmin = f32::INFINITY;
+            let mut worst = cut.path[0];
+            for p in &samples {
+                let d = distance_to_path(&river.path, *p);
+                if d < dmin {
+                    dmin = d;
+                    worst = *p;
+                }
+            }
+            if dmin < river.width * 0.5 + half {
+                issues.push(AuditIssue {
+                    severity: Severity::Warning,
+                    message: format!(
+                        "cut `{clabel}` cruza o rio `{rlabel}` perto de ({:.0}, {:.0}) — as \
+                         paredes da vala abrem na água; termina o cut antes da margem",
+                        worst.x, worst.y
+                    ),
+                });
+            }
+        }
+        for (wlabel, cliff) in &idx.cliffs {
+            if cliff.path.len() < 2 {
+                continue;
+            }
+            let mut dmin = f32::INFINITY;
+            let mut worst = cut.path[0];
+            for p in &samples {
+                let d = distance_to_path(&cliff.path, *p);
+                if d < dmin {
+                    dmin = d;
+                    worst = *p;
+                }
+            }
+            // Parede × parede: a banda do cliff + a banda do cut não podem
+            // partilhar o mesmo sítio (a segunda fatia o sólido da 1.ª).
+            if dmin < cliff.width * 0.5 + cut.width * 0.5 + 2.0 {
+                issues.push(AuditIssue {
+                    severity: Severity::Warning,
+                    message: format!(
+                        "cut `{clabel}` cruza a banda do cliff `{wlabel}` perto de ({:.0}, \
+                         {:.0}) — parede contra parede; afasta o traçado ou o cliff",
+                        worst.x, worst.y
+                    ),
+                });
+            }
+        }
+    }
+    // Plateau × água/estradas — o raise corre ANTES de pads/água, mas a
+    // parede é voxel: uma bacia a abrir dentro da pegada, ou uma estrada a
+    // entrar nela, esbarram no anel.
+    let plateau_sd = |plateau: &PlateauSpec, p: Vec2| -> f32 {
+        let half = plateau.size * 0.5;
+        let radius = plateau.corner_radius.clamp(0.0, half.x.min(half.y));
+        let inner = half - Vec2::splat(radius);
+        let d = (p - plateau.at).abs() - inner;
+        Vec2::max(d, Vec2::ZERO).length() + d.max_element().min(0.0) - radius
+    };
+    for (plabel, plateau) in &idx.plateaus {
+        for (llabel, lake) in &idx.lakes {
+            let shape = LakeShape::from_authoring(lake.at, &lake.shape);
+            let mut dmin = f32::INFINITY;
+            let mut worst = lake.at;
+            for i in 0..64 {
+                let theta = i as f32 / 64.0 * std::f32::consts::TAU;
+                let r = shape.contour(lake.radius, theta) * CARVE_MARGIN;
+                let p = lake.at + Vec2::new(theta.cos(), theta.sin()) * r;
+                let sd = plateau_sd(plateau, p);
+                if sd < dmin {
+                    dmin = sd;
+                    worst = p;
+                }
+            }
+            if dmin < 0.0 {
+                issues.push(AuditIssue {
+                    severity: Severity::Warning,
+                    message: format!(
+                        "lago `{llabel}` sobrepõe o plateau `{plabel}` perto de ({:.0}, {:.0}) \
+                         — a bacia desce ATRAVÉS da mesa; separe os dois",
+                        worst.x, worst.y
+                    ),
+                });
+            }
+        }
+        let mut road_paths: Vec<(String, &Vec<Vec2>)> = idx
+            .roads
+            .iter()
+            .map(|(label, spec)| (label.clone(), &spec.path))
+            .collect();
+        for (label, pts, _, _) in &idx.segments {
+            road_paths.push((label.clone(), pts));
+        }
+        let road_hit = road_paths
+            .iter()
+            .filter_map(|(label, pts)| {
+                let samples = resample(pts, ROAD_SAMPLE_STEP);
+                let mut worst = *pts.first()?;
+                let mut dmin = f32::INFINITY;
+                for p in &samples {
+                    let sd = plateau_sd(plateau, *p);
+                    if sd < dmin {
+                        dmin = sd;
+                        worst = *p;
+                    }
+                }
+                (dmin < 0.0).then_some((label.clone(), worst))
+            })
+            .next();
+        if let Some((rlabel, worst)) = road_hit {
+            issues.push(AuditIssue {
+                severity: Severity::Warning,
+                message: format!(
+                    "estrada `{rlabel}` entra na pegada do plateau `{plabel}` perto de ({:.0}, \
+                     {:.0}) — o anel de parede voxel bloqueia a subida; termina a estrada fora \
+                     ou sobe ao topo por um pad/ rampa autoral fora do anel",
+                    worst.x, worst.y
+                ),
+            });
+        }
+    }
     issues.sort_by(|a, b| a.message.cmp(&b.message));
     issues
 }
@@ -678,7 +862,7 @@ fn audit_road_line(
     let is_bridge = profile == RoadProfile::Bridge;
 
     for (name, lake) in &idx.lakes {
-        let shape = LakeShape::new(lake.at);
+        let shape = LakeShape::from_authoring(lake.at, &lake.shape);
         // Quanto o traçado (com a MEIA-LARGURA do ribbon) penetra o contorno
         // orgânico REAL: `r(θ) − (|p − at| − half)`. Testar só a linha
         // central deixava passar trilhos cuja BORDA ficava dentro de água —
@@ -826,6 +1010,39 @@ fn audit_road_line(
                 message: format!(
                     "estrada \"{label}\" cruza a banda do cliff \"{name}\" (folga \
                      {CLIFF_TIP_MARGIN:.0} m) — o ribbon atravessa a rocha sólida do campo voxel",
+                ),
+            });
+        }
+    }
+
+    // Estrada × cut — INTENÇÃO ambígua, por isso Info (o precedente do
+    // rio×cliff): correr DENTRO da vala é o road cut e é legítimo; cruzar
+    // TRANSVERSAL esbarra nas paredes voxel. O autor decide com o ponto na
+    // mão.
+    for (name, cut) in &idx.cuts {
+        if cut.path.len() < 2 {
+            continue;
+        }
+        let corridor = cut.width * 0.5 + width * 0.5;
+        let mut dmin = f32::INFINITY;
+        let mut worst = path[0];
+        for p in &samples {
+            if let Some(hit) = nearest_on_path(&cut.path, *p) {
+                let d = p.distance(hit.point);
+                if d < dmin {
+                    dmin = d;
+                    worst = *p;
+                }
+            }
+        }
+        if dmin < corridor {
+            issues.push(AuditIssue {
+                severity: Severity::Info,
+                message: format!(
+                    "estrada \"{label}\" cruza/acompanha o cut \"{name}\" perto de ({:.0}, \
+                     {:.0}) — se é o road cut (estrada dentro da vala), ok; cruzar transversal \
+                     bloqueia o ribbon nas paredes voxel",
+                    worst.x, worst.y,
                 ),
             });
         }

@@ -170,6 +170,7 @@ pub fn level_up_detector(
     mut heroes: Query<(Entity, &Xp, Option<&mut XpLevel>), (With<Player>, Changed<Xp>)>,
     mut events: MessageWriter<LevelUpEvent>,
     mut commands: Commands,
+    mut script_events: Option<ResMut<crate::luau::ScriptEventQueue>>,
 ) {
     for (entity, xp, level) in &mut heroes {
         match level {
@@ -184,6 +185,11 @@ pub fn level_up_detector(
                     events.write(LevelUpEvent {
                         new_level: lvl.level,
                     });
+                    if let Some(queue) = script_events.as_deref_mut() {
+                        queue.push(crate::luau::ScriptGameEvent::LevelUp {
+                            level: lvl.level,
+                        });
+                    }
                 }
             }
             None => {

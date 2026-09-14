@@ -49,6 +49,21 @@ pub struct ResolvedEmitter {
 
 /// Preset library — mirrors `VibeGame/src/plugins/particles/presets.ts` for
 /// the presets this world uses (values from the TS factories where present).
+/// Presets autorais do emissor — fonte única da cobertura de testes e da
+/// validação de `viber.burst` (preset desconhecido vira erro de script).
+pub const PRESET_NAMES: &[&str] = &[
+    "fire",
+    "smoke",
+    "fireflies",
+    "ground-dust",
+    "sparkle",
+    "leaves",
+    "snow",
+    "sand-dust",
+    "magic",
+    "core",
+];
+
 pub fn preset(name: &str) -> ResolvedEmitter {
     // Defaults roughly matching `fire`; each arm overrides what differs.
     let (rate, life, speed, size, color_a, color_b, gravity, radius, additive, end_size) =
@@ -1304,18 +1319,7 @@ mod tests {
 
     #[test]
     fn test_preset_library_covers_world_presets() {
-        for name in [
-            "fire",
-            "smoke",
-            "fireflies",
-            "ground-dust",
-            "sparkle",
-            "leaves",
-            "snow",
-            "sand-dust",
-            "magic",
-            "core",
-        ] {
+        for name in PRESET_NAMES {
             let p = preset(name);
             assert!(p.emission_rate > 0.0, "{name}");
             assert!(p.life.0 > 0.0 && p.life.1 >= p.life.0, "{name}");

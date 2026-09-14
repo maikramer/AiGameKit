@@ -153,6 +153,13 @@ impl CombatMusicState {
             Some("battle")
         }
     }
+
+    /// Apaga a música de combate JÁ (debug bridge: `combat_music("off")`) —
+    /// sem isto o A/B de BGM esperava os 8 s de `COMBAT_MUSIC_HOLD`.
+    pub fn clear(&mut self) {
+        self.until = 0.0;
+        self.boss = false;
+    }
 }
 
 /// Target linear volume of one layer given the active zone — SEM os buses

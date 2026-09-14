@@ -1,8 +1,10 @@
 //! Quests & diálogo (loop 3 do port simple-rpg) — o análogo nativo do
 //! plugin Quests do VibeGame:
 //!
-//! - **Dados**: as 21 quests dos JSONs (`examples/simple-rpg/quests/*.json`)
-//!   embutidas via `include_str!` — mesmo schema do jogo browser.
+//! - **Dados**: os JSONs de quests do MUNDO (`quests/*.json` ao lado do
+//!   `world.xml`, remapeável via `game.quests_dir` do config.yaml) — mesmo
+//!   schema do jogo browser. Conteúdo no disco: um mundo novo traz as suas
+//!   quests sem recompilar a engine.
 //! - **Estado**: `QuestLog` (NotTaken → Active → [Ready] → Done; bounties do
 //!   quadro (`npc == "notice_board"`) são repetíveis e voltam a NotTaken).
 //! - **Objetivos**: `kill` (hook do melee, por tipo de criatura), `visit`
@@ -18,6 +20,7 @@
 //! por enquanto vão para o toast.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use serde::Deserialize;
@@ -79,25 +82,45 @@ pub struct QuestRewards {
     pub items: Vec<String>,
 }
 
-const QUEST_JSONS: [&str; 6] = [
-    include_str!("../examples/simple-rpg/quests/city_quests.json"),
-    include_str!("../examples/simple-rpg/quests/dark_forest_quests.json"),
-    include_str!("../examples/simple-rpg/quests/desert_quests.json"),
-    include_str!("../examples/simple-rpg/quests/mountain_quests.json"),
-    include_str!("../examples/simple-rpg/quests/swamp_quests.json"),
-    // Cenários de fantasia (world/scenes/): romaria do alto, posto dos
-    // escavadores, campo da última batalha e covil dos contrabandistas.
-    include_str!("../examples/simple-rpg/quests/fantasy_quests.json"),
-];
-
-/// Parseia todos os JSONs embutidos (falha de parse = warn + skip; o resto
-/// do jogo continua).
-pub fn load_quests() -> Vec<QuestDef> {
+/// Lê todas as quests `*.json` de um diretório do mundo (o `run` passa
+/// `config.quests_dir_on(&world_dir)`; default `quests/` ao lado do
+/// `world.xml`). Ficheiros em ordem SORTED por nome — determinismo ("mesma
+/// seed, mesmo mundo" aplica-se à ordem dos defs, que o tracker respeita).
+/// Falha de parse/leitura de um ficheiro = warn + skip; diretório ausente =
+/// warn único + log vazio. Nunca pânico: um JSON que caia não derruba o jogo
+/// (o `analyze` e os testes são o gate da classe — ver
+/// `test_fantasy_scenario_quests_are_loaded`).
+pub fn load_quests_from_dir(dir: &Path) -> Vec<QuestDef> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        warn!(
+            target: "viber::quests",
+            "diretório de quests ausente: {} — mundo sem quests (crie `quests/*.json` ou aponte `game.quests_dir` no config.yaml)",
+            dir.display()
+        );
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.is_file() && path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json"))
+        })
+        .collect();
+    files.sort();
     let mut defs = Vec::new();
-    for (path, json) in QUEST_JSONS.iter().enumerate() {
-        match serde_json::from_str::<Vec<QuestDef>>(json) {
+    for path in files {
+        let parsed = std::fs::read_to_string(&path)
+            .map_err(|error| error.to_string())
+            .and_then(|text| {
+                serde_json::from_str::<Vec<QuestDef>>(&text)
+                    .map_err(|error| error.to_string())
+            });
+        match parsed {
             Ok(mut list) => defs.append(&mut list),
-            Err(error) => warn!(target: "viber::quests", "quest json #{path}: {error}"),
+            Err(error) => warn!(
+                target: "viber::quests",
+                "quest {}: {error} — ficheiro ignorado",
+                path.display()
+            ),
         }
     }
     defs
@@ -142,12 +165,13 @@ pub struct QuestLog {
 }
 
 impl Default for QuestLog {
+    /// Compat com apps mínimas/testes: `quests/` relativo ao CWD. O `run`
+    /// real NUNCA usa este default — `main.rs` insere o QuestLog explicitamente
+    /// com o dir resolvido do config (`config.quests_dir_on`), antes dos
+    /// plugins (o `init_resource` do `QuestsPlugin` não substitui o que já
+    /// existe).
     fn default() -> Self {
-        Self {
-            defs: load_quests(),
-            states: HashMap::new(),
-            done: Vec::new(),
-        }
+        Self::with_dir(Path::new("quests"))
     }
 }
 
@@ -160,6 +184,16 @@ impl QuestDef {
 }
 
 impl QuestLog {
+    /// Constrói o diário lendo as quests do diretório do mundo (os estados
+    /// nascem vazios — é o construtor do `run`; ver [`load_quests_from_dir`]).
+    pub fn with_dir(dir: &Path) -> Self {
+        Self {
+            defs: load_quests_from_dir(dir),
+            states: HashMap::new(),
+            done: Vec::new(),
+        }
+    }
+
     pub fn def(&self, id: &str) -> Option<&QuestDef> {
         self.defs.iter().find(|d| d.id == id)
     }
@@ -557,7 +591,15 @@ struct QuestTracker;
 fn quest_dialogue_system(
     keys: Res<ButtonInput<KeyCode>>,
     players: Query<&GlobalTransform, With<Player>>,
-    npcs: Query<(&GlobalTransform, &crate::recipes::spawn::DialogueNpc)>,
+    npcs: Query<(Entity, &GlobalTransform, &crate::recipes::spawn::DialogueNpc)>,
+    // Um script reclamou o diálogo (`viber.own_system("dialogue")`): o
+    // handler nativo cala e o fluxo é do Lua.
+    owners: Option<Res<crate::luau::ownership::ScriptSystemOwners>>,
+    // Arbitragem do [E] (`interact::InteractionFocus`): se o vencedor da
+    // tecla é OUTRO alvo, o diálogo nativo não dispara — prompt e ação
+    // apontavam para entidades diferentes quando um `ScriptInteraction`
+    // mais próximo ganhava o foco.
+    focus: Option<Res<crate::interact::InteractionFocus>>,
     mut log: ResMut<QuestLog>,
     mut vault: Option<ResMut<crate::economy::Vault>>,
     mut heroes: Query<&mut Xp, With<Player>>,
@@ -567,8 +609,15 @@ fn quest_dialogue_system(
     mut banners: Query<(&mut QuestDoneBanner, &Children)>,
     mut balloons: Query<(&mut Visibility, &mut HudBalloon, &Children)>,
     mut texts: Query<&mut Text>,
+    mut events: Option<ResMut<crate::luau::ScriptEventQueue>>,
 ) {
     if !keys.just_pressed(KeyCode::KeyE) {
+        return;
+    }
+    if owners
+        .as_deref()
+        .is_some_and(|o| o.owns(crate::luau::ownership::SYSTEM_DIALOGUE))
+    {
         return;
     }
     let Some(player) = players.iter().next() else {
@@ -579,10 +628,10 @@ fn quest_dialogue_system(
     // com 2 NPCs em alcance entregava/aceitava a quest do errado). O alcance
     // é o EFETIVO (`interact::default_range`, metade do autorado).
     let range = crate::interact::default_range();
-    let Some((_, npc)) = npcs
+    let Some((npc_entity, _, npc)) = npcs
         .iter()
-        .filter(|(t, _)| t.translation().distance(player_pos) < range)
-        .min_by(|(a, _), (b, _)| {
+        .filter(|(_, t, _)| t.translation().distance(player_pos) < range)
+        .min_by(|(_, a, _), (_, b, _)| {
             a.translation()
                 .distance_squared(player_pos)
                 .total_cmp(&b.translation().distance_squared(player_pos))
@@ -590,6 +639,15 @@ fn quest_dialogue_system(
     else {
         return;
     };
+    // O vencedor do foco [E] (se algum) tem de ser ESTE NPC — um script mais
+    // próximo que ganhou o [E] leva a interação consigo.
+    if let Some(focus) = focus.as_deref() {
+        if let Some(winner) = focus.winner(KeyCode::KeyE) {
+            if winner != npc_entity {
+                return;
+            }
+        }
+    }
     let id = npc.dialogue_id.clone();
     let vault_ref = vault.as_deref();
     info!(target: "viber::quests", "diálogo [E] com '{id}' — estado {}", crate::quests::status_name(log.status(&id, vault_ref)));
@@ -623,6 +681,11 @@ fn quest_dialogue_system(
             if log.status(&id, vault.as_deref()) == QuestStatus::Ready {
                 info!(target: "viber::quests", "entrega de '{id}'");
                 if let Some(rewards) = log.turn_in(&id, vault.as_deref_mut()) {
+                    if let Some(events) = events.as_deref_mut() {
+                        events.push(crate::luau::ScriptGameEvent::QuestDone {
+                            id: id.clone(),
+                        });
+                    }
                     if let Ok(mut xp) = heroes.single_mut() {
                         crate::vitals::gain_xp(&mut xp, rewards.xp);
                     }
@@ -683,7 +746,7 @@ fn quest_dialogue_system(
                 .unwrap_or_default(),
         ),
     };
-    show_balloon(&mut balloons, &mut texts, &body);
+    show_balloon(&mut balloons, &mut texts, &body, crate::hud::BALLOON_DURATION);
 }
 
 fn join_lines(lines: &[String]) -> String {
@@ -696,14 +759,20 @@ pub fn parse_item_reward(raw: &str) -> Option<(String, u32)> {
     Some((id.trim().to_lowercase(), n.trim().parse().ok()?))
 }
 
-/// Mostra o balão do HUD com `body` (mesmo mecanismo do hud: timer de 4 s).
-fn show_balloon(
+/// Mostra o balão do HUD com `body` por `secs` segundos. Caminho ÚNICO do
+/// balão: o diálogo nativo de quests e o `viber.say()` dos scripts escrevem
+/// por aqui. Devolve `true` se o mundo tem um `<DialogueBalloon>` (quem
+/// chama avisa 1× quando não tem — um `say` silencioso era invisível).
+pub(crate) fn show_balloon(
     balloons: &mut Query<(&mut Visibility, &mut HudBalloon, &Children)>,
     texts: &mut Query<&mut Text>,
     body: &str,
-) {
+    secs: f32,
+) -> bool {
+    let mut found = false;
     for (mut visibility, mut balloon, children) in balloons.iter_mut() {
-        balloon.timer = crate::hud::BALLOON_DURATION;
+        found = true;
+        balloon.timer = secs;
         *visibility = Visibility::Visible;
         if let Some(child) = children.first() {
             if let Ok(mut text) = texts.get_mut(*child) {
@@ -711,6 +780,7 @@ fn show_balloon(
             }
         }
     }
+    found
 }
 
 // ── fanfare de quest concluída (passe de juice r1) ──────────────────────
@@ -1007,12 +1077,19 @@ fn quest_tracker_system(
     }
 }
 
+/// (testes, todo o crate) Dir das quests do exemplo — o conteúdo deixou de
+/// estar embutido no binário; os testes leem do DISCO, como o `run`.
+#[cfg(test)]
+pub(crate) fn example_quests_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/simple-rpg/quests")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn log() -> QuestLog {
-        let log = QuestLog::default();
+        let log = QuestLog::with_dir(&example_quests_dir());
         assert!(
             log.defs.len() >= 21,
             "21 quests carregadas, {:?}",
@@ -1183,7 +1260,7 @@ mod tests {
 
     /// Os quatro cenários de fantasia têm de estar carregados.
     ///
-    /// Um JSON embutido que deixa de parsear não é um erro barulhento: o
+    /// Um JSON do disco que deixa de parsear não é um erro barulhento: o
     /// loader faz `warn + skip` e o jogo arranca com MENOS quests, em
     /// silêncio (aconteceu: faltava `biome` em duas entradas e o ficheiro
     /// inteiro caiu). Este teste é o gate contra isso — e o `analyze` cruza
@@ -1191,7 +1268,7 @@ mod tests {
     /// o marco de `visit` que não exista.
     #[test]
     fn test_fantasy_scenario_quests_are_loaded() {
-        let defs = load_quests();
+        let defs = load_quests_from_dir(&example_quests_dir());
         for id in [
             "pilgrimage_vael",
             "outpost_veins",
@@ -1200,15 +1277,51 @@ mod tests {
         ] {
             assert!(
                 defs.iter().any(|d| d.id == id),
-                "quest de cenário ausente: {id} (um JSON embutido deixou de parsear?)"
+                "quest de cenário ausente: {id} (um JSON do disco deixou de parsear?)"
             );
         }
         // 21 do jogo original + 4 dos cenários. Um ficheiro que caia leva
         // várias de uma vez, portanto o piso apanha a classe.
         assert!(
             defs.len() >= 25,
-            "só {} quests carregadas (21 + 4 dos cenários esperadas) — um JSON embutido caiu",
+            "só {} quests carregadas (21 + 4 dos cenários esperadas) — um JSON do disco caiu",
             defs.len()
         );
+    }
+
+    /// O loader de dir nunca pânica: dir ausente = vazio + warn; JSON maluco
+    /// = skip do ficheiro; a ordem é SORTED por nome de ficheiro.
+    #[test]
+    fn test_load_quests_from_dir_is_tolerant_and_sorted() {
+        // Dir ausente: vazio, sem pânico.
+        let empty = load_quests_from_dir(Path::new("/não/existe/quests"));
+        assert!(empty.is_empty(), "dir ausente → vazio");
+
+        let dir = tempfile::tempdir().unwrap();
+        // "b" malformado tem de ser saltado; "a" e "c" entram; um .txt é
+        // ignorado. Ordem esperada: a (2 defs) + c (1 def) = 3.
+        std::fs::write(
+            dir.path().join("b_broken.json"),
+            r#"[{"id": "sem_biome_e_sem_fecho"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("a_quests.json"),
+            r#"[
+                {"id":"q1","npc":"marco","biome":"city","title":"Um","objective":{"type":"kill","target":"wolf","count":1}},
+                {"id":"q2","npc":"notice_board","biome":"city","title":"Dois","objective":{"type":"collect","target":"stone","count":2}}
+            ]"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("c_quests.json"),
+            r#"[{"id":"q3","npc":"marco","biome":"swamp","title":"Três","objective":{"type":"visit","target":"torre","count":1}}]"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("notas.txt"), "ignorado").unwrap();
+
+        let defs = load_quests_from_dir(dir.path());
+        let ids: Vec<&str> = defs.iter().map(|d| d.id.as_str()).collect();
+        assert_eq!(ids, vec!["q1", "q2", "q3"], "skip do JSON malformado + ordem sorted");
     }
 }

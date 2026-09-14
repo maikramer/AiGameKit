@@ -21,7 +21,7 @@ use viber::recipes::spawn::{self, PendingWorld};
 use viber::ui;
 use viber::{
     ai, ambient, animation, audit, camera, economy, feedback, grass, harvest, hud, impact, menus,
-    meshopt, music, particles, physics, physics_fx, player, postfx, profiler, prop_tint, prune,
+    meshopt, music, nav, particles, physics, physics_fx, player, postfx, profiler, prop_tint, prune,
     quests, recipes, render_lod, save, scaffold, skills, sky, spawner, terrain, textures, trail,
     travel, vitals, worldsys, xml,
 };
@@ -98,6 +98,9 @@ enum Command {
 
 #[derive(Subcommand)]
 enum DebugCommand {
+    /// Lista as engines vivas (portas, mundos, pids) via engine.json das
+    /// sessões — o agente vê o QUEM antes de apontar `--world`/`--port`.
+    Engines,
     /// Check if the debug bridge is up
     Probe {
         #[arg(long)]
@@ -121,6 +124,35 @@ enum DebugCommand {
         #[arg(long, default_value_t = 10_000)]
         timeout_ms: u64,
     },
+    /// Captura N frames seguidos e compõe-nos numa ÚNICA folha (grid √N,
+    /// row-major, índice carimbado em cada célula, células com o formato do
+    /// frame — 4096 no lado comprido) — para ler movimento/flicker sem N
+    /// ficheiros. Protocolo de QA temporal: flicker não se vê num frame
+    /// isolado.
+    Burst {
+        #[arg(short, long, default_value = "burst.png")]
+        output: PathBuf,
+        /// Nº de frames: 4 (2×2), 9 (3×3) ou 16 (4×4)
+        #[arg(long, default_value_t = viber::bridge::burst::DEFAULT_FRAMES)]
+        frames: u32,
+        /// Frames renderizados a saltar entre capturas — 0 = consecutivos;
+        /// cada +1 estica o intervalo de tempo coberto (a folha cobre
+        /// frames × (skip+1) frames de render).
+        #[arg(long, default_value_t = 0)]
+        skip: u32,
+        #[arg(long)]
+        port: Option<u16>,
+        /// Mundo que identifica a engine alvo (caminho, nome de ficheiro ou
+        /// stem) — resolve a porta pelo engine.json da sessão desse mundo.
+        #[arg(long)]
+        world: Option<PathBuf>,
+        #[arg(long, default_value_t = 60_000)]
+        timeout_ms: u64,
+        /// Veredicto numérico de flicker: luma média/desvio POR FRAME + a
+        /// oscilação máxima entre frames consecutivos (não abre o PNG).
+        #[arg(long)]
+        stats: bool,
+    },
     /// Dump the entity tree (name/parent/transform/components)
     Tree {
         #[arg(long)]
@@ -142,6 +174,12 @@ enum DebugCommand {
         world: Option<PathBuf>,
         #[arg(long, default_value_t = 100)]
         limit: usize,
+        /// Nível mínimo (error|warn|info|debug|trace) — filtro client-side.
+        #[arg(long)]
+        level: Option<String>,
+        /// Substring a casar na mensagem/target — filtro client-side.
+        #[arg(long)]
+        grep: Option<String>,
         #[arg(long)]
         json: bool,
     },
@@ -196,6 +234,163 @@ enum DebugCommand {
         /// Imprime a resposta JSON completa (ok/result/applied/warnings)
         #[arg(long)]
         json: bool,
+    },
+    /// Schemas dos tipos REFLETIDOS da engine (`registry.schema` do BRP):
+    /// campos e tipos de cada componente/struct — o que um agente precisa
+    /// para `world.mutate_components` sem adivinhar. `--grep` filtra por
+    /// nome do tipo OU campo (o dump cru são MBs).
+    Schema {
+        /// Substring a casar no nome do tipo ou num nome de campo
+        #[arg(long)]
+        grep: Option<String>,
+        /// Filtra por crate (ex.: `viber`); repetível
+        #[arg(long = "crate")]
+        crates: Vec<String>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        world: Option<PathBuf>,
+    },
+    /// Todos os métodos BRP disponíveis (`rpc.discover`, OpenRPC): os builtin
+    /// do bevy_remote + os `viber.*` — a auto-descoberta completa.
+    Methods {
+        #[arg(long)]
+        grep: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        world: Option<PathBuf>,
+    },
+    /// A API explica-se: assinaturas + descrições de `viber.debug.*` e
+    /// enumeração viva de `viber.*`/`viber.ui.*`/`viber.profiler`.
+    Api {
+        #[arg(long)]
+        grep: Option<String>,
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        world: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Eventos de jogo estruturados do ring do bridge (dano/morte/quest/
+    /// toast/ui/travel/levelup). `--since N` devolve só os posteriores a N
+    /// (cursor do agente; o último seq do lote é o próximo cursor).
+    Events {
+        #[arg(long)]
+        since: Option<u64>,
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        world: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// QA determinístico: pausa e avança EXATAMENTE N frames à speed 1.
+    /// `viber debug step 5` + `burst` = leitura frame a frame sem conjeturas.
+    Step {
+        frames: u32,
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        world: Option<PathBuf>,
+    },
+    /// Restaura a speed anterior ao `step` (despausa).
+    Play {
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        world: Option<PathBuf>,
+    },
+    /// Amostra uma expressão Luau a N Hz durante T segundos — trajetórias,
+    /// HP, qualquer leitura do snapshot, sem loop à mão. `--csv` para plot.
+    Watch {
+        /// Expressão a avaliar por amostra (ex.: "viber.debug.player().x")
+        #[arg(short, long)]
+        lua: String,
+        #[arg(long, default_value_t = 10.0)]
+        hz: f32,
+        #[arg(long = "for", visible_alias = "for-secs", default_value_t = 5.0)]
+        for_secs: f32,
+        #[arg(long)]
+        csv: bool,
+        /// Imprime a coleção completa em JSON (`[{t, value}]`) em vez de linhas
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        world: Option<PathBuf>,
+    },
+    /// Corre um cenário de QA em Luau com helpers `expect`/`expect_near`/
+    /// `fail` (falha → exit 1). Cenários vivem em `<mundo>/qa/*.lua`.
+    Test {
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        world: Option<PathBuf>,
+    },
+    /// Diff de píxeis entre duas capturas (asserção visual numérica, CI).
+    /// `--threshold` em % de píxeis mudados (exit 1 acima).
+    Diff {
+        /// Captura A (ou a ATUAL, quando `--baseline` está presente)
+        a: PathBuf,
+        /// Captura B (opcional com `--baseline`)
+        b: Option<PathBuf>,
+        /// ROI x,y,w,h (píxeis) para restringir a comparação
+        #[arg(long)]
+        roi: Option<String>,
+        /// % de píxeis mudados que tolera (default 0 = qualquer diff falha)
+        #[arg(long)]
+        threshold: Option<f64>,
+        /// Diretório de golden images: compara `a` com `<dir>/<stem>.png`;
+        /// ausente → semeia o golden (primeiro run de CI)
+        #[arg(long)]
+        baseline: Option<PathBuf>,
+        /// Com `--baseline`: regrava o golden com `a` (aceita a mudança)
+        #[arg(long)]
+        update: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Cast de raio contra a FÍSICA (colliders Rapier) — devolve a primeira
+    /// entidade atingida com ponto/normal. Aceita valores negativos em
+    /// posição/direção (`raycast 0 30 0 0 -1 0`).
+    #[command(allow_negative_numbers = true)]
+    Raycast {
+        x: f32,
+        y: f32,
+        z: f32,
+        dx: f32,
+        dy: f32,
+        dz: f32,
+        /// Alcance do raio em metros (default 100)
+        #[arg(long)]
+        max_toi: Option<f64>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        world: Option<PathBuf>,
+    },
+    /// Hash do CONTEÚDO do mundo vivo (FNV-1a por entidade, independente de
+    /// ordem/ids): dois boots da mesma seed do mesmo binário → o MESMO hash.
+    /// A/B de determinismo "mesma seed, mesmo mundo" num só número.
+    Hash {
+        #[arg(long)]
+        port: Option<u16>,
+        /// Mundo que identifica a engine alvo (caminho, nome de ficheiro ou
+        /// stem) — resolve a porta pelo engine.json da sessão desse mundo.
+        #[arg(long)]
+        world: Option<PathBuf>,
     },
     /// Send a synthetic key event (aliases: w, space, enter, esc, up, ctrl…)
     Key {
@@ -539,12 +734,14 @@ fn analyze(path: &Path, strict: bool) -> Result<()> {
     );
     if summary.terrain > 0 || summary.ground_features() > 0 {
         println!(
-            "  terrain: heightfield {}, ground features {} (pads {}, lakes {}, rivers {}, cliffs {}, caves {}, arches {}, bridges {}, rock fields {}, roads {} + networks {}, decals {})",
+            "  terrain: heightfield {}, ground features {} (pads {}, lakes {}, rivers {}, cuts {}, plateaus {}, cliffs {}, caves {}, arches {}, bridges {}, rock fields {}, roads {} + networks {}, decals {})",
             summary.terrain,
             summary.ground_features(),
             summary.terrain_pads,
             summary.lakes,
             summary.rivers,
+            summary.cuts,
+            summary.plateaus,
             summary.cliffs,
             summary.caves,
             summary.arches,
@@ -759,6 +956,13 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // (textures_dir) e o spawn (bgm_dir) leem-no de lá.
     app.insert_resource(config.clone());
     app.insert_resource(save::SaveDir(Some(config.save_dir().to_path_buf())));
+    // Quests do MUNDO, lidas do DISCO (dir do config, default `quests/` ao
+    // lado do world.xml) — o conteúdo deixou de vir embutido na engine. O
+    // insert é ANTES dos plugins: o `init_resource` do QuestsPlugin não
+    // substitui o que já existe.
+    app.insert_resource(quests::QuestLog::with_dir(&config.quests_dir_on(
+        &world_dir,
+    )));
     // O modelo do céu também viaja como resource — o IBL (`ibl.rs`) pinta o
     // cubemap com a MESMA radiância que o domo desenha e os probes regionais
     // (`probes.rs`) usam os mesmos coeficientes. Sem ele os dois lêem `None` e
@@ -952,26 +1156,64 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     app.add_plugins(luau::LuauScriptPlugin {
         scripts_dir: config.scripts_dir_on(&world_dir),
     });
-    app.add_plugins(combat::CombatPlugin);
-    // Vitals juice (passe de juice r1): deteção robusta de level-up (qualquer
-    // fonte de XP) + fanfarra — bursts magic/sparkle, toast, kick de
-    // exposição e SFX.
-    app.add_plugins(vitals::VitalsPlugin);
-    // Feedback de combate (loop 2): dano flutuante, vignette/i-frames,
-    // TargetBar/BossBar reais, respawn, status effects.
-    app.add_plugins(feedback::FeedbackPlugin);
-    // Economia (loop 4): vault ouro/madeira/pedra, chips vivos, hotbar [1]/[2].
-    app.add_plugins(economy::EconomyPlugin);
-    // UI & menus (loop 5): toasts visuais, modal [Q], loja [K], loading.
+
+    // ── Preset RPG (config.yaml `gameplay`, default "rpg") ─────────────
+    // Combat/skills/vitals/feedback/economia/travel/save/quests/colheita
+    // são DOMÍNIO de RPG: com `gameplay: none` não entram no App e um jogo
+    // novo vive só de XML + Luau (worlds/lua-demo). `gameplay_rpg()` cobre
+    // o default.
+    let rpg = config.gameplay_rpg();
+    // Diagnóstico do preset (o gate decide quais plugins entram): visível no
+    // arranque e no analyze — `gameplay: none` sem efeito era invisível.
+    info!(
+        target: "viber",
+        "gameplay preset: {} (config `gameplay: {}`)",
+        if rpg { "rpg" } else { "none (só engine)" },
+        config.gameplay.as_deref().unwrap_or("<ausente → default rpg>")
+    );
+    // Serviços de ENGINE que os plugins RPG costumavam registar e que o resto
+    // do runtime lê: o semáforo de input tem de existir mesmo sem RPG
+    // (player_movement/profiler leem-no) e os toasts de script são UX de
+    // engine — o MenusPlugin fica FORA do gate (o seu lado RPG — catálogo da
+    // loja — é inerte sem vault, e `own_action` de Lua manda quando existe).
+    app.init_resource::<menus::MenusOpen>();
     app.add_plugins(menus::MenusPlugin);
-    // Travel/Nota/wayfinding (loop 6): marcos, viagem rápida, waypoint,
-    // registry de hostis por região.
-    app.add_plugins(travel::TravelPlugin);
-    // Save/load & opções (loop 7): save JSON, volumes na tab Opções.
+    // Save/load & opções: serviço de ENGINE (grava `world_kv`/posição/vitais
+    // em qualquer preset; os campos RPG só entram quando os recursos existem).
     app.add_plugins(save::SavePlugin);
-    // Skills/abilities/bombas (loop 8): dash/cura/golpe forte, passivas,
-    // guard/parry, profundidade do melee.
-    app.add_plugins(skills::SkillsPlugin);
+    // FX puros para mundos SEM o preset RPG: o CombatPlugin registra o kick
+    // de FOV e o hit-stop; sem ele, as primitivas `viber.fov_kick/hit_stop`
+    // (e o shake/kick/punch que vivem em recursos incondicionais) ficariam
+    // inertes. Registo CONDICIONAL — registar o mesmo sistema 2× duplica a
+    // instância no schedule e panica ao inicializar.
+    if !rpg {
+        app.init_resource::<camera::CameraFx>();
+        app.add_systems(bevy::app::Update, camera::fov_kick_system);
+        app.init_resource::<combat::HitStop>();
+        app.init_resource::<combat::BaseTimeScale>();
+        app.add_systems(bevy::app::Update, combat::hit_stop_system);
+    }
+    if rpg {
+        app.add_plugins(combat::CombatPlugin);
+        // Vitals juice (passe de juice r1): deteção robusta de level-up
+        // (qualquer fonte de XP) + fanfarra.
+        app.add_plugins(vitals::VitalsPlugin);
+        // Feedback de combate (loop 2): dano flutuante, vignette/i-frames,
+        // TargetBar/BossBar reais, respawn, status effects.
+        app.add_plugins(feedback::FeedbackPlugin);
+        // Economia (loop 4): vault ouro/madeira/pedra, chips vivos, hotbar
+        // [1]/[2]. (O RECURSO Vault é criado à pressa pelo primeiro
+        // `viber.vault_*`? NÃO — scripts recebem Option; um jogo sem RPG
+        // que queira economia constrói a sua em Lua.)
+        app.add_plugins(economy::EconomyPlugin);
+        // Travel/Nota/wayfinding (loop 6): marcos, viagem rápida, waypoint,
+        // registry de hostis por região.
+        app.add_plugins(travel::TravelPlugin);
+        // Skills/abilities/bombas (loop 8): dash/cura/golpe forte, passivas,
+        // guard/parry, profundidade do melee.
+        app.add_plugins(skills::SkillsPlugin);
+    } // fim do preset RPG
+
     // Mundo vivo (loop 9): fog/tint por BiomeRegion, orçamento de luzes,
     // gestos idle de NPC, SFX.
     app.add_plugins(ambient::AmbientPlugin);
@@ -983,7 +1225,9 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     app.add_plugins(physics_fx::PhysicsFxPlugin);
     // Colheita nativa (port do plugin `destructible`): árvores/rochas
     // destrutíveis — ferramenta na mão, quedas, estilhaços, loot no vault.
-    app.add_plugins(harvest::HarvestPlugin);
+    if rpg {
+        app.add_plugins(harvest::HarvestPlugin);
+    }
     // Sword trace (ribbon da lâmina) + bursts one-shot de partícula.
     app.add_plugins(trail::TrailPlugin);
     app.add_plugins(particles::BurstPlugin);
@@ -1000,11 +1244,18 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     app.init_resource::<camera::CameraKick>();
     // Quests & diálogo (loop 3): 21 quests JSON, flow [E] nos DialogueNPC,
     // QuestTracker, hooks viber.quest_* p/ Luau.
-    app.add_plugins(quests::QuestsPlugin);
+    if rpg {
+        app.add_plugins(quests::QuestsPlugin);
+    }
     // IA (FSM Rust + respawn): criaturas de <DynamicSpawner> SEM script caem
     // aqui — sem este plugin nasciam estátuas eternas e a RespawnQueue
     // nunca drenava.
     app.add_plugins(ai::AiPlugin);
+    // Navegação: navmesh Recast num tile que segue o herói, A* + evitamento
+    // RVO (bevy_landmass) e preferência por estradas via custo por tipo de
+    // polígono. Sem isto a IA volta à linha recta de sempre — o que é
+    // exactamente o que `VIBER_NAV=0` faz.
+    app.add_plugins(nav::NavPlugin);
     // LOD de render: culling por distância nas instâncias de spawner +
     // orçamento de sombras. Sem isto as ~9700 cenas glTF do simple-rpg
     // (60k entidades) entram todas nas 4 cascatas de sombra a cada frame.
@@ -1058,11 +1309,22 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // `HarvestSet` (o conjunto inteiro da colheita) — re-adicionar o
     // `harvest_context_system` aqui duplicava a instância no schedule e
     // panica ("more than one instance").
-    app.add_systems(
-        bevy::app::Update,
-        combat::player_melee_attack.after(harvest::HarvestSet),
-    );
+    if rpg {
+        // Só no preset RPG: com `gameplay: none` o melee nem existe (o
+        // sistema exige HarvestContext, que nasce no HarvestPlugin gated) —
+        // este registo de ORDENAÇÃO era a fuga que fazia o demo crashar.
+        app.add_systems(
+            bevy::app::Update,
+            combat::player_melee_attack.after(harvest::HarvestSet),
+        );
+    }
     app.add_systems(bevy::app::Startup, spawn::startup);
+    // Spawn RUNTIME de prototypes (viber.spawn_prototype): exclusivo, depois
+    // dos scripts do frame (as callbacks da entidade nova correm aqui).
+    app.add_systems(
+        bevy::app::PostUpdate,
+        recipes::spawn::apply_script_spawns.after(luau::luau_update),
+    );
     app.add_systems(
         bevy::app::Update,
         (
@@ -1124,7 +1386,9 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
         bevy::app::Update,
         (
             // Clamp da borda DEPOIS do movimento/dash do player (mesmo frame) —
-            // sem ordem, o clamp viajava um frame atrás do WASD.
+            // sem ordem, o clamp viajava um frame atrás do WASD. A aresta para
+            // `abilities_system` é no-op no preset `gameplay: none` (alvo
+            // ausente do schedule é tolerado) e mantém a semântica no RPG.
             worldsys::world_border_clamp
                 .after(player::player_movement)
                 .after(skills::abilities_system),
@@ -1134,11 +1398,16 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             hud::hud_toggle,
             timed(Group::Fx, particles::particle_emitter_update),
             timed(Group::Spawner, spawner::instantiate_spawn_groups),
-            vitals::debug_damage,
-            // Dano recebido também abana a câmara (peso ∝ dano).
-            feedback::shake_on_player_hurt,
         ),
     );
+    // Sistemas de DOMÍNIO (preset RPG): debug de vitais [H/N/K] e shake da
+    // câmara no dano recebido — fora do gate eram mais duas fugas do demo.
+    if rpg {
+        app.add_systems(
+            bevy::app::Update,
+            (vitals::debug_damage, feedback::shake_on_player_hurt),
+        );
+    }
     app.run();
     Ok(())
 }
@@ -1983,6 +2252,19 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
         world.as_deref().or(parent.as_deref())
     }
     match command {
+        DebugCommand::Engines => {
+            let engines = bridge::client::list_live_engines();
+            if engines.is_empty() {
+                println!("(nenhuma engine viva — `viber session up` ou `viber run --bridge`)");
+            } else {
+                for engine in engines {
+                    println!(
+                        ":{}  {}  (pid {})",
+                        engine.port, engine.world, engine.pid
+                    );
+                }
+            }
+        }
         DebugCommand::Probe { port, world } => {
             // O probe é a ferramenta de orientação: com várias engines vivas
             // LISTA-as em vez de falhar (os restantes subcomandos falham —
@@ -2013,6 +2295,58 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
             let source = client.screenshot_to_file(&output, timeout_ms)?;
             println!("✓ screenshot → {} (fonte: {source})", output.display());
         }
+        DebugCommand::Burst {
+            output,
+            frames,
+            skip,
+            port,
+            world,
+            timeout_ms,
+            stats,
+        } => {
+            if !bridge::burst::ALLOWED_FRAMES.contains(&frames) {
+                bail!(
+                    "frames inválido: {frames} — aceites 4 (2×2), 9 (3×3) ou 16 (4×4)"
+                );
+            }
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            let (bytes, source, sheet_w, sheet_h, final_status) =
+                client.burst(frames, skip, timeout_ms)?;
+            std::fs::write(&output, &bytes)
+                .with_context(|| format!("a escrever {}", output.display()))?;
+            let grid = bridge::burst::grid_for(frames).expect("validado acima");
+            println!(
+                "✓ burst → {} (fonte: {source})\n  {} frames em {grid}×{grid}, skip {skip} — cobre ~{} frames de render na folha {}×{}",
+                output.display(),
+                frames,
+                frames as u64 * (skip as u64 + 1),
+                if sheet_w > 0 { sheet_w } else { bridge::burst::SHEET_SIZE },
+                if sheet_h > 0 { sheet_h } else { bridge::burst::SHEET_SIZE }
+            );
+            if stats {
+                let Some(list) = final_status.get("frame_stats").and_then(Value::as_array) else {
+                    eprintln!("burst: sem frame_stats (engine antiga?)");
+                    return Ok(());
+                };
+                println!("  frame_stats:");
+                for frame in list {
+                    println!(
+                        "    #{} mean={:.2} std={:.2}",
+                        frame.get("index").and_then(Value::as_u64).unwrap_or(0),
+                        frame.get("mean").and_then(Value::as_f64).unwrap_or(0.0),
+                        frame.get("std").and_then(Value::as_f64).unwrap_or(0.0),
+                    );
+                }
+                if let Some(flicker) = final_status.get("flicker") {
+                    println!(
+                        "  flicker: max_mean_swing={:.3} max_consecutive_delta={:.3} (mundo parado: ≈0; oscilar = flicker)",
+                        flicker.get("max_mean_swing").and_then(Value::as_f64).unwrap_or(0.0),
+                        flicker.get("max_consecutive_delta").and_then(Value::as_f64).unwrap_or(0.0),
+                    );
+                }
+            }
+        }
         DebugCommand::Tree { port, world, json } => {
             let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
             let client = BridgeClient::localhost(port);
@@ -2027,11 +2361,53 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
             port,
             world,
             limit,
+            level,
+            grep,
             json,
         } => {
             let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
             let client = BridgeClient::localhost(port);
-            let logs = client.logs(limit)?;
+            let mut logs = client.logs(limit)?;
+            // Filtros client-side (o ring da engine fica inteiro).
+            if let Some(level) = level {
+                let min = match level.to_ascii_lowercase().as_str() {
+                    "error" => 4,
+                    "warn" | "warning" => 3,
+                    "info" => 2,
+                    "debug" => 1,
+                    _ => 0,
+                };
+                let rank = |value: &Value| match value.as_str() {
+                    Some("ERROR") => 4,
+                    Some("WARN") => 3,
+                    Some("INFO") => 2,
+                    Some("DEBUG") => 1,
+                    _ => 0,
+                };
+                if let Some(entries) = logs.as_array_mut() {
+                    entries.retain(|entry| {
+                        rank(entry.get("level").unwrap_or(&Value::Null)) >= min
+                    });
+                }
+            }
+            if let Some(needle) = grep {
+                let needle = needle.to_ascii_lowercase();
+                if let Some(entries) = logs.as_array_mut() {
+                    entries.retain(|entry| {
+                        let message = entry
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_ascii_lowercase();
+                        let target = entry
+                            .get("target")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_ascii_lowercase();
+                        message.contains(&needle) || target.contains(&needle)
+                    });
+                }
+            }
             if json {
                 println!("{logs:#}");
             } else {
@@ -2168,9 +2544,573 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
                 bail!("erro Luau: {error}");
             }
         }
+        DebugCommand::Schema {
+            grep,
+            crates,
+            json,
+            port,
+            world,
+        } => {
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            let params = if crates.is_empty() {
+                serde_json::json!({})
+            } else {
+                eprintln!(
+                    "viber: nota — o filtro de crate não exclui tipos SEM crate no path \
+(primitivos/tuplas) e os componentes do Viber não são refletidos (para esses, usa \
+`viber.debug.*`); sem `--grep` a lista pode surpreender"
+                );
+                serde_json::json!({ "with_crates": crates })
+            };
+            let schema = client.call("registry.schema", params)?;
+            let needle = grep.unwrap_or_default().to_ascii_lowercase();
+            let Some(types) = schema.as_object() else {
+                println!("{schema:#}");
+                return Ok(());
+            };
+            // Sem grep e sem --json: resumo (o dump inteiro são MBs).
+            if needle.is_empty() && !json {
+                let mut names: Vec<&str> = types.keys().map(String::as_str).collect();
+                names.sort();
+                eprintln!(
+                    "viber: {} tipos refletidos — usa --grep <tipo|campo> para os campos (ou --json para o dump cru)",
+                    names.len()
+                );
+                for name in names {
+                    println!("{name}");
+                }
+                return Ok(());
+            }
+            // Os FIELDS de uma struct vivem em `properties` (JSON-Schema);
+            // cada um é `{"type": "<primitivo>"}` ou
+            // `{"type": {"$ref": "#/$defs/<TypePath>"}}`.
+            let render_type = |info: &Value| -> String {
+                let ty = info.get("type").unwrap_or(&Value::Null);
+                if let Some(text) = ty.as_str() {
+                    return text.to_string();
+                }
+                if let Some(reference) = ty.get("$ref").and_then(Value::as_str) {
+                    return reference
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or(reference)
+                        .to_string();
+                }
+                if let Some(variants) = ty.as_array() {
+                    return variants
+                        .iter()
+                        .map(|v| {
+                            v.as_str()
+                                .map(str::to_string)
+                                .or_else(|| {
+                                    v.get("$ref")
+                                        .and_then(Value::as_str)
+                                        .map(|r| r.rsplit('/').next().unwrap_or(r).to_string())
+                                })
+                                .unwrap_or_else(|| "?".into())
+                        })
+                        .collect::<Vec<_>>()
+                        .join("|");
+                }
+                ty.as_str().unwrap_or("?").to_string()
+            };
+            let mut matched = serde_json::Map::new();
+            for (name, entry) in types {
+                let properties = entry.pointer("/properties").and_then(|f| f.as_object());
+                let field_hit = properties.is_some_and(|properties| {
+                    properties
+                        .keys()
+                        .any(|field| field.to_ascii_lowercase().contains(&needle))
+                });
+                if needle.is_empty() || name.to_ascii_lowercase().contains(&needle) || field_hit {
+                    matched.insert(name.clone(), entry.clone());
+                }
+            }
+            if json {
+                println!("{}", Value::Object(matched.clone()));
+            } else if matched.is_empty() {
+                eprintln!("viber: nenhum tipo casa com '{needle}'");
+            } else {
+                let mut names: Vec<&String> = matched.keys().collect();
+                names.sort();
+                for name in names {
+                    let entry = &matched[name];
+                    let kind = entry.get("kind").and_then(Value::as_str).unwrap_or("");
+                    let is_component = entry.pointer("/component_info").is_some();
+                    println!(
+                        "{name}{}",
+                        if is_component { "  [component]" } else { "" }
+                    );
+                    let _ = kind;
+                    if let Some(properties) = entry.pointer("/properties").and_then(|f| f.as_object())
+                    {
+                        for (field, info) in properties {
+                            println!("    {field}: {}", render_type(info));
+                        }
+                    }
+                }
+            }
+        }
+        DebugCommand::Methods {
+            grep,
+            json,
+            port,
+            world,
+        } => {
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            let discover = client.call("rpc.discover", serde_json::json!({}))?;
+            let needle = grep.unwrap_or_default().to_ascii_lowercase();
+            // O documento OpenRPC traz `methods: [{name, summary?}]`.
+            let names: Vec<(String, String)> = discover
+                .get("methods")
+                .and_then(Value::as_array)
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .filter_map(|method| {
+                            let name = method.get("name")?.as_str()?.to_string();
+                            let summary = method
+                                .get("summary")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_string();
+                            Some((name, summary))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            if json {
+                let filtered: Vec<Value> = names
+                    .iter()
+                    .filter(|(name, summary)| {
+                        needle.is_empty()
+                            || name.to_ascii_lowercase().contains(&needle)
+                            || summary.to_ascii_lowercase().contains(&needle)
+                    })
+                    .map(|(name, summary)| serde_json::json!({ "name": name, "summary": summary }))
+                    .collect();
+                println!("{}", Value::Array(filtered));
+            } else {
+                let mut shown = 0;
+                for (name, summary) in &names {
+                    if !needle.is_empty() && !name.to_ascii_lowercase().contains(&needle) {
+                        continue;
+                    }
+                    shown += 1;
+                    if summary.is_empty() {
+                        println!("{name}");
+                    } else {
+                        println!("{name}
+    {summary}");
+                    }
+                }
+                eprintln!("viber: {shown}/{} métodos", names.len());
+            }
+        }
+        DebugCommand::Api {
+            grep,
+            port,
+            world,
+            json,
+        } => {
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            let needle = grep.unwrap_or_default();
+            let code = if needle.is_empty() {
+                "return viber.debug.apidoc()".to_string()
+            } else {
+                format!("return viber.debug.apidoc() -- grep: {needle}")
+            };
+            let response = client.lua(&code)?;
+            if !response.get("ok").and_then(Value::as_bool).unwrap_or(false) {
+                let error = response
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("erro desconhecido");
+                bail!("erro Luau: {error}");
+            }
+            let mut doc = response.get("result").cloned().unwrap_or(Value::Null);
+            if !needle.is_empty() {
+                // Filtro client-side sobre o grupo debug (nome/descrição).
+                let needle_l = needle.to_ascii_lowercase();
+                if let Some(obj) = doc.get_mut("debug").and_then(Value::as_object_mut) {
+                    let kept: Vec<(String, Value)> = obj
+                        .iter()
+                        .filter(|(name, entry)| {
+                            name.to_ascii_lowercase().contains(&needle_l)
+                                || entry
+                                    .get("description")
+                                    .and_then(Value::as_str)
+                                    .map(|d| d.to_ascii_lowercase().contains(&needle_l))
+                                    .unwrap_or(false)
+                        })
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+                    obj.clear();
+                    for (k, v) in kept {
+                        obj.insert(k, v);
+                    }
+                }
+            }
+            if json {
+                println!("{doc:#}");
+            } else if let Some(debug) = doc.get("debug").and_then(Value::as_object) {
+                for (name, entry) in debug {
+                    println!(
+                        "viber.debug.{}{}
+    {}",
+                        name,
+                        entry.get("signature").and_then(Value::as_str).unwrap_or(""),
+                        entry.get("description").and_then(Value::as_str).unwrap_or("")
+                    );
+                }
+                for group in ["game", "ui", "profiler"] {
+                    if let Some(list) = doc.get(group).and_then(Value::as_object) {
+                        let names: Vec<&str> = list.keys().map(String::as_str).collect();
+                        println!("viber.{group}: {}", names.join(", "));
+                    }
+                }
+            } else {
+                println!("{doc:#}");
+            }
+        }
+        DebugCommand::Events {
+            since,
+            port,
+            world,
+            json,
+        } => {
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            let response =
+                client.lua(&format!("return viber.debug.events({})", since.unwrap_or(0)))?;
+            if !response.get("ok").and_then(Value::as_bool).unwrap_or(false) {
+                let error = response
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("erro desconhecido");
+                bail!("erro Luau: {error}");
+            }
+            let events = response.get("result").cloned().unwrap_or(Value::Null);
+            if json {
+                println!("{events:#}");
+            } else {
+                match events.as_array() {
+                    Some(list) if list.is_empty() => {
+                        println!("(sem eventos desde --since {})", since.unwrap_or(0))
+                    }
+                    Some(list) => {
+                        for event in list {
+                            println!(
+                                "{} [{:^7}] {}",
+                                event.get("seq").and_then(Value::as_u64).unwrap_or(0),
+                                event.get("kind").and_then(Value::as_str).unwrap_or("?"),
+                                serde_json::to_string(event).unwrap_or_default()
+                            );
+                        }
+                        if let Some(last) = list
+                            .last()
+                            .and_then(|e| e.get("seq"))
+                            .and_then(Value::as_u64)
+                        {
+                            eprintln!("(próximo cursor: --since {last})");
+                        }
+                    }
+                    None => println!("{events:#}"),
+                }
+            }
+        }
+        DebugCommand::Step { frames, port, world } => {
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            let response = client.lua(&format!(
+                "viber.debug.step({frames}) return true"
+            ))?;
+            if !response.get("ok").and_then(Value::as_bool).unwrap_or(false) {
+                let error = response
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("erro desconhecido");
+                bail!("erro Luau: {error}");
+            }
+            println!(
+                "✓ {frames} frame(s) avançado(s) — mundo PAUSADO (`viber debug play` retoma; `step 0` só congela)"
+            );
+        }
+        DebugCommand::Play { port, world } => {
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            client.lua("viber.debug.play() return true")?;
+            println!("✓ a correr (speed restaurada)");
+        }
+        DebugCommand::Watch {
+            lua: expression,
+            hz,
+            for_secs,
+            csv,
+            json,
+            port,
+            world,
+        } => {
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            let (hz, for_secs) = (f64::from(hz), f64::from(for_secs));
+            let period = std::time::Duration::from_secs_f64(1.0 / hz.max(0.1));
+            let started = std::time::Instant::now();
+            let mut samples: Vec<Value> = Vec::new();
+            if !json && !csv {
+                println!("# t\tvalue");
+            }
+            while started.elapsed().as_secs_f64() < for_secs.max(0.1) {
+                let tick = std::time::Instant::now();
+                let response = client.lua(&format!("return {expression}"))?;
+                if !response.get("ok").and_then(Value::as_bool).unwrap_or(false) {
+                    let error = response
+                        .get("error")
+                        .and_then(Value::as_str)
+                        .unwrap_or("erro desconhecido");
+                    bail!("erro Luau na amostra: {error}");
+                }
+                let value = response.get("result").cloned().unwrap_or(Value::Null);
+                let t = started.elapsed().as_secs_f64();
+                if !json {
+                    if csv {
+                        println!("{t:.3},{value}");
+                    } else {
+                        println!("{t:.3}	{value}");
+                    }
+                }
+                samples.push(serde_json::json!({ "t": t, "value": value }));
+                let elapsed = tick.elapsed();
+                if elapsed < period {
+                    std::thread::sleep(period - elapsed);
+                }
+            }
+            if json {
+                println!("{}", Value::Array(samples));
+            }
+        }
+        DebugCommand::Test {
+            path,
+            json,
+            port,
+            world,
+        } => {
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            let code = std::fs::read_to_string(&path)
+                .with_context(|| format!("a ler {}", path.display()))?;
+            // 1) helpers de QA (globals persistem na REPL)
+            client.lua(QA_HELPERS)?;
+            // 2) o cenário
+            let response = client.lua(&code)?;
+            let ok = response.get("ok").and_then(Value::as_bool).unwrap_or(false);
+            // 3) relatório dos helpers
+            let report = client.lua("return { ok = (#__qa.fails == 0), asserts = __qa.asserts, fails = __qa.fails }")?;
+            let report = report.get("result").cloned().unwrap_or(Value::Null);
+            let failed = report
+                .get("fails")
+                .and_then(Value::as_array)
+                .map(Vec::len)
+                .unwrap_or(0);
+            if json {
+                let mut out = serde_json::Map::new();
+                out.insert("file".into(), Value::String(path.display().to_string()));
+                out.insert("chunk_ok".into(), Value::Bool(ok));
+                out.insert("report".into(), report);
+                println!("{}", Value::Object(out));
+            } else if ok && failed == 0 {
+                let asserts = report
+                    .get("asserts")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                println!("✓ {} — {asserts} assert(s) passou(aram)", path.display());
+            } else {
+                if !ok {
+                    let error = response
+                        .get("error")
+                        .and_then(Value::as_str)
+                        .unwrap_or("erro desconhecido");
+                    eprintln!("✗ erro Luau: {error}");
+                }
+                for fail in report
+                    .get("fails")
+                    .and_then(Value::as_array)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default()
+                {
+                    eprintln!("✗ {fail}");
+                }
+                bail!("cenário falhou ({failed} assert(s))");
+            }
+        }
+        DebugCommand::Diff {
+            a,
+            b,
+            roi,
+            threshold,
+            baseline,
+            update,
+            json,
+        } => {
+            let roi = roi
+                .map(|r| bridge::diff::parse_roi(&r))
+                .transpose()
+                .map_err(|e| anyhow::anyhow!(e))?;
+            let mut other: Option<PathBuf> = None;
+            // Modo GOLDEN: `a` é a captura atual, o golden é
+            // `<dir>/<stem-de-a>.png` (ou o nome do `b`, se dado).
+            let result = if let Some(dir) = baseline {
+                let name = b
+                    .as_ref()
+                    .and_then(|path| path.file_stem())
+                    .or_else(|| a.file_stem())
+                    .and_then(|stem| stem.to_str())
+                    .unwrap_or("golden")
+                    .to_string();
+                if update {
+                    let golden = bridge::diff::update_baseline(&dir, &name, &a)
+                        .map_err(|e| anyhow::anyhow!(e))?;
+                    println!("✓ baseline atualizada: {}", golden.display());
+                    return Ok(());
+                }
+                match bridge::diff::compare_baseline(&dir, &name, &a)
+                    .map_err(|e| anyhow::anyhow!(e))?
+                {
+                    None => {
+                        println!(
+                            "✓ baseline semeada: {} (novo golden; volta a correr para comparar)",
+                            dir.join(format!("{name}.png")).display()
+                        );
+                        return Ok(());
+                    }
+                    Some((result, golden)) => {
+                        if !json {
+                            eprintln!("viber: golden {}", golden.display());
+                        }
+                        result
+                    }
+                }
+            } else {
+                let b = b.ok_or_else(|| {
+                    anyhow::anyhow!("uso: viber debug diff a.png b.png (ou --baseline <dir> a.png)")
+                })?;
+                other = Some(b.clone());
+                bridge::diff::diff_files(&a, &b, roi).map_err(|e| anyhow::anyhow!(e))?
+            };
+            if json {
+                let value = serde_json::to_value(&result).expect("serialize");
+                println!("{value:#}");
+            } else {
+                println!(
+                    "{} vs {}: mean_delta={:.3} max_delta={} changed={:.4}% p99={}",
+                    a.display(),
+                    other
+                        .as_deref()
+                        .map(|path| path.display().to_string())
+                        .unwrap_or_else(|| "(golden)".to_string()),
+                    result.mean_delta,
+                    result.max_delta,
+                    result.changed_pct,
+                    result.p99
+                );
+            }
+            let limit = threshold.unwrap_or(0.0);
+            if result.changed_pct > limit {
+                bail!(
+                    "diff acima do limiar: {:.4}% > {limit}%",
+                    result.changed_pct
+                );
+            }
+        }
+        DebugCommand::Raycast {
+            x,
+            y,
+            z,
+            dx,
+            dy,
+            dz,
+            max_toi,
+            json,
+            port,
+            world,
+        } => {
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            let result = client.call(
+                bridge::METHOD_RAYCAST,
+                serde_json::json!({
+                    "x": x, "y": y, "z": z,
+                    "dx": dx, "dy": dy, "dz": dz,
+                    "max_toi": max_toi,
+                }),
+            )?;
+            if json {
+                println!("{result:#}");
+            } else if result.get("hit").and_then(Value::as_bool).unwrap_or(false) {
+                println!(
+                    "✓ hit {} ({}) toi={:.3} point=({:.2},{:.2},{:.2}) normal=({:.2},{:.2},{:.2})",
+                    result.get("name").and_then(Value::as_str).unwrap_or("?"),
+                    result.get("entity").and_then(Value::as_u64).unwrap_or(0),
+                    result.get("toi").and_then(Value::as_f64).unwrap_or(0.0),
+                    result.pointer("/point/0").and_then(Value::as_f64).unwrap_or(0.0),
+                    result.pointer("/point/1").and_then(Value::as_f64).unwrap_or(0.0),
+                    result.pointer("/point/2").and_then(Value::as_f64).unwrap_or(0.0),
+                    result.pointer("/normal/0").and_then(Value::as_f64).unwrap_or(0.0),
+                    result.pointer("/normal/1").and_then(Value::as_f64).unwrap_or(0.0),
+                    result.pointer("/normal/2").and_then(Value::as_f64).unwrap_or(0.0),
+                );
+            } else {
+                println!("(sem hit)");
+            }
+        }
+        DebugCommand::Hash { port, world } => {
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            let response = client.lua("return viber.debug.world_hash()")?;
+            if !response.get("ok").and_then(Value::as_bool).unwrap_or(false) {
+                let error = response
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("erro desconhecido");
+                bail!("erro Luau: {error}");
+            }
+            match response.get("result") {
+                Some(value) => println!("{value}"),
+                None => bail!("engine sem viber.debug.world_hash (binário antigo?)"),
+            }
+        }
     }
     Ok(())
 }
+
+/// Helpers de QA injectados na REPL antes de `viber debug test <ficheiro>`.
+const QA_HELPERS: &str = r#"
+__qa = { asserts = 0, fails = {} }
+function expect(cond, msg)
+    __qa.asserts += 1
+    if not cond then table.insert(__qa.fails, msg or "expect falhou") end
+    return cond
+end
+function expect_near(a, b, tol, msg)
+    __qa.asserts += 1
+    tol = tol or 0.01
+    if math.abs(a - b) > tol then
+        table.insert(__qa.fails, (msg or "expect_near falhou")
+            .. string.format(" (%s vs %s ±%s)", tostring(a), tostring(b), tostring(tol)))
+        return false
+    end
+    return true
+end
+function fail(msg)
+    __qa.asserts += 1
+    table.insert(__qa.fails, msg or "fail")
+    return false
+end
+return true
+"#;
 
 fn main() -> std::process::ExitCode {
     let cli = Cli::parse();

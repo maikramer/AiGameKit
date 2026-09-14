@@ -1558,6 +1558,7 @@ mod tests {
             roads: Vec::new(),
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
         });
         app.add_systems(bevy::app::Update, seat_statics_once);
 
@@ -1636,6 +1637,7 @@ mod tests {
             roads: Vec::new(),
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
         });
         app.add_systems(bevy::app::Update, seat_statics_once);
 
@@ -1699,6 +1701,7 @@ mod tests {
             roads: Vec::new(),
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
         });
         app.add_systems(bevy::app::Update, seat_statics_once);
 
@@ -1936,6 +1939,7 @@ mod place_tests {
             roads: Vec::new(),
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
         };
         let ground = runtime.sample(0.0, 0.0);
         // `place` define a cota EXATA (sobe e desce), ao contrário do seating.

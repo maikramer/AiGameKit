@@ -53,6 +53,30 @@ impl Biome {
         }
     }
 
+    /// Id canónico do bioma (o mesmo vocabulário do attr `biome` da tag
+    /// declarativa `<Landmark>`).
+    pub fn id(self) -> &'static str {
+        match self {
+            Biome::DarkForest => "dark_forest",
+            Biome::Desert => "desert",
+            Biome::Swamp => "swamp",
+            Biome::FrozenPeaks => "frozen_peaks",
+        }
+    }
+
+    /// Resolve um id declarado em XML (`dark_forest`, `desert`, `swamp`,
+    /// `frozen_peaks`); desconhecido → `None` (o marco fica no catálogo com
+    /// o id cru, ver [`NotaLandmarkOwned::biome_label`]).
+    pub fn from_id(id: &str) -> Option<Biome> {
+        match id {
+            "dark_forest" => Some(Biome::DarkForest),
+            "desert" => Some(Biome::Desert),
+            "swamp" => Some(Biome::Swamp),
+            "frozen_peaks" => Some(Biome::FrozenPeaks),
+            _ => None,
+        }
+    }
+
     /// Quest de traçado do bioma (id no JSON).
     pub fn survey_quest(self) -> &'static str {
         match self {
@@ -80,7 +104,44 @@ pub struct NotaLandmark {
     pub label: &'static str,
 }
 
-/// Os 12 marcos — espelham os `objective.target` das quests `*_survey`.
+/// Marco de traçado OWNED (Fase B2) — a versão `String` do [`NotaLandmark`],
+/// construída a partir das tags declarativas `<Landmark>` do mundo ou do
+/// fallback hardcoded ([`LandmarkCatalog::fallback`]). `survey-quest` e
+/// `mark-radius` têm defaults por bioma (`Biome::survey_quest` /
+/// `Biome::mark_radius`), sobreponíveis por attr.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NotaLandmarkOwned {
+    /// `name` da entidade no mundo — é por ele que o [F] casa e as quests
+    /// `visit` apontam.
+    pub name: String,
+    /// Id do bioma tal como declarado (`dark_forest`, `desert`, `swamp`,
+    /// `frozen_peaks`) — o agrupamento "3 por bioma" compara ESTE id.
+    pub biome_id: String,
+    pub label: String,
+    /// Quest de traçado associada (dados de paridade; o consumo live das
+    /// quests `*_survey` continua a vir dos JSON).
+    pub survey_quest: String,
+    /// Alcance de marcação [F] (m).
+    pub mark_radius: f32,
+}
+
+impl NotaLandmarkOwned {
+    /// Bioma resolvido (`Biome::from_id`); `None` = id não reconhecido.
+    pub fn biome(&self) -> Option<Biome> {
+        Biome::from_id(&self.biome_id)
+    }
+
+    /// Rótulo de exposição do bioma; id desconhecido → o id cru (o marco
+    /// continua assinável/viável, só o toast mostra o nome menos amigável).
+    pub fn biome_label(&self) -> String {
+        self.biome()
+            .map(|b| b.label().to_string())
+            .unwrap_or_else(|| self.biome_id.clone())
+    }
+}
+
+/// Os 12 marcos do fallback — espelham os `objective.target` das quests
+/// `*_survey`.
 pub const LANDMARKS: [NotaLandmark; 12] = [
     NotaLandmark {
         name: "forest-outpost-tower",
@@ -144,8 +205,59 @@ pub const LANDMARKS: [NotaLandmark; 12] = [
     },
 ];
 
-pub fn landmark_by_name(name: &str) -> Option<&'static NotaLandmark> {
-    LANDMARKS.iter().find(|l| l.name == name)
+/// Catálogo dos marcos da Nota (Fase B2): preenchido no arranque a partir das
+/// tags declarativas `<Landmark>` do mundo (via `recipes::spawn::startup`);
+/// quando o mundo não declara NENHUM, [`Default`] entrega o fallback
+/// hardcoded ([`fallback`]) — política aditiva: o simple-rpg sem declarações
+/// comporta-se exatamente como antes.
+#[derive(Debug, Clone, Resource)]
+pub struct LandmarkCatalog(pub Vec<NotaLandmarkOwned>);
+
+impl Default for LandmarkCatalog {
+    fn default() -> Self {
+        Self::fallback()
+    }
+}
+
+impl LandmarkCatalog {
+    /// As 12 entradas hardcoded ([`LANDMARKS`]) no formato owned — o
+    /// comportamento de sempre quando o mundo não declara `<Landmark>`.
+    pub fn fallback() -> Self {
+        Self(
+            LANDMARKS
+                .iter()
+                .map(|l| NotaLandmarkOwned {
+                    name: l.name.to_string(),
+                    biome_id: l.biome.id().to_string(),
+                    label: l.label.to_string(),
+                    survey_quest: l.biome.survey_quest().to_string(),
+                    mark_radius: l.biome.mark_radius(),
+                })
+                .collect(),
+        )
+    }
+}
+
+/// Lookup puro: marco por `name` de entidade DENTRO de um catálogo.
+pub fn landmark_by_name<'a>(
+    catalog: &'a LandmarkCatalog,
+    name: &str,
+) -> Option<&'a NotaLandmarkOwned> {
+    catalog.0.iter().find(|l| l.name == name)
+}
+
+/// Quantos marcos do MESMO bioma (mesmo `biome_id`) faltam assinar — puro,
+/// para os testes do toast "faltam N em bioma".
+pub fn remaining_in_biome(
+    catalog: &LandmarkCatalog,
+    marked: &HashSet<String>,
+    biome_id: &str,
+) -> usize {
+    catalog
+        .0
+        .iter()
+        .filter(|l| l.biome_id == biome_id && !marked.contains(&l.name))
+        .count()
 }
 
 /// Bandas do mundo para o registry de hostis (índice = `alive_in_region`).
@@ -174,10 +286,12 @@ pub struct NotaLog {
     pub marked: HashSet<String>,
 }
 
-/// Waypoint atual (último marco assinado).
+/// Waypoint atual (último marco assinado). O rótulo é `String` desde a Fase
+/// B2: com o catálogo declarável (`<Landmark>`) os labels já não são
+/// `'static` — vivem no [`LandmarkCatalog`].
 #[derive(Debug, Clone, Resource, Default)]
 pub struct Waypoint {
-    pub label: Option<&'static str>,
+    pub label: Option<String>,
     pub position: Option<Vec3>,
 }
 
@@ -204,7 +318,8 @@ pub struct TravelPlugin;
 
 impl Plugin for TravelPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<NotaLog>()
+        app.init_resource::<LandmarkCatalog>()
+            .init_resource::<NotaLog>()
             .init_resource::<Waypoint>()
             .init_resource::<EnemyRegistry>()
             .init_resource::<TravelMenuState>()
@@ -318,6 +433,7 @@ fn nota_measure_system(
     keys: Res<ButtonInput<KeyCode>>,
     players: Query<&GlobalTransform, With<Player>>,
     named: Query<(&Name, &GlobalTransform)>,
+    catalog: Res<LandmarkCatalog>,
     mut nota: ResMut<NotaLog>,
     mut waypoint: ResMut<Waypoint>,
     mut toasts: MessageWriter<ScriptToast>,
@@ -337,19 +453,19 @@ fn nota_measure_system(
     // residuais de cota (marco num outeiro, herói na base) não deviam
     // impedir o [F] nem completar as quests *_survey.
     let Some((name, _)) = named.iter().find(|(name, t)| {
-        landmark_by_name(name)
-            .filter(|l| !nota.marked.contains(l.name))
-            .filter(|l| t.translation().xz().distance(player_pos.xz()) <= l.biome.mark_radius())
+        landmark_by_name(&catalog, name)
+            .filter(|l| !nota.marked.contains(&l.name))
+            .filter(|l| t.translation().xz().distance(player_pos.xz()) <= l.mark_radius)
             .is_some()
     }) else {
         return;
     };
     let name = name.to_string();
-    let Some(landmark) = landmark_by_name(&name) else {
+    let Some(landmark) = landmark_by_name(&catalog, &name) else {
         return;
     };
     nota.marked.insert(name.clone());
-    waypoint.label = Some(landmark.label);
+    waypoint.label = Some(landmark.label.clone());
     // O twin MAIS PRÓXIMO do herói (não o primeiro da query): com nomes
     // duplicados (includes repetidos), o primeiro podia estar do outro lado
     // do mapa e o waypoint apontava para lá.
@@ -362,21 +478,18 @@ fn nota_measure_system(
                 .total_cmp(&b.translation().distance_squared(player_pos))
         })
         .map(|(_, t)| t.translation());
-    let remaining_in_biome = LANDMARKS
-        .iter()
-        .filter(|l| l.biome == landmark.biome && !nota.marked.contains(l.name))
-        .count();
-    if remaining_in_biome == 0 {
+    let biome_label = landmark.biome_label();
+    let remaining = remaining_in_biome(&catalog, &nota.marked, &landmark.biome_id);
+    if remaining == 0 {
         toasts.write(ScriptToast(format!(
             "Medido e assinado: {} — {} ASSINADO!",
             landmark.label,
-            landmark.biome.label().to_uppercase()
+            biome_label.to_uppercase()
         )));
     } else {
         toasts.write(ScriptToast(format!(
-            "Medido e assinado: {} (faltam {remaining_in_biome} em {})",
-            landmark.label,
-            landmark.biome.label()
+            "Medido e assinado: {} (faltam {remaining} em {biome_label})",
+            landmark.label
         )));
     }
     info!(target: "viber::nota", "marco '{name}' assinado");
@@ -454,6 +567,7 @@ fn travel_menu_system(
     time: Res<Time>,
     players: Query<&GlobalTransform, With<Player>>,
     named: Query<(&Name, &GlobalTransform)>,
+    catalog: Res<LandmarkCatalog>,
     nota: Res<NotaLog>,
     mut state: ResMut<TravelMenuState>,
     // Espelho "painel aberto rouba input": sem isto, com o painel de viagem
@@ -510,10 +624,10 @@ fn travel_menu_system(
         }
     }
 
-    let marked: Vec<(&'static str, &'static str)> = LANDMARKS
+    let marked: Vec<&NotaLandmarkOwned> = catalog
+        .0
         .iter()
-        .filter(|l| nota.marked.contains(l.name))
-        .map(|l| (l.name, l.label))
+        .filter(|l| nota.marked.contains(&l.name))
         .collect();
 
     if !state.open {
@@ -537,10 +651,10 @@ fn travel_menu_system(
 
     // viajar: fade a preto 0.4 s → teleport no preto cheio → 0.4 s de volta
     if keys.just_pressed(KeyCode::KeyJ) {
-        if let Some((name, label)) = marked.get(state.selection) {
+        if let Some(entry) = marked.get(state.selection) {
             let target = named
                 .iter()
-                .find(|(name_entity, _)| name_entity.to_string() == *name)
+                .find(|(name_entity, _)| name_entity.to_string() == entry.name)
                 .map(|(_, t)| t.translation());
             if let Some(pos) = target {
                 let x = pos.x + 2.0;
@@ -559,7 +673,7 @@ fn travel_menu_system(
                     clip: crate::ambient::SfxClip::Travel,
                     position: None,
                 });
-                toasts.write(ScriptToast(format!("A viajar para {label}…")));
+                toasts.write(ScriptToast(format!("A viajar para {}…", entry.label)));
                 state.open = false;
                 // Confirmação fecha o painel: re-espelha (senão o input
                 // ficava roubado para sempre).
@@ -569,9 +683,9 @@ fn travel_menu_system(
     }
 
     let mut lines = vec![String::new()];
-    for (i, (_, label)) in marked.iter().enumerate() {
+    for (i, entry) in marked.iter().enumerate() {
         let marker = if i == state.selection { ">" } else { " " };
-        lines.push(format!("{marker} {label}"));
+        lines.push(format!("{marker} {}", entry.label));
     }
     lines.push(String::new());
     lines.push("[J] viajar · ↑↓ escolher · [G] sair".into());
@@ -716,7 +830,7 @@ fn waypoint_hud_system(
     mut hud: Query<&mut Visibility, With<WaypointHud>>,
     mut texts: Query<&mut Text, With<WaypointText>>,
 ) {
-    let Some(label) = waypoint.label else {
+    let Some(label) = waypoint.label.as_deref() else {
         return;
     };
     let Some(position) = waypoint.position else {
@@ -777,6 +891,7 @@ fn quest_debug_landmark(
     keys: Res<ButtonInput<KeyCode>>,
     mut players: Query<(Entity, &GlobalTransform, &mut Transform), With<Player>>,
     named: Query<(&Name, &GlobalTransform)>,
+    catalog: Res<LandmarkCatalog>,
     nota: Res<NotaLog>,
     terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     mut toasts: MessageWriter<ScriptToast>,
@@ -791,8 +906,8 @@ fn quest_debug_landmark(
     let Some(target) = named
         .iter()
         .filter(|(name, _)| {
-            landmark_by_name(name)
-                .filter(|l| !nota.marked.contains(l.name))
+            landmark_by_name(&catalog, name)
+                .filter(|l| !nota.marked.contains(&l.name))
                 .is_some()
         })
         .min_by(|(_, a_t), (_, b_t)| {
@@ -841,7 +956,8 @@ mod tests {
 
     #[test]
     fn test_survey_quests_exist_in_quest_log() {
-        let log = crate::quests::QuestLog::default();
+        let log =
+            crate::quests::QuestLog::with_dir(&crate::quests::example_quests_dir());
         for biome in [
             Biome::DarkForest,
             Biome::Desert,
@@ -888,10 +1004,91 @@ mod tests {
 
     #[test]
     fn test_landmark_lookup_and_radius() {
-        let l = landmark_by_name("desert-arch").expect("marco");
+        // Fase B2: o lookup puro recebe o catálogo — o fallback (default) tem
+        // de comportar-se como o const de sempre.
+        let catalog = LandmarkCatalog::default();
+        let l = landmark_by_name(&catalog, "desert-arch").expect("marco");
         assert_eq!(l.label, "Arco do Deserto");
-        assert_eq!(l.biome.mark_radius(), 12.0);
-        assert!(landmark_by_name("not-a-landmark").is_none());
+        assert_eq!(l.biome_id, "desert");
+        assert_eq!(l.biome(), Some(Biome::Desert));
+        assert_eq!(l.mark_radius, 12.0);
+        assert_eq!(l.survey_quest, "desert_survey");
+        assert!(landmark_by_name(&catalog, "not-a-landmark").is_none());
+    }
+
+    #[test]
+    fn test_fallback_catalog_mirrors_const() {
+        // O fallback (mundo sem <Landmark>) tem de ser EXATAMENTE o const:
+        // 12 marcos, 3 por bioma, nomes únicos, raio/quest por bioma.
+        let catalog = LandmarkCatalog::default();
+        assert_eq!(catalog.0.len(), 12);
+        for biome in [
+            Biome::DarkForest,
+            Biome::Desert,
+            Biome::Swamp,
+            Biome::FrozenPeaks,
+        ] {
+            let count = catalog
+                .0
+                .iter()
+                .filter(|l| l.biome_id == biome.id())
+                .count();
+            assert_eq!(count, 3, "bioma {} com {count}", biome.id());
+        }
+        let mut names: Vec<_> = catalog.0.iter().map(|l| l.name.clone()).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), 12);
+        // O fallback cobre o const um-a-um (ordem incluída).
+        for (owned, constant) in catalog.0.iter().zip(LANDMARKS.iter()) {
+            assert_eq!(owned.name, constant.name);
+            assert_eq!(owned.label, constant.label);
+            assert_eq!(owned.biome(), Some(constant.biome));
+            assert_eq!(owned.mark_radius, constant.biome.mark_radius());
+            assert_eq!(owned.survey_quest, constant.biome.survey_quest());
+        }
+    }
+
+    #[test]
+    fn test_remaining_in_biome_counts_unmarked() {
+        let catalog = LandmarkCatalog::default();
+        let mut marked = HashSet::new();
+        assert_eq!(remaining_in_biome(&catalog, &marked, "swamp"), 3);
+        for name in ["swamp-wrecked-boat", "swamp-sunken-graves", "swamp-bone-altar"] {
+            marked.insert(name.to_string());
+        }
+        assert_eq!(remaining_in_biome(&catalog, &marked, "swamp"), 0);
+        // Biomas não afetados pelos swamp marcados.
+        assert_eq!(remaining_in_biome(&catalog, &marked, "desert"), 3);
+    }
+
+    #[test]
+    fn test_biome_from_id_roundtrip() {
+        for biome in [
+            Biome::DarkForest,
+            Biome::Desert,
+            Biome::Swamp,
+            Biome::FrozenPeaks,
+        ] {
+            assert_eq!(Biome::from_id(biome.id()), Some(biome));
+        }
+        assert_eq!(Biome::from_id("vale"), None);
+        assert_eq!(Biome::from_id(""), None);
+    }
+
+    #[test]
+    fn test_unknown_biome_keeps_raw_id_label() {
+        // Marco declarado com bioma desconhecido: fica no catálogo, o toast
+        // mostra o id cru em vez de partir o parse.
+        let l = NotaLandmarkOwned {
+            name: "mystery-spire".into(),
+            biome_id: "vale".into(),
+            label: "Aguja Misteriosa".into(),
+            survey_quest: String::new(),
+            mark_radius: 8.0,
+        };
+        assert_eq!(l.biome(), None);
+        assert_eq!(l.biome_label(), "vale");
     }
 
     #[test]

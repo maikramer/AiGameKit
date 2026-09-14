@@ -24,6 +24,7 @@ pub mod luau;
 pub mod menus;
 pub mod meshopt;
 pub mod music;
+pub mod nav;
 pub mod particles;
 pub mod physics;
 pub mod physics_fx;

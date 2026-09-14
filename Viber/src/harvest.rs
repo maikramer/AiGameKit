@@ -395,10 +395,22 @@ pub fn debris_angvel(rng: &mut Rng) -> Vec3 {
 /// Deposita o loot no vault — MESMO caminho de `viber.report_collect`
 /// (recurso nomeado; itens de objetivo caem no `item_add`). Os objetivos
 /// `collect` das quests leem o vault, logo progridem sozinhos.
-pub fn grant_loot(vault: &mut Vault, resource: Option<&(String, u32)>) {
+pub fn grant_loot(
+    vault: &mut Vault,
+    resource: Option<&(String, u32)>,
+    events: &mut Option<ResMut<crate::luau::ScriptEventQueue>>,
+) {
     if let Some((kind, amount)) = resource {
-        if !vault.add_resource(kind, *amount) {
+        let known = vault.add_resource(kind, *amount);
+        if !known {
             vault.item_add(kind, *amount);
+        }
+        // Evento engine→Lua: quests/contadores em Lua podem reagir ao loot.
+        if let Some(events) = events.as_deref_mut() {
+            events.push(crate::luau::ScriptGameEvent::Collect {
+                item: kind.clone(),
+                amount: *amount,
+            });
         }
     }
 }
@@ -481,7 +493,18 @@ pub fn harvest_context_system(
     players: Query<&GlobalTransform, With<crate::player::Player>>,
     props: Query<(Entity, &GlobalTransform, &Destructible), Without<crate::player::Player>>,
     interactions: Query<(&GlobalTransform, &ScriptInteraction), Without<crate::player::Player>>,
+    owners: Option<Res<crate::luau::ScriptSystemOwners>>,
 ) {
+    // Reclamado por script (`viber.own_system("harvest")`): sem contexto não
+    // há prompt, ferramenta automática nem golpe nativos — a colheita é do
+    // Lua (e o melee deixa de ceder o [J]).
+    if owners
+        .as_deref()
+        .is_some_and(|o| o.owns(crate::luau::ownership::SYSTEM_HARVEST))
+    {
+        context.target = None;
+        return;
+    }
     let Ok(player) = players.single() else {
         context.target = None;
         return;
@@ -686,6 +709,7 @@ pub fn harvest_impact_system(
     mut hero_xp: Query<&mut Xp, With<crate::player::Player>>,
     darkens: Query<&Darken>,
     mut vault: Option<ResMut<Vault>>,
+    mut events: Option<ResMut<crate::luau::ScriptEventQueue>>,
     mut fx: HarvestFx,
 ) {
     if !pending.active {
@@ -734,7 +758,7 @@ pub fn harvest_impact_system(
         );
         // Loot no vault (report_collect) + XP +30 (mesma via de add_xp).
         if let Some(vault) = vault.as_deref_mut() {
-            grant_loot(vault, data.resource.as_ref());
+            grant_loot(vault, data.resource.as_ref(), &mut events);
         }
         if let Ok(mut xp) = hero_xp.single_mut() {
             gain_xp(&mut xp, HARVEST_XP);
@@ -1587,15 +1611,15 @@ mod tests {
     #[test]
     fn test_grant_loot_follows_report_collect_path() {
         let mut vault = Vault::default();
-        grant_loot(&mut vault, Some(&("wood".to_string(), 3)));
+        grant_loot(&mut vault, Some(&("wood".to_string(), 3)), &mut None);
         assert_eq!(vault.wood, 3);
-        grant_loot(&mut vault, Some(&("stone".to_string(), 4)));
+        grant_loot(&mut vault, Some(&("stone".to_string(), 4)), &mut None);
         assert_eq!(vault.stone, 4);
         // item de objetivo (não é recurso) → item_add, como no report_collect
-        grant_loot(&mut vault, Some(&("dark-wood".to_string(), 2)));
+        grant_loot(&mut vault, Some(&("dark-wood".to_string(), 2)), &mut None);
         assert_eq!(vault.item_count("dark-wood"), 2);
         // sem resource: nada (só XP)
-        grant_loot(&mut vault, None);
+        grant_loot(&mut vault, None, &mut None);
         assert_eq!(vault.gold, 0);
     }
 }

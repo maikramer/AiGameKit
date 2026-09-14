@@ -34,9 +34,26 @@ pub struct GameConfig {
     /// Título da janela (opcional; default = nome do ficheiro do mundo).
     #[serde(default)]
     pub title: Option<String>,
+    /// Preset de GAMEPLAY: `"rpg"` (default) liga os plugins de domínio
+    /// (combate/skills/economia/quests/travel/save/colheita); `"none"` boota
+    /// a engine SEM eles — o jogo é 100 % XML + Luau sobre a API genérica
+    /// (ver worlds/lua-demo). Desacoplamento do tipo de jogo.
+    #[serde(default)]
+    pub gameplay: Option<String>,
     pub assets: AssetsConfig,
     pub game: GameDirs,
     pub save: SaveConfig,
+}
+
+impl GameConfig {
+    /// `true` (default) = preset RPG completo; `gameplay: none` = só engine.
+    pub fn gameplay_rpg(&self) -> bool {
+        !self
+            .gameplay
+            .as_deref()
+            .map(|g| g.eq_ignore_ascii_case("none"))
+            .unwrap_or(false)
+    }
 }
 
 /// Diretórios resolvidos contra as asset roots (AssetServer multi-root).
@@ -65,6 +82,10 @@ pub struct AssetsConfig {
 pub struct GameDirs {
     /// `script="x.lua"` + hot-reload.
     pub scripts_dir: PathBuf,
+    /// Quests `*.json` do mundo (`quests::load_quests_from_dir`). Ausente →
+    /// `quests/` ao lado do `world.xml` (ver [`GameConfig::quests_dir_on`]).
+    #[serde(default)]
+    pub quests_dir: Option<PathBuf>,
     // NOTA: NÃO há `ui_dir` — o `src="@ui/hud.css"` do UiStyle é relativo à
     // pasta do jogo e o prefixo `ui/` é parte do caminho autor (contrato do
     // XML); juntar um dir configurável duplicava o prefixo e despia o HUD de
@@ -150,9 +171,33 @@ impl GameConfig {
             .map(|rel| Self::asset_string(&self.assets.terrain_textures_dir, &rel))
     }
 
+    /// O mesmo para o roughness map (micro-variação do brilho especular).
+    pub fn terrain_roughness(&self, layer: &str) -> Option<String> {
+        crate::terrain::splat::pool_roughness(layer)
+            .map(|rel| Self::asset_string(&self.assets.terrain_textures_dir, &rel))
+    }
+
+    /// O mesmo para o SMOOTHNESS map (algumas superfícies do pool publicam
+    /// smoothness; o material inverte).
+    pub fn terrain_smoothness(&self, layer: &str) -> Option<String> {
+        crate::terrain::splat::pool_smoothness(layer)
+            .map(|rel| Self::asset_string(&self.assets.terrain_textures_dir, &rel))
+    }
+
     /// Pasta de scripts (filesystem, contra a pasta do jogo).
     pub fn scripts_dir_on(&self, world_dir: &Path) -> PathBuf {
         world_dir.join(&self.game.scripts_dir)
+    }
+
+    /// Pasta de quests (filesystem, contra a pasta do jogo). Default
+    /// `quests/` ao lado do `world.xml` quando o config não remapeia.
+    pub fn quests_dir_on(&self, world_dir: &Path) -> PathBuf {
+        world_dir.join(
+            self.game
+                .quests_dir
+                .clone()
+                .unwrap_or_else(|| PathBuf::from("quests")),
+        )
     }
 
     /// Onde gravar os saves (absoluto; `~` já expandido no load).
@@ -204,9 +249,9 @@ pub fn load(world_dir: &Path) -> Result<GameConfig> {
 /// Aviso (não erro) em chaves desconhecidas — o config cresce, e um jogo com
 /// um campo futuro não deve rebentar numa engine antiga (igual aos attrs XML).
 fn warn_unknown_keys(path: &Path, value: &serde_yaml::Value) {
-    const TOP: &[&str] = &["title", "assets", "game", "save"];
+    const TOP: &[&str] = &["title", "gameplay", "assets", "game", "save"];
     const ASSETS: &[&str] = &["roots", "bgm_dir", "sfx_dir", "terrain_textures_dir"];
-    const GAME: &[&str] = &["scripts_dir"];
+    const GAME: &[&str] = &["scripts_dir", "quests_dir"];
     const SAVE: &[&str] = &["dir"];
     let Some(map) = value.as_mapping() else {
         return;
@@ -266,6 +311,7 @@ fn expand_home(path: &Path) -> PathBuf {
 pub(crate) fn fixture() -> GameConfig {
     GameConfig {
         title: None,
+        gameplay: None, // default: preset RPG (gameplay_rpg() == true)
         assets: AssetsConfig {
             roots: Vec::new(),
             bgm_dir: PathBuf::from("assets/audio/bgm"),
@@ -274,6 +320,7 @@ pub(crate) fn fixture() -> GameConfig {
         },
         game: GameDirs {
             scripts_dir: PathBuf::from("scripts"),
+            quests_dir: None, // default: quests/ ao lado do world.xml
         },
         save: SaveConfig {
             dir: PathBuf::from("/tmp"),
@@ -327,6 +374,8 @@ mod tests {
             vec![world_dir.to_path_buf(), dir.path().join("pool/public")]
         );
         assert_eq!(config.scripts_dir_on(world_dir), world_dir.join("scripts"));
+        // quests_dir ausente no config → default `quests/` ao lado do mundo.
+        assert_eq!(config.quests_dir_on(world_dir), world_dir.join("quests"));
         assert_eq!(config.save_dir(), Path::new("/tmp/viber-test-saves"));
     }
 
@@ -376,5 +425,22 @@ mod tests {
         let config = load(dir.path()).unwrap();
         let world_dir = dir.path();
         assert_eq!(config.asset_roots(world_dir), vec![world_dir.to_path_buf()]);
+    }
+}
+
+#[cfg(test)]
+mod gameplay_preset_tests {
+    use super::*;
+
+    #[test]
+    fn test_gameplay_preset_resolution() {
+        let mut config = fixture();
+        assert!(config.gameplay_rpg(), "ausente = default RPG");
+        config.gameplay = Some("rpg".to_string());
+        assert!(config.gameplay_rpg());
+        config.gameplay = Some("none".to_string());
+        assert!(!config.gameplay_rpg(), "'none' desliga o preset RPG");
+        config.gameplay = Some("NONE".to_string());
+        assert!(!config.gameplay_rpg(), "case-insensitive");
     }
 }

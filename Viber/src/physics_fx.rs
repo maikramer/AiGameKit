@@ -291,6 +291,7 @@ mod tests {
             roads: vec![],
             pads: vec![],
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
         });
 
         let hero = app

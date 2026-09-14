@@ -13,8 +13,10 @@ use bevy::world_serialization::WorldAssetRoot;
 use super::{EntityKind, EntitySpec, MaterialSpec, ParsedWorld, Shape, TransformSpec};
 use crate::terrain::TerrainSpec;
 use crate::terrain::cliffs::CliffSpec;
+use crate::terrain::cut::CutSpec;
 use crate::terrain::decal::GroundDecalSpec;
 use crate::terrain::features::TerrainFeatures;
+use crate::terrain::plateau::PlateauSpec;
 use crate::terrain::roads::{RoadNetworkSpec, RoadSpec, SegmentSpec, WaySpec};
 use crate::terrain::spec::TerrainPadSpec;
 use crate::terrain::voxel::ArchSpec;
@@ -132,6 +134,8 @@ fn is_ground_feature(kind: &EntityKind) -> bool {
         kind,
         EntityKind::TerrainPad { .. }
             | EntityKind::Lake { .. }
+            | EntityKind::Cut { .. }
+            | EntityKind::Plateau { .. }
             | EntityKind::River { .. }
             | EntityKind::Cliff { .. }
             | EntityKind::Cave { .. }
@@ -147,12 +151,38 @@ fn is_ground_feature(kind: &EntityKind) -> bool {
             | EntityKind::DynamicSpawner { .. }
             | EntityKind::SpawnExclusion { .. }
             | EntityKind::Vegetation { .. }
+            // Catálogos RPG declaráveis (Fases B2/B3): dados puras para os
+            // recursos `travel::LandmarkCatalog` / `feedback::RespawnCatalog`,
+            // recolhidos em `collect_catalogs` — nunca spawna entidade.
+            | EntityKind::Landmark { .. }
+            | EntityKind::SpawnPoint { .. }
     )
 }
 
 /// Collects the terrain spec and every ground feature out of a parsed entity
 /// tree into `out` — the same pass `startup` runs, exposed so headless tools
 /// and tests can carve a world without booting the app.
+/// Prototypes do mundo (`<Prototype id="…">`) para spawn EM RUNTIME
+/// (`viber.spawn_prototype`). Imutável pós-arranque.
+#[derive(Resource, Default)]
+pub struct PrototypeLibrary(pub std::collections::BTreeMap<String, EntitySpec>);
+
+/// Pedido de spawn pendente enfileirado por script; materializado pelo
+/// sistema exclusivo [`apply_script_spawns`] (primitivas com textura/colisor
+/// precisam dos `Assets`, que `Commands` não dá).
+pub struct PendingPrototypeSpawn {
+    pub name: String,
+    pub pos: Vec3,
+    /// Sem cota explícita: assenta o Y na superfície renderizada.
+    pub seat: bool,
+    /// Callback Lua chamada com os bits da entidade criada.
+    pub on_spawned: Option<mlua::Function>,
+}
+
+/// Fila de pedidos de spawn (`ScriptCommand::SpawnPrototype` → sistema).
+#[derive(Resource, Default)]
+pub struct PendingScriptSpawns(pub Vec<PendingPrototypeSpawn>);
+
 pub fn collect_terrain(specs: &[EntitySpec], out: &mut PendingTerrain) {
     collect_walk(specs, Vec2::ZERO, out);
 }
@@ -192,6 +222,18 @@ fn collect_walk(specs: &[EntitySpec], offset: Vec2, out: &mut PendingTerrain) {
                 out.features.lakes.push(LakeSpec {
                     at: lake.at + offset,
                     ..lake.clone()
+                });
+            }
+            EntityKind::Cut { spec: cut } => {
+                out.features.cuts.push(CutSpec {
+                    path: cut.path.iter().map(|p| *p + offset).collect(),
+                    ..cut.clone()
+                });
+            }
+            EntityKind::Plateau { spec: plateau } => {
+                out.features.plateaus.push(PlateauSpec {
+                    at: plateau.at + offset,
+                    ..plateau.clone()
                 });
             }
             EntityKind::River { spec: river } => {
@@ -283,6 +325,34 @@ fn collect_walk(specs: &[EntitySpec], offset: Vec2, out: &mut PendingTerrain) {
     }
 }
 
+/// Recolhe os catálogos RPG declaráveis (Fases B2/B3) da árvore de entidades:
+/// `<Landmark>` → [`crate::travel::LandmarkCatalog`] e `<SpawnPoint>` →
+/// [`crate::feedback::RespawnCatalog`]. Só substituem o fallback quando o
+/// mundo declara ALGUMA entrada (decidido no [`startup`]). Coordenadas `at`
+/// somam a translation dos grupos ancestrais (convenção `at` do XML).
+fn collect_catalogs(specs: &[EntitySpec], out: &mut PendingCatalogs, offset: Vec2) {
+    for spec in specs {
+        let child_offset =
+            offset + Vec2::new(spec.transform.translation[0], spec.transform.translation[2]);
+        match &spec.kind {
+            EntityKind::Landmark { spec } => out.landmarks.push(spec.clone()),
+            EntityKind::SpawnPoint { at, label } => out.spawn_points.push((
+                Vec2::new(at[0] + offset.x, at[1] + offset.y),
+                label.clone(),
+            )),
+            _ => {}
+        }
+        collect_catalogs(&spec.children, out, child_offset);
+    }
+}
+
+/// Catálogos pendentes de um mundo ([`collect_catalogs`]).
+#[derive(Default)]
+struct PendingCatalogs {
+    landmarks: Vec<crate::travel::NotaLandmarkOwned>,
+    spawn_points: Vec<(bevy::math::Vec2, String)>,
+}
+
 /// Stats from a world spawn.
 #[derive(Debug, Default)]
 pub struct SpawnStats {
@@ -304,9 +374,24 @@ pub fn startup(world: &mut World) {
     };
     collect_terrain(&parsed.entities, &mut pending_terrain);
     world.insert_resource(pending_terrain);
+    // Catálogos RPG declaráveis (Fases B2/B3): os plugins já inicializaram os
+    // recursos com o fallback hardcoded; só SUBSTITUÍMOS quando o mundo
+    // declara <Landmark>/<SpawnPoint> — política aditiva (o simple-rpg fica
+    // a funcionar identicamente, com ou sem o landmarks.xml novo).
+    let mut catalogs = PendingCatalogs::default();
+    collect_catalogs(&parsed.entities, &mut catalogs, Vec2::ZERO);
+    if !catalogs.landmarks.is_empty() {
+        world.insert_resource(crate::travel::LandmarkCatalog(catalogs.landmarks));
+    }
+    if !catalogs.spawn_points.is_empty() {
+        world.insert_resource(crate::feedback::RespawnCatalog(catalogs.spawn_points));
+    }
     // O save por-mundo precisa da pasta do world.xml DEPOIS de o bootstrap
     // do terreno remover `PendingTerrain` (save.rs::WorldBaseDir).
     world.insert_resource(crate::save::WorldBaseDir(pending.base_dir));
+    // Prototypes para spawn em runtime (viber.spawn_prototype) — o WorldIR
+    // morre aqui; a biblioteca sobrevive.
+    world.insert_resource(PrototypeLibrary(parsed.prototypes.clone()));
     if let Some([r, g, b]) = parsed.clear_color {
         world.insert_resource(ClearColor(Color::srgb(r, g, b)));
     }
@@ -726,14 +811,7 @@ fn collect_spawn_groups(
         match &spec.kind {
             EntityKind::Lake { spec: lake } => {
                 if lake.rocks {
-                    let candidates = crate::terrain::shore_rocks::lake_candidates(
-                        bevy::math::Vec2::new(lake.at.x, lake.at.y),
-                        lake.radius,
-                        lake.depth,
-                        lake.water_offset,
-                        &lake.rocks_spec,
-                        out.len(),
-                    );
+                    let candidates = crate::terrain::shore_rocks::lake_candidates(lake, out.len());
                     push_shore_rock_group(
                         out,
                         asset_server,
@@ -977,11 +1055,11 @@ fn spawn_entity(
     parent: Option<Entity>,
     stats: &mut SpawnStats,
     ambient: &mut Option<GlobalAmbientLight>,
-) {
+) -> Option<Entity> {
     // Ground features + `<Terrain>` are consumed by the terrain runtime
     // (collected in `startup`) — no entity is spawned for them.
     if is_ground_feature(&spec.kind) || matches!(spec.kind, EntityKind::Terrain { .. }) {
-        return;
+        return None;
     }
     // Every entity gets Visibility: glTF scene children carry
     // InheritedVisibility and warn B0004 if any parent lacks it.
@@ -995,6 +1073,14 @@ fn spawn_entity(
     // Script Luau da entidade: o runtime executa `on_update(dt)` por frame.
     if let Some(path) = &spec.script {
         entity.insert(crate::luau::LuaScriptRef { path: path.clone() });
+        // `tag="always-active"`: o script NUNCA congela pelo LOD de ativação
+        // (mesma política dos scripts de UI). Para CONTROLLERS de jogo que
+        // precisam de correr onde o herói andar (ex.: habilidades em Lua).
+        if spec.tag.as_deref() == Some("always-active") {
+            entity.insert(crate::luau::ScriptActivation {
+                radius: f32::INFINITY,
+            });
+        }
     }
     // Destrutível standalone (`<Entity destructible="…">`) — o caminho do
     // spawner cobre as instâncias; este cobre props autorais soltos.
@@ -1039,7 +1125,7 @@ fn spawn_entity(
             bevy::log::warn!(
                 "<Use prototype=\"{prototype}\"> chegou ao spawn sem expansão — ignorada"
             );
-            return;
+            return None;
         }
         EntityKind::ParticleSystem { spec } => {
             let resolved = crate::particles::resolve(spec);
@@ -1425,6 +1511,8 @@ fn spawn_entity(
         EntityKind::Terrain { .. }
         | EntityKind::TerrainPad { .. }
         | EntityKind::Lake { .. }
+        | EntityKind::Cut { .. }
+        | EntityKind::Plateau { .. }
         | EntityKind::River { .. }
         | EntityKind::Cliff { .. }
         | EntityKind::Cave { .. }
@@ -1536,12 +1624,16 @@ fn spawn_entity(
                     attrs: attrs.clone(),
                 });
         }
+        // Catálogos B2/B3: consumidos a MONTANTE (is_ground_feature →
+        // collect_catalogs, no arranque) — nunca chegam aqui.
+        EntityKind::Landmark { .. } | EntityKind::SpawnPoint { .. } => {}
     }
     stats.entities += 1;
     let id = entity.id();
     for child in &spec.children {
         spawn_entity(world, ctx, child, Some(id), stats, ambient);
     }
+    Some(id)
 }
 
 fn build_transform(spec: &TransformSpec) -> Transform {
@@ -1839,6 +1931,127 @@ mod cache_key_tests {
         let mut d = a.clone();
         d.texture = Some("/assets/t.png".to_string());
         assert_ne!(material_key(&a, false), material_key(&d, false));
+    }
+}
+
+/// Spawn RUNTIME de prototypes (`viber.spawn_prototype`): drena
+/// [`PendingScriptSpawns`], materializa cada `<Prototype>` com a MESMA
+/// maquinaria do arranque ([`spawn_entity`]) e chama a callback Lua com os
+/// bits da entidade criada. Sem cota explícita, assenta o Y na superfície
+/// renderizada (mesma regra dos spawners). Registrado no `run` em PostUpdate.
+pub fn apply_script_spawns(world: &mut World) {
+    let Some(mut pending) = world.remove_resource::<PendingScriptSpawns>() else {
+        return;
+    };
+    if pending.0.is_empty() {
+        world.insert_resource(pending);
+        return;
+    }
+    // Specs + Y de assentamento ANTES de mutar o World (recursos emprestados).
+    let requests: Vec<(PendingPrototypeSpawn, Option<EntitySpec>)> = {
+        let library = world.get_resource::<PrototypeLibrary>();
+        pending
+            .0
+            .drain(..)
+            .map(|req| {
+                let spec = library.and_then(|l| l.0.get(&req.name)).cloned();
+                (req, spec)
+            })
+            .collect()
+    };
+    let missing: usize = requests.iter().filter(|(_, s)| s.is_none()).count();
+    if missing > 0 {
+        warn!(
+            target: "viber::luau",
+            "viber.spawn_prototype: {missing} pedido(s) com prototype inexistente (descartados)"
+        );
+    }
+    let seat_ys: Vec<Option<f32>> = requests
+        .iter()
+        .map(|(req, _)| {
+            if !req.seat {
+                return None;
+            }
+            world
+                .get_resource::<crate::terrain::runtime::TerrainRuntime>()
+                .map(|t| t.sample_mesh_surface(req.pos.x, req.pos.z))
+        })
+        .collect();
+    // Assets removidos do World (mesmo padrão do `startup` — spawn_entity
+    // muta o World E recebe os Assets por &mut).
+    let mut meshes = world.remove_resource::<Assets<Mesh>>().expect("Assets<Mesh>");
+    let mut materials = world
+        .remove_resource::<Assets<StandardMaterial>>()
+        .expect("Assets<StandardMaterial>");
+    let mut sky_mats = world
+        .remove_resource::<Assets<crate::sky::SkyMaterial>>()
+        .expect("Assets<SkyMaterial>");
+    let asset_server = world.remove_resource::<AssetServer>().expect("AssetServer");
+    let mut tiled = world
+        .remove_resource::<crate::textures::WorldTiledTextures>()
+        .expect("WorldTiledTextures");
+    let game_config = world.get_resource::<crate::config::GameConfig>().cloned();
+    let mut ctx = SpawnCtx {
+        meshes: &mut meshes,
+        materials: &mut materials,
+        sky_mats: &mut sky_mats,
+        asset_server: &asset_server,
+        game_config,
+        tiled: &mut tiled,
+        mesh_cache: std::collections::HashMap::new(),
+        material_cache: std::collections::HashMap::new(),
+        chip_counter: std::cell::Cell::new(0),
+        mixer: std::cell::RefCell::new(None),
+        chips: std::cell::RefCell::new(Vec::new()),
+        hud: std::cell::RefCell::new(Vec::new()),
+        ui_styles: std::cell::RefCell::new(Vec::new()),
+        ui_pending_sheets: std::cell::RefCell::new(Vec::new()),
+        ui_tree_sheets: std::cell::RefCell::new(Vec::new()),
+        ui_trees: std::cell::RefCell::new(Vec::new()),
+        worldsys: Default::default(),
+        sky_request: std::cell::RefCell::new(None),
+    };
+    let mut stats = SpawnStats::default();
+    let mut ambient: Option<GlobalAmbientLight> = None;
+    let mut spawned: Vec<(Entity, Option<mlua::Function>)> = Vec::new();
+    for ((request, spec), seat_y) in requests.into_iter().zip(seat_ys) {
+        let Some(spec) = spec.as_ref() else {
+            continue;
+        };
+        let Some(root) = spawn_entity(world, &mut ctx, spec, None, &mut stats, &mut ambient)
+        else {
+            continue;
+        };
+        let y = seat_y.unwrap_or(request.pos.y);
+        if let Some(mut t) = world.get_mut::<Transform>(root) {
+            t.translation = Vec3::new(request.pos.x, y, request.pos.z);
+        }
+        spawned.push((root, request.on_spawned));
+    }
+    // Devolve os Assets (o mundo não pode ficar sem eles); o ctx tem de
+    // morrer ANTES — toma &mut deles.
+    drop(ctx);
+    world.insert_resource(meshes);
+    world.insert_resource(materials);
+    world.insert_resource(sky_mats);
+    world.insert_resource(asset_server);
+    world.insert_resource(tiled);
+    world.insert_resource(pending);
+    // Callbacks Lua: ctx seedado à entidade nova, argumento = bits.
+    if !spawned.is_empty() {
+        let Some(mut host) = world.get_resource_mut::<crate::luau::LuaScriptHost>() else {
+            return;
+        };
+        let host = &mut *host;
+        for (entity, cb) in spawned {
+            let Some(cb) = cb else { continue };
+            if let Some(mut c) = host.lua.app_data_mut::<crate::luau::ScriptCtx>() {
+                c.entity = Some(entity);
+            }
+            if let Err(e) = cb.call::<()>(entity.to_bits() as i64) {
+                warn!(target: "viber::luau", "viber.spawn_prototype callback: {e}");
+            }
+        }
     }
 }
 

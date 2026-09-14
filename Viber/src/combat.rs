@@ -492,6 +492,8 @@ pub struct MeleeFx<'w, 's> {
     pending: ResMut<'w, PendingSwing>,
     swing_clock: ResMut<'w, SwingClock>,
     trail_window: ResMut<'w, crate::trail::TrailWindow>,
+    // Eventos engine→Lua (`Kill` por abate).
+    events: Option<ResMut<'w, crate::luau::ScriptEventQueue>>,
 }
 
 /// ESTÁDIO 1 do melee (por press): agenda o swing. NADA de detecção de acerto
@@ -1048,6 +1050,7 @@ pub fn swing_track_system(
                 &mut fx.toasts,
                 &mut fx.quests_log,
                 &mut fx.sfx,
+                &mut fx.events,
             );
         }
     }
@@ -1550,6 +1553,7 @@ fn fireball_step(
     mut toasts: bevy::ecs::message::MessageWriter<ScriptToast>,
     mut sfx: MessageWriter<crate::ambient::SfxEvent>,
     mut quests: Option<ResMut<crate::quests::QuestLog>>,
+    mut fireball_events: Option<ResMut<crate::luau::ScriptEventQueue>>,
 ) {
     let dt = time.delta_secs();
     for (entity, mut transform, mut ball) in &mut balls {
@@ -1643,6 +1647,7 @@ fn fireball_step(
                     &mut toasts,
                     &mut quests,
                     &mut sfx,
+                    &mut fireball_events,
                 );
             }
             commands.entity(entity).despawn();

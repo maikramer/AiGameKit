@@ -17,7 +17,9 @@ use bevy::math::Vec2;
 
 use crate::terrain::TerrainSpec;
 use crate::terrain::cliffs::{CliffProfile, CliffSide, CliffSpec};
+use crate::terrain::cut::CutSpec;
 use crate::terrain::decal::GroundDecalSpec;
+use crate::terrain::plateau::{PlateauSpec, wall_profile_from_name};
 use crate::terrain::roads::{RoadNetworkSpec, RoadProfile, RoadSpec, SegmentSpec, WaySpec};
 use crate::terrain::spec::TerrainPadSpec;
 use crate::terrain::voxel::ArchSpec;
@@ -53,6 +55,8 @@ pub const KNOWN_TAGS: &[&str] = &[
     "terrain",
     "terrainpad",
     "lake",
+    "cut",
+    "plateau",
     "river",
     "cliff",
     "cave",
@@ -82,6 +86,9 @@ pub const KNOWN_TAGS: &[&str] = &[
     "interiorscene",
     "navmesh",
     "spawngate",
+    // Catálogos RPG declaráveis (Fases B2/B3).
+    "landmark",
+    "spawnpoint",
     "projectiletemplate",
     "questtracker",
     "waypointarrow",
@@ -343,6 +350,17 @@ pub enum EntityKind {
     Lake {
         spec: LakeSpec,
     },
+    /// `<Cut>` — dry trench along a path: floor carve + voxel wall bands
+    /// (`src/terrain/cut.rs`). O "road cut" autoral: uma estrada posterior
+    /// é surveyada dentro da vala.
+    Cut {
+        spec: CutSpec,
+    },
+    /// `<Plateau>` — authored mesa: raise carve + voxel wall ring
+    /// (`src/terrain/plateau.rs`).
+    Plateau {
+        spec: PlateauSpec,
+    },
     GroundDecal {
         spec: GroundDecalSpec,
     },
@@ -531,6 +549,23 @@ pub enum EntityKind {
     EngineConfig {
         tag: String,
         attrs: Vec<(String, String)>,
+    },
+    /// `<Landmark name biome label [survey-quest] [mark-radius]>` (Fase B2) —
+    /// marco de traçado da Nota declarável. Recolhido no arranque num
+    /// [`crate::travel::LandmarkCatalog`]; sem nenhum no mundo, o catálogo
+    /// fica com o fallback hardcoded das 12 entradas. Nunca spawna entidade —
+    /// o marco físico é a entidade com aquele `name`, algures no mundo.
+    Landmark {
+        spec: crate::travel::NotaLandmarkOwned,
+    },
+    /// `<SpawnPoint at="x z" [label="praça"]>` (Fase B3) — ponto de respawn
+    /// declarável. Recolhido num [`crate::feedback::RespawnCatalog`]; sem
+    /// nenhum, fallback dos 5 pontos do const. Nunca spawna entidade.
+    SpawnPoint {
+        /// XZ do ponto (offsets de grupo acumulados, convenção `at`).
+        at: [f32; 2],
+        /// Rótulo do toast de retorno; vazio → heurística de direção.
+        label: String,
     },
 }
 
@@ -1236,6 +1271,8 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
         "sky" => finish_sky(node, ctx).map(Some),
         "navmesh" | "spawngate" | "projectiletemplate" | "postfxdebugtoggle"
         | "adaptivequality" => finish_engine_config(node, ctx).map(Some),
+        "landmark" => finish_landmark(node, ctx).map(Some),
+        "spawnpoint" => finish_spawn_point(node, ctx).map(Some),
         "daycycle" => finish_daycycle(node, ctx).map(Some),
         "weather" => finish_weather(node, ctx).map(Some),
         "biomeregion" => finish_biome_region(node, ctx).map(Some),
@@ -1273,6 +1310,8 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
         "terrain" => finish_terrain(node, ctx).map(Some),
         "terrainpad" => finish_terrain_pad(node, ctx).map(Some),
         "lake" => finish_lake(node, ctx).map(Some),
+        "cut" => finish_cut(node, ctx).map(Some),
+        "plateau" => finish_plateau(node, ctx).map(Some),
         "grounddecal" => finish_ground_decal(node, ctx).map(Some),
         "river" => finish_river(node, ctx).map(Some),
         "cliff" => finish_cliff(node, ctx).map(Some),
@@ -2760,6 +2799,114 @@ fn finish_engine_config(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
     })
 }
 
+/// `<Landmark>` (Fase B2) — marco de traçado da Nota declarável:
+///
+/// ```xml
+/// <Landmark name="forest-outpost-tower" biome="dark_forest"
+///           label="Torre do Posto Avançado" survey-quest="forest_survey"
+///           mark-radius="10"/>
+/// ```
+///
+/// `name` (a entidade física no mundo), `biome` e `label` são obrigatórios;
+/// `survey-quest` e `mark-radius` são opcionais — o default vem do bioma
+/// (`Biome::survey_quest` / `Biome::mark_radius`). O marco não spawna
+/// entidade: a entrada vai para o `travel::LandmarkCatalog` no arranque.
+fn finish_landmark(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let name = common.name.ok_or_else(|| {
+        anyhow!("{ctx_tag}: `name` (a entidade do marco no mundo) é obrigatório")
+    })?;
+    let mut biome_id: Option<String> = None;
+    let mut label: Option<String> = None;
+    let mut survey_quest: Option<String> = None;
+    let mut mark_radius: Option<f32> = None;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "biome" => biome_id = Some(value.trim().to_ascii_lowercase()),
+            "label" => label = Some(value),
+            "survey-quest" => survey_quest = Some(value),
+            "mark-radius" => mark_radius = Some(values::parse_f32(&value, &kctx)?),
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    let biome_id = biome_id.ok_or_else(|| anyhow!("{ctx_tag}: `biome` é obrigatório"))?;
+    let label =
+        label.ok_or_else(|| anyhow!("{ctx_tag}: `label` (rótulo legível) é obrigatório"))?;
+    // Defaults por bioma; id desconhecido NÃO derruba o parse — o marco fica
+    // no catálogo com o id cru (o toast mostra o id, o resto funciona).
+    let biome = crate::travel::Biome::from_id(&biome_id);
+    if biome.is_none() {
+        ctx.warnings.push(format!(
+            "{ctx_tag}: bioma `{biome_id}` desconhecido (esperado dark_forest/desert/swamp/frozen_peaks) — defaults do arco de raio aplicados"
+        ));
+    }
+    let spec = crate::travel::NotaLandmarkOwned {
+        name,
+        biome_id,
+        label,
+        survey_quest: survey_quest.unwrap_or_else(|| {
+            biome
+                .map(|b| b.survey_quest().to_string())
+                .unwrap_or_default()
+        }),
+        mark_radius: mark_radius.unwrap_or_else(|| {
+            biome
+                .map(|b| b.mark_radius())
+                .unwrap_or(crate::travel::NOTA_RANGE_DEFAULT_M)
+        }),
+    };
+    Ok(EntitySpec {
+        name: None,
+        tag: None,
+        script: None,
+        transform: TransformSpec::default(),
+        physics: PhysicsSpec::default(),
+        destructible: None,
+        kind: EntityKind::Landmark { spec },
+        children: Vec::new(),
+    })
+}
+
+/// `<SpawnPoint at="x z" label="praça"/>` (Fase B3) — ponto de respawn
+/// declarável. `at` é obrigatório; `label` é opcional (vazio → a
+/// heurística de direção do fallback no toast). Vai para o
+/// `feedback::RespawnCatalog` no arranque; não spawna entidade.
+fn finish_spawn_point(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let off = terrain_offset(&common, node, ctx);
+    let mut at: Option<[f32; 2]> = None;
+    let mut label = String::new();
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "at" => {
+                let p = values::parse_vec2(&value, &kctx)?;
+                at = Some([p[0] + off.x, p[1] + off.y]);
+            }
+            "label" => label = value,
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    let at = at.ok_or_else(|| anyhow!("{ctx_tag}: `at` com \"x z\" é obrigatório"))?;
+    Ok(EntitySpec {
+        name: None,
+        tag: None,
+        script: None,
+        transform: TransformSpec::default(),
+        physics: PhysicsSpec::default(),
+        destructible: None,
+        kind: EntityKind::SpawnPoint { at, label },
+        children: Vec::new(),
+    })
+}
+
 /// `<Sky>` — procedural sky parameters kept as raw attrs; o domo é
 /// construído no fim do startup (`spawn.rs` → `sky::build_sky`) e o shader
 /// WGSL especializado por mundo é escrito pelo `run()` em `main.rs`.
@@ -3114,6 +3261,13 @@ fn finish_lake(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             "rocks-scale-max" => {
                 spec.rocks_spec.scale_max = values::parse_f32(&value, &kctx)?.clamp(0.5, 4.0)
             }
+            // Autoria da forma — ver `water::LakeAuthoring`. `seed` troca a
+            // fonte dos uniformes (SplitMix64); os outros três sobrepoem-se
+            // ao que o hash sorteou.
+            "seed" => spec.shape.seed = Some(values::parse_f32(&value, &kctx)?.max(0.0) as u64),
+            "stretch" => spec.shape.stretch = Some(values::parse_f32(&value, &kctx)?),
+            "axis" => spec.shape.axis_deg = Some(values::parse_f32(&value, &kctx)?),
+            "lobes" => spec.shape.lobes = Some(values::parse_f32(&value, &kctx)?),
             other => ctx
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
@@ -3136,6 +3290,121 @@ fn finish_lake(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         physics: common.physics,
         destructible: common.destructible,
         kind: EntityKind::Lake { spec },
+        children: Vec::new(),
+    })
+}
+
+/// `<Cut path="x z x z …" width depth wall seed>` — trincheira/cânion SECO:
+/// o piso desce no heightfield e as duas paredes nascem como sólidos voxel
+/// (`src/terrain/cut.rs`). Uma `<Road>` autorada depois é surveyada DENTRO
+/// da vala (o piso já lá está) — o "road cut".
+fn finish_cut(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
+    warn_children(node, ctx);
+    let ctx_tag = format!("<{}>", node.tag);
+    let off = terrain_offset(&common, node, ctx);
+    let mut spec = CutSpec::default();
+    let mut path: Option<Vec<[f32; 2]>> = None;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "path" => {
+                path = Some(values::parse_vec2_list(&value, &kctx)?);
+            }
+            "width" => spec.width = values::parse_f32(&value, &kctx)?,
+            "depth" => spec.depth = values::parse_f32(&value, &kctx)?,
+            "wall" | "profile" => {
+                spec.wall = wall_profile_from_name(&value).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "{kctx}: unknown wall profile `{value}` (vertical|concave|convex|\
+                         columnar|terraced|overhang — `arch` não é perfil de muro)"
+                    )
+                })?;
+            }
+            "seed" => spec.seed = values::parse_f32(&value, &kctx)?.max(0.0) as u64,
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    // O offset do grupo aplica-se DEPOIS da validação do path (mesma ordem
+    // do `finish_river`).
+    spec.path = offset_path(path.ok_or_else(|| anyhow::anyhow!("{ctx_tag}: path is required"))?, off);
+    if spec.path.len() < 2 {
+        bail!("{ctx_tag}: a cut needs at least 2 points (x z pairs)");
+    }
+    if spec.width <= 0.0 {
+        bail!("{ctx_tag}: width must be > 0 (got {})", spec.width);
+    }
+    if spec.depth <= 0.0 {
+        bail!("{ctx_tag}: depth must be > 0 (got {})", spec.depth);
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        physics: common.physics,
+        destructible: common.destructible,
+        kind: EntityKind::Cut { spec },
+        children: Vec::new(),
+    })
+}
+
+/// `<Plateau at="x z" size="w d" height falloff corner-radius wall seed>` —
+/// mesa/planalto autoral: topo plano ELEVADO no heightfield + anel de
+/// parede voxel que corta a borda vertical (`src/terrain/plateau.rs`).
+fn finish_plateau(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
+    warn_children(node, ctx);
+    let ctx_tag = format!("<{}>", node.tag);
+    let off = terrain_offset(&common, node, ctx);
+    let mut spec = PlateauSpec::default();
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "at" => spec.at = offset_point(values::parse_vec2(&value, &kctx)?, off),
+            // Extensão total, como <TerrainPad size>.
+            "size" => {
+                let v = values::parse_vec2(&value, &kctx)?;
+                spec.size = Vec2::new(v[0], v[1]);
+            }
+            "radius" => spec.size = Vec2::splat(values::parse_f32(&value, &kctx)? * 2.0),
+            "height" => spec.height = values::parse_f32(&value, &kctx)?,
+            "falloff" => spec.falloff = values::parse_f32(&value, &kctx)?,
+            "corner-radius" => spec.corner_radius = values::parse_f32(&value, &kctx)?,
+            "wall" | "profile" => {
+                spec.wall = wall_profile_from_name(&value).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "{kctx}: unknown wall profile `{value}` (vertical|concave|convex|\
+                         columnar|terraced|overhang — `arch` não é perfil de muro)"
+                    )
+                })?;
+            }
+            "seed" => spec.seed = values::parse_f32(&value, &kctx)?.max(0.0) as u64,
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    if spec.size.x <= 0.0 || spec.size.y <= 0.0 {
+        bail!(
+            "{ctx_tag}: size/radius must be > 0 (got {} x {})",
+            spec.size.x,
+            spec.size.y
+        );
+    }
+    if spec.height <= 0.0 {
+        bail!("{ctx_tag}: height must be > 0 (got {})", spec.height);
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        physics: common.physics,
+        destructible: common.destructible,
+        kind: EntityKind::Plateau { spec },
         children: Vec::new(),
     })
 }
@@ -4080,6 +4349,10 @@ pub struct WorldSummary {
     pub terrain_pads: usize,
     pub lakes: usize,
     pub rivers: usize,
+    /// `<Cut>` dry trenches (floor carve + voxel wall bands).
+    pub cuts: usize,
+    /// `<Plateau>` authored mesas (raise carve + voxel wall ring).
+    pub plateaus: usize,
     /// `<Cliff>` carved wall faces.
     pub cliffs: usize,
     pub caves: usize,
@@ -4148,6 +4421,8 @@ impl WorldSummary {
         self.terrain_pads
             + self.lakes
             + self.rivers
+            + self.cuts
+            + self.plateaus
             + self.cliffs
             + self.caves
             + self.arches
@@ -4236,6 +4511,8 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::Terrain { .. } => out.terrain += 1,
                 EntityKind::TerrainPad { .. } => out.terrain_pads += 1,
                 EntityKind::Lake { .. } => out.lakes += 1,
+                EntityKind::Cut { .. } => out.cuts += 1,
+                EntityKind::Plateau { .. } => out.plateaus += 1,
                 EntityKind::GroundDecal { .. } => out.ground_decals += 1,
                 EntityKind::River { .. } => out.rivers += 1,
                 EntityKind::Cliff { .. } => out.cliffs += 1,
@@ -4267,7 +4544,9 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 | EntityKind::BiomeRegion { .. }
                 | EntityKind::WorldBorder { .. }
                 | EntityKind::InteriorScene { .. }
-                | EntityKind::EngineConfig { .. } => out.world_systems += 1,
+                | EntityKind::EngineConfig { .. }
+                | EntityKind::Landmark { .. }
+                | EntityKind::SpawnPoint { .. } => out.world_systems += 1,
             }
             walk(&spec.children, next_in_composition, out);
         }
@@ -4307,6 +4586,111 @@ mod tests {
         assert!(matches!(spec.kind, EntityKind::Group));
         assert_eq!(spec.transform.scale, [1.0; 3]);
         assert_eq!(spec.transform.translation, [0.0; 3]);
+    }
+
+    #[test]
+    fn test_landmark_tag_parses_into_catalog_spec() {
+        // Fase B2: attrs explícitos; nenhum warning (todos conhecidos).
+        let (spec, w) = parse_one(&node(
+            "Landmark",
+            &[
+                ("name", "forest-outpost-tower"),
+                ("biome", "dark_forest"),
+                ("label", "Torre do Posto Avançado"),
+                ("survey-quest", "forest_survey"),
+                ("mark-radius", "10"),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::Landmark { spec } = spec.kind else {
+            panic!("não é um Landmark: {:?}", spec.kind);
+        };
+        assert_eq!(spec.name, "forest-outpost-tower");
+        assert_eq!(spec.biome_id, "dark_forest");
+        assert_eq!(spec.label, "Torre do Posto Avançado");
+        assert_eq!(spec.survey_quest, "forest_survey");
+        assert_eq!(spec.mark_radius, 10.0);
+        assert_eq!(spec.biome(), Some(crate::travel::Biome::DarkForest));
+    }
+
+    #[test]
+    fn test_landmark_defaults_come_from_biome() {
+        // Fase B2: sem survey-quest/mark-radius, os defaults são do bioma.
+        let (spec, w) = parse_one(&node(
+            "Landmark",
+            &[
+                ("name", "desert-arch"),
+                ("biome", "desert"),
+                ("label", "Arco do Deserto"),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::Landmark { spec } = spec.kind else {
+            panic!("não é um Landmark: {:?}", spec.kind);
+        };
+        assert_eq!(spec.survey_quest, "desert_survey");
+        assert_eq!(spec.mark_radius, 12.0);
+    }
+
+    #[test]
+    fn test_landmark_unknown_biome_warns_but_parses() {
+        // Bioma desconhecido: warning + o marco fica no catálogo com o id cru.
+        let (spec, w) = parse_one(&node(
+            "Landmark",
+            &[
+                ("name", "mystery-spire"),
+                ("biome", "vale"),
+                ("label", "Aguja"),
+            ],
+        ))
+        .unwrap();
+        assert!(w.iter().any(|x| x.contains("vale")), "{w:?}");
+        let EntityKind::Landmark { spec } = spec.kind else {
+            panic!("não é um Landmark: {:?}", spec.kind);
+        };
+        assert_eq!(spec.biome_id, "vale");
+        assert_eq!(spec.biome(), None);
+        assert_eq!(spec.mark_radius, crate::travel::NOTA_RANGE_DEFAULT_M);
+    }
+
+    #[test]
+    fn test_landmark_requires_name_biome_label() {
+        let mut ctx = ParseCtx::default();
+        assert!(parse_entity(&node("Landmark", &[("biome", "desert"), ("label", "x")]), &mut ctx).is_err());
+        let mut ctx = ParseCtx::default();
+        assert!(
+            parse_entity(&node("Landmark", &[("name", "x"), ("label", "y")]), &mut ctx).is_err()
+        );
+        let mut ctx = ParseCtx::default();
+        assert!(
+            parse_entity(&node("Landmark", &[("name", "x"), ("biome", "desert")]), &mut ctx)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn test_spawn_point_tag_parses() {
+        // Fase B3: `at` obrigatório, label opcional.
+        let (spec, w) = parse_one(&node("SpawnPoint", &[("at", "0 -50"), ("label", "portão sul")]))
+            .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::SpawnPoint { at, label } = spec.kind else {
+            panic!("não é um SpawnPoint: {:?}", spec.kind);
+        };
+        assert_eq!(at, [0.0, -50.0]);
+        assert_eq!(label, "portão sul");
+
+        let (spec, _) = parse_one(&node("SpawnPoint", &[("at", "12 34")])).unwrap();
+        let EntityKind::SpawnPoint { at, label } = spec.kind else {
+            panic!("não é um SpawnPoint: {:?}", spec.kind);
+        };
+        assert_eq!(at, [12.0, 34.0]);
+        assert!(label.is_empty());
+
+        let mut ctx = ParseCtx::default();
+        assert!(parse_entity(&node("SpawnPoint", &[("label", "x")]), &mut ctx).is_err());
     }
 
     #[test]
@@ -5184,6 +5568,8 @@ mod tests {
                 composition_parts: 0,
                 arches: 0,
                 bridges: 1,
+                cuts: 0,
+                plateaus: 0,
                 rock_fields: 1,
                 groups: 1,
                 primitives: 1,

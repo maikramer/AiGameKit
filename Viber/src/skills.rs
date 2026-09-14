@@ -397,7 +397,15 @@ fn guard_system(
     players: Query<Entity, With<Player>>,
     mut guards: Query<&mut Guarding>,
     mut commands: Commands,
+    owners: Option<Res<crate::luau::ScriptSystemOwners>>,
 ) {
+    // Reclamado por script (`viber.own_system("guard")`).
+    if owners
+        .as_deref()
+        .is_some_and(|o| o.owns(crate::luau::ownership::SYSTEM_GUARD))
+    {
+        return;
+    }
     let Ok(player) = players.single() else {
         return;
     };
@@ -431,6 +439,7 @@ pub(crate) fn kill_creature(
     toasts: &mut MessageWriter<ScriptToast>,
     quests: &mut Option<ResMut<QuestLog>>,
     sfx: &mut MessageWriter<crate::ambient::SfxEvent>,
+    events: &mut Option<ResMut<crate::luau::ScriptEventQueue>>,
 ) {
     commands
         .entity(target)
@@ -438,6 +447,18 @@ pub(crate) fn kill_creature(
         .insert(crate::combat::Corpse {
             timer: crate::combat::CORPSE_LIFETIME,
         });
+    // Evento engine→Lua: lógica de jogo (contadores, spawns de vingança,
+    // quests em Lua) reage ao abate sem tocar no Rust. `name` = kind do
+    // script ("wolf") — é o que objetivos conseguem casar; abates de
+    // criaturas FSM sem script reportam "creature" + bits.
+    if let Some(events) = events.as_deref_mut() {
+        events.push(crate::luau::ScriptGameEvent::Kill {
+            name: script
+                .map(|s| crate::combat::script_kind(&s.path))
+                .unwrap_or_else(|| "creature".to_string()),
+            entity: target.to_bits() as i64,
+        });
+    }
     sfx.write(crate::ambient::SfxEvent {
         clip: crate::ambient::SfxClip::EnemyDeath,
         position: Some(position),
@@ -484,6 +505,10 @@ pub struct AbilityFx<'w> {
     shake: ResMut<'w, crate::camera::CameraShake>,
     kick: ResMut<'w, crate::camera::CameraKick>,
     postfx: ResMut<'w, crate::postfx::PostFxState>,
+    // Eventos engine→Lua (`Kill` por abate de strike/bomba).
+    events: Option<ResMut<'w, crate::luau::ScriptEventQueue>>,
+    // Sistemas reclamados por scripts (`viber.own_system("abilities")`).
+    pub owners: Option<Res<'w, crate::luau::ScriptSystemOwners>>,
 }
 
 /// [C] dash · [E] cura (fora de interação) · [R] golpe forte radial.
@@ -531,6 +556,15 @@ pub fn abilities_system(
     // por trás do modal (os cooldowns continuam a correr, como as janelas
     // do melee).
     if menus.any() {
+        return;
+    }
+    // Reclamado por script (`viber.own_system("abilities")`): a lógica de
+    // C/E/R é do jogo.
+    if fx
+        .owners
+        .as_deref()
+        .is_some_and(|o| o.owns(crate::luau::ownership::SYSTEM_ABILITIES))
+    {
         return;
     }
     let Ok((entity, global, mut transform, mut health)) = players.single_mut() else {
@@ -673,6 +707,7 @@ pub fn abilities_system(
                 &mut toasts,
                 &mut quests,
                 &mut fx.sfx,
+                &mut fx.events,
             );
         }
         toasts.write(ScriptToast(if hit_any {
@@ -729,7 +764,15 @@ fn bomb_throw_system(
     mut commands: Commands,
     mut toasts: MessageWriter<ScriptToast>,
     mut sfx: MessageWriter<crate::ambient::SfxEvent>,
+    owners: Option<Res<crate::luau::ScriptSystemOwners>>,
 ) {
+    // Reclamado por script (`viber.own_system("bomb")`).
+    if owners
+        .as_deref()
+        .is_some_and(|o| o.owns(crate::luau::ownership::SYSTEM_BOMB))
+    {
+        return;
+    }
     // Menu aberto consome [B]: deixava de consumir bombas do vault por trás
     // do modal.
     if menus.any() {
@@ -879,6 +922,7 @@ fn bomb_step_system(
                 &mut toasts,
                 &mut quests,
                 &mut fx.sfx,
+                &mut fx.events,
             );
         }
         alerts.write(AttackAlert { position: center });

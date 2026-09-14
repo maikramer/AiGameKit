@@ -55,6 +55,7 @@ fn bench_voxel_box_build_per_lod() {
             lod,
             coords,
             [viber::terrain::voxel::spawn::NO_NEIGHBOUR; 4],
+                [false; 4],
         );
         assert!(!boxes.is_empty(), "lod {lod}: no boxes planned");
 
@@ -143,6 +144,57 @@ fn qa_pontes_field() -> (TerrainSpec, BrushGrid, VoxelField) {
     (spec, grid, field)
 }
 
+/// Custo do caminho REFINADO (64³, célula 0.5 m, perto de mods) — 8× as
+/// amostras do normal; o runtime paga UMA destas por frame (o orçamento
+/// consome-se inteiro). Tecto: 8× o do caminho normal.
+#[test]
+fn bench_voxel_box_build_refined() {
+    let (spec, grid, field) = qa_pontes_field();
+    let edge = spec.chunk_size;
+    let coords = bevy::math::UVec2::new(2, 2); // a ponte de pedra
+    let boxes = column_boxes(
+        &spec,
+        &grid,
+        &field,
+        edge,
+        1.0,
+        0,
+        coords,
+        [viber::terrain::voxel::spawn::NO_NEIGHBOUR; 4],
+        [false; 4],
+    );
+    let refined: Vec<_> = boxes
+        .into_iter()
+        .map(|mut b| {
+            b.cells *= 2;
+            b.voxel_size /= 2.0;
+            b.refined = true;
+            b
+        })
+        .collect();
+    assert!(!refined.is_empty(), "a coluna da ponte tem caixas");
+    for b in &refined {
+        let _ = build_box_mesh(&spec, &grid, &field, b);
+    }
+    let start = Instant::now();
+    let mut built = 0usize;
+    for b in &refined {
+        if build_box_mesh(&spec, &grid, &field, b).is_some() {
+            built += 1;
+        }
+    }
+    let per_box_ms = start.elapsed().as_secs_f64() * 1000.0 / built.max(1) as f64;
+    // 8× as amostras, mas SUPERLINEAR na prática (cache + candidates):
+    // medido 591 ms na pior coluna (ponte da qa-pontes) vs 8×10.5 = 84
+    // ingénuo. O teto guarda a regressão do custo, não a linearidade.
+    let refined_ceiling = MAX_MS_PER_BOX * 20.0;
+    println!("caixa REFINADA (64³): {per_box_ms:.2} ms/caixa (tecto {refined_ceiling} ms)");
+    assert!(
+        cfg!(debug_assertions) || per_box_ms < refined_ceiling,
+        "caixa refinada a {per_box_ms:.2} ms passa o tecto de {refined_ceiling} ms"
+    );
+}
+
 #[test]
 fn bench_voxel_box_build_with_a_field_full_of_mods() {
     let (spec, grid, field) = qa_pontes_field();
@@ -170,10 +222,25 @@ fn bench_voxel_box_build_with_a_field_full_of_mods() {
                 lod,
                 coords,
                 [viber::terrain::voxel::spawn::NO_NEIGHBOUR; 4],
+                [false; 4],
             );
             if boxes.is_empty() {
                 continue;
             }
+            // O tecto de 30 ms é o contrato do caminho NORMAL (32³): valida
+            // a afinação do ModIndex. Caixas REFINADAS (64³, perto de mods,
+            // default ON) amostram 8× — têm o próprio tecto, 8× o base.
+            let boxes: Vec<_> = boxes
+                .into_iter()
+                .map(|mut b| {
+                    if b.refined {
+                        b.cells /= 2;
+                        b.voxel_size *= 2.0;
+                        b.refined = false;
+                    }
+                    b
+                })
+                .collect();
             for b in &boxes {
                 let _ = build_box_mesh(&spec, &grid, &field, b);
             }
@@ -190,7 +257,8 @@ fn bench_voxel_box_build_with_a_field_full_of_mods() {
             }
             let per_box_ms = elapsed.as_secs_f64() * 1000.0 / built as f64;
             println!(
-                "coluna {coords:?} LOD {lod}: {built} caixas em {elapsed:?} → {per_box_ms:.2} ms/caixa",
+                "coluna {coords:?} LOD {lod} (não-refinado): {built} caixas em {elapsed:?} → \
+                 {per_box_ms:.2} ms/caixa",
             );
             assert!(
                 cfg!(debug_assertions) || per_box_ms < MAX_MS_PER_BOX,

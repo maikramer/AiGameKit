@@ -219,7 +219,15 @@ fn hotbar_use_system(
     mut toasts: MessageWriter<ScriptToast>,
     transforms: Query<&GlobalTransform, With<Player>>,
     time: Res<Time>,
+    owners: Option<Res<crate::luau::ScriptSystemOwners>>,
 ) {
+    // Reclamado por script (`viber.own_system("hotbar")`).
+    if owners
+        .as_deref()
+        .is_some_and(|o| o.owns(crate::luau::ownership::SYSTEM_HOTBAR))
+    {
+        return;
+    }
     *cooldown -= time.delta_secs();
     if *cooldown > 0.0 {
         return;

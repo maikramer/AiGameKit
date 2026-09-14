@@ -9,6 +9,7 @@ use bevy::ui::widget::ImageNode;
 use super::assets::{
     HudAssets, centered_at, gradient_overlay, label, panel_base, panel_edge, panel_shadow,
 };
+use super::compass::{CompassDistance, CompassLetter, CompassTick};
 use super::interact::{BALLOON_DURATION, HudBalloon, HudPrompt};
 use super::minimap::{MinimapAnchor, MinimapArrow, MinimapDot, MinimapRange};
 use super::vitals::xp_label_text;
@@ -456,15 +457,121 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                 });
         }
         "compass" => {
-            // A régua de compasso saiu do HUD.
-            //
-            // Ocupava 460 px no topo do ecrã — a faixa de céu que mais vale a
-            // pena ver — para dizer o que a rosa dos ventos do minimapa já
-            // diz, e as distâncias por sector duplicavam a seta de waypoint.
-            // A tag continua a ser aceite (mundos antigos não partem); só não
-            // desenha nada. Os helpers de `hud::compass` ficam: a matemática
-            // de rumo é testada e serve o `WaypointArrow`.
-            let _ = attrs;
+            // Régua de compasso no topo-centro: letras + réguas deslizam com
+            // o rumo da câmara (`hud::compass::hud_compass_update`) e cada
+            // sector de 45° mostra a distância ao NPC mais próximo. Removida
+            // no passe de polimento, RESTAURADA a pedido do autor — a faixa
+            // de céu em cima é dela.
+            world
+                .spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        top: Val::Px(10.0),
+                        left: Val::Px(0.0),
+                        right: Val::Px(0.0),
+                        justify_content: JustifyContent::Center,
+                        ..Default::default()
+                    },
+                    Name::new("hud:compass"),
+                ))
+                .with_children(|wrap| {
+                    const DIRECTIONS: [(&str, f32); 8] = [
+                        ("N", 0.0),
+                        ("NE", 45.0),
+                        ("E", 90.0),
+                        ("SE", 135.0),
+                        ("S", 180.0),
+                        ("SW", 225.0),
+                        ("W", 270.0),
+                        ("NW", 315.0),
+                    ];
+                    // Letters live INSIDE the strip so their absolute left is
+                    // relative to it (wrap is full-width, the strip is not).
+                    wrap.spawn((
+                        Node {
+                            width: Val::Px(460.0),
+                            height: Val::Px(34.0),
+                            border_radius: BorderRadius::all(Val::Px(17.0)),
+                            ..Default::default()
+                        },
+                        BackgroundColor(Color::srgba(0.03, 0.03, 0.025, 0.62)),
+                        ImageNode {
+                            image: hud.panel_gradient.clone(),
+                            color: Color::srgba(0.10, 0.095, 0.085, 0.55),
+                            ..Default::default()
+                        },
+                        BorderColor::all(Color::srgba(1.0, 0.96, 0.85, 0.12)),
+                        panel_shadow(),
+                    ))
+                    .with_children(|strip| {
+                        // Center caret (static): the heading marker.
+                        strip.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Percent(50.0),
+                                top: Val::Px(2.0),
+                                width: Val::Px(2.0),
+                                height: Val::Px(8.0),
+                                border_radius: BorderRadius::all(Val::Px(1.0)),
+                                ..Default::default()
+                            },
+                            BackgroundColor(Color::srgb(0.95, 0.78, 0.25)),
+                        ));
+                        for (name, bearing) in DIRECTIONS {
+                            let color = if name == "N" {
+                                Color::srgb(0.95, 0.78, 0.25)
+                            } else {
+                                Color::srgb(0.92, 0.92, 0.88)
+                            };
+                            strip.spawn((
+                                centered_at(Val::Px(230.0), Val::Px(4.0)),
+                                UiTransform::from_translation(Val2::new(
+                                    Val::Percent(-50.0),
+                                    Val::ZERO,
+                                )),
+                                label(&hud, name, 13.0, color),
+                                CompassLetter {
+                                    bearing_deg: bearing,
+                                },
+                            ));
+                            strip.spawn((
+                                centered_at(Val::Px(230.0), Val::Px(19.0)),
+                                UiTransform::from_translation(Val2::new(
+                                    Val::Percent(-50.0),
+                                    Val::ZERO,
+                                )),
+                                label(&hud, "", 9.0, Color::srgba(1.0, 0.92, 0.7, 0.85)),
+                                CompassDistance {
+                                    bearing_deg: bearing,
+                                },
+                            ));
+                        }
+                        // Tick marks every 22.5°.
+                        for i in 0..16 {
+                            let bearing = i as f32 * 22.5;
+                            let tall = i % 2 == 0;
+                            strip.spawn((
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    left: Val::Px(230.0),
+                                    top: Val::Px(0.0),
+                                    width: Val::Px(1.5),
+                                    height: Val::Px(if tall { 5.0 } else { 3.0 }),
+                                    ..Default::default()
+                                },
+                                BackgroundColor(Color::srgba(
+                                    1.0,
+                                    1.0,
+                                    0.95,
+                                    if tall { 0.4 } else { 0.22 },
+                                )),
+                                CompassTick {
+                                    bearing_deg: bearing,
+                                },
+                            ));
+                        }
+                    });
+                });
         }
         "interactionprompt" => {
             let key = attr(attrs, "key").unwrap_or("E").to_string();

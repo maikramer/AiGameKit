@@ -68,6 +68,12 @@ pub const RUN_SPEED: f32 = 5.2;
 pub const RUN_HYSTERESIS: f32 = 1.0;
 /// Hysteresis band (m/s) below [`IDLE_SPEED`] kept while already moving.
 pub const IDLE_HYSTERESIS: f32 = 0.07;
+/// [`RUN_HYSTERESIS`] as a fraction of the gate, for rigs whose run gate is
+/// smaller than the hero's. `1.0 / 5.2` is the hero's own ratio, so the hero
+/// keeps exactly the band it always had.
+pub const RUN_HYSTERESIS_FRACTION: f32 = RUN_HYSTERESIS / RUN_SPEED;
+/// Same idea for the idle band.
+pub const IDLE_HYSTERESIS_FRACTION: f32 = IDLE_HYSTERESIS / IDLE_SPEED;
 /// A character has to be off the ground this long (s) before the airborne
 /// clips take over.
 ///
@@ -92,25 +98,50 @@ pub const SPEED_SMOOTH_TAU: f32 = 0.12;
 /// Playback-rate clamp so the sync never turns a walk into a slideshow or a
 /// blur.
 pub const SPEED_SCALE_RANGE: (f32, f32) = (0.55, 1.7);
+/// Default yaw rate (rad/s) of a character with no authored profile.
+///
+/// ~7 rad/s turns 180° in a quarter second: fast enough that a creature still
+/// commits to a new target immediately, slow enough that the eye reads a turn
+/// instead of a teleported orientation.
+pub const DEFAULT_TURN_RATE: f32 = 7.0;
+/// Default acceleration (m/s²) toward the desired velocity.
+///
+/// At 12 m/s² a 4 m/s chase reaches full speed in a third of a second — the
+/// ramp is what the animation's own low-pass (`SPEED_SMOOTH_TAU`) was fighting
+/// when the AI went from standing to full speed inside one frame.
+pub const DEFAULT_ACCEL: f32 = 12.0;
 
 /// Nominal locomotion speeds (m/s) of a rig, used to sync clip playback rate
 /// to real motion (kills foot sliding).
+///
+/// `scale_range` travels with the speeds on purpose: the clamp is only a safety
+/// net against *wrong* nominals. A rig whose nominals were measured from the
+/// speeds it is actually commanded at (see [`LocomotionProfile`]) sits near 1.0
+/// and can afford a much tighter net than one running on the module defaults.
 #[derive(Debug, Clone, Copy)]
 pub struct MotionSpeeds {
     pub walk: f32,
     pub run: f32,
+    /// Playback-rate clamp applied by [`Self::scale_for`].
+    pub scale_range: (f32, f32),
 }
 
 impl MotionSpeeds {
     /// The hero: `Player::speed` 4.0, sprint ×1.5 (see [`crate::player`]).
+    ///
+    /// Keeps the wide legacy clamp: strafing drops the input magnitude to
+    /// `SIDE_MOVE_FACTOR` (0.6) without changing the nominal, so the hero walks
+    /// legitimately down at 0.6×.
     pub const HERO: Self = Self {
         walk: 4.0,
         run: 6.0,
+        scale_range: SPEED_SCALE_RANGE,
     };
-    /// Creatures: wander ~1.5 m/s, chase ~4 m/s (see [`crate::ai`]).
+    /// Creatures with no measured profile yet: wander ~1.5 m/s, chase ~4 m/s.
     pub const CREATURE: Self = Self {
         walk: 1.5,
         run: 4.0,
+        scale_range: SPEED_SCALE_RANGE,
     };
 
     /// Clip playback rate for a state at `speed`.
@@ -120,7 +151,159 @@ impl MotionSpeeds {
             AnimState::Walk => self.walk,
             _ => return 1.0,
         };
-        (speed / nominal.max(1e-3)).clamp(SPEED_SCALE_RANGE.0, SPEED_SCALE_RANGE.1)
+        (speed / nominal.max(1e-3)).clamp(self.scale_range.0, self.scale_range.1)
+    }
+}
+
+/// The two speed thresholds that pick a locomotion state, as a unit.
+///
+/// They used to be the module constants [`RUN_SPEED`] / [`IDLE_SPEED`] for
+/// every rig in the world, which is exactly how the moonwalk got in: a creature
+/// chasing at 4.6 m/s never reached the hero-sized 5.2 m/s run gate, stayed on
+/// the walk clip, and asked for a 3.07× playback rate that the clamp cut to
+/// 1.7× — 45 % of every stride was the feet sliding over the ground.
+#[derive(Debug, Clone, Copy)]
+pub struct MotionGates {
+    pub run: f32,
+    pub idle: f32,
+}
+
+impl MotionGates {
+    /// The historical, hero-sized thresholds.
+    pub const HERO: Self = Self {
+        run: RUN_SPEED,
+        idle: IDLE_SPEED,
+    };
+
+    /// Thresholds that fit a rig's own nominals: run halfway between walk and
+    /// run, idle low enough that a genuinely slow walker is not read as still.
+    pub fn from_speeds(speeds: MotionSpeeds) -> Self {
+        Self {
+            run: (speeds.walk + speeds.run) * 0.5,
+            idle: IDLE_SPEED.min(speeds.walk * 0.2),
+        }
+    }
+}
+
+/// Playback-rate clamp for a rig whose nominals were measured rather than
+/// assumed. Tighter than [`SPEED_SCALE_RANGE`] because the ratio should now sit
+/// near 1.0; anything outside it is a real mismatch, not a missing nominal.
+pub const CALIBRATED_SCALE_RANGE: (f32, f32) = (0.7, 1.45);
+
+/// Speed below which a commanded step counts as "not moving" for calibration.
+const CALIBRATION_FLOOR: f32 = 0.05;
+
+/// A walk nominal this close to the run nominal means we only ever saw ONE
+/// speed, so the pair is synthesised instead of measured.
+const CALIBRATION_SPREAD: f32 = 0.85;
+
+/// Nominal walk as a fraction of run, when only one speed was ever observed.
+const CALIBRATION_WALK_FRACTION: f32 = 0.45;
+
+/// Per-rig locomotion nominals — what "walking" and "running" mean for THIS
+/// character, plus how fast it may turn and accelerate.
+///
+/// Authoring is optional by design (mission premise "ease over knobs"): the
+/// component calibrates itself from the speeds the entity is actually commanded
+/// at, through [`Self::observe`]. The Luau scripts pass their speed to
+/// `viber.move_towards`, and the Rust FSM has it in `EnemyCreature::speed`, so
+/// both paths teach it the truth without a single line of authoring. An
+/// explicit `locomotion="walk: 1.1; run: 4.6"` (or `viber.set_locomotion`)
+/// latches [`Self::authored`] and stops the calibration.
+#[derive(Debug, Clone, Copy, Component)]
+pub struct LocomotionProfile {
+    /// Nominal walking speed (m/s) of the rig's walk clip.
+    pub walk: f32,
+    /// Nominal running speed (m/s) of the rig's run clip.
+    pub run: f32,
+    /// Maximum yaw rate (rad/s). The whole reason a creature stops spinning
+    /// 180° in one frame when it picks a new wander target.
+    pub turn_rate: f32,
+    /// Acceleration (m/s²) toward the desired velocity.
+    pub accel: f32,
+    /// Nominals came from authoring, not from observation.
+    pub authored: bool,
+    /// Slowest non-zero speed ever commanded (`INFINITY` until the first one).
+    observed_min: f32,
+    /// Fastest speed ever commanded.
+    observed_max: f32,
+}
+
+impl Default for LocomotionProfile {
+    fn default() -> Self {
+        Self {
+            walk: MotionSpeeds::CREATURE.walk,
+            run: MotionSpeeds::CREATURE.run,
+            turn_rate: DEFAULT_TURN_RATE,
+            accel: DEFAULT_ACCEL,
+            authored: false,
+            observed_min: f32::INFINITY,
+            observed_max: 0.0,
+        }
+    }
+}
+
+impl LocomotionProfile {
+    /// A profile with nominals the world author (or a script) stated outright.
+    pub fn authored(walk: f32, run: f32) -> Self {
+        Self {
+            walk: walk.max(1e-3),
+            run: run.max(walk).max(1e-3),
+            authored: true,
+            ..Self::default()
+        }
+    }
+
+    /// Feeds one commanded speed into the calibration.
+    ///
+    /// Returns `true` when the nominals moved, so callers can skip change
+    /// detection noise on the component.
+    pub fn observe(&mut self, commanded: f32) -> bool {
+        if self.authored || !commanded.is_finite() || commanded <= CALIBRATION_FLOOR {
+            return false;
+        }
+        let min = self.observed_min.min(commanded);
+        let max = self.observed_max.max(commanded);
+        if min == self.observed_min && max == self.observed_max {
+            return false;
+        }
+        self.observed_min = min;
+        self.observed_max = max;
+        // Two clearly separate speeds (wander vs chase) ARE the two nominals.
+        // One speed only — a townsfolk that never runs — gives the walk
+        // nominal, and the run nominal is synthesised above it so the rig keeps
+        // a headroom instead of flipping to the run clip on its own walk.
+        self.run = if min < max * CALIBRATION_SPREAD {
+            self.walk = min;
+            max
+        } else {
+            self.walk = max;
+            max / CALIBRATION_WALK_FRACTION
+        };
+        true
+    }
+
+    /// True once the profile has something better than the module defaults.
+    pub fn is_calibrated(&self) -> bool {
+        self.authored || self.observed_max > 0.0
+    }
+
+    /// Nominals + clamp for [`MotionSpeeds::scale_for`].
+    pub fn speeds(&self) -> MotionSpeeds {
+        MotionSpeeds {
+            walk: self.walk,
+            run: self.run,
+            scale_range: if self.is_calibrated() {
+                CALIBRATED_SCALE_RANGE
+            } else {
+                SPEED_SCALE_RANGE
+            },
+        }
+    }
+
+    /// State thresholds that fit these nominals.
+    pub fn gates(&self) -> MotionGates {
+        MotionGates::from_speeds(self.speeds())
     }
 }
 
@@ -240,6 +423,29 @@ pub fn next_state(
     grounded: bool,
     vertical_speed: f32,
 ) -> AnimState {
+    next_state_with(
+        current,
+        planar_speed,
+        grounded,
+        vertical_speed,
+        MotionGates::HERO,
+    )
+}
+
+/// [`next_state`] against a rig's own thresholds instead of the module-wide,
+/// hero-sized ones.
+///
+/// The hysteresis bands scale with the gates: a creature whose run gate sits at
+/// 2.75 m/s cannot use the hero's 1.0 m/s band without swallowing its whole
+/// walk range, so each band is a fraction of its own gate, capped at the
+/// historical constant so the hero's behaviour is bit-for-bit what it was.
+pub fn next_state_with(
+    current: Option<AnimState>,
+    planar_speed: f32,
+    grounded: bool,
+    vertical_speed: f32,
+    gates: MotionGates,
+) -> AnimState {
     if !grounded {
         return if vertical_speed > 0.0 {
             AnimState::Jump
@@ -247,17 +453,19 @@ pub fn next_state(
             AnimState::Fall
         };
     }
+    let run_band = RUN_HYSTERESIS.min(gates.run * RUN_HYSTERESIS_FRACTION);
+    let idle_band = IDLE_HYSTERESIS.min(gates.idle * IDLE_HYSTERESIS_FRACTION);
     // Widen the band the character is already inside, never the one it is
     // leaving — that is what stops the flapping without adding lag on entry.
     let run_gate = if current == Some(AnimState::Run) {
-        RUN_SPEED - RUN_HYSTERESIS
+        gates.run - run_band
     } else {
-        RUN_SPEED
+        gates.run
     };
     let idle_gate = if matches!(current, Some(AnimState::Walk) | Some(AnimState::Run)) {
-        IDLE_SPEED - IDLE_HYSTERESIS
+        gates.idle - idle_band
     } else {
-        IDLE_SPEED
+        gates.idle
     };
     if planar_speed >= run_gate {
         AnimState::Run
@@ -763,6 +971,7 @@ fn advance_motion(
     grounded: bool,
     vertical_speed: f32,
     dt: f32,
+    gates: MotionGates,
 ) -> AnimState {
     // Speed from actual displacement, not from the input: the character
     // controller may have been blocked by a wall, and a hero pressed into one
@@ -787,7 +996,13 @@ fn advance_motion(
         animator.air_time += dt;
     }
     let airborne = animator.air_time >= AIRBORNE_GRACE;
-    next_state(animator.state, animator.speed, !airborne, vertical_speed)
+    next_state_with(
+        animator.state,
+        animator.speed,
+        !airborne,
+        vertical_speed,
+        gates,
+    )
 }
 
 /// Matches the clip's playback rate to the character's real speed, so the feet
@@ -829,6 +1044,7 @@ pub fn drive_player_animation(
             hero.grounded,
             hero.vel_y,
             dt,
+            MotionGates::HERO,
         );
         play_state(&mut animator, &mut players, state);
         // Aterragem: one-shot `jumpland` após voo real (rigs sem o clip fazem
@@ -858,6 +1074,7 @@ pub fn drive_character_animation(
             &GlobalTransform,
             &mut CharacterAnimator,
             Option<&crate::luau::ScriptActivation>,
+            Option<&LocomotionProfile>,
         ),
         (Without<crate::player::Player>, Without<ManualAnimation>),
     >,
@@ -867,7 +1084,7 @@ pub fn drive_character_animation(
 ) {
     let dt = time.delta_secs().max(1e-4);
     let hero_pos = hero.single().ok().map(|g| g.translation());
-    for (transform, mut animator, activation) in &mut characters {
+    for (transform, mut animator, activation, profile) in &mut characters {
         if animator.locked {
             continue; // dead: the terminal clip holds the pose
         }
@@ -880,11 +1097,20 @@ pub fn drive_character_animation(
                 continue;
             }
         }
+        // A rig with no profile yet falls back to the module-wide creature
+        // nominals — the behaviour this driver always had.
+        let (speeds, gates) = match profile {
+            Some(p) => (p.speeds(), p.gates()),
+            None => (
+                MotionSpeeds::CREATURE,
+                MotionGates::from_speeds(MotionSpeeds::CREATURE),
+            ),
+        };
         // Creatures are always grounded as far as the clip picker is concerned;
         // none of the rigs in the pipeline ship airborne clips for them.
-        let state = advance_motion(&mut animator, position, true, 0.0, dt);
+        let state = advance_motion(&mut animator, position, true, 0.0, dt, gates);
         play_state(&mut animator, &mut players, state);
-        sync_clip_speed(&animator, &mut players, state, MotionSpeeds::CREATURE);
+        sync_clip_speed(&animator, &mut players, state, speeds);
     }
 }
 
@@ -917,6 +1143,151 @@ impl bevy::app::Plugin for AnimationPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Fraction of a stride the feet slide over the ground: the ratio between
+    /// what the body travels and what the clip, at its current playback rate,
+    /// says it travels. Zero is planted feet; the moonwalk was ~0.45.
+    fn foot_slide(profile: &LocomotionProfile, speed: f32) -> f32 {
+        let state = next_state_with(None, speed, true, 0.0, profile.gates());
+        let scale = profile.speeds().scale_for(state, speed);
+        let nominal = match state {
+            AnimState::Run => profile.run,
+            AnimState::Walk => profile.walk,
+            other => panic!("{speed} m/s should be locomotion, got {other:?}"),
+        };
+        (speed - scale * nominal).abs() / speed
+    }
+
+    /// The bug, frozen. A wolf chasing at 4.6 m/s never reached the hero-sized
+    /// 5.2 m/s run gate, so it stayed on the walk clip and asked for a 3.07×
+    /// playback rate that the clamp cut to 1.7× — 45 % of every stride was the
+    /// feet sliding. This is what the per-rig profile exists to fix.
+    #[test]
+    fn test_hero_sized_gates_are_what_made_a_chasing_wolf_moonwalk() {
+        let chase = 4.6_f32;
+        let state = next_state(None, chase, true, 0.0);
+        assert_eq!(
+            state,
+            AnimState::Walk,
+            "4.6 m/s is below the hero run gate of {RUN_SPEED}"
+        );
+        let scale = MotionSpeeds::CREATURE.scale_for(state, chase);
+        assert_eq!(scale, SPEED_SCALE_RANGE.1, "the rate request hits the clamp");
+        let slide = (chase - scale * MotionSpeeds::CREATURE.walk).abs() / chase;
+        assert!(
+            slide > 0.4,
+            "the legacy path slides {:.0} % of every stride",
+            slide * 100.0
+        );
+    }
+
+    /// Every creature in the example, calibrated from the speeds its script
+    /// actually commands, keeps its feet planted at every speed it is driven
+    /// at. The 0.15 bar is the acceptance criterion for this work.
+    #[test]
+    fn test_a_calibrated_profile_keeps_the_feet_planted() {
+        // (name, commanded speeds) straight out of examples/simple-rpg/scripts.
+        let rigs = [
+            ("wolf", vec![2.2_f32, 4.6]),
+            ("bandit", vec![1.8, 3.8]),
+            ("shade", vec![1.4, 4.2]),
+            ("slime", vec![0.7, 2.0]),
+            ("witch", vec![1.4, 3.6]),
+            ("sand-worm", vec![1.2, 4.0]),
+            ("townsfolk", vec![1.1]),
+            ("interior-folk", vec![0.6]),
+        ];
+        for (name, speeds) in rigs {
+            let mut profile = LocomotionProfile::default();
+            for speed in &speeds {
+                profile.observe(*speed);
+            }
+            assert!(profile.is_calibrated(), "{name} calibrated from its speeds");
+            for speed in &speeds {
+                let slide = foot_slide(&profile, *speed);
+                assert!(
+                    slide < 0.15,
+                    "{name} at {speed} m/s slides {:.0} % of a stride",
+                    slide * 100.0
+                );
+            }
+        }
+    }
+
+    /// Two clearly separated speeds ARE the two nominals; a single speed gives
+    /// the walk nominal and synthesises headroom above it, so a rig that only
+    /// ever strolls never flips itself onto the run clip.
+    #[test]
+    fn test_calibration_reads_two_speeds_as_walk_and_run() {
+        let mut two = LocomotionProfile::default();
+        two.observe(2.2);
+        two.observe(4.6);
+        assert_eq!((two.walk, two.run), (2.2, 4.6));
+        assert_eq!(
+            next_state_with(None, 4.6, true, 0.0, two.gates()),
+            AnimState::Run
+        );
+        assert_eq!(
+            next_state_with(None, 2.2, true, 0.0, two.gates()),
+            AnimState::Walk
+        );
+
+        let mut one = LocomotionProfile::default();
+        one.observe(1.1);
+        assert_eq!(one.walk, 1.1);
+        assert!(one.run > 1.1, "run nominal sits above the only speed seen");
+        assert_eq!(
+            next_state_with(None, 1.1, true, 0.0, one.gates()),
+            AnimState::Walk,
+            "a townsfolk walking at its own only speed stays on the walk clip"
+        );
+    }
+
+    /// Authoring wins over observation, and observation never touches it.
+    #[test]
+    fn test_authored_nominals_ignore_observation() {
+        let mut profile = LocomotionProfile::authored(1.1, 4.6);
+        assert!(!profile.observe(99.0), "authored profiles do not calibrate");
+        assert_eq!((profile.walk, profile.run), (1.1, 4.6));
+    }
+
+    /// The hero's thresholds and clamp are untouched by the per-rig work.
+    #[test]
+    fn test_hero_gates_and_clamp_are_unchanged() {
+        assert_eq!(MotionGates::HERO.run, RUN_SPEED);
+        assert_eq!(MotionGates::HERO.idle, IDLE_SPEED);
+        assert_eq!(MotionSpeeds::HERO.scale_range, SPEED_SCALE_RANGE);
+        // Strafing drops the hero to 0.6× without changing the nominal — the
+        // wide legacy clamp has to keep allowing it.
+        assert_eq!(MotionSpeeds::HERO.scale_for(AnimState::Walk, 4.0 * 0.6), 0.6);
+    }
+
+    /// The hysteresis band scales with the gate instead of swallowing a
+    /// creature's whole walk range, and the hero keeps exactly its old band.
+    #[test]
+    fn test_hysteresis_band_scales_with_the_gate() {
+        let dipped = RUN_SPEED - RUN_HYSTERESIS * 0.5;
+        assert_eq!(
+            next_state_with(Some(AnimState::Run), dipped, true, 0.0, MotionGates::HERO),
+            AnimState::Run,
+            "the hero band is bit-for-bit what it was"
+        );
+        let mut profile = LocomotionProfile::default();
+        profile.observe(0.7);
+        profile.observe(2.0);
+        let gates = profile.gates();
+        assert!(
+            gates.run - RUN_HYSTERESIS < profile.walk,
+            "a hero-sized band would drop the run gate below this rig's own \
+             walk nominal, so it would never come back off the run clip"
+        );
+        assert_eq!(
+            next_state_with(Some(AnimState::Run), 0.7, true, 0.0, gates),
+            AnimState::Walk,
+            "the scaled band still lets a slime drop back to its walk"
+        );
+    }
+
     use bevy::ecs::system::SystemState;
 
     /// The hero GLB's real clip list.
@@ -1148,18 +1519,18 @@ mod tests {
         let mut state = AnimState::Idle;
         for _ in 0..60 {
             x += 3.0 * dt;
-            state = advance_motion(&mut a, Vec3::new(x, 0.0, 0.0), true, 0.0, dt);
+            state = advance_motion(&mut a, Vec3::new(x, 0.0, 0.0), true, 0.0, dt, MotionGates::HERO);
             a.state = Some(state);
         }
         assert_eq!(state, AnimState::Walk);
         // A single frame reporting "not grounded" must not punch a Fall in.
         x += 3.0 * dt;
-        let flick = advance_motion(&mut a, Vec3::new(x, 0.0, 0.0), false, -1.0, dt);
+        let flick = advance_motion(&mut a, Vec3::new(x, 0.0, 0.0), false, -1.0, dt, MotionGates::HERO);
         assert_eq!(flick, AnimState::Walk, "one flicker frame is debounced");
         // Genuinely leaving the ground does switch.
         for _ in 0..12 {
             x += 3.0 * dt;
-            state = advance_motion(&mut a, Vec3::new(x, 0.0, 0.0), false, -4.0, dt);
+            state = advance_motion(&mut a, Vec3::new(x, 0.0, 0.0), false, -4.0, dt, MotionGates::HERO);
             a.state = Some(state);
         }
         assert_eq!(state, AnimState::Fall);
@@ -1171,7 +1542,7 @@ mod tests {
         let dt = 1.0 / 60.0;
         a.last_pos = None; // as left by the activation-radius freeze
         // Coming back 400 m away must not read as a 24 km/h sprint.
-        let state = advance_motion(&mut a, Vec3::new(400.0, 0.0, 0.0), true, 0.0, dt);
+        let state = advance_motion(&mut a, Vec3::new(400.0, 0.0, 0.0), true, 0.0, dt, MotionGates::HERO);
         assert_eq!(state, AnimState::Idle);
         assert_eq!(a.speed, 0.0);
     }
@@ -1491,21 +1862,21 @@ mod tests {
         let dt = 1.0 / 60.0;
         // 18 frames no ar ≈ 0.3 s de voo.
         for _ in 0..18 {
-            advance_motion(&mut a, Vec3::ZERO, false, -3.0, dt);
+            advance_motion(&mut a, Vec3::ZERO, false, -3.0, dt, MotionGates::HERO);
         }
         let was_airborne = a.air_time;
         assert!(
             was_airborne > LANDING_AIR_TIME,
             "voo acumulado {was_airborne}"
         );
-        advance_motion(&mut a, Vec3::ZERO, true, 0.0, dt);
+        advance_motion(&mut a, Vec3::ZERO, true, 0.0, dt, MotionGates::HERO);
         assert!(is_landing(was_airborne, true), "aterragem detetada");
         assert_eq!(a.air_time, 0.0, "air_time zerou no frame grounded");
         // Flicker de 1 frame (0.017 s) NÃO é aterragem.
         let mut b = animator(&["idle", "jumpland"]);
-        advance_motion(&mut b, Vec3::ZERO, false, -1.0, dt);
+        advance_motion(&mut b, Vec3::ZERO, false, -1.0, dt, MotionGates::HERO);
         let flick = b.air_time;
-        advance_motion(&mut b, Vec3::ZERO, true, 0.0, dt);
+        advance_motion(&mut b, Vec3::ZERO, true, 0.0, dt, MotionGates::HERO);
         assert!(!is_landing(flick, true), "flicker debounced");
         // Ainda no ar: nunca é aterragem.
         assert!(!is_landing(0.3, false));

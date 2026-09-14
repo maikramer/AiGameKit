@@ -47,6 +47,122 @@ pub const RESPAWN_PLAYER_CLEARANCE_M: f32 = 3.5;
 /// Re-agendamento de um respawn adiado por camping (s).
 pub const RESPAWN_CAMPING_RETRY_SECS: f32 = 5.0;
 
+/// Below this planar speed (m/s) a character counts as standing still, and an
+/// explicit look-at (`viber.face_player`) is allowed to own the facing.
+///
+/// Above it the body always points where it is *going*. This one rule is what
+/// kills the "anda de lado": the scripts call `face_player()` and
+/// `move_towards(patrol_point)` in the same frame, and the look-at used to win
+/// unconditionally — body aimed at the hero, translation going sideways.
+pub const FACING_MOVE_SPEED: f32 = 0.25;
+
+/// Velocity below which a decelerating character is simply stopped, so it does
+/// not creep forever on a vanishing remainder.
+pub const STOP_EPSILON: f32 = 0.02;
+
+/// Velocity-space locomotion shared by the Rust FSM ([`enemy_ai`]) and the
+/// Luau scripts (`viber.move_towards` / `move_by` / `face_towards`).
+///
+/// Producers state a *desire* for the frame ([`Self::drive`], [`Self::look_at`])
+/// and [`apply_ai_locomotion`] is the single consumer that turns it into
+/// movement: it ramps the velocity toward the desire at the profile's
+/// acceleration, steps the transform, snaps Y to the carved surface and turns
+/// the yaw at the profile's turn rate. Before this existed both producers wrote
+/// `Transform::translation` and `Transform::rotation` outright — full speed on
+/// the first frame and a hard 180° snap on every retarget.
+///
+/// The desire is a *one-frame* contract: the consumer clears it. A producer
+/// that stops asking decelerates to a stop instead of freezing mid-stride.
+#[derive(Debug, Clone, Copy, Component, Default)]
+pub struct AiLocomotion {
+    /// Current planar velocity (m/s). Integrated, never assigned by producers.
+    pub velocity: Vec2,
+    /// Desired planar velocity (m/s) for this frame.
+    desired: Vec2,
+    /// A producer asked for something this frame (distinguishes "stand still"
+    /// from "nobody is driving me").
+    driven: bool,
+    /// One-frame look-at direction (XZ), honoured only below
+    /// [`FACING_MOVE_SPEED`].
+    facing: Option<Vec2>,
+    /// Where the producer is actually trying to GO, when it knows.
+    ///
+    /// The desired velocity alone is not enough for a pathfinder: projecting it
+    /// forward only ever names a point on the straight line the character
+    /// cannot take, which is precisely the line the wall is on. `viber.move_towards`
+    /// and the FSM both know their destination, so they say it, and the
+    /// navigation bridge paths to the real thing.
+    goal: Option<Vec2>,
+}
+
+impl AiLocomotion {
+    /// Asks for a planar velocity (m/s) this frame, with no stated destination.
+    ///
+    /// Use [`Self::drive_to`] whenever the destination IS known: without it the
+    /// navigation bridge can only guess where the character is heading.
+    pub fn drive(&mut self, desired: Vec2) {
+        self.desired = desired;
+        self.driven = true;
+        self.goal = None;
+    }
+
+    /// Asks to travel toward `goal` at `speed` (m/s), from `here`.
+    ///
+    /// Never asks for more speed than closes the remaining gap this frame, so
+    /// arrival is the same as it always was.
+    pub fn drive_to(&mut self, here: Vec2, goal: Vec2, speed: f32, dt: f32) {
+        let offset = goal - here;
+        if offset.length_squared() <= 1e-8 || speed <= 0.0 {
+            self.halt();
+            self.goal = Some(goal);
+            return;
+        }
+        let reach = offset.length() / dt.max(1e-4);
+        self.desired = offset.normalize() * speed.min(reach);
+        self.driven = true;
+        self.goal = Some(goal);
+    }
+
+    /// Asks to stand still this frame (decelerating, not freezing).
+    pub fn halt(&mut self) {
+        self.desired = Vec2::ZERO;
+        self.driven = true;
+        self.goal = None;
+    }
+
+    /// Asks to look toward a direction, if the character is slow enough to be
+    /// allowed to (see [`FACING_MOVE_SPEED`]).
+    pub fn look_at(&mut self, dir: Vec2) {
+        if dir.length_squared() > 1e-8 {
+            self.facing = Some(dir.normalize());
+        }
+    }
+
+    /// Current planar speed (m/s).
+    pub fn speed(&self) -> f32 {
+        self.velocity.length()
+    }
+
+    /// The velocity asked for this frame, before the acceleration ramp.
+    ///
+    /// The navigation bridge reads it to know where the character *wants* to
+    /// go, replaces it with a navigated answer, and hands it back — which is
+    /// why the scripts never learn that pathfinding exists.
+    pub fn desired(&self) -> Vec2 {
+        self.desired
+    }
+
+    /// A producer asked for something this frame.
+    pub fn is_driven(&self) -> bool {
+        self.driven
+    }
+
+    /// Where the producer is trying to go, when it said so.
+    pub fn goal(&self) -> Option<Vec2> {
+        self.goal
+    }
+}
+
 /// Behaviour state of one [`EnemyCreature`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EnemyState {
@@ -187,27 +303,29 @@ pub fn enemy_ai(
             &mut EnemyCreature,
             Option<&Name>,
             Option<&mut WanderState>,
+            Option<&mut AiLocomotion>,
+            Option<&mut crate::animation::LocomotionProfile>,
         ),
         Without<crate::combat::Corpse>,
     >,
 ) {
-    let Some(runtime) = runtime else {
+    if runtime.is_none() {
         return; // terrain bootstrap has not published the carved world yet
-    };
+    }
     let now = time.elapsed_secs();
     let player_xz = players
         .iter()
         .next()
         .map(|gt| Vec2::new(gt.translation().x, gt.translation().z));
-    let world_limit = runtime.spec.world_size * 0.5;
 
-    for (entity, mut transform, mut enemy, name, wander) in &mut enemies {
+    for (entity, transform, mut enemy, name, wander, mut loco, mut profile) in &mut enemies {
         // First tick: the patrol anchor is wherever the creature spawned —
         // latched exactly once (Option, não sentinela ZERO).
         let home = *enemy
             .home
             .get_or_insert(Vec2::new(transform.translation.x, transform.translation.z));
         let pos_xz = Vec2::new(transform.translation.x, transform.translation.z);
+        let profile_seen = profile.is_some();
         let player_dist = player_xz
             .map(|p| pos_xz.distance(p))
             .unwrap_or(f32::INFINITY);
@@ -277,46 +395,156 @@ pub fn enemy_ai(
             }
         };
 
-        if speed > 0.0 {
-            let offset = target - pos_xz;
-            if offset.length_squared() > 1e-8 {
-                // NOTE: glam's `Vec3::truncate` drops Z (keeps x,y) — build
-                // the XZ pair explicitly instead.
-                let dir2 = offset.normalize();
-                let dir3 = Vec3::new(dir2.x, 0.0, dir2.y);
-                let step = (speed * time.delta_secs()).min(offset.length());
-                let moved = pos_xz + dir2 * step;
-                let moved = clamp_to_world(
-                    Vec3::new(moved.x, transform.translation.y, moved.y),
-                    world_limit,
-                );
-                // PISO SOB A CRIATURA (Y conhecido → surface_below): sob um
-                // cliff/arco fica SOB a rocha em vez de ser teletransportada
-                // para o topo do mundo. Enterrada (sonda dentro da rocha, ex.
-                // a subir uma parede) mantém a paridade antiga: superfície
-                // renderizada.
-                let y = runtime
-                    .surface_below(
-                        moved.x,
-                        moved.z,
-                        transform.translation.y + crate::player::GROUND_PROBE,
-                    )
-                    .unwrap_or_else(|| runtime.sample_mesh_surface(moved.x, moved.z));
-                transform.translation = Vec3::new(moved.x, y, moved.z);
-                transform.rotation = crate::player::facing_rotation(dir3);
+        // The FSM states a DESIRE; `apply_ai_locomotion` owns the transform.
+        // Teaching the profile the speeds this creature is actually driven at
+        // is what lets the animation driver pick the right clip and the right
+        // playback rate (see `animation::LocomotionProfile`).
+        if !profile_seen {
+            commands
+                .entity(entity)
+                .insert(crate::animation::LocomotionProfile::default());
+        }
+        if let Some(profile) = profile.as_deref_mut() {
+            profile.observe(enemy.speed);
+            profile.observe(enemy.speed * WANDER_SPEED_FRACTION);
+        }
+
+        let loco = match loco.as_deref_mut() {
+            Some(loco) => loco,
+            None => {
+                commands.entity(entity).insert(AiLocomotion::default());
+                continue;
             }
-        } else if matches!(enemy.state, EnemyState::Chase) {
-            // Parado em alcance de ataque: continuar a ENCARAR o player —
-            // sem isto a criatura congela virada para a última direção de
-            // patrulha enquanto o player orbita à volta.
-            if let Some(player_xz) = player_xz {
-                let offset = player_xz - pos_xz;
-                if offset.length_squared() > 1e-8 {
-                    let dir3 = Vec3::new(offset.x, 0.0, offset.y).normalize_or_zero();
-                    transform.rotation = crate::player::facing_rotation(dir3);
+        };
+
+        if speed > 0.0 {
+            // The FSM knows exactly where it is going — the player, or the
+            // patrol point — so it says so, and navigation can path there
+            // instead of guessing from the velocity.
+            loco.drive_to(pos_xz, target, speed, time.delta_secs());
+        } else {
+            loco.halt();
+            if matches!(enemy.state, EnemyState::Chase) {
+                // Parado em alcance de ataque: continuar a ENCARAR o player —
+                // sem isto a criatura congela virada para a última direção de
+                // patrulha enquanto o player orbita à volta.
+                if let Some(player_xz) = player_xz {
+                    loco.look_at(player_xz - pos_xz);
                 }
             }
         }
+    }
+}
+
+/// System set of [`apply_ai_locomotion`], so anything that has to write the
+/// locomotion ask (the navigation bridge) can order itself before the single
+/// consumer without naming the function.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AiLocomotionSystems;
+
+/// The single consumer of [`AiLocomotion`]: ramps velocity, steps the
+/// transform, snaps Y to the carved surface and turns the yaw.
+///
+/// Runs in `PostUpdate` before `TransformSystems::Propagate`, so every producer
+/// in `Update` (the FSM, the Luau command queue) has already had its say and
+/// the movement lands in the same frame's `GlobalTransform`.
+///
+/// Three things it does that the old direct-write path did not:
+///
+/// * **Acceleration.** Velocity chases the desire at `profile.accel` instead of
+///   jumping to it. The animation driver measures displacement through a
+///   `SPEED_SMOOTH_TAU` low-pass; a step function into that filter is what made
+///   the clip lag behind the body on every start and stop.
+/// * **Turn rate.** Yaw slerps toward the target at `profile.turn_rate`
+///   (reusing the hero's [`crate::player::facing_slerp_factor`]) instead of
+///   snapping. A wander retarget no longer spins the creature in one frame.
+/// * **Facing follows motion.** Above [`FACING_MOVE_SPEED`] the body points
+///   along its own velocity; an explicit look-at only wins when the character
+///   is effectively stopped.
+#[allow(clippy::type_complexity)]
+pub fn apply_ai_locomotion(
+    time: Res<Time>,
+    runtime: Option<Res<TerrainRuntime>>,
+    mut movers: Query<
+        (
+            &mut Transform,
+            &GlobalTransform,
+            &mut AiLocomotion,
+            Option<&crate::animation::LocomotionProfile>,
+        ),
+        Without<crate::combat::Corpse>,
+    >,
+) {
+    let dt = time.delta_secs();
+    if dt <= 0.0 {
+        return;
+    }
+    let world_limit = runtime.as_deref().map(|rt| rt.spec.world_size * 0.5);
+    for (mut transform, global, mut loco, profile) in &mut movers {
+        let profile = profile.copied().unwrap_or_default();
+        // O passo e o terreno são MUNDO; o `Transform` é LOCAL. `offset` é o
+        // que o pai acrescenta — um NPC dentro do grupo `city` tem local y=0 e
+        // world y≈38,7. Grupos de cena são translações puras; com um pai
+        // rodado ou escalado isto seria uma aproximação (a mesma que o antigo
+        // aplicador de `MoveBy` fazia).
+        let offset = global.translation() - transform.translation;
+        // Nobody drove this frame: coast to a stop rather than hold the last
+        // velocity forever (a script whose `on_update` was skipped by the AI
+        // LOD must not keep walking).
+        if !loco.driven {
+            loco.desired = Vec2::ZERO;
+        }
+        let delta = loco.desired - loco.velocity;
+        let max_change = profile.accel * dt;
+        loco.velocity += delta.clamp_length_max(max_change);
+        if loco.desired == Vec2::ZERO && loco.velocity.length() < STOP_EPSILON {
+            loco.velocity = Vec2::ZERO;
+        }
+
+        let step = loco.velocity * dt;
+        if step.length_squared() > 1e-12 {
+            let world = transform.translation + offset;
+            let mut x = world.x + step.x;
+            let mut z = world.z + step.y;
+            if let Some(limit) = world_limit {
+                let clamped = clamp_to_world(Vec3::new(x, world.y, z), limit);
+                x = clamped.x;
+                z = clamped.z;
+            }
+            // PISO SOB A CRIATURA (Y conhecido → surface_below): sob um
+            // cliff/arco fica SOB a rocha em vez de ser teletransportada para o
+            // topo do mundo. Sem terreno (testes headless sem bootstrap) o Y
+            // fica como está.
+            let y = match runtime.as_deref() {
+                Some(rt) => rt
+                    .surface_below(x, z, world.y + crate::player::GROUND_PROBE)
+                    .unwrap_or_else(|| rt.sample_mesh_surface(x, z)),
+                None => world.y,
+            };
+            transform.translation = Vec3::new(x, y, z) - offset;
+        }
+
+        let target_dir = if loco.speed() > FACING_MOVE_SPEED {
+            Some(loco.velocity.normalize())
+        } else {
+            loco.facing
+        };
+        if let Some(dir) = target_dir {
+            let target = crate::player::facing_rotation(Vec3::new(dir.x, 0.0, dir.y));
+            let t = crate::player::facing_slerp_factor(
+                transform.rotation,
+                target,
+                profile.turn_rate,
+                dt,
+            );
+            transform.rotation = transform.rotation.slerp(target, t);
+        }
+
+        // One-frame contract: the desire has been consumed.
+        loco.desired = Vec2::ZERO;
+        loco.driven = false;
+        loco.facing = None;
+        loco.goal = None;
     }
 }
 
@@ -485,6 +713,16 @@ impl Plugin for AiPlugin {
                     queue_creature_respawns,
                     respawn_spawners,
                 ),
+            )
+            // O consumidor único do [`AiLocomotion`] corre DEPOIS de todos os
+            // produtores do `Update` (a FSM aqui, a fila de comandos Luau no
+            // `LuauPlugin`) e ANTES da propagação de transforms, para o passo
+            // do frame chegar ao `GlobalTransform` do mesmo frame.
+            .add_systems(
+                bevy::app::PostUpdate,
+                timed(Group::Ai, apply_ai_locomotion)
+                    .in_set(AiLocomotionSystems)
+                    .before(bevy::transform::TransformSystems::Propagate),
             );
     }
 }
@@ -492,6 +730,251 @@ impl Plugin for AiPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Minimal headless app with just the locomotion consumer and a hand-driven
+    /// clock. No terrain: the integrator leaves Y alone, which is what we want
+    /// when the subject is XZ velocity and yaw.
+    fn locomotion_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins.build().disable::<bevy::time::TimePlugin>())
+            .add_plugins(bevy::transform::TransformPlugin);
+        app.init_resource::<Time>();
+        app.add_systems(
+            bevy::app::PostUpdate,
+            apply_ai_locomotion.before(bevy::transform::TransformSystems::Propagate),
+        );
+        app
+    }
+
+    fn tick(app: &mut App, millis: u64) {
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(std::time::Duration::from_millis(millis));
+        app.update();
+    }
+
+    /// Yaw never moves faster than the profile allows. Before this, every
+    /// wander retarget span the creature through 180° inside one frame.
+    #[test]
+    fn test_yaw_never_turns_faster_than_the_profile_allows() {
+        let mut app = locomotion_app();
+        let profile = crate::animation::LocomotionProfile::authored(1.5, 4.0);
+        let mut loco = AiLocomotion::default();
+        // Already at speed, heading -Z; the desire is a full 180° reversal.
+        loco.velocity = Vec2::new(0.0, -4.0);
+        let entity = app
+            .world_mut()
+            .spawn((Transform::from_xyz(0.0, 0.0, 0.0), loco, profile))
+            .id();
+
+        let dt = 0.05_f32;
+        let mut previous = app.world().entity(entity).get::<Transform>().unwrap().rotation;
+        for _ in 0..40 {
+            app.world_mut()
+                .entity_mut(entity)
+                .get_mut::<AiLocomotion>()
+                .unwrap()
+                .drive(Vec2::new(0.0, 4.0));
+            tick(&mut app, (dt * 1000.0) as u64);
+            let now = app.world().entity(entity).get::<Transform>().unwrap().rotation;
+            let swept = previous.angle_between(now);
+            assert!(
+                swept <= profile.turn_rate * dt + 1e-3,
+                "yaw swept {swept:.3} rad in one frame, cap is {:.3}",
+                profile.turn_rate * dt
+            );
+            previous = now;
+        }
+        // And it does get there: a capped turn is still a turn.
+        let facing = previous * Vec3::Z;
+        assert!(
+            facing.z > 0.9,
+            "after 2 s the body faces +Z, got {facing:?}"
+        );
+    }
+
+    /// Velocity ramps at the profile's acceleration instead of jumping to the
+    /// desire on the first frame — the step function into the animation's
+    /// own low-pass is what made clips lag the body on every start.
+    #[test]
+    fn test_velocity_ramps_instead_of_jumping_to_the_desire() {
+        let mut app = locomotion_app();
+        let profile = crate::animation::LocomotionProfile::authored(1.5, 4.0);
+        let entity = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(0.0, 0.0, 0.0),
+                AiLocomotion::default(),
+                profile,
+            ))
+            .id();
+
+        let dt = 0.05_f32;
+        app.world_mut()
+            .entity_mut(entity)
+            .get_mut::<AiLocomotion>()
+            .unwrap()
+            .drive(Vec2::new(4.0, 0.0));
+        tick(&mut app, 50);
+        let speed = app
+            .world()
+            .entity(entity)
+            .get::<AiLocomotion>()
+            .unwrap()
+            .speed();
+        assert!(
+            (speed - profile.accel * dt).abs() < 1e-3,
+            "first frame reaches accel·dt = {:.2} m/s, got {speed:.2}",
+            profile.accel * dt
+        );
+
+        // Keep driving: it converges on the desire and stays there.
+        for _ in 0..20 {
+            app.world_mut()
+                .entity_mut(entity)
+                .get_mut::<AiLocomotion>()
+                .unwrap()
+                .drive(Vec2::new(4.0, 0.0));
+            tick(&mut app, 50);
+        }
+        let speed = app
+            .world()
+            .entity(entity)
+            .get::<AiLocomotion>()
+            .unwrap()
+            .speed();
+        assert!((speed - 4.0).abs() < 1e-3, "settles at 4 m/s, got {speed:.2}");
+
+        // Stop driving: it coasts down instead of freezing mid-stride.
+        for _ in 0..20 {
+            tick(&mut app, 50);
+        }
+        let speed = app
+            .world()
+            .entity(entity)
+            .get::<AiLocomotion>()
+            .unwrap()
+            .speed();
+        assert_eq!(speed, 0.0, "an undriven character comes to a stop");
+    }
+
+    /// The rule that kills "anda de lado": a look-at issued while the body is
+    /// moving does not steal the facing. Stopped, it does.
+    #[test]
+    fn test_a_look_at_only_wins_when_the_body_is_stopped() {
+        let mut app = locomotion_app();
+        let profile = crate::animation::LocomotionProfile::authored(1.5, 4.0);
+        let entity = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(0.0, 0.0, 0.0),
+                AiLocomotion::default(),
+                profile,
+            ))
+            .id();
+
+        // Walking along +X while being told to look along +Z, every frame —
+        // exactly what the scripts do with move_towards + face_player.
+        for _ in 0..60 {
+            let mut entity_mut = app.world_mut().entity_mut(entity);
+            let mut loco = entity_mut.get_mut::<AiLocomotion>().unwrap();
+            loco.drive(Vec2::new(3.0, 0.0));
+            loco.look_at(Vec2::new(0.0, 1.0));
+            drop(entity_mut);
+            tick(&mut app, 50);
+        }
+        let facing = app.world().entity(entity).get::<Transform>().unwrap().rotation * Vec3::Z;
+        assert!(
+            facing.x > 0.9,
+            "a moving body faces where it goes (+X), got {facing:?}"
+        );
+
+        // Now stop and keep asking to look along +Z: the look-at takes over.
+        for _ in 0..60 {
+            app.world_mut()
+                .entity_mut(entity)
+                .get_mut::<AiLocomotion>()
+                .unwrap()
+                .look_at(Vec2::new(0.0, 1.0));
+            tick(&mut app, 50);
+        }
+        let facing = app.world().entity(entity).get::<Transform>().unwrap().rotation * Vec3::Z;
+        assert!(
+            facing.z > 0.9,
+            "a stopped body honours the look-at (+Z), got {facing:?}"
+        );
+    }
+
+    /// A producer that knows where it is going says so, and the stated goal is
+    /// what the navigation bridge paths to. Without it the only thing a
+    /// pathfinder could aim at is a point on the straight line — which is the
+    /// line the wall is on.
+    #[test]
+    fn a_stated_destination_survives_into_the_goal() {
+        let mut loco = AiLocomotion::default();
+        assert_eq!(loco.goal(), None, "nada pedido, nada declarado");
+
+        loco.drive_to(Vec2::ZERO, Vec2::new(30.0, 0.0), 4.0, 0.05);
+        assert_eq!(loco.goal(), Some(Vec2::new(30.0, 0.0)));
+        assert!((loco.desired().length() - 4.0).abs() < 1e-4, "pede a velocidade pedida");
+        assert!(loco.desired().x > 0.0, "aponta ao destino");
+
+        // Arrival: never overshoot, and the goal stays stated so the bridge
+        // knows the character is still trying to get there.
+        loco.drive_to(Vec2::new(29.95, 0.0), Vec2::new(30.0, 0.0), 4.0, 0.05);
+        assert!(
+            loco.desired().length() <= 4.0 + 1e-4,
+            "a chegada nunca pede mais do que fecha o intervalo"
+        );
+
+        // A bare velocity clears it — `viber.move_by` has no destination to
+        // state, and inventing one would path to a lie.
+        loco.drive(Vec2::new(1.0, 0.0));
+        assert_eq!(loco.goal(), None);
+    }
+
+    /// A child of a translated group moves in WORLD space and keeps its local
+    /// transform consistent — the townsfolk live under `<Group name="city">`.
+    #[test]
+    fn test_a_parented_character_moves_in_world_space() {
+        let mut app = locomotion_app();
+        let parent = app
+            .world_mut()
+            .spawn(Transform::from_xyz(100.0, 5.0, -50.0))
+            .id();
+        let child = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(0.0, 0.0, 0.0),
+                AiLocomotion::default(),
+                crate::animation::LocomotionProfile::authored(1.5, 4.0),
+            ))
+            .id();
+        app.world_mut().entity_mut(parent).add_child(child);
+        app.update(); // propagate once so the child has a GlobalTransform
+
+        for _ in 0..40 {
+            app.world_mut()
+                .entity_mut(child)
+                .get_mut::<AiLocomotion>()
+                .unwrap()
+                .drive(Vec2::new(2.0, 0.0));
+            tick(&mut app, 50);
+        }
+        let local = app.world().entity(child).get::<Transform>().unwrap().translation;
+        let world = app
+            .world()
+            .entity(child)
+            .get::<GlobalTransform>()
+            .unwrap()
+            .translation();
+        assert!(local.x > 1.0, "the child advanced, local x = {:.2}", local.x);
+        assert!(
+            (world.x - (100.0 + local.x)).abs() < 1e-3,
+            "world x tracks the parent offset: {world:?} vs local {local:?}"
+        );
+    }
+
     use crate::terrain::heightmap::HeightMapU16;
     use crate::terrain::spec::TerrainSpec;
 
@@ -656,6 +1139,7 @@ mod tests {
             roads: vec![],
             pads: vec![],
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
         };
         app.insert_resource(runtime);
 
@@ -735,6 +1219,7 @@ mod tests {
             roads: vec![],
             pads: vec![],
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
         });
         let world_limit = 128.0 * 0.5;
         let home = Vec2::new(40.0, -30.0); // well inside the world disc

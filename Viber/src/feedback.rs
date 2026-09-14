@@ -219,7 +219,53 @@ pub const RESPAWN_POINTS: [Vec2; 5] = [
     Vec2::new(50.0, 0.0),
 ];
 
-/// Ponto de respawn mais próximo da posição de morte (XZ).
+/// Catálogo dos pontos de respawn (Fase B3): as tags declarativas
+/// `<SpawnPoint at="x z" label="…">` do mundo (recolhidas no
+/// `recipes::spawn::startup`); sem nenhuma no mundo, [`Default`] entrega o
+/// fallback hardcoded ([`RESPAWN_POINTS`] × [`respawn_label`]) — política
+/// aditiva: o simple-rpg sem declarações renasce exatamente onde sempre.
+#[derive(Debug, Clone, Resource)]
+pub struct RespawnCatalog(pub Vec<(Vec2, String)>);
+
+impl Default for RespawnCatalog {
+    fn default() -> Self {
+        Self(
+            RESPAWN_POINTS
+                .iter()
+                .map(|&p| (p, respawn_label(p).to_string()))
+                .collect(),
+        )
+    }
+}
+
+impl RespawnCatalog {
+    /// Ponto + rótulo do respawn mais próximo (XZ) DENTRO do catálogo.
+    /// Rótulos vazios (ponto declarado sem `label`) caem na heurística de
+    /// direção de sempre ([`respawn_label`]).
+    pub fn nearest(&self, from: Vec2) -> (Vec2, &str) {
+        let Some((point, label)) = self
+            .0
+            .iter()
+            .min_by(|a, b| {
+                a.0.distance_squared(from)
+                    .total_cmp(&b.0.distance_squared(from))
+            })
+        else {
+            // Catálogo vazio explicitamente declarado → fallback do const.
+            let p = nearest_respawn_point(from);
+            return (p, respawn_label(p));
+        };
+        let label = if label.is_empty() {
+            respawn_label(*point)
+        } else {
+            label.as_str()
+        };
+        (*point, label)
+    }
+}
+
+/// Ponto de respawn mais próximo da posição de morte (XZ) — FALLBACK do
+/// [`RESPAWN_POINTS`]; em runtime usar [`RespawnCatalog::nearest`].
 pub fn nearest_respawn_point(from: Vec2) -> Vec2 {
     RESPAWN_POINTS
         .iter()
@@ -231,7 +277,8 @@ pub fn nearest_respawn_point(from: Vec2) -> Vec2 {
         .unwrap_or(Vec2::ZERO)
 }
 
-/// Rótulo humano do ponto de respawn (toast de retorno).
+/// Rótulo humano do ponto de respawn (toast de retorno) — heurística de
+/// direção usada pelo fallback e por pontos declarados sem `label`.
 pub fn respawn_label(point: Vec2) -> &'static str {
     match point {
         Vec2::ZERO => "praça",
@@ -306,6 +353,10 @@ impl Plugin for FeedbackPlugin {
             .add_message::<crate::ambient::SfxEvent>()
             .init_resource::<CombatTarget>()
             .init_resource::<HurtFlash>()
+            // Catálogo de respawn (Fase B3): o default É o fallback do const —
+            // apps mínimas e mundos sem <SpawnPoint> renascem como sempre;
+            // recipes::spawn::startup substitui-o quando o mundo declara.
+            .init_resource::<RespawnCatalog>()
             // O hit-flash clona StandardMaterials — apps mínimas precisam do
             // registo (bare `Assets`, sem AssetServer; na app completa o
             // AssetPlugin já o inseriu e isto é no-op).
@@ -476,6 +527,7 @@ fn player_hurt_system(
     mut toasts: MessageWriter<ScriptToast>,
     mut sfx: MessageWriter<crate::ambient::SfxEvent>,
     mut knockbacks: Query<&mut crate::physics_fx::Knockback>,
+    mut events: Option<ResMut<crate::luau::ScriptEventQueue>>,
 ) {
     let Ok((entity, transform, mut health, mut invuln, dying, guard)) = players.single_mut() else {
         return;
@@ -507,6 +559,14 @@ fn player_hurt_system(
         match hurt_player(&mut health, invuln.as_deref(), dying, amount, hurt.status) {
             HurtOutcome::Ignored | HurtOutcome::Blocked => continue,
             HurtOutcome::Applied { killed } => {
+                // Evento engine→Lua: o dano REAL (pós guard/parry/i-frames) —
+                // não o bruto do golpe. `hp` é o HP depois do dano.
+                if let Some(events) = events.as_deref_mut() {
+                    events.push(crate::luau::ScriptGameEvent::PlayerHurt {
+                        amount,
+                        hp: health.current,
+                    });
+                }
                 sfx.write(crate::ambient::SfxEvent {
                     clip: if killed {
                         // Morte do herói: sting de derrota (interface, sem
@@ -609,9 +669,13 @@ fn respawn_system(
         With<Player>,
     >,
     terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
+    // Option<Res>: apps mínimas podem correr o sistema sem o catálogo —
+    // o fallback é o const de sempre (RESPAWN_POINTS).
+    catalog: Option<Res<RespawnCatalog>>,
     time: Res<Time>,
     mut commands: Commands,
     mut toasts: MessageWriter<ScriptToast>,
+    mut events: Option<ResMut<crate::luau::ScriptEventQueue>>,
 ) {
     let dt = time.delta_secs();
     for (entity, mut health, mut transform, dying, mut status) in &mut players {
@@ -620,7 +684,19 @@ fn respawn_system(
                 state.timer -= dt;
                 if state.timer <= 0.0 {
                     let death_xz = Vec2::new(transform.translation.x, transform.translation.z);
-                    let point = nearest_respawn_point(death_xz);
+                    // Catálogo declarado (<SpawnPoint>) vence; sem recurso ou
+                    // com catálogo vazio, o fallback do const mantém o mundo.
+                    let (point, label) = catalog
+                        .as_deref()
+                        .filter(|c| !c.0.is_empty())
+                        .map(|c| {
+                            let (p, l) = c.nearest(death_xz);
+                            (p, l.to_string())
+                        })
+                        .unwrap_or_else(|| {
+                            let p = nearest_respawn_point(death_xz);
+                            (p, respawn_label(p).to_string())
+                        });
                     // SUPERFÍCIE RENDERIZADA (paridade com spawners/knockback):
                     // o sample analítico flutua acima do mesh nas cristas —
                     // renascia-se a "pairar" sobre os pontos de respawn.
@@ -640,14 +716,15 @@ fn respawn_system(
                     commands.entity(entity).insert(Invulnerable {
                         timer: RESPAWN_DELAY,
                     });
+                    if let Some(events) = events.as_deref_mut() {
+                        events.push(crate::luau::ScriptGameEvent::PlayerDied);
+                    }
                     toasts.write(ScriptToast(format!(
-                        "De volta à {} — levanta e luta!",
-                        respawn_label(point)
+                        "De volta à {label} — levanta e luta!"
                     )));
                     info!(
                         target: "viber::feedback",
-                        "respawn na {} ({point:?}) — HP cheio + {RESPAWN_DELAY}s de i-frames",
-                        respawn_label(point)
+                        "respawn na {label} ({point:?}) — HP cheio + {RESPAWN_DELAY}s de i-frames"
                     );
                 }
             }
@@ -1079,6 +1156,53 @@ mod tests {
         assert_eq!(respawn_label(Vec2::new(0.0, 50.0)), "portão norte");
         assert_eq!(respawn_label(Vec2::new(-50.0, 0.0)), "portão oeste");
         assert_eq!(respawn_label(Vec2::new(50.0, 0.0)), "portão leste");
+    }
+
+    #[test]
+    fn test_fallback_respawn_catalog_mirrors_const() {
+        // O default É o fallback: os 5 pontos do const com os rótulos da
+        // heurística de direção — comportamento idêntico para mundos sem
+        // <SpawnPoint>.
+        let catalog = RespawnCatalog::default();
+        assert_eq!(catalog.0.len(), RESPAWN_POINTS.len());
+        for (point, label) in &catalog.0 {
+            assert_eq!(respawn_label(*point), label.as_str());
+        }
+    }
+
+    #[test]
+    fn test_respawn_catalog_nearest_and_label() {
+        let catalog = RespawnCatalog(vec![
+            (Vec2::ZERO, "praça".into()),
+            (Vec2::new(300.0, -300.0), "santuário do ermo".into()),
+        ]);
+        // Morto a 10 m do santuário → santuário (o rótulo declarado vence).
+        let (point, label) = catalog.nearest(Vec2::new(305.0, -295.0));
+        assert_eq!(point, Vec2::new(300.0, -300.0));
+        assert_eq!(label, "santuário do ermo");
+        // Morto no centro → praça.
+        let (point, label) = catalog.nearest(Vec2::new(2.0, -2.0));
+        assert_eq!(point, Vec2::ZERO);
+        assert_eq!(label, "praça");
+    }
+
+    #[test]
+    fn test_respawn_catalog_entry_without_label_falls_back_to_direction() {
+        let catalog = RespawnCatalog(vec![(
+            Vec2::new(0.0, -80.0),
+            String::new(), // declarado sem label
+        )]);
+        let (point, label) = catalog.nearest(Vec2::new(0.0, -78.0));
+        assert_eq!(point, Vec2::new(0.0, -80.0));
+        assert_eq!(label, "portão sul", "rótulo vazio → heurística de direção");
+    }
+
+    #[test]
+    fn test_empty_respawn_catalog_falls_back_to_const() {
+        let catalog = RespawnCatalog(Vec::new());
+        let (point, label) = catalog.nearest(Vec2::new(48.0, 2.0));
+        assert_eq!(point, Vec2::new(50.0, 0.0));
+        assert_eq!(label, "portão leste");
     }
 
     #[test]
