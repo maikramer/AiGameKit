@@ -91,6 +91,9 @@ class RetargetProfile:
     # UAL1→UAL2). Lista vazia = só acrescenta, nunca substitui (pack "add-on").
     # Ver plan_pack_passes.
     replace_keys: list[str] | None = None
+    # Bloco ``ik_limits:`` (merge raso sobre data/ik/limits.yaml) — limites de
+    # juntas aplicados no passe IK pós-retarget (animator3d.ik). None = default.
+    ik_limits: dict[str, Any] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -153,6 +156,12 @@ def load_profile(name_or_path: str | Path) -> RetargetProfile:
         if not isinstance(replace_keys_raw, list) or not all(isinstance(k, str) for k in replace_keys_raw):
             raise ValueError(f"replace_keys do perfil {p.name!r} tem de ser uma lista de nomes limpos")
         replace_keys = list(replace_keys_raw)
+    ik_limits_raw = raw.get("ik_limits")
+    ik_limits: dict[str, Any] | None = None
+    if ik_limits_raw is not None:
+        if not isinstance(ik_limits_raw, dict):
+            raise ValueError(f"ik_limits do perfil {p.name!r} tem de ser um mapa (enabled/roles)")
+        ik_limits = dict(ik_limits_raw)
     return RetargetProfile(
         name=raw.get("profile", p.stem),
         bone_map=bone_map,
@@ -160,6 +169,7 @@ def load_profile(name_or_path: str | Path) -> RetargetProfile:
         source_path=Path(raw["source_path"]) if raw.get("source_path") else None,
         source_files_root=(str(raw["source_files"]["root"]) if raw.get("source_files", {}).get("root") else None),
         replace_keys=replace_keys,
+        ik_limits=ik_limits,
         extra=extra,
     )
 
@@ -434,6 +444,9 @@ def retarget_animation(
     bone_map: dict[str, str | list[str]],
     source_action_name: str,
     output_clip_name: str,
+    *,
+    enforce_limits: bool = True,
+    limits: Any | None = None,
 ) -> dict[str, Any]:
     """Retarget de uma action do source para o target (matrix_basis copy).
 
@@ -446,9 +459,13 @@ def retarget_animation(
         bone_map: ``{source_bone: target_bone | [candidatos target]}``.
         source_action_name: nome da action no source a retargetizar.
         output_clip_name: nome limpo do clip de saída (ex.: ``"idle"``).
+        enforce_limits: passe IK/limites de juntas pós-retarget
+            (:mod:`animator3d.ik`) — repara joelhos invertidos e clampa o curso
+            anatómico. ON por defeito; poses válidas ficam intactas.
+        limits: limites pré-carregados (override do perfil); None = default.
 
     Returns:
-        Dict com ``clip``, ``frames``, ``bones_mapped``, ``skipped_bones``.
+        Dict com ``clip``, ``frames``, ``bones_mapped``, ``skipped_bones``, ``ik``.
     """
     bpy = _bpy()
 
@@ -583,6 +600,15 @@ def retarget_animation(
 
     bpy.ops.object.mode_set(mode="OBJECT")
 
+    # Passe IK/limites de juntas: o retarget adopta quaternions absolutos do
+    # source sem verificação anatómica — joelhos invertidos/hiperextensões do
+    # mocap são reparados aqui (preserva end-effectors; clips válidos intactos).
+    ik_stats: dict[str, Any] | None = None
+    if enforce_limits:
+        from . import ik
+
+        ik_stats = ik.enforce_joint_limits(target.name, new_act, limits=limits)
+
     # Empurrar a nova action para NLA e limpar action activa.
     new_act.name = output_clip_name
     track = target.animation_data.nla_tracks.new()
@@ -596,6 +622,7 @@ def retarget_animation(
         "frames": (f0, f1),
         "bones_mapped": len(order),
         "skipped_bones": skipped,
+        "ik": ik_stats,
     }
 
 
@@ -606,6 +633,7 @@ def retarget_batch(
     *,
     only_clips: list[str] | None = None,
     replace: bool = False,
+    enforce_limits: bool = True,
 ) -> list[dict[str, Any]]:
     """Retarget de todos os clips de um perfil (ou subconjunto via ``only_clips``).
 
@@ -615,6 +643,7 @@ def retarget_batch(
         profile: perfil com ``bone_map`` e ``clip_map``.
         only_clips: se dado, retargetiza apenas estes nomes limpos.
         replace: se True, limpa as NLA tracks existentes no target antes de começar.
+        enforce_limits: passe IK/limites de juntas por clip (ver retarget_animation).
 
     Returns:
         Lista de resultados por clip (ver :func:`retarget_animation`).
@@ -631,6 +660,7 @@ def retarget_batch(
     if replace:
         _clear_nla_tracks(target_arm_name)
 
+    limits = _resolve_profile_limits(profile)
     clips = profile.clip_map
     if only_clips:
         clips = {k: v for k, v in clips.items() if k in set(only_clips)}
@@ -638,7 +668,15 @@ def retarget_batch(
     results = []
     for clean_name, src_track in clips.items():
         try:
-            res = retarget_animation(target_arm_name, source_arm_name, profile.bone_map, src_track, clean_name)
+            res = retarget_animation(
+                target_arm_name,
+                source_arm_name,
+                profile.bone_map,
+                src_track,
+                clean_name,
+                enforce_limits=enforce_limits,
+                limits=limits,
+            )
             results.append(res)
         except ValueError as e:
             # Clip source em falta — reportar mas continuar.
@@ -653,6 +691,7 @@ def retarget_batch_files(
     *,
     only_clips: list[str] | None = None,
     replace: bool = False,
+    enforce_limits: bool = True,
 ) -> list[dict[str, Any]]:
     """Retarget de packs POR-FICHEIRO (um FBX por clip, ex.: KevDev villager).
 
@@ -668,6 +707,7 @@ def retarget_batch_files(
         pack_root: diretório do pack extraído (``ItchPack.root``).
         only_clips: se dado, retargetiza apenas estes nomes limpos.
         replace: se True, limpa as NLA tracks existentes no target antes de começar.
+        enforce_limits: passe IK/limites de juntas por clip (ver retarget_animation).
 
     Returns:
         Lista de resultados por clip (ver :func:`retarget_animation`).
@@ -683,6 +723,7 @@ def retarget_batch_files(
     if replace:
         _clear_nla_tracks(target_arm_name)
 
+    limits = _resolve_profile_limits(profile)
     clips = profile.clip_map
     if only_clips:
         clips = {k: v for k, v in clips.items() if k in set(only_clips)}
@@ -697,10 +738,28 @@ def retarget_batch_files(
             )
             continue
         try:
-            results.append(_retarget_from_file(target_arm_name, fbx_path, profile.bone_map, clean_name))
+            results.append(
+                _retarget_from_file(
+                    target_arm_name,
+                    fbx_path,
+                    profile.bone_map,
+                    clean_name,
+                    enforce_limits=enforce_limits,
+                    limits=limits,
+                )
+            )
         except ValueError as e:
             results.append({"clip": clean_name, "source_track": rel, "error": str(e)})
     return results
+
+
+def _resolve_profile_limits(profile: RetargetProfile) -> Any | None:
+    """Limites IK do perfil (bloco ``ik_limits:``) carregados sobre o default."""
+    if not profile.ik_limits:
+        return None
+    from . import ik
+
+    return ik.load_limits(override=profile.ik_limits)
 
 
 def _retarget_from_file(
@@ -708,6 +767,9 @@ def _retarget_from_file(
     fbx_path: Path,
     bone_map: dict[str, str | list[str]],
     clean_name: str,
+    *,
+    enforce_limits: bool = True,
+    limits: Any | None = None,
 ) -> dict[str, Any]:
     """Importa um FBX de animação, retargetiza a sua action única e limpa a cena.
 
@@ -730,7 +792,15 @@ def _retarget_from_file(
         raise ValueError(f"FBX sem action de animação: {fbx_path.name}")
 
     try:
-        return retarget_animation(target_arm_name, source.name, bone_map, take_actions[0].name, clean_name)
+        return retarget_animation(
+            target_arm_name,
+            source.name,
+            bone_map,
+            take_actions[0].name,
+            clean_name,
+            enforce_limits=enforce_limits,
+            limits=limits,
+        )
     finally:
         # Descartar o source e os actions do take (a action nova do target
         # chama-se ``clean_name`` e não está em take_actions).

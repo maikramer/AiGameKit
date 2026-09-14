@@ -1082,6 +1082,17 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
         "quem (ex.: both,villager). Catálogo: animator3d list-animations."
     ),
 )
+@click.option(
+    "--ik-limits/--no-ik-limits",
+    "ik_limits",
+    default=True,
+    show_default=True,
+    help=(
+        "Passe IK/limites de juntas pós-animção (animator3d.ik): repara "
+        "joelhos/cotovelos do lado errado (pole) e clampa o curso anatómico. "
+        "Poses válidas ficam intactas."
+    ),
+)
 def cmd_game_pack(
     input_path: Path,
     output_path: Path,
@@ -1092,6 +1103,7 @@ def cmd_game_pack(
     procedural: bool,
     anim_pack: str,
     facing: str = "auto",
+    ik_limits: bool = True,
 ) -> None:
     """Gera todas as animações de um rig num único comando.
 
@@ -1152,7 +1164,14 @@ def cmd_game_pack(
     # Caminho primário (humanoides): retarget do pack Quaternius.
     if preset.lower() == "humanoid" and not procedural:
         done = _game_pack_quaternius_retarget(
-            item_id, arm_name, output_path, clip_filter=clip_filter, draco=draco, t0=t0, anim_pack=anim_pack.lower()
+            item_id,
+            arm_name,
+            output_path,
+            clip_filter=clip_filter,
+            draco=draco,
+            t0=t0,
+            anim_pack=anim_pack.lower(),
+            enforce_limits=ik_limits,
         )
         if done:
             return
@@ -1200,6 +1219,14 @@ def cmd_game_pack(
         console.print(f"  [dim]✓[/dim] {kwargs['action_name']}")
 
     emit_progress(item_id, TOOL_ANIMATOR3D, phase="clips", percent=100)
+
+    # Passe IK/limites sobre todos os clips gerados (procedural é seguro por
+    # construção — o passe é idempotente e fica como rede para rigs exóticos).
+    if ik_limits:
+        from . import ik
+
+        ik_stats = ik.enforce_all_actions(arm_name)
+        _print_ik_stats(ik_stats)
 
     nclips = bpy_ops.count_nla_tracks(arm_name)
 
@@ -1688,6 +1715,22 @@ def _print_retarget_result(res: dict) -> None:
     )
     if res.get("skipped_bones"):
         console.print(f"     [yellow]não mapeados:[/yellow] {', '.join(res['skipped_bones'])}")
+    _print_ik_stats([res["ik"]] if res.get("ik") else None)
+
+
+def _print_ik_stats(stats: list[dict] | None) -> None:
+    """Resumo do passe IK/limites por clip (só imprime quando corrigiu algo)."""
+    if not stats:
+        return
+    for s in stats:
+        fixes = int(s.get("hinge_fixes", 0)) + int(s.get("flips", 0)) + int(s.get("ball_clamps", 0))
+        if not fixes:
+            continue
+        console.print(
+            f"     [cyan]ik[/cyan] {s['clip']}: {s.get('flips', 0)} joelho/cotovelo reorientado(s), "
+            f"{s.get('hinge_fixes', 0)} curso clampeado(s), {s.get('ball_clamps', 0)} ball clamp(s) "
+            f"[dim]({s.get('frames', 0)} frames, {s.get('chains', 0)} cadeias)[/dim]"
+        )
 
 
 # Pack de animação -> perfil de retarget usado no game-pack. ``quaternius-hero``
@@ -1709,6 +1752,7 @@ def _game_pack_quaternius_retarget(
     draco: bool,
     t0: float,
     anim_pack: str = "quaternius",
+    enforce_limits: bool = True,
 ) -> bool:
     """Caminho primário do game-pack: retarget da combinação de packs.
 
@@ -1791,7 +1835,11 @@ def _game_pack_quaternius_retarget(
                 # efectivo deste pass decidiu PRESERVAR (ex.: idle da UAL).
                 rt.remove_clips(arm_name, [k for k in eff if k in already])
             eff_prof = dataclasses.replace(prof, clip_map=eff)
-            results.extend(rt.retarget_batch_files(arm_name, eff_prof, pack_root, only_clips=only, replace=first))
+            results.extend(
+                rt.retarget_batch_files(
+                    arm_name, eff_prof, pack_root, only_clips=only, replace=first, enforce_limits=enforce_limits
+                )
+            )
             first = False
             already.update(eff)
             continue
@@ -1807,7 +1855,11 @@ def _game_pack_quaternius_retarget(
         if not first:
             rt.remove_clips(arm_name, [k for k in eff if k in already])
         eff_prof = dataclasses.replace(prof, clip_map=eff)
-        results.extend(rt.retarget_batch(arm_name, source_arm.name, eff_prof, only_clips=only, replace=first))
+        results.extend(
+            rt.retarget_batch(
+                arm_name, source_arm.name, eff_prof, only_clips=only, replace=first, enforce_limits=enforce_limits
+            )
+        )
         _cleanup_retarget_source(source_arm)
         first = False
         already.update(eff)
@@ -1853,6 +1905,13 @@ def _game_pack_quaternius_retarget(
 @click.option("--source-track", required=True, help="Nome da action/track no source a retargetizar (ex.: Idle_Loop).")
 @click.option("--clip-name", required=True, help="Nome limpo do clip de saída (ex.: idle).")
 @click.option("--replace", is_flag=True, help="Limpar clips existentes no target antes de retargetizar.")
+@click.option(
+    "--ik-limits/--no-ik-limits",
+    "ik_limits",
+    default=True,
+    show_default=True,
+    help="Passe IK/limites de juntas pós-retarget (repara joelhos invertidos, clampa curso anatómico).",
+)
 def cmd_retarget(
     target_path: Path,
     source_path: Path,
@@ -1862,6 +1921,7 @@ def cmd_retarget(
     clip_name: str,
     replace: bool,
     draco: bool,
+    ik_limits: bool = True,
 ) -> None:
     """Retargetiza UMA animação de um rig source para o target.
 
@@ -1873,6 +1933,7 @@ def cmd_retarget(
     from . import retarget as rt
 
     profile = rt.load_profile(profile_name)
+    limits = rt._resolve_profile_limits(profile)
     item_id = target_path.stem
     t0 = time.monotonic()
     emit_progress(item_id, TOOL_ANIMATOR3D, phase="retarget", percent=0)
@@ -1888,7 +1949,15 @@ def cmd_retarget(
     if replace:
         rt._clear_nla_tracks("Target")
 
-    res = rt.retarget_animation("Target", source_arm.name, profile.bone_map, source_track, clip_name)
+    res = rt.retarget_animation(
+        "Target",
+        source_arm.name,
+        profile.bone_map,
+        source_track,
+        clip_name,
+        enforce_limits=ik_limits,
+        limits=limits,
+    )
     _print_retarget_result(res)
 
     _cleanup_retarget_source(source_arm)
@@ -1925,6 +1994,13 @@ def cmd_retarget(
 )
 @click.option("--no-replace", "replace", flag_value=False, help="Preservar clips existentes (append).")
 @click.option("--no-fetch", is_flag=True, help="Não fazer auto-download do pack Quaternius (usa --source).")
+@click.option(
+    "--ik-limits/--no-ik-limits",
+    "ik_limits",
+    default=True,
+    show_default=True,
+    help="Passe IK/limites de juntas pós-retarget (repara joelhos invertidos, clampa curso anatómico).",
+)
 def cmd_retarget_batch(
     target_path: Path,
     output_path: Path,
@@ -1934,6 +2010,7 @@ def cmd_retarget_batch(
     replace: bool,
     no_fetch: bool,
     draco: bool,
+    ik_limits: bool = True,
 ) -> None:
     """Retargetiza TODOS os clips de um perfil num único comando.
 
@@ -1989,10 +2066,14 @@ def cmd_retarget_batch(
 
     total = len(profile.clip_map)
     if per_file:
-        results = rt.retarget_batch_files("Target", profile, pack_root, only_clips=only_clips, replace=replace)
+        results = rt.retarget_batch_files(
+            "Target", profile, pack_root, only_clips=only_clips, replace=replace, enforce_limits=ik_limits
+        )
     else:
         source_arm = _import_retarget_source(Path(source_path), "Target")
-        results = rt.retarget_batch("Target", source_arm.name, profile, only_clips=only_clips, replace=replace)
+        results = rt.retarget_batch(
+            "Target", source_arm.name, profile, only_clips=only_clips, replace=replace, enforce_limits=ik_limits
+        )
         _cleanup_retarget_source(source_arm)
     for i, res in enumerate(results):
         pct = round(((i + 1) / total) * 100) if total else 100
@@ -2056,6 +2137,71 @@ def cmd_rename_clips(input_path: Path, output_path: Path, map_str: str, draco: b
 
     bpy_ops.export_glb(output_path, draco=draco)
     console.print(f"[green]rename-clips[/green] · {len(done)} renomeado(s) → {output_path.resolve()}")
+
+
+@main.command("ik-limits")
+@_draco_option
+@click.argument("input_path", type=click.Path(path_type=Path, exists=True))
+@click.argument("output_path", type=click.Path(path_type=Path))
+@click.option(
+    "--profile",
+    "profile_name",
+    default=None,
+    help="Perfil de retarget cujo bloco ik_limits aplicar (default: data/ik/limits.yaml global).",
+)
+@click.option(
+    "--disable",
+    "disable",
+    is_flag=True,
+    default=False,
+    help="No-op completo (mesmo efeito de ik_limits.enabled: false) — útil para A/B.",
+)
+def cmd_ik_limits(input_path: Path, output_path: Path, profile_name: str | None, disable: bool, draco: bool) -> None:
+    """Aplica o passe IK/limites de juntas a um GLB já animado — sem re-gerar clips.
+
+    Repara joelhos/cotovelos do lado errado (pole vector) e clampa o curso
+    anatómico em todos os clips do ficheiro. Útil para reanimar assets antigos
+    sem re-correr o game-pack. Ex.:
+    animator3d ik-limits hero_animated.glb hero_animated_fixed.glb
+    """
+    _require_bpy()
+    from . import bpy_ops, ik
+    from . import retarget as rt
+
+    limits = ik.load_limits(override=rt.load_profile(profile_name).ik_limits) if profile_name else None
+    if disable:
+        limits = ik.load_limits()
+        limits = ik.JointLimitSet(roles=limits.roles, enabled=False)
+
+    item_id = input_path.stem
+    t0 = time.monotonic()
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="loading_bpy", percent=0)
+
+    bpy_ops.clear_scene()
+    bpy_ops.import_asset(input_path)
+    arms = bpy_ops.list_armatures()
+    if not arms:
+        raise click.ClickException("Nenhum armature encontrado no ficheiro.")
+
+    all_stats: list[dict] = []
+    for arm in arms:
+        all_stats.extend(ik.enforce_all_actions(arm.name, limits=limits))
+    _print_ik_stats(all_stats)
+    if not all_stats:
+        console.print("[yellow]Nada a corrigir (sem cadeias/keys ou passe desligado).[/yellow]")
+
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=0)
+    bpy_ops.export_auto(output_path, draco=draco)
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=100)
+
+    elapsed = time.monotonic() - t0
+    total_fixes = sum(
+        int(s.get("hinge_fixes", 0)) + int(s.get("flips", 0)) + int(s.get("ball_clamps", 0)) for s in all_stats
+    )
+    console.print(
+        f"[green]ik-limits[/green] · {len(all_stats)} clip(s) · {total_fixes} correção(ões) → {output_path.resolve()}"
+    )
+    emit_result(item_id, TOOL_ANIMATOR3D, STATUS_OK, output=str(output_path.resolve()), seconds=elapsed)
 
 
 if __name__ == "__main__":

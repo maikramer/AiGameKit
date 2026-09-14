@@ -1,0 +1,42 @@
+# Limites anatómicos do passe IK/joint-limits (animator3d.ik).
+#
+# Ângulos em GRAUS. `hinge_min/hinge_max` = banda do ângulo INTERIOR na junta
+# média da cadeia (prox←junta→distal; 180 = membro esticado) — é o "curso da
+# junta". `one_way` + `pole` reparam a DIREÇÃO da dobradiça: joelho nunca dobra
+# para a frente, cotovelo nunca para dentro-trás. `pole: auto` deriva o lado de
+# flexão do rest pose do próprio rig (funciona em quadrúpedes); se o rest não
+# tem flexão, cai no `pole_fallback` (relativo à frente detetada do rig). O
+# one_way só atua em clips MAJORITARIAMENTE do lado do pole (≥70% dos frames) —
+# clips com o corpo rodado (death/roll deitados) ficam intactos.
+#
+# `upper_swing/twist_max` clampe a anca/ombro; `effector_*` clampe o pé/mão —
+# sempre RELATIVO AO PAI (matrix_basis), logo rotações do corpo inteiro não
+# disparam caps.
+#
+# Perfis de retarget (data/retarget/*.yaml) podem sobrepor qualquer campo num
+# bloco `ik_limits:` (merge raso por papel; `enabled: false` desliga o passe).
+# Defaults conservadores: só poses anatomicamente impossíveis são tocadas —
+# clips corretos ficam bit-idênticos (tolerância 0.5°).
+version: 1
+enabled: true
+roles:
+  leg:
+    hinge_min: 40.0 # abaixo disto = hiperextensão/colapso (tuck de salto chega a ~40°)
+    hinge_max: 180.0 # perna esticada (179-180°) é normal em suporte; só descer este valor se quiseres proibir lock
+    one_way: true
+    pole: auto
+    pole_fallback: back # joelho dobra para trás
+    upper_swing_max: 165.0 # anca (tuck/deep crouch exigem amplitude)
+    upper_twist_max: 75.0
+    effector_swing_max: 75.0 # pé vs canela (pointe/toes-to-shin)
+    effector_twist_max: 45.0
+  arm:
+    hinge_min: 20.0 # cotovelo quase nunca passa de 160° de flexão
+    hinge_max: 180.0
+    one_way: true
+    pole: auto
+    pole_fallback: out-back # cotovelo dobra para fora+trás
+    upper_swing_max: 165.0 # ombro: throw/dance exigem amplitude grande
+    upper_twist_max: 80.0
+    effector_swing_max: 75.0
+    effector_twist_max: 45.0

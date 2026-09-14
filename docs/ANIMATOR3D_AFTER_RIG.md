@@ -4,6 +4,7 @@ Happy path: rigged GLB → `animator3d game-pack` → animated GLB → (GameAsse
 
 Package docs: [`Animator3D/README.md`](../Animator3D/README.md).  
 Retarget bugs / biped vs creature: [`findings/ANIMATOR_RETARGET_FINDINGS.md`](findings/ANIMATOR_RETARGET_FINDINGS.md).  
+IK 2-ossos + limites de juntas (joelho nunca vira para a frente): [`findings/ANIMATOR_IK_LIMITS_FINDINGS.md`](findings/ANIMATOR_IK_LIMITS_FINDINGS.md).  
 Text-to-motion → SkinTokens (`motion3d apply-rigged`, perfil `hml22`): [`findings/MOTION3D_FINDINGS.md`](findings/MOTION3D_FINDINGS.md).  
 Clip inventory: [`quaternius_inventory.md`](quaternius_inventory.md).
 
@@ -55,6 +56,16 @@ animate:
 Without `force_preset: true`, `game-pack` may auto-switch humanoid → creature when
 `HumanoidRig.is_humanoid` fails (wings, odd chains). After changing preset, purge
 `_rigged*` + public lods and `gameassets resume`.
+
+## IK / joint limits (default ON)
+
+`game-pack`, `retarget` e `retarget-batch` correm o passe IK/limites de juntas
+pós-animção: repara joelhos/cotovelos do lado errado (eixo de flexão invertido,
+espelhando com o pé no sítio), clampa o curso anatómico e caps swing/twist.
+Só toca poses impossíveis — clips corretos ficam intactos. Opt-out:
+`--no-ik-limits` (ou `animator3d: { ik_limits: false }` no game.yaml). Reparar
+um GLB já animado sem re-gerar: `animator3d ik-limits in.glb out.glb`.
+Detalhe e lições: findings doc.
 
 ---
 
