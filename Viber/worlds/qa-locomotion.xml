@@ -1,0 +1,37 @@
+<!--
+  qa-locomotion: banco de ensaio da locomoção da IA.
+
+  Terreno plano, três andarilhos com o MESMO script a velocidades diferentes
+  (1.0 / 2.0 / 4.6 m/s — o passeio de um townsfolk, uma patrulha e a
+  perseguição de um lobo) e um `face_player()` por frame a brigar com a
+  marcha. É o cenário onde o moonwalk se mede: amostra-se a posição pelo
+  bridge, compara-se o passo real com o rumo e com o yaw, e vê-se se o corpo
+  aponta para onde vai.
+
+  Os nomes são estáveis (`walker_slow` / `walker_mid` / `walker_fast`) para o
+  `viber.debug.find` os encontrar.
+-->
+<world clear-color="#87b7e8">
+  <Terrain
+    world-size="256" max-height="4" chunk-size="64" resolution="64" levels="2"
+    height-smoothing="1" cliff-angle="50"
+    layers="grass vale_grass dirt forest_floor gravel mountain_stone sand dirt_trail" />
+  <AmbientLight color="0xb8c8e0" brightness="300" />
+  <DirectionalLight illuminance="12000" direction="-0.3 -1 -0.4" shadows="true" />
+  <DayCycle minute-of-day="720" minutes-per-real-second="0" />
+  <!-- O herói: o tile da navmesh é centrado nele (toda a IA vive dentro do
+       raio de activação à volta do herói, por isso é aí que a navegação tem
+       de estar correcta). Sem herói não há tile, e a IA cai na linha recta. -->
+  <PlayerGLTF name="player" translation="-38 4 0" model-url="/assets/meshes/characters/hero_lod0.glb" />
+  <ThirdPersonCamera distance="14" height="6" pitch="22" />
+
+  <Entity name="walker_slow" translation="0 0 6" script="qa-walker-slow.lua">
+    <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
+  </Entity>
+  <Entity name="walker_mid" translation="0 0 0" script="qa-walker-mid.lua">
+    <GltfScene url="/assets/meshes/characters/goblin_lod0.glb" />
+  </Entity>
+  <Entity name="walker_fast" translation="0 0 -6" script="qa-walker-fast.lua">
+    <GltfScene url="/assets/meshes/characters/wolf_lod0.glb" />
+  </Entity>
+</world>

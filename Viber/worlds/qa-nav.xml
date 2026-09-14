@@ -1,0 +1,55 @@
+<!--
+  qa-nav: banco de ensaio da NAVEGAÇÃO.
+
+  Uma parede corta a linha recta entre os dois pontos do trajecto. Os dois
+  caminhantes pedem `move_towards` ao ponto do outro lado e mais nada — não
+  sabem que a parede existe, tal como os 17 scripts do simple-rpg. Quem a
+  contorna é a navmesh.
+
+  A parede tem DOIS desvios simétricos, norte e sul, para que a única coisa
+  que desempate seja o preço do chão:
+
+    * `commuter` (script comum → NavProfile::Civil) paga
+      `offroad-cost` fora da estrada, e a estrada passa a NORTE;
+    * `hunter` (script sob `enemies/` → NavProfile::Wild) não paga nada,
+      por isso corta pelo caminho mais curto.
+
+  Medição: amostrar as duas entidades pelo bridge e ver por que lado passam.
+  Com `VIBER_NAV=0` ambos encostam à parede e ficam lá — é o antes.
+-->
+<world clear-color="#87b7e8">
+  <Terrain
+    world-size="256" max-height="4" chunk-size="64" resolution="64" levels="2"
+    height-smoothing="1" cliff-angle="50"
+    layers="grass vale_grass dirt forest_floor gravel mountain_stone sand dirt_trail" />
+  <NavMesh agent-radius="0.5" agent-height="1.9" tile-size="192" cell-size="0.6" offroad-cost="4" />
+  <AmbientLight color="0xb8c8e0" brightness="300" />
+  <DirectionalLight illuminance="12000" direction="-0.3 -1 -0.4" shadows="true" />
+  <DayCycle minute-of-day="720" minutes-per-real-second="0" />
+  <!-- O herói: o tile da navmesh é centrado nele (toda a IA vive dentro do
+       raio de activação à volta do herói, por isso é aí que a navegação tem
+       de estar correcta). Sem herói não há tile, e a IA cai na linha recta.
+       Fica a MEIO do trajecto: a ~30 m de cada extremo, dentro do raio de
+       activação de 45 m dos scripts — com o herói numa das pontas, o AI LOD
+       desliga os caminhantes a meio do caminho e o ensaio mede o gate, não a
+       navegação. -->
+  <PlayerGLTF name="player" translation="0 6 -22" model-url="/assets/meshes/characters/hero_lod0.glb" />
+  <ThirdPersonCamera distance="26" height="18" pitch="48" />
+
+  <!-- A estrada do desvio norte. `flatten=0`: só regista a fita (é o que
+       `on_road` e as áreas da navmesh precisam), sem esculpir o terreno. -->
+  <Road name="desvio.norte" width="5" flatten="0"
+        path="-34 16  -12 16  12 16  34 16" />
+
+  <!-- A parede: corta z ∈ [-9, 9] em x = 0. Os desvios ficam simétricos. -->
+  <Entity name="parede" translation="0 0 0">
+    <Cuboid half-size="0.6 3 9" base-color="#6b6f76" collider="shape: box" />
+  </Entity>
+
+  <Entity name="commuter" translation="-30 0 0" script="qa-commuter.lua">
+    <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
+  </Entity>
+  <Entity name="hunter" translation="-30 0 -3" script="enemies/qa-hunter.lua">
+    <GltfScene url="/assets/meshes/characters/wolf_lod0.glb" />
+  </Entity>
+</world>

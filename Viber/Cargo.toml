@@ -68,6 +68,20 @@ transvoxel = "2"
 dirs = "6"
 half = "2"
 notify = "8"
+# Navegação (docs/CRATES.md): Recast portado para Rust + pathfinding com
+# evitamento local. Os três são builds de Bevy 0.19 e do mesmo autor/família,
+# por isso não há risco de duas versões do ECS na árvore.
+#   bevy_rerecast     — gera a navmesh a partir da geometria real (o backend
+#                       de geometria é NOSSO: src/nav/backend.rs).
+#   bevy_landmass     — A* sobre a navmesh + evitamento RVO entre agentes +
+#                       custo por tipo de polígono (é o que faz "preferir
+#                       estradas" sair de borla).
+#   landmass_rerecast — a ponte entre os dois.
+# Sem o editor nem o debug plugin: o `bevy_rerecast` default arrasta uma UI
+# de editor que esta engine não usa.
+bevy_rerecast = { version = "0.5", default-features = false, features = ["bevy_mesh"] }
+bevy_landmass = "0.12"
+landmass_rerecast = "0.3"
 bevy_kira_audio = { version = "0.26", features = ["ogg"] }
 
 [dev-dependencies]
