@@ -145,8 +145,14 @@ UiText            { color: stone-200; font-size: 14 }
 ```
 
 * **Seletores**: tag, `.classe`, `#id`, compostos (`.track.hp`), descendentes
-  (`.panel .fill`) e os pseudos `:hover` / `:active` / `:disabled`. Não há
-  combinador de filho, irmão ou atributo — um HUD é uma árvore rasa.
+  (`.panel .fill`), **filho directo** (`.panel > .fill`) e as pseudos
+  `:hover` / `:active` / `:disabled` / `:focus` / `:checked` / `:empty` /
+  `:first-child` / `:last-child` / `:nth-child(an+b|odd|even)` — e compostas
+  (`.btn:hover:focus`), mais a NEGAÇÃO **`:not(.a)`** / `:not(#x)` /
+  `:not(uibutton)` (um composto por argumento). Não há combinador de irmão
+  (`+`/`~`) nem de atributo (`[...]`). `:focus` é o elemento com o teclado; `:checked` é um
+  `<UiCheck>` ligado; `:empty` é um elemento sem filhos nem texto; os
+  `*-child` leem a posição entre irmãos na ordem do DOM.
 * **Cascata**: id 100 · classe (e pseudo) 10 · tag 1; empate resolve por ordem
   no ficheiro; `style=""` inline ganha sempre.
 * **Valores**: número nu é **píxeis** (`width: 12`), `%` e `auto` também;
@@ -200,9 +206,9 @@ autoral a cada resize:
 * Operadores `+ - * /` com precedência normal, parêntesis e negativos
   (`calc(-4px + 10px)`); funções aninham (`min(max(30px, 10px), 1vmin)`).
 * Operandos: número nu = px (regra do dialecto), `px`, `vw`, `vh`, `vmin`,
-  `vmax`. `%` dentro da expressão NÃO é suportado (depende do tamanho do PAI,
-  que o resolve não conhece) — a declaração cai com warn; fora de expressões,
-  `%` de largura continua a existir (resolve contra o pai no layout).
+  `vmax` e **`%`** — fecha contra a LARGURA do pai (frame anterior; como no
+  CSS para `width`/`padding`/`margin`/`gap`; um `height` com `%` em `calc()`
+  usa a largura — divergência documentada). Sem pai conhecido, `%` vale 0.
 * `padding`/`margin`/`border`/`radius` não levam expressões — px/% e unidades
   de viewport chegam para espaçamentos responsivos.
 * Divisão por zero ou valor ilegível para uma propriedade conhecida → a
@@ -213,8 +219,10 @@ autoral a cada resize:
 Qualquer propriedade de cor aceita:
 
 * hex: `#rgb` `#rgba` `#rrggbb` `#rrggbbaa`;
-* `rgba(r,g,b,a)` (a em 0–1);
-* `transparent`/`none`, `white`, `black`;
+* `rgba(r,g,b,a)` (a em 0–1) e **`hsl(h,s%,l%)` / `hsla(h,s%,l%,a)`**
+  (separadores vírgula ou espaço: `hsl(120 50% 40%)`);
+* `transparent`/`none` e **nomes do CSS** — `red`, `teal`, `gold`,
+  `rebeccapurple`, `crimson`, `skyblue`… (~50 nomes comuns);
 * **paleta Tailwind v3 completa por nome** — `slate-900`, `rose-400`,
   `amber`, `emerald-600`… (22 tons × 11 shades: slate, gray, zinc, neutral,
   stone, red, orange, amber, yellow, lime, green, emerald, teal, cyan, sky,
@@ -222,6 +230,27 @@ Qualquer propriedade de cor aceita:
 * tom nu = shade 500 (`rose` ≡ `rose-500`);
 * **modificador de opacidade** à Tailwind: `rose-500/25` = 25 % de alpha;
   valores fora de 0–100 clampeiam.
+
+### 2.1.1 Gradientes — `linear-gradient` e `radial-gradient`
+
+`background` (e `background-image`) aceitam gradientes, pintados POR CIMA da
+cor de fundo (as duas coexistem: cor de reserva + gradiente):
+
+```css
+.barr     { background: linear-gradient(45deg, #000 0%, #fff 100%) }
+.aviso    { background: linear-gradient(to right, red, amber-400 70%, transparent) }
+.orbe     { background: radial-gradient(closest-side, white 0%, blue 100%) }
+.plain    { background-image: none }        /* tira um gradiente herdado */
+```
+
+* Ângulo: `45deg`, número nu (graus) ou `to top|right|bottom|left` (e as
+  diagonais `to top right`…). Omissão: `to bottom` (180°), como no CSS.
+* Stops: `cor` ou `cor posição` (`red 30%`, `#fff 40px`); stops sem posição
+  espaçam uniformemente. Mínimo de 2 stops.
+* Radial: prefixo opcional `circle`/`ellipse`/`closest-side`/`closest-corner`/
+  `farthest-side`/`farthest-corner` (omissão `farthest-corner`); centro fixo
+  ao meio do elemento.
+* `conic-gradient(...)` é aceite e lido como radial (a Bevy não pinta conic).
 
 ### 2.2 Profundidade — `outline` e `box-shadow`
 
@@ -245,7 +274,25 @@ h1    { font-weight: bold; }        /* ou 100–1000; light/medium/semibold/blac
 .liso { underline: none; }          /* desliga explicitamente uma herdada */
 ```
 
-`font-weight` só tem efeito visível em fontes variáveis.
+`font-weight` só tem efeito visível em fontes variáveis. Novos:
+
+```css
+.grito  { text-transform: uppercase; }   /* uppercase | lowercase | capitalize */
+.airy   { letter-spacing: 0.1em; }       /* px ou em/rem — herda como o texto */
+```
+
+`text-transform` é um espelho: o texto original fica guardado e o
+transformado vai para o ecrã — `set_text`/XML continuam a mandar no conteúdo.
+`letter-spacing` herda: uma `uiroot` com `letter-spacing: 1px` espaça tudo
+lá dentro.
+
+`text-overflow: ellipsis` corta o texto com `…` quando transborda a caixa —
+`clip`/`visible` (omissão) não cortam. Duas regras: pede **`line-break: none`**
+(texto de uma linha; o que quebra transborda na vertical e não é tocado) e
+uma **largura limitada** (`width`/`max-width` — texto de largura automática
+nunca transborda). O corte é medido pós-layout: muda o texto ou a janela e
+estabiliza num frame ou dois; larguras maiores restauram o texto completo
+sozinhas.
 
 ### 2.4 Grelhas — `display: grid`
 
@@ -297,12 +344,57 @@ height min-* max-* top right bottom left padding margin border border-width
 margin-* padding-* border-width-* align-content line-height
 border-color gap row-gap column-gap aspect overflow` ·
 `grid-template-columns grid-template-rows grid-auto-flow grid-column grid-row` ·
-`background border-color border radius outline box-shadow opacity z rotate
-scale translate cursor pointer-events` ·
-`color font-size font-weight text-align line-break text-decoration underline
-strikethrough text-shadow` · `tint fit`
+`background background-image border-color border-top-color border-right-color
+border-bottom-color border-left-color border radius outline box-shadow opacity
+z rotate scale translate cursor pointer-events` ·
+`color font-size font-weight text-align text-transform letter-spacing
+text-overflow line-break text-decoration underline strikethrough text-shadow` ·
+`tint fit` · motion: `transition animation`
 
-### 2.7 Nota sobre `anim` vs CSS
+`border-color` aceita 1–4 cores (atalho CSS `top right bottom left`) e os
+longhands por lado combinam com o uniforme. `radius` aceita 1–4 valores
+(2 = diagonais, 3 = `tl tr+bl br`).
+
+### 2.7 Motion — `transition` e `@keyframes`
+
+O mesmo motor serve as transições CSS, as animações nomeadas e o
+`viber.ui.tween()`:
+
+```css
+.btn        { background: slate-800ee; transition: background .2s ease-out, opacity .3s }
+.btn:hover  { background: slate-700ee }
+.slot.danger { animation: danger-pulse 1.2s ease-in-out infinite alternate }
+.toast.in    { transition: translate .25s ease-out; translate: 0 0 }
+
+@keyframes danger-pulse {
+    from { background: #7f1d1d; transform: scale(1) }
+    50%  { border-color: rose-400 }
+    to   { background: #b91c1c; scale: 1.06 }
+}
+```
+
+* **`transition: <prop> <duração> [easing] [atraso] [, mais…]`** — trocas de
+  classe/estado/media interpolem em vez de saltarem. Campos animáveis:
+  `opacity background border-color color width height top right bottom left
+  rotate scale font-size`. Easings: `linear ease ease-in ease-out ease-in-out
+  cubic-bezier(x1,y1,x2,y2) steps(n)`. O estilo INICIAL de um elemento não
+  transita (como no browser). Unidades mistas (`%` ↔ `px`) não transitam —
+  salto seco.
+* **`@keyframes nome { from|50%|to { declarações } }`** + **`animation:
+  nome <duração> [easing] [atraso] [infinite|n] [alternate] [reverse]
+  [forwards]`** — os frames são blocos de declarações; campos interpoláveis
+  interpolam entre frames, os discretos trocam ao meio. `forwards` segura o
+  último frame. Um bloco `@keyframes` vive na folha que o declarou (mesmo
+  scoping das regras).
+* Opacidade, cores e medidas animam **através do mesmo fan-out do re-estilo**:
+  a opacidade de grupo e a herança continuam certas durante o tween. Custo: o
+  elemento é re-estilizado por frame ENQUANTO anima (o mesmo de um hover;
+  parado custa zero).
+* O atributo `anim="…"` continua a funcionar; quando um `anim` e uma
+  `animation` disputam o transform do MESMO elemento, o `anim` (que corre
+  por último) vence — não mistures os dois no mesmo elemento.
+
+### 2.8 Nota sobre `anim` vs CSS
 
 `anim` vive no XML (ou em `set_anim`) e não é propriedade de estilo: quando
 presente, sobrepõe-se ao `rotate`/`scale`/`translate` resolvidos pela cascata
@@ -404,22 +496,32 @@ Instalada por `src/ui/script.rs` sobre o host de scripting existente.
 | `set_visible(id, bool)` / `set_disabled(id, bool)` | visibilidade / estado `:disabled` |
 | `add_class(id, c)` / `remove_class(id, c)` / `toggle_class(id, c, on)` | estado visual |
 | `set_style(id, "prop: valor; …")` | override inline (todo o dialecto do §2) |
+| `set_style(id, "…", true)` | SUBSTITUI o inline inteiro (o merge nunca desfaz; isto sim) |
+| `clear_style(id)` | remove o inline — a folha volta a mandar |
 | `set_checked(id, bool)` | estado de um `UiCheck` |
 | `set_anim(id, "pulse")` / `set_anim(id, "none")` | liga/desliga movimento em runtime |
 | `focus(id)` | dá o teclado a um `UiInput` (desfoca o anterior) |
 | `open(id, bool)` / `is_open(id)` | modais |
 | `select_tab(grupo, aba)` / `tab(grupo)` | abas |
 | `action(nome, arg)` | acção de jogo: `learn`, `buy`, `sell`, `save`, `load` |
+| `create{ tag=…, id=…, parent=…, class=…, text=…, style=…, … }` | **cria um elemento** em runtime (mesmo construtor do XML; sem `id` gera `ui-gen-N`; devolve o id) |
+| `destroy(id)` | remove o elemento e a sua subárvore (registry incluído) |
+| `tween(id, {property=, to=, from=, duration=, easing=, delay=})` | interpola um campo animável; termina com um evento `tween_done` |
+| `set(nome, valor)` | **bind de script**: alimenta `bind="nome"`, `bind="nome:classe"`, `get`/`number` (nomes da engine têm prioridade) |
 
 **Leitura** (snapshot do INÍCIO da frame; uma escrita e a sua verificação têm
 de ser chamadas separadas):
 
 | Chamada | Devolve |
 |---------|---------|
-| `read(id)` | `{text, value, visible, checked, disabled}` ou `nil` — QUALQUER elemento com id (inputs reportam o texto digitado, sliders o valor) |
+| `read(id)` | `{text, value, visible, checked, disabled, rect={x,y,w,h}}` ou `nil` — QUALQUER elemento com id (inputs reportam o texto digitado, sliders o valor) |
+| `rect(id)` | `{x, y, w, h}` pós-layout no espaço autoral (píxeis do CSS), ou `nil` |
+| `query(seletor)` | ids que casam um seletor do §2 (tag/classe/id/descendente/`>`/pseudos) |
+| `classes(id)` / `children(id)` / `parent(id)` | estrutura do elemento |
 | `exists(id)` | `true` se o id é endereçável agora |
-| `get(nome)` / `number(nome)` | ler um binding (texto / fração) |
+| `get(nome)` / `number(nome)` | ler um binding (texto / fração) — engine primeiro, depois os do `set()` |
 | `clicked(id)` | verdadeiro no frame do clique |
+| `events([prefixo])` | **drena** a fila de eventos do frame — ver abaixo |
 | `focused()` | id do `UiInput` com o teclado, ou `nil` |
 | `list_count(nome)` | nº de linhas numa fonte de lista |
 | `rows(nome)` | cópia das linhas — `{{campo=…}, …}` |
@@ -436,6 +538,79 @@ viber.ui.list("bag-demo", {
 Cria/repõe a fonte `bag-demo`; um `<UiList bind="bag-demo">` reconstrói-se
 sozinho. Números/booleanos stringify-se. Repor a MESMA lista não custa nada
 (detecção de mudança por conteúdo).
+
+**Eventos** — a engine acumula o que acontece aos elementos e
+`viber.ui.events()` devolve o lote (e esvazia a fila; consumidor único):
+
+```lua
+for _, ev in ipairs(viber.ui.events("shop-")) do
+  if ev.type == "click" then
+    comprar(ev.id)
+  elseif ev.type == "value_changed" then
+    ajustar_volume(ev.id, ev.value)
+  elseif ev.type == "text_changed" then
+    filtrar(ev.text)
+  elseif ev.type == "checked_changed" then
+    ligar(ev.id, ev.checked)
+  elseif ev.type == "focus_changed" then
+    teclado(ev.id, ev.focused)
+  elseif ev.type == "tab_changed" then
+    abrir_aba(ev.group, ev.tab)
+  elseif ev.type == "tween_done" then
+    viber.log("tween " .. ev.property .. " acabou em " .. ev.id)
+  end
+end
+```
+
+Isto substitui o padrão frágil do `clicked()` (verdade num ÚNICO frame — um
+polling mais lento perdia cliques) e a detecção de mudança manual
+(`ultimo_valor ~= viber.ui.number(...)` em cada frame). Barras/cooldowns não
+emitem `value_changed` — quem quiser segui-las lê `number()` como sempre.
+Com prefixo, só o que casa SAI da fila — o resto fica para outro script
+cujos prefixos não colidam; sem prefixo, drena tudo. Há também
+`hover_enter`/`hover_leave` (o ponteiro entrou/saiu) e `read(id).hovered`
+para quem prefere perguntar.
+
+**Criação dinâmica** — o mesmo construtor do XML, acionado de Luau:
+
+```lua
+local id = viber.ui.create{
+  tag = "uibutton", parent = "hud", class = "toast in",
+  text = "Quest concluída!", style = "background: emerald-700ee",
+  tooltip = "Clica para fechar",
+}
+viber.ui.tween(id, {property = "opacity", from = 0, to = 1, duration = 0.25})
+-- … e mais tarde:
+viber.ui.destroy(id)
+
+-- Subárvore NUMA chamada (a chave `children` é recursiva; ids em falta
+-- geram `ui-gen-N` e cada nível fica endereçável):
+local painel = viber.ui.create{
+  tag = "uipanel", parent = "hud", class = "card",
+  children = {
+    { tag = "uitext", class = "titulo", text = "Diário" },
+    { tag = "uibutton", class = "fechar", text = "×" },
+  },
+}
+```
+
+Os atributos da tabela são os mesmos do XML (`tag` obrigatório; `parent` é
+o id do elemento pai; o resto — `class`, `style`, `text`, `value`, `bind`,
+`tooltip`, `src`, `min`/`max`/`step`, `placeholder`… — passa como attr). O
+elemento entra no fim dos irmãos e APARECE no frame seguinte (comandos em
+fila), mas é endereçável por id logo na chamada seguinte. Criados sobrevivem
+até ao rebuild da UI (recarregar o mundo).
+
+**Binds por script** — o estado do script pode pilotar class-binds sem loops:
+
+```lua
+viber.ui.set("radar.mode", "combate")     -- <UiText bind="radar.mode"/>
+viber.ui.set("radar.alerta", true)        -- <UiPanel bind="radar.alerta:alerta"/>
+```
+
+O nome tem de NÃO colidir com um bind da engine (`health`, `quest.title`…):
+colisão = warn e recusa. `get`/`number` leem a engine primeiro, os binds de
+script depois.
 
 O script de uma `<UiRoot>` corre sempre: a UI não é um NPC, por isso está
 isenta do LOD de raio de activação que congela scripts distantes.

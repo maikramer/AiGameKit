@@ -16,8 +16,8 @@ não Unity/three.js.
 | XML: parse, includes, valores | `src/xml/` | `include.rs` (expansão), `values.rs` (parsers tolerantes) |
 | IR de entidades + spawn Bevy | `src/recipes/` | `mod.rs` (IR + `KNOWN_TAGS`), `spawn.rs`, `transform.rs` (euler→quat) |
 | Interiores (bolsa fora do mapa) | `examples/simple-rpg/world/interiors.xml` (**gerado**), `tools/gen_interiors.py`, `scripts/building-portal.lua` (**gerado**) | Uma `<InteriorScene>` põe 9 salas numa bolsa FORA da pegada do heightmap, onde não há terreno, bioma nem chuva. O XML das salas, o registo porta↔saída do script de portais e o retângulo da bolsa saem todos da MESMA tabela em `tools/gen_interiors.py` (mudar a bolsa = mudar `POCKET` lá). NPCs por papel com fallback para o elenco de rua; `interior-folk.lua`/`interior-keeper.lua` são as FSM de sala |
-| Terreno (specs, sampler, mesh, LOD) | `src/terrain/` | `spec.rs` (contrato), `sampler.rs`/`heightmap.rs` (altura), `mesh.rs` (chunks), `plugin.rs` (LOD runtime), `runtime.rs` (bootstrap + carve), `cliffs.rs` (cliffs procedurais + sharpen + CliffMask) |
-| Scripts Luau + API `viber.*` | `src/luau.rs` | referência completa em **`docs/LUA_API.md`**; hooks `on_update(dt)`/`on_player_attack`; "LOD de IA" via `ScriptActivation` |
+| Terreno (specs, sampler, mesh, LOD) | `src/terrain/` | `spec.rs` (contrato), `sampler.rs`/`heightmap.rs` (altura), `mesh.rs` (chunks), `plugin.rs` (LOD runtime + rebuild por edições), `runtime.rs` (bootstrap + carve + applier das edições vivas), `cliffs.rs` (cliffs procedurais + sharpen + CliffMask), `delta.rs` (**terreno vivo**: overlay de edições, Fase 3) |
+| Scripts Luau + API `viber.*` | `src/luau/` | módulos categorizados: `host` (VM/chunks), `ctx` (snapshot), `commands` (fila Lua→engine), `runtime` (sistemas), `api` + `input`/`events`/`timers`/`entity`/`game` (grupos da API), `sfx`; referência completa em **`docs/LUA_API.md`**; hooks `on_update(dt)`/`on_player_attack`; "LOD de IA" via `ScriptActivation` |
 | Hot-reload de scripts | `src/hot_reload.rs` | watcher (`notify`) sobre `<mundo>/scripts/` — recarga ao gravar com re-corrida do top-level; erro de compilação mantém o chunk antigo; `VIBER_HOT_RELOAD=0` desliga |
 | UI declarativa (`UiRoot`/`UiStyle`) + `viber.ui.*` | `src/ui/` | `tree.rs` (XML→bevy_ui), `style.rs` (stylesheet), `palette.rs` (cores Tailwind), `anim.rs` (movimento), `widgets.rs` (check/slider/input/tooltip/cursor), `script.rs` (API Luau), `bind.rs` (bindings), `modal.rs` (modais autorais) |
 | HUD de jogo | `src/hud/` | widgets que desenham dados do mundo: minimapa, compasso. O profiler e os painéis/menus vivem na UI declarativa (`src/ui/`, `world/profiler.xml`) |
@@ -44,6 +44,18 @@ cd Viber && cargo run -- run <world.xml>       # janela Bevy
 cd Viber && cargo test                          # testes headless
 make test-viber                                 # atalho monorepo
 ```
+
+### Preset de gameplay (`config.yaml` → `gameplay`)
+
+`gameplay: rpg` (default) liga os plugins de DOMÍNIO (combate [J], skills,
+vitals, feedback, economia/hotbar, travel/Nota, save, quests, colheita).
+`gameplay: none` boota a engine SEM eles — o jogo é 100 % XML + Luau sobre a
+API genérica (`viber.game/events/timers/entity_*/find/spawn_prototype`), com
+terreno/céu/player/câmara/UI declarativa/menus(services) intactos. O preset
+resolvido sai no arranque (`gameplay preset: …`). Vitrina:
+**`worlds/lua-demo/`** — micro-jogo de colheita de cristais em ~60 linhas de
+Luau (spawn por `<Prototype>` em runtime, HUD por `viber.ui.set_text`, estado
+em `viber.game`), `cargo run -- analyze worlds/lua-demo/world.xml` valida.
 
 ### CLI instalado (`viber`, via instalador unificado)
 
@@ -156,8 +168,11 @@ Bevy 0.19. `VIBER_PROBES=0` desliga.
 BRP sobre HTTP (`bevy_remote`) — porta **15702** por omissão; `--bridge PORT`
 fixa-a, `--bridge` sem valor escolhe a primeira porta LIVRE a partir de 15702
 (duas engines de mundos diferentes nunca disputam a mesma porta) — o equivalente nativo do tooling Chrome DevTools MCP do
-VibeGame. Métodos JSON-RPC: `viber.ping` (devolve `pid` + `world` servido); `viber.screenshot` +
+VibeGame. **Protocolo completo e receitas: [`docs/BRIDGE.md`](docs/BRIDGE.md).**
+Métodos JSON-RPC: `viber.ping` (devolve `pid` + `world` servido); `viber.screenshot` +
 `viber.screenshot_status` (request/poll — a captura completa em ~1-3 frames);
+**`viber.burst` + `viber.burst_status`** (N frames seguidos numa ÚNICA folha
+4096 no lado comprido — ver abaixo);
 `viber.tree` (árvore de entidades: id/nome/pai/transform/componentes);
 `viber.logs` (ring-buffer de tracing, 1000 entradas); `viber.input.key/text/
 click/move` (input sintético: `KeyboardInput`/`MouseButtonInput`/`CursorMoved`
@@ -193,6 +208,7 @@ viber debug probe                           # bridge vivo? (lista engines se hou
 viber debug --world qa-pontes probe         # aponta ESTA engine (stem do mundo)
 viber debug --world worlds/qa-pontes.xml screenshot -o shot.png
 viber debug screenshot -o shot.png          # captura da janela (1 engine viva = descobre sozinho)
+viber debug burst -o burst.png [--frames 4|9|16] [--skip N]   # N frames numa ÚNICA folha 4096²
 viber debug tree [--json]                   # entidades (como take_snapshot)
 viber debug logs [--limit N] [--json]       # console
 viber debug prof [--json]                   # snapshot do profiler (fps/frame/
@@ -208,6 +224,63 @@ viber debug key w | space | esc | up | ctrl | f3 [--shift]
 viber debug text "hello"                   # typing sintético por char
 viber debug lua '<código>'                 # avalia Luau NA engine (REPL; [--file
                                            #   f.lua] [--json] [--port] [--world m])
+viber debug engines                        # engines vivas (porta/mundo/pid)
+viber debug api [--grep x] [--json]        # a API explica-se (viber.debug.apidoc)
+viber debug events [--since N] [--json]    # eventos de jogo (dano/morte/quest/toast…)
+viber debug step <n> | play                # PAUSA e avança n frames (fica parado); play retoma
+viber debug schema [--grep x] [--crate viber]   # campos/tipos dos componentes (registry.schema)
+viber debug methods [--grep x]             # todos os métodos BRP (rpc.discover/OpenRPC)
+viber debug watch --lua 'expr' [--hz 10 --for 5 --csv]   # amostra uma expressão a N Hz
+viber debug test <cenario.lua> [--json]    # cenário QA com expect/expect_near (exit 1)
+viber debug diff a.png b.png [--roi x,y,w,h] [--threshold %]   # diff de píxeis (CI)
+viber debug diff --baseline qa/golden atual.png [--update]     # golden: semeia/compara/aceita
+viber debug raycast x y z dx dy dz [--max-toi 100]         # raio contra a física
+viber debug hash                           # hash do conteúdo do mundo (determinismo)
+viber debug burst -o f.png --stats         # + veredicto numérico de flicker (luma/frame)
+viber debug logs [--level warn] [--grep nav]               # filtros client-side
+```
+
+**Quatro capacidades (2026-09-14):** VER — `viber.debug.*` lê TUDO (vitals de
+qualquer entidade, FSM/IA, nav census, quest funda, terreno ao vivo, UI com
+rects, atmosfera, seeds); MEXER — quests/vault/skills/IA/nav/postfx/
+audio/física ao vivo, `spawn()` de primitivas FÍSICAS e GLBs do pool,
+`set_material/set_light` (as escritas aplicam no MESMO frame); PROVAR —
+event log estruturado (`events`), `step(n)` determinístico, `burst --stats`
+(veredicto de flicker), `diff` com exit code (golden images em CI), `watch`,
+`test` com asserts; DESCOBRIR — `apidoc()` (guard test garante docs↔API) e
+`viber debug api`. Hash do mundo (`viber debug hash`) = "mesma seed, mesmo
+mundo" num número.
+
+### Burst de frames (`viber debug burst`, métodos `viber.burst`/`viber.burst_status`)
+
+O que o protocolo de QA temporal pede (flicker/movimento NÃO se vê num frame
+isolado), servido de uma vez: `viber debug burst -o burst.png` captura N
+frames do render e devolve UMA folha (`src/bridge/burst.rs`) — grid √N×√N,
+row-major (frame 1 no canto sup. esq.), índice carimbado no canto de cada
+célula, separadores entre células. As células têm o MESMO formato do frame
+(sem letterbox — o 4096 é o LADO COMPRIDO da folha: frames 16:9 → folha
+4096×2304, em 2×2, 3×3 ou 4×4). `--frames 4|9|16` (default 9).
+
+**Frame skip configurável** — `--skip N` salta N frames renderizados entre
+capturas: `0` (default) = consecutivos, cada +1 estica o tempo coberto
+(a folha cobre sempre `frames × (skip+1)` frames de render — 16 frames com
+`--skip 7` ≈ 2,1 s de jogo a 60 fps; 9 frames com `--skip 3` ≈ 0,6 s). O
+agente escolhe: flicker de 1 frame pede `skip 0`; ler uma caminhada/combate
+pede skips maiores.
+
+Como funciona: request/poll como o screenshot; a engine spawna UMA entidade
+`Screenshot` por frame renderizado (uma captura por frame — o bevy rejeita
+duplicados da mesma janela), o observer deposita a imagem CRUA (sem encode
+por frame) e a composição + encode PNG da folha correm numa thread (não
+param o frame). Teto de 4 capturas em voo (texturas de readback) — com
+`skip 0` a cadência é a do readback (~1-2 frames), que é o "consecutivos"
+possível. Guard de stall de 30 s (janela minimizada não captura) → status
+`error`. O PNG também fica em disco na engine
+(`$TMPDIR/viber-bridge-<pid>/burst-<id>.png`).
+
+```bash
+viber debug burst -o movimento.png --frames 16 --skip 3   # leitura de movimento
+viber debug burst -o flicker.png --frames 9               # flicker: consecutivos
 ```
 
 ### Luau na REPL (`viber debug lua`, método `viber.lua`)
@@ -433,6 +506,33 @@ por assar e ele atravessava o mundo (y ≈ −150). No mesmo lote,
 pés" (era "há collider a menos de 192 m") e o snap analítico cancela a queda
 pendente no CCT — escrever só o `Transform` não chega, o Rapier aplicava o
 `motion.y` logo a seguir.
+
+### Terreno vivo — edições em runtime (`viber.terrain.*`, `src/terrain/delta.rs`)
+
+O mundo carvado sempre foi imutável pós-bootstrap ("destructible terrain is
+not in this round"); a Fase 3 abre a porta SEM tocar na grid: um **overlay
+esparso** (`DeltaGrid` — recortes densos f32 com alturas absolutas sobre o
+lattice da grid, o mais recente ganha, fusão automática ao tocar) e um
+**`EditedBase`** que implementa `HeightField` sobre grid+recortes — o
+MESMO trait por onde passam o mesher transvoxel, o `VoxelField::density`,
+as queries de gameplay e o `TerrainReader` do Luau. Vazio é grátis: sem
+recortes cai sempre na grid.
+
+`viber.terrain.lower/raise/flatten/crater(x, z, raio, …)` enfileira um
+`ScriptCommand::TerrainEdit`; o `apply_terrain_edits` (PreUpdate, no
+`TerrainFeaturesPlugin`) aplica no máximo `EDITS_PER_FRAME` (4)/frame ao
+overlay (`Arc::make_mut` — copia KILOBYTES de recortes, nunca a grid) e a
+revisão sobe. O passe de LOD do `plugin.rs` detecta a revisão nova (corre
+mesmo com a câmara parada), marca `edit_stale` só nas colunas cujo rect
+cruza `DeltaGrid::bounds()` e re-mesha-as pelo caminho staged de sempre —
+**mesh e collider trimesh no mesmo swap atómico**. Limites: raio ≤ 96 m,
+altura/profundidade ≤ 64 m, alturas em `[0, max-height]`; pedidos NaN/raio
+0 rejeitados com warn. **Não persiste no save** (v1) — o bootstrap
+determinístico e o hash do mundo continuam a bater. O SPLAT continua o do
+autor (uma cratera na relva fica verde até um re-bake — follow-up), e o
+bridge chega às mesmas funções pela REPL (`viber debug lua
+'viber.terrain.crater(...)'`). QA em `worlds/qa-edicoes.xml` (+ script
+`worlds/scripts/qa-edicoes.lua`).
 
 ### Interações: alcance único e "o mais próximo ganha" (`src/interact.rs`)
 
@@ -673,7 +773,7 @@ autrados. Zonas de exclusão autorais: `<SpawnExclusion at="x z" radius="n">`
 | `WorldBorder` | clamp da posição do player: `radius` (3800), `warn-seconds` (5), `margin` (80) |
 | `NavMesh`, `SpawnGate`, `ProjectileTemplate`, `AdaptiveQuality`, `PostFxDebugToggle` | aceites → recurso `EngineConfigData` (tag + attrs crus, `src/worldsys.rs`) — **data-only**, nenhum consumidor runtime ainda |
 | `UiStyle` | stylesheet CSS-like da UI declarativa: texto do elemento ou ficheiro via `src="ui/hud.css"`, relativo à pasta do mundo (`src/ui/style.rs`) — guia: [`docs/UI.md`](docs/UI.md) |
-| `UiRoot` | árvore UI declarativa inteira (`src/ui/tree.rs`): elementos `uitext, uibutton, uibar, uilist, uimodal, uirow, uicolumn, uigrid (cols="repeat(4, 1fr)"), uicooldown, uiicon, uispacer, uicheck (toggle), uislider (min/max/step), uiinput (campo de texto)` com attrs `id, class, style, text, value, key, tab, tab-group, scroll, hidden, disabled, escape-closes, bind, anim ("spin/pulse/bob/shake"), tooltip`; folha de estilo com paleta Tailwind por nome (`rose-400/80`), `box-shadow`, grid, decoração de texto, `pointer-events`/`cursor`, estados `:hover/:active/:disabled` e RESPONSIVO: unidades `vw/vh/vmin/vmax` + blocos `@media (min-width: …)/(portrait)/(max-aspect: …)` com re-estilo em resize — guia completo: [`docs/UI.md`](docs/UI.md); `<UiList>` + `<UiTemplate>`/`<UiEmpty>` repetem uma fonte de dados com `{campo}` substituído (fontes da engine OU `viber.ui.list()` de script, que passa a possuir a fonte); scripts manuseiam-na via `viber.ui.*` (`docs/LUA_API.md`); vitrina de tudo em `examples/simple-rpg/ui-showcase.xml` |
+| `UiRoot` | árvore UI declarativa inteira (`src/ui/tree.rs`): elementos `uitext, uibutton, uibar, uilist, uimodal, uirow, uicolumn, uigrid (cols="repeat(4, 1fr)"), uicooldown, uiicon, uispacer, uicheck (toggle), uislider (min/max/step), uiinput (campo de texto)` com attrs `id, class, style, text, value, key, tab, tab-group, scroll, hidden, disabled, escape-closes, bind, anim ("spin/pulse/bob/shake"), tooltip`; folha de estilo com paleta Tailwind por nome (`rose-400/80`), `box-shadow`, grid, decoração de texto, `pointer-events`/`cursor`, estados `:hover/:active/:disabled/:focus/:checked/:empty/:nth-child(…)`, combinador filho `.a > .b`, cores `hsl()`/nomes CSS/gradientes `linear-gradient`/`radial-gradient`, MOTION (`transition: prop dur easing` + `@keyframes` + `animation`, e `viber.ui.tween()`; motor em `src/ui/tween.rs` que anima via `UiComputed`+dirty), `text-transform`/`letter-spacing`/`border-color` por lado e RESPONSIVO: unidades `vw/vh/vmin/vmax` + `calc()/clamp()` com `%` do pai + blocos `@media (min-width: …)/(portrait)/(max-aspect: …)` com re-estilo em resize — guia completo: [`docs/UI.md`](docs/UI.md); `<UiList>` + `<UiTemplate>`/`<UiEmpty>` repetem uma fonte de dados com `{campo}` substituído (fontes da engine OU `viber.ui.list()` de script, que passa a possuir a fonte); scripts manuseiam-na via `viber.ui.*` — agora com EVENTOS (`viber.ui.events()` drena cliques/mudanças/focos/tween_done, em vez do `clicked()` de 1 frame), CRIAÇÃO DINÂMICA (`viber.ui.create{…}`/`destroy(id)`), leitura (`query(seletor)`/`rect(id)`/`classes`/`children`) e BINDS DE SCRIPT (`viber.ui.set(nome, valor)` alimenta class-binds; `src/ui/events.rs`) (`docs/LUA_API.md`); vitrina de tudo em `examples/simple-rpg/ui-showcase.xml` |
 
 Primitivas aceitam material: `base-color`, `metallic`, `roughness`,
 `opacity` (0=invisível, <1=`AlphaMode::Blend`), `emissive`/`emissive-color`,
@@ -716,10 +816,10 @@ default = budget de 2048 colunas), `height-smoothing` (1 = Catmull-Rom
 monotone; 0 = bilinear — suaviza a GRID de input), `collision-resolution`
 (64; interruptor — **0 desliga os colliders**; já não define geometria), `cliff-angle` (50° — gatilho da
 CliffMask/splat; 90 desliga), `cliff-min-area` (120 m²), `cliff-min-drop` (4 m), `cliff-min-extent` (8 m) — filtro REGIONAL: um componente de declive só é cliff se passar os três (mata declives espúrios), `cliff-streaks` (0.5 — escorrimentos verticais na pele da parede), `cliff-moss` (0.35 — musgo procedural nos ombros/ledges), `sharpen` (false), `sharpen-angle` (35°), `sharpen-seed` (0 = deriva de `seed`), `texture`/`texture-url`, `texture-tile-size` (0 = auto), `seed` (0), tint (caminho LEGADO): `base-color`, `color-low`, `color-mid`, `color-high`, `color-rock`, `snow-height`, `slope-threshold`, `slope-softness`, `height-blend-strength`; blend de camadas: `layers` (lista de ≤13 aliases do pool — `grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road pebbles` — ou caminhos de textura; o slot do leito carrega `pebbles` mesmo que o mundo não o liste), `shore-width` (5 m — faixa de areia fora da linha de água) — **PRODUÇÃO**: 8 layers por chunk (material bindless — o crash NV foi resolvido), ligado por omissão; escape hatch para o tint legado: `VIBER_CHUNK_LAYERS=0`; pele das paredes (estratos/streaks/musgo) configurável ao vivo via `viber.debug.ground{...}` |
-| — | **Material de chunk (r7 — 8 layers, bindless)**: o bootstrap gera UM material por chunk (`generate_chunk_splats` em `splat.rs`): as 8 texturas do pool com MAIOR peso agregado no chunk + DOIS planos splat RGBA8 32² próprios (plano 0 = slots 0–3, plano 1 = slots 4–7; pesos renormalizados a somar 1 EM CONJUNTO; chunks de montanha carregam snow/stone, de pântano mud — áreas diferentes têm blends diferentes). `rock` (paredes), leito (seixo) e a AREIA DA MARGEM são FORÇADOS na eleição top-8 — sem o force da areia a praia quebrava em costuras retas nos chunks que a perdiam da paleta. Material próprio (`layer_material.rs`, NÃO ExtendedMaterial) `#[bindless]` com 8 layers + 2 splats (pares de bindings 1–20; tabela de índices `range(0..21)`; params em storage array na binding 10: tiles/tints/flats/roughs + origem/tamanho + layer de rocha para paredes triplanares) + day/night tint; shader `shaders/terrain_chunk.wgsl` (template embutido reescrito no `run`). ⚠ **porquê bindless**: com bevy 0.19.1 + wgpu 29.0.4 + NV 595.84, QUALQUER material custom NÃO-bindless com `#[texture]` morre com SIGSEGV dentro de `libnvidia-gpucomp` ao criar o pipeline layout — teste-guarda `test_chunk_material_stays_bindless`; o `StandardMaterial` e materiais só-`#[storage]` (céu) funcionam; isolado por bissect de mundos M0–M23 (2026-09-04). Falha de textura reponta o slot para a layer dominante (leito → gravel quando o chunk o carrega) |
+| — | **Material de chunk (r8 — 8 layers + roughness, bindless)**: o bootstrap gera UM material por chunk (`generate_chunk_splats` em `splat.rs`): as 8 texturas do pool com MAIOR peso agregado no chunk + DOIS planos splat RGBA8 próprios (plano 0 = slots 0–3, plano 1 = slots 4–7; pesos renormalizados a somar 1 EM CONJUNTO; chunks de montanha carregam snow/stone, de pântano mud — áreas diferentes têm blends diferentes). `rock` (paredes), leito (seixo) e a AREIA DA MARGEM são FORÇADOS na eleição top-8 — sem o force da areia a praia quebrava em costuras retas nos chunks que a perdiam da paleta. Material próprio (`layer_material.rs`, NÃO ExtendedMaterial) `#[bindless]` com 8 layers × (albedo, normal, height, AO, **roughness**) + 2 splats — 42 pares textura/sampler, tabela de índices `range(0..85)`; params em storage array na binding 10: tiles/tints/flats/roughs + origem/tamanho + layer de rocha para paredes triplanares). **Roughness maps** (`roughness.ktx2`; `smoothness.ktx2` entra INVERTIDO — inventário estático `RoughMap` em `SLOT_STYLES`): flags em `roughs[i].y` (mix 0.85 com a constante afinada) e `.z` (inverter); slots sem mapa mantêm a constante (mix 0) — o look não muda um milímetro onde o pool não tem mapa. + day/night tint; shader `shaders/terrain_chunk.wgsl` (template embutido reescrito no `run`). ⚠ **porquê bindless**: com bevy 0.19.1 + wgpu 29.0.4 + NV 595.84, QUALQUER material custom NÃO-bindless com `#[texture]` morre com SIGSEGV dentro de `libnvidia-gpucomp` ao criar o pipeline layout — teste-guarda `test_chunk_material_stays_bindless`; o `StandardMaterial` e materiais só-`#[storage]` (céu) funcionam; isolado por bissect de mundos M0–M23 (2026-09-04). Falha de textura reponta o slot para o fallback dele (leito → gravel; mapa opcional → plano/constante) |
 | `TerrainPad` | `at` (`"x z"`), `size` (`"w d"`), `falloff` (8), `corner-radius` (4), `height` (ausente = auto: amostra o centro e escreve de volta) |
 | `InteriorScene` | `at` (`"x z"`, CENTRO), `size` (`"w d"`) — declara um retângulo como **bolsa de interior**, FORA da pegada do heightmap (`|x|` ou `|z|` > `world_size/2`). Dentro dela a `WorldBorder` não trava, não há bioma (névoa/tinta/exposição neutras) e NÃO chove (o emissor de chuva segue o player e seguiria para dentro da sala). A distância (>2 km) desliga o resto por si — render, cull, IA, spawners — e **fora do campo o terreno não gera colunas nem colliders**. A zona de música `dungeon` deixou de ter caixa copiada à mão: segue esta declaração. Um só por mundo; ver `src/worldsys.rs::InteriorSceneConfig` e `examples/simple-rpg/world/interiors.xml` |
-| `Lake` | `at`, `radius` (6), `depth` (1.5), `water-offset` (0.5), `color` (#2f7a9a), `opacity` (0.62 — lido pelo shader como escala de extinção da coluna), `ripple` (0.6 — amplitude das ondas, especializado como `CFG_WAVE_AMP` no `water.wgsl`; o maior dos lagos do mundo vence), `bank` (`soft` \| `beach` \| `cliff` \| `terraced` \| `gorge` \| `overhang` — `gorge`/`overhang` são VOXEL: anel de parede sólida na linha de água (`overhang` soca a base sob a lâmina; o carve preserva o banco natural), os restantes esculpem a rampa no heightfield), `rocks` (false — pedras de margem automáticas), `rocks-density` (0.12/m de linha de água), `rocks-scale-max` (1.4), filhos `<Island at="x z" radius height/>` (repetível — domo RAISE na bacia com praia; o espelho faz fade sobre ela). Carve: contorno orgânico com PERSONALIDADE por lago (`LakeShape` — alongamento dirigido `stretch·cos(2(θ−axis))` + harmónicos k=1,3,5,7 com amplitude e fase sorteadas por hash da posição; uns lagos saem quase redondos, outros ovais com baías e lóbulos, ±45 % no pico = `CONTOUR_PEAK` 1.45), rim = mínimo de 64 raios, taça `rim − depth·(1−t²)^1.5` até `radius·1.25`; espelho de água em `rim − water-offset` e termina EXATAMENTE na linha de água da taça |
+| `Lake` | `at`, `radius` (6), `depth` (1.5), `water-offset` (0.5), `color` (#2f7a9a), `opacity` (0.62 — lido pelo shader como escala de extinção da coluna), `ripple` (0.6 — amplitude das ondas, especializado como `CFG_WAVE_AMP` no `water.wgsl`; o maior dos lagos do mundo vence), `bank` (`soft` \| `beach` \| `cliff` \| `terraced` \| `gorge` \| `overhang` — `gorge`/`overhang` são VOXEL: anel de parede sólida na linha de água (`overhang` soca a base sob a lâmina; o carve preserva o banco natural), os restantes esculpem a rampa no heightfield), `rocks` (false — pedras de margem automáticas), `rocks-density` (0.12/m de linha de água), `rocks-scale-max` (1.4), filhos `<Island at="x z" radius height/>` (repetível — domo RAISE na bacia com praia; o espelho faz fade sobre ela). Carve: contorno orgânico com PERSONALIDADE por lago (`LakeShape` — alongamento dirigido `stretch·cos(2(θ−axis))` + harmónicos k=1,3,5,7 com amplitude e fase sorteadas por hash da posição; uns lagos saem quase redondos, outros ovais com baías e lóbulos, ±45 % no pico = `CONTOUR_PEAK` 1.45), **AUTORIA da forma**: `seed` (a fonte dos uniformes passa a SplitMix64 — mesma seed, mesma forma em qualquer posição), `stretch` (0–0.45), `axis` (graus), `lobes` (0–1.6, multiplicador das amplitudes; combinações agressivas são REESCALADAS para dentro do envelope `CONTOUR_PEAK`, nunca rejeitadas — sem autoria, o hash de posição fica bit-exact), rim = mínimo de 64 raios, taça `rim − depth·(1−t²)^1.5` até `radius·1.25`; espelho de água em `rim − water-offset` e termina EXATAMENTE na linha de água da taça |
 | `River` | `path` (`"x z x z …"`, ≥2 pontos), `width` (6), `depth` (1.5), `water-offset` (0.3), `bank-width` (2), `bank-height` (0.9), `color` (#2a6685), `opacity` (0.72), `bank`/`rocks`/`rocks-density`/`rocks-scale-max` (idem `<Lake>`; `gorge` = paredes verticais sólidas dos dois lados, `overhang` = socava), `pool-spacing` (0 — poços ×1.6/rápidos ×0.4 com largura ±20 %; a superfície fica lisa, o LEITO ondula e a profundidade lê-se no shader), `cascades` (true — queda >1.2 m entre estações vira cascata: face de água vertical no mesh, caldeirão ×1.6 a jusante, névoa `mist` na base), `waterfalls` (true — CACHOEIRAS automáticas: queda acumulada ≥ `waterfall-min-drop` (3 m) é o tier acima da cascata — cortina contínua do lip à base alargada ×1.4, caldeirão à escala da queda, névoa escalada, spray no lip, espuma no caldeirão, loop de áudio posicional `water_waterfall.ogg` com raio/ganho ∝ queda), `waterfall-min-drop` (3 — limiar do tier, clamp ≥ CASCADE_DROP), `waterfall-notch` (true — no cruzamento com um `<Cliff>`, fenda de spill no brow: cápsula subtractiva com largura ∝ canal; a parede fica sólida e a água despenca POR CIMA), `spring` (false — nascente na estação 0: ferradura de rocha voxel com a boca a jusante, poozinho fundo, névoa). **Rio × cliff = cachoeira automática**: o pre-pass de specs cruza os paths 2D (`river_cliff_crossings`), o carve segura a superfície a montante da crista e garante a queda a jusante (height do cliff ou 3 m), a deteção pós-bands anota a face brow→toe (`CascadeInfo.wall`); o audit reporta cada cruzamento como ℹ. Confluência: estações dentro do contorno de um lago sobem à cota do espelho. Chaikin ×2 + estações de 3 m; superfície = prefixo-mínimo descendente (água nunca sobe); a ribbon acaba na linha de água real e meia-largura varia por estação (pools) |
 
 **Água viva (automática, sem attrs):** espuma ambiente — emissores `foam`
@@ -729,6 +829,8 @@ distância à linha de água (fade 0–26 m, bus sfx, `src/ambient.rs`). As
 pedras de margem (`rocks="1"`) entram no pipeline de spawner como candidatos
 fixos determinísticos (seed = posição do corpo; `src/terrain/shore_rocks.rs`)
 — herdam occupancy partilhada, LOD ladder, colliders e `avoid-road`.
+| `Cut` | `path` (`"x z x z …"`, ≥2 pontos — eixo do PISO da vala), `width` (8 — largura útil do piso), `depth` (4 — profundidade abaixo do terreno natural suavizado), `wall` (`vertical` \| `concave` \| `convex` \| `columnar` \| `terraced` \| `overhang` — o vocabulário do `<Cliff>` menos `arch`), `seed` (0 = hash da posição). **Trincheira/cânion SECO** (`src/terrain/cut.rs`): o piso desce no heightfield (LOWER-only — a vala "morre" na encosta em vez de aterrar o vale) e as DUAS PAREDES nascem como sólidos voxel (bandas no bootstrap, pedra no splat via `CliffMask`, relva/spawners excluídas). **Road cut**: uma `<Road>` autorada depois do cut é surveyada DENTRO da vala (o piso já lá está) e as paredes ficam-lhe dos lados. Corre DEPOIS da água e ANTES das estradas. Audit: cut × lâmina/rio/cliff ⚠, estrada × cut ℹ (intenção ambígua, o autor decide) |
+| `Plateau` | `at` (`"x z"`), `size` (`"w d"` — extensão TOTAL do topo; `radius` aceito = diâmetro), `height` (6 — subida acima do terreno natural no centro), `falloff` (0 — saia fora da parede; a parede corta-a na vertical de qualquer forma), `corner-radius` (4), `wall` (idem `<Cut>`), `seed` (0). **Mesa/planalto autoral** (`src/terrain/plateau.rs`): RAISE no heightfield (topo plano que roads/pads/spawners leem) + ANEL DE PAREDE voxel que fatia a borda a prumo. Pads correm DEPOIS (um pad sobre o planalto aplaina o topo). No lado em que a encosta sobe até ao topo a parede encolhe ao assento mínimo — muro de contenção sem vala. Audit: lago/estrada a sobrepor a pegada ⚠ |
 | `Cliff` | `path` (`"x z x z …"` — linha de creste; a face pende do lado da queda), `width` (6, percurso horizontal da face), `height` (ausente = **auto**: a diferença natural entre creste e pé — a parede adapta-se ao lugar), `angle` (com `height` autoral deriva `width = height/tan(angle)`), `profile` (`vertical` \| `concave` \| `convex` \| `columnar` \| `terraced` \| `overhang` \| `arch`; columnar = colunas basálticas com cortes retos, fendas e brow dentado — a referência wargame; overhang = saliência que corta para trás por baixo da verga, abrigo com rocha por cima; arch = parede vertical com UM vão em arco furado no meio da banda — cápsula subtractiva na estação média, só abre se a queda local ≥ 3 m), `side` (`auto`/`left`/`right`), `noise` (0.15, ondulação da borda como fração de `width`), `gullies` (0 = off; 0.15–0.4 — ravinas de erosão one-sided na face, bútresses ficam na linha nominal), `notches` (0 = off; 0.1–0.3 — colos no creste como fração da queda LOCAL), `talus` (false — cone de detritos no pé, carve RAISE-only com `talus-angle` 36°; `run ≈ 0.55·queda/tan(ângulo)`, enterra até 35% da queda; o bitset `talus` entra na camada pública da máscara — splat pinta gravel, relva/spawners evitam), `seed` (0). **Sólido 3D no campo voxel — já NÃO é um carve** (`src/terrain/voxel/cliff.rs`). `vertical` é mesmo aprumado, `concave` tem UNDERCUT real (rocha por cima da cabeça), `convex` faz a sobrancelha exceder o próprio pé, `columnar` põe o offset de coluna em geometria. Colisão pelo trimesh da coluna (ver **Colisão de terreno** abaixo). Como a parede saiu da grid, um survey de estrada já não a lê — mantenha os cliffs afastados das artérias (o simple-rpg usa ~30 m). Banda one-side: o lado de cima NUNCA é tocado. Pele da parede (shader por chunk): estratos cromáticos (tint quente↔frio por banda + banco duro 1-em-4), meteorização vertical e AO de contacto lidos do WALL SPACE da máscara (canal R das vertex colors, 0=brow→1=pé), escorrimentos e musgo por noise — doseados por `cliff-streaks`/`cliff-moss`. Journal `cliff:i` (parede) + `cliff:i` (talus) |
 | `Cave` | `path` (`"x z x z …"` — eixo do túnel em XZ), `radius` (3 — **um valor ou um perfil**: `radius="2.5 5 3"` estreita, abre numa galeria e volta a estreitar, interpolado por COMPRIMENTO DE ARCO), `depth` (8 — profundidade do CENTRO do tubo abaixo da superfície), `open-ends` (true — a profundidade decresce a zero nas duas pontas, portanto o túnel rompe a encosta e a gruta tem bocas; a false fica selada), `mouth-flare` (1 — multiplicador do raio nas bocas), `mouth-fraction` (0.18 — fração do comprimento em que cada boca sobe à superfície). Filhos repetíveis: `<Chamber at="x z" radius height [depth]>` (sala — elipsóide subtractivo, `at` obrigatório) e `<Shaft at="x z" radius [depth]>` (chaminé vertical até à luz do dia). **NÃO é um carve** — nada é escrito no heightfield. É um encadeado de cápsulas / cones subtractivos no campo voxel (`src/terrain/voxel/cave.rs`), a primeira feature que põe ROCHA POR CIMA da cabeça do jogador. Construída DEPOIS do carve, portanto um túnel sob uma estrada segue o leito da estrada como construído. `depth <` o maior raio avisa (o tubo rompe ao longo de todo o comprimento em vez de ter tecto). Viber-only: o VibeGame salta a tag com aviso |
 | `Arch` | `at` (`"x z"`) **ou** `path` (`"x z x z …"`) — exatamente um dos dois; `width`/`span` (vão livre; com `path` deriva do passo menos as pernas), `height` (6 — altura livre do vão na coroa), `thickness` (2.5 — espessura das pernas), `depth` (4 — fundura do bloco ao longo do eixo), `yaw` (0 — ignorado com `path`, manda a tangente), `spans` (1 — N aberturas ao longo do `path`: um viaduto), `profile` (`portal` \| `natural`). Portal de rocha autónomo: sólido union no campo voxel (`src/terrain/voxel/arch.rs`) com vão em arco (caixa + coroa em cápsula); `natural` troca o bloco por uma banda de cones a curvar de pé a pé, grossa no chão e fina no fecho. Com `path` cada perna assenta no chão do SEU pé (a base vai ao mais baixo dos dois), que é o que faz um arco numa encosta ler como natural em vez de flutuar. A coluna no centro do vão tem DOIS spans sólidos — `column()` responde 2 e `viber.ground_below` põe o andador no chão, não na fita. Spawner/relva rejeitam a fita (`has_thin_roof`: laje suspensa < 4 m de espessura). Viber-only: o VibeGame salta a tag com aviso |
@@ -864,6 +966,29 @@ ribbons planas (GLB chega com glTF). Mundo demo:
 (perceção, movimento com snap no terreno, IA wander/chase, combate, quests,
 vault, interação, `viber.gesture`/`viber.sound`/`viber.player_hp` para NPC) +
 `viber.ui.*` está documentada em **`docs/LUA_API.md`**.
+
+Desacoplamento (2026-09-14): a API Lua cobre o que um jogo precisa para
+implementar a PRÓPRIA lógica sem tocar no Rust — `viber.input.*` (input cru
+de teclado/rato), `viber.events()` (fila engine→Lua: kill/hurt/died/collect/
+quest_done/level_up/ui_action), `viber.after/every` (timers), vitais
+genéricas (`viber.entity_hp/damage/heal/set_max_hp`), `viber.find/find_all`,
+`viber.game()` (estado world-scoped, persiste no save como `world_kv` em
+qualquer preset; `viber.save()/load()` por script),
+`viber.load` (módulos partilhados — `scripts/lib/fsm.lua` do exemplo),
+`viber.vault_take`, `viber.own_action` (reclama uma ação da UI; o handler
+nativo cala — a loja do simple-rpg é 100 % Lua em `scripts/game/shop.lua`) e
+`viber.spawn_prototype` (instancia um `<Prototype>` em runtime, com callback), `viber.save()/load_save()` (persistência por script) e `viber.own_system`
+(reclama um sistema nativo — diálogo/abilities/bomba/guarda/hotbar/colheita;
+ver `scripts/npc/forest-wolves.lua`, diálogo 100 % Lua). A família de FX
+(`viber.radial_damage/burst/ring/shake/kick/fov_kick/punch/hit_stop/
+damage_number/play_clip/entity_despawn/status_clear/entity_position/nearby/
+player_forward`) dá ao jogo o combate em Lua com paridade nativa (morte com
+cadáver/XP/quests/evento `Kill`); `world/gameplay.xml` do exemplo é a prova
+viva — habilidades [C]/[E]/[R] e [B] em Lua, com os controllers sempre ativos
+(`tag="always-active"`, o LOD de 45 m não os congela).
+Dados do jogo vêm do MUNDO: quests JSON lidas de `<mundo>/quests/`
+(`game.quests_dir` no config.yaml, já não `include_str!`), `<Landmark>` e
+`<SpawnPoint>` XML com fallback para as tabelas antigas.
 
 Pontos-chave: o top-level do chunk corre **1× por path** (globals partilhados
 entre entidades com o mesmo script — estado por entidade em `viber.state()`);

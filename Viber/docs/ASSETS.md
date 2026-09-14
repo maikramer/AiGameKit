@@ -24,6 +24,12 @@ assets:                        # resolve contra as ROOTS (AssetServer)
 
 game:                          # resolve contra a PASTA DO JOGO (filesystem)
   scripts_dir: scripts         # script="x.lua" + hot-reload
+  quests_dir: quests
+  # gameplay: rpg (default) | none — `none` boota a engine SEM os
+  # plugins de domínio (combate/skills/economia/quests/travel/save/colheita):
+  # o jogo é 100 % XML + Luau sobre a API genérica (ver worlds/lua-demo).           # opcional (default `quests/`); quests/*.json
+                               # do mundo — um ficheiro por grupo, lidos por
+                               # ordem sorted; parse falhado = warn + skip
 
 save:
   dir: ~/.local/share/viber    # absoluto (~ ok); {dir}/{mundo}.save.json

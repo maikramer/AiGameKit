@@ -85,17 +85,76 @@ end
 | `viber.player_position()` | `ok, x, y, z` | **4 valores**; `ok == false` quando não há player |
 | `viber.player_hp()` | `ok, cur, max` | snapshot do HP do herói no início do frame; `ok == false` sem player/vitals |
 | `viber.interacted(key)` | bool | tecla pressionada **neste frame** E player dentro do alcance de interação (3.5 m, ou o `range` de `set_interaction`). Teclas válidas: `"e" "j" "f" "q" "r" "space"` |
+| `viber.on_road(x, z)` | bool | ponto na fita de alguma estrada (query ao mundo carvado) |
+| `viber.in_water(x, z)` | bool | ponto dentro da zona de carve de um corpo de água |
 | `viber.ground_below(x, y, z)` | number \| nil | a superfície sólida mais alta em ou abaixo de `y` nesta coluna XZ. Acima do mundo = o topo; **dentro de uma gruta = o piso da gruta**; sob um arco ou sob o tabuleiro de uma `<Bridge>` = o chão do vão. `nil` sem terreno sólido abaixo. É a query certa para criaturas em túneis — os snaps de `move_towards`/`move_by` continuam a usar o TOPO |
+
+## Terreno vivo (`viber.terrain.*`)
+
+Edições do mundo em RUNTIME (Fase 3): a cratera/vala/aterro entra no
+overlay de edições (recortes densos sobre a grid carvada) e a engine
+re-mesha só as colunas afetadas — **mesh E collider trimesh**, pelo swap
+atómico do LOD de sempre. A grid do bootstrap nunca é mutada; o
+`viber.ground_below`/`ground_at` do frame seguinte já vê a edição. Não
+persiste no save (v1, documentado).
+
+| Função | Devolve | Notas |
+|--------|---------|-------|
+| `viber.terrain.lower(x, z, raio, profundidade)` | bool | abaixa (mineração/explosão): `h = cur − depth·falloff`; empilha em chamadas repetidas |
+| `viber.terrain.raise(x, z, raio, altura)` | bool | levanta (aterro/colina) |
+| `viber.terrain.flatten(x, z, raio [, altura])` | bool | achata à `altura` (ou à cota do centro quando omitida) com blend no falloff |
+| `viber.terrain.crater(x, z, raio, profundidade)` | bool | tigela funda até 0.7·raio + rebordo saliente até ao raio |
+| `viber.terrain.revision()` | u64 | revisão do overlay — muda quando alguma edição commitou |
+| `viber.terrain.max_radius()` | number | teto que a engine aplica ao raio (96 m) |
+
+Regras: o pedido entra numa fila e é aplicado no frame seguinte (no máximo
+4 por frame — um `on_update` em loop não congela o frame); raio ≤ 96 m e
+profundidade/altura ≤ 64 m (clamp); alturas resultantes ficam em
+`[0, max-height]`; pedidos NaN/inválidos são rejeitados com warn. O COMBATE
+fino pode usar isto para crateras de bombas, poços de mineração ou valas
+de cerco — `viber.terrain.flatten` é o que se quer debaixo de um edifício
+de script.
 
 ## Movimento & rotação
 
+O movimento é **pedido**, não escrito. `move_towards`/`move_by` declaram a
+velocidade planar desejada para o frame; um consumidor único na engine
+(`ai::apply_ai_locomotion`, `PostUpdate`) faz a rampa de aceleração, dá o passo,
+assenta o Y no terreno e roda o yaw. Consequências visíveis:
+
+- **A entidade acelera e desacelera** em vez de arrancar à velocidade máxima no
+  primeiro frame (`LocomotionProfile::accel`, 12 m/s² por omissão).
+- **A viragem tem limite de velocidade** (`turn_rate`, 7 rad/s por omissão): um
+  alvo novo faz a criatura *virar*, não rodar 180° num frame.
+- **O corpo aponta para onde vai.** Um `face_towards`/`face_player` é um
+  *pedido* de olhar, honrado só com a entidade praticamente parada (< 0.25 m/s).
+  Chamar `face_player()` e `move_towards(outro_ponto)` no mesmo frame já não põe
+  o NPC a andar de lado — a marcha ganha.
+- **Deixar de pedir movimento trava.** Sem `move_towards` num frame a entidade
+  desacelera até parar (é o que acontece quando o AI LOD salta o `on_update`).
+
 | Função | Notas |
 |--------|-------|
-| `viber.move_towards(x, z, speed)` | passo deste frame (`speed` em m/s) na direção do ponto; Y assentado no terreno |
-| `viber.move_by(dx, dz)` | passo relativo direto (m/s, multiplicado por `dt`); idem snap no terreno |
-| `viber.face_towards(x, z)` | vira o yaw da entidade para o ponto |
+| `viber.move_towards(x, z, speed)` | pede marcha na direção do ponto a `speed` m/s (nunca ultrapassa o ponto); Y assentado no terreno |
+| `viber.move_by(dx, dz)` | pede uma velocidade relativa direta em m/s; idem snap no terreno |
+| `viber.face_towards(x, z)` | pede o yaw para o ponto — só ganha com a entidade parada |
 | `viber.face_player()` | idem para o player (no-op sem player) |
+| `viber.set_locomotion(walk, run [, turn_rate])` | fixa os nominais do rig (m/s) e a taxa de viragem (rad/s), desligando a auto-calibração |
 | `viber.set_position(x, y, z)` | **legado** — posição absoluta SEM snap no terreno (compat); preferir `move_towards` |
+
+### Nominais de locomoção (porque o clip deixou de derrapar)
+
+O clip de locomoção é escolhido — e a sua cadência afinada — a partir dos
+**nominais do rig**: a que velocidade é que este personagem "anda" e "corre".
+Por omissão a engine **aprende-os sozinha** das velocidades que o script
+comanda: um lobo que chama `move_towards(..., 2.2)` em patrulha e
+`move_towards(..., 4.6)` em perseguição fica com `walk = 2.2` / `run = 4.6`, e
+as duas passadas batem certo com o chão. Um NPC que só anda a 1.1 m/s fica com
+`walk = 1.1` e um `run` sintético acima, para nunca saltar sozinho para o clip
+de corrida.
+
+Só é preciso `viber.set_locomotion` quando o clip do GLB foi assado a uma
+cadência que não corresponde à velocidade a que o script move a entidade.
 
 ## IA primitivas
 
@@ -158,6 +217,194 @@ Definições em JSON (21 quests do exemplo, embutidas em `src/quests.rs` via
 | `viber.item_count(id)` | quantidade atual (0 se desconhecido) |
 | `viber.alive_in_region(idx)` | hostis scriptados VIVOS na banda `idx` (0–4: centro/norte/sul/este/oeste; snapshot a 1 Hz — o gating do boss final usa isto) |
 
+## Input genérico (`viber.input.*`)
+
+Input CRU de teclado e rato — qualquer tecla, não só as de interação. NÃO é
+gateado por `MenusOpen`: um script que queira respeitar menus compõe com
+`viber.ui.is_open()`. Os três estados partilham o parser (`"w"`, `"7"`,
+`"f5"`, `"up"`/`"arrowup"`, `"lshift"`, `"="`, símbolos literais; rato:
+`"mouse1"`/`"lmb"`, `"mouse2"`/`"rmb"`, `"mouse3"`/`"mmb"`).
+
+| Função | Devolve |
+|--------|---------|
+| `viber.input.pressed(nome)` | `true` no frame em que a tecla foi pressionada |
+| `viber.input.down(nome)` | `true` enquanto held |
+| `viber.input.released(nome)` | `true` no frame em que foi largada |
+
+## Eventos engine→Lua (`viber.events()`)
+
+A fila de eventos do JOGO — o que mudou FORA dos scripts. Pull model: a 1.ª
+chamada SUBSCREVE o script (quem nunca chamou nunca recebe); cada chamada
+devolve e limpa a fila do próprio script. Cap de 64 por script (transbordo
+descarta o evento novo, warn 1×).
+
+```lua
+for _, ev in ipairs(viber.events()) do
+  if ev.type == "kill" then print(ev.name, ev.entity) end
+end
+```
+
+| `type` | Campos | Quando |
+|--------|--------|--------|
+| `kill` | `name` (kind do script, ex. `"wolf"`), `entity` (bits) | abate pelo melee nativo OU HP a zero por `viber.entity_damage` |
+| `player_hurt` | `amount` (pós-guard/parry), `hp` | o herói apanhou dano real |
+| `player_died` | — | respawn efetuado |
+| `collect` | `item`, `amount` | entrou algo no vault (loot, report_collect, item_add) |
+| `quest_done` | `id` | quest entregue |
+| `level_up` | `level` | subida de nível |
+| `ui_action` | `name`, `arg` | ação da UI declarativa (`viber.ui.action`) — os handlers nativos correm à mesma, SALVO as ações reclamadas por `viber.own_action` |
+
+## Timers (`viber.after` / `viber.every`)
+
+Substitui o `st.t += dt` manual. World-scoped: correm independentemente do
+raio de ativação do dono; a callback corre com o ctx seedado à entidade.
+
+```lua
+viber.after(2.5, function() viber.toast("passaram 2,5 s") end)
+local h = viber.every(0.5, function() ... end)
+viber.timer_cancel(h)
+```
+
+## Vitais genéricas de entidade
+
+O dano/cura de QUALQUER entidade em Lua — o que deixa um jogo fazer o seu
+combate sem o melee nativo. `id` = bits de entidade (`viber.find`); sem `id`
+= a entidade corrente. Leitura por snapshot de início-de-frame; escrita
+aplica pós-frame.
+
+| Função | Efeito |
+|--------|--------|
+| `viber.entity_hp(id?)` | `ok, cur, max` ( snapshots de entidades com `Health`) |
+| `viber.entity_set_max_hp(max, id?)` | cria o `Health` se faltar (current = max); redimensiona se existir |
+| `viber.entity_damage(amount, id?)` | dano direto (sem i-frames — esses são do path do player). HP ≤ 0 EMITE `{type="kill"}` e NÃO corre o caminho nativo (cadáver/XP/quests são do melee) — o script decide |
+| `viber.entity_heal(amount, id?)` | cura, clampe ao max |
+
+## Procura por nome
+
+| Função | Devolve |
+|--------|---------|
+| `viber.find(nome)` | bits da entidade (exato primeiro, substring depois) ou `nil` |
+| `viber.find_all(nome)` | array com TODAS as correspondências |
+
+## Estado de jogo e módulos
+
+```lua
+-- viber.game(): tabela ÚNICA por mundo — sobrevive ao hot-reload (como
+-- viber.state() sobrevive por entidade). Persiste no save como world_kv
+-- (JSON plano: string/número/bool) em QUALQUER preset — o save é serviço de
+-- engine. Gravar/carregar por script: `viber.save()` / `viber.load_save()` (o
+-- mesmo ficheiro do botão Guardar/Carregar do menu).
+viber.game().bosses_killed = (viber.game().bosses_killed or 0) + 1
+
+-- viber.load("lib/x.lua"): corre um chunk de scripts/ em env próprio UMA
+-- vez por mundo e devolve o seu return (cacheado) — fatora bibliotecas
+-- partilhadas (ver scripts/lib/fsm.lua do exemplo).
+local fsm = viber.load("lib/fsm.lua")
+
+-- viber.save() / viber.load_save(): gravam/carregam o save do mundo (posição do
+-- herói + vitais + game(); campos RPG quando existem). Um jogo sem RPG usa
+-- isto para auto-save em checkpoints (ver worlds/lua-demo).
+viber.save()
+```
+
+## Spawn em runtime (`viber.spawn_prototype`)
+
+Instancia um `<Prototype>` do mundo. O spawn real é pós-frame (sistema
+exclusivo — primitivas com textura/colisor precisam dos `Assets`); sem `y`
+o Y assenta na superfície renderizada. `opts.on_spawned(bits)` corre no fim
+do frame do spawn.
+
+```lua
+viber.spawn_prototype("goblin", px + 3, pz)
+viber.spawn_prototype("fireball", px, pz, { y = 1.5, on_spawned = function(bits)
+  projéteis[bits] = true
+end })
+```
+
+## Combate & FX (primitivas de jogo)
+
+O que deixa um jogo fazer o SEU combate/habilidades em Lua reusando a lógica
+nativa (falloff, knockback, morte com cadáver/XP/quests, partículas, câmara).
+Todas degradam para no-op quando o recurso subjacente não existe (mundo
+`gameplay: none` sem o plugin respetivo) — excepto `radial_damage`/`burst`,
+que só dependem de componentes/mensagens sempre registados.
+
+### Posição & alvos
+
+| Função | Devolve |
+|--------|---------|
+| `viber.entity_position(id?)` | `ok, x, y, z` do snapshot do frame (`ok == false` sem entrada; sem `id` = a própria) |
+| `viber.nearby(raio [, limite])` | lista `{id, name, x, y, z, distance}` de entidades NOMEADAS à volta da própria, mais perto 1.º (cap 64; default 16) |
+| `viber.player_forward()` | `dx, dz` — forward do herói no plano (modelo olha +Z), para dash/mira |
+
+### Dano e morte
+
+| Função | Efeito |
+|--------|--------|
+| `viber.radial_damage(x, z, raio, dano [, opts])` | dano em ÁREA com falloff linear (cheio no centro → metade na borda); `opts.knockback = força` empurra radialmente. Mortes seguem a **paridade do melee** (corpo + XP + quests `kill` + evento `{type="kill"}` + SFX) |
+| `viber.entity_despawn(id)` | remove a entidade (`despawn_self` é o atalho da própria) |
+| `viber.status_clear(kind)` | limpa um status do herói (`"venom"`; default sem arg) — o que o antídoto nativo faz |
+
+### Partículas
+
+| Função | Efeito |
+|--------|--------|
+| `viber.burst(preset, x, y, z [, count])` | burst de partículas; preset validado: `fire smoke fireflies ground-dust sparkle leaves snow sand-dust magic core` **+ `sparks`** (o impacto do melee nativo); desconhecido = erro de script; default 12 |
+| `viber.ring(x, z, raio [, cor])` | anel de choque no chão; `cor` em `"#rrggbb"` |
+
+### Câmara & feedback
+
+| Função | Efeito |
+|--------|--------|
+| `viber.shake(força)` | trauma da câmara (o melee usa ~0.2 por golpe, 0.45 no slam) |
+| `viber.kick(dx, dy, dz)` | solavanco direcional (mola) |
+| `viber.fov_kick(graus)` | pulso de FOV (dash nativo: +8°) |
+| `viber.punch(stops, bloom)` | pulso de pós-processo (exposição/bloom) |
+| `viber.hit_stop(segundos)` | congela o tempo virtual (impacto; o melee usa 0.06–0.13 s) |
+| `viber.damage_number(texto [, opts])` | número flutuante; `opts.color = "#rrggbb"`, `opts.x/y/z` (default: 1.8 m acima de si) |
+
+### Animação
+
+| Função | Efeito |
+|--------|--------|
+| `viber.play_clip(nome [, opts])` | clip de ação no rig (fuzzy match, blend 250 ms); `opts.speed` escala a reprodução (a colheita nativa usa 1.4), `opts.id` escolhe outra entidade (default: a própria). Generaliza o `viber.gesture` (que é `play_clip(nome)` sem opts) |
+
+Exemplo de habilidade em Lua (radial + juice + morte nativa):
+`examples/simple-rpg/scripts/game/abilities.lua`.
+
+## Scripts "sempre ativos" (controllers)
+
+Um `<Entity script="…" tag="always-active">` corre o seu `on_update` em
+QUALQUER lugar do mundo — sem o "LOD de IA" de 45 m que congela scripts
+distantes (mesma política dos scripts de UI). É o que um CONTROLLER de jogo
+(habilidades, hotbar, diretor) precisa; criaturas/NPCs ficam sem o tag para
+preservar o congelamento por distância.
+
+## Diálogo & posse de sistemas
+
+Um NPC/dador pode conduzir o seu PRÓPRIO diálogo em Lua:
+
+| Função | Efeito |
+|--------|--------|
+| `viber.say(texto [, segundos])` | escreve no **balão nativo** do HUD (o mesmo do diálogo de quests); sem `<DialogueBalloon>` no mundo = no-op com warn 1×; `\n` faz multi-linha; default 4 s |
+| `viber.quest_def(id)` | tabela da definição autoral (`id/title/npc/biome/kind/target/count/radius/gold/xp/items/lines_intro/lines_progress/lines_complete`) ou `nil` — lê o MESMO `<mundo>/quests/*.json` da engine |
+| `viber.quest_defs()` | lista com todas as definições do mundo |
+| `viber.own_system(nome)` | **reclama um sistema nativo** para Lua: o handler da engine cala e a lógica passa a ser do script. Nomes: `dialogue` (o `[E]` dos `<DialogueNPC>`), `abilities` (C/E/R), `bomb` (B), `guard` (L), `hotbar` (1/2), `harvest` (J). Sem posse, o comportamento nativo é o de sempre |
+
+Exemplo completo: `examples/simple-rpg/scripts/npc/forest-wolves.lua` (Hald —
+linhas do JSON, `say` no balão, `quest_accept`/`quest_turn_in`).
+
+> **GOTCHA**: o top-level do script corre ANTES do primeiro snapshot do
+> frame — leituras como `viber.quest_def`/`viber.find` só têm dados dentro do
+> `on_update` (o exemplo busca a def laziamente, na 1.ª chamada).
+
+## Economia adicional
+
+| Função | Efeito |
+|--------|--------|
+| `viber.vault_take(kind, amount)` | consome do vault (recurso OU item); sem stock = no-op com warn 1× (o script guarda-se com `vault_get`) |
+| `viber.own_action(nome)` | reclama uma ação da UI para Lua: o handler nativo cala e a ação chega via `viber.events()`. Sem dono, o comportamento nativo é o de sempre (compat) — ver `scripts/game/shop.lua` do exemplo |
+
 ## Interação & UI
 
 | Função | Notas |
@@ -180,6 +427,8 @@ snapshot do frame (bindings, estado por elemento, cliques, listas).
 | `add_class(id, class)` / `remove_class(id, class)` | classes do stylesheet |
 | `toggle_class(id, class, on)` | o mais usado por HUD scripts |
 | `set_style(id, declarations)` | inline style CSS-like — todo o dialecto (`"background: rose-500/40; box-shadow: 0 4 12 #00000088"`) |
+| `set_style(id, declarations, true)` | SUBSTITUI o inline inteiro (o merge nunca desfaz uma declaração; isto sim) |
+| `clear_style(id)` | remove o inline — a folha volta a mandar |
 | `set_checked(id, checked)` | estado de um `UiCheck` (classes `checked`/`unchecked` + tick sincronizam-se) |
 | `set_anim(id, spec)` | liga movimento em runtime (`"spin 3"`, `"pulse"`, `"bob 1.5 10"`, `"shake"`); `"none"` desliga |
 | `focus(id)` | dá o teclado a um `UiInput` (desfoca o anterior) |
@@ -187,19 +436,60 @@ snapshot do frame (bindings, estado por elemento, cliques, listas).
 | `select_tab(group, tab)` | seleciona tab num grupo |
 | `action(name, arg)` | levanta ação de gameplay (`learn`, `buy`, `sell`, `save`, `load`) |
 | `list(name, rows)` | cria/repõe uma fonte de `<UiList>` por script — `rows` = `{{campo=valor, …}, …}`; números/booleanos stringify |
+| `create{tag=…, id=…, parent=…, children={…}, …}` | **cria um elemento** em runtime com o mesmo construtor do XML — a chave `children` aceita uma subárvore recursiva de tabelas; sem `id` gera `ui-gen-N`; devolve o id (o elemento APARECE no frame seguinte, é endereçável logo a seguir) |
+| `destroy(id)` | remove o elemento e a subárvore (registry incluído) |
+| `tween(id, {property=, to=, from=, duration=, easing=, delay=})` | interpola um campo animável (`opacity`, `background`, `color`, `width`, `height`, `top/right/bottom/left`, `rotate`, `scale`, `font-size`); `to`/`from` = número ou cor (`"#ff0000"`); termina com evento `tween_done` |
+| `set(name, value)` | **bind de script**: alimenta `bind="nome"`, class-binds `bind="nome:classe"` e `get`/`number`; nomes da engine têm prioridade (colisão = warn e recusa) |
 
 | Reader | Devolve | Notas |
 |--------|---------|-------|
-| `read(id)` | table ou nil | `{text, value, visible, checked, disabled}` de QUALQUER elemento com id — inputs reportam o texto digitado, sliders o valor |
+| `read(id)` | table ou nil | `{text, value, visible, checked, disabled, rect={x,y,w,h}, hovered}` de QUALQUER elemento com id — inputs reportam o texto digitado, sliders o valor |
+| `rect(id)` | table ou nil | `{x, y, w, h}` pós-layout no espaço autoral (píxeis do CSS) |
+| `query(seletor)` | {ids…} | casam um seletor do dialeto — tag, `.classe`, `#id`, `:not(.a)`, descendente, `>` e pseudos (`:hover` casa quando o elemento ESTÁ hovered; ancestrais ficam neutros) |
+| `classes(id)` | {classes…} | classes actuais do elemento |
+| `children(id)` / `parent(id)` | {ids…} / string ou nil | estrutura |
 | `exists(id)` | bool | o id é endereçável agora? |
 | `focused()` | string ou nil | id do `UiInput` com o teclado |
-| `get(name)` | string | valor formatado do binding `name` (`""` se desconhecido) |
-| `number(name)` | number | fração 0..1 (ou contagem crua) do binding |
+| `get(name)` | string | valor formatado do binding `name` (`""` se desconhecido); engine primeiro, depois os do `set()` |
+| `number(name)` | number | fração 0..1 (ou contagem crua) do binding; idem fallback |
 | `is_open(id)` | bool | modal `id` está aberto? |
 | `tab(group)` | string | tab selecionada no grupo |
 | `clicked(id)` | bool | true **no frame** em que o elemento foi pressionado |
+| `events([prefix])` | {eventos…} | **DRENA** a fila de eventos — ver abaixo |
 | `list_count(name)` | number | nº de linhas da fonte de lista |
 | `rows(name)` | table | cópia das linhas — `{{campo=…}, …}` |
+
+**Eventos** (`viber.ui.events()` devolve o lote do frame e esvazia a fila;
+com prefixo, filtra por id a começar por ele — os restantes caem):
+
+| `type` | campos | emitido quando |
+|--------|--------|----------------|
+| `click` | `id` | elemento pressionado |
+| `value_changed` | `id`, `value` | slider muda de valor (barras/cooldowns NÃO emitem — muda a cada frame) |
+| `text_changed` | `id`, `text` | input muda de texto por teclado |
+| `checked_changed` | `id`, `checked` | check liga/desliga |
+| `focus_changed` | `id`, `focused` | input recebe/perde o teclado |
+| `tab_changed` | `group`, `tab` | aba activa muda |
+| `tween_done` | `id`, `property` | um `viber.ui.tween` terminou |
+| `hover_enter` / `hover_leave` | `id` | o ponteiro entrou/saiu do elemento |
+
+```lua
+for _, ev in ipairs(viber.ui.events("shop-")) do
+  if ev.type == "click" then comprar(ev.id)
+  elseif ev.type == "value_changed" then volume(ev.value) end
+end
+-- O prefixo SÓ retira o que casa: dois scripts com prefixos diferentes
+-- convivem; `events()` sem prefixo drena tudo.
+
+-- Criação dinâmica + tween:
+local toast = viber.ui.create{ tag = "uibutton", parent = "hud",
+  class = "toast", text = "Quest concluída!", style = "background: emerald-700ee" }
+viber.ui.tween(toast, {property = "opacity", from = 0, to = 1, duration = 0.25})
+viber.ui.destroy(toast)
+
+-- Binds por script (class-binds engine-driven sem loops de Luau):
+viber.ui.set("radar.alerta", true)   -- <UiPanel bind="radar.alerta:alerta"/>
+```
 
 Bindings disponíveis (`src/ui/bind.rs`, usados por `bind="…"` no XML e por
 `get`/`number`): `health` (+`.text` `.value` `.low`), `xp`/`xp.text`, `level`
@@ -304,6 +594,99 @@ viber.debug.around(raio, limite?)  -- resumo compacto de TUDO perto do player (d
                                    --   mesh_vertices/light+shadows/scripted/rigidbody
 viber.debug.fps()                  -- atalho para prof().fps (nil sem DiagnosticsStore)
 viber.debug.time_scale()
+
+-- introspecção profunda (M1): vitals de QUALQUER entidade, IA, nav, mundo
+viber.debug.health(id)             -- {current,max,dead} de qualquer entidade (nil sem Health)
+viber.debug.ai(id)                 -- {state="wander|chase",speed,aggro_radius,attack_radius,
+                                   --   home,desired,velocity,goal,nav_profile="civil|wild"}
+                                   --   (FSM da engine + AiLocomotion + perfil de navmesh)
+viber.debug.nav()                  -- pilha de navegação: {enabled,agent_radius,agent_height,
+                                   --   tile_size,offroad_cost,tile_center?,tile_generating,
+                                   --   tile_generations,tile_obstacles?,census{id→n}}
+                                   --   census = estados landmass ("fora-da-mesh"/"sem-caminho"…)
+viber.debug.quest(id)              -- quest FUNDA: {id,title,npc,biome,status,objective{kind,
+                                   --   target,count,progress_text},visited,rewards{gold,xp,items}}
+viber.debug.quest_defs()           -- [{id,title,status,kind,npc}] de todas as quests embutidas
+viber.debug.regions()              -- [{id,display_name,fog_density,tint,pp_exposure,
+                                   --   pp_bloom_strength}] das <BiomeRegion>
+viber.debug.biome_at(x, z)         -- região do ponto (polígono) ou nil (fora de todas)
+viber.debug.terrain(x, z)          -- AO VIVO: {height,in_field,on_road,in_water,water_surface?,
+                                   --   distance_to_road} (nil sem terreno)
+viber.debug.weather_full()         -- {wind,wind_strength,clouds,rain,cycle,scheduler{seed,
+                                   --   index,period,timer,target}} — o scheduler é o que o
+                                   --   ciclo VAI fazer (set_weather congela-o)
+viber.debug.atmosphere()           -- {day,night,golden,fog_density?,fog_color,exposure_scale,
+                                   --   bloom_boost} — estado vivo do grading/névoa
+viber.debug.border()               -- {radius,warn_seconds,margin} do <WorldBorder>
+viber.debug.interior()             -- {active,min?,max?,room_size,room_origin,camera_*} da bolsa
+viber.debug.ui_tree()              -- [{id,x,y,w,h,visible,disabled,text?,classes}] — ids
+                                   --   declarativos + hud:*/chip:* com RECTS (clique exato)
+viber.debug.audio()                -- {buses{master,music,sfx},layers,sinks,total,playing,…}
+viber.debug.seeds()                -- {terrain_seed?,world_size?,weather_seed?} (determinismo)
+viber.debug.world_hash()           -- hash hex do CONTEÚDO do mundo (soma FNV-1a por entidade,
+                                   --   independente de ordem/ids) — A/B "mesma seed, mesmo mundo";
+                                   --   `viber debug hash` é o atalho CLI. SÓ é estável com o
+                                   --   mundo congelado (step(0)): posições/HP entram no hash
+viber.debug.skills()               -- {learned,points,level?,level_points?,cooldowns{dash,heal,
+                                   --   strike},bonus_damage?,speed_mult?,max_hp_bonus?,crit_bonus?}
+viber.debug.waypoints()            -- {marked,label?,x,y,z?,landmarks[{name,biome}]} (12 marcos)
+viber.debug.save_info()            -- {path,exists,bytes?,mtime?} do save deste mundo
+
+-- escrita M2: controlo total (mesmo frame; falhas viram warnings)
+viber.debug.set_entity_hp(id, hp)  -- HP absoluto de QUALQUER entidade (clamp [0,max])
+viber.debug.set_max_hp(id, max)    -- HP máximo (mín. 1; atual clampado)
+viber.debug.quest_force(id, s)     -- força "active"|"ready"|"done"|"not_taken"
+viber.debug.quest_progress(id, n)  -- fixa o progresso (kill: contador; visit: N marcos;
+                                   --   collect é vault-driven → warning)
+viber.debug.vault_set(what, n)     -- valor ABSOLUTO de recurso (gold/wood/stone) ou item
+viber.debug.take(what, n)          -- tira do vault (false = stock insuficiente → warning)
+viber.debug.skill_learn(id)        -- aprende passiva (pré-requisitos/pontos respeitados;
+                                   --   aplica o delta de bónus ao herói, como na UI)
+viber.debug.skill_points(n)        -- pontos disponíveis (absoluto)
+viber.debug.skill_reset()          -- esquece tudo, devolve pontos, reverte bónus
+viber.debug.ai_state(id, s)        -- força "wander"|"chase" (a FSM reavalia por distância;
+                                   --   o lever que PERSISTE é ai_aggro)
+viber.debug.ai_aggro(id, r)        -- raio de aggro (m)
+viber.debug.ai_calm_all()          -- todas as criaturas da FSM → Wander
+viber.debug.nav_set{enabled=?, offroad_cost=?, tile_size=?}   -- navmesh ao vivo
+viber.debug.postfx{bloom=?, ssao=?, taa=?, dof=?, autoexposure=?, contact_shadows=?,
+                   aerial=?, splittone=?, vignette=?, chromatic=?, cas=?,
+                   motion_blur=?, volumetrics=?}
+                                   -- gates AO VIVO: false corta o efeito (igual a
+                                   --   VIBER_NO_*), true restaura — bisseção sem restart
+viber.debug.audio_set{master=?, music=?, sfx=?}               -- volumes ao vivo
+viber.debug.combat_music("battle"|"boss"|"off")               -- A/B de BGM sem esperar o hold
+viber.debug.physics_set{gravity={x,y,z}?, paused=?}           -- Rapier ao vivo
+viber.debug.save() / load()        -- pelo mesmo caminho da UI (UiAction)
+viber.debug.teleport_to(name)      -- player → primeira entidade com esse nome
+viber.debug.spawn(url, x, y, z, {yaw=?, scale=?, color="#hex"?, collider=?, snap=?})
+                                   -- primitiva FÍSICA ("box:w,h,d"|"sphere:r"|
+                                   --   "cylinder:r,h", collider+corpo fixo por omissão)
+                                   --   ou GLB do pool (load assíncrono; snap=true assenta
+                                   --   no terreno) → nome debug:spawn:N
+viber.debug.spawn_light(x, y, z, {intensity=?, color=?, shadows=?, range=?})
+                                   -- PointLight debug:light:N
+viber.debug.set_material(id, {base_color="#hex"?, metallic=?, roughness=?, unlit=?,
+                              emissive="#hex"?})
+                                   -- material PBR ao vivo (só STANDARD: primitivas/GLB —
+                                   --   os bindless do terreno não são mutáveis)
+viber.debug.set_light(id, {intensity=?, color=?, shadows=?, range=?})
+viber.debug.set_camera{distance=?, pitch=?, yaw=?, target=?}  -- yaw NOVO (M2)
+viber.debug.clear_markers()        -- remove TODO o namespace debug:* (markers, spawns, luzes)
+
+-- asserção e determinismo (M3)
+viber.debug.events(since?)         -- eventos de jogo {seq,time,kind,...} desde o cursor:
+                                   --   hurt/damage/death/quest/ui/travel/toast/levelup
+                                   --   (viber debug events é o atalho CLI)
+viber.debug.step(n)                -- PÁRA e avança EXATAMENTE n frames à speed 1; FICA
+                                   --   parado (cada step congela de novo; step(0) só congela)
+viber.debug.play()                 -- restaura a speed que estava ANTES da primeira chamada
+                                   --   da cadeia de steps
+
+-- auto-descoberta (M4)
+viber.debug.apidoc()               -- {debug={nome={signature,description}}, game={}, ui={},
+                                   --   profiler={}} — a engine explica-se
+                                   --   (viber debug api [--grep x] é o atalho CLI)
 
 -- escrita (mesmo frame)
 viber.debug.set_pos(id, x, y, z)
