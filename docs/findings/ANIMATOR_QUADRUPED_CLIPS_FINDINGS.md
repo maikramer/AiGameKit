@@ -133,6 +133,52 @@ todos com death a colapsar (pelve −0.349) em vez do golpe.
   `lod{0,1,2}` passam as regras próprias — validar o LOD0 com
   `aigamekit-lab check glb {id}_lod0.glb .../rules/lod0.yaml`.
 
+## Gait por IK: a passada "de caranguejo" (2026-09-14, 2.ª iteração)
+
+**Sintoma:** no engine, as patas dos quadrúpedes marchavam em diagonal/sentido
+lateral em vez de frente/trás (mais visível no lobo). **Não era regressão da
+regeneração** — o ficheiro antigo do pool media o mesmo (pata dianteira:
+Δlat 0.397 > Δfwd 0.307; novo FK: 0.392 vs 0.294).
+
+**Causa (três camadas, todas nos rigs auto-gerados do SkinTokens):**
+
+1. **Eixos locais arbitrários** — o gait FK mapeia "swing" para o eixo local
+   mais próximo do eixo mediolateral do mundo (`_resolve_bone_axes`); com
+   ossos e rolls arbitrários o mapeamento degrada e a pata marcha em diagonal.
+2. **Ossos DESCONECTADOS (gap tail→head)** — os "elos" efetivos da pata são os
+   OFFSETS entre heads (ex. lobo front-L: 0.19 + 0.20 = 0.39), não os
+   comprimentos dos ossos (0.11 + 0.15 = 0.26). O solver com comprimentos
+   gerava joelhos irreais e o pé disparava.
+3. **Alvos em espaço MUNDO com corpo a oscilar** — o quadril move-se com o
+   bob/lean/yaw da espinha; alvos fixos no mundo obrigavam o IK a esticar a
+   pata lateralmente para manter o pé. Alvos body-relative (frame do PAI do
+   quadril) tornam a passada sagital NO REFERENCIAL DO CORPO.
+
+**Fix:** `_ik_leg_cycle` (bpy_ops) — o ciclo define o ALVO do pé em espaço do
+corpo (frente/trás ao longo do forward + lift no swing, contacto no stance) e o
+solver analítico (2 ossos + pole, o mesmo do passe IK) coloca a junta:
+
+- elos = offsets entre heads (`o1_local`/`o2_local` nos frames locais dos ossos);
+- alvo = `pai_head + R_pai·(p_local + fwd_local·s + up_local·h)`; pole também
+  body-relative e **projetado no plano sagital** (o "joelho" de rest destes
+  rigs sai do plano e inclinava a dobra);
+- reconstrução por **AIM absoluto a partir do rest** (não arco-mínimo
+  incremental): direção-alvo exata e twist sem drift;
+- bases pelas identidades `B1 = R1⁻¹·Rp·Wp⁻¹·W1n`, `B2 = R2⁻¹·R1·W1n⁻¹·W2n`.
+
+**Verificação (o critério de aceitação):** deslocamento dos 4 pés no referencial
+do corpo no clip Walk — Δfwd > Δlat em TODAS (lobo: 0.212/0.175, 0.247/0.170,
+0.301/0.221, 0.319/0.115; antes a front-L era 0.212/0.432). No engine
+(`worlds/qa-locomotion.xml` + bridge): o lobo anda com z constante, yaw = −90°
+= rumo em todos os samples ✔. Renders laterais (`/tmp/ik5_walk_sheet.png`)
+mostram a passada ao longo do corpo.
+
+**Nota:** o `walk` mantém o trot e o `run` o galope — o gait IK só substitui a
+execução das patas (fases/papéis iguais). O caminho FK fica para o fallback
+bípede. Pool regenerado (wolf/scorpion/sand_worm) com o gait novo; o gate
+`animated.yaml` do sand_worm continua a falhar como antes (quirk pré-existente,
+ver secção de regeneração).
+
 ## Fora do âmbito (futuro)
 
 IK de pés com contacto real no chão (foot-planting por pata), 4-beat lateral

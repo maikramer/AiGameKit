@@ -1286,6 +1286,179 @@ def _gallop_phases(front: dict[str, list], hind: dict[str, list]) -> dict[tuple[
     return None
 
 
+def _ik_leg_cycle(
+    arm_obj: Any,
+    leg: list[str],
+    *,
+    forward: Any,
+    frame_start: int,
+    total: int,
+    cycles: float,
+    phase: float,
+    stride: float,
+    lift: float,
+    gain: float = 1.0,
+) -> None:
+    """Anima UMA pata por IK de 2 ossos com trajetória de pé em espaço do corpo.
+
+    Porquê IK e não FK: em rigs auto-gerados (SkinTokens) os ossos têm
+    orientações/roll arbitrários — o mapeamento "eixo local mais próximo do
+    swing" degrada e a pata marcha em DIAGONAL (lobo: pata dianteira com mais
+    deslocamento lateral que frontal; passada "de caranguejo"). Aqui o ciclo
+    define o ALVO do pé — frente/trás no eixo forward do corpo, com lift no
+    swing e contacto no stance — e o solver analítico (2 ossos + pole, o mesmo
+    do passe IK) coloca a junta. A passada é sagital por construção,
+    independentemente dos eixos locais dos ossos.
+
+    Args:
+        leg: cadeia da pata (upper, lower, foot?, toe?).
+        forward: direção forward do rig (espaço armature, horizontal).
+        stride: amplitude frente/trás do pé (metros).
+        lift: altura máxima do pé no swing (metros).
+        gain: multiplicador de passada (traseiras mais drive).
+    """
+    import math as _math
+
+    import numpy as np
+    from mathutils import Quaternion, Vector
+
+    from . import ik as _ik
+
+    if len(leg) < 2:
+        return
+    upper, lower = leg[0], leg[1]
+    foot = leg[2] if len(leg) > 2 else None
+    pb_u = arm_obj.pose.bones.get(upper)
+    pb_l = arm_obj.pose.bones.get(lower)
+    b_up = arm_obj.data.bones.get(upper)
+    b_lo = arm_obj.data.bones.get(lower)
+    if pb_u is None or pb_l is None or b_up is None or b_lo is None:
+        return
+    pb_u.rotation_mode = "QUATERNION"
+    pb_l.rotation_mode = "QUATERNION"
+
+    # Alvo de repouso = tornozelo no REST (espaço armature). Os "elos" EFETIVOS
+    # são os OFFSETS entre heads (não os comprimentos dos ossos): os auto-rigs
+    # do SkinTokens têm ossos DESCONECTADOS (gap tail→head do filho) — usar os
+    # comprimentos dava um alcance irreal, o solver gerava joelhos impossíveis
+    # e o pé disparava de lado. Com os offsets, o alcance fecha com o rest.
+    b_foot = arm_obj.data.bones.get(foot) if foot else None
+    p0 = Vector(b_foot.head_local) if b_foot is not None else Vector(b_lo.tail_local)
+    r1 = b_up.matrix_local.to_quaternion()
+    r2 = b_lo.matrix_local.to_quaternion()
+    o1_local = r1.inverted() @ (Vector(b_lo.head_local) - Vector(b_up.head_local))
+    o2_local = r2.inverted() @ (p0 - Vector(b_lo.head_local))
+    l1 = float(o1_local.length)
+    l2 = float(o2_local.length)
+    if l1 < 1e-4 or l2 < 1e-4:
+        return
+    o1_dir = o1_local.normalized()
+    o2_dir = o2_local.normalized()
+    prev_quat = arm_obj.data.bones[upper].parent
+    rp = prev_quat.matrix_local.to_quaternion() if prev_quat is not None else Quaternion()
+
+    chain = _ik.TwoBoneChain("leg", upper, lower, foot)
+    lim = _ik.load_limits().roles.get("leg", _ik.ChainLimit())
+    pole_v = _ik._resolve_pole(arm_obj, chain, lim, forward)
+    fwd = Vector((forward.x, forward.y, 0.0))
+    if fwd.length < 1e-6:
+        fwd = Vector((0.0, -1.0, 0.0))
+    fwd.normalize()
+    # Plano de dobra SAGITAL: remove a componente lateral do pole (rigs
+    # auto-gerados têm o "joelho" de rest fora do plano sagital — o plano de
+    # dobra inclina e o pé deriva de lado ao longo do ciclo). Mantém o sinal
+    # frente/trás da dobra de rest.
+    lat_u = Vector((-fwd.y, fwd.x, 0.0))
+    pole_v = pole_v - lat_u * pole_v.dot(lat_u)
+    if pole_v.length < 1e-4:
+        pole_v = -fwd
+    pole_v.normalize()
+    # Tudo expresso no frame do PAI do quadril (corpo): o corpo oscila
+    # (yaw/lean/bob) e alvos fixos no MUNDO faziam o quadril afastar-se
+    # lateralmente do alvo — o IK esticava a pata de lado. Com alvos
+    # body-relative a passada é sagital no referencial do corpo.
+    body_pb = pb_u.parent
+    if body_pb is not None:
+        r_body_rest = body_pb.bone.matrix_local.to_quaternion()
+        p_local = r_body_rest.inverted() @ (p0 - Vector(body_pb.bone.head_local))
+        fwd_local = r_body_rest.inverted() @ fwd
+        up_local = r_body_rest.inverted() @ Vector((0.0, 0.0, 1.0))
+        pole_local = r_body_rest.inverted() @ pole_v
+    else:
+        p_local, fwd_local, up_local, pole_local = p0, fwd, Vector((0.0, 0.0, 1.0)), pole_v
+    r1_arr = np.array([r1.w, r1.x, r1.y, r1.z], dtype=float)
+    rp_arr = np.array([rp.w, rp.x, rp.y, rp.z], dtype=float)
+    bpy = _bpy()
+
+    def _n(v: Any) -> np.ndarray:
+        return np.array([v.x, v.y, v.z], dtype=float)
+
+    def _nq(q: Any) -> np.ndarray:
+        return np.array([q.w, q.x, q.y, q.z], dtype=float)
+
+    def _mq(q: np.ndarray) -> Quaternion:
+        return Quaternion((float(q[0]), float(q[1]), float(q[2]), float(q[3])))
+
+    prev: dict[str, Quaternion] = {}
+    for fi in range(total):
+        t = fi / max(total - 1, 1)
+        frame = frame_start + fi
+        bpy.context.scene.frame_set(frame)
+        bpy.context.view_layer.update()
+        phi = (t * cycles + phase) % 1.0
+        # Stance [0,0.5): pé no chão, recua (frente→trás); swing [0.5,1):
+        # pé levanta e avança (trás→frente). Fases contínuas nos extremos.
+        if phi < 0.5:
+            w = phi / 0.5
+            s = 0.5 * stride * gain * (1.0 - 2.0 * w)
+            h = 0.0
+        else:
+            w = (phi - 0.5) / 0.5
+            s = 0.5 * stride * gain * (2.0 * w - 1.0)
+            h = lift * _math.sin(_math.pi * w)
+        if body_pb is not None:
+            wb = body_pb.matrix.to_quaternion()
+            b_pos = Vector(body_pb.matrix.translation)
+        else:
+            wb = Quaternion()
+            b_pos = Vector((0.0, 0.0, 0.0))
+        target_v = b_pos + (wb @ p_local) + (wb @ fwd_local) * s + (wb @ up_local) * h
+        pole_frame_v = wb @ pole_local
+        pole_frame = np.array([pole_frame_v.x, pole_frame_v.y, pole_frame_v.z], dtype=float)
+        root_v = Vector(pb_u.matrix.translation)
+        knee_new = _ik.two_bone_knee_position(_n(root_v), _n(target_v), l1, l2, pole_frame)
+        knee_new_v = Vector((float(knee_new[0]), float(knee_new[1]), float(knee_new[2])))
+        # AIM ABSOLUTO a partir do REST (não arco-mínimo incremental): a pose de
+        # repouso destes rigs é esquiçada — arcos incrementais acumulavam twist
+        # fora do plano e o pé derivava lateralmente. Aqui a direção-alvo é
+        # exata e o twist segue o rest (sem drift).
+        wp = pb_u.parent.matrix.to_quaternion() if pb_u.parent else Quaternion()
+        wp_arr = _nq(wp)
+        w1_rest_cur = _mq(_ik.q_mul(_ik.q_mul(wp_arr, _ik.q_conj(rp_arr)), r1_arr))
+        dir1_rest = w1_rest_cur @ o1_dir
+        d1 = knee_new_v - root_v
+        d1.normalize()
+        q1 = _ik.rotation_between(_n(dir1_rest), _n(d1))
+        w1_mq = _mq(_ik.q_mul(q1, _nq(w1_rest_cur)))
+        w2_rest_cur = w1_mq @ r1.inverted() @ r2
+        dir2_rest = w2_rest_cur @ o2_dir
+        d2 = target_v - knee_new_v
+        d2.normalize()
+        q2 = _ik.rotation_between(_n(dir2_rest), _n(d2))
+        w2_mq = _mq(_ik.q_mul(q2, _nq(w2_rest_cur)))
+        # B1 = R1⁻¹·Rp·Wp⁻¹·W1n ; B2 = R2⁻¹·R1·W1n⁻¹·W2n (identidade de cadeia
+        # — ver docs/findings/ANIMATOR_IK_LIMITS_FINDINGS.md).
+        basis1_mq = r1.inverted() @ rp @ wp.inverted() @ w1_mq
+        basis2_mq = r2.inverted() @ r1 @ w1_mq.inverted() @ w2_mq
+        for bone, basis in ((upper, basis1_mq), (lower, basis2_mq)):
+            pq = prev.get(bone)
+            if pq is not None and basis.dot(pq) < 0.0:
+                basis.negate()
+            prev[bone] = basis.copy()
+            arm_obj.pose.bones[bone].rotation_quaternion = basis
+            arm_obj.pose.bones[bone].keyframe_insert(data_path="rotation_quaternion", frame=frame)
+
+
 def _locomotion_cycle(
     arm_obj: Any,
     chains: dict[str, list[str]],
@@ -1478,8 +1651,31 @@ def _locomotion_cycle(
             roles[tuple(leg)] = (1.12, 0.9)
 
         def _anim_role(leg: list[str], phase: float) -> None:
-            gain, cushion = roles.get(tuple(leg), (1.0, 1.0))
-            anim_leg(leg, phase=phase, gain=gain, cushion=cushion)
+            from mathutils import Vector as _V
+
+            gain, _cushion = roles.get(tuple(leg), (1.0, 1.0))
+            # Passada/trajetória do pé derivadas do hip_amp e do comprimento da
+            # pata (walk ~0.45 rad → ~45% do comprimento; run amplia).
+            leg_len = 0.5
+            if len(leg) >= 2:
+                b0 = arm_obj.data.bones.get(leg[0])
+                b1 = arm_obj.data.bones.get(leg[1])
+                if b0 is not None and b1 is not None:
+                    leg_len = float((_V(b0.tail_local) - _V(b0.head_local)).length) + float(
+                        (_V(b1.tail_local) - _V(b1.head_local)).length
+                    )
+            _ik_leg_cycle(
+                arm_obj,
+                leg,
+                forward=forward,
+                frame_start=frame_start,
+                total=total,
+                cycles=cycles,
+                phase=phase,
+                stride=hip_amp * leg_len * 1.2,
+                lift=hip_amp * leg_len * 0.4,
+                gain=gain,
+            )
 
         if leg_phase_by_leg is not None:
             # Galope: fases EXPLÍCITAS por pata (sem anti-fase de lado).
