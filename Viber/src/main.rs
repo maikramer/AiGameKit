@@ -1136,6 +1136,18 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // Pós-processamento (exposição/bloom/SSAO) na câmara do mundo; os
     // `pp-*` das `<BiomeRegion>` conduzem-no. `VIBER_NO_POSTFX=1` desliga.
     app.add_plugins(postfx::PostFxPlugin);
+    // `<PostFxDebugToggle>`: teclas que comutam os gates de pós-processo ao
+    // vivo (inerte sem a tag no mundo).
+    app.add_plugins(viber::postfx_toggle::PostFxDebugTogglePlugin);
+    // `<AdaptiveQuality>`: tiers de qualidade pelo frame-time real (SSAO,
+    // volumétrico, sombras de ponto, cortes de efeitos).
+    app.add_plugins(viber::adaptive_quality::AdaptiveQualityPlugin);
+    // `<SpawnGate>`: segura a entidade-alvo no ar até haver collider de
+    // terreno sob ela (inerte sem a tag).
+    app.add_plugins(viber::spawn_gate::SpawnGatePlugin);
+    // `<ProjectileTemplate>` + `viber.fire_projectile`: projéteis simples
+    // (linha reta ou arco balístico) com dano por facção.
+    app.add_plugins(viber::projectile::ProjectilePlugin);
     // IBL vivo do céu (LightProbe + cubemap da paleta da atmosfera, filtrado
     // na GPU) — ambiente/reflexos que seguem a hora do dia. `VIBER_NO_IBL=1`.
     app.add_plugins(viber::ibl::SkyIblPlugin);
