@@ -241,6 +241,45 @@ pub struct EngineConfigData {
     pub attrs: Vec<(String, String)>,
 }
 
+impl EngineConfigData {
+    /// Raw value of `key` (attr names are already lowercased by the recipe).
+    pub fn attr(&self, key: &str) -> Option<&str> {
+        self.attrs
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+    }
+
+    /// `key` parsed as a finite `f32`; `None` when absent or unparsable.
+    pub fn f32_attr(&self, key: &str) -> Option<f32> {
+        self.attr(key)
+            .and_then(|v| v.trim().parse::<f32>().ok())
+            .filter(|v| v.is_finite())
+    }
+}
+
+/// Every `EngineConfig` element of the world, in document order.
+///
+/// One resource for all of them: a world declares `<NavMesh>`, `<SpawnGate>`,
+/// `<PostFxDebugToggle>`… side by side (and `<ProjectileTemplate>` many
+/// times), so a resource per element would keep only the last one.
+#[derive(Debug, Clone, Resource, Default)]
+pub struct EngineConfigs {
+    pub list: Vec<EngineConfigData>,
+}
+
+impl EngineConfigs {
+    /// First element with this (lowercase) tag.
+    pub fn first(&self, tag: &str) -> Option<&EngineConfigData> {
+        self.list.iter().find(|c| c.tag == tag)
+    }
+
+    /// Every element with this (lowercase) tag, in document order.
+    pub fn all<'a>(&'a self, tag: &'a str) -> impl Iterator<Item = &'a EngineConfigData> + 'a {
+        self.list.iter().filter(move |c| c.tag == tag)
+    }
+}
+
 /// Deferred world-system requests collected while spawning entities.
 #[derive(Debug, Resource, Default)]
 pub struct PendingWorldSystems {

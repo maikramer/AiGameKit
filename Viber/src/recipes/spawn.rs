@@ -528,9 +528,9 @@ pub fn startup(world: &mut World) {
             list: pending_worldsys.biomes.clone(),
         });
     }
-    for config in pending_worldsys.configs {
-        world.insert_resource(config);
-    }
+    world.insert_resource(crate::worldsys::EngineConfigs {
+        list: pending_worldsys.configs,
+    });
     // Always present, `<AudioMixer>` or not — systems take it as `ResMut`.
     world.insert_resource(mixer_settings.unwrap_or_default());
     world.insert_resource(meshes);

@@ -543,9 +543,9 @@ pub enum EntityKind {
         camera_pitch_deg: f32,
         camera_yaw_deg: f32,
     },
-    /// Engine config element kept as raw data (`Sky`, `NavMesh`,
-    /// `SpawnGate`, `ProjectileTemplate`, `PostFxDebugToggle`,
-    /// `AdaptiveQuality`) — data now, runtime hooks as phases land.
+    /// Engine config element kept as raw data (`NavMesh`, `SpawnGate`,
+    /// `ProjectileTemplate`, `PostFxDebugToggle`, `AdaptiveQuality`) — lands in
+    /// `worldsys::EngineConfigs`; each consumer plugin reads its own tag.
     EngineConfig {
         tag: String,
         attrs: Vec<(String, String)>,
