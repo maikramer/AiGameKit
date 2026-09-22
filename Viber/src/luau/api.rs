@@ -456,6 +456,43 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                 Ok(())
             })?,
         )?;
+        // viber.fire_projectile(id [, x, y, z]) — dispara um projétil do
+        // `<ProjectileTemplate id=…>` da boca da entidade para o peito do
+        // herói (ou para o ponto dado). `false` quando não há alvo.
+        api.set(
+            "fire_projectile",
+            lua.create_function(
+                |lua, (template, x, y, z): (String, Option<f32>, Option<f32>, Option<f32>)| {
+                    let mut ctx = lua
+                        .app_data_mut::<ScriptCtx>()
+                        .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                    let target = match (x, y, z) {
+                        (Some(x), Some(y), Some(z)) => Vec3::new(x, y, z),
+                        (None, None, None) => match ctx.player {
+                            Some(p) => p + Vec3::Y * crate::projectile::CHEST_HEIGHT,
+                            None => return Ok(false),
+                        },
+                        _ => {
+                            return Err(mlua::Error::runtime(
+                                "viber.fire_projectile: alvo precisa de x, y e z",
+                            ));
+                        }
+                    };
+                    if !target.is_finite() {
+                        return Err(mlua::Error::runtime(
+                            "viber.fire_projectile: alvo não finito (NaN/inf)",
+                        ));
+                    }
+                    let origin = ctx.origin + Vec3::Y * crate::projectile::MUZZLE_HEIGHT;
+                    ctx.commands.push(ScriptCommand::FireProjectile {
+                        template,
+                        origin,
+                        target,
+                    });
+                    Ok(true)
+                },
+            )?,
+        )?;
         api.set(
             "topple",
             lua.create_function(|lua, ()| {

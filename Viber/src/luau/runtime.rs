@@ -124,6 +124,8 @@ pub struct LuauRuntimeLocals<'w, 's> {
     /// overlay. `Option` pelas apps mínimas, como o resto.
     pub terrain_edits:
         Option<bevy::ecs::system::ResMut<'w, crate::terrain::delta::TerrainEditQueue>>,
+    /// Pedidos de `viber.fire_projectile` (consumidos pelo `ProjectilePlugin`).
+    pub projectiles: Option<bevy::ecs::system::ResMut<'w, crate::projectile::ProjectileQueue>>,
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -529,6 +531,21 @@ pub fn luau_update(
                 });
                 if std::env::var_os("VIBER_COMBAT_DEBUG").is_some() {
                     info!(target: "viber::combat", "damage {amount} pedido por script");
+                }
+            }
+            ScriptCommand::FireProjectile {
+                template,
+                origin,
+                target,
+            } => {
+                if let Some(queue) = locals.projectiles.as_deref_mut() {
+                    queue.requests.push(crate::projectile::ProjectileRequest {
+                        template,
+                        origin,
+                        target,
+                    });
+                } else {
+                    warn!("viber.fire_projectile sem ProjectilePlugin — pedido ignorado");
                 }
             }
             ScriptCommand::HealPlayer(amount) => {

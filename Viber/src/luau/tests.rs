@@ -644,6 +644,8 @@ use std::time::Duration;
             "return viber.shake(-1)",
             "return viber.nearby(0)",
             "return viber.play_clip('x', { speed = 0 })",
+            "return viber.fire_projectile('dardo', 0/0, 0, 0)",
+            "return viber.fire_projectile('dardo', 1, 2)",
         ] {
             assert!(
                 host.lua.load(snippet).exec().is_err(),
@@ -665,6 +667,19 @@ use std::time::Duration;
                 .exec()
                 .is_ok()
         );
+        // Sem herói no contexto não há alvo implícito: `false`, sem erro.
+        let implicit: bool = host
+            .lua
+            .load("return viber.fire_projectile('dardo')")
+            .eval()
+            .unwrap();
+        assert!(!implicit);
+        let explicit: bool = host
+            .lua
+            .load("return viber.fire_projectile('dardo', 1, 2, 3)")
+            .eval()
+            .unwrap();
+        assert!(explicit);
     }
 
     #[test]
