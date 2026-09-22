@@ -9,8 +9,8 @@ IR de entidades e spawna-a em Bevy. Tudo o que existe num mundo passa por aqui
 
 - **Tolerante por contrato:** mundos escritos contra um vocabulário maior (o
   do VibeGame) têm de continuar a correr — desconhecidos degradam a warning /
-  skip no-op, e o `analyze` imprime a cobertura (hoje só as 5 tags
-  `EngineConfig` data-only ficam sem consumidor).
+  skip no-op, e o `analyze` imprime a cobertura. As tags `EngineConfig`
+  ficam em `EngineConfigs` (attrs crus) e cada plugin lê a sua.
 - A IR desacopla o parse do spawn: `spawn.rs` consome specs já validados
   (terreno, água, estradas, física) em vez de re-parsing de strings.
 - Tags de HUD (`HealthBar`, `Minimap`, …) entram como IR genérica
