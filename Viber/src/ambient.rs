@@ -34,12 +34,29 @@ use crate::player::Player;
 /// de ponto (a luz continua a iluminar).
 pub const SHADOW_LIGHT_BUDGET: usize = 12;
 
-/// Orçamento efectivo: `VIBER_SHADOW_LIGHTS` ou [`SHADOW_LIGHT_BUDGET`].
+/// Orçamento efectivo: `VIBER_SHADOW_LIGHTS` ou [`SHADOW_LIGHT_BUDGET`]
+/// limitado pelo tier de qualidade ([`set_quality_shadow_cap`]).
 pub fn shadow_light_budget() -> usize {
     std::env::var("VIBER_SHADOW_LIGHTS")
         .ok()
         .and_then(|raw| raw.parse::<usize>().ok())
-        .unwrap_or(SHADOW_LIGHT_BUDGET)
+        .unwrap_or_else(|| {
+            SHADOW_LIGHT_BUDGET.min(QUALITY_SHADOW_CAP.load(std::sync::atomic::Ordering::Relaxed))
+        })
+}
+
+/// Teto do orçamento de sombras de ponto imposto por `<AdaptiveQuality>`
+/// (`usize::MAX` = sem teto). O env `VIBER_SHADOW_LIGHTS` ganha-lhe: é o A/B
+/// explícito de quem mede.
+static QUALITY_SHADOW_CAP: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(usize::MAX);
+
+/// Troca o teto do tier de qualidade (`None` = orçamento cheio).
+pub fn set_quality_shadow_cap(cap: Option<usize>) {
+    QUALITY_SHADOW_CAP.store(
+        cap.unwrap_or(usize::MAX),
+        std::sync::atomic::Ordering::Relaxed,
+    );
 }
 
 /// Distância máxima (m) a que uma PointLight ainda ganha shadow map, medida
