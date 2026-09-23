@@ -319,17 +319,19 @@ fn options_system(
     mut stats: Option<ResMut<PlayerStatsResource>>,
     mut progress: ResMut<LevelProgress>,
     // Um único param (tuplo) — o sistema já usa os 16 slots do Bevy; o
-    // estado de jogo Lua (`viber.game()`, sincronizado no save/load) e o
-    // pedido de script (`viber.save/load`) entram aqui para não estourar o
-    // teto.
+    // estado de jogo Lua (`viber.game()`, sincronizado no save/load), o
+    // pedido de script (`viber.save/load`) e os commands da chegada do herói
+    // entram aqui para não estourar o teto.
     mut world_save_host_request: (
         Option<Res<WorldBaseDir>>,
         Option<Res<SaveDir>>,
         Option<ResMut<crate::luau::LuaScriptHost>>,
         Option<ResMut<SaveRequest>>,
+        Commands,
     ),
     mut heroes: Query<
         (
+            Entity,
             &mut Transform,
             &mut Player,
             Option<&mut Health>,
@@ -409,7 +411,7 @@ fn options_system(
         let hero_state = heroes
             .single_mut()
             .ok()
-            .map(|(t, _player, hp, xp, level, _xp_level)| {
+            .map(|(_, t, _player, hp, xp, level, _xp_level)| {
                 (
                     // Sem `Health`/`Xp` (preset `none`): defaults — o mundo
                     // não tem vitais, o save é mesmo assim coerente.
@@ -477,7 +479,7 @@ fn options_system(
                 if let Some(host) = host.as_deref_mut() {
                     crate::luau::game::json_to_game(&host.lua, &game.world_kv);
                 }
-                if let Ok((mut transform, mut player, mut hp, mut xp, level, xp_level)) =
+                if let Ok((entity, mut transform, mut player, mut hp, mut xp, level, xp_level)) =
                     heroes.single_mut()
                 {
                     // Passivas do save aplicadas ao herói (HP máx + speed)
@@ -499,6 +501,19 @@ fn options_system(
                     // o herói fica onde está.
                     if game.position.iter().all(|v| v.is_finite()) {
                         transform.translation = game.position.into();
+                        // Chegada limpa (sem inércia/knockback da sessão, com
+                        // a tutela enquanto a coluna do save assa o collider).
+                        crate::player::settle_after_teleport(
+                            &mut world_save_host_request.4,
+                            entity,
+                            Some(&mut *player),
+                        );
+                    }
+                    // Carregar vivo a meio da queda em combate: o `Dying`
+                    // pendente fazia o respawn teleportar o herói (e emitir
+                    // `player_died`) segundos depois do load.
+                    if hp.as_deref().is_none_or(|hp| hp.current > 0.0) {
+                        world_save_host_request.4.entity(entity).remove::<crate::feedback::Dying>();
                     }
                     if let Some(mut level) = level {
                         level.level = game.level;

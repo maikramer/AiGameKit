@@ -78,17 +78,20 @@ pub fn radial_strength(distance: f32, radius: f32, strength: f32) -> Option<f32>
 ///
 /// - Cadáveres (`Corpse`) ficam de fora: mortos por strike/bomba no MESMO
 ///   frame tinham o `Knockback` inserido por cima da animação de morte.
-/// - O HERÓI não leva Y-slam (`translation.y = superfície`): um empurrão a
-///   meio de um salto sentava-o no chão de repente — a locomoção dele trata
-///   do Y sozinha. Criaturas continuam a assentar na superfície renderizada.
+/// - O HERÓI só tem o knockback DECAÍDO aqui: o deslocamento entra no
+///   pedido do character controller em [`crate::player::player_movement`]
+///   (escrito no Transform atravessava paredes; um Y-slam a meio de um salto
+///   sentava-o no chão). Criaturas assentam na superfície sob elas.
 /// - XZ clampado ao disco do [`crate::worldsys::WorldBorderConfig`] (a mesma
 ///   matemática de `worldsys::world_border_clamp`): o empurrão não pode
-///   expulsar ninguém do mundo.
+///   expulsar ninguém do mundo — excepto dentro da bolsa de interior, que
+///   vive declaradamente fora do disco (o clamp teleportava para o vale).
 #[allow(clippy::type_complexity)]
 fn knockback_system(
     time: Res<Time>,
     terrain: Option<Res<TerrainRuntime>>,
     border: Option<Res<crate::worldsys::WorldBorderConfig>>,
+    interior: Option<Res<crate::worldsys::InteriorSceneConfig>>,
     mut knocked: Query<
         (
             Entity,
@@ -111,7 +114,13 @@ fn knockback_system(
             knockback.velocity = Vec3::ZERO;
             commands.entity(entity).remove::<Knockback>();
         }
-        if let Some(limit) = limit {
+        if player.is_some() {
+            continue;
+        }
+        let in_interior = interior
+            .as_deref()
+            .is_some_and(|scene| scene.contains(transform.translation.x, transform.translation.z));
+        if let Some(limit) = limit.filter(|_| !in_interior) {
             let dist_sq = x * x + z * z;
             if dist_sq > limit * limit {
                 let scale = limit / dist_sq.sqrt();
@@ -120,15 +129,7 @@ fn knockback_system(
             }
         }
         if let Some(terrain) = terrain.as_deref() {
-            // Piso SOB o atingido (Y conhecido → surface_below): o knockback
-            // sob um cliff/arco fica SOB a rocha em vez de saltar para o
-            // topo. Sem piso conhecido (enterrado) mantém a paridade com os
-            // spawners: superfície renderizada.
-            if player.is_none() {
-                transform.translation.y = terrain
-                    .surface_below(x, z, transform.translation.y + crate::player::GROUND_PROBE)
-                    .unwrap_or_else(|| terrain.sample_mesh_surface(x, z));
-            }
+            transform.translation.y = crate::player::ground_near(terrain, x, z, transform.translation.y);
         }
         transform.translation.x = x;
         transform.translation.z = z;
@@ -258,7 +259,8 @@ mod tests {
     }
 
     /// R2-G5a: o HERÓI não leva Y-slam — com terreno REAL na app (o caminho
-    /// do slam ativo), o Y entra e sai intacto; XZ desloca na mesma.
+    /// do slam ativo), o Transform dele fica intacto (o deslocamento entra
+    /// pelo character controller no `player_movement`) e o knockback decai.
     #[test]
     fn test_knockback_keeps_player_y_headless() {
         use std::sync::Arc;
@@ -321,12 +323,9 @@ mod tests {
         app.update();
 
         let hero_t = app.world().get::<Transform>(hero).unwrap().translation;
-        assert!(
-            (hero_t.y - 3.5).abs() < 1e-5,
-            "Y do herói intocado: {}",
-            hero_t.y
-        );
-        assert!(hero_t.x > 10.0, "XZ do herói desloca: {hero_t:?}");
+        assert_eq!(hero_t, Vec3::new(10.0, 3.5, 10.0), "Transform do herói intocado");
+        let hero_kb = app.world().get::<Knockback>(hero).unwrap().velocity;
+        assert!(hero_kb.x < 2.0 && hero_kb.x > 0.0, "knockback do herói decai: {hero_kb:?}");
         let prop_t = app.world().get::<Transform>(prop).unwrap().translation;
         let ground = app
             .world()

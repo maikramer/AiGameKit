@@ -728,7 +728,7 @@ fn travel_fade_system(
     time: Res<Time>,
     mut fade: ResMut<TravelFade>,
     mut overlay: Query<(&mut BackgroundColor, &mut Visibility), With<TravelFadeOverlay>>,
-    mut heroes: Query<(&mut Transform, &mut Player), With<Player>>,
+    mut heroes: Query<(Entity, &mut Transform, &mut Player), With<Player>>,
     mut commands: Commands,
 ) {
     if fade.phase == TravelFadePhase::Idle {
@@ -737,12 +737,12 @@ fn travel_fade_system(
     let (alpha, arrived) = travel_fade_step(&mut fade, time.delta_secs());
     if arrived {
         if let Some(target) = fade.target {
-            if let Ok((mut transform, mut player)) = heroes.single_mut() {
+            if let Ok((entity, mut transform, mut player)) = heroes.single_mut() {
                 transform.translation = target;
-                // Chegada limpa: sem arrastar a inércia do trajeto antigo.
-                player.vel_x = 0.0;
-                player.vel_z = 0.0;
-                player.vel_y = 0.0;
+                // Chegada limpa: sem a inércia do trajeto antigo e com a
+                // tutela pós-teleporte (o marco fica longe — a coluna de
+                // destino pode ainda estar a assar o collider).
+                crate::player::settle_after_teleport(&mut commands, entity, Some(&mut *player));
             }
             {
                 // Poeira de aterragem — visível quando o fade abre.
@@ -889,17 +889,18 @@ fn enemy_registry_system(
 
 fn quest_debug_landmark(
     keys: Res<ButtonInput<KeyCode>>,
-    mut players: Query<(Entity, &GlobalTransform, &mut Transform), With<Player>>,
+    mut players: Query<(Entity, &GlobalTransform, &mut Transform, &mut Player), With<Player>>,
     named: Query<(&Name, &GlobalTransform)>,
     catalog: Res<LandmarkCatalog>,
     nota: Res<NotaLog>,
     terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     mut toasts: MessageWriter<ScriptToast>,
+    mut commands: Commands,
 ) {
     if !keys.just_pressed(KeyCode::F11) {
         return;
     }
-    let Ok((_pe, player_global, mut transform)) = players.single_mut() else {
+    let Ok((entity, player_global, mut transform, mut player)) = players.single_mut() else {
         return;
     };
     let player_pos = player_global.translation();
@@ -928,6 +929,7 @@ fn quest_debug_landmark(
         .map(|t| t.sample_mesh_surface(x, z))
         .unwrap_or(target.1.y);
     transform.translation = Vec3::new(x, y + 0.1, z);
+    crate::player::settle_after_teleport(&mut commands, entity, Some(&mut *player));
     toasts.write(ScriptToast(format!("QA: teleport ao marco {}", target.0)));
 }
 

@@ -17,7 +17,7 @@ use bevy::prelude::*;
 
 use crate::economy::Vault;
 use crate::feedback::{AttackAlert, DamageNumberEvent, Invulnerable};
-use crate::luau::{LuaScriptRef, ScriptInteraction, ScriptToast};
+use crate::luau::{LuaScriptRef, ScriptToast};
 use crate::player::Player;
 use crate::profiler::{Group, timed};
 use crate::quests::QuestLog;
@@ -139,7 +139,7 @@ pub const SKILLS: [SkillDef; 8] = [
 ];
 
 /// Bónus agregados das passivas aprendidas.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PlayerStats {
     pub bonus_damage: f32,
     pub speed_mult: f32,
@@ -147,12 +147,23 @@ pub struct PlayerStats {
     pub crit_bonus: f32,
 }
 
+/// O neutro é `speed_mult = 1` (sem passivas): os deltas dividem pela speed
+/// anterior, e um 0 derivado congelava o herói (reset) ou multiplicava-o
+/// por 1/ε (primeira compra de agilidade num jogo novo).
+impl Default for PlayerStats {
+    fn default() -> Self {
+        Self {
+            bonus_damage: 0.0,
+            speed_mult: 1.0,
+            max_hp_bonus: 0.0,
+            crit_bonus: 0.0,
+        }
+    }
+}
+
 /// Puro: bónus a partir dos ids aprendidos.
 pub fn stats_from_learned(learned: &[String]) -> PlayerStats {
-    let mut stats = PlayerStats {
-        speed_mult: 1.0,
-        ..Default::default()
-    };
+    let mut stats = PlayerStats::default();
     for id in learned {
         if let Some(def) = SKILLS.iter().find(|s| s.id == id) {
             match def.effect {
@@ -525,10 +536,13 @@ pub fn abilities_system(
             &mut Transform,
             Option<&mut Health>,
         ),
-        With<Player>,
+        // Herói a cair em combate não dasha, cura nem golpeia (os cooldowns
+        // continuam a correr).
+        (With<Player>, Without<crate::feedback::Dying>),
     >,
-    interactions: Query<(&GlobalTransform, &ScriptInteraction), Without<Player>>,
-    npcs: Query<&GlobalTransform, (With<crate::recipes::spawn::DialogueNpc>, Without<Player>)>,
+    // Arbitragem do [E] (`interact::InteractionFocus`): quem ganha a tecla
+    // é quem age — o mesmo alvo que o prompt mostra.
+    focus: Option<Res<crate::interact::InteractionFocus>>,
     mut creatures: Query<
         (
             Entity,
@@ -584,10 +598,7 @@ pub fn abilities_system(
         // superfície renderizada — o dash continua a cruzar obstáculos.
         let y = terrain
             .as_ref()
-            .map(|t| {
-                t.surface_below(x, z, pos.y + crate::player::GROUND_PROBE)
-                    .unwrap_or_else(|| t.sample_mesh_surface(x, z))
-            })
+            .map(|t| crate::player::ground_near(t, x, z, pos.y))
             .unwrap_or(pos.y);
         transform.translation = Vec3::new(x, y, z);
         commands.entity(entity).insert(Invulnerable {
@@ -605,13 +616,13 @@ pub fn abilities_system(
 
     // [E] cura — só quando NÃO há interação em alcance ([E] interagir ganha)
     if keys.just_pressed(KeyCode::KeyE) && cds.heal <= 0.0 {
-        // O [E] de interagir ganha: DialogueNPC (diálogo a 3,5 m, sem
-        // ScriptInteraction) e interações com range autoral > 3,5 m contam
-        // também — senão a cura saía AQUI e o diálogo/prompt em cima.
-        let near_interaction = npcs.iter().any(|t| t.translation().distance(pos) < 3.5)
-            || interactions
-                .iter()
-                .any(|(t, i)| t.translation().distance(pos) < i.range.max(3.5));
+        // O [E] de interagir ganha quando ALGUÉM ganha a tecla no foco
+        // (DialogueNPC ou ScriptInteraction de [E], com o alcance EFETIVO).
+        // Os 3,5 m fixos antigos (e props de [J] a contar) engoliam o [E] a
+        // 2–3 m de um NPC: nem diálogo (alcance 1,75 m) nem cura.
+        let near_interaction = focus
+            .as_deref()
+            .is_some_and(|focus| focus.winner(KeyCode::KeyE).is_some());
         if !near_interaction {
             if let Some(health) = health.as_mut() {
                 let healed = HEAL_ABILITY_AMOUNT.min(health.max - health.current);
@@ -644,6 +655,12 @@ pub fn abilities_system(
         let mut hit_any = false;
         let mut face_dir: Option<Vec3> = None;
         for (target, t, mut health, script, recoil) in creatures.iter_mut() {
+            // Já a 0 HP = morto neste frame por outra via (o `Corpse` fica
+            // pendente nos commands até ao fim do frame) — re-matá-lo dava
+            // XP, Kill e progresso de quest em dobro.
+            if health.current <= 0.0 {
+                continue;
+            }
             let delta = t.translation() - pos;
             let d = delta.length();
             if d > STRIKE_RADIUS {
@@ -877,6 +894,11 @@ fn bomb_step_system(
         let center = transform.translation;
         let mut kills: Vec<(Entity, Option<&LuaScriptRef>, Vec3)> = Vec::new();
         for (target, t, mut health, script, recoil) in creatures.iter_mut() {
+            // Duas bombas (ou bomba + golpe) no mesmo frame: o morto da
+            // primeira ainda não tem `Corpse` — sem isto o abate contava 2×.
+            if health.current <= 0.0 {
+                continue;
+            }
             let d = t.translation().distance(center);
             if let Some(dmg) = radial_damage(d, BOMB_RADIUS, BOMB_DAMAGE) {
                 apply_damage(&mut health, dmg);
@@ -947,8 +969,8 @@ fn bomb_step_system(
         );
         // knockback radial (loop 10): empurra as criaturas SOBREVIVENTES —
         // os abates deste frame (Corpse pendente) ficam de fora (R2-G7).
-        for (target, t, _health, _script, _recoil) in creatures.iter_mut() {
-            if killed_ids.contains(&target) {
+        for (target, t, health, _script, _recoil) in creatures.iter_mut() {
+            if killed_ids.contains(&target) || health.current <= 0.0 {
                 continue;
             }
             let delta = t.translation() - center;
