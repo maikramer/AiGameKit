@@ -28,12 +28,30 @@ use crate::skills::{LevelProgress, PlayerStatsResource, SkillTree};
 use crate::travel::NotaLog;
 use crate::vitals::{Health, Xp};
 
-/// Pasta do world.xml, capturada no startup — o save é prefixado por ela.
-/// NÃO usar `PendingTerrain` para isto: o bootstrap do terreno remove-o no
-/// Startup e a leitura em runtime devolvia sempre None (save global outra
-/// vez). Inserido por `recipes::spawn::startup`.
+/// Nome do save deste mundo ([`world_save_key`]), inserido pelo `run` a
+/// partir do caminho do world.xml; `None` = o nome global histórico.
 #[derive(Debug, Clone, Resource, Default)]
-pub struct WorldBaseDir(pub Option<std::path::PathBuf>);
+pub struct WorldSaveKey(pub Option<String>);
+
+/// Chave do save de um ficheiro de mundo: a pasta do jogo para `world.xml`
+/// (`simple-rpg/world.xml` → `simple-rpg`, o nome dos saves existentes) e
+/// `pasta-ficheiro` para os restantes — mundos irmãos na mesma pasta
+/// (`worlds/qa-agua.xml`, `worlds/qa-cliffs.xml`) deixam de partilhar o save.
+/// O caminho é tornado absoluto: `viber run world.xml` a partir da pasta do
+/// jogo tem `parent()` vazio e caía no nome global.
+pub fn world_save_key(world_file: &Path) -> Option<String> {
+    let abs = world_file
+        .canonicalize()
+        .or_else(|_| std::path::absolute(world_file))
+        .ok()?;
+    let dir = abs.parent()?.file_name()?.to_string_lossy().into_owned();
+    let stem = abs.file_stem()?.to_string_lossy().into_owned();
+    Some(if stem.eq_ignore_ascii_case("world") {
+        dir
+    } else {
+        format!("{dir}-{stem}")
+    })
+}
 
 /// Diretório de saves do `config.yaml` do jogo (`save.dir`); `None` = o
 /// histórico `~/.local/share/viber` (apps mínimas de teste).
@@ -50,13 +68,13 @@ pub fn save_path() -> PathBuf {
     save_path_for(None, None)
 }
 
-/// Caminho do save prefixado pelo mundo (`base_dir` = pasta do world.xml):
-/// gravar no mundo A e carregar no B nunca mais restaura o estado errado.
-/// Sem base_dir conhecida, cai no nome global histórico.
-pub fn save_path_for(base_dir: Option<&std::path::Path>, save_dir: Option<&Path>) -> PathBuf {
-    let name = base_dir
-        .and_then(|dir| dir.file_name())
-        .map(|world| format!("{}.save.json", world.to_string_lossy()))
+/// Caminho do save do mundo (`world_key` = [`world_save_key`]): gravar no
+/// mundo A e carregar no B nunca mais restaura o estado errado. Sem chave
+/// conhecida, cai no nome global histórico.
+pub fn save_path_for(world_key: Option<&str>, save_dir: Option<&Path>) -> PathBuf {
+    let name = world_key
+        .filter(|key| !key.is_empty())
+        .map(|key| format!("{key}.save.json"))
         .unwrap_or_else(|| SAVE_FILENAME.to_string());
     let dir = match save_dir.map(Path::to_path_buf) {
         Some(dir) => {
@@ -84,12 +102,16 @@ pub fn save_path_for(base_dir: Option<&std::path::Path>, save_dir: Option<&Path>
 pub struct SaveGame {
     // Campos nucleares com `#[serde(default)]`: um save antigo/parcial sem
     // `volumes`/`nota_marked`/`items`/… carrega em vez de ser recusado inteiro.
-    #[serde(default)]
-    pub xp: (u32, u32),
-    #[serde(default)]
-    pub health: (f32, f32),
-    #[serde(default)]
-    pub position: [f32; 3],
+    // XP, vitais, posição e volumes são `Option`: o zero do tipo matava o
+    // herói (health 0/0), punha-o na origem, parava os level-ups (next 0) e
+    // silenciava o áudio. Ausentes, o load mantém o estado da sessão; o JSON
+    // de `Some` é o mesmo array de sempre.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xp: Option<(u32, u32)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health: Option<(f32, f32)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<[f32; 3]>,
     #[serde(default)]
     pub gold: u32,
     #[serde(default)]
@@ -115,8 +137,8 @@ pub struct SaveGame {
     #[serde(default)]
     pub level: u32,
     /// Volumes (master, music, sfx) 0..=1.
-    #[serde(default)]
-    pub volumes: (f32, f32, f32),
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub volumes: Option<(f32, f32, f32)>,
     /// Estado de JOGO world-scoped do Luau (`viber.game()`), JSON plano
     /// (string/número/bool). É o gancho de persistência para lógica de jogo
     /// que vive em Lua — sem ele, scripts não conseguiam guardar nada.
@@ -142,9 +164,9 @@ pub fn capture(
     volumes: (f32, f32, f32),
 ) -> SaveGame {
     SaveGame {
-        xp,
-        health,
-        position,
+        xp: Some(xp),
+        health: Some(health),
+        position: Some(position),
         gold: vault.map(|v| v.gold).unwrap_or(0),
         wood: vault.map(|v| v.wood).unwrap_or(0),
         stone: vault.map(|v| v.stone).unwrap_or(0),
@@ -164,7 +186,7 @@ pub fn capture(
         skill_learned: tree.map(|t| t.learned.clone()).unwrap_or_default(),
         skill_points: tree.map(|t| t.points).unwrap_or(0),
         level,
-        volumes,
+        volumes: Some(volumes),
         world_kv: std::collections::BTreeMap::new(),
     }
 }
@@ -206,7 +228,7 @@ pub struct SavePlugin;
 impl Plugin for SavePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<OptionsRows>()
-            .init_resource::<WorldBaseDir>()
+            .init_resource::<WorldSaveKey>()
             .init_resource::<LevelProgress>()
             .init_resource::<SaveRequest>()
             .add_systems(Update, options_system);
@@ -255,7 +277,12 @@ pub fn apply_save(
         vault.items = game
             .items
             .iter()
-            .map(|(id, &n)| (crate::economy::normalize_item(id), n.min(99)))
+            .map(|(id, &n)| {
+                (
+                    crate::economy::normalize_item(id),
+                    n.min(crate::economy::MAX_ITEM_STACK),
+                )
+            })
             .collect();
     }
     if let Some(quests) = quests {
@@ -280,20 +307,23 @@ pub fn apply_save(
         stats.0 = crate::skills::stats_from_learned(&tree.learned);
     }
     // JSON editado/corrompido não pode pochar o mixer nem os vitals.
-    mixer.master = game.volumes.0.clamp(0.0, 1.0);
-    mixer.music = game.volumes.1.clamp(0.0, 1.0);
-    mixer.sfx = game.volumes.2.clamp(0.0, 1.0);
+    if let Some((master, music, sfx)) = game.volumes {
+        mixer.master = master.clamp(0.0, 1.0);
+        mixer.music = music.clamp(0.0, 1.0);
+        mixer.sfx = sfx.clamp(0.0, 1.0);
+    }
 }
 
 /// `XpLevel` que o load deve aplicar ao herói (R2-G4): nível e `last_next`
 /// vêm do save, para o `level_up_detector` (que compara `xp.next` ao
 /// `last_next`) ler o load como "já visto" em vez de fanfarrar um level-up
-/// espúrio com o nível errado. Puro para testes.
-pub fn saved_xp_level(game: &SaveGame) -> crate::vitals::XpLevel {
-    crate::vitals::XpLevel {
+/// espúrio com o nível errado. `None` sem XP no save (a sessão mantém o seu).
+/// Puro para testes.
+pub fn saved_xp_level(game: &SaveGame) -> Option<crate::vitals::XpLevel> {
+    game.xp.map(|(_, next)| crate::vitals::XpLevel {
         level: game.level,
-        last_next: game.xp.1,
-    }
+        last_next: next,
+    })
 }
 
 /// Opções e gravação: linhas ↑↓, volumes ←→, [J] grava, [L] carrega — e os
@@ -323,7 +353,7 @@ fn options_system(
     // pedido de script (`viber.save/load`) e os commands da chegada do herói
     // entram aqui para não estourar o teto.
     mut world_save_host_request: (
-        Option<Res<WorldBaseDir>>,
+        Option<Res<WorldSaveKey>>,
         Option<Res<SaveDir>>,
         Option<ResMut<crate::luau::LuaScriptHost>>,
         Option<ResMut<SaveRequest>>,
@@ -395,7 +425,7 @@ fn options_system(
             }
         }
     }
-    let base_dir = world_save_host_request
+    let world_key = world_save_host_request
         .0
         .as_deref()
         .and_then(|w| w.0.as_deref());
@@ -437,7 +467,7 @@ fn options_system(
             if let Some(host) = host.as_deref_mut() {
                 game.world_kv = crate::luau::game::game_to_json(&host.lua);
             }
-            if let Err(e) = save_to_disk(&save_path_for(base_dir, save_dir), &game) {
+            if let Err(e) = save_to_disk(&save_path_for(world_key, save_dir), &game) {
                 toasts.write(ScriptToast(format!("Falha ao gravar: {e}")));
                 sfx.write(crate::ambient::SfxEvent {
                     clip: crate::ambient::SfxClip::Error,
@@ -459,7 +489,7 @@ fn options_system(
         }
     }
     if (on_system_tab && keys.just_pressed(KeyCode::KeyL)) || load_requested {
-        match load_from_disk(&save_path_for(base_dir, save_dir)) {
+        match load_from_disk(&save_path_for(world_key, save_dir)) {
             Ok(game) => {
                 // Stats PRÉVIO capturado ANTES de apply_save o substituir —
                 // o delta tem de ser sessão→save; capturar depois (quando
@@ -488,19 +518,19 @@ fn options_system(
                     if let (Some(hp), Some(stats)) = (hp.as_deref_mut(), stats.as_deref()) {
                         crate::skills::apply_passive_delta(hp, &mut player, &previous, &stats.0);
                     }
-                    if let Some(hp) = hp.as_deref_mut() {
-                        hp.max = game.health.1.max(1.0);
-                        hp.current = game.health.0.clamp(0.0, hp.max);
+                    if let (Some(hp), Some((current, max))) = (hp.as_deref_mut(), game.health) {
+                        hp.max = max.max(1.0);
+                        hp.current = current.clamp(0.0, hp.max);
                     }
-                    if let Some(xp) = xp.as_deref_mut() {
-                        xp.current = game.xp.0;
-                        xp.next = game.xp.1;
+                    if let (Some(xp), Some((current, next))) = (xp.as_deref_mut(), game.xp) {
+                        xp.current = current;
+                        xp.next = next;
                     }
                     // Posição não finita (save editado com `1e40`, etc.) não
                     // entra na transform — virava NaN em cascata no Rapier;
                     // o herói fica onde está.
-                    if game.position.iter().all(|v| v.is_finite()) {
-                        transform.translation = game.position.into();
+                    if let Some(position) = game.position.filter(|p| p.iter().all(|v| v.is_finite())) {
+                        transform.translation = position.into();
                         // Chegada limpa (sem inércia/knockback da sessão, com
                         // a tutela enquanto a coluna do save assa o collider).
                         crate::player::settle_after_teleport(
@@ -527,13 +557,15 @@ fn options_system(
                     // impossível — existe desde o 1.º sighting do herói),
                     // o detector insere baseline silencioso com o next do
                     // save: também não fanfarra.
-                    if let Some(mut xp_level) = xp_level {
-                        *xp_level = saved_xp_level(&game);
+                    if let (Some(mut xp_level), Some(saved)) = (xp_level, saved_xp_level(&game)) {
+                        *xp_level = saved;
                     }
                 }
                 // Carregar um save com xp.next maior não pode creditar
                 // pontos de nível grátis no level_system.
-                progress.previous_next = Some(game.xp.1);
+                if let Some((_, next)) = game.xp {
+                    progress.previous_next = Some(next);
+                }
                 toasts.write(ScriptToast("Jogo carregado.".into()));
                 sfx.write(crate::ambient::SfxEvent {
                     clip: crate::ambient::SfxClip::Load,
@@ -561,10 +593,10 @@ mod tests {
     fn test_saved_xp_level_keeps_detector_silent() {
         let game = SaveGame {
             level: 4,
-            xp: (12, 338),
+            xp: Some((12, 338)),
             ..Default::default()
         };
-        let synced = saved_xp_level(&game);
+        let synced = saved_xp_level(&game).expect("xp no save");
         assert_eq!(synced.level, 4);
         assert_eq!(synced.last_next, 338);
         // Detector a seguir ao load: next (338) == last_next (338) → sem
@@ -638,8 +670,56 @@ mod tests {
         assert!(tree2.learned.contains(&"vitality1".to_string()));
         assert!(stats2.0.max_hp_bonus > 0.0);
         // XP/posição ficam por conta do chamador (teste do JSON):
-        assert_eq!(loaded.xp, (30, 150));
-        assert_eq!(loaded.position, [12.0, 25.0, -8.0]);
+        assert_eq!(loaded.xp, Some((30, 150)));
+        assert_eq!(loaded.position, Some([12.0, 25.0, -8.0]));
+        // O JSON de `Some` é o array de sempre (saves legíveis nos dois
+        // sentidos).
+        assert!(json.contains("\"xp\":[30,150]"), "{json}");
+    }
+
+    /// Save parcial sem vitais/XP/posição/volumes: o load mantém o estado da
+    /// sessão em vez de o zero do tipo (herói morto na origem e mudo).
+    #[test]
+    fn test_partial_save_keeps_session_state() {
+        let loaded: SaveGame = serde_json::from_str(r#"{ "gold": 5 }"#).unwrap();
+        assert_eq!(loaded.health, None);
+        assert_eq!(loaded.xp, None);
+        assert_eq!(loaded.position, None);
+        assert!(saved_xp_level(&loaded).is_none());
+        let mut mixer = AudioMixerSettings {
+            master: 0.6,
+            music: 0.4,
+            sfx: 0.8,
+        };
+        apply_save(&loaded, None, None, None, &mut mixer, None, None);
+        assert_eq!((mixer.master, mixer.music, mixer.sfx), (0.6, 0.4, 0.8));
+    }
+
+    /// A chave é por ficheiro de mundo: `world.xml` fica com o nome da pasta
+    /// (saves existentes) e irmãos na mesma pasta não colidem.
+    #[test]
+    fn test_world_save_key_per_world_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path().join("meu-jogo");
+        std::fs::create_dir_all(&game).unwrap();
+        for name in ["world.xml", "qa-agua.xml", "qa-cliffs.xml"] {
+            std::fs::write(game.join(name), "<world/>").unwrap();
+        }
+        assert_eq!(world_save_key(&game.join("world.xml")).as_deref(), Some("meu-jogo"));
+        assert_eq!(
+            world_save_key(&game.join("qa-agua.xml")).as_deref(),
+            Some("meu-jogo-qa-agua")
+        );
+        assert_ne!(
+            world_save_key(&game.join("qa-agua.xml")),
+            world_save_key(&game.join("qa-cliffs.xml"))
+        );
+        let save = save_path_for(Some("meu-jogo-qa-agua"), Some(dir.path()));
+        assert_eq!(save, dir.path().join("meu-jogo-qa-agua.save.json"));
+        assert_eq!(
+            save_path_for(None, Some(dir.path())),
+            dir.path().join(SAVE_FILENAME)
+        );
     }
 
     /// Um save antigo (sem campos de skills) carrega sem falhar.
@@ -699,7 +779,6 @@ mod tests {
         std::fs::remove_file(&path).ok();
         std::fs::remove_dir(&tmp).ok();
     }
-}
 
     /// Preset `gameplay: none`: sem Vault/QuestLog/Nota/SkillTree o capture
     /// grava os campos por omissão e o `world_kv` viaja — é a promessa do
@@ -728,7 +807,7 @@ mod tests {
         let mut mixer = AudioMixerSettings::default();
         apply_save(&loaded, None, None, None, &mut mixer, None, None);
         assert_eq!(loaded.world_kv.get("score"), Some(&serde_json::json!(4)));
-        assert_eq!(loaded.position, [3.0, 1.5, -2.0]);
+        assert_eq!(loaded.position, Some([3.0, 1.5, -2.0]));
         assert!((mixer.master - 1.0).abs() < 1e-6);
     }
 
@@ -750,3 +829,4 @@ mod tests {
         assert_eq!(loaded.world_kv.get("score"), Some(&serde_json::json!(9)));
         assert!((mixer.master - 0.5).abs() < 1e-6);
     }
+}

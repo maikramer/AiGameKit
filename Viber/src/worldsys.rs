@@ -64,19 +64,25 @@ impl DayCycleState {
 }
 
 /// Daylight factor `0.0` (night) → `1.0` (day) with 60-minute dawn/dusk ramps.
+///
+/// Circular over the 24 h clock: a dawn at 00:30 starts its ramp at 23:30
+/// and a dusk at 23:40 keeps fading past midnight (the linear version jumped
+/// to half light at 00:00).
 pub fn daylight_factor(minute: f32, dawn: f32, dusk: f32) -> f32 {
     const RAMP: f32 = 60.0;
-    if minute < dawn - RAMP {
-        0.0
-    } else if minute < dawn {
-        (minute - (dawn - RAMP)) / RAMP
-    } else if minute < dusk {
-        1.0
-    } else if minute < dusk + RAMP {
-        1.0 - (minute - dusk) / RAMP
-    } else {
-        0.0
+    const DAY: f32 = 24.0 * 60.0;
+    let day_len = dusk - dawn;
+    if day_len >= DAY {
+        return 1.0;
     }
+    let day_len = day_len.max(0.0);
+    let since_dawn = (minute - dawn).rem_euclid(DAY);
+    if since_dawn < day_len {
+        return 1.0;
+    }
+    let fade_out = 1.0 - (since_dawn - day_len) / RAMP;
+    let fade_in = 1.0 - (DAY - since_dawn) / RAMP;
+    fade_out.max(fade_in).clamp(0.0, 1.0)
 }
 
 /// `<Weather>` wind/cloud/rain config.
@@ -950,8 +956,10 @@ pub fn daycycle_drive(
     // minutes_per_real_second é MINUTOS de jogo por segundo real (default
     // 1.2 → dia de 20 min): o /60 antigo tratava-o como fração de segundo
     // e o dia durava ~20 h — o dusk autoral nunca chegava numa sessão.
-    clock.minute_of_day =
-        (clock.minute_of_day + clock.minutes_per_real_second * time.delta_secs()) % (24.0 * 60.0);
+    // rem_euclid: um relógio a andar para trás (velocidade negativa) ficava
+    // com minutos negativos e o sol/rampas liam noite eterna.
+    clock.minute_of_day = (clock.minute_of_day + clock.minutes_per_real_second * time.delta_secs())
+        .rem_euclid(24.0 * 60.0);
     if !clock.drive_ambient {
         return;
     }
@@ -1438,6 +1446,20 @@ mod tests {
         let mid = daylight_factor(300.0, 330.0, 1170.0); // dawn ramp
         assert!((0.0..1.0).contains(&mid));
         assert_eq!(daylight_factor(1231.0, 330.0, 1170.0), 0.0); // after dusk ramp
+    }
+
+    /// Rampas que atravessam a meia-noite são contínuas (sem salto às 00:00).
+    #[test]
+    fn test_daylight_factor_wraps_midnight() {
+        // dawn 00:30 → a rampa começa às 23:30 do dia anterior.
+        let before = daylight_factor(1439.9, 30.0, 1170.0);
+        let after = daylight_factor(0.0, 30.0, 1170.0);
+        assert!((before - 0.5).abs() < 0.01 && (after - 0.5).abs() < 0.01, "{before} {after}");
+        assert!((daylight_factor(1410.0, 30.0, 1170.0) - 0.0).abs() < 1e-6);
+        // dusk 23:40 → ainda a escurecer às 00:10.
+        let fading = daylight_factor(10.0, 330.0, 1420.0);
+        assert!((fading - 0.5).abs() < 1e-4, "{fading}");
+        assert_eq!(daylight_factor(700.0, 0.0, 1440.0), 1.0, "dia inteiro");
     }
 
     /// dawn/dusk degenerados nunca produzem NaN/inf no arco solar — o NaN

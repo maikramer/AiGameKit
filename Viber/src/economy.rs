@@ -34,6 +34,9 @@ pub const STARTING_GOLD: u32 = 30;
 /// Poções iniciais do herói: 1 uso imediato da hotbar [1].
 pub const STARTING_POTIONS: u32 = 1;
 
+/// Teto de uma pilha de item no inventário.
+pub const MAX_ITEM_STACK: u32 = 99;
+
 // ── vault ───────────────────────────────────────────────────────────────
 
 /// Recursos + inventário do herói.
@@ -68,12 +71,13 @@ impl Vault {
         }
     }
 
-    /// Adiciona `amount` unidades de um item (max stack 99, como no TS).
+    /// Adiciona `amount` unidades de um item (max stack [`MAX_ITEM_STACK`],
+    /// como no TS).
     pub fn item_add(&mut self, id: &str, amount: u32) {
         let entry = self.items.entry(normalize_item(id)).or_default();
         // saturating: um entry alto vindo de save corrompido não pode dar
         // overflow (panic em dev/test, wrap em release) antes do `.min`.
-        *entry = entry.saturating_add(amount).min(99);
+        *entry = entry.saturating_add(amount).min(MAX_ITEM_STACK);
     }
 
     pub fn item_count(&self, id: &str) -> u32 {

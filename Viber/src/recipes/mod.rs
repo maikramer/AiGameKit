@@ -2562,6 +2562,18 @@ fn finish_daycycle(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
         }
     }
+    const DAY_MINUTES: f32 = 24.0 * 60.0;
+    c.minute_of_day = c.minute_of_day.rem_euclid(DAY_MINUTES);
+    // Os arcos do sol e a rampa de luz assumem 0 ≤ dawn < dusk ≤ 1440; fora
+    // disso o dia media 1 minuto e o sol saltava.
+    if !(0.0 <= c.dawn_minute && c.dawn_minute < c.dusk_minute && c.dusk_minute <= DAY_MINUTES) {
+        ctx.warnings.push(format!(
+            "{ctx_tag}: dawn-minute ({}) must be before dusk-minute ({}) within 0..1440 — using 330/1170",
+            c.dawn_minute, c.dusk_minute
+        ));
+        c.dawn_minute = 330.0;
+        c.dusk_minute = 1170.0;
+    }
     Ok(EntitySpec {
         name: common.name,
         tag: common.tag,
@@ -5374,6 +5386,39 @@ mod tests {
         // Default ON: árvores/pedras/props fora do leito das estradas
         // (VibeGame perfis tree/foliage/creature); `avoid-road="0"` liga.
         assert!(spec.avoid_road, "avoid-road defaults ON");
+    }
+
+    /// dawn ≥ dusk (ou fora do dia) avisa e volta aos defaults; o minuto
+    /// inicial é normalizado ao relógio de 24 h.
+    #[test]
+    fn test_daycycle_rejects_inverted_dawn_dusk_and_wraps_start() {
+        let (spec, w) = parse_one(&node(
+            "DayCycle",
+            &[
+                ("dawn-minute", "1200"),
+                ("dusk-minute", "300"),
+                ("minute-of-day", "-60"),
+            ],
+        ))
+        .unwrap();
+        let EntityKind::DayCycle {
+            minute_of_day,
+            dawn_minute,
+            dusk_minute,
+            ..
+        } = spec.kind
+        else {
+            panic!("expected DayCycle");
+        };
+        assert_eq!((dawn_minute, dusk_minute), (330.0, 1170.0));
+        assert_eq!(minute_of_day, 1380.0);
+        assert!(w.iter().any(|m| m.contains("must be before dusk-minute")), "{w:?}");
+        let (_, w) = parse_one(&node(
+            "DayCycle",
+            &[("dawn-minute", "20"), ("dusk-minute", "1430")],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
     }
 
     /// `src` vira ficheiro; o texto inline fica CSS mesmo abrindo com `@`.

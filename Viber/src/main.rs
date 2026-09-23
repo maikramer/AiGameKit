@@ -1087,6 +1087,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             path.display()
         );
     }
+    app.insert_resource(save::WorldSaveKey(save::world_save_key(path)));
     app.insert_resource(PendingWorld {
         world,
         base_dir: world_base_dir(path),

@@ -404,9 +404,7 @@ pub fn startup(world: &mut World) {
     if !catalogs.spawn_points.is_empty() {
         world.insert_resource(crate::feedback::RespawnCatalog(catalogs.spawn_points));
     }
-    // O save por-mundo precisa da pasta do world.xml DEPOIS de o bootstrap
-    // do terreno remover `PendingTerrain` (save.rs::WorldBaseDir).
-    world.insert_resource(crate::save::WorldBaseDir(pending.base_dir));
+
     // Prototypes para spawn em runtime (viber.spawn_prototype) — o WorldIR
     // morre aqui; a biblioteca sobrevive.
     world.insert_resource(PrototypeLibrary(parsed.prototypes.clone()));

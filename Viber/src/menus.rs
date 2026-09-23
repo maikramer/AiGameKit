@@ -470,6 +470,9 @@ pub enum ShopAction {
     Sold { item: String, earned: u32 },
     OutOfStock { item: String },
     CannotAfford { item: String, price: u32 },
+    /// A pilha não leva a quantidade inteira — cobrar e cortar no teto
+    /// deitava o ouro fora.
+    StackFull { item: String },
     Nothing,
 }
 
@@ -480,6 +483,11 @@ pub fn shop_apply(vault: &mut Vault, index: usize) -> ShopAction {
         return ShopAction::Nothing;
     };
     if *price >= 0 {
+        if vault.item_count(key).saturating_add(*amount) > crate::economy::MAX_ITEM_STACK {
+            return ShopAction::StackFull {
+                item: label.to_string(),
+            };
+        }
         if vault.gold < *price as u32 {
             return ShopAction::CannotAfford {
                 item: label.to_string(),
@@ -764,6 +772,22 @@ mod tests {
         }
         assert_eq!(vault.gold, 10);
         assert_eq!(vault.stone, 1);
+    }
+
+    /// Pilha cheia: a compra é recusada sem cobrar.
+    #[test]
+    fn test_shop_refuses_full_stack_without_charging() {
+        let mut vault = Vault {
+            gold: 100,
+            ..Vault::default()
+        };
+        vault.item_add("potion", crate::economy::MAX_ITEM_STACK);
+        assert!(matches!(
+            shop_apply(&mut vault, 0),
+            ShopAction::StackFull { .. }
+        ));
+        assert_eq!(vault.gold, 100, "ouro intacto");
+        assert_eq!(vault.item_count("potion"), crate::economy::MAX_ITEM_STACK);
     }
 
     #[test]

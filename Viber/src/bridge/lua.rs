@@ -1889,13 +1889,13 @@ fn build_waypoints(world: &World) -> WaypointInfo {
 }
 
 fn build_save(world: &World) -> Option<SaveInfo> {
-    let base_dir = world
-        .get_resource::<crate::save::WorldBaseDir>()
+    let world_key = world
+        .get_resource::<crate::save::WorldSaveKey>()
         .and_then(|w| w.0.as_deref());
     let save_dir = world
         .get_resource::<crate::save::SaveDir>()
         .and_then(|d| d.0.as_deref());
-    let path = crate::save::save_path_for(base_dir, save_dir);
+    let path = crate::save::save_path_for(world_key, save_dir);
     let meta = std::fs::metadata(&path).ok();
     Some(SaveInfo {
         path: path.display().to_string(),

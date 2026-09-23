@@ -237,7 +237,9 @@ impl QuestLog {
 
     /// Aceita (NotTaken → Active). `false` se não existe ou já está ativa/feita.
     pub fn accept(&mut self, id: &str) -> bool {
-        if self.status(id, None) != QuestStatus::NotTaken {
+        // Sem def o status fica NotTaken para sempre: o estado órfão era
+        // "aceite" de novo a cada chamada (toast/SFX/evento repetidos).
+        if self.def(id).is_none() || self.status(id, None) != QuestStatus::NotTaken {
             return false;
         }
         self.states.insert(id.into(), ActiveQuest::default());
@@ -653,7 +655,10 @@ fn quest_dialogue_system(
     info!(target: "viber::quests", "diálogo [E] com '{id}' — estado {}", crate::quests::status_name(log.status(&id, vault_ref)));
     let body: String = match log.status(&id, vault.as_deref()) {
         QuestStatus::NotTaken => {
-            log.accept(&id);
+            if !log.accept(&id) {
+                debug!(target: "viber::quests", "diálogo '{id}' sem quest definida — nada a aceitar");
+                return;
+            }
             info!(target: "viber::quests", "quest '{id}' aceita via diálogo");
             sfx.write(crate::ambient::SfxEvent {
                 clip: crate::ambient::SfxClip::QuestAccept,
@@ -1168,6 +1173,9 @@ mod tests {
     fn test_kill_quest_lifecycle() {
         let mut log = log();
         assert_eq!(log.status("forest_wolves", None), QuestStatus::NotTaken);
+        assert!(!log.accept("no_such_quest"), "sem def não há o que aceitar");
+        assert!(log.status("no_such_quest", None) == QuestStatus::NotTaken);
+        assert!(!log.states.contains_key("no_such_quest"));
         assert!(log.accept("forest_wolves"));
         assert_eq!(log.status("forest_wolves", None), QuestStatus::Active);
         // aceitar duas vezes falha
