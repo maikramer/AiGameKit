@@ -43,6 +43,9 @@ pub struct XmlDocument {
     /// Root tag, lowercased (`world`, `scene`, …).
     pub root_tag: String,
     pub root_attrs: Vec<(String, String)>,
+    /// Root's own text — a single-root include fragment (`<UiStyle>` with
+    /// inline CSS) keeps it when unwrapped into a node.
+    pub root_text: String,
     pub children: Vec<XmlNode>,
 }
 
@@ -78,6 +81,7 @@ fn parse_str_with_context(src: &str, path: &Path) -> Result<XmlDocument> {
     Ok(XmlDocument {
         root_tag: root.tag_name().name().to_ascii_lowercase(),
         root_attrs: collect_attrs(root),
+        root_text: collect_text(root),
         children: collect_children(root)?,
     })
 }

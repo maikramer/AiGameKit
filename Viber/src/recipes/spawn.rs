@@ -666,7 +666,7 @@ struct SpawnCtx<'a> {
     /// Deferred HUD screen elements (tag + raw attrs).
     hud: std::cell::RefCell<HudList>,
     /// `<UiStyle>` sources, in document order (later rules win).
-    ui_styles: std::cell::RefCell<Vec<String>>,
+    ui_styles: std::cell::RefCell<Vec<super::UiStyleSource>>,
     /// Índices (em `ui_styles`) das folhas ainda pendentes — as que precedem
     /// o PRÓXIMO `<UiRoot>` são as que o alimentam (shadow-DOM-lite).
     ui_pending_sheets: std::cell::RefCell<Vec<usize>>,
@@ -2190,7 +2190,7 @@ mod terrain_collect_tests {
 /// file instead of inlined in the world XML.
 fn build_declarative_ui(
     world: &mut World,
-    styles: &[String],
+    styles: &[super::UiStyleSource],
     trees: &[crate::xml::XmlNode],
     tree_sheets: &[Vec<usize>],
     world_dir: Option<&std::path::Path>,
@@ -2229,8 +2229,8 @@ fn build_declarative_ui(
     // scoping por raiz perdia regras legítimas.
     let mut sheet_index_of = vec![usize::MAX; styles.len()];
     for (index, source) in styles.iter().enumerate() {
-        match source.strip_prefix('@') {
-            Some(relative) => {
+        match source {
+            super::UiStyleSource::File(relative) => {
                 // O src é relativo à PASTA DO JOGO e o prefixo `ui/` faz
                 // parte do caminho autor (`@ui/hud.css` → <jogo>/ui/hud.css)
                 // — juntar um ui_dir do config DUPLICAVA o prefixo
@@ -2246,7 +2246,7 @@ fn build_declarative_ui(
                     ),
                 }
             }
-            None => sheet_index_of[index] = sheet.parse_into(source),
+            super::UiStyleSource::Inline(text) => sheet_index_of[index] = sheet.parse_into(text),
         }
     }
     world.insert_resource(sheet);

@@ -235,7 +235,11 @@ fn resolved_count(spec: &StaticSpawnerSpec) -> u32 {
     if spec.density_per_km2 > 0.0 && spec.count == 0 {
         let dx = (spec.region_max[0] - spec.region_min[0]).abs();
         let dz = (spec.region_max[2] - spec.region_min[2]).abs();
-        let n = (spec.density_per_km2 * dx * dz / 1.0e6).round().max(1.0);
+        // Mesmo teto do attr `count`: regiões enormes não explodem o
+        // with_capacity nem as tentativas por instância.
+        let n = (spec.density_per_km2 * dx * dz / 1.0e6)
+            .round()
+            .clamp(1.0, 100_000.0);
         let capped = if spec.max_instances > 0 {
             n.min(spec.max_instances as f32)
         } else {
@@ -1560,6 +1564,11 @@ mod tests {
         s.max_instances = 50;
         let out = place(&s, &mut SpawnOccupancy::new(), &mut flat);
         assert_eq!(out.len(), 50, "max-instances caps density runs");
+        s.max_instances = 0;
+        s.density_per_km2 = 1.0e8; // 0.04 km² → 4 M sem teto
+        assert_eq!(resolved_count(&s), 100_000, "density runs share the count cap");
+        s.density_per_km2 = 1_000_000.0;
+        s.max_instances = 50;
         // `count` explícito ganha sempre ao modo densidade.
         s.count = 7;
         let out = place(&s, &mut SpawnOccupancy::new(), &mut flat);

@@ -462,11 +462,12 @@ fn collect_entities(
                     context: format!("<MusicLayer layer=\"{layer}\">"),
                 });
             }
-            EntityKind::UiStyle { source } => {
-                // O parser antecede '@' ao `src` (`@ui/hud.css`); o caminho
-                // é relativo à pasta do jogo (o prefixo `ui/` é do autor —
-                // contrato do XML, não um dir do config).
-                let file = source.trim_start_matches('@');
+            EntityKind::UiStyle {
+                source: crate::recipes::UiStyleSource::File(file),
+            } => {
+                // Relativo à pasta do jogo (o prefixo `ui/` é do autor —
+                // contrato do XML, não um dir do config); folhas inline não
+                // têm ficheiro a verificar.
                 refs.push(AssetRef {
                     kind: RefKind::Stylesheet,
                     path: world_dir.join(file),
@@ -532,7 +533,12 @@ fn collect_features(entities: &[EntitySpec], offset: [f32; 2], out: &mut Feature
             .clone()
             .or_else(|| entity.tag.clone())
             .unwrap_or_else(|| "sem nome".into());
-        let off = [
+        // As coordenadas da própria feature já trazem a translation dela
+        // (`terrain_offset` no parse): só os ANCESTRAIS entram aqui, como no
+        // `collect_walk` do runtime. Somar também a própria punha o audit a
+        // testar a feature no dobro do deslocamento.
+        let off = offset;
+        let child_off = [
             offset[0] + entity.transform.translation[0],
             offset[1] + entity.transform.translation[2],
         ];
@@ -546,7 +552,7 @@ fn collect_features(entities: &[EntitySpec], offset: [f32; 2], out: &mut Feature
         // autor a procurar o sítio no XML.
         let where_at = |p: Vec2| format!("({:.0}, {:.0})", p.x, p.y);
         match &entity.kind {
-            EntityKind::Road { spec } => {
+            EntityKind::Road { spec } if !spec.path.is_empty() => {
                 let mut spec = spec.clone();
                 spec.path = shift(&spec.path);
                 let label = spec.name.clone().unwrap_or_else(|| {
@@ -645,7 +651,7 @@ fn collect_features(entities: &[EntitySpec], offset: [f32; 2], out: &mut Feature
             }
             _ => {}
         }
-        collect_features(&entity.children, off, out);
+        collect_features(&entity.children, child_off, out);
     }
 }
 
@@ -1636,13 +1642,30 @@ mod tests {
                     },
                     Default::default(),
                 ),
+                entity(
+                    "css_inline",
+                    EntityKind::UiStyle {
+                        source: crate::recipes::UiStyleSource::Inline(
+                            "@import x; .hud { color: red; }".into(),
+                        ),
+                    },
+                    Default::default(),
+                ),
+                entity(
+                    "css_ficheiro",
+                    EntityKind::UiStyle {
+                        source: crate::recipes::UiStyleSource::File("ui/falta.css".into()),
+                    },
+                    Default::default(),
+                ),
             ],
             ..Default::default()
         };
         let config = crate::config::fixture();
         let report = audit(&world, &world_dir, &[asset_root.clone()], &config);
-        // Ausentes: lobo.glb (não criado), fantasma.glb, bgm/inexistente.ogg.
-        assert_eq!(report.missing_count(), 3, "{:?}", report.issues);
+        // Ausentes: lobo.glb (não criado), fantasma.glb, bgm/inexistente.ogg,
+        // ui/falta.css — a folha inline não é um ficheiro.
+        assert_eq!(report.missing_count(), 4, "{:?}", report.issues);
         // Script existente não gera issue; audio ok não gera.
         assert!(
             report
@@ -1857,6 +1880,24 @@ mod tests {
         let mut idx = FeatureIndex::default();
         collect_features(&world.entities, [0.0, 0.0], &mut idx);
         idx
+    }
+
+    /// A translation da própria feature já vem no `path` do parse; o audit
+    /// só soma a dos grupos ancestrais (antes contava a própria duas vezes).
+    #[test]
+    fn test_feature_offsets_are_counted_once() {
+        let idx = feature_index(
+            r#"<world>
+              <Group translation="100 0 0">
+                <Road name="r" translation="50 0 0" path="-30 0 30 0" width="4" />
+                <Lake name="l" translation="0 0 20" at="5 5" radius="4" depth="1" />
+              </Group>
+            </world>"#,
+        );
+        let road = &idx.roads[0].1;
+        assert_eq!(road.path[0], Vec2::new(120.0, 0.0));
+        assert_eq!(road.path[1], Vec2::new(180.0, 0.0));
+        assert_eq!(idx.lakes[0].1.at, Vec2::new(105.0, 25.0));
     }
 
     #[test]
