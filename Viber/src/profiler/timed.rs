@@ -365,6 +365,12 @@ impl<S: System> System for Timed<S> {
         self.inner.flags()
     }
 
+    // Sem isto o wrapper não entra no `SystemTypeSet` da fn interior e todo o
+    // `.after(fn)`/`.before(fn)` contra um sistema `timed` é um no-op mudo.
+    fn default_system_sets(&self) -> Vec<bevy::ecs::schedule::InternedSystemSet> {
+        self.inner.default_system_sets()
+    }
+
     unsafe fn run_unsafe(
         &mut self,
         input: SystemIn<'_, Self>,

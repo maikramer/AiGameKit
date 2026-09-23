@@ -1319,34 +1319,14 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
         bevy::app::Update,
         (ui::UiSet::Collect, ui::UiSet::Build, ui::UiSet::Bind).before(luau::luau_update),
     );
-    // O espelho `UiModalsOpen`→`MenusOpen` lê o valor que o driver dos modais
-    // declarativos escreve neste frame (UiSet::Script) — sem ordem, os
-    // consumos de `MenusOpen` (hotbar/movimento/câmara) viam o frame anterior.
-    app.add_systems(
-        bevy::app::Update,
-        menus::mirror_ui_modals_open.after(ui::UiSet::Script),
-    );
-    // O melee lê o `HarvestContext` do MESMO frame (gate colheita-melee):
-    // sem ordem, um press [J] ao ENTRAR no alcance colhia e golpeava com
-    // contexto stale, e ao SAIR perdia o press. A ordenação vai pelo
-    // `HarvestSet` (o conjunto inteiro da colheita) — re-adicionar o
-    // `harvest_context_system` aqui duplicava a instância no schedule e
-    // panica ("more than one instance").
-    if rpg {
-        // Só no preset RPG: com `gameplay: none` o melee nem existe (o
-        // sistema exige HarvestContext, que nasce no HarvestPlugin gated) —
-        // este registo de ORDENAÇÃO era a fuga que fazia o demo crashar.
-        app.add_systems(
-            bevy::app::Update,
-            combat::player_melee_attack.after(harvest::HarvestSet),
-        );
-    }
     app.add_systems(bevy::app::Startup, spawn::startup);
-    // Spawn RUNTIME de prototypes (viber.spawn_prototype): exclusivo, depois
-    // dos scripts do frame (as callbacks da entidade nova correm aqui).
+    // Spawn RUNTIME de prototypes (viber.spawn_prototype): exclusivo, no
+    // PostUpdate (depois dos scripts do Update — as callbacks da entidade nova
+    // correm aqui) e ANTES da propagação: sem a aresta a entidade podia
+    // renderizar um frame com o `GlobalTransform` identidade (na origem).
     app.add_systems(
         bevy::app::PostUpdate,
-        recipes::spawn::apply_script_spawns.after(luau::luau_update),
+        recipes::spawn::apply_script_spawns.before(bevy::transform::TransformSystems::Propagate),
     );
     app.add_systems(
         bevy::app::Update,
@@ -1389,22 +1369,13 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             timed(Group::World, worldsys::interior_lighting_apply)
                 .after(worldsys::sun_drive)
                 .after(worldsys::daycycle_drive),
+            // `weather_drive`/`atmosphere_drive` vivem no AmbientPlugin (dono
+            // do `AtmosphereState`), ordenados contra este `sun_drive`.
             timed(Group::World, worldsys::sun_drive),
-            // Scheduler do `<Weather cycle>` (chuva alvo determinística) —
-            // tem de correr ANTES do `atmosphere_drive` (a intensidade
-            // contínua de chuva entra na paleta no mesmo frame; as constraints
-            // do ambient.rs só ordenam se o sistema existir).
-            timed(Group::World, worldsys::weather_drive),
-            // Publica a paleta da hora (AtmosphereState) a partir do sol já
-            // apontado por `sun_drive` — céu, névoa, grading e exposure a
-            // leem. Sem este registo o recurso fica no default de dia para
-            // sempre (céu/névoa congelados, aurora a visualizar-se de dia).
-            timed(Group::World, worldsys::atmosphere_drive),
         ),
     );
-    // Tuplo dividido: o Bevy limita tuples de sistemas a 20 elementos e o
-    // bloco acima cresceu (weather/atmosphere drives). Constraints são
-    // explícitas (.after), a separação não muda semântica.
+    // Tuplo dividido: o Bevy limita tuples de sistemas a 20 elementos.
+    // Constraints são explícitas (.after), a separação não muda semântica.
     app.add_systems(
         bevy::app::Update,
         (
@@ -1423,13 +1394,10 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             timed(Group::Spawner, spawner::instantiate_spawn_groups),
         ),
     );
-    // Sistemas de DOMÍNIO (preset RPG): debug de vitais [H/N/K] e shake da
-    // câmara no dano recebido — fora do gate eram mais duas fugas do demo.
+    // Debug de vitais [H/N/K] (preset RPG). O shake no dano recebido vive no
+    // FeedbackPlugin — registá-lo também aqui corria-o 2× por frame.
     if rpg {
-        app.add_systems(
-            bevy::app::Update,
-            (vitals::debug_damage, feedback::shake_on_player_hurt),
-        );
+        app.add_systems(bevy::app::Update, vitals::debug_damage);
     }
     app.run();
     Ok(())

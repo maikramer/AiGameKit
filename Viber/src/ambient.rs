@@ -381,10 +381,18 @@ impl Plugin for AmbientPlugin {
                 (
                     // Scheduler do `<Weather cycle>` (WS-A): a intensidade
                     // contínua de chuva entra na paleta NO MESMO frame.
-                    crate::worldsys::weather_drive.before(crate::worldsys::atmosphere_drive),
+                    crate::profiler::timed(
+                        crate::profiler::Group::World,
+                        crate::worldsys::weather_drive,
+                    )
+                    .before(crate::worldsys::atmosphere_drive),
                     // Publica a paleta a partir da posição do sol já
                     // resolvida por `sun_drive` (main.rs)…
-                    crate::worldsys::atmosphere_drive.after(crate::worldsys::sun_drive),
+                    crate::profiler::timed(
+                        crate::profiler::Group::World,
+                        crate::worldsys::atmosphere_drive,
+                    )
+                    .after(crate::worldsys::sun_drive),
                     // …e empurra-a para o storage buffer do domo (`SkyUniform`)
                     // — é esta escrita por frame que faz o céu mudar com o
                     // `set_clock` (o relógio do mundo não é `globals.time`).
@@ -393,12 +401,11 @@ impl Plugin for AmbientPlugin {
                     // branca noturna) e o chão molhado (r3, canal `walls_b.w`)
                     // NÃO se registam aqui: vivem no `TerrainFeaturesPlugin`
                     // (src/terrain/runtime.rs), embrulhados em `timed` para
-                    // aparecerem no profiler. Registá-los também aqui era uma
-                    // DUPLICAÇÃO silenciosa — o `Timed` devolve o
-                    // `system_type()` do sistema INTERIOR, portanto o Bevy vê o
-                    // wrapper e a função crua como o mesmo sistema e o registo
-                    // posterior sobrepõe o anterior: a versão que sobrevivia era
-                    // a SEM `timed` e o sistema desaparecia do profiler.
+                    // aparecerem no profiler. Registá-los também aqui criava
+                    // uma SEGUNDA instância (o Bevy não deduplica
+                    // `add_systems`): o sistema corria 2× por frame e qualquer
+                    // `.after(fn)` contra ele falhava com "more than one
+                    // instance".
                 ),
             );
     }

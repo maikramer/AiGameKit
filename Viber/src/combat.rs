@@ -365,7 +365,13 @@ impl bevy::app::Plugin for CombatPlugin {
             Update,
             (ensure_player_vitals, ensure_creature_vitals, cycle_weapon),
         );
-        app.add_systems(Update, timed(Group::Combat, player_melee_attack));
+        // O melee lê o `HarvestContext` do MESMO frame (gate colheita-melee):
+        // sem ordem, um press [J] ao ENTRAR no alcance colhia e golpeava com
+        // contexto stale. Sem HarvestPlugin o conjunto está vazio (no-op).
+        app.add_systems(
+            Update,
+            timed(Group::Combat, player_melee_attack).after(crate::harvest::HarvestSet),
+        );
         // R2-G9: ambos escrevem o Transform do herói — o doc do estádio 2
         // promete DEPOIS de `player_movement` (o lunge não disputa a
         // locomoção) e ANTES da câmara third-person (que segue o herói).

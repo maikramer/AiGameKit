@@ -185,7 +185,9 @@ impl Plugin for MenusPlugin {
                 (
                     toast_display_system,
                     toast_fade_system,
-                    mirror_ui_modals_open,
+                    // Lê o `UiModalsOpen` que o driver dos modais escreve
+                    // NESTE frame (UiSet::Script).
+                    mirror_ui_modals_open.after(crate::ui::UiSet::Script),
                     campfire_banner_system,
                     loading_hide_system,
                 ),
