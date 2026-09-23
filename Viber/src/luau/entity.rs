@@ -137,10 +137,18 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
     Ok(())
 }
 
+/// Id vindo de Lua → `Entity`. O `Entity::from_bits` do Bevy PANICA com um
+/// índice inválido (`u32::MAX` nos 32 bits baixos) — um script com um id lixo
+/// derrubava o jogo; aqui vira um erro Lua normal.
+pub fn entity_from_id(bits: i64) -> mlua::Result<bevy::prelude::Entity> {
+    bevy::prelude::Entity::try_from_bits(bits as u64)
+        .ok_or_else(|| mlua::Error::runtime(format!("id de entidade inválido: {bits}")))
+}
+
 /// Bits da entidade alvo: `id` explícito OU a entidade corrente.
 fn resolve_entity(lua: &Lua, id: Option<i64>) -> mlua::Result<bevy::prelude::Entity> {
     match id {
-        Some(bits) => Ok(bevy::prelude::Entity::from_bits(bits as u64)),
+        Some(bits) => entity_from_id(bits),
         None => lua
             .app_data_ref::<ScriptCtx>()
             .and_then(|ctx| ctx.entity)

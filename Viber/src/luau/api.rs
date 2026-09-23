@@ -926,7 +926,7 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                     .app_data_mut::<ScriptCtx>()
                     .expect("ScriptCtx app data seeded in LuaScriptHost::new");
                 let entity = match id {
-                    Some(bits) => Entity::from_bits(bits as u64),
+                    Some(bits) => entity::entity_from_id(bits)?,
                     None => ctx.entity.ok_or_else(|| {
                         mlua::Error::runtime("viber.play_clip fora de on_update (sem id)")
                     })?,
@@ -944,10 +944,11 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
         api.set(
             "entity_despawn",
             lua.create_function(|lua, id: i64| {
+                let target = entity::entity_from_id(id)?;
                 lua.app_data_mut::<ScriptCtx>()
                     .expect("seeded")
                     .commands
-                    .push(ScriptCommand::Despawn(Entity::from_bits(id as u64)));
+                    .push(ScriptCommand::Despawn(target));
                 Ok(())
             })?,
         )?;

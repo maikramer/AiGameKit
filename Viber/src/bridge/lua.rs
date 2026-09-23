@@ -2281,7 +2281,8 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             .app_data_ref::<DebugView>()
             .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
         match arg {
-            EntityArg::Id(bits) => Ok(Entity::from_bits(bits)),
+            EntityArg::Id(bits) => Entity::try_from_bits(bits)
+                .ok_or_else(|| mlua::Error::runtime(format!("id de entidade inválido: {bits}"))),
             EntityArg::Name(name) => {
                 if let Some(id) = view.by_name.get(&name) {
                     return Ok(*id);

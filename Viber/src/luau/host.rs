@@ -5,9 +5,12 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
-use mlua::{Function, Lua, Table};
+use mlua::{Function, Lua, LuaOptions, StdLib, Table, VmState};
 
 use super::commands::ScriptCommand;
 use super::ctx::ScriptCtx;
@@ -59,6 +62,35 @@ impl LuaScriptRegistry {
     }
 }
 
+/// Tempo máximo de UMA entrada na VM (hook, top-level, timer, `on_spawned`)
+/// antes de a interromper com erro — um `while true do end` num script
+/// congelava a engine inteira.
+pub const SCRIPT_CALL_BUDGET: Duration = Duration::from_millis(500);
+
+/// Teto de heap da VM partilhada: um script a crescer uma tabela sem fim
+/// falha com erro Lua em vez de levar o processo ao OOM.
+pub const SCRIPT_MEMORY_LIMIT: usize = 512 * 1024 * 1024;
+
+/// Relógio do orçamento: prazo em ns desde `epoch` (0 = sem prazo). O
+/// interrupt do Luau lê-o; o relógio só é consultado a cada 64 interrupts.
+struct BudgetClock {
+    epoch: Instant,
+    deadline_ns: AtomicU64,
+    ticks: AtomicU32,
+}
+
+/// Arma o orçamento enquanto vive; ao sair repõe o prazo anterior.
+pub struct BudgetGuard {
+    clock: Arc<BudgetClock>,
+    previous: u64,
+}
+
+impl Drop for BudgetGuard {
+    fn drop(&mut self) {
+        self.clock.deadline_ns.store(self.previous, Ordering::Relaxed);
+    }
+}
+
 /// Bevy resource holding the shared Luau VM, the chunk registry and the
 /// warn-once bookkeeping. Build with [`LuaScriptHost::new`], load scripts via
 /// [`LuaScriptHost::load_script`] (code string) or
@@ -74,18 +106,50 @@ pub struct LuaScriptHost {
     pub scripts_dir: PathBuf,
     /// Script paths whose last error was already warned (warn 1x).
     warned: HashSet<String>,
+    budget: Arc<BudgetClock>,
 }
 
 impl LuaScriptHost {
     /// Creates the VM, installs the `viber` API table and seeds the app-data
     /// [`ScriptCtx`].
     pub fn new(scripts_dir: PathBuf) -> mlua::Result<Self> {
-        let lua = Lua::new();
+        // Sem PACKAGE: o `require` do mlua lê e executa QUALQUER `.lua` do
+        // disco (e o `package.path` é gravável) — os módulos passam pelo
+        // `viber.load`, preso a `scripts/`.
+        let lua = Lua::new_with(StdLib::ALL_SAFE ^ StdLib::PACKAGE, LuaOptions::default())?;
+        lua.set_memory_limit(SCRIPT_MEMORY_LIMIT)?;
+        // Biblioteca padrão só-leitura: os envs por script isolam globals,
+        // mas `string.format = nil` num script mexia na tabela PARTILHADA.
+        for lib in ["string", "math", "table", "coroutine", "bit32", "utf8", "os", "buffer"] {
+            if let Ok(t) = lua.globals().get::<Table>(lib) {
+                t.set_readonly(true);
+            }
+        }
+        let budget = Arc::new(BudgetClock {
+            epoch: Instant::now(),
+            deadline_ns: AtomicU64::new(0),
+            ticks: AtomicU32::new(0),
+        });
+        let clock = budget.clone();
+        lua.set_interrupt(move |_| {
+            let deadline = clock.deadline_ns.load(Ordering::Relaxed);
+            if deadline == 0 || clock.ticks.fetch_add(1, Ordering::Relaxed) % 64 != 0 {
+                return Ok(VmState::Continue);
+            }
+            if clock.epoch.elapsed().as_nanos() as u64 >= deadline {
+                return Err(mlua::Error::runtime(format!(
+                    "orçamento de CPU excedido ({} ms numa chamada) — loop infinito?",
+                    SCRIPT_CALL_BUDGET.as_millis()
+                )));
+            }
+            Ok(VmState::Continue)
+        });
         let host = Self {
             lua,
             registry: LuaScriptRegistry::default(),
             scripts_dir,
             warned: HashSet::new(),
+            budget,
         };
         host.install_viber_api()?;
         host.lua.set_app_data(ScriptCtx::default());
@@ -97,6 +161,20 @@ impl LuaScriptHost {
             ctx.scripts_dir = Some(host.scripts_dir.clone());
         }
         Ok(host)
+    }
+
+    /// Arma o [`SCRIPT_CALL_BUDGET`] até o guard sair de escopo. Entradas na
+    /// VM sem guard (REPL do bridge, testes) correm sem prazo.
+    pub fn budget_guard(&self) -> BudgetGuard {
+        let deadline = self.budget.epoch.elapsed() + SCRIPT_CALL_BUDGET;
+        let previous = self
+            .budget
+            .deadline_ns
+            .swap((deadline.as_nanos() as u64).max(1), Ordering::Relaxed);
+        BudgetGuard {
+            clock: self.budget.clone(),
+            previous,
+        }
     }
 
     /// Compiles `code` under `path` with a fresh sandboxed environment.
@@ -184,7 +262,13 @@ impl LuaScriptHost {
             .get_mut(path)
             .ok_or_else(|| mlua::Error::runtime(format!("script '{path}' not loaded")))?;
         if !script.ran {
-            script.chunk.call::<()>(())?;
+            let chunk = script.chunk.clone();
+            let _budget = self.budget_guard();
+            chunk.call::<()>(())?;
+            let script = self
+                .registry
+                .get_mut(path)
+                .ok_or_else(|| mlua::Error::runtime(format!("script '{path}' not loaded")))?;
             script.on_update = script.env.raw_get::<Option<Function>>("on_update")?;
             script.on_player_attack = script.env.raw_get::<Option<Function>>("on_player_attack")?;
             script.ran = true;
@@ -222,6 +306,7 @@ impl LuaScriptHost {
         let Some(on_update) = on_update else {
             return Ok(());
         };
+        let _budget = self.budget_guard();
         on_update.call::<()>(dt)
     }
 
@@ -253,6 +338,7 @@ impl LuaScriptHost {
         let Some(cb) = cb else {
             return Ok(());
         };
+        let _budget = self.budget_guard();
         cb.call::<()>((attacker_pos.x, attacker_pos.z))
     }
 
