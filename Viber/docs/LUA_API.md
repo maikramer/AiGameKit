@@ -25,9 +25,17 @@ caminhos relativos a `scripts/` aceitam subpastas). Ver exemplos vivos em
   `activation-radius`, default **45 m**) o `on_update` **nem corre** —
   inimigo distante custa zero lógica.
 - **Isolamento:** cada chunk tem environment próprio (`__index` → globals
-  reais); scripts não se clobberizam globals. `viber` e stdlib são partilhados.
+  reais); scripts não se clobberizam globals. `viber` e stdlib são partilhados
+  — a stdlib (`string`, `math`, `table`, …) é **só-leitura**. Não há
+  `require`/`package` (liam qualquer ficheiro do disco): módulos passam pelo
+  `viber.load`, preso a `scripts/`.
+- **Orçamento:** cada entrada na VM (`on_update`, `on_player_attack`,
+  top-level, timer, `on_spawned`) tem **500 ms** — um loop infinito vira erro
+  Lua (`orçamento de CPU excedido`) em vez de congelar a engine. A heap da VM
+  tem teto de **512 MiB**.
 - **Erros são pcall-style:** reportados **1× por script** (warn, visível no
-  `viber debug logs`) e nunca abortam a engine.
+  `viber debug logs`) e nunca abortam a engine. Ids de entidade inválidos
+  (ex. `0`) são erro Lua, não crash.
 - **Semântica de comandos:** setters de movimento/combate/UI **enfileiram
   comandos** aplicados no fim do frame, depois de todos os `on_update` — sem
   acesso direto ao ECS. `move_towards`/`move_by` assentam o Y no terreno
@@ -37,7 +45,10 @@ caminhos relativos a `scripts/` aceitam subpastas). Ver exemplos vivos em
   RECARREGA (2026-09-07, `src/hot_reload.rs`; `VIBER_HOT_RELOAD=0` desliga):
   o chunk é recompilado e o top-level re-corre nas entidades ativas —
   globals do script resetam (estado em `viber.state()` sobrevive, pois vive
-  fora do env). Erro de compilação = warn e o chunk antigo continua.
+  fora do env). Erro de compilação OU erro a correr o top-level = warn e o
+  chunk antigo continua. Os timers do chunk antigo saem (o top-level novo
+  re-regista os seus). Editar um módulo do `viber.load` tira-o do cache e
+  re-corre o top-level de todos os scripts.
 
 Esqueleto típico:
 
@@ -258,7 +269,10 @@ end
 ## Timers (`viber.after` / `viber.every`)
 
 Substitui o `st.t += dt` manual. World-scoped: correm independentemente do
-raio de ativação do dono; a callback corre com o ctx seedado à entidade.
+raio de ativação do dono; a callback corre com o ctx seedado ao dono
+(`viber.position()`, `dt`, herói e relógio do frame). Morrem com o dono (um
+`every` de uma entidade despawnada não volta a correr). O `every` mantém a
+cadência do agendamento (sem acumular o atraso de cada frame).
 
 ```lua
 viber.after(2.5, function() viber.toast("passaram 2,5 s") end)
@@ -298,8 +312,9 @@ aplica pós-frame.
 viber.game().bosses_killed = (viber.game().bosses_killed or 0) + 1
 
 -- viber.load("lib/x.lua"): corre um chunk de scripts/ em env próprio UMA
--- vez por mundo e devolve o seu return (cacheado) — fatora bibliotecas
--- partilhadas (ver scripts/lib/fsm.lua do exemplo).
+-- vez por mundo e devolve o seu return (cacheado; módulo sem return devolve
+-- true, como o require) — fatora bibliotecas partilhadas (ver
+-- scripts/lib/fsm.lua do exemplo). Só caminhos relativos a scripts/ (sem '..').
 local fsm = viber.load("lib/fsm.lua")
 
 -- viber.save() / viber.load_save(): gravam/carregam o save do mundo (posição do

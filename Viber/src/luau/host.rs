@@ -393,6 +393,10 @@ impl LuaScriptHost {
         if let Ok(states) = self.lua.named_registry_value::<Table>("viber_states") {
             let _ = states.raw_remove(entity.to_bits() as i64);
         }
+        // Timers do dono morrem com ele (um respawn re-regista os seus).
+        let bits = entity.to_bits() as i64;
+        let orphans = super::timers::timer_ids_where(&self.lua, |owner, _| owner == bits);
+        super::timers::drop_timers(&self.lua, &orphans);
         if let Some(mut ctx) = self.lua.app_data_mut::<ScriptCtx>() {
             ctx.pending.retain(|(e, _)| *e != entity);
             ctx.commands.retain(|c| {

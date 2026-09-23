@@ -1134,11 +1134,13 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                     let mut ctx = lua
                         .app_data_mut::<ScriptCtx>()
                         .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                    let caller_path = ctx.path.clone();
                     ctx.commands.push(ScriptCommand::SpawnPrototype {
                         name,
                         pos: Vec3::new(x, y.unwrap_or(0.0), z),
                         seat: y.is_none(),
                         on_spawned,
+                        caller_path,
                     });
                     Ok(())
                 },

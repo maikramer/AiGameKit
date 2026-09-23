@@ -356,7 +356,21 @@ pub fn luau_update(
     // não derruba o frame) e tick dos timers (`viber.after`/`every`), ambos
     // ANTES dos `on_update`: o script vê o evento/timer no próprio frame.
     fan_out_events(&host.lua, &incoming, &mut locals.events_dropped);
-    super::timers::tick(&mut host, elapsed);
+    super::timers::tick(
+        &mut host,
+        super::timers::TickFrame {
+            elapsed,
+            dt,
+            player: player_pos,
+            origin_of: |owner| {
+                scripts.get(owner).ok().and_then(|(_, _, transform, global, _, _)| {
+                    global
+                        .map(GlobalTransform::translation)
+                        .or_else(|| transform.map(|t| t.translation))
+                })
+            },
+        },
+    );
 
     for (entity, lref, transform, global, activation, interaction) in &mut scripts {
         // Posição no MUNDO (o `Transform` sozinho é local ao grupo pai).
@@ -1027,6 +1041,7 @@ pub fn luau_update(
                 pos,
                 seat,
                 on_spawned,
+                caller_path,
             } => {
                 if let Some(spawns) = locals.spawns.as_deref_mut() {
                     spawns.0.push(crate::recipes::spawn::PendingPrototypeSpawn {
@@ -1034,6 +1049,7 @@ pub fn luau_update(
                         pos,
                         seat,
                         on_spawned,
+                        caller_path,
                     });
                 }
             }

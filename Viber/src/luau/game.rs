@@ -80,6 +80,21 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
     Ok(())
 }
 
+/// Tira `path` do cache do `viber.load` (hot-reload de um módulo). Devolve
+/// `true` se estava carregado.
+pub fn evict_module(lua: &Lua, path: &str) -> bool {
+    let Ok(modules) = lua.named_registry_value::<Table>("viber_modules") else {
+        return false;
+    };
+    let cached = modules
+        .raw_get::<mlua::Value>(path)
+        .is_ok_and(|v| !matches!(v, mlua::Value::Nil));
+    if cached {
+        let _ = modules.raw_remove(path);
+    }
+    cached
+}
+
 /// Serializa o estado de jogo (`viber_game`) para JSON PLANO — só valores
 /// primitivos (string/número/bool) são persistíveis; tabelas/funções são
 /// IGNORADAS silenciosamente (o save é do jogo, não da VM).

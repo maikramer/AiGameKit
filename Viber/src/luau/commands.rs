@@ -210,5 +210,6 @@ pub enum ScriptCommand {
         /// Sem cota explícita: assenta o Y na superfície renderizada.
         seat: bool,
         on_spawned: Option<Function>,
+        caller_path: Option<String>,
     },
 }

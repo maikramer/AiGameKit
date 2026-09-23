@@ -177,6 +177,9 @@ pub struct PendingPrototypeSpawn {
     pub seat: bool,
     /// Callback Lua chamada com os bits da entidade criada.
     pub on_spawned: Option<mlua::Function>,
+    /// Script que pediu o spawn — a callback corre com o `ctx.path` dele
+    /// (timers/erros registados lá ficam atribuídos a quem os criou).
+    pub caller_path: Option<String>,
 }
 
 /// Fila de pedidos de spawn (`ScriptCommand::SpawnPrototype` → sistema).
@@ -2013,7 +2016,7 @@ pub fn apply_script_spawns(world: &mut World) {
     };
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
-    let mut spawned: Vec<(Entity, Option<mlua::Function>)> = Vec::new();
+    let mut spawned: Vec<(Entity, Option<mlua::Function>, Option<String>, Vec3)> = Vec::new();
     for ((request, spec), seat_y) in requests.into_iter().zip(seat_ys) {
         let Some(spec) = spec.as_ref() else {
             continue;
@@ -2026,7 +2029,11 @@ pub fn apply_script_spawns(world: &mut World) {
         if let Some(mut t) = world.get_mut::<Transform>(root) {
             t.translation = Vec3::new(request.pos.x, y, request.pos.z);
         }
-        spawned.push((root, request.on_spawned));
+        let origin = world
+            .get::<Transform>(root)
+            .map(|t| t.translation)
+            .unwrap_or(request.pos);
+        spawned.push((root, request.on_spawned, request.caller_path, origin));
     }
     // Devolve os Assets (o mundo não pode ficar sem eles); o ctx tem de
     // morrer ANTES — toma &mut deles.
@@ -2043,12 +2050,18 @@ pub fn apply_script_spawns(world: &mut World) {
             return;
         };
         let host = &mut *host;
-        for (entity, cb) in spawned {
+        for (entity, cb, caller_path, origin) in spawned {
             let Some(cb) = cb else { continue };
             if let Some(mut c) = host.lua.app_data_mut::<crate::luau::ScriptCtx>() {
                 c.entity = Some(entity);
+                c.path = caller_path;
+                c.origin = origin;
             }
-            if let Err(e) = cb.call::<()>(entity.to_bits() as i64) {
+            let result = {
+                let _budget = host.budget_guard();
+                cb.call::<()>(entity.to_bits() as i64)
+            };
+            if let Err(e) = result {
                 warn!(target: "viber::luau", "viber.spawn_prototype callback: {e}");
             }
         }

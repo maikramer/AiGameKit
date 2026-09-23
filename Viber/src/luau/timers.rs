@@ -71,11 +71,56 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
     Ok(())
 }
 
+/// Handles dos timers pendentes que satisfazem `pred(owner_bits, path)`.
+pub(crate) fn timer_ids_where(lua: &Lua, pred: impl Fn(i64, &str) -> bool) -> Vec<i64> {
+    let Ok(timers) = lua.named_registry_value::<Table>("viber_timers") else {
+        return Vec::new();
+    };
+    timers
+        .pairs::<i64, Table>()
+        .flatten()
+        .filter(|(_, entry)| {
+            let owner: i64 = entry.raw_get("owner").unwrap_or(0);
+            let path: String = entry.raw_get("path").unwrap_or_default();
+            pred(owner, &path)
+        })
+        .map(|(id, _)| id)
+        .collect()
+}
+
+/// Remove os timers `ids` da fila (e marca-os cancelados, caso o tick do
+/// frame já os tenha recolhido).
+pub(crate) fn drop_timers(lua: &Lua, ids: &[i64]) {
+    let Ok(timers) = lua.named_registry_value::<Table>("viber_timers") else {
+        return;
+    };
+    let cancelled = lua.named_registry_value::<Table>("viber_timer_cancelled").ok();
+    for id in ids {
+        let _ = timers.raw_remove(*id);
+        if let Some(cancelled) = &cancelled {
+            let _ = cancelled.raw_set(*id, true);
+        }
+    }
+}
+
+/// Snapshot do frame para as callbacks dos timers — o mesmo que o
+/// `run_update` semeia (sem ele, a callback via o `origin`/`dt` da ÚLTIMA
+/// entidade do frame anterior e `viber.position()`/`move_towards` calculavam
+/// a partir de outra criatura).
+pub struct TickFrame<F: Fn(Entity) -> Option<Vec3>> {
+    pub elapsed: f64,
+    pub dt: f32,
+    pub player: Option<Vec3>,
+    /// Posição no mundo do dono; `None` = dono morto (o timer é descartado).
+    pub origin_of: F,
+}
+
 /// Tick (início do `luau_update`, ANTES dos `on_update`): executa os timers
 /// vencidos com o ctx seedado ao dono (o `viber.state()` funciona dentro da
 /// callback). Erros são pcall-style (`warn_once` por path) — um timer a falhar
 /// nunca derruba o frame; `every` cancelado não re-agenda.
-pub fn tick(host: &mut super::host::LuaScriptHost, elapsed: f64) {
+pub fn tick<F: Fn(Entity) -> Option<Vec3>>(host: &mut super::host::LuaScriptHost, frame: TickFrame<F>) {
+    let elapsed = frame.elapsed;
     let lua = host.lua.clone();
     let Ok(timers) = lua.named_registry_value::<Table>("viber_timers") else {
         return;
@@ -86,7 +131,7 @@ pub fn tick(host: &mut super::host::LuaScriptHost, elapsed: f64) {
     // Fase 1: recolhe os vencidos (a iteração `pairs` tem de acabar antes de
     // as callbacks correrem — podem registar novos timers).
     let pairs: Vec<(i64, Table)> = timers.pairs::<i64, Table>().flatten().collect();
-    let mut due: Vec<(i64, Option<f64>, Function, i64, String)> = Vec::new();
+    let mut due: Vec<(i64, f64, Option<f64>, Function, i64, String)> = Vec::new();
     for (id, entry) in pairs {
         let at: f64 = entry.raw_get("at").unwrap_or(f64::INFINITY);
         if at > elapsed {
@@ -100,21 +145,36 @@ pub fn tick(host: &mut super::host::LuaScriptHost, elapsed: f64) {
         let owner: i64 = entry.raw_get("owner").unwrap_or(0);
         let path: String = entry.raw_get("path").unwrap_or_default();
         let _ = timers.raw_remove(id);
-        due.push((id, period, func, owner, path));
+        due.push((id, at, period, func, owner, path));
     }
     // Fase 2: executa (a entrada já saiu da tabela — cancelamentos posteriores
     // não a encontram; o marker em `viber_timer_cancelled` cobre o resto).
-    for (id, period, func, owner, path) in due {
+    for (id, at, period, func, owner, path) in due {
         if cancelled.raw_get::<bool>(id).unwrap_or(false) {
             let _ = cancelled.raw_remove(id);
             continue;
         }
-        let entity = Entity::from_bits(owner as u64);
+        // Dono despawnado: o timer morre com ele (um `every` órfão corria
+        // para sempre e enfileirava comandos contra uma entidade morta).
+        let Some(entity) = Entity::try_from_bits(owner as u64) else {
+            continue;
+        };
+        let Some(origin) = (frame.origin_of)(entity) else {
+            continue;
+        };
         if let Some(mut ctx) = lua.app_data_mut::<ScriptCtx>() {
             ctx.entity = Some(entity);
             ctx.path = Some(path.clone());
+            ctx.origin = origin;
+            ctx.player = frame.player;
+            ctx.dt = frame.dt;
+            ctx.elapsed = elapsed;
         }
-        if let Err(e) = func.call::<()>(()) {
+        let result = {
+            let _budget = host.budget_guard();
+            func.call::<()>(())
+        };
+        if let Err(e) = result {
             host.warn_once(&path, &e);
         }
         if let Some(p) = period {
@@ -123,8 +183,12 @@ pub fn tick(host: &mut super::host::LuaScriptHost, elapsed: f64) {
                 let _ = cancelled.raw_remove(id);
                 continue;
             }
+            // Cadência presa ao agendamento (`at + p`), não ao frame em que
+            // venceu — `elapsed + p` somava o atraso do frame a cada disparo.
+            // Depois de um engasgo longo retoma a partir de agora (sem rajada).
+            let next = if at + p > elapsed { at + p } else { elapsed + p };
             if let Ok(entry) = lua.create_table() {
-                let _ = entry.raw_set("at", elapsed + p);
+                let _ = entry.raw_set("at", next);
                 let _ = entry.raw_set("period", p);
                 let _ = entry.raw_set("func", func.clone());
                 let _ = entry.raw_set("owner", owner);
