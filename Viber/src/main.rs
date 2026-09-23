@@ -654,7 +654,11 @@ fn delegate_run_to_cargo(world: &Path, debug: bool, bridge: Option<u16>) -> Resu
 /// arranque do run remove executáveis e caches incrementais do perfil OPOSTO
 /// — os binários de teste do Bevy em dev pesam ~2.2 GB cada e reconstruírem-se
 /// num relink de segundos. Silencioso quando não há nada a limpar.
-fn run_target_housekeeping(active_debug: bool) {
+///
+/// Com `--no-cargo` o perfil ativo é o do PRÓPRIO executável (`target/debug/
+/// viber run --no-cargo` corre o debug mesmo sem `--debug`) — senão o
+/// arranque limpava o perfil em uso e o próximo build recompilava tudo.
+fn run_target_housekeeping(mut active_debug: bool, no_cargo: bool) {
     // O filho delegado (`cargo run -- run … --no-cargo`) não repete: o pai
     // limpou antes de lançar o cargo.
     if std::env::var_os(CARGO_DELEGATE_GUARD).is_some() {
@@ -666,6 +670,13 @@ fn run_target_housekeeping(active_debug: bool) {
     let Some(root) = viber_checkout_root(&cwd) else {
         return;
     };
+    if no_cargo {
+        let exe = std::env::current_exe().and_then(|p| p.canonicalize());
+        let debug_dir = root.join("target").join("debug").canonicalize();
+        if let (Ok(exe), Ok(debug_dir)) = (exe, debug_dir) {
+            active_debug = exe.starts_with(&debug_dir);
+        }
+    }
     let report = prune::housekeeping(&root, active_debug);
     if let Some(line) = report.describe() {
         eprintln!("viber: prune: {line}");
@@ -1434,7 +1445,7 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
             release: _,
             no_cargo,
         } => {
-            run_target_housekeeping(debug);
+            run_target_housekeeping(debug, no_cargo);
             let world = resolve_world_path(path)?;
             // `--bridge` sem valor escolhe porta livre ANTES da delegação —
             // a porta impressa no arranque tem de ser a que a engine usa de
