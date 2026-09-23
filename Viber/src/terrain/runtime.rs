@@ -406,6 +406,16 @@ pub struct TerrainReader {
     pub deltas: std::sync::Arc<crate::terrain::delta::DeltaGrid>,
 }
 
+impl TerrainReader {
+    /// Grid + edições — a mesma vista de [`TerrainRuntime::base`].
+    pub fn base(&self) -> crate::terrain::delta::EditedBase<'_> {
+        crate::terrain::delta::EditedBase {
+            grid: &self.grid,
+            deltas: &self.deltas,
+        }
+    }
+}
+
 /// A standing surface thinner than this with hollow ground below is a slab
 /// (arch band, tight overhang brow) — no prop should root on it.
 const MIN_STAND_THICKNESS: f32 = 4.0;

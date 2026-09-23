@@ -194,9 +194,19 @@ impl BrushGrid {
         self.revision
     }
 
-    /// World distance between texel centers (meters).
+    /// World distance between texel centers (meters) — the finer of the two
+    /// axes, for spacing/radius decisions. Index mapping uses the per-axis
+    /// steps: a non-square heightmap still spans `world_size` on BOTH axes.
     pub fn texel(&self) -> f32 {
+        self.step_x().min(self.step_z())
+    }
+
+    fn step_x(&self) -> f32 {
         self.world_size / (self.width.max(2) - 1) as f32
+    }
+
+    fn step_z(&self) -> f32 {
+        self.world_size / (self.depth.max(2) - 1) as f32
     }
 
     /// Raw grid access (`z * width + x`), for building read-side samplers.
@@ -220,8 +230,8 @@ impl BrushGrid {
     pub fn cell_center(&self, x: usize, z: usize) -> Vec2 {
         let half = self.world_size * 0.5;
         Vec2::new(
-            x as f32 * self.texel() - half,
-            z as f32 * self.texel() - half,
+            x as f32 * self.step_x() - half,
+            z as f32 * self.step_z() - half,
         )
     }
 
@@ -287,21 +297,21 @@ impl BrushGrid {
     /// of changed texels (a stroke that writes nothing does not bump the
     /// revision).
     pub fn apply(&mut self, req: BrushRequest) -> usize {
-        let texel = self.texel();
+        let (sx, sz) = (self.step_x(), self.step_z());
         let half = self.world_size * 0.5;
         // Texel index range covering the AABB expanded ±1 texel (the bilinear
         // stencil of any sample near the brush reaches this far). The upper
         // bound is clamped to the grid extent BEFORE the `+1`: pathological
         // AABBs (±inf, huge authored coords) saturate the float→usize cast and
         // the increment would overflow (panic in debug / wrap in release).
-        let x0 = (((req.min_x - texel) + half) / texel).floor().max(0.0) as usize;
-        let z0 = (((req.min_z - texel) + half) / texel).floor().max(0.0) as usize;
-        let x1 = ((((req.max_x + texel) + half) / texel)
+        let x0 = (((req.min_x - sx) + half) / sx).floor().max(0.0) as usize;
+        let z0 = (((req.min_z - sz) + half) / sz).floor().max(0.0) as usize;
+        let x1 = ((((req.max_x + sx) + half) / sx)
             .ceil()
             .min(self.width as f32) as usize
             + 1)
         .min(self.width);
-        let z1 = ((((req.max_z + texel) + half) / texel)
+        let z1 = ((((req.max_z + sz) + half) / sz)
             .ceil()
             .min(self.depth as f32) as usize
             + 1)
@@ -407,8 +417,8 @@ impl BrushGrid {
     /// Bilinear blend of the 4 texels around `p`; out-of-domain clamps.
     fn bilinear(&self, x: f32, z: f32) -> f32 {
         let half = self.world_size * 0.5;
-        let fx = ((x + half) / self.texel()).clamp(0.0, (self.width - 1) as f32);
-        let fz = ((z + half) / self.texel()).clamp(0.0, (self.depth - 1) as f32);
+        let fx = ((x + half) / self.step_x()).clamp(0.0, (self.width - 1) as f32);
+        let fz = ((z + half) / self.step_z()).clamp(0.0, (self.depth - 1) as f32);
         let x0 = fx.floor() as usize;
         let z0 = fz.floor() as usize;
         let x1 = (x0 + 1).min(self.width - 1);
@@ -441,19 +451,19 @@ impl BrushGrid {
     /// patamares dependentes do eixo.
     fn smoothed_axis(&self, x: f32, z: f32, axis: Axis) -> f32 {
         let half = self.world_size * 0.5;
-        let texel = self.texel();
+        let (sx, sz) = (self.step_x(), self.step_z());
         // `n` é a dimensão do eixo CRUZADO (para o clamp de j0) — com grids
         // não-quadrados, clampar com a contagem do eixo primário achatava
         // metade do mapa na última linha.
         let (cells, cross, n) = match axis {
             Axis::X => (
-                (((x + half) / texel).clamp(0.0, (self.width - 1) as f32)),
-                (z + half) / texel,
+                (((x + half) / sx).clamp(0.0, (self.width - 1) as f32)),
+                (z + half) / sz,
                 self.depth,
             ),
             Axis::Z => (
-                (((z + half) / texel).clamp(0.0, (self.depth - 1) as f32)),
-                (x + half) / texel,
+                (((z + half) / sz).clamp(0.0, (self.depth - 1) as f32)),
+                (x + half) / sx,
                 self.width,
             ),
         };
@@ -562,22 +572,24 @@ impl super::mesh::HeightField for BrushGrid {
     }
 
     fn range_over(&self, min_x: f32, min_z: f32, max_x: f32, max_z: f32) -> Option<(f32, f32)> {
-        let texel = self.texel();
+        let (sx, sz) = (self.step_x(), self.step_z());
         let half = self.world_size * 0.5;
         // Texel index range covering the world AABB (same index mapping as
         // `apply`, upper bound clamped to the grid extent BEFORE the `+1` —
         // pathological AABBs (±inf, huge authored coords) saturate the
-        // float→usize cast and the increment would overflow).
-        let x0 = ((min_x + half) / texel).floor().max(0.0) as usize;
-        let z0 = ((min_z + half) / texel).floor().max(0.0) as usize;
-        let x1 = ((((max_x + half) / texel)
-            .floor()
+        // float→usize cast and the increment would overflow). The upper
+        // bound is a CEIL: a bilinear sample at `max_x` inside a cell reads
+        // the texel on its far side too.
+        let x0 = ((min_x + half) / sx).floor().max(0.0) as usize;
+        let z0 = ((min_z + half) / sz).floor().max(0.0) as usize;
+        let x1 = ((((max_x + half) / sx)
+            .ceil()
             .max(0.0)
             .min(self.width as f32)) as usize
             + 1)
         .min(self.width);
-        let z1 = ((((max_z + half) / texel)
-            .floor()
+        let z1 = ((((max_z + half) / sz)
+            .ceil()
             .max(0.0)
             .min(self.depth as f32)) as usize
             + 1)
@@ -1008,6 +1020,43 @@ mod tests {
         let grid = BrushGrid::from_height_map(&map, 90.0, 40.0, 0.0).expect("grid");
         assert_eq!((grid.width(), grid.depth()), (9, 7));
         assert!((grid.cell_height(4, 3) - 12_345.0 / 65_535.0 * 40.0).abs() < 1e-3);
+    }
+
+    /// Um heightmap não-quadrado cobre `world_size` nos DOIS eixos: o texel
+    /// Z é `world/(depth-1)`, não o de X.
+    #[test]
+    fn test_non_square_grid_spans_the_world_on_both_axes() {
+        let mut grid = BrushGrid::new(vec![0; 9 * 5], 9, 5, 80.0, 50.0, 0.0).expect("grid");
+        grid.begin_stroke("ramp");
+        for z in 0..5 {
+            for x in 0..9 {
+                grid.set_cell_height(x, z, z as f32 * 10.0);
+            }
+        }
+        grid.commit_stroke();
+        let last = grid.cell_center(8, 4);
+        assert!(last.distance(Vec2::new(40.0, 40.0)) < 1e-4, "canto oposto: {last}");
+        // Passo Z = 80/4 = 20 m: a linha 3 está em z = 20 com altura 30.
+        assert!((grid.sample(0.0, 20.0) - 30.0).abs() < 0.01, "{}", grid.sample(0.0, 20.0));
+        assert!((grid.sample(0.0, 30.0) - 35.0).abs() < 0.01, "{}", grid.sample(0.0, 30.0));
+        let (lo, hi) = super::super::mesh::HeightField::range_over(&grid, -40.0, 25.0, 40.0, 40.0)
+            .expect("range");
+        assert!((lo - 30.0).abs() < 0.01 && (hi - 40.0).abs() < 0.01, "{lo}..{hi}");
+    }
+
+    /// O limite superior do `range_over` é um CEIL: um box que acaba a meio
+    /// de uma célula inclui o texel do outro lado (o bilinear lê-o).
+    #[test]
+    fn test_range_over_includes_the_far_texel_of_a_partial_cell() {
+        let mut grid = BrushGrid::new(vec![0; 8 * 8], 8, 8, 7.0, 50.0, 0.0).expect("grid");
+        grid.begin_stroke("spike");
+        grid.set_cell_height(4, 4, 20.0);
+        grid.commit_stroke();
+        // Texel 4 está em x = z = 0.5; o box acaba em 0.2 (dentro da célula 3–4).
+        let (_, hi) = super::super::mesh::HeightField::range_over(&grid, -1.0, -1.0, 0.2, 0.2)
+            .expect("range");
+        assert!(grid.sample(0.2, 0.2) > 1.0, "o bilinear já sobe no box");
+        assert!((hi - 20.0).abs() < 1e-3, "o pico do outro lado da célula conta: {hi}");
     }
 
     #[test]

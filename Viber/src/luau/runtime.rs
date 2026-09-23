@@ -656,7 +656,13 @@ pub fn luau_update(
             }
             ScriptCommand::TerrainEdit { edit } => {
                 if let Some(queue) = locals.terrain_edits.as_deref_mut() {
-                    queue.pending.push_back(edit);
+                    if !queue.push(edit) && locals.once_warned.insert("terrain_edit_full".into()) {
+                        warn!(
+                            "viber.terrain.*: fila de edições cheia ({} pendentes) — pedidos \
+                             descartados até a fila escoar",
+                            crate::terrain::delta::EDIT_QUEUE_CAP
+                        );
+                    }
                 } else {
                     // Apps mínimas sem o plugin de terreno: warn 1× (a fila
                     // nem existe — o pedido não pode ser aceite em silêncio).

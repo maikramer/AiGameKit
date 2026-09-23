@@ -3232,10 +3232,11 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let Some(terrain) = view.terrain.as_ref() else {
                 return Ok(Value::Nil);
             };
+            let base = terrain.base();
             let height = if terrain.voxel.is_flat() {
-                terrain.grid.sample(x, z)
+                crate::terrain::mesh::HeightField::sample(&base, x, z)
             } else {
-                terrain.voxel.surface_top(&*terrain.grid, x, z)
+                terrain.voxel.surface_top(&base, x, z)
             };
             let water_surface = view.surfaces.as_ref().and_then(|s| {
                 let p = Vec2::new(x, z);

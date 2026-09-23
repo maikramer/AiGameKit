@@ -895,7 +895,7 @@ pub fn instantiate_spawn_groups(
                 // — a matriz 3×3 da grelha crua era cega aos mods e inclinava
                 // props para paredes que a grelha nem via).
                 normal: runtime.voxel.gradient(
-                    &*runtime.grid,
+                    &runtime.base(),
                     bevy::math::Vec3::new(x, height, z),
                     0.5,
                 ),

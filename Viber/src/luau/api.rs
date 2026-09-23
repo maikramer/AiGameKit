@@ -197,7 +197,7 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                 let ground = lua
                     .app_data_ref::<ScriptCtx>()
                     .and_then(|ctx| ctx.terrain.clone())
-                    .and_then(|reader| reader.voxel.surface_below(&*reader.grid, x, z, y));
+                    .and_then(|reader| reader.voxel.surface_below(&reader.base(), x, z, y));
                 Ok(ground)
             })?,
         )?;

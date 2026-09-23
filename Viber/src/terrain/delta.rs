@@ -33,9 +33,17 @@ use super::mesh::HeightField;
 pub const EDIT_MAX_RADIUS: f32 = 96.0;
 /// Profundidade/altura máxima de uma edição (m).
 pub const EDIT_MAX_DEPTH: f32 = 64.0;
-/// Recortes vivos antes da fusão forçada (o mais antigo funde-se com o
-/// seguinte; a amostragem varre-os por ordem inversa).
+/// Recortes vivos antes da fusão forçada (o par ADJACENTE de menor união
+/// funde-se; a amostragem varre-os por ordem inversa).
 const MAX_RECTS: usize = 8;
+/// Teto duro de recortes quando nenhuma fusão cabe em [`MERGE_CELL_CAP`]
+/// (edições muito afastadas): acima dele funde-se na mesma.
+const MAX_RECTS_HARD: usize = 32;
+/// Células máximas de um recorte fundido (16 MiB de f32).
+const MERGE_CELL_CAP: usize = 4 * 1_048_576;
+/// Pedidos em fila antes de o `push` recusar (um script em loop não enche
+/// a memória nem agenda minutos de edições).
+pub const EDIT_QUEUE_CAP: usize = 256;
 /// Edições aplicadas por frame (o resto fica em fila) — um script em loop
 /// não transforma um frame num carve de mundo.
 pub const EDITS_PER_FRAME: usize = 4;
@@ -160,36 +168,35 @@ impl DeltaGrid {
         (lo <= hi).then_some((lo, hi))
     }
 
-    /// Commita um recorte: funde com o primeiro cuja BBOX ele toca
-    /// (expandindo ao envelope da união), senão empurra. Acima de
-    /// [`MAX_RECTS`], funde os dois mais antigos — a ordem do "mais
-    /// recente ganha" preserva-se sempre.
-    fn commit(&mut self, rect: DeltaRect) {
-        let mut merged: Option<(usize, DeltaRect)> = None;
-        for (i, old) in self.rects.iter().enumerate() {
-            let old_max = old.max_corner();
-            let rect_max = rect.max_corner();
-            let overlaps = old.min.x <= rect_max.x
-                && rect.min.x <= old_max.x
-                && old.min.y <= rect_max.y
-                && rect.min.y <= old_max.y;
-            if overlaps {
-                let lo = old.min.min(rect.min);
-                let hi = old_max.max(rect_max);
-                merged = Some((i, grow_pair(old, &rect, lo, hi)));
-                break;
-            }
-        }
-        match merged {
-            Some((i, grown)) => self.rects[i] = grown,
-            None => {
-                self.rects.push(rect);
-                if self.rects.len() > MAX_RECTS {
-                    let a = self.rects.remove(0);
-                    let b = self.rects.remove(0);
-                    let lo = a.min.min(b.min);
-                    let hi = a.max_corner().max(b.max_corner());
-                    self.rects.insert(0, grow_pair(&a, &b, lo, hi));
+    /// Commita um recorte. Funde SÓ com o recorte mais recente (o topo da
+    /// pilha) quando as bboxes se tocam: fundir com um mais antigo punha a
+    /// edição nova por baixo dos recortes intermédios, que a escondiam.
+    /// Senão empurra; acima de [`MAX_RECTS`] funde o par adjacente de menor
+    /// união — adjacente preserva o "mais recente ganha".
+    fn commit(&mut self, grid: &BrushGrid, rect: DeltaRect) {
+        let top = self.rects.len().wrapping_sub(1);
+        let merge_top = self
+            .rects
+            .last()
+            .is_some_and(|last| overlaps(last, &rect) && union_cells(last, &rect) <= MERGE_CELL_CAP);
+        if merge_top {
+            let grown = grow_pair(&self.rects[top], &rect, |p| {
+                sample_below(&self.rects[..top], grid, p)
+            });
+            self.rects[top] = grown;
+        } else {
+            self.rects.push(rect);
+            if self.rects.len() > MAX_RECTS {
+                let (i, cells) = (0..self.rects.len() - 1)
+                    .map(|i| (i, union_cells(&self.rects[i], &self.rects[i + 1])))
+                    .min_by_key(|&(_, cells)| cells)
+                    .expect("len > MAX_RECTS ≥ 2");
+                if cells <= MERGE_CELL_CAP || self.rects.len() > MAX_RECTS_HARD {
+                    let b = self.rects.remove(i + 1);
+                    let grown = grow_pair(&self.rects[i], &b, |p| {
+                        sample_below(&self.rects[..i], grid, p)
+                    });
+                    self.rects[i] = grown;
                 }
             }
         }
@@ -197,43 +204,50 @@ impl DeltaGrid {
     }
 }
 
-/// Cresce `a`/`b` ao envelope `lo..hi`: `b` é o mais RECENTE (ganha onde
-/// cobre), `a` preenche o resto; as células descobertas por ambos (cantos
-/// da bbox da união) herdam o vizinho mais próximo.
-fn grow_pair(a: &DeltaRect, b: &DeltaRect, lo: Vec2, hi: Vec2) -> DeltaRect {
+fn overlaps(a: &DeltaRect, b: &DeltaRect) -> bool {
+    let (a_max, b_max) = (a.max_corner(), b.max_corner());
+    a.min.x <= b_max.x && b.min.x <= a_max.x && a.min.y <= b_max.y && b.min.y <= a_max.y
+}
+
+/// Células do envelope da união de dois recortes (mesma grelha).
+fn union_cells(a: &DeltaRect, b: &DeltaRect) -> usize {
+    let lo = a.min.min(b.min);
+    let hi = a.max_corner().max(b.max_corner());
+    let cols = ((hi.x - lo.x) / a.texel).round() as usize + 1;
+    let rows = ((hi.y - lo.y) / a.texel).round() as usize + 1;
+    cols.saturating_mul(rows)
+}
+
+/// A vista por BAIXO de um recorte: os mais antigos, depois a grid base.
+fn sample_below(older: &[DeltaRect], grid: &BrushGrid, p: Vec2) -> f32 {
+    older
+        .iter()
+        .rev()
+        .find_map(|r| r.sample(p.x, p.y))
+        .unwrap_or_else(|| grid.sample(p.x, p.y))
+}
+
+/// Cresce `a`/`b` ao envelope da união: `b` é o mais RECENTE (ganha onde
+/// cobre), `a` preenche o resto e as células que nenhum cobre (cantos da
+/// bbox da união) recebem a vista de baixo — o que lá se via antes.
+fn grow_pair(a: &DeltaRect, b: &DeltaRect, below: impl Fn(Vec2) -> f32) -> DeltaRect {
     let texel = a.texel;
+    let lo = a.min.min(b.min);
+    let hi = a.max_corner().max(b.max_corner());
     let cols = ((hi.x - lo.x) / texel).round() as usize + 1;
     let rows = ((hi.y - lo.y) / texel).round() as usize + 1;
-    let mut data = vec![f32::NAN; cols * rows];
+    let mut data = Vec::with_capacity(cols * rows);
     let (mut lo_h, mut hi_h) = (f32::INFINITY, f32::NEG_INFINITY);
     for j in 0..rows {
         for i in 0..cols {
             let p = lo + Vec2::new(i as f32, j as f32) * texel;
-            // O recorte mais recente ganha; `a` é o mais velho.
-            let v = b.sample(p.x, p.y).or_else(|| a.sample(p.x, p.y));
-            if let Some(v) = v {
-                data[j * cols + i] = v;
-                lo_h = lo_h.min(v);
-                hi_h = hi_h.max(v);
-            }
-        }
-    }
-    // Células fora de ambos (cantos da união) herdam o vizinho mais próximo
-    // — o envelope só cresce por bbox, os buracos são pequenos.
-    for j in 0..rows {
-        for i in 0..cols {
-            if data[j * cols + i].is_nan() {
-                let left = i > 0 && !data[j * cols + i - 1].is_nan();
-                let up = j > 0 && !data[(j - 1) * cols + i].is_nan();
-                data[j * cols + i] = match (left, up) {
-                    (true, true) => (data[j * cols + i - 1] + data[(j - 1) * cols + i]) * 0.5,
-                    (true, false) => data[j * cols + i - 1],
-                    (false, true) => data[(j - 1) * cols + i],
-                    (false, false) => continue, // resolve no passe seguinte
-                };
-                lo_h = lo_h.min(data[j * cols + i]);
-                hi_h = hi_h.max(data[j * cols + i]);
-            }
+            let v = b
+                .sample(p.x, p.y)
+                .or_else(|| a.sample(p.x, p.y))
+                .unwrap_or_else(|| below(p));
+            data.push(v);
+            lo_h = lo_h.min(v);
+            hi_h = hi_h.max(v);
         }
     }
     DeltaRect {
@@ -317,8 +331,49 @@ pub struct TerrainEditQueue {
     pub pending: std::collections::VecDeque<TerrainEdit>,
     /// Total aplicado desde o boot (diagnóstico).
     pub applied: u64,
-    /// Pedidos descartados por inválidos (NaN, raio 0).
+    /// Pedidos descartados por inválidos (NaN, raio 0) ou com a fila cheia.
     pub rejected: u64,
+}
+
+impl TerrainEditQueue {
+    /// Enfileira `edit`; `false` (e conta em `rejected`) quando o pedido é
+    /// malformado ou a fila já tem [`EDIT_QUEUE_CAP`] pendentes.
+    pub fn push(&mut self, edit: TerrainEdit) -> bool {
+        if !edit.is_well_formed() || self.pending.len() >= EDIT_QUEUE_CAP {
+            self.rejected += 1;
+            return false;
+        }
+        self.pending.push_back(edit);
+        true
+    }
+}
+
+impl TerrainEdit {
+    fn center_radius(&self) -> (Vec2, f32) {
+        match self {
+            TerrainEdit::Lower { at, radius, .. }
+            | TerrainEdit::Raise { at, radius, .. }
+            | TerrainEdit::Flatten { at, radius, .. }
+            | TerrainEdit::Crater { at, radius, .. } => (*at, *radius),
+        }
+    }
+
+    /// Parâmetros utilizáveis: centro/raio finitos, raio > 0, profundidade
+    /// ou altura RELATIVA finita e ≤ [`EDIT_MAX_DEPTH`]; o `Flatten` leva uma
+    /// cota ABSOLUTA (só tem de ser finita — o resultado é clampado a
+    /// `0..=max_height` como todas as edições).
+    pub fn is_well_formed(&self) -> bool {
+        let (at, radius) = self.center_radius();
+        if !at.is_finite() || !radius.is_finite() || radius <= 0.0 {
+            return false;
+        }
+        match self {
+            TerrainEdit::Lower { depth: v, .. }
+            | TerrainEdit::Raise { height: v, .. }
+            | TerrainEdit::Crater { depth: v, .. } => v.is_finite() && v.abs() <= EDIT_MAX_DEPTH,
+            TerrainEdit::Flatten { height, .. } => height.is_none_or(f32::is_finite),
+        }
+    }
 }
 
 /// Falloff suave `1 → 0` em `t = d/raio` (smootherstep), com o corte a 1.
@@ -344,41 +399,30 @@ fn crater_profile(t: f32) -> f32 {
     }
 }
 
-/// Aplica UMA edição ao overlay. Devolve `false` quando o pedido é inválido
-/// (NaN/inf, raio ≤ 0) ou quando a área toda é uma no-op.
+/// Aplica UMA edição ao overlay. Devolve `false` quando o pedido é
+/// malformado (ver [`TerrainEdit::is_well_formed`]) ou cai fora do mundo.
 pub fn apply_edit(grid: &BrushGrid, deltas: &mut DeltaGrid, edit: &TerrainEdit) -> bool {
-    let (at, radius) = match edit {
-        TerrainEdit::Lower { at, radius, .. }
-        | TerrainEdit::Raise { at, radius, .. }
-        | TerrainEdit::Flatten { at, radius, .. }
-        | TerrainEdit::Crater { at, radius, .. } => (*at, *radius),
-    };
-    if !at.is_finite() || !radius.is_finite() || radius <= 0.0 {
+    if !edit.is_well_formed() {
         return false;
     }
+    let (at, radius) = edit.center_radius();
     let radius = radius.min(EDIT_MAX_RADIUS);
-    let amount = match edit {
-        TerrainEdit::Lower { depth, .. } => *depth,
-        TerrainEdit::Raise { height, .. } => *height,
-        TerrainEdit::Flatten { height, .. } => height.unwrap_or(f32::NAN),
-        TerrainEdit::Crater { depth, .. } => *depth,
-    };
-    if !amount.is_nan() && (!amount.is_finite() || amount.abs() > EDIT_MAX_DEPTH) {
-        return false;
-    }
 
     let texel = grid.texel();
-    // Rect ancorado ao lattice da grid, com uma célula de margem (o falloff
-    // chega a zero no raio, portanto a borda do rect já é igual à base).
+    // Rect ancorado ao lattice da grid (origem em -world_size/2), com uma
+    // célula de margem (o falloff chega a zero no raio, portanto a borda do
+    // rect já é igual à base) e recortado ao mundo: fora dele não há mesh,
+    // e um recorte distante faria o envelope da próxima fusão explodir.
+    let origin = -grid.world_size() * 0.5;
     let half = radius + texel;
-    let min = Vec2::new(
-        ((at.x - half) / texel).floor() * texel,
-        ((at.y - half) / texel).floor() * texel,
-    );
-    let max = Vec2::new(
-        ((at.x + half) / texel).ceil() * texel,
-        ((at.y + half) / texel).ceil() * texel,
-    );
+    let lo = (at - Vec2::splat(half)).max(Vec2::splat(origin - texel));
+    let hi = (at + Vec2::splat(half)).min(Vec2::splat(-origin + texel));
+    if lo.x >= hi.x || lo.y >= hi.y {
+        return false;
+    }
+    let snap = |v: f32, round: fn(f32) -> f32| origin + round((v - origin) / texel) * texel;
+    let min = Vec2::new(snap(lo.x, f32::floor), snap(lo.y, f32::floor));
+    let max = Vec2::new(snap(hi.x, f32::ceil), snap(hi.y, f32::ceil));
     let cols = (((max.x - min.x) / texel).round() as usize) + 1;
     let rows = (((max.y - min.y) / texel).round() as usize) + 1;
     if cols < 2 || rows < 2 || cols * rows > 1_048_576 {
@@ -415,8 +459,8 @@ pub fn apply_edit(grid: &BrushGrid, deltas: &mut DeltaGrid, edit: &TerrainEdit) 
         }
     }
 
-    // FASE 2 (escrita): commit (funde com recortes que toque).
-    deltas.commit(DeltaRect {
+    // FASE 2 (escrita): commit (funde com o recorte do topo se o tocar).
+    deltas.commit(grid, DeltaRect {
         min,
         texel,
         cols,
@@ -615,5 +659,158 @@ mod tests {
             let h = view.sample(k as f32 * 3.0, 0.0);
             assert!(h < 9.6, "edição {k} sobreviveu à fusão: {h}");
         }
+    }
+
+    /// A união de dois recortes em diagonal tem cantos que nenhum cobre:
+    /// recebem a base (antes ficavam NaN — altura NaN no mesh e na física).
+    #[test]
+    fn test_merge_corners_take_the_base_not_nan() {
+        let grid = flat_grid();
+        let mut deltas = DeltaGrid::default();
+        for at in [Vec2::new(0.0, 10.0), Vec2::new(10.0, 0.0)] {
+            assert!(apply_edit(
+                &grid,
+                &mut deltas,
+                &TerrainEdit::Raise {
+                    at,
+                    radius: 8.0,
+                    height: 2.0
+                }
+            ));
+        }
+        assert_eq!(deltas.rects.len(), 1, "as bboxes tocam-se: fundem");
+        let r = &deltas.rects[0];
+        assert!(r.data.iter().all(|v| v.is_finite()), "sem NaN no recorte fundido");
+        let corner = deltas.sample(r.min.x + 0.5, r.min.y + 0.5).expect("dentro");
+        assert!((corner - 10.0).abs() < 1e-3, "canto descoberto = base: {corner}");
+    }
+
+    /// A edição nova ganha SEMPRE: fundir com um recorte antigo punha-a por
+    /// baixo dos intermédios, que a escondiam.
+    #[test]
+    fn test_newest_edit_wins_over_intermediate_rects() {
+        let grid = flat_grid();
+        let mut deltas = DeltaGrid::default();
+        let lower = |x: f32| TerrainEdit::Lower {
+            at: Vec2::new(x, 0.0),
+            radius: 8.0,
+            depth: 2.0,
+        };
+        assert!(apply_edit(&grid, &mut deltas, &lower(-20.0)));
+        assert!(apply_edit(&grid, &mut deltas, &lower(20.0)));
+        assert_eq!(deltas.rects.len(), 2, "afastadas: dois recortes");
+        // Toca os dois; cobre x≈13 onde o lower de x=20 também manda.
+        assert!(apply_edit(
+            &grid,
+            &mut deltas,
+            &TerrainEdit::Flatten {
+                at: Vec2::ZERO,
+                radius: 14.0,
+                height: Some(20.0),
+            }
+        ));
+        let view = EditedBase {
+            grid: &grid,
+            deltas: &deltas,
+        };
+        let expected = {
+            let fresh = DeltaGrid::default();
+            let mut solo = fresh.clone();
+            apply_edit(&grid, &mut solo, &lower(20.0));
+            let before = EditedBase {
+                grid: &grid,
+                deltas: &solo,
+            }
+            .sample(13.0, 0.0);
+            before + (20.0 - before) * falloff(13.0 / 14.0)
+        };
+        let got = view.sample(13.0, 0.0);
+        assert!((got - expected).abs() < 0.05, "o flatten novo manda em x=13: {got} vs {expected}");
+        assert!(view.sample(0.0, 0.0) > 19.9, "centro achatado a 20 m");
+    }
+
+    /// Cota ABSOLUTA do flatten acima do teto relativo é legítima; fora do
+    /// mundo é recusado (o envelope da fusão seguinte explodiria).
+    #[test]
+    fn test_flatten_absolute_height_and_world_bounds() {
+        let grid = flat_grid();
+        let mut deltas = DeltaGrid::default();
+        let high = TerrainEdit::Flatten {
+            at: Vec2::ZERO,
+            radius: 6.0,
+            height: Some(45.0),
+        };
+        assert!(high.is_well_formed());
+        assert!(apply_edit(&grid, &mut deltas, &high));
+        assert!(deltas.sample(0.0, 0.0).unwrap() > 40.0);
+
+        let far = TerrainEdit::Raise {
+            at: Vec2::new(1.0e6, 0.0),
+            radius: 6.0,
+            height: 2.0,
+        };
+        assert!(far.is_well_formed());
+        assert!(!apply_edit(&grid, &mut deltas, &far), "fora do mundo");
+        assert_eq!(deltas.rects.len(), 1);
+        assert!(
+            !TerrainEdit::Raise {
+                at: Vec2::ZERO,
+                radius: 6.0,
+                height: EDIT_MAX_DEPTH + 1.0
+            }
+            .is_well_formed()
+        );
+        assert!(
+            !TerrainEdit::Flatten {
+                at: Vec2::ZERO,
+                radius: 6.0,
+                height: Some(f32::INFINITY)
+            }
+            .is_well_formed()
+        );
+    }
+
+    /// O recorte fica no lattice da grid (origem em −world/2), não no de 0.
+    #[test]
+    fn test_rect_is_anchored_to_the_grid_lattice() {
+        let grid = flat_grid();
+        let mut deltas = DeltaGrid::default();
+        apply_edit(
+            &grid,
+            &mut deltas,
+            &TerrainEdit::Lower {
+                at: Vec2::new(3.3, -7.1),
+                radius: 5.0,
+                depth: 1.0,
+            },
+        );
+        let r = &deltas.rects[0];
+        let origin = -grid.world_size() * 0.5;
+        for v in [r.min.x, r.min.y] {
+            let k = (v - origin) / grid.texel();
+            assert!((k - k.round()).abs() < 1e-3, "min fora do lattice: {v} (k = {k})");
+        }
+    }
+
+    /// A fila recusa malformados e para no teto.
+    #[test]
+    fn test_queue_rejects_malformed_and_caps() {
+        let mut q = TerrainEditQueue::default();
+        let ok = TerrainEdit::Lower {
+            at: Vec2::ZERO,
+            radius: 2.0,
+            depth: 1.0,
+        };
+        assert!(!q.push(TerrainEdit::Lower {
+            at: Vec2::ZERO,
+            radius: -1.0,
+            depth: 1.0
+        }));
+        for _ in 0..EDIT_QUEUE_CAP {
+            assert!(q.push(ok));
+        }
+        assert!(!q.push(ok), "fila cheia");
+        assert_eq!(q.pending.len(), EDIT_QUEUE_CAP);
+        assert_eq!(q.rejected, 2);
     }
 }

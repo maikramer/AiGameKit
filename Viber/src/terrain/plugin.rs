@@ -450,8 +450,12 @@ fn update_voxel_columns(
             chunk.lod != chunk.built_lod || nkey != chunk.built_neighbours || edit_stale;
         match build.as_mut() {
             // O alvo mudou a meio da construção: as staged (escondidas)
-            // morrem e a fila recomputa para o novo alvo.
-            Some(b) if b.target != chunk.lod || b.neighbours != nkey || b.edit_rev != edit_rev => {
+            // morrem e a fila recomputa para o novo alvo. Uma revisão de
+            // edição nova NÃO reinicia: a construção acaba com a revisão com
+            // que começou e o `edit_stale` agenda a seguinte se a edição a
+            // tocar — reiniciar aqui prendia TODAS as colunas em construção
+            // (streaming incluído) enquanto um script editasse a cada frame.
+            Some(b) if b.target != chunk.lod || b.neighbours != nkey => {
                 for e in b.staged.drain(..) {
                     commands.entity(e).despawn();
                 }
@@ -544,6 +548,10 @@ fn update_voxel_columns(
                     chunk.built_lod = b.target;
                     chunk.built_neighbours = b.neighbours;
                     chunk.built_edit_rev = b.edit_rev;
+                    if b.edit_rev != edit_rev {
+                        // Editada a meio: o passe seguinte decide se re-mesha.
+                        state.pending = true;
+                    }
 
                     commands.entity(entity).remove::<ColumnBuild>();
                 }

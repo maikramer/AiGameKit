@@ -484,6 +484,8 @@ impl CliffMask {
             return;
         }
         let half = self.world_size * 0.5;
+        let step_x = self.world_size / (width - 1) as f32;
+        let step_z = self.world_size / (depth - 1) as f32;
         for band in bands {
             if band.stations.len() < 2 {
                 continue;
@@ -501,14 +503,14 @@ impl CliffMask {
             }
             let clampx = |v: f32| v.clamp(0.0, (width - 1) as f32) as usize;
             let clampz = |v: f32| v.clamp(0.0, (depth - 1) as f32) as usize;
-            let x0 = clampx(((min_x - reach) + half) / texel);
-            let x1 = clampx((((max_x + reach) + half) / texel).ceil());
-            let z0 = clampz(((min_z - reach) + half) / texel);
-            let z1 = clampz((((max_z + reach) + half) / texel).ceil());
+            let x0 = clampx(((min_x - reach) + half) / step_x);
+            let x1 = clampx((((max_x + reach) + half) / step_x).ceil());
+            let z0 = clampz(((min_z - reach) + half) / step_z);
+            let z1 = clampz((((max_z + reach) + half) / step_z).ceil());
 
             for z in z0..=z1 {
                 for x in x0..=x1 {
-                    let p = Vec2::new(x as f32 * texel - half, z as f32 * texel - half);
+                    let p = Vec2::new(x as f32 * step_x - half, z as f32 * step_z - half);
                     let Some(hit) = nearest_on_path(&band.stations, p) else {
                         continue;
                     };
