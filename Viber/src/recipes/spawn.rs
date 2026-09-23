@@ -222,10 +222,7 @@ fn collect_walk(specs: &[EntitySpec], offset: Vec2, out: &mut PendingTerrain) {
                 });
             }
             EntityKind::Lake { spec: lake } => {
-                out.features.lakes.push(LakeSpec {
-                    at: lake.at + offset,
-                    ..lake.clone()
-                });
+                out.features.lakes.push(shift_lake(lake, offset));
             }
             EntityKind::Cut { spec: cut } => {
                 out.features.cuts.push(CutSpec {
@@ -328,6 +325,24 @@ fn collect_walk(specs: &[EntitySpec], offset: Vec2, out: &mut PendingTerrain) {
     }
 }
 
+/// Lago deslocado pelo offset dos grupos ancestrais — centro E ilhas: o parse
+/// só soma às ilhas a translation do próprio lago, e deslocar apenas o `at`
+/// deixava as ilhas para trás, fora da bacia.
+fn shift_lake(lake: &LakeSpec, offset: Vec2) -> LakeSpec {
+    LakeSpec {
+        at: lake.at + offset,
+        islands: lake
+            .islands
+            .iter()
+            .map(|island| crate::terrain::water::IslandSpec {
+                at: island.at + offset,
+                ..island.clone()
+            })
+            .collect(),
+        ..lake.clone()
+    }
+}
+
 /// Recolhe os catálogos RPG declaráveis (Fases B2/B3) da árvore de entidades:
 /// `<Landmark>` → [`crate::travel::LandmarkCatalog`] e `<SpawnPoint>` →
 /// [`crate::feedback::RespawnCatalog`]. Só substituem o fallback quando o
@@ -425,6 +440,7 @@ pub fn startup(world: &mut World) {
         &asset_server,
         &mut spawn_groups,
         &mut exclusions,
+        Vec2::ZERO,
     );
     // Os discos ficam em DOIS sítios de propósito: no `PendingSpawnGroups`
     // (consumidos e removidos no fim da colocação) e num recurso próprio, que
@@ -804,32 +820,35 @@ fn push_shore_rock_group(
 }
 
 /// Recursively collect `<StaticSpawner>` specs and start their template loads.
+///
+/// `offset` is the accumulated ancestor XZ translation — the same one
+/// [`collect_walk`] adds to lakes and rivers, so the shore rocks ring the
+/// water where it was actually carved.
 fn collect_spawn_groups(
     specs: &[EntitySpec],
     asset_server: &AssetServer,
     out: &mut Vec<crate::spawner::SpawnGroupState>,
     exclusions: &mut Vec<crate::spawner::SpawnExclusion>,
+    offset: Vec2,
 ) {
     for spec in specs {
+        let child_offset =
+            offset + Vec2::new(spec.transform.translation[0], spec.transform.translation[2]);
         match &spec.kind {
             EntityKind::Lake { spec: lake } => {
                 if lake.rocks {
-                    let candidates = crate::terrain::shore_rocks::lake_candidates(lake, out.len());
-                    push_shore_rock_group(
-                        out,
-                        asset_server,
-                        candidates,
-                        bevy::math::Vec2::new(lake.at.x, lake.at.y),
-                        &lake.rocks_spec,
-                    );
+                    let lake = shift_lake(lake, offset);
+                    let candidates = crate::terrain::shore_rocks::lake_candidates(&lake, out.len());
+                    push_shore_rock_group(out, asset_server, candidates, lake.at, &lake.rocks_spec);
                 }
-                collect_spawn_groups(&spec.children, asset_server, out, exclusions);
+                collect_spawn_groups(&spec.children, asset_server, out, exclusions, child_offset);
             }
             EntityKind::River { spec: river } => {
                 if river.rocks && river.path.len() >= 2 {
+                    let path: Vec<Vec2> = river.path.iter().map(|p| *p + offset).collect();
                     // As candidatas seguem o MESMO suavizado do carve
                     // (chaikin ×2 + resample) — as estações finais do rio.
-                    let smoothed = crate::terrain::paths::chaikin_smooth(&river.path, 2, false);
+                    let smoothed = crate::terrain::paths::chaikin_smooth(&path, 2, false);
                     let stations = crate::terrain::paths::resample(
                         &smoothed,
                         crate::terrain::water::RIVER_STATION_SPACING.max(0.5),
@@ -853,7 +872,7 @@ fn collect_spawn_groups(
                         &river.rocks_spec,
                     );
                 }
-                collect_spawn_groups(&spec.children, asset_server, out, exclusions);
+                collect_spawn_groups(&spec.children, asset_server, out, exclusions, child_offset);
             }
             EntityKind::StaticSpawner { spec: group }
             | EntityKind::DynamicSpawner { spec: group } => {
@@ -947,16 +966,18 @@ fn collect_spawn_groups(
                     activation_radius: spawner_spec.activation_radius,
                     template_collider: spawner_spec.template_collider.clone(),
                     template_destructible: spawner_spec.template_destructible.clone(),
-                    collider_handle: spawner_spec.template_collider.as_ref().map(|shape| {
+                    // Como nos spawners: só Mesh/Precompute têm glTF de
+                    // colisão — as outras formas pediam o load de um path vazio.
+                    collider_handle: spawner_spec.template_collider.as_ref().and_then(|shape| {
                         let url = match shape {
                             crate::physics::ColliderShape::Mesh { url, .. }
-                            | crate::physics::ColliderShape::Precompute { url } => url.clone(),
-                            _ => String::new(),
+                            | crate::physics::ColliderShape::Precompute { url } => url,
+                            _ => return None,
                         };
-                        crate::meshopt::load_gltf(
+                        Some(crate::meshopt::load_gltf(
                             asset_server,
                             url.trim_start_matches('/').to_owned(),
-                        )
+                        ))
                     }),
                     spec: spawner_spec,
                     handles,
@@ -966,7 +987,7 @@ fn collect_spawn_groups(
                     dynamic: false,
                 });
             }
-            _ => collect_spawn_groups(&spec.children, asset_server, out, exclusions),
+            _ => collect_spawn_groups(&spec.children, asset_server, out, exclusions, child_offset),
         }
     }
 }
@@ -1009,11 +1030,11 @@ fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &Entity
             // Primitiva (parte de `<Composition>` ou `collider="auto"`
             // autoral): a forma é conhecida AGORA — colisor exato, sem
             // PendingCollider nem AABB aproximado.
+            // O mesh da primitiva não tem escala (fica no `Transform`) e o
+            // Rapier aplica a escala do `GlobalTransform` ao collider — passar
+            // a escala do spec aqui dava escala² ao colisor.
             if let EntityKind::Primitive { shape, .. } = &spec.kind {
-                entity.insert(crate::physics::collider_for_shape(
-                    shape,
-                    Vec3::from(spec.transform.scale),
-                ));
+                entity.insert(crate::physics::collider_for_shape(shape, Vec3::ONE));
             } else {
                 entity.insert(PendingCollider {
                     shape: ColliderShape::Auto,
@@ -1609,11 +1630,16 @@ fn spawn_entity(
             camera_pitch_deg,
             camera_yaw_deg,
         } => {
+            // O parse já somou a translation do próprio elemento; faltam os
+            // grupos ancestrais (a convenção `at` das features do terreno) —
+            // sem eles o retângulo ficava longe das salas que declara.
+            let offset = ancestor_xz(entity.world(), parent);
+            let shift = |p: &[f32; 2]| [p[0] + offset.x, p[1] + offset.y];
             ctx.worldsys.interior_scene = Some(crate::worldsys::InteriorSceneConfig {
-                min: *min,
-                max: *max,
+                min: shift(min),
+                max: shift(max),
                 room_size: *room_size,
-                room_origin: *room_origin,
+                room_origin: shift(room_origin),
                 camera_distance: *camera_distance,
                 camera_pitch_deg: *camera_pitch_deg,
                 camera_yaw_deg: *camera_yaw_deg,
@@ -1637,6 +1663,20 @@ fn spawn_entity(
         spawn_entity(world, ctx, child, Some(id), stats, ambient);
     }
     Some(id)
+}
+
+/// XZ acumulado das translations dos ancestrais já spawnados (sem rotação —
+/// a mesma convenção de [`collect_walk`] para as features do terreno).
+fn ancestor_xz(world: &World, mut parent: Option<Entity>) -> Vec2 {
+    let mut offset = Vec2::ZERO;
+    for _ in 0..64 {
+        let Some(entity) = parent else { break };
+        if let Some(transform) = world.get::<Transform>(entity) {
+            offset += transform.translation.xz();
+        }
+        parent = world.get::<ChildOf>(entity).map(|c| c.parent());
+    }
+    offset
 }
 
 fn build_transform(spec: &TransformSpec) -> Transform {

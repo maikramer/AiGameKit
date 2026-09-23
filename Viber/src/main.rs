@@ -1388,7 +1388,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
                 .after(skills::abilities_system),
             sky::sky_follow_camera,
             worldsys::seat_statics_once,
-            worldsys::resolve_pending_place,
+            worldsys::resolve_pending_place.after(worldsys::seat_statics_once),
             hud::hud_toggle,
             timed(Group::Fx, particles::particle_emitter_update),
             timed(Group::Spawner, spawner::instantiate_spawn_groups),

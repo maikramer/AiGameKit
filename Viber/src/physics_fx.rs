@@ -57,6 +57,15 @@ pub fn knockback_after(direction: Vec3, strength: f32) -> Knockback {
     }
 }
 
+/// Tombamento de `angle_deg` em torno de `axis`. Eixo nulo (herói em cima do
+/// tronco) cai para +X: `from_axis_angle(ZERO, a)` dá um quaternião NÃO
+/// unitário, que no `Transform` encolhia o prop (a meio a 90°) em vez de o
+/// rodar.
+pub fn fall_rotation(axis: Vec3, angle_deg: f32) -> Quat {
+    let axis = axis.try_normalize().unwrap_or(Vec3::X);
+    Quat::from_axis_angle(axis, angle_deg.to_radians())
+}
+
 /// Ângulo de queda (graus) no instante `t` de uma queda de `duration`.
 pub fn fall_angle(t: f32, duration: f32) -> f32 {
     let phase = (t / duration).clamp(0.0, 1.0);
@@ -150,8 +159,7 @@ fn falling_system(
             continue;
         }
         let angle = fall_angle(fall.timer, FALL_DURATION);
-        let axis = fall.axis.normalize_or_zero();
-        transform.rotation = Quat::from_axis_angle(axis, angle.to_radians()) * fall.initial;
+        transform.rotation = fall_rotation(fall.axis, angle) * fall.initial;
     }
 }
 
@@ -188,6 +196,18 @@ mod tests {
     fn test_knockback_zero_direction_safe() {
         let kb = knockback_after(Vec3::ZERO, 6.0);
         assert_eq!(kb.velocity, Vec3::ZERO);
+    }
+
+    /// Eixo nulo continua a dar uma ROTAÇÃO (quaternião unitário) — antes
+    /// encolhia o prop em vez de o tombar.
+    #[test]
+    fn test_fall_rotation_stays_unit_on_a_zero_axis() {
+        let q = fall_rotation(Vec3::ZERO, 90.0);
+        assert!((q.length() - 1.0).abs() < 1e-5, "unit: {}", q.length());
+        let tipped = q * Vec3::Y;
+        assert!(tipped.y.abs() < 1e-4, "fully tipped: {tipped}");
+        let q = fall_rotation(Vec3::new(0.0, 0.0, 5.0), 90.0);
+        assert!((q * Vec3::Y - Vec3::NEG_X).length() < 1e-4, "axis is normalized");
     }
 
     #[test]

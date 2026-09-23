@@ -4,6 +4,7 @@
 #[cfg(test)]
 use std::sync::Arc;
 
+use bevy::math::Affine3A;
 use bevy::math::Quat;
 use bevy::math::Vec3;
 use bevy::prelude::*;
@@ -545,6 +546,7 @@ pub fn seat_statics_once(
     parents: Query<(Entity, &ChildOf)>,
     seated: Query<(), With<SeatOnTerrain>>,
     unit: Query<(), With<SeatAsUnit>>,
+    placed: Query<(), With<PendingPlace>>,
 ) {
     if *done {
         return;
@@ -553,10 +555,15 @@ pub fn seat_statics_once(
         return;
     };
     // Índice pai → filhos: um passe sobre todas as relações de hierarquia.
+    // Filhos com `place` explícito ficam de fora: vão para o seu `at` (não
+    // estão onde o XZ autoral diz, por isso enviesavam o centro do grupo) e
+    // o `resolve_pending_place` define-lhes a cota exata a seguir.
     let mut children_of: std::collections::HashMap<Entity, Vec<Entity>> =
         std::collections::HashMap::new();
     for (child, parent) in &parents {
-        children_of.entry(parent.parent()).or_default().push(child);
+        if !placed.contains(child) {
+            children_of.entry(parent.parent()).or_default().push(child);
+        }
     }
     let roots: Vec<Entity> = transforms
         .iter()
@@ -734,15 +741,18 @@ pub struct PendingPlace {
 /// One-shot: resolve todos os [`PendingPlace`] quando o terreno existe.
 ///
 /// O XZ do objeto é REESCRITO para `at` (a composição vai PARA onde o autor
-/// pediu — semântica do `place` do VibeGame), compensando a translation do
-/// pai para o caso aninhado. Só altera a pose uma vez; depois o componente
-/// sai da entidade.
-#[allow(clippy::type_complexity)]
+/// pediu — semântica do `place` do VibeGame) e a cota do solo é MUNDO: a pose
+/// pretendida é convertida para o referencial do pai. Aninhado num grupo que
+/// o [`seat_statics_once`] acabou de levantar (corre antes, no mesmo frame —
+/// daí o [`TransformHelper`] em vez do `GlobalTransform` ainda velho), o Y
+/// local já desconta a subida do pai; escrever a cota mundo como Y local
+/// somava a altura do chão duas vezes. Só altera a pose uma vez; depois o
+/// componente sai da entidade.
 pub fn resolve_pending_place(
     mut done: Local<bool>,
     runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
-    mut pending: Query<(Entity, &mut Transform, &PendingPlace, Option<&ChildOf>)>,
-    globals: Query<&GlobalTransform>,
+    pending: Query<(Entity, &PendingPlace, Option<&ChildOf>)>,
+    mut poses: ParamSet<(bevy::transform::helper::TransformHelper, Query<&mut Transform>)>,
     mut commands: Commands,
 ) {
     if *done {
@@ -751,26 +761,53 @@ pub fn resolve_pending_place(
     let Some(runtime) = runtime else {
         return;
     };
-    for (entity, mut transform, place, parent) in &mut pending {
-        // XZ do PAI em mundo: um `<Use>`/composition aninhado num grupo com
-        // translation mantém o offset — `at` é sempre XZ MUNDO.
-        let parent_xz = parent
-            .and_then(|p| globals.get(p.parent()).ok())
-            .map(|g| Vec2::new(g.translation().x, g.translation().z))
-            .unwrap_or(Vec2::ZERO);
-        let local_xz = place.at - parent_xz;
-        let authored_y = transform.translation.y;
-        let ground = place_ground_y(&runtime, place.at.x, place.at.y, authored_y);
-        transform.translation.x = local_xz.x;
-        transform.translation.z = local_xz.y;
-        transform.translation.y = ground + place.base_y_offset;
-        if place.align_to_terrain {
-            let normal = terrain_normal(&runtime, place.at.x, place.at.y);
-            transform.rotation = align_up_to(normal, transform.rotation);
-        }
+    let parents: Vec<(Entity, PendingPlace, Affine3A)> = pending
+        .iter()
+        .map(|(entity, place, parent)| {
+            let parent_world = parent
+                .and_then(|p| poses.p0().compute_global_transform(p.parent()).ok())
+                .map(|g| g.affine())
+                .unwrap_or(Affine3A::IDENTITY);
+            (entity, place.clone(), parent_world)
+        })
+        .collect();
+    let mut transforms = poses.p1();
+    for (entity, place, parent_world) in parents {
         commands.entity(entity).remove::<PendingPlace>();
+        let Ok(mut transform) = transforms.get_mut(entity) else {
+            continue;
+        };
+        if let Some(local) = placed_local_transform(&runtime, &place, parent_world, *transform) {
+            *transform = local;
+        }
     }
     *done = true;
+}
+
+/// Pose LOCAL (referencial do pai `parent_world`) de um objeto com `place`:
+/// XZ mundo = `at`, Y mundo = solo + `base-y-offset`, rotação alinhada à
+/// normal quando pedido. `None` quando o pai tem escala nula (sem inversa).
+fn placed_local_transform(
+    runtime: &crate::terrain::runtime::TerrainRuntime,
+    place: &PendingPlace,
+    parent_world: Affine3A,
+    local: Transform,
+) -> Option<Transform> {
+    if parent_world.matrix3.determinant().abs() < 1e-12 {
+        return None;
+    }
+    let (_, parent_rotation, _) = parent_world.to_scale_rotation_translation();
+    let authored_world_y = parent_world.transform_point3(local.translation).y;
+    let ground = place_ground_y(runtime, place.at.x, place.at.y, authored_world_y);
+    let world = Vec3::new(place.at.x, ground + place.base_y_offset, place.at.y);
+    let mut out = local;
+    out.translation = parent_world.inverse().transform_point3(world);
+    if place.align_to_terrain {
+        let normal = terrain_normal(runtime, place.at.x, place.at.y);
+        let world_rotation = align_up_to(normal, parent_rotation * local.rotation);
+        out.rotation = (parent_rotation.inverse() * world_rotation).normalize();
+    }
+    Some(out)
 }
 
 /// Cota do solo para colocação explícita: o topo do span em que o objeto
@@ -1951,8 +1988,7 @@ mod place_tests {
         );
     }
 
-    #[test]
-    fn test_place_ground_y_uses_flat_fixture() {
+    fn flat_runtime() -> crate::terrain::runtime::TerrainRuntime {
         use crate::terrain::brush::BrushGrid;
         use crate::terrain::heightmap::HeightMapU16;
         use crate::terrain::runtime::TerrainRuntime;
@@ -1980,10 +2016,70 @@ mod place_tests {
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
         };
+        runtime
+    }
+
+    #[test]
+    fn test_place_ground_y_uses_flat_fixture() {
+        let runtime = flat_runtime();
         let ground = runtime.sample(0.0, 0.0);
         // `place` define a cota EXATA (sobe e desce), ao contrário do seating.
         assert_eq!(place_ground_y(&runtime, 0.0, 0.0, 0.0), ground);
         assert_eq!(place_ground_y(&runtime, 0.0, 0.0, 80.0), ground);
+    }
+
+    /// `place` aninhado num grupo já levantado ao chão: a cota do solo é
+    /// MUNDO — o Y local desconta a subida do pai (antes somava-a outra vez
+    /// e a composition flutuava à altura do chão acima dele).
+    #[test]
+    fn test_place_under_a_lifted_parent_lands_on_the_ground() {
+        let runtime = flat_runtime();
+        let ground = runtime.sample(4.0, -6.0);
+        let parent = Affine3A::from_translation(Vec3::new(10.0, ground, 2.0));
+        let place = PendingPlace {
+            at: Vec2::new(4.0, -6.0),
+            align_to_terrain: false,
+            base_y_offset: 0.5,
+        };
+        let local = placed_local_transform(&runtime, &place, parent, Transform::default()).expect("placed");
+        let world = parent.transform_point3(local.translation);
+        assert!((world - Vec3::new(4.0, ground + 0.5, -6.0)).length() < 1e-4, "world {world}");
+        assert!((local.translation.y - 0.5).abs() < 1e-4, "local y {}", local.translation.y);
+    }
+
+    /// Seating + place no MESMO frame: o grupo sobe, a composition filha com
+    /// `place` fica no chão (não à altura do chão acima dele) e não enviesa
+    /// o centro de amostragem do grupo.
+    #[test]
+    fn test_seat_then_place_in_the_same_frame() {
+        let mut app = bevy::app::App::new();
+        app.insert_resource(flat_runtime());
+        app.add_systems(
+            bevy::app::Update,
+            (seat_statics_once, resolve_pending_place.after(seat_statics_once)),
+        );
+        let ground = flat_runtime().sample(0.0, 0.0);
+        let group = app.world_mut().spawn((Transform::default(), SeatOnTerrain)).id();
+        app.world_mut().spawn((Transform::from_xyz(1.0, 0.0, 1.0), ChildOf(group)));
+        let placed = app
+            .world_mut()
+            .spawn((
+                Transform::default(),
+                PendingPlace {
+                    at: Vec2::new(3.0, -2.0),
+                    align_to_terrain: false,
+                    base_y_offset: 0.0,
+                },
+                ChildOf(group),
+            ))
+            .id();
+        app.update();
+        let group_y = app.world().get::<Transform>(group).unwrap().translation.y;
+        assert!((group_y - ground).abs() < 1e-3, "group seated: {group_y}");
+        let local = app.world().get::<Transform>(placed).unwrap().translation;
+        let world = Vec3::new(local.x, local.y + group_y, local.z);
+        assert!((world - Vec3::new(3.0, ground, -2.0)).length() < 1e-3, "placed world {world}");
+        assert!(app.world().get::<PendingPlace>(placed).is_none());
     }
 
     /// A bolsa só isenta do clamp/DENTRO do retângulo — e um retângulo

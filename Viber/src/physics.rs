@@ -439,8 +439,9 @@ pub fn collider_for_shape(shape: &crate::recipes::Shape, scale: Vec3) -> Collide
 
 /// Finishes [`PendingCollider`]s whose glTF has finished loading.
 ///
-/// `Auto` resolves from the entity's rendered [`Aabb`]; the mesh shapes bake a
-/// Rapier shape out of every primitive in the loaded glTF.
+/// `Auto` resolves from the rendered bounds of the entity and its whole
+/// subtree ([`local_bounds`]); the mesh shapes bake a Rapier shape out of
+/// every primitive in the loaded glTF.
 #[allow(clippy::type_complexity)]
 #[allow(clippy::too_many_arguments)]
 pub fn resolve_pending_colliders(
@@ -451,39 +452,28 @@ pub fn resolve_pending_colliders(
     gltfs: Res<Assets<bevy::gltf::Gltf>>,
     gltf_meshes: Res<Assets<bevy::gltf::GltfMesh>>,
     meshes: Res<Assets<Mesh>>,
-    mut pending: Query<
-        (
-            Entity,
-            &mut PendingCollider,
-            Option<&bevy::camera::primitives::Aabb>,
-            Option<&Children>,
-            Option<&GlobalTransform>,
-        ),
-        Without<ColliderResolved>,
-    >,
+    mut pending: Query<(Entity, &mut PendingCollider, Option<&GlobalTransform>), Without<ColliderResolved>>,
     scene_bounds: Query<(&GlobalTransform, Option<&bevy::camera::primitives::Aabb>)>,
+    hierarchy: Query<&Children>,
     mut debug_colliders: Local<u32>,
 ) {
-    for (entity, mut request, aabb, children, entity_global) in pending.iter_mut() {
+    for (entity, mut request, entity_global) in pending.iter_mut() {
         request.age += time.delta_secs();
+        let bounds = || local_bounds(entity, entity_global, &hierarchy, &scene_bounds);
         match &request.shape {
             ColliderShape::Auto => {
-                // The AABB only exists once the entity's mesh is loaded.
-                let Some(aabb) = aabb else {
-                    if request.age < PENDING_TIMEOUT {
-                        continue;
-                    }
-                    // Cena demorou: AABB dos filhos ou desiste.
-                    if let Some((center, half)) = fallback_children_aabb(children, &scene_bounds) {
-                        fallback_cuboid_child(&mut commands, entity, entity_global, center, half);
-                    }
-                    commands.entity(entity).insert(ColliderResolved);
+                // Os bounds só existem depois de o mesh (ou a cena glTF, cujos
+                // `Aabb` vivem em netos/bisnetos) carregar.
+                if let Some((center, half)) = bounds() {
+                    bounds_cuboid(&mut commands, entity, center, half);
+                } else if request.age < PENDING_TIMEOUT {
                     continue;
-                };
-                let half = Vec3::from(aabb.half_extents).max(Vec3::splat(1e-3));
-                commands
-                    .entity(entity)
-                    .insert((Collider::cuboid(half.x, half.y, half.z), ColliderResolved));
+                } else {
+                    bevy::log::warn!(
+                        "physics: collider auto sem bounds após {PENDING_TIMEOUT} s — sem collider (entity {entity:?})"
+                    );
+                }
+                commands.entity(entity).insert(ColliderResolved);
             }
             ColliderShape::Mesh { .. } | ColliderShape::Precompute { .. } => {
                 let Some(handle) = request.gltf.as_ref() else {
@@ -516,8 +506,8 @@ pub fn resolve_pending_colliders(
                         "physics: glTF de colisão atrasado (>{} s) — fallback AABB (entity {entity:?})",
                         PENDING_TIMEOUT
                     );
-                    if let Some((center, half)) = fallback_children_aabb(children, &scene_bounds) {
-                        fallback_cuboid_child(&mut commands, entity, entity_global, center, half);
+                    if let Some((center, half)) = bounds() {
+                        bounds_cuboid(&mut commands, entity, center, half);
                     }
                     commands.entity(entity).insert(ColliderResolved);
                     continue;
@@ -526,22 +516,17 @@ pub fn resolve_pending_colliders(
                     server.get_load_state(handle),
                     Some(bevy::asset::LoadState::Failed(_))
                 ) {
-                    match aabb {
-                        Some(aabb) => {
-                            let half = Vec3::from(aabb.half_extents).max(Vec3::splat(1e-3));
-                            commands.entity(entity).insert((
-                                Collider::cuboid(half.x, half.y, half.z),
-                                ColliderResolved,
-                            ));
-                        }
-                        // No bounds yet either — give up rather than spin.
-                        None => {
-                            bevy::log::warn!(
-                                "physics: colisão falhou ao carregar e sem Aabb — sem collider (entity {entity:?})"
-                            );
-                            commands.entity(entity).insert(ColliderResolved);
-                        }
+                    match bounds() {
+                        Some((center, half)) => bounds_cuboid(&mut commands, entity, center, half),
+                        // O glTF de colisão falha logo; a cena renderizada
+                        // pode ainda não ter bounds — espera por eles até ao
+                        // timeout em vez de desistir no 1.º frame.
+                        None if request.age < PENDING_TIMEOUT => continue,
+                        None => bevy::log::warn!(
+                            "physics: colisão falhou ao carregar e sem Aabb — sem collider (entity {entity:?})"
+                        ),
                     }
+                    commands.entity(entity).insert(ColliderResolved);
                     continue;
                 }
                 let Some(gltf) = gltfs.get(handle) else {
@@ -606,52 +591,71 @@ pub fn resolve_pending_colliders(
     }
 }
 
-/// AABB unido das cenas filhas (mundo). `None` quando nada tem bounds.
-fn fallback_children_aabb(
-    children: Option<&Children>,
+/// AABB da entidade e de TODOS os descendentes com `Aabb`, no referencial
+/// LOCAL da entidade (antes da escala dela). Uma cena glTF põe os meshes em
+/// netos/bisnetos do `SceneRoot` — só os filhos diretos quase nunca têm
+/// bounds. `None` quando nada tem bounds (ou a entidade tem escala nula).
+fn local_bounds(
+    entity: Entity,
+    entity_global: Option<&GlobalTransform>,
+    hierarchy: &Query<&Children>,
     scene_bounds: &Query<(&GlobalTransform, Option<&bevy::camera::primitives::Aabb>)>,
 ) -> Option<(Vec3, Vec3)> {
-    let children = children?;
+    let to_local = match entity_global {
+        Some(global) if global.affine().matrix3.determinant().abs() > 1e-12 => global.affine().inverse(),
+        Some(_) => return None,
+        None => bevy::math::Affine3A::IDENTITY,
+    };
+    let boxes = std::iter::once(entity)
+        .chain(hierarchy.iter_descendants(entity))
+        .filter_map(|e| scene_bounds.get(e).ok())
+        .filter_map(|(global, aabb)| {
+            let aabb = aabb?;
+            Some((to_local * global.affine(), Vec3::from(aabb.center), Vec3::from(aabb.half_extents)))
+        });
+    union_bounds(boxes)
+}
+
+/// União (centro, meia-extensão) de caixas orientadas, cada uma dada pelo
+/// affine que a leva ao referencial alvo — os 8 cantos entram no AABB, por
+/// isso rotações/escalas dos nós da cena são respeitadas.
+fn union_bounds(boxes: impl Iterator<Item = (bevy::math::Affine3A, Vec3, Vec3)>) -> Option<(Vec3, Vec3)> {
     let mut min = Vec3::splat(f32::INFINITY);
     let mut max = Vec3::splat(f32::NEG_INFINITY);
-    for child in children.iter() {
-        let Ok((transform, aabb)) = scene_bounds.get(child) else {
-            continue;
-        };
-        let Some(aabb) = aabb else { continue };
-        let center = transform.transform_point(aabb.center.into());
-        let half = Vec3::from(aabb.half_extents);
-        min = min.min(center - half);
-        max = max.max(center + half);
+    for (affine, center, half) in boxes {
+        for i in 0..8 {
+            let sign = Vec3::new(
+                if i & 1 == 0 { -1.0 } else { 1.0 },
+                if i & 2 == 0 { -1.0 } else { 1.0 },
+                if i & 4 == 0 { -1.0 } else { 1.0 },
+            );
+            let corner = affine.transform_point3(center + half * sign);
+            min = min.min(corner);
+            max = max.max(corner);
+        }
     }
     if !min.is_finite() || !max.is_finite() {
         return None;
     }
-    let center = (min + max) * 0.5;
-    Some((center, (max - min) * 0.5))
+    Some(((min + max) * 0.5, (max - min) * 0.5))
 }
 
-/// Fallback AABB como FILHO da entidade, com o offset relativo ao centro do
-/// prop. Inserir `Transform::from_translation(center)` na própria entidade —
-/// `center` é world-space — teleportava o prop e quebrava a hierarquia.
-fn fallback_cuboid_child(
-    commands: &mut Commands,
-    entity: Entity,
-    entity_global: Option<&GlobalTransform>,
-    center: Vec3,
-    half: Vec3,
-) {
-    let local = entity_global
-        .map(|g| g.affine().inverse().transform_point3(center))
-        .unwrap_or(center);
-    let collider = commands
-        .spawn((
-            Name::new("collider"),
-            Collider::cuboid(half.x.max(1e-3), half.y.max(1e-3), half.z.max(1e-3)),
-            Transform::from_translation(local),
-        ))
+/// Caixa de bounds (referencial local da entidade) como collider. Centrada na
+/// origem vai direto na entidade; descentrada (prop com pivô nos pés) vai num
+/// FILHO com o offset — mudar o `Transform` da própria entidade teleportava o
+/// prop. O Rapier aplica a escala do `GlobalTransform`, por isso a caixa fica
+/// em unidades locais.
+fn bounds_cuboid(commands: &mut Commands, entity: Entity, center: Vec3, half: Vec3) {
+    let half = half.max(Vec3::splat(1e-3));
+    let collider = Collider::cuboid(half.x, half.y, half.z);
+    if center.length_squared() < 1e-8 {
+        commands.entity(entity).insert(collider);
+        return;
+    }
+    let child = commands
+        .spawn((Name::new("collider"), collider, Transform::from_translation(center)))
         .id();
-    commands.entity(entity).add_child(collider);
+    commands.entity(entity).add_child(child);
 }
 
 /// Bakes one Rapier collider out of every mesh primitive in a glTF.
@@ -1070,6 +1074,27 @@ mod tests {
         );
     }
 
+    /// Bounds de uma cena glTF: meshes em nós aninhados (com offset e
+    /// rotação) entram TODOS no AABB local — o fallback antigo só via filhos
+    /// diretos e ignorava a rotação.
+    #[test]
+    fn test_union_bounds_covers_nested_rotated_nodes() {
+        use bevy::math::Affine3A;
+        let feet_pivot = (Affine3A::from_translation(Vec3::new(0.0, 1.0, 0.0)), Vec3::ZERO, Vec3::splat(1.0));
+        let rotated = (
+            Affine3A::from_rotation_translation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_4), Vec3::X * 3.0),
+            Vec3::ZERO,
+            Vec3::new(1.0, 0.5, 0.0),
+        );
+        let (center, half) = union_bounds([feet_pivot, rotated].into_iter()).expect("bounds");
+        let d = std::f32::consts::FRAC_1_SQRT_2;
+        let min = Vec3::new(-1.0, -0.5, -1.0);
+        let max = Vec3::new(3.0 + d, 2.0, 1.0);
+        assert!((center - (min + max) * 0.5).length() < 1e-4, "center {center}");
+        assert!((half - (max - min) * 0.5).length() < 1e-4, "half {half}");
+        assert!(union_bounds(std::iter::empty()).is_none(), "no boxes, no bounds");
+    }
+
     #[test]
     fn test_body_bundle_kinds() {
         assert!(body_bundle(BodyKind::None, None).is_none());
@@ -1309,11 +1334,13 @@ pub fn stream_voxel_colliders(
                         bake.add_bevy_mesh(box_chunk.origin, mesh);
                     }
                 }
+                // Sem `ready` aqui: a coluna reparada pode não ser a que está
+                // sob o herói, e o insert é diferido (o Rapier só a vê no
+                // frame seguinte) — o ramo `d <= 0` acima publica-o então.
                 if let Some(collider) = bake.bake() {
                     commands
                         .entity(entity)
                         .try_insert((collider, RigidBody::Fixed, VoxelCollider));
-                    status.ready = true;
                     *repairs += 1;
                 }
             }
