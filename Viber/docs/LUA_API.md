@@ -119,9 +119,14 @@ persiste no save (v1, documentado).
 | `viber.terrain.max_radius()` | number | teto que a engine aplica ao raio (96 m) |
 
 Regras: o pedido entra numa fila e é aplicado no frame seguinte (no máximo
-4 por frame — um `on_update` em loop não congela o frame); raio ≤ 96 m e
-profundidade/altura ≤ 64 m (clamp); alturas resultantes ficam em
-`[0, max-height]`; pedidos NaN/inválidos são rejeitados com warn. O COMBATE
+4 por frame — um `on_update` em loop não congela o frame); o raio é
+clampado a 96 m; alturas resultantes ficam em `[0, max-height]`. O `bool`
+devolvido diz se o pedido foi ACEITE: `false` para NaN/infinito, raio ≤ 0
+ou profundidade/altura relativa acima de 64 m (a `altura` do `flatten` é
+uma cota absoluta — só tem de ser finita) — esse nem chega à fila. A fila
+guarda no máximo 256 pedidos pendentes; acima disso os pedidos seguintes
+são descartados (warn 1× — o `true` já devolvido não o reflete) até
+escoar. O COMBATE
 fino pode usar isto para crateras de bombas, poços de mineração ou valas
 de cerco — `viber.terrain.flatten` é o que se quer debaixo de um edifício
 de script.
