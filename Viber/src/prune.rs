@@ -97,7 +97,7 @@ pub fn housekeeping(checkout_root: &Path, active_debug: bool) -> PruneReport {
     if any_foreign_build_running(&own_tree) {
         return report_skipped("cargo/rustc de outro processo em curso");
     }
-    let live = live_exes_under(&drop_dir, &own_tree);
+    let live = live_exes_under(&drop_dir);
 
     let mut binaries = Vec::new();
     collect_binaries(&drop_dir, &mut binaries);
@@ -161,7 +161,8 @@ fn remove_files(paths: &[PathBuf], live: &HashSet<PathBuf>) -> (u64, u64) {
     let mut seen_inodes = HashSet::new();
     let (mut bytes, mut removed) = (0u64, 0u64);
     for path in paths {
-        if live.contains(path) {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+        if live.contains(&canonical) {
             continue;
         }
         let Ok(metadata) = fs::metadata(path) else {
@@ -259,8 +260,9 @@ fn any_foreign_build_running(skip: &HashSet<u32>) -> bool {
 /// Caminhos de binários EM EXECUÇÃO que vivem dentro de `dir` — poupá-los
 /// mantém o contrato "nunca tirar o chão a um processo vivo" (o unlink até
 /// seria seguro no Linux, mas o run seguinte desse agente deve encontrar o
-/// binário onde ele estava).
-fn live_exes_under(dir: &Path, skip: &HashSet<u32>) -> HashSet<PathBuf> {
+/// binário onde ele estava). O PRÓPRIO processo conta: um `viber run
+/// --no-cargo` lançado de dentro do perfil a limpar não pode apagar-se.
+fn live_exes_under(dir: &Path) -> HashSet<PathBuf> {
     let mut live = HashSet::new();
     let Ok(dir) = dir.canonicalize() else {
         return live;
@@ -276,9 +278,6 @@ fn live_exes_under(dir: &Path, skip: &HashSet<u32>) -> HashSet<PathBuf> {
         else {
             continue;
         };
-        if skip.contains(&pid) {
-            continue;
-        }
         if let Ok(exe) = fs::read_link(format!("/proc/{pid}/exe")) {
             if exe.starts_with(&dir) {
                 live.insert(exe);
@@ -422,6 +421,27 @@ mod tests {
         let (bytes, removed) = remove_files(&binaries, &HashSet::new());
         assert_eq!(removed, 2, "ambos os nomes do inode são removidos");
         assert_eq!(bytes, 100, "bytes contados uma vez, como no du");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn own_executable_counts_as_live() {
+        let exe = std::env::current_exe().unwrap().canonicalize().unwrap();
+        let live = live_exes_under(exe.parent().unwrap());
+        assert!(live.contains(&exe), "o próprio processo nunca se apaga");
+    }
+
+    #[test]
+    fn live_match_survives_non_canonical_candidate_paths() {
+        let root = fixture_root("canon");
+        let debug = root.join("target/debug");
+        write(&debug.join("viber"), &[5u8; 32], true);
+        let mut live = HashSet::new();
+        live.insert(debug.join("viber").canonicalize().unwrap());
+        let detour = debug.join("deps").join("..").join("viber");
+        let (_, removed) = remove_files(&[detour], &live);
+        assert_eq!(removed, 0);
+        assert!(debug.join("viber").exists());
         let _ = fs::remove_dir_all(&root);
     }
 

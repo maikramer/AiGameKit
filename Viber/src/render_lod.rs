@@ -154,16 +154,36 @@ pub struct RenderLodPlugin;
 
 impl bevy::app::Plugin for RenderLodPlugin {
     fn build(&self, app: &mut bevy::app::App) {
-        app.init_resource::<MeshLodStats>().add_systems(
-            bevy::app::PostUpdate,
-            (
-                timed(Group::Render, cull_distant_objects),
-                timed(Group::Render, update_mesh_lod),
-                timed(Group::Render, propagate_no_shadow),
-            )
-                .chain()
-                .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
-        );
+        app.init_resource::<MeshLodStats>()
+            .add_observer(retag_no_shadow_on_ready)
+            .add_systems(
+                bevy::app::PostUpdate,
+                (
+                    timed(Group::Render, cull_distant_objects),
+                    timed(Group::Render, update_mesh_lod),
+                    timed(Group::Render, propagate_no_shadow),
+                )
+                    .chain()
+                    .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
+            );
+    }
+}
+
+/// Re-marks a non-casting LOD instance once its NEW tier has spawned.
+///
+/// A swap only requests the scene: the scene spawner despawns the old
+/// subtree and spawns the new one in the next frame's `SpawnScene`. Tagging
+/// at swap time let [`propagate_no_shadow`] find the OLD (already tagged)
+/// meshes and clear the marker, so every fresh tier cast shadows again.
+/// `WorldInstanceReady` fires right after the spawn, before `PostUpdate`, so
+/// the new meshes are tagged before they are ever extracted.
+fn retag_no_shadow_on_ready(
+    ready: On<bevy::world_serialization::WorldInstanceReady>,
+    lods: Query<&MeshLod>,
+    mut commands: Commands,
+) {
+    if lods.get(ready.entity).is_ok_and(|lod| lod.no_shadows) {
+        commands.entity(ready.entity).try_insert(NoShadowSubtree);
     }
 }
 
@@ -172,11 +192,9 @@ impl bevy::app::Plugin for RenderLodPlugin {
 /// Only hidden-by-culling instances are skipped: a prop the player cannot see
 /// does not deserve a respawn, and it re-tiers on the frame it comes back.
 fn update_mesh_lod(
-    mut commands: Commands,
     cameras: Query<&GlobalTransform, With<Camera3d>>,
     mut stats: ResMut<MeshLodStats>,
     mut instances: Query<(
-        Entity,
         &GlobalTransform,
         &mut MeshLod,
         &mut bevy::world_serialization::WorldAssetRoot,
@@ -190,7 +208,7 @@ fn update_mesh_lod(
     let mut budget = swap_budget();
     let mut swaps = 0usize;
     let mut pending = 0usize;
-    for (entity, transform, mut lod, mut root, visibility) in &mut instances {
+    for (transform, mut lod, mut root, visibility) in &mut instances {
         if *visibility == Visibility::Hidden {
             continue;
         }
@@ -216,13 +234,10 @@ fn update_mesh_lod(
         // so the transform, collider and script all survive untouched. The
         // animation bind does not survive — it re-arms off this very change
         // (see `crate::animation::rearm_after_scene_swap`).
+        // The fresh subtree earns its `NotShadowCaster` tags again in
+        // `retag_no_shadow_on_ready`, once it has actually spawned.
         root.0 = scene;
         lod.current = wanted;
-        if lod.no_shadows {
-            // The old subtree carried the `NotShadowCaster` tags; the fresh
-            // one has to earn them again.
-            commands.entity(entity).insert(NoShadowSubtree);
-        }
         budget -= 1;
         swaps += 1;
     }
@@ -452,6 +467,32 @@ mod tests {
         // …and coming back from tier 1 it moves in to 36.8 m.
         assert_eq!(lod.tier_for(38.0, 1), 1);
         assert_eq!(lod.tier_for(36.0, 1), 0);
+    }
+
+    /// The fresh tier of a non-casting instance is re-marked when its scene
+    /// instance becomes ready — not at swap time, when only the old (already
+    /// tagged) subtree exists.
+    #[test]
+    fn test_scene_ready_re_marks_non_casting_lod_instances() {
+        let mut app = App::new();
+        app.add_observer(retag_no_shadow_on_ready);
+        let mut quiet = ladder(2);
+        quiet.no_shadows = true;
+        let caster = app.world_mut().spawn(ladder(2)).id();
+        let non_caster = app.world_mut().spawn(quiet).id();
+        let instance_id = {
+            let world = app.world_mut();
+            world.init_resource::<bevy::world_serialization::WorldInstanceSpawner>();
+            world.resource_scope(|_, mut spawner: Mut<bevy::world_serialization::WorldInstanceSpawner>| {
+                spawner.spawn_as_child(Handle::default(), non_caster)
+            })
+        };
+        for entity in [caster, non_caster] {
+            app.world_mut().trigger(bevy::world_serialization::WorldInstanceReady { entity, instance_id });
+        }
+        app.update();
+        assert!(app.world().get::<NoShadowSubtree>(non_caster).is_some());
+        assert!(app.world().get::<NoShadowSubtree>(caster).is_none());
     }
 
     #[test]

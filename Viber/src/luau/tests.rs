@@ -644,6 +644,8 @@ use std::time::Duration;
             "return viber.shake(-1)",
             "return viber.nearby(0)",
             "return viber.play_clip('x', { speed = 0 })",
+            "return viber.fire_projectile('dardo', 0/0, 0, 0)",
+            "return viber.fire_projectile('dardo', 1, 2)",
         ] {
             assert!(
                 host.lua.load(snippet).exec().is_err(),
@@ -665,6 +667,19 @@ use std::time::Duration;
                 .exec()
                 .is_ok()
         );
+        // Sem herói no contexto não há alvo implícito: `false`, sem erro.
+        let implicit: bool = host
+            .lua
+            .load("return viber.fire_projectile('dardo')")
+            .eval()
+            .unwrap();
+        assert!(!implicit);
+        let explicit: bool = host
+            .lua
+            .load("return viber.fire_projectile('dardo', 1, 2, 3)")
+            .eval()
+            .unwrap();
+        assert!(explicit);
     }
 
     #[test]
@@ -1601,4 +1616,197 @@ use std::time::Duration;
             app.world().resource::<LuaScriptHost>().registry.contains("clip.lua"),
             "o script continua carregado depois do warn"
         );
+    }
+
+    #[test]
+    fn test_invalid_entity_id_is_a_script_error_not_a_panic() {
+        // 32 bits baixos a zero = índice inválido: `Entity::from_bits` panicava.
+        let mut host = host_with(
+            "ok_despawn = pcall(viber.entity_despawn, 0)\n\
+             ok_hp = pcall(viber.entity_set_max_hp, 10, 4294967296)\n\
+             ok_clip = pcall(viber.play_clip, 'wave', { id = 0 })",
+            "ids.lua",
+        );
+        let mut world = World::new();
+        host.activate(world.spawn_empty().id(), "ids.lua").expect("activate");
+        for key in ["ok_despawn", "ok_hp", "ok_clip"] {
+            assert_eq!(
+                host.script_global("ids.lua", key).unwrap(),
+                mlua::Value::Boolean(false),
+                "{key}: id inválido tem de falhar como erro Lua"
+            );
+        }
+    }
+
+    #[test]
+    fn test_infinite_loop_is_interrupted_by_the_cpu_budget() {
+        let mut host = host_with("function on_update(dt) while true do end end", "loop.lua");
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+        host.activate(entity, "loop.lua").expect("activate");
+        let t0 = std::time::Instant::now();
+        let err = host
+            .run_update(entity, "loop.lua", 0.016, Vec3::ZERO, None, 0.0)
+            .expect_err("o loop infinito tem de ser interrompido");
+        assert!(err.to_string().contains("orçamento"), "{err}");
+        assert!(t0.elapsed() < Duration::from_secs(5));
+        // Fora de uma chamada guardada não há prazo pendurado.
+        host.load_script("after.lua", "x = 0 for i = 1, 100000 do x = x + i end")
+            .unwrap();
+        host.activate(entity, "after.lua").expect("sem prazo stale");
+    }
+
+    #[test]
+    fn test_sandbox_blocks_require_and_shared_stdlib_writes() {
+        let mut host = host_with(
+            "has_require = require ~= nil\n\
+             has_package = package ~= nil\n\
+             ok_clobber = pcall(function() string.upper = nil end)\n\
+             ok_load = pcall(viber.load, '../../etc/passwd')\n\
+             ok_abs = pcall(viber.load, '/etc/passwd')",
+            "sandbox.lua",
+        );
+        let mut world = World::new();
+        host.activate(world.spawn_empty().id(), "sandbox.lua").expect("activate");
+        for key in ["has_require", "has_package", "ok_clobber", "ok_load", "ok_abs"] {
+            assert_eq!(
+                host.script_global("sandbox.lua", key).unwrap(),
+                mlua::Value::Boolean(false),
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_load_module_without_return_runs_once() {
+        let dir = std::env::temp_dir().join(format!("viber-luau-once-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("side.lua"),
+            "viber.game().runs = (viber.game().runs or 0) + 1",
+        )
+        .unwrap();
+        let mut host = LuaScriptHost::new(dir.clone()).expect("host");
+        host.load_script(
+            "user.lua",
+            "a = viber.load('side.lua')\nb = viber.load('side.lua')",
+        )
+        .unwrap();
+        let mut world = World::new();
+        host.activate(world.spawn_empty().id(), "user.lua").expect("activate");
+        let game: Table = host.lua.named_registry_value("viber_game").unwrap();
+        assert_eq!(game.raw_get::<i64>("runs").unwrap(), 1);
+        assert_eq!(
+            host.script_global("user.lua", "b").unwrap(),
+            mlua::Value::Boolean(true)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_timers_die_with_their_owner() {
+        let host = host_with(
+            "function on_update(dt)\n\
+               if not armed then armed = true viber.every(0.1, function() end) end\n\
+             end",
+            "orfao.lua",
+        );
+        let mut app = test_app(host);
+        let owner = app
+            .world_mut()
+            .spawn((
+                Transform::default(),
+                LuaScriptRef {
+                    path: "orfao.lua".to_string(),
+                },
+            ))
+            .id();
+        app.update();
+        let pending = |app: &bevy::app::App| {
+            let host = app.world().resource::<LuaScriptHost>();
+            crate::luau::timers::timer_ids_where(&host.lua, |_, _| true).len()
+        };
+        assert_eq!(pending(&app), 1);
+        app.world_mut().despawn(owner);
+        app.update();
+        assert_eq!(pending(&app), 0, "timer órfão sai com o dono");
+    }
+
+    #[test]
+    fn test_timer_callback_sees_its_owner_ctx() {
+        let host = host_with(
+            "function on_update(dt)\n\
+               if not armed then\n\
+                 armed = true\n\
+                 armed_x = viber.position()\n\
+                 viber.after(0, function()\n\
+                   local x = viber.position()\n\
+                   seen = seen or {}\n\
+                   seen[#seen + 1] = x\n\
+                 end)\n\
+               end\n\
+             end",
+            "dono.lua",
+        );
+        let mut app = test_app(host);
+        for x in [3.0, -7.0] {
+            app.world_mut().spawn((
+                Transform::from_xyz(x, 0.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(x, 0.0, 0.0)),
+                LuaScriptRef {
+                    path: "dono.lua".to_string(),
+                },
+            ));
+        }
+        app.update();
+        advance_time(&mut app, 0.1);
+        app.update();
+        let host = app.world().resource::<LuaScriptHost>();
+        let mlua::Value::Table(seen) = host.script_global("dono.lua", "seen").unwrap() else {
+            panic!("timer não correu");
+        };
+        // Globals partilhados pelo path: só o 1.º on_update arma; o timer
+        // tem de ver a posição DESSE dono, não a da última entidade.
+        let xs: Vec<f64> = seen.sequence_values::<f64>().flatten().collect();
+        let armed_x: f64 = match host.script_global("dono.lua", "armed_x").unwrap() {
+            mlua::Value::Integer(n) => n as f64,
+            mlua::Value::Number(n) => n,
+            other => panic!("armed_x: {other:?}"),
+        };
+        assert_eq!(xs, vec![armed_x], "origin do dono, não a da última entidade");
+    }
+
+    #[test]
+    fn test_script_kill_is_emitted_once_with_the_script_kind() {
+        let host = host_with(
+            "function on_update(dt)\n\
+               if not hit then\n\
+                 hit = true\n\
+                 viber.entity_set_max_hp(10)\n\
+                 viber.entity_damage(15)\n\
+                 viber.entity_damage(15)\n\
+               end\n\
+             end",
+            "creatures/goblin.lua",
+        );
+        let mut app = test_app(host);
+        app.init_resource::<ScriptEventQueue>();
+        app.world_mut().spawn((
+            Transform::default(),
+            LuaScriptRef {
+                path: "creatures/goblin.lua".to_string(),
+            },
+        ));
+        app.update();
+        let kills: Vec<String> = app
+            .world()
+            .resource::<ScriptEventQueue>()
+            .0
+            .iter()
+            .filter_map(|e| match e {
+                ScriptGameEvent::Kill { name, .. } => Some(name.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(kills, vec!["goblin".to_string()]);
     }

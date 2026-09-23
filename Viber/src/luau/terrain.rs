@@ -24,8 +24,12 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
     let terrain = lua.create_table()?;
 
     /// Enfileira uma edição (o `apply_terrain_edits` aplica-a no frame
-    /// seguinte). Devolve `true` quando o pedido entrou na fila.
+    /// seguinte). Devolve `false` para um pedido malformado (NaN, raio ≤ 0,
+    /// profundidade acima do teto) — esse nem chega à fila.
     fn enqueue(lua: &Lua, edit: TerrainEdit) -> mlua::Result<bool> {
+        if !edit.is_well_formed() {
+            return Ok(false);
+        }
         let mut ctx = lua
             .app_data_mut::<ScriptCtx>()
             .expect("ScriptCtx app data seeded in LuaScriptHost::new");

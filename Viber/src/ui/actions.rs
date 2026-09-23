@@ -60,6 +60,11 @@ pub fn shop_message(action: &ShopAction) -> String {
             "{} custa {price} de ouro — não chega.",
             crate::ui::menu_data::item_label(item)
         ),
+        ShopAction::StackFull { item } => format!(
+            "Já tens o máximo de {} ({}).",
+            crate::ui::menu_data::item_label(item),
+            crate::economy::MAX_ITEM_STACK
+        ),
         ShopAction::Nothing => "Nada a negociar.".to_string(),
     }
 }

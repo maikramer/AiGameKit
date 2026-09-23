@@ -197,7 +197,7 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                 let ground = lua
                     .app_data_ref::<ScriptCtx>()
                     .and_then(|ctx| ctx.terrain.clone())
-                    .and_then(|reader| reader.voxel.surface_below(&*reader.grid, x, z, y));
+                    .and_then(|reader| reader.voxel.surface_below(&reader.base(), x, z, y));
                 Ok(ground)
             })?,
         )?;
@@ -455,6 +455,45 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                 });
                 Ok(())
             })?,
+        )?;
+        // viber.fire_projectile(id [, x, y, z]) — dispara um projétil do
+        // `<ProjectileTemplate id=…>` da boca da entidade para o peito do
+        // herói (ou para o ponto dado). `false` quando não há alvo.
+        api.set(
+            "fire_projectile",
+            lua.create_function(
+                |lua, (template, x, y, z): (String, Option<f32>, Option<f32>, Option<f32>)| {
+                    let mut ctx = lua
+                        .app_data_mut::<ScriptCtx>()
+                        .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                    let target = match (x, y, z) {
+                        (Some(x), Some(y), Some(z)) => Vec3::new(x, y, z),
+                        (None, None, None) => match ctx.player {
+                            Some(p) => p + Vec3::Y * crate::projectile::CHEST_HEIGHT,
+                            None => return Ok(false),
+                        },
+                        _ => {
+                            return Err(mlua::Error::runtime(
+                                "viber.fire_projectile: alvo precisa de x, y e z",
+                            ));
+                        }
+                    };
+                    if !target.is_finite() {
+                        return Err(mlua::Error::runtime(
+                            "viber.fire_projectile: alvo não finito (NaN/inf)",
+                        ));
+                    }
+                    let origin = ctx.origin + Vec3::Y * crate::projectile::MUZZLE_HEIGHT;
+                    let shooter = ctx.entity;
+                    ctx.commands.push(ScriptCommand::FireProjectile {
+                        template,
+                        origin,
+                        target,
+                        shooter,
+                    });
+                    Ok(true)
+                },
+            )?,
         )?;
         api.set(
             "topple",
@@ -889,7 +928,7 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                     .app_data_mut::<ScriptCtx>()
                     .expect("ScriptCtx app data seeded in LuaScriptHost::new");
                 let entity = match id {
-                    Some(bits) => Entity::from_bits(bits as u64),
+                    Some(bits) => entity::entity_from_id(bits)?,
                     None => ctx.entity.ok_or_else(|| {
                         mlua::Error::runtime("viber.play_clip fora de on_update (sem id)")
                     })?,
@@ -907,10 +946,11 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
         api.set(
             "entity_despawn",
             lua.create_function(|lua, id: i64| {
+                let target = entity::entity_from_id(id)?;
                 lua.app_data_mut::<ScriptCtx>()
                     .expect("seeded")
                     .commands
-                    .push(ScriptCommand::Despawn(Entity::from_bits(id as u64)));
+                    .push(ScriptCommand::Despawn(target));
                 Ok(())
             })?,
         )?;
@@ -1096,11 +1136,13 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                     let mut ctx = lua
                         .app_data_mut::<ScriptCtx>()
                         .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                    let caller_path = ctx.path.clone();
                     ctx.commands.push(ScriptCommand::SpawnPrototype {
                         name,
                         pos: Vec3::new(x, y.unwrap_or(0.0), z),
                         seat: y.is_none(),
                         on_spawned,
+                        caller_path,
                     });
                     Ok(())
                 },

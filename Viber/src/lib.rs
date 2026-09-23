@@ -3,6 +3,7 @@
 //! Library crate exposing the XML loader (`xml`), the recipe IR (`recipes`)
 //! and gameplay modules (`terrain`); the `viber` binary is a thin CLI on top.
 
+pub mod adaptive_quality;
 pub mod ai;
 pub mod ambient;
 pub mod animation;
@@ -30,8 +31,10 @@ pub mod physics;
 pub mod physics_fx;
 pub mod player;
 pub mod postfx;
+pub mod postfx_toggle;
 pub mod probes;
 pub mod profiler;
+pub mod projectile;
 pub mod prop_tint;
 pub mod prune;
 pub mod quests;
@@ -44,6 +47,7 @@ pub mod session;
 pub mod skills;
 pub mod sky;
 pub mod sky_nishita;
+pub mod spawn_gate;
 pub mod spawner;
 pub mod terrain;
 pub mod textures;

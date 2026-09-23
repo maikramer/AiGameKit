@@ -147,12 +147,9 @@ impl NavConfig {
 
     /// Folds the attributes of a `<NavMesh …>` element into this config.
     ///
-    /// The tag has been parsed since the XML recipes were written and kept as
-    /// data with nobody to read it (`AGENTS.md`: "data-only, nenhum consumidor
-    /// runtime ainda"). This is that consumer. Unknown attributes are ignored
-    /// rather than fatal, and a value that does not parse leaves the default
-    /// in place — a typo in a world file must not cost the world its
-    /// navigation.
+    /// Unknown attributes are ignored rather than fatal, and a value that does
+    /// not parse leaves the default in place — a typo in a world file must not
+    /// cost the world its navigation.
     pub fn apply_attrs(&mut self, attrs: &[(String, String)]) {
         for (key, value) in attrs {
             let Ok(number) = value.trim().parse::<f32>() else {
@@ -202,7 +199,14 @@ impl Plugin for NavPlugin {
         }
         app.insert_resource(config)
             .init_resource::<NavTile>()
-            .add_systems(PreStartup, apply_navmesh_tag)
+            // The tag lands with the world, in `spawn::startup` — PreStartup
+            // would run before any world exists and never see it.
+            .add_systems(
+                Startup,
+                (apply_navmesh_tag, spawn_archipelago)
+                    .chain()
+                    .after(crate::recipes::spawn::startup),
+            )
             .add_plugins((
                 NavmeshPlugins::default(),
                 // Landmass defaults to `FixedPreUpdate`, which in Bevy's main
@@ -218,7 +222,6 @@ impl Plugin for NavPlugin {
                     .in_schedule(bevy::app::PostUpdate),
             ))
             .set_navmesh_backend(backend::nav_backend)
-            .add_systems(Startup, spawn_archipelago)
             .add_systems(Update, tile::retile_navmesh)
             .add_systems(Update, mark_tile_ready)
             .add_systems(Update, agent::attach_nav_agents);
@@ -307,19 +310,16 @@ fn mark_tile_ready(
 
 /// Lets `<NavMesh …>` in the world XML tune the stack.
 ///
-/// The recipes keep the tag as a raw [`crate::worldsys::EngineConfigData`]
-/// resource; this reads it once, before the archipelago is built, so the agent
-/// radius the world asked for is the one the archipelago is priced with.
+/// The recipes keep the tag as raw data in [`crate::worldsys::EngineConfigs`];
+/// this reads it once, before the archipelago is built, so the agent radius the
+/// world asked for is the one the archipelago is priced with.
 fn apply_navmesh_tag(
     mut config: ResMut<NavConfig>,
-    declared: Option<Res<crate::worldsys::EngineConfigData>>,
+    declared: Option<Res<crate::worldsys::EngineConfigs>>,
 ) {
-    let Some(declared) = declared else {
+    let Some(declared) = declared.as_ref().and_then(|c| c.first("navmesh")) else {
         return;
     };
-    if declared.tag != "navmesh" {
-        return;
-    }
     config.apply_attrs(&declared.attrs);
     info!(
         "nav: <NavMesh> aplicada — raio {:.2} m, tile {:.0} m, custo fora-de-estrada {:.2}×",

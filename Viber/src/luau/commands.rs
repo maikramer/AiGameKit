@@ -43,6 +43,13 @@ pub enum ScriptCommand {
         from: Option<Vec3>,
     },
     HealPlayer(f32),
+    /// Dispara um projétil de um `<ProjectileTemplate>` (`viber.fire_projectile`).
+    FireProjectile {
+        template: String,
+        origin: Vec3,
+        target: Vec3,
+        shooter: Option<Entity>,
+    },
     /// Aplica um status effect ao herói (hoje: `"venom"`) — tratado pelo
     /// feedback (tick 1/s, path único de dano).
     ApplyStatus {
@@ -204,5 +211,6 @@ pub enum ScriptCommand {
         /// Sem cota explícita: assenta o Y na superfície renderizada.
         seat: bool,
         on_spawned: Option<Function>,
+        caller_path: Option<String>,
     },
 }

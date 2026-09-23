@@ -111,7 +111,7 @@ fn expand(
             vec![XmlNode {
                 tag: doc.root_tag,
                 attrs: doc.root_attrs,
-                text: String::new(),
+                text: doc.root_text,
                 children: doc.children,
             }]
         };
@@ -205,6 +205,21 @@ mod tests {
         // Bare-fragment roots come through the document root, which the
         // parser lowercases; recipe matching is case-insensitive anyway.
         assert!(world.nodes[2].tag.eq_ignore_ascii_case("Group"));
+    }
+
+    #[test]
+    fn test_bare_fragment_root_keeps_its_text() {
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            &dir.path().join("style.xml"),
+            "<UiStyle>.hud { color: red; }</UiStyle>",
+        );
+        write(
+            &dir.path().join("m.xml"),
+            "<world><Include src=\"style.xml\" /></world>",
+        );
+        let world = load_at(dir.path(), "m.xml").unwrap();
+        assert_eq!(world.nodes[0].text, ".hud { color: red; }");
     }
 
     #[test]

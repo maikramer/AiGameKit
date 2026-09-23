@@ -177,6 +177,9 @@ pub struct PendingPrototypeSpawn {
     pub seat: bool,
     /// Callback Lua chamada com os bits da entidade criada.
     pub on_spawned: Option<mlua::Function>,
+    /// Script que pediu o spawn — a callback corre com o `ctx.path` dele
+    /// (timers/erros registados lá ficam atribuídos a quem os criou).
+    pub caller_path: Option<String>,
 }
 
 /// Fila de pedidos de spawn (`ScriptCommand::SpawnPrototype` → sistema).
@@ -219,10 +222,7 @@ fn collect_walk(specs: &[EntitySpec], offset: Vec2, out: &mut PendingTerrain) {
                 });
             }
             EntityKind::Lake { spec: lake } => {
-                out.features.lakes.push(LakeSpec {
-                    at: lake.at + offset,
-                    ..lake.clone()
-                });
+                out.features.lakes.push(shift_lake(lake, offset));
             }
             EntityKind::Cut { spec: cut } => {
                 out.features.cuts.push(CutSpec {
@@ -325,6 +325,24 @@ fn collect_walk(specs: &[EntitySpec], offset: Vec2, out: &mut PendingTerrain) {
     }
 }
 
+/// Lago deslocado pelo offset dos grupos ancestrais — centro E ilhas: o parse
+/// só soma às ilhas a translation do próprio lago, e deslocar apenas o `at`
+/// deixava as ilhas para trás, fora da bacia.
+fn shift_lake(lake: &LakeSpec, offset: Vec2) -> LakeSpec {
+    LakeSpec {
+        at: lake.at + offset,
+        islands: lake
+            .islands
+            .iter()
+            .map(|island| crate::terrain::water::IslandSpec {
+                at: island.at + offset,
+                ..island.clone()
+            })
+            .collect(),
+        ..lake.clone()
+    }
+}
+
 /// Recolhe os catálogos RPG declaráveis (Fases B2/B3) da árvore de entidades:
 /// `<Landmark>` → [`crate::travel::LandmarkCatalog`] e `<SpawnPoint>` →
 /// [`crate::feedback::RespawnCatalog`]. Só substituem o fallback quando o
@@ -386,9 +404,7 @@ pub fn startup(world: &mut World) {
     if !catalogs.spawn_points.is_empty() {
         world.insert_resource(crate::feedback::RespawnCatalog(catalogs.spawn_points));
     }
-    // O save por-mundo precisa da pasta do world.xml DEPOIS de o bootstrap
-    // do terreno remover `PendingTerrain` (save.rs::WorldBaseDir).
-    world.insert_resource(crate::save::WorldBaseDir(pending.base_dir));
+
     // Prototypes para spawn em runtime (viber.spawn_prototype) — o WorldIR
     // morre aqui; a biblioteca sobrevive.
     world.insert_resource(PrototypeLibrary(parsed.prototypes.clone()));
@@ -422,6 +438,7 @@ pub fn startup(world: &mut World) {
         &asset_server,
         &mut spawn_groups,
         &mut exclusions,
+        Vec2::ZERO,
     );
     // Os discos ficam em DOIS sítios de propósito: no `PendingSpawnGroups`
     // (consumidos e removidos no fim da colocação) e num recurso próprio, que
@@ -528,9 +545,9 @@ pub fn startup(world: &mut World) {
             list: pending_worldsys.biomes.clone(),
         });
     }
-    for config in pending_worldsys.configs {
-        world.insert_resource(config);
-    }
+    world.insert_resource(crate::worldsys::EngineConfigs {
+        list: pending_worldsys.configs,
+    });
     // Always present, `<AudioMixer>` or not — systems take it as `ResMut`.
     world.insert_resource(mixer_settings.unwrap_or_default());
     world.insert_resource(meshes);
@@ -647,7 +664,7 @@ struct SpawnCtx<'a> {
     /// Deferred HUD screen elements (tag + raw attrs).
     hud: std::cell::RefCell<HudList>,
     /// `<UiStyle>` sources, in document order (later rules win).
-    ui_styles: std::cell::RefCell<Vec<String>>,
+    ui_styles: std::cell::RefCell<Vec<super::UiStyleSource>>,
     /// Índices (em `ui_styles`) das folhas ainda pendentes — as que precedem
     /// o PRÓXIMO `<UiRoot>` são as que o alimentam (shadow-DOM-lite).
     ui_pending_sheets: std::cell::RefCell<Vec<usize>>,
@@ -801,32 +818,35 @@ fn push_shore_rock_group(
 }
 
 /// Recursively collect `<StaticSpawner>` specs and start their template loads.
+///
+/// `offset` is the accumulated ancestor XZ translation — the same one
+/// [`collect_walk`] adds to lakes and rivers, so the shore rocks ring the
+/// water where it was actually carved.
 fn collect_spawn_groups(
     specs: &[EntitySpec],
     asset_server: &AssetServer,
     out: &mut Vec<crate::spawner::SpawnGroupState>,
     exclusions: &mut Vec<crate::spawner::SpawnExclusion>,
+    offset: Vec2,
 ) {
     for spec in specs {
+        let child_offset =
+            offset + Vec2::new(spec.transform.translation[0], spec.transform.translation[2]);
         match &spec.kind {
             EntityKind::Lake { spec: lake } => {
                 if lake.rocks {
-                    let candidates = crate::terrain::shore_rocks::lake_candidates(lake, out.len());
-                    push_shore_rock_group(
-                        out,
-                        asset_server,
-                        candidates,
-                        bevy::math::Vec2::new(lake.at.x, lake.at.y),
-                        &lake.rocks_spec,
-                    );
+                    let lake = shift_lake(lake, offset);
+                    let candidates = crate::terrain::shore_rocks::lake_candidates(&lake, out.len());
+                    push_shore_rock_group(out, asset_server, candidates, lake.at, &lake.rocks_spec);
                 }
-                collect_spawn_groups(&spec.children, asset_server, out, exclusions);
+                collect_spawn_groups(&spec.children, asset_server, out, exclusions, child_offset);
             }
             EntityKind::River { spec: river } => {
                 if river.rocks && river.path.len() >= 2 {
+                    let path: Vec<Vec2> = river.path.iter().map(|p| *p + offset).collect();
                     // As candidatas seguem o MESMO suavizado do carve
                     // (chaikin ×2 + resample) — as estações finais do rio.
-                    let smoothed = crate::terrain::paths::chaikin_smooth(&river.path, 2, false);
+                    let smoothed = crate::terrain::paths::chaikin_smooth(&path, 2, false);
                     let stations = crate::terrain::paths::resample(
                         &smoothed,
                         crate::terrain::water::RIVER_STATION_SPACING.max(0.5),
@@ -850,7 +870,7 @@ fn collect_spawn_groups(
                         &river.rocks_spec,
                     );
                 }
-                collect_spawn_groups(&spec.children, asset_server, out, exclusions);
+                collect_spawn_groups(&spec.children, asset_server, out, exclusions, child_offset);
             }
             EntityKind::StaticSpawner { spec: group }
             | EntityKind::DynamicSpawner { spec: group } => {
@@ -944,16 +964,18 @@ fn collect_spawn_groups(
                     activation_radius: spawner_spec.activation_radius,
                     template_collider: spawner_spec.template_collider.clone(),
                     template_destructible: spawner_spec.template_destructible.clone(),
-                    collider_handle: spawner_spec.template_collider.as_ref().map(|shape| {
+                    // Como nos spawners: só Mesh/Precompute têm glTF de
+                    // colisão — as outras formas pediam o load de um path vazio.
+                    collider_handle: spawner_spec.template_collider.as_ref().and_then(|shape| {
                         let url = match shape {
                             crate::physics::ColliderShape::Mesh { url, .. }
-                            | crate::physics::ColliderShape::Precompute { url } => url.clone(),
-                            _ => String::new(),
+                            | crate::physics::ColliderShape::Precompute { url } => url,
+                            _ => return None,
                         };
-                        crate::meshopt::load_gltf(
+                        Some(crate::meshopt::load_gltf(
                             asset_server,
                             url.trim_start_matches('/').to_owned(),
-                        )
+                        ))
                     }),
                     spec: spawner_spec,
                     handles,
@@ -963,7 +985,7 @@ fn collect_spawn_groups(
                     dynamic: false,
                 });
             }
-            _ => collect_spawn_groups(&spec.children, asset_server, out, exclusions),
+            _ => collect_spawn_groups(&spec.children, asset_server, out, exclusions, child_offset),
         }
     }
 }
@@ -1006,11 +1028,11 @@ fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &Entity
             // Primitiva (parte de `<Composition>` ou `collider="auto"`
             // autoral): a forma é conhecida AGORA — colisor exato, sem
             // PendingCollider nem AABB aproximado.
+            // O mesh da primitiva não tem escala (fica no `Transform`) e o
+            // Rapier aplica a escala do `GlobalTransform` ao collider — passar
+            // a escala do spec aqui dava escala² ao colisor.
             if let EntityKind::Primitive { shape, .. } = &spec.kind {
-                entity.insert(crate::physics::collider_for_shape(
-                    shape,
-                    Vec3::from(spec.transform.scale),
-                ));
+                entity.insert(crate::physics::collider_for_shape(shape, Vec3::ONE));
             } else {
                 entity.insert(PendingCollider {
                     shape: ColliderShape::Auto,
@@ -1606,11 +1628,16 @@ fn spawn_entity(
             camera_pitch_deg,
             camera_yaw_deg,
         } => {
+            // O parse já somou a translation do próprio elemento; faltam os
+            // grupos ancestrais (a convenção `at` das features do terreno) —
+            // sem eles o retângulo ficava longe das salas que declara.
+            let offset = ancestor_xz(entity.world(), parent);
+            let shift = |p: &[f32; 2]| [p[0] + offset.x, p[1] + offset.y];
             ctx.worldsys.interior_scene = Some(crate::worldsys::InteriorSceneConfig {
-                min: *min,
-                max: *max,
+                min: shift(min),
+                max: shift(max),
                 room_size: *room_size,
-                room_origin: *room_origin,
+                room_origin: shift(room_origin),
                 camera_distance: *camera_distance,
                 camera_pitch_deg: *camera_pitch_deg,
                 camera_yaw_deg: *camera_yaw_deg,
@@ -1634,6 +1661,20 @@ fn spawn_entity(
         spawn_entity(world, ctx, child, Some(id), stats, ambient);
     }
     Some(id)
+}
+
+/// XZ acumulado das translations dos ancestrais já spawnados (sem rotação —
+/// a mesma convenção de [`collect_walk`] para as features do terreno).
+fn ancestor_xz(world: &World, mut parent: Option<Entity>) -> Vec2 {
+    let mut offset = Vec2::ZERO;
+    for _ in 0..64 {
+        let Some(entity) = parent else { break };
+        if let Some(transform) = world.get::<Transform>(entity) {
+            offset += transform.translation.xz();
+        }
+        parent = world.get::<ChildOf>(entity).map(|c| c.parent());
+    }
+    offset
 }
 
 fn build_transform(spec: &TransformSpec) -> Transform {
@@ -2013,7 +2054,7 @@ pub fn apply_script_spawns(world: &mut World) {
     };
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
-    let mut spawned: Vec<(Entity, Option<mlua::Function>)> = Vec::new();
+    let mut spawned: Vec<(Entity, Option<mlua::Function>, Option<String>, Vec3)> = Vec::new();
     for ((request, spec), seat_y) in requests.into_iter().zip(seat_ys) {
         let Some(spec) = spec.as_ref() else {
             continue;
@@ -2026,7 +2067,11 @@ pub fn apply_script_spawns(world: &mut World) {
         if let Some(mut t) = world.get_mut::<Transform>(root) {
             t.translation = Vec3::new(request.pos.x, y, request.pos.z);
         }
-        spawned.push((root, request.on_spawned));
+        let origin = world
+            .get::<Transform>(root)
+            .map(|t| t.translation)
+            .unwrap_or(request.pos);
+        spawned.push((root, request.on_spawned, request.caller_path, origin));
     }
     // Devolve os Assets (o mundo não pode ficar sem eles); o ctx tem de
     // morrer ANTES — toma &mut deles.
@@ -2043,12 +2088,18 @@ pub fn apply_script_spawns(world: &mut World) {
             return;
         };
         let host = &mut *host;
-        for (entity, cb) in spawned {
+        for (entity, cb, caller_path, origin) in spawned {
             let Some(cb) = cb else { continue };
             if let Some(mut c) = host.lua.app_data_mut::<crate::luau::ScriptCtx>() {
                 c.entity = Some(entity);
+                c.path = caller_path;
+                c.origin = origin;
             }
-            if let Err(e) = cb.call::<()>(entity.to_bits() as i64) {
+            let result = {
+                let _budget = host.budget_guard();
+                cb.call::<()>(entity.to_bits() as i64)
+            };
+            if let Err(e) = result {
                 warn!(target: "viber::luau", "viber.spawn_prototype callback: {e}");
             }
         }
@@ -2137,7 +2188,7 @@ mod terrain_collect_tests {
 /// file instead of inlined in the world XML.
 fn build_declarative_ui(
     world: &mut World,
-    styles: &[String],
+    styles: &[super::UiStyleSource],
     trees: &[crate::xml::XmlNode],
     tree_sheets: &[Vec<usize>],
     world_dir: Option<&std::path::Path>,
@@ -2176,8 +2227,8 @@ fn build_declarative_ui(
     // scoping por raiz perdia regras legítimas.
     let mut sheet_index_of = vec![usize::MAX; styles.len()];
     for (index, source) in styles.iter().enumerate() {
-        match source.strip_prefix('@') {
-            Some(relative) => {
+        match source {
+            super::UiStyleSource::File(relative) => {
                 // O src é relativo à PASTA DO JOGO e o prefixo `ui/` faz
                 // parte do caminho autor (`@ui/hud.css` → <jogo>/ui/hud.css)
                 // — juntar um ui_dir do config DUPLICAVA o prefixo
@@ -2193,7 +2244,7 @@ fn build_declarative_ui(
                     ),
                 }
             }
-            None => sheet_index_of[index] = sheet.parse_into(source),
+            super::UiStyleSource::Inline(text) => sheet_index_of[index] = sheet.parse_into(text),
         }
     }
     world.insert_resource(sheet);

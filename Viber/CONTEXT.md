@@ -18,9 +18,7 @@ Nomenclatura segue **Bevy** (`translation`, `euler`, `half-size`,
   `viber.ui.*` (2); física Rapier declarativa (3).
 - O exemplo `examples/simple-rpg` é **jogável de ponta a ponta**: combate,
   21 quests, economia, travel, save/load, mundo vivo, física — portado em 10 loops.
-- **Gaps conhecidos (fila aberta):** tags `EngineConfig` data-only sem
-  consumidor (`NavMesh`, `SpawnGate`, `ProjectileTemplate`, `AdaptiveQuality`,
-  `PostFxDebugToggle`); sem hot-reload de scripts; nametags de HUD comentadas
+- **Gaps conhecidos (fila aberta):** sem hot-reload de scripts; nametags de HUD comentadas
   (`BISECT` em `src/main.rs`); vegetação sem GPU instancing.
 
 ## Como correr

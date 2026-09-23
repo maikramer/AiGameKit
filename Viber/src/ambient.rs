@@ -34,12 +34,29 @@ use crate::player::Player;
 /// de ponto (a luz continua a iluminar).
 pub const SHADOW_LIGHT_BUDGET: usize = 12;
 
-/// Orçamento efectivo: `VIBER_SHADOW_LIGHTS` ou [`SHADOW_LIGHT_BUDGET`].
+/// Orçamento efectivo: `VIBER_SHADOW_LIGHTS` ou [`SHADOW_LIGHT_BUDGET`]
+/// limitado pelo tier de qualidade ([`set_quality_shadow_cap`]).
 pub fn shadow_light_budget() -> usize {
     std::env::var("VIBER_SHADOW_LIGHTS")
         .ok()
         .and_then(|raw| raw.parse::<usize>().ok())
-        .unwrap_or(SHADOW_LIGHT_BUDGET)
+        .unwrap_or_else(|| {
+            SHADOW_LIGHT_BUDGET.min(QUALITY_SHADOW_CAP.load(std::sync::atomic::Ordering::Relaxed))
+        })
+}
+
+/// Teto do orçamento de sombras de ponto imposto por `<AdaptiveQuality>`
+/// (`usize::MAX` = sem teto). O env `VIBER_SHADOW_LIGHTS` ganha-lhe: é o A/B
+/// explícito de quem mede.
+static QUALITY_SHADOW_CAP: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(usize::MAX);
+
+/// Troca o teto do tier de qualidade (`None` = orçamento cheio).
+pub fn set_quality_shadow_cap(cap: Option<usize>) {
+    QUALITY_SHADOW_CAP.store(
+        cap.unwrap_or(usize::MAX),
+        std::sync::atomic::Ordering::Relaxed,
+    );
 }
 
 /// Distância máxima (m) a que uma PointLight ainda ganha shadow map, medida
@@ -94,7 +111,9 @@ impl Default for PointShadowsEnabled {
     }
 }
 /// Histerese de rank: uma luz só PERDE a sombra acima de
-/// BUDGET+BAND e só a ganha abaixo de BUDGET.
+/// BUDGET+BAND e só a ganha abaixo de BUDGET. Limitada a um terço do
+/// orçamento em [`wants_point_shadow`]: com a banda cheia, o teto 4 do tier
+/// Medium mantinha as 8 sombras do High e o teto 0 do Low deixava 4 acesas.
 const SHADOW_LIGHT_BAND: usize = 4;
 /// Política antiga, só para A/B: `VIBER_LIGHT_BUDGET=12` apaga (Visibility
 /// hidden) tudo além das N luzes mais próximas — o comportamento pré-ronda
@@ -364,10 +383,18 @@ impl Plugin for AmbientPlugin {
                 (
                     // Scheduler do `<Weather cycle>` (WS-A): a intensidade
                     // contínua de chuva entra na paleta NO MESMO frame.
-                    crate::worldsys::weather_drive.before(crate::worldsys::atmosphere_drive),
+                    crate::profiler::timed(
+                        crate::profiler::Group::World,
+                        crate::worldsys::weather_drive,
+                    )
+                    .before(crate::worldsys::atmosphere_drive),
                     // Publica a paleta a partir da posição do sol já
                     // resolvida por `sun_drive` (main.rs)…
-                    crate::worldsys::atmosphere_drive.after(crate::worldsys::sun_drive),
+                    crate::profiler::timed(
+                        crate::profiler::Group::World,
+                        crate::worldsys::atmosphere_drive,
+                    )
+                    .after(crate::worldsys::sun_drive),
                     // …e empurra-a para o storage buffer do domo (`SkyUniform`)
                     // — é esta escrita por frame que faz o céu mudar com o
                     // `set_clock` (o relógio do mundo não é `globals.time`).
@@ -376,12 +403,11 @@ impl Plugin for AmbientPlugin {
                     // branca noturna) e o chão molhado (r3, canal `walls_b.w`)
                     // NÃO se registam aqui: vivem no `TerrainFeaturesPlugin`
                     // (src/terrain/runtime.rs), embrulhados em `timed` para
-                    // aparecerem no profiler. Registá-los também aqui era uma
-                    // DUPLICAÇÃO silenciosa — o `Timed` devolve o
-                    // `system_type()` do sistema INTERIOR, portanto o Bevy vê o
-                    // wrapper e a função crua como o mesmo sistema e o registo
-                    // posterior sobrepõe o anterior: a versão que sobrevivia era
-                    // a SEM `timed` e o sistema desaparecia do profiler.
+                    // aparecerem no profiler. Registá-los também aqui criava
+                    // uma SEGUNDA instância (o Bevy não deduplica
+                    // `add_systems`): o sistema corria 2× por frame e qualquer
+                    // `.after(fn)` contra ele falhava com "more than one
+                    // instance".
                 ),
             );
     }
@@ -642,7 +668,8 @@ pub fn wants_point_shadow(
 ) -> bool {
     let near =
         gap_m <= max_distance || (already_on && gap_m <= max_distance + SHADOW_LIGHT_BAND as f32);
-    let ranked_in = rank < budget || (already_on && rank < budget + SHADOW_LIGHT_BAND);
+    let band = SHADOW_LIGHT_BAND.min(budget / 3);
+    let ranked_in = rank < budget || (already_on && rank < budget + band);
     near && ranked_in
 }
 
@@ -1503,6 +1530,18 @@ mod tests {
         // Rank: 13.ª mantém-se acesa, 17.ª (12 + banda) já não.
         assert!(wants_point_shadow(13, 5.0, 12, max, true));
         assert!(!wants_point_shadow(16, 5.0, 12, max, true));
+    }
+
+    /// Os tetos do `<AdaptiveQuality>` cortam mesmo: a banda de histerese
+    /// não pode segurar as sombras que o tier anterior deixou ligadas.
+    #[test]
+    fn point_shadow_band_respects_quality_caps() {
+        let max = SHADOW_LIGHT_MAX_DISTANCE;
+        // High (8) → Medium (4): a 5.ª fica pela banda (1), a 6.ª apaga-se.
+        assert!(wants_point_shadow(4, 5.0, 4, max, true));
+        assert!(!wants_point_shadow(5, 5.0, 4, max, true));
+        // Low (0): nenhuma sombra fica acesa.
+        assert!(!wants_point_shadow(0, 0.0, 0, max, true));
     }
 
     /// O gate de luz do dia usa a mesma curva do tint (`daylight_factor`):

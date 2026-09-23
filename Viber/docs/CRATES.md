@@ -28,7 +28,7 @@ Confirmados compatíveis com Bevy 0.19 (dependências publicadas verificadas a
 
 - **`bevy_rerecast` + `vleue_navigator`** — port do Recast (navmesh a partir
   da geometria real: trimesh das colunas + colliders) + pathfinding Polyanya.
-  Daria consumidor à tag `NavMesh` (hoje data-only) e substituiria o
+  Usaria a tag `NavMesh` (hoje só afina o landmass) e substituiria o
   wander/chase determinístico da `src/ai.rs` quando o mundo pede navegação.
   PRÓXIMO CANDIDATO.
 - **`bevy_replicon`** 0.44 (set 2026) — replicação server-authoritative;

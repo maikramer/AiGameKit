@@ -32,7 +32,10 @@ game:                          # resolve contra a PASTA DO JOGO (filesystem)
                                # ordem sorted; parse falhado = warn + skip
 
 save:
-  dir: ~/.local/share/viber    # absoluto (~ ok); {dir}/{mundo}.save.json
+  dir: ~/.local/share/viber    # absoluto (~ ok); {dir}/{mundo}.save.json —
+                               # {mundo} = pasta do ficheiro para `world.xml`,
+                               # `<pasta>-<ficheiro>` para os outros (mundos
+                               # irmãos na mesma pasta não partilham o save)
 ```
 
 ## Como a engine resolve um caminho

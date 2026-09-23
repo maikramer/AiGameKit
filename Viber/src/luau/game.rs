@@ -26,6 +26,20 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
     api.set(
         "load",
         lua.create_function(|lua, path: String| {
+            // Só caminhos RELATIVOS dentro de `scripts/` — `..` ou raiz
+            // absoluta liam (e executavam) qualquer ficheiro do disco.
+            let relative = std::path::Path::new(&path);
+            let inside = relative.components().all(|c| {
+                matches!(
+                    c,
+                    std::path::Component::Normal(_) | std::path::Component::CurDir
+                )
+            });
+            if path.is_empty() || !inside {
+                return Err(mlua::Error::runtime(format!(
+                    "viber.load('{path}'): só caminhos relativos a scripts/ (sem '..')"
+                )));
+            }
             let modules: Table = lua.named_registry_value("viber_modules")?;
             if let Ok(cached) = modules.raw_get::<mlua::Value>(path.clone()) {
                 if !matches!(cached, mlua::Value::Nil) {
@@ -52,11 +66,33 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
                 .set_environment(env)
                 .into_function()?;
             let value: mlua::Value = chunk.call(())?;
+            // Módulo sem `return` (só mexe em `viber.game()`) cacheia `true`,
+            // como o `require` — com `nil` o cache falhava e o módulo
+            // re-corria a CADA chamada.
+            let value = match value {
+                mlua::Value::Nil => mlua::Value::Boolean(true),
+                other => other,
+            };
             modules.raw_set(path, value.clone())?;
             Ok(value)
         })?,
     )?;
     Ok(())
+}
+
+/// Tira `path` do cache do `viber.load` (hot-reload de um módulo). Devolve
+/// `true` se estava carregado.
+pub fn evict_module(lua: &Lua, path: &str) -> bool {
+    let Ok(modules) = lua.named_registry_value::<Table>("viber_modules") else {
+        return false;
+    };
+    let cached = modules
+        .raw_get::<mlua::Value>(path)
+        .is_ok_and(|v| !matches!(v, mlua::Value::Nil));
+    if cached {
+        let _ = modules.raw_remove(path);
+    }
+    cached
 }
 
 /// Serializa o estado de jogo (`viber_game`) para JSON PLANO — só valores

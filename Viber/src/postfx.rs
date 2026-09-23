@@ -241,16 +241,60 @@ static FX_RUNTIME_OFF: std::sync::LazyLock<
 /// `VOLUMETRICS`).
 pub fn fx_runtime_toggle(key: &'static str, on: bool) {
     let mut set = FX_RUNTIME_OFF.lock().expect("FX_RUNTIME_OFF");
-    if on {
-        set.remove(key);
-    } else {
-        set.insert(key);
+    let changed = if on { set.remove(key) } else { set.insert(key) };
+    if changed {
+        FX_GATE_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
-/// O gate está forçado OFF pelo bridge?
-fn fx_forced_off(key: &str) -> bool {
+/// O gate está forçado OFF ao vivo (bridge ou `<PostFxDebugToggle>`)?
+pub fn fx_forced_off(key: &str) -> bool {
     FX_RUNTIME_OFF.lock().is_ok_and(|set| set.contains(key))
+}
+
+/// Sobe a cada mudança de gate em runtime (bridge, `<PostFxDebugToggle>`,
+/// `<AdaptiveQuality>`) — o [`sync_postfx_gates`] só reconcilia as câmaras
+/// quando isto mexe.
+static FX_GATE_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Geração atual dos gates runtime (ver [`FX_GATE_GENERATION`]).
+pub fn fx_gate_generation() -> u64 {
+    FX_GATE_GENERATION.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// O que o escalonador de qualidade (`<AdaptiveQuality>`) corta/baixa.
+///
+/// Fonte SEPARADA do bridge: quando o tier sobe, o escalonador repõe só o que
+/// ele próprio cortou — um efeito que o QA desligou à mão continua desligado.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct QualityGates {
+    /// Keys de [`fx_off`] cortadas por este tier.
+    pub off: Vec<&'static str>,
+    /// Qualidade do SSAO do tier (`None` = default da engine).
+    pub ssao: Option<ScreenSpaceAmbientOcclusionQualityLevel>,
+    /// Passos do raymarch volumétrico do tier (`None` = default).
+    pub volumetric_steps: Option<u32>,
+}
+
+static FX_QUALITY: std::sync::LazyLock<std::sync::Mutex<QualityGates>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(QualityGates::default()));
+
+/// Troca o conjunto de cortes do escalonador de qualidade (idempotente).
+pub fn set_quality_gates(gates: QualityGates) {
+    let mut current = FX_QUALITY.lock().expect("FX_QUALITY");
+    if *current != gates {
+        *current = gates;
+        FX_GATE_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+fn quality_gates() -> QualityGates {
+    FX_QUALITY.lock().map(|q| q.clone()).unwrap_or_default()
+}
+
+/// O gate está cortado pelo tier de qualidade?
+fn fx_quality_off(key: &str) -> bool {
+    FX_QUALITY.lock().is_ok_and(|q| q.off.contains(&key))
 }
 
 /// Gate de A/B por efeito: `VIBER_NO_<KEY>=1` tira ESSE efeito da câmara e
@@ -267,7 +311,9 @@ fn fx_forced_off(key: &str) -> bool {
 /// (`VIGNETTE`, `CHROMATIC`, `CAS`), `MOTION_BLUR`, `TAA`, `VOLUMETRICS`.
 /// O bridge (`viber.debug.postfx{...}`) força os mesmos keys AO VIVO.
 pub fn fx_off(key: &str) -> bool {
-    fx_forced_off(key) || std::env::var_os(format!("VIBER_NO_{key}")).is_some()
+    fx_forced_off(key)
+        || fx_quality_off(key)
+        || std::env::var_os(format!("VIBER_NO_{key}")).is_some()
 }
 
 /// Motion blur LIGADO por omissão; `VIBER_NO_MOTION_BLUR=1` desliga-o.
@@ -314,8 +360,9 @@ fn ssao_quality(taa: bool) -> ScreenSpaceAmbientOcclusionQualityLevel {
         Ok("medium") | Ok("medio") | Ok("médio") => Q::Medium,
         Ok("high") | Ok("alto") => Q::High,
         Ok("ultra") => Q::Ultra,
-        _ if taa => Q::High,
-        _ => Q::Medium,
+        _ => quality_gates()
+            .ssao
+            .unwrap_or(if taa { Q::High } else { Q::Medium }),
     }
 }
 
@@ -336,6 +383,7 @@ fn volumetric_steps() -> u32 {
         .ok()
         .and_then(|v| v.parse().ok())
         .filter(|steps| *steps > 0)
+        .or(quality_gates().volumetric_steps)
         .unwrap_or(64)
 }
 
@@ -556,6 +604,10 @@ impl Plugin for PostFxPlugin {
             info!("postfx: desligado por VIBER_NO_POSTFX");
             return;
         }
+        app.insert_resource(PostFxBoot {
+            volumetrics: volumetrics_enabled(),
+        })
+        .init_resource::<AutoExposureCurve>();
         app.add_plugins(bevy::post_process::auto_exposure::AutoExposurePlugin);
         // LOOP B — split-tone pós-tonemap: o shader é INLINE (const), o
         // handle vive no OnceLock porque `fragment_shader()` é estática.
@@ -591,6 +643,9 @@ impl Plugin for PostFxPlugin {
         app.add_systems(
             bevy::app::Update,
             (
+                // Antes do attach: uma câmara nova entra já com os gates em
+                // vigor e só as equipadas (`With<Bloom>`) precisam de sync.
+                sync_postfx_gates,
                 attach_postfx_to_cameras,
                 // O grading lê [`crate::worldsys::AtmosphereState`] do MESMO
                 // frame (publicada depois de `sun_drive`; o registo/glue vive
@@ -635,9 +690,13 @@ fn attach_postfx_to_cameras(
     cameras: Query<Entity, (With<Camera3d>, Without<Bloom>)>,
     mut curves: ResMut<Assets<AutoExposureCompensationCurve>>,
     // Uma curva por processo, partilhada por todas as câmaras.
-    mut curve: Local<Option<Handle<AutoExposureCompensationCurve>>>,
+    mut curve: ResMut<AutoExposureCurve>,
 ) {
+    if cameras.is_empty() {
+        return;
+    }
     let compensation_curve = curve
+        .0
         .get_or_insert_with(|| {
             if std::env::var_os("VIBER_NO_AECURVE").is_some() {
                 info!("postfx: teto da exposição automática DESLIGADO (VIBER_NO_AECURVE)");
@@ -689,63 +748,12 @@ fn attach_postfx_to_cameras(
             // MESMO prepass, logo os motion vectors são partilhados.
             // `VIBER_NO_MOTION_BLUR=1` tira-o (ver [`motion_blur_enabled`]).
             motion_blur_component(),
-            // SSAO High aproveita o denoise temporal do TAA (r1 era Medium
-            // por causa do ruído sem acumulação). `VIBER_SSAO=medium|low|high|
-            // ultra` sobrepõe para A/B — Medium (8 spp vs 18 do High) é a
-            // alvanca listada no PERFORMANCE.md; o TAA limpa o ruído extra.
-            ScreenSpaceAmbientOcclusion {
-                quality_level: ssao_quality(taa_enabled()),
-                ..ScreenSpaceAmbientOcclusion::default()
-            },
-            // Contact shadows: raymarch na depth por luz com sombras — as
-            // sombras de contacto miúdas (herói→chão, poste→calçada) onde os
-            // shadow maps não têm resolução. Passo linear 24 ≈ raios de 0.5 m.
-            ContactShadows {
-                linear_steps: 24,
-                thickness: 0.2,
-                length: 0.5,
-            },
-            // Exposição AUTO (r2): a câmara mede o histograma e adapta-se —
-            // a noite da vila abre +2..3 stops sozinha (as lanternas POPAM)
-            // e o meio-dia fecha. Combina com o EV autoral do bioma
-            // (compensação multiplicativa). Velocidades cinematográficas:
-            // abre devagar, fecha mais devagar ainda.
-            //
-            // A CURVA limita a abertura a [`NIGHT_LIFT_CAP_EV`] nos escuros:
-            // sem ela o medidor satura de noite e abre os +6 EV do máximo,
-            // que na escala da paleta (céu/névoa) é um frame branco.
-            AutoExposure {
-                range: -6.0..=8.0,
-                speed_brighten: 1.2,
-                speed_darken: 0.5,
-                compensation_curve: compensation_curve.clone(),
-                ..AutoExposure::default()
-            },
-            // DoF cinemático subtil: foco no herói (o `drive_dof_focus`
-            // persegue a distância real câmara↔herói), bokeh com teto de 20 px
-            // e `max_depth` a 700 m para o horizonte/fog não virar sopa.
-            DepthOfField {
-                mode: DepthOfFieldMode::Bokeh,
-                focal_distance: 5.0,
-                aperture_f_stops: 1.4,
-                max_circle_of_confusion_diameter: 20.0,
-                max_depth: 700.0,
-                ..DepthOfField::default()
-            },
-            // Vinheta leve e aberração cromática subtil — a "lente" da câmara.
-            // Intensidade muito abaixo dos defaults (1.0 / 0.02) para ler como
-            // vidro fotográfico e não como filtro.
-            Vignette {
-                intensity: 0.30,
-                radius: 0.85,
-                smoothness: 2.5,
-                ..Vignette::default()
-            },
-            ChromaticAberration {
-                intensity: 0.0035,
-                max_samples: 8,
-                ..ChromaticAberration::default()
-            },
+            ssao_component(),
+            contact_shadows_component(),
+            auto_exposure_component(compensation_curve.clone()),
+            dof_component(),
+            vignette_component(),
+            chromatic_component(),
             // CAS (P1.10): sharpening adaptativo ao contraste — corre no
             // post-process DEPOIS do AA e devolve o detalhe que o TAA (e o
             // FXAA do fallback) suavizam.
@@ -759,29 +767,30 @@ fn attach_postfx_to_cameras(
         // slots). O `Bloom` NÃO se remove: o filtro deste sistema é
         // `Without<Bloom>` e a remoção fazia-o reentrar todos os frames; a
         // intensidade fica a zero e o `drive_postfx` respeita o gate.
-        if fx_off("AUTOEXPOSURE") {
+        // `LENS` = o trio vinheta/aberração/CAS; as três keys finas separam-no
+        // sem recompilar (bissecção de 2026-09-13: o pisca vive AQUI).
+        let gates = PostFxGates::from_off(fx_off);
+        if !gates.auto_exposure {
             commands.entity(camera).remove::<AutoExposure>();
         }
-        if fx_off("DOF") {
+        if !gates.dof {
             commands.entity(camera).remove::<DepthOfField>();
         }
-        if fx_off("SSAO") {
+        if !gates.ssao {
             commands
                 .entity(camera)
                 .remove::<ScreenSpaceAmbientOcclusion>();
         }
-        if fx_off("CONTACT_SHADOWS") {
+        if !gates.contact_shadows {
             commands.entity(camera).remove::<ContactShadows>();
         }
-        // `LENS` = o trio todo; as três keys finas separam-no sem recompilar
-        // (bissecção de 2026-09-13: o pisca vive AQUI).
-        if fx_off("LENS") || fx_off("VIGNETTE") {
+        if !gates.vignette {
             commands.entity(camera).remove::<Vignette>();
         }
-        if fx_off("LENS") || fx_off("CHROMATIC") {
+        if !gates.chromatic {
             commands.entity(camera).remove::<ChromaticAberration>();
         }
-        if fx_off("LENS") || fx_off("CAS") {
+        if !gates.cas {
             commands
                 .entity(camera)
                 .remove::<ContrastAdaptiveSharpening>();
@@ -789,12 +798,12 @@ fn attach_postfx_to_cameras(
         // Split-tone (LOOP B), à parte: o tuple acima já usa os 15 slots do
         // `Bundle` — sombras frias / highlights quentes pela hora, passe
         // fullscreen pós-tonemap conduzido pelo `drive_split_tone`.
-        if !fx_off("SPLITTONE") {
+        if gates.split_tone {
             commands.entity(camera).insert(SplitToneSettings::default());
         }
         // Perspetiva aérea (LOOP C): o marcador liga o passe depth-aware no
         // render app (as matrizes vêm do `ExtractedView` no prepare).
-        if !fx_off("AERIAL") {
+        if gates.aerial {
             commands.entity(camera).insert(AerialPerspective);
         }
         if taa_enabled() {
@@ -821,22 +830,258 @@ fn attach_postfx_to_cameras(
         // `volumetrics_enabled`; apagavam o frame na bisseção r1, renderizam
         // com o TAA da r2).
         if volumetrics_enabled() {
-            commands.entity(camera).insert(VolumetricFog {
-                // Sem EnvironmentMapLight no motor: ambient do volume a 0 —
-                // a névoa brilha pela luz do sol (VolumetricLight), não por
-                // si mesma (senão a noite fica com uma wash cinzenta).
-                ambient_intensity: 0.0,
-                // BANDING: sem jitter o raymarch amostra os MESMOS offsets
-                // por raios de profundidade semelhante e as faixas de
-                // integração aparecem como linhas horizontais no céu (raios
-                // longos até ao domo, 850 m, com 32/64 passos). O jitter
-                // desloca a origem do raio por noise — o TAA acumula e
-                // dissolve as faixas.
-                jitter: 1.0,
-                step_count: volumetric_steps(),
-                ..VolumetricFog::default()
-            });
+            commands.entity(camera).insert(volumetric_fog_component());
         }
+    }
+}
+
+/// SSAO High aproveita o denoise temporal do TAA (r1 era Medium por causa do
+/// ruído sem acumulação). `VIBER_SSAO=medium|low|high|ultra` sobrepõe para
+/// A/B — Medium (8 spp vs 18 do High) é a alavanca listada no PERFORMANCE.md;
+/// o TAA limpa o ruído extra. O tier de qualidade também a baixa.
+fn ssao_component() -> ScreenSpaceAmbientOcclusion {
+    ScreenSpaceAmbientOcclusion {
+        quality_level: ssao_quality(taa_enabled()),
+        ..ScreenSpaceAmbientOcclusion::default()
+    }
+}
+
+/// Contact shadows: raymarch na depth por luz com sombras — as sombras de
+/// contacto miúdas (herói→chão, poste→calçada) onde os shadow maps não têm
+/// resolução. Passo linear 24 ≈ raios de 0.5 m.
+fn contact_shadows_component() -> ContactShadows {
+    ContactShadows {
+        linear_steps: 24,
+        thickness: 0.2,
+        length: 0.5,
+    }
+}
+
+/// Exposição AUTO (r2): a câmara mede o histograma e adapta-se — a noite da
+/// vila abre +2..3 stops sozinha (as lanternas POPAM) e o meio-dia fecha.
+/// Combina com o EV autoral do bioma (compensação multiplicativa).
+/// Velocidades cinematográficas: abre devagar, fecha mais devagar ainda.
+///
+/// A CURVA limita a abertura a [`NIGHT_LIFT_CAP_EV`] nos escuros: sem ela o
+/// medidor satura de noite e abre os +6 EV do máximo, que na escala da paleta
+/// (céu/névoa) é um frame branco.
+fn auto_exposure_component(curve: Handle<AutoExposureCompensationCurve>) -> AutoExposure {
+    AutoExposure {
+        range: -6.0..=8.0,
+        speed_brighten: 1.2,
+        speed_darken: 0.5,
+        compensation_curve: curve,
+        ..AutoExposure::default()
+    }
+}
+
+/// DoF cinemático subtil: foco no herói (o `drive_dof_focus` persegue a
+/// distância real câmara↔herói), bokeh com teto de 20 px e `max_depth` a
+/// 700 m para o horizonte/fog não virar sopa.
+fn dof_component() -> DepthOfField {
+    DepthOfField {
+        mode: DepthOfFieldMode::Bokeh,
+        focal_distance: 5.0,
+        aperture_f_stops: 1.4,
+        max_circle_of_confusion_diameter: 20.0,
+        max_depth: 700.0,
+        ..DepthOfField::default()
+    }
+}
+
+/// Vinheta leve — metade da "lente" da câmara. Intensidade muito abaixo do
+/// default (1.0) para ler como vidro fotográfico e não como filtro.
+fn vignette_component() -> Vignette {
+    Vignette {
+        intensity: 0.30,
+        radius: 0.85,
+        smoothness: 2.5,
+        ..Vignette::default()
+    }
+}
+
+/// Aberração cromática subtil (default 0.02 → 0.0035).
+fn chromatic_component() -> ChromaticAberration {
+    ChromaticAberration {
+        intensity: 0.0035,
+        max_samples: 8,
+        ..ChromaticAberration::default()
+    }
+}
+
+fn volumetric_fog_component() -> VolumetricFog {
+    VolumetricFog {
+        // Sem EnvironmentMapLight no motor: ambient do volume a 0 — a névoa
+        // brilha pela luz do sol (VolumetricLight), não por si mesma (senão a
+        // noite fica com uma wash cinzenta).
+        ambient_intensity: 0.0,
+        // BANDING: sem jitter o raymarch amostra os MESMOS offsets por raios
+        // de profundidade semelhante e as faixas de integração aparecem como
+        // linhas horizontais no céu (raios longos até ao domo, 850 m, com
+        // 32/64 passos). O jitter desloca a origem do raio por noise — o TAA
+        // acumula e dissolve as faixas.
+        jitter: 1.0,
+        step_count: volumetric_steps(),
+        ..VolumetricFog::default()
+    }
+}
+
+/// Que componentes de pós-processo a câmara deve ter, pelos gates em vigor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PostFxGates {
+    auto_exposure: bool,
+    dof: bool,
+    ssao: bool,
+    contact_shadows: bool,
+    vignette: bool,
+    chromatic: bool,
+    cas: bool,
+    split_tone: bool,
+    aerial: bool,
+    volumetrics: bool,
+}
+
+impl PostFxGates {
+    /// `off(key)` responde se o gate está cortado (ver [`fx_off`]).
+    fn from_off(off: impl Fn(&str) -> bool) -> Self {
+        let lens = off("LENS");
+        Self {
+            auto_exposure: !off("AUTOEXPOSURE"),
+            dof: !off("DOF"),
+            ssao: !off("SSAO"),
+            contact_shadows: !off("CONTACT_SHADOWS"),
+            vignette: !lens && !off("VIGNETTE"),
+            chromatic: !lens && !off("CHROMATIC"),
+            cas: !lens && !off("CAS"),
+            split_tone: !off("SPLITTONE"),
+            aerial: !off("AERIAL"),
+            volumetrics: !off("VOLUMETRICS"),
+        }
+    }
+}
+
+/// Estado de arranque do pós-processo que os gates runtime não podem mudar.
+#[derive(Debug, Clone, Copy, Resource)]
+struct PostFxBoot {
+    /// O volume de névoa só nasce no Startup quando os volumetrics arrancam
+    /// ligados; sem ele, repor o `VolumetricFog` na câmara não desenha nada.
+    volumetrics: bool,
+}
+
+/// A curva da exposição automática, partilhada pelas câmaras e reposta pelo
+/// [`sync_postfx_gates`] quando o gate volta a ligar.
+#[derive(Debug, Clone, Default, Resource)]
+struct AutoExposureCurve(Option<Handle<AutoExposureCompensationCurve>>);
+
+/// Reconcilia os componentes das câmaras JÁ equipadas com os gates em vigor
+/// quando algum mudou em runtime (bridge, `<PostFxDebugToggle>`,
+/// `<AdaptiveQuality>`).
+///
+/// Sem isto, os interruptores ao vivo só mudavam a flag: o bundle entra uma vez
+/// no [`attach_postfx_to_cameras`] e só o bloom (conduzido por frame) reagia.
+/// O TAA fica de fora — trocar TAA↔FXAA muda o filtro de sombras e os
+/// prepasses da câmara, e esse corte continua a ser de arranque.
+#[allow(clippy::type_complexity)]
+fn sync_postfx_gates(
+    mut commands: Commands,
+    boot: Option<Res<PostFxBoot>>,
+    curve: Res<AutoExposureCurve>,
+    mut cameras: Query<
+        (
+            Entity,
+            Has<AutoExposure>,
+            Has<DepthOfField>,
+            Has<ContactShadows>,
+            Has<Vignette>,
+            Has<ChromaticAberration>,
+            Has<ContrastAdaptiveSharpening>,
+            Has<SplitToneSettings>,
+            Has<AerialPerspective>,
+            Option<&mut VolumetricFog>,
+        ),
+        (With<Camera3d>, With<Bloom>),
+    >,
+    mut seen: Local<u64>,
+) {
+    let generation = fx_gate_generation();
+    if generation == *seen {
+        return;
+    }
+    *seen = generation;
+    let gates = PostFxGates::from_off(fx_off);
+    let volumetrics_booted = boot.is_some_and(|b| b.volumetrics);
+    for (camera, ae, dof, contact, vignette, chromatic, cas, split, aerial, fog) in &mut cameras {
+        let mut entity = commands.entity(camera);
+        match (gates.auto_exposure, ae, curve.0.clone()) {
+            (true, false, Some(handle)) => {
+                entity.insert(auto_exposure_component(handle));
+            }
+            (false, true, _) => {
+                entity.remove::<AutoExposure>();
+            }
+            _ => {}
+        }
+        toggle(&mut entity, gates.dof, dof, dof_component);
+        toggle(
+            &mut entity,
+            gates.contact_shadows,
+            contact,
+            contact_shadows_component,
+        );
+        toggle(&mut entity, gates.vignette, vignette, vignette_component);
+        toggle(&mut entity, gates.chromatic, chromatic, chromatic_component);
+        toggle(
+            &mut entity,
+            gates.cas,
+            cas,
+            ContrastAdaptiveSharpening::default,
+        );
+        toggle(
+            &mut entity,
+            gates.split_tone,
+            split,
+            SplitToneSettings::default,
+        );
+        toggle(&mut entity, gates.aerial, aerial, || AerialPerspective);
+        // Reinserir o SSAO também aplica a qualidade do tier.
+        if gates.ssao {
+            entity.insert(ssao_component());
+        } else {
+            entity.remove::<ScreenSpaceAmbientOcclusion>();
+        }
+        entity.insert(motion_blur_component());
+        if volumetrics_booted {
+            match (gates.volumetrics, fog) {
+                (true, Some(mut fog)) => {
+                    let steps = volumetric_steps();
+                    if fog.step_count != steps {
+                        fog.step_count = steps;
+                    }
+                }
+                (true, None) => {
+                    entity.insert(volumetric_fog_component());
+                }
+                (false, Some(_)) => {
+                    entity.remove::<VolumetricFog>();
+                }
+                (false, None) => {}
+            }
+        }
+    }
+}
+
+/// Insere `make()` quando o gate quer o componente e ele falta; remove-o no
+/// caso inverso.
+fn toggle<C: Component>(
+    entity: &mut bevy::ecs::system::EntityCommands,
+    wanted: bool,
+    present: bool,
+    make: impl FnOnce() -> C,
+) {
+    if wanted && !present {
+        entity.insert(make());
+    } else if !wanted && present {
+        entity.remove::<C>();
     }
 }
 
@@ -2404,6 +2649,49 @@ fn follow_fog_volume(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_lens_gate_cuts_the_whole_trio() {
+        let gates = PostFxGates::from_off(|k| k == "LENS");
+        assert!(!gates.vignette && !gates.chromatic && !gates.cas);
+        assert!(gates.dof && gates.ssao && gates.aerial);
+        let gates = PostFxGates::from_off(|k| k == "CHROMATIC");
+        assert!(gates.vignette && !gates.chromatic && gates.cas);
+    }
+
+    /// Um gate desligado AO VIVO sai da câmara já equipada e volta quando
+    /// liga — antes só a flag mudava e o componente ficava lá.
+    #[test]
+    fn test_live_gate_removes_and_restores_camera_component() {
+        let mut app = App::new();
+        app.init_resource::<AutoExposureCurve>()
+            .insert_resource(PostFxBoot { volumetrics: false })
+            .add_systems(Update, sync_postfx_gates);
+        let camera = app
+            .world_mut()
+            .spawn((
+                Camera3d::default(),
+                Bloom::NATURAL,
+                contact_shadows_component(),
+            ))
+            .id();
+        app.update();
+        assert!(app.world().get::<ContactShadows>(camera).is_some());
+
+        fx_runtime_toggle("CONTACT_SHADOWS", false);
+        app.update();
+        assert!(
+            app.world().get::<ContactShadows>(camera).is_none(),
+            "gate OFF tira o componente"
+        );
+
+        fx_runtime_toggle("CONTACT_SHADOWS", true);
+        app.update();
+        assert!(
+            app.world().get::<ContactShadows>(camera).is_some(),
+            "gate ON repõe-no"
+        );
+    }
 
     /// O passe de perspetiva aérea corre ANTES do TAA por omissão: é
     /// depth-aware e a depth do prepass vem jitterada, por isso mascarar

@@ -466,18 +466,7 @@ fn nota_measure_system(
     };
     nota.marked.insert(name.clone());
     waypoint.label = Some(landmark.label.clone());
-    // O twin MAIS PRÓXIMO do herói (não o primeiro da query): com nomes
-    // duplicados (includes repetidos), o primeiro podia estar do outro lado
-    // do mapa e o waypoint apontava para lá.
-    waypoint.position = named
-        .iter()
-        .filter(|(entity_name, _)| entity_name.to_string() == name)
-        .min_by(|(_, a), (_, b)| {
-            a.translation()
-                .distance_squared(player_pos)
-                .total_cmp(&b.translation().distance_squared(player_pos))
-        })
-        .map(|(_, t)| t.translation());
+    waypoint.position = nearest_named(&named, &name, player_pos);
     let biome_label = landmark.biome_label();
     let remaining = remaining_in_biome(&catalog, &nota.marked, &landmark.biome_id);
     if remaining == 0 {
@@ -493,6 +482,20 @@ fn nota_measure_system(
         )));
     }
     info!(target: "viber::nota", "marco '{name}' assinado");
+}
+
+/// A entidade `name` MAIS PRÓXIMA de `from` (não a primeira da query): com
+/// nomes duplicados (includes repetidos) a primeira podia estar do outro
+/// lado do mapa — o waypoint e o fast-travel apontavam para lá.
+fn nearest_named(named: &Query<(&Name, &GlobalTransform)>, name: &str, from: Vec3) -> Option<Vec3> {
+    named
+        .iter()
+        .filter(|(entity_name, _)| entity_name.as_str() == name)
+        .map(|(_, t)| t.translation())
+        .min_by(|a, b| {
+            a.distance_squared(from)
+                .total_cmp(&b.distance_squared(from))
+        })
 }
 
 // ── viagem rápida [G] na fogueira ───────────────────────────────────────
@@ -652,10 +655,11 @@ fn travel_menu_system(
     // viajar: fade a preto 0.4 s → teleport no preto cheio → 0.4 s de volta
     if keys.just_pressed(KeyCode::KeyJ) {
         if let Some(entry) = marked.get(state.selection) {
-            let target = named
+            let hero = players
                 .iter()
-                .find(|(name_entity, _)| name_entity.to_string() == entry.name)
-                .map(|(_, t)| t.translation());
+                .next()
+                .map_or(Vec3::ZERO, GlobalTransform::translation);
+            let target = nearest_named(&named, &entry.name, hero);
             if let Some(pos) = target {
                 let x = pos.x + 2.0;
                 let z = pos.z + 2.0;
@@ -728,7 +732,7 @@ fn travel_fade_system(
     time: Res<Time>,
     mut fade: ResMut<TravelFade>,
     mut overlay: Query<(&mut BackgroundColor, &mut Visibility), With<TravelFadeOverlay>>,
-    mut heroes: Query<(&mut Transform, &mut Player), With<Player>>,
+    mut heroes: Query<(Entity, &mut Transform, &mut Player), With<Player>>,
     mut commands: Commands,
 ) {
     if fade.phase == TravelFadePhase::Idle {
@@ -737,12 +741,12 @@ fn travel_fade_system(
     let (alpha, arrived) = travel_fade_step(&mut fade, time.delta_secs());
     if arrived {
         if let Some(target) = fade.target {
-            if let Ok((mut transform, mut player)) = heroes.single_mut() {
+            if let Ok((entity, mut transform, mut player)) = heroes.single_mut() {
                 transform.translation = target;
-                // Chegada limpa: sem arrastar a inércia do trajeto antigo.
-                player.vel_x = 0.0;
-                player.vel_z = 0.0;
-                player.vel_y = 0.0;
+                // Chegada limpa: sem a inércia do trajeto antigo e com a
+                // tutela pós-teleporte (o marco fica longe — a coluna de
+                // destino pode ainda estar a assar o collider).
+                crate::player::settle_after_teleport(&mut commands, entity, Some(&mut *player));
             }
             {
                 // Poeira de aterragem — visível quando o fade abre.
@@ -889,17 +893,18 @@ fn enemy_registry_system(
 
 fn quest_debug_landmark(
     keys: Res<ButtonInput<KeyCode>>,
-    mut players: Query<(Entity, &GlobalTransform, &mut Transform), With<Player>>,
+    mut players: Query<(Entity, &GlobalTransform, &mut Transform, &mut Player), With<Player>>,
     named: Query<(&Name, &GlobalTransform)>,
     catalog: Res<LandmarkCatalog>,
     nota: Res<NotaLog>,
     terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     mut toasts: MessageWriter<ScriptToast>,
+    mut commands: Commands,
 ) {
     if !keys.just_pressed(KeyCode::F11) {
         return;
     }
-    let Ok((_pe, player_global, mut transform)) = players.single_mut() else {
+    let Ok((entity, player_global, mut transform, mut player)) = players.single_mut() else {
         return;
     };
     let player_pos = player_global.translation();
@@ -928,6 +933,7 @@ fn quest_debug_landmark(
         .map(|t| t.sample_mesh_surface(x, z))
         .unwrap_or(target.1.y);
     transform.translation = Vec3::new(x, y + 0.1, z);
+    crate::player::settle_after_teleport(&mut commands, entity, Some(&mut *player));
     toasts.write(ScriptToast(format!("QA: teleport ao marco {}", target.0)));
 }
 
@@ -970,6 +976,29 @@ mod tests {
                 biome.survey_quest()
             );
         }
+    }
+
+    /// Homónimos: ganha o mais próximo, não o primeiro spawnado.
+    #[test]
+    fn test_nearest_named_picks_the_closest_twin() {
+        let mut world = World::new();
+        world.spawn((
+            Name::new("cairn"),
+            GlobalTransform::from_translation(Vec3::new(500.0, 0.0, 0.0)),
+        ));
+        world.spawn((
+            Name::new("cairn"),
+            GlobalTransform::from_translation(Vec3::new(5.0, 0.0, 0.0)),
+        ));
+        world.spawn((Name::new("other"), GlobalTransform::IDENTITY));
+        let mut state =
+            bevy::ecs::system::SystemState::<Query<(&Name, &GlobalTransform)>>::new(&mut world);
+        let named = state.get(&world).expect("query válida");
+        assert_eq!(
+            nearest_named(&named, "cairn", Vec3::ZERO),
+            Some(Vec3::new(5.0, 0.0, 0.0))
+        );
+        assert_eq!(nearest_named(&named, "missing", Vec3::ZERO), None);
     }
 
     #[test]

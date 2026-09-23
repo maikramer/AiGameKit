@@ -303,6 +303,10 @@ pub enum HurtOutcome {
 /// Caminho único de dano ao herói: i-frames (físico, só com timer > 0 —
 /// o componente fica, o QUE importa é a janela), `Dying` ignora tudo,
 /// clamp no pool e deteção de morte.
+///
+/// HP já a 0 também ignora: o `Dying` só entra no fim do frame (commands),
+/// e um segundo golpe no mesmo frame da morte voltava a dar `killed` — o
+/// sting de game over e o evento `player_hurt` saíam em dobro.
 pub fn hurt_player(
     health: &mut Health,
     invuln: Option<&Invulnerable>,
@@ -310,7 +314,7 @@ pub fn hurt_player(
     amount: f32,
     status: bool,
 ) -> HurtOutcome {
-    if dying.is_some() {
+    if dying.is_some() || health.current <= 0.0 {
         return HurtOutcome::Ignored;
     }
     if !status && invuln.is_some_and(|frame| frame.timer > 0.0) {
@@ -387,7 +391,9 @@ impl Plugin for FeedbackPlugin {
                 (
                     player_hurt_system,
                     tick_status_system,
-                    respawn_system,
+                    // A morte deste frame entra em `Dying` no MESMO frame (o
+                    // dano aplica-se antes de o respawn olhar para o HP).
+                    respawn_system.after(player_hurt_system),
                     decay_invulnerability,
                     target_expiry_system,
                     target_ring_system,
@@ -636,7 +642,7 @@ pub fn shake_on_player_hurt(
 /// Veneno: 1 tick/s enquanto activo — passa pelo único caminho de dano
 /// (`PlayerHurt` → `player_hurt_system`: sem i-frames, sem número,
 /// respeitando `Dying`). Não aplicar aqui directamente: o evento era
-/// consumido a seguir e o tick saía em DUPLICO.#[allow(clippy::type_complexity)]
+/// consumido a seguir e o tick saía em DUPLICO.
 fn tick_status_system(
     time: Res<Time>,
     mut players: Query<&mut StatusEffects, With<Player>>,
@@ -665,6 +671,7 @@ fn respawn_system(
             &mut Transform,
             Option<&mut Dying>,
             Option<&mut StatusEffects>,
+            Option<&mut Player>,
         ),
         With<Player>,
     >,
@@ -678,7 +685,7 @@ fn respawn_system(
     mut events: Option<ResMut<crate::luau::ScriptEventQueue>>,
 ) {
     let dt = time.delta_secs();
-    for (entity, mut health, mut transform, dying, mut status) in &mut players {
+    for (entity, mut health, mut transform, dying, mut status, mut player) in &mut players {
         match dying {
             Some(mut state) => {
                 state.timer -= dt;
@@ -702,9 +709,14 @@ fn respawn_system(
                     // renascia-se a "pairar" sobre os pontos de respawn.
                     let y = terrain
                         .as_deref()
+                        .filter(|t| t.in_field(point.x, point.y))
                         .map(|t| t.sample_mesh_surface(point.x, point.y) + 0.1)
                         .unwrap_or(transform.translation.y);
                     transform.translation = Vec3::new(point.x, y, point.y);
+                    // Chegada limpa: a queda/knockback da morte não viaja
+                    // para o ponto de respawn, e a coluna de destino (longe)
+                    // pode ainda não ter collider — a tutela segura o herói.
+                    crate::player::settle_after_teleport(&mut commands, entity, player.as_deref_mut());
                     health.current = health.max;
                     // Morte limpa status: renascer envenenado punha o herói a
                     // perder o HP cheio no ponto de respawn sem inimigo algum.
@@ -1253,6 +1265,12 @@ mod tests {
             HurtOutcome::Applied { killed: true }
         );
         assert!((hp.current - 0.0).abs() < 1e-4);
+        // Segundo golpe no MESMO frame da morte (o `Dying` ainda está nos
+        // commands): ignorado, não volta a dar `killed`.
+        assert_eq!(
+            hurt_player(&mut hp, None, None, 25.0, false),
+            HurtOutcome::Ignored
+        );
     }
 
     #[test]
@@ -1582,5 +1600,50 @@ mod tests {
             world.get_entity(enemy).is_ok(),
             "o inimigo sobrevive — só o flash sai"
         );
+    }
+
+    /// O respawn é uma chegada LIMPA: a queda e o knockback da morte não
+    /// viajam para o ponto de respawn, e a tutela pós-teleporte entra (a
+    /// coluna de destino, longe, pode ainda não ter collider).
+    #[test]
+    fn test_respawn_clears_momentum_and_settles() {
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .add_message::<ScriptToast>()
+            .add_systems(Update, respawn_system);
+        let hero = app
+            .world_mut()
+            .spawn((
+                Player {
+                    vel_x: 3.0,
+                    vel_y: -40.0,
+                    vel_z: -2.0,
+                    ..Player::default()
+                },
+                Health {
+                    current: 0.0,
+                    max: 100.0,
+                },
+                Transform::from_xyz(48.0, -20.0, 2.0),
+                Dying { timer: 0.01 },
+                crate::physics_fx::Knockback {
+                    velocity: Vec3::X * 5.0,
+                },
+            ))
+            .id();
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(std::time::Duration::from_millis(50));
+        app.update();
+
+        let world = app.world();
+        let player = world.get::<Player>(hero).unwrap();
+        assert_eq!((player.vel_x, player.vel_y, player.vel_z), (0.0, 0.0, 0.0));
+        assert!(world.get::<crate::physics_fx::Knockback>(hero).is_none());
+        assert!(world.get::<crate::player::TeleportSettle>(hero).is_some());
+        assert!(world.get::<Dying>(hero).is_none());
+        assert_eq!(world.get::<Health>(hero).unwrap().current, 100.0);
+        let t = world.get::<Transform>(hero).unwrap().translation;
+        assert_eq!((t.x, t.z), (50.0, 0.0), "portão leste (o mais próximo)");
     }
 }

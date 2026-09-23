@@ -25,9 +25,17 @@ caminhos relativos a `scripts/` aceitam subpastas). Ver exemplos vivos em
   `activation-radius`, default **45 m**) o `on_update` **nem corre** —
   inimigo distante custa zero lógica.
 - **Isolamento:** cada chunk tem environment próprio (`__index` → globals
-  reais); scripts não se clobberizam globals. `viber` e stdlib são partilhados.
+  reais); scripts não se clobberizam globals. `viber` e stdlib são partilhados
+  — a stdlib (`string`, `math`, `table`, …) é **só-leitura**. Não há
+  `require`/`package` (liam qualquer ficheiro do disco): módulos passam pelo
+  `viber.load`, preso a `scripts/`.
+- **Orçamento:** cada entrada na VM (`on_update`, `on_player_attack`,
+  top-level, timer, `on_spawned`) tem **500 ms** — um loop infinito vira erro
+  Lua (`orçamento de CPU excedido`) em vez de congelar a engine. A heap da VM
+  tem teto de **512 MiB**.
 - **Erros são pcall-style:** reportados **1× por script** (warn, visível no
-  `viber debug logs`) e nunca abortam a engine.
+  `viber debug logs`) e nunca abortam a engine. Ids de entidade inválidos
+  (ex. `0`) são erro Lua, não crash.
 - **Semântica de comandos:** setters de movimento/combate/UI **enfileiram
   comandos** aplicados no fim do frame, depois de todos os `on_update` — sem
   acesso direto ao ECS. `move_towards`/`move_by` assentam o Y no terreno
@@ -37,7 +45,10 @@ caminhos relativos a `scripts/` aceitam subpastas). Ver exemplos vivos em
   RECARREGA (2026-09-07, `src/hot_reload.rs`; `VIBER_HOT_RELOAD=0` desliga):
   o chunk é recompilado e o top-level re-corre nas entidades ativas —
   globals do script resetam (estado em `viber.state()` sobrevive, pois vive
-  fora do env). Erro de compilação = warn e o chunk antigo continua.
+  fora do env). Erro de compilação OU erro a correr o top-level = warn e o
+  chunk antigo continua. Os timers do chunk antigo saem (o top-level novo
+  re-regista os seus). Editar um módulo do `viber.load` tira-o do cache e
+  re-corre o top-level de todos os scripts.
 
 Esqueleto típico:
 
@@ -108,9 +119,14 @@ persiste no save (v1, documentado).
 | `viber.terrain.max_radius()` | number | teto que a engine aplica ao raio (96 m) |
 
 Regras: o pedido entra numa fila e é aplicado no frame seguinte (no máximo
-4 por frame — um `on_update` em loop não congela o frame); raio ≤ 96 m e
-profundidade/altura ≤ 64 m (clamp); alturas resultantes ficam em
-`[0, max-height]`; pedidos NaN/inválidos são rejeitados com warn. O COMBATE
+4 por frame — um `on_update` em loop não congela o frame); o raio é
+clampado a 96 m; alturas resultantes ficam em `[0, max-height]`. O `bool`
+devolvido diz se o pedido foi ACEITE: `false` para NaN/infinito, raio ≤ 0
+ou profundidade/altura relativa acima de 64 m (a `altura` do `flatten` é
+uma cota absoluta — só tem de ser finita) — esse nem chega à fila. A fila
+guarda no máximo 256 pedidos pendentes; acima disso os pedidos seguintes
+são descartados (warn 1× — o `true` já devolvido não o reflete) até
+escoar. O COMBATE
 fino pode usar isto para crateras de bombas, poços de mineração ou valas
 de cerco — `viber.terrain.flatten` é o que se quer debaixo de um edifício
 de script.
@@ -187,6 +203,7 @@ foldarms/lean/idle`.
 |--------|-------|
 | `viber.damage_player(amount)` | dano pelo path único do feedback (i-frames, vinheta, número flutuante, morte, knockback com `from` = posição da entidade) |
 | `viber.heal_player(amount)` | cura direta no HP do herói |
+| `viber.fire_projectile(id [, x, y, z])` | dispara um projétil do `<ProjectileTemplate id=…>` do mundo, da boca da entidade (+1.2 m) para o peito do herói (+1.1 m) ou para o ponto dado; devolve `false` sem herói nem alvo. A facção do template decide quem leva o dano (`enemy` → herói pelo path único do feedback; `player` → criaturas com `Health`; `neutral` → só terreno); `gravity > 0` faz arco balístico. O projétil nunca acerta a entidade que o disparou e o acerto é varrido (não atravessa alvos num frame longo). Template desconhecido = warn 1× e o disparo cai |
 | `viber.apply_status(kind, secs)` | status effect no herói; hoje só `kind = "venom"` (tick 1/s) |
 | `viber.add_xp(gain)` | XP direto no herói |
 | `viber.topple()` | destrutível (`break-style: fall`): tomba na direção herói→entidade, remove o script e despawna no fim da queda |
@@ -257,7 +274,10 @@ end
 ## Timers (`viber.after` / `viber.every`)
 
 Substitui o `st.t += dt` manual. World-scoped: correm independentemente do
-raio de ativação do dono; a callback corre com o ctx seedado à entidade.
+raio de ativação do dono; a callback corre com o ctx seedado ao dono
+(`viber.position()`, `dt`, herói e relógio do frame). Morrem com o dono (um
+`every` de uma entidade despawnada não volta a correr). O `every` mantém a
+cadência do agendamento (sem acumular o atraso de cada frame).
 
 ```lua
 viber.after(2.5, function() viber.toast("passaram 2,5 s") end)
@@ -297,8 +317,9 @@ aplica pós-frame.
 viber.game().bosses_killed = (viber.game().bosses_killed or 0) + 1
 
 -- viber.load("lib/x.lua"): corre um chunk de scripts/ em env próprio UMA
--- vez por mundo e devolve o seu return (cacheado) — fatora bibliotecas
--- partilhadas (ver scripts/lib/fsm.lua do exemplo).
+-- vez por mundo e devolve o seu return (cacheado; módulo sem return devolve
+-- true, como o require) — fatora bibliotecas partilhadas (ver
+-- scripts/lib/fsm.lua do exemplo). Só caminhos relativos a scripts/ (sem '..').
 local fsm = viber.load("lib/fsm.lua")
 
 -- viber.save() / viber.load_save(): gravam/carregam o save do mundo (posição do

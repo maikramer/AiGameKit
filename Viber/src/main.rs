@@ -654,7 +654,11 @@ fn delegate_run_to_cargo(world: &Path, debug: bool, bridge: Option<u16>) -> Resu
 /// arranque do run remove executáveis e caches incrementais do perfil OPOSTO
 /// — os binários de teste do Bevy em dev pesam ~2.2 GB cada e reconstruírem-se
 /// num relink de segundos. Silencioso quando não há nada a limpar.
-fn run_target_housekeeping(active_debug: bool) {
+///
+/// Com `--no-cargo` o perfil ativo é o do PRÓPRIO executável (`target/debug/
+/// viber run --no-cargo` corre o debug mesmo sem `--debug`) — senão o
+/// arranque limpava o perfil em uso e o próximo build recompilava tudo.
+fn run_target_housekeeping(mut active_debug: bool, no_cargo: bool) {
     // O filho delegado (`cargo run -- run … --no-cargo`) não repete: o pai
     // limpou antes de lançar o cargo.
     if std::env::var_os(CARGO_DELEGATE_GUARD).is_some() {
@@ -666,6 +670,13 @@ fn run_target_housekeeping(active_debug: bool) {
     let Some(root) = viber_checkout_root(&cwd) else {
         return;
     };
+    if no_cargo {
+        let exe = std::env::current_exe().and_then(|p| p.canonicalize());
+        let debug_dir = root.join("target").join("debug").canonicalize();
+        if let (Ok(exe), Ok(debug_dir)) = (exe, debug_dir) {
+            active_debug = exe.starts_with(&debug_dir);
+        }
+    }
     let report = prune::housekeeping(&root, active_debug);
     if let Some(line) = report.describe() {
         eprintln!("viber: prune: {line}");
@@ -1076,6 +1087,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             path.display()
         );
     }
+    app.insert_resource(save::WorldSaveKey(save::world_save_key(path)));
     app.insert_resource(PendingWorld {
         world,
         base_dir: world_base_dir(path),
@@ -1136,6 +1148,18 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // Pós-processamento (exposição/bloom/SSAO) na câmara do mundo; os
     // `pp-*` das `<BiomeRegion>` conduzem-no. `VIBER_NO_POSTFX=1` desliga.
     app.add_plugins(postfx::PostFxPlugin);
+    // `<PostFxDebugToggle>`: teclas que comutam os gates de pós-processo ao
+    // vivo (inerte sem a tag no mundo).
+    app.add_plugins(viber::postfx_toggle::PostFxDebugTogglePlugin);
+    // `<AdaptiveQuality>`: tiers de qualidade pelo frame-time real (SSAO,
+    // volumétrico, sombras de ponto, cortes de efeitos).
+    app.add_plugins(viber::adaptive_quality::AdaptiveQualityPlugin);
+    // `<SpawnGate>`: segura a entidade-alvo no ar até haver collider de
+    // terreno sob ela (inerte sem a tag).
+    app.add_plugins(viber::spawn_gate::SpawnGatePlugin);
+    // `<ProjectileTemplate>` + `viber.fire_projectile`: projéteis simples
+    // (linha reta ou arco balístico) com dano por facção.
+    app.add_plugins(viber::projectile::ProjectilePlugin);
     // IBL vivo do céu (LightProbe + cubemap da paleta da atmosfera, filtrado
     // na GPU) — ambiente/reflexos que seguem a hora do dia. `VIBER_NO_IBL=1`.
     app.add_plugins(viber::ibl::SkyIblPlugin);
@@ -1296,34 +1320,14 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
         bevy::app::Update,
         (ui::UiSet::Collect, ui::UiSet::Build, ui::UiSet::Bind).before(luau::luau_update),
     );
-    // O espelho `UiModalsOpen`→`MenusOpen` lê o valor que o driver dos modais
-    // declarativos escreve neste frame (UiSet::Script) — sem ordem, os
-    // consumos de `MenusOpen` (hotbar/movimento/câmara) viam o frame anterior.
-    app.add_systems(
-        bevy::app::Update,
-        menus::mirror_ui_modals_open.after(ui::UiSet::Script),
-    );
-    // O melee lê o `HarvestContext` do MESMO frame (gate colheita-melee):
-    // sem ordem, um press [J] ao ENTRAR no alcance colhia e golpeava com
-    // contexto stale, e ao SAIR perdia o press. A ordenação vai pelo
-    // `HarvestSet` (o conjunto inteiro da colheita) — re-adicionar o
-    // `harvest_context_system` aqui duplicava a instância no schedule e
-    // panica ("more than one instance").
-    if rpg {
-        // Só no preset RPG: com `gameplay: none` o melee nem existe (o
-        // sistema exige HarvestContext, que nasce no HarvestPlugin gated) —
-        // este registo de ORDENAÇÃO era a fuga que fazia o demo crashar.
-        app.add_systems(
-            bevy::app::Update,
-            combat::player_melee_attack.after(harvest::HarvestSet),
-        );
-    }
     app.add_systems(bevy::app::Startup, spawn::startup);
-    // Spawn RUNTIME de prototypes (viber.spawn_prototype): exclusivo, depois
-    // dos scripts do frame (as callbacks da entidade nova correm aqui).
+    // Spawn RUNTIME de prototypes (viber.spawn_prototype): exclusivo, no
+    // PostUpdate (depois dos scripts do Update — as callbacks da entidade nova
+    // correm aqui) e ANTES da propagação: sem a aresta a entidade podia
+    // renderizar um frame com o `GlobalTransform` identidade (na origem).
     app.add_systems(
         bevy::app::PostUpdate,
-        recipes::spawn::apply_script_spawns.after(luau::luau_update),
+        recipes::spawn::apply_script_spawns.before(bevy::transform::TransformSystems::Propagate),
     );
     app.add_systems(
         bevy::app::Update,
@@ -1366,22 +1370,13 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             timed(Group::World, worldsys::interior_lighting_apply)
                 .after(worldsys::sun_drive)
                 .after(worldsys::daycycle_drive),
+            // `weather_drive`/`atmosphere_drive` vivem no AmbientPlugin (dono
+            // do `AtmosphereState`), ordenados contra este `sun_drive`.
             timed(Group::World, worldsys::sun_drive),
-            // Scheduler do `<Weather cycle>` (chuva alvo determinística) —
-            // tem de correr ANTES do `atmosphere_drive` (a intensidade
-            // contínua de chuva entra na paleta no mesmo frame; as constraints
-            // do ambient.rs só ordenam se o sistema existir).
-            timed(Group::World, worldsys::weather_drive),
-            // Publica a paleta da hora (AtmosphereState) a partir do sol já
-            // apontado por `sun_drive` — céu, névoa, grading e exposure a
-            // leem. Sem este registo o recurso fica no default de dia para
-            // sempre (céu/névoa congelados, aurora a visualizar-se de dia).
-            timed(Group::World, worldsys::atmosphere_drive),
         ),
     );
-    // Tuplo dividido: o Bevy limita tuples de sistemas a 20 elementos e o
-    // bloco acima cresceu (weather/atmosphere drives). Constraints são
-    // explícitas (.after), a separação não muda semântica.
+    // Tuplo dividido: o Bevy limita tuples de sistemas a 20 elementos.
+    // Constraints são explícitas (.after), a separação não muda semântica.
     app.add_systems(
         bevy::app::Update,
         (
@@ -1394,19 +1389,16 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
                 .after(skills::abilities_system),
             sky::sky_follow_camera,
             worldsys::seat_statics_once,
-            worldsys::resolve_pending_place,
+            worldsys::resolve_pending_place.after(worldsys::seat_statics_once),
             hud::hud_toggle,
             timed(Group::Fx, particles::particle_emitter_update),
             timed(Group::Spawner, spawner::instantiate_spawn_groups),
         ),
     );
-    // Sistemas de DOMÍNIO (preset RPG): debug de vitais [H/N/K] e shake da
-    // câmara no dano recebido — fora do gate eram mais duas fugas do demo.
+    // Debug de vitais [H/N/K] (preset RPG). O shake no dano recebido vive no
+    // FeedbackPlugin — registá-lo também aqui corria-o 2× por frame.
     if rpg {
-        app.add_systems(
-            bevy::app::Update,
-            (vitals::debug_damage, feedback::shake_on_player_hurt),
-        );
+        app.add_systems(bevy::app::Update, vitals::debug_damage);
     }
     app.run();
     Ok(())
@@ -1422,7 +1414,7 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
             release: _,
             no_cargo,
         } => {
-            run_target_housekeeping(debug);
+            run_target_housekeeping(debug, no_cargo);
             let world = resolve_world_path(path)?;
             // `--bridge` sem valor escolhe porta livre ANTES da delegação —
             // a porta impressa no arranque tem de ser a que a engine usa de

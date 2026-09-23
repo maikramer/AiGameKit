@@ -235,7 +235,11 @@ fn resolved_count(spec: &StaticSpawnerSpec) -> u32 {
     if spec.density_per_km2 > 0.0 && spec.count == 0 {
         let dx = (spec.region_max[0] - spec.region_min[0]).abs();
         let dz = (spec.region_max[2] - spec.region_min[2]).abs();
-        let n = (spec.density_per_km2 * dx * dz / 1.0e6).round().max(1.0);
+        // Mesmo teto do attr `count`: regiões enormes não explodem o
+        // with_capacity nem as tentativas por instância.
+        let n = (spec.density_per_km2 * dx * dz / 1.0e6)
+            .round()
+            .clamp(1.0, 100_000.0);
         let capped = if spec.max_instances > 0 {
             n.min(spec.max_instances as f32)
         } else {
@@ -575,6 +579,16 @@ pub fn compute_placements(
     (out, stats)
 }
 
+/// Criaturas ficam verticais (VibeGame, perfil `creature`): movem-se depois
+/// do spawn — um tilt de nascimento ficava colado ao corpo. Só a ROTAÇÃO
+/// perde o alinhamento: o Y continua a vir do `align-to-terrain` (desligá-lo
+/// punha as criaturas na base da região, enterradas no relevo até andarem).
+fn stand_upright(instances: &mut [PlacedInstance]) {
+    for instance in instances {
+        instance.rotation = Quat::from_rotation_y(instance.yaw_deg.to_radians());
+    }
+}
+
 /// One collected `<StaticSpawner>`: spec plus one handle per template url.
 pub struct SpawnGroupState {
     pub spec: StaticSpawnerSpec,
@@ -705,7 +719,12 @@ fn apply_template_collider(
     }
     match shape {
         crate::physics::ColliderShape::None => {}
-        crate::physics::ColliderShape::Box { .. } => {
+        // Formas imediatas: o resolver de `PendingCollider` trata-as como já
+        // construídas no spawn — pendentes ficavam sem collider nenhum.
+        crate::physics::ColliderShape::Box { .. }
+        | crate::physics::ColliderShape::Sphere { .. }
+        | crate::physics::ColliderShape::Cylinder { .. }
+        | crate::physics::ColliderShape::Capsule { .. } => {
             if let Some((collider, offset)) = crate::physics::immediate_collider(shape) {
                 if offset.translation == Vec3::ZERO {
                     entity.insert(collider);
@@ -872,11 +891,6 @@ pub fn instantiate_spawn_groups(
                 .fold(None::<f32>, |acc, r| Some(acc.map_or(r, |max| max.max(r))));
             group.spec.footprint_radius = auto.unwrap_or(0.8);
         }
-        // Criaturas ficam verticais (VibeGame, perfil `creature`): movem-se
-        // depois do spawn — um tilt de nascimento ficava colado ao corpo.
-        if group.dynamic {
-            group.spec.align_to_terrain = false;
-        }
         let near_radius = group.spec.near_water_radius;
         // Margem de cliff em metros reais: a máscara é amostrada com folga =
         // margem autoral + meia-largura da pegada na maior escala possível —
@@ -895,7 +909,7 @@ pub fn instantiate_spawn_groups(
                 // — a matriz 3×3 da grelha crua era cega aos mods e inclinava
                 // props para paredes que a grelha nem via).
                 normal: runtime.voxel.gradient(
-                    &*runtime.grid,
+                    &runtime.base(),
                     bevy::math::Vec3::new(x, height, z),
                     0.5,
                 ),
@@ -961,7 +975,10 @@ pub fn instantiate_spawn_groups(
                 })
             })
             .collect();
-        let (instances, stats) = compute_placements(&group.spec, occupancy, &mut sample);
+        let (mut instances, stats) = compute_placements(&group.spec, occupancy, &mut sample);
+        if group.dynamic {
+            stand_upright(&mut instances);
+        }
         // Uma linha por grupo com o breakdown de rejeições — QA no
         // `viber debug logs`; grupos limpos ficam em debug.
         let line = format!(
@@ -1047,8 +1064,6 @@ fn spawn_instance(
                 crate::luau::ScriptActivation {
                     radius: group.activation_radius,
                 },
-                // Vitals para o combate (dano/morte).
-                crate::vitals::Health::default(),
                 // Sem isto as criaturas nunca ligavam o AnimationPlayer e
                 // patrulhavam em bind pose.
                 crate::animation::AnimatedScene {
@@ -1056,6 +1071,17 @@ fn spawn_instance(
                         .clone(),
                 },
             ));
+            // Vitals só para hostis e com o HP AUTORAL (mesma regra do
+            // `combat::ensure_creature_vitals`): o `Health::default()` de
+            // sempre tornava townsfolk dinâmicos mortáveis e punha os chefes
+            // spawnados a 100 HP (o ensure não corrige quem já tem Health).
+            if crate::combat::is_hostile_script(script) {
+                let hp = crate::combat::authored_max_hp(script);
+                entity.insert(crate::vitals::Health {
+                    current: hp,
+                    max: hp,
+                });
+            }
         }
         (true, None) => {
             entity.insert((
@@ -1538,6 +1564,11 @@ mod tests {
         s.max_instances = 50;
         let out = place(&s, &mut SpawnOccupancy::new(), &mut flat);
         assert_eq!(out.len(), 50, "max-instances caps density runs");
+        s.max_instances = 0;
+        s.density_per_km2 = 1.0e8; // 0.04 km² → 4 M sem teto
+        assert_eq!(resolved_count(&s), 100_000, "density runs share the count cap");
+        s.density_per_km2 = 1_000_000.0;
+        s.max_instances = 50;
         // `count` explícito ganha sempre ao modo densidade.
         s.count = 7;
         let out = place(&s, &mut SpawnOccupancy::new(), &mut flat);
@@ -1599,6 +1630,37 @@ mod tests {
                 .angle_between(Vec3::Y)
                 .to_degrees();
             assert!(tilt < 1.0, "upright on water: {tilt}");
+        }
+    }
+
+    /// Grupos dinâmicos: Y no relevo (não na base da região) e sem o tilt do
+    /// declive — a criatura nasce em pé sobre a encosta.
+    #[test]
+    fn test_dynamic_group_stays_on_terrain_upright() {
+        let mut s = spec();
+        s.count = 5;
+        s.random_yaw = true;
+        s.max_slope_deg = 60.0;
+        let mut slope = |_: f32, _: f32| TerrainSample {
+            height: 7.5,
+            normal: Vec3::new(0.5, 0.8, 0.0).normalize(),
+            water: false,
+            water_surface: None,
+            near_water: false,
+            road: false,
+            cliff: false,
+            roof: false,
+        };
+        let mut out = place(&s, &mut SpawnOccupancy::new(), &mut slope);
+        assert_eq!(out.len(), 5);
+        stand_upright(&mut out);
+        for instance in &out {
+            assert!((instance.position.y - 7.5).abs() < 1e-4, "on the hill: {}", instance.position.y);
+            let up = instance.rotation * Vec3::Y;
+            assert!(up.angle_between(Vec3::Y).to_degrees() < 0.01, "upright: {up}");
+            let fwd = instance.rotation * Vec3::Z;
+            let expected = Quat::from_rotation_y(instance.yaw_deg.to_radians()) * Vec3::Z;
+            assert!(fwd.distance(expected) < 1e-4, "yaw kept");
         }
     }
 

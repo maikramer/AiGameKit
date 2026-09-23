@@ -365,7 +365,13 @@ impl bevy::app::Plugin for CombatPlugin {
             Update,
             (ensure_player_vitals, ensure_creature_vitals, cycle_weapon),
         );
-        app.add_systems(Update, timed(Group::Combat, player_melee_attack));
+        // O melee lê o `HarvestContext` do MESMO frame (gate colheita-melee):
+        // sem ordem, um press [J] ao ENTRAR no alcance colhia e golpeava com
+        // contexto stale. Sem HarvestPlugin o conjunto está vazio (no-op).
+        app.add_systems(
+            Update,
+            timed(Group::Combat, player_melee_attack).after(crate::harvest::HarvestSet),
+        );
         // R2-G9: ambos escrevem o Transform do herói — o doc do estádio 2
         // promete DEPOIS de `player_movement` (o lunge não disputa a
         // locomoção) e ANTES da câmara third-person (que segue o herói).
@@ -447,6 +453,13 @@ pub fn is_hostile_script(path: &str) -> bool {
         || path.starts_with("bosses\\")
 }
 
+/// Alvos das vias de dano do herói (melee, fireball): criaturas com script
+/// hostil E as da FSM Rust (`<Spawner>` sem script → `EnemyCreature`), que
+/// também recebem `Health` (`ai::ensure_fsm_vitals`). Só com
+/// `With<LuaScriptRef>` estas eram imunes ao [J]/clique e à fireball — só o
+/// strike e a bomba as matavam.
+pub type Hostile = Or<(With<LuaScriptRef>, With<crate::ai::EnemyCreature>)>;
+
 #[allow(clippy::type_complexity)]
 pub fn ensure_creature_vitals(
     creatures: Query<
@@ -520,7 +533,7 @@ pub fn player_melee_attack(
     held: Res<HeldWeapon>,
     enemies: Query<
         (Entity, &GlobalTransform, &Health, Option<&Corpse>),
-        (Without<Player>, With<LuaScriptRef>),
+        (Without<Player>, Hostile),
     >,
 ) {
     // Janelas correm SEMPRE (mesmo com menu aberto, o combo morre à mesma).
@@ -546,6 +559,13 @@ pub fn player_melee_attack(
     // Menu aberto consome [J]: confirmava compra/teleporte E desencadeava
     // o melee por trás.
     if menus.any() {
+        return;
+    }
+    // Herói a 0 HP (a cair em combate, até ao respawn) não ataca.
+    if players
+        .single()
+        .is_ok_and(|(_, _, _, health)| health.is_some_and(|h| h.current <= 0.0))
+    {
         return;
     }
     let j_pressed = keys.just_pressed(KeyCode::KeyJ);
@@ -700,7 +720,9 @@ pub fn swing_track_system(
     mut kick: ResMut<crate::camera::CameraKick>,
     mut postfx: ResMut<crate::postfx::PostFxState>,
     mut fx: MeleeFx,
-    mut players: Query<(&GlobalTransform, &mut Transform), With<Player>>,
+    // Um herói que cai a meio do windup cancela o swing (sem lunge nem golpe
+    // de um corpo no chão).
+    mut players: Query<(&GlobalTransform, &mut Transform), (With<Player>, Without<crate::feedback::Dying>)>,
     mut hero_xp: Query<&mut Xp, With<Player>>,
     mut enemies: Query<
         (
@@ -711,7 +733,7 @@ pub fn swing_track_system(
             Option<&LuaScriptRef>,
             Option<&crate::impact::HitRecoil>,
         ),
-        (Without<Player>, With<LuaScriptRef>),
+        (Without<Player>, Hostile),
     >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -774,11 +796,12 @@ pub fn swing_track_system(
                 origin.x + fx.pending.aim.x * step,
                 origin.z + fx.pending.aim.z * step,
             );
-            // SUPERFÍCIE RENDERIZADA (paridade com spawners/knockback): o
-            // sample analítico flutua acima das cordas do mesh nas cristas.
+            // Piso SOB o herói (paridade com o dash): o topo do mundo sob um
+            // overhang é teto, e fora da pegada (bolsa de interior) a amostra
+            // saturada da orla atirava-o para a cota da borda.
             let y = terrain
                 .as_ref()
-                .map(|t| t.sample_mesh_surface(x, z))
+                .map(|t| crate::player::ground_near(t, x, z, origin.y))
                 .unwrap_or(origin.y);
             player_transform.translation = Vec3::new(x, y, z);
             fx.pending.lunge_left -= step;
@@ -878,7 +901,7 @@ pub fn swing_track_system(
                 Color::srgb(1.0, 0.96, 0.85)
             },
         });
-        if killed {
+        if was_execute {
             fx.numbers.write(crate::feedback::DamageNumberEvent {
                 position: target_pos + Vec3::Y * 2.4,
                 text: "EXECUTADO!".into(),
@@ -1441,7 +1464,7 @@ pub fn cast_fireball(
     mut players: Query<(Entity, &GlobalTransform, &mut Transform), With<Player>>,
     enemies: Query<
         (&GlobalTransform, &Health, Option<&Corpse>),
-        (Without<Player>, With<LuaScriptRef>),
+        (Without<Player>, Hostile),
     >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -1545,7 +1568,7 @@ fn fireball_step(
             Option<&LuaScriptRef>,
             Option<&crate::impact::HitRecoil>,
         ),
-        (Without<Player>, With<LuaScriptRef>, Without<Corpse>),
+        (Without<Player>, Hostile, Without<Corpse>),
     >,
     mut hero_xp: Query<&mut Xp, With<Player>>,
     mut numbers: MessageWriter<crate::feedback::DamageNumberEvent>,
@@ -1554,6 +1577,7 @@ fn fireball_step(
     mut sfx: MessageWriter<crate::ambient::SfxEvent>,
     mut quests: Option<ResMut<crate::quests::QuestLog>>,
     mut fireball_events: Option<ResMut<crate::luau::ScriptEventQueue>>,
+    terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
 ) {
     let dt = time.delta_secs();
     for (entity, mut transform, mut ball) in &mut balls {
@@ -1562,13 +1586,28 @@ fn fireball_step(
             commands.entity(entity).despawn();
             continue;
         }
+        let previous = transform.translation;
         transform.translation += ball.vel * dt;
-        // Impacto: qualquer inimigo num raio de contato.
+        // Impacto: qualquer inimigo VIVO num raio de contato — um morto neste
+        // frame (0 HP, `Corpse` ainda pendente) absorvia a bola e era
+        // re-morto (XP e Kill em dobro).
         let mut impact: Option<Vec3> = None;
-        for (_, t, _, _, _) in &enemies {
-            if t.translation().distance(transform.translation) < 1.2 {
+        for (_, t, health, _, _) in &enemies {
+            if health.current > 0.0 && t.translation().distance(transform.translation) < 1.2 {
                 impact = Some(t.translation());
                 break;
+            }
+        }
+        // O terreno também detona (entrar em rocha — colina, parede, teto
+        // de gruta): sem isto a bola atravessava relevo e acertava inimigos
+        // do outro lado. Detona no último ponto em AR.
+        if impact.is_none() {
+            let p = transform.translation;
+            if terrain
+                .as_deref()
+                .is_some_and(|t| t.in_field(p.x, p.z) && t.is_solid(p))
+            {
+                impact = Some(previous);
             }
         }
         if let Some(center) = impact {
@@ -1604,7 +1643,7 @@ fn fireball_step(
             let mut kills: Vec<(Entity, Option<&LuaScriptRef>, Vec3)> = Vec::new();
             let mut hit_any = false;
             for (target, t, mut health, script, recoil) in &mut enemies {
-                if t.translation().distance(center) <= FIREBALL_RADIUS {
+                if health.current > 0.0 && t.translation().distance(center) <= FIREBALL_RADIUS {
                     hit_any = true;
                     // Paridade do melee: acertar fixa o alvo da TargetBar.
                     fx.combat_target.entity = Some(target);

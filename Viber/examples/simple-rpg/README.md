@@ -3,9 +3,9 @@
 Porta do exemplo `VibeGame/examples/simple-rpg` para a engine nativa Viber.
 O mundo foi convertido por `Viber/scripts/migrate_from_vibegame.py`. O jogo
 corre de ponta a ponta: as Fases 0–3 da engine estão feitas e as tags do
-mundo original já têm runtime — só as tags `EngineConfig` data-only
+mundo original já têm runtime, incluindo as tags `EngineConfig`
 (`NavMesh`, `SpawnGate`, `ProjectileTemplate`, `AdaptiveQuality`,
-`PostFxDebugToggle`) passam verbatim sem consumidor.
+`PostFxDebugToggle`).
 
 ## Correr
 
@@ -35,7 +35,7 @@ raio de ativação (default 45 m) o `on_update` nem corre. A referência da API
 está em `Viber/docs/LUA_API.md`.
 
 O `analyze` imprime o relatório de cobertura — é o roteiro do que falta à
-engine (hoje: só as 5 tags `EngineConfig` data-only).
+engine.
 
 Assets: `/assets/…` resolve contra as asset roots do `config.yaml` deste
 jogo — a pasta do jogo SEMPRE primeiro (overrides), o pool partilhado
@@ -79,8 +79,6 @@ passadas verbatim. Regras de mapeamento: docstring do conversor.
 
 ## Fila aberta (na engine, não neste mundo)
 
-- Consumir as tags `EngineConfig` data-only: `NavMesh`, `SpawnGate`,
-  `ProjectileTemplate`, `AdaptiveQuality`, `PostFxDebugToggle`
 - Hot-reload de scripts Luau
 - Nametags de HUD (sistema comentado — `BISECT` em `Viber/src/main.rs`)
 - Instancing GPU para vegetação (hoje cap 800 instâncias/tag)

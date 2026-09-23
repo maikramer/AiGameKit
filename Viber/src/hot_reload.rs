@@ -121,6 +121,10 @@ impl HotReloadState {
 /// primeira ativação; reloads preservam o home existente). Devolve quantas
 /// entidades re-ativaram. Erro de LEITURA/compilação → `Err` e o chunk
 /// antigo fica intacto (o `load_script` só substitui depois de compilar).
+/// Erro no TOP-LEVEL (o chunk compila mas rebenta a correr) → `Err` e o chunk
+/// antigo é reposto: sem isso a entidade ficava sem `on_update`, em silêncio.
+/// Os timers do chunk antigo saem com a recarga — o top-level novo re-regista
+/// os seus (senão cada save somava mais um `viber.every`).
 pub fn reload_script(
     host: &mut LuaScriptHost,
     scripts_dir: &Path,
@@ -130,17 +134,37 @@ pub fn reload_script(
     let full = scripts_dir.join(rel);
     let code =
         std::fs::read_to_string(&full).map_err(|e| format!("a ler {}: {e}", full.display()))?;
+    let previous = host.registry.get(rel).cloned();
+    let old_timers = crate::luau::timers::timer_ids_where(&host.lua, |_, path| path == rel);
     host.load_script(rel, &code)
         .map_err(|e| format!("a compilar '{rel}': {e}"))?;
     host.clear_warnings(rel);
     let mut count = 0;
+    let mut first_err = None;
     for (entity, origin) in entities {
         // Top-level re-corre (o reload pôs `ran = false`). Um erro aqui não
         // desiste das restantes entidades — cada uma é independente.
-        if host.activate_at(*entity, rel, *origin).is_ok() {
-            count += 1;
+        match host.activate_at(*entity, rel, *origin) {
+            Ok(()) => count += 1,
+            Err(e) => {
+                first_err.get_or_insert_with(|| e.to_string());
+            }
         }
     }
+    if count == 0 {
+        if let Some(err) = first_err {
+            let fresh = crate::luau::timers::timer_ids_where(&host.lua, |_, path| path == rel)
+                .into_iter()
+                .filter(|id| !old_timers.contains(id))
+                .collect::<Vec<_>>();
+            crate::luau::timers::drop_timers(&host.lua, &fresh);
+            if let Some(previous) = previous {
+                host.registry.insert(rel.to_string(), previous);
+            }
+            return Err(format!("top-level de '{rel}': {err}"));
+        }
+    }
+    crate::luau::timers::drop_timers(&host.lua, &old_timers);
     Ok(count)
 }
 
@@ -165,27 +189,35 @@ pub fn hot_reload_poll(
             continue;
         };
         // Só chunks que a engine já carregou (ficheiros novos não referem
-        // nenhuma entidade — carregá-los seria estado morto no registry).
-        if !host.registry.contains(&rel) {
+        // nenhuma entidade — carregá-los seria estado morto no registry). Um
+        // módulo `viber.load` editado sai do cache e TODOS os scripts
+        // re-correm o top-level: guardam o `return` antigo em locals.
+        let targets: Vec<String> = if host.registry.contains(&rel) {
+            vec![rel.clone()]
+        } else if crate::luau::game::evict_module(&host.lua, &rel) {
+            host.registry.paths().into_iter().map(str::to_string).collect()
+        } else {
             continue;
-        }
-        let entities: Vec<(Entity, Vec3)> = scripts
-            .iter()
-            .filter(|(_, lref, _)| lref.path == rel)
-            .map(|(entity, _, transform)| {
-                (
-                    entity,
-                    transform.map(|t| t.translation).unwrap_or(Vec3::ZERO),
-                )
-            })
-            .collect();
-        match reload_script(&mut host, &state.root, &rel, &entities) {
-            Ok(count) => {
-                info!("hot-reload: '{rel}' recarregado (top-level em {count} entidade(s))");
-            }
-            Err(e) => {
-                // Chunk antigo continua ativo — warn (não panic), a engine segue.
-                warn!("hot-reload falhou ({e}) — chunk antigo mantém-se");
+        };
+        for target in targets {
+            let entities: Vec<(Entity, Vec3)> = scripts
+                .iter()
+                .filter(|(_, lref, _)| lref.path == target)
+                .map(|(entity, _, transform)| {
+                    (
+                        entity,
+                        transform.map(|t| t.translation).unwrap_or(Vec3::ZERO),
+                    )
+                })
+                .collect();
+            match reload_script(&mut host, &state.root, &target, &entities) {
+                Ok(count) => {
+                    info!("hot-reload: '{target}' recarregado (top-level em {count} entidade(s))");
+                }
+                Err(e) => {
+                    // Chunk antigo continua ativo — warn (não panic), a engine segue.
+                    warn!("hot-reload falhou ({e}) — chunk antigo mantém-se");
+                }
             }
         }
     }
@@ -272,6 +304,53 @@ mod tests {
         // Chunk antigo intacto: globals do primeiro load preservados.
         let loaded = host.script_global("npc.lua", "loaded").unwrap();
         assert_eq!(loaded, mlua::Value::Boolean(true));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Top-level que rebenta a CORRER → Err, e o chunk antigo (com o seu
+    /// `on_update`) é reposto; os timers do chunk antigo sobrevivem.
+    #[test]
+    fn runtime_error_in_toplevel_restores_old_chunk() {
+        let dir = temp_scripts_dir("toplevel");
+        let path = dir.join("npc.lua");
+        fs::write(&path, "version = 1\nfunction on_update(dt) end").unwrap();
+
+        let mut host = LuaScriptHost::new(dir.clone()).unwrap();
+        host.ensure_loaded("npc.lua").unwrap();
+        let hero = Entity::from_bits(42);
+        host.activate_at(hero, "npc.lua", Vec3::ZERO).unwrap();
+
+        fs::write(&path, "version = 2\nerror('boom')").unwrap();
+        let err = reload_script(&mut host, &dir, "npc.lua", &[(hero, Vec3::ZERO)]);
+        assert!(err.unwrap_err().contains("boom"));
+        assert_eq!(
+            host.script_global("npc.lua", "version").unwrap(),
+            mlua::Value::Integer(1),
+            "env antigo reposto"
+        );
+        assert!(host.registry.get("npc.lua").unwrap().on_update.is_some());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Um reload bem-sucedido não soma timers: os do chunk antigo saem e o
+    /// top-level novo re-regista os seus.
+    #[test]
+    fn reload_replaces_timers_instead_of_stacking() {
+        let dir = temp_scripts_dir("timers");
+        let path = dir.join("npc.lua");
+        fs::write(&path, "viber.every(1, function() end)\nfunction on_update(dt) end").unwrap();
+
+        let mut host = LuaScriptHost::new(dir.clone()).unwrap();
+        host.ensure_loaded("npc.lua").unwrap();
+        let hero = Entity::from_bits(42);
+        host.activate_at(hero, "npc.lua", Vec3::ZERO).unwrap();
+        let count = |host: &LuaScriptHost| {
+            crate::luau::timers::timer_ids_where(&host.lua, |_, p| p == "npc.lua").len()
+        };
+        assert_eq!(count(&host), 1);
+        reload_script(&mut host, &dir, "npc.lua", &[(hero, Vec3::ZERO)]).unwrap();
+        reload_script(&mut host, &dir, "npc.lua", &[(hero, Vec3::ZERO)]).unwrap();
+        assert_eq!(count(&host), 1);
         let _ = fs::remove_dir_all(&dir);
     }
 

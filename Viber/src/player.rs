@@ -27,7 +27,8 @@ pub const SIDE_MOVE_FACTOR: f32 = 0.6;
 /// assenta a skin acima do collider, e a sonda tem de começar em AR.
 pub const GROUND_PROBE: f32 = 0.05;
 /// Camera yaw turn rate while steering with A/D (rad/s, VibeGame
-/// `CAMERA_TURN_SPEED`).
+/// `CAMERA_TURN_SPEED`). `OrbitCamera::yaw_deg` is in degrees — convert
+/// before integrating.
 pub const CAMERA_TURN_SPEED: f32 = 2.5;
 
 /// Terminal fall speed (m/s).
@@ -58,9 +59,6 @@ impl Default for TeleportSettle {
     }
 }
 
-/// Folga (m) com que um teleporte assenta ACIMA da superfície.
-pub const LANDING_CLEARANCE: f32 = 0.15;
-
 /// Y de aterragem para um teleporte: a superfície SÓLIDA sob o destino
 /// (`surface_below`, que respeita grutas e overhangs), com o topo do mundo
 /// como segunda escolha e o Y pedido como último recurso (fora da pegada do
@@ -80,11 +78,37 @@ pub fn landing_position(
     let surface = terrain
         .surface_below(requested.x, requested.z, requested.y + GROUND_PROBE)
         .unwrap_or_else(|| terrain.sample(requested.x, requested.z));
-    Vec3::new(
-        requested.x,
-        surface.max(requested.y.min(surface)),
-        requested.z,
-    )
+    Vec3::new(requested.x, surface, requested.z)
+}
+
+/// Chão para um reposicionamento CURTO de quem já está no mundo (dash,
+/// lunge, knockback): a superfície sólida sob `from_y` (overhangs e grutas
+/// ficam por baixo da rocha), a superfície renderizada quando a sonda não vê
+/// nada (enterrado a cruzar uma parede) e o próprio `from_y` FORA da pegada
+/// do terreno — as amostras saturam na orla e devolviam a cota da borda a
+/// quem estivesse numa bolsa de interior.
+pub fn ground_near(terrain: &TerrainRuntime, x: f32, z: f32, from_y: f32) -> f32 {
+    if !terrain.in_field(x, z) {
+        return from_y;
+    }
+    terrain
+        .surface_below(x, z, from_y + GROUND_PROBE)
+        .unwrap_or_else(|| terrain.sample_mesh_surface(x, z))
+}
+
+/// Chegada limpa depois de um teleporte do herói (respawn, viagem, load):
+/// sem a inércia nem o knockback do sítio antigo, e com a tutela
+/// [`TeleportSettle`] enquanto o collider do destino assa.
+pub fn settle_after_teleport(commands: &mut Commands, entity: Entity, player: Option<&mut Player>) {
+    if let Some(player) = player {
+        player.vel_x = 0.0;
+        player.vel_y = 0.0;
+        player.vel_z = 0.0;
+    }
+    commands
+        .entity(entity)
+        .try_remove::<crate::physics_fx::Knockback>()
+        .try_insert(TeleportSettle::default());
 }
 
 /// How far below the topmost surface counts as "fell out of the world" (m).
@@ -329,6 +353,8 @@ pub fn player_movement(
             Option<&mut bevy_rapier3d::prelude::KinematicCharacterController>,
             Option<&bevy_rapier3d::prelude::KinematicCharacterControllerOutput>,
             Option<&mut TeleportSettle>,
+            Option<&crate::feedback::Dying>,
+            Option<&crate::physics_fx::Knockback>,
         ),
         Without<Camera>,
     >,
@@ -342,7 +368,7 @@ pub fn player_movement(
     // persiste e é reaplicado em todos os steps (o herói deslizava com o
     // menu aberto e, se estava em salto, subia indefinidamente).
     if menus.any() {
-        for (_, mut player, controller, _, _) in &mut players {
+        for (_, mut player, controller, _, _, _, _) in &mut players {
             player.vel_y = 0.0;
             if let Some(mut controller) = controller {
                 controller.translation = Some(Vec3::ZERO);
@@ -365,7 +391,14 @@ pub fn player_movement(
     let sprint = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let jump_held = keys.pressed(KeyCode::Space);
 
-    for (mut transform, mut player, mut controller, output, mut settle) in &mut players {
+    for (mut transform, mut player, mut controller, output, mut settle, dying, knockback) in &mut players {
+        // Herói a cair em combate: sem andar, rodar a câmara nem saltar até
+        // ao respawn — a gravidade e o chão continuam (o corpo assenta).
+        let (move_x, move_forward, jump_held) = if dying.is_some() {
+            (0.0, 0.0, false)
+        } else {
+            (move_x, move_forward, jump_held)
+        };
         // Tutela pós-teleporte: enquanto dura, o chão ANALÍTICO manda mesmo
         // que já exista collider algures — a coluna de destino pode estar a
         // assar e uma queda a 55 m/s atravessa o trimesh antes disso.
@@ -419,7 +452,7 @@ pub fn player_movement(
             // the auto-follow hands control back after a grace period.
             let mut camera_yaw_deg = 0.0f32;
             if let Some(mut cam) = cameras.iter_mut().next() {
-                cam.yaw_deg -= move_x * CAMERA_TURN_SPEED * dt;
+                cam.yaw_deg -= move_x * CAMERA_TURN_SPEED.to_degrees() * dt;
                 camera_yaw_deg = cam.yaw_deg;
             }
             if move_x != 0.0 {
@@ -449,6 +482,12 @@ pub fn player_movement(
             player.last_moving_time = now;
         }
         let mut motion = Vec3::new(player.vel_x, 0.0, player.vel_z) * dt;
+        // O empurrão de um golpe entra no MESMO pedido ao character
+        // controller: escrito direto no Transform atravessava paredes e
+        // props (o `physics_fx` só o decai para o herói).
+        if let Some(knockback) = knockback {
+            motion += knockback.velocity.with_y(0.0) * dt;
+        }
 
         // Facing: slerp toward the move heading at `rotation_speed` rad/s,
         // only while moving (VibeGame rotation mode 1 — idle keeps facing).
@@ -741,6 +780,50 @@ mod tests {
         assert!(settle.frames >= 20, "frames = {}", settle.frames);
     }
     use super::*;
+
+    fn small_runtime() -> TerrainRuntime {
+        let spec = crate::terrain::spec::TerrainSpec {
+            world_size: 128.0,
+            max_height: 40.0,
+            seed: 5,
+            ..crate::terrain::spec::TerrainSpec::default()
+        };
+        let map = crate::terrain::heightmap::HeightMapU16::procedural(&spec, spec.resolution.max(1) as usize);
+        let grid = crate::terrain::brush::BrushGrid::from_height_map(
+            &map,
+            spec.world_size,
+            spec.max_height,
+            spec.height_smoothing,
+        )
+        .expect("grid builds");
+        TerrainRuntime {
+            spec,
+            grid: std::sync::Arc::new(grid),
+            water: vec![],
+            roads: vec![],
+            pads: vec![],
+            voxel: std::sync::Arc::new(crate::terrain::voxel::VoxelField::default()),
+            deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+        }
+    }
+
+    /// Dash/lunge/knockback FORA da pegada (bolsa de interior) mantêm o Y:
+    /// as amostras saturam na orla e devolviam a cota da borda do mapa.
+    #[test]
+    fn ground_near_keeps_y_outside_the_terrain_footprint() {
+        let rt = small_runtime();
+        assert_eq!(ground_near(&rt, 900.0, 900.0, 3.25), 3.25);
+        let inside = ground_near(&rt, 10.0, 10.0, 100.0);
+        assert!(approx(inside, rt.sample_mesh_surface(10.0, 10.0)), "{inside}");
+    }
+
+    /// O teleporte ASSENTA exatamente na superfície sob o destino.
+    #[test]
+    fn landing_snaps_to_the_surface_below() {
+        let rt = small_runtime();
+        let landed = landing_position(Some(&rt), Vec3::new(10.0, 90.0, 10.0));
+        assert!(approx(landed.y, rt.sample(10.0, 10.0)), "{landed:?}");
+    }
 
     fn approx(a: f32, b: f32) -> bool {
         (a - b).abs() < 1e-4

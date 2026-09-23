@@ -268,6 +268,16 @@ fn parse_place(value: &str, ctx_tag: &str, ctx: &mut ParseCtx) -> Option<PlaceSp
     Some(place)
 }
 
+/// Where a `<UiStyle>` sheet comes from. Kept apart from the CSS text so an
+/// inline sheet that opens with an at-rule is never mistaken for a path.
+#[derive(Debug, Clone, PartialEq)]
+pub enum UiStyleSource {
+    /// The element's text content.
+    Inline(String),
+    /// `src`: relative to the game folder (`ui/hud.css` → `<game>/ui/hud.css`).
+    File(String),
+}
+
 #[derive(Debug, Clone)]
 pub enum EntityKind {
     /// Transform-only container (the `entity` and `group` tags).
@@ -463,9 +473,9 @@ pub enum EntityKind {
         tag: String,
         attrs: Vec<(String, String)>,
     },
-    /// `<UiStyle>` — a CSS-like stylesheet; the text content is the source.
+    /// `<UiStyle>` — a CSS-like stylesheet, inline or from a `src` file.
     UiStyle {
-        source: String,
+        source: UiStyleSource,
     },
     /// `<UiRoot>` — the declarative UI tree, kept whole (children included)
     /// because `src/ui/tree.rs` builds bevy_ui nodes straight from the XML.
@@ -543,9 +553,9 @@ pub enum EntityKind {
         camera_pitch_deg: f32,
         camera_yaw_deg: f32,
     },
-    /// Engine config element kept as raw data (`Sky`, `NavMesh`,
-    /// `SpawnGate`, `ProjectileTemplate`, `PostFxDebugToggle`,
-    /// `AdaptiveQuality`) — data now, runtime hooks as phases land.
+    /// Engine config element kept as raw data (`NavMesh`, `SpawnGate`,
+    /// `ProjectileTemplate`, `PostFxDebugToggle`, `AdaptiveQuality`) — lands in
+    /// `worldsys::EngineConfigs`; each consumer plugin reads its own tag.
     EngineConfig {
         tag: String,
         attrs: Vec<(String, String)>,
@@ -1156,12 +1166,21 @@ fn apply_use_overrides(
                 .map(|v| spec.transform.translation = v)
                 .map_err(|e| e.to_string())
                 .err(),
+            // O quat ganha ao euler no build_transform: a rotação do `<Use>`
+            // tem de apagar a outra forma herdada do protótipo, senão um
+            // `euler` sobre um protótipo com `rotation` nunca roda.
             "euler" => values::parse_vec3(value, &format!("{ctx_tag} euler"))
-                .map(|v| spec.transform.euler_deg = Some(v))
+                .map(|v| {
+                    spec.transform.euler_deg = Some(v);
+                    spec.transform.rotation_quat = None;
+                })
                 .map_err(|e| e.to_string())
                 .err(),
             "rotation" => parse_rotation_attr(value, &format!("{ctx_tag} rotation"))
-                .map(|q| spec.transform.rotation_quat = Some(q))
+                .map(|q| {
+                    spec.transform.rotation_quat = Some(q);
+                    spec.transform.euler_deg = None;
+                })
                 .map_err(|e| e.to_string())
                 .err(),
             "scale" => values::parse_vec3(value, &format!("{ctx_tag} scale"))
@@ -1183,6 +1202,7 @@ fn apply_use_overrides(
                                 values::parse_vec3(&tval, &format!("{ctx_tag} transform euler"))
                             {
                                 spec.transform.euler_deg = Some(v);
+                                spec.transform.rotation_quat = None;
                             }
                         }
                         "scale" => {
@@ -1353,7 +1373,13 @@ fn parse_rotation_attr(value: &str, ctx: &str) -> Result<[f32; 4]> {
         let e = values::parse_vec3(value, ctx)?;
         return Ok(transform::euler_rad_to_quat(e));
     }
-    values::parse_vec4(value, ctx)
+    // Um quat não-unitário escala/cisalha a malha; o nulo é NaN no Transform.
+    let [x, y, z, w] = values::parse_vec4(value, ctx)?;
+    let len = (x * x + y * y + z * z + w * w).sqrt();
+    if !(len.is_finite() && len > 1.0e-6) {
+        bail!("{ctx}: quaternion `{value}` has zero length");
+    }
+    Ok([x / len, y / len, z / len, w / len])
 }
 
 /// Parse the universal attributes, returning the ones left for the kind parser.
@@ -2055,6 +2081,7 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
             children: Vec::new(),
         });
     }
+    let mut count_authored = false;
     for (key, value) in rest {
         let kctx = format!("{ctx_tag} {key}");
         match key.as_str() {
@@ -2062,7 +2089,10 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
             // perde precisão acima de 2^24); count com cap — o with_capacity
             // do spawner e as tentativas count*8+64 escalam com ele.
             "seed" => spec.seed = values::parse_u64(&value, &kctx)?,
-            "count" => spec.count = values::parse_u32(&value, &kctx)?.min(100_000),
+            "count" => {
+                spec.count = values::parse_u32(&value, &kctx)?.min(100_000);
+                count_authored = true;
+            }
             "region-min" => spec.region_min = values::parse_vec3(&value, &kctx)?,
             "region-max" => spec.region_max = values::parse_vec3(&value, &kctx)?,
             "cluster-count" => spec.cluster_count = values::parse_u32(&value, &kctx)?.min(10_000),
@@ -2104,6 +2134,11 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
         }
+    }
+    // O `count` por omissão (1) não pode anular uma `density-per-km2`
+    // autorada — só um `count` escrito no XML ganha ao modo densidade.
+    if spec.density_per_km2 > 0.0 && !count_authored {
+        spec.count = 0;
     }
     Ok(EntitySpec {
         name: common.name,
@@ -2526,6 +2561,18 @@ fn finish_daycycle(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
         }
+    }
+    const DAY_MINUTES: f32 = 24.0 * 60.0;
+    c.minute_of_day = c.minute_of_day.rem_euclid(DAY_MINUTES);
+    // Os arcos do sol e a rampa de luz assumem 0 ≤ dawn < dusk ≤ 1440; fora
+    // disso o dia media 1 minuto e o sol saltava.
+    if !(0.0 <= c.dawn_minute && c.dawn_minute < c.dusk_minute && c.dusk_minute <= DAY_MINUTES) {
+        ctx.warnings.push(format!(
+            "{ctx_tag}: dawn-minute ({}) must be before dusk-minute ({}) within 0..1440 — using 330/1170",
+            c.dawn_minute, c.dusk_minute
+        ));
+        c.dawn_minute = 330.0;
+        c.dusk_minute = 1170.0;
     }
     Ok(EntitySpec {
         name: common.name,
@@ -2963,14 +3010,16 @@ fn finish_ui_style(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         rest.into_iter().filter(|(key, _)| key != "src").collect(),
         ctx,
     );
-    let source = match node.attr("src") {
-        Some(src) => format!("@{}", src.trim()),
-        None => node.text.clone(),
+    let source = match node.attr("src").map(str::trim) {
+        Some(src) if !src.is_empty() => UiStyleSource::File(src.to_string()),
+        _ => {
+            if node.text.trim().is_empty() {
+                ctx.warnings
+                    .push(format!("<{}>: empty stylesheet", node.tag));
+            }
+            UiStyleSource::Inline(node.text.clone())
+        }
     };
-    if source.trim().is_empty() {
-        ctx.warnings
-            .push(format!("<{}>: empty stylesheet", node.tag));
-    }
     Ok(EntitySpec {
         name: common.name,
         tag: common.tag,
@@ -4157,6 +4206,14 @@ fn finish_road(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
         }
     }
+    // Sem `path` o spec ficava com o caminho vazio e o audit indexava
+    // `path[0]` (panic no `analyze`); largura ≤ 0 carvava uma faixa degenerada.
+    if spec.path.len() < 2 {
+        bail!("{ctx_tag}: `path` with at least 2 points (x z pairs) is required");
+    }
+    if !(spec.width.is_finite() && spec.width > 0.0) {
+        bail!("{ctx_tag}: width must be a positive number (got {})", spec.width);
+    }
     if let Some(p) = profile {
         spec.profile = p;
     }
@@ -4317,6 +4374,28 @@ fn finish_road_network(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
                 child.tag,
                 node.tag
             ),
+        }
+    }
+    // O `expand` salta segmentos com ids desconhecidos e resolve cada id para
+    // o PRIMEIRO `<Way>` com ele — sem estes avisos, uma gralha num `a`/`b`
+    // ou um id repetido faziam desaparecer troços de estrada em silêncio.
+    let mut seen = std::collections::HashSet::new();
+    for way in &spec.ways {
+        if !seen.insert(way.id.as_str()) {
+            ctx.warnings.push(format!(
+                "{ctx_tag}: duplicate <Way id=\"{}\"> — segments use the first one",
+                way.id
+            ));
+        }
+    }
+    for seg in &spec.segments {
+        for id in [&seg.a, &seg.b] {
+            if !seen.contains(id.as_str()) {
+                ctx.warnings.push(format!(
+                    "{ctx_tag}: <Segment a=\"{}\" b=\"{}\"> references unknown way `{id}` — segment skipped",
+                    seg.a, seg.b
+                ));
+            }
         }
     }
     Ok(EntitySpec {
@@ -5309,6 +5388,88 @@ mod tests {
         assert!(spec.avoid_road, "avoid-road defaults ON");
     }
 
+    /// dawn ≥ dusk (ou fora do dia) avisa e volta aos defaults; o minuto
+    /// inicial é normalizado ao relógio de 24 h.
+    #[test]
+    fn test_daycycle_rejects_inverted_dawn_dusk_and_wraps_start() {
+        let (spec, w) = parse_one(&node(
+            "DayCycle",
+            &[
+                ("dawn-minute", "1200"),
+                ("dusk-minute", "300"),
+                ("minute-of-day", "-60"),
+            ],
+        ))
+        .unwrap();
+        let EntityKind::DayCycle {
+            minute_of_day,
+            dawn_minute,
+            dusk_minute,
+            ..
+        } = spec.kind
+        else {
+            panic!("expected DayCycle");
+        };
+        assert_eq!((dawn_minute, dusk_minute), (330.0, 1170.0));
+        assert_eq!(minute_of_day, 1380.0);
+        assert!(w.iter().any(|m| m.contains("must be before dusk-minute")), "{w:?}");
+        let (_, w) = parse_one(&node(
+            "DayCycle",
+            &[("dawn-minute", "20"), ("dusk-minute", "1430")],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+    }
+
+    /// `src` vira ficheiro; o texto inline fica CSS mesmo abrindo com `@`.
+    #[test]
+    fn test_ui_style_src_and_inline_at_rule() {
+        let (spec, _) = parse_one(&node("UiStyle", &[("src", " ui/hud.css ")])).unwrap();
+        let EntityKind::UiStyle { source } = spec.kind else {
+            panic!("expected UiStyle");
+        };
+        assert_eq!(source, UiStyleSource::File("ui/hud.css".into()));
+        let mut inline = node("UiStyle", &[]);
+        inline.text = "@import base; .hud { color: red; }".into();
+        let (spec, w) = parse_one(&inline).unwrap();
+        let EntityKind::UiStyle { source } = spec.kind else {
+            panic!("expected UiStyle");
+        };
+        assert_eq!(
+            source,
+            UiStyleSource::Inline("@import base; .hud { color: red; }".into())
+        );
+        assert!(w.is_empty(), "{w:?}");
+        let (_, w) = parse_one(&node("UiStyle", &[("src", "")])).unwrap();
+        assert!(w.iter().any(|m| m.contains("empty stylesheet")), "{w:?}");
+    }
+
+    /// `density-per-km2` sozinho liga o modo densidade (o `count` por omissão
+    /// não o anula); um `count` autorado continua a ganhar.
+    #[test]
+    fn test_density_without_count_switches_to_density_mode() {
+        let mut template = node("GameObject", &[("role", "static")]);
+        template.children = vec![node(
+            "GLTFLoader",
+            &[("url", "/assets/meshes/forest/pine_dark_lod0.glb")],
+        )];
+        let parse_count = |attrs: &[(&str, &str)]| {
+            let mut spawner = node("StaticSpawner", attrs);
+            spawner.children = vec![template.clone()];
+            let (spec, _) = parse_one(&spawner).unwrap();
+            let EntityKind::StaticSpawner { spec } = spec.kind else {
+                panic!("expected static spawner");
+            };
+            spec.count
+        };
+        assert_eq!(parse_count(&[("density-per-km2", "400")]), 0);
+        assert_eq!(
+            parse_count(&[("density-per-km2", "400"), ("count", "7")]),
+            7
+        );
+        assert_eq!(parse_count(&[]), 1, "no density keeps the default count");
+    }
+
     #[test]
     fn test_destructible_spec_parses_all_fields() {
         let spec = DestructibleSpec::parse(
@@ -5519,7 +5680,7 @@ mod tests {
                     "RockFeatures",
                     &[("region", "-50 -50 50 50"), ("arches", "2")],
                 ),
-                node("Road", &[]),
+                node("Road", &[("path", "0 0 10 0")]),
                 node("RoadNetwork", &[]),
                 node("GltfScene", &[("url", "/assets/meshes/x.glb")]),
                 node("StaticSpawner", &[("count", "10"), ("seed", "7")]),
@@ -5921,6 +6082,10 @@ mod tests {
                 .any(|m| m.contains("bridge-url") && m.contains("glTF")),
             "{w:?}"
         );
+        assert!(
+            w.iter().any(|m| m.contains("unknown way `ghost`")),
+            "a typo in a segment id is reported, not silently dropped: {w:?}"
+        );
         let EntityKind::RoadNetwork { spec } = spec.kind else {
             panic!("expected network");
         };
@@ -5941,6 +6106,24 @@ mod tests {
         let mut net = node("RoadNetwork", &[]);
         net.children = vec![node("Cuboid", &[])];
         assert!(parse_one(&net).is_err());
+    }
+
+    #[test]
+    fn test_road_network_warns_on_duplicate_way_ids() {
+        let mut net = node("RoadNetwork", &[]);
+        net.children = vec![
+            node("Way", &[("id", "a"), ("xz", "0 0")]),
+            node("Way", &[("id", "a"), ("xz", "9 9")]),
+        ];
+        let (_, w) = parse_one(&net).unwrap();
+        assert!(w.iter().any(|m| m.contains("duplicate <Way id=\"a\">")), "{w:?}");
+    }
+
+    #[test]
+    fn test_road_without_path_or_width_is_rejected() {
+        assert!(parse_one(&node("Road", &[("width", "4")])).is_err(), "no path");
+        assert!(parse_one(&node("Road", &[("path", "0 0 10 0"), ("width", "0")])).is_err());
+        assert!(parse_one(&node("Road", &[("path", "0 0 10 0")])).is_ok());
     }
 
     #[test]
@@ -6178,6 +6361,16 @@ mod composition_tests {
     }
 
     #[test]
+    fn test_rotation_quat_is_normalized_and_zero_rejected() {
+        let (spec, _) = parse_one(&node("Entity", &[("rotation", "0 2 0 2")])).unwrap();
+        let q = spec.transform.rotation_quat.expect("quat parsed");
+        let h = std::f32::consts::FRAC_1_SQRT_2;
+        assert!((q[1] - h).abs() < 1e-6 && (q[3] - h).abs() < 1e-6, "{q:?}");
+        let err = parse_one(&node("Entity", &[("rotation", "0 0 0 0")])).unwrap_err();
+        assert!(err.to_string().contains("zero length"), "{err}");
+    }
+
+    #[test]
     fn test_primitive_emissive_parsed() {
         let (spec, w) = parse_one(&node("Sphere", &[("emissive", "#ff6622")])).unwrap();
         assert!(w.is_empty(), "{w:?}");
@@ -6243,6 +6436,26 @@ mod composition_tests {
             matches!(inst.children[0].physics.collider, ColliderShape::Auto),
             "as marcas de colisor por parte sobrevivem à expansão"
         );
+    }
+
+    /// A rotação do `<Use>` substitui a do protótipo, seja qual for a forma.
+    #[test]
+    fn test_use_rotation_override_replaces_prototype_rotation() {
+        let mut proto = node("Prototype", &[("id", "p")]);
+        proto.children = vec![node("Box", &[("rotation", "0 0.7071068 0 0.7071068")])];
+        let use_euler = node("Use", &[("prototype", "p"), ("euler", "0 45 0")]);
+        let world = parse_world(&[], &[proto.clone(), use_euler]).unwrap();
+        let t = &world.entities[0].transform;
+        assert_eq!(t.euler_deg, Some([0.0, 45.0, 0.0]));
+        assert!(t.rotation_quat.is_none(), "o quat do protótipo não pode ganhar");
+
+        let mut proto_euler = node("Prototype", &[("id", "q")]);
+        proto_euler.children = vec![node("Box", &[("euler", "0 90 0")])];
+        let use_quat = node("Use", &[("prototype", "q"), ("rotation", "0 0 0 1")]);
+        let world = parse_world(&[], &[proto_euler, use_quat]).unwrap();
+        let t = &world.entities[0].transform;
+        assert_eq!(t.rotation_quat, Some([0.0, 0.0, 0.0, 1.0]));
+        assert!(t.euler_deg.is_none());
     }
 
     #[test]
