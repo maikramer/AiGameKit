@@ -9,8 +9,9 @@
 //! contém o seu XZ ter [`crate::physics::VoxelCollider`]; aí assenta-a na
 //! superfície sólida (+ `skin-distance`) e solta-a — uma só vez.
 //!
-//! Fora do campo do heightmap (bolsas de interior) ou num terreno sem
-//! colisão (`collision-resolution="0"`) não há chão por esperar: a entidade
+//! Num mundo sem `<Terrain>`, fora do campo do heightmap (bolsas de interior)
+//! ou num terreno sem colisão (`collision-resolution="0"`) não há chão por
+//! esperar: a entidade
 //! solta-se no primeiro frame, no Y autorado. [`GATE_TIMEOUT_S`] é a rede de
 //! segurança de uma coluna que nunca chega a assar (longe do herói).
 
@@ -195,7 +196,10 @@ fn hold_gated(
         gate.waited += time.delta_secs();
         let is_player = player.is_some();
         let release = match runtime.as_deref() {
-            None => false,
+            // O `TerrainRuntime` nasce no `Startup` (bootstrap síncrono): sem
+            // ele no `Update` não há terreno por esperar — segurar aqui era
+            // congelar o herói no `y-fallback` para sempre.
+            None => true,
             Some(rt) => {
                 !rt.in_field(gate.hold.x, gate.hold.z)
                     || rt.spec.collision_resolution == 0
@@ -386,12 +390,15 @@ mod tests {
     }
 
     #[test]
-    fn test_gate_waits_for_the_terrain_runtime() {
+    fn test_gate_without_terrain_releases_at_the_authored_y() {
         let at = Vec3::new(10.0, 3.0, 10.0);
         let (mut app, entity) = gate_app(None, at);
         app.update();
-        app.update();
-        assert!(app.world().get::<SpawnGated>(entity).is_some());
+        assert!(app.world().get::<SpawnGated>(entity).is_none());
+        assert_eq!(
+            app.world().get::<Transform>(entity).unwrap().translation,
+            at
+        );
     }
 
     #[test]

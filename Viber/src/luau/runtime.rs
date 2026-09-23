@@ -554,12 +554,14 @@ pub fn luau_update(
                 template,
                 origin,
                 target,
+                shooter,
             } => {
                 if let Some(queue) = locals.projectiles.as_deref_mut() {
                     queue.requests.push(crate::projectile::ProjectileRequest {
                         template,
                         origin,
                         target,
+                        shooter,
                     });
                 } else if locals.once_warned.insert("fire_projectile".into()) {
                     warn!("viber.fire_projectile sem ProjectilePlugin — pedido ignorado");

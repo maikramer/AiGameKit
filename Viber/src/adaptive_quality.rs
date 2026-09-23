@@ -37,6 +37,18 @@ pub const DOWNSCALE_HYSTERESIS: f32 = 1.35;
 pub const UPSCALE_HYSTERESIS: f32 = 0.55;
 /// Intervalo mínimo entre transições (s); subir espera 1.5× isto.
 pub const TRANSITION_COOLDOWN_S: f32 = 10.0;
+/// Com vsync o frame nunca desce do intervalo de refresh (16.7 ms a 60 Hz),
+/// e o limiar "frio" (alvo × 0.55 ≈ 10 ms a 55 fps) ficava inalcançável: o
+/// `auto` só descia. Um EMA colado ao chão medido (≤ chão × isto) e abaixo do
+/// orçamento também é folga.
+pub const VSYNC_FLOOR_TOLERANCE: f32 = 1.05;
+/// Segundos de aquecimento antes de o chão de frame-time contar — os
+/// primeiros frames (swapchain ainda por mostrar) são artificialmente curtos.
+pub const FLOOR_WARMUP_S: f32 = 2.0;
+/// Uma descida até isto (s) depois de uma subida = a subida falhou.
+pub const PROBE_FAIL_WINDOW_S: f32 = 20.0;
+/// Teto do multiplicador do cooldown de subida após subidas falhadas.
+pub const MAX_UPSCALE_BACKOFF: f32 = 8.0;
 /// Tier mais baixo (Low).
 pub const LOWEST_TIER: u8 = 3;
 /// `target-fps` por omissão (o do VibeGame).
@@ -124,6 +136,16 @@ pub struct AdaptiveQuality {
     cold_frames: u32,
     since_transition: f32,
     pub transitions: u32,
+    /// A janela apresenta com vsync (`Fifo`/`AutoVsync`): o frame-time tem
+    /// chão no refresh e a folga só se lê colada a ele.
+    pub vsync: bool,
+    /// Menor EMA depois do aquecimento — com vsync, o intervalo de refresh.
+    floor_ms: Option<f32>,
+    elapsed: f32,
+    /// A última transição foi uma subida.
+    last_up: bool,
+    /// Multiplicador do cooldown de subida (dobra a cada subida falhada).
+    upscale_backoff: f32,
 }
 
 impl AdaptiveQuality {
@@ -147,6 +169,11 @@ impl AdaptiveQuality {
             // primeira transição espera o cooldown inteiro.
             since_transition: 0.0,
             transitions: 0,
+            vsync: false,
+            floor_ms: None,
+            elapsed: 0.0,
+            last_up: false,
+            upscale_backoff: 1.0,
         }
     }
 
@@ -159,21 +186,34 @@ impl AdaptiveQuality {
             return None;
         }
         self.since_transition += dt;
+        self.elapsed += dt;
         let ema = match self.ema_ms {
             Some(prev) => prev * (1.0 - EMA_ALPHA) + sample_ms * EMA_ALPHA,
             None => sample_ms,
         };
         self.ema_ms = Some(ema);
+        if self.elapsed >= FLOOR_WARMUP_S {
+            self.floor_ms = Some(self.floor_ms.map_or(ema, |floor| floor.min(ema)));
+        }
         let QualityMode::Auto = self.mode else {
             return None;
         };
+        // Uma subida que sobreviveu à janela deixa de contar como falhada.
+        if self.last_up && self.since_transition >= PROBE_FAIL_WINDOW_S {
+            self.upscale_backoff = 1.0;
+        }
         let target_ms = 1000.0 / self.target_fps;
         self.hot_frames = if ema > target_ms * DOWNSCALE_HYSTERESIS {
             self.hot_frames + 1
         } else {
             0
         };
-        self.cold_frames = if ema < target_ms * UPSCALE_HYSTERESIS {
+        let pegged_at_floor = self.vsync
+            && ema < target_ms
+            && self
+                .floor_ms
+                .is_some_and(|floor| ema <= floor * VSYNC_FLOOR_TOLERANCE);
+        self.cold_frames = if ema < target_ms * UPSCALE_HYSTERESIS || pegged_at_floor {
             self.cold_frames + 1
         } else {
             0
@@ -182,11 +222,16 @@ impl AdaptiveQuality {
             && self.tier < LOWEST_TIER
             && self.since_transition >= TRANSITION_COOLDOWN_S
         {
+            if self.last_up && self.since_transition < PROBE_FAIL_WINDOW_S {
+                self.upscale_backoff = (self.upscale_backoff * 2.0).min(MAX_UPSCALE_BACKOFF);
+            }
+            self.last_up = false;
             self.tier + 1
         } else if self.cold_frames >= COLD_FRAMES_TO_UPSCALE
             && self.tier > 0
-            && self.since_transition >= TRANSITION_COOLDOWN_S * 1.5
+            && self.since_transition >= TRANSITION_COOLDOWN_S * 1.5 * self.upscale_backoff
         {
+            self.last_up = true;
             self.tier - 1
         } else {
             return None;
@@ -253,10 +298,24 @@ fn install_adaptive_quality(mut commands: Commands, configs: Option<Res<EngineCo
     commands.insert_resource(state);
 }
 
-fn drive_adaptive_quality(time: Res<Time<Real>>, state: Option<ResMut<AdaptiveQuality>>) {
+fn drive_adaptive_quality(
+    time: Res<Time<Real>>,
+    state: Option<ResMut<AdaptiveQuality>>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+) {
     let Some(mut state) = state else {
         return;
     };
+    if let Ok(window) = windows.single() {
+        use bevy::window::PresentMode;
+        let vsync = matches!(
+            window.present_mode,
+            PresentMode::AutoVsync | PresentMode::Fifo | PresentMode::FifoRelaxed
+        );
+        if state.vsync != vsync {
+            state.vsync = vsync;
+        }
+    }
     if let Some(tier) = state.step(time.delta_secs()) {
         apply_tier(tier);
         info!(
@@ -328,6 +387,66 @@ mod tests {
         // 20 ms: acima do alvo (16.7) mas dentro da histerese (< 22.5).
         assert!(run(&mut q, 5000, 20.0).is_empty());
         assert_eq!(q.tier, 0);
+    }
+
+    /// Com vsync a 60 Hz o frame nunca desce dos 16.7 ms: sem o chão, um
+    /// trecho pesado baixava o tier para sempre.
+    #[test]
+    fn test_vsync_capped_frames_recover_the_tier() {
+        let mut q = AdaptiveQuality::new(55.0, QualityMode::Auto);
+        q.vsync = true;
+        run(&mut q, 200, 16.7);
+        run(&mut q, 2000, 40.0);
+        assert_eq!(q.tier, LOWEST_TIER);
+        let ups = run(&mut q, 10_000, 16.7);
+        assert_eq!(ups, vec![2, 1, 0], "de volta ao Max colado ao refresh");
+    }
+
+    #[test]
+    fn test_without_vsync_the_floor_is_not_headroom() {
+        let mut q = AdaptiveQuality::new(55.0, QualityMode::Auto);
+        run(&mut q, 2000, 40.0);
+        assert_eq!(q.tier, LOWEST_TIER);
+        // 16.7 ms sem vsync = 8% abaixo do alvo, longe da folga de 45%.
+        assert!(run(&mut q, 10_000, 16.7).is_empty());
+    }
+
+    /// Uma subida que não aguenta (volta a aquecer logo) dobra o cooldown da
+    /// próxima tentativa — sem isto o chão do vsync fazia ping-pong.
+    #[test]
+    fn test_failed_upscale_backs_off() {
+        let mut q = AdaptiveQuality::new(55.0, QualityMode::Auto);
+        q.vsync = true;
+        run(&mut q, 200, 16.7);
+        run(&mut q, 2000, 40.0);
+        assert_eq!(q.tier, LOWEST_TIER);
+        // Sobe a 2 colado ao refresh…
+        let mut frames = 0;
+        while q.tier == LOWEST_TIER {
+            q.step(0.0167);
+            frames += 1;
+            assert!(frames < 100_000, "nunca subiu");
+        }
+        let first_probe = frames;
+        // …mas no tier 2 o frame cai para 33 ms (vsync a meio) → desce.
+        for _ in 0..100_000 {
+            if q.tier == LOWEST_TIER {
+                break;
+            }
+            q.step(0.0333);
+        }
+        assert_eq!(q.tier, LOWEST_TIER, "a subida falhada volta a descer");
+        assert_eq!(q.upscale_backoff, 2.0);
+        let mut second = 0;
+        while q.tier == LOWEST_TIER {
+            q.step(0.0167);
+            second += 1;
+            assert!(second < 100_000, "nunca voltou a subir");
+        }
+        assert!(
+            second as f32 * 0.0167 >= TRANSITION_COOLDOWN_S * 1.5 * 2.0,
+            "2.ª tentativa espera o dobro ({second} frames vs {first_probe})"
+        );
     }
 
     #[test]

@@ -247,8 +247,8 @@ pub fn fx_runtime_toggle(key: &'static str, on: bool) {
     }
 }
 
-/// O gate está forçado OFF pelo bridge?
-fn fx_forced_off(key: &str) -> bool {
+/// O gate está forçado OFF ao vivo (bridge ou `<PostFxDebugToggle>`)?
+pub fn fx_forced_off(key: &str) -> bool {
     FX_RUNTIME_OFF.lock().is_ok_and(|set| set.contains(key))
 }
 

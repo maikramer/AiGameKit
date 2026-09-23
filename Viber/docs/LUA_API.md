@@ -198,7 +198,7 @@ foldarms/lean/idle`.
 |--------|-------|
 | `viber.damage_player(amount)` | dano pelo path único do feedback (i-frames, vinheta, número flutuante, morte, knockback com `from` = posição da entidade) |
 | `viber.heal_player(amount)` | cura direta no HP do herói |
-| `viber.fire_projectile(id [, x, y, z])` | dispara um projétil do `<ProjectileTemplate id=…>` do mundo, da boca da entidade (+1.2 m) para o peito do herói (+1.1 m) ou para o ponto dado; devolve `false` sem herói nem alvo. A facção do template decide quem leva o dano (`enemy` → herói pelo path único do feedback; `player` → criaturas com `Health`; `neutral` → só terreno); `gravity > 0` faz arco balístico. Template desconhecido = warn 1× e o disparo cai |
+| `viber.fire_projectile(id [, x, y, z])` | dispara um projétil do `<ProjectileTemplate id=…>` do mundo, da boca da entidade (+1.2 m) para o peito do herói (+1.1 m) ou para o ponto dado; devolve `false` sem herói nem alvo. A facção do template decide quem leva o dano (`enemy` → herói pelo path único do feedback; `player` → criaturas com `Health`; `neutral` → só terreno); `gravity > 0` faz arco balístico. O projétil nunca acerta a entidade que o disparou e o acerto é varrido (não atravessa alvos num frame longo). Template desconhecido = warn 1× e o disparo cai |
 | `viber.apply_status(kind, secs)` | status effect no herói; hoje só `kind = "venom"` (tick 1/s) |
 | `viber.add_xp(gain)` | XP direto no herói |
 | `viber.topple()` | destrutível (`break-style: fall`): tomba na direção herói→entidade, remove o script e despawna no fim da queda |

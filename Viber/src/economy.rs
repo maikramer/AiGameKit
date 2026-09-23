@@ -245,6 +245,16 @@ fn hotbar_use_system(
     if menus.is_some_and(|m| m.any()) {
         return;
     }
+    // Ctrl/Alt+dígito são atalhos (ex. `<PostFxDebugToggle>` em Ctrl+1..6),
+    // não uso de item.
+    if keys.any_pressed([
+        KeyCode::ControlLeft,
+        KeyCode::ControlRight,
+        KeyCode::AltLeft,
+        KeyCode::AltRight,
+    ]) {
+        return;
+    }
     let (item, label) = if potion {
         ("potion", "Poção")
     } else {
@@ -374,6 +384,46 @@ mod tests {
             vault.add_resource(kind, 1);
             assert_eq!(vault.resource(kind), 1);
         }
+    }
+
+    #[test]
+    fn test_hotbar_ignores_ctrl_digit_shortcuts() {
+        let mut app = App::new();
+        app.init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<Time>()
+            .init_resource::<Vault>()
+            .add_message::<DamageNumberEvent>()
+            .add_message::<ScriptToast>()
+            .add_systems(Update, hotbar_use_system);
+        app.world_mut().resource_mut::<Vault>().item_add("potion", 2);
+        app.world_mut().spawn((
+            Player::default(),
+            Health {
+                current: 10.0,
+                max: 100.0,
+            },
+            GlobalTransform::default(),
+        ));
+        {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.press(KeyCode::ControlLeft);
+            keys.press(KeyCode::Digit1);
+        }
+        app.update();
+        assert_eq!(
+            app.world().resource::<Vault>().item_count("potion"),
+            2,
+            "Ctrl+1 é atalho (postfx), não poção"
+        );
+        {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(KeyCode::ControlLeft);
+            keys.release(KeyCode::Digit1);
+            keys.clear();
+            keys.press(KeyCode::Digit1);
+        }
+        app.update();
+        assert_eq!(app.world().resource::<Vault>().item_count("potion"), 1);
     }
 
     #[test]

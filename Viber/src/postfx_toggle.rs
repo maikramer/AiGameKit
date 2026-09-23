@@ -34,12 +34,13 @@ pub struct FxBinding {
     pub label: String,
 }
 
-/// Bindings ativas + o estado que ESTE toggle impôs a cada gate.
+/// Bindings ativas. O estado ON/OFF NÃO vive aqui: é o corte runtime
+/// partilhado com o bridge ([`crate::postfx::fx_forced_off`]) — uma cópia
+/// local ficava dessincronizada e a 1.ª tecla depois de um
+/// `viber.debug.postfx{…}` não fazia nada.
 #[derive(Debug, Clone, Default, Resource)]
 pub struct PostFxToggleBindings {
     pub bindings: Vec<FxBinding>,
-    /// Gates que o toggle desligou (o resto segue o env/default).
-    pub forced_off: Vec<&'static str>,
 }
 
 /// Alias do autor → key do gate. `Err` explica aliases reconhecidos mas que
@@ -158,18 +159,15 @@ fn install_bindings(mut commands: Commands, configs: Option<Res<EngineConfigs>>)
             .collect::<Vec<_>>()
             .join(", ")
     );
-    commands.insert_resource(PostFxToggleBindings {
-        bindings,
-        forced_off: Vec::new(),
-    });
+    commands.insert_resource(PostFxToggleBindings { bindings });
 }
 
 fn toggle_on_keys(
     keys: Option<Res<ButtonInput<KeyCode>>>,
     menus: Option<Res<crate::menus::MenusOpen>>,
-    toggles: Option<ResMut<PostFxToggleBindings>>,
+    toggles: Option<Res<PostFxToggleBindings>>,
 ) {
-    let (Some(keys), Some(mut toggles)) = (keys, toggles) else {
+    let (Some(keys), Some(toggles)) = (keys, toggles) else {
         return;
     };
     if menus.is_some_and(|m| m.any()) {
@@ -186,18 +184,16 @@ fn toggle_on_keys(
         .map(|b| b.fx)
         .collect();
     for fx in pressed {
-        let now_off = if let Some(i) = toggles.forced_off.iter().position(|k| *k == fx) {
-            toggles.forced_off.swap_remove(i);
-            false
-        } else {
-            toggles.forced_off.push(fx);
-            true
-        };
+        let now_off = !crate::postfx::fx_forced_off(fx);
         crate::postfx::fx_runtime_toggle(fx, !now_off);
-        info!(
-            "postfx-toggle: {fx} {}",
-            if now_off { "OFF" } else { "ON (env/default)" }
-        );
+        let state = if now_off {
+            "OFF"
+        } else if crate::postfx::fx_off(fx) {
+            "ON — mas continua cortado (VIBER_NO_* ou tier de qualidade)"
+        } else {
+            "ON"
+        };
+        info!("postfx-toggle: {fx} {state}");
     }
 }
 
@@ -273,7 +269,6 @@ mod tests {
         app.init_resource::<ButtonInput<KeyCode>>()
             .insert_resource(PostFxToggleBindings {
                 bindings: parse_bindings("f4:splittone").0,
-                forced_off: Vec::new(),
             })
             .add_systems(Update, toggle_on_keys);
         let press = |app: &mut App| {
@@ -290,5 +285,23 @@ mod tests {
             std::env::var_os("VIBER_NO_SPLITTONE").is_some() || !crate::postfx::fx_off("SPLITTONE"),
             "2.º toque repõe"
         );
+    }
+
+    /// O bridge desligou o efeito: a 1.ª tecla tem de o LIGAR (antes o toggle
+    /// só via o seu próprio registo e o 1.º toque não fazia nada).
+    #[test]
+    fn test_key_press_follows_the_bridge_state() {
+        let mut app = App::new();
+        app.init_resource::<ButtonInput<KeyCode>>()
+            .insert_resource(PostFxToggleBindings {
+                bindings: parse_bindings("f7:aerial").0,
+            })
+            .add_systems(Update, toggle_on_keys);
+        crate::postfx::fx_runtime_toggle("AERIAL", false);
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::F7);
+        app.update();
+        assert!(!crate::postfx::fx_forced_off("AERIAL"), "1.º toque repõe");
     }
 }

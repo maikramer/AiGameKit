@@ -48,6 +48,7 @@ pub enum ScriptCommand {
         template: String,
         origin: Vec3,
         target: Vec3,
+        shooter: Option<Entity>,
     },
     /// Aplica um status effect ao herói (hoje: `"venom"`) — tratado pelo
     /// feedback (tick 1/s, path único de dano).

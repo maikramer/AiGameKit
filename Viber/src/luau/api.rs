@@ -484,10 +484,12 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                         ));
                     }
                     let origin = ctx.origin + Vec3::Y * crate::projectile::MUZZLE_HEIGHT;
+                    let shooter = ctx.entity;
                     ctx.commands.push(ScriptCommand::FireProjectile {
                         template,
                         origin,
                         target,
+                        shooter,
                     });
                     Ok(true)
                 },

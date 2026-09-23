@@ -149,6 +149,9 @@ pub struct ProjectileRequest {
     /// Boca de disparo (mundo).
     pub origin: Vec3,
     pub target: Vec3,
+    /// Quem disparou (a entidade do script) — o projétil nunca a acerta:
+    /// sai de dentro da cápsula dela.
+    pub shooter: Option<Entity>,
 }
 
 /// Fila de disparos (`viber.fire_projectile` → [`spawn_projectiles`]).
@@ -166,6 +169,7 @@ pub struct Projectile {
     pub sensor_radius: f32,
     pub faction: Faction,
     pub gravity: f32,
+    pub shooter: Option<Entity>,
 }
 
 /// Velocidade inicial que leva `origin` a `target` a `speed` m/s.
@@ -197,12 +201,38 @@ pub fn launch_velocity(origin: Vec3, target: Vec3, speed: f32, gravity: f32) -> 
     dir * speed * angle.cos() + Vec3::Y * speed * angle.sin()
 }
 
-/// Distância de `p` ao eixo da cápsula de um corpo com os pés em `feet`.
-fn body_distance(p: Vec3, feet: Vec3) -> f32 {
+/// Menor distância entre o passo do projétil (`a → b`) e o eixo da cápsula de
+/// um corpo com os pés em `feet`, mais a fração do passo (0..1) onde ela
+/// acontece. Varrido: testar só a posição final deixava um passo longo
+/// (soluço de frame, template rápido) atravessar o corpo sem acertar.
+fn swept_body_distance(a: Vec3, b: Vec3, feet: Vec3) -> (f32, f32) {
     let low = feet + Vec3::Y * BODY_LOW;
-    let high = feet + Vec3::Y * BODY_HIGH;
-    let y = p.y.clamp(low.y, high.y);
-    p.distance(Vec3::new(feet.x, y, feet.z))
+    let axis = Vec3::Y * (BODY_HIGH - BODY_LOW);
+    let step = b - a;
+    let r = a - low;
+    let (aa, ee, f) = (step.length_squared(), axis.length_squared(), axis.dot(r));
+    let (s, t) = if aa <= 1e-12 {
+        (0.0, (f / ee).clamp(0.0, 1.0))
+    } else {
+        let c = step.dot(r);
+        let bb = step.dot(axis);
+        let denom = aa * ee - bb * bb;
+        let mut s = if denom > 1e-12 {
+            ((bb * f - c * ee) / denom).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let mut t = (bb * s + f) / ee;
+        if t < 0.0 {
+            t = 0.0;
+            s = (-c / aa).clamp(0.0, 1.0);
+        } else if t > 1.0 {
+            t = 1.0;
+            s = ((bb - c) / aa).clamp(0.0, 1.0);
+        }
+        (s, t)
+    };
+    ((a + step * s).distance(low + axis * t), s)
 }
 
 fn install_templates(
@@ -291,6 +321,7 @@ fn spawn_projectiles(
                 sensor_radius: template.sensor_radius,
                 faction: template.faction,
                 gravity: template.gravity,
+                shooter: request.shooter,
             },
         ));
         if let (Some(meshes), Some(materials)) = (meshes.as_deref_mut(), materials.as_deref_mut()) {
@@ -339,7 +370,7 @@ fn step_projectiles(
     runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     mut out: ImpactOut,
     mut projectiles: Query<(Entity, &mut Transform, &mut Projectile)>,
-    players: Query<&GlobalTransform, With<Player>>,
+    players: Query<(Entity, &GlobalTransform), With<Player>>,
     mut creatures: Query<
         (
             Entity,
@@ -356,7 +387,10 @@ fn step_projectiles(
     if dt <= 0.0 {
         return;
     }
-    let hero = players.iter().next().map(GlobalTransform::translation);
+    let hero = players
+        .iter()
+        .next()
+        .map(|(entity, transform)| (entity, transform.translation()));
     for (entity, mut transform, mut shot) in &mut projectiles {
         shot.life -= dt;
         if shot.life <= 0.0 {
@@ -371,31 +405,35 @@ fn step_projectiles(
             transform.look_to(dir, Vec3::Y);
         }
 
+        let reach = shot.sensor_radius + BODY_RADIUS;
         match shot.faction {
             Faction::Enemy => {
-                if let Some(feet) = hero {
-                    if body_distance(pos, feet) <= shot.sensor_radius + BODY_RADIUS {
+                if let Some((_, feet)) = hero.filter(|(e, _)| shot.shooter != Some(*e)) {
+                    let (gap, along) = swept_body_distance(prev, pos, feet);
+                    if gap <= reach {
                         out.hurts.write(crate::feedback::PlayerHurt {
                             amount: shot.damage,
                             status: false,
                             from: Some(prev - shot.vel.normalize_or_zero() * 2.0),
                         });
-                        impact_burst(&mut commands, pos);
+                        impact_burst(&mut commands, prev.lerp(pos, along));
                         commands.entity(entity).despawn();
                         continue;
                     }
                 }
             }
             Faction::Player => {
+                // O PRIMEIRO corpo ao longo do passo, não o primeiro da query.
                 let hit = creatures
                     .iter()
-                    .find(|(_, t, h, ..)| {
-                        h.current > 0.0
-                            && body_distance(pos, t.translation())
-                                <= shot.sensor_radius + BODY_RADIUS
+                    .filter(|(e, _, h, ..)| h.current > 0.0 && shot.shooter != Some(*e))
+                    .filter_map(|(e, t, ..)| {
+                        let (gap, along) = swept_body_distance(prev, pos, t.translation());
+                        (gap <= reach).then_some((e, along))
                     })
-                    .map(|(e, ..)| e);
-                if let Some(target) = hit {
+                    .min_by(|a, b| a.1.total_cmp(&b.1));
+                if let Some((target, along)) = hit {
+                    let pos = prev.lerp(pos, along);
                     if let Ok((target, t, mut health, script, recoil)) = creatures.get_mut(target) {
                         crate::vitals::apply_damage(&mut health, shot.damage);
                         let at = t.translation();
@@ -416,7 +454,9 @@ fn step_projectiles(
                         });
                         out.alerts
                             .write(crate::feedback::AttackAlert { position: at });
-                        if health.current <= 0.0 && script.is_some() {
+                        // Criaturas FSM sem script também morrem (paridade
+                        // com melee/abilities/fireball).
+                        if health.current <= 0.0 {
                             crate::skills::kill_creature(
                                 &mut commands,
                                 target,
@@ -613,6 +653,7 @@ mod tests {
                 template: "bolt".into(),
                 origin,
                 target,
+                shooter: None,
             });
     }
 
@@ -685,6 +726,98 @@ mod tests {
         assert_eq!(app.world().get::<Health>(goblin).unwrap().current, 23.0);
     }
 
+    /// Um passo de 4 m (soluço de 250 ms a 16 m/s) atravessava a cápsula de
+    /// 1.5 m sem que a posição final lhe tocasse.
+    #[test]
+    fn test_long_step_does_not_tunnel_through_the_hero() {
+        let mut app = app_with(template(Faction::Enemy));
+        app.world_mut().spawn((
+            Player::default(),
+            Transform::from_xyz(0.0, 0.0, 2.0),
+            GlobalTransform::from_xyz(0.0, 0.0, 2.0),
+        ));
+        fire(
+            &mut app,
+            Vec3::new(0.0, 1.2, 0.0),
+            Vec3::new(0.0, 1.1, 10.0),
+        );
+        app.update();
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(std::time::Duration::from_millis(250));
+        app.update();
+        assert_eq!(hurts(&app), 1, "o passo 0→5 m cruza o herói em z=2");
+    }
+
+    #[test]
+    fn test_swept_distance_hits_mid_step() {
+        let feet = Vec3::new(0.0, 0.0, 2.0);
+        let (gap, along) = swept_body_distance(Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 1.0, 5.0), feet);
+        assert!(gap < 1e-4, "{gap}");
+        assert!((along - 0.4).abs() < 1e-4, "{along}");
+        let (gap, _) = swept_body_distance(Vec3::new(3.0, 1.0, 0.0), Vec3::new(3.0, 1.0, 5.0), feet);
+        assert!((gap - 3.0).abs() < 1e-4, "{gap}");
+        // Por cima da cabeça: a distância conta ao topo da cápsula.
+        let (gap, _) = swept_body_distance(Vec3::new(0.0, 3.0, 0.0), Vec3::new(0.0, 3.0, 5.0), feet);
+        assert!((gap - (3.0 - BODY_HIGH)).abs() < 1e-4, "{gap}");
+    }
+
+    /// Uma entidade com vida que dispara um projétil do herói (torre aliada)
+    /// saía de dentro da própria cápsula e acertava-se no 1.º frame.
+    #[test]
+    fn test_shooter_is_never_hit_by_its_own_projectile() {
+        let mut app = app_with(template(Faction::Player));
+        let turret = app
+            .world_mut()
+            .spawn((
+                Health {
+                    current: 30.0,
+                    max: 30.0,
+                },
+                Transform::from_xyz(0.0, 0.0, 0.0),
+                GlobalTransform::from_xyz(0.0, 0.0, 0.0),
+            ))
+            .id();
+        app.world_mut()
+            .resource_mut::<ProjectileQueue>()
+            .requests
+            .push(ProjectileRequest {
+                template: "bolt".into(),
+                origin: Vec3::new(0.0, 1.2, 0.0),
+                target: Vec3::new(0.0, 1.1, 10.0),
+                shooter: Some(turret),
+            });
+        run_frames(&mut app, 60);
+        assert_eq!(app.world().get::<Health>(turret).unwrap().current, 30.0);
+    }
+
+    /// Criaturas FSM sem script morriam de pé a 0 HP (sem cadáver nem XP).
+    #[test]
+    fn test_projectile_kills_scriptless_creature() {
+        let mut app = app_with(ProjectileTemplate {
+            damage: 50.0,
+            ..template(Faction::Player)
+        });
+        let wolf = app
+            .world_mut()
+            .spawn((
+                Health {
+                    current: 10.0,
+                    max: 10.0,
+                },
+                Transform::from_xyz(0.0, 0.0, 6.0),
+                GlobalTransform::from_xyz(0.0, 0.0, 6.0),
+            ))
+            .id();
+        fire(
+            &mut app,
+            Vec3::new(0.0, 1.2, 0.0),
+            Vec3::new(0.0, 1.1, 6.0),
+        );
+        run_frames(&mut app, 60);
+        assert!(app.world().get::<Corpse>(wolf).is_some(), "vira cadáver");
+    }
+
     #[test]
     fn test_projectile_expires_after_max_life() {
         let mut app = app_with(ProjectileTemplate {
@@ -720,6 +853,7 @@ mod tests {
                 template: "nope".into(),
                 origin: Vec3::ZERO,
                 target: Vec3::Z,
+                shooter: None,
             });
         run_frames(&mut app, 1);
         assert_eq!(

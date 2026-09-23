@@ -111,7 +111,9 @@ impl Default for PointShadowsEnabled {
     }
 }
 /// Histerese de rank: uma luz só PERDE a sombra acima de
-/// BUDGET+BAND e só a ganha abaixo de BUDGET.
+/// BUDGET+BAND e só a ganha abaixo de BUDGET. Limitada a um terço do
+/// orçamento em [`wants_point_shadow`]: com a banda cheia, o teto 4 do tier
+/// Medium mantinha as 8 sombras do High e o teto 0 do Low deixava 4 acesas.
 const SHADOW_LIGHT_BAND: usize = 4;
 /// Política antiga, só para A/B: `VIBER_LIGHT_BUDGET=12` apaga (Visibility
 /// hidden) tudo além das N luzes mais próximas — o comportamento pré-ronda
@@ -666,7 +668,8 @@ pub fn wants_point_shadow(
 ) -> bool {
     let near =
         gap_m <= max_distance || (already_on && gap_m <= max_distance + SHADOW_LIGHT_BAND as f32);
-    let ranked_in = rank < budget || (already_on && rank < budget + SHADOW_LIGHT_BAND);
+    let band = SHADOW_LIGHT_BAND.min(budget / 3);
+    let ranked_in = rank < budget || (already_on && rank < budget + band);
     near && ranked_in
 }
 
@@ -1527,6 +1530,18 @@ mod tests {
         // Rank: 13.ª mantém-se acesa, 17.ª (12 + banda) já não.
         assert!(wants_point_shadow(13, 5.0, 12, max, true));
         assert!(!wants_point_shadow(16, 5.0, 12, max, true));
+    }
+
+    /// Os tetos do `<AdaptiveQuality>` cortam mesmo: a banda de histerese
+    /// não pode segurar as sombras que o tier anterior deixou ligadas.
+    #[test]
+    fn point_shadow_band_respects_quality_caps() {
+        let max = SHADOW_LIGHT_MAX_DISTANCE;
+        // High (8) → Medium (4): a 5.ª fica pela banda (1), a 6.ª apaga-se.
+        assert!(wants_point_shadow(4, 5.0, 4, max, true));
+        assert!(!wants_point_shadow(5, 5.0, 4, max, true));
+        // Low (0): nenhuma sombra fica acesa.
+        assert!(!wants_point_shadow(0, 0.0, 0, max, true));
     }
 
     /// O gate de luz do dia usa a mesma curva do tint (`daylight_factor`):
