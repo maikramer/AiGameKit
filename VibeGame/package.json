@@ -182,7 +182,7 @@
     "prettier": "^3.9.6",
     "rollup-plugin-visualizer": "^7.1.1",
     "stats-gl": "^4.2.3",
-    "three": "^0.185.1",
+    "three": "^0.186.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vite-plugin-dts": "^5.0.3"
