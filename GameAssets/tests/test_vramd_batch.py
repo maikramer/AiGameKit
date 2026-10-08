@@ -15,7 +15,6 @@ from gameassets.vramd_batch import (
     resolve_text2d_vram_opts,
     resolve_text2sound_vram_opts,
     resolve_text3d_vram_opts,
-    run_motion3d_wave_or_fallback,
     run_skymap2d_wave_or_fallback,
     run_terrain3d_wave_or_fallback,
     run_text2d_wave_or_fallback,
@@ -315,7 +314,6 @@ class TestOptionalWaveOrFallback:
         assert run_texture2d_wave_or_fallback(items, manifest_dir=Path("."), no_vramd=True) is None
         assert run_skymap2d_wave_or_fallback(items, manifest_dir=Path("."), no_vramd=True) is None
         assert run_text2sound_wave_or_fallback(items, manifest_dir=Path("."), no_vramd=True) is None
-        assert run_motion3d_wave_or_fallback(items, manifest_dir=Path("."), no_vramd=True) is None
         assert (
             run_terrain3d_wave_or_fallback([{"id": "t", "output": "/tmp/h.png"}], manifest_dir=Path("."), no_vramd=True)
             is None
