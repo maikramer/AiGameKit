@@ -162,7 +162,7 @@ class ImageProcessorV2:
 
 
 class BRIARMBG:
-    def __init__(self, path="briaai/RMBG-2.0", device='cuda'):
+    def __init__(self, path="ZhengPeng7/BiRefNet", device='cuda'):
         self.birefnet = AutoModelForImageSegmentation.from_pretrained(
             path, trust_remote_code=True
         )

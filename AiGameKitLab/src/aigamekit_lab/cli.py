@@ -1018,20 +1018,6 @@ def bench_paint_vram_cmd(
     )
 
 
-@bench_group.command("pre-quantize")
-@click.option(
-    "--modelo",
-    type=click.Choice(["paint3d", "todos"]),
-    default="todos",
-)
-@click.option("--dry-run", is_flag=True, help="Só verificar SDNQ, sem quantizar.")
-def bench_pre_quantize_cmd(modelo: str, dry_run: bool) -> None:
-    """Pré-quantização SDNQ (UNet Paint3D)."""
-    from aigamekit_lab.pre_quantize import run_pre_quantize_cli
-
-    sys.exit(run_pre_quantize_cli(modelo, dry_run))
-
-
 @bench_group.command("sdnq-sweep")
 @click.option(
     "--mesh",
