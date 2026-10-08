@@ -222,8 +222,12 @@ impl Plugin for NavPlugin {
                     .in_schedule(bevy::app::PostUpdate),
             ))
             .set_navmesh_backend(backend::nav_backend)
-            .add_systems(Update, tile::retile_navmesh)
-            .add_systems(Update, mark_tile_ready)
+            .add_systems(Startup, spawn_archipelago)
+            .add_observer(on_navmesh_ready)
+            // Ready BEFORE retile: the retile probe reads "not in flight and
+            // still `generating`" as a failed bake, so success has to have
+            // cleared the flag first.
+            .add_systems(Update, (mark_tile_ready, tile::retile_navmesh).chain())
             .add_systems(Update, agent::attach_nav_agents);
 
         // One frame, one pipeline: the producers state an ask in `Update`, the
@@ -301,10 +305,24 @@ fn mark_tile_ready(
         let (AssetEvent::Added { id } | AssetEvent::Modified { id }) = event else {
             continue;
         };
-        if tile.handle.as_ref().is_some_and(|handle| handle.id() == *id) {
+        if tile.handle.as_ref().is_some_and(|handle| handle.id() == *id) && tile.generating {
             tile.generating = false;
+            tile.failures = 0;
             info!("nav: tile #{} pronto", tile.generations);
         }
+    }
+}
+
+/// Clears the in-flight flag the moment `bevy_rerecast` reports a baked tile.
+///
+/// The trigger fires from the `PostUpdate` that polled the finished task, a
+/// frame before the asset event reaches [`mark_tile_ready`] — which is what
+/// lets [`tile::retile_navmesh`] tell a finished bake from a failed one.
+fn on_navmesh_ready(ready: On<bevy_rerecast::prelude::NavmeshReady>, mut tile: ResMut<NavTile>) {
+    if tile.handle.as_ref().is_some_and(|handle| handle.id() == ready.0) && tile.generating {
+        tile.generating = false;
+        tile.failures = 0;
+        info!("nav: tile #{} pronto", tile.generations);
     }
 }
 

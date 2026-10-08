@@ -11,7 +11,7 @@
 //! (rerecast runs it on the task pool); until the first one lands, agents fall
 //! back to the beeline they always had.
 
-use bevy::math::bounding::Aabb3d;
+use bevy::shape::Aabb3d;
 use bevy::prelude::*;
 use bevy_rerecast::prelude::{NavmeshGenerator, NavmeshSettings};
 use bevy_rerecast::rerecast::{AreaType, ConvexVolume};
@@ -52,13 +52,32 @@ pub struct NavTile {
     /// the tile was made. Re-baking when this number changes is what keeps the
     /// mesh honest without polling geometry every frame.
     pub baked_obstacles: Option<usize>,
+    /// Consecutive generations that died without a navmesh.
+    ///
+    /// `bevy_rerecast` only *logs* a failed bake ("Invalid contour…" is the one
+    /// the `simple-rpg` spawn tile hit): no asset event, no callback. Before
+    /// this counter existed `generating` stayed `true` forever, `retile_navmesh`
+    /// never ran again, and every creature of the session walked the beeline
+    /// ("fora-da-mesh" in `viber.debug.nav()`). Each retry nudges the voxel
+    /// grid and eases the contour simplification — the failure is a property
+    /// of one particular rasterisation, not of the world.
+    pub failures: u32,
+    /// Seconds until the in-flight generation is probed again.
+    pub probe_cooldown: f32,
 }
+
+/// How often (s) an in-flight generation is probed for a silent failure.
+pub const NAV_FAILURE_PROBE_SECS: f32 = 0.5;
+/// Ceiling (s) of the probe back-off after repeated failures, so a world that
+/// can never bake does not keep a core busy re-baking it.
+pub const NAV_FAILURE_PROBE_MAX_SECS: f32 = 15.0;
 
 /// Requests a new tile when the player has walked out of the current one's
 /// inner margin (or when there is no tile at all).
 #[allow(clippy::too_many_arguments)]
 pub fn retile_navmesh(
     mut commands: Commands,
+    time: Res<Time>,
     config: Res<super::NavConfig>,
     terrain: Option<Res<TerrainRuntime>>,
     archipelago: Option<Res<super::NavArchipelago>>,
@@ -67,7 +86,11 @@ pub fn retile_navmesh(
     players: Query<&GlobalTransform, With<crate::player::Player>>,
     obstacles: Query<(), (With<bevy_rapier3d::prelude::Collider>, super::backend::ObstacleFilter)>,
 ) {
-    if !config.enabled || tile.generating || terrain.is_none() {
+    if !config.enabled || terrain.is_none() {
+        return;
+    }
+    if tile.generating {
+        probe_in_flight(&mut tile, &config, terrain.as_deref(), &mut generator, time.delta_secs());
         return;
     }
     let Ok(player) = players.single() else {
@@ -83,7 +106,7 @@ pub fn retile_navmesh(
         return;
     }
 
-    let settings = tile_settings(&config, here, terrain.as_deref());
+    let settings = tile_settings_attempt(&config, here, terrain.as_deref(), tile.failures);
     let handle = match tile.handle.clone() {
         // Same handle across regenerations: the island keeps pointing at it and
         // the agents never see a frame without a navmesh.
@@ -107,6 +130,7 @@ pub fn retile_navmesh(
     tile.handle = Some(handle);
     tile.center = Some(here);
     tile.generating = true;
+    tile.probe_cooldown = NAV_FAILURE_PROBE_SECS;
     tile.generations += 1;
     tile.baked_obstacles = Some(obstacle_count);
     info!(
@@ -115,12 +139,73 @@ pub fn retile_navmesh(
     );
 }
 
+/// Checks whether the in-flight generation died without a navmesh and, if
+/// so, queues the retry.
+///
+/// `NavmeshGenerator::regenerate` refuses (returns `false`) while the handle
+/// is still queued or baking — so a probe that is *accepted* means the bake is
+/// gone, and since success clears `generating` first (the [`NavmeshReady`]
+/// observer, flushed in the `PostUpdate` that polled the task), gone means
+/// failed. The accepted probe *is* the retry: it carries the next attempt's
+/// nudged settings.
+///
+/// [`NavmeshReady`]: bevy_rerecast::prelude::NavmeshReady
+fn probe_in_flight(
+    tile: &mut NavTile,
+    config: &super::NavConfig,
+    terrain: Option<&TerrainRuntime>,
+    generator: &mut NavmeshGenerator,
+    dt: f32,
+) {
+    tile.probe_cooldown -= dt;
+    if tile.probe_cooldown > 0.0 {
+        return;
+    }
+    let (Some(handle), Some(center)) = (tile.handle.clone(), tile.center) else {
+        return;
+    };
+    let attempt = tile.failures + 1;
+    tile.probe_cooldown = failure_backoff(attempt);
+    let settings = tile_settings_attempt(config, center, terrain, attempt);
+    if generator.regenerate(&handle, settings) {
+        tile.failures = attempt;
+        warn!(
+            "nav: tile #{} falhou sem navmesh (tentativa {attempt}) — a repetir com a grelha deslocada",
+            tile.generations
+        );
+    }
+}
+
+/// Probe period after `failures` consecutive failed bakes: doubles from
+/// [`NAV_FAILURE_PROBE_SECS`] up to [`NAV_FAILURE_PROBE_MAX_SECS`].
+pub fn failure_backoff(failures: u32) -> f32 {
+    let doubled = NAV_FAILURE_PROBE_SECS * 2f32.powi(failures.min(8) as i32);
+    doubled.min(NAV_FAILURE_PROBE_MAX_SECS)
+}
+
 /// The rerecast settings for a tile centred on `center`.
 pub fn tile_settings(
     config: &super::NavConfig,
     center: Vec2,
     terrain: Option<&TerrainRuntime>,
 ) -> NavmeshSettings {
+    tile_settings_attempt(config, center, terrain, 0)
+}
+
+/// [`tile_settings`] for the `attempt`-th retry after failed bakes.
+///
+/// Attempt 0 is the plain tile. Each retry shifts the tile's AABB — and with
+/// it the whole voxel grid — by a fraction of a cell that never repeats (the
+/// golden ratio), and relaxes the contour simplification one notch: the
+/// "Invalid contour" failure comes from a simplified contour folding over
+/// itself, which is a property of one exact rasterisation.
+pub fn tile_settings_attempt(
+    config: &super::NavConfig,
+    center: Vec2,
+    terrain: Option<&TerrainRuntime>,
+    attempt: u32,
+) -> NavmeshSettings {
+    let center = center + attempt_offset(config, attempt);
     let half = config.tile_size * 0.5;
     // Vertical extent: the carved world is at most `max_height` tall, plus room
     // for bridge decks and cliff brows above it.
@@ -135,7 +220,31 @@ pub fn tile_settings(
     if let Some(terrain) = terrain {
         settings.area_volumes = road_area_volumes(terrain, center, half);
     }
+    if attempt > 0 {
+        settings.max_simplification_error =
+            (settings.max_simplification_error - 0.2 * attempt as f32).max(MIN_SIMPLIFICATION_ERROR);
+    }
     settings
+}
+
+/// Floor of the relaxed contour simplification on retries (voxels). Below
+/// ~0.5 the contours keep every stair-step of the rasterisation and the
+/// polygon count explodes for no navigational gain.
+const MIN_SIMPLIFICATION_ERROR: f32 = 0.5;
+
+/// Sub-cell shift of the tile for the `attempt`-th retry (zero on attempt 0).
+pub fn attempt_offset(config: &super::NavConfig, attempt: u32) -> Vec2 {
+    if attempt == 0 {
+        return Vec2::ZERO;
+    }
+    // Cell size as rerecast derives it (`agent_radius / cell_size_fraction`,
+    // fraction 3 by default); the fractional part of k·φ walks the cell
+    // without ever landing on the same phase twice.
+    let cell = config.agent_radius / 3.0;
+    const PHI: f32 = 0.618_034;
+    let phase_x = (attempt as f32 * PHI).fract();
+    let phase_z = (attempt as f32 * PHI * PHI).fract();
+    Vec2::new(phase_x, phase_z) * cell
 }
 
 /// Convex volumes that paint the roads (and the paved pads) with
@@ -227,4 +336,45 @@ fn road_quads(
         });
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nav::NavConfig;
+
+    #[test]
+    fn test_failure_backoff_doubles_and_caps() {
+        assert_eq!(failure_backoff(0), NAV_FAILURE_PROBE_SECS);
+        assert_eq!(failure_backoff(1), NAV_FAILURE_PROBE_SECS * 2.0);
+        assert_eq!(failure_backoff(2), NAV_FAILURE_PROBE_SECS * 4.0);
+        assert_eq!(failure_backoff(50), NAV_FAILURE_PROBE_MAX_SECS);
+    }
+
+    #[test]
+    fn test_attempt_offset_is_zero_first_then_sub_cell_and_distinct() {
+        let config = NavConfig::default();
+        let cell = config.agent_radius / 3.0;
+        assert_eq!(attempt_offset(&config, 0), Vec2::ZERO);
+        let offsets: Vec<Vec2> = (1..6).map(|k| attempt_offset(&config, k)).collect();
+        for offset in &offsets {
+            assert!(offset.x >= 0.0 && offset.x < cell && offset.y >= 0.0 && offset.y < cell);
+        }
+        for (i, a) in offsets.iter().enumerate() {
+            for b in &offsets[i + 1..] {
+                assert!(a.distance(*b) > 1e-3, "each retry rasterises differently");
+            }
+        }
+    }
+
+    #[test]
+    fn test_retry_settings_shift_the_tile_and_relax_simplification() {
+        let config = NavConfig::default();
+        let base = tile_settings(&config, Vec2::ZERO, None);
+        let retry = tile_settings_attempt(&config, Vec2::ZERO, None, 1);
+        assert_ne!(base.aabb.unwrap().min, retry.aabb.unwrap().min);
+        assert!(retry.max_simplification_error < base.max_simplification_error);
+        let deep = tile_settings_attempt(&config, Vec2::ZERO, None, 40);
+        assert_eq!(deep.max_simplification_error, MIN_SIMPLIFICATION_ERROR);
+    }
 }

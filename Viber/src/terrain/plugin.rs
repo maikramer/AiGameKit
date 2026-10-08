@@ -1007,7 +1007,7 @@ mod tests {
         let mesh0 = app
             .world_mut()
             .resource_mut::<Assets<Mesh>>()
-            .add(Mesh::from(bevy::math::primitives::Cuboid::new(
+            .add(Mesh::from(bevy::shape::Cuboid::new(
                 1.0, 1.0, 1.0,
             )));
         for cz in 0..2u32 {
@@ -1287,7 +1287,7 @@ mod tests {
         let mesh0 = app
             .world_mut()
             .resource_mut::<Assets<Mesh>>()
-            .add(Mesh::from(bevy::math::primitives::Cuboid::new(
+            .add(Mesh::from(bevy::shape::Cuboid::new(
                 1.0, 1.0, 1.0,
             )));
         for cz in 0..2u32 {

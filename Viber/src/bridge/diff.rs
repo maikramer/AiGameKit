@@ -37,7 +37,7 @@ pub fn parse_roi(roi: &str) -> Result<(u32, u32, u32, u32), String> {
 
 /// Decodifica um PNG/Rgba.
 fn load_rgba(path: &Path) -> Result<image::RgbaImage, String> {
-    image::io::Reader::open(path)
+    image::ImageReader::open(path)
         .map_err(|e| format!("a abrir {}: {e}", path.display()))?
         .decode()
         .map_err(|e| format!("a descodificar {}: {e}", path.display()))

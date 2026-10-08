@@ -337,6 +337,42 @@ fn gpu_spans(store: &DiagnosticsStore) -> Vec<serde_json::Value> {
         .collect()
 }
 
+/// Contagem de componentes lidos/escritos por sistema, pelos schedules vivos —
+/// a fonte é o `ScheduleData` do `bevy::dev_tools` (o mesmo que o método BRP
+/// `schedule.graph` serve; 0.20). Schedules ainda não inicializados são
+/// saltados em silêncio (correm no arranque e ficam prontos logo a seguir).
+/// O nome bate com o `system_type()` do interior do `timed` — a mesma chave
+/// das linhas da tab Sistemas.
+fn system_access_map(world: &mut World) -> std::collections::HashMap<String, (usize, usize)> {
+    use bevy::dev_tools::schedule_data::serde::ScheduleData;
+
+    let mut map = std::collections::HashMap::new();
+    let components = world.components();
+    let Some(schedules) = world.get_resource::<Schedules>() else {
+        return map;
+    };
+    for (_label, schedule) in schedules.iter() {
+        // Sem build metadata (o cache é privado do bevy_remote): os ACESSOS
+        // vêm do grafo do schedule, a metadata só enriquece — `None` chega.
+        let Ok(data) = ScheduleData::from_schedule(schedule, components, None) else {
+            continue;
+        };
+        for system in &data.systems {
+            let mut reads = 0usize;
+            let mut writes = 0usize;
+            for filtered in &system.filtered_accesses {
+                reads += filtered.access.reads.len();
+                writes += filtered.access.writes.len();
+            }
+            // O primeiro visto ganha: um fn registado em dois schedules é o
+            // mesmo sistema a olhar para a mesma lista de componentes.
+            map.entry(system.name.clone())
+                .or_insert((reads, writes));
+        }
+    }
+    map
+}
+
 /// Snapshot JSON do profiler — o corpo do método `viber.profiler` (compatível
 /// com o formato anterior; campos novos só se acrescentam).
 pub fn snapshot(world: &mut World) -> serde_json::Value {
@@ -378,10 +414,24 @@ pub fn snapshot(world: &mut World) -> serde_json::Value {
 
     let frame_avg_f32 = avg.unwrap_or(0.0);
     let limit = systems_limit();
+    // Reads/writes por sistema (bevy 0.20 — os mesmos dados que o BRP
+    // `schedule.graph` serve): enriquece as linhas com a CONTAGEM de
+    // componentes lidos/escritos. Diz em QUÊ é que um sistema caro toca —
+    // o complemento do ms que o `Timed` já dá.
+    let access = system_access_map(world);
     let systems: Vec<serde_json::Value> = timed::systems_snapshot(frame_avg_f32)
         .into_iter()
         .take(limit)
-        .map(|s| serde_json::to_value(s).unwrap_or(json!({})))
+        .map(|s| {
+            let mut v = serde_json::to_value(s).unwrap_or(json!({}));
+            if let Some(name) = v.get("name").and_then(|n| n.as_str()) {
+                if let Some((reads, writes)) = access.get(name) {
+                    v["reads"] = json!(reads);
+                    v["writes"] = json!(writes);
+                }
+            }
+            v
+        })
         .collect();
     let scripts_timed: Vec<serde_json::Value> = timed::scripts_snapshot(frame_avg_f32)
         .into_iter()

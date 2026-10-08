@@ -190,6 +190,8 @@ pub fn weather_drive(
     weather: Option<ResMut<WeatherState>>,
     scheduler: Option<ResMut<WeatherScheduler>>,
     runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
+    regions: Option<Res<BiomeRegions>>,
+    players: Query<&GlobalTransform, With<crate::player::Player>>,
 ) {
     let Some(mut weather) = weather else {
         return;
@@ -206,7 +208,28 @@ pub fn weather_drive(
         return;
     };
     let target = scheduler.tick(dt);
-    weather.rain = rain_toward(weather.rain, target, dt, WEATHER_TRANSITION_SECS);
+    // `rain-scale` do bioma onde o herói está: o deserto seca o céu dele sem
+    // mexer no ciclo do mundo (o scheduler continua determinístico).
+    let scale = players
+        .single()
+        .ok()
+        .and_then(|p| {
+            let t = p.translation();
+            rain_scale_at(regions.as_deref(), t.x, t.z)
+        })
+        .unwrap_or(1.0);
+    weather.rain = rain_toward(weather.rain, target * scale, dt, WEATHER_TRANSITION_SECS);
+}
+
+/// `rain-scale` da primeira `<BiomeRegion>` que contém `(x, z)` e o declara
+/// (`None` = sem região ou sem fator — a chuva do mundo passa inteira).
+pub fn rain_scale_at(regions: Option<&BiomeRegions>, x: f32, z: f32) -> Option<f32> {
+    regions?
+        .list
+        .iter()
+        .filter(|r| r.rain_scale.is_some())
+        .find(|r| crate::ambient::point_in_polygon(x, z, &r.polygon))
+        .and_then(|r| r.rain_scale)
 }
 
 /// `<BiomeRegion>` polygon + fog/tint data (fog rendering follow-up).
@@ -225,6 +248,11 @@ pub struct BiomeRegionData {
     pub pp_exposure: Option<f32>,
     /// `pp-bloom-strength`: bloom intensity inside the region.
     pub pp_bloom_strength: Option<f32>,
+    /// `rain-scale`: fator da chuva do `<Weather>` com o herói dentro da
+    /// região (0 = seca, 1 = a do mundo; `None` = 1). Escala o ALVO do
+    /// ciclo, portanto a chuva abranda/volta com a mesma rampa de sempre ao
+    /// atravessar a fronteira — sem degrau.
+    pub rain_scale: Option<f32>,
 }
 
 /// Todas as `<BiomeRegion>` do mundo (loop 9: fog/tint por bioma).
@@ -1518,6 +1546,31 @@ mod tests {
     }
 
     /// O lerp de chuva aproxima-se à velocidade constante, sem overshoot.
+    #[test]
+    fn test_rain_scale_at_picks_the_region_under_the_point() {
+        let region = |id: &str, polygon: Vec<[f32; 2]>, rain_scale: Option<f32>| BiomeRegionData {
+            id: id.into(),
+            display_name: String::new(),
+            polygon,
+            fog_density: 0.0,
+            tint: None,
+            pp_exposure: None,
+            pp_bloom_strength: None,
+            rain_scale,
+        };
+        let regions = BiomeRegions {
+            list: vec![
+                region("desert", vec![[0.0, -10.0], [0.0, 10.0], [100.0, 10.0], [100.0, -10.0]], Some(0.0)),
+                region("forest", vec![[-100.0, -10.0], [-100.0, 10.0], [0.0, 10.0], [0.0, -10.0]], None),
+            ],
+        };
+        assert_eq!(rain_scale_at(Some(&regions), 50.0, 0.0), Some(0.0));
+        // Região sem `rain-scale` e fora de tudo: a chuva do mundo passa.
+        assert_eq!(rain_scale_at(Some(&regions), -50.0, 0.0), None);
+        assert_eq!(rain_scale_at(Some(&regions), 500.0, 500.0), None);
+        assert_eq!(rain_scale_at(None, 50.0, 0.0), None);
+    }
+
     #[test]
     fn test_rain_toward_is_monotonic_and_clamped() {
         let mut value = 0.0_f32;

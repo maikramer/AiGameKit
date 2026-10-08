@@ -777,7 +777,12 @@ use bevy::asset::io::{
     AssetReader, AssetReaderError, AssetSourceBuilder, AssetSourceId, ErasedAssetReader,
     PathStream, Reader, VecReader,
 };
-use bevy::prelude::*;
+// Explícito, não `bevy::prelude::*`: desde o Bevy 0.20 o prelude traz o
+// `ContextExt` (`.context()`/`.with_context()` para `BevyError`), que colide
+// com o `anyhow::Context` usado em todo este ficheiro.
+use bevy::app::App;
+use bevy::asset::{AssetApp, AssetServer, Handle};
+use bevy::log::warn;
 use bevy::tasks::ConditionalSendFuture;
 
 /// Wraps another [`AssetReader`] and expands `EXT_meshopt_compression` in glTF

@@ -1093,10 +1093,16 @@ impl StyleProps {
             rect(r);
         }
         if let Some(r) = &mut self.border_radius {
-            r.top_left = to_px(r.top_left);
-            r.top_right = to_px(r.top_right);
-            r.bottom_right = to_px(r.bottom_right);
-            r.bottom_left = to_px(r.bottom_left);
+            // Bevy 0.20: cada canto é um `CornerRadius` (raio x/y elíptico).
+            for corner in [
+                &mut r.top_left,
+                &mut r.top_right,
+                &mut r.bottom_right,
+                &mut r.bottom_left,
+            ] {
+                corner.x = to_px(corner.x);
+                corner.y = to_px(corner.y);
+            }
         }
         if let Some(shadows) = &mut self.box_shadow {
             for shadow in shadows.iter_mut() {
@@ -2838,22 +2844,22 @@ fn parse_radius(value: &str) -> Option<BorderRadius> {
         1 => BorderRadius::all(parts[0]),
         // 2 = pares diagonais (tl+br, tr+bl); 3 = (tl, tr+bl, br) — o CSS box.
         2 => BorderRadius {
-            top_left: parts[0],
-            top_right: parts[1],
-            bottom_right: parts[0],
-            bottom_left: parts[1],
+            top_left: parts[0].into(),
+            top_right: parts[1].into(),
+            bottom_right: parts[0].into(),
+            bottom_left: parts[1].into(),
         },
         3 => BorderRadius {
-            top_left: parts[0],
-            top_right: parts[1],
-            bottom_right: parts[2],
-            bottom_left: parts[1],
+            top_left: parts[0].into(),
+            top_right: parts[1].into(),
+            bottom_right: parts[2].into(),
+            bottom_left: parts[1].into(),
         },
         4 => BorderRadius {
-            top_left: parts[0],
-            top_right: parts[1],
-            bottom_right: parts[2],
-            bottom_left: parts[3],
+            top_left: parts[0].into(),
+            top_right: parts[1].into(),
+            bottom_right: parts[2].into(),
+            bottom_left: parts[3].into(),
         },
         _ => return None,
     })
@@ -4104,15 +4110,15 @@ mod tests {
         assert_eq!(props.border_color, None);
         // Radius 2 = diagonais; 3 = (tl, tr+bl, br).
         let radius = parse_declarations("radius: 4 8", "t").border_radius.expect("2");
-        assert_eq!(radius.top_left, Val::Px(4.0));
-        assert_eq!(radius.top_right, Val::Px(8.0));
-        assert_eq!(radius.bottom_right, Val::Px(4.0));
-        assert_eq!(radius.bottom_left, Val::Px(8.0));
+        assert_eq!(radius.top_left, CornerRadius::from(Val::Px(4.0)));
+        assert_eq!(radius.top_right, CornerRadius::from(Val::Px(8.0)));
+        assert_eq!(radius.bottom_right, CornerRadius::from(Val::Px(4.0)));
+        assert_eq!(radius.bottom_left, CornerRadius::from(Val::Px(8.0)));
         let radius = parse_declarations("radius: 1 2 3", "t").border_radius.expect("3");
-        assert_eq!(radius.top_left, Val::Px(1.0));
-        assert_eq!(radius.top_right, Val::Px(2.0));
-        assert_eq!(radius.bottom_right, Val::Px(3.0));
-        assert_eq!(radius.bottom_left, Val::Px(2.0));
+        assert_eq!(radius.top_left, CornerRadius::from(Val::Px(1.0)));
+        assert_eq!(radius.top_right, CornerRadius::from(Val::Px(2.0)));
+        assert_eq!(radius.bottom_right, CornerRadius::from(Val::Px(3.0)));
+        assert_eq!(radius.bottom_left, CornerRadius::from(Val::Px(2.0)));
     }
 
     #[test]

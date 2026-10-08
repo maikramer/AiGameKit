@@ -680,7 +680,7 @@ pub fn respawn_spawners(
             }
         } else if let (Some(meshes), Some(materials)) = (&mut meshes, &mut materials) {
             entity.insert((
-                Mesh3d(meshes.add(Mesh::from(bevy::math::primitives::Sphere::new(0.5)))),
+                Mesh3d(meshes.add(Mesh::from(bevy::shape::Sphere::new(0.5)))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::srgb(0.85, 0.2, 0.2),
                     ..StandardMaterial::default()

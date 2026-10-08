@@ -3,6 +3,8 @@
 //! a engine e o mundo.
 
 use bevy::prelude::*;
+// Bevy 0.20: `Interaction`/`Button` do prelude são aliases de tipos privados.
+use crate::ui::interaction::Interaction;
 
 use super::assets::{HudAssets, gradient_overlay, label, panel_base, panel_edge, panel_shadow};
 use super::widgets::{controls_row, tab_buttons};

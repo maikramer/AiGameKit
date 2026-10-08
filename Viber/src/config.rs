@@ -40,6 +40,11 @@ pub struct GameConfig {
     /// (ver worlds/lua-demo). Desacoplamento do tipo de jogo.
     #[serde(default)]
     pub gameplay: Option<String>,
+    /// Preset de GRÁFICOS: `"alto" | "equilibrado" (default) | "desempenho"`.
+    /// Um botão em vez de doze `VIBER_*` (ver [`crate::graphics`]);
+    /// `VIBER_GRAPHICS` sobrepõe-se e cada knob individual ganha a ambos.
+    #[serde(default)]
+    pub graphics: Option<String>,
     pub assets: AssetsConfig,
     pub game: GameDirs,
     pub save: SaveConfig,
@@ -249,7 +254,7 @@ pub fn load(world_dir: &Path) -> Result<GameConfig> {
 /// Aviso (não erro) em chaves desconhecidas — o config cresce, e um jogo com
 /// um campo futuro não deve rebentar numa engine antiga (igual aos attrs XML).
 fn warn_unknown_keys(path: &Path, value: &serde_yaml::Value) {
-    const TOP: &[&str] = &["title", "gameplay", "assets", "game", "save"];
+    const TOP: &[&str] = &["title", "gameplay", "graphics", "assets", "game", "save"];
     const ASSETS: &[&str] = &["roots", "bgm_dir", "sfx_dir", "terrain_textures_dir"];
     const GAME: &[&str] = &["scripts_dir", "quests_dir"];
     const SAVE: &[&str] = &["dir"];
@@ -312,6 +317,7 @@ pub(crate) fn fixture() -> GameConfig {
     GameConfig {
         title: None,
         gameplay: None, // default: preset RPG (gameplay_rpg() == true)
+        graphics: None, // default: preset `equilibrado` (crate::graphics)
         assets: AssetsConfig {
             roots: Vec::new(),
             bgm_dir: PathBuf::from("assets/audio/bgm"),

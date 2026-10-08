@@ -12,7 +12,7 @@
 
 use crate::profiler::{Group, timed};
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
-use bevy::math::primitives::Torus;
+use bevy::shape::Torus;
 use bevy::prelude::*;
 
 /// Duração do recoil (s) — um terço de um combo de melee.
@@ -105,6 +105,9 @@ pub fn ring_radius_progress(k: f32) -> f32 {
     1.0 - (1.0 - k).powi(3)
 }
 
+/// Torus unitário partilhado por todos os anéis de choque.
+const IMPACT_RING_MESH: Handle<Mesh> = bevy::asset::uuid_handle!("6f0d3c52-9a41-4b7e-8d3a-2c1e5f7b9a10");
+
 /// Spawna um anel de choque em `position` (à altura dos pés + ~8 cm — o
 /// torus é plano no XZ; em declives moderados pode tangenciar o chão, é um
 /// flash de 0,4 s). Cor tipicamente quente (`#ffd9a0`).
@@ -119,7 +122,14 @@ pub fn spawn_impact_ring(
     // Torus unitário (raio 1, tubo fino): a escala da entidade é o raio em
     // metros. O tubo engorda com a expansão — lê-se como a onda a perder
     // energia, não como um aro fino a fugir.
-    let mesh = meshes.add(Torus::new(0.045, 1.0));
+    // Mesh PARTILHADA: o torus é unitário (a escala é o raio), portanto
+    // todos os anéis servem-se do mesmo asset — antes cada golpe tesselava
+    // um torus novo e subia-o para a GPU. O material continua por anel
+    // (o alpha de cada um desvanece à sua cadência).
+    if meshes.get(&IMPACT_RING_MESH).is_none() {
+        let _ = meshes.insert(&IMPACT_RING_MESH, Torus::new(0.045, 1.0).into());
+    }
+    let mesh = IMPACT_RING_MESH;
     let material = materials.add(StandardMaterial {
         base_color: color.with_alpha(RING_START_ALPHA),
         unlit: true,

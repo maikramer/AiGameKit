@@ -56,7 +56,7 @@
 use bevy::ecs::message::MessageWriter;
 use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::MouseButton;
-use bevy::math::primitives::Sphere;
+use bevy::shape::Sphere;
 use bevy::prelude::*;
 
 use crate::ambient::{SfxClip, SfxEvent};

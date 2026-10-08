@@ -284,8 +284,10 @@ pub fn split_class_bind(bind: &str) -> Option<(&str, &str)> {
 /// novo é recalculado do zero a cada frame, a escrita é que é rara).
 #[allow(clippy::type_complexity)]
 /// Resolve um nome: ENGINE primeiro, binds de script (`viber.ui.set`)
-/// depois. `None` = desconhecido nos dois.
-fn resolve_binding(
+/// depois. `None` = desconhecido nos dois. Partilhado com o fade
+/// (`ui::fade::drive_ui_fades`) — um `fade=` ligado a um bind de script
+/// tem de acender como qualquer outro elemento.
+pub(crate) fn resolve_binding(
     data: &UiData,
     script_binds: Option<&UiScriptBinds>,
     name: &str,

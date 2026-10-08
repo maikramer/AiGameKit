@@ -392,7 +392,7 @@ impl<S: System> System for Timed<S> {
         self.inner.queue_deferred(world);
     }
 
-    fn initialize(&mut self, world: &mut World) -> bevy::ecs::query::FilteredAccessSet {
+    fn initialize(&mut self, world: &mut World) -> bevy::ecs::system::SystemAccess {
         self.inner.initialize(world)
     }
 
@@ -674,6 +674,63 @@ pub fn render_phase_anchors(app: &mut App) {
     anchor!(8, RenderSystems::PrepareResourcesFlush);
     anchor!(9, RenderSystems::PrepareBindGroups);
     anchor!(10, RenderSystems::Render);
+    core3d_anchors(render_app);
+}
+
+/// Fases do schedule `Core3d` — o que vive DENTRO de `render.render`.
+///
+/// O `render.render` do `simple-rpg` ficou em ~13 ms de CPU depois de as
+/// sombras e a resolução deixarem de explicar o frame (a 640x360, com a GPU a
+/// 81 %, continuava lá), e sem estas linhas era uma segunda caixa preta.
+const CORE3D_PHASES: [&str; 5] = [
+    "core3d.shadow_prepass",
+    "core3d.main_pass",
+    "core3d.early_post",
+    "core3d.post",
+    "core3d.tail",
+];
+
+/// Marca da cadeia do `Core3d` (vive no mundo do render app, como a do
+/// `Render`; são schedules diferentes, por isso precisa de recurso próprio).
+#[derive(Resource, Default)]
+pub struct Core3dPhaseClock {
+    mark: Option<Instant>,
+}
+
+fn core3d_phase_start(mut clock: ResMut<Core3dPhaseClock>) {
+    clock.mark = Some(Instant::now());
+}
+
+fn core3d_phase_end<const I: usize>(mut clock: ResMut<Core3dPhaseClock>) {
+    let now = Instant::now();
+    if let Some(mark) = clock.mark.replace(now) {
+        record_system(
+            Group::Engine,
+            CORE3D_PHASES[I],
+            now.duration_since(mark).as_secs_f32() * 1000.0,
+        );
+    }
+}
+
+/// Instala as âncoras no schedule `Core3d` do render app.
+///
+/// `shadow_prepass` cobre tudo o que corre antes do `MainPass` (o prepass de
+/// profundidade E os passes de sombra, que no Bevy 0.19 são sistemas deste
+/// schedule, não nós de um grafo).
+fn core3d_anchors(render_app: &mut SubApp) {
+    use bevy::core_pipeline::{Core3d, Core3dSystems};
+
+    render_app.init_resource::<Core3dPhaseClock>();
+    render_app.add_systems(Core3d, core3d_phase_start.before(Core3dSystems::Prepass));
+    macro_rules! anchor {
+        ($index:expr, $set:expr) => {
+            render_app.add_systems(Core3d, core3d_phase_end::<$index>.after($set));
+        };
+    }
+    anchor!(0, Core3dSystems::Prepass);
+    anchor!(1, Core3dSystems::MainPass);
+    anchor!(2, Core3dSystems::EarlyPostProcess);
+    anchor!(3, Core3dSystems::PostProcess);
 }
 
 /// Regista as âncoras do step de física no mesmo schedule do

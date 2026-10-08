@@ -14,6 +14,7 @@ pub mod combat;
 pub mod config;
 pub mod economy;
 pub mod feedback;
+pub mod graphics;
 pub mod grass;
 pub mod harvest;
 pub mod hot_reload;

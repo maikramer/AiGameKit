@@ -957,7 +957,7 @@ pub fn luau_update(
                         });
                     }
                     if let Some((_, _, _, Some(xp))) = player_components.as_mut() {
-                        crate::vitals::gain_xp(xp, crate::combat::KILL_XP);
+                        crate::vitals::gain_xp(xp, crate::combat::kill_xp(&name));
                     }
                     sfx.write(crate::ambient::SfxEvent {
                         clip: crate::ambient::SfxClip::EnemyDeath,

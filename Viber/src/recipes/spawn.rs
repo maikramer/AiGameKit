@@ -6,7 +6,7 @@ use bevy::asset::LoadState;
 
 use bevy::gltf::Gltf;
 use bevy::light::NotShadowCaster;
-use bevy::math::primitives::{Capsule3d, Cuboid, Cylinder, Plane3d, Sphere};
+use bevy::shape::{Capsule3d, Cuboid, Cylinder, Plane3d, Sphere};
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
 
@@ -1597,6 +1597,7 @@ fn spawn_entity(
             tint,
             pp_exposure,
             pp_bloom_strength,
+            rain_scale,
         } => {
             ctx.worldsys.biomes.push(crate::worldsys::BiomeRegionData {
                 id: id.clone(),
@@ -1606,6 +1607,7 @@ fn spawn_entity(
                 tint: *tint,
                 pp_exposure: *pp_exposure,
                 pp_bloom_strength: *pp_bloom_strength,
+                rain_scale: *rain_scale,
             });
         }
         EntityKind::WorldBorder {

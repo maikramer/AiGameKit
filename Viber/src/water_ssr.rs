@@ -103,9 +103,10 @@ pub fn water_ssr_requested() -> bool {
 
 /// Marcador na câmara 3D que recebe o passe (postfx insere com o gate on).
 #[derive(Component, ExtractComponent, Clone, Copy, Default, Debug)]
+#[extract_app(RenderApp)]
 pub struct WaterSsr;
 
-/// Template WGSL do passe — `viber run` escreve-o em `shaders/water_ssr.wgsl`
+/// Template WGSL do passe — `viber run` escreve-o em `shaders/water_ssr.wesl`
 /// (contrato de conteúdo como sky/water; sem especialização por mundo, o
 /// ficheiro é estático). Self-contained: zero `#import` — as matrizes e as
 /// cotas chegam por uniforms próprios, o que o deixa compilável pelo harness
@@ -533,12 +534,13 @@ fn init_pipeline(
     ];
     let layout = BindGroupLayoutDescriptor::new("water_ssr_layout", &entries);
     let sampler = render_device.create_sampler(&SamplerDescriptor::default());
-    let shader = asset_server.load("shaders/water_ssr.wgsl");
+    let shader = asset_server.load("shaders/water_ssr.wesl");
     let vertex_state = VertexState {
         shader: fullscreen_shader.shader(),
         shader_defs: Vec::new(),
         entry_point: Some("fullscreen_vertex_shader".into()),
         buffers: Vec::new(),
+        constants: Vec::new(),
     };
     let desc = RenderPipelineDescriptor {
         label: Some("water_ssr_pipeline".into()),

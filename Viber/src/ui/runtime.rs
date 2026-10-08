@@ -11,6 +11,8 @@ use std::collections::HashMap;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+// Bevy 0.20: `Interaction`/`Button` do prelude são aliases de tipos privados.
+use crate::ui::interaction::{Button, Interaction};
 use bevy::text::{
     FontWeight, LetterSpacing, LineBreak, Strikethrough, StrikethroughColor, Underline,
     UnderlineColor,

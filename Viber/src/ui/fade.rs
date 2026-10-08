@@ -27,7 +27,8 @@
 
 use bevy::prelude::*;
 
-use super::bind::UiData;
+use super::bind::{UiData, resolve_binding};
+use super::script::UiScriptBinds;
 use super::runtime::{UiBind, UiStyleDirty};
 
 /// Fade state of one element (and, through inheritance, its subtree).
@@ -132,6 +133,10 @@ pub fn drive_ui_fades(
     mut commands: Commands,
     time: Res<Time>,
     data: Res<UiData>,
+    // Binds de script (`viber.ui.set`) — sem isto um `fade=` num bind de
+    // script ficava apagado para sempre ("unknown binding"). Option: apps
+    // mínimas de teste não registam os binds de script.
+    script_binds: Option<Res<UiScriptBinds>>,
     // Warn 1× por binding desconhecido (padrão do `UiBindWarnings`): um
     // elemento com fade está EXCLUÍDO da query do `apply_ui_bindings` —
     // togglar a `Visibility` dele em duro partiria o dissolve — pelo que o
@@ -147,9 +152,10 @@ pub fn drive_ui_fades(
     )>,
 ) {
     let dt = time.delta_secs();
+    let script_binds = script_binds.as_deref();
     for (entity, bind, mut fade, mut visibility, already_dirty) in &mut fades {
         if let Some(bind) = bind {
-            match data.get(&bind.0) {
+            match resolve_binding(&data, script_binds, &bind.0) {
                 Some(value) => fade.shown = value.truthy,
                 None => {
                     if warned.insert(bind.0.clone()) {
@@ -200,6 +206,35 @@ mod tests {
         // Garbage never yields a negative or NaN duration.
         let bad = UiFade::parse("wat");
         assert!(bad.in_secs >= 0.0 && bad.out_secs >= 0.0);
+    }
+
+    /// Um `fade=` ligado a um bind de SCRIPT (`viber.ui.set`) acende como
+    /// um bind da engine — antes o fade só lia o `UiData` e a barra de chefe
+    /// do simple-rpg (bind `boss.active`) nunca aparecia.
+    #[test]
+    fn test_fade_follows_a_script_bind() {
+        let mut app = App::new();
+        let mut binds = UiScriptBinds::default();
+        binds
+            .0
+            .insert("boss.active".into(), super::super::script::ScriptBindValue::Flag(true));
+        app.init_resource::<Time>()
+            .init_resource::<UiData>()
+            .insert_resource(binds)
+            .add_systems(Update, drive_ui_fades);
+        let element = app
+            .world_mut()
+            .spawn((
+                UiBind("boss.active".into()),
+                UiFade::parse("0.2 0.6"),
+                Visibility::Hidden,
+            ))
+            .id();
+        app.update();
+        assert!(
+            app.world().get::<UiFade>(element).unwrap().shown,
+            "o bind de script tem de ligar o fade"
+        );
     }
 
     #[test]

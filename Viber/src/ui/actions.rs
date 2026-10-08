@@ -85,7 +85,12 @@ pub fn apply_shop_actions(
 ) {
     // `gameplay: none` não tem EconomyPlugin → sem Vault → sem loja nativa
     // (um jogo nesse preset negocia inteiramente por Lua, ver lua-demo/shop).
-    let Some(vault) = vault.as_deref_mut() else {
+    // `as_mut`, NÃO `as_deref_mut`: o `DerefMut` do `ResMut` marca o Vault
+    // como alterado — no topo do sistema isso acontecia TODOS os frames e
+    // acordava cada leitor de `vault.is_changed()` (chips do HUD a varrer
+    // todos os `Name` do mundo, snapshots Lua de quests/vault) sem compra
+    // nenhuma. O deref mutável só acontece dentro de `shop_apply`.
+    let Some(vault) = vault.as_mut() else {
         return;
     };
     for action in actions.read() {
@@ -118,7 +123,9 @@ pub fn forward_ui_actions(
     mut actions: bevy::ecs::message::MessageReader<UiAction>,
     mut events: Option<ResMut<crate::luau::ScriptEventQueue>>,
 ) {
-    let Some(events) = events.as_deref_mut() else {
+    // `as_mut` pelo mesmo motivo do `apply_shop_actions`: a fila só fica
+    // alterada quando há ação para encaminhar.
+    let Some(events) = events.as_mut() else {
         return;
     };
     for action in actions.read() {

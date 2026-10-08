@@ -39,7 +39,7 @@ use crate::worldsys::{BiomeRegions, WeatherState};
 
 /// Vertex stage of the grass material (wind). Config block rewritten from
 /// `<Weather>` before the asset is inserted — see [`configure_shader`].
-pub const GRASS_WGSL: &str = include_str!("grass.wgsl");
+pub const GRASS_WGSL: &str = include_str!("grass.wesl");
 
 const CONFIG_BEGIN: &str = "// === WORLD CONFIG";
 const CONFIG_END: &str = "// === END WORLD CONFIG ===";
@@ -163,7 +163,7 @@ impl Default for GrassSettings {
         let density_scale = std::env::var("VIBER_GRASS_DENSITY")
             .ok()
             .and_then(|v| v.parse::<f32>().ok())
-            .unwrap_or(1.0)
+            .unwrap_or_else(crate::graphics::grass_density_scale)
             .clamp(0.0, 4.0);
         Self {
             enabled,
@@ -560,7 +560,7 @@ fn configure_shader(mut shaders: ResMut<Assets<Shader>>, weather: Option<Res<Wea
     let source = replace_config_block(GRASS_WGSL, &config);
     if let Err(error) = shaders.insert(
         GRASS_SHADER.id(),
-        Shader::from_wgsl(source, "viber/grass.wgsl"),
+        Shader::from_wesl(source, "viber/grass.wesl"),
     ) {
         warn!("grass: shader não inserido ({error}) — o vento fica com as consts default");
     }
@@ -1560,6 +1560,7 @@ mod tests {
                     tint: None,
                     pp_exposure: None,
                     pp_bloom_strength: None,
+                    rain_scale: None,
                 },
                 crate::worldsys::BiomeRegionData {
                     id: "dark-forest".into(),
@@ -1574,6 +1575,7 @@ mod tests {
                     tint: None,
                     pp_exposure: None,
                     pp_bloom_strength: None,
+                    rain_scale: None,
                 },
             ],
         };

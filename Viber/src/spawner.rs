@@ -13,7 +13,6 @@
 use std::collections::HashMap;
 
 use bevy::asset::LoadState;
-use bevy::camera::primitives::MeshAabb as _;
 use bevy::gltf::{Gltf, GltfMesh};
 use bevy::math::Vec3;
 use bevy::prelude::*;
@@ -630,10 +629,11 @@ impl SpawnGroupState {
         if authored <= 0.0 {
             return f32::INFINITY;
         }
+        let scale = crate::graphics::cull_scale();
         if self.dynamic && authored == crate::render_lod::DEFAULT_STATIC_CULL {
-            return crate::render_lod::DEFAULT_DYNAMIC_CULL;
+            return crate::render_lod::DEFAULT_DYNAMIC_CULL * scale;
         }
-        authored
+        authored * scale
     }
 }
 
@@ -672,10 +672,10 @@ fn template_footprint_radius(
             let Some(mesh) = meshes.get(&primitive.mesh) else {
                 continue;
             };
-            if let Some(aabb) = mesh.compute_aabb() {
+            if let Some(half) = mesh_half_extents(mesh) {
                 found = true;
-                half_extent = half_extent.max(aabb.half_extents.x);
-                half_extent = half_extent.max(aabb.half_extents.z);
+                half_extent = half_extent.max(half.x);
+                half_extent = half_extent.max(half.z);
             }
         }
     }
@@ -1114,6 +1114,22 @@ fn spawn_instance(
             entity.insert(crate::harvest::Destructible::from_spec(destructible));
         }
     }
+}
+
+/// Semi-extensões do AABB das posições de uma malha (espaço do modelo).
+///
+/// Bevy 0.20 tornou o `Mesh::compute_aabb` privado (o `final_aabb` só é
+/// preenchido na extração para a GPU, tarde demais para o spawner).
+fn mesh_half_extents(mesh: &Mesh) -> Option<Vec3> {
+    let Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)) =
+        mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+    else {
+        return None;
+    };
+    let mut iter = positions.iter().map(|p| Vec3::from_array(*p));
+    let first = iter.next()?;
+    let (min, max) = iter.fold((first, first), |(lo, hi), p| (lo.min(p), hi.max(p)));
+    Some((max - min) * 0.5)
 }
 
 #[cfg(test)]

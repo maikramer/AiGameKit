@@ -14,7 +14,7 @@
 //! ARCHITECTURE NOTE — duas vias de configuração:
 //!
 //! 1. **Consts especializadas.** `viber run` reescreve o bloco CONFIG de
-//!    `shaders/sky.wgsl` com os valores do `<Sky>`/`<DayCycle>`/`<Weather>`
+//!    `shaders/sky.wesl` com os valores do `<Sky>`/`<DayCycle>`/`<Weather>`
 //!    do mundo antes de o renderer o carregar (nuvens, estrelas, aurora…).
 //! 2. **Storage per-frame** ([`SkyUniform`]). A hora do mundo NÃO
 //!    pode vir de `globals.time`: `viber.debug.set_clock` (e qualquer
@@ -48,7 +48,7 @@ use bevy::shader::ShaderRef;
 
 /// Template WGSL do céu (defaults; `viber run` reescreve o bloco CONFIG com
 /// os valores do mundo antes de o renderer o carregar).
-pub const SKY_WGSL: &str = include_str!("sky.wgsl");
+pub const SKY_WGSL: &str = include_str!("sky.wesl");
 
 /// Ganho de saída do domo (o WGSL multiplica por isto no fim). **1.0** —
 /// o r7 pôs 400 acreditando que a exposição física da câmara (EV100 ~9.7)
@@ -162,7 +162,7 @@ pub struct SkyMaterial {
 
 impl Material for SkyMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/sky.wgsl".into()
+        "shaders/sky.wesl".into()
     }
 
     // The dome is seen from the inside. Bevy 0.19 no longer exposes
@@ -491,11 +491,25 @@ pub fn sky_dome_mesh() -> bevy::mesh::Mesh {
 /// (ver a nota REFRESH DO STORAGE no topo do ficheiro).
 fn new_sky_buffer(data: SkyUniform) -> ShaderBuffer {
     let mut buffer = ShaderBuffer::with_size(
-        std::mem::size_of::<SkyUniform>(),
+        std::mem::size_of::<SkyUniform>() as u64,
         RenderAssetUsages::default(),
     );
-    buffer.set_data(data);
+    write_sky_buffer(&mut buffer, data);
     buffer
+}
+
+/// Escreve `data` no buffer com o layout std430 do encase.
+///
+/// Bevy 0.20 tirou o `ShaderBuffer::set_data` (encase) — o buffer passou a
+/// guardar bytes alinhados (`extend_from_slice` de `NoUninit`). O encase
+/// continua a ser quem sabe o layout do `ShaderType`; só a cópia mudou.
+fn write_sky_buffer(buffer: &mut ShaderBuffer, data: SkyUniform) {
+    let mut wrapper = bevy::render::render_resource::encase::StorageBuffer::new(Vec::<u8>::new());
+    wrapper
+        .write(&data)
+        .expect("SkyUniform cabe no seu próprio buffer");
+    buffer.clear();
+    buffer.extend_from_slice(&wrapper.into_inner());
 }
 
 /// Empurra a paleta da hora ([`crate::worldsys::AtmosphereState`] + vento do
@@ -569,7 +583,7 @@ pub fn sky_material_drive(
         if let Some(material) = materials.get_mut(&handle.0)
             && let Some(mut buffer) = buffers.get_mut(&material.data)
         {
-            buffer.set_data(data);
+            write_sky_buffer(&mut buffer, data);
         }
         if let Some(mat) = &replacement {
             commands.entity(entity).insert(mat.clone());

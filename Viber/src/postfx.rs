@@ -311,10 +311,19 @@ fn fx_quality_off(key: &str) -> bool {
 /// (`VIGNETTE`, `CHROMATIC`, `CAS`), `MOTION_BLUR`, `TAA`, `VOLUMETRICS`.
 /// O bridge (`viber.debug.postfx{...}`) força os mesmos keys AO VIVO.
 pub fn fx_off(key: &str) -> bool {
+    if HEAVY_FX_KEYS.contains(&key) && !crate::graphics::heavy_fx_enabled() {
+        return true;
+    }
     fx_forced_off(key)
         || fx_quality_off(key)
         || std::env::var_os(format!("VIBER_NO_{key}")).is_some()
 }
+
+/// Efeitos que o preset `desempenho` desliga em bloco: os que custam um passe
+/// full-res (ou um raymarch por pixel) e cujo ganho se lê em screenshots
+/// paradas, não em movimento. Bloom e TAA ficam — o TAA é o que limpa o ruído
+/// do PCSS, tirá-lo sai mais caro em qualidade do que vale em ms.
+const HEAVY_FX_KEYS: [&str; 4] = ["SSAO", "DOF", "MOTION_BLUR", "CONTACT_SHADOWS"];
 
 /// Motion blur LIGADO por omissão; `VIBER_NO_MOTION_BLUR=1` desliga-o.
 ///
@@ -367,7 +376,24 @@ fn ssao_quality(taa: bool) -> ScreenSpaceAmbientOcclusionQualityLevel {
 }
 
 fn volumetrics_enabled() -> bool {
-    !fx_off("VOLUMETRICS")
+    // `volumetric_steps() == 0` é como o preset `desempenho` desliga o
+    // raymarch: um passe full-res de 6 ms que, em movimento, se lê como
+    // "névoa com sol" e não como geometria.
+    !fx_off("VOLUMETRICS") && volumetric_steps() > 0
+}
+
+/// OIT (bevy 0.20) para as partículas — **opt-in** (`VIBER_OIT=1`), o mesmo
+/// regime do `VIBER_WATER_SSR`: um caminho novo de transparência não entra no
+/// frame por omissão sem medição de custo e QA temporal (5 frames + diff,
+/// controle = o mesmo braço corrido 2× com a flag off).
+pub fn oit_requested() -> bool {
+    matches!(
+        std::env::var("VIBER_OIT")
+            .ok()
+            .map(|v| v.trim().to_ascii_lowercase())
+            .as_deref(),
+        Some("1" | "true" | "yes" | "on")
+    )
 }
 
 /// Passos do raymarch volumétrico (`VIBER_VOLUMETRIC_STEPS`).
@@ -378,13 +404,18 @@ fn volumetrics_enabled() -> bool {
 /// (o que sobe é o ruído por frame, que o TAA já tem de limpar por causa do
 /// PCSS). O gate existe para o A/B de QA: medir o frame e comparar a imagem
 /// antes de mexer no default.
+///
+/// O default desceu de 64 para 40 depois de o A/B no spawn do `simple-rpg`
+/// (RTX 4050, 1280x720) mostrar o raymarch a valer **~3 ms de um frame de
+/// 31 ms** — o segundo maior item da lente, atrás só das cascatas do sol.
 fn volumetric_steps() -> u32 {
     std::env::var("VIBER_VOLUMETRIC_STEPS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .filter(|steps| *steps > 0)
+        // `0` é um valor VÁLIDO aqui: é como se desliga o raymarch sem tocar
+        // no preset (`volumetrics_enabled` lê-o).
         .or(quality_gates().volumetric_steps)
-        .unwrap_or(64)
+        .unwrap_or_else(crate::graphics::volumetric_steps)
 }
 
 /// Marcador do [`FogVolume`] cinemático que segue o herói.
@@ -531,7 +562,7 @@ pub fn auto_exposure_target_lift(x: f32) -> f32 {
 /// por LUT de 256 valores no passe do medidor) — não há knob de "ganho
 /// máximo" no componente.
 pub fn night_capped_compensation_curve() -> AutoExposureCompensationCurve {
-    use bevy::math::cubic_splines::LinearSpline;
+    use bevy::curve::cubic_splines::LinearSpline;
     AutoExposureCompensationCurve::from_curve(LinearSpline::new(night_capped_curve_points()))
         .unwrap_or_default()
 }
@@ -614,7 +645,7 @@ impl Plugin for PostFxPlugin {
         let shader_handle = app
             .world_mut()
             .resource_mut::<Assets<Shader>>()
-            .add(Shader::from_wgsl(SPLIT_TONE_WGSL, "viber_split_tone.wgsl"));
+            .add(Shader::from_wesl(SPLIT_TONE_WGSL, "viber_split_tone.wesl"));
         let _ = SPLIT_TONE_SHADER.set(shader_handle);
         app.add_plugins(FullscreenMaterialPlugin::<SplitToneSettings>::default());
         // LOOP C — perspetiva aérea: passe fullscreen depth-aware (padrão
@@ -758,9 +789,23 @@ fn attach_postfx_to_cameras(
             // post-process DEPOIS do AA e devolve o detalhe que o TAA (e o
             // FXAA do fallback) suavizam.
             ContrastAdaptiveSharpening::default(),
-            // Color grading (CDL) — o `drive_postfx` conduz-o pela hora do dia.
+            // Color grading (CDL) — o `drive_postfx` conduz-lo pela hora do dia.
             bevy::render::view::ColorGrading::default(),
         ));
+        // OIT (bevy 0.20): transparência order-independent — GATE por câmara
+        // (o componente liga o percurso; materiais com `AlphaMode`
+        // Blend/Premultiplied/Add participam por omissão — `enable_oit()`
+        // default true). Os billboards das partículas (fogo/magic/sparkle em
+        // Add, restantes em Blend) deixam de depender da ordem de sorteio.
+        // **OPT-IN** (`VIBER_OIT=1`): sem medição de custo e QA temporal
+        // (protocolo dos 5 frames) não entra no frame por omissão. A ÁGUA
+        // fica fora da 1.ª iteração (`WaterExtension::enable_oit()` = false)
+        // — o blend dela já é analítico pela coluna assada.
+        if oit_requested() {
+            commands
+                .entity(camera)
+                .insert(bevy::core_pipeline::oit::OrderIndependentTransparencySettings::default());
+        }
         // Gates de bissecção (`VIBER_NO_<KEY>=1`, ver [`fx_off`]): o bundle
         // entra inteiro e o que estiver desligado sai a seguir — remover é
         // mais barato do que 8 ramos de inserção (o `Bundle` já esgota os 15
@@ -1561,6 +1606,7 @@ pub fn split_tone_for(low_sun: f32, night: f32) -> ([f32; 3], [f32; 3]) {
 /// [`ExtractComponent`]). O WGSL declara o struct ESPELHADO (mesmos
 /// offsets do encase: vec3×2 + 3×f32).
 #[derive(Component, Clone, Copy, PartialEq, ExtractComponent, ShaderType, Default)]
+#[extract_app(RenderApp)]
 pub struct SplitToneSettings {
     /// Multiplicador linear do extremo das sombras.
     pub shadow_tint: Vec3,
@@ -1588,7 +1634,7 @@ const SPLIT_TONE_WGSL: &str = r#"
 // chama-se `FullscreenVertexOutput` (importar `fullscreen_vertex_out`, como
 // nos exemplos antigos, deixa o identificador fora de scope e o naga REJEITA
 // o shader: o passe salta em silêncio e o split-tone não existe no frame).
-#import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
+import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput;
 
 struct SplitToneSettings {
     shadow_tint: vec3<f32>,
@@ -1767,6 +1813,7 @@ pub fn aerial_grade(color: [f32; 3], f: f32) -> [f32; 3] {
 /// Liga o passe de perspetiva aérea numa câmara (default-on; inserido pelo
 /// `attach_postfx_to_cameras` junto do resto da lente).
 #[derive(Component, Clone, Copy, Default, ExtractComponent)]
+#[extract_app(RenderApp)]
 pub struct AerialPerspective;
 
 /// Handle do shader inline — criado no `PostFxPlugin::build` (mesmo padrão
@@ -1934,6 +1981,7 @@ fn init_aerial_pipeline(
         shader_defs: Vec::new(),
         entry_point: Some("fullscreen_vertex_shader".into()),
         buffers: Vec::new(),
+        constants: Vec::new(),
     };
     let desc = RenderPipelineDescriptor {
         label: Some("aerial_perspective_pipeline".into()),
@@ -2759,7 +2807,7 @@ mod tests {
         );
         // A curva tem de sair do `from_curve` (monótona, sem descontinuidades
         // — um `Err` cai no default, que é a LUT plana e sem teto).
-        use bevy::math::cubic_splines::LinearSpline;
+        use bevy::curve::cubic_splines::LinearSpline;
         assert!(
             AutoExposureCompensationCurve::from_curve(LinearSpline::new(
                 night_capped_curve_points()
@@ -3368,7 +3416,7 @@ mod tests {
         // simplesmente não existia no frame; apanhado no boot de QA 2026-09-13).
         assert!(
             SPLIT_TONE_WGSL.contains(
-                "#import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput"
+                "import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput;"
             ),
             "o WGSL tem de importar o struct FullscreenVertexOutput pelo nome exacto"
         );

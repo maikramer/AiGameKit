@@ -23,6 +23,8 @@
 //! and `tooltip="…"` (hover hint, `ui::widgets`).
 
 use bevy::prelude::*;
+// Bevy 0.20: `Interaction`/`Button` do prelude são aliases de tipos privados.
+use crate::ui::interaction::{Button, Interaction};
 use bevy::ui::FocusPolicy;
 use bevy::ui::widget::ImageNode;
 
@@ -709,7 +711,8 @@ mod tests {
         use bevy::camera::RenderTarget;
         use bevy::input::touch::Touches;
         use bevy::math::Affine2;
-        use bevy::ui::{ComputedUiTargetCamera, UiStack, ui_focus_system};
+        use crate::ui::interaction::ui_focus_system;
+        use bevy::ui::{ComputedUiTargetCamera, UiStack};
         use bevy::window::PrimaryWindow;
 
         let mut app = tree_app();
@@ -885,6 +888,33 @@ mod tests {
         // authored placeholder — silent, and easy to miss by eye.
         let data = crate::ui::bind::UiData::default();
         let lists = ["quests", "bag", "skills", "shop", "controls", "system"];
+        // Binds de SCRIPT: os nomes que os `.lua` do mundo alimentam com
+        // `viber.ui.set("nome", …)` literal (barra de chefe, cooldowns das
+        // habilidades Lua). Um nome que nenhum script escreve continua a
+        // ser apanhado aqui.
+        let mut script_binds = std::collections::HashSet::new();
+        fn scan(dir: &std::path::Path, out: &mut std::collections::HashSet<String>) {
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    scan(&path, out);
+                } else if path.extension().is_some_and(|e| e == "lua") {
+                    let source = std::fs::read_to_string(&path).unwrap_or_default();
+                    for chunk in source.split("viber.ui.set(\"").skip(1) {
+                        if let Some(name) = chunk.split('"').next() {
+                            out.insert(name.to_ascii_lowercase());
+                        }
+                    }
+                }
+            }
+        }
+        scan(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/simple-rpg/scripts"),
+            &mut script_binds,
+        );
         for path in [
             "examples/simple-rpg/world/hud.xml",
             "examples/simple-rpg/world/menu.xml",
@@ -908,7 +938,7 @@ mod tests {
                     continue;
                 }
                 assert!(
-                    data.get(&bind).is_some(),
+                    data.get(&bind).is_some() || script_binds.contains(&bind),
                     "{path}: <{}> binds to unknown `{bind}`",
                     node.tag
                 );

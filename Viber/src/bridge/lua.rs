@@ -23,7 +23,7 @@ use std::sync::Arc;
 use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::message::Messages;
 use bevy::ecs::system::In;
-use bevy::math::primitives::{Cuboid, Sphere};
+use bevy::shape::{Cuboid, Sphere};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Collider, RapierContextSimulation, RigidBody};
 
@@ -5391,7 +5391,7 @@ fn spawn_primitive(
     warnings: &mut Vec<String>,
 ) -> bool {
     use bevy::asset::Assets;
-    use bevy::math::primitives::Cylinder;
+    use bevy::shape::Cylinder;
     let Some(mut meshes) = world.get_resource_mut::<Assets<Mesh>>() else {
         warnings.push("Assets<Mesh> indisponível — spawn ignorado".into());
         return false;

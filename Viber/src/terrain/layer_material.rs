@@ -12,7 +12,7 @@
 //!
 //! Same architecture as [`super::water_material`] / [`crate::sky`] for the
 //! world constants: `viber run` rewrites the CONFIG block of
-//! `shaders/terrain_chunk.wgsl` before the renderer loads it (the Bevy 0.19
+//! `shaders/terrain_chunk.wesl` before the renderer loads it (the Bevy 0.19
 //! slot-1 storage promotion never re-uploads custom material uniforms).
 //!
 //! Lighting é o pipeline PBR REAL da engine (2026-09-07, passe "Luz &
@@ -39,7 +39,7 @@ use bevy::shader::ShaderRef;
 
 /// Template WGSL do material de chunk (defaults; `viber run` reescreve o
 /// bloco CONFIG com as consts de parede antes de o renderer o carregar).
-pub const TERRAIN_CHUNK_WGSL: &str = include_str!("chunk.wgsl");
+pub const TERRAIN_CHUNK_WGSL: &str = include_str!("chunk.wesl");
 
 const CONFIG_BEGIN: &str = "// === WORLD CONFIG";
 const CONFIG_END: &str = "// === END WORLD CONFIG ===";
@@ -315,7 +315,7 @@ impl TerrainChunkMaterial {
 
 impl bevy::pbr::Material for TerrainChunkMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/terrain_chunk.wgsl".into()
+        "shaders/terrain_chunk.wesl".into()
     }
 
     // Voxel wall shells carry sub-voxel thin sheets (a carved void passing a
@@ -924,8 +924,9 @@ mod tests {
 
         let wgsl = TERRAIN_CHUNK_WGSL;
         assert!(
-            wgsl.contains("#ifdef BINDLESS"),
-            "o WGSL precisa do ramo bindless"
+            // WESL (Bevy 0.20): a compilação condicional é `@if(BINDLESS)`.
+            wgsl.contains("@if(BINDLESS)"),
+            "o shader precisa do ramo bindless"
         );
         assert!(
             wgsl.contains("bindless_textures_2d") && wgsl.contains("bindless_samplers_filtering"),
@@ -953,8 +954,8 @@ mod tests {
             "T5:",
         ];
         for copy in [
-            "assets/shaders/terrain_chunk.wgsl",
-            "worlds/shaders/terrain_chunk.wgsl",
+            "assets/shaders/terrain_chunk.wesl",
+            "worlds/shaders/terrain_chunk.wesl",
         ] {
             let Ok(source) = std::fs::read_to_string(copy) else {
                 // A cópia ainda não existe (nunca houve um run que a

@@ -532,6 +532,9 @@ pub enum EntityKind {
         pp_exposure: Option<f32>,
         /// `pp-bloom-strength`: bloom intensity inside the region.
         pp_bloom_strength: Option<f32>,
+        /// `rain-scale`: fator da chuva do `<Weather>` dentro da região
+        /// (0 = seca — deserto; 1 = a do mundo). `None` = 1.
+        rain_scale: Option<f32>,
     },
     /// `<WorldBorder radius>` — keeps the player inside the world disc.
     WorldBorder {
@@ -2674,6 +2677,7 @@ fn finish_biome_region(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
     let mut tint = None;
     let mut pp_exposure = None;
     let mut pp_bloom_strength = None;
+    let mut rain_scale = None;
     for (key, value) in rest {
         let kctx = format!("{ctx_tag} {key}");
         match key.as_str() {
@@ -2696,6 +2700,9 @@ fn finish_biome_region(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
             "pp-bloom-strength" => {
                 pp_bloom_strength = Some(values::parse_f32(&value, &kctx)?);
             }
+            "rain-scale" => {
+                rain_scale = Some(values::parse_f32(&value, &kctx)?.clamp(0.0, 1.0));
+            }
             other => ctx
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
@@ -2716,6 +2723,7 @@ fn finish_biome_region(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
             tint,
             pp_exposure,
             pp_bloom_strength,
+            rain_scale,
         },
         children: Vec::new(),
     })
@@ -6567,7 +6575,9 @@ mod composition_tests {
     }
 }
 
-/// Cascatas do shadow map do sol (`VIBER_SHADOW_CASCADES`, default 4).
+/// Cascatas do shadow map do sol (`VIBER_SHADOW_CASCADES`; sem ele, o preset
+/// de [`crate::graphics`] — 4 em `alto`, 3 em `equilibrado`, 2 em
+/// `desempenho`).
 ///
 /// Cada cascata é uma vista de render: mais cascatas = sombra nítida mais
 /// longe e mais tempo de CPU no render app. O teto do Bevy 0.19 é 4
@@ -6577,15 +6587,23 @@ pub fn sun_shadow_cascades() -> usize {
         .ok()
         .and_then(|raw| raw.parse::<usize>().ok())
         .filter(|n| (1..=4).contains(n))
-        .unwrap_or(4)
+        .unwrap_or_else(crate::graphics::shadow_cascades)
 }
 
-/// Alcance máximo das cascatas do sol em metros (`VIBER_SHADOW_DISTANCE`,
-/// default 600 — as serras distantes recebem sombra).
+/// Alcance máximo das cascatas do sol em metros (`VIBER_SHADOW_DISTANCE`; sem
+/// ele, o preset de [`crate::graphics`] — 300 / 150 / 90 m).
+///
+/// Era 600 fixo ("as serras distantes recebem sombra") e o preço estava
+/// medido no sítio errado. No spawn do `simple-rpg` (RTX 4050, 1280x720) as
+/// cascatas a 600 m varrem **23556 malhas** — contra 5140 dentro de 120 m — e
+/// o passe é **draw-bound, não fill-bound**: baixar o shadow map de 4096²
+/// para 1024² devolveu 1 ms, cortar o ALCANCE devolveu 9. A 150 m o mesmo
+/// shadow map fica com 4x a densidade de texels (14,6 cm/texel → 3,7): as
+/// sombras perto do herói ficam mais nítidas, não menos.
 pub fn sun_shadow_distance() -> f32 {
     std::env::var("VIBER_SHADOW_DISTANCE")
         .ok()
         .and_then(|raw| raw.parse::<f32>().ok())
         .filter(|d| *d > 0.0)
-        .unwrap_or(600.0)
+        .unwrap_or_else(crate::graphics::shadow_distance)
 }

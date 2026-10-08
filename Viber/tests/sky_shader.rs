@@ -22,6 +22,24 @@ use naga::{AddressSpace, ScalarKind, ShaderStage, StorageAccess, TypeInner, Vect
 use std::{borrow::Cow, path::Path, sync::mpsc, time::Duration};
 use viber::sky::SkyConfig;
 
+mod common;
+
+/// Stubs mínimos dos módulos que o sky.wesl importa (bevy 0.20).
+const STUBS: [(&str, &str); 2] = [
+    (
+        "bevy_render::view",
+        "struct View { world_from_view: mat4x4<f32>, };",
+    ),
+    (
+        "bevy_pbr::render::forward_io",
+        "struct VertexOutput { @builtin(position) position: vec4<f32>, @location(0) world_position: vec4<f32>, };",
+    ),
+];
+
+fn standalone(source: &str) -> String {
+    common::compile_wesl(source, &STUBS, &[])
+}
+
 /// O grupo do MATERIAL no bevy 0.19 (material.rs) — o `#{MATERIAL_BIND_GROUP}`
 /// do WGSL é substituído por este valor em runtime. O céu leu ETERNAMENTE o
 /// binding errado quando o grupo estava hardcoded a 2 (céu "congelado" em
@@ -38,49 +56,11 @@ fn dimensions() -> (u32, u32) {
     );
     (width, width / 2)
 }
-const IMPORTS: [(&str, &str); 3] = [
-    (
-        "#import bevy_render::view::View",
-        "struct View { world_from_view: mat4x4<f32>, };",
-    ),
-    (
-        "#import bevy_render::globals::Globals",
-        "struct Globals { time: f32, delta_time: f32, frame_count: u32, };",
-    ),
-    (
-        "#import bevy_pbr::forward_io::VertexOutput",
-        "struct VertexOutput { @builtin(position) position: vec4<f32>, @location(0) world_position: vec4<f32>, };",
-    ),
-];
 
-fn standalone(source: &str) -> String {
-    source.lines().map(|line| {
-        let trimmed = line.trim();
-        if trimmed.starts_with('#') {
-            IMPORTS.iter().find(|(import, _)| *import == trimmed)
-                .unwrap_or_else(|| panic!("unsupported shader directive: {line}; extend the explicit harness contract"))
-                .1.to_owned()
-        } else {
-            line.replace("#{MATERIAL_BIND_GROUP}", &MATERIAL_BIND_GROUP.to_string())
-        }
-    }).collect::<Vec<_>>().join("\n")
-}
-
-fn validate(source: &str) -> naga::Module {
-    let module = naga::front::wgsl::parse_str(source)
-        .unwrap_or_else(|error| panic!("{}", error.emit_to_string(source)));
-    naga::valid::Validator::new(
-        naga::valid::ValidationFlags::all(),
-        naga::valid::Capabilities::all(),
-    )
-    .validate(&module)
-    .unwrap_or_else(|error| panic!("{}", error.emit_to_string(source)));
-    module
-}
 
 #[test]
 fn template_and_specialized_worlds_parse_and_validate() {
-    validate(&standalone(include_str!("../src/sky.wgsl")));
+    common::validate(&standalone(include_str!("../src/sky.wesl")));
     for config in [
         SkyConfig::default(),
         SkyConfig {
@@ -121,13 +101,13 @@ fn template_and_specialized_worlds_parse_and_validate() {
             ..Default::default()
         },
     ] {
-        validate(&standalone(&config.render_world_shader()));
+        common::validate(&standalone(&config.render_world_shader()));
     }
 }
 
 #[test]
 fn storage_binding_and_six_vec4_abi_are_preserved() {
-    let module = validate(&standalone(include_str!("../src/sky.wgsl")));
+    let module = common::validate(&standalone(include_str!("../src/sky.wesl")));
     let (_, sky) = module
         .global_variables
         .iter()
@@ -143,7 +123,7 @@ fn storage_binding_and_six_vec4_abi_are_preserved() {
     assert_eq!(
         (binding.group, binding.binding),
         (MATERIAL_BIND_GROUP, 0),
-        "o storage do céu TEM de viver no grupo do MATERIAL (#{MATERIAL_BIND_GROUP}) — \
+        "o storage do céu TEM de viver no grupo do MATERIAL (constants::MATERIAL_BIND_GROUP) — \
          um grupo hardcoded fica atrás do bevy e lê o binding errado como SkyUniform"
     );
     let TypeInner::Struct { members, span } = &module.types[sky.ty].inner else {
@@ -260,7 +240,7 @@ fn render(
 }}
 "#
     ));
-    validate(&source);
+    common::validate(&source);
     let shader = device.create_and_validate_shader_module(ShaderModuleDescriptor {
         label: Some("sky regression"),
         source: ShaderSource::Wgsl(Cow::Owned(source)),
@@ -453,7 +433,8 @@ fn render(
     rx.recv_timeout(Duration::from_secs(60))
         .expect("GPU readback callback")
         .expect("GPU readback mapping");
-    let mapped = readback.slice(..).get_mapped_range();
+    let mapped = readback.slice(..).get_mapped_range()
+        .expect("GPU readback mapped range");
     let pixels = mapped
         .chunks_exact(16)
         .map(|pixel| {

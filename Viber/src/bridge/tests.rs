@@ -215,7 +215,7 @@ fn lua_app(port: u16) -> App {
         .world_mut()
         .get_resource_mut::<bevy::asset::Assets<bevy::mesh::Mesh>>()
         .unwrap();
-    let cube = meshes.add(bevy::mesh::Mesh::from(bevy::math::primitives::Cuboid::new(
+    let cube = meshes.add(bevy::mesh::Mesh::from(bevy::shape::Cuboid::new(
         1.0, 1.0, 1.0,
     )));
     let mut materials = app
@@ -1335,7 +1335,7 @@ fn test_bridge_raycast_headless() {
         // Cubo collider a 5 m de altura — raio de cima deve apanhar o TOPO.
         let mut meshes = world
             .resource_mut::<bevy::asset::Assets<bevy::mesh::Mesh>>();
-        let cube = meshes.add(bevy::mesh::Mesh::from(bevy::math::primitives::Cuboid::new(
+        let cube = meshes.add(bevy::mesh::Mesh::from(bevy::shape::Cuboid::new(
             1.0, 1.0, 1.0,
         )));
         drop(meshes);

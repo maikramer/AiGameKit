@@ -6,7 +6,7 @@
 //! Bevy 0.19 slot-1 storage promotion never re-uploads custom material
 //! uniforms, so the per-world config (day clock for the glint, `<Weather>`
 //! wind for the wave field) is injected as **consts** — `viber run` rewrites
-//! the CONFIG block of `shaders/water.wgsl` before the renderer loads it — and
+//! the CONFIG block of `shaders/water.wesl` before the renderer loads it — and
 //! per-frame values come from the engine's `Globals` binding.
 //!
 //! The base `StandardMaterial` still carries the static surface properties
@@ -25,7 +25,7 @@ use bevy::shader::ShaderRef;
 
 /// Template WGSL da água (defaults; `viber run` reescreve o bloco CONFIG com
 /// os valores do mundo antes de o renderer o carregar).
-pub const WATER_WGSL: &str = include_str!("water.wgsl");
+pub const WATER_WGSL: &str = include_str!("water.wesl");
 
 const CONFIG_BEGIN: &str = "// === WORLD CONFIG";
 const CONFIG_END: &str = "// === END WORLD CONFIG ===";
@@ -41,13 +41,21 @@ pub struct WaterExtension {}
 impl MaterialExtension for WaterExtension {
     fn vertex_shader() -> ShaderRef {
         // O Bevy 0.19 usa o vertex da extensão NO LUGAR do base
-        // (extended_material.rs) — o water.wgsl replica o mesh.wgsl inteiro
+        // (extended_material.rs) — o water.wesl replica o mesh.wesl inteiro
         // e acrescenta o deslocamento de onda (estilo bevy_water).
-        "shaders/water.wgsl".into()
+        "shaders/water.wesl".into()
     }
 
     fn fragment_shader() -> ShaderRef {
-        "shaders/water.wgsl".into()
+        "shaders/water.wesl".into()
+    }
+
+    /// A água fica FORA do OIT (bevy 0.20): o blend dela já é analítico
+    /// (coluna de água assada por vértice + Fresnel) e o `ExtendedMaterial`
+    /// delega `enable_oit` na EXTENSÃO — false aqui põe-na fora mesmo com
+    /// `VIBER_OIT=1` na câmara (1.ª iteração: só partículas).
+    fn enable_oit() -> bool {
+        false
     }
 }
 
@@ -245,7 +253,7 @@ mod tests {
         for marker in ["DEBUG SPLIT", "DEBUG OVERLAY", "viewport.z / 3.0"] {
             assert!(
                 !WATER_WGSL.contains(marker),
-                "overlay de debug (`{marker}`) esquecido em water.wgsl"
+                "overlay de debug (`{marker}`) esquecido em water.wesl"
             );
         }
         // O caminho normal termina no PBR, não num write directo de cor.

@@ -2,6 +2,8 @@
 //! the building blocks shared by the menu and the profiler window.
 
 use bevy::prelude::*;
+// Bevy 0.20: `Interaction`/`Button` do prelude são aliases de tipos privados.
+use crate::ui::interaction::{Button, Interaction};
 
 use super::assets::{HudAssets, label};
 

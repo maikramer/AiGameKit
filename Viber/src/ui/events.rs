@@ -14,6 +14,8 @@
 //! desígnio (drenar).
 
 use bevy::prelude::*;
+// Bevy 0.20: `Interaction`/`Button` do prelude são aliases de tipos privados.
+use crate::ui::interaction::Interaction;
 
 use super::runtime::{UiId, UiRegistry};
 use super::tween::StyleField;

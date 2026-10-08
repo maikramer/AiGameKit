@@ -21,6 +21,7 @@ pub mod bind;
 pub mod collect;
 pub mod events;
 pub mod fade;
+pub mod interaction;
 pub mod list;
 pub mod menu_data;
 pub mod modal;
@@ -80,6 +81,7 @@ pub struct UiPlugin;
 
 impl bevy::app::Plugin for UiPlugin {
     fn build(&self, app: &mut bevy::app::App) {
+        interaction::ensure_plugin(app);
         app.init_resource::<StyleSheet>()
             .init_resource::<UiRegistry>()
             .init_resource::<UiData>()

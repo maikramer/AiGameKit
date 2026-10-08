@@ -517,7 +517,7 @@ fn dir_shadow_size() -> usize {
         .ok()
         .and_then(|raw| raw.parse::<usize>().ok())
         .filter(|size| *size >= 256 && size % 2 == 0)
-        .unwrap_or(4096)
+        .unwrap_or_else(viber::graphics::dir_shadow_size)
 }
 
 fn point_shadow_size() -> usize {
@@ -893,6 +893,10 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // vêm as asset roots e os diretórios (docs/ASSETS.md).
     let world_dir_pre = world_base_dir(path).unwrap_or_else(|| PathBuf::from("."));
     let config = viber::config::load(&world_dir_pre)?;
+    // Preset de gráficos ANTES de construir a App: as cascatas do sol, o
+    // shadow map e o raymarch volumétrico são lidos durante o spawn do mundo.
+    let graphics = viber::graphics::resolve(config.graphics.as_deref());
+    info!("graphics preset: {}", graphics.name());
     let title = config.title.clone().unwrap_or_else(|| {
         format!(
             "Viber — {}",
@@ -922,8 +926,8 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     let shaders_dir = asset_root.join("shaders");
     let _ = std::fs::create_dir_all(&shaders_dir);
     for (name, contents) in [
-        ("sky.wgsl", sky_config.render_world_shader()),
-        ("water.wgsl", water_config.render_world_shader()),
+        ("sky.wesl", sky_config.render_world_shader()),
+        ("water.wesl", water_config.render_world_shader()),
     ] {
         if let Err(e) = std::fs::write(shaders_dir.join(name), contents) {
             eprintln!(
@@ -934,11 +938,11 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     }
     if let Some(layers_config) = &layers_config {
         if let Err(e) = std::fs::write(
-            shaders_dir.join("terrain_chunk.wgsl"),
+            shaders_dir.join("terrain_chunk.wesl"),
             layers_config.render_world_shader(),
         ) {
             eprintln!(
-                "viber: falha ao escrever {}/terrain_chunk.wgsl: {e}",
+                "viber: falha ao escrever {}/terrain_chunk.wesl: {e}",
                 shaders_dir.display()
             );
         }
@@ -948,11 +952,11 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // não o usam.
     if viber::water_ssr::water_ssr_requested() {
         if let Err(e) = std::fs::write(
-            shaders_dir.join("water_ssr.wgsl"),
+            shaders_dir.join("water_ssr.wesl"),
             viber::water_ssr::WATER_SSR_WGSL,
         ) {
             eprintln!(
-                "viber: falha ao escrever {}/water_ssr.wgsl: {e}",
+                "viber: falha ao escrever {}/water_ssr.wesl: {e}",
                 shaders_dir.display()
             );
         }
@@ -1397,7 +1401,9 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     );
     // Debug de vitais [H/N/K] (preset RPG). O shake no dano recebido vive no
     // FeedbackPlugin — registá-lo também aqui corria-o 2× por frame.
-    if rpg {
+    // O debug de vitais [H] dano / [N] cura total / [K] +XP é batota em jogo
+    // normal (o [K] ainda colidia com a loja): só com `VIBER_DEBUG_KEYS=1`.
+    if rpg && std::env::var_os("VIBER_DEBUG_KEYS").is_some_and(|v| v != "0") {
         app.add_systems(bevy::app::Update, vitals::debug_damage);
     }
     app.run();

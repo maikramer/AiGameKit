@@ -229,6 +229,7 @@ mod tests {
             tint,
             pp_exposure: None,
             pp_bloom_strength: None,
+            rain_scale: None,
         }
     }
 

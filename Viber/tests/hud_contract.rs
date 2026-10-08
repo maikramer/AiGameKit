@@ -13,9 +13,30 @@ fn visit<'a>(nodes: &'a [XmlNode], out: &mut Vec<&'a XmlNode>) {
     }
 }
 
+/// Nomes que os scripts do mundo alimentam com `viber.ui.set("nome", …)`
+/// literal (barra de chefe, cooldowns das habilidades Lua, outras missões) —
+/// binds de SCRIPT, válidos no hud.xml tal como os da engine.
+fn script_binds(dir: &Path, out: &mut HashSet<String>) {
+    for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            script_binds(&path, out);
+        } else if path.extension().is_some_and(|e| e == "lua") {
+            let source = std::fs::read_to_string(&path).unwrap();
+            for chunk in source.split("viber.ui.set(\"").skip(1) {
+                if let Some(name) = chunk.split('"').next() {
+                    out.insert(name.to_owned());
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn shipped_hud_has_unique_ids_and_valid_bindings() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/simple-rpg");
+    let mut scripted = HashSet::new();
+    script_binds(&root.join("scripts"), &mut scripted);
     let mut ids = HashSet::new();
     for file in ["world/hud.xml", "world/menu.xml", "qa-hud.xml"] {
         let doc = xml::parse_file(&root.join(file)).unwrap();
@@ -37,7 +58,7 @@ fn shipped_hud_has_unique_ids_and_valid_bindings() {
                         None => binding,
                     };
                     assert!(
-                        UiData::default().get(name).is_some(),
+                        UiData::default().get(name).is_some() || scripted.contains(name),
                         "unknown binding {binding}"
                     );
                 }
@@ -89,10 +110,22 @@ fn hud_script_opens_journal_and_punches_the_combo() {
         click = false
         anims = {}
         opened = nil
-        viber = {state=function() return state end, ui={
+        binds = {}
+        game = {}
+        viber = {state=function() return state end,
+          time=function() return 10 end,
+          game=function() return game end,
+          quest_defs=function() return {} end,
+          quest_state=function() return "not_taken" end,
+          ui={
             number=function(key) return 0 end,
             get=function(key) return combo end,
-            toggle_class=function() assert(false, "toggles vivem em class-binds engine") end,
+            -- Os toggles de ESTADO vivem em class-binds engine; só as linhas
+            -- das "outras missões" (escritas pelo script) usam toggle_class.
+            toggle_class=function(id) assert(id:sub(1, 12) == "quest-other-", "toggle fora das outras missões: " .. id) end,
+            set=function(name, value) binds[name] = value end,
+            set_text=function() end,
+            set_visible=function() end,
             clicked=function(id) return id == "open-journal" and click end,
             open=function(id) opened = id end,
             set_anim=function(id, anim) anims[id] = anim end
@@ -109,6 +142,9 @@ fn hud_script_opens_journal_and_punches_the_combo() {
         on_update(0.016)
         assert(opened == nil)
         assert(anims["combo-text"] == "none")
+        -- Barra de chefe sem sinal = apagada; outras missões vazias.
+        assert(binds["boss.active"] == false)
+        assert(binds["quests.others"] == false)
 
         click = true
         on_update(0.016)

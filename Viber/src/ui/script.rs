@@ -19,6 +19,8 @@ use std::sync::{Arc, Mutex};
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+// Bevy 0.20: `Interaction`/`Button` do prelude são aliases de tipos privados.
+use crate::ui::interaction::Interaction;
 use mlua::{Lua, Table, Value};
 
 use super::bind::UiData;

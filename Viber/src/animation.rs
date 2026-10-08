@@ -1114,6 +1114,99 @@ pub fn drive_character_animation(
     }
 }
 
+/// Below this camera-independent distance to the hero a bound character
+/// always animates, even past its script's activation radius — an idle
+/// creature at 50 m still reads on screen, a statue would not.
+pub const ANIM_FREEZE_MIN_DISTANCE: f32 = 70.0;
+/// Hysteresis band for [`freeze_distant_animation`]: a frozen rig wakes up
+/// only once it is back inside this fraction of the freeze distance, so a
+/// creature pacing along the boundary does not flip archetypes every frame.
+const ANIM_FREEZE_HYSTERESIS: f32 = 0.9;
+
+/// The graph handle of a rig parked by [`freeze_distant_animation`].
+///
+/// Bevy's `animate_targets` evaluates every curve of every bone of every
+/// player each frame — `paused` included, it only stops the clock — and the
+/// written bone transforms then dirty `transform_propagate` and the skin
+/// upload. Taking the `AnimationGraphHandle` away is what makes a rig cost
+/// nothing: its targets bail on the first lookup and the player's clock
+/// stops, so the clip resumes where it left off when the handle comes back.
+#[derive(Debug, Component)]
+pub struct FrozenAnimation(AnimationGraphHandle);
+
+/// Distance past which a character's rig stops animating.
+fn freeze_distance(activation: Option<&crate::luau::ScriptActivation>) -> f32 {
+    activation
+        .map_or(0.0, |a| a.radius)
+        .max(ANIM_FREEZE_MIN_DISTANCE)
+}
+
+/// Whether a rig should be frozen this frame, given its current state.
+fn should_freeze(frozen: bool, distance: f32, freeze_at: f32, visible: bool) -> bool {
+    if !visible {
+        return true;
+    }
+    if frozen {
+        distance > freeze_at * ANIM_FREEZE_HYSTERESIS
+    } else {
+        distance > freeze_at
+    }
+}
+
+/// Parks the rigs of characters far from the hero or hidden by the distance
+/// cull ([`crate::render_lod::CullDistance`]), and wakes them back up.
+///
+/// With ~300 creatures in the `simple-rpg`, of which a few dozen are ever
+/// near the hero, the parked rigs were the bulk of `animate_targets` and of
+/// the ~4 ms `transform_propagate` — every bone of every creature on the map
+/// rewritten every frame, for creatures nobody could see move.
+#[allow(clippy::type_complexity)]
+pub fn freeze_distant_animation(
+    mut commands: Commands,
+    hero: Query<&GlobalTransform, With<crate::player::Player>>,
+    characters: Query<
+        (
+            &GlobalTransform,
+            &CharacterAnimator,
+            Option<&crate::luau::ScriptActivation>,
+        ),
+        Without<crate::player::Player>,
+    >,
+    rigs: Query<(
+        Option<&AnimationGraphHandle>,
+        Option<&FrozenAnimation>,
+        Option<&InheritedVisibility>,
+    )>,
+) {
+    let Ok(hero) = hero.single() else {
+        return;
+    };
+    let hero_pos = hero.translation();
+    for (transform, animator, activation) in &characters {
+        let Ok((graph, frozen, visibility)) = rigs.get(animator.player) else {
+            continue;
+        };
+        let visible = visibility.is_none_or(|v| v.get());
+        let distance = transform.translation().distance(hero_pos);
+        let freeze = should_freeze(frozen.is_some(), distance, freeze_distance(activation), visible);
+        match (freeze, graph, frozen) {
+            (true, Some(graph), None) => {
+                commands
+                    .entity(animator.player)
+                    .remove::<AnimationGraphHandle>()
+                    .insert(FrozenAnimation(graph.clone()));
+            }
+            (false, None, Some(FrozenAnimation(graph))) => {
+                commands
+                    .entity(animator.player)
+                    .remove::<FrozenAnimation>()
+                    .insert(graph.clone());
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Registers clip binding, action arbitration and the motion drivers.
 #[derive(Default)]
 pub struct AnimationPlugin;
@@ -1134,6 +1227,7 @@ impl bevy::app::Plugin for AnimationPlugin {
                 // the airborne state was a frame stale at random.
                 drive_player_animation.after(crate::player::player_movement),
                 drive_character_animation,
+                freeze_distant_animation,
             )
                 .chain(),
         );
@@ -1143,6 +1237,57 @@ impl bevy::app::Plugin for AnimationPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_freeze_distance_never_drops_below_the_floor() {
+        assert_eq!(freeze_distance(None), ANIM_FREEZE_MIN_DISTANCE);
+        let near = crate::luau::ScriptActivation { radius: 45.0 };
+        assert_eq!(freeze_distance(Some(&near)), ANIM_FREEZE_MIN_DISTANCE);
+        let far = crate::luau::ScriptActivation { radius: 120.0 };
+        assert_eq!(freeze_distance(Some(&far)), 120.0);
+    }
+
+    #[test]
+    fn test_should_freeze_has_hysteresis_and_obeys_visibility() {
+        // Hidden by the distance cull: frozen regardless of distance.
+        assert!(should_freeze(false, 1.0, 70.0, false));
+        // Awake rig freezes only past the edge.
+        assert!(!should_freeze(false, 69.0, 70.0, true));
+        assert!(should_freeze(false, 71.0, 70.0, true));
+        // Frozen rig inside the band stays frozen, wakes past it.
+        assert!(should_freeze(true, 65.0, 70.0, true));
+        assert!(!should_freeze(true, 60.0, 70.0, true));
+    }
+
+    #[test]
+    fn test_freeze_parks_and_restores_the_graph_handle() {
+        let mut app = App::new();
+        app.add_systems(Update, freeze_distant_animation);
+        app.world_mut()
+            .spawn((crate::player::Player::default(), GlobalTransform::default()));
+        let graph = AnimationGraphHandle(Handle::default());
+        let rig = app.world_mut().spawn(graph).id();
+        let creature = app
+            .world_mut()
+            .spawn((
+                GlobalTransform::from_translation(Vec3::new(200.0, 0.0, 0.0)),
+                animator(&["idle"]),
+            ))
+            .id();
+        app.world_mut()
+            .get_mut::<CharacterAnimator>(creature)
+            .unwrap()
+            .player = rig;
+        app.update();
+        assert!(app.world().get::<AnimationGraphHandle>(rig).is_none(), "far rig parked");
+        assert!(app.world().get::<FrozenAnimation>(rig).is_some());
+        app.world_mut()
+            .entity_mut(creature)
+            .insert(GlobalTransform::from_translation(Vec3::new(10.0, 0.0, 0.0)));
+        app.update();
+        assert!(app.world().get::<AnimationGraphHandle>(rig).is_some(), "near rig restored");
+        assert!(app.world().get::<FrozenAnimation>(rig).is_none());
+    }
 
     /// Fraction of a stride the feet slide over the ground: the ratio between
     /// what the body travels and what the clip, at its current playback rate,

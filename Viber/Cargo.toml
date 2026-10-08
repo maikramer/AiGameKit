@@ -2,7 +2,7 @@
 name = "viber"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.96"
 description = "Viber — native Bevy engine for AiGameKit declarative world XML"
 license = "MIT"
 repository = "https://github.com/maikeu/AiGameKit"
@@ -15,7 +15,11 @@ base64 = "0.22"
 # `basis-universal` transcodes the KTX2/UASTC textures the asset pipeline
 # bakes into its GLBs (`KHR_texture_basisu`); without it those textures are
 # "Missing data" and the whole GLB fails to load.
-bevy = { version = "0.19", features = [
+# 0.20.0-rc.2 (tag GitHub 2026-09-25) ainda NÃO estava no crates.io no dia da
+# mudança — o `[patch.crates-io]` no fim do ficheiro resolve esta dependência
+# (e todos os subcrates) para o tag git `v0.20.0-rc.2`. Remover a tabela
+# quando o rc.2 sair no crates.io.
+bevy = { version = "0.20.0-rc.2", features = [
     "bevy_remote",
     "wav",
     "jpeg",
@@ -30,6 +34,9 @@ bevy = { version = "0.19", features = [
     # PCSS (soft shadows físicos): soft_shadow_size nas luzes — ver spawn.rs.
     # Experimental no 0.19, exigido explícito pelo bevy_pbr.
     "experimental_pbr_pcss",
+    # `ScheduleData` (schedule_data::serde) alimenta a tab Sistemas do profiler
+    # com os reads/writes por sistema — os mesmos dados do BRP `schedule.graph`.
+    "bevy_dev_tools",
 ] }
 clap = { version = "4.6", features = ["derive"] }
 
@@ -45,8 +52,14 @@ serde_yaml = "0.9"
 flate2 = "1"
 # `async-collider` gives `Collider::from_bevy_mesh` (trimesh/convex colliders
 # baked from glTF meshes); `debug-render-3d` draws collider wireframes so
-# collision can be verified in a screenshot.
-bevy_rapier3d = { version = "0.36", features = ["async-collider", "debug-render-3d"] }
+# collision can be verified in a screenshot. Vendored em `vendor/bevy_rapier3d`
+# (port 0.20 — ver vendor/FORKS_020.md); sem `picking-backend`/`to-bevy-mesh`
+# (a engine não os usa e o picking mudou de API no 0.20).
+bevy_rapier3d = { path = "vendor/bevy_rapier3d", default-features = false, features = [
+    "dim3",
+    "async-collider",
+    "debug-render-3d",
+] }
 
 # Luau scripting runtime (`src/luau.rs`). `luau` = sandboxed Luau VM;
 # `vendored` builds the VM from source (needs a C++ toolchain);
@@ -79,14 +92,17 @@ notify = "8"
 #   landmass_rerecast — a ponte entre os dois.
 # Sem o editor nem o debug plugin: o `bevy_rerecast` default arrasta uma UI
 # de editor que esta engine não usa.
-bevy_rerecast = { version = "0.5", default-features = false, features = ["bevy_mesh"] }
-bevy_landmass = "0.12"
-landmass_rerecast = "0.3"
-bevy_kira_audio = { version = "0.26", features = ["ogg"] }
+bevy_rerecast = { path = "vendor/bevy_rerecast", default-features = false, features = ["bevy_mesh"] }
+bevy_landmass = { path = "vendor/bevy_landmass" }
+landmass_rerecast = { path = "vendor/landmass_rerecast" }
+bevy_kira_audio = { version = "0.27.0-rc.1", features = ["ogg"] }
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
 naga = { version = "29.0.4", features = ["wgsl-in"] }
+# Harnesses de shader (tests/common/mod.rs) compilam WESL com a MESMA versão
+# que o bevy 0.20 puxa — stubs de import no sítio do naga_oil antigo.
+wesl = "0.4.2"
 tempfile = "3"
 
 # ---------------------------------------------------------------- profiles
@@ -111,3 +127,39 @@ opt-level = 3
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+# ---------------------------------------------------------------- patches
+# `rerecast` 0.4 com dois fixes de robustez (vendor/rerecast/VIBER_PATCH.md):
+# uma triangulação de contorno falhada deixava de abortar a navmesh INTEIRA
+# (o spawn do simple-rpg nunca teve navmesh — todas as criaturas em linha
+# recta) e o comprimento das diagonais deixou de dar a volta em `u16`.
+[patch.crates-io]
+rerecast = { path = "vendor/rerecast" }
+# Bevy 0.20.0-rc.2 pelo tag git (aín não publicado no crates.io) — os
+# subcrates redirecionados são TODOS os que os crates do ecossistema
+# (bevy_kira_audio 0.27-rc.1, forks de vendor/) puxam do registry; assim
+# existe uma só versão de bevy_ecs/bevy_render na árvore. REMOVER o bloco
+# `bevy*` quando o rc.2 sair no crates.io (trocar por bump de versão).
+bevy = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_app = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_asset = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_camera = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_color = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_curve = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_derive = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_ecs = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_gizmos = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_light = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_log = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_material = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_math = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_mesh = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_pbr = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_platform = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_reflect = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_render = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_shape = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_tasks = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_time = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_transform = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
+bevy_utils = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
