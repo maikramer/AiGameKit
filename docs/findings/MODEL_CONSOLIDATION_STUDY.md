@@ -1,6 +1,6 @@
 # Consolidação de modelos — inventário e plano de redução
 
-**Data:** 2026-10-08 · **Estado:** estudo concluído, **nada executado ainda** — cortes aguardam aprovação.
+**Data:** 2026-10-08 · **Estado:** ✅ **EXECUTADO** (tiers 1+2+3a + unificações de vendor; ver §8).
 
 Objetivo: reduzir o número de modelos/variantes em uso, o espaço em disco e a
 complexidade de vendors. Método: `du` sobre todos os caches (`~/.cache/huggingface`,
@@ -145,3 +145,42 @@ se o token HF perder acesso SA3 (re-download continua possível com token válid
 3. `vramd doctor` após os cortes para confirmar que nenhum backend perdeu pesos
    (nenhum cortado está em `backends.yaml`/calibrações).
 4. Venvs/target: iniciativa à parte, com janela dedicada.
+
+## 8. Execução (2026-10-08) — registo
+
+**Discos cortados (~42,5 GB):** hub HF 166→125 GB (Sana ×2, t5-base, SA Open 1.0 +
+small, Disty0 klein-SDNQ, ai-forever Real-ESRGAN) + `motius-t2mgpt-humanml3d` 1,3 GB +
+zips Quaternius 34 MB + log residual text2icon. HY-Motion full **mantido** (alavanca
+`--quality highest`). Nota de infra: parte dos blobs HF era **propriedade de root**
+(processo antigo correu como root) — precisou `sudo rm`; o hub vive no mount
+`/media/maikeu/b1e7…` (mesmo disco do checkout), não em `/home`.
+
+**Commits (main):**
+- `f14d8f2d` Text2Sound: aliases/specs/helps legados Open removidos; ids SA3 canónicos
+  exportados por `aigamekit_shared.quality` (`SA3_MUSIC_MODEL_ID`/`SA3_EFFECTS_MODEL_ID`),
+  `models.py` importa-os — fim do sync manual.
+- `8db6f77a` Motion3D/Shared: alias `T2MGPTPipeline`, footprints `motius-t2mgpt` e
+  `hunyuan3d-2.1-dit` removidos (o registry do pacote PyPI vramd mantém as chaves
+  dele para payloads antigos — sem impacto).
+- `26595db6` Text2D: alternativa Disty0/FLUX.2-klein-4B-SDNQ removida de
+  cli/tests/READMEs/TROUBLESHOOTING/SKILL (a env `TEXT2D_MODEL_ID` genérica fica).
+- `472f592b` Paint3D: `texture_upscale` usa `ensure_realesrgan_ckpt()` (x4plus único).
+- `05beaaaf` Text3D/AiGameKitLab: default morto do vendor bg-remover → BiRefNet;
+  `pre_quantize.py` duplicado apagado.
+- `45e655b6` Shared: fetch itch valida marker de `extracted/` antes do zip — zips
+  apagáveis sem re-download (novo teste offline).
+
+**Desvios do plano original (verificação de código):**
+1. **Real-ESRGAN — direção invertida**: os dois .pth são treinos **diferentes**
+   (702/702 tensors divergem; ai-forever é state_dict cru sem `params_ema`). Unificar
+   no HF trocaria os pesos do enhance multiview (default ON) e exigia editar vendored
+   do-not-modify. Ficou **um só**: `RealESRGAN_x4plus.pth` (xinntao) para upscale e
+   enhance.
+2. **Rename do footprint `stable-audio-open` → SKIP**: o registry do vramd PyPI
+   (externo) não tem `stable-audio-3`; rename só no monorepo degrada o admit para o
+   fallback 8 GiB. Fica pendente de release coordenada do vramd.
+
+**Testes:** Text2Sound 619 ✓ · Shared 1313 ✓ · Motion3D 135 ✓ · Text2D 219 ✓ ·
+Paint3D 254 ✓ · AiGameKitLab 274 ✓ · Text3D 538 ✓ + **7 falhas pré-existentes**
+(octree ladder/`max_octree_for_vram` — confirmadas por stash antes/depois, WIP alheio).
+`vramd doctor` pós-corte: sem perdas (vramd estava parado; auto-arranca no próximo uso).
