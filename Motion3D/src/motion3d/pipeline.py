@@ -276,5 +276,4 @@ def _reanchor_joints_to_transl(joints: np.ndarray, transl: np.ndarray) -> np.nda
     return joints + delta[:, None, :]
 
 
-T2MGPTPipeline = HYMotionPipeline
 ModelName = Literal["lite", "full"]

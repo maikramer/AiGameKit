@@ -332,7 +332,6 @@ def test_hw_auto(ev: str, v: str, exp: bool) -> None:
         "flux-klein-4b",
         "flux-klein-9b",
         "flux-dev-uint4",
-        "hunyuan3d-2.1-dit",
         "hunyuan3d-omni",
         "hunyuan3d-part",
         "hunyuan-paint",

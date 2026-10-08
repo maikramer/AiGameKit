@@ -130,7 +130,6 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     # fp16; ativação a 1024² com circular padding. Calibração 6g (2026-08):
     # peak 3392 MiB full-GPU fp16.
     "sd15-base": ModelFootprint(2.4, 1.2, 1.8, architecture="sd"),
-    "hunyuan3d-2.1-dit": ModelFootprint(6.5, 1.5, 5.0, architecture="hunyuan3d"),
     # Hunyuan3D-Omni (~3.3B): DiT + ShapeVAE + OmniEncoder/DINOv2; README ~10 GB fp16.
     "hunyuan3d-omni": ModelFootprint(10.0, 2.0, 6.0, architecture="hunyuan3d"),
     # Hunyuan3D-Part: DiT ~3.3 + conditioner ~0.9 + ShapeVAE ~0.3 + P3-SAM ~0.2 + overhead.
@@ -142,8 +141,6 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     # Pegadas = DiT residente + act (não soma Qwen+DiT ~24 GiB).
     "hy-motion-lite": ModelFootprint(1.2, 1.2, 1.0, architecture="dit"),
     "hy-motion-full": ModelFootprint(2.5, 1.5, 2.0, architecture="dit"),
-    # Legacy Motius key (retired path) — keep for old payloads.
-    "motius-t2mgpt": ModelFootprint(1.5, 0.8, 2.5, architecture="dit"),
 }
 
 # Footprint genérico de fallback (modelo médio ~8 GiB) quando a chave é desconhecida.
@@ -154,7 +151,7 @@ def get_footprint(key: str) -> ModelFootprint:
     """Consulta o registry de pegadas por chave canónica.
 
     Args:
-        key: Chave do modelo (ex: ``"flux-klein-9b"``, ``"hunyuan3d-2.1-dit"``).
+        key: Chave do modelo (ex: ``"flux-klein-9b"``, ``"hunyuan-paint"``).
 
     Returns:
         :class:`ModelFootprint` do registry, ou um footprint genérico de fallback

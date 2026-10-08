@@ -152,7 +152,7 @@ tools:
     folder: Motion3D
     cli_name: motion3d
     python_module: motion3d
-    description: "Text-to-motion Motius T2M-GPT (HumanML3D) → NPZ / GLB (bpy)"
+    description: "Text-to-motion HY-Motion-1.0 (Lite/Full) → NPZ / GLB (bpy)"
     min_python: [3, 13]
     needs_pytorch: true
     # `motion3d apply-rigged` calls animator3d.retarget in-process.

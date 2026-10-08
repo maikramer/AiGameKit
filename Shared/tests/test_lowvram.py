@@ -169,8 +169,8 @@ class TestFootprintRegistry:
         assert fp.architecture == "flux"
 
     def test_hunyuan_footprint_has_architecture(self) -> None:
-        fp = get_footprint("hunyuan3d-2.1-dit")
-        assert fp.architecture == "hunyuan3d"
+        fp = get_footprint("hunyuan-paint")
+        assert fp.architecture == "unet"
 
     def test_hunyuan_omni_footprint(self) -> None:
         fp = get_footprint("hunyuan3d-omni")
