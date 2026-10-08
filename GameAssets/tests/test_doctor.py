@@ -31,27 +31,27 @@ def _tool_bin_map(mapping: dict[str, str | None]):
 
 class TestCheckTools:
     def test_all_installed_ok(self) -> None:
-        with patch.object(doctor, "_tool_bin", _tool_bin_map({})):
+        with patch.object(doctor, "tool_bin", _tool_bin_map({})):
             checks = doctor.check_tools()
         assert checks[0].status == "ok"
         assert checks[1].status == "ok"
 
     def test_missing_core_fails_with_fix(self) -> None:
-        with patch.object(doctor, "_tool_bin", _tool_bin_map({"text3d": None, "paint3d": None})):
+        with patch.object(doctor, "tool_bin", _tool_bin_map({"text3d": None, "paint3d": None})):
             checks = doctor.check_tools()
         assert checks[0].status == "fail"
         assert "text3d" in checks[0].detail and "paint3d" in checks[0].detail
         assert "install.sh" in checks[0].fix
 
     def test_missing_dream_optional_warns(self) -> None:
-        with patch.object(doctor, "_tool_bin", _tool_bin_map({"skymap2d": None})):
+        with patch.object(doctor, "tool_bin", _tool_bin_map({"skymap2d": None})):
             checks = doctor.check_tools()
         assert checks[1].status == "warn"
         assert "skymap2d" in checks[1].detail
         assert "install.sh" in checks[1].fix
 
     def test_gameassets_itself_is_not_required(self) -> None:
-        with patch.object(doctor, "_tool_bin", _tool_bin_map({"gameassets": None})):
+        with patch.object(doctor, "tool_bin", _tool_bin_map({"gameassets": None})):
             checks = doctor.check_tools()
         assert checks[0].status == "ok"
 
@@ -81,7 +81,7 @@ class TestCheckVramdGpu:
 
 class TestCheckCompression:
     def test_text3d_missing_warns(self) -> None:
-        with patch.object(doctor, "_tool_bin", _tool_bin_map({"text3d": None})):
+        with patch.object(doctor, "tool_bin", _tool_bin_map({"text3d": None})):
             checks = doctor.check_compression()
         assert checks[0].status == "warn"
         assert "install.sh text3d" in checks[0].fix
@@ -89,7 +89,7 @@ class TestCheckCompression:
     def test_doctor_passes(self) -> None:
         proc = subprocess.CompletedProcess([], 0, stdout="all good", stderr="")
         with (
-            patch.object(doctor, "_tool_bin", _tool_bin_map({})),
+            patch.object(doctor, "tool_bin", _tool_bin_map({})),
             patch.object(doctor.subprocess, "run", return_value=proc),
         ):
             checks = doctor.check_compression()
@@ -98,7 +98,7 @@ class TestCheckCompression:
     def test_doctor_failing_degrades_to_warn_with_tail(self) -> None:
         proc = subprocess.CompletedProcess([], 1, stdout="ktx: MISSING\nmeshopt: ok", stderr="")
         with (
-            patch.object(doctor, "_tool_bin", _tool_bin_map({})),
+            patch.object(doctor, "tool_bin", _tool_bin_map({})),
             patch.object(doctor.subprocess, "run", return_value=proc),
         ):
             checks = doctor.check_compression()
@@ -107,7 +107,7 @@ class TestCheckCompression:
 
     def test_timeout_warns(self) -> None:
         with (
-            patch.object(doctor, "_tool_bin", _tool_bin_map({})),
+            patch.object(doctor, "tool_bin", _tool_bin_map({})),
             patch.object(doctor.subprocess, "run", side_effect=subprocess.TimeoutExpired("x", 1)),
         ):
             checks = doctor.check_compression()
@@ -132,7 +132,7 @@ class TestCheckDreamLlm:
     def test_openai_key_wins(self) -> None:
         with (
             patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False),
-            patch.object(doctor, "_ollama_reachable", return_value=False),
+            patch.object(doctor, "ollama_reachable", return_value=False),
         ):
             checks = doctor.check_dream_llm()
         assert checks[0].status == "ok"
@@ -141,7 +141,7 @@ class TestCheckDreamLlm:
     def test_ollama_local(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("OPENAI_API_KEY", None)
-            with patch.object(doctor, "_ollama_reachable", return_value=True):
+            with patch.object(doctor, "ollama_reachable", return_value=True):
                 checks = doctor.check_dream_llm()
         assert checks[0].status == "ok"
         assert "ollama" in checks[0].detail
@@ -149,7 +149,7 @@ class TestCheckDreamLlm:
     def test_no_llm_falls_back_with_fix(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("OPENAI_API_KEY", None)
-            with patch.object(doctor, "_ollama_reachable", return_value=False):
+            with patch.object(doctor, "ollama_reachable", return_value=False):
                 checks = doctor.check_dream_llm()
         assert checks[0].status == "warn"
         assert "OPENAI_API_KEY" in checks[0].fix
@@ -157,7 +157,7 @@ class TestCheckDreamLlm:
     def test_hf_token_absent_warns(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("HF_TOKEN", None)
-            with patch.object(doctor, "_ollama_reachable", return_value=False):
+            with patch.object(doctor, "ollama_reachable", return_value=False):
                 checks = doctor.check_dream_llm()
         assert checks[1].status == "warn"
         assert "gated" in checks[1].detail
@@ -166,11 +166,11 @@ class TestCheckDreamLlm:
 class TestOllamaReachable:
     def test_unreachable(self) -> None:
         with patch.object(doctor.urllib.request, "urlopen", side_effect=OSError("down")):
-            assert doctor._ollama_reachable() is False
+            assert doctor.ollama_reachable() is False
 
     def test_reachable(self) -> None:
         with patch.object(doctor.urllib.request, "urlopen", return_value=object()):
-            assert doctor._ollama_reachable() is True
+            assert doctor.ollama_reachable() is True
 
 
 class TestCheckDisk:

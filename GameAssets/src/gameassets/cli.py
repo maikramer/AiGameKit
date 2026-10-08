@@ -935,7 +935,22 @@ def dream_create_cmd(
     DESCRIPTION é a descrição do jogo em linguagem natural.
     """
     from .dream.planner import apply_seed, plan_game
+    from .dream.preflight import dream_preflight_issues
     from .dream.runner import run_dream
+
+    preflight = dream_preflight_issues(
+        provider=llm_provider,
+        api_key=llm_api_key,
+        with_sky=with_sky,
+        with_audio=with_audio,
+        terrain=terrain,
+        dry_run=dry_run,
+    )
+    if preflight:
+        console.print("[bold]Pré-checks do dream:[/bold]")
+        for line in preflight:
+            console.print(f"  [yellow]![/yellow] {line}")
+        console.print()
 
     bundle = load_presets_bundle(presets_local)
     preset_names = sorted(bundle.keys())
@@ -958,7 +973,8 @@ def dream_create_cmd(
     if plan.source == "fallback":
         console.print(
             f"[yellow]LLM indisponível — a usar plano fallback (keyword-based).[/yellow]\n"
-            f"  Motivo: {plan.source_detail}"
+            f"  Motivo: {plan.source_detail}\n"
+            f"  Para planos melhores: export OPENAI_API_KEY=… (ou --llm-provider ollama local)"
         )
     elif plan.source == "cache":
         console.print(f"[cyan]Plano em cache[/cyan] — {plan.source_detail}")
@@ -1055,6 +1071,13 @@ def dream_refine_cmd(
     """
     from .dream.emitter import emit_all
     from .dream.planner import apply_seed, load_plan_path, refine_plan
+    from .dream.preflight import llm_issues
+
+    llm_warnings = llm_issues(llm_provider, llm_api_key)
+    if llm_warnings:
+        for line in llm_warnings:
+            console.print(f"  [yellow]![/yellow] {line}")
+        console.print()
 
     if not plan_json.is_file():
         console.print(f"[red]Plano não encontrado:[/red] {plan_json}")

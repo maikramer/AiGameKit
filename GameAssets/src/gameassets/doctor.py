@@ -76,7 +76,7 @@ class DoctorCheck:
         return {"ok": "✓", "warn": "!", "fail": "✗"}.get(self.status, "?")
 
 
-def _tool_bin(tool: str) -> str | None:
+def tool_bin(tool: str) -> str | None:
     cli = TOOL_CLIS[tool]
     try:
         return str(resolve_binary(cli.upper().replace("-", "_") + "_BIN", cli))
@@ -94,7 +94,7 @@ def _run_version(cmd: list[str], timeout: float = 10.0) -> str | None:
 
 def check_tools() -> list[DoctorCheck]:
     """Ferramentas do perfil core + extras opcionais do dream."""
-    missing_core = [t for t in CORE_TOOLS if t != "gameassets" and _tool_bin(t) is None]
+    missing_core = [t for t in CORE_TOOLS if t != "gameassets" and tool_bin(t) is None]
     if missing_core:
         check = DoctorCheck(
             name=f"Ferramentas do perfil core ({len(CORE_TOOLS)})",
@@ -109,7 +109,7 @@ def check_tools() -> list[DoctorCheck]:
             detail="todas resolvíveis",
         )
 
-    missing_optional = [t for t in DREAM_OPTIONAL_TOOLS if _tool_bin(t) is None]
+    missing_optional = [t for t in DREAM_OPTIONAL_TOOLS if tool_bin(t) is None]
     if missing_optional:
         names = ", ".join(missing_optional)
         optional = DoctorCheck(
@@ -154,7 +154,7 @@ def check_vramd_gpu() -> list[DoctorCheck]:
 
 def check_compression() -> list[DoctorCheck]:
     """Compressão GLB (KTX2/meshopt/npx) — agrega o ``text3d doctor``."""
-    if _tool_bin("text3d") is None:
+    if tool_bin("text3d") is None:
         return [
             DoctorCheck(
                 name="Compressão GLB (KTX2/meshopt)",
@@ -163,7 +163,7 @@ def check_compression() -> list[DoctorCheck]:
                 fix="./install.sh text3d",
             )
         ]
-    text3d_bin = _tool_bin("text3d")
+    text3d_bin = tool_bin("text3d")
     try:
         proc = subprocess.run(
             [text3d_bin, "doctor"],
@@ -216,7 +216,7 @@ def check_node_bun() -> list[DoctorCheck]:
     return checks
 
 
-def _ollama_reachable() -> bool:
+def ollama_reachable() -> bool:
     host = os.environ.get("OLLAMA_HOST") or "http://localhost:11434"
     if "://" not in host:
         host = f"http://{host}"
@@ -231,7 +231,7 @@ def check_dream_llm() -> list[DoctorCheck]:
     """Provider LLM do ``gameassets dream`` (sem chave degrada para fallback)."""
     if os.environ.get("OPENAI_API_KEY"):
         provider = DoctorCheck(name="LLM do dream", status="ok", detail="provider openai (OPENAI_API_KEY)")
-    elif _ollama_reachable():
+    elif ollama_reachable():
         provider = DoctorCheck(
             name="LLM do dream",
             status="ok",
