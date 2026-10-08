@@ -13,7 +13,7 @@ description: Gera imagens 2D a partir de texto com FLUX.2 Klein (SDNQ via Disty0
 
 ## O que é
 
-CLI **text-to-2D** com [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) em quantização **SDNQ** ([Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic)), pensado para GPUs modestas (**CPU offload** via hw-auto / modo memory-efficient).
+CLI **text-to-2D** com [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) em quantização **SDNQ** runtime ([Disty0/sdnq](https://github.com/Disty0/sdnq)), pensado para GPUs modestas (**CPU offload** via hw-auto / modo memory-efficient).
 
 ## Pré-requisitos
 

@@ -8,7 +8,7 @@
 
 Text2D is a CLI tool that generates images from text prompts using the FLUX.2 Klein model in SDNQ (4-bit dynamic quantization). It integrates with the AiGameKit monorepo pipeline and supports quality presets, multi-GPU inference, and batch generation.
 
-**Default model:** [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (low VRAM, public) or [FLUX.2 Klein 9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (high VRAM, **gated** — accept terms on the Hub). Both load the official BFL fp16 base; SDNQ quantization is applied at **runtime** (no pre-quantized checkpoint by default). Pre-quantized [Disty0 mirrors](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) are optional via `TEXT2D_MODEL_ID`.
+**Default model:** [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (low VRAM, public) or [FLUX.2 Klein 9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (high VRAM, **gated** — accept terms on the Hub). Both load the official BFL fp16 base; SDNQ quantization is applied at **runtime** (no pre-quantized checkpoint by default).
 
 ## Requirements
 
@@ -207,7 +207,6 @@ Output:
 |----|-------|
 | `black-forest-labs/FLUX.2-klein-9B` | Default (high VRAM), fp16 base + SDNQ runtime quantization (**gated** — accept terms on Hub) |
 | `black-forest-labs/FLUX.2-klein-4B` | Auto-selected by hw-auto on small GPUs (<7.5 GB), fp16 base + SDNQ runtime (public) |
-| `Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic` | Optional pre-quantized checkpoint via `TEXT2D_MODEL_ID` (declares `flux-non-commercial-license`) |
 
 > GGUF weights target ComfyUI-GGUF workflows, not this CLI.
 
@@ -351,4 +350,4 @@ Text2D/
 ## License
 
 - **Code:** MIT — [LICENSE](LICENSE).
-- **Weights:** default = official BFL fp16 base ([FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) Apache 2.0, public; [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) **gated**) with SDNQ runtime quantization (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Optional pre-quantized [Disty0 mirrors](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) declare `flux-non-commercial-license`. Full license table: [AiGameKit/README.md — Licenses](../README.md).
+- **Weights:** default = official BFL fp16 base ([FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) Apache 2.0, public; [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) **gated**) with SDNQ runtime quantization (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Full license table: [AiGameKit/README.md — Licenses](../README.md).

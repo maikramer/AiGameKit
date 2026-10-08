@@ -30,4 +30,4 @@ def test_models():
     runner = CliRunner()
     r = runner.invoke(cli, ["models"])
     assert r.exit_code == 0
-    assert "Disty0" in r.output
+    assert "FLUX.2-klein" in r.output

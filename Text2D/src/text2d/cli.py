@@ -904,10 +904,6 @@ def models_cmd() -> None:
         "black-forest-labs/FLUX.2-klein-4B",
         "Padrão hw-auto (GPU apertada): base fp16 + SDNQ runtime, 4B parâmetros (público)",
     )
-    t.add_row(
-        "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic",
-        "Alternativa: checkpoint pré-quantizado via TEXT2D_MODEL_ID (flux-non-commercial-license)",
-    )
     console.print(t)
     console.print(
         Panel(

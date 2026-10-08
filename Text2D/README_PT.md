@@ -2,7 +2,7 @@
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
-CLI de **text-to-imagem** com [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) em quantização **SDNQ** ([Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic)), no mesmo espírito do Text3D (Click + Rich, `src/`, scripts).
+CLI de **text-to-imagem** com [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) em quantização **SDNQ** runtime ([Disty0/sdnq](https://github.com/Disty0/sdnq)), no mesmo espírito do Text3D (Click + Rich, `src/`, scripts).
 
 ## Requisitos
 
@@ -17,7 +17,7 @@ Auto-detecção de hardware (`--hw-auto`, ligada por defeito): GPUs pequenas gan
 **Group offload + CUDA streams (defeito ON):** sempre que o full-GPU não teria folga (FLUX klein int4 ficaria a 83–91% do orçamento em GPUs 8–12 GB), o planner engaja group offload com streams — os pesos streamam por grupos e o pico cai para ≈ ativação, com VAE tiling + attention slicing como chunks menores. Quantização 4 bits por defeito; int3/int2 só em GPUs minúsculas (<4 GB), como último recurso. Kill-switch: `--no-group-offload` ou `TEXT2D_GROUP_OFFLOAD=0` (global: `AIGAMEKIT_GROUP_OFFLOAD=0`).
 | Disco   | ~8 GB  | Cache HF + pesos SDNQ (~2,5 GB em disco) |
 
-**Licença dos pesos:** o default é a base oficial [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (**Apache 2.0**, download público) / [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (**gated** — aceitar termos BFL + `HF_TOKEN`) com quantização **SDNQ em runtime** (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Checkpoints pré-quantizados [Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) são opcionais via `TEXT2D_MODEL_ID` (declaram `flux-non-commercial-license`). Resumo: [Licenças no monorepo](../README_PT.md).
+**Licença dos pesos:** o default é a base oficial [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (**Apache 2.0**, download público) / [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (**gated** — aceitar termos BFL + `HF_TOKEN`) com quantização **SDNQ em runtime** (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Resumo: [Licenças no monorepo](../README_PT.md).
 
 ## Instalação
 
@@ -171,4 +171,4 @@ pytest tests/ -v
 ## Licença
 
 - **Código:** MIT — [LICENSE](LICENSE).
-- **Pesos:** default = base oficial BFL fp16 ([FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) Apache 2.0, público; [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) **gated**) + quantização SDNQ runtime (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Mirrors pré-quantizados [Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) declaram `flux-non-commercial-license`. Tabela completa: [AiGameKit/README_PT.md — Licenças](../README_PT.md).
+- **Pesos:** default = base oficial BFL fp16 ([FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) Apache 2.0, público; [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) **gated**) + quantização SDNQ runtime (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Tabela completa: [AiGameKit/README_PT.md — Licenças](../README_PT.md).
