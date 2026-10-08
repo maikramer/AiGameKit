@@ -95,11 +95,13 @@ def test_get_spec_custom_id() -> None:
     assert "Custom" in s.label
 
 
-def test_get_spec_open_small_heuristic() -> None:
-    from text2sound.models import SPEC_LEGACY_EFFECTS, get_spec
+def test_get_spec_legacy_open_falls_to_fallback() -> None:
+    from text2sound.models import get_spec
 
     s = get_spec("stabilityai/stable-audio-open-small")
-    assert s.hf_id == SPEC_LEGACY_EFFECTS.hf_id
+    assert s.hf_id == "stabilityai/stable-audio-open-small"
+    assert s.max_seconds == 47.0
+    assert s.default_sampler == "pingpong"
 
 
 def test_get_spec_sa3_heuristics() -> None:

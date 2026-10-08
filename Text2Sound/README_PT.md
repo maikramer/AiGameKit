@@ -9,7 +9,7 @@ CLI para geração de áudio estéreo a 44.1 kHz a partir de prompts de texto, c
 | Música / ambientes longos | [Stable Audio 3 Small Music](https://huggingface.co/stabilityai/stable-audio-3-small-music) | até ~120 s (variável) | `--profile music` (padrão) |
 | Efeitos / SFX curtos | [Stable Audio 3 Small SFX](https://huggingface.co/stabilityai/stable-audio-3-small-sfx) | até ~30 s | `--profile effects` |
 
-Ambos usam por defeito `steps=8`, `cfg_scale=1.0`, sampler `pingpong` (difusão destilada — o guidance está cozido no modelo). Os checkpoints Stable Audio Open legados continuam via `--model open-1.0` / `--model open-small`.
+Ambos usam por defeito `steps=8`, `cfg_scale=1.0`, sampler `pingpong` (difusão destilada — o guidance está cozido no modelo).
 
 ### Loops BGM seamless
 
@@ -86,7 +86,6 @@ text2sound generate "rain and thunder" --seed 42 --cfg-scale 8
 
 - **`--profile music`** (padrão): `stabilityai/stable-audio-3-small-music`
 - **`--profile effects`**: `stabilityai/stable-audio-3-small-sfx`
-- Legado: `--model open-1.0` / `--model open-small`
 - **`--model`** tem prioridade sobre o perfil: aceita o ID HF completo ou aliases `music`, `full`, `effects`, `small`, `sfx`
 
 ```bash

@@ -10,8 +10,6 @@ import pytest
 from text2sound import presets as presets_mod
 from text2sound.hardware import profile_from_specs
 from text2sound.models import (
-    LEGACY_MODEL_EFFECTS_ID,
-    LEGACY_MODEL_MUSIC_ID,
     MODEL_EFFECTS_ID,
     MODEL_MUSIC_ID,
     get_spec,
@@ -159,14 +157,19 @@ def test_list_presets_count_and_sorted() -> None:
         ("sfx", MODEL_EFFECTS_ID),
         ("stabilityai/stable-audio-3-small-music", MODEL_MUSIC_ID),
         ("stabilityai/stable-audio-3-small-sfx", MODEL_EFFECTS_ID),
-        ("open-1.0", LEGACY_MODEL_MUSIC_ID),
-        ("open-small", LEGACY_MODEL_EFFECTS_ID),
-        ("stabilityai/stable-audio-open-1.0", LEGACY_MODEL_MUSIC_ID),
-        ("stabilityai/stable-audio-open-small", LEGACY_MODEL_EFFECTS_ID),
+        ("MUSIC", MODEL_MUSIC_ID),
+        (" music ", MODEL_MUSIC_ID),
+        ("SFX", MODEL_EFFECTS_ID),
     ],
 )
 def test_resolve_model_id(user: str | None, expected: str) -> None:
     assert resolve_model_id(user) == expected
+
+
+def test_resolve_model_id_legacy_open_removed() -> None:
+    for alias in ("1.0", "open-1.0", "open-small"):
+        with pytest.raises(ValueError, match="Modelo desconhecido"):
+            resolve_model_id(alias)
 
 
 @pytest.mark.parametrize(
@@ -187,8 +190,8 @@ def test_resolve_model_from_profile(profile: str, override: str | None, expected
     [
         (MODEL_MUSIC_ID, 120.0),
         (MODEL_EFFECTS_ID, 30.0),
-        (LEGACY_MODEL_MUSIC_ID, 47.0),
-        ("stabilityai/stable-audio-open-small", 11.0),
+        # ID legado explícito já sem spec própria → fallback conservador.
+        ("stabilityai/stable-audio-open-small", 47.0),
         ("custom/org-model", 47.0),
     ],
 )
@@ -204,8 +207,6 @@ def test_get_spec_max_seconds(hf_id: str, expected_max: float) -> None:
     [
         (MODEL_MUSIC_ID, 8, 1.0, "pingpong"),
         (MODEL_EFFECTS_ID, 8, 1.0, "pingpong"),
-        (LEGACY_MODEL_MUSIC_ID, 100, 7.0, "dpmpp-3m-sde"),
-        (LEGACY_MODEL_EFFECTS_ID, 8, 1.0, "euler"),
     ],
 )
 def test_get_spec_sa3_defaults(hf_id: str, steps: int, cfg: float, sampler: str) -> None:

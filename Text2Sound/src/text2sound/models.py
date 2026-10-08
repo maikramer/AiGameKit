@@ -1,13 +1,13 @@
 """Text2Sound — metadados e resolução de modelos Hugging Face (música vs efeitos).
 
-Modelos default: família **Stable Audio 3 Small** (difusão rectified-flow
-destilada + T5Gemma) com um checkpoint dedicado por domínio:
+Modelos: família **Stable Audio 3 Small** (difusão rectified-flow destilada +
+T5Gemma) com um checkpoint dedicado por domínio:
 
 - ``stabilityai/stable-audio-3-small-music`` — música / clips longos (variável)
 - ``stabilityai/stable-audio-3-small-sfx``   — efeitos / clips curtos
 
-Os modelos Stable Audio Open (1.0 / small) ficam como legado via alias
-``open-1.0`` / ``open-small`` ou ID HF explícito.
+Os ids canónicos vivem em ``aigamekit_shared.quality`` (única fonte de verdade,
+partilhada com o QualityEngine).
 """
 
 from __future__ import annotations
@@ -15,12 +15,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-MODEL_MUSIC_ID = "stabilityai/stable-audio-3-small-music"
-MODEL_EFFECTS_ID = "stabilityai/stable-audio-3-small-sfx"
+from aigamekit_shared.quality import SA3_EFFECTS_MODEL_ID, SA3_MUSIC_MODEL_ID
 
-# Legado (aliases open-1.0 / open-small ou ID HF explícito)
-LEGACY_MODEL_MUSIC_ID = "stabilityai/stable-audio-open-1.0"
-LEGACY_MODEL_EFFECTS_ID = "stabilityai/stable-audio-open-small"
+MODEL_MUSIC_ID = SA3_MUSIC_MODEL_ID
+MODEL_EFFECTS_ID = SA3_EFFECTS_MODEL_ID
 
 ProfileName = Literal["music", "effects"]
 
@@ -75,37 +73,9 @@ SPEC_EFFECTS = ModelSpec(
     min_condition_seconds=2.0,
 )
 
-# Defaults alinhados com o model card do Open 1.0 (difusão condicionada).
-SPEC_LEGACY_MUSIC = ModelSpec(
-    hf_id=LEGACY_MODEL_MUSIC_ID,
-    label="Stable Audio Open 1.0 (música / clips longos) — legado",
-    max_seconds=47.0,
-    default_seconds=30.0,
-    default_steps=100,
-    default_cfg=7.0,
-    default_sampler="dpmpp-3m-sde",
-    default_sigma_min=0.3,
-    default_sigma_max=500.0,
-)
-
-# Defaults do model card: steps=8, cfg=1.0. O modelo usa rf_denoiser → sample_rf; sampler euler compatível.
-SPEC_LEGACY_EFFECTS = ModelSpec(
-    hf_id=LEGACY_MODEL_EFFECTS_ID,
-    label="Stable Audio Open Small (efeitos / clips curtos) — legado",
-    max_seconds=11.0,
-    default_seconds=11.0,
-    default_steps=8,
-    default_cfg=1.0,
-    default_sampler="euler",
-    default_sigma_min=0.3,
-    default_sigma_max=500.0,
-)
-
 _SPECS_BY_ID: dict[str, ModelSpec] = {
     MODEL_MUSIC_ID: SPEC_MUSIC,
     MODEL_EFFECTS_ID: SPEC_EFFECTS,
-    LEGACY_MODEL_MUSIC_ID: SPEC_LEGACY_MUSIC,
-    LEGACY_MODEL_EFFECTS_ID: SPEC_LEGACY_EFFECTS,
 }
 
 # Aliases (minúsculos) → ID HF canónico
@@ -115,12 +85,6 @@ MODEL_ALIASES: dict[str, str] = {
     "effects": MODEL_EFFECTS_ID,
     "small": MODEL_EFFECTS_ID,
     "sfx": MODEL_EFFECTS_ID,
-    # Legado Stable Audio Open
-    "open-1.0": LEGACY_MODEL_MUSIC_ID,
-    "open-1.0-music": LEGACY_MODEL_MUSIC_ID,
-    "1.0": LEGACY_MODEL_MUSIC_ID,
-    "open-small": LEGACY_MODEL_EFFECTS_ID,
-    "open-small-sfx": LEGACY_MODEL_EFFECTS_ID,
 }
 
 
@@ -163,8 +127,6 @@ def get_spec(hf_id: str) -> ModelSpec:
         return SPEC_EFFECTS
     if "sfx" in hf_id:
         return ModelSpec(**{**SPEC_EFFECTS.__dict__, "hf_id": hf_id, "label": f"Custom ({hf_id})"})
-    if "open-small" in hf_id or "stable-audio-open-small" in hf_id:
-        return SPEC_LEGACY_EFFECTS
     # Modelo desconhecido: limites do SA3 (mais permissivos) e defaults SA3.
     return ModelSpec(
         hf_id=hf_id,

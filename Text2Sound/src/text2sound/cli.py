@@ -284,7 +284,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "-m",
     "model_id",
     default=None,
-    help=("Modelo: ID HF ou alias (music, effects, sfx, open-1.0, open-small). Tem prioridade sobre --profile."),
+    help=("Modelo: ID HF ou alias (music, effects, sfx, full, small). Tem prioridade sobre --profile."),
 )
 @click.option(
     "--half/--no-half",
@@ -1070,7 +1070,7 @@ def generate_cmd(
 @click.option("--sampler", default=DEFAULT_SAMPLER, type=str)
 @click.option("--format", "-f", "fmt", default="ogg", type=click.Choice(list(SUPPORTED_FORMATS)))
 @click.option("--trim/--no-trim", default=True)
-@click.option("--model", "-m", "model_id", default=None, help="ID HF ou alias (music, effects, sfx, open-1.0, …)")
+@click.option("--model", "-m", "model_id", default=None, help="ID HF ou alias (music, effects, sfx, full, small, …)")
 @click.option(
     "--half/--no-half",
     "half_precision",
@@ -1432,7 +1432,6 @@ def info_cmd() -> None:
 
     t.add_row("Música (default)", "stabilityai/stable-audio-3-small-music — duração variável (~120s), steps~8, cfg 1.0")
     t.add_row("Efeitos", "stabilityai/stable-audio-3-small-sfx — clips curtos (~30s), steps~8, cfg 1.0")
-    t.add_row("Legado", "open-1.0 / open-small (aliases --model)")
     t.add_row("Sample rate", "44100 Hz")
     t.add_row("Canais", "Estéreo (2)")
 

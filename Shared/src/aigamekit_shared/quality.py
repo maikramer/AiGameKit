@@ -25,9 +25,13 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 
 VALID_QUALITIES = ("fast", "low", "medium", "high", "highest")
 
-# Audio model IDs (kept in-sync with Text2Sound/models.py)
-_MODEL_MUSIC_ID = "stabilityai/stable-audio-3-small-music"
-_MODEL_EFFECTS_ID = "stabilityai/stable-audio-3-small-sfx"
+# IDs canónicos dos modelos de áudio SA3 — única fonte de verdade
+# (Text2Sound/models.py importa estes símbolos).
+SA3_MUSIC_MODEL_ID = "stabilityai/stable-audio-3-small-music"
+SA3_EFFECTS_MODEL_ID = "stabilityai/stable-audio-3-small-sfx"
+
+_MODEL_MUSIC_ID = SA3_MUSIC_MODEL_ID
+_MODEL_EFFECTS_ID = SA3_EFFECTS_MODEL_ID
 
 
 @dataclass(frozen=True)

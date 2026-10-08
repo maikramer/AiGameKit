@@ -9,7 +9,7 @@ CLI for stereo **44.1 kHz** audio from text prompts using the [Stable Audio 3 Sm
 | `music` (default) | [Stable Audio 3 Small Music](https://huggingface.co/stabilityai/stable-audio-3-small-music) | up to ~120 s (variable) | Music, long ambience |
 | `effects` | [Stable Audio 3 Small SFX](https://huggingface.co/stabilityai/stable-audio-3-small-sfx) | up to ~30 s | Short SFX, sound effects |
 
-Both default to `steps=8`, `cfg_scale=1.0`, sampler `pingpong` (adversarially distilled — more steps only marginally improve quality; guidance is baked in). Legacy Stable Audio Open checkpoints remain available via `--model open-1.0` / `--model open-small`.
+Both default to `steps=8`, `cfg_scale=1.0`, sampler `pingpong` (adversarially distilled — more steps only marginally improve quality; guidance is baked in).
 
 ### Seamless BGM loops
 

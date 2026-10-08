@@ -6,8 +6,6 @@ T5Gemma, checkpoints dedicados por domínio) via ``stable-audio-tools``:
 - ``stabilityai/stable-audio-3-small-music`` — música (default do perfil music)
 - ``stabilityai/stable-audio-3-small-sfx``   — efeitos (default do perfil effects)
 
-Os modelos Stable Audio Open (1.0 / small) continuam a funcionar como legado
-(ID HF explícito / aliases ``open-1.0`` / ``open-small``).
 """
 
 from __future__ import annotations

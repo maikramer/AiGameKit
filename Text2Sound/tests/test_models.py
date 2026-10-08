@@ -3,8 +3,6 @@
 import pytest
 
 from text2sound.models import (
-    LEGACY_MODEL_EFFECTS_ID,
-    LEGACY_MODEL_MUSIC_ID,
     MODEL_EFFECTS_ID,
     MODEL_MUSIC_ID,
     get_spec,
@@ -26,10 +24,13 @@ class TestResolveModelId:
         assert resolve_model_id("MUSIC") == MODEL_MUSIC_ID
         assert resolve_model_id("full") == MODEL_MUSIC_ID
 
-    def test_aliases_legacy_open(self):
-        assert resolve_model_id("1.0") == LEGACY_MODEL_MUSIC_ID
-        assert resolve_model_id("open-1.0") == LEGACY_MODEL_MUSIC_ID
-        assert resolve_model_id("open-small") == LEGACY_MODEL_EFFECTS_ID
+    def test_legacy_open_aliases_removed(self):
+        with pytest.raises(ValueError, match="Modelo desconhecido"):
+            resolve_model_id("1.0")
+        with pytest.raises(ValueError, match="Modelo desconhecido"):
+            resolve_model_id("open-1.0")
+        with pytest.raises(ValueError, match="Modelo desconhecido"):
+            resolve_model_id("open-small")
 
     def test_aliases_effects(self):
         assert resolve_model_id("effects") == MODEL_EFFECTS_ID
@@ -39,8 +40,7 @@ class TestResolveModelId:
     def test_hf_id_passthrough(self):
         assert resolve_model_id("stabilityai/stable-audio-3-small-music") == MODEL_MUSIC_ID
         assert resolve_model_id("stabilityai/stable-audio-3-small-sfx") == MODEL_EFFECTS_ID
-        assert resolve_model_id("stabilityai/stable-audio-open-1.0") == LEGACY_MODEL_MUSIC_ID
-        assert resolve_model_id("stabilityai/stable-audio-open-small") == LEGACY_MODEL_EFFECTS_ID
+        assert resolve_model_id("myorg/custom-audio") == "myorg/custom-audio"
 
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Modelo desconhecido"):
@@ -73,14 +73,15 @@ class TestGetSpec:
         assert e.default_sampler == "pingpong"
         assert e.default_seconds == 10.0
 
-    def test_known_ids_legacy_open(self):
-        m = get_spec(LEGACY_MODEL_MUSIC_ID)
+    def test_legacy_open_ids_fall_to_fallback(self):
+        # IDs HF legados (Stable Audio Open) já não têm spec própria: caem no
+        # fallback conservador do SA3 se passados explicitamente.
+        m = get_spec("stabilityai/stable-audio-open-1.0")
         assert m.max_seconds == 47.0
-        assert m.default_steps == 100
-        e = get_spec(LEGACY_MODEL_EFFECTS_ID)
-        assert e.max_seconds == 11.0
-        assert e.default_steps == 8
-        assert e.default_sampler == "euler"
+        assert m.default_steps == 8
+        e = get_spec("stabilityai/stable-audio-open-small")
+        assert e.max_seconds == 47.0
+        assert e.default_sampler == "pingpong"
 
     def test_custom_id_fallback(self):
         s = get_spec("user/custom-model")
