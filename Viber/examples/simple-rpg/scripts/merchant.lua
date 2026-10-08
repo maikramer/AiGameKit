@@ -31,6 +31,10 @@ function on_update(dt)
       viber.sound("shop_open") -- sino de boas-vindas na 1.ª fala
     end
     viber.toast(lines[st.i])
+    -- Falar com o Bram abre a banca: o diário no separador Loja (antes a
+    -- loja só se achava sabendo que existia um separador no [Q]).
+    viber.ui.open("menu", true)
+    viber.ui.select_tab("menu", "shop")
   end
   -- A loja (lista + cliques + ações buy/sell) é atualizada daqui.
   shop.update(dt)

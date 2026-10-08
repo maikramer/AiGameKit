@@ -561,13 +561,21 @@ pub struct TravelMenuState {
     pub selection: usize,
 }
 
+/// `true` quando o nome identifica uma fogueira (`campfire`, sem distinguir
+/// maiúsculas) — sem alocar, porque corre sobre cada `Name` novo do mundo.
+fn is_campfire_name(name: &str) -> bool {
+    const NEEDLE: &[u8] = b"campfire";
+    name.as_bytes()
+        .windows(NEEDLE.len())
+        .any(|w| w.eq_ignore_ascii_case(NEEDLE))
+}
+
 /// [G] perto da fogueira abre; ↑↓ seleciona marcos assinados; [J] viaja.
 /// O [J] não teleporta directamente: arma o [`TravelFade`] (o teleport
 /// acontece no preto cheio, em [`travel_fade_system`]).
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn travel_menu_system(
     keys: Res<ButtonInput<KeyCode>>,
-    time: Res<Time>,
     players: Query<&GlobalTransform, With<Player>>,
     named: Query<(&Name, &GlobalTransform)>,
     catalog: Res<LandmarkCatalog>,
@@ -584,26 +592,30 @@ fn travel_menu_system(
     mut toasts: MessageWriter<ScriptToast>,
     mut sfx: MessageWriter<crate::ambient::SfxEvent>,
     // Profiling 2026-09-09: o scan de TODAS as entidades nomeadas custava
-    // ~1 ms POR FRAME (a 2.ª linha do profiler). A proximidade da fogueira
-    // agora calcula-se a 4 Hz — o [G] responde ao cache mais recente (o
-    // player atravessa os 14 m de alcance em mais de 1 s a andar).
-    mut scan_throttle: Local<f32>,
-    mut cached_campfire: Local<bool>,
+    // ~1 ms POR FRAME; o throttle a 4 Hz que se seguiu ainda deixava um pico
+    // de ~2,5 ms (p95) a cada 250 ms — `to_ascii_lowercase` alocava uma
+    // String por cada uma das ~79k entidades nomeadas. As fogueiras são
+    // indexadas UMA vez, quando o `Name` aparece (`Changed`), e o teste de
+    // alcance corre todos os frames só sobre elas.
+    new_names: Query<(Entity, &Name), Changed<Name>>,
+    mut campfires: Local<Vec<Entity>>,
 ) {
     // Fogueira POR NOME ("campfire" no mundo) — sem o marcador, qualquer
     // entidade a <14 m (árvore, rocha, NPC) abria o fast-travel em todo o
     // lado e o requisito "fogueira da praça" era letra morta.
-    *scan_throttle -= time.delta_secs();
-    if *scan_throttle <= 0.0 {
-        *scan_throttle = 0.25;
-        *cached_campfire = players.iter().next().is_some_and(|player| {
-            named.iter().any(|(name, t)| {
-                name.to_ascii_lowercase().contains("campfire")
-                    && t.translation().distance(player.translation()) < TRAVEL_CAMPFIRE_RANGE_M
-            })
-        });
+    for (entity, name) in &new_names {
+        if is_campfire_name(name.as_str()) && !campfires.contains(&entity) {
+            campfires.push(entity);
+        }
     }
-    let near_campfire = *cached_campfire;
+    campfires.retain(|&e| named.contains(e));
+    let near_campfire = players.iter().next().is_some_and(|player| {
+        campfires.iter().any(|&e| {
+            named
+                .get(e)
+                .is_ok_and(|(_, t)| t.translation().distance(player.translation()) < TRAVEL_CAMPFIRE_RANGE_M)
+        })
+    });
 
     if keys.just_pressed(KeyCode::KeyG) && (near_campfire || state.open) {
         state.open = !state.open;
@@ -940,6 +952,16 @@ fn quest_debug_landmark(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_campfire_name_is_case_insensitive_substring() {
+        assert!(is_campfire_name("campfire"));
+        assert!(is_campfire_name("Town-Campfire-01"));
+        assert!(is_campfire_name("CAMPFIRE"));
+        assert!(!is_campfire_name("camp"));
+        assert!(!is_campfire_name("fire-pit"));
+        assert!(!is_campfire_name(""));
+    }
 
     #[test]
     fn test_catalog_12_landmarks_3_per_biome() {

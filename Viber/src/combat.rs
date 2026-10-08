@@ -422,6 +422,19 @@ pub const BOSS_HP_BOG_WARDEN: f32 = 600.0;
 pub const BOSS_HP_SAND_WORM: f32 = 500.0;
 pub const BOSS_HP_WITCH: f32 = 400.0;
 
+/// XP de abate por tipo de criatura (`script_kind`): os chefes pagam o
+/// esforço — com o [`KILL_XP`] de um lobo, derrubar o ogro de 1200 HP dava
+/// +15 XP. O resto dos hostis mantém o [`KILL_XP`].
+pub fn kill_xp(kind: &str) -> u32 {
+    match kind {
+        "boss" => 300,
+        "bog-warden" => 180,
+        "sand-worm" => 160,
+        "witch" => 140,
+        _ => KILL_XP,
+    }
+}
+
 /// HP de nascença para um scriptado hostil: HP autoral dos bosses
 /// ([`BOSS_HP_OGRE`]…), [`crate::vitals::DEFAULT_HEALTH`] para o resto.
 /// Aceita `\` ou `/` como separador (mesmo contrato de [`is_hostile_script`]).
@@ -1697,6 +1710,15 @@ fn fireball_step(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_bosses_pay_more_xp_than_regular_kills() {
+        assert_eq!(kill_xp("wolf"), KILL_XP);
+        assert_eq!(kill_xp("creature"), KILL_XP);
+        for boss in ["boss", "bog-warden", "sand-worm", "witch"] {
+            assert!(kill_xp(boss) >= 8 * KILL_XP, "{boss} paga como chefe");
+        }
+    }
 
     #[test]
     fn test_chain_multiplier_matches_vibegame() {

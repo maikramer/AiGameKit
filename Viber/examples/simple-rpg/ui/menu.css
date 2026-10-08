@@ -162,8 +162,10 @@ uibutton.row:active { background: stone-800 }
   align: start;
 }
 .row-line { width: 100%; align: center; gap: 1vmin }
-.row-title { font-size: 2.1vmin; color: stone-100; min-width: 0 }
-.row-note { font-size: 1.6vmin; color: stone-300; max-width: 100%; min-width: 0 }
+/* `flex-shrink: 0`: sem largura explícita o título encolhia a zero (a linha
+   da missão aparecia sem nome) e a nota quebrava numa coluna estreita. */
+.row-title { font-size: 2.1vmin; color: stone-100; flex-shrink: 0 }
+.row-note { font-size: 1.6vmin; color: stone-300; width: 100% }
 .row-tag { font-size: 1.5vmin; color: amber-300; flex-shrink: 0 }
 .row-count { font-size: 1.7vmin; color: stone-300 }
 .row-price { font-size: 2vmin; color: amber-300; font-weight: bold }

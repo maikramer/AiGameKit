@@ -23,11 +23,19 @@ function on_update(dt)
   end
   if viber.input.pressed("1") then
     st.cd = COOLDOWN
-    if viber.item_count("potion") > 0 then
+    local _, hp, max_hp = viber.player_hp()
+    local healed = math.min(POTION_HEAL, math.max(0, (max_hp or 0) - (hp or 0)))
+    if viber.item_count("potion") > 0 and healed < 1 then
+      -- Vida cheia: a poção fica no cinto (antes gastava-se para nada).
+      viber.toast("Vida já está cheia.")
+    elseif viber.item_count("potion") > 0 then
       viber.vault_take("potion", 1)
-      viber.heal_player(POTION_HEAL)
-      viber.damage_number("+" .. POTION_HEAL .. " HP", { color = "#7ef29d" })
-      viber.toast("Poção usada (+" .. POTION_HEAL .. " HP)")
+      viber.heal_player(healed)
+      -- O número nasce SOBRE O HERÓI (sem x/y/z saía sobre o controller).
+      local _, px, py, pz = viber.player_position()
+      viber.damage_number("+" .. math.floor(healed) .. " HP", { color = "#7ef29d", x = px, y = py + 2.0, z = pz })
+      viber.sound("heal")
+      viber.toast("Poção usada (+" .. math.floor(healed) .. " HP)")
     else
       viber.toast("Sem poções.")
       viber.sound("error")

@@ -63,7 +63,7 @@
                   <UiSpacer />
                   <UiText class="row-tag">{status_text}</UiText>
                 </UiRow>
-                <UiText class="row-note">{objective} · {npc} · {biome}</UiText>
+                <UiText class="row-note">{objective} · {biome_name}</UiText>
                 <UiRow class="row-line">
                   <UiBar class="row-bar" value="{progress}" />
                   <UiText class="row-count">{progress_text}</UiText>

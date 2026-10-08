@@ -10,8 +10,11 @@
   cenário. name="boss" é contrato com src/main.ts (<BossBar target-entity>).
 -->
   <Group name="creatures.bosses" translation="0 0 0">
-    <!-- Norte — Bruxa da Floresta (clareira, -10/135). -->
-    <Entity name="boss-witch" translation="16 0 290" script="bosses/witch.lua">
+    <!-- Norte — Bruxa da Floresta, NA CLAREIRA dela (cabana/caldeirão em
+         landmarks/forest.xml §5, chão plano a ~47 m, dentro da exclusão de
+         spawn de r=24). Estava em (16, 290), 36 m ao lado, numa encosta de
+         ~45° (48→72 m em 24 m): o combate de chefe fazia-se a subir. -->
+    <Entity name="boss-witch" translation="-4 0 282" script="bosses/witch.lua">
       <GltfScene url="/assets/meshes/characters/witch_boss_lod0.glb" />
     </Entity>
     <!-- Leste — Verme das Areias (fundo do deserto). -->

@@ -232,7 +232,12 @@ pub fn audit(
 fn audit_quests(world: &ParsedWorld, quests_dir: &Path, report: &mut AuditReport) {
     use std::collections::HashSet;
 
-    fn walk(specs: &[EntitySpec], names: &mut HashSet<String>, givers: &mut HashSet<String>) {
+    fn walk(
+        specs: &[EntitySpec],
+        names: &mut HashSet<String>,
+        givers: &mut HashSet<String>,
+        kinds: &mut HashSet<String>,
+    ) {
         for spec in specs {
             if let Some(name) = &spec.name {
                 names.insert(name.clone());
@@ -240,12 +245,25 @@ fn audit_quests(world: &ParsedWorld, quests_dir: &Path, report: &mut AuditReport
             if let EntityKind::DialogueNpc { dialogue_id, .. } = &spec.kind {
                 givers.insert(dialogue_id.clone());
             }
-            walk(&spec.children, names, givers);
+            // Tipo de criatura abatível: o MESMO `script_kind` que o combate
+            // reporta à quest (`bosses/bog-warden.lua` → `bog-warden`).
+            if let Some(script) = &spec.script {
+                kinds.insert(crate::combat::script_kind(script));
+            }
+            if let EntityKind::DynamicSpawner { spec: group } | EntityKind::StaticSpawner { spec: group } =
+                &spec.kind
+            {
+                if let Some(script) = &group.template_script {
+                    kinds.insert(crate::combat::script_kind(script));
+                }
+            }
+            walk(&spec.children, names, givers, kinds);
         }
     }
     let mut names = HashSet::new();
     let mut givers = HashSet::new();
-    walk(&world.entities, &mut names, &mut givers);
+    let mut kinds = HashSet::new();
+    walk(&world.entities, &mut names, &mut givers, &mut kinds);
 
     // Um mundo SEM nenhum `<DialogueNPC>` não tem sistema de quests para
     // auditar: as definições vivem no DISCO do jogo (`game.quests_dir`) e
@@ -265,6 +283,18 @@ fn audit_quests(world: &ParsedWorld, quests_dir: &Path, report: &mut AuditReport
                 message: format!(
                     "quest `{}`: nenhum `<DialogueNPC dialogue-id=\"{}\">` no mundo — a quest fica no diário sem poder ser aceita",
                     def.id, def.id
+                ),
+            });
+        }
+        // `kill` casa pelo nome do script da criatura — um alvo que nenhum
+        // script produz nunca avança (era o caso do `boss_bogwarden`, cujo
+        // script reporta `bog-warden`).
+        if def.objective.kind == "kill" && !kinds.contains(&def.objective.target) {
+            report.issues.push(AuditIssue {
+                severity: Severity::Warning,
+                message: format!(
+                    "quest `{}`: alvo de `kill` sem criatura no mundo: `{}` — o alvo é o nome do script (`enemies/wolf.lua` → `wolf`)",
+                    def.id, def.objective.target
                 ),
             });
         }

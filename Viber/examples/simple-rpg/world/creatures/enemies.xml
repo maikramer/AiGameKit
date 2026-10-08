@@ -17,9 +17,8 @@
   de NavMesh — não é instanciado. Contagens sobem devagar; o DistanceCull é
   que evita pagar IA por quem está longe.
 
-  NOTA DE ASSET: shade_*.glb não existe no bundle (só o script
-  enemies/shade.ts). Enquanto não for regenerado, a sombra usa o mesh do
-  bogling a 1.4× — ver public/world/context.md.
+  Sombras: o shade_*.glb já existe no pool (é o mesmo que a Cidadela Caída
+  usa) — o remendo antigo com o mesh do bogling a 1.4× foi retirado.
 -->
   <Group name="creatures" translation="0 0 0">
     <!-- ============================================================
@@ -31,8 +30,8 @@
       </Creature>
     </DynamicSpawner>
     <DynamicSpawner avoid-water="1" count="14" seed="202" region-min="-170 0 160" region-max="170 0 360" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="411">
-      <Creature role="enemy" script="enemies/shade.lua" transform="scale: 1.4 1.4 1.4">
-        <GLTFLoader role="visual" url="/assets/meshes/characters/bogling_lod0.glb" lod1-url="/assets/meshes/characters/bogling_lod1.glb" lod2-url="/assets/meshes/characters/bogling_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
+      <Creature role="enemy" script="enemies/shade.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/shade_lod0.glb" lod1-url="/assets/meshes/characters/shade_lod1.glb" lod2-url="/assets/meshes/characters/shade_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
     <!-- ============================================================

@@ -15,9 +15,17 @@ local SKILLS = {
   "vitality2", "strength2", "agility2", "precision2",
 }
 
--- Espelha `shop_catalog()` da engine: o que se compra e o que se vende.
-local BUY  = { "potion", "antidote", "bomb" }
-local SELL = { "wood", "stone" }
+-- A loja é dirigida pelas LINHAS da lista `shop` (game/shop.lua monta-as):
+-- um preço "+N" é venda, o resto é compra. Com a lista fixa de antes
+-- (só madeira/pedra) os despojos de quest apareciam mas o clique morria.
+local function shop_clicks()
+  for _, row in ipairs(viber.ui.rows("shop")) do
+    if row.id and viber.ui.clicked("shop-" .. row.id) then
+      local selling = tostring(row.price or ""):sub(1, 1) == "+"
+      viber.ui.action(selling and "sell" or "buy", row.id)
+    end
+  end
+end
 
 function on_update(dt)
   if viber.ui.clicked("menu-close") then
@@ -32,16 +40,7 @@ function on_update(dt)
     end
   end
 
-  for _, item in ipairs(BUY) do
-    if viber.ui.clicked("shop-" .. item) then
-      viber.ui.action("buy", item)
-    end
-  end
-  for _, item in ipairs(SELL) do
-    if viber.ui.clicked("shop-" .. item) then
-      viber.ui.action("sell", item)
-    end
-  end
+  shop_clicks()
 
   if viber.ui.clicked("act-save") then viber.ui.action("save", "") end
   if viber.ui.clicked("act-load") then viber.ui.action("load", "") end

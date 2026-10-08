@@ -4,6 +4,7 @@ local fsm = viber.load("lib/fsm.lua").new{
   wander = 1.6, chase = 3.2,
   aggro = 10, deaggro = 15,
   range = 1.6, damage = 10, cooldown = 1.4,
+  windup = 0.45,
   radius = 8,
 }
 

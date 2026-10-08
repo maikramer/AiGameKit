@@ -38,7 +38,7 @@
     "lines_complete": ["O lago devolveu uma coisa, então. Fica com a vara."],
     "objective": {
       "type": "kill",
-      "target": "boss_bogwarden",
+      "target": "bog-warden",
       "count": 1
     },
     "rewards": {

@@ -97,5 +97,37 @@
       "xp": 160,
       "items": ["potion:2"]
     }
+  },
+  {
+    "id": "forest_witch",
+    "npc": "npc_forest_witch",
+    "biome": "dark-forest",
+    "title": "Irmã Vessa, a vigia",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Há uma clareira no fundo da floresta onde nem os lobos entram. É lá que a Bruxa canta.",
+      "Quando ela apontar pro chão onde você pisa, saia. A maldição cai no mesmo lugar e queima como veneno.",
+      "Acabe com ela e a floresta volta a ser só floresta."
+    ],
+    "lines_progress": [
+      "A Bruxa ainda canta na clareira, ao norte. Leve antídotos."
+    ],
+    "lines_complete": [
+      "O canto parou… Pela primeira vez em anos, ouço os pássaros. Fique com o amuleto — era dela, agora protege."
+    ],
+    "objective": {
+      "type": "kill",
+      "target": "witch",
+      "count": 1
+    },
+    "rewards": {
+      "gold": 450,
+      "xp": 320,
+      "items": [
+        "nature_amulet:1",
+        "antidote:2"
+      ]
+    }
   }
 ]

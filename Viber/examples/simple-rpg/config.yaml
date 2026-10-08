@@ -1,6 +1,10 @@
 # config.yaml — contrato de paths do jogo com a engine (docs/ASSETS.md).
 # Relativos a ESTA pasta. Obrigatório: o run/analyze não arranca sem ele.
 title: Simple RPG
+# Preset da lente (docs/PERFORMANCE.md): alto | equilibrado | desempenho.
+# `equilibrado` é o default; `desempenho` é o que dá 60 fps numa RTX 4050
+# Laptop a 1280x720 (troca god-rays volumétricos, SSAO e DOF por 9 ms).
+graphics: equilibrado
 
 assets:
   # Roots extra, por ordem, DEPOIS da pasta do jogo (que é sempre a 1.ª —

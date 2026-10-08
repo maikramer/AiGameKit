@@ -90,8 +90,10 @@
     <!-- NORTE: Floresta Sombria. `display-name` alimenta o bind `zone.name`
          (HUD): nome autoral vence a tabela de fallback da engine. -->
     <BiomeRegion id="dark-forest" display-name="Floresta Sombria" polygon="[-56,56;56,56;4040,4040;-4040,4040]" tint="#1a3320" fog-density="0.0020" pp-exposure="0.78" />
-    <!-- LESTE: Deserto -->
-    <BiomeRegion id="desert" display-name="Ermo Rubro" polygon="[56,-56;56,56;4040,4040;4040,-4040]" tint="#c2a878" fog-density="0.0014" pp-exposure="0.74" pp-bloom-strength="0.18" />
+    <!-- LESTE: Deserto. `rain-scale="0.1"`: o ciclo do <Weather> é do mundo,
+         mas no Ermo o céu fica quase seco — entrar no deserto abranda a
+         chuva com a rampa normal (10 s), sair devolve-a. -->
+    <BiomeRegion id="desert" display-name="Ermo Rubro" polygon="[56,-56;56,56;4040,4040;4040,-4040]" tint="#c2a878" fog-density="0.0014" pp-exposure="0.74" pp-bloom-strength="0.18" rain-scale="0.1" />
     <!-- OESTE: Pântano (bacias baixas do relevo real) -->
     <BiomeRegion id="swamp" display-name="Pântano da Bruma" polygon="[-56,-56;-56,56;-4040,4040;-4040,-4040]" tint="#3a4a30" fog-density="0.0046" pp-exposure="0.70" />
     <!-- SUL: Picos Gelados. Vértice da cunha empurrado de ±56 para ±240:

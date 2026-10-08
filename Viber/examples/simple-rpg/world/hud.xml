@@ -66,12 +66,32 @@
           <UiText id="quest-count" bind="quest.text" />
         </UiPanel>
       </UiPanel>
+      <!-- As OUTRAS missões em curso (a do cartão fica de fora): linhas
+           escritas pelo hud.lua a 2 Hz; "pronta" = voltar ao dador. -->
+      <UiColumn id="quest-others" class="quest-others" bind="quests.others" fade="0.2 0.4">
+        <UiText id="quest-other-1" class="quest-other" />
+        <UiText id="quest-other-2" class="quest-other" />
+        <UiText id="quest-other-3" class="quest-other" />
+        <UiText id="quest-other-more" class="quest-other more" />
+      </UiColumn>
     </UiColumn>
 
     <UiColumn id="target" class="anchor-target" bind="target.alive" fade="0.15 0.3">
       <UiPanel class="hud-card target-card">
         <UiText id="target-name" bind="target.name" />
         <UiBar id="target-bar" class="track hp" bind="target" value="1" />
+      </UiPanel>
+    </UiColumn>
+    <!-- Barra de chefe: binds de SCRIPT (`viber.ui.set` em lib/fsm.lua);
+         o hud.lua apaga-a quando o chefe deixa de dar sinal (morto/longe). -->
+    <UiColumn id="bossbar" class="anchor-boss" bind="boss.active" fade="0.25 0.6">
+      <UiPanel class="hud-card boss-card" bind="boss.enraged:enraged">
+        <UiRow class="boss-head">
+          <UiText class="boss-tag">CHEFE</UiText>
+          <UiText id="boss-name" bind="boss.name">—</UiText>
+          <UiText class="boss-rage">FÚRIA</UiText>
+        </UiRow>
+        <UiBar id="boss-bar" class="track boss" bind="boss" value="1" />
       </UiPanel>
     </UiColumn>
     <UiColumn id="combo" class="anchor-combo" bind="combo" fade="0.15 0.3">
@@ -99,32 +119,35 @@
     <UiColumn id="dock-anchor" class="anchor-dock">
       <UiRow class="dock-caption"><UiText>J  ATACAR</UiText><UiSpacer /><UiText>L  DEFENDER</UiText></UiRow>
       <UiRow id="dock" class="hud-card dock">
-        <!-- `cd.*.ready` acende o slot (fio de ouro) via class-bind no cell. -->
-        <UiColumn class="action-cell ability" bind="cd.dash.ready:ready">
-          <UiCooldown id="cd-dash" class="action-slot" bind="cd.dash" value="0" tooltip="Investida [C]">
+        <!-- As habilidades são do JOGO (scripts/game/abilities.lua): os binds
+             `ab.*` vêm do script (`viber.ui.set`), não da engine — os `cd.*`
+             nativos ficam a zero quando o Lua reclama o sistema. `ab.*.ready`
+             acende o slot (fio de ouro) via class-bind no cell. -->
+        <UiColumn class="action-cell ability" bind="ab.dash.ready:ready">
+          <UiCooldown id="cd-dash" class="action-slot" bind="ab.dash" value="0" tooltip="Investida [C]">
             <UiIcon class="slot-icon" src="/assets/icons/ability_dash.png" />
             <UiPanel class="slot-key"><UiText class="action-key">C</UiText></UiPanel>
-            <UiBar class="cooldown-track" bind="cd.dash" />
+            <UiBar class="cooldown-track" bind="ab.dash" />
           </UiCooldown><UiText class="action-name">Esquiva</UiText>
         </UiColumn>
-        <UiColumn class="action-cell ability" bind="cd.heal.ready:ready">
-          <UiCooldown id="cd-heal" class="action-slot" bind="cd.heal" value="0" tooltip="Curar [E], longe de personagens e interações">
+        <UiColumn class="action-cell ability" bind="ab.heal.ready:ready">
+          <UiCooldown id="cd-heal" class="action-slot" bind="ab.heal" value="0" tooltip="Curar [E], longe de personagens e interações">
             <UiIcon class="slot-icon" src="/assets/icons/ability_heal.png" />
             <UiPanel class="slot-key"><UiText class="action-key">E</UiText></UiPanel>
-            <UiBar class="cooldown-track" bind="cd.heal" />
+            <UiBar class="cooldown-track" bind="ab.heal" />
           </UiCooldown><UiText class="action-name">Cura</UiText>
         </UiColumn>
-        <UiColumn class="action-cell ability" bind="cd.strike.ready:ready">
-          <UiCooldown id="cd-strike" class="action-slot" bind="cd.strike" value="0" tooltip="Golpe radial [R]">
+        <UiColumn class="action-cell ability" bind="ab.strike.ready:ready">
+          <UiCooldown id="cd-strike" class="action-slot" bind="ab.strike" value="0" tooltip="Golpe radial [R]">
             <UiIcon class="slot-icon" src="/assets/icons/ability_power.png" />
             <UiPanel class="slot-key"><UiText class="action-key">R</UiText></UiPanel>
-            <UiBar class="cooldown-track" bind="cd.strike" />
+            <UiBar class="cooldown-track" bind="ab.strike" />
           </UiCooldown><UiText class="action-name">Impacto</UiText>
         </UiColumn>
         <UiPanel class="dock-divider" />
         <!-- `*.empty` cinzeia o vial quando o stock chega a zero. -->
         <UiColumn class="action-cell">
-          <UiPanel id="vial-potion" class="action-slot consumable" bind="potion.empty:depleted" tooltip="Poção [1]: recupera 25 de vida">
+          <UiPanel id="vial-potion" class="action-slot consumable" bind="potion.empty:depleted" tooltip="Poção [1]: recupera 50 de vida">
             <UiIcon class="slot-icon" src="/assets/icons/potion_health.png" />
             <UiPanel class="slot-key"><UiText class="action-key">1</UiText></UiPanel>
             <UiText class="item-count" bind="potion">0</UiText>

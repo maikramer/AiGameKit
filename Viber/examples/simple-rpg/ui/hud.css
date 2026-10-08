@@ -91,12 +91,31 @@
 #hud #quest-title { font-size: 15; width: 100%; flex-shrink: 1 }
 #hud #quest-bar { width: 100%; height: 3 }
 #hud #quest-count { font-size: 12; color: #abd1b1; width: 100%; flex-shrink: 1 }
+#hud .quest-others { width: 100%; align: end; gap: 3; padding: 0 4 }
+#hud .quest-other { font-size: 11; color: #e7dcc3; text-align: right; text-shadow: 1 1 #171d20 }
+#hud .quest-other.ready { color: #a9e0b0 }
+#hud .quest-other.more { color: #b9ab8c; font-size: 10 }
 
-#hud .anchor-target { position: absolute; top: 78; left: 0; right: 0; align: center }
+/* ── chefe: faixa larga por baixo do compasso (binds de script em
+   lib/fsm.lua); a fúria acende a moldura e o rótulo. O alvo e o combo
+   descem uma linha para a faixa caber sem sobrepor. */
+#hud .anchor-boss { position: absolute; top: 60; left: 0; right: 0; align: center }
+#hud .boss-card { width: 460; max-width: 44vw; padding: 8 14; gap: 6; border-color: #c9785f99 }
+#hud .boss-head { width: 100%; align: center; gap: 8 }
+#hud .boss-tag { font-size: 9; color: #171d20; background: #d98a6c; padding: 1 5; radius: 3 }
+#hud #boss-name { font-size: 15; color: #f3dcc4; flex-grow: 1 }
+#hud .boss-rage { display: none; font-size: 10; color: #ff9b73 }
+#hud .boss-card.enraged { border-color: #ff6a4a; box-shadow: 0 0 14 #ff3b1f66 }
+#hud .boss-card.enraged .boss-rage { display: flex }
+#hud #boss-bar { width: 100%; height: 8 }
+#hud .track.boss .fill { background: #c9493b }
+#hud .boss-card.enraged .track.boss .fill { background: #ff6a3d }
+
+#hud .anchor-target { position: absolute; top: 122; left: 0; right: 0; align: center }
 #hud .target-card { width: 240; max-width: 38vw; align: stretch; padding: 8 12; gap: 6 }
 #hud #target-name { font-size: 13; text-align: center; width: 100%; flex-shrink: 1 }
 #hud #target-bar { height: 5; width: 100% }
-#hud .anchor-combo { position: absolute; top: 142; left: 0; right: 0; align: center }
+#hud .anchor-combo { position: absolute; top: 186; left: 0; right: 0; align: center }
 #hud #combo-text { font-size: 23; color: #f5d68e; text-shadow: 1 2 #171d20 }
 
 /* ── ambiente (encima do minimapa nativo, 208 × 148 a 18 da margem) ── */
@@ -153,7 +172,9 @@
 #hud .prompt-card { direction: row; align: center; gap: 10; padding: 7 12; max-width: 54vw }
 #hud .prompt-key { padding: 3 7; background: #ddc798; radius: 3; flex-shrink: 0 }
 #hud .prompt-key uitext { font-size: 15; color: #171d20 }
-#hud #prompt-label { font-size: 14; flex-shrink: 1; min-width: 0 }
+/* Sem largura explícita, `flex-shrink: 1; min-width: 0` encolhia o texto a
+   zero e o prompt mostrava só a tecla ("[E]" sem "falar"). */
+#hud #prompt-label { font-size: 14; flex-shrink: 0 }
 #hud .anchor-zone { position: absolute; top: 31vh; left: 0; right: 0; align: center; gap: 7 }
 #hud .zone-label { font-size: 11; color: #e5d2a5; text-shadow: 1 2 #171d20 }
 #hud #zone-name { font-size: 30; max-width: 80vw; text-align: center; text-shadow: 1 2 #171d20 }
@@ -169,6 +190,8 @@
   #hud .anchor-clock { bottom: 298 }
   #hud .anchor-prompt { bottom: 124; justify: end; padding: 0 3vw }
   #hud .prompt-card { max-width: 57vw }
+  #hud .anchor-boss { top: 136 }
+  #hud .boss-card { max-width: 70vw }
   #hud .anchor-target { top: 198 }
   #hud .anchor-combo { top: 258 }
   #hud .anchor-notification { top: auto; bottom: 196; align: end; padding: 0 3vw }

@@ -26,13 +26,53 @@ pub fn quest_status(status: QuestStatus) -> (&'static str, &'static str) {
     }
 }
 
-/// Objective phrased for a player: `"caçar 5 wolf"`, not `{kind, target}`.
+/// Objective phrased for a player: `"derrotar 5× lobo"`, not `{kind, target}`.
 pub fn objective_text(kind: &str, target: &str, count: u32) -> String {
+    let what = target_label(target);
     match kind {
-        "kill" => format!("derrotar {count}× {target}"),
-        "collect" => format!("reunir {count}× {target}"),
-        "visit" => format!("visitar {count} local(is)"),
-        other => format!("{other} {count}× {target}"),
+        "kill" if count == 1 => format!("derrotar {what}"),
+        "kill" => format!("derrotar {count}× {what}"),
+        "collect" => format!("reunir {count}× {what}"),
+        "visit" if count == 1 => "visitar 1 local".to_string(),
+        "visit" => format!("visitar {count} locais"),
+        other => format!("{other} {count}× {what}"),
+    }
+}
+
+/// Alvo de objetivo em palavras de jogador: o id da criatura (nome do
+/// script) ou do recurso vira o nome que o mundo lhe dá. Desconhecido =
+/// o próprio id sem hífens (nunca desaparece).
+pub fn target_label(target: &str) -> String {
+    match target {
+        "wolf" => "lobo".into(),
+        "goblin" => "goblin".into(),
+        "bandit" => "bandido".into(),
+        "scorpion" => "escorpião".into(),
+        "shade" => "sombra".into(),
+        "slime" => "slime".into(),
+        "bogling" => "bogling".into(),
+        "boss" => "o Ogro dos Picos".into(),
+        "bog-warden" => "o Guardião do Lodo".into(),
+        "sand-worm" => "o Verme das Areias".into(),
+        "witch" => "a Bruxa do Bosque".into(),
+        "wood" => "madeira".into(),
+        "stone" => "pedra".into(),
+        "dark-wood" => "madeira escura".into(),
+        "bog-moss" => "musgo do pântano".into(),
+        other => other.replace(['-', '_'], " "),
+    }
+}
+
+/// Nome de exposição de um bioma de quest (o `display-name` das
+/// `<BiomeRegion>` do simple-rpg); desconhecido = o id sem hífens.
+pub fn biome_label(biome: &str) -> String {
+    match biome {
+        "city" => "Discórdia".into(),
+        "dark-forest" => "Floresta Sombria".into(),
+        "desert" => "Ermo Rubro".into(),
+        "swamp" => "Pântano da Bruma".into(),
+        "frozen-peaks" => "Picos Gelados".into(),
+        other => other.replace(['-', '_'], " "),
     }
 }
 
@@ -57,7 +97,7 @@ pub fn item_label(id: &str) -> String {
 }
 
 /// The controls reference — the list that used to sit on top of the world.
-pub const CONTROLS: [(&str, &str); 14] = [
+pub const CONTROLS: [(&str, &str); 17] = [
     ("W A S D", "mover"),
     ("SHIFT", "correr"),
     ("ESPAÇO", "saltar"),
@@ -66,9 +106,12 @@ pub const CONTROLS: [(&str, &str); 14] = [
     ("E", "curar"),
     ("R", "golpe forte"),
     ("L", "guarda / aparar"),
+    ("B", "bomba"),
+    ("V", "trocar de alvo"),
     ("1 / 2", "poção / antídoto"),
     ("E", "interagir e falar"),
     ("F", "assinar marco da Nota"),
+    ("G", "viagem rápida (junto a uma fogueira)"),
     ("Q / ESC", "abrir e fechar este diário"),
     ("1 - 6", "separador do diário (com ele aberto)"),
     ("P", "profiler"),
@@ -136,6 +179,7 @@ pub fn quest_rows(quests: Option<&QuestLog>, vault: Option<&Vault>) -> Vec<ListR
                 ("title", def.title.clone()),
                 ("npc", def.npc.clone()),
                 ("biome", def.biome.clone()),
+                ("biome_name", biome_label(&def.biome)),
                 ("status", class.to_string()),
                 ("status_text", label.to_string()),
                 (
@@ -298,14 +342,15 @@ mod tests {
 
     #[test]
     fn test_objective_text_reads_like_a_sentence() {
-        assert_eq!(objective_text("kill", "wolf", 5), "derrotar 5× wolf");
-        assert_eq!(objective_text("collect", "wood", 3), "reunir 3× wood");
-        assert_eq!(
-            objective_text("visit", "shrine ruins", 2),
-            "visitar 2 local(is)"
-        );
+        assert_eq!(objective_text("kill", "wolf", 5), "derrotar 5× lobo");
+        assert_eq!(objective_text("kill", "bog-warden", 1), "derrotar o Guardião do Lodo");
+        assert_eq!(objective_text("collect", "wood", 3), "reunir 3× madeira");
+        assert_eq!(objective_text("visit", "shrine ruins", 2), "visitar 2 locais");
         // An objective kind nobody taught us still renders something useful.
         assert_eq!(objective_text("escort", "npc", 1), "escort 1× npc");
+        // Unknown targets keep their id, minus the separators.
+        assert_eq!(target_label("frost-slime"), "frost slime");
+        assert_eq!(biome_label("dark-forest"), "Floresta Sombria");
     }
 
     #[test]

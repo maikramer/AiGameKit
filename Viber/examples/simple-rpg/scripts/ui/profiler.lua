@@ -50,10 +50,16 @@ local function fill_systems(systems)
   for i, s in ipairs(systems.systems or {}) do
     if i > 12 then break end
     local hot = (s.avg_ms or 0) >= 1.0 and "! " or ""
+    -- Bevy 0.20: contagem de componentes lidos/escritos por sistema (o
+    -- `schedule.graph` do BRP) — diz EM QUÊ o sistema caro toca.
+    local rw = ""
+    if s.reads or s.writes then
+      rw = string.format(" · R%d/W%d", s.reads or 0, s.writes or 0)
+    end
     rows[#rows + 1] = {
       name = hot .. s.name,
-      val = string.format("%s · %s",
-        string.format("%.2f", s.avg_ms or 0), fmt_ms(s.p95_ms)),
+      val = string.format("%s · %s%s",
+        string.format("%.2f", s.avg_ms or 0), fmt_ms(s.p95_ms), rw),
     }
   end
   viber.ui.list("prof-systems", rows)

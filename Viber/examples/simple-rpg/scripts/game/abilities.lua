@@ -24,12 +24,35 @@ local HEAL_AMOUNT = 50
 local STRIKE_RADIUS, STRIKE_DAMAGE, STRIKE_KNOCKBACK = 4.8, 60, 7
 local BOMB_LAUNCH_DISTANCE = 2.6
 
+local PERIOD = { dash = CD_DASH, heal = CD_HEAL, strike = CD_STRIKE }
+
+-- O dock do HUD lê `ab.<nome>` (fração em recarga) e `ab.<nome>.ready`
+-- (class-bind que acende o slot) — os `cd.*` nativos ficam a zero com o
+-- sistema reclamado, e sem isto o dock mostrava tudo sempre pronto.
+-- (Nomes literais: o teste `test_shipped_worlds_bind_only_to_known_names`
+-- lê os `viber.ui.set("…")` dos scripts para validar os binds do hud.xml.)
+local function publish_cooldowns(cd)
+  viber.ui.set("ab.dash", cd.dash / PERIOD.dash)
+  viber.ui.set("ab.dash.ready", cd.dash <= 0)
+  viber.ui.set("ab.heal", cd.heal / PERIOD.heal)
+  viber.ui.set("ab.heal.ready", cd.heal <= 0)
+  viber.ui.set("ab.strike", cd.strike / PERIOD.strike)
+  viber.ui.set("ab.strike.ready", cd.strike <= 0)
+end
+
+-- O [E] é de quem estiver à frente: com um prompt [E] no ecrã (NPC,
+-- baú, poço…) a tecla é da interação e a cura não sai por baixo.
+local function e_is_interaction()
+  return viber.ui.get("prompt.key") == "E" and viber.ui.get("prompt.label") ~= ""
+end
+
 function on_update(dt)
   local st = viber.state()
   st.cd = st.cd or { dash = 0, heal = 0, strike = 0 }
   for k, v in pairs(st.cd) do
     st.cd[k] = math.max(0, v - dt)
   end
+  publish_cooldowns(st.cd)
   -- Menus abertos comem as teclas (paridade com o `MenusOpen` nativo).
   -- `viber.ui.is_open` exige o id do modal (não há "algum aberto?" na API).
   if viber.ui.is_open("menu") or viber.ui.is_open("profiler") then
@@ -51,13 +74,22 @@ function on_update(dt)
     viber.burst("ground-dust", px, py + 0.2, pz, 10)
   end
 
-  -- [E] cura (sem interação em alcance — a fronteira do nativo; aqui cura
-  -- sempre que não há menus; um NPC em alcance tem prioridade própria).
-  if viber.input.pressed("e") and st.cd.heal <= 0 and not viber.interacted("e") then
-    st.cd.heal = CD_HEAL
-    viber.heal_player(HEAL_AMOUNT)
-    viber.sound("heal")
-    viber.damage_number("+" .. HEAL_AMOUNT .. " HP", { color = "#7ef29d" })
+  -- [E] cura (sem interação em alcance — a fronteira do nativo: o prompt
+  -- [E] do HUD é a mesma pergunta "há alguém para falar/usar aqui?").
+  -- Com a vida cheia não gasta a recarga; o número mostra o que CUROU (e
+  -- nasce sobre o herói — sem x/y/z saía sobre a entidade controller).
+  if viber.input.pressed("e") and st.cd.heal <= 0 and not e_is_interaction() then
+    local _, hp, max_hp = viber.player_hp()
+    local healed = math.min(HEAL_AMOUNT, math.max(0, (max_hp or 0) - (hp or 0)))
+    if healed < 1 then
+      viber.toast("Vida já está cheia.")
+    else
+      st.cd.heal = CD_HEAL
+      viber.heal_player(healed)
+      viber.sound("heal")
+      viber.burst("sparkle", px, py + 1.0, pz, 14)
+      viber.damage_number("+" .. math.floor(healed) .. " HP", { color = "#7ef29d", x = px, y = py + 2.0, z = pz })
+    end
   end
 
   -- [R] golpe radial com juice completo (valores do nativo).

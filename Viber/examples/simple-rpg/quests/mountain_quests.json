@@ -55,20 +55,21 @@
     "portrait": "",
     "voice": "",
     "lines_intro": [
-      "Lobos das neves cercam o caminho pro covil do ogro.",
-      "Elimine 4 e eu abro a passagem pra você."
+      "O ogro dorme no covil lá no alto, e só desce quando a serra fica em silêncio.",
+      "Limpe os Picos — goblins, lobos, tudo — e ele vem ao seu encontro. Derrube-o e a estrada do sul é nossa outra vez.",
+      "Cuidado quando ele erguer os punhos: saia de perto antes que a terra rache."
     ],
-    "lines_progress": ["Ainda faltam {remaining} lobos das neves."],
-    "lines_complete": ["O caminho está livre. Cuidado com o ogro lá no alto."],
+    "lines_progress": ["O ogro ainda respira. A serra precisa ficar quieta pra ele descer."],
+    "lines_complete": ["Você derrubou o ogro dos Picos! Os mojões vão contar isso por cem anos."],
     "objective": {
       "type": "kill",
-      "target": "wolf",
-      "count": 4
+      "target": "boss",
+      "count": 1
     },
     "rewards": {
-      "gold": 320,
-      "xp": 260,
-      "items": ["potion:2"]
+      "gold": 700,
+      "xp": 500,
+      "items": ["ancient_relic:1", "potion:3"]
     }
   },
   {

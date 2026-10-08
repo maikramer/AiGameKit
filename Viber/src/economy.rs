@@ -326,8 +326,9 @@ fn vault_chips_system(
         return;
     }
     for (name, children) in &chips {
-        let name_str = name.to_string();
-        let Some(resource) = name_str.strip_prefix("chip:") else {
+        // `as_str`, não `to_string`: a query apanha todo o nó nomeado com
+        // filhos (dezenas de milhares no simple-rpg) e só 3 são chips.
+        let Some(resource) = name.as_str().strip_prefix("chip:") else {
             continue;
         };
         let wanted = vault.resource(resource).to_string();

@@ -593,9 +593,16 @@ struct QuestTracker;
 fn quest_dialogue_system(
     keys: Res<ButtonInput<KeyCode>>,
     players: Query<&GlobalTransform, With<Player>>,
-    npcs: Query<(Entity, &GlobalTransform, &crate::recipes::spawn::DialogueNpc)>,
+    npcs: Query<(
+        Entity,
+        &GlobalTransform,
+        &crate::recipes::spawn::DialogueNpc,
+        Has<crate::luau::LuaScriptRef>,
+    )>,
     // Um script reclamou o diálogo (`viber.own_system("dialogue")`): o
-    // handler nativo cala e o fluxo é do Lua.
+    // handler nativo cala NOS NPCs COM SCRIPT — esses conduzem a conversa
+    // em Lua. Os NPCs sem script continuam no fluxo nativo (a posse era
+    // global: o Hald em Lua calava os ~26 dadores do simple-rpg).
     owners: Option<Res<crate::luau::ownership::ScriptSystemOwners>>,
     // Arbitragem do [E] (`interact::InteractionFocus`): se o vencedor da
     // tecla é OUTRO alvo, o diálogo nativo não dispara — prompt e ação
@@ -616,12 +623,9 @@ fn quest_dialogue_system(
     if !keys.just_pressed(KeyCode::KeyE) {
         return;
     }
-    if owners
+    let dialogue_owned = owners
         .as_deref()
-        .is_some_and(|o| o.owns(crate::luau::ownership::SYSTEM_DIALOGUE))
-    {
-        return;
-    }
+        .is_some_and(|o| o.owns(crate::luau::ownership::SYSTEM_DIALOGUE));
     let Some(player) = players.iter().next() else {
         return;
     };
@@ -630,10 +634,10 @@ fn quest_dialogue_system(
     // com 2 NPCs em alcance entregava/aceitava a quest do errado). O alcance
     // é o EFETIVO (`interact::default_range`, metade do autorado).
     let range = crate::interact::default_range();
-    let Some((npc_entity, _, npc)) = npcs
+    let Some((npc_entity, _, npc, scripted)) = npcs
         .iter()
-        .filter(|(_, t, _)| t.translation().distance(player_pos) < range)
-        .min_by(|(_, a, _), (_, b, _)| {
+        .filter(|(_, t, _, _)| t.translation().distance(player_pos) < range)
+        .min_by(|(_, a, _, _), (_, b, _, _)| {
             a.translation()
                 .distance_squared(player_pos)
                 .total_cmp(&b.translation().distance_squared(player_pos))
@@ -641,6 +645,9 @@ fn quest_dialogue_system(
     else {
         return;
     };
+    if dialogue_owned && scripted {
+        return;
+    }
     // O vencedor do foco [E] (se algum) tem de ser ESTE NPC — um script mais
     // próximo que ganhou o [E] leva a interação consigo.
     if let Some(focus) = focus.as_deref() {
@@ -1049,17 +1056,33 @@ fn quest_tracker_system(
     time: Res<Time>,
     log: Res<QuestLog>,
     vault: Option<Res<crate::economy::Vault>>,
-    tracker: Query<&Children, With<QuestTracker>>,
+    mut tracker: Query<(&Children, &mut Visibility), With<QuestTracker>>,
     mut texts: Query<&mut Text>,
+    // HUD declarativo com a missão (`bind="quest.title"`): o tracker nativo
+    // é o fallback de mundos sem UI — com os dois, o texto cru aparecia
+    // duplicado por baixo do cartão de missão.
+    declarative: Query<&crate::ui::runtime::UiBind>,
 ) {
     *throttle -= time.delta_secs();
     if *throttle > 0.0 {
         return;
     }
     *throttle = 0.5;
-    let Ok(children) = tracker.single() else {
+    let Ok((children, mut visibility)) = tracker.single_mut() else {
         return;
     };
+    let superseded = declarative.iter().any(|b| b.0 == "quest.title");
+    let wanted_visibility = if superseded {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    };
+    if *visibility != wanted_visibility {
+        *visibility = wanted_visibility;
+    }
+    if superseded {
+        return;
+    }
     let active = log.active_ids(vault.as_deref());
     for (i, child) in children.iter().enumerate() {
         let Ok(mut text) = texts.get_mut(child) else {
@@ -1167,6 +1190,56 @@ mod tests {
         );
         assert_eq!(normalize_target("Wolf"), normalize_target("wolf"));
         assert_ne!(normalize_target("wolf"), normalize_target("shade"));
+    }
+
+    /// `viber.own_system("dialogue")` cala o [E] nativo SÓ nos NPCs com
+    /// script (que falam em Lua). Era global: o Hald do simple-rpg
+    /// (`npc/forest-wolves.lua`) emudecia todos os outros dadores.
+    #[test]
+    fn test_owned_dialogue_only_silences_scripted_npcs() {
+        let run = |dialogue_id: &str, scripted: bool| -> QuestStatus {
+            let mut app = App::new();
+            let mut keys = ButtonInput::<KeyCode>::default();
+            keys.press(KeyCode::KeyE);
+            let mut owners = crate::luau::ownership::ScriptSystemOwners::default();
+            owners
+                .0
+                .insert(crate::luau::ownership::SYSTEM_DIALOGUE.to_string());
+            app.insert_resource(keys)
+                .insert_resource(owners)
+                .insert_resource(log())
+                .add_message::<ScriptToast>()
+                .add_message::<crate::ambient::SfxEvent>()
+                .add_systems(Update, quest_dialogue_system);
+            app.world_mut()
+                .spawn((Player::default(), GlobalTransform::default()));
+            let npc = app
+                .world_mut()
+                .spawn((
+                    crate::recipes::spawn::DialogueNpc {
+                        dialogue_id: dialogue_id.into(),
+                    },
+                    GlobalTransform::from_translation(Vec3::new(1.0, 0.0, 0.0)),
+                ))
+                .id();
+            if scripted {
+                app.world_mut().entity_mut(npc).insert(crate::luau::LuaScriptRef {
+                    path: "npc/forest-wolves.lua".into(),
+                });
+            }
+            app.update();
+            app.world().resource::<QuestLog>().status(dialogue_id, None)
+        };
+        assert_eq!(
+            run("forest_shades", false),
+            QuestStatus::Active,
+            "NPC sem script: o diálogo nativo continua a aceitar"
+        );
+        assert_eq!(
+            run("forest_wolves", true),
+            QuestStatus::NotTaken,
+            "NPC com script: a conversa é do Lua"
+        );
     }
 
     #[test]
@@ -1282,17 +1355,20 @@ mod tests {
             "outpost_veins",
             "citadel_shades",
             "smugglers_cache",
+            // Caçadas aos chefes (§10c de world/ai/npcs.xml).
+            "forest_witch",
+            "desert_worm",
         ] {
             assert!(
                 defs.iter().any(|d| d.id == id),
                 "quest de cenário ausente: {id} (um JSON do disco deixou de parsear?)"
             );
         }
-        // 21 do jogo original + 4 dos cenários. Um ficheiro que caia leva
-        // várias de uma vez, portanto o piso apanha a classe.
+        // 21 do jogo original + 4 dos cenários + 2 caçadas. Um ficheiro que
+        // caia leva várias de uma vez, portanto o piso apanha a classe.
         assert!(
-            defs.len() >= 25,
-            "só {} quests carregadas (21 + 4 dos cenários esperadas) — um JSON do disco caiu",
+            defs.len() >= 27,
+            "só {} quests carregadas (21 + 4 dos cenários + 2 caçadas esperadas) — um JSON do disco caiu",
             defs.len()
         );
     }

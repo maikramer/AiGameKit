@@ -12,7 +12,7 @@
 //! - **Guard [L]** (sistema em `feedback.rs`): −75 % de dano, parry total
 //!   nos primeiros 0,22 s.
 
-use bevy::math::primitives::Sphere;
+use bevy::shape::Sphere;
 use bevy::prelude::*;
 
 use crate::economy::Vault;
@@ -474,18 +474,24 @@ pub(crate) fn kill_creature(
         clip: crate::ambient::SfxClip::EnemyDeath,
         position: Some(position),
     });
+    let kind = script.map(|s| crate::combat::script_kind(&s.path));
+    let reward = kind
+        .as_deref()
+        .map_or(crate::combat::KILL_XP, crate::combat::kill_xp);
     if let Ok(mut xp) = hero_xp.single_mut() {
-        gain_xp(&mut xp, crate::combat::KILL_XP);
+        gain_xp(&mut xp, reward);
     }
     numbers.write(DamageNumberEvent {
         position: position + Vec3::Y * 0.4,
-        text: format!("+{} XP", crate::combat::KILL_XP),
+        text: format!("+{reward} XP"),
         color: Color::srgb(1.0, 0.8, 0.25),
     });
-    toasts.write(ScriptToast(format!(
-        "Inimigo derrotado (+{} XP)",
-        crate::combat::KILL_XP
-    )));
+    let boss = script.is_some_and(|s| s.path.replace('\\', "/").starts_with("bosses/"));
+    toasts.write(ScriptToast(if boss {
+        format!("Chefe derrotado! (+{reward} XP)")
+    } else {
+        format!("Inimigo derrotado (+{reward} XP)")
+    }));
     if let (Some(script), Some(quests)) = (script, quests.as_deref_mut()) {
         let kind = crate::combat::script_kind(&script.path);
         for ready in quests.report_kill(&kind) {

@@ -110,6 +110,22 @@
       <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="peaks_survey" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
+    <!-- ============================================================
+           §10c CAÇADAS — um dador por chefe de bioma, fora da muralha e
+           longe das artérias. Objetivo `kill` com o nome do SCRIPT do chefe
+           (`bosses/witch.lua` → `witch`, `bosses/sand-worm.lua` →
+           `sand-worm`); o `analyze` avisa se o alvo não existir no mundo.
+           O Guardião do Lodo (Onno, §10 Pântano) e o Ogro (Sig, §10 Picos)
+           já têm dador.
+           ============================================================ -->
+    <Entity name="npc_forest_witch" translation="-24 0 82">
+      <GltfScene url="/assets/meshes/characters/npc_scholar_lod0.glb" />
+      <DialogueNPC dialogue-id="forest_witch" portrait-url="" voice-sfx="" marker-height="2.5" />
+    </Entity>
+    <Entity name="npc_desert_worm" translation="96 0 10">
+      <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
+      <DialogueNPC dialogue-id="desert_worm" portrait-url="" voice-sfx="" marker-height="2.5" />
+    </Entity>
   </Group>
   <!-- FIM quest-npcs -->
 </world>

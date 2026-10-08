@@ -95,5 +95,37 @@
       "xp": 170,
       "items": ["potion:2"]
     }
+  },
+  {
+    "id": "desert_worm",
+    "npc": "npc_desert_worm",
+    "biome": "desert",
+    "title": "Kadi, guia de caravanas",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Três caravanas sumiram no fundo do Ermo. A areia engoliu tudo — camelos, carga, gente.",
+      "Não foi tempestade. É o Verme. Quando a areia tremer à volta dele, corra pra longe do círculo.",
+      "Mate o bicho e as rotas reabrem. Pago bem, e em seda."
+    ],
+    "lines_progress": [
+      "O Verme ainda se esconde no fundo do deserto, a leste."
+    ],
+    "lines_complete": [
+      "As dunas estão quietas! As caravanas voltam amanhã — e o primeiro brinde é seu."
+    ],
+    "objective": {
+      "type": "kill",
+      "target": "sand-worm",
+      "count": 1
+    },
+    "rewards": {
+      "gold": 450,
+      "xp": 320,
+      "items": [
+        "silk_cloth:2",
+        "potion:2"
+      ]
+    }
   }
 ]
