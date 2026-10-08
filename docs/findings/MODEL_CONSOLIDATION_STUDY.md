@@ -129,13 +129,14 @@ se o token HF perder acesso SA3 (re-download continua possível com token válid
 
 ## 6. Achados secundários de disco (fora do âmbito "modelos")
 
-- **Venvs por tool: 126 GB** — o stack torch CUDA está replicado ×17. O pip cache
-  (`~/.cache/pip`, em `/home`) e os venvs (em `/media/…/GitClones`) estão em
-  filesystems diferentes → sem hardlinks, cópias completas. Mover o cache para o mesmo
-  FS e reinstalar os venvs (ou `uv` com cache no mesmo FS) deduplica ~5-6 GB/venv.
-  Iniciativa separada e arriscada (workers vramd dependem dos venvs) — fazer tool a
-  tool com `vramd stop`.
-- **`Viber/target`: 25 GB** — `cargo clean` (ou manter só o profile release).
+- **Venvs por tool: 126 GB → 28 GB** ✅ (executado 2026-10-08, ver §8): o stack torch
+  CUDA estava replicado ×17 porque o pip **copia** wheels para cada venv (sem
+  hardlinks como o uv) e o pip cache (`/home`) e os venvs (`/media/…`) estão em
+  filesystems diferentes. Resolvido com dedupe por hardlinks in-place
+  (`make dedupe-venvs`, `scripts/dedupe_venvs.py`) — sem reinstalações nem rede.
+  Reexecutar após `./install.sh <tool>` ou upgrades de pacotes grandes.
+- **`Viber/target`: 25 GB** — `cargo clean` (ou manter só o profile release). Ainda
+  por fazer (WIP activo de outro agente no Viber — não limpar a meio de builds).
 - **`outputs/` do Motion3D**: ~123 MB de NPZ de teste — limpeza trivial.
 
 ## 7. Sequência recomendada
@@ -184,3 +185,17 @@ zips Quaternius 34 MB + log residual text2icon. HY-Motion full **mantido** (alav
 Paint3D 254 ✓ · AiGameKitLab 274 ✓ · Text3D 538 ✓ + **7 falhas pré-existentes**
 (octree ladder/`max_octree_for_vram` — confirmadas por stash antes/depois, WIP alheio).
 `vramd doctor` pós-corte: sem perdas (vramd estava parado; auto-arranca no próximo uso).
+
+## 9. Execução complementar — dedupe das venvs (2026-10-08, tarde)
+
+`scripts/dedupe_venvs.py` + `make dedupe-venvs` (`DEDUPE_ARGS=--apply` para aplicar):
+agrupa ficheiros ≥1 MiB entre todas as `*/.venv` por (tamanho, blake2b) e substitui
+duplicados por hardlinks (atómico por ficheiro: `os.link` + `os.replace`; salta
+`st_nlink>1`). Resultado: **126 GB → 28 GB** (98 GB libertados no disco `/media`,
+95→193 GB livres), 3005 hardlinks, 0 falhas. As 17 venvs eram todas Python 3.13 com
+torch 2.13.0+cu130 idêntico (Intrinsic 2.14.0) — daí a taxa tão alta.
+
+Verificação pós-dedupe: `import torch` nas 16 venvs ✓ · suites rápidas Motion3D 135 /
+Text2D 4 / Text2Sound 39 / Paint3D 48 / Shared 77 / AiGameKitLab 274 ✓ · canaries
+`bpy` 5.2 / `diffusers` / `vramd` ✓. Semântica: upgrade/uninstall numa venv faz unlink
+do link — irmãs intactas; reexecutar o dedupe após installs novos.

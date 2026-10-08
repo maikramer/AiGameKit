@@ -5,7 +5,7 @@ PYTHON_PROJECTS := Shared Text2D Text3D Paint3D Part3D GameAssets Texture2D Skym
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-viber test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-viber test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean dedupe-venvs typecheck check install-hooks
 
 # Each package is tested from its own venv (installed by ./install.sh <tool>, which
 # adds the [dev] extra). CI has no per-package venv, so the system interpreter stays
@@ -138,6 +138,9 @@ clean: ## Remove __pycache__, caches, build/, dist/, *.egg-info under the repo
 	@find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null; true
 	@find . -type d \( -name build -o -name dist \) -exec rm -rf {} + 2>/dev/null; true
 	@find . -type d -name '*.egg-info' -exec rm -rf {} + 2>/dev/null; true
+
+dedupe-venvs: ## Hardlink ficheiros idênticos entre */.venv (dry-run; --apply via DEDUPE_ARGS)
+	python3 scripts/dedupe_venvs.py $(DEDUPE_ARGS)
 
 typecheck: ## mypy on Shared/src (--ignore-missing-imports)
 	$(call run-mypy-shared)
