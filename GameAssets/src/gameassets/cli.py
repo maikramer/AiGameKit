@@ -240,6 +240,23 @@ def info_cmd() -> None:
         )
 
 
+@main.command("doctor")
+@click.option("--json", "as_json", is_flag=True, help="Saída JSON para agentes (CI-ready).")
+def doctor_cmd(as_json: bool) -> None:
+    """Primeiro uso: valida tools do perfil, vramd/GPU, compressão GLB, LLM do dream e disco."""
+    import json as _json
+
+    from .doctor import doctor_payload, render_doctor, run_doctor
+
+    checks = run_doctor()
+    if as_json:
+        console.print(_json.dumps(doctor_payload(checks), ensure_ascii=False, indent=2))
+    else:
+        render_doctor(checks)
+    if any(c.status == "fail" for c in checks):
+        sys.exit(1)
+
+
 @main.command("prompts")
 @click.option(
     "--profile",
