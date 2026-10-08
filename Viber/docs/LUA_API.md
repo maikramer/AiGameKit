@@ -211,7 +211,7 @@ foldarms/lean/idle`.
 
 ## Quests
 
-Definições em JSON (21 quests do exemplo, embutidas em `src/quests.rs` via
+Definições em JSON (27 quests do exemplo, embutidas em `src/quests.rs` via
 `include_str!`); o estado viaja no save. `viber.quest_state` devolve
 `"not_taken" | "active" | "ready" | "done" | "unknown"`.
 
@@ -410,7 +410,7 @@ Um NPC/dador pode conduzir o seu PRÓPRIO diálogo em Lua:
 | `viber.say(texto [, segundos])` | escreve no **balão nativo** do HUD (o mesmo do diálogo de quests); sem `<DialogueBalloon>` no mundo = no-op com warn 1×; `\n` faz multi-linha; default 4 s |
 | `viber.quest_def(id)` | tabela da definição autoral (`id/title/npc/biome/kind/target/count/radius/gold/xp/items/lines_intro/lines_progress/lines_complete`) ou `nil` — lê o MESMO `<mundo>/quests/*.json` da engine |
 | `viber.quest_defs()` | lista com todas as definições do mundo |
-| `viber.own_system(nome)` | **reclama um sistema nativo** para Lua: o handler da engine cala e a lógica passa a ser do script. Nomes: `dialogue` (o `[E]` dos `<DialogueNPC>`), `abilities` (C/E/R), `bomb` (B), `guard` (L), `hotbar` (1/2), `harvest` (J). Sem posse, o comportamento nativo é o de sempre |
+| `viber.own_system(nome)` | **reclama um sistema nativo** para Lua: o handler da engine cala e a lógica passa a ser do script. Nomes: `dialogue` (o `[E]` dos `<DialogueNPC>` **com script** — os NPCs sem script continuam no diálogo nativo; era global e um único NPC em Lua emudecia todos os dadores do mundo), `abilities` (C/E/R), `bomb` (B), `guard` (L), `hotbar` (1/2), `harvest` (J). Sem posse, o comportamento nativo é o de sempre |
 
 Exemplo completo: `examples/simple-rpg/scripts/npc/forest-wolves.lua` (Hald —
 linhas do JSON, `say` no balão, `quest_accept`/`quest_turn_in`).

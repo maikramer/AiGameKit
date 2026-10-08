@@ -685,3 +685,19 @@ tudo.
   pistas de grelha respeita parêntesis exactamente por isso.
 * Enquanto um `UiInput` está focado, as teclas de modal são ignoradas (o
   campo é que as come) — por isso é que "Menu" num campo não abre o menu.
+
+## `Interaction` / `Button` depois do Bevy 0.20
+
+O Bevy 0.20 tornou `bevy::ui::Interaction` e `bevy::ui::Button` aliases
+deprecados de tipos **privados** — já não podem aparecer numa query fora do
+`bevy_ui`. O substituto oficial (`picking::hover::Hovered` + `ui::Pressed` do
+`bevy_ui_widgets`) tem outra semântica (press/release por observers de
+picking), e toda a UI declarativa — cliques, sliders, checkboxes, modais, a
+`UiClicks` que o bridge lê — foi escrita contra a antiga.
+
+[`src/ui/interaction.rs`](../src/ui/interaction.rs) é o `ui_focus_system` do
+0.19 portado tal e qual sobre um `Interaction` e um `Button` **nossos** (mesmos
+inputs: rato, toques, cursor da janela; mesma `UiStack`), registado pelo
+`UiPlugin` em `PreUpdate`/`UiSystems::Focus`. Código da engine importa
+`crate::ui::interaction::{Button, Interaction}` — o import explícito sombreia
+o do prelude. Migrar para o picking é trocar este ficheiro, não a UI.

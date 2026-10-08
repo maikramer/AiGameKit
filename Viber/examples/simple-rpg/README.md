@@ -21,9 +21,10 @@ cargo run -- analyze examples/simple-rpg/world.xml       # headless + cobertura
 
 Jogável de ponta a ponta: **player** com combate melee ([J]/clique, alvo [V],
 dash [C], golpe radial [R], bomba [B], guard [L], talentos com [Q]→Talentos),
-**21 quests** (JSON em `quests/`, diálogo [E] com os NPCs, tracker no HUD,
+**27 quests** (JSON em `quests/`, diálogo [E] com os NPCs, tracker no HUD,
 bounties no notice-board), **economia** (vault gold/wood/stone, colheita de
-árvores/pedras, loja [K] no mercador, hotbar [1]/[2]), **travel** (A Nota —
+árvores/pedras, loja no diário [Q]→Loja — falar com o Bram [E] abre-a —,
+hotbar [1]/[2], despojos de ouro/poções nos abates), **travel** (A Nota —
 12 marcos para assinar com [F], viagem rápida [G] nas fogueiras, seta de
 waypoint), **save/load** (menu [Q]→Sistema: [J] grava, [L] carrega; JSON em
 `~/.local/share/viber/`), **mundo vivo** (céu procedural + ciclo dia/noite,
@@ -36,6 +37,21 @@ está em `Viber/docs/LUA_API.md`.
 
 O `analyze` imprime o relatório de cobertura — é o roteiro do que falta à
 engine.
+
+### Combate (lib/fsm.lua)
+
+Os golpes inimigos são **legíveis**: a criatura trava, toca o clip `attack`
+e pulsa um anel âmbar no chão durante o *windup*; o dano só entra se o herói
+ainda estiver ao alcance no impacto — recuar, dash [C] ou aparar [L] no
+tempo certo resolvem (sai "ESQUIVA"). Depois do golpe há uma janela de
+punição (*recover*). Atingir uma criatura fá-la vacilar (clip `hit`) e
+cancela o windup. Os **chefes** (Bruxa, Verme, Guardião do Lodo, Ogro) têm
+barra própria no HUD, *poise* (só vacilam com dano acumulado), um especial a
+cada 3 golpes com anel de aviso colorido (a maldição da Bruxa cai onde o herói
+estava) e fúria abaixo de ~40 % de vida. Cada um tem dador de quest.
+
+As teclas de debug de vitais ([H] dano, [N] cura total, [K] +XP) só existem
+com `VIBER_DEBUG_KEYS=1`.
 
 Assets: `/assets/…` resolve contra as asset roots do `config.yaml` deste
 jogo — a pasta do jogo SEMPRE primeiro (overrides), o pool partilhado
@@ -50,8 +66,8 @@ espelho nem cópia local do pool** (guarda anti-regressão:
 - `world.xml` — raiz ( porta do `index.html` original; `<Scene>` → `<world>` ),
   com a UI declarativa (`UiRoot`/`UiStyle`) de tabs do HUD
 - `world/**.xml` — módulos migrados, espelham `public/world/` do original
-- `quests/*.json` — definições das 21 quests (embutidas na engine via
-  `include_str!`; campos: `id, npc, biome, title, lines_*, objective, rewards`)
+- `quests/*.json` — definições das 27 quests (lidas do disco pela engine via
+  `game.quests_dir`; campos: `id, npc, biome, title, lines_*, objective, rewards`)
 - `scripts/**.lua` — comportamento Luau (inimigos/bosses, colheita, POIs,
   HUD/UI) via a API `viber.*` (`Viber/docs/LUA_API.md`)
 - `config.yaml` — **contrato de paths com a engine** (obrigatório; roots,

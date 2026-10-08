@@ -5,7 +5,7 @@ O mundo que valida a engine de ponta a ponta: port do exemplo
 
 ## Estado
 
-**Jogável de ponta a ponta** — combate melee + skills + talentos, 21 quests
+**Jogável de ponta a ponta** — combate melee + skills + talentos, 27 quests
 com diálogo, economia (vault, colheita, loja, hotbar), travel (A Nota, 12
 marcos, viagem rápida), save/load, mundo vivo (céu procedural, dia/noite,
 clima, BGM por zona, partículas) e física (knockback, destrutíveis).

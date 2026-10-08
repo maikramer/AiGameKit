@@ -1,10 +1,17 @@
 # AGENTS.md — Viber
 
-Engine de jogo NATIVA em Rust/Bevy 0.19 que corre mundos declarativos XML do
+Engine de jogo NATIVA em Rust/Bevy **0.20.0-rc.2** que corre mundos declarativos XML do
 AiGameKit — sem browser, sem three.js. Estado: **Fases 0–3 ✅** (parse → IR →
 spawn → terreno → Luau → física; port do simple-rpg feito em 10 loops).
 Nomenclatura segue **Bevy** (`translation`, `euler`, `half-size`, `base-color`),
 não Unity/three.js.
+
+## Bevy 0.20 (WESL + forks vendored + OIT)
+
+* **WESL substituiu o naga_oil** — os shaders do motor são `.wesl`: `#import a::b::{x}` → `import a::b::{x};` (imports no topo, podem ser condicionais), `#ifdef X` → `@if(X)` (anexado a declarações/instruções; blocos `@if(BINDLESS) { … } @else { … }` embrulham regiões inteiras), `#{CONST}` → `constants::CONST` (defs numéricas), e os módulos do PBR ganharam o prefixo `bevy_pbr::render::` (`prepass_utils`→`bevy_pbr::prepass::utils`, `ssao_utils`→`bevy_pbr::ssao::utils`). Os ficheiros gerados em `<mundo>/shaders/` são `.wesl`; WGSL puro SEM diretivas continua válido (`AERIAL_WGSL`/`water_ssr` ficam `from_wgsl`). Harnesses: `tests/common/mod.rs` compila WESL com `wesl::compile` + stubs por módulo + o módulo especial `constants` — o padrão do `bevy_shader::shader_cache`.
+* **bevy 0.20.0-rc.2 pelo git tag** enquanto o crates.io não o publica: tabela `[patch.crates-io]` no `Cargo.toml` (bevy + 21 subcrates → `tag v0.20.0-rc.2`) — REMOVER quando o rc.2 sair no registry. Os crates do ecossistema presos ao 0.19 vivem em `vendor/` (bevy_rapier3d, bevy_rerecast[_core], bevy_landmass, landmass_rerecast — proveniência e condições de des-vendor em [`vendor/FORKS_020.md`](vendor/FORKS_020.md)).
+* **OIT** (transparência order-independent, opt-in `VIBER_OIT=1`): o gate é o componente `OrderIndependentTransparencySettings` na câmara (postfx.rs `oit_requested`); materiais `AlphaMode::Blend/Add` participam por omissão (`enable_oit()` default true), a ÁGUA fica fora (`WaterExtension::enable_oit() = false`).
+* **Reads/writes por sistema no profiler** (tab Sistemas, `viber debug prof --tab sistemas`): `ScheduleData` do `bevy_dev_tools` — os mesmos dados do BRP `schedule.graph`.
 
 ## WHERE TO LOOK
 
@@ -24,7 +31,7 @@ não Unity/three.js.
 | Player + câmara | `src/player.rs`, `src/camera.rs` | WASD/setas + Shift sprint + Space salto; third-person com drag/scroll |
 | Combate | `src/combat.rs`, `src/skills.rs`, `src/feedback.rs`, `src/vitals.rs` | melee [J], alvo [V], skills [C]/[R]/[B]/[L], dano flutuante/i-frames/respawn, HP/XP |
 | Colheita (destructibles) | `src/harvest.rs` | minerar/cortar nativos: `destructible="…"` no XML + `<ResourceNode>` no template; [J]/clique perto do prop toca clip `mine`/`chop` com picareta/machado na mão; `fall` = árvore cai e fica toco, `shatter` = pedra despedaça; loot → vault/XP/quests |
-| Quests & diálogo | `src/quests.rs`, `examples/simple-rpg/quests/*.json` | 25 quests JSON embutidas via `include_str!` (21 do jogo + 4 dos cenários), flow [E], QuestTracker. Schema: `id`/`npc`/`biome`/`title`/`lines_intro|progress|complete`/`objective{type: kill\|collect\|visit, target, count, radius}`/`rewards{gold,xp,items}`. Um `biome` em falta derruba o FICHEIRO inteiro (warn + skip), e um JSON que caia é silencioso — `test_fantasy_scenario_quests_are_loaded` e o audit cobrem a classe. Objetivo `visit` casa por NOME de entidade + `radius`; `kill` pelo nome do script da criatura (`enemies/wolf.lua` → `wolf`); `collect` pelo vault (`stone`, `wood`, `dark-wood`, `bog-moss`). O `analyze` cruza as defs com o mundo: dador sem `<DialogueNPC dialogue-id=…>` e marco de `visit` inexistente saem como ⚠ (`audit::audit_quests`; salta em mundos sem nenhum NPC de diálogo) |
+| Quests & diálogo | `src/quests.rs`, `examples/simple-rpg/quests/*.json` | 27 quests JSON (21 do jogo + 4 dos cenários + 2 caçadas a chefes), flow [E], QuestTracker. Schema: `id`/`npc`/`biome`/`title`/`lines_intro|progress|complete`/`objective{type: kill\|collect\|visit, target, count, radius}`/`rewards{gold,xp,items}`. Um `biome` em falta derruba o FICHEIRO inteiro (warn + skip), e um JSON que caia é silencioso — `test_fantasy_scenario_quests_are_loaded` e o audit cobrem a classe. Objetivo `visit` casa por NOME de entidade + `radius`; `kill` pelo nome do script da criatura (`enemies/wolf.lua` → `wolf`); `collect` pelo vault (`stone`, `wood`, `dark-wood`, `bog-moss`). O `analyze` cruza as defs com o mundo: dador sem `<DialogueNPC dialogue-id=…>`, marco de `visit` inexistente e alvo de `kill` que nenhum script de criatura produz saem como ⚠ (`audit::audit_quests`; salta em mundos sem nenhum NPC de diálogo) |
 | Cenários (peças de sítio) | `examples/simple-rpg/world/scenes/*.xml` | Quatro sítios habitados, cada um com a sua quest: acampamento de peregrinos à boca do Ermo, posto dos escavadores na mesa do Alto de Vael, campo da última batalha à porta da Cidadela e covil dos contrabandistas na orla da floresta. Agrupados por `<Group name="scene.*">`, com `SpawnExclusion`, âncoras visitáveis (nomeadas para o objetivo `visit`) e um NPC dador `<DialogueNPC>` por peça |
 | Economia & menus | `src/economy.rs`, `src/menus.rs` | vault real + hotbar [1]/[2]; toasts, banner e loading screen. O modal [Q] e a loja passaram para a UI declarativa (`world/menu.xml`); `MenusOpen` é espelhado de `UiModalsOpen` |
 | Save/load | `src/save.rs` | JSON em `~/.local/share/viber/<mundo>.save.json` (`save.dir` do `config.yaml` sobrepõe; `<mundo>` = nome da pasta para `world.xml`, `<pasta>-<ficheiro>` para os outros XML — `qa-hud.xml` não pisa o save do `world.xml`); campos ausentes num save parcial mantêm o estado da sessão; [J]/[L] com um menu aberto, ou os botões Guardar/Carregar do separador Sistema (`viber.ui.action("save"\|"load")`) |
@@ -44,6 +51,22 @@ cd Viber && cargo run -- run <world.xml>       # janela Bevy
 cd Viber && cargo test                          # testes headless
 make test-viber                                 # atalho monorepo
 ```
+
+### Preset de gráficos (`config.yaml` → `graphics`)
+
+`graphics: alto | equilibrado (default) | desempenho` — UM botão para a lente
+toda (cascatas do sol, shadow map, raymarch volumétrico, SSAO/DOF/motion blur/
+contact shadows, alcance de render dos spawners, densidade da relva).
+`VIBER_GRAPHICS` sobrepõe-se sem editar o ficheiro e cada `VIBER_*` individual
+continua a ganhar ao preset (a bissecção de QA não perdeu nada). Medido no
+`simple-rpg` (RTX 4050 Laptop, 1280x720, janela VISÍVEL): **32 / 26 / 17 ms**
+de frame — o `desempenho` é o preset dos 60 fps. Fonte:
+[`src/graphics.rs`](src/graphics.rs); números e o que NÃO funcionou em
+[`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
+
+> **Ao medir performance:** a janela tem de estar VISÍVEL. Ocluída, o
+> compositor estrangula a apresentação e o `render.prepare_views` salta de 8
+> para 15–26 ms com a GPU a 34 % — qualquer A/B feito assim é lixo.
 
 ### Preset de gameplay (`config.yaml` → `gameplay`)
 
@@ -96,7 +119,7 @@ do binário instalado).
 Um PNG/WebP é comprimido em disco e **RGBA8 na VRAM**. Todos os assets de
 runtime do pool estão em KTX2/UASTC; conteúdo novo deve entrar já assim
 (`text3d finish`, ou `scripts/ktx2_compress_pool.py --assets <raiz> --loose`).
-Nunca `etc1s`: o Bevy 0.19 não descomprime BasisLZ. Detalhe e números em
+Nunca `etc1s`: a policy do pool é UASTC (o leitor do 0.20 já transcode ETC1S, mas a qualidade manda UASTC). Detalhe e números em
 [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md). Assets partilhados vivem SÓ no
 pool — sem cópias nem symlinks por exemplo ([`docs/ASSETS.md`](docs/ASSETS.md)).
 
@@ -113,7 +136,7 @@ com `<Weather rain>`, superfícies para cima ganham o mesmo reflexo × chuva ×
 (`VIBER_WATER_SSR=1`) — sem acumulação temporal própria o reflexo dança com as
 ondas (medido 2026-09-10); é caminho raster oficial mas não está no frame por
 omissão. Ligar custa ~1 passe fullscreen de 24 passos. WGSL
-self-contained em `shaders/water_ssr.wgsl` (escrito no `run`); harness
+self-contained em `shaders/water_ssr.wesl` (escrito no `run`); harness
 `tests/water_ssr_shader.rs` valida layout (288/176 B) e proíbe indexação
 dinâmica de arrays em uniforms (crash do compilador NV 595.84 — cotas em
 campos s0..s7 desenrolados).
@@ -161,7 +184,7 @@ cujo `<BiomeRegion>` declara `tint` (máx. 8, espaçados ≥40 m; pad sem tint
 não gera probe — seria clone do céu mundial). Cubemap pintado em CPU pelo
 MESMO painter do IBL (`crate::ibl::sky_cubemap_tinted`, tint no hemisfério de
 baixo), repintado por fase do dia; parallax correction por AABB é nativa do
-Bevy 0.19. `VIBER_PROBES=0` desliga.
+Bevy. `VIBER_PROBES=0` desliga.
 
 ### Debug bridge (`viber run --bridge`)
 
@@ -356,7 +379,7 @@ viber debug lua 'local l = viber.debug.lights() local n = 0
 for _, luz in ipairs(l) do if luz.shadows then n = n + 1 end end return n'  # luzes caras
 ```
 
-**Limites honestos do profiling:** o Bevy 0.19 não expõe tempos POR sistema
+**Limites honestos do profiling:** o Bevy não expõe tempos POR sistema
 nem POR entidade de render (os executores já não emitem spans tracing). O que
 existe de real: `physics()` (contadores do último step do Rapier), `prof()`
 (frame ms/fps/scripts/chunks) e os PROXIES de composição em `stats()` — nº de
@@ -428,7 +451,7 @@ relva, sombras do sol, sombras das lanternas, pausar física). Cada aba tem **CO
 
 Anatomia:
 * Engine: `src/profiler/` (`mod.rs` plugin+contadores+overlay F3, `timed.rs`
-  wrapper `timed(Group, system)` que mede sistemas — o Bevy 0.19 não expõe
+  wrapper `timed(Group, system)` que mede sistemas — o Bevy não expõe
   tempos por sistema — mais âncoras do `PhysicsSet::StepSimulation`,
   `world_tab.rs`/`physics_tab.rs`/`audio_tab.rs` snapshots,
   `script.rs` = `viber.profiler()`/`viber.profiler_cmd()` para Luau);
@@ -766,10 +789,10 @@ autrados. Zonas de exclusão autorais: `<SpawnExclusion at="x z" radius="n">`
 — sempre honrada por TODOS os spawners, mesmo com `avoid-overlaps="0"`.
 | `destructible` (attr universal) | component-string de colheita nativa (`src/harvest.rs`): `popup-text`, `popup-color` (#hex), `preset` (burst de break), `burst-count`, `hits` (3), `hit-preset` (sparks/rockshards→sparks, woodchips→leaves), `hit-burst-count`, `shake-on-hit`, `crack-on-hit`+`crack-style` (voronoi/vertical → darken ×0.85 por golpe), `break-style` (`burst` \| `fall` \| `shatter`), `cut-height` (aceite; os GLBs de árvore já vêm pré-divididos em meshes `Stump`+`Top`), `range` (3.5). Num template de spawner aplica-se a CADA instância; filho `<ResourceNode kind="wood\|stone" yield="N"/>` do template define o loot. [J]/clique perto do prop: o herói equipa picareta (mine) ou machado (fall), toca o clip `mine`/`chop`, impacto a 35 % do clip, faíscas+wobble+darken por golpe; no último: `fall` tomba o `Top` longe do player com pivô no corte e fica o toco com collider, `shatter` lança 9 pedaços balísticos que pousam e desvanecem. Loot → vault (`ResourceNode`) + 30 XP + quests de recolha (lêem o vault) + popup flutuante + SFX `chop/mine-hit/break` (`assets/audio/sfx/combat/*.ogg`) |
 | `Vegetation` | `meshes` (lista separada por espaços), `density-per-km2`, `seed`, `region-*`, `scale-*`, `max-slope-deg`, `avoid-water`, `avoid-road` (default ON — `avoid-road="0"` deixa a erva entrar nas fitas), `avoid-cliff`/`cliff-margin` (idem spawners, default ON/2 m), `max-distance`, `cluster-*`; count = densidade × área km² com cap `max-instances` (default 800/tag — o original GPU-instancia ~100k; instancing é follow-up). `smart`/`wind`/`flower-*`/`plant-*` aceites sem efeito |
-| `Sky` | domo de céu procedural WGSL (`src/sky.rs`: sol, nuvens FBM, lua, estrelas, aurora, meteoros); os attrs crus são injectados como consts no shader **escrito em disco** (`<asset_root>/shaders/sky.wgsl`) a cada `run` — especialização por mundo (o Bevy 0.19 não re-uploads uniforms de material custom). `model` (`analytic`, default — o gradiente estilizado — ou `nishita`, o scattering físico portado do `bevy_atmosphere`) escolhe o modelo; `VIBER_SKY_MODEL` sobrepõe-no sem editar o XML. O modelo é resolvido UMA vez no `run` (`SkyConfig::with_env_override`) e viaja como resource `SkyModelState` para o IBL e os probes regionais — é o mesmo valor no shader e no ambiente, e o arranque loga `sky: modelo …` (o gate fica visível no `viber debug logs`) |
+| `Sky` | domo de céu procedural WGSL (`src/sky.rs`: sol, nuvens FBM, lua, estrelas, aurora, meteoros); os attrs crus são injectados como consts no shader **escrito em disco** (`<asset_root>/shaders/sky.wesl`) a cada `run` — especialização por mundo (o Bevy não re-uploads uniforms de material custom). `model` (`analytic`, default — o gradiente estilizado — ou `nishita`, o scattering físico portado do `bevy_atmosphere`) escolhe o modelo; `VIBER_SKY_MODEL` sobrepõe-no sem editar o XML. O modelo é resolvido UMA vez no `run` (`SkyConfig::with_env_override`) e viaja como resource `SkyModelState` para o IBL e os probes regionais — é o mesmo valor no shader e no ambiente, e o arranque loga `sky: modelo …` (o gate fica visível no `viber debug logs`) |
 | `DayCycle` | relógio dia/noite que conduz ambiente + sol: `minute-of-day` (normalizado a 0..1440), `minutes-per-real-second`, `dawn-minute`, `dusk-minute` (dawn tem de vir antes de dusk dentro de 0..1440 — senão avisa e volta a 330/1170), `ambient-day-intensity`, `ambient-night-intensity`, `drive-ambient`, `max-sun-elevation`, `sun-azimuth-base`. As rampas de luz são circulares (sem salto à meia-noite) (`src/worldsys.rs`) |
 | `Weather` | `wind` (vec2, consts de shader no boot), `wind-strength`, `clouds`, `rain` (0..1 contínuo — intensidade; conduz emissor de chuva ancorado ao player com partículas esticadas `size_y`, loop SFX `ambient/rain_loop.ogg` com volume ∝ intensidade, fog/exposure no `AtmosphereState`), `cycle` (bool — liga o scheduler determinístico: a cada 240 s roda um alvo de chuva com SplitMix64(seed ⊕ índice·golden), transição lerp 10 s; sem `cycle` a chuva é estática como autorada) (`src/worldsys.rs` + `src/ambient.rs`: `RainEmitter`, `rain_emitter_driver`) |
-| `BiomeRegion` | polígono de bioma: `id`, `polygon` (`"[x,z;x,z;…]"`), `display-name` (nome de exposição no HUD via bind `zone.name`; ausente = tabela de fallback da engine), `fog-density`, `tint`, `pp-exposure`, `pp-bloom-strength` — fog/tint/postfx seguem a região do player (`src/ambient.rs` + `src/postfx.rs`) |
+| `BiomeRegion` | polígono de bioma: `id`, `polygon` (`"[x,z;x,z;…]"`), `display-name` (nome de exposição no HUD via bind `zone.name`; ausente = tabela de fallback da engine), `fog-density`, `tint`, `pp-exposure`, `pp-bloom-strength`, `rain-scale` (0..1: fator da chuva do `<Weather cycle>` com o herói na região — o deserto do simple-rpg usa 0.1; escala o ALVO do ciclo, a rampa de 10 s mantém-se) — fog/tint/postfx seguem a região do player (`src/ambient.rs` + `src/postfx.rs`) |
 | `WorldBorder` | clamp da posição do player: `radius` (3800), `warn-seconds` (5), `margin` (80) |
 | `NavMesh` | afina a navegação (`agent-radius`, tile, custo fora-de-estrada) — `src/nav/mod.rs`, lido no Startup **depois** do spawn do mundo (antes vivia em PreStartup e nunca via a tag) |
 | `SpawnGate` | `target-entity` (`player` default, ou `Name` de uma entidade), `y-fallback`, `skin-distance` (0.05): segura o alvo no ar (física desligada, velocidade a zero) até a coluna de terreno sob ele ter `VoxelCollider` e larga-o na superfície + skin; timeout 20 s; mundo sem `<Terrain>`, fora do heightfield ou sem colisão de terreno solta logo (no Y autorado). O herói ganha `TeleportSettle` ao ser largado (`src/spawn_gate.rs`) |
@@ -809,7 +832,7 @@ carve de pads/lagos/rios/estradas pelo brush engine; não há mesh nem collider
 heightfield. O visual do chão tem dois caminhos: o tint LEGADO por
 altura/inclinação em vertex colors (sem WGSL) ou — quando o mundo declara
 `layers` — o BLEND de 13 texturas de solo do pool por splat map (`splat.rs` +
-`layer_material.rs` + `shaders/terrain_chunk.wgsl`), que substitui o tint e
+`layer_material.rs` + `shaders/terrain_chunk.wesl`), que substitui o tint e
 pinta areia nas margens e o LEITO DE SEIXO (`pebbles`) nos fundos de
 lagos/rios.
 
@@ -822,10 +845,10 @@ default = budget de 2048 colunas), `height-smoothing` (1 = Catmull-Rom
 monotone; 0 = bilinear — suaviza a GRID de input), `collision-resolution`
 (64; interruptor — **0 desliga os colliders**; já não define geometria), `cliff-angle` (50° — gatilho da
 CliffMask/splat; 90 desliga), `cliff-min-area` (120 m²), `cliff-min-drop` (4 m), `cliff-min-extent` (8 m) — filtro REGIONAL: um componente de declive só é cliff se passar os três (mata declives espúrios), `cliff-streaks` (0.5 — escorrimentos verticais na pele da parede), `cliff-moss` (0.35 — musgo procedural nos ombros/ledges), `sharpen` (false), `sharpen-angle` (35°), `sharpen-seed` (0 = deriva de `seed`), `texture`/`texture-url`, `texture-tile-size` (0 = auto), `seed` (0), tint (caminho LEGADO): `base-color`, `color-low`, `color-mid`, `color-high`, `color-rock`, `snow-height`, `slope-threshold`, `slope-softness`, `height-blend-strength`; blend de camadas: `layers` (lista de ≤13 aliases do pool — `grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road pebbles` — ou caminhos de textura; o slot do leito carrega `pebbles` mesmo que o mundo não o liste), `shore-width` (5 m — faixa de areia fora da linha de água) — **PRODUÇÃO**: 8 layers por chunk (material bindless — o crash NV foi resolvido), ligado por omissão; escape hatch para o tint legado: `VIBER_CHUNK_LAYERS=0`; pele das paredes (estratos/streaks/musgo) configurável ao vivo via `viber.debug.ground{...}` |
-| — | **Material de chunk (r8 — 8 layers + roughness, bindless)**: o bootstrap gera UM material por chunk (`generate_chunk_splats` em `splat.rs`): as 8 texturas do pool com MAIOR peso agregado no chunk + DOIS planos splat RGBA8 próprios (plano 0 = slots 0–3, plano 1 = slots 4–7; pesos renormalizados a somar 1 EM CONJUNTO; chunks de montanha carregam snow/stone, de pântano mud — áreas diferentes têm blends diferentes). `rock` (paredes), leito (seixo) e a AREIA DA MARGEM são FORÇADOS na eleição top-8 — sem o force da areia a praia quebrava em costuras retas nos chunks que a perdiam da paleta. Material próprio (`layer_material.rs`, NÃO ExtendedMaterial) `#[bindless]` com 8 layers × (albedo, normal, height, AO, **roughness**) + 2 splats — 42 pares textura/sampler, tabela de índices `range(0..85)`; params em storage array na binding 10: tiles/tints/flats/roughs + origem/tamanho + layer de rocha para paredes triplanares). **Roughness maps** (`roughness.ktx2`; `smoothness.ktx2` entra INVERTIDO — inventário estático `RoughMap` em `SLOT_STYLES`): flags em `roughs[i].y` (mix 0.85 com a constante afinada) e `.z` (inverter); slots sem mapa mantêm a constante (mix 0) — o look não muda um milímetro onde o pool não tem mapa. + day/night tint; shader `shaders/terrain_chunk.wgsl` (template embutido reescrito no `run`). ⚠ **porquê bindless**: com bevy 0.19.1 + wgpu 29.0.4 + NV 595.84, QUALQUER material custom NÃO-bindless com `#[texture]` morre com SIGSEGV dentro de `libnvidia-gpucomp` ao criar o pipeline layout — teste-guarda `test_chunk_material_stays_bindless`; o `StandardMaterial` e materiais só-`#[storage]` (céu) funcionam; isolado por bissect de mundos M0–M23 (2026-09-04). Falha de textura reponta o slot para o fallback dele (leito → gravel; mapa opcional → plano/constante) |
+| — | **Material de chunk (r8 — 8 layers + roughness, bindless)**: o bootstrap gera UM material por chunk (`generate_chunk_splats` em `splat.rs`): as 8 texturas do pool com MAIOR peso agregado no chunk + DOIS planos splat RGBA8 próprios (plano 0 = slots 0–3, plano 1 = slots 4–7; pesos renormalizados a somar 1 EM CONJUNTO; chunks de montanha carregam snow/stone, de pântano mud — áreas diferentes têm blends diferentes). `rock` (paredes), leito (seixo) e a AREIA DA MARGEM são FORÇADOS na eleição top-8 — sem o force da areia a praia quebrava em costuras retas nos chunks que a perdiam da paleta. Material próprio (`layer_material.rs`, NÃO ExtendedMaterial) `#[bindless]` com 8 layers × (albedo, normal, height, AO, **roughness**) + 2 splats — 42 pares textura/sampler, tabela de índices `range(0..85)`; params em storage array na binding 10: tiles/tints/flats/roughs + origem/tamanho + layer de rocha para paredes triplanares). **Roughness maps** (`roughness.ktx2`; `smoothness.ktx2` entra INVERTIDO — inventário estático `RoughMap` em `SLOT_STYLES`): flags em `roughs[i].y` (mix 0.85 com a constante afinada) e `.z` (inverter); slots sem mapa mantêm a constante (mix 0) — o look não muda um milímetro onde o pool não tem mapa. + day/night tint; shader `shaders/terrain_chunk.wesl` (template embutido reescrito no `run`). ⚠ **porquê bindless**: com bevy 0.19.1 + wgpu 29.0.4 + NV 595.84 (re-verificar no wgpu 30 do 0.20), QUALQUER material custom NÃO-bindless com `#[texture]` morria com SIGSEGV dentro de `libnvidia-gpucomp` ao criar o pipeline layout — teste-guarda `test_chunk_material_stays_bindless`; o `StandardMaterial` e materiais só-`#[storage]` (céu) funcionam; isolado por bissect de mundos M0–M23 (2026-09-04). Falha de textura reponta o slot para o fallback dele (leito → gravel; mapa opcional → plano/constante) |
 | `TerrainPad` | `at` (`"x z"`), `size` (`"w d"`), `falloff` (8), `corner-radius` (4), `height` (ausente = auto: amostra o centro e escreve de volta) |
 | `InteriorScene` | `at` (`"x z"`, CENTRO), `size` (`"w d"`) — declara um retângulo como **bolsa de interior**, FORA da pegada do heightmap (`|x|` ou `|z|` > `world_size/2`). Dentro dela a `WorldBorder` não trava, não há bioma (névoa/tinta/exposição neutras) e NÃO chove (o emissor de chuva segue o player e seguiria para dentro da sala). A distância (>2 km) desliga o resto por si — render, cull, IA, spawners — e **fora do campo o terreno não gera colunas nem colliders**. A zona de música `dungeon` deixou de ter caixa copiada à mão: segue esta declaração. Um só por mundo; ver `src/worldsys.rs::InteriorSceneConfig` e `examples/simple-rpg/world/interiors.xml` |
-| `Lake` | `at`, `radius` (6), `depth` (1.5), `water-offset` (0.5), `color` (#2f7a9a), `opacity` (0.62 — lido pelo shader como escala de extinção da coluna), `ripple` (0.6 — amplitude das ondas, especializado como `CFG_WAVE_AMP` no `water.wgsl`; o maior dos lagos do mundo vence), `bank` (`soft` \| `beach` \| `cliff` \| `terraced` \| `gorge` \| `overhang` — `gorge`/`overhang` são VOXEL: anel de parede sólida na linha de água (`overhang` soca a base sob a lâmina; o carve preserva o banco natural), os restantes esculpem a rampa no heightfield), `rocks` (false — pedras de margem automáticas), `rocks-density` (0.12/m de linha de água), `rocks-scale-max` (1.4), filhos `<Island at="x z" radius height/>` (repetível — domo RAISE na bacia com praia; o espelho faz fade sobre ela). Carve: contorno orgânico com PERSONALIDADE por lago (`LakeShape` — alongamento dirigido `stretch·cos(2(θ−axis))` + harmónicos k=1,3,5,7 com amplitude e fase sorteadas por hash da posição; uns lagos saem quase redondos, outros ovais com baías e lóbulos, ±45 % no pico = `CONTOUR_PEAK` 1.45), **AUTORIA da forma**: `seed` (a fonte dos uniformes passa a SplitMix64 — mesma seed, mesma forma em qualquer posição), `stretch` (0–0.45), `axis` (graus), `lobes` (0–1.6, multiplicador das amplitudes; combinações agressivas são REESCALADAS para dentro do envelope `CONTOUR_PEAK`, nunca rejeitadas — sem autoria, o hash de posição fica bit-exact), rim = mínimo de 64 raios, taça `rim − depth·(1−t²)^1.5` até `radius·1.25`; espelho de água em `rim − water-offset` e termina EXATAMENTE na linha de água da taça |
+| `Lake` | `at`, `radius` (6), `depth` (1.5), `water-offset` (0.5), `color` (#2f7a9a), `opacity` (0.62 — lido pelo shader como escala de extinção da coluna), `ripple` (0.6 — amplitude das ondas, especializado como `CFG_WAVE_AMP` no `water.wesl`; o maior dos lagos do mundo vence), `bank` (`soft` \| `beach` \| `cliff` \| `terraced` \| `gorge` \| `overhang` — `gorge`/`overhang` são VOXEL: anel de parede sólida na linha de água (`overhang` soca a base sob a lâmina; o carve preserva o banco natural), os restantes esculpem a rampa no heightfield), `rocks` (false — pedras de margem automáticas), `rocks-density` (0.12/m de linha de água), `rocks-scale-max` (1.4), filhos `<Island at="x z" radius height/>` (repetível — domo RAISE na bacia com praia; o espelho faz fade sobre ela). Carve: contorno orgânico com PERSONALIDADE por lago (`LakeShape` — alongamento dirigido `stretch·cos(2(θ−axis))` + harmónicos k=1,3,5,7 com amplitude e fase sorteadas por hash da posição; uns lagos saem quase redondos, outros ovais com baías e lóbulos, ±45 % no pico = `CONTOUR_PEAK` 1.45), **AUTORIA da forma**: `seed` (a fonte dos uniformes passa a SplitMix64 — mesma seed, mesma forma em qualquer posição), `stretch` (0–0.45), `axis` (graus), `lobes` (0–1.6, multiplicador das amplitudes; combinações agressivas são REESCALADAS para dentro do envelope `CONTOUR_PEAK`, nunca rejeitadas — sem autoria, o hash de posição fica bit-exact), rim = mínimo de 64 raios, taça `rim − depth·(1−t²)^1.5` até `radius·1.25`; espelho de água em `rim − water-offset` e termina EXATAMENTE na linha de água da taça |
 | `River` | `path` (`"x z x z …"`, ≥2 pontos), `width` (6), `depth` (1.5), `water-offset` (0.3), `bank-width` (2), `bank-height` (0.9), `color` (#2a6685), `opacity` (0.72), `bank`/`rocks`/`rocks-density`/`rocks-scale-max` (idem `<Lake>`; `gorge` = paredes verticais sólidas dos dois lados, `overhang` = socava), `pool-spacing` (0 — poços ×1.6/rápidos ×0.4 com largura ±20 %; a superfície fica lisa, o LEITO ondula e a profundidade lê-se no shader), `cascades` (true — queda >1.2 m entre estações vira cascata: face de água vertical no mesh, caldeirão ×1.6 a jusante, névoa `mist` na base), `waterfalls` (true — CACHOEIRAS automáticas: queda acumulada ≥ `waterfall-min-drop` (3 m) é o tier acima da cascata — cortina contínua do lip à base alargada ×1.4, caldeirão à escala da queda, névoa escalada, spray no lip, espuma no caldeirão, loop de áudio posicional `water_waterfall.ogg` com raio/ganho ∝ queda), `waterfall-min-drop` (3 — limiar do tier, clamp ≥ CASCADE_DROP), `waterfall-notch` (true — no cruzamento com um `<Cliff>`, fenda de spill no brow: cápsula subtractiva com largura ∝ canal; a parede fica sólida e a água despenca POR CIMA), `spring` (false — nascente na estação 0: ferradura de rocha voxel com a boca a jusante, poozinho fundo, névoa). **Rio × cliff = cachoeira automática**: o pre-pass de specs cruza os paths 2D (`river_cliff_crossings`), o carve segura a superfície a montante da crista e garante a queda a jusante (height do cliff ou 3 m), a deteção pós-bands anota a face brow→toe (`CascadeInfo.wall`); o audit reporta cada cruzamento como ℹ. Confluência: estações dentro do contorno de um lago sobem à cota do espelho. Chaikin ×2 + estações de 3 m; superfície = prefixo-mínimo descendente (água nunca sobe); a ribbon acaba na linha de água real e meia-largura varia por estação (pools) |
 
 **Água viva (automática, sem attrs):** espuma ambiente — emissores `foam`
@@ -896,13 +919,13 @@ sustenta a `<InteriorScene>`. **Regra dura:** gameplay com Y conhecido usa
 `grid.sample` fora de `src/terrain/` é proibido (`collision-resolution` = só
 interruptor, `0` desliga). Teste: `tests/terrain_collision.rs`.
 
-**Água animada** (`water_material.rs` + `shaders/water.wgsl`): lakes/rivers
+**Água animada** (`water_material.rs` + `shaders/water.wesl`): lakes/rivers
 usam `ExtendedMaterial<StandardMaterial, WaterExtension>` — o fragment
 acrescenta ondas dirigidas pelo `wind`/`wind-strength` do `<Weather>`
 (normais animadas), fresnel (transparente de cima, espelho rasante + tint de
 céu), e glint de sol/lua (segue o relógio do `<DayCycle>`, igual à luz
 real). Zero uniforms de material — consts especializadas por mundo no
-`shaders/water.wgsl` (escrito no `run`, ao lado do céu) + `Globals` para o
+`shaders/water.wesl` (escrito no `run`, ao lado do céu) + `Globals` para o
 tempo, mesma arquitetura do `src/sky.rs`. Cor/alpha do corpo nas VERTEX
 COLORS (fade de margem incluído); `NotShadowCaster` obrigatório.
 

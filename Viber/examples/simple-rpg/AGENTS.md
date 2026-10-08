@@ -9,7 +9,7 @@ Panorama e estado: [`README.md`](README.md). Aqui ficam as regras para editar.
 |---------|---------|
 | `world.xml` | raiz do mundo (inclui os módulos + UI declarativa) |
 | `world/**.xml` | módulos migrados: cidades (`world/cities/discordia/*`), criaturas, landmarks, interiors, frontier |
-| `quests/*.json` | definições das 21 quests — **embutidas na engine via `include_str!`: alterar exige `cargo build`** |
+| `quests/*.json` | definições das 27 quests — lidas do DISCO no arranque (reiniciar a engine; sem `cargo build`) |
 | `scripts/**.lua` | comportamento (inimigos/bosses, colheita, POIs, HUD/UI) — **sem hot-reload: alterar exige reiniciar a engine** |
 | `ui/*.css` + `world/hud.xml` / `world/menu.xml` | HUD e menu [Q] declarativos |
 | `shaders/sky.wgsl` | céu — **reescrito em disco a cada `run`** (especializado pelos attrs do `<Sky>`); não editar à mão expectando persistência |

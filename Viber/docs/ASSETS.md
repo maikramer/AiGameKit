@@ -14,6 +14,15 @@ layouts de filesystem hardcoded, nem descobre pools por conta própria.
 
 ```yaml
 title: Simple RPG              # opcional — título da janela
+graphics: equilibrado          # opcional — alto | equilibrado (default) | desempenho
+                               #   um botão em vez de doze VIBER_*: cascatas do
+                               #   sol, shadow map, raymarch volumétrico, SSAO/
+                               #   DOF/motion blur/contact shadows, alcance de
+                               #   render dos spawners e densidade da relva.
+                               #   `VIBER_GRAPHICS` sobrepõe-se; cada VIBER_*
+                               #   individual ganha ao preset (bissecção de QA).
+                               #   Medido no simple-rpg (RTX 4050, 1280x720):
+                               #   32 / 26 / 17 ms de frame.
 
 assets:                        # resolve contra as ROOTS (AssetServer)
   roots:                       # extra, por ordem, DEPOIS da pasta do jogo

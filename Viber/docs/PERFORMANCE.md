@@ -33,7 +33,77 @@ Estado ao vivo (`viber.debug.stats()`): 10019 instâncias com `CullDistance`,
 **7009 escondidas**; ladder de LOD com 2540 no tier 0, 559 no tier 1 e 2422
 no tier 2.
 
-## As quatro causas (por ordem de impacto)
+## Segunda passagem (2026-09-14): 34,5 → 26 ms, e um preset de 60 fps
+
+A primeira passagem deixou o mundo a ~11–17 ms. Um ano de conteúdo depois
+(78 816 entidades, 25 248 malhas, postfx completo com TAA/bloom/SSAO/DOF/
+volumétrico/motion blur/PCSS) o mesmo spawn media **31–34,5 ms (29 fps)**.
+
+### Como medir sem se enganar
+
+* **A janela tem de estar VISÍVEL.** Com a janela ocluída (IDE por cima) o
+  compositor estrangula a apresentação: `render.prepare_views` — que é onde o
+  `prepare_windows` faz `get_current_texture()` — salta de 8 para 15–26 ms com
+  a GPU a 34 % de ocupação. Todos os A/B feitos nesse estado são lixo.
+* `viber debug prof --tab sistemas` traz agora a linha do tempo COMPLETA:
+  `sched.*` (main thread), `render.*` (fases do render app) e `core3d.*`
+  (dentro do `render.render`). `VIBER_PROF_GPU=1` acrescenta `gpu[]` com o
+  tempo de GPU por span do grafo.
+* `viber debug prof --samples N` com **N ≥ 12**, e citar `frame_ms.avg`.
+
+### O que dominava o frame
+
+| corte | Δ frame |
+|-------|---------|
+| sombras do sol (4 cascatas, 600 m, 4096²) | **−12,6 ms** |
+| raymarch volumétrico (64 passos, full-res) | **−6,0 ms** |
+| resto do postfx (bloom, SSAO, TAA, DOF, CAS…) | −5,0 ms |
+| sombras das point lights | −0,5 ms |
+| relva (`VIBER_GRASS=0`) | ~0 |
+| terreno (743 → 112 colunas) | ~0 |
+| SSR da água, IBL, point-shadow budget | ~0 |
+
+**O passe de sombra é draw-bound, não fill-bound.** 4096² → 1024² (16x menos
+texels) devolveu **1 ms**; cortar o ALCANCE devolveu **9**. A razão está na
+distribuição das malhas à volta do herói: 974 dentro de 80 m, 5140 dentro de
+120 m, **23 556 dentro dos 600 m que as cascatas varriam**. Passar de 4 para 2
+cascatas quase não mexe (−2,2 ms) porque a cascata longa continua a apanhar
+tudo — o que conta é o RAIO, não o número de vistas.
+
+### O que NÃO funcionou (fica registado para não se repetir)
+
+* **`NotShadowCaster` por instância com raio próprio** ("continua a desenhar,
+  deixa de projetar"). Tirou 19 584 malhas das cascatas e, com o alcance já
+  curto, mediu **pior**: 27,6–28,4 ms contra 25,8–26,1 sem ele. O custo é
+  estrutural — 20 mil componentes a mais fragmentam os arquétipos e o render
+  app paga na extração o que a sombra poupou. Com cascatas de 150 m o alcance
+  já faz o trabalho todo.
+* **Baixar o `cull-distance` dos props** (320 → 192 m) enquanto a GPU era o
+  limite: 0 ms. Só passa a valer no preset `desempenho`, depois de as sombras
+  e o volumétrico deixarem de saturar a GPU.
+
+### O resultado
+
+`config.yaml: graphics:` ([`src/graphics.rs`](../src/graphics.rs)) resolve tudo
+de uma vez — `VIBER_GRAPHICS` sobrepõe-se, e cada `VIBER_*` individual
+continua a ganhar ao preset (a bissecção de QA não perdeu nada):
+
+| | cascatas | alcance | shadow map | volumétrico | SSAO/DOF/blur/contact | cull | relva | **frame** |
+|---|---|---|---|---|---|---|---|---|
+| `alto` | 4 | 300 m | 4096² | 64 passos | on | 1,15x | 1,0 | **32,0 ms** (31 fps) |
+| `equilibrado` (default) | 3 | 150 m | 4096² | 40 passos | on | 1,0x | 1,0 | **26,0 ms** (38 fps) |
+| `desempenho` | 2 | 90 m | 2048² | off | off | 0,7x | 0,6 | **16,8 ms** (**60 fps**) |
+
+O default subiu de 29 para 38 fps **sem perder um efeito** — as sombras perto
+do herói ficam mais nítidas, não menos (150 m num mapa de 4096² dá 3,7 cm por
+texel contra os 14,6 cm do alcance antigo). O `desempenho` é o preset dos
+60 fps: perde os god-rays volumétricos, o SSAO e o DOF.
+
+No `desempenho` o limite deixa de ser a GPU e passa a ser **`render.render`
+(~10 ms de encode/submit)** com a `prepare_views` a 1 ms — o próximo teto é o
+número de instâncias desenhadas, não a lente.
+
+## As quatro causas da primeira passagem (por ordem de impacto)
 
 ### 1. O jogo corria sem optimizações
 

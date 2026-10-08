@@ -1,7 +1,8 @@
 # CRATES.md — adoção de crates e watch-list
 
-Estudo do ecossistema crates.io/Bevy feito a 2026-09-07 e o que dele entrou
-na engine. Critérios de adoção: (1) compatibilidade Bevy 0.19 confirmada nas
+Estudo do ecossistema crates.io/Bevy feito a 2026-09-07 (actualizado no upgrade
+a 0.20 a 2026-09-25) e o que dele entrou na engine. Critérios de adoção:
+(1) compatibilidade Bevy confirmada nas
 dependências publicadas, (2) substituir uma roda própria SEM mudar
 comportamento visível (contrato "mesma seed, mesmo mundo"), (3) risco de
 driver NV (materiais/shaders custom) avaliado, (4) manutenção ativa do crate.
@@ -20,6 +21,24 @@ driver NV (materiais/shaders custom) avaliado, (4) manutenção ativa do crate.
 O `bevy_audio`/rodio do Bevy fica compilado (tirar a feature do `bevy` exige
 re-listar ~20 features default — frágil); NENHUM som nasce por ele —
 `AudioPlayer`/`PlaybackSettings` deixaram de ser usados em runtime.
+
+## Forks vendored para o Bevy 0.20 (2026-09-25)
+
+O bevy 0.20.0-rc.2 saiu no GitHub antes do crates.io, e os crates do
+ecossistema presos ao 0.19 ficaram em `vendor/` com `[patch.crates-io]`
+(proveniência/revs e condições de des-vendor em
+[`vendor/FORKS_020.md`](../vendor/FORKS_020.md)):
+
+| Fork | A montar quando | Notas do port |
+|------|-----------------|---------------|
+| `bevy_rapier3d` 0.36 (→ rapier3d 0.36) | o monorepo `dimforge/rapier` (o repo `bevy_rapier` foi ARQUIVADO) publicar a versão bevy-0.20 | soft-bodies novos do rapier 0.36: `IntegrationParameters.soft_bodies`, `ContactPair::manifolds` método, `RigidBodyType::SoftFrame`, trait `handle_soft_body_tear_event`; `bevy_math::bounding` → `bevy_shape`. |
+| `bevy_rerecast` + `bevy_rerecast_core` 0.5 | `janhohenheim/rerecast` publicar 0.20 | reflect derives por feature do `rerecast` core. |
+| `bevy_landmass` 0.13 + `landmass_rerecast` 0.3 | `andriyDev/landmass` branch bevy-0.20 virar release | landmass_rerecast ainda misturava bevy 0.19 no branch — corrigido no vendor. |
+
+O próprio bevy vem do **git tag `v0.20.0-rc.2`** pela tabela `[patch.crates-io]`
+do `Cargo.toml` (bevy + 21 subcrates) — **remover o bloco `bevy*` quando o
+rc.2 sair no crates.io** (troca de 2 minutos). Também a borda: dev-dep `wesl`
+0.4.2 (mesma do bevy) para os harnesses de shader.
 
 ## Watch-list (avaliar numa próxima ronda)
 
