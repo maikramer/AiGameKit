@@ -225,13 +225,21 @@ cargo test --manifest-path Materialize/Cargo.toml test_preset_roundtrip  # Singl
 ### Instalação por perfil (install.sh)
 
 ```bash
-./install.sh core        # zero-a-jogo mínimo (10): vramd text2d text3d paint3d rigging3d
+./install.sh              # SEM ARGUMENTOS = perfil core (10): vramd text2d text3d paint3d rigging3d
                          #   animator3d gameassets materialize aigamekitlab vibegame
-./install.sh examples    # tudo que os jogos de exemplo usam (16): core + texture2d skymap2d
+./install.sh core         # o mesmo, explícito
+./install.sh examples     # tudo que os jogos de exemplo usam (16): core + texture2d skymap2d
                          #   text2sound terrain3d rocks3d viber
-./install.sh --all       # catálogo completo (acrescenta part3d, motion3d, intrinsic)
-./install.sh <tool>      # tool individual (sempre disponível)
+./install.sh --all        # catálogo completo (acrescenta part3d, motion3d, intrinsic)
+./install.sh <tool>       # tool individual (sempre disponível)
+./install.sh --list       # listar perfis e ferramentas
 ```
+
+Pre-flight (`scripts/preflight.py`) antes de qualquer install: valida pré-requisitos
+externos (Node ≥ 20.12, Bun, cargo, GPU, disco) e pára **uma vez** com os comandos para
+copiar quando falta algo obrigatório (bypass agentes/CI: `AIGAMEKIT_PREFLIGHT=0`). Perfis
+continuam depois de falhas com resumo OK/FALHOU; em sucesso correm `gameassets doctor`
+(check único de primeiro uso) e imprimem os próximos passos.
 
 Estudo de uso real: [`docs/findings/TOOLKIT_CORE_PROFILE_STUDY.md`](docs/findings/TOOLKIT_CORE_PROFILE_STUDY.md).
 

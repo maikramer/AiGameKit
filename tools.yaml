@@ -17,7 +17,7 @@ tools:
     cli_name: vramd
     python_module: vramd
     description: "vramd — supervisor único de VRAM para todas as ferramentas GPU (substitui o ModelServer)"
-    min_python: [3, 11]
+    min_python: [3, 13]
     install_order: -3
 
   text2d:

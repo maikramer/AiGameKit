@@ -54,7 +54,6 @@ def install_tool(
     skip_deps: bool = False,
     skip_models: bool = False,
     force: bool = False,
-    text2d_venv_only: bool = False,
 ) -> bool:
     ensure_clified_env(monorepo)
     _ensure_clified_importable()
@@ -62,20 +61,17 @@ def install_tool(
     from clified.installer.unified import install_tool as _clified_install
 
     load_registry()
-    return cast(
-        bool,
-        _clified_install(
-            name,
-            action=action,
-            install_prefix=install_prefix,
-            python_cmd=python_cmd or default_python_command(),
-            use_venv=use_venv,
-            skip_deps=skip_deps,
-            skip_models=skip_models,
-            force=force,
-            text2d_venv_only=text2d_venv_only,
-        ),
+    result = _clified_install(
+        name,
+        action=action,
+        install_prefix=install_prefix,
+        python_cmd=python_cmd or default_python_command(),
+        use_venv=use_venv,
+        skip_deps=skip_deps,
+        skip_models=skip_models,
+        force=force,
     )
+    return bool(result)  # InstallResult.__bool__ → .ok
 
 
 def install_all(
@@ -94,17 +90,15 @@ def install_all(
     from clified.installer.unified import install_all as _clified_install_all
 
     load_registry()
-    return cast(
-        bool,
-        _clified_install_all(
-            install_prefix=install_prefix,
-            python_cmd=python_cmd or default_python_command(),
-            use_venv=use_venv,
-            skip_deps=skip_deps,
-            skip_models=skip_models,
-            force=force,
-        ),
+    ok, _results = _clified_install_all(
+        install_prefix=install_prefix,
+        python_cmd=python_cmd or default_python_command(),
+        use_venv=use_venv,
+        skip_deps=skip_deps,
+        skip_models=skip_models,
+        force=force,
     )
+    return bool(ok)
 
 
 def list_available_tools(monorepo: Path | None = None) -> list[ToolSpec]:

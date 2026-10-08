@@ -29,9 +29,10 @@ The tools form a modular generation pipeline — use them individually or let **
 
 ### One-command idea-to-game
 
-The flagship workflow — describe your game and let the pipeline generate everything:
+The flagship workflow — **after installing** (`./install.sh` at the repo root; see [Quick start](#quick-start)) — describe your game and let the pipeline generate everything:
 
 ```bash
+gameassets doctor                                                                   # confirm first-use readiness
 gameassets dream "A dark fantasy RPG with skeletons and treasure chests" --dry-run   # preview plan
 gameassets dream "A dark fantasy RPG with skeletons and treasure chests"              # full run
 ```
@@ -179,51 +180,26 @@ Catalog keys match `tools.yaml` entries: `text2d`, `text3d`, `texture2d`, `skyma
 
 ### Installer via Clified (from clone)
 
-Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://pypi.org/project/clified/) on PyPI (installed automatically by the root scripts):
+Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://pypi.org/project/clified/) on PyPI (installed automatically by the root scripts). **No arguments = core profile:**
 
 ```bash
-# Linux/macOS
-./install.sh --list                     # List available tools
-./install.sh core                       # Zero-to-game profile (10 tools: full animated-GLB DAG + browser engine)
-./install.sh examples                   # Example-games profile (16 tools: core + sky/audio/textures/terrain/rocks + Viber)
-./install.sh --all                      # Full catalog (adds part3d, motion3d, intrinsic)
-./install.sh materialize                # Install Materialize (Rust)
-./install.sh text2d                     # Creates Text2D/.venv if needed; installs into project venv
-./install.sh texture2d                  # Same (Texture2D/.venv)
-./install.sh skymap2d                   # Skymap2D (equirectangular skymaps; no GPU)
-./install.sh text2sound                 # Text2Sound (needs CUDA; installs PyTorch)
-./install.sh text3d                     # Text3D (Text2D + Hunyuan; nvdiffrast for Paint)
-./install.sh gameassets                 # GameAssets (batch; orchestrates other CLIs)
-./install.sh paint3d                    # Paint3D (texturing + nvdiffrast)
-./install.sh rigging3d                  # Rigging3D (SkinTokens + PyTorch/CUDA via installer)
-./install.sh animator3d                 # Animator3D (bpy / animation; no PyTorch)
-./install.sh aigamekitlab                 # AiGameKitLab (debug 3D, benches, profiling)
-./install.sh terrain3d                  # Terrain3D (AI terrain; CUDA GPU)
-./install.sh rocks3d                    # Rocks3D (procedural rocks)
-./install.sh vibegame                   # VibeGame (Bun + Vite 3D engine)
-./install.sh all                        # Install everything present
+# Linux/macOS — from a clone
+./install.sh               # pre-flight → core profile (10 tools, zero-to-game) → doctor + next steps
+./install.sh examples      # core + sky/audio/textures/terrain/rocks + Viber (16) — full dream coverage
+./install.sh --all         # full catalog (adds part3d, motion3d, intrinsic)
+./install.sh <tool>        # individual tool (keys of tools.yaml: text2d, paint3d, gameassets, …)
+./install.sh --list        # list profiles and tools
 
-# Windows PowerShell (recommended on Windows: script detects `python` and passes it to the installer)
-.\install.ps1 --list
-.\install.ps1 materialize
-.\install.ps1 text2d
-.\install.ps1 texture2d
-.\install.ps1 skymap2d
-.\install.ps1 text2sound
-.\install.ps1 text3d
-.\install.ps1 gameassets
-.\install.ps1 paint3d
-.\install.ps1 rigging3d
-.\install.ps1 animator3d
-.\install.ps1 aigamekitlab
-.\install.ps1 terrain3d
-.\install.ps1 rocks3d
-.\install.ps1 vibegame
-.\install.ps1 all
-
-# Windows CMD (same: `install.bat` passes the interpreter to the installer)
-install.bat materialize
+# Windows — PowerShell (or CMD: install.bat); same flow and defaults
+.\install.ps1              # core profile
+.\install.ps1 examples
 ```
+
+The **pre-flight** (`scripts/preflight.py`) checks external prerequisites first (Node ≥ 20.12,
+Bun, cargo, GPU, disk) and, when something mandatory is missing, stops **once** with every
+command ready to copy (Linux and Windows). Profile installs continue past failures and print
+an OK/FAILED summary; on success they run `gameassets doctor` and print next steps.
+Bypass for agents/CI: `AIGAMEKIT_PREFLIGHT=0`. Details: [docs/INSTALLING.md](docs/INSTALLING.md).
 
 Equivalent with Shared installed: `aigamekit-install text2d`, `aigamekit-install all`, etc. (list: `aigamekit-install --list`).
 

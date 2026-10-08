@@ -62,6 +62,14 @@ AiGameKit/
 
 ## Arranque rápido
 
+Num clone do repo, três comandos (o pre-flight avisa **uma vez** com tudo o que falta antes de instalar):
+
+```bash
+./install.sh               # pre-flight → perfil core (10 tools, zero-a-jogo) → doctor + próximos passos
+gameassets doctor          # confirma GPU, compressão GLB e LLM do dream
+gameassets dream "A dark fantasy RPG with skeletons and treasure chests" --dry-run
+```
+
 Guia completo em português: **[docs/INSTALLING_PT.md](docs/INSTALLING_PT.md)**. Versão em inglês: [docs/INSTALLING.md](docs/INSTALLING.md).
 
 **Pipeline jogo (GameAssets → Vite / VibeGame, pastas, handoff GLB):** [docs/MONOREPO_GAME_PIPELINE.md](docs/MONOREPO_GAME_PIPELINE.md) (documento em inglês).
@@ -115,51 +123,27 @@ Chaves do catálogo = entradas em `tools.yaml` (`text2d`, `text3d`, `materialize
 
 ### Instalador unificado (a partir de clone)
 
-O monorepo inclui um instalador unificado que instala qualquer ferramenta registada:
+A instalação é orientada pelo [`tools.yaml`](tools.yaml) e pelo [Clified](https://pypi.org/project/clified/) no PyPI (auto-instalado pelos scripts da raiz). **Sem argumentos = perfil core:**
 
 ```bash
-# Linux/macOS
-./install.sh --list                     # Listar ferramentas disponíveis
-./install.sh core                       # Perfil zero-a-jogo (10 tools: DAG GLB animado + engine browser)
-./install.sh examples                   # Perfil dos exemplos (16 tools: core + céu/áudio/texturas/terreno/rochas + Viber)
-./install.sh --all                      # Catálogo completo (acrescenta part3d, motion3d, intrinsic)
-./install.sh materialize                # Instalar Materialize (Rust)
-./install.sh text2d                     # Cria Text2D/.venv se necessário; instala no venv do projecto
-./install.sh texture2d                  # Idem (Texture2D/.venv)
-./install.sh skymap2d                   # Skymap2D (skymaps equirectangular; sem GPU)
-./install.sh text2sound                 # Text2Sound (requer CUDA; instala PyTorch)
-./install.sh text3d                     # Text3D (Text2D + Hunyuan; nvdiffrast para Paint)
-./install.sh gameassets                 # GameAssets (batch; orquestra outras CLIs)
-./install.sh paint3d                    # Paint3D (textura + nvdiffrast)
-./install.sh rigging3d                  # Rigging3D (SkinTokens + PyTorch/CUDA via instalador)
-./install.sh animator3d                 # Animator3D (bpy / animação; sem PyTorch)
-./install.sh aigamekitlab                 # AiGameKitLab (debug 3D, benches, profiling)
-./install.sh terrain3d                  # Terrain3D (terreno IA; CUDA GPU)
-./install.sh rocks3d                    # Rocks3D (rochas procedurais)
-./install.sh vibegame                   # VibeGame (Bun + motor 3D Vite)
-./install.sh all                        # Instalar tudo
+# Linux/macOS — a partir de um clone
+./install.sh               # pre-flight → perfil core (10 tools, zero-a-jogo) → doctor + próximos passos
+./install.sh examples      # core + céu/áudio/texturas/terreno/rochas + Viber (16) — dream completo
+./install.sh --all         # catálogo completo (acrescenta part3d, motion3d, intrinsic)
+./install.sh <tool>        # ferramenta individual (chaves de tools.yaml: text2d, paint3d, gameassets, …)
+./install.sh --list        # listar perfis e ferramentas
 
-# Windows PowerShell (recomendado no Windows: o script detecta `python` e passa-o ao instalador)
-.\install.ps1 --list
-.\install.ps1 materialize
-.\install.ps1 text2d
-.\install.ps1 texture2d
-.\install.ps1 skymap2d
-.\install.ps1 text2sound
-.\install.ps1 text3d
-.\install.ps1 gameassets
-.\install.ps1 paint3d
-.\install.ps1 rigging3d
-.\install.ps1 animator3d
-.\install.ps1 aigamekitlab
-.\install.ps1 terrain3d
-.\install.ps1 rocks3d
-.\install.ps1 vibegame
-.\install.ps1 all
-
-# Windows CMD (idem: `install.bat` passa o interpretador ao instalador)
-install.bat materialize
+# Windows — PowerShell (ou CMD: install.bat); mesmo fluxo e defaults
+.\install.ps1              # perfil core
+.\install.ps1 examples
 ```
+
+O **pre-flight** (`scripts/preflight.py`) verifica primeiro os pré-requisitos externos
+(Node ≥ 20.12, Bun, cargo, GPU, disco) e, quando falta algo obrigatório, pára **uma única
+vez** com todos os comandos prontos a copiar (Linux e Windows). Os perfis continuam depois
+de falhas e imprimem um resumo OK/FALHOU; em sucesso correm `gameassets doctor` e imprimem
+os próximos passos. Bypass para agentes/CI: `AIGAMEKIT_PREFLIGHT=0`. Detalhe:
+[docs/INSTALLING_PT.md](docs/INSTALLING_PT.md).
 
 Equivalente com o pacote Shared instalado: `aigamekit-install text2d`, `aigamekit-install all`, etc. (lista: `aigamekit-install --list`).
 

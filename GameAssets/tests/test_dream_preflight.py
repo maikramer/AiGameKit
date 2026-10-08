@@ -99,14 +99,14 @@ class TestToolIssues:
 
 
 class TestCliIntegration:
-    def test_create_prints_preflight_llm_warning(self) -> None:
+    def test_create_prints_preflight_llm_warning(self, tmp_path) -> None:
         with patch("gameassets.dream.planner._call_openai", side_effect=RuntimeError("LLM down")):
-            r = runner.invoke(cli, ["dream", "um jogo de teste", "--dry-run", "--output-dir", "."])
+            r = runner.invoke(cli, ["dream", "um jogo de teste", "--dry-run", "--output-dir", str(tmp_path)])
         assert r.exit_code == 0
         assert "Pré-checks do dream" in r.output
         assert "OPENAI_API_KEY" in r.output
 
-    def test_create_silent_when_all_good(self) -> None:
+    def test_create_silent_when_all_good(self, tmp_path) -> None:
         import json
 
         plan = {
@@ -124,6 +124,6 @@ class TestCliIntegration:
             patch.dict(os.environ, {"OPENAI_API_KEY": "sk-x"}, clear=False),
             patch("gameassets.dream.planner._call_openai", return_value=json.dumps(plan)),
         ):
-            r = runner.invoke(cli, ["dream", "um jogo de teste", "--dry-run", "--output-dir", "."])
+            r = runner.invoke(cli, ["dream", "um jogo de teste", "--dry-run", "--output-dir", str(tmp_path)])
         assert r.exit_code == 0
         assert "Pré-checks do dream" not in r.output

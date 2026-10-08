@@ -56,13 +56,6 @@ def text2sound_install_in_venv(inst: PythonProjectInstaller) -> None:
     if not inst.skip_pytorch:
         inst.install_pytorch(pip_cmd, cwd=inst.project_root)
 
-    req_file = getattr(inst, "requirements_file", None)
-    if req_file is not None and req_file.is_file():
-        inst.logger.info(f"Instalando dependências: {req_file}")
-        subprocess.run([*pip_cmd, *constr, "-r", str(req_file)], check=True, cwd=_root)
-    elif req_file is not None:
-        inst.logger.warn(f"Ficheiro em falta: {req_file}")
-
     sat_deps = inst.project_root / "config" / "requirements-stable-audio-deps.txt"
     inst.logger.info("stable-audio-tools GitHub (--no-deps), depois dependências listadas...")
     # pip (não uv): o main do GitHub pin Requires-Python <3.11 (stack de treino

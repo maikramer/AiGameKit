@@ -47,9 +47,26 @@ Na **raiz** do repositório (pasta que contém `Shared/`, `install.sh`, `.git`):
 
 | Plataforma | Comando |
 |------------|---------|
-| Linux / macOS | `./install.sh <ferramenta>` |
-| Windows PowerShell | `.\install.ps1 <ferramenta>` |
-| Windows CMD | `install.bat <ferramenta>` |
+| Linux / macOS | `./install.sh` (sem argumentos = perfil core) |
+| Windows PowerShell | `.\install.ps1` (sem argumentos = perfil core) |
+| Windows CMD | `install.bat` (sem argumentos = perfil core) |
+
+**Perfis** (o `install.sh` expande-os em installs sequenciais — estudo: [findings/TOOLKIT_CORE_PROFILE_STUDY.md](findings/TOOLKIT_CORE_PROFILE_STUDY.md)):
+
+| Perfil | Tools | Objetivo |
+|--------|-------|----------|
+| `./install.sh` (sem args) | 10: `vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab vibegame` | **Default** — zero-a-jogo mínimo (DAG GLB animado → browser) |
+| `./install.sh core` | as mesmas 10 | Igual a sem-argumentos, explícito |
+| `./install.sh examples` | 16: core + `texture2d skymap2d text2sound terrain3d rocks3d viber` | Tudo o que os jogos de exemplo usam (inclui sky/terreno/áudio do dream) |
+| `./install.sh --all` | 19: examples + `part3d motion3d intrinsic` | Catálogo completo (extras opt-in) |
+
+Antes de instalar, um **pre-flight** (`scripts/preflight.py`) verifica os pré-requisitos
+externos que o instalador não auto-instala (Node ≥ 20.12, Bun, cargo, GPU, disco). Quando
+falta algo obrigatório, pára **uma única vez** com todos os comandos prontos a copiar
+(apt/nodesource/rustup/bun no Linux; winget no Windows); bypass para agentes/CI com
+`AIGAMEKIT_PREFLIGHT=0`. Os perfis **continuam depois de falhas** e imprimem um resumo
+OK/FALHOU com comandos de retry; em sucesso correm `gameassets doctor` e imprimem os
+próximos passos. `./install.sh --list` mostra perfis e ferramentas.
 
 Bootstrap: `scripts/install-bootstrap.{sh,ps1}` + `scripts/_bootstrap.{sh,ps1}` (vendored do Clified v0.9.0) — deteção de Python, instalação do `clified` via pip, bootstrap do `uv`.
 
@@ -75,8 +92,8 @@ Variável útil: `PYTHON_CMD` — interpretador a usar (por defeito `python3`, o
 | `text2d` | Text2D | Python | 3.13 | PyTorch/CUDA; SDNQ FLUX; ícones de UI via `--category icon --transparent` (rembg) |
 | `text3d` | Text3D | Python | 3.13 | Depende de Text2D; nvdiffrast pós-venv |
 | `part3d` | Part3D | Python | 3.13 | Decomposição semântica (Hunyuan3D-Part: P3-SAM + X-Part); PyTorch |
-| `gameassets` | GameAssets | Python | 3.13 | Batch + `dream`; orquestra CLIs |
-| `modelserver` | ModelServer | Python | 3.13 | Unified Model Server (`vramd`/`vramd`); supervisor VRAM |
+| `gameassets` | GameAssets | Python | 3.13 | Batch + `dream`; orquestra CLIs; `doctor` = check único de primeiro uso |
+| `vramd` | Vramd | Python | 3.13 | Unified Model Server (`vramd`); supervisor de VRAM |
 | `aigamekitlab` | AiGameKitLab | Python | 3.13 | Debug 3D, benches, profiling |
 | `text2sound` | Text2Sound | Python | 3.13 | PyTorch/CUDA |
 | `texture2d` | Texture2D | Python | 3.13 | GPU local (SD1.5) |
@@ -89,6 +106,8 @@ Variável útil: `PYTHON_CMD` — interpretador a usar (por defeito `python3`, o
 | `paint3d` | Paint3D | Python | 3.13 | Hunyuan3D-Paint + nvdiffrast |
 | `materialize` | Materialize | Rust | — | Requer `cargo`; binário em `~/.local/bin` |
 | `vibegame` | VibeGame | Bun | — | Requer **Bun**; CLI `vibegame` → `~/.local/bin` |
+| `viber` | Viber | Rust | — | Requer `cargo`; motor Bevy (mundos XML) |
+| `intrinsic` | Intrinsic | Python | 3.13 | Decomposição intrínseca (**licença académica**) |
 
 Instalar tudo o que estiver presente no checkout: `./install.sh all` ou one-liner `--get aigamekit`.
 
@@ -121,36 +140,41 @@ KTX2/meshopt) e — por ferramenta — Rust (`materialize`) ou Bun (`vibegame`).
 | Bun | `vibegame` (motor 3D no browser) | `sudo apt install unzip` + `curl -fsSL https://bun.sh/install \| bash` | `powershell -c "irm bun.sh/install.ps1 \| iex"` | manual |
 | Driver NVIDIA + CUDA | todas as tools GPU (text2d/text3d/paint3d/…) | `nvidia-smi` tem de listar uma GPU | NVIDIA App / instalação do driver | manual |
 
-**Ver o que falta na tua máquina:** `text3d doctor` (bpy/meshopt/npx/ktx) ·
-`clified doctor` (receipts/wrappers) · `vramd doctor` (vramd/VRAM).
+**Ver o que falta na tua máquina:** `gameassets doctor` (check único de primeiro
+uso: tools, vramd/GPU, compressão GLB, Node/Bun, LLM do dream, disco) ·
+`text3d doctor` (detalhe de compressão) · `clified doctor` (receipts/wrappers) ·
+`vramd doctor` (fila/VRAM).
 
 ### Máquina limpa — quickstart Linux
 
 ```bash
-sudo apt install python3-full python3-pip python3-venv build-essential unzip
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs   # Node ≥ 20.12 (o apt do 24.04 traz 18.x)
-curl -fsSL https://sh.rustup.rs | sh                    # só para materialize
-curl -fsSL https://bun.sh/install | bash                # só para vibegame
+sudo apt install python3-full python3-pip python3-venv
 git clone <este repo> && cd AiGameKit
-./install.sh all        # uv + clified + KTX-Software instalados automaticamente
-text3d doctor           # confirma deps de compressão (meshopt/ktx/npx)
+./install.sh               # pre-flight → perfil core (uv + clified + KTX-Software automáticos)
+gameassets doctor          # READY? então:
+gameassets dream "A dark fantasy RPG with skeletons and treasure chests" --dry-run
 ```
 
+Se o pre-flight parar, ele imprime **um bloco único** com tudo o que falta e os
+comandos exatos para copiar (Node ≥ 20.12 via nodesource, rustup, Bun, …). Instala
+e volta a correr `./install.sh`. Queres sky/terreno/áudio no `dream` também?
+`./install.sh examples`.
+
 > O `python3-pip` é obrigatório para o bootstrap (ele valida `python3 -m pip --version`).
-> O `build-essential` é a toolchain C exigida pelo cargo/rustup (`materialize`) e por
-> alguns wheels; o `unzip` é exigido pelo instalador do Bun (`vibegame`).
 > O Node tem de ser **≥ 20.12**: o `nodejs` do apt do Ubuntu 24.04 é 18.x, velho
-> demais para o build rolldown do VibeGame (`node:util` `styleText`).
+> demais para o build rolldown do VibeGame (`node:util` `styleText`) — o pre-flight
+> apanha isto antes de instalar seja o que for.
 
 ### Máquina limpa — quickstart Windows
 
 ```powershell
-# 1) Python 3.13: instalador python.org (marcar "Add to PATH")
-# 2) Node.js: winget install OpenJS.NodeJS.LTS
-# 3) 7-Zip (opcional, permite KTX2 automático): winget install 7zip.7zip
+# O pre-flight verifica; se faltar:
+#   winget install Python.Python.3.13
+#   winget install OpenJS.NodeJS.LTS
+#   winget install 7zip.7zip        # opcional, permite KTX2 automático
 git clone <este repo>; cd AiGameKit
-.\install.ps1 all       # uv + clified instalados automaticamente
-text3d doctor
+.\install.ps1              # pre-flight → perfil core
+gameassets doctor
 ```
 
 > Sem 7-Zip no Windows, o KTX2 fica offline até instalar
