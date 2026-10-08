@@ -265,7 +265,16 @@ def fetch_itch_pack(
         if on_status:
             on_status(msg)
 
-    if force or not is_pack_cached(pack=pack):
+    # Marker de extracção (idempotência do _extract): se o conteúdo extraído
+    # já existe, o zip é dispensável — não forçamos re-download só para o
+    # is_pack_cached (que valida o zip) o rejeitar.
+    files = dict(lock.get("files") or {})
+    marker = str(files.get("glb") or lock.get("marker") or "")
+    if not marker:
+        raise ValueError(f"Lockfile do pack {pack!r} sem 'files.glb' nem 'marker' (idempotência da extracção).")
+    extracted_marker = root / "extracted" / str(lock.get("inner_dir") or "") / marker
+
+    if force or not (extracted_marker.is_file() or is_pack_cached(pack=pack)):
         _status(f"a descarregar {lock['name']} ({lock['expected_size'] // (1 << 20)} MB)...")
         signed = _resolve_signed_download_url(lock, pack)
         _download(signed, zip_path, referer_base=base, expected_sha256=lock["expected_sha256"])
@@ -273,10 +282,6 @@ def fetch_itch_pack(
     else:
         _status(f"pack {pack} já em cache.")
 
-    files = dict(lock.get("files") or {})
-    marker = str(files.get("glb") or lock.get("marker") or "")
-    if not marker:
-        raise ValueError(f"Lockfile do pack {pack!r} sem 'files.glb' nem 'marker' (idempotência da extracção).")
     inner = _extract(zip_path, root / "extracted", str(lock.get("inner_dir") or ""), marker)
     _status(f"pack pronto: {inner}")
 

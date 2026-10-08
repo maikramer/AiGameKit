@@ -228,6 +228,33 @@ class TestFetchOffline:
         assert inner1 == inner2
         assert glb.stat().st_mtime_ns == mtime  # não re-extraiu
 
+    def test_no_download_when_zip_deleted_but_extracted_exists(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Zip apagado + extracted presente ⇒ fetch usa o extracted, sem rede."""
+        monkeypatch.setenv("VRAMD_CACHE_DIR", str(tmp_path / "cache"))
+        root = qf.quaternius_cache_root()
+        root.mkdir(parents=True)
+        zip_path = root / "FakePack.zip"
+        _make_pack_zip(zip_path)
+        lock = _fake_lock(zip_path)
+        monkeypatch.setattr(qf, "_lock_data", lambda pack=qf.DEFAULT_PACK: lock)
+
+        first = qf.fetch_quaternius_pack()
+        assert first.glb.is_file()
+
+        zip_path.unlink()  # higiene de disco: só o extracted interessa
+
+        def _no_network(*args: object, **kwargs: object) -> str:
+            raise AssertionError("não devia resolver URL de download com extracted presente")
+
+        monkeypatch.setattr(qf, "_resolve_signed_download_url", _no_network)
+        statuses: list[str] = []
+        second = qf.fetch_quaternius_pack(on_status=statuses.append)
+        assert second.glb == first.glb
+        assert second.glb.is_file()
+        assert any("em cache" in s for s in statuses)
+
     def test_get_glb_path_uses_default_pack(self, monkeypatch: pytest.MonkeyPatch) -> None:
         seen: dict[str, str] = {}
 
