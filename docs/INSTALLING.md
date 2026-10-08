@@ -51,6 +51,14 @@ At the **repository root** (folder containing `Shared/`, `install.sh`, `.git`):
 | Windows PowerShell | `.\install.ps1 <tool>` |
 | Windows CMD | `install.bat <tool>` |
 
+**Profiles** (`install.sh` expands them into sequential tool installs — study: [findings/TOOLKIT_CORE_PROFILE_STUDY.md](findings/TOOLKIT_CORE_PROFILE_STUDY.md)):
+
+| Profile | Tools | Purpose |
+|---------|-------|---------|
+| `./install.sh core` | 10: `vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab vibegame` | Minimum zero-to-game (animated-GLB DAG → browser) |
+| `./install.sh examples` | 16: core + `texture2d skymap2d text2sound terrain3d rocks3d viber` | Everything the example games use |
+| `./install.sh --all` | 19: examples + `part3d motion3d intrinsic` | Full catalog (opt-in extras) |
+
 Bootstrap: `scripts/install-bootstrap.{sh,ps1}` + `scripts/_bootstrap.{sh,ps1}` (vendored from Clified v0.9.0) — Python detection, `clified` install via pip, `uv` bootstrap.
 
 With `aigamekit-shared` installed (or `PYTHONPATH` pointing to `Shared/src`):

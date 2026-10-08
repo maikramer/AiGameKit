@@ -120,6 +120,9 @@ O monorepo inclui um instalador unificado que instala qualquer ferramenta regist
 ```bash
 # Linux/macOS
 ./install.sh --list                     # Listar ferramentas disponíveis
+./install.sh core                       # Perfil zero-a-jogo (10 tools: DAG GLB animado + engine browser)
+./install.sh examples                   # Perfil dos exemplos (16 tools: core + céu/áudio/texturas/terreno/rochas + Viber)
+./install.sh --all                      # Catálogo completo (acrescenta part3d, motion3d, intrinsic)
 ./install.sh materialize                # Instalar Materialize (Rust)
 ./install.sh text2d                     # Cria Text2D/.venv se necessário; instala no venv do projecto
 ./install.sh texture2d                  # Idem (Texture2D/.venv)

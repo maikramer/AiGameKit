@@ -184,6 +184,9 @@ Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://pypi.
 ```bash
 # Linux/macOS
 ./install.sh --list                     # List available tools
+./install.sh core                       # Zero-to-game profile (10 tools: full animated-GLB DAG + browser engine)
+./install.sh examples                   # Example-games profile (16 tools: core + sky/audio/textures/terrain/rocks + Viber)
+./install.sh --all                      # Full catalog (adds part3d, motion3d, intrinsic)
 ./install.sh materialize                # Install Materialize (Rust)
 ./install.sh text2d                     # Creates Text2D/.venv if needed; installs into project venv
 ./install.sh texture2d                  # Same (Texture2D/.venv)

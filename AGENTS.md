@@ -68,28 +68,28 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 
 **Key directories:**
 
-| Directory | Language | Package name | Description |
-|-----------|----------|--------------|-------------|
-| `Shared/` | Python | `aigamekit-shared` | Shared lib (logging, GPU, subprocess, installers, CLI) |
-| `Text2D/` | Python | `text2d` | Text-to-image (FLUX SDNQ; group offload+streams e int4 por defeito — int3/int2 só em GPUs <4 GB; [`docs/findings/TEXT2D_GROUP_OFFLOAD_FINDINGS.md`](docs/findings/TEXT2D_GROUP_OFFLOAD_FINDINGS.md)). Ícones de UI: `--category icon` (512², 2 steps) + `--transparent` (rembg) |
-| `Text3D/` | Python | `text3d` | Text-to-3D (Hunyuan3D-Omni SDNQ) |
-| `Paint3D/` | Python | `paint3d` | 3D texturing (Hunyuan3D-Paint 2.1, bilateral smooth, bake_exp=6) |
-| `Part3D/` | Python | `part3d` | Semantic mesh part decomposition (Hunyuan3D-Part: P3-SAM + X-Part; SDNQ) |
-| `GameAssets/` | Python | `gameassets` | Batch asset generation |
-| `Texture2D/` | Python | `texture2d` | Seamless 2D textures (local SD1.5; seamless 2.0: late-circular + noise rolling, decode integral, hires 512+refine, score/auto-heal — [`docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md`](docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md)) |
-| `Skymap2D/` | Python | `skymap2d` | 360-degree skymaps (local FLUX.1-dev + LoRA) |
-| `Text2Sound/` | Python | `text2sound` | Text-to-audio (Stable Audio 3 Small: music/sfx) |
-| `Rigging3D/` | Python | `rigging3d` | Auto-rigging (SkinTokens, Python 3.13) |
-| `Animator3D/` | Python | `animator3d` | Animation (bpy 5.2 LTS, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
-| `Motion3D/` | Python | `motion3d` | Text-to-motion (HY-Motion-1.0 Lite/Full) → NPZ @30fps; `apply-rigged` → SkinTokens via Animator3D `hml22`; vramd |
-| `AiGameKitLab/` | Python | `aigamekit-lab` | Debug 3D, benches, profiling |
-| `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute; 3.0: guided filter, HBAO, make-seamless, `--intrinsic`) |
-| `Intrinsic/` | Python | `intrinsic-worker` | Decomposição intrínseca albedo/shading/especular (compphoto/Intrinsic; **licença académica**; backend vramd `intrinsic` para `materialize --intrinsic`) |
-| `Viber/` | Rust | `viber` | Native Bevy engine (declarative world XML, Bevy naming; Phases: 0 ✅ XML+spawn, 1 terreno ✅ (Terrain/Pad/Lake/River/Road/RoadNetwork), 2 Luau scripts ✅ (API `viber.*` — `Viber/docs/LUA_API.md`), 3 physics ✅ (Rapier); simple-rpg port done in 10 loops) |
-| `Terrain3D/` | Python | `terrain3d` | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
-| `Rocks3D/` | Python | `rocks3d` | Procedural 3D rock generation (no PyTorch) |
-| `Vramd/` | Python | `modelserver` (CLI `vramd`/`vramd`) | Unified Model Server (vramd) — single-process GPU/VRAM supervisor |
-| `VibeGame/` | TypeScript | `aigamekit-vibegame` (npm) | 3D game engine (bitecs, Three.js, Vite build; Bun tests); `gltf-anim` plugin; `PlayerGLTF` recipe |
+| Directory | Language | Package name | Perfil | Description |
+|-----------|----------|--------------|--------|-------------|
+| `Shared/` | Python | `aigamekit-shared` | core (auto) | Shared lib (logging, GPU, subprocess, installers, CLI) |
+| `Text2D/` | Python | `text2d` | core | Text-to-image (FLUX SDNQ; group offload+streams e int4 por defeito — int3/int2 só em GPUs <4 GB; [`docs/findings/TEXT2D_GROUP_OFFLOAD_FINDINGS.md`](docs/findings/TEXT2D_GROUP_OFFLOAD_FINDINGS.md)). Ícones de UI: `--category icon` (512², 2 steps) + `--transparent` (rembg) |
+| `Text3D/` | Python | `text3d` | core | Text-to-3D (Hunyuan3D-Omni SDNQ) |
+| `Paint3D/` | Python | `paint3d` | core | 3D texturing (Hunyuan3D-Paint 2.1, bilateral smooth, bake_exp=6) |
+| `Part3D/` | Python | `part3d` | extra | Semantic mesh part decomposition (Hunyuan3D-Part: P3-SAM + X-Part; SDNQ) |
+| `GameAssets/` | Python | `gameassets` | core | Batch asset generation |
+| `Texture2D/` | Python | `texture2d` | examples | Seamless 2D textures (local SD1.5; seamless 2.0: late-circular + noise rolling, decode integral, hires 512+refine, score/auto-heal — [`docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md`](docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md)) |
+| `Skymap2D/` | Python | `skymap2d` | examples | 360-degree skymaps (local FLUX.1-dev + LoRA) |
+| `Text2Sound/` | Python | `text2sound` | examples | Text-to-audio (Stable Audio 3 Small: music/sfx) |
+| `Rigging3D/` | Python | `rigging3d` | core | Auto-rigging (SkinTokens, Python 3.13) |
+| `Animator3D/` | Python | `animator3d` | core | Animation (bpy 5.2 LTS, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
+| `Motion3D/` | Python | `motion3d` | extra | Text-to-motion (HY-Motion-1.0 Lite/Full) → NPZ @30fps; `apply-rigged` → SkinTokens via Animator3D `hml22`; vramd |
+| `AiGameKitLab/` | Python | `aigamekit-lab` | core | Debug 3D, benches, profiling |
+| `Materialize/` | Rust | `materialize-cli` | core | PBR map generation (wgpu compute; 3.0: guided filter, HBAO, make-seamless, `--intrinsic`) |
+| `Intrinsic/` | Python | `intrinsic-worker` | extra | Decomposição intrínseca albedo/shading/especular (compphoto/Intrinsic; **licença académica**; backend vramd `intrinsic` para `materialize --intrinsic`) |
+| `Viber/` | Rust | `viber` | examples | Native Bevy engine (declarative world XML, Bevy naming; Phases: 0 ✅ XML+spawn, 1 terreno ✅ (Terrain/Pad/Lake/River/Road/RoadNetwork), 2 Luau scripts ✅ (API `viber.*` — `Viber/docs/LUA_API.md`), 3 physics ✅ (Rapier); simple-rpg port done in 10 loops) |
+| `Terrain3D/` | Python | `terrain3d` | examples | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
+| `Rocks3D/` | Python | `rocks3d` | examples | Procedural 3D rock generation (no PyTorch) |
+| `Vramd/` | Python | `modelserver` (CLI `vramd`/`vramd`) | core | Unified Model Server (vramd) — single-process GPU/VRAM supervisor |
+| `VibeGame/` | TypeScript | `aigamekit-vibegame` (npm) | core | 3D game engine (bitecs, Three.js, Vite build; Bun tests); `gltf-anim` plugin; `PlayerGLTF` recipe |
 
 All Python packages depend on `aigamekit-shared` (install Shared first). VibeGame is standalone (Bun + Vite); it does not use `aigamekit-shared`.
 
@@ -204,7 +204,7 @@ Declarative GLB player in world XML:
 <PlayerGLTF pos="0 0 0" model-url="/assets/models/hero.glb"></PlayerGLTF>
 ```
 
-**Idea-to-game (`gameassets dream`):** `gameassets dream "description" --dry-run` calls an LLM to plan assets+scene, emits `game.yaml`/`manifest.csv`/`world.xml`/`main.ts`/`index.html`, runs batch+sky+handoff, and scaffolds a playable Vite project. Pipeline stages (3D, rig, parts, animate) are auto-detected from manifest columns and `game.yaml` profile blocks. Use `--no-animate` or `--no-rig` to opt out. Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context, planlint). Providers: `--llm-provider openai|huggingface|ollama|stdin` (ollama = local, zero-key). `--dry-run` generates files without GPU. Plans are linted + auto-repaired (`planlint`), cached by description+flags (`--replan` to force; env `AIGAMEKIT_DREAM_CACHE`), and carry provenance (`source`/`seed`/`repairs`). `--seed N` pins deterministic generation. Iterate: `gameassets dream refine plan.json "add a dragon"` (LLM edits the plan, `.bak` backup, seeds preserved, regenerates batch files); audit: `gameassets dream explain plan.json [--json]` (exit 1 on lint errors — CI-ready).
+**Idea-to-game (`gameassets dream`):** `gameassets dream "description" --dry-run` calls an LLM to plan assets+scene, emits `game.yaml`/`manifest.csv`/`world.xml`/`main.ts`/`index.html`, runs batch+sky+handoff, and scaffolds a playable Vite project. Pipeline stages (3D, rig, animate) are auto-detected from manifest columns and `game.yaml` profile blocks. Use `--no-animate` or `--no-rig` to opt out. Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context, planlint). Providers: `--llm-provider openai|huggingface|ollama|stdin` (ollama = local, zero-key). `--dry-run` generates files without GPU. Plans are linted + auto-repaired (`planlint`), cached by description+flags (`--replan` to force; env `AIGAMEKIT_DREAM_CACHE`), and carry provenance (`source`/`seed`/`repairs`). `--seed N` pins deterministic generation. Iterate: `gameassets dream refine plan.json "add a dragon"` (LLM edits the plan, `.bak` backup, seeds preserved, regenerates batch files); audit: `gameassets dream explain plan.json [--json]` (exit 1 on lint errors — CI-ready).
 
 ### Tests — single test file or test class
 
@@ -221,6 +221,19 @@ pytest --cov=src --cov-report=html                # With coverage
 cargo test --manifest-path Materialize/Cargo.toml
 cargo test --manifest-path Materialize/Cargo.toml test_preset_roundtrip  # Single test
 ```
+
+### Instalação por perfil (install.sh)
+
+```bash
+./install.sh core        # zero-a-jogo mínimo (10): vramd text2d text3d paint3d rigging3d
+                         #   animator3d gameassets materialize aigamekitlab vibegame
+./install.sh examples    # tudo que os jogos de exemplo usam (16): core + texture2d skymap2d
+                         #   text2sound terrain3d rocks3d viber
+./install.sh --all       # catálogo completo (acrescenta part3d, motion3d, intrinsic)
+./install.sh <tool>      # tool individual (sempre disponível)
+```
+
+Estudo de uso real: [`docs/findings/TOOLKIT_CORE_PROFILE_STUDY.md`](docs/findings/TOOLKIT_CORE_PROFILE_STUDY.md).
 
 ### Install dev dependencies
 
