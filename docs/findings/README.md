@@ -22,6 +22,7 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [MOTION3D_FINDINGS.md](MOTION3D_FINDINGS.md) | Text-to-motion → SkinTokens: `apply-rigged`, aim/rest/folhas, neutro A-pose vs pés do alvo, in-place, venv |
 | [PRECOMPUTE_COLLIDERS_FINDINGS.md](PRECOMPUTE_COLLIDERS_FINDINGS.md) | Colisores cápsula/cilindro pré-calculados (tronco); `aigamekit-lab precompute` → `gameassets_handoff.json` → `PrecomputePlugin`; carve procedural |
 | [MODEL_CONSOLIDATION_STUDY.md](MODEL_CONSOLIDATION_STUDY.md) | Inventário de modelos/variantes (~166 GB HF) + cortes por tier (~44 GB: órfãos Sana/t5-base/T2MGPT, SA Open legado, Disty0 klein, HY-Motion full) e unificações de vendor (Real-ESRGAN, bg-remover, aliases) |
+| [TOOLKIT_CORE_PROFILE_STUDY.md](TOOLKIT_CORE_PROFILE_STUDY.md) | Uso real das 20 tools nos exemplos: Part3D/Motion3D/Intrinsic não usados (~42 GB); perfis install.sh `core|examples|all`; doc-bug "parts auto-detect" |
 
 **Relacionados (fora desta pasta):**
 
