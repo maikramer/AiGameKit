@@ -1,14 +1,17 @@
 """
-Upscaling de texturas com Real-ESRGAN (via spandrel + huggingface_hub).
+Upscaling de texturas com Real-ESRGAN x4plus (via spandrel).
 
 Escala a textura baseColor de 1024→2048 ou 4096, adicionando detalhe via IA
 sem alterar a identidade visual. Processamento por tiles para VRAM limitada.
+
+Usa o mesmo checkpoint do enhance multiview do painter
+(``ensure_realesrgan_ckpt`` → ``RealESRGAN_x4plus.pth``), o único Real-ESRGAN
+do pipeline.
 """
 
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 import bpy
 import numpy as np
@@ -17,30 +20,19 @@ from PIL import Image
 
 from aigamekit_shared.logging import Logger
 
+from .hy3d21_paths import ensure_realesrgan_ckpt
+
 _logger = Logger()
 
-_MODEL_REPO = "ai-forever/Real-ESRGAN"
-_MODEL_FILENAME = "RealESRGAN_x4.pth"
 _SCALE = 4
 
-_HINT = "Upscaling requer spandrel e huggingface_hub.\n  pip install spandrel huggingface-hub"
-
-
-def _download_model() -> Path:
-    from huggingface_hub import hf_hub_download
-
-    return Path(
-        hf_hub_download(
-            repo_id=_MODEL_REPO,
-            filename=_MODEL_FILENAME,
-        )
-    )
+_HINT = "Upscaling requer spandrel.\n  pip install spandrel"
 
 
 def _load_model(device: torch.device | str = "cpu") -> torch.nn.Module:
     import spandrel
 
-    path = _download_model()
+    path = ensure_realesrgan_ckpt()
     model_descriptor = spandrel.ModelLoader(device=device).load_from_file(str(path))
     model = model_descriptor.model.eval()
     return model
