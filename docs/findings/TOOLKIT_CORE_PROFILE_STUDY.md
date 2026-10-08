@@ -1,6 +1,6 @@
 # Toolkit core — uso real nos exemplos e proposta de redução
 
-**Data:** 2026-10-08 · **Estado:** estudo concluído — perfis e cortes **aguardam aprovação**.
+**Data:** 2026-10-08 · **Estado:** ✅ **EXECUTADO** (ver §6).
 Complementa [`MODEL_CONSOLIDATION_STUDY.md`](MODEL_CONSOLIDATION_STUDY.md) (modelos/venvs).
 
 Objetivo: reduzir o toolkit ao que os jogos de exemplo realmente exercitam —
@@ -86,3 +86,25 @@ mas sem wiring. Intrinsic é licença académica, opção desligada por defeito.
 4. Cortes de disco opcionais (aprovar caso a caso): venvs + modelos dos extras
    demoted (~41,7 GB); reexecutar `make dedupe-venvs` depois de qualquer reinstalação.
 5. CI: sem mudanças (Part3D/Motion3D/Intrinsic já estão fora da matriz Python).
+
+## 6. Execução (2026-10-08) — registo
+
+Aprovado na totalidade, incluindo o corte do Motion3D do disco.
+
+- **`install.sh` perfis `core|examples`** (commit): expansão sequencial de
+  clified-install por tool em subshells (o CLI aceita 1 tool posicional); `--all`
+  e installs individuais mantêm-se. Testado com bootstrap stubbed.
+- **Docs**: AGENTS.md com coluna **Perfil** na tabela de pacotes (20/20) + secção
+  "Instalação por perfil"; README/README_PT/INSTALLING com a tabela de perfis;
+  doc-bug "parts auto-detect" corrigido em AGENTS.md e ZERO_TO_GAME_AI.md.
+- **GameAssets**: wave `run_motion3d_wave_or_fallback` + `motion3d_specs_from_items`
+  removidas (sem callers) e testes ajustados — 781 ✓.
+- **Disco** (~34 GB medidos): venvs `Part3D/Motion3D/Intrinsic` apagadas (14 venvs
+  ficam); modelos `Hunyuan3D-Part` (12 GB) + space, `Qwen3-8B` (16 GB),
+  `clip-vit-large-patch14` (1,6 GB), `HY-Motion-1.0` stub + cache local
+  `hy-motion-1.0` (5,7 GB). Hub HF: 125→96 GB. `/media`: 354→320 GB usados.
+- **tools.yaml intocado** — extras continuam instaláveis individualmente
+  (`./install.sh part3d` etc.); backends vramd dos extras ficam (erro lazy
+  acionável). CI sem mudanças (os 3 já estavam fora da matriz).
+- Reinstalar um extra no futuro: `./install.sh <tool>` + `make dedupe-venvs
+  DEDUPE_ARGS=--apply` + re-download dos modelos (Part3D ~12 GB; Motion3D ~23 GB).
