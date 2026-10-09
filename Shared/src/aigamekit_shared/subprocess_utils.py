@@ -76,7 +76,8 @@ def resolve_binary(env_name: str, default_name: str) -> str:
     found = shutil.which(default_name)
     if not found:
         raise FileNotFoundError(
-            f"Comando não encontrado: {default_name!r}. Instala o pacote ou define {env_name} com o caminho absoluto."
+            f"Comando não encontrado: {default_name!r}. "
+            f"Instala com ./install.sh {default_name} (raiz do monorepo) ou define {env_name} com o caminho absoluto."
         )
     return found
 

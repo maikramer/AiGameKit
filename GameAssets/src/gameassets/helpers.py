@@ -404,6 +404,27 @@ def _row_wants_animate(row: ManifestRow, with_rig: bool, has_rigging_profile: bo
     return bool(row.generate_animate)
 
 
+def missing_inputs_hint(profile_path: Path, manifest_path: Path | None = None) -> str | None:
+    """Erro acionável quando faltam ``game.yaml``/manifest (aponta ``init``/``dream``).
+
+    Devolve a mensagem a mostrar (com ``click.ClickException``) ou ``None``
+    quando os inputs existem.
+    """
+    if not profile_path.is_file():
+        return (
+            f"'{profile_path}' não encontrado.\n"
+            "  Começa aqui:\n"
+            "    gameassets init                            (cria game.yaml + manifest.yaml comentados)\n"
+            '    gameassets dream "a tua ideia" --dry-run     (a IA escreve-os por ti)'
+        )
+    if manifest_path is not None and not manifest_path.is_file():
+        return (
+            f"Manifest '{manifest_path}' não encontrado (procurado ao lado de '{profile_path}').\n"
+            "  gameassets init cria um manifest.yaml de exemplo; ou verifica --manifest."
+        )
+    return None
+
+
 def _resolve_manifest_path(raw: str | Path) -> Path:
     """Resolve manifest path: if no extension, try .yaml, .yml.
 

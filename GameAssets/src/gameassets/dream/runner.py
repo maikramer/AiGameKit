@@ -158,6 +158,13 @@ def run_dream(
 
     console.print(Panel(f"[bold]{plan.title}[/bold] — {plan.genre}", title="Dream", border_style="cyan"))
 
+    if not dry_run:
+        console.print(
+            "[yellow]1.ª vez:[/yellow] o pipeline 3D completo descarrega ~30 GB de pesos "
+            "(FLUX, Hunyuan, Paint, SkinTokens) para ~/.cache/huggingface — 20 a 40 min conforme "
+            "a ligação, com a GPU a 0% durante o download. Os próximos runs usam a cache."
+        )
+
     # --- 0. Resumo do plano: provenance + stages + lint (antes de queimar GPU) ---
     report["lint"] = _print_plan_summary(plan, max_assets=max_assets)
 

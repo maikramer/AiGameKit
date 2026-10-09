@@ -10,6 +10,53 @@
 
 Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio**, **texturas seamless (GPU local)** e **skymaps** (GPU local), **texturização PBR**, **rigging**, **animação** e **batch de assets**, partilhando a mesma base (`aigamekit-shared`), instalador unificado e documentação.
 
+## Pipeline
+
+As ferramentas formam um pipeline de geração modular — usa-as individualmente ou deixa o **GameAssets** orquestrar o fluxo completo:
+
+```
+  Text2D (imagem) ──→ Text3D (mesh) ──→ Paint3D (textura) ──→ Rigging3D (rig) ──→ Animator3D (animação)
+       │                                        │                                  │
+       ▼                                        ▼                                  ▼
+  Texture2D (seamless)                   Materialize (PBR)                      GameAssets (batch)
+       │                                                                               ──→ VibeGame (browser)
+  Skymap2D (céu)
+  Text2Sound (áudio)
+  Terrain3D (terreno)
+```
+
+### Uma ideia, um comando
+
+O fluxo flagship — **após instalar** (`./install.sh` na raiz; ver [Arranque rápido](#arranque-rápido)) — descreve o teu jogo e deixa o pipeline gerar tudo:
+
+```bash
+gameassets doctor                                                                   # confirma que está pronto
+gameassets dream "A dark fantasy RPG with skeletons and treasure chests" --dry-run   # pré-visualiza o plano
+gameassets dream "A dark fantasy RPG with skeletons and treasure chests"              # run completo
+```
+
+O que o `dream` faz: planeia assets com um LLM (`--llm-provider openai|huggingface|ollama|stdin`), gera `game.yaml` / `manifest.yaml` / `world.xml`, corre o pipeline completo (batch → rig → animate → sky → terrain → ícones), faz o handoff dos assets para o `public/` do Vite e faz scaffold de um projeto jogável. As stages são auto-detetadas; opt-outs por funcionalidade: `--no-audio`, `--no-sky`, `--no-terrain` (as flags `--no-3d`/`--no-rig`/`--no-animate` são do `gameassets batch`). Itera com `gameassets dream refine plan.json "add a dragon"`.
+
+Código: [`GameAssets/src/gameassets/dream/`](GameAssets/src/gameassets/dream/).
+
+### Integração VibeGame
+
+Os assets gerados entram no motor browser VibeGame via handoff e cenas XML declarativas:
+
+```bash
+gameassets handoff --public-dir public/    # copia GLBs (prefere animados) + manifest.json
+```
+
+Descrição da cena em `world.xml` com as recipes VibeGame:
+
+```html
+<PlayerGLTF pos="0 0 0" model-url="/assets/models/hero.glb"></PlayerGLTF>
+<GLTFLoader pos="5 0 0" model-url="/assets/models/skeleton.glb"></GLTFLoader>
+<Terrain heightmap-url="/assets/heightmap.png" resolution="128"></Terrain>
+```
+
+APIs-chave: [`gltf-bridge.ts`](VibeGame/src/extras/gltf-bridge.ts) (`loadGltfToScene`, `loadGltfAnimated`), [`gltf-animator.ts`](VibeGame/src/extras/gltf-animator.ts) (`GltfAnimator`), [`sky-env.ts`](VibeGame/src/extras/sky-env.ts) (`applyEquirectSkyEnvironment`). Ver [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md) e [`VibeGame/README.md`](VibeGame/README.md).
+
 ## Projetos
 
 | Pasta | Descrição |
@@ -19,7 +66,7 @@ Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio
 | [**Text3D**](Text3D/) | Pipeline **text-to-3D**: imagem 2D (via Text2D) → mesh GLB com Hunyuan3D-Omni (SDNQ INT4; controlos bbox/pose/point/voxel). Textura via Paint3D (opcional). |
 | [**Paint3D**](Paint3D/) | **Texturização 3D**: Hunyuan3D-Paint 2.1 (PBR multivista) + Materialize PBR + Upscale IA (Real-ESRGAN). Standalone ou via Text3D. |
 | [**Part3D**](Part3D/) | **Decomposição semântica de partes**: Hunyuan3D-Part (P3-SAM + X-Part). SDNQ + CPU offload para ~6 GB VRAM. |
-| [**GameAssets**](GameAssets/) | **Batch de prompts/assets**: perfil + CSV → `text2d` ou `texture2d` + opcional `text3d`, rig, **Animator3D** (auto-detetado), **`gameassets dream`** (ideia → scaffold Vite). |
+| [**GameAssets**](GameAssets/) | **Batch de prompts/assets**: `game.yaml` + manifesto YAML → `text2d` ou `texture2d` + opcional `text3d`, rig, **Animator3D** (auto-detetado), **`gameassets dream`** (ideia → scaffold Vite). |
 | [**Texture2D**](Texture2D/) | **Texturas 2D seamless** (tileable) via pattern-diffusion (GPU local) + PBR via Materialize. |
 | [**Skymap2D**](Skymap2D/) | **Skymaps equirectangular 360°** — FLUX.1-dev + LoRA local na GPU (CUDA), skyboxes para game dev. |
 | [**Text2Sound**](Text2Sound/) | CLI **text-to-audio** com Stable Audio 3 Small (música/SFX separados): áudio estéreo 44.1 kHz, presets para game dev. |
@@ -31,6 +78,19 @@ Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio
 | [**VibeGame**](VibeGame/) | **vibegame** — motor 3D em TypeScript (ECS, Three.js, XML declarativo); **Bun** + **Vite**. Ver [VibeGame/README.md](VibeGame/README.md). |
 
 Cada projeto tem o seu próprio `README`, `setup`, requisitos e licença.
+
+### Presets de qualidade & multi-GPU
+
+Todas as ferramentas de geração suportam um sistema de qualidade unificado (`--quality fast|low|medium|high|highest`) com defaults sensatos por ferramenta e categoria de asset. Ver [`docs/superpowers/specs/2026-04-30-quality-presets-design.md`](docs/superpowers/specs/2026-04-30-quality-presets-design.md).
+
+Multi-GPU (via dispatch `accelerate`) na maioria das ferramentas GPU:
+
+```bash
+text3d generate "a dragon" --gpu-ids 0,1       # Divide pesos pela GPU 0 e 1
+paint3d texture dragon.glb --gpu-ids 0,1       # Texturização multi-GPU
+```
+
+Deteção automática via NVML (`aigamekit_shared.gpu.detect_gpu_ids`, dep `nvidia-ml-py`; fallback `nvidia-smi`) quando omitido. O GameAssets batch/resume propaga `--gpu-ids` a todas as sub-ferramentas.
 
 ## Arquitectura
 
@@ -204,6 +264,12 @@ cd ../Animator3D && python3.13 -m venv .venv && source .venv/bin/activate && pip
 
 # 11. Materialize (Rust — requer cargo)
 cd ../Materialize && ./install.sh
+
+# 12. AiGameKitLab (debug 3D, benches, profiling; sem PyTorch)
+cd ../AiGameKitLab && python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && aigamekit-lab --help
+
+# 13. Terrain3D (terreno IA; GPU CUDA)
+cd ../Terrain3D && python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && terrain3d --help
 ```
 
 Instruções completas: [docs/INSTALLING_PT.md](docs/INSTALLING_PT.md) (incl. registo de novas ferramentas via `tools.yaml`), [Shared/README_PT.md](Shared/README_PT.md), e os READMEs de cada pasta (`README_PT.md` por pacote quando existir).
@@ -237,6 +303,8 @@ O monorepo usa variáveis de ambiente para localizar binários e configurar comp
 | `TEXTURE2D_BIN` | GameAssets | Caminho para o binário `texture2d` |
 | `TEXT2SOUND_BIN` | GameAssets | Caminho para o binário `text2sound` |
 | `MATERIALIZE_BIN` | GameAssets, Text3D | Caminho para o binário `materialize` |
+| `AIGAMEKITLAB_BIN` | GameAssets | Path para `aigamekit-lab` |
+| `TERRAIN3D_BIN` | GameAssets | Path para `terrain3d` |
 | `TERRAIN3D_BIN` | GameAssets | Caminho para o binário `terrain3d` |
 | `TEXT2D_MODEL_ID` | Text2D | Override do modelo HF para Text2D |
 | `TEXTURE2D_MODEL_ID` | Texture2D | Override do modelo HF para Texture2D (default `stable-diffusion-v1-5/stable-diffusion-v1-5`) |
@@ -250,14 +318,22 @@ O monorepo usa variáveis de ambiente para localizar binários e configurar comp
 | `TEXT3D_EXPORT_ROTATION_X_DEG` | Text3D | Rotação X ao exportar mesh (graus) |
 | `PAINT3D_ALLOW_SHARED_GPU` | Paint3D | Permitir GPU partilhada com outros processos |
 | `PAINT3D_GPU_KILL_OTHERS` | Paint3D | Controlar terminação de processos GPU concorrentes |
+| `PART3D_BIN` | Part3D | Override do binário `part3d` |
+| `PART3D_HW_AUTO` | Part3D | `0` desliga auto-deteção de hardware |
+| `PART3D_ALLOW_SHARED_GPU` | Part3D | Permitir GPU partilhada com outros processos |
+| `PART3D_GPU_KILL_OTHERS` | Part3D | Controlar terminação de processos GPU concorrentes |
 | `PAINT3D_MULTI_GPU` | Paint3D | **Obsoleto** — usar `--gpu-ids 0,1`. Variável de ambiente legada para dividir VAE entre GPUs |
 | `RIGGING3D_ROOT` | Rigging3D | Raiz da árvore de inferência (por defeito: pacote incluído) |
 | `RIGGING3D_PYTHON` | Rigging3D | Interpretador Python do ambiente de inferência |
 | `VRAMD_BIN` | Tools GPU | Path para `vramd` (vramd) |
 | `VRAMD_AUTO_START` | Tools GPU | `0` desliga auto-start do vramd |
 | `VRAMD_PRIORITY` | Tools GPU / GameAssets | Prioridade na fila: `interactive` \| `batch` |
+| `VRAMD_MAX_AFFINITY_CUTS` | vramd | Máx. de cortes de afinidade antes de forçar HOL (default `3`) |
+| `VRAMD_MAX_QUEUE_DEPTH` | vramd | Profundidade da fila antes de `queue_full` (default `32`) |
+| `VRAMD_MAX_INFLIGHT` | vramd | Gerações paralelas (default `1`) |
 | `AIGAMEKIT_ALLOW_LEGACY_SERVER` | Shared / tools | `1` = servers per-tool + `ensure_vram` legacy (default off) |
 | `AIGAMEKIT_PREFER_MONOREPO` | Shared / GameAssets | Default `1`: `resolve_binary` prefere `<Tool>/.venv/bin` a wrappers stale |
+| `VRAMD_CLIENT_SOCKET` | Shared | Override do path do socket Unix (legacy / testes) |
 | `AIGAMEKIT_LOG_DIR` | Todas as tools Python + vramd | Dir de logs diários (default `~/.cache/aigamekit/logs`) |
 | `AIGAMEKIT_LOG_FILE` | Todas as tools Python + vramd | Path exacto do ficheiro de log |
 | `AIGAMEKIT_LOG_TOOL` | Todas as tools Python + vramd | Nome da tool no ficheiro (auto CLI / `vramd`) |
@@ -330,6 +406,8 @@ make fmt-check       # Verificar formatação sem alterar
 make test            # Pytest em todos os pacotes + Cargo test
 make test-shared     # Pytest só no Shared
 make test-text2d     # Pytest só no Text2D
+make test-aigamekitlab # Pytest só no AiGameKitLab
+make test-terrain3d  # Pytest só no Terrain3D
 make typecheck       # MyPy no Shared/src
 make check           # lint + fmt-check + typecheck + test (CI completo)
 make clean           # Remover __pycache__, caches, builds

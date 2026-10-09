@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-from ..doctor import ollama_reachable, tool_bin
+from ..doctor import install_cmd, ollama_reachable, tool_bin
 
 
 def llm_issues(provider: str, api_key: str | None) -> list[str]:
@@ -35,14 +35,16 @@ def llm_issues(provider: str, api_key: str | None) -> list[str]:
 def _tool_issues(*, with_sky: bool, with_audio: bool, terrain: bool | None) -> list[str]:
     issues: list[str] = []
     if with_sky and tool_bin("skymap2d") is None:
-        issues.append("sky: skymap2d em falta — o céu vai ser saltado. ./install.sh skymap2d (ou --no-sky)")
+        issues.append(f"sky: skymap2d em falta — o céu vai ser saltado. {install_cmd('skymap2d')} (ou --no-sky)")
     if with_audio and tool_bin("text2sound") is None:
-        issues.append("áudio: text2sound em falta — os sons vão ser saltados. ./install.sh text2sound (ou --no-audio)")
+        issues.append(
+            f"áudio: text2sound em falta — os sons vão ser saltados. {install_cmd('text2sound')} (ou --no-audio)"
+        )
     # terrain=None é "auto": o plano LLM pode ativar — avisar já quando a tool falta.
     if terrain is not False and tool_bin("terrain3d") is None:
         issues.append(
-            "terreno: terrain3d em falta — se o plano ativar terreno, o passo salta. "
-            "./install.sh terrain3d (ou --no-terrain)"
+            f"terreno: terrain3d em falta — se o plano ativar terreno, o passo salta. "
+            f"{install_cmd('terrain3d')} (ou --no-terrain)"
         )
     return issues
 

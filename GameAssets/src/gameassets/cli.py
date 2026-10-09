@@ -261,7 +261,7 @@ def doctor_cmd(as_json: bool) -> None:
 @click.option(
     "--profile",
     "profile_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    type=click.Path(dir_okay=False, path_type=Path),
     default="game.yaml",
     help="Ficheiro de perfil YAML",
 )
@@ -292,7 +292,12 @@ def prompts_cmd(
     output: Path | None,
 ) -> None:
     """Mostra (ou grava) os prompts finais sem usar GPU."""
+    from .helpers import _resolve_manifest_path, missing_inputs_hint
     from .prompt_builder import build_audio_prompt, build_prompt
+
+    hint = missing_inputs_hint(profile_path, _resolve_manifest_path(manifest_path))
+    if hint:
+        raise click.ClickException(hint)
 
     profile, rows, _bundle, preset = _build_context(profile_path, manifest_path, presets_local)
     entries: list[dict[str, Any]] = []

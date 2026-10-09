@@ -752,3 +752,31 @@ class TestHandoffPbrRoughnessPreference:
         assert pbr.count("/assets/pbr/hero/roughness.png") == 1
         assert "/assets/pbr/hero/normal.png" in pbr
         assert "/assets/pbr/hero/ao.png" in pbr
+
+
+class TestMissingInputsHint:
+    def test_missing_profile_points_to_init_and_dream(self, tmp_path: Path) -> None:
+        from gameassets.helpers import missing_inputs_hint
+
+        hint = missing_inputs_hint(tmp_path / "game.yaml")
+        assert hint is not None
+        assert "gameassets init" in hint
+        assert "dream" in hint
+
+    def test_missing_manifest_points_to_manifest_flag(self, tmp_path: Path) -> None:
+        from gameassets.helpers import missing_inputs_hint
+
+        profile = tmp_path / "game.yaml"
+        profile.write_text("style: {}\nassets: []\n", encoding="utf-8")
+        hint = missing_inputs_hint(profile, tmp_path / "manifest.yaml")
+        assert hint is not None
+        assert "--manifest" in hint
+
+    def test_all_present_returns_none(self, tmp_path: Path) -> None:
+        from gameassets.helpers import missing_inputs_hint
+
+        profile = tmp_path / "game.yaml"
+        manifest = tmp_path / "manifest.yaml"
+        profile.write_text("style: {}\n", encoding="utf-8")
+        manifest.write_text("rows: []\n", encoding="utf-8")
+        assert missing_inputs_hint(profile, manifest) is None

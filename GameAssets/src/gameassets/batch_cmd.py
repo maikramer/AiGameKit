@@ -118,7 +118,7 @@ console = Console()
 @click.option(
     "--profile",
     "profile_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    type=click.Path(dir_okay=False, path_type=Path),
     default="game.yaml",
 )
 @click.option(
@@ -305,6 +305,11 @@ def batch_cmd(
     plain: bool,
 ) -> None:
     """Gera imagens (e opcionalmente meshes) para cada linha do manifest."""
+    from .helpers import missing_inputs_hint
+
+    hint = missing_inputs_hint(profile_path, _resolve_manifest_path(manifest_path))
+    if hint:
+        raise click.ClickException(hint)
     if plain:
         no_dashboard = True
         global console
@@ -362,7 +367,10 @@ def batch_cmd(
         except FileNotFoundError:
             if dry_run:
                 return tool_name
-            raise click.ClickException(f"{tool_name} não encontrado no PATH (defina {env_var})") from None
+            raise click.ClickException(
+                f"{tool_name} não encontrado. Instala com ./install.sh {tool_name} (raiz do monorepo) "
+                f"ou define {env_var} com o caminho absoluto."
+            ) from None
 
     text2d_bin: str | None = None
     texture2d_bin: str | None = None
@@ -408,7 +416,10 @@ def batch_cmd(
             if dry_run:
                 terrain3d_bin = "terrain3d"
             else:
-                raise click.ClickException("terrain3d não encontrado (defina TERRAIN3D_BIN)") from None
+                raise click.ClickException(
+                    "terrain3d não encontrado. Instala com ./install.sh terrain3d (raiz do monorepo) "
+                    "ou define TERRAIN3D_BIN com o caminho absoluto."
+                ) from None
 
     with_skymap = not no_skymap and profile.skymap2d is not None and bool(_skymap2d_profile_effective(profile).prompt)
     skymap2d_bin: str | None = None
@@ -419,7 +430,10 @@ def batch_cmd(
             if dry_run:
                 skymap2d_bin = "skymap2d"
             else:
-                raise click.ClickException("skymap2d não encontrado (defina SKYMAP2D_BIN)") from None
+                raise click.ClickException(
+                    "skymap2d não encontrado. Instala com ./install.sh skymap2d (raiz do monorepo) "
+                    "ou define SKYMAP2D_BIN com o caminho absoluto."
+                ) from None
 
     # icons (scene-level ícones de UI via text2d --category icon)
     with_icons = not no_icons and profile.icons is not None and bool(_icons_profile_effective(profile).prompts)
@@ -430,7 +444,10 @@ def batch_cmd(
             if dry_run:
                 text2d_bin = "text2d"
             else:
-                raise click.ClickException("text2d não encontrado (defina TEXT2D_BIN)") from None
+                raise click.ClickException(
+                    "text2d não encontrado. Instala com ./install.sh text2d (raiz do monorepo) "
+                    "ou define TEXT2D_BIN com o caminho absoluto."
+                ) from None
 
     meta = Table(show_header=False, box=box.SIMPLE, title="[bold]Batch[/bold]")
     meta.add_row("Perfil", str(profile_path.resolve()))

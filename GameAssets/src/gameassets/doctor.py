@@ -9,6 +9,7 @@ compressão GLB, Node/Bun, LLM do ``dream`` e disco. Saída humana (rich) ou
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 import subprocess
 import urllib.error
@@ -18,6 +19,19 @@ from pathlib import Path
 from typing import Any
 
 from .runner import resolve_binary
+
+IS_WINDOWS = platform.system() == "Windows"
+
+
+def install_cmd(tool: str = "") -> str:
+    """Comando de instalação do monorepo para mensagens de erro (cross-platform)."""
+    script = ".\\install.ps1" if IS_WINDOWS else "./install.sh"
+    return f"{script} {tool}".rstrip()
+
+
+def bun_install_hint() -> str:
+    return 'powershell -c "irm bun.sh/install.ps1 | iex"' if IS_WINDOWS else "curl -fsSL https://bun.sh/install | bash"
+
 
 # Perfis (espelham install.sh / scripts/preflight.py — mantê-los sincronizados).
 CORE_TOOLS = (
@@ -100,7 +114,7 @@ def check_tools() -> list[DoctorCheck]:
             name=f"Ferramentas do perfil core ({len(CORE_TOOLS)})",
             status="fail",
             detail=f"em falta: {', '.join(missing_core)}",
-            fix="./install.sh   (na raiz do monorepo — instala o perfil core)",
+            fix=f"{install_cmd()}   (na raiz do monorepo — instala o perfil core)",
         )
     else:
         check = DoctorCheck(
@@ -116,7 +130,7 @@ def check_tools() -> list[DoctorCheck]:
             name="Extras do dream (sky/terreno/áudio)",
             status="warn",
             detail=f"em falta: {names} — o dream salta estes passos",
-            fix=f"./install.sh examples   (ou individual: ./install.sh {' '.join(missing_optional)})",
+            fix=f"{install_cmd('examples')}   (ou individual: {install_cmd(' '.join(missing_optional))})",
         )
     else:
         optional = DoctorCheck(
@@ -160,7 +174,7 @@ def check_compression() -> list[DoctorCheck]:
                 name="Compressão GLB (KTX2/meshopt)",
                 status="warn",
                 detail="text3d ausente — sem verificação",
-                fix="./install.sh text3d",
+                fix=install_cmd("text3d"),
             )
         ]
     text3d_bin = tool_bin("text3d")
@@ -210,7 +224,7 @@ def check_node_bun() -> list[DoctorCheck]:
             name="Bun",
             status="ok" if bun else "warn",
             detail=bun or "não encontrado — projetos do dream não arranjam (bun install/dev)",
-            fix="curl -fsSL https://bun.sh/install | bash",
+            fix=bun_install_hint(),
         )
     )
     return checks
@@ -262,7 +276,7 @@ def check_disk() -> list[DoctorCheck]:
         free_gb = shutil.disk_usage(Path.home()).free / (1024**3)
     except OSError:
         return [DoctorCheck(name="Disco livre", status="ok", detail="indeterminado")]
-    detail = f"{free_gb:.0f} GB livres em ~ (pesos de modelos: ~/.cache/huggingface)"
+    detail = f"{free_gb:.0f} GB livres em ~ (1.º dream/batch 3D descarrega ≈ 30 GB para ~/.cache/huggingface)"
     status = "ok" if free_gb >= MIN_DISK_GB else "warn"
     return [DoctorCheck(name=f"Disco livre ≥ {MIN_DISK_GB} GB", status=status, detail=detail)]
 

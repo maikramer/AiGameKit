@@ -230,3 +230,36 @@ class TestDoctorCli:
         r = runner.invoke(cli, ["doctor", "--help"])
         assert r.exit_code == 0
         assert "vramd" in r.output and "dream" in r.output
+
+
+class TestCrossPlatformHints:
+    def test_install_cmd_linux(self) -> None:
+        with patch.object(doctor, "IS_WINDOWS", False):
+            assert doctor.install_cmd("text3d") == "./install.sh text3d"
+            assert doctor.install_cmd() == "./install.sh"
+
+    def test_install_cmd_windows(self) -> None:
+        with patch.object(doctor, "IS_WINDOWS", True):
+            assert doctor.install_cmd("text3d") == ".\\install.ps1 text3d"
+
+    def test_bun_hint_by_platform(self) -> None:
+        with patch.object(doctor, "IS_WINDOWS", True):
+            assert "install.ps1" in doctor.bun_install_hint()
+        with patch.object(doctor, "IS_WINDOWS", False):
+            assert "bun.sh/install" in doctor.bun_install_hint()
+
+    def test_missing_core_fix_uses_platform_cmd(self) -> None:
+        with (
+            patch.object(doctor, "tool_bin", _tool_bin_map({"text3d": None})),
+            patch.object(doctor, "IS_WINDOWS", True),
+        ):
+            checks = doctor.check_tools()
+        assert "install.ps1" in checks[0].fix
+
+
+class TestBatchInitHintCli:
+    def test_batch_without_game_yaml_suggests_init(self, runner: CliRunner, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        r = runner.invoke(cli, ["batch"])
+        assert r.exit_code != 0
+        assert "gameassets init" in r.output
