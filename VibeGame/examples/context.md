@@ -2,7 +2,7 @@
 
 <!-- LLM:OVERVIEW -->
 
-Shipped examples in this repository: **hello-world** (minimal terrain + physics + deterministic placement), **simple-rpg** (full AiGameKit pipeline demo, Crystal Vale), **simple-racer** (racing plugin + shared Vale packs), and **simple-farm** (isometric Harvest-Moon-style farming: till→plant→water→sleep→harvest→sell). Shared GameAssets packs (forest/village/infra/terrain/props manifests + binaries) live in [`shared-assets/`](shared-assets/README.md).
+Shipped examples in this repository: **hello-world** (minimal terrain + physics + deterministic placement), **simple-rpg** (full AiGameKit pipeline demo, Crystal Vale), **simple-racer** (racing plugin + shared Vale packs), and **simple-farm** (isometric Harvest-Moon-style farming: till→plant→water→sleep→harvest→sell). Shared GameAssets packs (forest/village/infra/terrain/props manifests + binaries) live in the monorepo asset pool at [`../../Viber/examples/shared-assets/`](../../Viber/examples/shared-assets/README.md).
 <!-- /LLM:OVERVIEW -->
 
 ## Purpose
@@ -16,7 +16,7 @@ Shipped examples in this repository: **hello-world** (minimal terrain + physics 
 ```
 examples/
 ├── context.md          # This file
-├── shared-assets/      # Crystal Vale shared packs: manifests + binaries (single pool, served via vibegame({ sharedAssets }))
+├── (shared-assets/ → ../../Viber/examples/shared-assets/)  # Crystal Vale pool: manifests + binaries (served via vibegame({ sharedAssets }))
 ├── shared/             # TS helpers (i18n, HUD) — not GLBs
 ├── hello-world/        # Minimal: terrain, dynamic body, <GameObject place="…">
 │   ├── context.md

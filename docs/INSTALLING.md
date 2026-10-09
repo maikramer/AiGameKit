@@ -195,8 +195,8 @@ SKIP_INFERENCE=1 scripts/docker/ubuntu-clean-test.sh # installs + smokes only
 ```
 
 - Runs in **2 groups** (disk-layout limit: the repo may live on a separate
-  drive): A = light tools (`modelserver rocks3d texture2d text2sound
-  skymap2d aigamekitlab materialize`), B = GPU/3D chain (`modelserver text2d
+  drive): A = light tools (`vramd rocks3d texture2d text2sound
+  skymap2d aigamekitlab materialize`), B = GPU/3D chain (`vramd text2d
   text3d paint3d rigging3d animator3d terrain3d vibegame gameassets`).
 - **Host caches are mounted** to avoid massive downloads: `~/.cache/huggingface`
   (models) and `~/.cache/uv` (wheels). GPU is passed through with `--gpus all`

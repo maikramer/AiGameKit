@@ -5,13 +5,13 @@ Documento de apoio ao fluxo **conteúdo gerado + orquestração + agentes de có
 ## Três camadas de IA no monorepo
 
 1. **Modelos generativos** — Text2D, Texture2D, Text3D, Paint3D, Text2Sound, Skymap2D, etc.: transformam prompts em ficheiros (PNG, GLB, áudio).
-2. **Orquestração** — **GameAssets** (`gameassets batch`): perfil YAML + CSV + presets, chamadas determinísticas a CLIs (`*_BIN`).
+2. **Orquestração** — **GameAssets** (`gameassets batch`): perfil YAML + manifesto YAML + presets, chamadas determinísticas a CLIs (`*_BIN`).
 3. **Agentes / IDE** — Convenções em [AGENTS.md](../AGENTS.md), contexto do motor em [VibeGame/llms.txt](../VibeGame/llms.txt), skill do GameAssets em `GameAssets/src/gameassets/cursor_skill/SKILL.md`.
 
 ## Fluxo recomendado
 
-1. Instalar ferramentas ([INSTALLING_PT.md](INSTALLING_PT.md)).
-2. Definir `game.yaml` + `manifest.csv` + presets; opcionalmente `gameassets prompts` antes do batch.
+1. Instalar (`./install.sh` na raiz — perfil core; confirmar com `gameassets doctor`): ver [INSTALLING_PT.md](INSTALLING_PT.md).
+2. `gameassets init` gera `game.yaml` + `manifest.yaml` comentados; opcionalmente `gameassets prompts` antes do batch.
 3. Correr `gameassets batch` — pipeline stages (3D, rig, parts, animate) são auto-detetados do manifest + `game.yaml`.
 4. Opcional: validar GLBs com AiGameKitLab.
 5. Copiar outputs para `public/assets/…` (ou `gameassets handoff --public-dir …`) e usar `loadGltfToScene`, `<GLTFLoader url="…">`, ou os exemplos [simple-rpg](../VibeGame/examples/simple-rpg/) (completo) / [hello-world](../VibeGame/examples/hello-world/) (mínimo).
@@ -93,7 +93,9 @@ Novo comando que recebe uma **descrição em linguagem natural**, chama um **LLM
 gameassets dream "idle clicker de fazenda, estilo pixel art" --dry-run
 ```
 
-Fases: Plan (LLM) → Emit (yaml/csv/xml/ts) → Batch (auto-deteção 3D/rig/animate) → Sky → Handoff → Scaffold. `--dry-run` gera ficheiros sem GPU. Providers: `openai`, `huggingface`, `stdin`.
+Fases: Plan (LLM) → Emit (yaml/xml/ts) → Batch (auto-deteção 3D/rig/animate) → Terrain (auto) → Sky → Ícones → Handoff → Scaffold. `--dry-run` gera ficheiros sem GPU. Providers: `openai` (default), `huggingface`, `ollama` (local, sem chave), `stdin`. Opt-outs por funcionalidade: `--no-audio`, `--no-sky`, `--no-terrain` (as flags `--no-3d`/`--no-rig`/`--no-animate` são do `gameassets batch`).
+
+Iterar sem regenerar tudo: `gameassets dream refine <plano>.json "add a dragon boss"` (o LLM edita o plano, seeds preservadas, ficheiros do batch re-emitidos); auditoria: `gameassets dream explain <plano>.json [--json]`.
 
 Código: `GameAssets/src/gameassets/dream/`.
 
@@ -103,4 +105,3 @@ Código: `GameAssets/src/gameassets/dream/`.
 |------------|------|
 | Média | Zip CI de `public/assets` |
 | Baixa | `resume --dry-run-json` alinhado ao `batch` |
-| Baixa | Refinamento multi-turn do plano no `dream` |

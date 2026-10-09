@@ -4,6 +4,16 @@
 
 CLI para **batches de prompts e assets** alinhados ao estilo e à ideia do teu jogo. Combina um perfil YAML (`game.yaml`), um manifest YAML e presets de estilo, e orquestra **`text2d`** ou **`texture2d`** (texturas seamless locais), opcionalmente **`text2sound`** (áudio por linha), **`text3d`** (só geometria), **`paint3d`** (Hunyuan3D-Paint 2.1 — textura + PBR no GLB com `text3d.texture`) e **Materialize** só para **mapas PBR a partir da imagem difusa** no fluxo Texture2D (`texture2d.materialize`).
 
+## Primeiro uso — `doctor`
+
+```bash
+gameassets doctor   # tools do perfil, vramd/GPU, compressão GLB, Node/Bun, LLM do dream, disco — veredicto READY
+```
+
+É o check único que o instalador corre no fim de um perfil; `--json` para agentes,
+exit 1 quando algo obrigatório falha. O `dream` imprime o seu próprio painel de
+pré-checks (chave LLM em falta, tools de sky/terreno/áudio) antes de qualquer trabalho.
+
 ## Requisitos
 
 - Python 3.13+ (`>=3.13,<3.14`)
@@ -15,10 +25,6 @@ CLI para **batches de prompts e assets** alinhados ao estilo e à ideia do teu j
   - `TEXT2SOUND_BIN` — executável `text2sound` ([Text2Sound](../Text2Sound)) quando há linhas com **`generate_audio=true`** no manifest (e não usas `--skip-audio`)
   - `MATERIALIZE_BIN` — opcional; **mapas PBR a partir da difusa** com Texture2D + `texture2d.materialize` (ver [Materialize](../Materialize) e [Text3D/docs/PBR_MATERIALIZE.md](../Text3D/docs/PBR_MATERIALIZE.md))
   - `ANIMATOR3D_BIN` — executável `animator3d` ([Animator3D](../Animator3D)) após rig com sucesso (`animator3d game-pack`; auto-detetado quando o bloco `rigging3d` existe no perfil — ver secção do batch abaixo)
-
-## Debug / laboratório
-
-Debug visual de GLB (screenshots, inspect, compare, bundle) está em **[AiGameKitLab](../AiGameKitLab)** (`aigamekit-lab debug …`), não no `gameassets`.
 
 ## Debug / laboratório
 

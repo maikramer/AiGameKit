@@ -197,9 +197,9 @@ SKIP_INFERENCE=1 scripts/docker/ubuntu-clean-test.sh # só instalação + smokes
 ```
 
 - Corre em **2 grupos** (limite do layout de disco: o repo pode viver num disco
-  separado): A = tools leves (`modelserver rocks3d texture2d
+  separado): A = tools leves (`vramd rocks3d texture2d
   text2sound skymap2d aigamekitlab materialize`), B = cadeia GPU/3D
-  (`modelserver text2d text3d paint3d rigging3d animator3d terrain3d vibegame
+  (`vramd text2d text3d paint3d rigging3d animator3d terrain3d vibegame
   gameassets`).
 - **Caches do host montados** para evitar downloads massivos:
   `~/.cache/huggingface` (modelos) e `~/.cache/uv` (wheels). A GPU é passada com
@@ -226,9 +226,9 @@ SKIP_INFERENCE=1 scripts/docker/ubuntu-clean-test.sh # só instalação + smokes
 | Ficheiro | Função |
 |----------|--------|
 | **`AiGameKit/install.sh`** (raiz) | Delega ao **Clified** (`tools.yaml` + hooks no repo). |
-| **`<Projeto>/scripts/install.sh`** | Atalho local **desse** projecto. **Não** é o script da raiz. |
+| **`<Projeto>/scripts/installer.py`** | Atalho local **dessa** tool. **Não** é o script da raiz. |
 
-Preferência: `./install.sh <nome>` **a partir da raiz**. O wrapper em `scripts/` existe para quem já está dentro da pasta do projecto.
+Preferência: `./install.sh` **a partir da raiz**. O wrapper por projeto existe para quem já está dentro da pasta da tool (infere a tool do nome da pasta).
 
 ---
 

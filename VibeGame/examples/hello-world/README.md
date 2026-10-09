@@ -11,3 +11,10 @@ Minimal **VibeGame** example: procedural terrain, one physics sphere, and a shor
 bun install
 bun run dev
 ```
+
+Or with npm alone (no Bun needed):
+
+```bash
+npm install
+npm run dev
+```

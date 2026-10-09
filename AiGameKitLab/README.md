@@ -17,7 +17,13 @@ Requires `aigamekit-shared` as a dependency. All rendering commands use **native
 
 ## Installation
 
-From the monorepo root:
+Official (from the monorepo root — creates `AiGameKitLab/.venv` + CLI wrapper):
+
+```bash
+./install.sh aigamekitlab
+```
+
+Manual:
 
 ```bash
 cd Shared && pip install -e .

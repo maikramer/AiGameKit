@@ -32,15 +32,15 @@ flowchart TB
 | Layer | Role | Typical inputs |
 |-------|------|----------------|
 | **Generative** | Images, meshes, audio, skies from prompts | Natural-language prompts, seeds, HF tokens |
-| **Orchestration** | Repeatable pipelines, CSV manifests, logs | `game.yaml`, `manifest.csv`, `*_BIN` env vars |
+| **Orchestration** | Repeatable pipelines, YAML manifests, logs | `game.yaml`, `manifest.yaml`, `*_BIN` env vars |
 | **Agentic** | Code, scene XML, iteration in the repo | Cursor rules, `llms.txt`, skills under `GameAssets/src/gameassets/cursor_skill/` |
 
 None of these replaces the others: **prompts become files**, **files become URLs**, **agents edit code** that loads those URLs (e.g. `loadGltfToScene` in [VibeGame/src/extras/gltf-bridge.ts](../VibeGame/src/extras/gltf-bridge.ts)).
 
 ## 2. Recommended workflow (zero to playable loop)
 
-1. **Install** the CLIs you need from the repo root ([INSTALLING.md](INSTALLING.md)): at minimum `gameassets`, tools referenced by your profile, and optionally `./install.sh vibegame` for the scaffold CLI.
-2. **Author style and scope** in `game.yaml` + `manifest.csv` + presets; use `gameassets prompts` to review prompts before spending GPU/API quota.
+1. **Install** the CLIs you need from the repo root ([INSTALLING.md](INSTALLING.md)): `./install.sh` (core profile) covers the default `dream` flow; run `gameassets doctor` to confirm readiness.
+2. **Author style and scope**: `gameassets init` scaffolds a commented `game.yaml` + `manifest.yaml`; use `gameassets prompts` to review prompts before spending GPU/API quota.
 3. **Run batch**: `gameassets batch --profile … --manifest …`. Pipeline stages (3D, rig, animate) are auto-detected from manifest columns and `game.yaml` profile blocks ([GameAssets README](../GameAssets/README.md)).
 4. **Validate assets**: optional `aigamekit-lab debug …` on critical GLBs ([AiGameKitLab](../AiGameKitLab/)).
 5. **Hand off to the web**: copy GLBs/audio into `public/assets/…` per [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md); use [VibeGame/examples/simple-rpg](../VibeGame/examples/simple-rpg/) as a full template or [VibeGame/examples/hello-world](../VibeGame/examples/hello-world/) for a minimal app.
@@ -122,7 +122,7 @@ Avoid pasting large generated assets into the chat; **link paths** under `public
 
 ## 6. `gameassets dream` — idea-to-game in one command
 
-The `dream` command closes the last manual gap: it takes a **natural-language description** of a game, calls an **LLM** to plan assets and scene layout, then runs **batch + skymap + handoff** and scaffolds a **playable Vite project** with VibeGame.
+The `dream` command closes the last manual gap: it takes a **natural-language description** of a game, calls an **LLM** to plan assets and scene layout, then runs **batch + terrain + sky + icons + handoff** and scaffolds a **playable Vite project** with VibeGame.
 
 ```bash
 gameassets dream "platformer 3D com cristais num mundo de nuvens, estilo lowpoly" --dry-run
@@ -131,15 +131,19 @@ gameassets dream "platformer 3D com cristais num mundo de nuvens, estilo lowpoly
 | Phase | What happens |
 |-------|--------------|
 | 1. Plan | LLM generates `dream_plan.json` (title, genre, assets, scene placements, sky prompt) |
-| 2. Emit | Converts plan into `game.yaml`, `manifest.csv`, `world.xml`, `main.ts`, `index.html` |
+| 2. Emit | Converts plan into `game.yaml`, `manifest.yaml`, `world.xml`, `main.ts`, `index.html` |
 | 3. Batch | `gameassets batch` on the emitted profile/manifest (auto-detects 3D, rig, animate) |
-| 4. Sky | `skymap2d generate` from the sky prompt (equirect PNG) |
-| 5. Handoff | `gameassets handoff --public-dir <project>/public` |
-| 6. Scaffold | Creates `package.json`, `vite.config.ts`, copies emitted `main.ts` + `index.html` |
+| 4. Terrain | `terrain3d` diffusion heightmap when the plan enables terrain (auto) |
+| 5. Sky | `skymap2d generate` from the sky prompt (equirect PNG) |
+| 6. Icons | `text2d --category icon` UI icons from the plan |
+| 7. Handoff | `gameassets handoff --public-dir <project>/public` |
+| 8. Scaffold | Creates `package.json`, `vite.config.ts`, copies emitted `main.ts` + `index.html` |
 
 `--dry-run` stops after phase 2 (no GPU), so you can review/edit files before running batch.
 
-Providers: `--llm-provider openai` (default), `huggingface`, or `stdin`. Falls back to a minimal plan if no LLM is available.
+Providers: `--llm-provider openai` (default), `huggingface`, `ollama` (local, zero-key), or `stdin`. Falls back to a minimal plan if no LLM is available — the pre-flight panel warns about this before any work runs.
+
+Iterate on an existing plan without regenerating everything: `gameassets dream refine <plan>.json "add a dragon boss"` (LLM edits the plan, seeds preserved, batch files re-emitted); audit with `gameassets dream explain <plan>.json [--json]`.
 
 Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context).
 
@@ -149,7 +153,6 @@ Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_contex
 |----------|------|
 | Medium | Zip/tar of `public/assets` for CI artefacts |
 | Low | `gameassets resume --dry-run-json` parity with `batch` |
-| Low | Multi-turn LLM refinement in `dream` (iterate on plan before generating) |
 
 ## 8. References
 

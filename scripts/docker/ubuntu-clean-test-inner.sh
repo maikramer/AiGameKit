@@ -143,14 +143,14 @@ if [ "${TEST_TOOLS:-}" != "" ]; then
   TOOLS="$TEST_TOOLS"
   echo "Modo TEST_TOOLS — só: $TOOLS"
 else
-  TOOLS="modelserver text2d text3d gameassets aigamekitlab text2sound texture2d skymap2d terrain3d rocks3d rigging3d animator3d paint3d materialize vibegame"
+  TOOLS="vramd text2d text3d gameassets aigamekitlab text2sound texture2d skymap2d terrain3d rocks3d rigging3d animator3d paint3d materialize vibegame"
   echo "Modo completo — todas as tools do tools.yaml (instalação + inferência)."
 fi
 echo "Tools a instalar: $TOOLS"
 
 # <tool>|<cli-name>|<tolerate?>
 TOOL_SPECS="
-modelserver|aigamekit-model-server|
+vramd|vramd|
 gameassets|gameassets|
 rocks3d|rocks3d|
 materialize|materialize|

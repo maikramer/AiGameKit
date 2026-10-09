@@ -6,16 +6,24 @@ Orchestrator for the entire AiGameKit pipeline. Coordinates **Text2D**, **Textur
 
 Reads `game.yaml` (style + tool configuration) and `manifest.yaml` (asset list), then runs each sub-tool in the correct order, tracking progress, managing VRAM, and producing a structured output directory ready for handoff to Vite / VibeGame.
 
+## First-use check
+
+```bash
+gameassets doctor   # tools of the profile, vramd/GPU, GLB compression, Node/Bun, dream LLM, disk — READY verdict
+```
+
+`doctor` is the single first-use check the installer runs at the end of a profile install. `--json` for agents; exit 1 when something mandatory fails. The `dream` command prints its own pre-flight panel (missing LLM key, sky/terrain/audio tools) before doing any work.
+
 ## Overview
 
 GameAssets is the central hub of the [AiGameKit monorepo](../). It does **not** generate images or meshes itself — it delegates to specialized packages and manages the workflow:
 
 - **2D generation:** Text2D (FLUX, local GPU) or Texture2D (seamless textures, local SD1.5) or Skymap2D (equirectangular 360° sky, local FLUX.1-dev + LoRA)
-- **3D shape:** Text3D (Hunyuan3D-2.1, image→geometry)
+- **3D shape:** Text3D (Hunyuan3D-Omni, image→geometry)
 - **3D texturing:** Paint3D (Hunyuan3D-Paint 2.1, PBR-ready GLB) with optional quick paint (solid / perlin)
 - **Auto-rigging:** Rigging3D (SkinTokens, GLB → rigged GLB)
 - **Animation:** Animator3D (`game-pack`, rigged GLB → animated GLB with clips)
-- **Audio:** Text2Sound (Stable Audio Open, per-row SFX / BGM)
+- **Audio:** Text2Sound (Stable Audio 3 Small, per-row SFX / BGM)
 - **PBR maps:** Materialize (diffuse → normal / metallic / roughness / AO, only for Texture2D flow)
 - **Terrain:** Terrain3D (AI terrain generation via diffusion, from `dream` command)
 - **LOD / collision:** Text3D `lod` / `collision` sub-commands
@@ -602,7 +610,7 @@ Options for 360° equirectangular sky generation.
 
 #### `text3d` — Text3DProfile
 
-Options for Text3D (Hunyuan3D-2.1) shape generation.
+Options for Text3D (Hunyuan3D-Omni) shape generation.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -645,7 +653,7 @@ Options for Paint3D texturing (Hunyuan3D-Paint 2.1 AI or quick paint).
 
 #### `text2sound` — Text2SoundProfile
 
-Options for Text2Sound (Stable Audio Open) audio generation.
+Options for Text2Sound (Stable Audio 3 Small) audio generation.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|

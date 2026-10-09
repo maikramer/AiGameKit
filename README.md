@@ -37,7 +37,7 @@ gameassets dream "A dark fantasy RPG with skeletons and treasure chests" --dry-r
 gameassets dream "A dark fantasy RPG with skeletons and treasure chests"              # full run
 ```
 
-What `dream` does: plans assets via an LLM (`--llm-provider openai|huggingface|stdin`), generates `game.yaml` / `manifest.csv` / `world.xml`, runs the full pipeline (batch → rig → animate → sky → terrain), handoffs assets to Vite public dir, and scaffolds a playable project. Stages are auto-detected; use `--no-animate`, `--no-rig`, or `--no-3d` to opt out.
+What `dream` does: plans assets via an LLM (`--llm-provider openai|huggingface|ollama|stdin`), generates `game.yaml` / `manifest.yaml` / `world.xml`, runs the full pipeline (batch → rig → animate → sky → terrain → icons), handoffs assets to Vite public dir, and scaffolds a playable project. Pipeline stages are auto-detected; opt out with `--no-audio`, `--no-sky`, or `--no-terrain` (per-stage `--no-3d/--no-rig/--no-animate` live in `gameassets batch`). Iterate with `gameassets dream refine plan.json "add a dragon"`.
 
 Source: [`GameAssets/src/gameassets/dream/`](GameAssets/src/gameassets/dream/).
 
@@ -323,9 +323,9 @@ The monorepo uses environment variables to locate binaries and configure behavio
 | `VRAMD_BIN` | All GPU tools | Path to `vramd` (vramd) |
 | `VRAMD_AUTO_START` | All GPU tools | `0` disables auto-start of vramd on first generate |
 | `VRAMD_PRIORITY` | All GPU tools / GameAssets | Default queue priority: `interactive` \| `batch` |
-| `VRAMD_MAX_AFFINITY_CUTS` | ModelServer | Max VRAM-affinity skips before forcing HOL (default `3`) |
-| `VRAMD_MAX_QUEUE_DEPTH` | ModelServer | Job queue depth before `queue_full` (default `32`) |
-| `VRAMD_MAX_INFLIGHT` | ModelServer | Parallel generations (default `1`) |
+| `VRAMD_MAX_AFFINITY_CUTS` | vramd | Max VRAM-affinity skips before forcing HOL (default `3`) |
+| `VRAMD_MAX_QUEUE_DEPTH` | vramd | Job queue depth before `queue_full` (default `32`) |
+| `VRAMD_MAX_INFLIGHT` | vramd | Parallel generations (default `1`) |
 | `AIGAMEKIT_ALLOW_LEGACY_SERVER` | Shared / tools | `1` = opt-in per-tool legacy servers + legacy `ensure_vram` (default off) |
 | `AIGAMEKIT_PREFER_MONOREPO` | Shared / GameAssets | Default `1`: `resolve_binary` prefers `<Tool>/.venv/bin` over stale `~/.local/bin` |
 | `VRAMD_CLIENT_SOCKET` | Shared | Override Unix socket path (legacy / tests) |
