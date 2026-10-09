@@ -186,7 +186,7 @@ def _binary_dilate(mask: np.ndarray, iterations: int) -> np.ndarray:
             t = torch.from_numpy(mask.astype(np.float32)).to(device)[None, None]
             for _ in range(iters):
                 t = F.max_pool2d(t, kernel_size=3, stride=1, padding=1)
-            return cast(np.ndarray, (t[0, 0] > 0.5).detach().cpu().numpy())
+            return (t[0, 0] > 0.5).detach().cpu().numpy()
         except Exception as exc:
             log.debug("dilate GPU fallback CPU: %s", exc)
     out = mask.astype(bool, copy=True)

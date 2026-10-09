@@ -41,6 +41,7 @@ def add_vramd_options(fn: F) -> F:
         def generate_cmd(ctx, ..., ums_priority, no_ums, ums_stream):
             ...
     """
+    click: Any
     try:
         import rich_click as click
     except ImportError:  # pragma: no cover
@@ -762,7 +763,7 @@ def delegate_or_prepare(
     return False
 
 
-def add_group_offload_option():
+def add_group_offload_option() -> Any:
     """Decorador click com a flag ``--group-offload`` padrão das tools 2D/3D.
 
     Uso (substitui o bloco ``@click.option("--group-offload/...")`` repetido)::
@@ -809,6 +810,6 @@ def group_offload_needed_or_classic(
     """
     if policy.will_engage():
         if margin_gib is not None:
-            return policy.needed_mib(margin_gib=margin_gib)
-        return policy.needed_mib()
+            return int(policy.needed_mib(margin_gib=margin_gib))
+        return int(policy.needed_mib())
     return needed_mib_for_backend(backend, quant_mode=quant_mode, memory_efficient=memory_efficient)

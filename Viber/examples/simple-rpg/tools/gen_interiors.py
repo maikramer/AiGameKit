@@ -22,7 +22,6 @@ Correr:  python3 tools/gen_interiors.py
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -39,7 +38,11 @@ MARGIN = 22.0
 # Albedo + normal do pool, em UV world-space (`texture-tile-size` = metros por
 # repetição). É o que faz um soalho ler como soalho em vez de "caixa cinzenta".
 MAT = {
-    "stone_floor": ("/assets/textures/cobblestone_road/albedo.ktx2", "/assets/textures/cobblestone_road/normal.ktx2", 3.2),
+    "stone_floor": (
+        "/assets/textures/cobblestone_road/albedo.ktx2",
+        "/assets/textures/cobblestone_road/normal.ktx2",
+        3.2,
+    ),
     "wood_floor": ("/assets/textures/wood_planks/albedo.ktx2", "/assets/textures/wood_planks/normal.ktx2", 3.0),
     "dirt_floor": ("/assets/textures/dirt_road/albedo.ktx2", None, 3.0),
     "plaster": ("/assets/textures/wall_plaster/albedo.ktx2", "/assets/textures/wall_plaster/normal.ktx2", 3.4),
@@ -49,16 +52,16 @@ MAT = {
     "cloth": ("/assets/textures/wood_planks/albedo.ktx2", None, 2.0),
 }
 
-WALL_H = 2.4          # altura da parede (m)
-WALL_T = 0.14         # meia-espessura
-DOOR_W = 2.6          # vão da porta
-DOOR_H = 2.1          # altura do vão (o lintel fecha por cima)
+WALL_H = 2.4  # altura da parede (m)
+WALL_T = 0.14  # meia-espessura
+DOOR_W = 2.6  # vão da porta
+DOOR_H = 2.1  # altura do vão (o lintel fecha por cima)
 WIN_W = 1.6
 WIN_SILL = 0.9
 WIN_TOP = 1.9
 
 
-def mat(prim: str, key: str, color: str = None) -> str:
+def mat(prim: str, key: str, color: str | None = None) -> str:
     """Atributos de material de uma primitiva: textura do pool + cor opcional."""
     albedo, normal, tile = MAT[key]
     attrs = []
@@ -74,6 +77,7 @@ def mat(prim: str, key: str, color: str = None) -> str:
 @dataclass
 class Box:
     """Uma parte do shell, em coordenadas LOCAIS da sala (centro no 0,0)."""
+
     x: float
     y: float
     z: float
@@ -87,14 +91,15 @@ class Box:
 @dataclass
 class Prop:
     """Mobília: asset do pool + offset local + colisor."""
+
     asset: str
     x: float
     z: float
     yaw: float = 0.0
     scale: float = 1.0
-    collider: str = "trimesh"   # trimesh | precompute | box
+    collider: str = "trimesh"  # trimesh | precompute | box
     script: str | None = None
-    fire: bool = False          # chama + luz quente no topo
+    fire: bool = False  # chama + luz quente no topo
     light: tuple | None = None  # (cor, intensidade, altura)
 
 
@@ -109,6 +114,7 @@ class Npc:
     invisível, e no dia em que os modelos novos aterrarem basta voltar a
     correr este gerador para os lugares certos mudarem sozinhos.
     """
+
     role: str
     x: float
     z: float
@@ -117,7 +123,8 @@ class Npc:
 
     @property
     def model(self) -> str:
-        return ROLE_MODEL.get(self.role, self.role) if available(ROLE_MODEL.get(self.role, self.role)) else ROLE_FALLBACK[self.role]
+        model = ROLE_MODEL.get(self.role, self.role)
+        return model if available(model) else ROLE_FALLBACK[self.role]
 
 
 #: Papel → modelo gerado por `manifests/characters-interiors.yaml`.
@@ -179,7 +186,7 @@ class Room:
     iz: int
     floor: str = "stone_floor"
     wall: str = "plaster"
-    beams: bool = True          # no-op desde 2026-09-13 (ver `shell`)
+    beams: bool = True  # no-op desde 2026-09-13 (ver `shell`)
     windows: int = 2
     # Porta de rua (world/cities/discordia/portals.xml): o par
     # porta↔saída vive NUMA linha, não em duas listas alinhadas por ordem.
@@ -187,7 +194,7 @@ class Room:
     props: list[Prop] = field(default_factory=list)
     npcs: list[Npc] = field(default_factory=list)
     lights: list[tuple] = field(default_factory=list)  # (cor, intensidade, x, z, y)
-    open_air: bool = False      # banca/mercado: sem paredes, só postes e toldo
+    open_air: bool = False  # banca/mercado: sem paredes, só postes e toldo
 
     @property
     def cx(self) -> float:
@@ -199,7 +206,7 @@ class Room:
 
     @property
     def exit_z(self) -> float:
-        """Z local do portal de saída (no vão −Z, 1 m fora da parede)."""
+        """Z local do portal de saída (no vão -Z, 1 m fora da parede)."""
         return -(self.d * 0.5 + 1.0)
 
 
@@ -216,7 +223,8 @@ def wall_run(z: float, half_len: float, openings: list[tuple[float, float]]) -> 
         boxes.append(Box(centre, (DOOR_H + WALL_H) * 0.5, z, width * 0.5, (WALL_H - DOOR_H) * 0.5, WALL_T, "wall"))
         cursor = hi
     if cursor < half_len:
-        boxes.append(Box((cursor + half_len) * 0.5, WALL_H * 0.5, z, (half_len - cursor) * 0.5, WALL_H * 0.5, WALL_T, "wall"))
+        w = (half_len - cursor) * 0.5
+        boxes.append(Box((cursor + half_len) * 0.5, WALL_H * 0.5, z, w, WALL_H * 0.5, WALL_T, "wall"))
     return boxes
 
 
@@ -233,7 +241,8 @@ def wall_side(x: float, half_len: float, openings: list[tuple[float, float]]) ->
         boxes.append(Box(x, (WIN_TOP + WALL_H) * 0.5, centre, WALL_T, (WALL_H - WIN_TOP) * 0.5, width * 0.5, "wall"))
         cursor = hi
     if cursor < half_len:
-        boxes.append(Box(x, WALL_H * 0.5, (cursor + half_len) * 0.5, WALL_T, WALL_H * 0.5, (half_len - cursor) * 0.5, "wall"))
+        w = (half_len - cursor) * 0.5
+        boxes.append(Box(x, WALL_H * 0.5, (cursor + half_len) * 0.5, WALL_T, WALL_H * 0.5, w, "wall"))
     return boxes
 
 
@@ -249,8 +258,8 @@ def shell(room: Room) -> list[Box]:
     # janelas distribuídas pelas paredes laterais (nunca na do vão)
     win_e = [(-hd * 0.35, WIN_W), (hd * 0.35, WIN_W)] if room.windows >= 2 else []
     win_w = [(-hd * 0.35, WIN_W)] if room.windows >= 1 else []
-    out += wall_run(hd, hw, [])                      # norte: sólida
-    out += wall_run(-hd, hw, [(0.0, DOOR_W)])        # sul: vão da porta
+    out += wall_run(hd, hw, [])  # norte: sólida
+    out += wall_run(-hd, hw, [(0.0, DOOR_W)])  # sul: vão da porta
     out += wall_side(hw, hd, win_e)
     out += wall_side(-hw, hd, win_w)
     # postes nos cantos + ombreiras da porta
@@ -274,221 +283,325 @@ def shell(room: Room) -> list[Box]:
 
 
 # ── SALAS ──────────────────────────────────────────────────────────────────
-# Convenção: a porta está SEMPRE no vão −Z (o shell abre o buraco aí), logo o
+# Convenção: a porta está SEMPRE no vão -Z (o shell abre o buraco aí), logo o
 # ponto focal de cada sala (altar, fornalha, lareira, balcão) fica em +Z e o
 # que sobra encosta às paredes laterais. `check_inside` recusa prop/NPC no
 # corredor da porta.
 def rooms() -> list[Room]:
     """As nove salas. O foco (altar, fornalha, lareira, balcão) fica SEMPRE em
-    +Z e a porta em −Z, para o herói entrar e ver a sala pela frente."""
+    +Z e a porta em -Z, para o herói entrar e ver a sala pela frente."""
     R: list[Room] = []
-    # ── CAPELA 24×18 ──────────────────────────────────────────────────────
-    R.append(Room("chapel", "capela", 24, 18, 1, 0, door=(7.46, 22.46),
-        floor="stone_floor", wall="plaster", windows=2,
-        props=[
-            Prop("interiors/chapel_altar_lod0", 0, 6.4, 180),
-            Prop("interiors/chapel_pulpit_lod0", 1.9, 5.0, 180),
-            Prop("interiors/church_organ_lod0", -7.4, 5.6, -90),
-            Prop("interiors/candelabra_tall_lod0", -6.8, 3.0, 0, light=("0xffd9a0", 10_000, 2.2)),
-            Prop("interiors/candelabra_tall_lod0", 6.8, 3.0, 0, light=("0xffd9a0", 9_000, 2.2)),
-            Prop("interiors/chapel_pew_lod0", -3.9, -1.4, 0),
-            Prop("interiors/chapel_pew_lod0", 3.9, -1.4, 0),
-            Prop("interiors/chapel_pew_lod0", -3.9, -3.8, 0),
-            Prop("interiors/chapel_pew_lod0", 3.9, -3.8, 0),
-            # 3.ª fila + tapetes da nave: a capela é a sala que o jogador vê
-            # primeiro e a que a câmara de interior enquadra inteira — vale o
-            # detalhe (pedido do utilizador 2026-09-13).
-            Prop("interiors/chapel_pew_lod0", -3.9, -6.2, 0),
-            Prop("interiors/chapel_pew_lod0", 3.9, -6.2, 0),
-            Prop("interiors/rug_woven_lod0", 0.0, -2.6, 0, 1.3),
-            Prop("interiors/rug_woven_lod0", 0.0, -5.4, 0, 1.3),
-            Prop("interiors/confessional_lod0", -9.4, -4.6, 90),
-            Prop("interiors/chapel_statue_lod0", 9.6, -5.6, 90),
-            # Sacristia encostada ao fundo: estante e cómoda em espelho.
-            Prop("interiors/bookshelf_lod0", -10.9, 6.4, 90),
-            Prop("interiors/cupboard_lod0", 10.9, 6.4, -90),
-            Prop("interiors/stool_wood_lod0", -6.0, 4.0, 20),
-            # Lanternas de parede: luz quente à altura dos olhos, sem sombra.
-            Prop("interiors/lantern_hanging_lod0", -11.0, -1.6, 90, light=("0xffcf8a", 5_200, 1.9)),
-            Prop("interiors/lantern_hanging_lod0", 11.0, -1.6, -90, light=("0xffcf8a", 5_200, 1.9)),
-            Prop("interiors/candelabra_tall_lod0", -2.4, -7.4, 0, light=("0xffd9a0", 6_000, 2.2)),
-            Prop("interiors/candelabra_tall_lod0", 2.4, -7.4, 0, light=("0xffd9a0", 6_000, 2.2)),
-            Prop("props/stone_pillar_lod0", -10.6, 1.0, 0, 1.1),
-            Prop("props/stone_pillar_lod0", 10.6, 1.0, 0, 1.1),
-            Prop("village/iron_brazier_lod0", -4.8, 6.2, 0, fire=True, light=("0xffa83a", 3_600, 1.1)),
-            Prop("village/iron_brazier_lod0", 4.8, 6.2, 0, fire=True, light=("0xffa83a", 3_600, 1.1)),
-        ],
-        npcs=[Npc("priest", 1.2, 3.4, 0, "interior-keeper.lua"),
-              Npc("elder", -7.6, -7.0, 160, "interior-folk.lua")],
-        lights=[("0xffd9a0", 8_000, 0.0, 0.0, 2.3)]))
-    # ── FERRARIA 22×16 ────────────────────────────────────────────────────
-    R.append(Room("forge", "ferraria", 22, 16, 2, 0, door=(-30.47, -29.06),
-        floor="dirt_floor", wall="stone_wall", windows=2,
-        props=[
-            Prop("interiors/forge_furnace_lod0", 0, 5.8, 180, fire=True, light=("0xff8a40", 12_000, 1.6)),
-            Prop("village/anvil_lod0", 0, 2.0, 180, script="anvil.lua"),
-            Prop("interiors/sledge_hammer_lod0", 1.0, 3.0, 200),
-            Prop("village/forge_bellows_lod0", -3.6, 5.4, 0),
-            Prop("village/quench_trough_lod0", 3.6, 4.6, 0),
-            Prop("village/horseshoe_pile_lod0", -2.6, 1.4, 0),
-            Prop("village/weapon_rack_lod0", 8.6, -1.6, 90),
-            Prop("village/weapon_rack_lod0", 8.6, -4.0, 90),
-            Prop("village/chopping_block_lod0", -7.0, -3.4, 0),
-            Prop("village/log_pile_lod0", -8.4, -5.4, 40),
-            Prop("village/wooden_crate_lod0", 7.4, -5.6, 0),
-            Prop("village/wooden_barrel_lod0", 8.6, -5.4, 0),
-            Prop("village/wooden_barrel_lod0", -9.0, 3.6, 0),
-        ],
-        npcs=[Npc("blacksmith", 2.2, 3.0, 0, "anvil.lua")],
-        lights=[("0xffc090", 6_000, 0.0, 0.0, 2.2)]))
-    # ── CASA COMUM 20×16 ──────────────────────────────────────────────────
-    R.append(Room("house_a", "casa comum", 20, 16, 0, 0, door=(26.35, 8.44),
-        floor="wood_floor",
-        props=[
-            Prop("interiors/fireplace_hearth_lod0", 0, 6.2, 180, fire=True, light=("0xffb070", 11_000, 1.4)),
-            Prop("interiors/dining_table_lod0", 0, 0.4, 0),
-            Prop("interiors/wooden_chair_lod0", 0, -1.6, 180),
-            Prop("interiors/wooden_chair_lod0", 0, 2.4, 0),
-            Prop("interiors/wooden_chair_lod0", -1.8, 0.4, -90),
-            Prop("interiors/wooden_chair_lod0", 1.8, 0.4, 90),
-            Prop("interiors/rug_woven_lod0", 0, 0.4, 0, collider="box"),
-            Prop("interiors/bed_simple_lod0", -7.0, -5.2, 0),
-            Prop("interiors/cupboard_lod0", -8.6, 4.4, 0),
-            Prop("interiors/bookshelf_lod0", 8.4, 4.6, 180),
-            Prop("interiors/cauldron_iron_lod0", 6.8, 6.0, 180, fire=True),
-            Prop("interiors/spinning_wheel_lod0", 7.2, -1.0, 90),
-            Prop("village/wooden_barrel_lod0", -8.4, -1.4, 0),
-            Prop("village/wooden_crate_lod0", 7.6, -5.4, 20),
-        ],
-        npcs=[Npc("cook", -6.4, 5.2, 200, "interior-keeper.lua"),
-              Npc("innkeeper", 2.6, 1.2, 20, "interior-keeper.lua")],
-        lights=[("0xffcf9a", 9_000, 0.0, 0.4, 2.3)]))
-    # ── CASA B (biblioteca) 20×16 ─────────────────────────────────────────
-    R.append(Room("house_b", "casa do escriba", 20, 16, 0, 1, door=(-17.44, 22.47),
-        floor="wood_floor",
-        props=[
-            Prop("interiors/fireplace_hearth_lod0", 0, 6.2, 180, fire=True, light=("0xffb070", 8_000, 1.4)),
-            Prop("interiors/bookshelf_lod0", -7.4, 3.4, 0),
-            Prop("interiors/bookshelf_lod0", -7.4, 4.6, 0),
-            Prop("interiors/bookshelf_lod0", 7.4, 3.4, 180),
-            Prop("interiors/bookshelf_lod0", 7.4, 4.6, 180),
-            Prop("interiors/dining_table_lod0", -1.0, -0.6, 0),
-            Prop("interiors/wooden_chair_lod0", -1.0, -2.6, 180),
-            Prop("interiors/wooden_chair_lod0", 3.2, -0.6, 90),
-            Prop("interiors/candelabra_tall_lod0", 1.6, -0.6, 0, light=("0xffd9a0", 7_000, 2.2)),
-            Prop("interiors/bookshelf_lod0", 7.6, -4.6, 180),
-            Prop("interiors/rug_woven_lod0", -1.0, -0.6, 0, collider="box", scale=0.9),
-            Prop("village/wooden_crate_lod0", -8.0, -4.8, 0),
-        ],
-        npcs=[Npc("scholar", -1.0, 0.6, 0, "interior-keeper.lua")],
-        lights=[("0xffd0a0", 6_000, 0.0, -0.6, 2.3)]))
-    # ── CASA C (cozinha) 20×16 ────────────────────────────────────────────
-    R.append(Room("house_c", "cozinha", 20, 16, 1, 1, door=(-20.47, -18.44),
-        floor="wood_floor",
-        props=[
-            Prop("interiors/fireplace_hearth_lod0", 0, 6.2, 180, fire=True, light=("0xffb070", 11_000, 1.4)),
-            Prop("interiors/cauldron_iron_lod0", -2.4, 5.0, 180, fire=True),
-            Prop("interiors/cauldron_iron_lod0", 2.4, 5.0, 180, fire=True),
-            Prop("interiors/tavern_bar_lod0", 0, 1.6, 0),
-            Prop("interiors/dining_table_lod0", 0, -4.8, 0),
-            Prop("interiors/stool_wood_lod0", -1.6, -4.8, 90),
-            Prop("interiors/stool_wood_lod0", 1.6, -4.8, -90),
-            Prop("interiors/cupboard_lod0", -8.6, 4.6, 0),
-            Prop("interiors/cupboard_lod0", 8.6, 4.6, 180),
-            Prop("village/wooden_barrel_lod0", 7.6, 1.0, 0),
-            Prop("village/wooden_barrel_lod0", 7.6, -0.6, 0),
-            Prop("village/wooden_crate_lod0", -7.8, -1.2, 0),
-            Prop("village/wooden_crate_lod0", -7.8, -3.0, 12),
-        ],
-        npcs=[Npc("cook", -1.4, 3.4, 180, "interior-keeper.lua"),
-              Npc("bard", 3.4, -3.0, 40, "interior-folk.lua")],
-        lights=[("0xffcf9a", 8_000, 0.0, 0.0, 2.3)]))
-    # ── CABANA DO PASTOR 18×14 ────────────────────────────────────────────
-    R.append(Room("shepherd", "cabana do pastor", 18, 14, 2, 1, door=(-22.33, 12.95),
-        floor="wood_floor",
-        props=[
-            Prop("interiors/fireplace_hearth_lod0", 0, 5.2, 180, fire=True, light=("0xffb070", 9_000, 1.4)),
-            Prop("interiors/bed_simple_lod0", -6.0, -3.6, 0),
-            Prop("interiors/dining_table_lod0", 1.6, 0.0, 0),
-            Prop("interiors/stool_wood_lod0", 3.4, 0.0, 90),
-            Prop("interiors/stool_wood_lod0", -0.2, 0.0, -90),
-            Prop("village/shepherd_cottage_lod0", 4.0, 3.6, 180, 0.5),
-            Prop("village/log_pile_lod0", -6.6, 2.0, 20),
-            Prop("village/quench_trough_lod0", 6.4, -3.4, 0),
-            Prop("village/wooden_barrel_lod0", -6.8, -0.6, 0),
-            Prop("farm/hay_bale_lod0", 6.6, 0.8, 30),
-            Prop("farm/hay_bale_lod0", 6.6, -1.0, 0),
-            Prop("farm/scarecrow_lod0", -3.0, 4.4, 180),
-        ],
-        npcs=[Npc("scout", 1.6, -2.0, 180, "interior-folk.lua"),
-              Npc("farmhand", -4.6, -2.4, 220, "interior-folk.lua")],
-        lights=[("0xffd0a0", 6_000, 0.0, 0.0, 2.2)]))
-    # ── CELEIRO 28×20 ─────────────────────────────────────────────────────
-    R.append(Room("barn", "celeiro", 28, 20, 0, 2, door=(-26.11, 30.00),
-        floor="dirt_floor", wall="stone_wall", windows=1,
-        props=[
-            Prop("farm/hay_bale_lod0", -8.0, 5.0, 0),
-            Prop("farm/hay_bale_lod0", -6.0, 3.4, 20),
-            Prop("farm/hay_bale_lod0", 8.0, 5.0, 350),
-            Prop("farm/hay_bale_lod0", 6.0, 3.2, 0),
-            Prop("farm/hay_bale_lod0", -9.0, -4.0, 0),
-            Prop("village/log_pile_lod0", 8.6, -4.4, 60, 1.3),
-            Prop("village/wooden_crate_lod0", -2.6, -7.2, 0),
-            Prop("village/wooden_crate_lod0", 2.8, -7.0, 24),
-            Prop("village/wooden_barrel_lod0", 4.4, -7.2, 0),
-            Prop("farm/chicken_coop_lod0", 10.6, -1.0, 90),
-            Prop("farm/fence_segment_lod0", -11.0, 0.0, 90, 1.2),
-            Prop("farm/fence_segment_lod0", -11.0, -3.2, 90, 1.2),
-            Prop("village/chopping_block_lod0", 5.0, -6.0, 0),
-            Prop("props/rock_mossy_lod0", 3.4, -6.6, 0, 1.2, "precompute"),
-            Prop("village/iron_brazier_lod0", 0.0, 7.4, 180, fire=True, light=("0xffa83a", 3_400, 1.1)),
-        ],
-        npcs=[Npc("guard", 2.0, 4.6, 0, "watch-guard.lua")],
-        lights=[("0xffd0a0", 7_000, 0.0, 0.0, 2.3)]))
-    # ── CASA COMPRIDA (taberna) 28×20 ─────────────────────────────────────
-    R.append(Room("longhouse", "taberna", 28, 20, 1, 2, door=(35.53, -37.53),
-        floor="wood_floor", windows=2,
-        props=[
-            Prop("interiors/tavern_bar_lod0", 0, 5.4, 180),
-            Prop("village/wooden_barrel_lod0", -8.0, 6.6, 0),
-            Prop("village/wooden_barrel_lod0", -7.0, 6.6, 0),
-            Prop("village/wooden_barrel_lod0", 8.0, 6.6, 0),
-            Prop("interiors/fireplace_hearth_lod0", 0, 8.6, 180, fire=True, light=("0xffb070", 10_000, 1.4)),
-            Prop("interiors/dining_table_lod0", -6.0, -1.0, 0),
-            Prop("interiors/dining_table_lod0", 6.0, -1.0, 0),
-            Prop("interiors/dining_table_lod0", -6.0, -5.4, 0),
-            Prop("interiors/dining_table_lod0", 6.0, -5.4, 0),
-            Prop("interiors/stool_wood_lod0", -7.8, -1.0, 90),
-            Prop("interiors/stool_wood_lod0", -4.2, -1.0, -90),
-            Prop("interiors/stool_wood_lod0", 7.8, -1.0, 90),
-            Prop("interiors/stool_wood_lod0", 4.2, -1.0, -90),
-            Prop("interiors/stool_wood_lod0", -7.8, -5.4, 90),
-            Prop("interiors/stool_wood_lod0", 7.8, -5.4, 90),
-            Prop("interiors/dining_table_lod0", 0, -3.4, 0),
-            Prop("interiors/wooden_chair_lod0", 0, -5.4, 180),
-            Prop("interiors/candelabra_tall_lod0", -12.0, 2.0, 0, light=("0xffd9a0", 8_000, 2.2)),
-            Prop("interiors/candelabra_tall_lod0", 12.0, 2.0, 0, light=("0xffd9a0", 8_000, 2.2)),
-            Prop("interiors/spinning_wheel_lod0", 11.4, -6.2, 90),
-            Prop("village/notice_board_lod0", -13.0, 0.0, 90, script="notice-board.lua"),
-        ],
-        npcs=[Npc("innkeeper", -2.0, 4.0, 0, "interior-keeper.lua"),
-              Npc("bard", 2.6, -3.6, 30, "interior-folk.lua"),
-              Npc("merchant", 11.0, 3.6, 90, "merchant.lua")],
-        lights=[("0xffcf9a", 9_000, 0.0, -1.0, 2.4)]))
-    # ── BANCA DO MERCADO 18×14 (aberta) ───────────────────────────────────
-    R.append(Room("market", "banca do mercado", 18, 14, 2, 2, door=(10.10, -15.70),
-        floor="stone_floor", open_air=True,
-        props=[
-            Prop("village/market_stall_lod0", 0, -2.0, 180, 1.0, "trimesh", "merchant.lua"),
-            Prop("village/medieval_well_lod0", -6.4, 3.6, 0, 0.9),
-            Prop("village/wooden_crate_lod0", 6.4, 4.2, 0),
-            Prop("village/wooden_crate_lod0", 7.4, 3.2, 30),
-            Prop("village/wooden_barrel_lod0", 6.8, 1.2, 0),
-            Prop("village/market_stall_lod0", 5.4, -4.6, 0, 0.85),
-        ],
-        npcs=[Npc("merchant", -1.6, 1.6, 200, "merchant.lua"),
-              Npc("farmhand", 5.0, -3.0, 0, "interior-folk.lua")],
-        lights=[("0xffd9a0", 7_000, 0.0, 0.0, 2.6)]))
+    # ── CAPELA 24x18 ──────────────────────────────────────────────────────
+    R.append(
+        Room(
+            "chapel",
+            "capela",
+            24,
+            18,
+            1,
+            0,
+            door=(7.46, 22.46),
+            floor="stone_floor",
+            wall="plaster",
+            windows=2,
+            props=[
+                Prop("interiors/chapel_altar_lod0", 0, 6.4, 180),
+                Prop("interiors/chapel_pulpit_lod0", 1.9, 5.0, 180),
+                Prop("interiors/church_organ_lod0", -7.4, 5.6, -90),
+                Prop("interiors/candelabra_tall_lod0", -6.8, 3.0, 0, light=("0xffd9a0", 10_000, 2.2)),
+                Prop("interiors/candelabra_tall_lod0", 6.8, 3.0, 0, light=("0xffd9a0", 9_000, 2.2)),
+                Prop("interiors/chapel_pew_lod0", -3.9, -1.4, 0),
+                Prop("interiors/chapel_pew_lod0", 3.9, -1.4, 0),
+                Prop("interiors/chapel_pew_lod0", -3.9, -3.8, 0),
+                Prop("interiors/chapel_pew_lod0", 3.9, -3.8, 0),
+                # 3.ª fila + tapetes da nave: a capela é a sala que o jogador vê
+                # primeiro e a que a câmara de interior enquadra inteira — vale o
+                # detalhe (pedido do utilizador 2026-09-13).
+                Prop("interiors/chapel_pew_lod0", -3.9, -6.2, 0),
+                Prop("interiors/chapel_pew_lod0", 3.9, -6.2, 0),
+                Prop("interiors/rug_woven_lod0", 0.0, -2.6, 0, 1.3),
+                Prop("interiors/rug_woven_lod0", 0.0, -5.4, 0, 1.3),
+                Prop("interiors/confessional_lod0", -9.4, -4.6, 90),
+                Prop("interiors/chapel_statue_lod0", 9.6, -5.6, 90),
+                # Sacristia encostada ao fundo: estante e cómoda em espelho.
+                Prop("interiors/bookshelf_lod0", -10.9, 6.4, 90),
+                Prop("interiors/cupboard_lod0", 10.9, 6.4, -90),
+                Prop("interiors/stool_wood_lod0", -6.0, 4.0, 20),
+                # Lanternas de parede: luz quente à altura dos olhos, sem sombra.
+                Prop("interiors/lantern_hanging_lod0", -11.0, -1.6, 90, light=("0xffcf8a", 5_200, 1.9)),
+                Prop("interiors/lantern_hanging_lod0", 11.0, -1.6, -90, light=("0xffcf8a", 5_200, 1.9)),
+                Prop("interiors/candelabra_tall_lod0", -2.4, -7.4, 0, light=("0xffd9a0", 6_000, 2.2)),
+                Prop("interiors/candelabra_tall_lod0", 2.4, -7.4, 0, light=("0xffd9a0", 6_000, 2.2)),
+                Prop("props/stone_pillar_lod0", -10.6, 1.0, 0, 1.1),
+                Prop("props/stone_pillar_lod0", 10.6, 1.0, 0, 1.1),
+                Prop("village/iron_brazier_lod0", -4.8, 6.2, 0, fire=True, light=("0xffa83a", 3_600, 1.1)),
+                Prop("village/iron_brazier_lod0", 4.8, 6.2, 0, fire=True, light=("0xffa83a", 3_600, 1.1)),
+            ],
+            npcs=[
+                Npc("priest", 1.2, 3.4, 0, "interior-keeper.lua"),
+                Npc("elder", -7.6, -7.0, 160, "interior-folk.lua"),
+            ],
+            lights=[("0xffd9a0", 8_000, 0.0, 0.0, 2.3)],
+        )
+    )
+    # ── FERRARIA 22x16 ────────────────────────────────────────────────────
+    R.append(
+        Room(
+            "forge",
+            "ferraria",
+            22,
+            16,
+            2,
+            0,
+            door=(-30.47, -29.06),
+            floor="dirt_floor",
+            wall="stone_wall",
+            windows=2,
+            props=[
+                Prop("interiors/forge_furnace_lod0", 0, 5.8, 180, fire=True, light=("0xff8a40", 12_000, 1.6)),
+                Prop("village/anvil_lod0", 0, 2.0, 180, script="anvil.lua"),
+                Prop("interiors/sledge_hammer_lod0", 1.0, 3.0, 200),
+                Prop("village/forge_bellows_lod0", -3.6, 5.4, 0),
+                Prop("village/quench_trough_lod0", 3.6, 4.6, 0),
+                Prop("village/horseshoe_pile_lod0", -2.6, 1.4, 0),
+                Prop("village/weapon_rack_lod0", 8.6, -1.6, 90),
+                Prop("village/weapon_rack_lod0", 8.6, -4.0, 90),
+                Prop("village/chopping_block_lod0", -7.0, -3.4, 0),
+                Prop("village/log_pile_lod0", -8.4, -5.4, 40),
+                Prop("village/wooden_crate_lod0", 7.4, -5.6, 0),
+                Prop("village/wooden_barrel_lod0", 8.6, -5.4, 0),
+                Prop("village/wooden_barrel_lod0", -9.0, 3.6, 0),
+            ],
+            npcs=[Npc("blacksmith", 2.2, 3.0, 0, "anvil.lua")],
+            lights=[("0xffc090", 6_000, 0.0, 0.0, 2.2)],
+        )
+    )
+    # ── CASA COMUM 20x16 ──────────────────────────────────────────────────
+    R.append(
+        Room(
+            "house_a",
+            "casa comum",
+            20,
+            16,
+            0,
+            0,
+            door=(26.35, 8.44),
+            floor="wood_floor",
+            props=[
+                Prop("interiors/fireplace_hearth_lod0", 0, 6.2, 180, fire=True, light=("0xffb070", 11_000, 1.4)),
+                Prop("interiors/dining_table_lod0", 0, 0.4, 0),
+                Prop("interiors/wooden_chair_lod0", 0, -1.6, 180),
+                Prop("interiors/wooden_chair_lod0", 0, 2.4, 0),
+                Prop("interiors/wooden_chair_lod0", -1.8, 0.4, -90),
+                Prop("interiors/wooden_chair_lod0", 1.8, 0.4, 90),
+                Prop("interiors/rug_woven_lod0", 0, 0.4, 0, collider="box"),
+                Prop("interiors/bed_simple_lod0", -7.0, -5.2, 0),
+                Prop("interiors/cupboard_lod0", -8.6, 4.4, 0),
+                Prop("interiors/bookshelf_lod0", 8.4, 4.6, 180),
+                Prop("interiors/cauldron_iron_lod0", 6.8, 6.0, 180, fire=True),
+                Prop("interiors/spinning_wheel_lod0", 7.2, -1.0, 90),
+                Prop("village/wooden_barrel_lod0", -8.4, -1.4, 0),
+                Prop("village/wooden_crate_lod0", 7.6, -5.4, 20),
+            ],
+            npcs=[
+                Npc("cook", -6.4, 5.2, 200, "interior-keeper.lua"),
+                Npc("innkeeper", 2.6, 1.2, 20, "interior-keeper.lua"),
+            ],
+            lights=[("0xffcf9a", 9_000, 0.0, 0.4, 2.3)],
+        )
+    )
+    # ── CASA B (biblioteca) 20x16 ─────────────────────────────────────────
+    R.append(
+        Room(
+            "house_b",
+            "casa do escriba",
+            20,
+            16,
+            0,
+            1,
+            door=(-17.44, 22.47),
+            floor="wood_floor",
+            props=[
+                Prop("interiors/fireplace_hearth_lod0", 0, 6.2, 180, fire=True, light=("0xffb070", 8_000, 1.4)),
+                Prop("interiors/bookshelf_lod0", -7.4, 3.4, 0),
+                Prop("interiors/bookshelf_lod0", -7.4, 4.6, 0),
+                Prop("interiors/bookshelf_lod0", 7.4, 3.4, 180),
+                Prop("interiors/bookshelf_lod0", 7.4, 4.6, 180),
+                Prop("interiors/dining_table_lod0", -1.0, -0.6, 0),
+                Prop("interiors/wooden_chair_lod0", -1.0, -2.6, 180),
+                Prop("interiors/wooden_chair_lod0", 3.2, -0.6, 90),
+                Prop("interiors/candelabra_tall_lod0", 1.6, -0.6, 0, light=("0xffd9a0", 7_000, 2.2)),
+                Prop("interiors/bookshelf_lod0", 7.6, -4.6, 180),
+                Prop("interiors/rug_woven_lod0", -1.0, -0.6, 0, collider="box", scale=0.9),
+                Prop("village/wooden_crate_lod0", -8.0, -4.8, 0),
+            ],
+            npcs=[Npc("scholar", -1.0, 0.6, 0, "interior-keeper.lua")],
+            lights=[("0xffd0a0", 6_000, 0.0, -0.6, 2.3)],
+        )
+    )
+    # ── CASA C (cozinha) 20x16 ────────────────────────────────────────────
+    R.append(
+        Room(
+            "house_c",
+            "cozinha",
+            20,
+            16,
+            1,
+            1,
+            door=(-20.47, -18.44),
+            floor="wood_floor",
+            props=[
+                Prop("interiors/fireplace_hearth_lod0", 0, 6.2, 180, fire=True, light=("0xffb070", 11_000, 1.4)),
+                Prop("interiors/cauldron_iron_lod0", -2.4, 5.0, 180, fire=True),
+                Prop("interiors/cauldron_iron_lod0", 2.4, 5.0, 180, fire=True),
+                Prop("interiors/tavern_bar_lod0", 0, 1.6, 0),
+                Prop("interiors/dining_table_lod0", 0, -4.8, 0),
+                Prop("interiors/stool_wood_lod0", -1.6, -4.8, 90),
+                Prop("interiors/stool_wood_lod0", 1.6, -4.8, -90),
+                Prop("interiors/cupboard_lod0", -8.6, 4.6, 0),
+                Prop("interiors/cupboard_lod0", 8.6, 4.6, 180),
+                Prop("village/wooden_barrel_lod0", 7.6, 1.0, 0),
+                Prop("village/wooden_barrel_lod0", 7.6, -0.6, 0),
+                Prop("village/wooden_crate_lod0", -7.8, -1.2, 0),
+                Prop("village/wooden_crate_lod0", -7.8, -3.0, 12),
+            ],
+            npcs=[Npc("cook", -1.4, 3.4, 180, "interior-keeper.lua"), Npc("bard", 3.4, -3.0, 40, "interior-folk.lua")],
+            lights=[("0xffcf9a", 8_000, 0.0, 0.0, 2.3)],
+        )
+    )
+    # ── CABANA DO PASTOR 18x14 ────────────────────────────────────────────
+    R.append(
+        Room(
+            "shepherd",
+            "cabana do pastor",
+            18,
+            14,
+            2,
+            1,
+            door=(-22.33, 12.95),
+            floor="wood_floor",
+            props=[
+                Prop("interiors/fireplace_hearth_lod0", 0, 5.2, 180, fire=True, light=("0xffb070", 9_000, 1.4)),
+                Prop("interiors/bed_simple_lod0", -6.0, -3.6, 0),
+                Prop("interiors/dining_table_lod0", 1.6, 0.0, 0),
+                Prop("interiors/stool_wood_lod0", 3.4, 0.0, 90),
+                Prop("interiors/stool_wood_lod0", -0.2, 0.0, -90),
+                Prop("village/shepherd_cottage_lod0", 4.0, 3.6, 180, 0.5),
+                Prop("village/log_pile_lod0", -6.6, 2.0, 20),
+                Prop("village/quench_trough_lod0", 6.4, -3.4, 0),
+                Prop("village/wooden_barrel_lod0", -6.8, -0.6, 0),
+                Prop("farm/hay_bale_lod0", 6.6, 0.8, 30),
+                Prop("farm/hay_bale_lod0", 6.6, -1.0, 0),
+                Prop("farm/scarecrow_lod0", -3.0, 4.4, 180),
+            ],
+            npcs=[
+                Npc("scout", 1.6, -2.0, 180, "interior-folk.lua"),
+                Npc("farmhand", -4.6, -2.4, 220, "interior-folk.lua"),
+            ],
+            lights=[("0xffd0a0", 6_000, 0.0, 0.0, 2.2)],
+        )
+    )
+    # ── CELEIRO 28x20 ─────────────────────────────────────────────────────
+    R.append(
+        Room(
+            "barn",
+            "celeiro",
+            28,
+            20,
+            0,
+            2,
+            door=(-26.11, 30.00),
+            floor="dirt_floor",
+            wall="stone_wall",
+            windows=1,
+            props=[
+                Prop("farm/hay_bale_lod0", -8.0, 5.0, 0),
+                Prop("farm/hay_bale_lod0", -6.0, 3.4, 20),
+                Prop("farm/hay_bale_lod0", 8.0, 5.0, 350),
+                Prop("farm/hay_bale_lod0", 6.0, 3.2, 0),
+                Prop("farm/hay_bale_lod0", -9.0, -4.0, 0),
+                Prop("village/log_pile_lod0", 8.6, -4.4, 60, 1.3),
+                Prop("village/wooden_crate_lod0", -2.6, -7.2, 0),
+                Prop("village/wooden_crate_lod0", 2.8, -7.0, 24),
+                Prop("village/wooden_barrel_lod0", 4.4, -7.2, 0),
+                Prop("farm/chicken_coop_lod0", 10.6, -1.0, 90),
+                Prop("farm/fence_segment_lod0", -11.0, 0.0, 90, 1.2),
+                Prop("farm/fence_segment_lod0", -11.0, -3.2, 90, 1.2),
+                Prop("village/chopping_block_lod0", 5.0, -6.0, 0),
+                Prop("props/rock_mossy_lod0", 3.4, -6.6, 0, 1.2, "precompute"),
+                Prop("village/iron_brazier_lod0", 0.0, 7.4, 180, fire=True, light=("0xffa83a", 3_400, 1.1)),
+            ],
+            npcs=[Npc("guard", 2.0, 4.6, 0, "watch-guard.lua")],
+            lights=[("0xffd0a0", 7_000, 0.0, 0.0, 2.3)],
+        )
+    )
+    # ── CASA COMPRIDA (taberna) 28x20 ─────────────────────────────────────
+    R.append(
+        Room(
+            "longhouse",
+            "taberna",
+            28,
+            20,
+            1,
+            2,
+            door=(35.53, -37.53),
+            floor="wood_floor",
+            windows=2,
+            props=[
+                Prop("interiors/tavern_bar_lod0", 0, 5.4, 180),
+                Prop("village/wooden_barrel_lod0", -8.0, 6.6, 0),
+                Prop("village/wooden_barrel_lod0", -7.0, 6.6, 0),
+                Prop("village/wooden_barrel_lod0", 8.0, 6.6, 0),
+                Prop("interiors/fireplace_hearth_lod0", 0, 8.6, 180, fire=True, light=("0xffb070", 10_000, 1.4)),
+                Prop("interiors/dining_table_lod0", -6.0, -1.0, 0),
+                Prop("interiors/dining_table_lod0", 6.0, -1.0, 0),
+                Prop("interiors/dining_table_lod0", -6.0, -5.4, 0),
+                Prop("interiors/dining_table_lod0", 6.0, -5.4, 0),
+                Prop("interiors/stool_wood_lod0", -7.8, -1.0, 90),
+                Prop("interiors/stool_wood_lod0", -4.2, -1.0, -90),
+                Prop("interiors/stool_wood_lod0", 7.8, -1.0, 90),
+                Prop("interiors/stool_wood_lod0", 4.2, -1.0, -90),
+                Prop("interiors/stool_wood_lod0", -7.8, -5.4, 90),
+                Prop("interiors/stool_wood_lod0", 7.8, -5.4, 90),
+                Prop("interiors/dining_table_lod0", 0, -3.4, 0),
+                Prop("interiors/wooden_chair_lod0", 0, -5.4, 180),
+                Prop("interiors/candelabra_tall_lod0", -12.0, 2.0, 0, light=("0xffd9a0", 8_000, 2.2)),
+                Prop("interiors/candelabra_tall_lod0", 12.0, 2.0, 0, light=("0xffd9a0", 8_000, 2.2)),
+                Prop("interiors/spinning_wheel_lod0", 11.4, -6.2, 90),
+                Prop("village/notice_board_lod0", -13.0, 0.0, 90, script="notice-board.lua"),
+            ],
+            npcs=[
+                Npc("innkeeper", -2.0, 4.0, 0, "interior-keeper.lua"),
+                Npc("bard", 2.6, -3.6, 30, "interior-folk.lua"),
+                Npc("merchant", 11.0, 3.6, 90, "merchant.lua"),
+            ],
+            lights=[("0xffcf9a", 9_000, 0.0, -1.0, 2.4)],
+        )
+    )
+    # ── BANCA DO MERCADO 18x14 (aberta) ───────────────────────────────────
+    R.append(
+        Room(
+            "market",
+            "banca do mercado",
+            18,
+            14,
+            2,
+            2,
+            door=(10.10, -15.70),
+            floor="stone_floor",
+            open_air=True,
+            props=[
+                Prop("village/market_stall_lod0", 0, -2.0, 180, 1.0, "trimesh", "merchant.lua"),
+                Prop("village/medieval_well_lod0", -6.4, 3.6, 0, 0.9),
+                Prop("village/wooden_crate_lod0", 6.4, 4.2, 0),
+                Prop("village/wooden_crate_lod0", 7.4, 3.2, 30),
+                Prop("village/wooden_barrel_lod0", 6.8, 1.2, 0),
+                Prop("village/market_stall_lod0", 5.4, -4.6, 0, 0.85),
+            ],
+            npcs=[Npc("merchant", -1.6, 1.6, 200, "merchant.lua"), Npc("farmhand", 5.0, -3.0, 0, "interior-folk.lua")],
+            lights=[("0xffd9a0", 7_000, 0.0, 0.0, 2.6)],
+        )
+    )
     return R
 
 
@@ -496,7 +609,8 @@ def rooms() -> list[Room]:
 def emit_shell(room: Room, out: list[str]) -> None:
     parts = shell(room)
     out.append(
-        f'    <Composition name="interior.{room.id}.shell" translation="{room.cx:.0f} 0 {room.cz:.0f}" body="fixed" collider="auto">'
+        f'    <Composition name="interior.{room.id}.shell" '
+        f'translation="{room.cx:.0f} 0 {room.cz:.0f}" body="fixed" collider="auto">'
     )
     for b in parts:
         key = b.material if b.material != "wall" else room.wall
@@ -519,29 +633,45 @@ def emit_prop(room: Room, p: Prop, out: list[str]) -> None:
     if kind == "trimesh" and not tem_colisao:
         kind = "precompute"
     coll = {
-        "trimesh": f'shape: trimesh; mesh-url: /assets/meshes/{base}_collision.glb; mesh-anchor: base',
-        "precompute": f'shape: precompute; mesh-url: /assets/meshes/{p.asset}.glb',
+        "trimesh": f"shape: trimesh; mesh-url: /assets/meshes/{base}_collision.glb; mesh-anchor: base",
+        "precompute": f"shape: precompute; mesh-url: /assets/meshes/{p.asset}.glb",
         "box": "shape: box; size: 1.6 0.06 1.6",
     }[kind]
-    transform = f' transform="rotation: 0 {p.yaw} 0; scale: {p.scale} {p.scale} {p.scale}"' if (p.yaw or p.scale != 1.0) else ""
+    transform = (
+        f' transform="rotation: 0 {p.yaw} 0; scale: {p.scale} {p.scale} {p.scale}"' if (p.yaw or p.scale != 1.0) else ""
+    )
     script = f' script="{p.script}"' if p.script else ""
-    nome = f'interior.{room.id}.{Path(p.asset).name.replace("_lod0", "").replace("_", ".")}'
-    out.append(f'    <Entity name="{nome}" translation="{x:.1f} 0 {z:.1f}"{transform}{script} rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="{coll}">')
+    nome = f"interior.{room.id}.{Path(p.asset).name.replace('_lod0', '').replace('_', '.')}"
+    out.append(
+        f'    <Entity name="{nome}" translation="{x:.1f} 0 {z:.1f}"{transform}{script} '
+        f'rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="{coll}">'
+    )
     out.append(f'      <GltfScene url="/assets/meshes/{p.asset}.glb" />')
     if p.light:
         color, intensity, height = p.light
-        out.append(f'      <PointLight translation="0 {height:.2f} 0" color="{color}" intensity="{intensity}" shadows="false" />')
+        out.append(
+            f'      <PointLight translation="0 {height:.2f} 0" color="{color}" '
+            f'intensity="{intensity}" shadows="false" />'
+        )
     out.append("    </Entity>")
     if p.fire:
         out.append(f'    <Entity translation="{x:.1f} 0 {z:.1f}">')
-        out.append('      <ParticleSystem preset="fire" transform="pos: 0 0.75 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.22; start-life-min: 0.4; start-life-max: 1.1; start-speed-min: 1.0; start-speed-max: 2.2; start-size-min: 0.2; start-size-max: 0.46; looping: 1; world-space: 1" />')
+        out.append(
+            '      <ParticleSystem preset="fire" transform="pos: 0 0.75 0" '
+            'particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.22; '
+            "start-life-min: 0.4; start-life-max: 1.1; start-speed-min: 1.0; "
+            "start-speed-max: 2.2; start-size-min: 0.2; start-size-max: 0.46; "
+            'looping: 1; world-space: 1" />'
+        )
         out.append("    </Entity>")
 
 
 def emit_npc(room: Room, n: Npc, out: list[str]) -> None:
     x, z = room.cx + n.x, room.cz + n.z
     rot = f' transform="rotation: 0 {n.yaw} 0"' if n.yaw else ""
-    out.append(f'    <Entity name="interior.{room.id}.{n.role}" translation="{x:.1f} 0 {z:.1f}"{rot} script="{n.script}">')
+    out.append(
+        f'    <Entity name="interior.{room.id}.{n.role}" translation="{x:.1f} 0 {z:.1f}"{rot} script="{n.script}">'
+    )
     out.append(f'      <GltfScene url="/assets/meshes/characters/{n.model}_lod0.glb" />')
     out.append("    </Entity>")
 
@@ -561,7 +691,7 @@ def check_inside(R: list[Room]) -> None:
         for n in r.npcs:
             if abs(n.x) > hw or abs(n.z) > hd:
                 raise SystemExit(f"{r.id}: NPC {n.role} fora do casco ({n.x},{n.z})")
-        # A porta (−Z) tem de ficar livre: nenhum prop no corredor central.
+        # A porta (-Z) tem de ficar livre: nenhum prop no corredor central.
         for p in r.props:
             if p.z < -r.d * 0.5 + 3.0 and abs(p.x) < 1.6:
                 raise SystemExit(f"{r.id}: prop {p.asset} tapa o vão da porta ({p.x},{p.z})")
@@ -582,7 +712,7 @@ def main() -> None:
     add("  bioma (névoa/tinta/exposição) e a chuva. O que sobra é distância: >2 km não")
     add("  entra em render-distance, cull-distance nem raio de ativação de IA.")
     add("")
-    add("  ENTRADAS: o portal de saída de cada sala é colocado no vão −Z a partir da")
+    add("  ENTRADAS: o portal de saída de cada sala é colocado no vão -Z a partir da")
     add("  MESMA tabela de salas que `scripts/building-portal.lua` usa (ROOMS); o")
     add("  script confere no arranque que a sala existe a <1 m do sítio esperado, para")
     add("  XML e Lua não se afastarem em silêncio.")
@@ -610,7 +740,7 @@ def main() -> None:
     add("")
     # mobília partilhada entre salas: cada `Prop` gera uma Entity própria.
     for room in R:
-        add(f"  <!-- ══════════════════ {room.name.upper()} ({room.w:.0f}×{room.d:.0f}) ══════════════════ -->")
+        add(f"  <!-- ══════════════════ {room.name.upper()} ({room.w:.0f}x{room.d:.0f}) ══════════════════ -->")
         emit_shell(room, out)
         for p in room.props:
             emit_prop(room, p, out)
@@ -620,8 +750,11 @@ def main() -> None:
             add(f'    <Group translation="{room.cx + lx:.0f} 0 {room.cz + lz:.0f}" body="none" collider="none">')
             add(f'      <PointLight translation="0 {ly:.2f} 0" color="{color}" intensity="{intensity}" />')
             add("    </Group>")
-        # saída: no vão −Z, 1 m fora da parede
-        add(f'    <Entity name="portal.exit_{room.id}" translation="{room.cx:.0f} 0 {room.cz + room.exit_z:.1f}" script="building-portal.lua" />')
+        # saída: no vão -Z, 1 m fora da parede
+        add(
+            f'    <Entity name="portal.exit_{room.id}" '
+            f'translation="{room.cx:.0f} 0 {room.cz + room.exit_z:.1f}" script="building-portal.lua" />'
+        )
         add("")
     add("</world>")
     raiz = Path(__file__).resolve().parents[1]
@@ -746,8 +879,6 @@ def portal_lua(R: list[Room]) -> str:
         "pz": POCKET[1],
         "linhas": linhas,
     }
-
-
 
 
 if __name__ == "__main__":

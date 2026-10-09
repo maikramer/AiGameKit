@@ -331,9 +331,14 @@ class TestBuildingOctreeFloor:
 
         for size in ([5.5, 5.0, 5.5], [7.5, 6.0, 11.0], [5.2, 3.2, 6.0]):
             r = tune_hunyuan_for_bbox(
-                base_steps=30, base_octree=256, base_chunks=1,
-                size_m=size, category="building", quality="medium",
-                total_vram_gib=6.0, group_offload=True,
+                base_steps=30,
+                base_octree=256,
+                base_chunks=1,
+                size_m=size,
+                category="building",
+                quality="medium",
+                total_vram_gib=6.0,
+                group_offload=True,
             )
             assert r.octree == 544
 
@@ -341,9 +346,14 @@ class TestBuildingOctreeFloor:
         from text3d.bbox_tune import tune_hunyuan_for_bbox
 
         r = tune_hunyuan_for_bbox(
-            base_steps=30, base_octree=256, base_chunks=1,
-            size_m=[0.4, 0.4, 0.4], category="prop", quality="medium",
-            total_vram_gib=6.0, group_offload=True,
+            base_steps=30,
+            base_octree=256,
+            base_chunks=1,
+            size_m=[0.4, 0.4, 0.4],
+            category="prop",
+            quality="medium",
+            total_vram_gib=6.0,
+            group_offload=True,
         )
         assert r.octree < 384  # o piso é só para edifícios
 
@@ -351,8 +361,13 @@ class TestBuildingOctreeFloor:
         from text3d.bbox_tune import tune_hunyuan_for_bbox
 
         r = tune_hunyuan_for_bbox(
-            base_steps=30, base_octree=256, base_chunks=1,
-            size_m=[6.0, 5.5, 10.0], bbox_preset="building", quality="medium",
-            total_vram_gib=6.0, group_offload=True,
+            base_steps=30,
+            base_octree=256,
+            base_chunks=1,
+            size_m=[6.0, 5.5, 10.0],
+            bbox_preset="building",
+            quality="medium",
+            total_vram_gib=6.0,
+            group_offload=True,
         )
         assert r.octree == 544

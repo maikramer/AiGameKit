@@ -29,9 +29,13 @@ exclude = [
     "node_modules",
     ".git",
     "Rigging3D/src/rigging3d/unirig",
+    "Rigging3D/src/rigging3d/skintokens",
     "Text3D/src/text3d/hy3dshape",
     "Terrain3D/src/terrain3d/vendor",
     "Motion3D/src/motion3d/vendor",
+    # Vendored (AGENTS.md): não editar nem formatar.
+    "Paint3D/src/paint3d/hy3dpaint",
+    "Paint3D/src/paint3d/hunyuan3d-2.1",
     # Probes ad-hoc de investigação (não fazem parte de nenhum pacote).
     "docs/.debug_axis",
 ]

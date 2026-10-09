@@ -88,7 +88,12 @@ def select_attention_backend(
 
     # Tentar diffusers set_attention_backend se disponível (diffusers 0.34+).
     try:
-        from diffusers.hooks import AttentionBackendName
+        from diffusers import hooks as _diffusers_hooks
+
+        # AttentionBackendName só existe em diffusers >= 0.34 (sem stubs estáveis).
+        AttentionBackendName = getattr(_diffusers_hooks, "AttentionBackendName", None)
+        if AttentionBackendName is None:
+            raise ImportError("diffusers sem AttentionBackendName")
 
         backend_map = {
             "sage": getattr(AttentionBackendName, "SAGE_ATTENTION", None),

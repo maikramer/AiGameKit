@@ -12,6 +12,7 @@ JSON traz o snapshot completo do profiler, incluindo os sistemas embrulhados em
 Cite a MEDIANA, não a média de uma amostra: numa máquina com engines de agentes
 paralelos o frame oscila com a contensão da GPU e a mediana é o que sobrevive.
 """
+
 import argparse
 import glob
 import json
@@ -23,7 +24,7 @@ import sys
 def load_arms(directory, phase="idle"):
     arms = {}
     for path in sorted(glob.glob(os.path.join(directory, "*-r*.json"))):
-        base = os.path.basename(path)[:-5]          # arm0-r1-idle
+        base = os.path.basename(path)[:-5]  # arm0-r1-idle
         stem, _, tag = base.rpartition("-")
         if phase != "all" and tag != phase:
             continue
@@ -64,13 +65,12 @@ def system_ms(row, name):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("directory", nargs="?", default=os.path.join(
-        os.environ.get("TMPDIR", "/tmp"), "viber-perf-ab"))
+    parser.add_argument("directory", nargs="?", default=os.path.join(os.environ.get("TMPDIR", "/tmp"), "viber-perf-ab"))
     parser.add_argument("--systems", default="")
-    parser.add_argument("--phase", default="idle",
-                        help="idle | stress | all — o sufixo do JSON escrito pelo perf_ab.sh")
-    parser.add_argument("--top", type=int, default=0,
-                        help="imprime os N sistemas mais caros do último braço")
+    parser.add_argument(
+        "--phase", default="idle", help="idle | stress | all — o sufixo do JSON escrito pelo perf_ab.sh"
+    )
+    parser.add_argument("--top", type=int, default=0, help="imprime os N sistemas mais caros do último braço")
     args = parser.parse_args()
 
     arms = load_arms(args.directory, args.phase)
@@ -85,21 +85,25 @@ def main():
         frame = median_of(rows, lambda r: r.get("frame_ms_avg"))
         fps = median_of(rows, lambda r: r.get("fps_avg"))
         summary[arm] = frame
-        print(f"{arm:<8} {len(rows):>2} {frame if frame is not None else -1:>14.2f} "
-              f"{fps if fps is not None else -1:>13.1f}")
+        print(
+            f"{arm:<8} {len(rows):>2} {frame if frame is not None else -1:>14.2f} "
+            f"{fps if fps is not None else -1:>13.1f}"
+        )
 
     keys = sorted(summary)
     if len(keys) == 2 and summary[keys[0]] and summary[keys[1]]:
         a, b = summary[keys[0]], summary[keys[1]]
         delta = a - b
         pct = delta / a * 100.0 if a else 0.0
-        print(f"\ndelta {keys[0]} -> {keys[1]}: {delta:+.2f} ms ({pct:+.1f} %)"
-              f"   [{'mais rápido' if delta > 0 else 'mais lento'} o 2.º braço]")
+        print(
+            f"\ndelta {keys[0]} -> {keys[1]}: {delta:+.2f} ms ({pct:+.1f} %)"
+            f"   [{'mais rápido' if delta > 0 else 'mais lento'} o 2.º braço]"
+        )
         print("  (sinal positivo = o 2.º braço é mais RÁPIDO)")
 
     if args.systems:
         names = [n.strip() for n in args.systems.split(",") if n.strip()]
-        header = " ".join(f"{k+'.avg':>13} {k+'.max':>13}" for k in sorted(arms))
+        header = " ".join(f"{k + '.avg':>13} {k + '.max':>13}" for k in sorted(arms))
         print(f"\n{'sistema':<44} {header}")
         for name in names:
             cells = []
@@ -110,8 +114,11 @@ def main():
                     entry = system_ms(row, name)
                     if entry and entry[1] is not None:
                         peak = entry[1] if peak is None else max(peak, entry[1])
-                cells.append(f"{value:>13.5f} {peak if peak is not None else 0:>13.5f}"
-                             if value is not None else f"{'—':>13} {'—':>13}")
+                cells.append(
+                    f"{value:>13.5f} {peak if peak is not None else 0:>13.5f}"
+                    if value is not None
+                    else f"{'—':>13} {'—':>13}"
+                )
             print(f"{name:<44} " + " ".join(cells))
 
     if args.top:
@@ -119,7 +126,7 @@ def main():
         rows = arms[last_arm]
         systems = (rows[-1].get("last") or {}).get("systems") or []
         print(f"\ntop {args.top} sistemas ({last_arm}):")
-        for entry in systems[:args.top]:
+        for entry in systems[: args.top]:
             print(f"  {entry.get('avg_ms', 0):>8.4f} ms  {entry.get('name')}")
     return 0
 

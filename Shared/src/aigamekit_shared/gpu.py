@@ -35,7 +35,7 @@ def _torch() -> types.ModuleType:
     try:
         import torch
 
-        return torch  # type: ignore[no-any-return]
+        return torch
     except ImportError:
         raise ImportError("torch não está instalado. Instale com: pip install aigamekit-shared[gpu]") from None
 

@@ -20,6 +20,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from types import ModuleType
 
 
 @dataclass
@@ -180,6 +181,7 @@ def find_quantization_sweet_spot(
     """
     results: dict[str, VRAMStats | None] = {}
 
+    torch: ModuleType | None
     try:
         import torch
     except ImportError:

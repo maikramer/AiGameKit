@@ -22,6 +22,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import math
 import struct
@@ -29,10 +30,7 @@ import sys
 import zlib
 from pathlib import Path
 
-DEFAULT_AHGT = (
-    Path(__file__).resolve().parents[2]
-    / "shared-assets/public/assets/terrain/terrain.ahgt"
-)
+DEFAULT_AHGT = Path(__file__).resolve().parents[2] / "shared-assets/public/assets/terrain/terrain.ahgt"
 
 
 class HeightField:
@@ -84,7 +82,7 @@ class HeightField:
         """Altura da superfície base — `height-smoothing` como no `<Terrain>`."""
         gx = self._grid_coord(x, self.width)
         gz = self._grid_coord(z, self.depth)
-        x0, z0 = int(math.floor(gx)), int(math.floor(gz))
+        x0, z0 = math.floor(gx), math.floor(gz)
         x1, z1 = min(x0 + 1, self.width - 1), min(z0 + 1, self.depth - 1)
         tx, tz = gx - x0, gz - z0
         h = self._texel
@@ -93,10 +91,7 @@ class HeightField:
         bilinear = top * (1 - tz) + bot * tz
         if smoothing <= 0.0:
             return bilinear
-        rows = [
-            self._monotone(h(x0 - 1, z), h(x0, z), h(x1, z), h(x0 + 2, z), tx)
-            for z in (z0 - 1, z0, z1, z0 + 2)
-        ]
+        rows = [self._monotone(h(x0 - 1, z), h(x0, z), h(x1, z), h(x0 + 2, z), tx) for z in (z0 - 1, z0, z1, z0 + 2)]
         smooth = self._monotone(*rows, tz)
         if smoothing >= 1.0:
             return smooth
@@ -111,11 +106,7 @@ class HeightField:
 
     def relief(self, x: float, z: float, reach: float = 40.0) -> float:
         """Amplitude (max-min) da vizinhança — mede se o sítio é encosta."""
-        samples = [
-            self.height(x + dx, z + dz)
-            for dx in (-reach, 0.0, reach)
-            for dz in (-reach, 0.0, reach)
-        ]
+        samples = [self.height(x + dx, z + dz) for dx in (-reach, 0.0, reach) for dz in (-reach, 0.0, reach)]
         return max(samples) - min(samples)
 
 
@@ -132,7 +123,7 @@ def main() -> int:
 
     field = HeightField(args.ahgt)
     print(
-        f"# {args.ahgt.name}: {field.width}×{field.depth} texels, "
+        f"# {args.ahgt.name}: {field.width}x{field.depth} texels, "
         f"world {field.world_size:.0f} m, max {field.max_height:.0f} m",
         file=sys.stderr,
     )
@@ -141,23 +132,19 @@ def main() -> int:
         step = args.step
         extent = args.extent
         n = int(extent * 2 / step) + 1
-        print(f"# malha {n}×{n}, passo {step:.0f} m, coordenadas = canto superior esquerdo")
+        print(f"# malha {n}x{n}, passo {step:.0f} m, coordenadas = canto superior esquerdo")
         header = "        " + "".join(f"{int(-extent + i * step):>7d}" for i in range(n))
         print(header)
         for j in range(n):
             z = -extent + j * step
-            row = "".join(
-                f"{field.height(-extent + i * step, z):>7.0f}" for i in range(n)
-            )
+            row = "".join(f"{field.height(-extent + i * step, z):>7.0f}" for i in range(n))
             print(f"{int(z):>7d} {row}")
         print()
         print("# declives (graus)")
         print(header)
         for j in range(n):
             z = -extent + j * step
-            row = "".join(
-                f"{field.slope_deg(-extent + i * step, z):>7.0f}" for i in range(n)
-            )
+            row = "".join(f"{field.slope_deg(-extent + i * step, z):>7.0f}" for i in range(n))
             print(f"{int(z):>7d} {row}")
         return 0
 
@@ -165,8 +152,8 @@ def main() -> int:
     if args.profile:
         if len(coords) < 4 or len(coords) % 2:
             raise SystemExit("--profile precisa de pares x z (>=2 pontos)")
-        pts = list(zip(coords[0::2], coords[1::2]))
-        for (ax, az), (bx, bz) in zip(pts, pts[1:]):
+        pts = list(zip(coords[0::2], coords[1::2], strict=True))
+        for (ax, az), (bx, bz) in itertools.pairwise(pts):
             dist = math.hypot(bx - ax, bz - az)
             print(f"# corte ({ax:.0f},{az:.0f}) -> ({bx:.0f},{bz:.0f})  {dist:.0f} m")
             for i in range(args.samples + 1):
@@ -183,7 +170,7 @@ def main() -> int:
 
     if len(coords) % 2:
         raise SystemExit("os pontos têm de vir em pares x z")
-    for x, z in zip(coords[0::2], coords[1::2]):
+    for x, z in zip(coords[0::2], coords[1::2], strict=True):
         print(
             f"({x:8.1f},{z:8.1f})  h={field.height(x, z):7.1f}  "
             f"declive={field.slope_deg(x, z):5.1f}°  "

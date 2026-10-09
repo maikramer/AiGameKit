@@ -276,8 +276,9 @@ def patch_lora_shape_calculation() -> None:
             return _sdnq_weight_shape(submod.weight, submod)
         raise ValueError("Either base_module or base_weight_param_name must be provided.")
 
-    FluxLoraLoaderMixin._calculate_module_shape = _patched
-    FluxLoraLoaderMixin._sdnq_patched = True
+    # Monkeypatching intencional do SDNQ.
+    FluxLoraLoaderMixin._calculate_module_shape = _patched  # type: ignore[method-assign]
+    FluxLoraLoaderMixin._sdnq_patched = True  # type: ignore[attr-defined]
 
 
 def _check_cuda() -> bool:
@@ -285,7 +286,7 @@ def _check_cuda() -> bool:
     try:
         import torch
 
-        return torch.cuda.is_available()  # type: ignore[no-any-return]
+        return torch.cuda.is_available()
     except ImportError:
         return False
 

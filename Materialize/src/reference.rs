@@ -406,7 +406,7 @@ pub fn horizon_occlusion(
             ) - center_h;
             let angle = (dh * depth_scale / dist).atan();
             horizon = horizon.max(angle);
-            if horizon > 1.5707 {
+            if horizon > std::f32::consts::FRAC_PI_2 {
                 break;
             }
         }

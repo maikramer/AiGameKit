@@ -27,6 +27,7 @@ Uso:  python3 gen_heightmap.py [-o terrain.ahgt] [--preview preview.png]
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import struct
 import zlib
@@ -47,7 +48,7 @@ SEED = 20260903
 
 
 def value_noise(n: int, cells: int, rng: np.random.Generator) -> np.ndarray:
-    """Value-noise `n×n` com `cells` células por lado, interpolação cúbica."""
+    """Value-noise `nxn` com `cells` células por lado, interpolação cúbica."""
     lat = rng.random((cells + 3, cells + 3), dtype=np.float64)
     zoom = n / cells
     out = ndimage.zoom(lat, zoom, order=3, mode="grid-wrap")
@@ -60,7 +61,7 @@ def fbm(n: int, cells: int, octaves: int, rng: np.random.Generator, gain: float 
     total = np.zeros((n, n))
     amp, norm, c = 1.0, 0.0, cells
     for _ in range(octaves):
-        total += amp * value_noise(n, max(2, int(round(c))), rng)
+        total += amp * value_noise(n, max(2, round(c)), rng)
         norm += amp
         amp *= gain
         c *= 2.0
@@ -72,7 +73,7 @@ def ridged(n: int, cells: int, octaves: int, rng: np.random.Generator, gain: flo
     total = np.zeros((n, n))
     amp, norm, c, weight = 1.0, 0.0, cells, np.ones((n, n))
     for _ in range(octaves):
-        s = 1.0 - np.abs(2.0 * value_noise(n, max(2, int(round(c))), rng) - 1.0)
+        s = 1.0 - np.abs(2.0 * value_noise(n, max(2, round(c)), rng) - 1.0)
         s *= s
         s *= np.clip(weight, 0.0, 1.0)
         weight = s * 2.0
@@ -123,7 +124,7 @@ def mesa(X, Z, cx, cz, r, h, edge=26.0, wob=0.22, phase=0.0):
 def seg_distance(X, Z, pts):
     """Distância ao polilinha `pts` = [(x,z), ...]."""
     best = np.full(X.shape, 1e9)
-    for (x0, z0), (x1, z1) in zip(pts[:-1], pts[1:]):
+    for (x0, z0), (x1, z1) in itertools.pairwise(pts):
         dx, dz = x1 - x0, z1 - z0
         ll = dx * dx + dz * dz
         if ll < 1e-9:
@@ -138,7 +139,7 @@ def seg_param_height(X, Z, pts, heights):
     """Altura interpolada ao longo do polilinha, projectada no ponto mais perto."""
     best_d = np.full(X.shape, 1e9)
     best_h = np.zeros(X.shape)
-    for i, ((x0, z0), (x1, z1)) in enumerate(zip(pts[:-1], pts[1:])):
+    for i, ((x0, z0), (x1, z1)) in enumerate(itertools.pairwise(pts)):
         dx, dz = x1 - x0, z1 - z0
         ll = max(dx * dx + dz * dz, 1e-9)
         t = np.clip(((X - x0) * dx + (Z - z0) * dz) / ll, 0.0, 1.0)
@@ -255,7 +256,7 @@ def droplet_erosion(
         # Escavar no MÁXIMO uma fração da descida e nunca mais que `MAX_DIG` m
         # por passo: o bound clássico `-dh` deixava a gota cortar a descida
         # INTEIRA de um penhasco — a parede ficava mais funda e a gota seguinte
-        # escavava o dobro (×2 por visita ⇒ min -3e17 em 20 iterações).
+        # escavava o dobro (x2 por visita ⇒ min -3e17 em 20 iterações).
         dig = np.minimum(np.minimum(-excess * erode, np.maximum(-dh, 0.0) * 0.30), MAX_DIG)
         take = np.where((dh <= 0.0) & (excess < 0.0), dig, 0.0)
         sediment = sediment - amount + take
@@ -301,9 +302,12 @@ def build_design(X, Z, rng):
     h += 2.6 * swamp * (fbm(X.shape[0], 34, 3, rng) - 0.5) * 2.0
     # Muro oeste do horizonte: serra baixa e escura
     h += ridge_line(
-        X, Z,
+        X,
+        Z,
         [(-980, 620), (-880, 300), (-830, -40), (-900, -420), (-1020, -720)],
-        [118, 152, 140, 158, 126], width=110, shoulder=280,
+        [118, 152, 140, 158, 126],
+        width=110,
+        shoulder=280,
     )
 
     # ---- ESTE: deserto — bacia de dunas, depois mesas ---------------------
@@ -320,12 +324,16 @@ def build_design(X, Z, rng):
         (688, 250, 96, 82, 1.2),
         (660, -140, 78, 70, 4.1),
     ]:
-        h = np.maximum(h, mesa(X, Z, cx, cz, rr, VALE_FLOOR + hh + 34.0 * smoothstep(330.0, 640.0, np.array(float(cx))), edge=22, phase=ph))
+        lift = VALE_FLOOR + hh + 34.0 * smoothstep(330.0, 640.0, np.array(float(cx)))
+        h = np.maximum(h, mesa(X, Z, cx, cz, rr, lift, edge=22, phase=ph))
     # Muralha de arenito no horizonte este
     h += ridge_line(
-        X, Z,
+        X,
+        Z,
         [(900, 700), (860, 300), (880, -60), (930, -460), (1000, -760)],
-        [86, 104, 96, 112, 92], width=130, shoulder=300,
+        [86, 104, 96, 112, 92],
+        width=130,
+        shoulder=300,
     )
 
     # ---- NORTE: floresta — colinas + vale do rio -------------------------
@@ -335,15 +343,21 @@ def build_design(X, Z, rng):
     h += 14.0 * dome(X, Z, 150, 320, 170, 1.0, wob=0.3, phase=2.8)
     # Crista arborizada de fundo (z 380-560)
     h += ridge_line(
-        X, Z,
+        X,
+        Z,
         [(-520, 470), (-260, 430), (10, 460), (280, 430), (540, 480)],
-        [72, 88, 78, 92, 70], width=90, shoulder=220,
+        [72, 88, 78, 92, 70],
+        width=90,
+        shoulder=220,
     )
     # Muro norte do horizonte
     h += ridge_line(
-        X, Z,
+        X,
+        Z,
         [(-900, 880), (-400, 820), (60, 900), (520, 830), (980, 890)],
-        [104, 128, 112, 134, 108], width=140, shoulder=320,
+        [104, 128, 112, 134, 108],
+        width=140,
+        shoulder=320,
     )
 
     # ---- SUL: picos gelados — a estrela do horizonte ---------------------
@@ -351,9 +365,12 @@ def build_design(X, Z, rng):
     h += 46.0 * smoothstep(-130.0, -270.0, Z)
     # Ombro/arête que liga os cumes
     h += ridge_line(
-        X, Z,
+        X,
+        Z,
         [(-320, -300), (-150, -352), (20, -318), (120, -336), (270, -392)],
-        [58, 92, 70, 96, 74], width=70, shoulder=170,
+        [58, 92, 70, 96, 74],
+        width=70,
+        shoulder=170,
     )
     # Pico dominante — visível da praça a ~350 m
     h = np.maximum(h, cone(X, Z, 96, -334, 210, 196.0, exp=1.42, phase=0.6))
@@ -363,9 +380,12 @@ def build_design(X, Z, rng):
     h = np.maximum(h, cone(X, Z, -330, -470, 150, 158.0, exp=1.55, phase=5.2))
     # Parede sul do horizonte
     h += ridge_line(
-        X, Z,
+        X,
+        Z,
         [(-980, -880), (-420, -800), (40, -900), (500, -820), (980, -880)],
-        [122, 150, 132, 152, 124], width=150, shoulder=330,
+        [122, 150, 132, 152, 124],
+        width=150,
+        shoulder=330,
     )
     # Garganta da artéria sul (x≈-12): rasga o sopé para a estrada passar
     gorge = seg_distance(X, Z, [(-6, -140), (-10, -210), (-12, -260), (-12, -300), (-40, -360), (-90, -430)])
@@ -458,10 +478,25 @@ def flatten_corridors(h, X, Z, n):
 
     # --- Vale do rio norte: desce sempre de E para O ----------------------
     river = [
-        (314, 125), (287, 121), (258, 121), (236, 141), (209, 162), (180, 188),
-        (150, 193), (121, 199), (92, 189), (62, 203), (33, 209), (4, 215),
-        (-25, 213), (-55, 215), (-84, 232), (-113, 260), (-133, 289),
-        (-158, 318), (-186, 340),
+        (314, 125),
+        (287, 121),
+        (258, 121),
+        (236, 141),
+        (209, 162),
+        (180, 188),
+        (150, 193),
+        (121, 199),
+        (92, 189),
+        (62, 203),
+        (33, 209),
+        (4, 215),
+        (-25, 213),
+        (-55, 215),
+        (-84, 232),
+        (-113, 260),
+        (-133, 289),
+        (-158, 318),
+        (-186, 340),
     ]
     prof = np.linspace(0.0, 1.0, len(river))
     bed = list(VALE_FLOOR + 15.0 - 15.0 * prof)  # 51 → 36 m, monótono

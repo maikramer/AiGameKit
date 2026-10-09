@@ -179,7 +179,7 @@ def fix_glb_ktx2_dfd(glb_path: str | Path, *, dry_run: bool = False) -> int:
     return fixed
 
 
-def _glb_binary_slice(data: bytes) -> tuple[int, dict] | None:
+def _glb_binary_slice(data: bytes | bytearray) -> tuple[int, dict] | None:
     """``(byte_offset_do_BIN_chunk, json)`` ou ``None`` se não for GLB válido."""
     if len(data) < 28 or data[:4] != b"glTF":
         return None
