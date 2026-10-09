@@ -41,6 +41,10 @@ entrada a bater certo com a CLI e release por tag.
 
 ### Changed — Viber (track nativa)
 
+- **Bevy 0.20.0 oficial (crates.io)**: os 22 patches git do rc.2 foram removidos e
+  toda a árvore resolve ao registry; forks do ecossistema (bevy_rapier3d,
+  rerecast/landmass) continuam vendored até os upstreams publicarem versões
+  bevy-0.20. Clippy `-D warnings` limpo (202 avisos do port resolvidos).
 - **Port para Bevy 0.20.0-rc.2**: WESL substitui o naga_oil; crates do ecossistema
   ficam vendored.
 - **simple-rpg completo no Viber** (10 loops de port): combate, quests, economia,

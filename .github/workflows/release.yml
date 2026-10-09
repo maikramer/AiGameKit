@@ -1,11 +1,17 @@
-# Release workflow — version bump + git tag + npm publish (VibeGame)
-# Triggered manually or on tag push.
-# Python packages are not published here (no PyPI config); this handles
-# VibeGame npm publish and git tag creation.
+# Release workflow — GitHub Release por tag + bump opcional + npm opt-in.
+#
+# Fluxo normal: `git tag -a v<N> && git push origin v<N>` → o job
+# `github-release` cria a GitHub Release com as notes geradas + a entrada do
+# CHANGELOG.md. O `workflow_dispatch` mantém o bump de versão do VibeGame +
+# tag (para releases planeadas), e o npm publish é OPT-IN (input
+# `publish_npm`, default false) até o secret NPM_TOKEN existir — a v0.5.0
+# falhou com ENEEDAUTH por esse motivo.
 
 name: Release
 
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       version:
@@ -13,6 +19,10 @@ on:
         required: true
       prerelease:
         description: 'Prerelease? (skip npm publish)'
+        type: boolean
+        default: false
+      publish_npm:
+        description: 'Publish aigamekit-vibegame to npm (needs NPM_TOKEN secret)'
         type: boolean
         default: false
 
@@ -23,8 +33,11 @@ permissions:
   contents: write
 
 jobs:
+  # Só no workflow_dispatch: cria a tag (o push dela re-dispara este workflow
+  # no ramo de tags e corre o github-release).
   version-bump:
-    name: Bump version
+    name: Bump version (manual only)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -44,11 +57,43 @@ jobs:
           git tag "v${{ github.event.inputs.version }}"
           git push origin main --tags
 
-  publish-vibegame:
-    name: Publish VibeGame to npm
-    needs: version-bump
+  github-release:
+    name: GitHub Release (tag push)
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.prerelease == 'false' }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Extract CHANGELOG entry for this tag
+        id: changelog
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          # Secção ## [v<N>] — ... até à próxima secção ## (exclusivé).
+          awk -v tag="## [${GITHUB_REF_NAME}]" '
+            $0 == tag {found=1; next}
+            found && /^## \[/ {exit}
+            found {print}
+          ' CHANGELOG.md > body.md
+          if [ ! -s body.md ]; then
+            echo "_(sem entrada ${GITHUB_REF_NAME} no CHANGELOG.md — ver commits)_" > body.md
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: body.md
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+
+  publish-vibegame:
+    name: Publish VibeGame to npm (opt-in)
+    needs: version-bump
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.prerelease == 'false' &&
+      github.event.inputs.publish_npm == 'true'
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: VibeGame
