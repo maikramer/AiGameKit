@@ -387,6 +387,7 @@ class TestFineBitPresets:
 
     def test_create_config_passes_hadamard(self):
         """create_config inclui use_hadamard/use_codebook/hadamard_group_size."""
+        pytest.importorskip("sdnq")  # runtime externo (SDNQ PyPI) — skip no CI sem o pacote
         from aigamekit_shared.sdnq import create_config
 
         cfg = create_config("sdnq-int3", quantization_device="cpu", return_device="cpu")
