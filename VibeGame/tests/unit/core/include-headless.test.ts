@@ -12,7 +12,7 @@ import { loadWorldFromFile } from '../../../src/cli/headless';
 
 const PUBLIC_DIR = path.resolve(
   import.meta.dir,
-  '../../../examples/simple-rpg/public'
+  '../../../../Viber/examples/shared-assets/public'
 );
 
 describe('loadWorldFromFile with Includes', () => {

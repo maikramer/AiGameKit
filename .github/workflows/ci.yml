@@ -118,7 +118,9 @@ jobs:
         with:
           components: clippy, rustfmt
       - name: rustfmt
-        run: cargo fmt --all --manifest-path Viber/Cargo.toml -- --check
+        # Sem --all: o --all também formata os path-deps de vendor/ (forks
+        # que mantêm o estilo do upstream por policy do repo).
+        run: cargo fmt --manifest-path Viber/Cargo.toml -- --check
       - name: Clippy
         run: cargo clippy --manifest-path Viber/Cargo.toml -- -D warnings
       - name: Tests

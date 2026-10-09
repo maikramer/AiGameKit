@@ -13,7 +13,7 @@ describe('simple-racer circuit bed falloff', () => {
     const xml = readFileSync(
       resolve(
         import.meta.dir,
-        '../../../examples/simple-racer/public/world/circuit/bed.xml'
+        '../../../../Viber/examples/shared-assets/public/world/circuit/bed.xml'
       ),
       'utf8'
     );

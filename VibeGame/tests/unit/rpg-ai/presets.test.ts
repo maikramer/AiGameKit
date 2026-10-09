@@ -28,7 +28,7 @@ const CREATURE_EID = 2;
 const DT = 0.016;
 const PRESET_DIR = join(
   import.meta.dir,
-  '../../../examples/simple-rpg/public/data/ai'
+  '../../../../Viber/examples/shared-assets/public/data/ai'
 );
 
 interface StubState {

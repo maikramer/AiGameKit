@@ -13,6 +13,7 @@ Extrai padrões que eram copy-pasted across 9 CLIs:
 
 from __future__ import annotations
 
+import importlib
 import os
 import time
 from collections.abc import Callable
@@ -29,6 +30,14 @@ _logger = Logger()
 F = TypeVar("F", bound=Callable[..., Any])
 
 
+def _click_module() -> Any:
+    """``rich_click`` quando disponível, ``click`` de outra forma."""
+    try:
+        return importlib.import_module("rich_click")
+    except ImportError:  # pragma: no cover
+        return importlib.import_module("click")
+
+
 def add_vramd_options(fn: F) -> F:
     """Decorator Click: acrescenta ``--vramd-priority``, ``--no-vramd``, ``--vramd-stream``.
 
@@ -41,11 +50,7 @@ def add_vramd_options(fn: F) -> F:
         def generate_cmd(ctx, ..., ums_priority, no_ums, ums_stream):
             ...
     """
-    click: Any
-    try:
-        import rich_click as click
-    except ImportError:  # pragma: no cover
-        import click
+    click = _click_module()
 
     fn = click.option(
         "--vramd-stream",

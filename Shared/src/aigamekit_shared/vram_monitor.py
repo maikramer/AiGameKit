@@ -16,6 +16,7 @@ Uso:
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import threading
 import time
 from collections.abc import Callable
@@ -181,11 +182,9 @@ def find_quantization_sweet_spot(
     """
     results: dict[str, VRAMStats | None] = {}
 
-    torch: ModuleType | None
-    try:
-        import torch
-    except ImportError:
-        torch = None
+    torch: ModuleType | None = None
+    if importlib.util.find_spec("torch") is not None:
+        torch = importlib.import_module("torch")
 
     print("=" * 70)
     print("BUSCANDO SWEET SPOT DE QUANTIZAÇÃO")

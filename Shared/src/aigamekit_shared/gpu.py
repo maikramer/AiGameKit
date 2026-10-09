@@ -14,6 +14,7 @@ from __future__ import annotations
 import atexit
 import contextlib
 import gc
+import importlib
 import os
 import shutil
 import signal
@@ -33,9 +34,7 @@ _NVML_VALUE_NOT_AVAILABLE = 0xFFFFFFFFFFFFFFFF
 def _torch() -> types.ModuleType:
     """Import lazy de torch — falha clara se não instalado."""
     try:
-        import torch
-
-        return torch
+        return importlib.import_module("torch")
     except ImportError:
         raise ImportError("torch não está instalado. Instale com: pip install aigamekit-shared[gpu]") from None
 

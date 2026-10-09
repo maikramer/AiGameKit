@@ -276,9 +276,10 @@ def patch_lora_shape_calculation() -> None:
             return _sdnq_weight_shape(submod.weight, submod)
         raise ValueError("Either base_module or base_weight_param_name must be provided.")
 
-    # Monkeypatching intencional do SDNQ.
-    FluxLoraLoaderMixin._calculate_module_shape = _patched  # type: ignore[method-assign]
-    FluxLoraLoaderMixin._sdnq_patched = True  # type: ignore[attr-defined]
+    # Monkeypatching intencional do SDNQ — setattr com nome em variável
+    # (ruff B010) aceito pelo mypy com e sem os tipos do diffusers instalados.
+    for _attr, _value in (("_calculate_module_shape", _patched), ("_sdnq_patched", True)):
+        setattr(FluxLoraLoaderMixin, _attr, _value)
 
 
 def _check_cuda() -> bool:
@@ -286,7 +287,7 @@ def _check_cuda() -> bool:
     try:
         import torch
 
-        return torch.cuda.is_available()
+        return bool(torch.cuda.is_available())
     except ImportError:
         return False
 

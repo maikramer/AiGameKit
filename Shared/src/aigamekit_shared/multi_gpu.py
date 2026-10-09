@@ -7,6 +7,7 @@ weights across multiple GPUs with mixed VRAM.
 
 from __future__ import annotations
 
+import importlib
 import logging
 import types
 from dataclasses import dataclass, field
@@ -16,9 +17,7 @@ from typing import Any, ClassVar
 def _torch() -> types.ModuleType:
     """Lazy import of torch."""
     try:
-        import torch
-
-        return torch
+        return importlib.import_module("torch")
     except ImportError:
         raise ImportError("torch is not installed. Install with: pip install aigamekit-shared[gpu]") from None
 
