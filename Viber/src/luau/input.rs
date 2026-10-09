@@ -3,7 +3,6 @@
 //! `viber.input` (input CRU de teclado e rato, qualquer tecla).
 
 use bevy::input::keyboard::KeyCode;
-use bevy::input::mouse::MouseButton;
 use mlua::{Lua, Table};
 
 use super::ctx::ScriptCtx;
@@ -47,15 +46,15 @@ pub fn key_code_from_str(key: &str) -> Option<KeyCode> {
         }
     }
     // F1..F24 e teclado numérico.
-    if let Some(rest) = k.strip_prefix('f') {
-        if let Ok(n) = rest.parse::<u8>() {
-            return function_key(n);
-        }
+    if let Some(rest) = k.strip_prefix('f')
+        && let Ok(n) = rest.parse::<u8>()
+    {
+        return function_key(n);
     }
-    if let Some(rest) = k.strip_prefix("numpad") {
-        if let Ok(n) = rest.parse::<u8>() {
-            return numpad_key(n);
-        }
+    if let Some(rest) = k.strip_prefix("numpad")
+        && let Ok(n) = rest.parse::<u8>()
+    {
+        return numpad_key(n);
     }
     Some(match k {
         "space" => KeyCode::Space,
@@ -234,7 +233,7 @@ fn numpad_key(n: u8) -> Option<KeyCode> {
 
 /// Instala `viber.input` na tabela `viber`.
 pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
-        // ── Input genérico ──────────────────────────────────────────────
+    // ── Input genérico ──────────────────────────────────────────────
     // Input CRU de teclado e rato (qualquer tecla, não só as de
     // interação). NÃO é gateado por MenusOpen — um script que queira
     // respeitar menus compõe com `viber.ui.is_open()`. Os três estados

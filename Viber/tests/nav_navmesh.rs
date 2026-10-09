@@ -259,6 +259,9 @@ fn the_navmesh_tag_finally_configures_something() {
         ("tile-size".into(), "1".into()),
     ]);
     assert_eq!(config.max_slope_deg, 89.0);
-    assert_eq!(config.offroad_cost, 1.0, "custo < 1 inverteria a preferência");
+    assert_eq!(
+        config.offroad_cost, 1.0,
+        "custo < 1 inverteria a preferência"
+    );
     assert_eq!(config.tile_size, 16.0);
 }

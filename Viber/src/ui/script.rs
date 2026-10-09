@@ -27,7 +27,7 @@ use super::bind::UiData;
 use super::events::{UiEvent, UiEvents};
 use super::list::ListRow;
 use super::runtime::{
-    UiBar, UiClasses, UiClicks, UiCooldown, UiComputed, UiDisabled, UiInlineStyle, UiRegistry,
+    UiBar, UiClasses, UiClicks, UiComputed, UiCooldown, UiDisabled, UiInlineStyle, UiRegistry,
     UiStyleDirty, UiTag,
 };
 use super::style::{StyleState, parse_declarations};
@@ -319,7 +319,10 @@ pub struct UiScriptState {
 /// `XmlNode` — recursivo: a chave `children` cria a SUBÁRVORE inteira numa
 /// só chamada de `viber.ui.create`. Ids em falta geram `ui-gen-N` (cada nível
 /// fica endereçável).
-fn lua_table_to_node(spec: &Table, generated: &std::sync::atomic::AtomicU64) -> mlua::Result<XmlNode> {
+fn lua_table_to_node(
+    spec: &Table,
+    generated: &std::sync::atomic::AtomicU64,
+) -> mlua::Result<XmlNode> {
     let tag: String = spec.get("tag")?;
     let mut attrs: Vec<(String, String)> = Vec::new();
     let mut children: Vec<XmlNode> = Vec::new();
@@ -412,8 +415,8 @@ pub fn install_ui_api(lua: &Lua, state: &UiScriptState) -> mlua::Result<()> {
             replace: false,
         }
     });
-    command!("clear_style", (String, ()), |(id, ())| UiCommand::ClearStyle {
-        id
+    command!("clear_style", (String, ()), |(id, ())| {
+        UiCommand::ClearStyle { id }
     });
     command!("open", (String, bool), |(id, open)| UiCommand::SetModal {
         id,
@@ -778,7 +781,9 @@ pub fn install_ui_api(lua: &Lua, state: &UiScriptState) -> mlua::Result<()> {
     }
 
     // viber.ui.destroy(id) — remove o elemento e a subárvore (registry incluído).
-    command!("destroy", (String, ()), |(id, ())| UiCommand::Destroy { id });
+    command!("destroy", (String, ()), |(id, ())| UiCommand::Destroy {
+        id
+    });
 
     // viber.ui.tween(id, {property="opacity", to=1, from=0, duration=0.3,
     //                     easing="ease-out", delay=0})
@@ -792,37 +797,39 @@ pub fn install_ui_api(lua: &Lua, state: &UiScriptState) -> mlua::Result<()> {
             "tween",
             lua.create_function(
                 move |lua, (id, spec): (String, Table)| -> mlua::Result<()> {
-                    let tween_value = |lua: &Lua, value: mlua::Value| -> Option<super::tween::TweenValue> {
-                        match value {
-                            Value::Number(n) => {
-                                Some(super::tween::TweenValue::Num(super::tween::NumUnit::Px, n as f32))
+                    let tween_value =
+                        |lua: &Lua, value: mlua::Value| -> Option<super::tween::TweenValue> {
+                            match value {
+                                Value::Number(n) => Some(super::tween::TweenValue::Num(
+                                    super::tween::NumUnit::Px,
+                                    n as f32,
+                                )),
+                                Value::Integer(n) => Some(super::tween::TweenValue::Num(
+                                    super::tween::NumUnit::Px,
+                                    n as f32,
+                                )),
+                                Value::String(text) => {
+                                    let text = text.to_string_lossy();
+                                    super::style::parse_color(text.trim())
+                                        .map(super::tween::TweenValue::Color)
+                                }
+                                Value::Table(table) => {
+                                    // aceita também {r,g,b} / {r,g,b,a} 0..1
+                                    let channel = |key: &str| -> Option<f32> {
+                                        table.get::<f64>(key).ok().map(|v| v as f32)
+                                    };
+                                    let (r, g, b) = (channel("r")?, channel("g")?, channel("b")?);
+                                    let a = channel("a").unwrap_or(1.0);
+                                    Some(super::tween::TweenValue::Color(
+                                        bevy::color::Color::srgba(r, g, b, a),
+                                    ))
+                                }
+                                _ => {
+                                    let _ = lua;
+                                    None
+                                }
                             }
-                            Value::Integer(n) => Some(super::tween::TweenValue::Num(
-                                super::tween::NumUnit::Px,
-                                n as f32,
-                            )),
-                            Value::String(text) => {
-                                let text = text.to_string_lossy();
-                                super::style::parse_color(text.trim())
-                                    .map(super::tween::TweenValue::Color)
-                            }
-                            Value::Table(table) => {
-                                // aceita também {r,g,b} / {r,g,b,a} 0..1
-                                let channel = |key: &str| -> Option<f32> {
-                                    table.get::<f64>(key).ok().map(|v| v as f32)
-                                };
-                                let (r, g, b) = (channel("r")?, channel("g")?, channel("b")?);
-                                let a = channel("a").unwrap_or(1.0);
-                                Some(super::tween::TweenValue::Color(
-                                    bevy::color::Color::srgba(r, g, b, a),
-                                ))
-                            }
-                            _ => {
-                                let _ = lua;
-                                None
-                            }
-                        }
-                    };
+                        };
                     let property: String = spec.get("property")?;
                     let Some(field) = super::tween::StyleField::parse(&property) else {
                         warn!("ui: tween `{property}` não é um campo animável — pedido ignorado");
@@ -870,9 +877,13 @@ pub fn install_ui_api(lua: &Lua, state: &UiScriptState) -> mlua::Result<()> {
                     Value::Boolean(flag) => ScriptBindValue::Flag(flag),
                     Value::Integer(n) => ScriptBindValue::Number(n as f64),
                     Value::Number(n) => ScriptBindValue::Number(n),
-                    Value::String(text) => ScriptBindValue::Text(text.to_string_lossy().to_string()),
+                    Value::String(text) => {
+                        ScriptBindValue::Text(text.to_string_lossy().to_string())
+                    }
                     other => {
-                        warn!("ui: viber.ui.set só aceita texto/número/booleano (recebeu {other:?})");
+                        warn!(
+                            "ui: viber.ui.set só aceita texto/número/booleano (recebeu {other:?})"
+                        );
                         return Ok(());
                     }
                 };
@@ -916,11 +927,11 @@ pub fn install_ui_api(lua: &Lua, state: &UiScriptState) -> mlua::Result<()> {
             "classes",
             lua.create_function(move |lua, id: String| {
                 let table = lua.create_table()?;
-                if let Ok(structure) = view.structure.lock() {
-                    if let Some(node) = structure.get(&id) {
-                        for (index, class) in node.classes.iter().enumerate() {
-                            table.set(index + 1, class.as_str())?;
-                        }
+                if let Ok(structure) = view.structure.lock()
+                    && let Some(node) = structure.get(&id)
+                {
+                    for (index, class) in node.classes.iter().enumerate() {
+                        table.set(index + 1, class.as_str())?;
                     }
                 }
                 Ok(table)
@@ -935,11 +946,11 @@ pub fn install_ui_api(lua: &Lua, state: &UiScriptState) -> mlua::Result<()> {
             "children",
             lua.create_function(move |lua, id: String| {
                 let table = lua.create_table()?;
-                if let Ok(structure) = view.structure.lock() {
-                    if let Some(node) = structure.get(&id) {
-                        for (index, child) in node.children.iter().enumerate() {
-                            table.set(index + 1, child.as_str())?;
-                        }
+                if let Ok(structure) = view.structure.lock()
+                    && let Some(node) = structure.get(&id)
+                {
+                    for (index, child) in node.children.iter().enumerate() {
+                        table.set(index + 1, child.as_str())?;
                     }
                 }
                 Ok(table)
@@ -1036,11 +1047,13 @@ pub fn install_ui_api(lua: &Lua, state: &UiScriptState) -> mlua::Result<()> {
                             checked: node.classes.iter().any(|c| c == "checked"),
                             empty: node.children.is_empty(),
                             sibling_index: sibling.unwrap_or(0),
-                            sibling_count: node.parent.as_deref().and_then(|parent| {
-                                structure
-                                    .get(parent)
-                                    .map(|parent| parent.children.len())
-                            }).unwrap_or(1),
+                            sibling_count: node
+                                .parent
+                                .as_deref()
+                                .and_then(|parent| {
+                                    structure.get(parent).map(|parent| parent.children.len())
+                                })
+                                .unwrap_or(1),
                         })
                         .collect();
                     if selector.matches(&refs) {
@@ -1166,10 +1179,10 @@ pub fn apply_ui_commands(
                 // widget syncs from, not just a stale `Text` on the root.
                 if let Some(mut input) = input {
                     input.text = value;
-                } else if let Ok(mut text) = text.get_mut(entity) {
-                    if text.0 != value {
-                        text.0 = value;
-                    }
+                } else if let Ok(mut text) = text.get_mut(entity)
+                    && text.0 != value
+                {
+                    text.0 = value;
                 }
             }
             UiCommand::SetValue { value, .. } => {
@@ -1214,17 +1227,17 @@ pub fn apply_ui_commands(
                 commands.entity(entity).insert(UiStyleDirty);
             }
             UiCommand::AddClass { class, .. } => {
-                if let Ok(mut classes) = classes.get_mut(entity) {
-                    if classes.add(&class) {
-                        commands.entity(entity).insert(UiStyleDirty);
-                    }
+                if let Ok(mut classes) = classes.get_mut(entity)
+                    && classes.add(&class)
+                {
+                    commands.entity(entity).insert(UiStyleDirty);
                 }
             }
             UiCommand::RemoveClass { class, .. } => {
-                if let Ok(mut classes) = classes.get_mut(entity) {
-                    if classes.remove(&class) {
-                        commands.entity(entity).insert(UiStyleDirty);
-                    }
+                if let Ok(mut classes) = classes.get_mut(entity)
+                    && classes.remove(&class)
+                {
+                    commands.entity(entity).insert(UiStyleDirty);
                 }
             }
             UiCommand::SetModal { open, .. } => {
@@ -1251,21 +1264,19 @@ pub fn apply_ui_commands(
                 // Blur whoever had it, then hand the keyboard over. Only an
                 // input can actually take it.
                 let takes = input.is_some();
-                if let Some(previous) = focus.0 {
-                    if previous != entity {
-                        if let Ok(mut classes) = classes.get_mut(previous) {
-                            if classes.remove("focused") {
-                                commands.entity(previous).insert(UiStyleDirty);
-                            }
-                        }
-                    }
+                if let Some(previous) = focus.0
+                    && previous != entity
+                    && let Ok(mut classes) = classes.get_mut(previous)
+                    && classes.remove("focused")
+                {
+                    commands.entity(previous).insert(UiStyleDirty);
                 }
                 if takes {
                     focus.0 = Some(entity);
-                    if let Ok(mut classes) = classes.get_mut(entity) {
-                        if classes.add("focused") {
-                            commands.entity(entity).insert(UiStyleDirty);
-                        }
+                    if let Ok(mut classes) = classes.get_mut(entity)
+                        && classes.add("focused")
+                    {
+                        commands.entity(entity).insert(UiStyleDirty);
                     }
                 }
             }
@@ -1331,31 +1342,32 @@ pub fn apply_ui_commands(
                 if let Ok(mut transitions) = info.tweens.get_mut(entity) {
                     // Regista o alvo corrente para o diff da cascata não
                     // "re-saltar" o campo no próximo re-estilo.
-                    if !transitions.targets.contains_key(&field) {
-                        if let Some(current) = info
+                    if !transitions.targets.contains_key(&field)
+                        && let Some(current) = info
                             .computed
                             .get(entity)
                             .ok()
                             .and_then(|computed| field.get(&computed.0))
-                        {
-                            transitions.targets.insert(field, current);
-                        }
+                    {
+                        transitions.targets.insert(field, current);
                     }
                     if transitions.start(field, to, easing, duration, delay, true) {
                         transitions.label = id.clone();
                         // O `from` explícito vence o valor exibido.
-                        if let Some(from) = from {
-                            if let Some(run) = transitions.tweens.last_mut() {
-                                run.from = from;
-                            }
+                        if let Some(from) = from
+                            && let Some(run) = transitions.tweens.last_mut()
+                        {
+                            run.from = from;
                         }
                     }
                 } else {
                     // Sem `UiTransitions` (nenhuma `transition` na cascata):
                     // cria e volta a enfileirar — o componente existe no
                     // frame seguinte (commands) e o tween arranca lá.
-                    let mut created = super::tween::UiTransitions::default();
-                    created.label = id.clone();
+                    let created = super::tween::UiTransitions {
+                        label: id.clone(),
+                        ..Default::default()
+                    };
                     commands.entity(entity).insert(created);
                     state.queue.push(UiCommand::Tween {
                         id: id.clone(),
@@ -1407,7 +1419,9 @@ pub fn apply_ui_creates(world: &mut World) {
             .and_then(|parent| world.get::<Children>(parent))
             .map(|kids| kids.len().saturating_sub(1))
             .unwrap_or(0);
-        world.entity_mut(entity).insert(super::runtime::UiOrder(order));
+        world
+            .entity_mut(entity)
+            .insert(super::runtime::UiOrder(order));
         // Novos descendentes podem casar regras `descendant` — o pai re-estila.
         if let Some(parent) = parent {
             world.entity_mut(parent).insert(UiStyleDirty);
@@ -1438,6 +1452,7 @@ pub fn apply_ui_script_binds(
 
 /// Queries do publish — agrupadas num SystemParam (tecto de 16 parâmetros).
 #[derive(SystemParam)]
+#[allow(clippy::type_complexity)] // queries AnyOf do publish
 pub struct UiPublishInfo<'w, 's> {
     pub texts: Query<'w, 's, &'static Text>,
     pub widgets: Query<
@@ -1463,12 +1478,8 @@ pub struct UiPublishInfo<'w, 's> {
     pub parents: Query<'w, 's, &'static ChildOf>,
     /// Quem trocou de classes neste frame (o mapa de estrutura actualiza só
     /// essas entradas, sem clones por frame).
-    pub classes_changed: Query<
-        'w,
-        's,
-        (Entity, &'static UiClasses),
-        bevy::ecs::query::Changed<UiClasses>,
-    >,
+    pub classes_changed:
+        Query<'w, 's, (Entity, &'static UiClasses), bevy::ecs::query::Changed<UiClasses>>,
     /// Estado de hover para `read().hovered` e `:hover` no `query`.
     pub interactions: Query<'w, 's, &'static Interaction>,
 }
@@ -1549,12 +1560,9 @@ pub fn publish_ui_script_view(
                 .is_ok_and(|v| *v != Visibility::Hidden);
             let checked = check.is_some_and(|check| check.checked);
             let disabled = info.disabled.get(entity).unwrap_or(false);
-            let hovered = info
-                .interactions
-                .get(entity)
-                .is_ok_and(|interaction| {
-                    matches!(interaction, Interaction::Hovered | Interaction::Pressed)
-                });
+            let hovered = info.interactions.get(entity).is_ok_and(|interaction| {
+                matches!(interaction, Interaction::Hovered | Interaction::Pressed)
+            });
             // Rect pós-layout (posição global + tamanho), repartido pela
             // escala para o espaço autoral.
             let rect: [f32; 4] = {
@@ -1617,54 +1625,54 @@ pub fn publish_ui_script_view(
     // Reconstrói SÓ quando a estrutura mudou — registry (build/create/destroy)
     // ou alguém trocou classes (class-binds vivem a isso); o passe é de
     // centenas de entradas e não corre em frames parados.
-    if registry.is_changed() || info.classes_changed.iter().next().is_some() {
-        if let Ok(mut structure) = state.view.structure.lock() {
-            structure.retain(|id, _| registry.by_id.contains_key(id.as_str()));
-            let reverse: HashMap<Entity, &str> = registry
-                .by_id
-                .iter()
-                .map(|(id, entity)| (*entity, id.as_str()))
-                .collect();
-            for (id, &entity) in &registry.by_id {
-                let Ok(tag) = info.tags.get(entity) else {
-                    continue;
-                };
-                let classes = info
-                    .classes
-                    .get(entity)
-                    .map(|classes| classes.0.clone())
-                    .unwrap_or_default();
-                let parent = info
-                    .parents
-                    .get(entity)
-                    .ok()
-                    .and_then(|parent| reverse.get(&parent.parent()).map(|s| s.to_string()));
-                let children: Vec<String> = info
-                    .children
-                    .get(entity)
-                    .map(|kids| {
-                        kids.iter()
-                            .filter_map(|kid| reverse.get(&kid).map(|s| s.to_string()))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                match structure.get_mut(id.as_str()) {
-                    Some(node) => {
-                        node.classes = classes;
-                        node.parent = parent;
-                        node.children = children;
-                    }
-                    None => {
-                        structure.insert(
-                            id.clone(),
-                            UiElementNode {
-                                tag: tag.0.clone(),
-                                classes,
-                                parent,
-                                children,
-                            },
-                        );
-                    }
+    if (registry.is_changed() || info.classes_changed.iter().next().is_some())
+        && let Ok(mut structure) = state.view.structure.lock()
+    {
+        structure.retain(|id, _| registry.by_id.contains_key(id.as_str()));
+        let reverse: HashMap<Entity, &str> = registry
+            .by_id
+            .iter()
+            .map(|(id, entity)| (*entity, id.as_str()))
+            .collect();
+        for (id, &entity) in &registry.by_id {
+            let Ok(tag) = info.tags.get(entity) else {
+                continue;
+            };
+            let classes = info
+                .classes
+                .get(entity)
+                .map(|classes| classes.0.clone())
+                .unwrap_or_default();
+            let parent = info
+                .parents
+                .get(entity)
+                .ok()
+                .and_then(|parent| reverse.get(&parent.parent()).map(|s| s.to_string()));
+            let children: Vec<String> = info
+                .children
+                .get(entity)
+                .map(|kids| {
+                    kids.iter()
+                        .filter_map(|kid| reverse.get(&kid).map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            match structure.get_mut(id.as_str()) {
+                Some(node) => {
+                    node.classes = classes;
+                    node.parent = parent;
+                    node.children = children;
+                }
+                None => {
+                    structure.insert(
+                        id.clone(),
+                        UiElementNode {
+                            tag: tag.0.clone(),
+                            classes,
+                            parent,
+                            children,
+                        },
+                    );
                 }
             }
         }
@@ -1732,13 +1740,19 @@ mod tests {
         assert_eq!(node.tag, "uipanel");
         assert!(node.attrs.iter().any(|(k, v)| k == "class" && v == "linha"));
         // ids gerados em TODOS os níveis — cada elemento fica endereçável.
-        assert!(node.attrs.iter().any(|(k, v)| k == "id" && v.starts_with("ui-gen-")));
+        assert!(
+            node.attrs
+                .iter()
+                .any(|(k, v)| k == "id" && v.starts_with("ui-gen-"))
+        );
         assert_eq!(node.children.len(), 2);
         assert_eq!(node.children[0].tag, "uitext");
-        assert!(node.children[0]
-            .attrs
-            .iter()
-            .any(|(k, v)| k == "text" && v == "olá"));
+        assert!(
+            node.children[0]
+                .attrs
+                .iter()
+                .any(|(k, v)| k == "text" && v == "olá")
+        );
         assert!(node.children[1].attrs.iter().any(|(k, _)| k == "id"));
     }
 

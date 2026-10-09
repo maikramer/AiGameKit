@@ -21,9 +21,9 @@ use viber::recipes::spawn::{self, PendingWorld};
 use viber::ui;
 use viber::{
     ai, ambient, animation, audit, camera, economy, feedback, grass, harvest, hud, impact, menus,
-    meshopt, music, nav, particles, physics, physics_fx, player, postfx, profiler, prop_tint, prune,
-    quests, recipes, render_lod, save, scaffold, skills, sky, spawner, terrain, textures, trail,
-    travel, vitals, worldsys, xml,
+    meshopt, music, nav, particles, physics, physics_fx, player, postfx, profiler, prop_tint,
+    prune, quests, recipes, render_lod, save, scaffold, skills, sky, spawner, terrain, textures,
+    trail, travel, vitals, worldsys, xml,
 };
 
 /// Native Bevy engine for AiGameKit declarative worlds.
@@ -936,30 +936,30 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             );
         }
     }
-    if let Some(layers_config) = &layers_config {
-        if let Err(e) = std::fs::write(
+    if let Some(layers_config) = &layers_config
+        && let Err(e) = std::fs::write(
             shaders_dir.join("terrain_chunk.wesl"),
             layers_config.render_world_shader(),
-        ) {
-            eprintln!(
-                "viber: falha ao escrever {}/terrain_chunk.wesl: {e}",
-                shaders_dir.display()
-            );
-        }
+        )
+    {
+        eprintln!(
+            "viber: falha ao escrever {}/terrain_chunk.wesl: {e}",
+            shaders_dir.display()
+        );
     }
     // SSR da água (Fase B): shader ESTÁTICO (sem especialização por mundo) —
     // só se escreve com o gate ligado, para não tocar no disco de mundos que
     // não o usam.
-    if viber::water_ssr::water_ssr_requested() {
-        if let Err(e) = std::fs::write(
+    if viber::water_ssr::water_ssr_requested()
+        && let Err(e) = std::fs::write(
             shaders_dir.join("water_ssr.wesl"),
             viber::water_ssr::WATER_SSR_WGSL,
-        ) {
-            eprintln!(
-                "viber: falha ao escrever {}/water_ssr.wesl: {e}",
-                shaders_dir.display()
-            );
-        }
+        )
+    {
+        eprintln!(
+            "viber: falha ao escrever {}/water_ssr.wesl: {e}",
+            shaders_dir.display()
+        );
     }
     let mut app = bevy::app::App::new();
     // Registered before `AssetPlugin`, which snapshots the sources when it
@@ -975,9 +975,9 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // lado do world.xml) — o conteúdo deixou de vir embutido na engine. O
     // insert é ANTES dos plugins: o `init_resource` do QuestsPlugin não
     // substitui o que já existe.
-    app.insert_resource(quests::QuestLog::with_dir(&config.quests_dir_on(
-        &world_dir,
-    )));
+    app.insert_resource(quests::QuestLog::with_dir(
+        &config.quests_dir_on(&world_dir),
+    ));
     // O modelo do céu também viaja como resource — o IBL (`ibl.rs`) pinta o
     // cubemap com a MESMA radiância que o domo desenha e os probes regionais
     // (`probes.rs`) usam os mesmos coeficientes. Sem ele os dois lêem `None` e
@@ -1430,10 +1430,8 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
                 Some(Some(port)) => Some(port),
                 Some(None) => Some(free_bridge_port(bridge::DEFAULT_BRIDGE_PORT)?),
             };
-            if !no_cargo {
-                if let Some(code) = delegate_run_to_cargo(&world, debug, bridge)? {
-                    return Ok(std::process::ExitCode::from(code as u8));
-                }
+            if !no_cargo && let Some(code) = delegate_run_to_cargo(&world, debug, bridge)? {
+                return Ok(std::process::ExitCode::from(code as u8));
             }
             run(&world, bridge)
                 .map(|_| std::process::ExitCode::SUCCESS)
@@ -1831,13 +1829,13 @@ fn looks_like_engine(args: &[String], world: &Path) -> bool {
 /// ou ser nosso).
 fn session_down(world: Option<&Path>) -> Result<()> {
     let (paths, _) = session_paths(world.map(PathBuf::from).as_ref())?;
-    if let Some((owner, remaining)) = paths.busy() {
-        if remaining > std::time::Duration::ZERO {
-            bail!(
-                "sessão ocupada por '{owner}' (~{} s) — `release` do dono ou espere o TTL",
-                remaining.as_secs()
-            );
-        }
+    if let Some((owner, remaining)) = paths.busy()
+        && remaining > std::time::Duration::ZERO
+    {
+        bail!(
+            "sessão ocupada por '{owner}' (~{} s) — `release` do dono ou espere o TTL",
+            remaining.as_secs()
+        );
     }
     let Some(engine) = paths.engine_info() else {
         println!("viber session: nenhuma engine registada — nada a fazer");
@@ -2256,10 +2254,7 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
                 println!("(nenhuma engine viva — `viber session up` ou `viber run --bridge`)");
             } else {
                 for engine in engines {
-                    println!(
-                        ":{}  {}  (pid {})",
-                        engine.port, engine.world, engine.pid
-                    );
+                    println!(":{}  {}  (pid {})", engine.port, engine.world, engine.pid);
                 }
             }
         }
@@ -2303,9 +2298,7 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
             stats,
         } => {
             if !bridge::burst::ALLOWED_FRAMES.contains(&frames) {
-                bail!(
-                    "frames inválido: {frames} — aceites 4 (2×2), 9 (3×3) ou 16 (4×4)"
-                );
+                bail!("frames inválido: {frames} — aceites 4 (2×2), 9 (3×3) ou 16 (4×4)");
             }
             let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
             let client = BridgeClient::localhost(port);
@@ -2319,8 +2312,16 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
                 output.display(),
                 frames,
                 frames as u64 * (skip as u64 + 1),
-                if sheet_w > 0 { sheet_w } else { bridge::burst::SHEET_SIZE },
-                if sheet_h > 0 { sheet_h } else { bridge::burst::SHEET_SIZE }
+                if sheet_w > 0 {
+                    sheet_w
+                } else {
+                    bridge::burst::SHEET_SIZE
+                },
+                if sheet_h > 0 {
+                    sheet_h
+                } else {
+                    bridge::burst::SHEET_SIZE
+                }
             );
             if stats {
                 let Some(list) = final_status.get("frame_stats").and_then(Value::as_array) else {
@@ -2339,8 +2340,14 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
                 if let Some(flicker) = final_status.get("flicker") {
                     println!(
                         "  flicker: max_mean_swing={:.3} max_consecutive_delta={:.3} (mundo parado: ≈0; oscilar = flicker)",
-                        flicker.get("max_mean_swing").and_then(Value::as_f64).unwrap_or(0.0),
-                        flicker.get("max_consecutive_delta").and_then(Value::as_f64).unwrap_or(0.0),
+                        flicker
+                            .get("max_mean_swing")
+                            .and_then(Value::as_f64)
+                            .unwrap_or(0.0),
+                        flicker
+                            .get("max_consecutive_delta")
+                            .and_then(Value::as_f64)
+                            .unwrap_or(0.0),
                     );
                 }
             }
@@ -2383,9 +2390,7 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
                     _ => 0,
                 };
                 if let Some(entries) = logs.as_array_mut() {
-                    entries.retain(|entry| {
-                        rank(entry.get("level").unwrap_or(&Value::Null)) >= min
-                    });
+                    entries.retain(|entry| rank(entry.get("level").unwrap_or(&Value::Null)) >= min);
                 }
             }
             if let Some(needle) = grep {
@@ -2513,10 +2518,10 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
                     Some(Value::Null) | None => println!("(nil)"),
                     Some(value) => println!("{value:#}"),
                 }
-                if let Some(applied) = response.get("applied").and_then(Value::as_u64) {
-                    if applied > 0 {
-                        eprintln!("({applied} operações aplicadas)");
-                    }
+                if let Some(applied) = response.get("applied").and_then(Value::as_u64)
+                    && applied > 0
+                {
+                    eprintln!("({applied} operações aplicadas)");
                 }
                 for warning in response
                     .get("warnings")
@@ -2636,12 +2641,10 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
                     let entry = &matched[name];
                     let kind = entry.get("kind").and_then(Value::as_str).unwrap_or("");
                     let is_component = entry.pointer("/component_info").is_some();
-                    println!(
-                        "{name}{}",
-                        if is_component { "  [component]" } else { "" }
-                    );
+                    println!("{name}{}", if is_component { "  [component]" } else { "" });
                     let _ = kind;
-                    if let Some(properties) = entry.pointer("/properties").and_then(|f| f.as_object())
+                    if let Some(properties) =
+                        entry.pointer("/properties").and_then(|f| f.as_object())
                     {
                         for (field, info) in properties {
                             println!("    {field}: {}", render_type(info));
@@ -2700,8 +2703,10 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
                     if summary.is_empty() {
                         println!("{name}");
                     } else {
-                        println!("{name}
-    {summary}");
+                        println!(
+                            "{name}
+    {summary}"
+                        );
                     }
                 }
                 eprintln!("viber: {shown}/{} métodos", names.len());
@@ -2761,7 +2766,10 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
     {}",
                         name,
                         entry.get("signature").and_then(Value::as_str).unwrap_or(""),
-                        entry.get("description").and_then(Value::as_str).unwrap_or("")
+                        entry
+                            .get("description")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
                     );
                 }
                 for group in ["game", "ui", "profiler"] {
@@ -2782,8 +2790,10 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
         } => {
             let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
             let client = BridgeClient::localhost(port);
-            let response =
-                client.lua(&format!("return viber.debug.events({})", since.unwrap_or(0)))?;
+            let response = client.lua(&format!(
+                "return viber.debug.events({})",
+                since.unwrap_or(0)
+            ))?;
             if !response.get("ok").and_then(Value::as_bool).unwrap_or(false) {
                 let error = response
                     .get("error")
@@ -2820,12 +2830,14 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
                 }
             }
         }
-        DebugCommand::Step { frames, port, world } => {
+        DebugCommand::Step {
+            frames,
+            port,
+            world,
+        } => {
             let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
             let client = BridgeClient::localhost(port);
-            let response = client.lua(&format!(
-                "viber.debug.step({frames}) return true"
-            ))?;
+            let response = client.lua(&format!("viber.debug.step({frames}) return true"))?;
             if !response.get("ok").and_then(Value::as_bool).unwrap_or(false) {
                 let error = response
                     .get("error")
@@ -2906,7 +2918,9 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
             let response = client.lua(&code)?;
             let ok = response.get("ok").and_then(Value::as_bool).unwrap_or(false);
             // 3) relatório dos helpers
-            let report = client.lua("return { ok = (#__qa.fails == 0), asserts = __qa.asserts, fails = __qa.fails }")?;
+            let report = client.lua(
+                "return { ok = (#__qa.fails == 0), asserts = __qa.asserts, fails = __qa.fails }",
+            )?;
             let report = report.get("result").cloned().unwrap_or(Value::Null);
             let failed = report
                 .get("fails")
@@ -2920,10 +2934,7 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
                 out.insert("report".into(), report);
                 println!("{}", Value::Object(out));
             } else if ok && failed == 0 {
-                let asserts = report
-                    .get("asserts")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0);
+                let asserts = report.get("asserts").and_then(Value::as_u64).unwrap_or(0);
                 println!("✓ {} — {asserts} assert(s) passou(aram)", path.display());
             } else {
                 if !ok {
@@ -3053,12 +3064,30 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
                     result.get("name").and_then(Value::as_str).unwrap_or("?"),
                     result.get("entity").and_then(Value::as_u64).unwrap_or(0),
                     result.get("toi").and_then(Value::as_f64).unwrap_or(0.0),
-                    result.pointer("/point/0").and_then(Value::as_f64).unwrap_or(0.0),
-                    result.pointer("/point/1").and_then(Value::as_f64).unwrap_or(0.0),
-                    result.pointer("/point/2").and_then(Value::as_f64).unwrap_or(0.0),
-                    result.pointer("/normal/0").and_then(Value::as_f64).unwrap_or(0.0),
-                    result.pointer("/normal/1").and_then(Value::as_f64).unwrap_or(0.0),
-                    result.pointer("/normal/2").and_then(Value::as_f64).unwrap_or(0.0),
+                    result
+                        .pointer("/point/0")
+                        .and_then(Value::as_f64)
+                        .unwrap_or(0.0),
+                    result
+                        .pointer("/point/1")
+                        .and_then(Value::as_f64)
+                        .unwrap_or(0.0),
+                    result
+                        .pointer("/point/2")
+                        .and_then(Value::as_f64)
+                        .unwrap_or(0.0),
+                    result
+                        .pointer("/normal/0")
+                        .and_then(Value::as_f64)
+                        .unwrap_or(0.0),
+                    result
+                        .pointer("/normal/1")
+                        .and_then(Value::as_f64)
+                        .unwrap_or(0.0),
+                    result
+                        .pointer("/normal/2")
+                        .and_then(Value::as_f64)
+                        .unwrap_or(0.0),
                 );
             } else {
                 println!("(sem hit)");

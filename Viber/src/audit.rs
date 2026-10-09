@@ -21,7 +21,9 @@ use crate::terrain::cut::CutSpec;
 use crate::terrain::paths::{distance_to_path, nearest_on_path, resample};
 use crate::terrain::plateau::PlateauSpec;
 use crate::terrain::roads::{RoadProfile, RoadSpec};
-use crate::terrain::water::{CONTOUR_PEAK, CARVE_MARGIN, LakeShape, LakeSpec, RiverSpec, river_cliff_crossings};
+use crate::terrain::water::{
+    CARVE_MARGIN, CONTOUR_PEAK, LakeShape, LakeSpec, RiverSpec, river_cliff_crossings,
+};
 
 /// Severidade de um achado: `Missing` vira ERRO com `analyze --strict`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -250,12 +252,11 @@ fn audit_quests(world: &ParsedWorld, quests_dir: &Path, report: &mut AuditReport
             if let Some(script) = &spec.script {
                 kinds.insert(crate::combat::script_kind(script));
             }
-            if let EntityKind::DynamicSpawner { spec: group } | EntityKind::StaticSpawner { spec: group } =
-                &spec.kind
+            if let EntityKind::DynamicSpawner { spec: group }
+            | EntityKind::StaticSpawner { spec: group } = &spec.kind
+                && let Some(script) = &group.template_script
             {
-                if let Some(script) = &group.template_script {
-                    kinds.insert(crate::combat::script_kind(script));
-                }
+                kinds.insert(crate::combat::script_kind(script));
             }
             walk(&spec.children, names, givers, kinds);
         }

@@ -56,8 +56,8 @@
 use bevy::ecs::message::MessageWriter;
 use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::MouseButton;
-use bevy::shape::Sphere;
 use bevy::prelude::*;
+use bevy::shape::Sphere;
 
 use crate::ambient::{SfxClip, SfxEvent};
 use crate::combat::{ATTACK_TIME_SCALE, HeldWeapon, SWING_IMPACT_FRACTION};
@@ -775,10 +775,10 @@ pub fn harvest_impact_system(
             clip: sfx_hit(kind),
             position: Some(prop_pos),
         });
-        if data.shake_on_hit {
-            if let Some(shake) = build_hit_shake(&fx, entity) {
-                fx.commands.entity(entity).insert(shake);
-            }
+        if data.shake_on_hit
+            && let Some(shake) = build_hit_shake(&fx, entity)
+        {
+            fx.commands.entity(entity).insert(shake);
         }
         apply_darken(&mut fx, &darkens, entity, destructible.hits_taken);
     }
@@ -913,13 +913,12 @@ fn mesh_world_y_range(
     meshes: &Assets<Mesh>,
 ) -> Option<(f32, f32)> {
     let mut range: Option<(f32, f32)> = None;
-    if let Ok(m3d) = mesh_viz.get(root) {
-        if let Some((lo, hi)) = meshes.get(&m3d.0).and_then(mesh_local_y_range) {
-            if let Ok(gt) = globals.get(root) {
-                let base = gt.translation().y;
-                range = Some((base + lo * gt.scale().y, base + hi * gt.scale().y));
-            }
-        }
+    if let Ok(m3d) = mesh_viz.get(root)
+        && let Some((lo, hi)) = meshes.get(&m3d.0).and_then(mesh_local_y_range)
+        && let Ok(gt) = globals.get(root)
+    {
+        let base = gt.translation().y;
+        range = Some((base + lo * gt.scale().y, base + hi * gt.scale().y));
     }
     if let Ok(kids) = children.get(root) {
         for child in kids.iter() {
@@ -1223,10 +1222,10 @@ fn build_hit_shake(fx: &HarvestFx, prop: Entity) -> Option<HitShake> {
             }
         }
     }
-    if targets.is_empty() {
-        if let Ok(transform) = fx.transforms.get(prop) {
-            targets.push((prop, transform.rotation));
-        }
+    if targets.is_empty()
+        && let Ok(transform) = fx.transforms.get(prop)
+    {
+        targets.push((prop, transform.rotation));
     }
     (!targets.is_empty()).then_some(HitShake {
         elapsed: 0.0,
@@ -1338,10 +1337,10 @@ fn find_child_named(
     children: &Query<&Children>,
     names: &Query<&Name>,
 ) -> Option<Entity> {
-    if let Ok(own) = names.get(root) {
-        if own.as_str().to_ascii_lowercase() == name {
-            return Some(root);
-        }
+    if let Ok(own) = names.get(root)
+        && own.as_str().to_ascii_lowercase() == name
+    {
+        return Some(root);
     }
     for child in children.get(root).ok()?.iter() {
         if let Some(found) = find_child_named(child, name, children, names) {

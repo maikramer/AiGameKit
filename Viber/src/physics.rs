@@ -452,7 +452,10 @@ pub fn resolve_pending_colliders(
     gltfs: Res<Assets<bevy::gltf::Gltf>>,
     gltf_meshes: Res<Assets<bevy::gltf::GltfMesh>>,
     meshes: Res<Assets<Mesh>>,
-    mut pending: Query<(Entity, &mut PendingCollider, Option<&GlobalTransform>), Without<ColliderResolved>>,
+    mut pending: Query<
+        (Entity, &mut PendingCollider, Option<&GlobalTransform>),
+        Without<ColliderResolved>,
+    >,
     scene_bounds: Query<(&GlobalTransform, Option<&bevy::camera::primitives::Aabb>)>,
     hierarchy: Query<&Children>,
     mut debug_colliders: Local<u32>,
@@ -602,7 +605,9 @@ fn local_bounds(
     scene_bounds: &Query<(&GlobalTransform, Option<&bevy::camera::primitives::Aabb>)>,
 ) -> Option<(Vec3, Vec3)> {
     let to_local = match entity_global {
-        Some(global) if global.affine().matrix3.determinant().abs() > 1e-12 => global.affine().inverse(),
+        Some(global) if global.affine().matrix3.determinant().abs() > 1e-12 => {
+            global.affine().inverse()
+        }
         Some(_) => return None,
         None => bevy::math::Affine3A::IDENTITY,
     };
@@ -611,7 +616,11 @@ fn local_bounds(
         .filter_map(|e| scene_bounds.get(e).ok())
         .filter_map(|(global, aabb)| {
             let aabb = aabb?;
-            Some((to_local * global.affine(), Vec3::from(aabb.center), Vec3::from(aabb.half_extents)))
+            Some((
+                to_local * global.affine(),
+                Vec3::from(aabb.center),
+                Vec3::from(aabb.half_extents),
+            ))
         });
     union_bounds(boxes)
 }
@@ -619,7 +628,9 @@ fn local_bounds(
 /// União (centro, meia-extensão) de caixas orientadas, cada uma dada pelo
 /// affine que a leva ao referencial alvo — os 8 cantos entram no AABB, por
 /// isso rotações/escalas dos nós da cena são respeitadas.
-fn union_bounds(boxes: impl Iterator<Item = (bevy::math::Affine3A, Vec3, Vec3)>) -> Option<(Vec3, Vec3)> {
+fn union_bounds(
+    boxes: impl Iterator<Item = (bevy::math::Affine3A, Vec3, Vec3)>,
+) -> Option<(Vec3, Vec3)> {
     let mut min = Vec3::splat(f32::INFINITY);
     let mut max = Vec3::splat(f32::NEG_INFINITY);
     for (affine, center, half) in boxes {
@@ -653,7 +664,11 @@ fn bounds_cuboid(commands: &mut Commands, entity: Entity, center: Vec3, half: Ve
         return;
     }
     let child = commands
-        .spawn((Name::new("collider"), collider, Transform::from_translation(center)))
+        .spawn((
+            Name::new("collider"),
+            collider,
+            Transform::from_translation(center),
+        ))
         .id();
     commands.entity(entity).add_child(child);
 }
@@ -710,10 +725,17 @@ pub fn mesh_vertices_indices(mesh: &Mesh) -> Option<(Vec<Vec3>, Vec<[u32; 3]>)> 
     };
     let indices: Vec<[u32; 3]> = match mesh.indices() {
         Some(Indices::U16(idx)) => idx
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|i| [i[0] as u32, i[1] as u32, i[2] as u32])
             .collect(),
-        Some(Indices::U32(idx)) => idx.chunks_exact(3).map(|i| [i[0], i[1], i[2]]).collect(),
+        Some(Indices::U32(idx)) => idx
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|i| [i[0], i[1], i[2]])
+            .collect(),
         // Un-indexed: every three vertices are one triangle.
         None => (0..vertices.len() as u32 / 3)
             .map(|t| [t * 3, t * 3 + 1, t * 3 + 2])
@@ -1080,9 +1102,16 @@ mod tests {
     #[test]
     fn test_union_bounds_covers_nested_rotated_nodes() {
         use bevy::math::Affine3A;
-        let feet_pivot = (Affine3A::from_translation(Vec3::new(0.0, 1.0, 0.0)), Vec3::ZERO, Vec3::splat(1.0));
+        let feet_pivot = (
+            Affine3A::from_translation(Vec3::new(0.0, 1.0, 0.0)),
+            Vec3::ZERO,
+            Vec3::splat(1.0),
+        );
         let rotated = (
-            Affine3A::from_rotation_translation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_4), Vec3::X * 3.0),
+            Affine3A::from_rotation_translation(
+                Quat::from_rotation_y(std::f32::consts::FRAC_PI_4),
+                Vec3::X * 3.0,
+            ),
             Vec3::ZERO,
             Vec3::new(1.0, 0.5, 0.0),
         );
@@ -1090,9 +1119,15 @@ mod tests {
         let d = std::f32::consts::FRAC_1_SQRT_2;
         let min = Vec3::new(-1.0, -0.5, -1.0);
         let max = Vec3::new(3.0 + d, 2.0, 1.0);
-        assert!((center - (min + max) * 0.5).length() < 1e-4, "center {center}");
+        assert!(
+            (center - (min + max) * 0.5).length() < 1e-4,
+            "center {center}"
+        );
         assert!((half - (max - min) * 0.5).length() < 1e-4, "half {half}");
-        assert!(union_bounds(std::iter::empty()).is_none(), "no boxes, no bounds");
+        assert!(
+            union_bounds(std::iter::empty()).is_none(),
+            "no boxes, no bounds"
+        );
     }
 
     #[test]
@@ -1196,7 +1231,7 @@ impl ColumnColliderBake {
         let base = self.vertices.len() as u32;
         self.vertices
             .extend(data.positions.iter().map(|p| origin + Vec3::from(*p)));
-        for tri in data.indices.chunks_exact(3) {
+        for tri in data.indices.as_chunks::<3>().0 {
             self.indices
                 .push([tri[0] + base, tri[1] + base, tri[2] + base]);
         }

@@ -94,6 +94,7 @@ fn day_phase(clock: Option<&DayCycleState>) -> Option<u32> {
 }
 
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)] // sistema Bevy com queries/params explícitos
 fn update_sky_cubemap(
     mut commands: Commands,
     clock: Option<Res<DayCycleState>>,
@@ -359,8 +360,8 @@ fn sky_radiance(
         let sd = dir.dot(sun).max(0.0);
         let halo = (sd.powi(8)) * 0.35 + (sd.powi(64)) * 1.2;
         let disc = smoothstep(0.9995, 0.99985, sd) * 60.0;
-        for i in 0..3 {
-            sun_add[i] = a.sun_tint[i] * (halo + disc);
+        for (s, t) in sun_add.iter_mut().zip(a.sun_tint.iter()) {
+            *s = *t * (halo + disc);
         }
     }
     for i in 0..3 {

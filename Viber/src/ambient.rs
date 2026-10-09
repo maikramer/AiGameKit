@@ -555,8 +555,8 @@ fn biome_fog_system(
     let blend = biome_blend.get_or_insert((target_mult, target_tint, target_weight));
     const BLEND_K: f32 = 0.35;
     blend.0 += (target_mult - blend.0) * BLEND_K;
-    for c in 0..3 {
-        blend.1[c] += (target_tint[c] - blend.1[c]) * BLEND_K;
+    for (b, t) in blend.1.iter_mut().zip(target_tint) {
+        *b += (t - *b) * BLEND_K;
     }
     blend.2 += (target_weight - blend.2) * BLEND_K;
     let (smooth_mult, smooth_tint, smooth_weight) = *blend;
@@ -903,10 +903,10 @@ fn sfx_player_system(
         return;
     };
     // Mudo total nem toca (o bus estaria a −60 dB na mesma — poupança de CPU).
-    if let Some(mixer) = mixer {
-        if (mixer.sfx * mixer.master) <= 0.0 {
-            return;
-        }
+    if let Some(mixer) = mixer
+        && (mixer.sfx * mixer.master) <= 0.0
+    {
+        return;
     }
     for event in events.read() {
         let Some(handle) = handles.get(event.clip) else {

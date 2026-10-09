@@ -434,14 +434,14 @@ impl Specializer<RenderPipeline> for WaterSsrSpecializer {
                 write_mask: ColorWrites::ALL,
             },
         );
-        Ok(key.into())
+        Ok(key)
     }
 }
 
 /// Textura de histórico do reflexo (persistente por view; recriada no resize).
 fn create_history(device: &RenderDevice, width: u32, height: u32) -> SsrHistory {
     let tex = device.create_texture(&TextureDescriptor {
-        label: Some("water_ssr_history".into()),
+        label: Some("water_ssr_history"),
         size: Extent3d {
             width: width.max(1),
             height: height.max(1),
@@ -566,7 +566,7 @@ fn init_pipeline(
         sampler,
         variants: Variants::new(WaterSsrSpecializer, desc),
         params_buf: render_device.create_buffer(&BufferDescriptor {
-            label: Some("water_ssr_params".into()),
+            label: Some("water_ssr_params"),
             size: 176,
             usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM,
             mapped_at_creation: false,
@@ -603,7 +603,7 @@ fn pack_view_uniform(
     viewport: bevy::math::UVec4,
 ) -> Vec<u8> {
     let mut data = Vec::with_capacity(288);
-    let mut push_mat = |m: &bevy::math::Mat4, data: &mut Vec<u8>| {
+    let push_mat = |m: &bevy::math::Mat4, data: &mut Vec<u8>| {
         for f in m.to_cols_array() {
             data.extend_from_slice(&f.to_le_bytes());
         }
@@ -659,9 +659,10 @@ fn pack_params_uniform(surfaces: &[f32], rain: f32) -> Vec<u8> {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::type_complexity)] // queries de render do SSR
 fn prepare_bind_groups(
     mut commands: Commands,
-    mut pipeline: Option<ResMut<WaterSsrPipeline>>,
+    pipeline: Option<ResMut<WaterSsrPipeline>>,
     pipeline_cache: Res<PipelineCache>,
     render_device: Res<RenderDevice>,
     queue: Res<RenderQueue>,
@@ -733,12 +734,12 @@ fn prepare_bind_groups(
                     ),
                 )
             };
-            g.a = make(&target.main_texture_view());
-            g.b = make(&target.main_texture_other_view());
+            g.a = make(target.main_texture_view());
+            g.b = make(target.main_texture_other_view());
             g.parity ^= 1; // este frame escreve na que NÃO foi lida
         } else {
             let view_buf = render_device.create_buffer(&BufferDescriptor {
-                label: Some("water_ssr_view_uniform".into()),
+                label: Some("water_ssr_view_uniform"),
                 size: 288,
                 usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM,
                 mapped_at_creation: false,
@@ -767,8 +768,8 @@ fn prepare_bind_groups(
                     ),
                 )
             };
-            let a = make(&target.main_texture_view());
-            let b = make(&target.main_texture_other_view());
+            let a = make(target.main_texture_view());
+            let b = make(target.main_texture_other_view());
             commands.entity(entity).insert((
                 WaterSsrPipelineId(pid),
                 WaterSsrViewGpu {
@@ -812,7 +813,7 @@ pub(crate) fn water_ssr_pass(
     // `parity` já foi trocado no prepare: aponta para a que NÃO foi lida.
     let hist_write = &view_gpu.hist[view_gpu.parity].view;
     let pass_descriptor = RenderPassDescriptor {
-        label: Some("water_ssr_pass".into()),
+        label: Some("water_ssr_pass"),
         color_attachments: &[
             Some(RenderPassColorAttachment {
                 view: destination,

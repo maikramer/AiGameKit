@@ -786,7 +786,10 @@ pub fn resolve_pending_place(
     mut done: Local<bool>,
     runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     pending: Query<(Entity, &PendingPlace, Option<&ChildOf>)>,
-    mut poses: ParamSet<(bevy::transform::helper::TransformHelper, Query<&mut Transform>)>,
+    mut poses: ParamSet<(
+        bevy::transform::helper::TransformHelper,
+        Query<&mut Transform>,
+    )>,
     mut commands: Commands,
 ) {
     if *done {
@@ -1482,7 +1485,10 @@ mod tests {
         // dawn 00:30 → a rampa começa às 23:30 do dia anterior.
         let before = daylight_factor(1439.9, 30.0, 1170.0);
         let after = daylight_factor(0.0, 30.0, 1170.0);
-        assert!((before - 0.5).abs() < 0.01 && (after - 0.5).abs() < 0.01, "{before} {after}");
+        assert!(
+            (before - 0.5).abs() < 0.01 && (after - 0.5).abs() < 0.01,
+            "{before} {after}"
+        );
         assert!((daylight_factor(1410.0, 30.0, 1170.0) - 0.0).abs() < 1e-6);
         // dusk 23:40 → ainda a escurecer às 00:10.
         let fading = daylight_factor(10.0, 330.0, 1420.0);
@@ -1560,8 +1566,16 @@ mod tests {
         };
         let regions = BiomeRegions {
             list: vec![
-                region("desert", vec![[0.0, -10.0], [0.0, 10.0], [100.0, 10.0], [100.0, -10.0]], Some(0.0)),
-                region("forest", vec![[-100.0, -10.0], [-100.0, 10.0], [0.0, 10.0], [0.0, -10.0]], None),
+                region(
+                    "desert",
+                    vec![[0.0, -10.0], [0.0, 10.0], [100.0, 10.0], [100.0, -10.0]],
+                    Some(0.0),
+                ),
+                region(
+                    "forest",
+                    vec![[-100.0, -10.0], [-100.0, 10.0], [0.0, 10.0], [0.0, -10.0]],
+                    None,
+                ),
             ],
         };
         assert_eq!(rain_scale_at(Some(&regions), 50.0, 0.0), Some(0.0));
@@ -2116,10 +2130,18 @@ mod place_tests {
             align_to_terrain: false,
             base_y_offset: 0.5,
         };
-        let local = placed_local_transform(&runtime, &place, parent, Transform::default()).expect("placed");
+        let local =
+            placed_local_transform(&runtime, &place, parent, Transform::default()).expect("placed");
         let world = parent.transform_point3(local.translation);
-        assert!((world - Vec3::new(4.0, ground + 0.5, -6.0)).length() < 1e-4, "world {world}");
-        assert!((local.translation.y - 0.5).abs() < 1e-4, "local y {}", local.translation.y);
+        assert!(
+            (world - Vec3::new(4.0, ground + 0.5, -6.0)).length() < 1e-4,
+            "world {world}"
+        );
+        assert!(
+            (local.translation.y - 0.5).abs() < 1e-4,
+            "local y {}",
+            local.translation.y
+        );
     }
 
     /// Seating + place no MESMO frame: o grupo sobe, a composition filha com
@@ -2131,11 +2153,18 @@ mod place_tests {
         app.insert_resource(flat_runtime());
         app.add_systems(
             bevy::app::Update,
-            (seat_statics_once, resolve_pending_place.after(seat_statics_once)),
+            (
+                seat_statics_once,
+                resolve_pending_place.after(seat_statics_once),
+            ),
         );
         let ground = flat_runtime().sample(0.0, 0.0);
-        let group = app.world_mut().spawn((Transform::default(), SeatOnTerrain)).id();
-        app.world_mut().spawn((Transform::from_xyz(1.0, 0.0, 1.0), ChildOf(group)));
+        let group = app
+            .world_mut()
+            .spawn((Transform::default(), SeatOnTerrain))
+            .id();
+        app.world_mut()
+            .spawn((Transform::from_xyz(1.0, 0.0, 1.0), ChildOf(group)));
         let placed = app
             .world_mut()
             .spawn((
@@ -2153,7 +2182,10 @@ mod place_tests {
         assert!((group_y - ground).abs() < 1e-3, "group seated: {group_y}");
         let local = app.world().get::<Transform>(placed).unwrap().translation;
         let world = Vec3::new(local.x, local.y + group_y, local.z);
-        assert!((world - Vec3::new(3.0, ground, -2.0)).length() < 1e-3, "placed world {world}");
+        assert!(
+            (world - Vec3::new(3.0, ground, -2.0)).length() < 1e-3,
+            "placed world {world}"
+        );
         assert!(app.world().get::<PendingPlace>(placed).is_none());
     }
 

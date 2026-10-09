@@ -483,12 +483,18 @@ mod tests {
         let instance_id = {
             let world = app.world_mut();
             world.init_resource::<bevy::world_serialization::WorldInstanceSpawner>();
-            world.resource_scope(|_, mut spawner: Mut<bevy::world_serialization::WorldInstanceSpawner>| {
-                spawner.spawn_as_child(Handle::default(), non_caster)
-            })
+            world.resource_scope(
+                |_, mut spawner: Mut<bevy::world_serialization::WorldInstanceSpawner>| {
+                    spawner.spawn_as_child(Handle::default(), non_caster)
+                },
+            )
         };
         for entity in [caster, non_caster] {
-            app.world_mut().trigger(bevy::world_serialization::WorldInstanceReady { entity, instance_id });
+            app.world_mut()
+                .trigger(bevy::world_serialization::WorldInstanceReady {
+                    entity,
+                    instance_id,
+                });
         }
         app.update();
         assert!(app.world().get::<NoShadowSubtree>(non_caster).is_some());

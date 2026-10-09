@@ -294,10 +294,10 @@ pub fn sync_text_transforms(
     for (entity, mut text, computed, mut mirror) in &mut query {
         let Some(transform) = computed.0.text_transform else {
             // A declaração saiu (classe/media) — restaura o original e desarma.
-            if let Some(mirror) = mirror.as_deref_mut() {
-                if **text != mirror.original {
-                    **text = mirror.original.clone();
-                }
+            if let Some(mirror) = mirror.as_deref_mut()
+                && **text != mirror.original
+            {
+                **text = mirror.original.clone();
             }
             if mirror.is_some() {
                 commands.entity(entity).remove::<UiTextMirror>();
@@ -441,7 +441,10 @@ pub fn apply_ui_styles(
             .iter()
             .filter_map(|e| lookup.get(*e).ok().map(|item| (*e, item)))
             .map(
-                |(element, (tag, id, classes, interaction, disabled, pointer_none, parent, check))| {
+                |(
+                    element,
+                    (tag, id, classes, interaction, disabled, pointer_none, parent, check),
+                )| {
                     // Posição entre irmãos: índice no Children do PAI, na
                     // ordem do DOM (a que `:nth-child` fala).
                     let (sibling_index, sibling_count) = parent
@@ -481,7 +484,17 @@ pub fn apply_ui_styles(
         let refs: Vec<super::style::ElementRef<'_>> = parts
             .iter()
             .map(
-                |(tag, id, classes, state, focused, checked, empty, sibling_index, sibling_count)| {
+                |(
+                    tag,
+                    id,
+                    classes,
+                    state,
+                    focused,
+                    checked,
+                    empty,
+                    sibling_index,
+                    sibling_count,
+                )| {
                     super::style::ElementRef {
                         tag,
                         id: id.as_deref(),
@@ -611,15 +624,13 @@ pub fn apply_ui_styles(
                     run.field.set(&mut props, value);
                 }
             }
-        } else if let Some(specs) = props
-            .transition
-            .clone()
-            .filter(|specs| !specs.is_empty())
-        {
+        } else if let Some(specs) = props.transition.clone().filter(|specs| !specs.is_empty()) {
             // Primeiro estilo com `transition`: registra os alvos sem tween —
             // o estilo inicial NÃO transita (semântica do browser).
-            let mut created = super::tween::UiTransitions::default();
-            created.specs = specs;
+            let mut created = super::tween::UiTransitions {
+                specs,
+                ..Default::default()
+            };
             for spec in &created.specs {
                 if let Some(value) = spec.property.get(&props) {
                     created.targets.insert(spec.property, value);
@@ -627,7 +638,9 @@ pub fn apply_ui_styles(
             }
             commands.entity(entity).insert(created);
         }
-        commands.entity(entity).insert(UiComputed(props.clone(), opacity));
+        commands
+            .entity(entity)
+            .insert(UiComputed(props.clone(), opacity));
         fresh.insert(entity, props.clone());
 
         if let Ok((mut node, background, border_color, z_index, transform)) = nodes.get_mut(entity)
@@ -664,8 +677,9 @@ pub fn apply_ui_styles(
                 ];
                 if declared.iter().any(|side| side.is_some()) {
                     let current: &BorderColor = border.as_ref();
-                    let pick =
-                        |side: Option<Color>, fallback: Color| fade(side.unwrap_or(fallback), opacity);
+                    let pick = |side: Option<Color>, fallback: Color| {
+                        fade(side.unwrap_or(fallback), opacity)
+                    };
                     *border = BorderColor {
                         top: pick(declared[0], current.top),
                         right: pick(declared[1], current.right),
@@ -763,15 +777,15 @@ pub fn apply_ui_styles(
                     commands.entity(entity).insert(LetterSpacing::Px(px));
                 }
                 Some(LetterSpacingSpec::Em(em)) => {
-                    let size = font_px(props.font_size.as_ref())
-                        .unwrap_or(super::style::DEFAULT_FONT_PX);
+                    let size =
+                        font_px(props.font_size.as_ref()).unwrap_or(super::style::DEFAULT_FONT_PX);
                     commands.entity(entity).insert(LetterSpacing::Px(size * em));
                 }
                 None => {
-                    if let Ok(mut spacing) = info.letters.get_mut(entity) {
-                        if !matches!(*spacing, LetterSpacing::Px(0.0)) {
-                            *spacing = LetterSpacing::Px(0.0);
-                        }
+                    if let Ok(mut spacing) = info.letters.get_mut(entity)
+                        && !matches!(*spacing, LetterSpacing::Px(0.0))
+                    {
+                        *spacing = LetterSpacing::Px(0.0);
                     }
                 }
             }
@@ -1722,15 +1736,13 @@ mod tests {
 
         #[allow(clippy::type_complexity)]
         let mut state: bevy::ecs::system::SystemState<(
-            Query<
-                (
-                    Entity,
-                    &mut Text,
-                    &UiComputed,
-                    &ComputedNode,
-                    Option<&mut UiTextOverflowMirror>,
-                ),
-            >,
+            Query<(
+                Entity,
+                &mut Text,
+                &UiComputed,
+                &ComputedNode,
+                Option<&mut UiTextOverflowMirror>,
+            )>,
             Commands,
         )> = bevy::ecs::system::SystemState::new(&mut world);
 
@@ -1739,7 +1751,9 @@ mod tests {
             let (mut query, mut commands) = state.get_mut(&mut world).expect("system state");
             sync_text_overflow(query.reborrow(), commands.reborrow());
             state.apply(&mut world);
-            let mirror = world.get::<UiTextOverflowMirror>(entity).expect("espelho criado");
+            let mirror = world
+                .get::<UiTextOverflowMirror>(entity)
+                .expect("espelho criado");
             assert_eq!(mirror.keep, full.chars().count());
         }
 

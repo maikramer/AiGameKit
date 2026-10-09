@@ -230,10 +230,10 @@ impl CliffBand {
         if spec.path.len() < 2 || !spec.width.is_finite() || spec.width <= 0.0 {
             return None;
         }
-        if let Some(a) = spec.angle {
-            if !a.is_finite() || a <= 0.0 {
-                return None;
-            }
+        if let Some(a) = spec.angle
+            && (!a.is_finite() || a <= 0.0)
+        {
+            return None;
         }
         let spacing = (texel * 2.0).max(1.0);
         let smoothed = chaikin_smooth(&spec.path, 2, false);

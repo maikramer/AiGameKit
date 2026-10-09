@@ -343,9 +343,15 @@ mod tests {
     #[test]
     fn test_objective_text_reads_like_a_sentence() {
         assert_eq!(objective_text("kill", "wolf", 5), "derrotar 5× lobo");
-        assert_eq!(objective_text("kill", "bog-warden", 1), "derrotar o Guardião do Lodo");
+        assert_eq!(
+            objective_text("kill", "bog-warden", 1),
+            "derrotar o Guardião do Lodo"
+        );
         assert_eq!(objective_text("collect", "wood", 3), "reunir 3× madeira");
-        assert_eq!(objective_text("visit", "shrine ruins", 2), "visitar 2 locais");
+        assert_eq!(
+            objective_text("visit", "shrine ruins", 2),
+            "visitar 2 locais"
+        );
         // An objective kind nobody taught us still renders something useful.
         assert_eq!(objective_text("escort", "npc", 1), "escort 1× npc");
         // Unknown targets keep their id, minus the separators.

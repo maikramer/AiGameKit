@@ -3,14 +3,7 @@
 //! posições, teclas, quest/vault, terreno) e onde os comandos se acumulam.
 //! Inclui os registos de superfície partilhados (estradas/água).
 
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use bevy::prelude::*;
-
-use crate::terrain::roads::RoadPath;
-use crate::terrain::runtime::TerrainReader;
-use crate::terrain::water::WaterBody;
 
 use super::commands::ScriptCommand;
 

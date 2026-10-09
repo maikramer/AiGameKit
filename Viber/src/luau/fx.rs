@@ -93,8 +93,16 @@ impl ScriptFx<'_> {
     }
 
     /// Anel de choque no chão (`impact::spawn_impact_ring`).
-    pub fn ring(&mut self, commands: &mut Commands, x: f32, z: f32, radius: f32, color: Option<[f32; 3]>) {
-        let (Some(meshes), Some(materials)) = (self.meshes.as_deref_mut(), self.materials.as_deref_mut())
+    pub fn ring(
+        &mut self,
+        commands: &mut Commands,
+        x: f32,
+        z: f32,
+        radius: f32,
+        color: Option<[f32; 3]>,
+    ) {
+        let (Some(meshes), Some(materials)) =
+            (self.meshes.as_deref_mut(), self.materials.as_deref_mut())
         else {
             return;
         };

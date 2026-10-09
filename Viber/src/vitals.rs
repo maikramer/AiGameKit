@@ -186,9 +186,7 @@ pub fn level_up_detector(
                         new_level: lvl.level,
                     });
                     if let Some(queue) = script_events.as_deref_mut() {
-                        queue.push(crate::luau::ScriptGameEvent::LevelUp {
-                            level: lvl.level,
-                        });
+                        queue.push(crate::luau::ScriptGameEvent::LevelUp { level: lvl.level });
                     }
                 }
             }

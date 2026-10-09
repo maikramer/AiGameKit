@@ -280,26 +280,25 @@ pub fn weapon_trail_system(
     }
 
     // Amostragem (janela ativa + arma com transform + blade conhecida).
-    if window.left > 0.0 {
-        if let (Ok(global), Some((base_local, tip_local))) =
+    if window.left > 0.0
+        && let (Ok(global), Some((base_local, tip_local))) =
             (weapons.get(weapon_entity), state.blade)
-        {
-            let affine = global.affine();
-            let base = affine.transform_point(base_local);
-            let tip = affine.transform_point(tip_local);
-            let moved = state
-                .samples
-                .front()
-                .is_none_or(|s| s.tip.distance(tip) >= TRAIL_MIN_DISTANCE);
-            if moved {
-                state.samples.push_front(TrailSample {
-                    base,
-                    tip,
-                    age: 0.0,
-                });
-                while state.samples.len() > TRAIL_SAMPLES {
-                    state.samples.pop_back();
-                }
+    {
+        let affine = global.affine();
+        let base = affine.transform_point(base_local);
+        let tip = affine.transform_point(tip_local);
+        let moved = state
+            .samples
+            .front()
+            .is_none_or(|s| s.tip.distance(tip) >= TRAIL_MIN_DISTANCE);
+        if moved {
+            state.samples.push_front(TrailSample {
+                base,
+                tip,
+                age: 0.0,
+            });
+            while state.samples.len() > TRAIL_SAMPLES {
+                state.samples.pop_back();
             }
         }
     }

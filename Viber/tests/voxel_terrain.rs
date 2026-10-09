@@ -693,7 +693,10 @@ fn test_refined_cells_do_not_increase_flipped_triangles() {
         }
         total
     };
-    assert!(count(VOXEL_CHUNK_CELLS * 2) >= count(VOXEL_CHUNK_CELLS), "refino = mais detalhe");
+    assert!(
+        count(VOXEL_CHUNK_CELLS * 2) >= count(VOXEL_CHUNK_CELLS),
+        "refino = mais detalhe"
+    );
 }
 
 #[test]

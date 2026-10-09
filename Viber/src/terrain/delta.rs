@@ -82,20 +82,27 @@ impl DeltaRect {
     }
 
     fn max_corner(&self) -> Vec2 {
-        self.min
-            + Vec2::new((self.cols - 1) as f32, (self.rows - 1) as f32) * self.texel
+        self.min + Vec2::new((self.cols - 1) as f32, (self.rows - 1) as f32) * self.texel
     }
 
     /// min/max do sub-rectângulo que intersecta o box dado; `None` quando
     /// não há sobreposição.
     fn range_over(&self, min_x: f32, min_z: f32, max_x: f32, max_z: f32) -> Option<(f32, f32)> {
-        if max_x < self.min.x || min_x > self.max_corner().x || max_z < self.min.y || min_z > self.max_corner().y {
+        if max_x < self.min.x
+            || min_x > self.max_corner().x
+            || max_z < self.min.y
+            || min_z > self.max_corner().y
+        {
             return None;
         }
         let i0 = (((min_x - self.min.x) / self.texel).floor().max(0.0)) as usize;
         let j0 = (((min_z - self.min.y) / self.texel).floor().max(0.0)) as usize;
-        let i1 = (((max_x - self.min.x) / self.texel).ceil().min((self.cols - 1) as f32)) as usize;
-        let j1 = (((max_z - self.min.y) / self.texel).ceil().min((self.rows - 1) as f32)) as usize;
+        let i1 = (((max_x - self.min.x) / self.texel)
+            .ceil()
+            .min((self.cols - 1) as f32)) as usize;
+        let j1 = (((max_z - self.min.y) / self.texel)
+            .ceil()
+            .min((self.rows - 1) as f32)) as usize;
         let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
         for j in j0..=j1 {
             for i in i0..=i1 {
@@ -175,10 +182,9 @@ impl DeltaGrid {
     /// união — adjacente preserva o "mais recente ganha".
     fn commit(&mut self, grid: &BrushGrid, rect: DeltaRect) {
         let top = self.rects.len().wrapping_sub(1);
-        let merge_top = self
-            .rects
-            .last()
-            .is_some_and(|last| overlaps(last, &rect) && union_cells(last, &rect) <= MERGE_CELL_CAP);
+        let merge_top = self.rects.last().is_some_and(|last| {
+            overlaps(last, &rect) && union_cells(last, &rect) <= MERGE_CELL_CAP
+        });
         if merge_top {
             let grown = grow_pair(&self.rects[top], &rect, |p| {
                 sample_below(&self.rects[..top], grid, p)
@@ -460,15 +466,18 @@ pub fn apply_edit(grid: &BrushGrid, deltas: &mut DeltaGrid, edit: &TerrainEdit) 
     }
 
     // FASE 2 (escrita): commit (funde com o recorte do topo se o tocar).
-    deltas.commit(grid, DeltaRect {
-        min,
-        texel,
-        cols,
-        rows,
-        data,
-        lo,
-        hi,
-    });
+    deltas.commit(
+        grid,
+        DeltaRect {
+            min,
+            texel,
+            cols,
+            rows,
+            data,
+            lo,
+            hi,
+        },
+    );
     true
 }
 
@@ -568,7 +577,10 @@ mod tests {
             },
         );
         let second = deltas.sample(0.0, 0.0).unwrap();
-        assert!(second < first - 2.0, "escava em camadas: {first} → {second}");
+        assert!(
+            second < first - 2.0,
+            "escava em camadas: {first} → {second}"
+        );
     }
 
     /// A cratera tem tigela E rebordo; fora do raio nada muda.
@@ -680,9 +692,15 @@ mod tests {
         }
         assert_eq!(deltas.rects.len(), 1, "as bboxes tocam-se: fundem");
         let r = &deltas.rects[0];
-        assert!(r.data.iter().all(|v| v.is_finite()), "sem NaN no recorte fundido");
+        assert!(
+            r.data.iter().all(|v| v.is_finite()),
+            "sem NaN no recorte fundido"
+        );
         let corner = deltas.sample(r.min.x + 0.5, r.min.y + 0.5).expect("dentro");
-        assert!((corner - 10.0).abs() < 1e-3, "canto descoberto = base: {corner}");
+        assert!(
+            (corner - 10.0).abs() < 1e-3,
+            "canto descoberto = base: {corner}"
+        );
     }
 
     /// A edição nova ganha SEMPRE: fundir com um recorte antigo punha-a por
@@ -725,7 +743,10 @@ mod tests {
             before + (20.0 - before) * falloff(13.0 / 14.0)
         };
         let got = view.sample(13.0, 0.0);
-        assert!((got - expected).abs() < 0.05, "o flatten novo manda em x=13: {got} vs {expected}");
+        assert!(
+            (got - expected).abs() < 0.05,
+            "o flatten novo manda em x=13: {got} vs {expected}"
+        );
         assert!(view.sample(0.0, 0.0) > 19.9, "centro achatado a 20 m");
     }
 
@@ -788,7 +809,10 @@ mod tests {
         let origin = -grid.world_size() * 0.5;
         for v in [r.min.x, r.min.y] {
             let k = (v - origin) / grid.texel();
-            assert!((k - k.round()).abs() < 1e-3, "min fora do lattice: {v} (k = {k})");
+            assert!(
+                (k - k.round()).abs() < 1e-3,
+                "min fora do lattice: {v} (k = {k})"
+            );
         }
     }
 

@@ -273,12 +273,7 @@ impl Easing {
                 }
                 if let Some(rest) = text.strip_prefix("steps(") {
                     let rest = rest.strip_suffix(')')?;
-                    return rest
-                        .trim()
-                        .parse()
-                        .ok()
-                        .filter(|n| *n > 0)
-                        .map(Self::Steps);
+                    return rest.trim().parse().ok().filter(|n| *n > 0).map(Self::Steps);
                 }
                 return None;
             }
@@ -627,10 +622,10 @@ fn sample_keyframes(
         before.props.clone()
     };
     for field in TWEENABLE_FIELDS {
-        if let (Some(from), Some(to)) = (field.get(&before.props), field.get(&after.props)) {
-            if let Some(value) = from.lerp(to, local) {
-                field.set(&mut out, value);
-            }
+        if let (Some(from), Some(to)) = (field.get(&before.props), field.get(&after.props))
+            && let Some(value) = from.lerp(to, local)
+        {
+            field.set(&mut out, value);
         }
     }
     Some(out)
@@ -722,15 +717,36 @@ mod tests {
         let target = TweenValue::Num(NumUnit::Px, 100.0);
         transitions.targets.insert(StyleField::Width, target);
         let new_target = TweenValue::Num(NumUnit::Px, 160.0);
-        assert!(transitions.start(StyleField::Width, new_target, Easing::Linear, 1.0, 0.0, false));
+        assert!(transitions.start(
+            StyleField::Width,
+            new_target,
+            Easing::Linear,
+            1.0,
+            0.0,
+            false
+        ));
         // O alvo avança para o novo valor (o diff da cascata compara com ele).
-        assert_eq!(transitions.targets.get(&StyleField::Width), Some(&new_target));
+        assert_eq!(
+            transitions.targets.get(&StyleField::Width),
+            Some(&new_target)
+        );
         // Re-alvo a meio (elapsed 0.5 de 100→160): o novo from é o valor
         // EXIBIDO (130), não o alvo antigo — sem salto no meio do caminho.
         transitions.tweens[0].elapsed = 0.5;
         let new_target2 = TweenValue::Num(NumUnit::Px, 220.0);
-        assert!(transitions.start(StyleField::Width, new_target2, Easing::Linear, 1.0, 0.0, false));
-        assert_eq!(transitions.tweens.len(), 1, "o tween antigo foi substituído");
+        assert!(transitions.start(
+            StyleField::Width,
+            new_target2,
+            Easing::Linear,
+            1.0,
+            0.0,
+            false
+        ));
+        assert_eq!(
+            transitions.tweens.len(),
+            1,
+            "o tween antigo foi substituído"
+        );
         let run = &transitions.tweens[0];
         assert!((run.from.num_value() - 130.0).abs() < 1e-5);
         // Unidades mistas: recusa e mantém o alvo antigo.
@@ -752,8 +768,7 @@ mod tests {
         };
         // Infinite: fract; alternate inverte nos ciclos ímpares.
         assert!(
-            (animation_offset(&spec(Iterations::Infinite, false), 1.5).unwrap() - 0.5).abs()
-                < 1e-6
+            (animation_offset(&spec(Iterations::Infinite, false), 1.5).unwrap() - 0.5).abs() < 1e-6
         );
         assert!(
             (animation_offset(&spec(Iterations::Infinite, true), 1.25).unwrap() - 0.75).abs()

@@ -119,6 +119,7 @@ pub fn clear_ui_events(mut events: ResMut<UiEvents>) {
 /// frame de jogo (vida, cooldown) e o lote de eventos virava spam; quem quer
 /// seguir uma barra lê `viber.ui.number()` como sempre.
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)] // sistema Bevy com queries/params explícitos
 pub fn collect_ui_widget_events(
     mut events: ResMut<UiEvents>,
     registry: Res<UiRegistry>,
@@ -128,18 +129,9 @@ pub fn collect_ui_widget_events(
         (Entity, &UiId, &super::widgets::UiSlider),
         bevy::ecs::query::Changed<super::widgets::UiSlider>,
     >,
-    inputs: Query<
-        (Entity, &UiId, &UiInput),
-        bevy::ecs::query::Changed<UiInput>,
-    >,
-    checks: Query<
-        (Entity, &UiId, &UiCheck),
-        bevy::ecs::query::Changed<UiCheck>,
-    >,
-    interactions: Query<
-        (Entity, &UiId, &Interaction),
-        bevy::ecs::query::Changed<Interaction>,
-    >,
+    inputs: Query<(Entity, &UiId, &UiInput), bevy::ecs::query::Changed<UiInput>>,
+    checks: Query<(Entity, &UiId, &UiCheck), bevy::ecs::query::Changed<UiCheck>>,
+    interactions: Query<(Entity, &UiId, &Interaction), bevy::ecs::query::Changed<Interaction>>,
     mut last_sliders: Local<std::collections::HashMap<Entity, f32>>,
     mut last_inputs: Local<std::collections::HashMap<Entity, String>>,
     mut last_checks: Local<std::collections::HashMap<Entity, bool>>,
@@ -199,10 +191,7 @@ pub fn collect_ui_widget_events(
         if let Some(previous) = *last_focus
             && let Some(id) = id_of(previous)
         {
-            events.push(UiEvent::FocusChanged {
-                id,
-                focused: false,
-            });
+            events.push(UiEvent::FocusChanged { id, focused: false });
         }
         if let Some(current) = focus.0
             && let Some(id) = id_of(current)

@@ -22,7 +22,10 @@ use bevy::ecs::query::QueryData;
 use bevy::input::InputSystems;
 use bevy::input::touch::Touches;
 use bevy::prelude::*;
-use bevy::ui::{CalculatedClip, ComputedNode, ComputedUiTargetCamera, FocusPolicy, UiGlobalTransform, UiStack, UiSystems};
+use bevy::ui::{
+    CalculatedClip, ComputedNode, ComputedUiTargetCamera, FocusPolicy, UiGlobalTransform, UiStack,
+    UiSystems,
+};
 use bevy::window::PrimaryWindow;
 
 /// Tipo de interação do ponteiro com um nó de UI (semântica do Bevy 0.19).

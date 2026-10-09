@@ -155,6 +155,8 @@ fn bake_cliff_colors(
         };
         // As posições do mesh são relativas à caixa; a máscara lê MUNDO.
         let origin = Vec2::new(chunk.origin.x, chunk.origin.z);
+        #[allow(clippy::explicit_auto_deref)]
+        // AssetMut<Mesh> → &mut Mesh precisa do deref explícito
         if super::cliffs::bake_cliff_colors(&mask, origin, &mut *mesh) > 0 {
             commands.entity(entity).insert(super::cliffs::CliffBaked);
         }
@@ -338,7 +340,6 @@ fn update_voxel_columns(
     // A vista GRID + EDIÇÕES: o mesher e o `region_state` leem esta base,
     // portanto uma cratera entra no próximo rebuild sem tocar na grid.
     let base = runtime.base();
-    let grid = &runtime.grid; // (testes/legado)
     let voxel = &runtime.voxel;
     // Captura ANTES do loop de colunas (o índice usa `state` mutável).
     let standard = state.material.clone();
@@ -446,8 +447,7 @@ fn update_voxel_columns(
                 cx + half >= min.x && cx - half <= max.x && cz + half >= min.y && cz - half <= max.y
             })
         };
-        let stale =
-            chunk.lod != chunk.built_lod || nkey != chunk.built_neighbours || edit_stale;
+        let stale = chunk.lod != chunk.built_lod || nkey != chunk.built_neighbours || edit_stale;
         match build.as_mut() {
             // O alvo mudou a meio da construção: as staged (escondidas)
             // morrem e a fila recomputa para o novo alvo. Uma revisão de
@@ -630,15 +630,7 @@ fn update_voxel_columns(
             let refined =
                 super::voxel::spawn::refined_neighbours(&lod_field, voxel, spec, edge, coords);
             let column_boxes = super::voxel::column_boxes(
-                spec,
-                &base,
-                voxel,
-                edge,
-                lod0_cell,
-                lod,
-                coords,
-                neighbours,
-                refined,
+                spec, &base, voxel, edge, lod0_cell, lod, coords, neighbours, refined,
             );
             budget = budget.saturating_sub(column_boxes.len() as u32);
             let (entity, built) = super::voxel::spawn_column(
@@ -1007,9 +999,7 @@ mod tests {
         let mesh0 = app
             .world_mut()
             .resource_mut::<Assets<Mesh>>()
-            .add(Mesh::from(bevy::shape::Cuboid::new(
-                1.0, 1.0, 1.0,
-            )));
+            .add(Mesh::from(bevy::shape::Cuboid::new(1.0, 1.0, 1.0)));
         for cz in 0..2u32 {
             for cx in 0..2u32 {
                 let origin = Vec3::new(-half + cx as f32 * edge, 0.0, -half + cz as f32 * edge);
@@ -1287,9 +1277,7 @@ mod tests {
         let mesh0 = app
             .world_mut()
             .resource_mut::<Assets<Mesh>>()
-            .add(Mesh::from(bevy::shape::Cuboid::new(
-                1.0, 1.0, 1.0,
-            )));
+            .add(Mesh::from(bevy::shape::Cuboid::new(1.0, 1.0, 1.0)));
         for cz in 0..2u32 {
             for cx in 0..2u32 {
                 let origin = Vec3::new(-half + cx as f32 * edge, 0.0, -half + cz as f32 * edge);

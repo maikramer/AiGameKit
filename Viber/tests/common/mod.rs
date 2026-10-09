@@ -26,8 +26,7 @@ impl Resolver for HarnessResolver<'_> {
     fn resolve_source(&self, path: &ModulePath) -> Result<Cow<'_, str>, ResolveError> {
         let path = &canonical_path(path);
         // O módulo especial `constants` (mesma convenção do shader_cache).
-        if path.origin == PathOrigin::Package("constants".to_string())
-            && path.components.is_empty()
+        if path.origin == PathOrigin::Package("constants".to_string()) && path.components.is_empty()
         {
             return Ok(Cow::Borrowed(self.constants));
         }
@@ -75,7 +74,10 @@ pub fn compile_wesl(
         ..Default::default()
     };
     for def in defines {
-        options.features.flags.insert(def.to_string(), Feature::Enable);
+        options
+            .features
+            .flags
+            .insert(def.to_string(), Feature::Enable);
     }
     // O valor REAL que o bevy substitui no runtime (o grupo do material) —
     // manter a sincronizar com `bevy::pbr::MATERIAL_BIND_GROUP_INDEX`.

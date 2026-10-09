@@ -15,11 +15,7 @@ base64 = "0.22"
 # `basis-universal` transcodes the KTX2/UASTC textures the asset pipeline
 # bakes into its GLBs (`KHR_texture_basisu`); without it those textures are
 # "Missing data" and the whole GLB fails to load.
-# 0.20.0-rc.2 (tag GitHub 2026-09-25) ainda NÃO estava no crates.io no dia da
-# mudança — o `[patch.crates-io]` no fim do ficheiro resolve esta dependência
-# (e todos os subcrates) para o tag git `v0.20.0-rc.2`. Remover a tabela
-# quando o rc.2 sair no crates.io.
-bevy = { version = "0.20.0-rc.2", features = [
+bevy = { version = "0.20", features = [
     "bevy_remote",
     "wav",
     "jpeg",
@@ -134,32 +130,6 @@ codegen-units = 1
 # (o spawn do simple-rpg nunca teve navmesh — todas as criaturas em linha
 # recta) e o comprimento das diagonais deixou de dar a volta em `u16`.
 [patch.crates-io]
+# Bevy 0.20.0 oficial (crates.io, 2026-10-08) — os forks de vendor/ e o
+# bevy_kira_audio 0.27-rc.1 resolvem agora ao registry; sem patches git.
 rerecast = { path = "vendor/rerecast" }
-# Bevy 0.20.0-rc.2 pelo tag git (aín não publicado no crates.io) — os
-# subcrates redirecionados são TODOS os que os crates do ecossistema
-# (bevy_kira_audio 0.27-rc.1, forks de vendor/) puxam do registry; assim
-# existe uma só versão de bevy_ecs/bevy_render na árvore. REMOVER o bloco
-# `bevy*` quando o rc.2 sair no crates.io (trocar por bump de versão).
-bevy = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_app = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_asset = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_camera = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_color = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_curve = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_derive = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_ecs = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_gizmos = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_light = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_log = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_material = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_math = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_mesh = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_pbr = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_platform = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_reflect = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_render = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_shape = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_tasks = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_time = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_transform = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }
-bevy_utils = { git = "https://github.com/bevyengine/bevy", tag = "v0.20.0-rc.2" }

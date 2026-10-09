@@ -11,8 +11,8 @@
 //! (rerecast runs it on the task pool); until the first one lands, agents fall
 //! back to the beeline they always had.
 
-use bevy::shape::Aabb3d;
 use bevy::prelude::*;
+use bevy::shape::Aabb3d;
 use bevy_rerecast::prelude::{NavmeshGenerator, NavmeshSettings};
 use bevy_rerecast::rerecast::{AreaType, ConvexVolume};
 
@@ -84,13 +84,25 @@ pub fn retile_navmesh(
     mut tile: ResMut<NavTile>,
     mut generator: NavmeshGenerator,
     players: Query<&GlobalTransform, With<crate::player::Player>>,
-    obstacles: Query<(), (With<bevy_rapier3d::prelude::Collider>, super::backend::ObstacleFilter)>,
+    obstacles: Query<
+        (),
+        (
+            With<bevy_rapier3d::prelude::Collider>,
+            super::backend::ObstacleFilter,
+        ),
+    >,
 ) {
     if !config.enabled || terrain.is_none() {
         return;
     }
     if tile.generating {
-        probe_in_flight(&mut tile, &config, terrain.as_deref(), &mut generator, time.delta_secs());
+        probe_in_flight(
+            &mut tile,
+            &config,
+            terrain.as_deref(),
+            &mut generator,
+            time.delta_secs(),
+        );
         return;
     }
     let Ok(player) = players.single() else {
@@ -221,8 +233,9 @@ pub fn tile_settings_attempt(
         settings.area_volumes = road_area_volumes(terrain, center, half);
     }
     if attempt > 0 {
-        settings.max_simplification_error =
-            (settings.max_simplification_error - 0.2 * attempt as f32).max(MIN_SIMPLIFICATION_ERROR);
+        settings.max_simplification_error = (settings.max_simplification_error
+            - 0.2 * attempt as f32)
+            .max(MIN_SIMPLIFICATION_ERROR);
     }
     settings
 }

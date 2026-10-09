@@ -22,12 +22,13 @@ O `bevy_audio`/rodio do Bevy fica compilado (tirar a feature do `bevy` exige
 re-listar ~20 features default — frágil); NENHUM som nasce por ele —
 `AudioPlayer`/`PlaybackSettings` deixaram de ser usados em runtime.
 
-## Forks vendored para o Bevy 0.20 (2026-09-25)
+## Forks vendored para o Bevy 0.20 (2026-09-25; bevy oficial 2026-10-09)
 
-O bevy 0.20.0-rc.2 saiu no GitHub antes do crates.io, e os crates do
-ecossistema presos ao 0.19 ficaram em `vendor/` com `[patch.crates-io]`
-(proveniência/revs e condições de des-vendor em
-[`vendor/FORKS_020.md`](../vendor/FORKS_020.md)):
+O Bevy **0.20.0 final** está no crates.io desde 2026-10-08 — o `bevy = "0.20"`
+resolve do registry e a tabela `[patch.crates-io]` de tags git foi removida.
+Os crates do ecossistema abaixo continuam em `vendor/` até os upstreams
+publicarem as versões bevy-0.20 (proveniência/revs e condições de des-vendor
+em [`vendor/FORKS_020.md`](../vendor/FORKS_020.md)):
 
 | Fork | A montar quando | Notas do port |
 |------|-----------------|---------------|
@@ -35,10 +36,9 @@ ecossistema presos ao 0.19 ficaram em `vendor/` com `[patch.crates-io]`
 | `bevy_rerecast` + `bevy_rerecast_core` 0.5 | `janhohenheim/rerecast` publicar 0.20 | reflect derives por feature do `rerecast` core. |
 | `bevy_landmass` 0.13 + `landmass_rerecast` 0.3 | `andriyDev/landmass` branch bevy-0.20 virar release | landmass_rerecast ainda misturava bevy 0.19 no branch — corrigido no vendor. |
 
-O próprio bevy vem do **git tag `v0.20.0-rc.2`** pela tabela `[patch.crates-io]`
-do `Cargo.toml` (bevy + 21 subcrates) — **remover o bloco `bevy*` quando o
-rc.2 sair no crates.io** (troca de 2 minutos). Também a borda: dev-dep `wesl`
-0.4.2 (mesma do bevy) para os harnesses de shader.
+Único `[patch.crates-io]` restante: `rerecast` (fixes locais de robustez —
+`vendor/rerecast/VIBER_PATCH.md`). Dev-deps de shader: `wesl` 0.4.2 + `naga`
+(29.0.4 — ver `tests/chunk_shader.rs` para os harnesses).
 
 ## Watch-list (avaliar numa próxima ronda)
 

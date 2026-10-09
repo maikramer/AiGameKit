@@ -582,18 +582,10 @@ impl super::mesh::HeightField for BrushGrid {
         // the texel on its far side too.
         let x0 = ((min_x + half) / sx).floor().max(0.0) as usize;
         let z0 = ((min_z + half) / sz).floor().max(0.0) as usize;
-        let x1 = ((((max_x + half) / sx)
-            .ceil()
-            .max(0.0)
-            .min(self.width as f32)) as usize
-            + 1)
-        .min(self.width);
-        let z1 = ((((max_z + half) / sz)
-            .ceil()
-            .max(0.0)
-            .min(self.depth as f32)) as usize
-            + 1)
-        .min(self.depth);
+        let x1 = ((((max_x + half) / sx).ceil().max(0.0).min(self.width as f32)) as usize + 1)
+            .min(self.width);
+        let z1 = ((((max_z + half) / sz).ceil().max(0.0).min(self.depth as f32)) as usize + 1)
+            .min(self.depth);
         if x0 >= x1 || z0 >= z1 {
             return None;
         }
@@ -1035,13 +1027,27 @@ mod tests {
         }
         grid.commit_stroke();
         let last = grid.cell_center(8, 4);
-        assert!(last.distance(Vec2::new(40.0, 40.0)) < 1e-4, "canto oposto: {last}");
+        assert!(
+            last.distance(Vec2::new(40.0, 40.0)) < 1e-4,
+            "canto oposto: {last}"
+        );
         // Passo Z = 80/4 = 20 m: a linha 3 está em z = 20 com altura 30.
-        assert!((grid.sample(0.0, 20.0) - 30.0).abs() < 0.01, "{}", grid.sample(0.0, 20.0));
-        assert!((grid.sample(0.0, 30.0) - 35.0).abs() < 0.01, "{}", grid.sample(0.0, 30.0));
+        assert!(
+            (grid.sample(0.0, 20.0) - 30.0).abs() < 0.01,
+            "{}",
+            grid.sample(0.0, 20.0)
+        );
+        assert!(
+            (grid.sample(0.0, 30.0) - 35.0).abs() < 0.01,
+            "{}",
+            grid.sample(0.0, 30.0)
+        );
         let (lo, hi) = super::super::mesh::HeightField::range_over(&grid, -40.0, 25.0, 40.0, 40.0)
             .expect("range");
-        assert!((lo - 30.0).abs() < 0.01 && (hi - 40.0).abs() < 0.01, "{lo}..{hi}");
+        assert!(
+            (lo - 30.0).abs() < 0.01 && (hi - 40.0).abs() < 0.01,
+            "{lo}..{hi}"
+        );
     }
 
     /// O limite superior do `range_over` é um CEIL: um box que acaba a meio
@@ -1056,7 +1062,10 @@ mod tests {
         let (_, hi) = super::super::mesh::HeightField::range_over(&grid, -1.0, -1.0, 0.2, 0.2)
             .expect("range");
         assert!(grid.sample(0.2, 0.2) > 1.0, "o bilinear já sobe no box");
-        assert!((hi - 20.0).abs() < 1e-3, "o pico do outro lado da célula conta: {hi}");
+        assert!(
+            (hi - 20.0).abs() < 1e-3,
+            "o pico do outro lado da célula conta: {hi}"
+        );
     }
 
     #[test]

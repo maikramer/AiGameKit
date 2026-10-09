@@ -243,14 +243,10 @@ impl RespawnCatalog {
     /// Rótulos vazios (ponto declarado sem `label`) caem na heurística de
     /// direção de sempre ([`respawn_label`]).
     pub fn nearest(&self, from: Vec2) -> (Vec2, &str) {
-        let Some((point, label)) = self
-            .0
-            .iter()
-            .min_by(|a, b| {
-                a.0.distance_squared(from)
-                    .total_cmp(&b.0.distance_squared(from))
-            })
-        else {
+        let Some((point, label)) = self.0.iter().min_by(|a, b| {
+            a.0.distance_squared(from)
+                .total_cmp(&b.0.distance_squared(from))
+        }) else {
             // Catálogo vazio explicitamente declarado → fallback do const.
             let p = nearest_respawn_point(from);
             return (p, respawn_label(p));
@@ -541,22 +537,22 @@ fn player_hurt_system(
     for hurt in hurts.read() {
         // guard [L]: parry total na janela inicial, senão −75 %
         let mut amount = hurt.amount;
-        if !hurt.status {
-            if let Some(g) = guard {
-                if g.timer <= crate::skills::PARRY_WINDOW {
-                    amount = 0.0;
-                    toasts.write(ScriptToast("PARRY!".into()));
-                    sfx.write(crate::ambient::SfxEvent {
-                        clip: crate::ambient::SfxClip::ShieldBlock,
-                        position: Some(transform.translation()),
-                    });
-                } else {
-                    amount *= GUARD_REDUCTION;
-                    sfx.write(crate::ambient::SfxEvent {
-                        clip: crate::ambient::SfxClip::ShieldBlock,
-                        position: Some(transform.translation()),
-                    });
-                }
+        if !hurt.status
+            && let Some(g) = guard
+        {
+            if g.timer <= crate::skills::PARRY_WINDOW {
+                amount = 0.0;
+                toasts.write(ScriptToast("PARRY!".into()));
+                sfx.write(crate::ambient::SfxEvent {
+                    clip: crate::ambient::SfxClip::ShieldBlock,
+                    position: Some(transform.translation()),
+                });
+            } else {
+                amount *= GUARD_REDUCTION;
+                sfx.write(crate::ambient::SfxEvent {
+                    clip: crate::ambient::SfxClip::ShieldBlock,
+                    position: Some(transform.translation()),
+                });
             }
         }
         if amount <= 0.0 {
@@ -716,7 +712,11 @@ fn respawn_system(
                     // Chegada limpa: a queda/knockback da morte não viaja
                     // para o ponto de respawn, e a coluna de destino (longe)
                     // pode ainda não ter collider — a tutela segura o herói.
-                    crate::player::settle_after_teleport(&mut commands, entity, player.as_deref_mut());
+                    crate::player::settle_after_teleport(
+                        &mut commands,
+                        entity,
+                        player.as_deref_mut(),
+                    );
                     health.current = health.max;
                     // Morte limpa status: renascer envenenado punha o herói a
                     // perder o HP cheio no ponto de respawn sem inimigo algum.
@@ -731,9 +731,7 @@ fn respawn_system(
                     if let Some(events) = events.as_deref_mut() {
                         events.push(crate::luau::ScriptGameEvent::PlayerDied);
                     }
-                    toasts.write(ScriptToast(format!(
-                        "De volta à {label} — levanta e luta!"
-                    )));
+                    toasts.write(ScriptToast(format!("De volta à {label} — levanta e luta!")));
                     info!(
                         target: "viber::feedback",
                         "respawn na {label} ({point:?}) — HP cheio + {RESPAWN_DELAY}s de i-frames"
@@ -871,21 +869,19 @@ fn target_ring_system(
         return;
     };
     let alive = rings.iter().any(|(_, ring, _, _)| ring.target == wanted);
-    if !alive {
-        if let Ok(t) = positions.get(wanted) {
-            commands.spawn((
-                Mesh3d(assets.mesh.clone()),
-                MeshMaterial3d(assets.material.clone()),
-                Transform::from_translation(t.translation() + Vec3::Y * RING_Y_OFFSET),
-                Visibility::Inherited,
-                NotShadowCaster,
-                Name::new("fx:target-ring"),
-                TargetRing {
-                    target: wanted,
-                    age: 0.0,
-                },
-            ));
-        }
+    if !alive && let Ok(t) = positions.get(wanted) {
+        commands.spawn((
+            Mesh3d(assets.mesh.clone()),
+            MeshMaterial3d(assets.material.clone()),
+            Transform::from_translation(t.translation() + Vec3::Y * RING_Y_OFFSET),
+            Visibility::Inherited,
+            NotShadowCaster,
+            Name::new("fx:target-ring"),
+            TargetRing {
+                target: wanted,
+                age: 0.0,
+            },
+        ));
     }
     // Follow + pulso por frame.
     let dt = time.delta_secs();

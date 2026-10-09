@@ -768,7 +768,12 @@ mod tests {
             .id();
 
         let dt = 0.05_f32;
-        let mut previous = app.world().entity(entity).get::<Transform>().unwrap().rotation;
+        let mut previous = app
+            .world()
+            .entity(entity)
+            .get::<Transform>()
+            .unwrap()
+            .rotation;
         for _ in 0..40 {
             app.world_mut()
                 .entity_mut(entity)
@@ -776,7 +781,12 @@ mod tests {
                 .unwrap()
                 .drive(Vec2::new(0.0, 4.0));
             tick(&mut app, (dt * 1000.0) as u64);
-            let now = app.world().entity(entity).get::<Transform>().unwrap().rotation;
+            let now = app
+                .world()
+                .entity(entity)
+                .get::<Transform>()
+                .unwrap()
+                .rotation;
             let swept = previous.angle_between(now);
             assert!(
                 swept <= profile.turn_rate * dt + 1e-3,
@@ -843,7 +853,10 @@ mod tests {
             .get::<AiLocomotion>()
             .unwrap()
             .speed();
-        assert!((speed - 4.0).abs() < 1e-3, "settles at 4 m/s, got {speed:.2}");
+        assert!(
+            (speed - 4.0).abs() < 1e-3,
+            "settles at 4 m/s, got {speed:.2}"
+        );
 
         // Stop driving: it coasts down instead of freezing mid-stride.
         for _ in 0..20 {
@@ -883,7 +896,13 @@ mod tests {
             drop(entity_mut);
             tick(&mut app, 50);
         }
-        let facing = app.world().entity(entity).get::<Transform>().unwrap().rotation * Vec3::Z;
+        let facing = app
+            .world()
+            .entity(entity)
+            .get::<Transform>()
+            .unwrap()
+            .rotation
+            * Vec3::Z;
         assert!(
             facing.x > 0.9,
             "a moving body faces where it goes (+X), got {facing:?}"
@@ -898,7 +917,13 @@ mod tests {
                 .look_at(Vec2::new(0.0, 1.0));
             tick(&mut app, 50);
         }
-        let facing = app.world().entity(entity).get::<Transform>().unwrap().rotation * Vec3::Z;
+        let facing = app
+            .world()
+            .entity(entity)
+            .get::<Transform>()
+            .unwrap()
+            .rotation
+            * Vec3::Z;
         assert!(
             facing.z > 0.9,
             "a stopped body honours the look-at (+Z), got {facing:?}"
@@ -916,7 +941,10 @@ mod tests {
 
         loco.drive_to(Vec2::ZERO, Vec2::new(30.0, 0.0), 4.0, 0.05);
         assert_eq!(loco.goal(), Some(Vec2::new(30.0, 0.0)));
-        assert!((loco.desired().length() - 4.0).abs() < 1e-4, "pede a velocidade pedida");
+        assert!(
+            (loco.desired().length() - 4.0).abs() < 1e-4,
+            "pede a velocidade pedida"
+        );
         assert!(loco.desired().x > 0.0, "aponta ao destino");
 
         // Arrival: never overshoot, and the goal stays stated so the bridge
@@ -961,14 +989,23 @@ mod tests {
                 .drive(Vec2::new(2.0, 0.0));
             tick(&mut app, 50);
         }
-        let local = app.world().entity(child).get::<Transform>().unwrap().translation;
+        let local = app
+            .world()
+            .entity(child)
+            .get::<Transform>()
+            .unwrap()
+            .translation;
         let world = app
             .world()
             .entity(child)
             .get::<GlobalTransform>()
             .unwrap()
             .translation();
-        assert!(local.x > 1.0, "the child advanced, local x = {:.2}", local.x);
+        assert!(
+            local.x > 1.0,
+            "the child advanced, local x = {:.2}",
+            local.x
+        );
         assert!(
             (world.x - (100.0 + local.x)).abs() < 1e-3,
             "world x tracks the parent offset: {world:?} vs local {local:?}"

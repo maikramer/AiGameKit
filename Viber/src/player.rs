@@ -391,7 +391,9 @@ pub fn player_movement(
     let sprint = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let jump_held = keys.pressed(KeyCode::Space);
 
-    for (mut transform, mut player, mut controller, output, mut settle, dying, knockback) in &mut players {
+    for (mut transform, mut player, mut controller, output, mut settle, dying, knockback) in
+        &mut players
+    {
         // Herói a cair em combate: sem andar, rodar a câmara nem saltar até
         // ao respawn — a gravidade e o chão continuam (o corpo assenta).
         let (move_x, move_forward, jump_held) = if dying.is_some() {
@@ -788,7 +790,10 @@ mod tests {
             seed: 5,
             ..crate::terrain::spec::TerrainSpec::default()
         };
-        let map = crate::terrain::heightmap::HeightMapU16::procedural(&spec, spec.resolution.max(1) as usize);
+        let map = crate::terrain::heightmap::HeightMapU16::procedural(
+            &spec,
+            spec.resolution.max(1) as usize,
+        );
         let grid = crate::terrain::brush::BrushGrid::from_height_map(
             &map,
             spec.world_size,
@@ -814,7 +819,10 @@ mod tests {
         let rt = small_runtime();
         assert_eq!(ground_near(&rt, 900.0, 900.0, 3.25), 3.25);
         let inside = ground_near(&rt, 10.0, 10.0, 100.0);
-        assert!(approx(inside, rt.sample_mesh_surface(10.0, 10.0)), "{inside}");
+        assert!(
+            approx(inside, rt.sample_mesh_surface(10.0, 10.0)),
+            "{inside}"
+        );
     }
 
     /// O teleporte ASSENTA exatamente na superfície sob o destino.

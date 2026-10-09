@@ -280,13 +280,13 @@ fn warn_unknown_keys(path: &Path, value: &serde_yaml::Value) {
         };
         if let Some(inner) = group.as_mapping() {
             for inner_key in inner.keys() {
-                if let Some(inner_key) = inner_key.as_str() {
-                    if !allowed.contains(&inner_key) {
-                        eprintln!(
-                            "warning: {}: chave desconhecida `{key}.{inner_key}` — ignorada",
-                            path.display()
-                        );
-                    }
+                if let Some(inner_key) = inner_key.as_str()
+                    && !allowed.contains(&inner_key)
+                {
+                    eprintln!(
+                        "warning: {}: chave desconhecida `{key}.{inner_key}` — ignorada",
+                        path.display()
+                    );
                 }
             }
         }

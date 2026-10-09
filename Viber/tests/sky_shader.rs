@@ -57,7 +57,6 @@ fn dimensions() -> (u32, u32) {
     (width, width / 2)
 }
 
-
 #[test]
 fn template_and_specialized_worlds_parse_and_validate() {
     common::validate(&standalone(include_str!("../src/sky.wesl")));
@@ -433,7 +432,9 @@ fn render(
     rx.recv_timeout(Duration::from_secs(60))
         .expect("GPU readback callback")
         .expect("GPU readback mapping");
-    let mapped = readback.slice(..).get_mapped_range()
+    let mapped = readback
+        .slice(..)
+        .get_mapped_range()
         .expect("GPU readback mapped range");
     let pixels = mapped
         .chunks_exact(16)

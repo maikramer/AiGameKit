@@ -252,7 +252,6 @@ fn frame_stepper_system(world: &mut World) {
         // Fica PAUSADO (speed 0); `viber.debug.play()` restaura
         // `stepper.restore` — o valor guardado na primeira chamada da cadeia.
         stepper.active = false;
-        drop(stepper);
         if let Some(mut base) = world.get_resource_mut::<crate::combat::BaseTimeScale>() {
             base.0 = 0.0;
         }
@@ -489,9 +488,7 @@ fn burst_request(params: In<Option<Value>>, world: &mut World) -> BrpResult {
             .bursts
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        store
-            .request(frames, skip, output)
-            .map_err(invalid)?
+        store.request(frames, skip, output).map_err(invalid)?
     };
     Ok(json!({
         "id": id,
@@ -528,11 +525,7 @@ fn burst_status(params: In<Option<Value>>, world: &mut World) -> BrpResult {
     });
     // Veredicto numérico por frame (luma média/desvio): flicker lê-se nas
     // OSCILAÇÕES entre células sem abrir o PNG.
-    let stats: Vec<&burst::FrameStat> = info
-        .frame_stats
-        .iter()
-        .flatten()
-        .collect();
+    let stats: Vec<&burst::FrameStat> = info.frame_stats.iter().flatten().collect();
     if !stats.is_empty() {
         let means: Vec<f32> = stats.iter().map(|s| s.mean).collect();
         let stds: Vec<f32> = stats.iter().map(|s| s.std).collect();
@@ -544,9 +537,14 @@ fn burst_status(params: In<Option<Value>>, world: &mut World) -> BrpResult {
             .windows(2)
             .map(|pair| (pair[1] - pair[0]).abs())
             .fold(0.0_f32, f32::max);
-        out["frame_stats"] = json!(stats.iter().map(|s| json!({
-            "index": s.index, "mean": s.mean, "std": s.std,
-        })).collect::<Vec<_>>());
+        out["frame_stats"] = json!(
+            stats
+                .iter()
+                .map(|s| json!({
+                    "index": s.index, "mean": s.mean, "std": s.std,
+                }))
+                .collect::<Vec<_>>()
+        );
         out["flicker"] = json!({
             "max_mean_swing": max_mean_swing,
             "max_consecutive_delta": max_consecutive_delta,
@@ -665,8 +663,8 @@ fn raycast_method(params: In<Option<Value>>, world: &mut World) -> BrpResult {
         };
         RapierQueryPipeline::new_scoped(
             &sim.broad_phase,
-            &colliders,
-            &bodies,
+            colliders,
+            bodies,
             &QueryFilter::default(),
             &DefaultQueryDispatcher,
             |pipeline| pipeline.cast_ray_and_get_normal(origin, dir, max_toi, solid),
@@ -681,7 +679,7 @@ fn raycast_method(params: In<Option<Value>>, world: &mut World) -> BrpResult {
     let point = origin + dir * toi;
     let mut out = json!({
         "hit": true,
-        "entity": entity.to_bits() as u64,
+        "entity": entity.to_bits(),
         "toi": toi,
         "point": [point.x, point.y, point.z],
         "normal": [normal.x, normal.y, normal.z],

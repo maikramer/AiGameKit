@@ -69,7 +69,7 @@ impl Plugin for RegionalProbesPlugin {
 }
 
 /// Região a conter o ponto (even-odd point-in-polygon). A 1.ª que der match.
-fn region_at<'a>(regions: &'a BiomeRegions, p: Vec2) -> Option<&'a BiomeRegionData> {
+fn region_at(regions: &BiomeRegions, p: Vec2) -> Option<&BiomeRegionData> {
     regions.list.iter().find(|r| {
         let poly = &r.polygon;
         if poly.len() < 3 {

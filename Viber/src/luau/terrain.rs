@@ -65,24 +65,22 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
     )?;
     terrain.set(
         "flatten",
-        lua.create_function(
-            |lua, (x, z, radius, height): (f32, f32, f32, Value)| {
-                let h = match height {
-                    Value::Nil => None,
-                    other => Some(other.as_f32().ok_or_else(|| {
-                        mlua::Error::runtime("viber.terrain.flatten: height deve ser número ou nil")
-                    })?),
-                };
-                enqueue(
-                    lua,
-                    TerrainEdit::Flatten {
-                        at: bevy::math::Vec2::new(x, z),
-                        radius,
-                        height: h,
-                    },
-                )
-            },
-        )?,
+        lua.create_function(|lua, (x, z, radius, height): (f32, f32, f32, Value)| {
+            let h = match height {
+                Value::Nil => None,
+                other => Some(other.as_f32().ok_or_else(|| {
+                    mlua::Error::runtime("viber.terrain.flatten: height deve ser número ou nil")
+                })?),
+            };
+            enqueue(
+                lua,
+                TerrainEdit::Flatten {
+                    at: bevy::math::Vec2::new(x, z),
+                    radius,
+                    height: h,
+                },
+            )
+        })?,
     )?;
     terrain.set(
         "crater",

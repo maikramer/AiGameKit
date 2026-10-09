@@ -23,8 +23,8 @@ use std::sync::Arc;
 use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::message::Messages;
 use bevy::ecs::system::In;
-use bevy::shape::{Cuboid, Sphere};
 use bevy::prelude::*;
+use bevy::shape::{Cuboid, Sphere};
 use bevy_rapier3d::prelude::{Collider, RapierContextSimulation, RigidBody};
 
 use crate::terrain::TerrainChunkMaterial;
@@ -637,7 +637,10 @@ pub enum DebugOp {
         tile_size: Option<f32>,
     },
     /// Gate de postfx FORÇADO ao vivo (`VIBER_NO_<KEY>` sem restart).
-    PostFx { key: &'static str, on: bool },
+    PostFx {
+        key: &'static str,
+        on: bool,
+    },
     /// Volumes do mixer (mixer_sync aplica aos buses ao vivo).
     AudioSet {
         master: Option<f32>,
@@ -1396,9 +1399,7 @@ fn build_view(world: &mut World) -> DebugView {
             })
         };
         let scripted = e.get::<crate::luau::LuaScriptRef>().is_some();
-        let script = e
-            .get::<crate::luau::LuaScriptRef>()
-            .map(|s| s.path.clone());
+        let script = e.get::<crate::luau::LuaScriptRef>().map(|s| s.path.clone());
         let health = e.get::<Health>().map(|h| (h.current, h.max));
         let ai = ai_info(&e);
 
@@ -1409,12 +1410,8 @@ fn build_view(world: &mut World) -> DebugView {
         // Hash do conteúdo por entidade (FNV-1a) acumulado por SOMA —
         // independente de ordem e de reusos de índice de entidade: mundos
         // com o mesmo conteúdo têm o mesmo `world_hash`.
-        world_hash = world_hash.wrapping_add(entity_hash(
-            name.as_deref(),
-            position,
-            health,
-            disabled,
-        ));
+        world_hash =
+            world_hash.wrapping_add(entity_hash(name.as_deref(), position, health, disabled));
         stats.meshes += usize::from(mesh.is_some());
         if let Some(collider) = &collider {
             stats.colliders_total += 1;
@@ -1555,23 +1552,25 @@ fn build_view(world: &mut World) -> DebugView {
 fn ai_info(e: &bevy::ecs::world::EntityRef) -> Option<AiInfo> {
     let fsm = e.get::<crate::ai::EnemyCreature>();
     let loco = e.get::<crate::ai::AiLocomotion>();
-    let profile = e
-        .get::<crate::nav::NavProfile>()
-        .map(|p| match p {
-            crate::nav::NavProfile::Civil => "civil",
-            crate::nav::NavProfile::Wild => "wild",
-        });
+    let profile = e.get::<crate::nav::NavProfile>().map(|p| match p {
+        crate::nav::NavProfile::Civil => "civil",
+        crate::nav::NavProfile::Wild => "wild",
+    });
     (fsm.is_some() || loco.is_some() || profile.is_some()).then(|| AiInfo {
-        state: fsm.map(|f| match f.state {
-            crate::ai::EnemyState::Wander => "wander",
-            crate::ai::EnemyState::Chase => "chase",
-        }).map(str::to_string),
+        state: fsm
+            .map(|f| match f.state {
+                crate::ai::EnemyState::Wander => "wander",
+                crate::ai::EnemyState::Chase => "chase",
+            })
+            .map(str::to_string),
         speed: fsm.map(|f| f.speed).unwrap_or(0.0),
         aggro_radius: fsm.map(|f| f.aggro_radius).unwrap_or(0.0),
         attack_radius: fsm.map(|f| f.attack_radius).unwrap_or(0.0),
         home: fsm.and_then(|f| f.home).map(|h| [h.x, h.y]),
         desired: loco.map(|l| l.desired()).unwrap_or_default().to_array(),
-        velocity: loco.map(|l| [l.velocity.x, l.velocity.y]).unwrap_or_default(),
+        velocity: loco
+            .map(|l| [l.velocity.x, l.velocity.y])
+            .unwrap_or_default(),
         goal: loco.and_then(|l| l.goal()).map(|g| [g.x, g.y]),
         nav_profile: profile.map(str::to_string),
     })
@@ -1613,7 +1612,9 @@ fn build_nav(world: &mut World) -> Option<NavInfo> {
     {
         let mut q = world.query::<&AgentState>();
         for state in q.iter(world) {
-            *census.entry(crate::nav::agent::state_name(state)).or_insert(0) += 1;
+            *census
+                .entry(crate::nav::agent::state_name(state))
+                .or_insert(0) += 1;
         }
     }
     let mut census: Vec<(&'static str, usize)> = census.into_iter().collect();
@@ -1838,9 +1839,10 @@ fn build_skills(world: &World) -> Option<SkillsInfo> {
         .get_resource::<crate::skills::AbilityCooldowns>()
         .map(|c| [c.dash, c.heal, c.strike]);
     let stats = world.get_resource::<crate::skills::PlayerStatsResource>();
-    let level = world
-        .iter_entities()
-        .find_map(|e| e.get::<crate::skills::LevelState>().map(|l| (l.level, l.points)));
+    let level = world.iter_entities().find_map(|e| {
+        e.get::<crate::skills::LevelState>()
+            .map(|l| (l.level, l.points))
+    });
     Some(SkillsInfo {
         learned: tree.learned.clone(),
         points: tree.points,
@@ -2152,65 +2154,225 @@ pub fn eval(params: In<Option<Json>>, world: &mut World) -> BrpResult {
 /// (`test_apidoc_covers_registered_functions`) garante a paridade exata nos
 /// dois sentidos — função nova sem doc falha o teste, doc órfã também.
 pub const DEBUG_API_DOCS: &[(&str, &str, &str)] = &[
-    ("entities", "entities(radius?)", "entidades no snapshot {id,name?,x,y,z,disabled} (cap 4096, mais perto 1.º)"),
-    ("find", "find(name)", "id (bits) por nome exato → substring case-insensitive"),
-    ("find_all", "find_all(name)", "ids (bits) de todas as entidades que casam (substring)"),
+    (
+        "entities",
+        "entities(radius?)",
+        "entidades no snapshot {id,name?,x,y,z,disabled} (cap 4096, mais perto 1.º)",
+    ),
+    (
+        "find",
+        "find(name)",
+        "id (bits) por nome exato → substring case-insensitive",
+    ),
+    (
+        "find_all",
+        "find_all(name)",
+        "ids (bits) de todas as entidades que casam (substring)",
+    ),
     ("pos", "pos(id)", "(x, y, z) da entidade"),
-    ("info", "info(id)", "tudo: transform, mesh, material, collider, luz, hp, script, ai"),
-    ("components", "components(id)", "nomes dos componentes (por arquétipo)"),
-    ("transform", "transform(id)", "{x,y,z,pitch,yaw,roll,sx,sy,sz,gx?,gy?,gz?}"),
-    ("mesh", "mesh(id)", "{topology,vertices,indices,has_normals,has_uvs,uv_bounds}"),
-    ("material", "material(id)", "{base_color,metallic,roughness,unlit,texturas{w,h}}"),
+    (
+        "info",
+        "info(id)",
+        "tudo: transform, mesh, material, collider, luz, hp, script, ai",
+    ),
+    (
+        "components",
+        "components(id)",
+        "nomes dos componentes (por arquétipo)",
+    ),
+    (
+        "transform",
+        "transform(id)",
+        "{x,y,z,pitch,yaw,roll,sx,sy,sz,gx?,gy?,gz?}",
+    ),
+    (
+        "mesh",
+        "mesh(id)",
+        "{topology,vertices,indices,has_normals,has_uvs,uv_bounds}",
+    ),
+    (
+        "material",
+        "material(id)",
+        "{base_color,metallic,roughness,unlit,texturas{w,h}}",
+    ),
     ("collider", "collider(id)", "resumo do shape Rapier"),
-    ("health", "health(id)", "{current,max,dead} de QUALQUER entidade"),
-    ("ai", "ai(id)", "FSM+locomoção da criatura {state,speed,aggro,goal,nav_profile}"),
-    ("nav", "nav()", "estado da pilha de navegação {enabled,tile,census}"),
-    ("player", "player()", "{id,x,y,z,hp,max_hp,xp,xp_next,speed}"),
+    (
+        "health",
+        "health(id)",
+        "{current,max,dead} de QUALQUER entidade",
+    ),
+    (
+        "ai",
+        "ai(id)",
+        "FSM+locomoção da criatura {state,speed,aggro,goal,nav_profile}",
+    ),
+    (
+        "nav",
+        "nav()",
+        "estado da pilha de navegação {enabled,tile,census}",
+    ),
+    (
+        "player",
+        "player()",
+        "{id,x,y,z,hp,max_hp,xp,xp_next,speed}",
+    ),
     ("camera", "camera()", "pose da OrbitCamera"),
-    ("clock", "clock()", "{minute,dawn,dusk,minutes_per_real_second}"),
+    (
+        "clock",
+        "clock()",
+        "{minute,dawn,dusk,minutes_per_real_second}",
+    ),
     ("vault", "vault()", "{gold,wood,stone,items{}}"),
     ("quests", "quests()", "{id = estado}"),
-    ("quest", "quest(id)", "quest FUNDA: título, objetivo com progresso, rewards"),
-    ("quest_defs", "quest_defs()", "[{id,title,status,kind,npc}] das quests embutidas"),
-    ("regions", "regions()", "<BiomeRegion> com fog/tint/exposure"),
+    (
+        "quest",
+        "quest(id)",
+        "quest FUNDA: título, objetivo com progresso, rewards",
+    ),
+    (
+        "quest_defs",
+        "quest_defs()",
+        "[{id,title,status,kind,npc}] das quests embutidas",
+    ),
+    (
+        "regions",
+        "regions()",
+        "<BiomeRegion> com fog/tint/exposure",
+    ),
     ("biome_at", "biome_at(x, z)", "região do ponto (polígono)"),
-    ("terrain", "terrain(x, z)", "queries AO VIVO: altura, estrada, água, distância a estrada"),
-    ("weather_full", "weather_full()", "tempo + scheduler do ciclo (o que VAI acontecer)"),
-    ("atmosphere", "atmosphere()", "grading/névoa vivos {day,night,fog_density,exposure}"),
-    ("border", "border()", "<WorldBorder> {radius,warn_seconds,margin}"),
-    ("interior", "interior()", "bolsa de interior {active,min,max,room_*}"),
-    ("ui_tree", "ui_tree()", "UI endereçável com RECTS (clique exato via input.click)"),
+    (
+        "terrain",
+        "terrain(x, z)",
+        "queries AO VIVO: altura, estrada, água, distância a estrada",
+    ),
+    (
+        "weather_full",
+        "weather_full()",
+        "tempo + scheduler do ciclo (o que VAI acontecer)",
+    ),
+    (
+        "atmosphere",
+        "atmosphere()",
+        "grading/névoa vivos {day,night,fog_density,exposure}",
+    ),
+    (
+        "border",
+        "border()",
+        "<WorldBorder> {radius,warn_seconds,margin}",
+    ),
+    (
+        "interior",
+        "interior()",
+        "bolsa de interior {active,min,max,room_*}",
+    ),
+    (
+        "ui_tree",
+        "ui_tree()",
+        "UI endereçável com RECTS (clique exato via input.click)",
+    ),
     ("audio", "audio()", "buses/layers/sinks do mixer"),
-    ("seeds", "seeds()", "{terrain_seed,world_size,weather_seed} (determinismo)"),
-    ("world_hash", "world_hash()", "hash hex do conteúdo do mundo (A/B de determinismo)"),
-    ("skills", "skills()", "árvore, pontos, nível, cooldowns, bónus"),
-    ("waypoints", "waypoints()", "Nota marcada + waypoint + 12 marcos"),
-    ("save_info", "save_info()", "{path,exists,bytes,mtime} do save"),
+    (
+        "seeds",
+        "seeds()",
+        "{terrain_seed,world_size,weather_seed} (determinismo)",
+    ),
+    (
+        "world_hash",
+        "world_hash()",
+        "hash hex do conteúdo do mundo (A/B de determinismo)",
+    ),
+    (
+        "skills",
+        "skills()",
+        "árvore, pontos, nível, cooldowns, bónus",
+    ),
+    (
+        "waypoints",
+        "waypoints()",
+        "Nota marcada + waypoint + 12 marcos",
+    ),
+    (
+        "save_info",
+        "save_info()",
+        "{path,exists,bytes,mtime} do save",
+    ),
     ("stats", "stats()", "agregados do mundo inteiro (cap-free)"),
     ("physics", "physics()", "tempos do último step do Rapier"),
-    ("colliders", "colliders(radius?)", "dump de colliders (cap 256)"),
-    ("lights", "lights(radius?)", "dump de luzes (com shadows destacado)"),
-    ("around", "around(radius, limit?)", "resumo compacto do que está perto do player"),
+    (
+        "colliders",
+        "colliders(radius?)",
+        "dump de colliders (cap 256)",
+    ),
+    (
+        "lights",
+        "lights(radius?)",
+        "dump de luzes (com shadows destacado)",
+    ),
+    (
+        "around",
+        "around(radius, limit?)",
+        "resumo compacto do que está perto do player",
+    ),
     ("prof", "prof()", "snapshot do profiler"),
     ("fps", "fps()", "fps instantâneo"),
     ("time_scale", "time_scale()", "speed virtual atual"),
     ("distance", "distance(a, b)", "metros entre duas entidades"),
-    ("ground_state", "ground_state()", "tuning de splat + pele das paredes correntes"),
-    ("events", "events(since?)", "eventos de jogo estruturados desde o cursor seq"),
-    ("apidoc", "apidoc()", "ESTA tabela: assinaturas + descrições de toda a API"),
-    ("set_pos", "set_pos(id, x, y, z)", "posição absoluta, sem snap"),
+    (
+        "ground_state",
+        "ground_state()",
+        "tuning de splat + pele das paredes correntes",
+    ),
+    (
+        "events",
+        "events(since?)",
+        "eventos de jogo estruturados desde o cursor seq",
+    ),
+    (
+        "apidoc",
+        "apidoc()",
+        "ESTA tabela: assinaturas + descrições de toda a API",
+    ),
+    (
+        "set_pos",
+        "set_pos(id, x, y, z)",
+        "posição absoluta, sem snap",
+    ),
     ("teleport", "teleport(x, y, z)", "player, Y explícito"),
     ("tp", "tp(x, z)", "player, Y sentado no terreno"),
-    ("move_to", "move_to(id, x, z)", "qualquer entidade, Y no terreno"),
-    ("move_player", "move_player(dx, dz)", "delta XZ do player, Y no terreno"),
+    (
+        "move_to",
+        "move_to(id, x, z)",
+        "qualquer entidade, Y no terreno",
+    ),
+    (
+        "move_player",
+        "move_player(dx, dz)",
+        "delta XZ do player, Y no terreno",
+    ),
     ("face", "face(x, z)", "player olha para o ponto"),
-    ("teleport_to", "teleport_to(name)", "player → primeira entidade com esse nome"),
-    ("rotate", "rotate(id, graus)", "soma yaw em graus em torno do Y"),
-    ("set_scale", "set_scale(id, s)", "escala uniforme (mín. 0.001)"),
+    (
+        "teleport_to",
+        "teleport_to(name)",
+        "player → primeira entidade com esse nome",
+    ),
+    (
+        "rotate",
+        "rotate(id, graus)",
+        "soma yaw em graus em torno do Y",
+    ),
+    (
+        "set_scale",
+        "set_scale(id, s)",
+        "escala uniforme (mín. 0.001)",
+    ),
     ("hide", "hide(id)", "esconde"),
     ("show", "show(id)", "mostra"),
     ("toggle_vis", "toggle_vis(id)", "alterna visibilidade"),
-    ("disable", "disable(id)", "insere Disabled (sai de TODAS as queries)"),
+    (
+        "disable",
+        "disable(id)",
+        "insere Disabled (sai de TODAS as queries)",
+    ),
     ("enable", "enable(id)", "remove Disabled"),
     ("despawn", "despawn(id)", "remove a entidade"),
     ("heal", "heal(n)", "cura o player"),
@@ -2218,29 +2380,101 @@ pub const DEBUG_API_DOCS: &[(&str, &str, &str)] = &[
     ("xp", "xp(n)", "XP ao player"),
     ("give", "give(what, n)", "recurso/item → vault (aditivo)"),
     ("take", "take(what, n)", "tira do vault (recurso ou item)"),
-    ("vault_set", "vault_set(what, n)", "valor ABSOLUTO de recurso/item"),
+    (
+        "vault_set",
+        "vault_set(what, n)",
+        "valor ABSOLUTO de recurso/item",
+    ),
     ("set_speed", "set_speed(n)", "velocidade do player"),
     ("set_time_scale", "set_time_scale(n)", "slow-mo; 0 = pausa"),
-    ("set_entity_hp", "set_entity_hp(id, hp)", "HP absoluto de QUALQUER entidade"),
-    ("set_max_hp", "set_max_hp(id, max)", "HP máximo de qualquer entidade"),
+    (
+        "set_entity_hp",
+        "set_entity_hp(id, hp)",
+        "HP absoluto de QUALQUER entidade",
+    ),
+    (
+        "set_max_hp",
+        "set_max_hp(id, max)",
+        "HP máximo de qualquer entidade",
+    ),
     ("kill", "kill(id)", "HP a zero (sem i-frames)"),
     ("set_hp", "set_hp(hp)", "HP do player (absoluto, clamp)"),
-    ("quest_force", "quest_force(id, state)", "força active|ready|done|not_taken"),
-    ("quest_progress", "quest_progress(id, n)", "fixa o progresso (kill/visit)"),
-    ("skill_learn", "skill_learn(id)", "aprende passiva (aplica o delta ao herói)"),
-    ("skill_points", "skill_points(n)", "pontos disponíveis (absoluto)"),
-    ("skill_reset", "skill_reset()", "esquece tudo, devolve pontos, reverte bónus"),
-    ("ai_state", "ai_state(id, s)", "força wander|chase (a FSM reavalia por distância)"),
-    ("ai_aggro", "ai_aggro(id, r)", "raio de aggro (o lever que persiste)"),
-    ("ai_calm_all", "ai_calm_all()", "todas as criaturas → Wander"),
-    ("nav_set", "nav_set{...}", "navmesh ao vivo: enabled/offroad_cost/tile_size"),
-    ("postfx", "postfx{...}", "gates de efeito AO VIVO (bloom, ssao, taa, …)"),
-    ("audio_set", "audio_set{...}", "volumes master/music/sfx ao vivo"),
-    ("combat_music", "combat_music(s)", "battle|boss|off (A/B de BGM)"),
-    ("physics_set", "physics_set{...}", "gravidade e/ou pausa do pipeline Rapier"),
-    ("set_camera", "set_camera{...}", "distance/pitch/yaw/target da OrbitCamera"),
+    (
+        "quest_force",
+        "quest_force(id, state)",
+        "força active|ready|done|not_taken",
+    ),
+    (
+        "quest_progress",
+        "quest_progress(id, n)",
+        "fixa o progresso (kill/visit)",
+    ),
+    (
+        "skill_learn",
+        "skill_learn(id)",
+        "aprende passiva (aplica o delta ao herói)",
+    ),
+    (
+        "skill_points",
+        "skill_points(n)",
+        "pontos disponíveis (absoluto)",
+    ),
+    (
+        "skill_reset",
+        "skill_reset()",
+        "esquece tudo, devolve pontos, reverte bónus",
+    ),
+    (
+        "ai_state",
+        "ai_state(id, s)",
+        "força wander|chase (a FSM reavalia por distância)",
+    ),
+    (
+        "ai_aggro",
+        "ai_aggro(id, r)",
+        "raio de aggro (o lever que persiste)",
+    ),
+    (
+        "ai_calm_all",
+        "ai_calm_all()",
+        "todas as criaturas → Wander",
+    ),
+    (
+        "nav_set",
+        "nav_set{...}",
+        "navmesh ao vivo: enabled/offroad_cost/tile_size",
+    ),
+    (
+        "postfx",
+        "postfx{...}",
+        "gates de efeito AO VIVO (bloom, ssao, taa, …)",
+    ),
+    (
+        "audio_set",
+        "audio_set{...}",
+        "volumes master/music/sfx ao vivo",
+    ),
+    (
+        "combat_music",
+        "combat_music(s)",
+        "battle|boss|off (A/B de BGM)",
+    ),
+    (
+        "physics_set",
+        "physics_set{...}",
+        "gravidade e/ou pausa do pipeline Rapier",
+    ),
+    (
+        "set_camera",
+        "set_camera{...}",
+        "distance/pitch/yaw/target da OrbitCamera",
+    ),
     ("set_clock", "set_clock(minute)", "0–1440 (1380 = noite)"),
-    ("set_weather", "set_weather{...}", "rain/clouds/wind (congela o ciclo)"),
+    (
+        "set_weather",
+        "set_weather{...}",
+        "rain/clouds/wind (congela o ciclo)",
+    ),
     ("rain_look", "rain_look{...}", "look da chuva ao vivo"),
     ("set_window", "set_window(w, h)", "resize p/ QA responsivo"),
     ("sun", "sun{...}", "sol da cena E do shader do terreno"),
@@ -2248,14 +2482,46 @@ pub const DEBUG_API_DOCS: &[(&str, &str, &str)] = &[
     ("save", "save()", "grava (mesmo caminho da UI)"),
     ("load", "load()", "carrega o save"),
     ("toast", "toast(msg)", "mensagem no HUD"),
-    ("spawn_sphere", "spawn_sphere(x, y, z, r, hex?)", "marker debug:sphere:N (visual)"),
-    ("spawn_box", "spawn_box(x, y, z, size, hex?)", "marker debug:box:N (visual)"),
-    ("spawn_light", "spawn_light(x, y, z, {...})", "PointLight debug:light:N"),
-    ("spawn", "spawn(url, x, y, z, {...})", "primitiva FÍSICA (box/sphere/cylinder) ou GLB do pool"),
-    ("set_material", "set_material(id, {...})", "material PBR ao vivo (só standard)"),
-    ("set_light", "set_light(id, {...})", "intensity/color/shadows/range ao vivo"),
-    ("clear_markers", "clear_markers()", "remove TODO o namespace debug:*"),
-    ("step", "step(n)", "pausa e avança EXATAMENTE n frames (QA determinístico)"),
+    (
+        "spawn_sphere",
+        "spawn_sphere(x, y, z, r, hex?)",
+        "marker debug:sphere:N (visual)",
+    ),
+    (
+        "spawn_box",
+        "spawn_box(x, y, z, size, hex?)",
+        "marker debug:box:N (visual)",
+    ),
+    (
+        "spawn_light",
+        "spawn_light(x, y, z, {...})",
+        "PointLight debug:light:N",
+    ),
+    (
+        "spawn",
+        "spawn(url, x, y, z, {...})",
+        "primitiva FÍSICA (box/sphere/cylinder) ou GLB do pool",
+    ),
+    (
+        "set_material",
+        "set_material(id, {...})",
+        "material PBR ao vivo (só standard)",
+    ),
+    (
+        "set_light",
+        "set_light(id, {...})",
+        "intensity/color/shadows/range ao vivo",
+    ),
+    (
+        "clear_markers",
+        "clear_markers()",
+        "remove TODO o namespace debug:*",
+    ),
+    (
+        "step",
+        "step(n)",
+        "pausa e avança EXATAMENTE n frames (QA determinístico)",
+    ),
     ("play", "play()", "restaura a speed anterior ao step"),
 ];
 
@@ -3007,7 +3273,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let Some(g) = view.ground else {
                 return Ok(Value::Nil);
             };
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({
                     "patchiness": g.tuning.patchiness,
@@ -3024,7 +3290,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                     "streaks": g.walls_b[1],
                     "moss": g.walls_b[2],
                 }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3044,10 +3310,10 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             else {
                 return Ok(Value::Nil);
             };
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({ "current": current, "max": max, "dead": current <= 0.0 }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3066,7 +3332,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             else {
                 return Ok(Value::Nil);
             };
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({
                     "state": ai.state,
@@ -3079,7 +3345,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                     "goal": ai.goal,
                     "nav_profile": ai.nav_profile,
                 }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3126,7 +3392,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let Some(quest) = view.quests_deep.iter().find(|q| q.id == id) else {
                 return Ok(Value::Nil);
             };
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({
                     "id": quest.id,
@@ -3147,7 +3413,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                         "items": quest.rewards_items,
                     },
                 }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3165,7 +3431,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                             "kind": q.objective_kind, "npc": q.npc })
                 })
                 .collect();
-            Ok(json_to_lua(lua, &Json::Array(list))?)
+            json_to_lua(lua, &Json::Array(list))
         })?,
     )?;
 
@@ -3187,7 +3453,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                     })
                 })
                 .collect();
-            Ok(json_to_lua(lua, &Json::Array(list))?)
+            json_to_lua(lua, &Json::Array(list))
         })?,
     )?;
 
@@ -3204,7 +3470,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             else {
                 return Ok(Value::Nil);
             };
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({
                     "id": region.id,
@@ -3214,7 +3480,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                     "pp_exposure": region.pp_exposure,
                     "pp_bloom_strength": region.pp_bloom_strength,
                 }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3253,7 +3519,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                     .map(|r| r.distance_to_road(p))
                     .fold(f32::MAX, f32::min)
             });
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({
                     "height": height,
@@ -3266,7 +3532,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                     "water_surface": water_surface,
                     "distance_to_road": distance_to_road,
                 }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3279,7 +3545,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let Some(w) = view.weather.as_ref() else {
                 return Ok(Value::Nil);
             };
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({
                     "wind": w.wind,
@@ -3292,7 +3558,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                         "timer": s.timer, "target": s.target,
                     })),
                 }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3305,14 +3571,14 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let Some(a) = view.atmosphere.as_ref() else {
                 return Ok(Value::Nil);
             };
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({
                     "day": a.day, "night": a.night, "golden": a.golden,
                     "fog_density": a.fog_density, "fog_color": a.fog_color,
                     "exposure_scale": a.exposure_scale, "bloom_boost": a.bloom_boost,
                 }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3325,10 +3591,10 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let Some(b) = view.border.as_ref() else {
                 return Ok(Value::Nil);
             };
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({ "radius": b.radius, "warn_seconds": b.warn_seconds, "margin": b.margin }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3341,7 +3607,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let Some(i) = view.interior.as_ref() else {
                 return Ok(Value::Nil);
             };
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({
                     "active": i.active, "min": i.min, "max": i.max,
@@ -3350,7 +3616,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                     "camera_pitch_deg": i.camera_pitch_deg,
                     "camera_yaw_deg": i.camera_yaw_deg,
                 }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3373,7 +3639,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
                     })
                 })
                 .collect();
-            Ok(json_to_lua(lua, &Json::Array(list))?)
+            json_to_lua(lua, &Json::Array(list))
         })?,
     )?;
 
@@ -3396,14 +3662,14 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let view = lua
                 .app_data_ref::<DebugView>()
                 .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({
                     "terrain_seed": view.seeds.terrain_seed,
                     "world_size": view.seeds.world_size,
                     "weather_seed": view.seeds.weather_seed,
                 }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3433,12 +3699,10 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             };
             let filtered: Vec<Json> = list
                 .iter()
-                .filter(|event| {
-                    event.get("seq").and_then(Json::as_f64).unwrap_or(0.0) > since
-                })
+                .filter(|event| event.get("seq").and_then(Json::as_f64).unwrap_or(0.0) > since)
                 .cloned()
                 .collect();
-            Ok(json_to_lua(lua, &Json::Array(filtered))?)
+            json_to_lua(lua, &Json::Array(filtered))
         })?,
     )?;
 
@@ -3460,7 +3724,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, ()| {
             let view = lua.app_data_ref::<DebugView>();
             let _ = view; // (docs são estáticas; a view não é precisa)
-            let mut out = lua.create_table()?;
+            let out = lua.create_table()?;
 
             // 1) viber.debug.* — documentação estática.
             let debug_docs = lua.create_table()?;
@@ -3475,7 +3739,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
 
             // 2) viber.* dos scripts de jogo + ui/profiler — ENUMERADOS da
             //    tabela viva (a verdade do binário, não de docs antigas).
-            let enumerate = |lua: &Lua, table: Value| -> mlua::Result<Vec<String>> {
+            let enumerate = |_lua: &Lua, table: Value| -> mlua::Result<Vec<String>> {
                 let mut names = Vec::new();
                 if let Value::Table(t) = table {
                     for pair in t.clone().pairs::<Value, Value>() {
@@ -3554,7 +3818,8 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let view = lua
                 .app_data_ref::<DebugView>()
                 .ok_or_else(|| mlua::Error::runtime("sem snapshot — só dentro de viber.lua"))?;
-            let marked = lua.create_sequence_from(view.waypoints.marked.iter().map(String::as_str))?;
+            let marked =
+                lua.create_sequence_from(view.waypoints.marked.iter().map(String::as_str))?;
             let landmarks = lua.create_sequence_from(
                 view.waypoints
                     .landmarks
@@ -3591,13 +3856,13 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             let Some(s) = view.save.as_ref() else {
                 return Ok(Value::Nil);
             };
-            Ok(json_to_lua(
+            json_to_lua(
                 lua,
                 &json!({
                     "path": s.path, "exists": s.exists,
                     "bytes": s.bytes, "mtime": s.mtime,
                 }),
-            )?)
+            )
         })?,
     )?;
 
@@ -3632,15 +3897,11 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
 
     api.set(
         "vault_set",
-        lua.create_function(|lua, (what, n): (String, u32)| {
-            push(lua, DebugOp::VaultSet(what, n))
-        })?,
+        lua.create_function(|lua, (what, n): (String, u32)| push(lua, DebugOp::VaultSet(what, n)))?,
     )?;
     api.set(
         "take",
-        lua.create_function(|lua, (what, n): (String, u32)| {
-            push(lua, DebugOp::Take(what, n))
-        })?,
+        lua.create_function(|lua, (what, n): (String, u32)| push(lua, DebugOp::Take(what, n)))?,
     )?;
 
     api.set(
@@ -3766,8 +4027,14 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    api.set("save", lua.create_function(|lua, ()| push(lua, DebugOp::Save))?)?;
-    api.set("load", lua.create_function(|lua, ()| push(lua, DebugOp::Load))?)?;
+    api.set(
+        "save",
+        lua.create_function(|lua, ()| push(lua, DebugOp::Save))?,
+    )?;
+    api.set(
+        "load",
+        lua.create_function(|lua, ()| push(lua, DebugOp::Load))?,
+    )?;
 
     api.set(
         "teleport_to",
@@ -4127,9 +4394,7 @@ fn op_non_finite(op: &DebugOp) -> Option<&'static str> {
         DebugOp::SetEntityHp(_, hp) | DebugOp::SetMaxHp(_, hp) if !hp.is_finite() => {
             Some("set_entity_hp/set_max_hp")
         }
-        DebugOp::QuestProgress(_, n) => {
-            (*n > 1_000_000).then_some("quest_progress")
-        }
+        DebugOp::QuestProgress(_, n) => (*n > 1_000_000).then_some("quest_progress"),
         DebugOp::AiAggro(_, r) if !r.is_finite() => Some("ai_aggro"),
         DebugOp::NavSet {
             offroad_cost,
@@ -4140,13 +4405,10 @@ fn op_non_finite(op: &DebugOp) -> Option<&'static str> {
         {
             Some("nav_set")
         }
-        DebugOp::AudioSet {
-            master,
-            music,
-            sfx,
-        } if [master, music, sfx]
-            .into_iter()
-            .any(|v| v.is_some_and(|x| !x.is_finite())) =>
+        DebugOp::AudioSet { master, music, sfx }
+            if [master, music, sfx]
+                .into_iter()
+                .any(|v| v.is_some_and(|x| !x.is_finite())) =>
         {
             Some("audio_set")
         }
@@ -4183,9 +4445,7 @@ fn op_non_finite(op: &DebugOp) -> Option<&'static str> {
         }
         DebugOp::SetLight {
             intensity, range, ..
-        } if intensity.is_some_and(|v| !v.is_finite())
-            || range.is_some_and(|v| !v.is_finite()) =>
-        {
+        } if intensity.is_some_and(|v| !v.is_finite()) || range.is_some_and(|v| !v.is_finite()) => {
             Some("set_light")
         }
         _ => None,
@@ -4566,11 +4826,11 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
                     .push("sun: sem DirectionalLight no mundo — só o sol do terreno mudou".into());
                 return true;
             };
-            if yaw.is_some() || pitch.is_some() {
-                if let Some(mut transform) = world.get_mut::<Transform>(light) {
-                    transform.rotation =
-                        Quat::from_rotation_arc(Vec3::NEG_Z, travel.normalize_or_zero());
-                }
+            if (yaw.is_some() || pitch.is_some())
+                && let Some(mut transform) = world.get_mut::<Transform>(light)
+            {
+                transform.rotation =
+                    Quat::from_rotation_arc(Vec3::NEG_Z, travel.normalize_or_zero());
             }
             if let Some(mut light) = world.get_mut::<DirectionalLight>(light) {
                 if let Some(v) = illuminance {
@@ -4598,33 +4858,32 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
         } => {
             // 1) Pele das paredes: TODOS os materiais de chunk partilham os
             //    valores (a mesa de estilo é global).
-            if moss.is_some()
+            if (moss.is_some()
                 || streaks.is_some()
                 || rock_darken.is_some()
                 || tri_slope.is_some()
                 || tri_soft.is_some()
-                || strata_strength.is_some()
+                || strata_strength.is_some())
+                && let Some(mut assets) = world.get_resource_mut::<Assets<TerrainChunkMaterial>>()
             {
-                if let Some(mut assets) = world.get_resource_mut::<Assets<TerrainChunkMaterial>>() {
-                    for (_, mat) in assets.iter_mut() {
-                        if let Some(v) = tri_slope {
-                            mat.params.walls_a.x = v.clamp(0.0, 1.0);
-                        }
-                        if let Some(v) = tri_soft {
-                            mat.params.walls_a.y = v.clamp(0.01, 1.0);
-                        }
-                        if let Some(v) = strata_strength {
-                            mat.params.walls_a.w = v.clamp(0.0, 1.0);
-                        }
-                        if let Some(v) = rock_darken {
-                            mat.params.walls_b.x = v.clamp(0.0, 2.0);
-                        }
-                        if let Some(v) = streaks {
-                            mat.params.walls_b.y = v.clamp(0.0, 1.0);
-                        }
-                        if let Some(v) = moss {
-                            mat.params.walls_b.z = v.clamp(0.0, 1.0);
-                        }
+                for (_, mat) in assets.iter_mut() {
+                    if let Some(v) = tri_slope {
+                        mat.params.walls_a.x = v.clamp(0.0, 1.0);
+                    }
+                    if let Some(v) = tri_soft {
+                        mat.params.walls_a.y = v.clamp(0.01, 1.0);
+                    }
+                    if let Some(v) = strata_strength {
+                        mat.params.walls_a.w = v.clamp(0.0, 1.0);
+                    }
+                    if let Some(v) = rock_darken {
+                        mat.params.walls_b.x = v.clamp(0.0, 2.0);
+                    }
+                    if let Some(v) = streaks {
+                        mat.params.walls_b.y = v.clamp(0.0, 1.0);
+                    }
+                    if let Some(v) = moss {
+                        mat.params.walls_b.z = v.clamp(0.0, 1.0);
                     }
                 }
             }
@@ -4684,8 +4943,12 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
                 .set_physical_resolution(width.max(64.0) as u32, height.max(64.0) as u32);
             true
         }
-        DebugOp::SetEntityHp(entity, hp) => set_entity_health(world, entity, Some(hp), None, warnings),
-        DebugOp::SetMaxHp(entity, max) => set_entity_health(world, entity, None, Some(max), warnings),
+        DebugOp::SetEntityHp(entity, hp) => {
+            set_entity_health(world, entity, Some(hp), None, warnings)
+        }
+        DebugOp::SetMaxHp(entity, max) => {
+            set_entity_health(world, entity, None, Some(max), warnings)
+        }
         DebugOp::QuestForce(id, state) => {
             let Some(mut log) = world.get_resource_mut::<crate::quests::QuestLog>() else {
                 warnings.push("sem QuestLog — quest_force ignorado".into());
@@ -4778,9 +5041,7 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
                         .collect();
                 }
                 _ => {
-                    warnings.push(
-                        "collect é vault-driven: usa viber.debug.vault_set".into(),
-                    );
+                    warnings.push("collect é vault-driven: usa viber.debug.vault_set".into());
                     return false;
                 }
             }
@@ -4894,17 +5155,15 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
             }
             applied
         }
-        DebugOp::AiAggro(entity, radius) => {
-            with_entity(world, entity, warnings, |e| {
-                e.get_mut::<crate::ai::EnemyCreature>()
-                    .map(|mut fsm| fsm.aggro_radius = radius.max(0.0))
-                    .is_some()
-            })
-            .unwrap_or_else(|| {
-                warnings.push("ai_aggro: entidade sem EnemyCreature".into());
-                false
-            })
-        }
+        DebugOp::AiAggro(entity, radius) => with_entity(world, entity, warnings, |e| {
+            e.get_mut::<crate::ai::EnemyCreature>()
+                .map(|mut fsm| fsm.aggro_radius = radius.max(0.0))
+                .is_some()
+        })
+        .unwrap_or_else(|| {
+            warnings.push("ai_aggro: entidade sem EnemyCreature".into());
+            false
+        }),
         DebugOp::AiCalmAll => {
             let mut q = world.query::<&mut crate::ai::EnemyCreature>();
             let mut n = 0;
@@ -4941,28 +5200,26 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
             crate::postfx::fx_runtime_toggle(key, on);
             true
         }
-        DebugOp::AudioSet {
-            master,
-            music,
-            sfx,
-        } => match world.get_resource_mut::<crate::music::AudioMixerSettings>() {
-            Some(mut mixer) => {
-                if let Some(v) = master {
-                    mixer.master = v.clamp(0.0, 1.0);
+        DebugOp::AudioSet { master, music, sfx } => {
+            match world.get_resource_mut::<crate::music::AudioMixerSettings>() {
+                Some(mut mixer) => {
+                    if let Some(v) = master {
+                        mixer.master = v.clamp(0.0, 1.0);
+                    }
+                    if let Some(v) = music {
+                        mixer.music = v.clamp(0.0, 1.0);
+                    }
+                    if let Some(v) = sfx {
+                        mixer.sfx = v.clamp(0.0, 1.0);
+                    }
+                    true
                 }
-                if let Some(v) = music {
-                    mixer.music = v.clamp(0.0, 1.0);
+                None => {
+                    warnings.push("sem AudioMixerSettings (MusicPlugin?)".into());
+                    false
                 }
-                if let Some(v) = sfx {
-                    mixer.sfx = v.clamp(0.0, 1.0);
-                }
-                true
             }
-            None => {
-                warnings.push("sem AudioMixerSettings (MusicPlugin?)".into());
-                false
-            }
-        },
+        }
         DebugOp::CombatMusic(state) => {
             let now = world.resource::<Time>().elapsed_secs_f64();
             match world.get_resource_mut::<crate::music::CombatMusicState>() {
@@ -5062,13 +5319,16 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
             let pos = world
                 .get::<Transform>(target)
                 .map(|t| t.translation)
-                .or_else(|| world.get::<GlobalTransform>(target).map(|t| t.translation()));
+                .or_else(|| {
+                    world
+                        .get::<GlobalTransform>(target)
+                        .map(|t| t.translation())
+                });
             let Some(mut pos) = pos else {
                 warnings.push(format!("teleport_to: '{name}' sem posição"));
                 return false;
             };
-            if let Some(terrain) = world.get_resource::<crate::terrain::runtime::TerrainRuntime>()
-            {
+            if let Some(terrain) = world.get_resource::<crate::terrain::runtime::TerrainRuntime>() {
                 pos.y = terrain.sample(pos.x, pos.z);
             }
             let Some(player) = find_player(world).map(|p| p.entity) else {
@@ -5097,8 +5357,7 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
                 rotation: Quat::from_rotation_y(yaw.unwrap_or(0.0).to_radians()),
                 scale: Vec3::splat(scale.unwrap_or(1.0).max(0.001)),
             };
-            static NEXT_SPAWN: std::sync::atomic::AtomicU64 =
-                std::sync::atomic::AtomicU64::new(1);
+            static NEXT_SPAWN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
             let n = NEXT_SPAWN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let name = format!("debug:spawn:{n}");
             if let Some(shape) = parse_primitive(&url) {
@@ -5111,7 +5370,7 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
                     return false;
                 };
                 let handle =
-                    crate::meshopt::load_gltf(&server, url.trim_start_matches('/').to_owned());
+                    crate::meshopt::load_gltf(server, url.trim_start_matches('/').to_owned());
                 world.spawn((
                     Name::new(name),
                     transform,
@@ -5128,8 +5387,7 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
             shadows,
             range,
         } => {
-            static NEXT_LIGHT: std::sync::atomic::AtomicU64 =
-                std::sync::atomic::AtomicU64::new(1);
+            static NEXT_LIGHT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
             let n = NEXT_LIGHT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let light = PointLight {
                 intensity: intensity.unwrap_or(1200.0).max(0.0),
@@ -5168,7 +5426,8 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
                 );
                 return false;
             };
-            let Some(mut assets) = world.get_resource_mut::<bevy::asset::Assets<StandardMaterial>>()
+            let Some(mut assets) =
+                world.get_resource_mut::<bevy::asset::Assets<StandardMaterial>>()
             else {
                 warnings.push("Assets<StandardMaterial> indisponível".into());
                 return false;
@@ -5262,15 +5521,13 @@ fn set_time_scale_value(world: &mut World, scale: f32) {
     if let Some(mut base) = world.get_resource_mut::<crate::combat::BaseTimeScale>() {
         base.0 = scale;
     }
-    world.resource_mut::<Time<Virtual>>().set_relative_speed(scale);
+    world
+        .resource_mut::<Time<Virtual>>()
+        .set_relative_speed(scale);
 }
 
 /// `UiAction` para a engine (save/load passam pelo mesmo caminho da UI).
-fn queue_ui_action(
-    world: &mut World,
-    name: &str,
-    warnings: &mut Vec<String>,
-) -> bool {
+fn queue_ui_action(world: &mut World, name: &str, warnings: &mut Vec<String>) -> bool {
     match world.get_resource_mut::<Messages<crate::ui::actions::UiAction>>() {
         Some(mut msgs) => {
             msgs.write(crate::ui::actions::UiAction {
@@ -5401,16 +5658,13 @@ fn spawn_primitive(
             Mesh::from(Cuboid::new(dims.x, dims.y, dims.z)),
             Collider::cuboid(dims.x * 0.5, dims.y * 0.5, dims.z * 0.5),
         ),
-        PrimitiveShape::Sphere(radius) => {
-            (Mesh::from(Sphere::new(radius)), Collider::ball(radius))
-        }
+        PrimitiveShape::Sphere(radius) => (Mesh::from(Sphere::new(radius)), Collider::ball(radius)),
         PrimitiveShape::Cylinder(radius, height) => (
             Mesh::from(Cylinder::new(radius, height)),
             Collider::cylinder(height * 0.5, radius),
         ),
     };
     let mesh = meshes.add(mesh);
-    drop(meshes);
     let Some(mut materials) = world.get_resource_mut::<Assets<StandardMaterial>>() else {
         warnings.push("Assets<StandardMaterial> indisponível".into());
         return false;
@@ -5421,7 +5675,6 @@ fn spawn_primitive(
             .unwrap_or(Color::srgb(0.65, 0.65, 0.7)),
         ..Default::default()
     });
-    drop(materials);
     let mut entity = world.spawn((
         Name::new(name),
         Mesh3d(mesh),

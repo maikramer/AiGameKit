@@ -113,9 +113,7 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
             let path = lua
                 .app_data_ref::<ScriptCtx>()
                 .and_then(|ctx| ctx.path.clone())
-                .ok_or_else(|| {
-                    mlua::Error::runtime("viber.events fora de script (sem path)")
-                })?;
+                .ok_or_else(|| mlua::Error::runtime("viber.events fora de script (sem path)"))?;
             let queues: Table = lua.named_registry_value("viber_events")?;
             // 1.ª chamada CRIA a fila (a presença da chave É a subscrição) —
             // erro aqui era o script nunca subscrever e nunca receber nada.

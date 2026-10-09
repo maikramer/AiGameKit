@@ -611,9 +611,9 @@ fn travel_menu_system(
     campfires.retain(|&e| named.contains(e));
     let near_campfire = players.iter().next().is_some_and(|player| {
         campfires.iter().any(|&e| {
-            named
-                .get(e)
-                .is_ok_and(|(_, t)| t.translation().distance(player.translation()) < TRAVEL_CAMPFIRE_RANGE_M)
+            named.get(e).is_ok_and(|(_, t)| {
+                t.translation().distance(player.translation()) < TRAVEL_CAMPFIRE_RANGE_M
+            })
         })
     });
 
@@ -665,36 +665,36 @@ fn travel_menu_system(
     }
 
     // viajar: fade a preto 0.4 s → teleport no preto cheio → 0.4 s de volta
-    if keys.just_pressed(KeyCode::KeyJ) {
-        if let Some(entry) = marked.get(state.selection) {
-            let hero = players
-                .iter()
-                .next()
-                .map_or(Vec3::ZERO, GlobalTransform::translation);
-            let target = nearest_named(&named, &entry.name, hero);
-            if let Some(pos) = target {
-                let x = pos.x + 2.0;
-                let z = pos.z + 2.0;
-                // SUPERFÍCIE RENDERIZADA (paridade com os spawners/knockback):
-                // o sample analítico flutua acima das cordas do mesh nas
-                // cristas — chegava-se do fast-travel a "pairar".
-                let y = terrain
-                    .as_ref()
-                    .map(|t| t.sample_mesh_surface(x, z))
-                    .unwrap_or(pos.y);
-                fade.phase = TravelFadePhase::Out;
-                fade.timer = TRAVEL_FADE_OUT;
-                fade.target = Some(Vec3::new(x, y + 0.1, z));
-                sfx.write(crate::ambient::SfxEvent {
-                    clip: crate::ambient::SfxClip::Travel,
-                    position: None,
-                });
-                toasts.write(ScriptToast(format!("A viajar para {}…", entry.label)));
-                state.open = false;
-                // Confirmação fecha o painel: re-espelha (senão o input
-                // ficava roubado para sempre).
-                menus.travel = false;
-            }
+    if keys.just_pressed(KeyCode::KeyJ)
+        && let Some(entry) = marked.get(state.selection)
+    {
+        let hero = players
+            .iter()
+            .next()
+            .map_or(Vec3::ZERO, GlobalTransform::translation);
+        let target = nearest_named(&named, &entry.name, hero);
+        if let Some(pos) = target {
+            let x = pos.x + 2.0;
+            let z = pos.z + 2.0;
+            // SUPERFÍCIE RENDERIZADA (paridade com os spawners/knockback):
+            // o sample analítico flutua acima das cordas do mesh nas
+            // cristas — chegava-se do fast-travel a "pairar".
+            let y = terrain
+                .as_ref()
+                .map(|t| t.sample_mesh_surface(x, z))
+                .unwrap_or(pos.y);
+            fade.phase = TravelFadePhase::Out;
+            fade.timer = TRAVEL_FADE_OUT;
+            fade.target = Some(Vec3::new(x, y + 0.1, z));
+            sfx.write(crate::ambient::SfxEvent {
+                clip: crate::ambient::SfxClip::Travel,
+                position: None,
+            });
+            toasts.write(ScriptToast(format!("A viajar para {}…", entry.label)));
+            state.open = false;
+            // Confirmação fecha o painel: re-espelha (senão o input
+            // ficava roubado para sempre).
+            menus.travel = false;
         }
     }
 
@@ -751,30 +751,22 @@ fn travel_fade_system(
         return;
     }
     let (alpha, arrived) = travel_fade_step(&mut fade, time.delta_secs());
-    if arrived {
-        if let Some(target) = fade.target {
-            if let Ok((entity, mut transform, mut player)) = heroes.single_mut() {
-                transform.translation = target;
-                // Chegada limpa: sem a inércia do trajeto antigo e com a
-                // tutela pós-teleporte (o marco fica longe — a coluna de
-                // destino pode ainda estar a assar o collider).
-                crate::player::settle_after_teleport(&mut commands, entity, Some(&mut *player));
-            }
-            {
-                // Poeira de aterragem — visível quando o fade abre.
-                crate::particles::spawn_burst(
-                    &mut commands,
-                    &crate::vitals::juice_spec(
-                        "ground-dust",
-                        (0.3, 0.7),
-                        (0.3, 0.6),
-                        (1.0, 2.5),
-                        None,
-                    ),
-                    target + Vec3::Y * 0.15,
-                    14,
-                );
-            }
+    if arrived && let Some(target) = fade.target {
+        if let Ok((entity, mut transform, mut player)) = heroes.single_mut() {
+            transform.translation = target;
+            // Chegada limpa: sem a inércia do trajeto antigo e com a
+            // tutela pós-teleporte (o marco fica longe — a coluna de
+            // destino pode ainda estar a assar o collider).
+            crate::player::settle_after_teleport(&mut commands, entity, Some(&mut *player));
+        }
+        {
+            // Poeira de aterragem — visível quando o fade abre.
+            crate::particles::spawn_burst(
+                &mut commands,
+                &crate::vitals::juice_spec("ground-dust", (0.3, 0.7), (0.3, 0.6), (1.0, 2.5), None),
+                target + Vec3::Y * 0.15,
+                14,
+            );
         }
     }
     let Ok((mut bg, mut visibility)) = overlay.single_mut() else {
@@ -903,6 +895,7 @@ fn enemy_registry_system(
 
 // ── QA: F11 teleport ao próximo marco por assinar ───────────────────────
 
+#[allow(clippy::too_many_arguments)] // sistema Bevy com queries/params explícitos
 fn quest_debug_landmark(
     keys: Res<ButtonInput<KeyCode>>,
     mut players: Query<(Entity, &GlobalTransform, &mut Transform, &mut Player), With<Player>>,
@@ -984,8 +977,7 @@ mod tests {
 
     #[test]
     fn test_survey_quests_exist_in_quest_log() {
-        let log =
-            crate::quests::QuestLog::with_dir(&crate::quests::example_quests_dir());
+        let log = crate::quests::QuestLog::with_dir(&crate::quests::example_quests_dir());
         for biome in [
             Biome::DarkForest,
             Biome::Desert,
@@ -1105,7 +1097,11 @@ mod tests {
         let catalog = LandmarkCatalog::default();
         let mut marked = HashSet::new();
         assert_eq!(remaining_in_biome(&catalog, &marked, "swamp"), 3);
-        for name in ["swamp-wrecked-boat", "swamp-sunken-graves", "swamp-bone-altar"] {
+        for name in [
+            "swamp-wrecked-boat",
+            "swamp-sunken-graves",
+            "swamp-bone-altar",
+        ] {
             marked.insert(name.to_string());
         }
         assert_eq!(remaining_in_biome(&catalog, &marked, "swamp"), 0);

@@ -12,8 +12,8 @@
 
 use crate::profiler::{Group, timed};
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
-use bevy::shape::Torus;
 use bevy::prelude::*;
+use bevy::shape::Torus;
 
 /// Duração do recoil (s) — um terço de um combo de melee.
 pub const RECOIL_DURATION: f32 = 0.22;
@@ -106,7 +106,8 @@ pub fn ring_radius_progress(k: f32) -> f32 {
 }
 
 /// Torus unitário partilhado por todos os anéis de choque.
-const IMPACT_RING_MESH: Handle<Mesh> = bevy::asset::uuid_handle!("6f0d3c52-9a41-4b7e-8d3a-2c1e5f7b9a10");
+const IMPACT_RING_MESH: Handle<Mesh> =
+    bevy::asset::uuid_handle!("6f0d3c52-9a41-4b7e-8d3a-2c1e5f7b9a10");
 
 /// Spawna um anel de choque em `position` (à altura dos pés + ~8 cm — o
 /// torus é plano no XZ; em declives moderados pode tangenciar o chão, é um

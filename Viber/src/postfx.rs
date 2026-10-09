@@ -1544,7 +1544,7 @@ pub const SPLIT_TONE_LOW_SUN_ZERO_DEG: f32 = 50.0;
 /// ≥[`SPLIT_TONE_LOW_SUN_ZERO_DEG`], smoothstep no meio. 07:30 do simple-rpg
 /// (26,9°) ≈ 0,98; 07:49 (30,8°) ≈ 0,87; meio-dia (62°) = 0; alvorada (5°) =
 /// 1. Debaixo do horizonte mantém 1 — a transição para o braço da NOITE é a
-/// rampa `night` (que já rampa suavemente com a elevação negativa).
+///    rampa `night` (que já rampa suavemente com a elevação negativa).
 pub fn low_sun_split_weight(elevation_deg: f32) -> f32 {
     if !elevation_deg.is_finite() {
         return 0.0;
@@ -2111,21 +2111,21 @@ fn prepare_aerial(
             // O ping-pong do ViewTarget troca a textura fonte entre frames:
             // recria o bind group quando o id não bate.
             if gpu.a.0 != target.main_texture_view().id() {
-                gpu.a = make(&target.main_texture_view(), &buf);
+                gpu.a = make(target.main_texture_view(), &buf);
             }
             if gpu.b.0 != target.main_texture_other_view().id() {
-                gpu.b = make(&target.main_texture_other_view(), &buf);
+                gpu.b = make(target.main_texture_other_view(), &buf);
             }
         } else {
             let buf = render_device.create_buffer(&BufferDescriptor {
-                label: Some("aerial_perspective_uniform".into()),
+                label: Some("aerial_perspective_uniform"),
                 size: AERIAL_UNIFORM_BYTES as u64,
                 usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM,
                 mapped_at_creation: false,
             });
             queue.write_buffer(&buf, 0, &view_bytes);
-            let a = make(&target.main_texture_view(), &buf);
-            let b = make(&target.main_texture_other_view(), &buf);
+            let a = make(target.main_texture_view(), &buf);
+            let b = make(target.main_texture_other_view(), &buf);
             commands
                 .entity(entity)
                 .insert((AerialPipelineId(pid), AerialViewGpu { buf, a, b }));
@@ -2215,7 +2215,7 @@ fn aerial_pass(
         &view_gpu.b
     };
     let pass_descriptor = RenderPassDescriptor {
-        label: Some("aerial_perspective_pass".into()),
+        label: Some("aerial_perspective_pass"),
         color_attachments: &[Some(RenderPassColorAttachment {
             view: destination,
             depth_slice: None,

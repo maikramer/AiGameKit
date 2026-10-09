@@ -16,7 +16,7 @@
 //!
 //! Determinístico por construção: o piso segue o path suavizado (Chaikin ×2
 //! + resample), sem RNG no carve; o noise fica para a largura das paredes,
-//! semeado por `seed` (0 = hash da posição).
+//!   semeado por `seed` (0 = hash da posição).
 
 use bevy::math::Vec2;
 
@@ -238,12 +238,11 @@ pub fn cut_wall_bands(spec: &CutSpec, grid: &dyn HeightField, texel: f32) -> Vec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy::math::Vec3;
     use crate::terrain::brush::BrushGrid;
+    use bevy::math::Vec3;
 
     fn flat_grid() -> BrushGrid {
-        let mut grid =
-            BrushGrid::new(vec![0; 96 * 96], 96, 96, 96.0, 50.0, 0.0).expect("grid");
+        let mut grid = BrushGrid::new(vec![0; 96 * 96], 96, 96, 96.0, 50.0, 0.0).expect("grid");
         grid.begin_stroke("flat");
         for i in 0..96 * 96 {
             grid.set_cell_height(i % 96, i / 96, 8.0);
@@ -291,7 +290,8 @@ mod tests {
             for z in [-20.0_f32, 0.0, 20.0] {
                 let i = ((z + 48.0) as usize) * 96 + ((x + 48.0) as usize);
                 assert_eq!(
-                    grid.raw()[i], before[i],
+                    grid.raw()[i],
+                    before[i],
                     "texel outside the corridor moved at ({x},{z})"
                 );
             }
@@ -336,10 +336,7 @@ mod tests {
         }
         for band in &bands {
             for i in 0..band.stations.len() {
-                assert!(
-                    band.top_y[i] > band.bot_y[i] + 0.5,
-                    "wall has real drop"
-                );
+                assert!(band.top_y[i] > band.bot_y[i] + 0.5, "wall has real drop");
                 assert!(
                     band.bot_y[i] < 8.0 - spec.depth + 0.6,
                     "toe near the carved floor: {}",

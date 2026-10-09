@@ -112,10 +112,10 @@ pub fn publish_profiler_view(world: &mut World) {
             .unwrap_or(false);
         if !open {
             // Modal fechado: larga o cache — `viber.profiler()` devolve nil.
-            if let Ok(mut view) = world.resource::<ProfilerScriptState>().view.lock() {
-                if view.is_some() {
-                    *view = None;
-                }
+            if let Ok(mut view) = world.resource::<ProfilerScriptState>().view.lock()
+                && view.is_some()
+            {
+                *view = None;
             }
             return;
         }

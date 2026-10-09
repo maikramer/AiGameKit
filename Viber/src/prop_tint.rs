@@ -215,14 +215,13 @@ fn prop_daynight_tint(
             .unwrap_or(1.0)
     };
     let tint = day_tint(day);
-    if let Some(last) = state.last_tint {
-        if !roster_changed
-            && (tint[0] - last[0]).abs() < 1e-3
-            && (tint[1] - last[1]).abs() < 1e-3
-            && (tint[2] - last[2]).abs() < 1e-3
-        {
-            return;
-        }
+    if let Some(last) = state.last_tint
+        && !roster_changed
+        && (tint[0] - last[0]).abs() < 1e-3
+        && (tint[1] - last[1]).abs() < 1e-3
+        && (tint[2] - last[2]).abs() < 1e-3
+    {
+        return;
     }
 
     // Monta o roster ELEGÍVEL uma vez (unlit/emissivos fora) e abre a

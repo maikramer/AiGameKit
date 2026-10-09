@@ -746,6 +746,7 @@ impl LakeShape {
     /// Hash da família `sin·43758` do repo, um salt POR parâmetro: as fases
     /// antigas derivavam todas de UM `base` e as silhuetas repetiam-se
     /// entre lagos.
+    #[allow(dead_code)] // construtor histórico — usado pelos testes em tests/
     pub(crate) fn new(at: Vec2) -> Self {
         Self::from_authoring(at, &LakeAuthoring::default())
     }
@@ -763,20 +764,12 @@ impl LakeShape {
                 .abs()
         };
         let g = |salt: u64| -> f32 {
-            let mut state = a
-                .seed
-                .unwrap_or(0)
-                ^ salt.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            let mut state = a.seed.unwrap_or(0) ^ salt.wrapping_mul(0x9E37_79B9_7F4A_7C15);
             ((crate::rng::splitmix64(&mut state) >> 40) as f32) / 16_777_216.0
         };
         // Um uniforme por parâmetro, da fonte que a autoria escolher.
-        let pick = |fsalt: f32, usalt: u64| -> f32 {
-            if a.seed.is_some() {
-                g(usalt)
-            } else {
-                h(fsalt)
-            }
-        };
+        let pick =
+            |fsalt: f32, usalt: u64| -> f32 { if a.seed.is_some() { g(usalt) } else { h(fsalt) } };
         let mut harmonics = std::array::from_fn(|i| {
             let amp = LAKE_HARMONIC_MIN[i]
                 + (LAKE_HARMONIC_MAX[i] - LAKE_HARMONIC_MIN[i])
@@ -1627,7 +1620,7 @@ pub fn lake_water_mesh(spec: &LakeSpec, water_y: f32, grid: &BrushGrid) -> Chunk
     // sobre areia seca, nos rasos). O MESMO fator vive no registry
     // (`WaterBody::mirror_reach`) — ver [`lake_mirror_reach`].
     let reach = lake_mirror_reach(spec.depth, spec.water_offset);
-    let push = |mesh: &mut ChunkMeshData, p: Vec2, radial: f32, mask: f32| {
+    let push = |mesh: &mut ChunkMeshData, p: Vec2, _radial: f32, mask: f32| {
         // Coluna vertical: o leito É a grid (o carve escreveu a taça lá).
         let depth = (water_y - grid.sample(p.x, p.y)).clamp(0.05, 40.0);
         mesh.positions.push([p.x, y, p.y]);
@@ -1890,7 +1883,8 @@ mod tests {
             shape.contour(10.0, 0.3),
             shape.contour(10.0, 0.3),
             "same position -> same contour"
-        );        let mut min = f32::INFINITY;
+        );
+        let mut min = f32::INFINITY;
         let mut max = f32::NEG_INFINITY;
         for i in 0..64 {
             let r = shape.contour(10.0, i as f32 / 64.0 * std::f32::consts::TAU);

@@ -333,10 +333,10 @@ fn vault_chips_system(
         };
         let wanted = vault.resource(resource).to_string();
         for child in children.iter() {
-            if let Ok(mut text) = texts.get_mut(child) {
-                if text.0 != wanted {
-                    text.0 = wanted.clone();
-                }
+            if let Ok(mut text) = texts.get_mut(child)
+                && text.0 != wanted
+            {
+                text.0 = wanted.clone();
             }
         }
     }
@@ -396,7 +396,9 @@ mod tests {
             .add_message::<DamageNumberEvent>()
             .add_message::<ScriptToast>()
             .add_systems(Update, hotbar_use_system);
-        app.world_mut().resource_mut::<Vault>().item_add("potion", 2);
+        app.world_mut()
+            .resource_mut::<Vault>()
+            .item_add("potion", 2);
         app.world_mut().spawn((
             Player::default(),
             Health {

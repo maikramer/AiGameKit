@@ -151,18 +151,18 @@ pub fn reload_script(
             }
         }
     }
-    if count == 0 {
-        if let Some(err) = first_err {
-            let fresh = crate::luau::timers::timer_ids_where(&host.lua, |_, path| path == rel)
-                .into_iter()
-                .filter(|id| !old_timers.contains(id))
-                .collect::<Vec<_>>();
-            crate::luau::timers::drop_timers(&host.lua, &fresh);
-            if let Some(previous) = previous {
-                host.registry.insert(rel.to_string(), previous);
-            }
-            return Err(format!("top-level de '{rel}': {err}"));
+    if count == 0
+        && let Some(err) = first_err
+    {
+        let fresh = crate::luau::timers::timer_ids_where(&host.lua, |_, path| path == rel)
+            .into_iter()
+            .filter(|id| !old_timers.contains(id))
+            .collect::<Vec<_>>();
+        crate::luau::timers::drop_timers(&host.lua, &fresh);
+        if let Some(previous) = previous {
+            host.registry.insert(rel.to_string(), previous);
         }
+        return Err(format!("top-level de '{rel}': {err}"));
     }
     crate::luau::timers::drop_timers(&host.lua, &old_timers);
     Ok(count)
@@ -195,7 +195,11 @@ pub fn hot_reload_poll(
         let targets: Vec<String> = if host.registry.contains(&rel) {
             vec![rel.clone()]
         } else if crate::luau::game::evict_module(&host.lua, &rel) {
-            host.registry.paths().into_iter().map(str::to_string).collect()
+            host.registry
+                .paths()
+                .into_iter()
+                .map(str::to_string)
+                .collect()
         } else {
             continue;
         };
@@ -338,7 +342,11 @@ mod tests {
     fn reload_replaces_timers_instead_of_stacking() {
         let dir = temp_scripts_dir("timers");
         let path = dir.join("npc.lua");
-        fs::write(&path, "viber.every(1, function() end)\nfunction on_update(dt) end").unwrap();
+        fs::write(
+            &path,
+            "viber.every(1, function() end)\nfunction on_update(dt) end",
+        )
+        .unwrap();
 
         let mut host = LuaScriptHost::new(dir.clone()).unwrap();
         host.ensure_loaded("npc.lua").unwrap();

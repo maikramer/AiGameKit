@@ -1922,28 +1922,28 @@ impl TemplateLod {
 /// Recolhe urls de template e, em paralelo (mesmo índice), a ladder de LOD.
 fn collect_template_meshes(node: &XmlNode, out: &mut Vec<String>, lods: &mut Vec<TemplateLod>) {
     let lower = node.tag.to_ascii_lowercase();
-    if matches!(lower.as_str(), "gltfloader" | "gltfscene") {
-        if let Some(url) = node.attr("url").map(str::trim).filter(|s| !s.is_empty()) {
-            out.push(url.to_string());
-            let attr = |name: &str| {
-                node.attr(name)
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_string)
-            };
-            let number = |name: &str, fallback: f32| {
-                node.attr(name)
-                    .and_then(|v| v.trim().parse::<f32>().ok())
-                    .filter(|v| *v > 0.0)
-                    .unwrap_or(fallback)
-            };
-            lods.push(TemplateLod {
-                lod1_url: attr("lod1-url"),
-                lod2_url: attr("lod2-url"),
-                near: number("lod-threshold-near", DEFAULT_LOD_NEAR),
-                mid: number("lod-threshold-mid", DEFAULT_LOD_MID),
-            });
-        }
+    if matches!(lower.as_str(), "gltfloader" | "gltfscene")
+        && let Some(url) = node.attr("url").map(str::trim).filter(|s| !s.is_empty())
+    {
+        out.push(url.to_string());
+        let attr = |name: &str| {
+            node.attr(name)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        };
+        let number = |name: &str, fallback: f32| {
+            node.attr(name)
+                .and_then(|v| v.trim().parse::<f32>().ok())
+                .filter(|v| *v > 0.0)
+                .unwrap_or(fallback)
+        };
+        lods.push(TemplateLod {
+            lod1_url: attr("lod1-url"),
+            lod2_url: attr("lod2-url"),
+            near: number("lod-threshold-near", DEFAULT_LOD_NEAR),
+            mid: number("lod-threshold-mid", DEFAULT_LOD_MID),
+        });
     }
     for child in &node.children {
         collect_template_meshes(child, out, lods);
@@ -1979,15 +1979,15 @@ fn collect_template_destructible(node: &XmlNode) -> Option<DestructibleSpec> {
 /// Primeiro `<ResourceNode kind="…" yield="…">` na subárvore do template
 /// (qualquer profundidade) — o loot nativo da colheita.
 fn collect_resource_node(node: &XmlNode) -> Option<(String, u32)> {
-    if node.tag.eq_ignore_ascii_case("resourcenode") {
-        if let Some(kind) = node.attr("kind").map(str::trim).filter(|s| !s.is_empty()) {
-            let amount = node
-                .attr("yield")
-                .and_then(|v| v.trim().parse::<u32>().ok())
-                .unwrap_or(1)
-                .max(1);
-            return Some((kind.to_string(), amount));
-        }
+    if node.tag.eq_ignore_ascii_case("resourcenode")
+        && let Some(kind) = node.attr("kind").map(str::trim).filter(|s| !s.is_empty())
+    {
+        let amount = node
+            .attr("yield")
+            .and_then(|v| v.trim().parse::<u32>().ok())
+            .unwrap_or(1)
+            .max(1);
+        return Some((kind.to_string(), amount));
     }
     node.children.iter().find_map(collect_resource_node)
 }
@@ -2043,10 +2043,10 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
     // Destrutível do template: o attr `destructible` + o loot do
     // `<ResourceNode kind yield>` filho (árvores→wood, rochas→stone).
     spec.template_destructible = collect_template_destructible(node);
-    if let Some(template) = spec.template_destructible.as_mut() {
-        if template.resource.is_none() {
-            template.resource = collect_resource_node(node);
-        }
+    if let Some(template) = spec.template_destructible.as_mut()
+        && template.resource.is_none()
+    {
+        template.resource = collect_resource_node(node);
     }
     // Collider do template: primeiro filho com attr `collider`.
     for child in &node.children {
@@ -2805,7 +2805,7 @@ fn finish_interior_scene(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpe
             "{ctx_tag}: `at` with an \"x z\" centre and `size` with a \"w d\" extent are both required"
         );
     };
-    if !(size[0] > 0.0) || !(size[1] > 0.0) || !size[0].is_finite() || !size[1].is_finite() {
+    if size[0] <= 0.0 || size[1] <= 0.0 || !size[0].is_finite() || !size[1].is_finite() {
         bail!("{ctx_tag}: size must be two positive, finite numbers (got {size:?})");
     }
     let half = [size[0] * 0.5, size[1] * 0.5];
@@ -2869,9 +2869,9 @@ fn finish_engine_config(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
 fn finish_landmark(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
-    let name = common.name.ok_or_else(|| {
-        anyhow!("{ctx_tag}: `name` (a entidade do marco no mundo) é obrigatório")
-    })?;
+    let name = common
+        .name
+        .ok_or_else(|| anyhow!("{ctx_tag}: `name` (a entidade do marco no mundo) é obrigatório"))?;
     let mut biome_id: Option<String> = None;
     let mut label: Option<String> = None;
     let mut survey_quest: Option<String> = None;
@@ -3386,7 +3386,10 @@ fn finish_cut(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     }
     // O offset do grupo aplica-se DEPOIS da validação do path (mesma ordem
     // do `finish_river`).
-    spec.path = offset_path(path.ok_or_else(|| anyhow::anyhow!("{ctx_tag}: path is required"))?, off);
+    spec.path = offset_path(
+        path.ok_or_else(|| anyhow::anyhow!("{ctx_tag}: path is required"))?,
+        off,
+    );
     if spec.path.len() < 2 {
         bail!("{ctx_tag}: a cut needs at least 2 points (x z pairs)");
     }
@@ -3667,10 +3670,10 @@ fn finish_cliff(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             w = spec.width
         );
     }
-    if let Some(a) = spec.angle {
-        if a <= 0.0 {
-            bail!("{ctx_tag}: angle must be > 0 (got {a})");
-        }
+    if let Some(a) = spec.angle
+        && a <= 0.0
+    {
+        bail!("{ctx_tag}: angle must be > 0 (got {a})");
     }
     Ok(EntitySpec {
         name: common.name,
@@ -3898,10 +3901,10 @@ fn finish_arch(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     if !spec.path.is_empty() && !has_path {
         bail!("{ctx_tag}: a `path` needs at least 2 points (x z pairs)");
     }
-    if let Some(span) = spec.span {
-        if span <= 0.0 || !span.is_finite() {
-            bail!("{ctx_tag}: width must be > 0 (got {span})");
-        }
+    if let Some(span) = spec.span
+        && (span <= 0.0 || !span.is_finite())
+    {
+        bail!("{ctx_tag}: width must be > 0 (got {span})");
     }
     for (key, size) in [
         ("height", spec.height),
@@ -4220,7 +4223,10 @@ fn finish_road(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         bail!("{ctx_tag}: `path` with at least 2 points (x z pairs) is required");
     }
     if !(spec.width.is_finite() && spec.width > 0.0) {
-        bail!("{ctx_tag}: width must be a positive number (got {})", spec.width);
+        bail!(
+            "{ctx_tag}: width must be a positive number (got {})",
+            spec.width
+        );
     }
     if let Some(p) = profile {
         spec.profile = p;
@@ -4745,23 +4751,39 @@ mod tests {
     #[test]
     fn test_landmark_requires_name_biome_label() {
         let mut ctx = ParseCtx::default();
-        assert!(parse_entity(&node("Landmark", &[("biome", "desert"), ("label", "x")]), &mut ctx).is_err());
-        let mut ctx = ParseCtx::default();
         assert!(
-            parse_entity(&node("Landmark", &[("name", "x"), ("label", "y")]), &mut ctx).is_err()
+            parse_entity(
+                &node("Landmark", &[("biome", "desert"), ("label", "x")]),
+                &mut ctx
+            )
+            .is_err()
         );
         let mut ctx = ParseCtx::default();
         assert!(
-            parse_entity(&node("Landmark", &[("name", "x"), ("biome", "desert")]), &mut ctx)
-                .is_err()
+            parse_entity(
+                &node("Landmark", &[("name", "x"), ("label", "y")]),
+                &mut ctx
+            )
+            .is_err()
+        );
+        let mut ctx = ParseCtx::default();
+        assert!(
+            parse_entity(
+                &node("Landmark", &[("name", "x"), ("biome", "desert")]),
+                &mut ctx
+            )
+            .is_err()
         );
     }
 
     #[test]
     fn test_spawn_point_tag_parses() {
         // Fase B3: `at` obrigatório, label opcional.
-        let (spec, w) = parse_one(&node("SpawnPoint", &[("at", "0 -50"), ("label", "portão sul")]))
-            .unwrap();
+        let (spec, w) = parse_one(&node(
+            "SpawnPoint",
+            &[("at", "0 -50"), ("label", "portão sul")],
+        ))
+        .unwrap();
         assert!(w.is_empty(), "{w:?}");
         let EntityKind::SpawnPoint { at, label } = spec.kind else {
             panic!("não é um SpawnPoint: {:?}", spec.kind);
@@ -5420,7 +5442,10 @@ mod tests {
         };
         assert_eq!((dawn_minute, dusk_minute), (330.0, 1170.0));
         assert_eq!(minute_of_day, 1380.0);
-        assert!(w.iter().any(|m| m.contains("must be before dusk-minute")), "{w:?}");
+        assert!(
+            w.iter().any(|m| m.contains("must be before dusk-minute")),
+            "{w:?}"
+        );
         let (_, w) = parse_one(&node(
             "DayCycle",
             &[("dawn-minute", "20"), ("dusk-minute", "1430")],
@@ -6124,12 +6149,18 @@ mod tests {
             node("Way", &[("id", "a"), ("xz", "9 9")]),
         ];
         let (_, w) = parse_one(&net).unwrap();
-        assert!(w.iter().any(|m| m.contains("duplicate <Way id=\"a\">")), "{w:?}");
+        assert!(
+            w.iter().any(|m| m.contains("duplicate <Way id=\"a\">")),
+            "{w:?}"
+        );
     }
 
     #[test]
     fn test_road_without_path_or_width_is_rejected() {
-        assert!(parse_one(&node("Road", &[("width", "4")])).is_err(), "no path");
+        assert!(
+            parse_one(&node("Road", &[("width", "4")])).is_err(),
+            "no path"
+        );
         assert!(parse_one(&node("Road", &[("path", "0 0 10 0"), ("width", "0")])).is_err());
         assert!(parse_one(&node("Road", &[("path", "0 0 10 0")])).is_ok());
     }
@@ -6455,7 +6486,10 @@ mod composition_tests {
         let world = parse_world(&[], &[proto.clone(), use_euler]).unwrap();
         let t = &world.entities[0].transform;
         assert_eq!(t.euler_deg, Some([0.0, 45.0, 0.0]));
-        assert!(t.rotation_quat.is_none(), "o quat do protótipo não pode ganhar");
+        assert!(
+            t.rotation_quat.is_none(),
+            "o quat do protótipo não pode ganhar"
+        );
 
         let mut proto_euler = node("Prototype", &[("id", "q")]);
         proto_euler.children = vec![node("Box", &[("euler", "0 90 0")])];

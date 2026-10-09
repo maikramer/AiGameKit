@@ -173,15 +173,13 @@ pub fn drive_ui_sliders(
 ) {
     for (entity, interaction, cursor, mut slider, mut classes, already_dirty) in &mut sliders {
         let dragging = *interaction == Interaction::Pressed;
-        if dragging {
-            if let Some(point) = cursor.and_then(|cursor| cursor.normalized) {
-                let fraction = if slider.vertical {
-                    1.0 - point.y
-                } else {
-                    point.x
-                };
-                slider.value = slider.value_at(fraction);
-            }
+        if dragging && let Some(point) = cursor.and_then(|cursor| cursor.normalized) {
+            let fraction = if slider.vertical {
+                1.0 - point.y
+            } else {
+                point.x
+            };
+            slider.value = slider.value_at(fraction);
         }
         if classes.set_class("dragging", dragging) && !already_dirty {
             commands.entity(entity).insert(UiStyleDirty);
@@ -292,14 +290,12 @@ pub fn sync_ui_input_focus(
         if matches!(
             key.logical_key,
             bevy::input::keyboard::Key::Enter | bevy::input::keyboard::Key::Escape
-        ) {
-            if let Some(entity) = focus.0.take() {
-                if let Ok((_, _, mut classes, already_dirty)) = inputs.get_mut(entity) {
-                    if classes.remove("focused") && !already_dirty {
-                        commands.entity(entity).insert(UiStyleDirty);
-                    }
-                }
-            }
+        ) && let Some(entity) = focus.0.take()
+            && let Ok((_, _, mut classes, already_dirty)) = inputs.get_mut(entity)
+            && classes.remove("focused")
+            && !already_dirty
+        {
+            commands.entity(entity).insert(UiStyleDirty);
         }
     }
     for (entity, interaction, mut classes, already_dirty) in &mut inputs {
@@ -328,15 +324,15 @@ pub fn sync_ui_input_text(
         } else {
             input.text.clone()
         };
-        if let Ok(mut text) = texts.get_mut(input.child) {
-            if text.0 != shown {
-                text.0 = shown;
-            }
+        if let Ok(mut text) = texts.get_mut(input.child)
+            && text.0 != shown
+        {
+            text.0 = shown;
         }
-        if let Ok(mut classes) = classes.get_mut(entity) {
-            if classes.set_class("placeholder", empty) {
-                commands.entity(entity).insert(UiStyleDirty);
-            }
+        if let Ok(mut classes) = classes.get_mut(entity)
+            && classes.set_class("placeholder", empty)
+        {
+            commands.entity(entity).insert(UiStyleDirty);
         }
     }
 }
@@ -436,17 +432,17 @@ pub fn drive_ui_tooltip(
     match target {
         Some(text) => {
             if layer.showing.as_deref() != Some(text.as_str()) {
-                if let Some(text_entity) = layer.text_entity {
-                    if let Ok(mut tip_text) = texts.get_mut(text_entity) {
-                        tip_text.0 = text.clone();
-                    }
+                if let Some(text_entity) = layer.text_entity
+                    && let Ok(mut tip_text) = texts.get_mut(text_entity)
+                {
+                    tip_text.0 = text.clone();
                 }
                 layer.showing = Some(text);
             }
-            if let Ok(mut visibility) = visibility.get_mut(tip) {
-                if *visibility == Visibility::Hidden {
-                    *visibility = Visibility::Inherited;
-                }
+            if let Ok(mut visibility) = visibility.get_mut(tip)
+                && *visibility == Visibility::Hidden
+            {
+                *visibility = Visibility::Inherited;
             }
             // Near the pointer. The cursor arrives in window pixels, but
             // `Val::Px` is multiplied by `UiScale` — sem a divisão, o tooltip
@@ -454,30 +450,30 @@ pub fn drive_ui_tooltip(
             // de 720p). Trabalha no espaço AUTORAL (janela ÷ escala,
             // `scale::ui_viewport`) e clampeia nesse mesmo espaço; o Val::Px
             // volta a ser multiplicado pela escala ao aplicar.
-            if let (Ok(window), Ok(mut node)) = (windows.single(), nodes.get_mut(tip)) {
-                if let Some(cursor) = window.cursor_position() {
-                    let scale = if scale.0 > 1e-3 { scale.0 } else { 1.0 };
-                    let (width, height) =
-                        super::scale::ui_viewport(window.width(), window.height(), scale);
-                    node.left = Val::Px(
-                        (cursor.x / scale + 14.0)
-                            .max(0.0)
-                            .min((width - 230.0).max(0.0)),
-                    );
-                    node.top = Val::Px(
-                        (cursor.y / scale + 18.0)
-                            .max(0.0)
-                            .min((height - 48.0).max(0.0)),
-                    );
-                }
+            if let (Ok(window), Ok(mut node)) = (windows.single(), nodes.get_mut(tip))
+                && let Some(cursor) = window.cursor_position()
+            {
+                let scale = if scale.0 > 1e-3 { scale.0 } else { 1.0 };
+                let (width, height) =
+                    super::scale::ui_viewport(window.width(), window.height(), scale);
+                node.left = Val::Px(
+                    (cursor.x / scale + 14.0)
+                        .max(0.0)
+                        .min((width - 230.0).max(0.0)),
+                );
+                node.top = Val::Px(
+                    (cursor.y / scale + 18.0)
+                        .max(0.0)
+                        .min((height - 48.0).max(0.0)),
+                );
             }
         }
         None => {
             layer.showing = None;
-            if let Ok(mut visibility) = visibility.get_mut(tip) {
-                if *visibility != Visibility::Hidden {
-                    *visibility = Visibility::Hidden;
-                }
+            if let Ok(mut visibility) = visibility.get_mut(tip)
+                && *visibility != Visibility::Hidden
+            {
+                *visibility = Visibility::Hidden;
             }
         }
     }

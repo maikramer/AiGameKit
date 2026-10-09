@@ -6,8 +6,8 @@
 //!   UMA vez por mundo e devolve o seu `return` (cache em `viber_modules`) —
 //!   a base para fatorar FSM/bibliotecas partilhadas entre scripts.
 
-use mlua::{Lua, Table};
 use mlua::IntoLua;
+use mlua::{Lua, Table};
 
 use super::ctx::ScriptCtx;
 
@@ -41,19 +41,18 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
                 )));
             }
             let modules: Table = lua.named_registry_value("viber_modules")?;
-            if let Ok(cached) = modules.raw_get::<mlua::Value>(path.clone()) {
-                if !matches!(cached, mlua::Value::Nil) {
-                    return Ok(cached);
-                }
+            if let Ok(cached) = modules.raw_get::<mlua::Value>(path.clone())
+                && !matches!(cached, mlua::Value::Nil)
+            {
+                return Ok(cached);
             }
             let dir = lua
                 .app_data_ref::<ScriptCtx>()
                 .and_then(|ctx| ctx.scripts_dir.clone())
                 .ok_or_else(|| mlua::Error::runtime("viber.load sem scripts_dir"))?;
             let full = dir.join(&path);
-            let code = std::fs::read_to_string(&full).map_err(|e| {
-                mlua::Error::runtime(format!("viber.load('{path}'): {e}"))
-            })?;
+            let code = std::fs::read_to_string(&full)
+                .map_err(|e| mlua::Error::runtime(format!("viber.load('{path}'): {e}")))?;
             // Env sandbox próprio (mesma forma do chunk de entidade) — o
             // módulo não pode clobber globals de quem o carrega.
             let env = lua.create_table()?;

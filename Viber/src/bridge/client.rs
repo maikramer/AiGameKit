@@ -229,11 +229,11 @@ impl BridgeClient {
                 }
             };
             // Progresso no stderr (o stdout fica para o resultado final).
-            if let Some(count) = status.get("captured").and_then(Value::as_u64) {
-                if count > last_captured {
-                    last_captured = count;
-                    eprintln!("viber: burst {count}/{frames} frames capturados");
-                }
+            if let Some(count) = status.get("captured").and_then(Value::as_u64)
+                && count > last_captured
+            {
+                last_captured = count;
+                eprintln!("viber: burst {count}/{frames} frames capturados");
             }
             match status.get("status").and_then(Value::as_str) {
                 Some("captured") => {
@@ -514,10 +514,12 @@ pub fn list_live_engines() -> Vec<LiveEngine> {
         // mesma porta — observado ao vivo: 3 mundos listados no :15702,
         // dois deles mortos). Um ping confirma quem lá está; sem campo
         // `world` (binário antigo) mantém-se — não há como validar.
-        .filter(|engine| match BridgeClient::localhost(engine.port).probe_world() {
-            Some(served) => same_world(&served, &engine.world),
-            None => true,
-        })
+        .filter(
+            |engine| match BridgeClient::localhost(engine.port).probe_world() {
+                Some(served) => same_world(&served, &engine.world),
+                None => true,
+            },
+        )
         .map(|engine| LiveEngine {
             port: engine.port,
             world: engine.world,
@@ -525,7 +527,6 @@ pub fn list_live_engines() -> Vec<LiveEngine> {
         })
         .collect()
 }
-
 
 /// Candidatas à descoberta implícita, por ordem de preferência — ou as locais
 /// em conflito, quando há ≥2 debaixo do cwd (não há como adivinhar qual é a
@@ -696,15 +697,15 @@ fn confirm_engine_engine(engine: &LiveEngine) -> Result<u16> {
         );
     }
     let client = BridgeClient::localhost(engine.port);
-    if let Some(served) = client.probe_world() {
-        if !same_world(&served, &engine.world) {
-            anyhow::bail!(
-                "a porta {} é servida por `{}`, não por `{}` (registo stale — sobe a engine de novo)",
-                engine.port,
-                served,
-                engine.world
-            );
-        }
+    if let Some(served) = client.probe_world()
+        && !same_world(&served, &engine.world)
+    {
+        anyhow::bail!(
+            "a porta {} é servida por `{}`, não por `{}` (registo stale — sobe a engine de novo)",
+            engine.port,
+            served,
+            engine.world
+        );
     }
     Ok(engine.port)
 }

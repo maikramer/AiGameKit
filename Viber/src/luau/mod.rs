@@ -30,8 +30,8 @@ pub mod api;
 pub mod commands;
 pub mod components;
 pub mod ctx;
-pub mod events;
 pub mod entity;
+pub mod events;
 pub mod fx;
 pub mod game;
 pub mod host;
@@ -50,19 +50,18 @@ pub use components::{
     DEFAULT_ACTIVATION_RADIUS, LuaScriptRef, ScriptActivation, ScriptInteraction, ScriptToast,
 };
 pub use ctx::{ScriptCtx, SurfaceCache, SurfaceRegistries};
-pub use events::{ScriptEventQueue, ScriptGameEvent, EVENT_QUEUE_CAP};
+pub use events::{EVENT_QUEUE_CAP, ScriptEventQueue, ScriptGameEvent};
 pub use host::{LoadedScript, LuaScriptHost, LuaScriptRegistry};
-pub use input::{input_code_from_str, key_code_from_str, InputCode};
+pub use input::{InputCode, input_code_from_str, key_code_from_str};
 pub use ownership::ScriptSystemOwners;
 pub use runtime::{
-    aggro_alert_system, luau_on_add, luau_on_remove, luau_update, LuauRuntimeLocals,
+    LuauRuntimeLocals, aggro_alert_system, luau_on_add, luau_on_remove, luau_update,
 };
-pub use sfx::{match_gesture_clip, sfx_clip_from_str, SFX_NAME_REGISTRY};
+pub use sfx::{SFX_NAME_REGISTRY, match_gesture_clip, sfx_clip_from_str};
 
-use bevy::prelude::*;
 use crate::profiler::{Group, timed};
+use bevy::prelude::*;
 use std::path::PathBuf;
-
 
 /// Bevy plugin wiring the Luau runtime: inserts [`LuaScriptHost`], then runs
 /// `on_add` → `update` → `on_remove` hooks every frame. The orchestrator adds

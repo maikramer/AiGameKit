@@ -322,10 +322,10 @@ pub fn snapshot(world: &mut World, nearby_radius: f32, frame: u64) -> WorldSnaps
     // Segundo passe (só na lista final): sensor/dormindo — não participam do
     // filtro "interessante", só refinam tags.
     for entry in &mut nearby {
-        if let Some(sleeping) = world.get::<Sleeping>(entry.handle) {
-            if sleeping.sleeping {
-                entry.tags.push("sleeping");
-            }
+        if let Some(sleeping) = world.get::<Sleeping>(entry.handle)
+            && sleeping.sleeping
+        {
+            entry.tags.push("sleeping");
         }
         if world.get::<Sensor>(entry.handle).is_some() {
             entry.tags.push("sensor");

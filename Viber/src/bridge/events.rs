@@ -13,7 +13,7 @@
 use std::collections::VecDeque;
 
 use bevy::prelude::*;
-use serde_json::{json, Value as Json};
+use serde_json::{Value as Json, json};
 
 /// Eventos retidos no ring (o mais novo no fim).
 pub const EVENT_BUFFER_CAPACITY: usize = 1000;
@@ -53,8 +53,12 @@ impl BridgeEventLog {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs_f64())
             .unwrap_or(0.0);
-        self.buffer
-            .push_back(BridgeEvent { seq, time, kind, data });
+        self.buffer.push_back(BridgeEvent {
+            seq,
+            time,
+            kind,
+            data,
+        });
         while self.buffer.len() > EVENT_BUFFER_CAPACITY {
             self.buffer.pop_front();
         }
@@ -71,14 +75,15 @@ impl BridgeEventLog {
 
     /// Cauda para o snapshot da REPL (últimos [`SNAPSHOT_TAIL`]).
     pub fn tail_json(&self) -> Json {
-        json!(self
-            .buffer
-            .iter()
-            .rev()
-            .take(SNAPSHOT_TAIL)
-            .rev()
-            .map(event_json)
-            .collect::<Vec<_>>())
+        json!(
+            self.buffer
+                .iter()
+                .rev()
+                .take(SNAPSHOT_TAIL)
+                .rev()
+                .map(event_json)
+                .collect::<Vec<_>>()
+        )
     }
 }
 
@@ -102,7 +107,7 @@ pub fn event_json(event: &BridgeEvent) -> Json {
 /// `pub(crate)`: o tipo aparece na assinatura do sistema, que o plugin
 /// (módulo pai) regista.
 #[derive(Default)]
-pub(crate) struct QuestLogFingerprint(pub Option<String>);
+pub struct QuestLogFingerprint(pub Option<String>);
 
 /// Coleta os eventos do frame para o ring. Corre no PostUpdate — DEPOIS de
 /// tudo o que escreveu eventos no Update; os `MessageReader` com `Local`
@@ -118,10 +123,7 @@ pub fn collect_bridge_events(
     mut toasts: MessageReader<crate::luau::ScriptToast>,
     quest_log: Option<Res<crate::quests::QuestLog>>,
     mut quest_fingerprint: Local<QuestLogFingerprint>,
-    deaths: Query<
-        (Entity, Option<&Name>, &crate::vitals::Health),
-        Changed<crate::vitals::Health>,
-    >,
+    deaths: Query<(Entity, Option<&Name>, &crate::vitals::Health), Changed<crate::vitals::Health>>,
 ) {
     for event in hurt.read() {
         log.push(
@@ -167,7 +169,7 @@ pub fn collect_bridge_events(
     // Mortes: HP acabou de cruzar para 0 (Changed evita repetir o cadáver).
     for (entity, name, health) in &deaths {
         if health.current <= 0.0 {
-            let mut data = json!({ "entity": entity.to_bits() as u64 });
+            let mut data = json!({ "entity": entity.to_bits() });
             if let Some(name) = name {
                 data["name"] = json!(name.to_string());
             }

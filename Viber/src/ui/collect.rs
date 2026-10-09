@@ -232,18 +232,16 @@ pub fn collect_ui_data(
     data.target_name.clear();
     data.target_health = 0.0;
     data.target_health_max = 0.0;
-    if let Some(target) = target.as_deref() {
-        if target.timer > 0.0 {
-            if let Some(entity) = target.entity {
-                if let Ok((health, name)) = targets.get(entity) {
-                    data.target_name = name
-                        .map(|n| n.as_str().to_string())
-                        .unwrap_or_else(|| "Inimigo".to_string());
-                    data.target_health = health.current;
-                    data.target_health_max = health.max;
-                }
-            }
-        }
+    if let Some(target) = target.as_deref()
+        && target.timer > 0.0
+        && let Some(entity) = target.entity
+        && let Ok((health, name)) = targets.get(entity)
+    {
+        data.target_name = name
+            .map(|n| n.as_str().to_string())
+            .unwrap_or_else(|| "Inimigo".to_string());
+        data.target_health = health.current;
+        data.target_health_max = health.max;
     }
     if let Some(day) = day.as_deref() {
         let text = clock_text(day.minute_of_day);

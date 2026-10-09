@@ -550,10 +550,10 @@ impl TerrainChunkConfig {
     pub fn from_world(entities: &[crate::recipes::EntitySpec]) -> Option<TerrainChunkConfig> {
         fn walk(specs: &[crate::recipes::EntitySpec]) -> Option<crate::terrain::spec::TerrainSpec> {
             for spec in specs {
-                if let crate::recipes::EntityKind::Terrain { spec } = &spec.kind {
-                    if !spec.layers.is_empty() {
-                        return Some(spec.clone());
-                    }
+                if let crate::recipes::EntityKind::Terrain { spec } = &spec.kind
+                    && !spec.layers.is_empty()
+                {
+                    return Some(spec.clone());
                 }
                 if let Some(found) = walk(&spec.children) {
                     return Some(found);
@@ -694,6 +694,7 @@ pub fn terrain_day_tint(day: f32) -> [f32; 3] {
 /// MESMO passo a direção do sol (`AtmosphereState.sun_dir`, convertida
 /// para a direção de viagem) para a luz do terreno bater certo com as
 /// sombras e a hora dourada do céu.
+#[allow(clippy::too_many_arguments)] // sistema Bevy com queries/params explícitos
 pub fn terrain_daynight_tint(
     clock: Option<Res<crate::worldsys::DayCycleState>>,
     atmosphere: Option<Res<crate::worldsys::AtmosphereState>>,
@@ -791,12 +792,13 @@ pub fn terrain_daynight_tint(
 /// Publica a chuva do `<Weather>` no canal LIVRE `walls_b.w` dos params de
 /// chunk — o `chunk.wgsl` lê-o como `wet` e molha o chão (albedo escurecido
 /// + roughness de poça). Sistema próprio (throttle 0.5 s) porque o passo do
-/// day-tint quantiza por FASE do dia e a chuva muda dentro da fase.
+///   day-tint quantiza por FASE do dia e a chuva muda dentro da fase.
 ///
 /// Como o day tint, a passagem é ORÇAMENTADA por frame
 /// ([`CHUNK_MATERIAL_WRITE_BUDGET`]). O `published` é o valor que já chegou a
 /// TODOS os materiais: sem ele, um tick a meio de uma passagem reiniciava o
 /// cursor e os últimos materiais da lista nunca seriam escritos.
+#[allow(clippy::too_many_arguments)] // sistema Bevy com queries/params explícitos
 pub fn terrain_rain_wetness(
     time: Res<Time>,
     weather: Option<Res<crate::worldsys::WeatherState>>,
@@ -1075,16 +1077,7 @@ mod tests {
             moss: 0.35,
         };
         let params = TerrainChunkParams::from_slots(
-            [
-                SLOT_GRASS,
-                SLOT_VALE_GRASS,
-                SLOT_DIRT_TRAIL,
-                3,
-                4,
-                5,
-                7,
-                12,
-            ],
+            [SLOT_GRASS, SLOT_VALE_GRASS, SLOT_DIRT_TRAIL, 3, 4, 5, 7, 12],
             [0.0, 0.0],
             64.0,
             &cfg,

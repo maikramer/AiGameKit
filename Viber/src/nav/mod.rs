@@ -305,7 +305,12 @@ fn mark_tile_ready(
         let (AssetEvent::Added { id } | AssetEvent::Modified { id }) = event else {
             continue;
         };
-        if tile.handle.as_ref().is_some_and(|handle| handle.id() == *id) && tile.generating {
+        if tile
+            .handle
+            .as_ref()
+            .is_some_and(|handle| handle.id() == *id)
+            && tile.generating
+        {
             tile.generating = false;
             tile.failures = 0;
             info!("nav: tile #{} pronto", tile.generations);
@@ -319,7 +324,12 @@ fn mark_tile_ready(
 /// frame before the asset event reaches [`mark_tile_ready`] — which is what
 /// lets [`tile::retile_navmesh`] tell a finished bake from a failed one.
 fn on_navmesh_ready(ready: On<bevy_rerecast::prelude::NavmeshReady>, mut tile: ResMut<NavTile>) {
-    if tile.handle.as_ref().is_some_and(|handle| handle.id() == ready.0) && tile.generating {
+    if tile
+        .handle
+        .as_ref()
+        .is_some_and(|handle| handle.id() == ready.0)
+        && tile.generating
+    {
         tile.generating = false;
         tile.failures = 0;
         info!("nav: tile #{} pronto", tile.generations);

@@ -17,40 +17,38 @@ use super::ctx::ScriptCtx;
 /// Instala `viber.after`/`viber.every`/`viber.timer_cancel` na tabela `viber`.
 pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
     let register = |periodic: bool| {
-        lua.create_function(
-            move |lua, (secs, func): (f64, Function)| {
-                if !secs.is_finite() || secs < 0.0 {
-                    return Err(mlua::Error::runtime(
-                        "viber.after/every: segundos têm de ser finitos e >= 0",
-                    ));
-                }
-                let (owner, path, elapsed) = {
-                    let ctx = lua
-                        .app_data_ref::<ScriptCtx>()
-                        .ok_or_else(|| mlua::Error::runtime("viber.after fora de script"))?;
-                    (
-                        ctx.entity
-                            .ok_or_else(|| mlua::Error::runtime("viber.after fora de on_update"))?,
-                        ctx.path.clone().unwrap_or_default(),
-                        ctx.elapsed,
-                    )
-                };
-                let timers: Table = lua.named_registry_value("viber_timers")?;
-                let seq: Table = lua.named_registry_value("viber_timer_seq")?;
-                let id: i64 = seq.raw_get("next")?;
-                seq.raw_set("next", id + 1)?;
-                let entry = lua.create_table()?;
-                entry.raw_set("at", elapsed + secs)?;
-                if periodic {
-                    entry.raw_set("period", secs)?;
-                }
-                entry.raw_set("func", func)?;
-                entry.raw_set("owner", owner.to_bits() as i64)?;
-                entry.raw_set("path", path)?;
-                timers.raw_set(id, entry)?;
-                Ok(id)
-            },
-        )
+        lua.create_function(move |lua, (secs, func): (f64, Function)| {
+            if !secs.is_finite() || secs < 0.0 {
+                return Err(mlua::Error::runtime(
+                    "viber.after/every: segundos têm de ser finitos e >= 0",
+                ));
+            }
+            let (owner, path, elapsed) = {
+                let ctx = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .ok_or_else(|| mlua::Error::runtime("viber.after fora de script"))?;
+                (
+                    ctx.entity
+                        .ok_or_else(|| mlua::Error::runtime("viber.after fora de on_update"))?,
+                    ctx.path.clone().unwrap_or_default(),
+                    ctx.elapsed,
+                )
+            };
+            let timers: Table = lua.named_registry_value("viber_timers")?;
+            let seq: Table = lua.named_registry_value("viber_timer_seq")?;
+            let id: i64 = seq.raw_get("next")?;
+            seq.raw_set("next", id + 1)?;
+            let entry = lua.create_table()?;
+            entry.raw_set("at", elapsed + secs)?;
+            if periodic {
+                entry.raw_set("period", secs)?;
+            }
+            entry.raw_set("func", func)?;
+            entry.raw_set("owner", owner.to_bits() as i64)?;
+            entry.raw_set("path", path)?;
+            timers.raw_set(id, entry)?;
+            Ok(id)
+        })
     };
     api.set("after", register(false)?)?;
     api.set("every", register(true)?)?;
@@ -94,7 +92,9 @@ pub(crate) fn drop_timers(lua: &Lua, ids: &[i64]) {
     let Ok(timers) = lua.named_registry_value::<Table>("viber_timers") else {
         return;
     };
-    let cancelled = lua.named_registry_value::<Table>("viber_timer_cancelled").ok();
+    let cancelled = lua
+        .named_registry_value::<Table>("viber_timer_cancelled")
+        .ok();
     for id in ids {
         let _ = timers.raw_remove(*id);
         if let Some(cancelled) = &cancelled {
@@ -119,7 +119,10 @@ pub struct TickFrame<F: Fn(Entity) -> Option<Vec3>> {
 /// vencidos com o ctx seedado ao dono (o `viber.state()` funciona dentro da
 /// callback). Erros são pcall-style (`warn_once` por path) — um timer a falhar
 /// nunca derruba o frame; `every` cancelado não re-agenda.
-pub fn tick<F: Fn(Entity) -> Option<Vec3>>(host: &mut super::host::LuaScriptHost, frame: TickFrame<F>) {
+pub fn tick<F: Fn(Entity) -> Option<Vec3>>(
+    host: &mut super::host::LuaScriptHost,
+    frame: TickFrame<F>,
+) {
     let elapsed = frame.elapsed;
     let lua = host.lua.clone();
     let Ok(timers) = lua.named_registry_value::<Table>("viber_timers") else {
@@ -186,7 +189,11 @@ pub fn tick<F: Fn(Entity) -> Option<Vec3>>(host: &mut super::host::LuaScriptHost
             // Cadência presa ao agendamento (`at + p`), não ao frame em que
             // venceu — `elapsed + p` somava o atraso do frame a cada disparo.
             // Depois de um engasgo longo retoma a partir de agora (sem rajada).
-            let next = if at + p > elapsed { at + p } else { elapsed + p };
+            let next = if at + p > elapsed {
+                at + p
+            } else {
+                elapsed + p
+            };
             if let Ok(entry) = lua.create_table() {
                 let _ = entry.raw_set("at", next);
                 let _ = entry.raw_set("period", p);

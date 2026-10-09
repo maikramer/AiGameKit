@@ -138,7 +138,8 @@ fn knockback_system(
             }
         }
         if let Some(terrain) = terrain.as_deref() {
-            transform.translation.y = crate::player::ground_near(terrain, x, z, transform.translation.y);
+            transform.translation.y =
+                crate::player::ground_near(terrain, x, z, transform.translation.y);
         }
         transform.translation.x = x;
         transform.translation.z = z;
@@ -207,7 +208,10 @@ mod tests {
         let tipped = q * Vec3::Y;
         assert!(tipped.y.abs() < 1e-4, "fully tipped: {tipped}");
         let q = fall_rotation(Vec3::new(0.0, 0.0, 5.0), 90.0);
-        assert!((q * Vec3::Y - Vec3::NEG_X).length() < 1e-4, "axis is normalized");
+        assert!(
+            (q * Vec3::Y - Vec3::NEG_X).length() < 1e-4,
+            "axis is normalized"
+        );
     }
 
     #[test]
@@ -343,9 +347,16 @@ mod tests {
         app.update();
 
         let hero_t = app.world().get::<Transform>(hero).unwrap().translation;
-        assert_eq!(hero_t, Vec3::new(10.0, 3.5, 10.0), "Transform do herói intocado");
+        assert_eq!(
+            hero_t,
+            Vec3::new(10.0, 3.5, 10.0),
+            "Transform do herói intocado"
+        );
         let hero_kb = app.world().get::<Knockback>(hero).unwrap().velocity;
-        assert!(hero_kb.x < 2.0 && hero_kb.x > 0.0, "knockback do herói decai: {hero_kb:?}");
+        assert!(
+            hero_kb.x < 2.0 && hero_kb.x > 0.0,
+            "knockback do herói decai: {hero_kb:?}"
+        );
         let prop_t = app.world().get::<Transform>(prop).unwrap().translation;
         let ground = app
             .world()

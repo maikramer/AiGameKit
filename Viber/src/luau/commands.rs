@@ -74,7 +74,10 @@ pub enum ScriptCommand {
     },
     /// Consome do vault (`viber.vault_take`): recurso OU item, `false`-sem-
     /// stock vira no-op com warn 1× (o script guarda-se com `vault_get`).
-    VaultTake { kind: String, amount: u32 },
+    VaultTake {
+        kind: String,
+        amount: u32,
+    },
     /// Reclama uma ação da UI (`viber.own_action("buy")`) — o handler nativo
     /// correspondente cala e a ação chega a Lua via `viber.events()`.
     OwnUiAction(String),

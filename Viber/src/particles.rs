@@ -1202,12 +1202,11 @@ fn burst_despawn_system(
     for (entity, mut burst, emitter, mesh) in &mut bursts {
         burst.timer -= dt;
         if burst.timer <= 0.0 {
-            if let Some(mut mesh_asset) = meshes.get_mut(&mesh.0) {
-                if let Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)) =
+            if let Some(mut mesh_asset) = meshes.get_mut(&mesh.0)
+                && let Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)) =
                     mesh_asset.attribute_mut(bevy::mesh::Mesh::ATTRIBUTE_POSITION)
-                {
-                    positions.fill([0.0; 3]);
-                }
+            {
+                positions.fill([0.0; 3]);
             }
             pool.park_mesh(emitter.capacity, mesh.0.clone());
             commands.entity(entity).despawn();

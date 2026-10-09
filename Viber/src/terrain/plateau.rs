@@ -289,13 +289,12 @@ pub fn plateau_wall_band(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy::math::Vec3;
     use crate::terrain::brush::BrushGrid;
+    use bevy::math::Vec3;
 
     /// 96×96 grid plana a 8 m.
     fn flat_grid() -> BrushGrid {
-        let mut grid =
-            BrushGrid::new(vec![0; 96 * 96], 96, 96, 96.0, 50.0, 0.0).expect("grid");
+        let mut grid = BrushGrid::new(vec![0; 96 * 96], 96, 96, 96.0, 50.0, 0.0).expect("grid");
         grid.begin_stroke("flat");
         for i in 0..96 * 96 {
             grid.set_cell_height(i % 96, i / 96, 8.0);
@@ -375,10 +374,7 @@ mod tests {
         let center = spec.at;
         for i in 0..n {
             let crest = band.stations[i];
-            assert!(
-                band.top_y[i] > band.bot_y[i],
-                "wall has drop everywhere"
-            );
+            assert!(band.top_y[i] > band.bot_y[i], "wall has drop everywhere");
             assert!(
                 band.drop_normal[i].dot(crest - center) > 0.0,
                 "normal points outward"

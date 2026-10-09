@@ -170,7 +170,10 @@ impl BurstStore {
         let id = self.next_id;
         let dir = std::env::temp_dir().join(format!("viber-bridge-{}", std::process::id()));
         if let Err(error) = std::fs::create_dir_all(&dir) {
-            warn!("bridge: falha ao criar {} para bursts: {error}", dir.display());
+            warn!(
+                "bridge: falha ao criar {} para bursts: {error}",
+                dir.display()
+            );
         }
         let path = output.unwrap_or_else(|| dir.join(format!("burst-{id}.png")));
         self.bursts.insert(
@@ -256,7 +259,11 @@ impl BurstStore {
                 burst.frame_stats.push(None);
             }
         }
-        burst.frame_stats.push(Some(FrameStat { index: slot, mean, std }));
+        burst.frame_stats.push(Some(FrameStat {
+            index: slot,
+            mean,
+            std,
+        }));
         *cell = Some(image);
         burst.collected_count += 1;
         burst.last_progress = Instant::now();
@@ -339,7 +346,10 @@ impl BurstStore {
         stalled
             .into_iter()
             .filter_map(|id| {
-                self.fail(id, "burst parou sem progresso (janela minimizada? render pausado?)".into())
+                self.fail(
+                    id,
+                    "burst parou sem progresso (janela minimizada? render pausado?)".into(),
+                )
             })
             .collect()
     }
@@ -384,7 +394,9 @@ pub fn grid_for(frames: u32) -> Option<u32> {
 
 /// Guard do mutex — o padrão do bridge (`PoisonError::into_inner`).
 fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Coração do burst no sistema `Update` do bridge (chamado por
@@ -406,9 +418,8 @@ pub fn drive(world: &mut World, slot_taken: bool) {
         };
         if let Some((id, slot)) = next {
             let store = world.resource::<BridgeShared>().bursts.clone();
-            world
-                .spawn(Screenshot::primary_window())
-                .observe(move |trigger: On<ScreenshotCaptured>| {
+            world.spawn(Screenshot::primary_window()).observe(
+                move |trigger: On<ScreenshotCaptured>| {
                     let image = trigger.image.clone();
                     let store = store.clone();
                     let outcome = image
@@ -425,7 +436,8 @@ pub fn drive(world: &mut World, slot_taken: bool) {
                             warn!("bridge: burst falhou: {message}");
                         }
                     }
-                });
+                },
+            );
         }
     }
 
@@ -443,8 +455,7 @@ pub fn drive(world: &mut World, slot_taken: bool) {
             match outcome {
                 Ok((bytes, layout)) => {
                     if let Err(error) = std::fs::write(&path, &bytes) {
-                        let message =
-                            format!("falha ao escrever {}: {error}", path.display());
+                        let message = format!("falha ao escrever {}: {error}", path.display());
                         if let Some(message) = store.fail(id, message) {
                             warn!("bridge: burst falhou: {message}");
                         }
@@ -515,7 +526,9 @@ fn stamp_index(sheet: &mut RgbaImage, cell_x: u32, cell_y: u32, cell: u32, index
         }
     }
     for (i, char) in text.chars().enumerate() {
-        let Some(digit) = char.to_digit(10) else { continue };
+        let Some(digit) = char.to_digit(10) else {
+            continue;
+        };
         let glyph = &DIGITS[digit as usize];
         for (row, bits) in glyph.iter().enumerate() {
             for col in 0..3 {
@@ -546,7 +559,9 @@ fn stamp_index(sheet: &mut RgbaImage, cell_x: u32, cell_y: u32, cell: u32, index
 pub fn compose(cells: &[RgbaImage], long_side: u32) -> Result<(RgbaImage, SheetLayout), String> {
     let frames = cells.len() as u32;
     let Some(grid) = grid_for(frames) else {
-        return Err(format!("{frames} frames não formam grid (aceites 4, 9, 16)"));
+        return Err(format!(
+            "{frames} frames não formam grid (aceites 4, 9, 16)"
+        ));
     };
     let first = cells.first().ok_or("burst sem frames")?;
     let (fw, fh) = (first.width(), first.height());
@@ -554,7 +569,9 @@ pub fn compose(cells: &[RgbaImage], long_side: u32) -> Result<(RgbaImage, SheetL
         return Err("frame com dimensão 0 (janela minimizada?)".into());
     }
     if long_side < grid {
-        return Err(format!("folha {long_side} pequena demais para {grid}×{grid}"));
+        return Err(format!(
+            "folha {long_side} pequena demais para {grid}×{grid}"
+        ));
     }
     // Células com o formato do frame: o lado comprido da célula é
     // long_side/grid e o outro sai da razão do frame (arredondado — a
@@ -580,13 +597,7 @@ pub fn compose(cells: &[RgbaImage], long_side: u32) -> Result<(RgbaImage, SheetL
         let y = (index as u32 / grid) * cell_h;
         image::imageops::overlay(&mut sheet, &resized, x as i64, y as i64);
         let stamp_cell = cell_w.min(cell_h);
-        stamp_index(
-            &mut sheet,
-            x,
-            y,
-            stamp_cell,
-            index as u32 + 1,
-        );
+        stamp_index(&mut sheet, x, y, stamp_cell, index as u32 + 1);
     }
     for k in 1..grid {
         let line_w = k * cell_w;
@@ -660,8 +671,14 @@ mod tests {
             store.request(5, 0, None).unwrap_err(),
             "frames `5` inválido — aceites 4, 9 ou 16 (grids 2×2, 3×3, 4×4)"
         );
-        assert!(store.request(16, MAX_SKIP + 1, None).is_err(), "skip acima do teto falha");
-        assert!(store.request(16, MAX_SKIP, None).is_ok(), "skip no teto passa");
+        assert!(
+            store.request(16, MAX_SKIP + 1, None).is_err(),
+            "skip acima do teto falha"
+        );
+        assert!(
+            store.request(16, MAX_SKIP, None).is_ok(),
+            "skip no teto passa"
+        );
     }
 
     #[test]
@@ -670,7 +687,11 @@ mod tests {
         let (id, _) = store.request(4, 2, None).expect("burst");
         // tick 1: spawn imediato; ticks 2-3: cooldown 3; tick 4: 2.ª spawn —
         // capturas nos frames 1 e 4 = "a cada skip+1 = 3 frames".
-        assert_eq!(store.next_capture(), Some((id, 0)), "1.ª captura é imediata");
+        assert_eq!(
+            store.next_capture(),
+            Some((id, 0)),
+            "1.ª captura é imediata"
+        );
         assert_eq!(store.next_capture(), None, "cooldown — tick sem spawn");
         assert_eq!(store.next_capture(), None, "cooldown — tick sem spawn");
         assert_eq!(
@@ -687,7 +708,10 @@ mod tests {
                     break;
                 }
             }
-            assert!(spawned_here, "slot {expected_slot} devia spawnar em ~3 ticks");
+            assert!(
+                spawned_here,
+                "slot {expected_slot} devia spawnar em ~3 ticks"
+            );
         }
         assert_eq!(
             store.next_capture(),
@@ -714,7 +738,11 @@ mod tests {
             "MAX_IN_FLIGHT trava enquanto nada é depositado"
         );
         // Um deposit liberta uma vaga — a próxima spawn é o slot seguinte.
-        assert!(!store.deposit(id, 0, solid([1, 2, 3, 255], 4, 4)).expect("deposit"));
+        assert!(
+            !store
+                .deposit(id, 0, solid([1, 2, 3, 255], 4, 4))
+                .expect("deposit")
+        );
         assert_eq!(store.next_capture(), Some((id, MAX_IN_FLIGHT)));
     }
 
@@ -723,12 +751,23 @@ mod tests {
         let mut store = BurstStore::default();
         let (id, _) = store.request(4, 0, None).expect("burst");
         for slot in 0..3 {
-            assert!(!store.deposit(id, slot, solid([0, 255, 0, 255], 8, 8)).expect("deposit"));
+            assert!(
+                !store
+                    .deposit(id, slot, solid([0, 255, 0, 255], 8, 8))
+                    .expect("deposit")
+            );
         }
-        assert!(store.deposit(id, 3, solid([0, 0, 255, 255], 8, 8)).expect("deposit"));
+        assert!(
+            store
+                .deposit(id, 3, solid([0, 0, 255, 255], 8, 8))
+                .expect("deposit")
+        );
         let (cells, _path) = store.take_cells(id).expect("completo → células");
         assert_eq!(cells.len(), 4);
-        assert_eq!(store.get(id).expect("existe").status, BurstStatus::Composing);
+        assert_eq!(
+            store.get(id).expect("existe").status,
+            BurstStatus::Composing
+        );
         assert!(
             store.take_cells(id).is_none(),
             "2.º take não repete (Composing já não é Capturing)"
@@ -739,12 +778,23 @@ mod tests {
     fn test_compose_layout_row_major_sem_letterbox() {
         // 4 frames 32×18 (16:9) numa folha de lado comprido 512 → células
         // 256×144 (MESMO formato do frame, sem barras), folha 512×288.
-        let colors = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [255, 255, 0, 255]];
+        let colors = [
+            [255, 0, 0, 255],
+            [0, 255, 0, 255],
+            [0, 0, 255, 255],
+            [255, 255, 0, 255],
+        ];
         let cells: Vec<RgbaImage> = colors.iter().map(|c| solid(*c, 32, 18)).collect();
         let (sheet, layout) = compose(&cells, 512).expect("compose");
         assert_eq!(
             layout,
-            SheetLayout { sheet_w: 512, sheet_h: 288, grid: 2, cell_w: 256, cell_h: 144 }
+            SheetLayout {
+                sheet_w: 512,
+                sheet_h: 288,
+                grid: 2,
+                cell_w: 256,
+                cell_h: 144
+            }
         );
         assert_eq!((sheet.width(), sheet.height()), (512, 288));
         // Row-major: vermelho na célula 0 (canto sup esq), verde à direita,
@@ -767,7 +817,13 @@ mod tests {
         let (sheet, layout) = compose(&cells, 512).expect("compose");
         assert_eq!(
             layout,
-            SheetLayout { sheet_w: 288, sheet_h: 512, grid: 3, cell_w: 96, cell_h: 170 }
+            SheetLayout {
+                sheet_w: 288,
+                sheet_h: 512,
+                grid: 3,
+                cell_w: 96,
+                cell_h: 170
+            }
         );
         assert_eq!((sheet.width(), sheet.height()), (288, 512));
         assert_eq!(sheet.get_pixel(48, 85), &Rgba([10, 200, 30, 255]));
@@ -787,7 +843,10 @@ mod tests {
                 }
             }
         }
-        assert!(has_black, "carimbo do índice devia estar no canto da célula");
+        assert!(
+            has_black,
+            "carimbo do índice devia estar no canto da célula"
+        );
     }
 
     #[test]
@@ -804,7 +863,10 @@ mod tests {
         let mut store = BurstStore::default();
         let (id, _) = store.request(4, 0, None).expect("burst");
         // Sem progresso desde o request — mas ainda dentro do timeout.
-        assert!(store.fail_stalled().is_empty(), "recém-criado não está parado");
+        assert!(
+            store.fail_stalled().is_empty(),
+            "recém-criado não está parado"
+        );
         // Força o relógio: deposita e usa um request velho via fail directo.
         let _ = store.deposit(id, 0, solid([1, 2, 3, 255], 4, 4));
         let msg = store.fail(id, "x".into());

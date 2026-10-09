@@ -278,10 +278,10 @@ fn live_exes_under(dir: &Path) -> HashSet<PathBuf> {
         else {
             continue;
         };
-        if let Ok(exe) = fs::read_link(format!("/proc/{pid}/exe")) {
-            if exe.starts_with(&dir) {
-                live.insert(exe);
-            }
+        if let Ok(exe) = fs::read_link(format!("/proc/{pid}/exe"))
+            && exe.starts_with(&dir)
+        {
+            live.insert(exe);
         }
     }
     live

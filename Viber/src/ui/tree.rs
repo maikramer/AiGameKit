@@ -231,10 +231,10 @@ pub fn build_ui_tree(
             None => warn!("ui: unknown anim `{spec}` on <{}> — skipped", node.tag),
         }
     }
-    if let Some(text) = attr(node, "tooltip") {
-        if !text.is_empty() {
-            entity.insert(UiTooltipText(text.to_string()));
-        }
+    if let Some(text) = attr(node, "tooltip")
+        && !text.is_empty()
+    {
+        entity.insert(UiTooltipText(text.to_string()));
     }
 
     match tag.as_str() {
@@ -707,11 +707,11 @@ mod tests {
     #[test]
     fn test_focus_reaches_journal_through_label_and_menu_root_but_not_open_modal() {
         use super::super::runtime::{UiClicks, collect_ui_clicks};
+        use crate::ui::interaction::ui_focus_system;
         use bevy::app::HierarchyPropagatePlugin;
         use bevy::camera::RenderTarget;
         use bevy::input::touch::Touches;
         use bevy::math::Affine2;
-        use crate::ui::interaction::ui_focus_system;
         use bevy::ui::{ComputedUiTargetCamera, UiStack};
         use bevy::window::PrimaryWindow;
 

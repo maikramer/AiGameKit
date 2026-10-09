@@ -76,7 +76,10 @@ pub enum Position {
     FirstChild,
     LastChild,
     /// `:nth-child(an+b)` — `odd` é `{a: 2, b: 1}`, `even` `{a: 2, b: 0}`.
-    Nth { a: i32, b: i32 },
+    Nth {
+        a: i32,
+        b: i32,
+    },
 }
 
 impl Compound {
@@ -90,10 +93,11 @@ impl Compound {
         if self.state != StyleState::Normal {
             score += 10;
         }
-        score += 10 * (self.focused as u32
-            + self.checked as u32
-            + self.empty as u32
-            + self.position.is_some() as u32);
+        score += 10
+            * (self.focused as u32
+                + self.checked as u32
+                + self.empty as u32
+                + self.position.is_some() as u32);
         // Cada `:not(…)` pesa como uma classe (flat, não a especificidade do
         // argumento — subconjunto documentado).
         score += 10 * self.negations.len() as u32;
@@ -140,15 +144,15 @@ impl Compound {
                 return false;
             }
         }
-        if let Some(tag) = &self.tag {
-            if tag != element.tag {
-                return false;
-            }
+        if let Some(tag) = &self.tag
+            && tag != element.tag
+        {
+            return false;
         }
-        if let Some(id) = &self.id {
-            if element.id != Some(id.as_str()) {
-                return false;
-            }
+        if let Some(id) = &self.id
+            && element.id != Some(id.as_str())
+        {
+            return false;
         }
         self.classes
             .iter()
@@ -349,11 +353,9 @@ fn parse_transition(value: &str) -> Option<Vec<TransitionSpec>> {
                         delay = seconds;
                     }
                     times += 1;
-                } else if !seen_easing {
-                    if let Some(parsed) = super::tween::Easing::parse(word) {
-                        easing = parsed;
-                        seen_easing = true;
-                    }
+                } else if !seen_easing && let Some(parsed) = super::tween::Easing::parse(word) {
+                    easing = parsed;
+                    seen_easing = true;
                 }
             }
             Some(TransitionSpec {
@@ -394,11 +396,9 @@ fn parse_animation(value: &str) -> Option<AnimationSpec> {
                         delay = seconds;
                     }
                     times += 1;
-                } else if !seen_easing {
-                    if let Some(parsed) = super::tween::Easing::parse(word) {
-                        easing = parsed;
-                        seen_easing = true;
-                    }
+                } else if !seen_easing && let Some(parsed) = super::tween::Easing::parse(word) {
+                    easing = parsed;
+                    seen_easing = true;
                 }
             }
         }
@@ -416,7 +416,8 @@ fn parse_animation(value: &str) -> Option<AnimationSpec> {
 }
 
 /// `(min-width: 900) and (portrait)` → [`MediaCond`]; `None` = ilegível.
-pub fn parse_media_cond(text: &str) -> Option<MediaCond> {    let mut cond = MediaCond::default();
+pub fn parse_media_cond(text: &str) -> Option<MediaCond> {
+    let mut cond = MediaCond::default();
     // " and " com espaços — um split por "and" a seco partia "landscape".
     for part in text.split(" and ") {
         let part = part
@@ -1646,10 +1647,7 @@ pub fn parse_selector(text: &str) -> Option<Selector> {
         }
         return None;
     }
-    Some(Selector {
-        parts,
-        combinators,
-    })
+    Some(Selector { parts, combinators })
 }
 
 /// One whitespace-free chunk: `UiPanel.card#hero:hover:focus` — os pseudos
@@ -1872,7 +1870,9 @@ fn apply_declaration(props: &mut StyleProps, name: &str, value: &str) -> bool {
         "justify" | "justify-content" => {
             props.justify_content = parse_justify(value);
             if props.justify_content.is_none() && !value.is_empty() {
-                warn!("ui style: valor `{value}` ilegível para `justify-content` — declaração saltada");
+                warn!(
+                    "ui style: valor `{value}` ilegível para `justify-content` — declaração saltada"
+                );
             }
         }
         "width" => assign(&mut props.width, parse_measure_in(value, name)),
@@ -2023,7 +2023,9 @@ fn apply_declaration(props: &mut StyleProps, name: &str, value: &str) -> bool {
         "text-transform" => {
             props.text_transform = parse_text_transform(value);
             if props.text_transform.is_none() && !value.is_empty() {
-                warn!("ui style: valor `{value}` ilegível para `text-transform` — declaração saltada");
+                warn!(
+                    "ui style: valor `{value}` ilegível para `text-transform` — declaração saltada"
+                );
             }
         }
         // `ellipsis` corta com …; `clip`/`visible`/`none` são o omissão.
@@ -2121,9 +2123,13 @@ fn apply_declaration(props: &mut StyleProps, name: &str, value: &str) -> bool {
         // motion
         "transition" => {
             assign(&mut props.transition, parse_transition(value));
-            if props.transition.is_none() && !value.is_empty() && !value.eq_ignore_ascii_case("none")
+            if props.transition.is_none()
+                && !value.is_empty()
+                && !value.eq_ignore_ascii_case("none")
             {
-                warn!("ui style: `transition: {value}` sem nenhum campo animável — declaração saltada");
+                warn!(
+                    "ui style: `transition: {value}` sem nenhum campo animável — declaração saltada"
+                );
             }
         }
         "animation" => {
@@ -2488,7 +2494,9 @@ fn parse_border_colors(props: &mut StyleProps, value: &str) {
         [t, r, b, l] => (*t, *r, *b, *l),
         _ => {
             if !value.is_empty() {
-                warn!("ui style: `border-color: {value}` precisa de 1-4 cores — declaração saltada");
+                warn!(
+                    "ui style: `border-color: {value}` precisa de 1-4 cores — declaração saltada"
+                );
             }
             return;
         }
@@ -2586,17 +2594,18 @@ fn parse_gradient_stop(text: &str) -> Option<GradientStop> {
     let mut color = None;
     let mut point = None;
     for token in text.split_whitespace() {
-        if color.is_none() && point.is_none() {
-            if let Some(parsed) = parse_color(token) {
-                color = Some(parsed);
-                continue;
-            }
+        if color.is_none()
+            && point.is_none()
+            && let Some(parsed) = parse_color(token)
+        {
+            color = Some(parsed);
+            continue;
         }
-        if point.is_none() {
-            if let Some(val) = parse_val(token) {
-                point = Some(val);
-                continue;
-            }
+        if point.is_none()
+            && let Some(val) = parse_val(token)
+        {
+            point = Some(val);
+            continue;
         }
         if color.is_none() {
             color = parse_color(token);
@@ -2649,9 +2658,7 @@ fn parse_radial_gradient_args(args: &[&str]) -> Option<GradientSpec> {
             || shape.starts_with("ellipse ")
             || shape.starts_with("at ");
         if is_shape {
-            farthest = !(shape.contains("closest")
-                || shape == "circle"
-                || shape == "ellipse");
+            farthest = !(shape.contains("closest") || shape == "circle" || shape == "ellipse");
             stops_text = &args[1..];
         }
     }
@@ -2672,7 +2679,9 @@ fn parse_display(value: &str) -> Option<Display> {
         "grid" => Display::Grid,
         "flex" | "" => Display::Flex,
         other => {
-            warn!("ui style: display `{other}` desconhecido — a usar flex (vale flex/none/grid/block)");
+            warn!(
+                "ui style: display `{other}` desconhecido — a usar flex (vale flex/none/grid/block)"
+            );
             Display::Flex
         }
     };
@@ -2923,7 +2932,7 @@ pub fn parse_color(value: &str) -> Option<Color> {
         // `hsl(120, 50%, 50%)` e o moderno `hsl(120 50% 50%)` — separadores
         // vírgula ou espaço; `%` opcional em s/l.
         let tokens: Vec<f32> = args
-            .split(|c| c == ',' || c == ' ')
+            .split([',', ' '])
             .filter_map(|p| {
                 let p = p.trim().strip_suffix('%').unwrap_or(p.trim());
                 p.parse::<f32>().ok()
@@ -3933,10 +3942,7 @@ mod tests {
             ..static_el("uipanel", None, &["fill"])
         };
         assert!(
-            styles
-                .resolve(&[panel, fill], VIEW, None)
-                .width
-                .is_some(),
+            styles.resolve(&[panel, fill], VIEW, None).width.is_some(),
             "filho directo casa o combinador `>`"
         );
         // Neto de .panel — o `>` NÃO casa; só o descendente `.deep`.
@@ -3998,7 +4004,10 @@ mod tests {
         // second: :nth-child(2) (3) + -n+2 (6); não é odd nem first/last
         assert_eq!(resolved_second.width, Some(Measure::plain(Val::Px(3.0))));
         assert!(resolved_second.height.is_none());
-        assert_eq!(resolved_second.min_width, Some(Measure::plain(Val::Px(6.0))));
+        assert_eq!(
+            resolved_second.min_width,
+            Some(Measure::plain(Val::Px(6.0)))
+        );
         // third: :last-child (2) + odd/2n+1 (4+5); fora de -n+2
         assert_eq!(resolved_third.width, Some(Measure::plain(Val::Px(2.0))));
         assert_eq!(resolved_third.height, Some(Measure::plain(Val::Px(5.0))));
@@ -4046,10 +4055,7 @@ mod tests {
     fn test_gradients_parse() {
         let linear = parse_gradient("linear-gradient(45deg, #000 0%, #fff 100%)").expect("linear");
         match linear {
-            GradientSpec::Linear {
-                angle_deg,
-                stops,
-            } => {
+            GradientSpec::Linear { angle_deg, stops } => {
                 assert!((angle_deg - 45.0).abs() < 1e-6);
                 assert_eq!(stops.len(), 2);
                 assert_eq!(stops[0].point, Some(Val::Percent(0.0)));
@@ -4057,8 +4063,7 @@ mod tests {
             }
             other => panic!("esperava linear, tinha {other:?}"),
         }
-        let words =
-            parse_gradient("linear-gradient(to right, red, blue)").expect("to right");
+        let words = parse_gradient("linear-gradient(to right, red, blue)").expect("to right");
         match words {
             GradientSpec::Linear { angle_deg, stops } => {
                 assert!((angle_deg - 90.0).abs() < 1e-6, "to right = 90deg");
@@ -4068,7 +4073,13 @@ mod tests {
             other => panic!("esperava linear, tinha {other:?}"),
         }
         let radial = parse_gradient("radial-gradient(closest-side, white, black)").expect("radial");
-        assert!(matches!(radial, GradientSpec::Radial { farthest: false, .. }));
+        assert!(matches!(
+            radial,
+            GradientSpec::Radial {
+                farthest: false,
+                ..
+            }
+        ));
         // Por declaração: background aceita gradiente, background-color não.
         let props = parse_declarations(
             "background: linear-gradient(to bottom, black, white); background-color: red",
@@ -4096,10 +4107,7 @@ mod tests {
             Some(Color::srgb(0.0, 128.0 / 255.0, 0.0)),
             "green = 008000"
         );
-        assert_eq!(
-            props.border_bottom_color,
-            Some(Color::srgb(0.0, 0.0, 1.0))
-        );
+        assert_eq!(props.border_bottom_color, Some(Color::srgb(0.0, 0.0, 1.0)));
         assert_eq!(props.border_left_color, Some(Color::srgb(1.0, 1.0, 0.0)));
         // Longhands com o uniforme por baixo.
         let props = parse_declarations("border-color: white; border-top-color: black", "t");
@@ -4109,12 +4117,16 @@ mod tests {
         assert_eq!(props.border_right_color, parse_color("white"));
         assert_eq!(props.border_color, None);
         // Radius 2 = diagonais; 3 = (tl, tr+bl, br).
-        let radius = parse_declarations("radius: 4 8", "t").border_radius.expect("2");
+        let radius = parse_declarations("radius: 4 8", "t")
+            .border_radius
+            .expect("2");
         assert_eq!(radius.top_left, CornerRadius::from(Val::Px(4.0)));
         assert_eq!(radius.top_right, CornerRadius::from(Val::Px(8.0)));
         assert_eq!(radius.bottom_right, CornerRadius::from(Val::Px(4.0)));
         assert_eq!(radius.bottom_left, CornerRadius::from(Val::Px(8.0)));
-        let radius = parse_declarations("radius: 1 2 3", "t").border_radius.expect("3");
+        let radius = parse_declarations("radius: 1 2 3", "t")
+            .border_radius
+            .expect("3");
         assert_eq!(radius.top_left, CornerRadius::from(Val::Px(1.0)));
         assert_eq!(radius.top_right, CornerRadius::from(Val::Px(2.0)));
         assert_eq!(radius.bottom_right, CornerRadius::from(Val::Px(3.0)));
@@ -4193,12 +4205,12 @@ mod tests {
     #[test]
     fn test_text_overflow_parses() {
         let props = parse_declarations("text-overflow: ellipsis", "t");
-        assert_eq!(
-            props.text_overflow,
-            Some(TextOverflowKind::Ellipsis)
-        );
+        assert_eq!(props.text_overflow, Some(TextOverflowKind::Ellipsis));
         // clip/visible/none são o omissão — recusam sem warn.
-        assert_eq!(parse_declarations("text-overflow: clip", "t").text_overflow, None);
+        assert_eq!(
+            parse_declarations("text-overflow: clip", "t").text_overflow,
+            None
+        );
         // NÃO herda: o filho não recebe do pai.
         let parent = parse_declarations("text-overflow: ellipsis", "t");
         let mut child = StyleProps::default();

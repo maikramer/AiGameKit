@@ -87,7 +87,9 @@ pub struct BudgetGuard {
 
 impl Drop for BudgetGuard {
     fn drop(&mut self) {
-        self.clock.deadline_ns.store(self.previous, Ordering::Relaxed);
+        self.clock
+            .deadline_ns
+            .store(self.previous, Ordering::Relaxed);
     }
 }
 
@@ -120,7 +122,16 @@ impl LuaScriptHost {
         lua.set_memory_limit(SCRIPT_MEMORY_LIMIT)?;
         // Biblioteca padrão só-leitura: os envs por script isolam globals,
         // mas `string.format = nil` num script mexia na tabela PARTILHADA.
-        for lib in ["string", "math", "table", "coroutine", "bit32", "utf8", "os", "buffer"] {
+        for lib in [
+            "string",
+            "math",
+            "table",
+            "coroutine",
+            "bit32",
+            "utf8",
+            "os",
+            "buffer",
+        ] {
             if let Ok(t) = lua.globals().get::<Table>(lib) {
                 t.set_readonly(true);
             }
@@ -133,7 +144,12 @@ impl LuaScriptHost {
         let clock = budget.clone();
         lua.set_interrupt(move |_| {
             let deadline = clock.deadline_ns.load(Ordering::Relaxed);
-            if deadline == 0 || clock.ticks.fetch_add(1, Ordering::Relaxed) % 64 != 0 {
+            if deadline == 0
+                || !clock
+                    .ticks
+                    .fetch_add(1, Ordering::Relaxed)
+                    .is_multiple_of(64)
+            {
                 return Ok(VmState::Continue);
             }
             if clock.epoch.elapsed().as_nanos() as u64 >= deadline {
@@ -428,7 +444,6 @@ impl LuaScriptHost {
         env.set_metatable(Some(mt));
         Ok(env)
     }
-
 
     /// Instala a API `viber` na VM — composta em `api.rs` (grupos
     /// categorizados: núcleo, input, eventos, timers, entidade, jogo).

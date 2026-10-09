@@ -481,15 +481,14 @@ fn step_projectiles(
 
         // Terreno: a superfície sólida sob a posição ANTERIOR (grutas e
         // overhangs contam) ficou acima da atual → atravessou o chão.
-        if let Some(rt) = runtime.as_deref() {
-            if rt.in_field(pos.x, pos.z)
-                && rt
-                    .surface_below(pos.x, pos.z, prev.y.max(pos.y) + 0.01)
-                    .is_some_and(|ground| pos.y <= ground)
-            {
-                impact_burst(&mut commands, pos);
-                commands.entity(entity).despawn();
-            }
+        if let Some(rt) = runtime.as_deref()
+            && rt.in_field(pos.x, pos.z)
+            && rt
+                .surface_below(pos.x, pos.z, prev.y.max(pos.y) + 0.01)
+                .is_some_and(|ground| pos.y <= ground)
+        {
+            impact_burst(&mut commands, pos);
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -752,13 +751,16 @@ mod tests {
     #[test]
     fn test_swept_distance_hits_mid_step() {
         let feet = Vec3::new(0.0, 0.0, 2.0);
-        let (gap, along) = swept_body_distance(Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 1.0, 5.0), feet);
+        let (gap, along) =
+            swept_body_distance(Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 1.0, 5.0), feet);
         assert!(gap < 1e-4, "{gap}");
         assert!((along - 0.4).abs() < 1e-4, "{along}");
-        let (gap, _) = swept_body_distance(Vec3::new(3.0, 1.0, 0.0), Vec3::new(3.0, 1.0, 5.0), feet);
+        let (gap, _) =
+            swept_body_distance(Vec3::new(3.0, 1.0, 0.0), Vec3::new(3.0, 1.0, 5.0), feet);
         assert!((gap - 3.0).abs() < 1e-4, "{gap}");
         // Por cima da cabeça: a distância conta ao topo da cápsula.
-        let (gap, _) = swept_body_distance(Vec3::new(0.0, 3.0, 0.0), Vec3::new(0.0, 3.0, 5.0), feet);
+        let (gap, _) =
+            swept_body_distance(Vec3::new(0.0, 3.0, 0.0), Vec3::new(0.0, 3.0, 5.0), feet);
         assert!((gap - (3.0 - BODY_HIGH)).abs() < 1e-4, "{gap}");
     }
 
@@ -809,11 +811,7 @@ mod tests {
                 GlobalTransform::from_xyz(0.0, 0.0, 6.0),
             ))
             .id();
-        fire(
-            &mut app,
-            Vec3::new(0.0, 1.2, 0.0),
-            Vec3::new(0.0, 1.1, 6.0),
-        );
+        fire(&mut app, Vec3::new(0.0, 1.2, 0.0), Vec3::new(0.0, 1.1, 6.0));
         run_frames(&mut app, 60);
         assert!(app.world().get::<Corpse>(wolf).is_some(), "vira cadáver");
     }

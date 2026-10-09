@@ -6,8 +6,8 @@ use bevy::asset::LoadState;
 
 use bevy::gltf::Gltf;
 use bevy::light::NotShadowCaster;
-use bevy::shape::{Capsule3d, Cuboid, Cylinder, Plane3d, Sphere};
 use bevy::prelude::*;
+use bevy::shape::{Capsule3d, Cuboid, Cylinder, Plane3d, Sphere};
 use bevy::world_serialization::WorldAssetRoot;
 
 use super::{EntityKind, EntitySpec, MaterialSpec, ParsedWorld, Shape, TransformSpec};
@@ -354,10 +354,9 @@ fn collect_catalogs(specs: &[EntitySpec], out: &mut PendingCatalogs, offset: Vec
             offset + Vec2::new(spec.transform.translation[0], spec.transform.translation[2]);
         match &spec.kind {
             EntityKind::Landmark { spec } => out.landmarks.push(spec.clone()),
-            EntityKind::SpawnPoint { at, label } => out.spawn_points.push((
-                Vec2::new(at[0] + offset.x, at[1] + offset.y),
-                label.clone(),
-            )),
+            EntityKind::SpawnPoint { at, label } => out
+                .spawn_points
+                .push((Vec2::new(at[0] + offset.x, at[1] + offset.y), label.clone())),
             _ => {}
         }
         collect_catalogs(&spec.children, out, child_offset);
@@ -2022,7 +2021,9 @@ pub fn apply_script_spawns(world: &mut World) {
         .collect();
     // Assets removidos do World (mesmo padrão do `startup` — spawn_entity
     // muta o World E recebe os Assets por &mut).
-    let mut meshes = world.remove_resource::<Assets<Mesh>>().expect("Assets<Mesh>");
+    let mut meshes = world
+        .remove_resource::<Assets<Mesh>>()
+        .expect("Assets<Mesh>");
     let mut materials = world
         .remove_resource::<Assets<StandardMaterial>>()
         .expect("Assets<StandardMaterial>");
@@ -2061,8 +2062,7 @@ pub fn apply_script_spawns(world: &mut World) {
         let Some(spec) = spec.as_ref() else {
             continue;
         };
-        let Some(root) = spawn_entity(world, &mut ctx, spec, None, &mut stats, &mut ambient)
-        else {
+        let Some(root) = spawn_entity(world, &mut ctx, spec, None, &mut stats, &mut ambient) else {
             continue;
         };
         let y = seat_y.unwrap_or(request.pos.y);

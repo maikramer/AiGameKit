@@ -73,7 +73,7 @@ fn bake_column(
         0,
         COORDS,
         [NO_NEIGHBOUR; 4],
-            [false; 4],
+        [false; 4],
     );
     let mut bake = ColumnColliderBake::new();
     let mut meshed = 0;
@@ -209,7 +209,7 @@ fn test_the_bake_is_deterministic() {
         0,
         COORDS,
         [NO_NEIGHBOUR; 4],
-            [false; 4],
+        [false; 4],
     );
     let bake = || {
         let mut b = ColumnColliderBake::new();

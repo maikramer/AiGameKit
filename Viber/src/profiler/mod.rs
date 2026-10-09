@@ -366,8 +366,7 @@ fn system_access_map(world: &mut World) -> std::collections::HashMap<String, (us
             }
             // O primeiro visto ganha: um fn registado em dois schedules é o
             // mesmo sistema a olhar para a mesma lista de componentes.
-            map.entry(system.name.clone())
-                .or_insert((reads, writes));
+            map.entry(system.name.clone()).or_insert((reads, writes));
         }
     }
     map
@@ -424,11 +423,11 @@ pub fn snapshot(world: &mut World) -> serde_json::Value {
         .take(limit)
         .map(|s| {
             let mut v = serde_json::to_value(s).unwrap_or(json!({}));
-            if let Some(name) = v.get("name").and_then(|n| n.as_str()) {
-                if let Some((reads, writes)) = access.get(name) {
-                    v["reads"] = json!(reads);
-                    v["writes"] = json!(writes);
-                }
+            if let Some(name) = v.get("name").and_then(|n| n.as_str())
+                && let Some((reads, writes)) = access.get(name)
+            {
+                v["reads"] = json!(reads);
+                v["writes"] = json!(writes);
             }
             v
         })

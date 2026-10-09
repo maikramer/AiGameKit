@@ -55,7 +55,7 @@ fn bench_voxel_box_build_per_lod() {
             lod,
             coords,
             [viber::terrain::voxel::spawn::NO_NEIGHBOUR; 4],
-                [false; 4],
+            [false; 4],
         );
         assert!(!boxes.is_empty(), "lod {lod}: no boxes planned");
 

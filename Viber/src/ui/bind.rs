@@ -293,11 +293,13 @@ pub(crate) fn resolve_binding(
     name: &str,
 ) -> Option<BoundValue> {
     data.get(name).or_else(|| {
-        script_binds.and_then(|binds| binds.get(name)).map(|value| BoundValue {
-            fraction: value.number() as f32,
-            text: value.text(),
-            truthy: value.flag(),
-        })
+        script_binds
+            .and_then(|binds| binds.get(name))
+            .map(|value| BoundValue {
+                fraction: value.number() as f32,
+                text: value.text(),
+                truthy: value.flag(),
+            })
     })
 }
 
@@ -373,17 +375,17 @@ pub fn apply_ui_bindings(
         }
     }
     for (bind, mut cooldown) in &mut cooldowns {
-        if let Some(value) = resolve(&bind.0) {
-            if (cooldown.value - value.fraction).abs() > 1e-4 {
-                cooldown.value = value.fraction;
-            }
+        if let Some(value) = resolve(&bind.0)
+            && (cooldown.value - value.fraction).abs() > 1e-4
+        {
+            cooldown.value = value.fraction;
         }
     }
     for (bind, mut text) in &mut texts {
-        if let Some(value) = resolve(&bind.0) {
-            if text.0 != value.text {
-                text.0 = value.text;
-            }
+        if let Some(value) = resolve(&bind.0)
+            && text.0 != value.text
+        {
+            text.0 = value.text;
         }
     }
     for (bind, mut visibility) in &mut others {

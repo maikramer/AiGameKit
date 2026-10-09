@@ -307,36 +307,36 @@ pub fn hud_minimap_update(
 
     // Bake one-shot: no primeiro frame em que o terreno já existe. O custo
     // é de carregamento, nunca de gameplay.
-    if baked.is_none() {
-        if let Some(runtime) = runtime.as_deref() {
-            let handle = images.add(bake_terrain_image(runtime));
-            let span_px = runtime.spec.world_size * scale;
-            commands.entity(map_entity).with_children(|map| {
-                map.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Percent(50.0),
-                        top: Val::Percent(50.0),
-                        margin: UiRect::px(-span_px * 0.5, 0.0, -span_px * 0.5, 0.0),
-                        width: Val::Px(span_px),
-                        height: Val::Px(span_px),
-                        ..Default::default()
-                    },
-                    ImageNode {
-                        image: handle.clone(),
-                        ..Default::default()
-                    },
-                    // O with_children dos commands APENDA o filho no fim da
-                    // lista — sem Z negativo ele desenha POR CIMA da seta e
-                    // dos pontos (o clip não reordena nada).
-                    ZIndex(-1),
-                    UiTransform::IDENTITY,
-                    Name::new("hud:minimap:terrain"),
-                    MinimapTerrain,
-                ));
-            });
-            *baked = Some(handle);
-        }
+    if baked.is_none()
+        && let Some(runtime) = runtime.as_deref()
+    {
+        let handle = images.add(bake_terrain_image(runtime));
+        let span_px = runtime.spec.world_size * scale;
+        commands.entity(map_entity).with_children(|map| {
+            map.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Percent(50.0),
+                    top: Val::Percent(50.0),
+                    margin: UiRect::px(-span_px * 0.5, 0.0, -span_px * 0.5, 0.0),
+                    width: Val::Px(span_px),
+                    height: Val::Px(span_px),
+                    ..Default::default()
+                },
+                ImageNode {
+                    image: handle.clone(),
+                    ..Default::default()
+                },
+                // O with_children dos commands APENDA o filho no fim da
+                // lista — sem Z negativo ele desenha POR CIMA da seta e
+                // dos pontos (o clip não reordena nada).
+                ZIndex(-1),
+                UiTransform::IDENTITY,
+                Name::new("hud:minimap:terrain"),
+                MinimapTerrain,
+            ));
+        });
+        *baked = Some(handle);
     }
     // Sem terreno ainda (mundo a carregar): o resto do HUD do mapa espera —
     // pontos sobre vidro escuro sem contexto era o erro que o crítico apanhou.

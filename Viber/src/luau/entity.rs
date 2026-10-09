@@ -9,8 +9,8 @@
 //! corre o caminho nativo (cadáver/XP/quests são do melee) — o script decide
 //! (topple/despawn/eventos).
 
-use mlua::{Lua, Table};
 use mlua::IntoLua;
+use mlua::{Lua, Table};
 
 use super::commands::ScriptCommand;
 use super::ctx::ScriptCtx;
@@ -107,7 +107,7 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
             if let Some(bits) = exact_or_substring(&ctx.named_entities, &name) {
                 // i64 via IntoLua (Luau não tem inteiros — o Value::Integer
                 // do mlua é i32 e os bits podem excedê-lo).
-                return Ok(bits.first().copied().unwrap_or(0).into_lua(lua)?);
+                return bits.first().copied().unwrap_or(0).into_lua(lua);
             }
             Ok(mlua::Value::Nil)
         })?,
@@ -166,7 +166,5 @@ fn exact_or_substring<'a>(
     if let Some(v) = map.get(name) {
         return Some(v);
     }
-    map.iter()
-        .find(|(k, _)| k.contains(name))
-        .map(|(_, v)| v)
+    map.iter().find(|(k, _)| k.contains(name)).map(|(_, v)| v)
 }

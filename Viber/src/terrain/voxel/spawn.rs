@@ -188,7 +188,14 @@ pub(crate) fn refined_neighbours(
             (coords.x as i64 + dx).max(0) as u32,
             (coords.y as i64 + dz).max(0) as u32,
         );
-        column_refines(lod_field, field, spec, chunk_edge, lod_field.get(nc).unwrap_or(NO_NEIGHBOUR), nc)
+        column_refines(
+            lod_field,
+            field,
+            spec,
+            chunk_edge,
+            lod_field.get(nc).unwrap_or(NO_NEIGHBOUR),
+            nc,
+        )
     })
 }
 
@@ -534,13 +541,13 @@ pub fn spawn_voxel_columns(
             };
             let neighbours = lod_field.neighbours(coords);
             let refined = refined_neighbours(&lod_field, field, spec, edge, coords);
-            let boxes =
-                column_boxes(spec, grid, field, edge, lod0_cell, lod, coords, neighbours, refined);
+            let boxes = column_boxes(
+                spec, grid, field, edge, lod0_cell, lod, coords, neighbours, refined,
+            );
             // Mesma codificação do plugin (`lod | 0x80·refinado`) — o passe
             // de LOD compara contra ISTO; guardar o array cru fazia toda
             // coluna refinada reconstruir uma vez à toa no primeiro frame.
-            let nkey: [u8; 4] =
-                std::array::from_fn(|i| neighbours[i] | ((refined[i] as u8) << 7));
+            let nkey: [u8; 4] = std::array::from_fn(|i| neighbours[i] | ((refined[i] as u8) << 7));
             stats.chunks += 1;
             let material = layer_map
                 .and_then(|m| m.get(cx, cz).cloned())
@@ -641,7 +648,9 @@ mod tests {
             [false; 4],
         );
         assert!(
-            boxes.iter().any(|b| b.refined && b.cells == 64 && b.voxel_size == 0.5),
+            boxes
+                .iter()
+                .any(|b| b.refined && b.cells == 64 && b.voxel_size == 0.5),
             "coluna sobre o mod refina a meio célula: {:?}",
             boxes.first().map(|b| (b.cells, b.voxel_size, b.refined))
         );
@@ -701,7 +710,10 @@ mod tests {
         for b in &boxes {
             let lx = ((b.origin.x - (-128.0 + 64.0)) / b.extent).round() as i32;
             if lx == 0 {
-                assert!(b.transitions[0], "face −X ponteia o vizinho refinado: {b:?}");
+                assert!(
+                    b.transitions[0],
+                    "face −X ponteia o vizinho refinado: {b:?}"
+                );
             } else {
                 assert!(!b.transitions[0], "fiada interior não ponteia: {b:?}");
             }

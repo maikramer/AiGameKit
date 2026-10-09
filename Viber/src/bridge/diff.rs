@@ -30,7 +30,10 @@ pub fn parse_roi(roi: &str) -> Result<(u32, u32, u32, u32), String> {
     if parts.len() != 4 {
         return Err(format!("roi '{roi}' inválida — usa x,y,w,h"));
     }
-    let nums: Result<Vec<u32>, _> = parts.iter().map(|p| p.parse::<u32>().map_err(|e| e.to_string())).collect();
+    let nums: Result<Vec<u32>, _> = parts
+        .iter()
+        .map(|p| p.parse::<u32>().map_err(|e| e.to_string()))
+        .collect();
     let nums = nums.map_err(|e| format!("roi '{roi}': {e}"))?;
     Ok((nums[0], nums[1], nums[2], nums[3]))
 }
@@ -45,7 +48,11 @@ fn load_rgba(path: &Path) -> Result<image::RgbaImage, String> {
 }
 
 /// Diff completo entre dois ficheiros de imagem.
-pub fn diff_files(a: &Path, b: &Path, roi: Option<(u32, u32, u32, u32)>) -> Result<DiffResult, String> {
+pub fn diff_files(
+    a: &Path,
+    b: &Path,
+    roi: Option<(u32, u32, u32, u32)>,
+) -> Result<DiffResult, String> {
     let img_a = load_rgba(a)?;
     let img_b = load_rgba(b)?;
     if img_a.dimensions() != img_b.dimensions() {
@@ -81,7 +88,7 @@ pub fn diff_files(a: &Path, b: &Path, roi: Option<(u32, u32, u32, u32)>) -> Resu
                 .abs_diff(pb[0])
                 .max(pa[1].abs_diff(pb[1]))
                 .max(pa[2].abs_diff(pb[2]));
-            histogram[delta.min(255) as usize] += 1;
+            histogram[delta as usize] += 1;
             sum += u64::from(delta);
             max_delta = max_delta.max(u32::from(delta));
             if delta > 0 {
@@ -135,7 +142,11 @@ pub fn compare_baseline(
 }
 
 /// Regrava o golden com o conteúdo de `actual` (aceitar a mudança).
-pub fn update_baseline(dir: &Path, name: &str, actual: &Path) -> Result<std::path::PathBuf, String> {
+pub fn update_baseline(
+    dir: &Path,
+    name: &str,
+    actual: &Path,
+) -> Result<std::path::PathBuf, String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("a criar {}: {e}", dir.display()))?;
     let golden = dir.join(format!("{name}.png"));
     std::fs::copy(actual, &golden).map_err(|e| format!("a gravar {}: {e}", golden.display()))?;
@@ -154,7 +165,9 @@ mod tests {
         let a = dir.join("a.png");
         let b = dir.join("b.png");
         let mut img = image::RgbaImage::new(64, 64);
-        image::DynamicImage::ImageRgba8(img.clone()).save(&a).unwrap();
+        image::DynamicImage::ImageRgba8(img.clone())
+            .save(&a)
+            .unwrap();
         img.put_pixel(10, 10, image::Rgba([255, 0, 0, 255]));
         image::DynamicImage::ImageRgba8(img).save(&b).unwrap();
 
@@ -177,7 +190,9 @@ mod tests {
         let golden_dir = dir.join("golden");
         let actual = dir.join("atual.png");
         std::fs::create_dir_all(&dir).unwrap();
-        image::DynamicImage::new_rgba8(32, 32).save(&actual).unwrap();
+        image::DynamicImage::new_rgba8(32, 32)
+            .save(&actual)
+            .unwrap();
 
         let seeded = compare_baseline(&golden_dir, "shot", &actual).unwrap();
         assert!(seeded.is_none(), "primeiro run semeia o golden");

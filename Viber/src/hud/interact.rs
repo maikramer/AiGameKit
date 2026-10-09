@@ -96,10 +96,10 @@ pub fn hud_balloon_update(
         let visible = *visibility == Visibility::Visible;
         if !balloon_tick(&mut balloon.timer, visible, dt) {
             *visibility = Visibility::Hidden;
-            if let Some(child) = children.first() {
-                if let Ok(mut text) = texts.get_mut(*child) {
-                    text.0 = "…".into();
-                }
+            if let Some(child) = children.first()
+                && let Ok(mut text) = texts.get_mut(*child)
+            {
+                text.0 = "…".into();
             }
         }
     }

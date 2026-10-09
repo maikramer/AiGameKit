@@ -13,8 +13,8 @@
 //! did before.
 
 use bevy::prelude::*;
-use bevy_landmass::prelude::*;
 use bevy_landmass::coords::ThreeD;
+use bevy_landmass::prelude::*;
 use bevy_landmass::{Agent3d, AgentTypeIndexCostOverrides, Character};
 
 use crate::ai::AiLocomotion;
@@ -87,7 +87,9 @@ pub fn attach_nav_agents(
         return;
     };
     for (entity, profile, script, fsm) in &fresh {
-        let profile = profile.copied().unwrap_or_else(|| default_profile(script, fsm));
+        let profile = profile
+            .copied()
+            .unwrap_or_else(|| default_profile(script, fsm));
         let mut overrides = AgentTypeIndexCostOverrides::default();
         if matches!(profile, NavProfile::Civil) {
             overrides.set_type_index_cost(GROUND_TYPE_INDEX, config.offroad_cost);
@@ -277,8 +279,17 @@ pub fn pull_nav_velocities(
     if config.debug && census.iter().any(|n| *n > 0) {
         debug!(
             "nav: idle {} chegou {} a-andar {} fora-da-mesh {} alvo-fora {} sem-caminho {} pausado {} | 1.º agente pedido ({:.2}, {:.2}) → navegado ({:.2}, {:.2})",
-            census[0], census[1], census[4], census[5], census[6], census[7], census[8],
-            sample_ask.x, sample_ask.y, sample_nav.x, sample_nav.y
+            census[0],
+            census[1],
+            census[4],
+            census[5],
+            census[6],
+            census[7],
+            census[8],
+            sample_ask.x,
+            sample_ask.y,
+            sample_nav.x,
+            sample_nav.y
         );
     }
 }

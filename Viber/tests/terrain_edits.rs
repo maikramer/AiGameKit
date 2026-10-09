@@ -88,7 +88,11 @@ fn test_crater_moves_the_mesh_and_the_queries() {
         grid: &grid,
         deltas: &deltas,
     };
-    assert!(base.sample(0.0, 0.0) < 5.0, "fundo da tigela: {}", base.sample(0.0, 0.0));
+    assert!(
+        base.sample(0.0, 0.0) < 5.0,
+        "fundo da tigela: {}",
+        base.sample(0.0, 0.0)
+    );
     assert!(
         (base.sample(30.0, 30.0) - 10.0).abs() < 0.1,
         "fora do raio intacto"

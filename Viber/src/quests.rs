@@ -102,7 +102,10 @@ pub fn load_quests_from_dir(dir: &Path) -> Vec<QuestDef> {
     let mut files: Vec<PathBuf> = entries
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
         .filter(|path| {
-            path.is_file() && path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json"))
+            path.is_file()
+                && path
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("json"))
         })
         .collect();
     files.sort();
@@ -111,8 +114,7 @@ pub fn load_quests_from_dir(dir: &Path) -> Vec<QuestDef> {
         let parsed = std::fs::read_to_string(&path)
             .map_err(|error| error.to_string())
             .and_then(|text| {
-                serde_json::from_str::<Vec<QuestDef>>(&text)
-                    .map_err(|error| error.to_string())
+                serde_json::from_str::<Vec<QuestDef>>(&text).map_err(|error| error.to_string())
             });
         match parsed {
             Ok(mut list) => defs.append(&mut list),
@@ -650,12 +652,11 @@ fn quest_dialogue_system(
     }
     // O vencedor do foco [E] (se algum) tem de ser ESTE NPC — um script mais
     // próximo que ganhou o [E] leva a interação consigo.
-    if let Some(focus) = focus.as_deref() {
-        if let Some(winner) = focus.winner(KeyCode::KeyE) {
-            if winner != npc_entity {
-                return;
-            }
-        }
+    if let Some(focus) = focus.as_deref()
+        && let Some(winner) = focus.winner(KeyCode::KeyE)
+        && winner != npc_entity
+    {
+        return;
     }
     let id = npc.dialogue_id.clone();
     let vault_ref = vault.as_deref();
@@ -694,23 +695,21 @@ fn quest_dialogue_system(
                 info!(target: "viber::quests", "entrega de '{id}'");
                 if let Some(rewards) = log.turn_in(&id, vault.as_deref_mut()) {
                     if let Some(events) = events.as_deref_mut() {
-                        events.push(crate::luau::ScriptGameEvent::QuestDone {
-                            id: id.clone(),
-                        });
+                        events.push(crate::luau::ScriptGameEvent::QuestDone { id: id.clone() });
                     }
                     if let Ok(mut xp) = heroes.single_mut() {
                         crate::vitals::gain_xp(&mut xp, rewards.xp);
                     }
-                    if rewards.gold > 0 {
-                        if let Some(vault) = vault.as_deref_mut() {
-                            vault.add_resource("gold", rewards.gold);
-                        }
+                    if rewards.gold > 0
+                        && let Some(vault) = vault.as_deref_mut()
+                    {
+                        vault.add_resource("gold", rewards.gold);
                     }
                     for item in &rewards.items {
-                        if let Some((id, n)) = parse_item_reward(item) {
-                            if let Some(vault) = vault.as_deref_mut() {
-                                vault.item_add(&id, n);
-                            }
+                        if let Some((id, n)) = parse_item_reward(item)
+                            && let Some(vault) = vault.as_deref_mut()
+                        {
+                            vault.item_add(&id, n);
                         }
                     }
                     toasts.write(ScriptToast(format!(
@@ -758,7 +757,12 @@ fn quest_dialogue_system(
                 .unwrap_or_default(),
         ),
     };
-    show_balloon(&mut balloons, &mut texts, &body, crate::hud::BALLOON_DURATION);
+    show_balloon(
+        &mut balloons,
+        &mut texts,
+        &body,
+        crate::hud::BALLOON_DURATION,
+    );
 }
 
 fn join_lines(lines: &[String]) -> String {
@@ -786,10 +790,10 @@ pub(crate) fn show_balloon(
         found = true;
         balloon.timer = secs;
         *visibility = Visibility::Visible;
-        if let Some(child) = children.first() {
-            if let Ok(mut text) = texts.get_mut(*child) {
-                text.0 = body.into();
-            }
+        if let Some(child) = children.first()
+            && let Ok(mut text) = texts.get_mut(*child)
+        {
+            text.0 = body.into();
         }
     }
     found
@@ -863,10 +867,10 @@ fn quest_done_fanfare(
     if let Ok((mut banner, children)) = banners.single_mut() {
         banner.timer = QUEST_BANNER_SECS;
         // children[0] = "MISSÃO CONCLUÍDA" (fixo), children[1] = subtítulo.
-        if let Some(&subtitle) = children.get(1) {
-            if let Ok(mut text) = texts.get_mut(subtitle) {
-                text.0 = format!("✦ {title}");
-            }
+        if let Some(&subtitle) = children.get(1)
+            && let Ok(mut text) = texts.get_mut(subtitle)
+        {
+            text.0 = format!("✦ {title}");
         }
     }
 }
@@ -1223,9 +1227,11 @@ mod tests {
                 ))
                 .id();
             if scripted {
-                app.world_mut().entity_mut(npc).insert(crate::luau::LuaScriptRef {
-                    path: "npc/forest-wolves.lua".into(),
-                });
+                app.world_mut()
+                    .entity_mut(npc)
+                    .insert(crate::luau::LuaScriptRef {
+                        path: "npc/forest-wolves.lua".into(),
+                    });
             }
             app.update();
             app.world().resource::<QuestLog>().status(dialogue_id, None)
@@ -1406,6 +1412,10 @@ mod tests {
 
         let defs = load_quests_from_dir(dir.path());
         let ids: Vec<&str> = defs.iter().map(|d| d.id.as_str()).collect();
-        assert_eq!(ids, vec!["q1", "q2", "q3"], "skip do JSON malformado + ordem sorted");
+        assert_eq!(
+            ids,
+            vec!["q1", "q2", "q3"],
+            "skip do JSON malformado + ordem sorted"
+        );
     }
 }

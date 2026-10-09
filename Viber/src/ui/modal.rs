@@ -161,12 +161,11 @@ pub fn parse_key(name: &str) -> KeyCode {
         "backslash" | "\\" => KeyCode::Backslash,
         _ => {
             // Letras: "p" (ou "KeyP"/"P" — o trim+lowercase já tratou).
-            if let Some(rest) = key.strip_prefix("key") {
-                if rest.len() == 1 {
-                    if let Some(code) = letter_key(rest) {
-                        return code;
-                    }
-                }
+            if let Some(rest) = key.strip_prefix("key")
+                && rest.len() == 1
+                && let Some(code) = letter_key(rest)
+            {
+                return code;
             }
             if let Some(code) = letter_key(key) {
                 return code;
@@ -189,26 +188,26 @@ pub fn parse_key(name: &str) -> KeyCode {
                 return code;
             }
             // Teclas de função F1–F12.
-            if let Some(n) = key.strip_prefix('f') {
-                if let Ok(n) = n.parse::<u8>() {
-                    let code = match n {
-                        1 => KeyCode::F1,
-                        2 => KeyCode::F2,
-                        3 => KeyCode::F3,
-                        4 => KeyCode::F4,
-                        5 => KeyCode::F5,
-                        6 => KeyCode::F6,
-                        7 => KeyCode::F7,
-                        8 => KeyCode::F8,
-                        9 => KeyCode::F9,
-                        10 => KeyCode::F10,
-                        11 => KeyCode::F11,
-                        12 => KeyCode::F12,
-                        _ => KeyCode::F1,
-                    };
-                    if (1..=12).contains(&n) {
-                        return code;
-                    }
+            if let Some(n) = key.strip_prefix('f')
+                && let Ok(n) = n.parse::<u8>()
+            {
+                let code = match n {
+                    1 => KeyCode::F1,
+                    2 => KeyCode::F2,
+                    3 => KeyCode::F3,
+                    4 => KeyCode::F4,
+                    5 => KeyCode::F5,
+                    6 => KeyCode::F6,
+                    7 => KeyCode::F7,
+                    8 => KeyCode::F8,
+                    9 => KeyCode::F9,
+                    10 => KeyCode::F10,
+                    11 => KeyCode::F11,
+                    12 => KeyCode::F12,
+                    _ => KeyCode::F1,
+                };
+                if (1..=12).contains(&n) {
+                    return code;
                 }
             }
             if !key.is_empty() {

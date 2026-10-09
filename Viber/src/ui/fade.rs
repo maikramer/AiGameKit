@@ -28,8 +28,8 @@
 use bevy::prelude::*;
 
 use super::bind::{UiData, resolve_binding};
-use super::script::UiScriptBinds;
 use super::runtime::{UiBind, UiStyleDirty};
+use super::script::UiScriptBinds;
 
 /// Fade state of one element (and, through inheritance, its subtree).
 #[derive(Debug, Clone, Component)]
@@ -215,9 +215,10 @@ mod tests {
     fn test_fade_follows_a_script_bind() {
         let mut app = App::new();
         let mut binds = UiScriptBinds::default();
-        binds
-            .0
-            .insert("boss.active".into(), super::super::script::ScriptBindValue::Flag(true));
+        binds.0.insert(
+            "boss.active".into(),
+            super::super::script::ScriptBindValue::Flag(true),
+        );
         app.init_resource::<Time>()
             .init_resource::<UiData>()
             .insert_resource(binds)

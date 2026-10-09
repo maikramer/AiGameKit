@@ -710,12 +710,11 @@ fn apply_template_collider(
     handle: &Option<bevy::asset::Handle<bevy::gltf::Gltf>>,
     moving: bool,
 ) {
-    if moving {
-        if let Some((body, gravity)) =
+    if moving
+        && let Some((body, gravity)) =
             crate::physics::body_bundle(crate::physics::BodyKind::Kinematic, None)
-        {
-            entity.insert((body, gravity));
-        }
+    {
+        entity.insert((body, gravity));
     }
     match shape {
         crate::physics::ColliderShape::None => {}
@@ -1109,10 +1108,10 @@ fn spawn_instance(
         apply_template_collider(&mut entity, shape, &group.collider_handle, group.dynamic);
     }
     // Destrutível é coisa de prop estático — criaturas morrem por combate.
-    if !group.dynamic {
-        if let Some(destructible) = &group.template_destructible {
-            entity.insert(crate::harvest::Destructible::from_spec(destructible));
-        }
+    if !group.dynamic
+        && let Some(destructible) = &group.template_destructible
+    {
+        entity.insert(crate::harvest::Destructible::from_spec(destructible));
     }
 }
 
@@ -1582,7 +1581,11 @@ mod tests {
         assert_eq!(out.len(), 50, "max-instances caps density runs");
         s.max_instances = 0;
         s.density_per_km2 = 1.0e8; // 0.04 km² → 4 M sem teto
-        assert_eq!(resolved_count(&s), 100_000, "density runs share the count cap");
+        assert_eq!(
+            resolved_count(&s),
+            100_000,
+            "density runs share the count cap"
+        );
         s.density_per_km2 = 1_000_000.0;
         s.max_instances = 50;
         // `count` explícito ganha sempre ao modo densidade.
@@ -1671,9 +1674,16 @@ mod tests {
         assert_eq!(out.len(), 5);
         stand_upright(&mut out);
         for instance in &out {
-            assert!((instance.position.y - 7.5).abs() < 1e-4, "on the hill: {}", instance.position.y);
+            assert!(
+                (instance.position.y - 7.5).abs() < 1e-4,
+                "on the hill: {}",
+                instance.position.y
+            );
             let up = instance.rotation * Vec3::Y;
-            assert!(up.angle_between(Vec3::Y).to_degrees() < 0.01, "upright: {up}");
+            assert!(
+                up.angle_between(Vec3::Y).to_degrees() < 0.01,
+                "upright: {up}"
+            );
             let fwd = instance.rotation * Vec3::Z;
             let expected = Quat::from_rotation_y(instance.yaw_deg.to_radians()) * Vec3::Z;
             assert!(fwd.distance(expected) < 1e-4, "yaw kept");

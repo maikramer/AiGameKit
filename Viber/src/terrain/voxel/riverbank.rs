@@ -152,8 +152,7 @@ pub fn lake_shore_band(
     // Anel fechado: amostra o contorno harmónico na linha de água real e
     // fecha repetindo a primeira estação no fim (into_mods corta por pares).
     let segments = 96;
-    let shape =
-        super::super::water::LakeShape::from_authoring(spec.at, &spec.shape);
+    let shape = super::super::water::LakeShape::from_authoring(spec.at, &spec.shape);
     let reach = (super::super::water::waterline_reach(spec.depth, spec.water_offset)
         * super::super::water::CARVE_MARGIN)
         .clamp(0.5, 1.6);
@@ -349,7 +348,7 @@ pub fn wall_waterfalls(
                     continue;
                 };
                 let d = hit.point.distance(*st);
-                if best.as_ref().map_or(true, |(bd, _, _)| d < *bd) {
+                if best.as_ref().is_none_or(|(bd, _, _)| d < *bd) {
                     best = Some((d, bi, hit));
                 }
             }

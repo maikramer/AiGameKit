@@ -438,19 +438,20 @@ fn options_system(
         // Sem herói (ausente/Disabled) não há estado real para gravar — cair
         // nos defaults ((100,100),(0,100), origem) SOBRESCREVIA um save bom.
         // Trata como falha: toast + SFX de erro, sem tocar no disco.
-        let hero_state = heroes
-            .single_mut()
-            .ok()
-            .map(|(_, t, _player, hp, xp, level, _xp_level)| {
-                (
-                    // Sem `Health`/`Xp` (preset `none`): defaults — o mundo
-                    // não tem vitais, o save é mesmo assim coerente.
-                    hp.map(|h| (h.current, h.max)).unwrap_or((100.0, 100.0)),
-                    xp.map(|x| (x.current, x.next)).unwrap_or((0, 100)),
-                    [t.translation.x, t.translation.y, t.translation.z],
-                    level.as_ref().map(|l| l.level).unwrap_or(0),
-                )
-            });
+        let hero_state =
+            heroes
+                .single_mut()
+                .ok()
+                .map(|(_, t, _player, hp, xp, level, _xp_level)| {
+                    (
+                        // Sem `Health`/`Xp` (preset `none`): defaults — o mundo
+                        // não tem vitais, o save é mesmo assim coerente.
+                        hp.map(|h| (h.current, h.max)).unwrap_or((100.0, 100.0)),
+                        xp.map(|x| (x.current, x.next)).unwrap_or((0, 100)),
+                        [t.translation.x, t.translation.y, t.translation.z],
+                        level.as_ref().map(|l| l.level).unwrap_or(0),
+                    )
+                });
         if let Some((health, xp, position, level)) = hero_state {
             let mut game = capture(
                 vault.as_deref(),
@@ -464,7 +465,7 @@ fn options_system(
                 (mixer.master, mixer.music, mixer.sfx),
             );
             // Estado de jogo Lua vai no mesmo ficheiro (JSON plano).
-            if let Some(host) = host.as_deref_mut() {
+            if let Some(host) = host.as_mut() {
                 game.world_kv = crate::luau::game::game_to_json(&host.lua);
             }
             if let Err(e) = save_to_disk(&save_path_for(world_key, save_dir), &game) {
@@ -506,7 +507,7 @@ fn options_system(
                     stats.as_deref_mut(),
                 );
                 // Estado de jogo Lua reposto (viber.game()).
-                if let Some(host) = host.as_deref_mut() {
+                if let Some(host) = host.as_mut() {
                     crate::luau::game::json_to_game(&host.lua, &game.world_kv);
                 }
                 if let Ok((entity, mut transform, mut player, mut hp, mut xp, level, xp_level)) =
@@ -529,7 +530,9 @@ fn options_system(
                     // Posição não finita (save editado com `1e40`, etc.) não
                     // entra na transform — virava NaN em cascata no Rapier;
                     // o herói fica onde está.
-                    if let Some(position) = game.position.filter(|p| p.iter().all(|v| v.is_finite())) {
+                    if let Some(position) =
+                        game.position.filter(|p| p.iter().all(|v| v.is_finite()))
+                    {
                         transform.translation = position.into();
                         // Chegada limpa (sem inércia/knockback da sessão, com
                         // a tutela enquanto a coluna do save assa o collider).
@@ -543,7 +546,10 @@ fn options_system(
                     // pendente fazia o respawn teleportar o herói (e emitir
                     // `player_died`) segundos depois do load.
                     if hp.as_deref().is_none_or(|hp| hp.current > 0.0) {
-                        world_save_host_request.4.entity(entity).remove::<crate::feedback::Dying>();
+                        world_save_host_request
+                            .4
+                            .entity(entity)
+                            .remove::<crate::feedback::Dying>();
                     }
                     if let Some(mut level) = level {
                         level.level = game.level;
@@ -705,7 +711,10 @@ mod tests {
         for name in ["world.xml", "qa-agua.xml", "qa-cliffs.xml"] {
             std::fs::write(game.join(name), "<world/>").unwrap();
         }
-        assert_eq!(world_save_key(&game.join("world.xml")).as_deref(), Some("meu-jogo"));
+        assert_eq!(
+            world_save_key(&game.join("world.xml")).as_deref(),
+            Some("meu-jogo")
+        );
         assert_eq!(
             world_save_key(&game.join("qa-agua.xml")).as_deref(),
             Some("meu-jogo-qa-agua")

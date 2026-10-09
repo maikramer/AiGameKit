@@ -1,10 +1,16 @@
-# vendor/ — forks vendored para o Bevy 0.20.0-rc.2
+# vendor/ — forks vendored para o Bevy 0.20
 
-O Bevy 0.20.0-rc.2 (tag GitHub de 2026-09-25) ainda **não está no crates.io**
-no dia desta vendedorização; os crates do ecossistema que a engine usa estão
-todos presos ao Bevy 0.19. Até o upstream publicar, carregamos cópias locais
-portadas por nós. **Remover cada fork quando a versão bevy-0.20 dele sair no
-crates.io** (ver `docs/CRATES.md`).
+**Atualização 2026-10-09**: o Bevy **0.20.0 final** saiu no crates.io
+(2026-10-08); a tabela `[patch.crates-io]` de tags git foi **removida** e o
+`bevy = "0.20"` resolve agora do registry. Os forks abaixo continuam vendored
+porque os upstreams **ainda não publicaram** versões bevy-0.20 — as deps bevy
+deles (`"0.20.0-rc.2"`, caret) aceitam a 0.20.0 final e resolvem à mesma
+árvore. **Remover cada fork quando a versão bevy-0.20 dele sair no crates.io**
+(ver `docs/CRATES.md`).
+
+Histórico: os forks foram criados quando o Bevy 0.20.0-rc.2 (tag GitHub
+2026-09-25) ainda não estava no crates.io e os crates do ecossistema estavam
+presos ao Bevy 0.19.
 
 | Fork | Proveniência | Upstream | Estado no dia do fork |
 |------|--------------|----------|----------------------|

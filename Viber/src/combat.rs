@@ -598,16 +598,14 @@ pub fn player_melee_attack(
     }
     // J contextual: se há alvo de colheita (ScriptInteraction com tecla J) no
     // alcance, o golpe vai para a coleta — o script do alvo cuida do resto.
-    if j_pressed {
-        if let Ok((_, player, _, _)) = players.single() {
-            let origin = player.translation();
-            let near_harvest = harvest_targets.iter().any(|(t, interaction)| {
-                interaction.key == KeyCode::KeyJ
-                    && t.translation().distance(origin) <= interaction.range.min(3.5)
-            });
-            if near_harvest {
-                return;
-            }
+    if j_pressed && let Ok((_, player, _, _)) = players.single() {
+        let origin = player.translation();
+        let near_harvest = harvest_targets.iter().any(|(t, interaction)| {
+            interaction.key == KeyCode::KeyJ
+                && t.translation().distance(origin) <= interaction.range.min(3.5)
+        });
+        if near_harvest {
+            return;
         }
     }
     let elapsed = time.elapsed_secs_f64();
@@ -735,7 +733,10 @@ pub fn swing_track_system(
     mut fx: MeleeFx,
     // Um herói que cai a meio do windup cancela o swing (sem lunge nem golpe
     // de um corpo no chão).
-    mut players: Query<(&GlobalTransform, &mut Transform), (With<Player>, Without<crate::feedback::Dying>)>,
+    mut players: Query<
+        (&GlobalTransform, &mut Transform),
+        (With<Player>, Without<crate::feedback::Dying>),
+    >,
     mut hero_xp: Query<&mut Xp, With<Player>>,
     mut enemies: Query<
         (
@@ -773,14 +774,14 @@ pub fn swing_track_system(
     };
     let origin = player_global.translation();
     // Re-aim: alvo vivo → mira no XZ dele; alvo morto a meio → mantém a última.
-    if let Some(entity) = fx.pending.target {
-        if let Ok((_, t, health, corpse, _, _)) = enemies.get(entity) {
-            if corpse.is_none() && health.current > 0.0 {
-                let aim = (t.translation() - origin).with_y(0.0).normalize_or_zero();
-                if aim.length_squared() > 1e-6 {
-                    fx.pending.aim = aim;
-                }
-            }
+    if let Some(entity) = fx.pending.target
+        && let Ok((_, t, health, corpse, _, _)) = enemies.get(entity)
+        && corpse.is_none()
+        && health.current > 0.0
+    {
+        let aim = (t.translation() - origin).with_y(0.0).normalize_or_zero();
+        if aim.length_squared() > 1e-6 {
+            fx.pending.aim = aim;
         }
     }
     // setPlayerFaceTarget: o corpo vira para a mira durante o windup.
@@ -798,11 +799,11 @@ pub fn swing_track_system(
     if fx.pending.lunge_left > 0.0 {
         let speed = LUNGE_SPEED_CAP.min(fx.pending.lunge_left / fx.pending.delay.max(1.0 / 60.0));
         let mut step = (speed * dt).min(fx.pending.lunge_left);
-        if let Some(entity) = fx.pending.target {
-            if let Ok((_, t, _, _, _, _)) = enemies.get(entity) {
-                let gap = (t.translation() - origin).with_y(0.0).length();
-                step = step.min((gap - LUNGE_STANDOFF).max(0.0));
-            }
+        if let Some(entity) = fx.pending.target
+            && let Ok((_, t, _, _, _, _)) = enemies.get(entity)
+        {
+            let gap = (t.translation() - origin).with_y(0.0).length();
+            step = step.min((gap - LUNGE_STANDOFF).max(0.0));
         }
         if step > 0.0 {
             let (x, z) = (
@@ -1475,10 +1476,7 @@ pub fn cast_fireball(
     time: Res<Time>,
     mut last: Local<Option<f64>>,
     mut players: Query<(Entity, &GlobalTransform, &mut Transform), With<Player>>,
-    enemies: Query<
-        (&GlobalTransform, &Health, Option<&Corpse>),
-        (Without<Player>, Hostile),
-    >,
+    enemies: Query<(&GlobalTransform, &Health, Option<&Corpse>), (Without<Player>, Hostile)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -1490,10 +1488,10 @@ pub fn cast_fireball(
     if !mouse.just_pressed(MouseButton::Right) {
         return;
     }
-    if let Some(last) = *last {
-        if time.elapsed_secs_f64() - last < FIREBALL_COOLDOWN as f64 {
-            return;
-        }
+    if let Some(last) = *last
+        && time.elapsed_secs_f64() - last < FIREBALL_COOLDOWN as f64
+    {
+        return;
     }
     let Ok((_, player, mut transform)) = players.single_mut() else {
         return;

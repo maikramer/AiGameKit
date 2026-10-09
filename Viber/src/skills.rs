@@ -12,8 +12,8 @@
 //! - **Guard [L]** (sistema em `feedback.rs`): −75 % de dano, parry total
 //!   nos primeiros 0,22 s.
 
-use bevy::shape::Sphere;
 use bevy::prelude::*;
+use bevy::shape::Sphere;
 
 use crate::economy::Vault;
 use crate::feedback::{AttackAlert, DamageNumberEvent, Invulnerable};
@@ -629,22 +629,20 @@ pub fn abilities_system(
         let near_interaction = focus
             .as_deref()
             .is_some_and(|focus| focus.winner(KeyCode::KeyE).is_some());
-        if !near_interaction {
-            if let Some(health) = health.as_mut() {
-                let healed = HEAL_ABILITY_AMOUNT.min(health.max - health.current);
-                health.current += healed;
-                cds.heal = HEAL_ABILITY_COOLDOWN;
-                numbers.write(DamageNumberEvent {
-                    position: pos + Vec3::Y * 1.9,
-                    text: format!("+{}", healed.round() as i32),
-                    color: Color::srgb(0.4, 1.0, 0.45),
+        if !near_interaction && let Some(health) = health.as_mut() {
+            let healed = HEAL_ABILITY_AMOUNT.min(health.max - health.current);
+            health.current += healed;
+            cds.heal = HEAL_ABILITY_COOLDOWN;
+            numbers.write(DamageNumberEvent {
+                position: pos + Vec3::Y * 1.9,
+                text: format!("+{}", healed.round() as i32),
+                color: Color::srgb(0.4, 1.0, 0.45),
+            });
+            if healed > 0.0 {
+                fx.sfx.write(crate::ambient::SfxEvent {
+                    clip: crate::ambient::SfxClip::Heal,
+                    position: None,
                 });
-                if healed > 0.0 {
-                    fx.sfx.write(crate::ambient::SfxEvent {
-                        clip: crate::ambient::SfxClip::Heal,
-                        position: None,
-                    });
-                }
             }
         }
     }

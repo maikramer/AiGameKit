@@ -774,7 +774,10 @@ fn test_bridge_burst_headless() {
             serde_json::json!({ "frames": 5 }),
         ),
     );
-    assert!(error.contains("4, 9 ou 16"), "erro devia listar os aceites: {error}");
+    assert!(
+        error.contains("4, 9 ou 16"),
+        "erro devia listar os aceites: {error}"
+    );
 
     // skip acima do teto → idem
     let error = settle_err(
@@ -815,7 +818,11 @@ fn test_bridge_burst_headless() {
     );
     assert_eq!(status["status"], serde_json::json!("capturing"));
     assert_eq!(status["captured"], serde_json::json!(0));
-    assert_eq!(status["spawned"], serde_json::json!(1), "1.ª captura spawna no 1.º tick");
+    assert_eq!(
+        status["spawned"],
+        serde_json::json!(1),
+        "1.ª captura spawna no 1.º tick"
+    );
     assert!(
         status.get("png_base64").is_none(),
         "sem folha enquanto não capturado"
@@ -830,7 +837,10 @@ fn test_bridge_burst_headless() {
             serde_json::json!({ "id": 9999 }),
         ),
     );
-    assert!(error.contains("unknown burst id"), "erro devia ser de id: {error}");
+    assert!(
+        error.contains("unknown burst id"),
+        "erro devia ser de id: {error}"
+    );
 }
 
 // ── M1: introspecção profunda (vitals de qualquer entidade, IA, nav, …) ──
@@ -872,18 +882,28 @@ fn test_bridge_lua_introspection_round3() {
     app.update();
 
     // health() de QUALQUER entidade — não só do player.
-    let r = lua_call(&mut app, LUA5_TEST_PORT, "local h = viber.debug.health('mob') return { h.current, h.max, h.dead }");
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
+        "local h = viber.debug.health('mob') return { h.current, h.max, h.dead }",
+    );
     assert_eq!(r["ok"], serde_json::json!(true));
     assert_eq!(r["result"][0].as_f64(), Some(30.0));
     assert_eq!(r["result"][1].as_f64(), Some(90.0));
     assert_eq!(r["result"][2], serde_json::json!(false));
 
     // Sem Health → nil (e não erro).
-    let r = lua_call(&mut app, LUA5_TEST_PORT, "return viber.debug.health('goblin') == nil");
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
+        "return viber.debug.health('goblin') == nil",
+    );
     assert_eq!(r["result"], serde_json::json!(true));
 
     // ai() — FSM + locomoção + perfil.
-    let r = lua_call(&mut app, LUA5_TEST_PORT, 
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
         "local a = viber.debug.ai('mob') return { a.state, a.speed, a.nav_profile, a.aggro_radius }",
     );
     assert_eq!(r["result"][0], serde_json::json!("wander"));
@@ -892,7 +912,9 @@ fn test_bridge_lua_introspection_round3() {
     assert_eq!(r["result"][3].as_f64(), Some(18.0));
 
     // info() enriquecido: hp/max_hp + ai + script na mesma tabela.
-    let r = lua_call(&mut app, LUA5_TEST_PORT, 
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
         "local i = viber.debug.info('mob') local g = viber.debug.info('goblin')
          return { i.hp, i.max_hp, i.ai.nav_profile, g.script }",
     );
@@ -900,7 +922,9 @@ fn test_bridge_lua_introspection_round3() {
     assert_eq!(r["result"][3], serde_json::json!("ghost.lua"));
 
     // nav() — config inserida, sem tile ainda.
-    let r = lua_call(&mut app, LUA5_TEST_PORT, 
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
         "local n = viber.debug.nav() return { n.enabled, n.tile_size, n.offroad_cost, n.tile_generations }",
     );
     assert_eq!(r["result"][0], serde_json::json!(true));
@@ -909,7 +933,9 @@ fn test_bridge_lua_introspection_round3() {
     assert_eq!(r["result"][3].as_i64(), Some(0));
 
     // Quest funda: defs embutidos + título + objetivo.
-    let r = lua_call(&mut app, LUA5_TEST_PORT, 
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
         "local q = viber.debug.quest('forest_survey') return { q.title ~= nil, q.objective.kind, q.status }",
     );
     assert_eq!(r["result"][0], serde_json::json!(true));
@@ -925,24 +951,42 @@ fn test_bridge_lua_introspection_round3() {
     );
 
     // skills() com árvore vazia.
-    let r = lua_call(&mut app, LUA5_TEST_PORT, "local s = viber.debug.skills() return { #s.learned, s.points }");
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
+        "local s = viber.debug.skills() return { #s.learned, s.points }",
+    );
     assert_eq!(r["result"][0], serde_json::json!(0));
     assert_eq!(r["result"][1], serde_json::json!(0));
 
     // waypoints() — catálogo estático dos 12 marcos.
-    let r = lua_call(&mut app, LUA5_TEST_PORT, "return #viber.debug.waypoints().landmarks");
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
+        "return #viber.debug.waypoints().landmarks",
+    );
     assert_eq!(r["result"], serde_json::json!(12));
 
     // save_info() — path não vazio (exists depende da máquina).
-    let r = lua_call(&mut app, LUA5_TEST_PORT, "local s = viber.debug.save_info() return #s.path > 0");
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
+        "local s = viber.debug.save_info() return #s.path > 0",
+    );
     assert_eq!(r["result"], serde_json::json!(true));
 
     // audio() — buses default sem kira; nil-safe.
-    let r = lua_call(&mut app, LUA5_TEST_PORT, "local a = viber.debug.audio() return a ~= nil and a.buses.master");
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
+        "local a = viber.debug.audio() return a ~= nil and a.buses.master",
+    );
     assert_eq!(r["result"].as_f64(), Some(1.0));
 
     // Seeds/terreno/atmosfera ausentes → nil, NUNCA erro.
-    let r = lua_call(&mut app, LUA5_TEST_PORT, 
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
         "return { viber.debug.terrain(0, 0) == nil, viber.debug.atmosphere() == nil,
                   viber.debug.weather_full() == nil, viber.debug.border() == nil,
                   viber.debug.interior() == nil, viber.debug.biome_at(0, 0) == nil }",
@@ -959,8 +1003,13 @@ fn test_bridge_lua_introspection_round3() {
     let r = lua_call(&mut app, LUA5_TEST_PORT, "return viber.debug.world_hash()");
     let hash_a = r["result"].as_str().expect("hash hex").to_string();
     let r = lua_call(&mut app, LUA5_TEST_PORT, "return viber.debug.world_hash()");
-    assert_eq!(r["result"].as_str(), Some(hash_a.as_str()), "hash estável sem mutação");
-    app.world_mut().spawn((Name::new("hash-bait"), Transform::IDENTITY));
+    assert_eq!(
+        r["result"].as_str(),
+        Some(hash_a.as_str()),
+        "hash estável sem mutação"
+    );
+    app.world_mut()
+        .spawn((Name::new("hash-bait"), Transform::IDENTITY));
     let r = lua_call(&mut app, LUA5_TEST_PORT, "return viber.debug.world_hash()");
     assert_ne!(
         r["result"].as_str(),
@@ -969,7 +1018,11 @@ fn test_bridge_lua_introspection_round3() {
     );
 
     // seeds() — sem terreno nem ciclo, tudo nil (e nunca erro).
-    let r = lua_call(&mut app, LUA5_TEST_PORT, "local s = viber.debug.seeds() return s ~= nil and s.terrain_seed == nil");
+    let r = lua_call(
+        &mut app,
+        LUA5_TEST_PORT,
+        "local s = viber.debug.seeds() return s ~= nil and s.terrain_seed == nil",
+    );
     assert_eq!(r["result"], serde_json::json!(true));
 }
 
@@ -1003,7 +1056,9 @@ fn test_bridge_lua_control_round4() {
         world.insert_resource(crate::nav::NavConfig::default());
         world.insert_resource(crate::music::AudioMixerSettings::default());
         world.insert_resource(crate::music::CombatMusicState::default());
-        world.insert_resource(bevy::ecs::message::Messages::<crate::ui::actions::UiAction>::default());
+        world.insert_resource(
+            bevy::ecs::message::Messages::<crate::ui::actions::UiAction>::default(),
+        );
     }
     app.update();
 
@@ -1027,10 +1082,7 @@ fn test_bridge_lua_control_round4() {
     // HP de QUALQUER entidade.
     let r = lua("viber.debug.set_entity_hp('mob', 5) return true", &mut app);
     assert_eq!(r["applied"], serde_json::json!(1));
-    let mut query = app.world_mut().query::<(
-        &Name,
-        &crate::vitals::Health,
-    )>();
+    let mut query = app.world_mut().query::<(&Name, &crate::vitals::Health)>();
     let found = query
         .iter(app.world())
         .find(|(name, _)| name.as_str() == "mob")
@@ -1083,10 +1135,7 @@ fn test_bridge_lua_control_round4() {
         &mut app,
     );
     assert_eq!(r["applied"], serde_json::json!(1));
-    let r = lua(
-        "return viber.debug.quest('forest_survey').status",
-        &mut app,
-    );
+    let r = lua("return viber.debug.quest('forest_survey').status", &mut app);
     assert_eq!(r["result"], serde_json::json!("done"));
     let r = lua(
         "viber.debug.quest_force('forest_survey', 'reset') return true",
@@ -1181,10 +1230,7 @@ fn test_bridge_lua_control_round4() {
     assert_eq!(r["result"].as_f64(), Some(0.25));
 
     // combat_music battle → layer ativa; off → apaga.
-    let r = lua(
-        "viber.debug.combat_music('boss') return true",
-        &mut app,
-    );
+    let r = lua("viber.debug.combat_music('boss') return true", &mut app);
     assert_eq!(r["applied"], serde_json::json!(1));
     {
         let world = app.world();
@@ -1259,9 +1305,7 @@ fn test_bridge_lua_control_round4() {
         // O rich pelo NOME — depois do spawn do box há ≥2 materiais.
         let handle = query
             .iter(world)
-            .find(|(name, _)| {
-                name.map(|n| n.as_str() == "rich").unwrap_or(false)
-            })
+            .find(|(name, _)| name.map(|n| n.as_str() == "rich").unwrap_or(false))
             .expect("rich material")
             .1
             .0
@@ -1274,7 +1318,10 @@ fn test_bridge_lua_control_round4() {
     }
 
     // set_light ao vivo.
-    let r = lua("viber.debug.set_light('rich', {intensity = 77}) return true", &mut app);
+    let r = lua(
+        "viber.debug.set_light('rich', {intensity = 77}) return true",
+        &mut app,
+    );
     assert_eq!(r["applied"], serde_json::json!(1));
     let mut query = app
         .world_mut()
@@ -1292,7 +1339,9 @@ fn test_bridge_lua_control_round4() {
     );
     assert_eq!(r["applied"], serde_json::json!(0));
     assert!(
-        serde_json::to_string(&r["warnings"]).unwrap().contains("AssetServer"),
+        serde_json::to_string(&r["warnings"])
+            .unwrap()
+            .contains("AssetServer"),
         "warning de AssetServer ausente"
     );
 
@@ -1333,8 +1382,7 @@ fn test_bridge_raycast_headless() {
             bevy_rapier3d::prelude::RapierConfiguration::new(1.0),
         ));
         // Cubo collider a 5 m de altura — raio de cima deve apanhar o TOPO.
-        let mut meshes = world
-            .resource_mut::<bevy::asset::Assets<bevy::mesh::Mesh>>();
+        let mut meshes = world.resource_mut::<bevy::asset::Assets<bevy::mesh::Mesh>>();
         let cube = meshes.add(bevy::mesh::Mesh::from(bevy::shape::Cuboid::new(
             1.0, 1.0, 1.0,
         )));
@@ -1496,7 +1544,9 @@ fn test_bridge_registry_schema_headless() {
         .map(|(name, _)| name)
         .collect();
     assert!(
-        with_translation.iter().any(|name| name.ends_with("Transform")),
+        with_translation
+            .iter()
+            .any(|name| name.ends_with("Transform")),
         "algum tipo Transform com campo translation no schema; candidatos: {with_translation:?}"
     );
 

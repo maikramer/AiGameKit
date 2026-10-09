@@ -555,46 +555,46 @@ pub fn third_person_camera(
         // Terrain collision applied to the desired position FIRST: the final
         // smoothing always chases a safe target, never a blocked one.
         let mut safe = desired;
-        if cam.min_terrain_distance > 0.0 {
-            if let Some(rt) = runtime.as_deref() {
-                let eye = cam.follow_point + Vec3::Y * COLLISION_EYE_HEIGHT;
-                let delta = desired - eye;
-                let full_dist = delta.length();
-                if full_dist > 0.01 {
-                    let dir = delta / full_dist;
-                    let radius = cam.min_terrain_distance.max(0.5);
-                    let hit = terrain_safe_distance(
-                        |x, z| rt.sample(x, z),
-                        eye,
-                        dir,
-                        full_dist,
-                        radius,
-                        cam.min_terrain_distance,
-                    );
-                    match hit {
-                        Some(t) => {
-                            let safe_dist = (t - radius).max(0.01);
-                            safe = eye + dir * safe_dist;
-                        }
-                        None => {
-                            // Clear line of sight: still enforce the floor
-                            // above the terrain at the desired spot. Piso SOB
-                            // a câmara (Y conhecido): sob um overhang o chão
-                            // é o de baixo — o topo da rocha é teto, não
-                            // minTerrainDistance.
-                            let min_y = if rt.in_field(desired.x, desired.z) {
-                                rt.surface_below(
-                                    desired.x,
-                                    desired.z,
-                                    desired.y + crate::player::GROUND_PROBE,
-                                )
-                                .unwrap_or(f32::NEG_INFINITY)
-                            } else {
-                                f32::NEG_INFINITY
-                            } + cam.min_terrain_distance;
-                            if desired.y < min_y {
-                                safe.y = min_y;
-                            }
+        if cam.min_terrain_distance > 0.0
+            && let Some(rt) = runtime.as_deref()
+        {
+            let eye = cam.follow_point + Vec3::Y * COLLISION_EYE_HEIGHT;
+            let delta = desired - eye;
+            let full_dist = delta.length();
+            if full_dist > 0.01 {
+                let dir = delta / full_dist;
+                let radius = cam.min_terrain_distance.max(0.5);
+                let hit = terrain_safe_distance(
+                    |x, z| rt.sample(x, z),
+                    eye,
+                    dir,
+                    full_dist,
+                    radius,
+                    cam.min_terrain_distance,
+                );
+                match hit {
+                    Some(t) => {
+                        let safe_dist = (t - radius).max(0.01);
+                        safe = eye + dir * safe_dist;
+                    }
+                    None => {
+                        // Clear line of sight: still enforce the floor
+                        // above the terrain at the desired spot. Piso SOB
+                        // a câmara (Y conhecido): sob um overhang o chão
+                        // é o de baixo — o topo da rocha é teto, não
+                        // minTerrainDistance.
+                        let min_y = if rt.in_field(desired.x, desired.z) {
+                            rt.surface_below(
+                                desired.x,
+                                desired.z,
+                                desired.y + crate::player::GROUND_PROBE,
+                            )
+                            .unwrap_or(f32::NEG_INFINITY)
+                        } else {
+                            f32::NEG_INFINITY
+                        } + cam.min_terrain_distance;
+                        if desired.y < min_y {
+                            safe.y = min_y;
                         }
                     }
                 }

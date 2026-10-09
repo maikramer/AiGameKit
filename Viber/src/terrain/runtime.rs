@@ -36,7 +36,8 @@ use super::sampler::ResolvedPad;
 use super::spec::TerrainSpec;
 use super::splat::{
     SLOT_GRAVEL, SLOT_RIVERBED, SplatParams, chunk_splat_image, chunk_splat2_image, flat_ao_image,
-    flat_height_image, flat_normal_image, flat_rough_image, generate_chunk_splats, solid_white_image,
+    flat_height_image, flat_normal_image, flat_rough_image, generate_chunk_splats,
+    solid_white_image,
 };
 use super::voxel::{Span, VoxelField};
 use super::water::{WaterBody, lake_water_mesh, river_water_mesh};
@@ -121,6 +122,7 @@ pub struct PendingTerrainTextures {
 /// with [`crate::textures::WorldTiledTextures`] at `load` time and the
 /// sampler is settled once by the single-writer texture pass. Writing it
 /// here too re-opened the clamp/REPEAT race that stretched ground textures.
+#[allow(clippy::too_many_arguments)] // sistema Bevy com queries/params explícitos
 pub fn drop_failed_terrain_textures(
     server: Res<AssetServer>,
     mut pending: ResMut<PendingTerrainTextures>,
@@ -175,15 +177,15 @@ pub fn drop_failed_terrain_textures(
                     "terrain chunk layer {slot} failed to load ({error}); repointing \
                      the slot to its fallback texture"
                 );
-                if let Some(chunk_materials) = chunk_materials.as_mut() {
-                    if let Some(mut layer) = chunk_materials.get_mut(material) {
-                        let fallback = if images.contains(repoint) {
-                            repoint.clone()
-                        } else {
-                            images.add(solid_white_image())
-                        };
-                        *layer.texture_mut(*slot) = fallback;
-                    }
+                if let Some(chunk_materials) = chunk_materials.as_mut()
+                    && let Some(mut layer) = chunk_materials.get_mut(material)
+                {
+                    let fallback = if images.contains(repoint) {
+                        repoint.clone()
+                    } else {
+                        images.add(solid_white_image())
+                    };
+                    *layer.texture_mut(*slot) = fallback;
                 }
                 false
             }
@@ -205,13 +207,13 @@ pub fn drop_failed_terrain_textures(
                          back to the flat normal (sincroniza normal.ktx2 do pool)"
                     );
                 }
-                if let Some(chunk_materials) = chunk_materials.as_mut() {
-                    if let Some(mut layer) = chunk_materials.get_mut(material) {
-                        let flat = flat_handle
-                            .get_or_insert_with(|| images.add(flat_normal_image()))
-                            .clone();
-                        *layer.normal_mut(*slot) = flat;
-                    }
+                if let Some(chunk_materials) = chunk_materials.as_mut()
+                    && let Some(mut layer) = chunk_materials.get_mut(material)
+                {
+                    let flat = flat_handle
+                        .get_or_insert_with(|| images.add(flat_normal_image()))
+                        .clone();
+                    *layer.normal_mut(*slot) = flat;
                 }
                 false
             }
@@ -230,13 +232,13 @@ pub fn drop_failed_terrain_textures(
                          back to the flat height (height-blend devolve os pesos)"
                     );
                 }
-                if let Some(chunk_materials) = chunk_materials.as_mut() {
-                    if let Some(mut layer) = chunk_materials.get_mut(material) {
-                        let flat = flat_height_handle
-                            .get_or_insert_with(|| images.add(flat_height_image()))
-                            .clone();
-                        *layer.height_mut(*slot) = flat;
-                    }
+                if let Some(chunk_materials) = chunk_materials.as_mut()
+                    && let Some(mut layer) = chunk_materials.get_mut(material)
+                {
+                    let flat = flat_height_handle
+                        .get_or_insert_with(|| images.add(flat_height_image()))
+                        .clone();
+                    *layer.height_mut(*slot) = flat;
                 }
                 false
             }
@@ -255,13 +257,13 @@ pub fn drop_failed_terrain_textures(
                          back to the neutral AO (oclusão nenhuma)"
                     );
                 }
-                if let Some(chunk_materials) = chunk_materials.as_mut() {
-                    if let Some(mut layer) = chunk_materials.get_mut(material) {
-                        let flat = flat_ao_handle
-                            .get_or_insert_with(|| images.add(flat_ao_image()))
-                            .clone();
-                        *layer.ao_mut(*slot) = flat;
-                    }
+                if let Some(chunk_materials) = chunk_materials.as_mut()
+                    && let Some(mut layer) = chunk_materials.get_mut(material)
+                {
+                    let flat = flat_ao_handle
+                        .get_or_insert_with(|| images.add(flat_ao_image()))
+                        .clone();
+                    *layer.ao_mut(*slot) = flat;
                 }
                 false
             }
@@ -280,14 +282,14 @@ pub fn drop_failed_terrain_textures(
                          back to the constant roughness (mix do mapa a zero)"
                     );
                 }
-                if let Some(chunk_materials) = chunk_materials.as_mut() {
-                    if let Some(mut layer) = chunk_materials.get_mut(material) {
-                        let flat = flat_rough_handle
-                            .get_or_insert_with(|| images.add(flat_rough_image()))
-                            .clone();
-                        *layer.rough_mut(*slot) = flat;
-                        layer.params.roughs[*slot].y = 0.0;
-                    }
+                if let Some(chunk_materials) = chunk_materials.as_mut()
+                    && let Some(mut layer) = chunk_materials.get_mut(material)
+                {
+                    let flat = flat_rough_handle
+                        .get_or_insert_with(|| images.add(flat_rough_image()))
+                        .clone();
+                    *layer.rough_mut(*slot) = flat;
+                    layer.params.roughs[*slot].y = 0.0;
                 }
                 false
             }
@@ -955,7 +957,7 @@ pub fn bootstrap(world: &mut World) {
             &mut images,
             &mut chunk_materials,
             &mut watched,
-            &config,
+            config,
             edge,
             rows,
             &asset_roots,
@@ -1084,15 +1086,15 @@ pub fn bootstrap(world: &mut World) {
     for bridge in pending.features.bridges.iter().chain(&seeded.bridges) {
         // The clearance is reported, never enforced: a deck that grazes the
         // ground is a legal causeway, it is just rarely what was authored.
-        if let Some(clear) = bridge.clearance(&grid) {
-            if clear < bridge.clearance {
-                warn!(
-                    "terrain: bridge `{}` never gets more than {clear:.1} m of air under its deck \
+        if let Some(clear) = bridge.clearance(&grid)
+            && clear < bridge.clearance
+        {
+            warn!(
+                "terrain: bridge `{}` never gets more than {clear:.1} m of air under its deck \
                      (asked for {:.1} m) — is it spanning anything?",
-                    bridge.name.as_deref().unwrap_or("bridge"),
-                    bridge.clearance
-                );
-            }
+                bridge.name.as_deref().unwrap_or("bridge"),
+                bridge.clearance
+            );
         }
         voxel_mods.extend(bridge.build(&grid));
     }
@@ -1429,9 +1431,7 @@ fn spawn_chunk_materials(
             continue;
         }
         let path = match crate::terrain::layer_material::SLOT_STYLES[slot].rough_map {
-            crate::terrain::layer_material::RoughMap::Rough => {
-                game_config.terrain_roughness(entry)
-            }
+            crate::terrain::layer_material::RoughMap::Rough => game_config.terrain_roughness(entry),
             crate::terrain::layer_material::RoughMap::Smooth => {
                 game_config.terrain_smoothness(entry)
             }
@@ -1670,11 +1670,11 @@ pub fn rebake_chunk_splats(world: &mut World, tuning: super::splat::SplatTuning)
         };
         // Mesmos handles → trocar por AssetId substitui in-place e re-uploads.
         if let Some(mut images) = world.get_resource_mut::<Assets<Image>>() {
-            images.insert(
+            let _ = images.insert(
                 splat.id(),
                 super::splat::chunk_splat_plane_image(chunk_splat, 0),
             );
-            images.insert(
+            let _ = images.insert(
                 splat2.id(),
                 super::splat::chunk_splat_plane_image(chunk_splat, 1),
             );
@@ -2134,8 +2134,8 @@ mod tests {
         let mut app = bevy::app::App::new();
         app.add_plugins(bevy::MinimalPlugins);
         let raw: Vec<u16> = (0..64 * 64).map(|_| 6553u16).collect(); // ~10 m
-        let grid = crate::terrain::brush::BrushGrid::new(raw, 64, 64, 64.0, 50.0, 0.0)
-            .expect("grid");
+        let grid =
+            crate::terrain::brush::BrushGrid::new(raw, 64, 64, 64.0, 50.0, 0.0).expect("grid");
         app.insert_resource(TerrainRuntime {
             spec: TerrainSpec {
                 world_size: 64.0,
@@ -2188,8 +2188,8 @@ mod tests {
         let mut app = bevy::app::App::new();
         app.add_plugins(bevy::MinimalPlugins);
         let raw: Vec<u16> = (0..64 * 64).map(|_| 6553u16).collect();
-        let grid = crate::terrain::brush::BrushGrid::new(raw, 64, 64, 64.0, 50.0, 0.0)
-            .expect("grid");
+        let grid =
+            crate::terrain::brush::BrushGrid::new(raw, 64, 64, 64.0, 50.0, 0.0).expect("grid");
         app.insert_resource(TerrainRuntime {
             spec: TerrainSpec {
                 world_size: 64.0,

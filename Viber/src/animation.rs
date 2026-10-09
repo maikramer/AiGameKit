@@ -1051,10 +1051,11 @@ pub fn drive_player_animation(
         // no-op silencioso). Não interrompe one-shots em curso (um swing a
         // terminar tem prioridade sobre o "poussada") e não toca a histerese
         // — o `play_state` acima já fez a passagem de locomoção.
-        if is_landing(was_airborne, hero.grounded) && !animator.is_busy() {
-            if let Some(node) = animator.node_matching(|n| n == "jumpland") {
-                play_action(&mut animator, &mut players, node, ACTION_BLEND, false);
-            }
+        if is_landing(was_airborne, hero.grounded)
+            && !animator.is_busy()
+            && let Some(node) = animator.node_matching(|n| n == "jumpland")
+        {
+            play_action(&mut animator, &mut players, node, ACTION_BLEND, false);
         }
         sync_clip_speed(&animator, &mut players, state, MotionSpeeds::HERO);
     }
@@ -1089,13 +1090,13 @@ pub fn drive_character_animation(
             continue; // dead: the terminal clip holds the pose
         }
         let position = transform.translation();
-        if let (Some(hero_pos), Some(activation)) = (hero_pos, activation) {
-            if position.distance(hero_pos) > activation.radius {
-                // Drop the baseline so the first tick back in range measures a
-                // frame, not the whole trip.
-                animator.last_pos = None;
-                continue;
-            }
+        if let (Some(hero_pos), Some(activation)) = (hero_pos, activation)
+            && position.distance(hero_pos) > activation.radius
+        {
+            // Drop the baseline so the first tick back in range measures a
+            // frame, not the whole trip.
+            animator.last_pos = None;
+            continue;
         }
         // A rig with no profile yet falls back to the module-wide creature
         // nominals — the behaviour this driver always had.
@@ -1188,7 +1189,12 @@ pub fn freeze_distant_animation(
         };
         let visible = visibility.is_none_or(|v| v.get());
         let distance = transform.translation().distance(hero_pos);
-        let freeze = should_freeze(frozen.is_some(), distance, freeze_distance(activation), visible);
+        let freeze = should_freeze(
+            frozen.is_some(),
+            distance,
+            freeze_distance(activation),
+            visible,
+        );
         match (freeze, graph, frozen) {
             (true, Some(graph), None) => {
                 commands
@@ -1279,13 +1285,19 @@ mod tests {
             .unwrap()
             .player = rig;
         app.update();
-        assert!(app.world().get::<AnimationGraphHandle>(rig).is_none(), "far rig parked");
+        assert!(
+            app.world().get::<AnimationGraphHandle>(rig).is_none(),
+            "far rig parked"
+        );
         assert!(app.world().get::<FrozenAnimation>(rig).is_some());
         app.world_mut()
             .entity_mut(creature)
             .insert(GlobalTransform::from_translation(Vec3::new(10.0, 0.0, 0.0)));
         app.update();
-        assert!(app.world().get::<AnimationGraphHandle>(rig).is_some(), "near rig restored");
+        assert!(
+            app.world().get::<AnimationGraphHandle>(rig).is_some(),
+            "near rig restored"
+        );
         assert!(app.world().get::<FrozenAnimation>(rig).is_none());
     }
 
@@ -1317,7 +1329,10 @@ mod tests {
             "4.6 m/s is below the hero run gate of {RUN_SPEED}"
         );
         let scale = MotionSpeeds::CREATURE.scale_for(state, chase);
-        assert_eq!(scale, SPEED_SCALE_RANGE.1, "the rate request hits the clamp");
+        assert_eq!(
+            scale, SPEED_SCALE_RANGE.1,
+            "the rate request hits the clamp"
+        );
         let slide = (chase - scale * MotionSpeeds::CREATURE.walk).abs() / chase;
         assert!(
             slide > 0.4,
@@ -1404,7 +1419,10 @@ mod tests {
         assert_eq!(MotionSpeeds::HERO.scale_range, SPEED_SCALE_RANGE);
         // Strafing drops the hero to 0.6× without changing the nominal — the
         // wide legacy clamp has to keep allowing it.
-        assert_eq!(MotionSpeeds::HERO.scale_for(AnimState::Walk, 4.0 * 0.6), 0.6);
+        assert_eq!(
+            MotionSpeeds::HERO.scale_for(AnimState::Walk, 4.0 * 0.6),
+            0.6
+        );
     }
 
     /// The hysteresis band scales with the gate instead of swallowing a
@@ -1664,18 +1682,39 @@ mod tests {
         let mut state = AnimState::Idle;
         for _ in 0..60 {
             x += 3.0 * dt;
-            state = advance_motion(&mut a, Vec3::new(x, 0.0, 0.0), true, 0.0, dt, MotionGates::HERO);
+            state = advance_motion(
+                &mut a,
+                Vec3::new(x, 0.0, 0.0),
+                true,
+                0.0,
+                dt,
+                MotionGates::HERO,
+            );
             a.state = Some(state);
         }
         assert_eq!(state, AnimState::Walk);
         // A single frame reporting "not grounded" must not punch a Fall in.
         x += 3.0 * dt;
-        let flick = advance_motion(&mut a, Vec3::new(x, 0.0, 0.0), false, -1.0, dt, MotionGates::HERO);
+        let flick = advance_motion(
+            &mut a,
+            Vec3::new(x, 0.0, 0.0),
+            false,
+            -1.0,
+            dt,
+            MotionGates::HERO,
+        );
         assert_eq!(flick, AnimState::Walk, "one flicker frame is debounced");
         // Genuinely leaving the ground does switch.
         for _ in 0..12 {
             x += 3.0 * dt;
-            state = advance_motion(&mut a, Vec3::new(x, 0.0, 0.0), false, -4.0, dt, MotionGates::HERO);
+            state = advance_motion(
+                &mut a,
+                Vec3::new(x, 0.0, 0.0),
+                false,
+                -4.0,
+                dt,
+                MotionGates::HERO,
+            );
             a.state = Some(state);
         }
         assert_eq!(state, AnimState::Fall);
@@ -1687,7 +1726,14 @@ mod tests {
         let dt = 1.0 / 60.0;
         a.last_pos = None; // as left by the activation-radius freeze
         // Coming back 400 m away must not read as a 24 km/h sprint.
-        let state = advance_motion(&mut a, Vec3::new(400.0, 0.0, 0.0), true, 0.0, dt, MotionGates::HERO);
+        let state = advance_motion(
+            &mut a,
+            Vec3::new(400.0, 0.0, 0.0),
+            true,
+            0.0,
+            dt,
+            MotionGates::HERO,
+        );
         assert_eq!(state, AnimState::Idle);
         assert_eq!(a.speed, 0.0);
     }

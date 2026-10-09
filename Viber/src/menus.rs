@@ -257,8 +257,8 @@ fn toast_display_system(
         }
         // Fila cheia: o mais antigo sai já (fade curto), para o novo caber
         // sem a pilha crescer para fora do enquadramento.
-        if active.iter().count() >= TOAST_CAP {
-            if let Some((oldest, _)) = active
+        if active.iter().count() >= TOAST_CAP
+            && let Some((oldest, _)) = active
                 .iter()
                 .min_by(|a, b| {
                     a.1.timer
@@ -266,11 +266,9 @@ fn toast_display_system(
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
                 .map(|(entity, pill)| (entity, pill.timer))
-            {
-                if let Ok((_, mut pill)) = active.get_mut(oldest) {
-                    pill.timer = pill.timer.min(TOAST_FADE_OUT * 0.5);
-                }
-            }
+            && let Ok((_, mut pill)) = active.get_mut(oldest)
+        {
+            pill.timer = pill.timer.min(TOAST_FADE_OUT * 0.5);
         }
         let Ok(container) = container.single() else {
             continue;
@@ -466,13 +464,26 @@ pub fn vault_lines(vault: &Vault) -> Vec<String> {
 /// Estado da loja: seleção e resultado da última ação (puro p/ testes).
 #[derive(Debug, Clone, PartialEq)]
 pub enum ShopAction {
-    Bought { item: String, price: u32 },
-    Sold { item: String, earned: u32 },
-    OutOfStock { item: String },
-    CannotAfford { item: String, price: u32 },
+    Bought {
+        item: String,
+        price: u32,
+    },
+    Sold {
+        item: String,
+        earned: u32,
+    },
+    OutOfStock {
+        item: String,
+    },
+    CannotAfford {
+        item: String,
+        price: u32,
+    },
     /// A pilha não leva a quantidade inteira — cobrar e cortar no teto
     /// deitava o ouro fora.
-    StackFull { item: String },
+    StackFull {
+        item: String,
+    },
     Nothing,
 }
 
