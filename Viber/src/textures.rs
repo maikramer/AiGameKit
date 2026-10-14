@@ -136,6 +136,16 @@ pub fn patch_image(image: &mut Image, world_tiled: bool) {
     if image.texture_descriptor.mip_level_count > 1 {
         return;
     }
+    // Render targets (o viewport do ViberEditor, câmaras render-to-texture)
+    // têm de ficar com 1 nível: o wgpu recusa uma view com vários mips como
+    // color attachment ("texture view is not renderable").
+    if image
+        .texture_descriptor
+        .usage
+        .contains(bevy::render::render_resource::TextureUsages::RENDER_ATTACHMENT)
+    {
+        return;
+    }
     if !is_plain_rgba(image.texture_descriptor.format) {
         return;
     }
@@ -259,6 +269,18 @@ mod tests {
     }
 
     /// Já tem mips (KTX2/DDS): passa intacto.
+    #[test]
+    fn test_patch_skips_render_targets() {
+        let mut image = Image::new_target_texture(
+            64,
+            64,
+            bevy::render::render_resource::TextureFormat::Bgra8UnormSrgb,
+            None,
+        );
+        patch_image(&mut image, false);
+        assert_eq!(image.texture_descriptor.mip_level_count, 1);
+    }
+
     #[test]
     fn test_patch_skips_existing_mips() {
         let mut image = rgba_image(4, 4, [1, 2, 3, 4]);

@@ -602,7 +602,9 @@ viber.debug.collider(id)           -- {shape="cuboid|ball|trimesh|compound|outro
 viber.debug.prof()                 -- snapshot do profiler (tabela; ver viber.profiler)
 viber.debug.stats()                -- agregados do mundo INTEIRO: entities, meshes,
                                    --   colliders (+por shape), rigidbodies (+por tipo),
-                                   --   lights (+shadows), emitters, scripted, disabled,
+                                   --   lights (+shadows), emitters (vivos), emitters_registered
+                                   --   (markers AmbientFx; com VIBER_FX_LIFECYCLE=1 os vivos
+                                   --   são só os perto da câmara), scripted, disabled,
                                    --   scripts_total/active, fps, frame_ms_avg, terrain_chunks
 viber.debug.physics()              -- tempos do ÚLTIMO step do Rapier: {enabled, step_ms,
                                    --   collision_detection_ms, solver_ms, ccd_ms, islands_ms,
@@ -727,6 +729,11 @@ viber.debug.xp(n) / give(item, n)
 viber.debug.set_speed(n) / set_time_scale(n)  -- slow-mo; 0 = pausa
 viber.debug.set_camera{distance=?, pitch=?, target=?}  -- OrbitCamera (screenshots)
 viber.debug.set_clock(minuto)      -- 0–1440 (1380 = noite); sem DayCycle → warning
+viber.debug.dlss(modo)             -- modo DLSS AO VIVO: "auto|dlaa|quality|balanced|
+                                    --   performance|ultra" (feature `dlss`; off = arranque).
+                                    --   Recria o contexto no frame seguinte — A/B de modos
+                                    --   no MESMO processo; sem suporte/binário sem a
+                                    --   feature → warning e nil efetivo
 viber.debug.set_weather{rain=?, clouds=?, wind=?}  -- fixa o tempo e CONGELA o ciclo (A/B)
 viber.debug.rain_look{near_fade=?, alpha=?, width=?, rate=?}  -- look da chuva ao vivo
 viber.debug.set_window(w, h)       -- redimensiona a janela p/ QA responsivo (@media, vw/vh)

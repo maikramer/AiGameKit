@@ -33,6 +33,7 @@ fn node(tag: &str, attrs: &[(&str, &str)]) -> XmlNode {
             .collect(),
         text: String::new(),
         children: vec![],
+        origin: None,
     }
 }
 
@@ -121,7 +122,10 @@ fn test_composition_identical_parts_share_mesh_and_material() {
 
     let root = app
         .world_mut()
-        .query_filtered::<Entity, bevy::ecs::query::Added<Children>>()
+        .query_filtered::<Entity, (
+            bevy::ecs::query::Added<Children>,
+            Without<viber::recipes::spawn::EditorGroup>,
+        )>()
         .single(app.world())
         .expect("composition root");
     let kids = children_of(&app, root);

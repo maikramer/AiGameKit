@@ -172,6 +172,7 @@ pub fn instantiate(node: &XmlNode, row: &ListRow, index: usize) -> XmlNode {
             .iter()
             .map(|child| instantiate(child, row, index))
             .collect(),
+        origin: None,
     }
 }
 
@@ -366,7 +367,9 @@ mod tests {
                 attrs: vec![],
                 text: "{title}".into(),
                 children: vec![],
+                origin: None,
             }],
+            origin: None,
         };
         let row = row(&[("title", "Lobos"), ("status", "ready")]);
         let built = instantiate(&template, &row, 2);

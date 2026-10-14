@@ -29,6 +29,10 @@ pub const CONFIG_YAML_TEMPLATE: &str = r#"# config.yaml — contrato de paths do
 # Relativos a ESTA pasta. Obrigatório: o run/analyze não arranca sem ele.
 title: # opcional — título da janela (vazio = nome do world.xml)
 
+# DLSS (upscaling NVIDIA, requer binário construído com --features dlss):
+# off | auto (default) | dlaa | quality | balanced | performance | ultra
+# dlss: quality
+
 assets:
   # Roots extra, por ordem, DEPOIS da pasta do jogo (a 1.ª root é sempre a
   # pasta do próprio jogo — overrides e shaders/ especializados vivem lá).

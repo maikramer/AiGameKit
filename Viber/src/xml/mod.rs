@@ -4,6 +4,7 @@
 //! original engine: boolean attributes may be written bare (`<PointLight
 //! shadows>`) and tag names are matched case-insensitively downstream.
 
+pub mod emit;
 pub mod include;
 pub mod values;
 
@@ -16,7 +17,7 @@ use anyhow::{Context, Result};
 /// Tag and attribute names are preserved exactly as written; recipe matching
 /// lowercases them. Attribute values stay strings until a recipe interprets
 /// them.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct XmlNode {
     pub tag: String,
     pub attrs: Vec<(String, String)>,
@@ -25,6 +26,47 @@ pub struct XmlNode {
     /// Empty for the structural tags that carry none.
     pub text: String,
     pub children: Vec<XmlNode>,
+    /// De onde o nó veio (ficheiro + caminho), carimbado por
+    /// [`include::load_world`]. Atravessa a expansão de includes até ao spawn, e é o que
+    /// liga uma entidade viva ao nó XML que a declarou (`crate::scene`). `None` em nós
+    /// criados por código.
+    pub origin: Option<std::sync::Arc<NodeOrigin>>,
+}
+
+/// Igualdade de CONTEÚDO XML: a `origin` é metadado de proveniência e não conta — o mesmo
+/// elemento lido de dois sítios (ou criado por código) é o mesmo XML.
+impl PartialEq for XmlNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.tag == other.tag
+            && self.attrs == other.attrs
+            && self.text == other.text
+            && self.children == other.children
+    }
+}
+
+/// Posição de um nó no seu ficheiro de origem.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NodeOrigin {
+    /// Caminho canónico do ficheiro.
+    pub file: std::sync::Arc<Path>,
+    /// Índices de filhos a partir do elemento raiz (vazio = o próprio raiz).
+    pub path: Vec<u32>,
+}
+
+/// Carimba `origin` em todos os nós de um ficheiro acabado de ler.
+pub fn stamp_origins(nodes: &mut [XmlNode], file: &std::sync::Arc<Path>) {
+    fn rec(nodes: &mut [XmlNode], file: &std::sync::Arc<Path>, prefix: &mut Vec<u32>) {
+        for (index, node) in nodes.iter_mut().enumerate() {
+            prefix.push(index as u32);
+            node.origin = Some(std::sync::Arc::new(NodeOrigin {
+                file: file.clone(),
+                path: prefix.clone(),
+            }));
+            rec(&mut node.children, file, prefix);
+            prefix.pop();
+        }
+    }
+    rec(nodes, file, &mut Vec::new());
 }
 
 impl XmlNode {
@@ -72,6 +114,14 @@ pub fn parse_file(path: &Path) -> Result<XmlDocument> {
     let raw =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     parse_str_with_context(&normalize_bare_bools(&raw), path)
+}
+
+/// Parse a snippet of one or more sibling elements (`<Entity …/><Group …>…</Group>`) — the
+/// payload of a `viber::scene` insert op. Bare booleans are accepted like in world files.
+pub fn parse_fragment(src: &str) -> Result<Vec<XmlNode>> {
+    let wrapped = format!("<fragment>{}</fragment>", normalize_bare_bools(src));
+    let doc = roxmltree::Document::parse(&wrapped).context("parsing XML fragment")?;
+    collect_children(doc.root_element())
 }
 
 fn parse_str_with_context(src: &str, path: &Path) -> Result<XmlDocument> {
@@ -123,6 +173,7 @@ fn collect_children_at(node: roxmltree::Node, depth: usize) -> Result<Vec<XmlNod
                 attrs: collect_attrs(n),
                 text: collect_text(n),
                 children: collect_children_at(n, depth + 1)?,
+                origin: None,
             })
         })
         .collect()
@@ -368,6 +419,7 @@ mod tests {
             attrs: vec![("name".into(), "hero".into())],
             text: String::new(),
             children: vec![],
+            origin: None,
         };
         assert_eq!(node.attr("name"), Some("hero"));
         assert_eq!(node.attr("missing"), None);

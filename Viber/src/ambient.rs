@@ -677,6 +677,7 @@ pub fn wants_point_shadow(
 fn light_budget_system(
     mut throttle: Local<f32>,
     time: Res<Time>,
+    editor: Query<&GlobalTransform, With<crate::editor_camera::EditorCamera>>,
     cameras: Query<&GlobalTransform, With<Camera3d>>,
     lights: Query<(Entity, &GlobalTransform), (With<PointLight>, Without<Camera3d>)>,
     shadow_lights: Query<(Entity, &GlobalTransform), (With<PointLight>, With<AuthoredShadowLight>)>,
@@ -691,8 +692,9 @@ fn light_budget_system(
     }
     *throttle = LIGHT_BUDGET_INTERVAL;
     // `iter().next()` e não `single()`: com ≥2 câmaras o `single()` falhava
-    // (mesma semântica do 1.º player do `music_driver`).
-    let Some(cam) = cameras.iter().next() else {
+    // (mesma semântica do 1.º player do `music_driver`). Em modo editor a
+    // câmara de editor é que orça — ver `active_camera_eye`.
+    let Some(cam) = crate::editor_camera::active_camera_eye(&editor, &cameras) else {
         return;
     };
     let cam_pos = cam.translation();
@@ -894,6 +896,7 @@ fn pitch_jitter(clip: SfxClip, rng: &mut u32) -> f32 {
 fn sfx_player_system(
     mut events: MessageReader<SfxEvent>,
     handles: Option<Res<SfxHandles>>,
+    editor: Query<&GlobalTransform, With<crate::editor_camera::EditorCamera>>,
     listeners: Query<&GlobalTransform, With<Camera3d>>,
     mixer: Option<Res<crate::music::AudioMixerSettings>>,
     sfx: Option<Res<bevy_kira_audio::AudioChannel<crate::music::SfxBus>>>,
@@ -918,9 +921,7 @@ fn sfx_player_system(
         // multiplicado no spawn) não fazia.
         let volume = match event.position {
             Some(pos) => {
-                let distance = listeners
-                    .iter()
-                    .next()
+                let distance = crate::editor_camera::active_camera_eye(&editor, &listeners)
                     .map(|cam| cam.translation().distance(pos))
                     .unwrap_or(0.0);
                 (1.0 - distance / 40.0).clamp(0.05, 1.0)

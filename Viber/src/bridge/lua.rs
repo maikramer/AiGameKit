@@ -118,6 +118,9 @@ pub struct WorldStats {
     pub lights_directional: usize,
     pub lights_with_shadows: usize,
     pub emitters: usize,
+    /// Markers `AmbientFx` registados (o lifecycle monta `emitters` vivos
+    /// por proximidade — `emitters_registered` é o total do mundo).
+    pub emitters_registered: usize,
     pub scripted: usize,
     pub disabled: usize,
     /// Instâncias com [`crate::render_lod::CullDistance`] (props/erva de
@@ -550,6 +553,14 @@ pub enum DebugOp {
     },
     /// Minuto do dia (0–1440, wrap).
     SetClock(f32),
+    /// Modo do DLSS AO VIVO (`viber.debug.dlss("performance")`): troca o
+    /// `perf_quality_mode` da câmara — o `prepare_dlss` do bevy recria o
+    /// contexto na mudança e a nova escala aplica nos frames seguintes. É o
+    /// A/B interleaved de modos SEM reboot, no MESMO processo (o protocolo
+    /// de medição da casa). On/off continua gate de arranque (`VIBER_DLSS`/
+    /// config.yaml): remover o componente ao vivo deixava o
+    /// `MainPassResolutionOverride` órfão.
+    SetDlssMode(String),
     /// Look da chuva AO VIVO (`viber.debug.rain_look{...}`): fade junto da
     /// câmara, tecto de alpha, largura do streak e rate. A afinação da chuva
     /// é visual — sem isto cada tentativa custava um rebuild + reboot.
@@ -1440,6 +1451,7 @@ fn build_view(world: &mut World) -> DebugView {
             stats.lights_with_shadows += usize::from(light.shadows);
         }
         stats.emitters += usize::from(e.get::<crate::particles::ParticleEmitter>().is_some());
+        stats.emitters_registered += usize::from(e.get::<crate::particles::AmbientFx>().is_some());
 
         // LOD de render: quanto do mundo o culling está mesmo a poupar.
         if e.get::<crate::render_lod::CullDistance>().is_some() {
@@ -2471,6 +2483,11 @@ pub const DEBUG_API_DOCS: &[(&str, &str, &str)] = &[
     ),
     ("set_clock", "set_clock(minute)", "0–1440 (1380 = noite)"),
     (
+        "dlss",
+        "dlss(mode)",
+        "modo DLSS ao vivo (auto|dlaa|quality|balanced|performance|ultra)",
+    ),
+    (
         "set_weather",
         "set_weather{...}",
         "rain/clouds/wind (congela o ciclo)",
@@ -2807,6 +2824,7 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
             table.raw_set("lights_directional", s.lights_directional)?;
             table.raw_set("lights_with_shadows", s.lights_with_shadows)?;
             table.raw_set("emitters", s.emitters)?;
+            table.raw_set("emitters_registered", s.emitters_registered)?;
             table.raw_set("cullable", s.cullable)?;
             table.raw_set("culled", s.culled)?;
             table.raw_set("lod_tier0", s.lod_tier0)?;
@@ -3194,6 +3212,10 @@ fn ensure_debug_api(lua: &Lua) -> mlua::Result<()> {
     api.set(
         "set_clock",
         lua.create_function(|lua, minute: f32| push(lua, DebugOp::SetClock(minute)))?,
+    )?;
+    api.set(
+        "dlss",
+        lua.create_function(|lua, mode: String| push(lua, DebugOp::SetDlssMode(mode)))?,
     )?;
     api.set(
         "rain_look",
@@ -4725,6 +4747,59 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
                 }
             }
         }
+        DebugOp::SetDlssMode(mode) => {
+            #[cfg(feature = "dlss")]
+            {
+                match crate::dlss::DlssSetting::parse(&mode) {
+                    Some(crate::dlss::DlssSetting::Off) => {
+                        warnings.push(
+                            "dlss: off é gate de arranque (VIBER_DLSS=0 / config.yaml) \
+                             — o componente não se remove ao vivo"
+                                .into(),
+                        );
+                        false
+                    }
+                    Some(setting) => {
+                        let Some(quality_mode) = crate::dlss::quality_mode(setting) else {
+                            warnings.push(format!("dlss: modo {mode:?} sem equivalente"));
+                            return false;
+                        };
+                        let mut cameras = world.query::<&mut bevy::anti_alias::dlss::Dlss>();
+                        let mut touched = 0usize;
+                        for mut dlss in cameras.iter_mut(world) {
+                            dlss.perf_quality_mode = quality_mode;
+                            // Escala nova: a história temporal da antiga não
+                            // serve — limpa-a por um frame (sem smear).
+                            dlss.reset = true;
+                            touched += 1;
+                        }
+                        if touched == 0 {
+                            warnings.push(
+                                "dlss: nenhuma câmara com Dlss (desligado no arranque? \
+                                 VIBER_DLSS / config.yaml)"
+                                    .into(),
+                            );
+                            false
+                        } else {
+                            true
+                        }
+                    }
+                    None => {
+                        warnings.push(format!(
+                            "dlss: modo {mode:?} não reconhecido \
+                             (auto|dlaa|quality|balanced|performance|ultra)"
+                        ));
+                        false
+                    }
+                }
+            }
+            #[cfg(not(feature = "dlss"))]
+            {
+                let _ = mode;
+                warnings.push("dlss: binário construído sem --features dlss".into());
+                false
+            }
+        }
         DebugOp::RainLook {
             near_fade,
             alpha,
@@ -5375,7 +5450,7 @@ fn apply_one(world: &mut World, op: DebugOp, warnings: &mut Vec<String>) -> bool
                     Name::new(name),
                     transform,
                     Visibility::default(),
-                    crate::recipes::spawn::GltfScenePending { handle },
+                    crate::recipes::spawn::GltfScenePending::single(handle),
                 ));
                 true
             }

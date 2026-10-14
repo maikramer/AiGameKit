@@ -1177,6 +1177,8 @@ mod tests {
             pads: vec![],
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         };
         app.insert_resource(runtime);
 
@@ -1257,6 +1259,8 @@ mod tests {
             pads: vec![],
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         });
         let world_limit = 128.0 * 0.5;
         let home = Vec2::new(40.0, -30.0); // well inside the world disc

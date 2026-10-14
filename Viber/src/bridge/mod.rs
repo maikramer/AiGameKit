@@ -9,8 +9,11 @@ pub mod burst;
 pub mod client;
 pub mod diff;
 pub mod events;
+pub mod fork_compat;
 pub mod logs;
 pub mod lua;
+pub mod scene;
+pub mod selection;
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -52,6 +55,13 @@ pub const METHOD_TEXT: &str = "viber.input.text";
 pub const METHOD_CLICK: &str = "viber.input.click";
 pub const METHOD_MOVE: &str = "viber.input.move";
 pub const METHOD_RAYCAST: &str = "viber.raycast";
+pub const METHOD_CAMERA_ORBIT: &str = "viber.camera.orbit";
+pub const METHOD_CAMERA_PAN: &str = "viber.camera.pan";
+pub const METHOD_CAMERA_ZOOM: &str = "viber.camera.zoom";
+pub const METHOD_CAMERA_LOOK_AT: &str = "viber.camera.look_at";
+pub const METHOD_CAMERA_POSE: &str = "viber.camera.pose";
+pub const METHOD_PICK: &str = "viber.pick";
+pub const METHOD_SELECT: &str = "viber.select";
 
 /// Estado partilhado entre os handlers BRP (PreUpdate) e os sistemas (Update).
 #[derive(Resource, Default)]
@@ -180,6 +190,7 @@ impl Plugin for BridgePlugin {
             .add_plugins(
                 RemotePlugin::default()
                     .with_method_main(METHOD_PING, ping)
+                    .with_method_main("app.info", app_info)
                     .with_method_main(METHOD_SCREENSHOT, screenshot_request)
                     .with_method_main(METHOD_SCREENSHOT_STATUS, screenshot_status)
                     .with_method_main(METHOD_BURST, burst_request)
@@ -195,11 +206,41 @@ impl Plugin for BridgePlugin {
                     .with_method_main(METHOD_TEXT, input_text)
                     .with_method_main(METHOD_CLICK, input_click)
                     .with_method_main(METHOD_MOVE, input_move)
-                    .with_method_main(METHOD_RAYCAST, raycast_method),
+                    .with_method_main(METHOD_RAYCAST, raycast_method)
+                    .with_method_main(METHOD_CAMERA_ORBIT, camera_orbit)
+                    .with_method_main(METHOD_CAMERA_PAN, camera_pan)
+                    .with_method_main(METHOD_CAMERA_ZOOM, camera_zoom)
+                    .with_method_main(METHOD_CAMERA_LOOK_AT, camera_look_at)
+                    .with_method_main(METHOD_CAMERA_POSE, camera_pose)
+                    .with_method_main(METHOD_PICK, selection::pick_method)
+                    .with_method_main(METHOD_SELECT, selection::select_method)
+                    .with_method_main(scene::METHOD_LS, scene::ls_method)
+                    .with_method_main(scene::METHOD_GET, scene::get_method)
+                    .with_method_main(scene::METHOD_FIND, scene::find_method)
+                    .with_method_main(scene::METHOD_APPLY, scene::apply_method)
+                    .with_method_main(scene::METHOD_UNDO, scene::undo_method)
+                    .with_method_main(scene::METHOD_REDO, scene::redo_method)
+                    .with_method_main(scene::METHOD_SAVE, scene::save_method)
+                    .with_method_main(scene::METHOD_PICK, scene::pick_method)
+                    .with_method_main(scene::METHOD_ENTITIES, scene::entities_method)
+                    .with_method_main(scene::METHOD_CATALOG, scene::catalog_method)
+                    .with_method_main(scene::METHOD_DROP, scene::drop_method)
+                    .with_method_main(scene::METHOD_FILES, scene::files_method)
+                    .with_method_main(scene::METHOD_TOOL_LIST, scene::tool_list_method)
+                    .with_method_main(scene::METHOD_TOOL_SCATTER, scene::tool_scatter_method)
+                    .with_method_main(scene::METHOD_TOOL_SETTLE, scene::tool_settle_method)
+                    .with_method_main(
+                        scene::METHOD_TOOL_CANONICALIZE,
+                        scene::tool_canonicalize_method,
+                    ),
             )
             .add_plugins(RemoteHttpPlugin::default().with_port(self.port))
+            // Shims de compatibilidade com o cliente BRP do Bevy main (fork
+            // do ViberEditor/bevy_inspector): entidades "NvG" ↔ bits 0.20.0.
+            // DEPOIS do RemotePlugin — substitui entradas do RemoteMethods.
             .add_systems(Update, process_capture_requests)
             .init_resource::<PendingMouseClick>()
+            .init_resource::<selection::SelectedEntity>()
             // Event log estruturado: os messages têm de existir (apps mínimas
             // de teste ficam auto-suficientes — add_message é idempotente).
             .add_message::<crate::feedback::PlayerHurt>()
@@ -220,6 +261,16 @@ impl Plugin for BridgePlugin {
                     .after(bevy::input::InputSystems)
                     .before(bevy::ui::UiSystems::Focus),
             );
+        // Highlight da seleção (`viber.select`) — SÓ com o plugin de gizmos
+        // no app (DefaultPlugins com a feature `bevy_gizmos`). Apps mínimas
+        // de teste não o têm e o parâmetro `Gizmos` panica na validação.
+        if app.is_plugin_added::<bevy::gizmos::GizmoPlugin>() {
+            app.add_systems(Update, selection::selection_gizmos);
+        }
+        // Shims de compatibilidade com o cliente BRP do Bevy main (fork do
+        // ViberEditor/bevy_inspector): entidades "NvG" ↔ bits 0.20.0. Tem de
+        // ser depois do RemotePlugin — substitui entradas do RemoteMethods.
+        fork_compat::install(app);
     }
 }
 
@@ -425,7 +476,7 @@ fn primary_window(world: &mut World) -> Option<Entity> {
     query.single(world).ok()
 }
 
-fn invalid(message: String) -> BrpError {
+pub(crate) fn invalid(message: String) -> BrpError {
     BrpError {
         code: bevy::remote::error_codes::INVALID_PARAMS,
         message,
@@ -454,6 +505,20 @@ fn ping(_params: In<Option<Value>>, world: &mut World) -> BrpResult {
         pong["world"] = json!(world_path);
     }
     Ok(pong)
+}
+
+/// `app.info` — o handshake do `bevy_inspector` remoto (Bevy main) antes de
+/// pollar `world.query`. O `bevy_remote` 0.20.0 (registry) ainda não traz
+/// este builtin; REMOVER quando o Viber subir para um Bevy que o inclua.
+/// O `sub_app` é obrigatório no `BrpAppInfoResponse` do fork — sem ele o
+/// inspector perde a ligação ("missing field `sub_app`") e a árvore fica
+/// vazia.
+fn app_info(_params: In<Option<Value>>, _world: &mut World) -> BrpResult {
+    Ok(json!({
+        "app_name": "viber",
+        "bevy_version": "0.20.0",
+        "sub_app": "main",
+    }))
 }
 
 fn screenshot_request(_params: In<Option<Value>>, world: &mut World) -> BrpResult {
@@ -616,12 +681,6 @@ fn screenshot_status(params: In<Option<Value>>, world: &mut World) -> BrpResult 
 /// default 100 m). Resposta: `{hit: false}` ou `{hit: true, entity, name?,
 /// toi, point, normal}`.
 fn raycast_method(params: In<Option<Value>>, world: &mut World) -> BrpResult {
-    use bevy_rapier3d::prelude::{
-        QueryFilter, RapierContextColliders, RapierContextSimulation, RapierQueryPipeline,
-        RapierRigidBodySet,
-    };
-    use bevy_rapier3d::rapier::parry::query::DefaultQueryDispatcher;
-
     #[derive(Deserialize)]
     struct Params {
         x: f32,
@@ -638,10 +697,33 @@ fn raycast_method(params: In<Option<Value>>, world: &mut World) -> BrpResult {
     if !dir.is_finite() || dir.length_squared() < 1e-12 {
         return Err(invalid("raycast: direção inválida (NaN/inf/zero)".into()));
     }
-    let dir = dir.normalize();
-    let origin = Vec3::new(params.x, params.y, params.z);
-    let max_toi = params.max_toi.unwrap_or(100.0).max(0.0);
-    let solid = params.solid.unwrap_or(true);
+    raycast_json(
+        world,
+        Vec3::new(params.x, params.y, params.z),
+        dir.normalize(),
+        params.max_toi,
+        params.solid.unwrap_or(true),
+    )
+}
+
+/// Núcleo do raycast contra a física — partilhado por `viber.raycast` e
+/// `viber.pick` (unproject da câmara de editor). `dir` DEVE estar
+/// normalizado. A resposta inclui a raiz nomeada da instância (`root`/`root
+/// _name`) — o hit cai no collider-filho anónimo.
+pub(crate) fn raycast_json(
+    world: &mut World,
+    origin: Vec3,
+    dir: Vec3,
+    max_toi: Option<f32>,
+    solid: bool,
+) -> BrpResult {
+    use bevy_rapier3d::prelude::{
+        QueryFilter, RapierContextColliders, RapierContextSimulation, RapierQueryPipeline,
+        RapierRigidBodySet,
+    };
+    use bevy_rapier3d::rapier::parry::query::DefaultQueryDispatcher;
+
+    let max_toi = max_toi.unwrap_or(100.0).max(0.0);
     let Some(ctx_entity) = world
         .iter_entities()
         .find(|e| e.contains::<RapierContextSimulation>())
@@ -675,17 +757,24 @@ fn raycast_method(params: In<Option<Value>>, world: &mut World) -> BrpResult {
     };
     let toi = hit.time_of_impact;
     let normal = hit.normal;
+    let (root, root_name) = selection::named_root(world, entity);
     let name = world.get::<Name>(entity).map(|n| n.to_string());
     let point = origin + dir * toi;
     let mut out = json!({
         "hit": true,
         "entity": entity.to_bits(),
+        "root": fork_compat::entity_bits_to_string(root.to_bits())
+            .map(Value::String)
+            .unwrap_or_else(|| json!(root.to_bits())),
         "toi": toi,
         "point": [point.x, point.y, point.z],
         "normal": [normal.x, normal.y, normal.z],
     });
     if let Some(name) = name {
         out["name"] = json!(name);
+    }
+    if let Some(root_name) = root_name {
+        out["root_name"] = json!(root_name);
     }
     Ok(out)
 }
@@ -809,6 +898,114 @@ fn profiler_extra_toggle(params: In<Option<Value>>, world: &mut World) -> BrpRes
         Some(on) => Ok(json!({ "id": params.id, "on": on })),
         None => Err(invalid(format!("extra desconhecido: {}", params.id))),
     }
+}
+
+// ------------------------------------------------------- câmara de editor
+
+/// Erro padrão dos métodos `viber.camera.*` fora do modo `--camera free` —
+/// o cliente do editor distingue "modo errado" de "params inválidos".
+fn editor_cam_locked() -> BrpError {
+    invalid("camera mode is not free — arranca a engine com `viber run --camera free`".into())
+}
+
+/// Extrai o estado da câmara de editor ACTIVO (recurso presente e `active`),
+/// ou o erro claro de modo. As mutações BRP aplicam no frame seguinte
+/// (`editor_camera_follow` projecta o estado no `Transform`).
+fn require_editor_cam(
+    world: &mut World,
+) -> Result<bevy::ecs::change_detection::Mut<'_, crate::editor_camera::EditorCamState>, BrpError> {
+    world
+        .get_resource_mut::<crate::editor_camera::EditorCamState>()
+        .filter(|state| state.active)
+        .ok_or_else(editor_cam_locked)
+}
+
+/// Pose como JSON (`target`/`yaw`/`pitch`/`distance`) — corpo comum das
+/// respostas `viber.camera.*`, para o editor sincronizar UI/minimapa.
+fn editor_cam_pose(state: &crate::editor_camera::EditorCamState) -> Value {
+    json!({
+        "target": [state.target.x, state.target.y, state.target.z],
+        "yaw": state.yaw_deg,
+        "pitch": state.pitch_deg,
+        "distance": state.distance,
+    })
+}
+
+/// `viber.camera.orbit {dx_deg?, dy_deg?}` — roda a órbita da câmara de
+/// editor em torno do alvo (`yaw += dx`, pitch clamp -10°..85°). Devolve a
+/// pose resultante.
+fn camera_orbit(params: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        dx_deg: Option<f32>,
+        dy_deg: Option<f32>,
+    }
+    let params: Params = parse_params(params.0)?;
+    let mut state = require_editor_cam(world)?;
+    crate::editor_camera::orbit(
+        &mut state,
+        params.dx_deg.unwrap_or(0.0),
+        params.dy_deg.unwrap_or(0.0),
+    )
+    .map_err(invalid)?;
+    Ok(editor_cam_pose(&state))
+}
+
+/// `viber.camera.pan {dx?, dy?}` — pan no plano da câmara a partir de
+/// deltas de rato em PÍXEIS do preview do editor (escala com a distância ao
+/// alvo; o conteúdo segue o cursor). Devolve a pose resultante.
+fn camera_pan(params: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        dx: Option<f32>,
+        dy: Option<f32>,
+    }
+    let params: Params = parse_params(params.0)?;
+    let mut state = require_editor_cam(world)?;
+    crate::editor_camera::pan(
+        &mut state,
+        params.dx.unwrap_or(0.0),
+        params.dy.unwrap_or(0.0),
+    )
+    .map_err(invalid)?;
+    Ok(editor_cam_pose(&state))
+}
+
+/// `viber.camera.zoom {factor}` — `distance /= factor` com clamp 5..3000
+/// (`factor` 2 aproxima à metade). Devolve a pose resultante.
+fn camera_zoom(params: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        factor: f32,
+    }
+    let params: Params = parse_params(params.0)?;
+    let mut state = require_editor_cam(world)?;
+    crate::editor_camera::zoom(&mut state, params.factor).map_err(invalid)?;
+    Ok(editor_cam_pose(&state))
+}
+
+/// `viber.camera.look_at {x, y, z}` — aponta a órbita a um novo alvo (ex.:
+/// clique no minimapa do editor). Devolve a pose resultante.
+fn camera_look_at(params: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        x: f32,
+        y: f32,
+        z: f32,
+    }
+    let params: Params = parse_params(params.0)?;
+    let mut state = require_editor_cam(world)?;
+    crate::editor_camera::look_at(&mut state, Vec3::new(params.x, params.y, params.z))
+        .map_err(invalid)?;
+    Ok(editor_cam_pose(&state))
+}
+
+/// `viber.camera.pose {}` — leitura da pose actual (target/yaw/pitch/
+/// distance), para o editor sincronizar UI/minimapa após interações
+/// concorrentes.
+fn camera_pose(_params: In<Option<Value>>, world: &mut World) -> BrpResult {
+    let state = require_editor_cam(world)?;
+    Ok(editor_cam_pose(&state))
 }
 
 // ---------------------------------------------------------------- input
@@ -1065,6 +1262,79 @@ mod png_tests {
         png.truncate(png.len() - 1);
         assert!(!png_complete(&png), "cortado a meio do CRC é incompleto");
         assert!(!png_complete(b""), "vazio é incompleto");
+    }
+}
+
+#[cfg(test)]
+mod camera_method_tests {
+    use super::*;
+    use crate::editor_camera::{DEFAULT_DISTANCE, DEFAULT_PITCH_DEG, EditorCamState};
+
+    fn world_with(active: bool) -> World {
+        let mut world = World::default();
+        if active {
+            world.insert_resource(EditorCamState {
+                active: true,
+                ..EditorCamState::default()
+            });
+        }
+        world
+    }
+
+    #[test]
+    fn test_camera_methods_require_free_mode() {
+        // Estado presente mas INACTIVO (apps mínimas): erro claro de modo.
+        let mut world = world_with(false);
+        let error = camera_orbit(In(Some(json!({ "dx_deg": 10.0 }))), &mut world).unwrap_err();
+        assert!(error.message.contains("not free"), "{}", error.message);
+        // Recurso AUSENTE (engine arrancada sem `--camera free`): idem.
+        let mut world = World::default();
+        let error = camera_pose(In(None), &mut world).unwrap_err();
+        assert!(error.message.contains("not free"), "{}", error.message);
+    }
+
+    #[test]
+    fn test_camera_orbit_handler_applies_and_returns_pose() {
+        let mut world = world_with(true);
+        let out = camera_orbit(
+            In(Some(json!({ "dx_deg": 90.0, "dy_deg": 10.0 }))),
+            &mut world,
+        )
+        .unwrap();
+        assert_eq!(out["yaw"], json!(90.0));
+        assert_eq!(out["pitch"], json!(DEFAULT_PITCH_DEG + 10.0));
+        assert_eq!(out["distance"], json!(DEFAULT_DISTANCE));
+        assert_eq!(out["target"], json!([0.0, 0.0, 0.0]));
+        // O estado do MUNDO (a fonte do `editor_camera_follow`) também mudou.
+        assert_eq!(
+            world.resource::<EditorCamState>().yaw_deg,
+            90.0,
+            "o handler muta o recurso, não só a resposta"
+        );
+        // Omisso = 0 (delta neutro): só o que foi pedido se move.
+        let out = camera_orbit(In(Some(json!({ "dy_deg": -500.0 }))), &mut world).unwrap();
+        assert_eq!(out["yaw"], json!(90.0));
+        assert_eq!(out["pitch"], json!(crate::editor_camera::MIN_PITCH_DEG));
+    }
+
+    #[test]
+    fn test_camera_zoom_look_at_pose_roundtrip() {
+        let mut world = world_with(true);
+        // Zoom inválido: params error (não o erro de modo).
+        let error = camera_zoom(In(Some(json!({ "factor": 0.0 }))), &mut world).unwrap_err();
+        assert!(error.message.contains("factor"), "{}", error.message);
+        let out = camera_zoom(In(Some(json!({ "factor": 2.0 }))), &mut world).unwrap();
+        assert_eq!(out["distance"], json!(DEFAULT_DISTANCE / 2.0));
+        // look_at + pose: o que se escreve é o que se lê.
+        let written = camera_look_at(
+            In(Some(json!({ "x": 120.0, "y": 8.0, "z": -40.0 }))),
+            &mut world,
+        )
+        .unwrap();
+        let read = camera_pose(In(None), &mut world).unwrap();
+        assert_eq!(written["target"], json!([120.0, 8.0, -40.0]));
+        assert_eq!(read["target"], json!([120.0, 8.0, -40.0]));
+        assert_eq!(read["distance"], json!(DEFAULT_DISTANCE / 2.0));
     }
 }
 

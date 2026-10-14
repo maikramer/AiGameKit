@@ -192,6 +192,7 @@ fn retag_no_shadow_on_ready(
 /// Only hidden-by-culling instances are skipped: a prop the player cannot see
 /// does not deserve a respawn, and it re-tiers on the frame it comes back.
 fn update_mesh_lod(
+    editor: Query<&GlobalTransform, With<crate::editor_camera::EditorCamera>>,
     cameras: Query<&GlobalTransform, With<Camera3d>>,
     mut stats: ResMut<MeshLodStats>,
     mut instances: Query<(
@@ -201,7 +202,9 @@ fn update_mesh_lod(
         &Visibility,
     )>,
 ) {
-    let Some(camera) = cameras.iter().next() else {
+    // Modo editor: a distância mede-se à câmara de editor (a de jogo está
+    // inactiva mas continua na query — ver `active_camera_eye`).
+    let Some(camera) = crate::editor_camera::active_camera_eye(&editor, &cameras) else {
         return;
     };
     let eye = camera.translation();
@@ -254,10 +257,11 @@ fn update_mesh_lod(
 /// change detection (and therefore visibility propagation) only fires on an
 /// actual transition.
 fn cull_distant_objects(
+    editor: Query<&GlobalTransform, With<crate::editor_camera::EditorCamera>>,
     cameras: Query<&GlobalTransform, With<Camera3d>>,
     mut objects: Query<(&GlobalTransform, &CullDistance, &mut Visibility)>,
 ) {
-    let Some(camera) = cameras.iter().next() else {
+    let Some(camera) = crate::editor_camera::active_camera_eye(&editor, &cameras) else {
         return;
     };
     let eye = camera.translation();

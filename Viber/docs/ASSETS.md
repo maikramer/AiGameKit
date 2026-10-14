@@ -23,6 +23,13 @@ graphics: equilibrado          # opcional — alto | equilibrado (default) | des
                                #   individual ganha ao preset (bissecção de QA).
                                #   Medido no simple-rpg (RTX 4050, 1280x720):
                                #   32 / 26 / 17 ms de frame.
+dlss: auto                     # opcional — off | auto (default) | dlaa | quality |
+                               #   balanced | performance | ultra. SÓ tem efeito
+                               #   no binário construído com --features dlss
+                               #   (upscaling NGX da NVIDIA; sem suporte na
+                               #   máquina cai para o TAA com aviso).
+                               #   `VIBER_DLSS` sobrepõe; o modo troca AO VIVO
+                               #   na REPL (`viber.debug.dlss("performance")`).
 
 assets:                        # resolve contra as ROOTS (AssetServer)
   roots:                       # extra, por ordem, DEPOIS da pasta do jogo

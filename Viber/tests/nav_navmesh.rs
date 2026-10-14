@@ -50,6 +50,8 @@ fn world_with_a_road() -> TerrainRuntime {
         pads: vec![],
         voxel: Arc::new(viber::terrain::voxel::VoxelField::default()),
         deltas: std::sync::Arc::new(viber::terrain::delta::DeltaGrid::default()),
+        paint: std::sync::Arc::new(viber::terrain::paint::PaintGrid::default()),
+        splat_tuning: Default::default(),
     }
 }
 

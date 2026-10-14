@@ -220,6 +220,18 @@ pub enum Biome {
 }
 
 impl Biome {
+    /// Nome canónico do vocabulário `biomes.wedges[].biome` do meta `.ahgt`
+    /// (o inverso de [`Biome::from_name`] — é o que o `to_ahgt` escreve).
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Vale => "vale",
+            Self::Forest => "forest",
+            Self::Desert => "desert",
+            Self::Swamp => "swamp",
+            Self::Peaks => "peaks",
+        }
+    }
+
     /// `None` para nomes fora do vocabulário (o chamador avisa e ignora).
     pub fn from_name(name: &str) -> Option<Self> {
         match name.trim().to_ascii_lowercase().as_str() {
@@ -1103,9 +1115,7 @@ pub struct ChunkSplat {
 fn pack_chunk_splat(
     weights: &[[f32; LAYER_COUNT]],
     size: u32,
-    force_rock: bool,
-    force_bed: bool,
-    force_shore: bool,
+    extra_forced: &[usize],
 ) -> ChunkSplat {
     let mut sums = [0.0f32; LAYER_COUNT];
     for w in weights {
@@ -1121,24 +1131,21 @@ fn pack_chunk_splat(
     // Overrides entram do FIM da tabela (os picks de menor peso) — num chunk
     // de gorge com lago ao pé rock/bed/sand coexistem em vez de um apagar o
     // outro. Evict só picks NATURAIS: um slot forçado por um override
-    // anterior nunca é despejado por um seguinte.
+    // anterior nunca é despejado por um seguinte (`extra_forced` traz as
+    // flags de parede/leito/praia e os slots FORTEMENTE pintados).
     let forced = [SLOT_MOUNTAIN_STONE, SLOT_RIVERBED, SLOT_SAND];
-    let wanted = [
-        (force_rock, SLOT_MOUNTAIN_STONE),
-        (force_bed, SLOT_RIVERBED),
-        (force_shore, SLOT_SAND),
-    ];
-    for (needed, slot) in wanted {
-        if needed && !selected.contains(&slot) {
-            if selected.len() >= 8 {
-                let pos = selected
-                    .iter()
-                    .rposition(|&s| !forced.contains(&s))
-                    .unwrap_or(selected.len() - 1);
-                selected.remove(pos);
-            }
-            selected.push(slot);
+    for &slot in extra_forced {
+        if slot >= LAYER_COUNT || selected.contains(&slot) {
+            continue;
         }
+        if selected.len() >= 8 {
+            let pos = selected
+                .iter()
+                .rposition(|&s| !forced.contains(&s) && !extra_forced.contains(&s))
+                .unwrap_or(selected.len() - 1);
+            selected.remove(pos);
+        }
+        selected.push(slot);
     }
     let top: [usize; 8] = selected.try_into().expect("8 slots");
 
@@ -1183,6 +1190,7 @@ fn pack_chunk_splat(
 /// Same weight field as the retired global planes ([`generate_splats`]) —
 /// see [`weights_at`]; chunks whose aggregate picks differ render different
 /// layer sets, which is the point of per-chunk materials.
+#[allow(clippy::too_many_arguments)]
 pub fn generate_chunk_splats(
     grid: &BrushGrid,
     water: &[WaterBody],
@@ -1191,10 +1199,9 @@ pub fn generate_chunk_splats(
     chunk_edge: f32,
     rows: u32,
     cliff: Option<&crate::terrain::cliffs::CliffMask>,
+    paint: Option<&crate::terrain::paint::PaintGrid>,
 ) -> Vec<ChunkSplat> {
     let world = grid.world_size();
-    let size = CHUNK_SPLAT_TEXELS;
-    let texel = chunk_edge / size as f32;
     let shore = params
         .tuning
         .shore_width
@@ -1210,7 +1217,6 @@ pub fn generate_chunk_splats(
         .filter(|r| !r.bridge)
         .map(|r| (road_bounds(r, 4.0), r))
         .collect();
-    let epsilon = grid.texel();
     let half = world * 0.5;
     let mut ctx = TexelCtx {
         params,
@@ -1227,53 +1233,136 @@ pub fn generate_chunk_splats(
                 -half + cx as f32 * chunk_edge,
                 -half + cz as f32 * chunk_edge,
             );
-            let mut weights = vec![[0.0f32; LAYER_COUNT]; (size * size) as usize];
-            for tz in 0..size {
-                let z = origin.y + (tz as f32 + 0.5) * texel;
-                for tx in 0..size {
-                    let x = origin.x + (tx as f32 + 0.5) * texel;
-                    let y = grid.sample(x, z);
-                    let normal = grid.sample_normal(x, z, epsilon);
-                    weights[(tz * size + tx) as usize] =
-                        weights_at(x, z, y, normal.y, grid.max_height(), &mut ctx);
-                }
-            }
-            // Chunks com paredes na máscara GARANTEM a mountain_stone entre
-            // os 4 slots — sem ela o índice rock do material ficaria -1 e o
-            // gate triplanar não tinha textura nenhuma para projetar.
-            // Grelha 4×4 sobre o chunk INTEIRO (±10% para lá da borda, para
-            // a pedra atravessar a emenda): as 4 sondas antigas duplicavam-se
-            // e concentravam-se na metade min — paredes no terço max nunca
-            // eram apanhadas e liam-se plastilina em faixas alinhadas à
-            // grelha de chunks. Primeiro hit sai (chunks de relva não pagam
-            // as 16 sondas).
-            let has_core = cliff.is_some_and(|m| {
-                for ix in 0..4 {
-                    for iz in 0..4 {
-                        let fx = -0.1 + 0.4 * ix as f32;
-                        let fz = -0.1 + 0.4 * iz as f32;
-                        if m.is_core_at(Vec2::new(
-                            origin.x + chunk_edge * fx,
-                            origin.y + chunk_edge * fz,
-                        )) {
-                            return true;
-                        }
-                    }
-                }
-                false
-            });
-            // Um texel a ≥25% seixo lê-se leito: o chunk tem de carregar a
-            // textura mesmo que o agregado do leito perca a eleição top-8.
-            let has_bed = weights.iter().any(|w| w[SLOT_RIVERBED] >= 0.25);
-            // Idem para a PRAIA: a areia da margem perdia a eleição em
-            // chunks de relva e a praia quebrava em costuras retas de chunk.
-            let has_shore = weights.iter().any(|w| w[SLOT_SAND] >= 0.25);
-            out.push(pack_chunk_splat(
-                &weights, size, has_core, has_bed, has_shore,
+            out.push(bake_chunk_with_ctx(
+                grid, chunk_edge, paint, origin, &mut ctx,
             ));
         }
     }
     out
+}
+
+/// Coze UM chunk ([`bake_chunk`] e o loop de [`generate_chunk_splats`] chegam
+/// aqui): pesos procedurais + pintura, slots forçados e empacotamento.
+fn bake_chunk_with_ctx(
+    grid: &BrushGrid,
+    chunk_edge: f32,
+    paint: Option<&crate::terrain::paint::PaintGrid>,
+    origin: Vec2,
+    ctx: &mut TexelCtx,
+) -> ChunkSplat {
+    let size = CHUNK_SPLAT_TEXELS;
+    let texel = chunk_edge / size as f32;
+    let epsilon = grid.texel();
+    let cliff = ctx.cliff;
+    {
+        let mut weights = vec![[0.0f32; LAYER_COUNT]; (size * size) as usize];
+        // Pico de peso PINTADO por slot neste chunk: um slot pintado a
+        // ≥50% num só texel entra na eleição à força (como o leito e a
+        // praia) — senão uma mancha pequosa perdia a top-8 do chunk.
+        let mut painted_peak = [0.0f32; LAYER_COUNT];
+        for tz in 0..size {
+            let z = origin.y + (tz as f32 + 0.5) * texel;
+            for tx in 0..size {
+                let x = origin.x + (tx as f32 + 0.5) * texel;
+                let y = grid.sample(x, z);
+                let normal = grid.sample_normal(x, z, epsilon);
+                let mut w = weights_at(x, z, y, normal.y, grid.max_height(), ctx);
+                if let Some((slot, weight)) = paint.and_then(|paint| paint.sample(x, z)) {
+                    painted_peak[slot] = painted_peak[slot].max(weight);
+                    for value in w.iter_mut() {
+                        *value *= 1.0 - weight;
+                    }
+                    w[slot] += weight;
+                }
+                weights[(tz * size + tx) as usize] = w;
+            }
+        }
+        let mut forced: Vec<usize> = Vec::new();
+        for (slot, &peak) in painted_peak.iter().enumerate() {
+            if peak >= 0.5 {
+                forced.push(slot);
+            }
+        }
+        // Chunks com paredes na máscara GARANTEM a mountain_stone entre
+        // os 4 slots — sem ela o índice rock do material ficaria -1 e o
+        // gate triplanar não tinha textura nenhuma para projetar.
+        // Grelha 4×4 sobre o chunk INTEIRO (±10% para lá da borda, para
+        // a pedra atravessar a emenda): as 4 sondas antigas duplicavam-se
+        // e concentravam-se na metade min — paredes no terço max nunca
+        // eram apanhadas e liam-se plastilina em faixas alinhadas à
+        // grelha de chunks. Primeiro hit sai (chunks de relva não pagam
+        // as 16 sondas).
+        let has_core = cliff.is_some_and(|m| {
+            for ix in 0..4 {
+                for iz in 0..4 {
+                    let fx = -0.1 + 0.4 * ix as f32;
+                    let fz = -0.1 + 0.4 * iz as f32;
+                    if m.is_core_at(Vec2::new(
+                        origin.x + chunk_edge * fx,
+                        origin.y + chunk_edge * fz,
+                    )) {
+                        return true;
+                    }
+                }
+            }
+            false
+        });
+        // Um texel a ≥25% seixo lê-se leito: o chunk tem de carregar a
+        // textura mesmo que o agregado do leito perca a eleição top-8.
+        let has_bed = weights.iter().any(|w| w[SLOT_RIVERBED] >= 0.25);
+        // Idem para a PRAIA: a areia da margem perdia a eleição em
+        // chunks de relva e a praia quebrava em costuras retas de chunk.
+        let has_shore = weights.iter().any(|w| w[SLOT_SAND] >= 0.25);
+        if has_core {
+            forced.push(SLOT_MOUNTAIN_STONE);
+        }
+        if has_bed {
+            forced.push(SLOT_RIVERBED);
+        }
+        if has_shore {
+            forced.push(SLOT_SAND);
+        }
+        pack_chunk_splat(&weights, size, &forced)
+    }
+}
+
+/// Coze um único chunk a partir das features cruas (constrói as caixas de
+/// água/estrada localmente — o caminho da REPINTURA ao vivo, que cobre poucos
+/// chunks por pincelada). `origin` é o canto (-X,-Z) do chunk em mundo.
+#[allow(clippy::too_many_arguments)]
+pub fn bake_chunk(
+    grid: &BrushGrid,
+    water: &[WaterBody],
+    roads: &[RoadPath],
+    params: &SplatParams,
+    chunk_edge: f32,
+    cliff: Option<&crate::terrain::cliffs::CliffMask>,
+    paint: Option<&crate::terrain::paint::PaintGrid>,
+    origin: Vec2,
+) -> ChunkSplat {
+    let shore = params
+        .tuning
+        .shore_width
+        .unwrap_or(params.shore_width)
+        .max(0.5);
+    let water_boxes: Vec<(Bounds, &WaterBody)> = water
+        .iter()
+        .filter(|b| b.radius > 0.0 || !b.stations.is_empty())
+        .map(|b| (water_bounds(b, shore), b))
+        .collect();
+    let road_boxes: Vec<(Bounds, &RoadPath)> = roads
+        .iter()
+        .filter(|r| !r.bridge)
+        .map(|r| (road_bounds(r, 4.0), r))
+        .collect();
+    let mut ctx = TexelCtx {
+        params,
+        shore,
+        water_boxes: &water_boxes,
+        road_boxes: &road_boxes,
+        cliff,
+    };
+    bake_chunk_with_ctx(grid, chunk_edge, paint, origin, &mut ctx)
 }
 
 /// One chunk's splat plane as a Bevy image (mip chain + linear/aniso via the
@@ -1698,6 +1787,54 @@ mod tests {
     /// pesos a somar ~1 por texel; chunks diferentes podem escolher slots
     /// diferentes (o ponto do material por chunk).
     #[test]
+    fn paint_overrides_weights_and_wins_the_election() {
+        let world = flat_world();
+        // Uma mancha FORTE de desert_sand no centro do chunk (0,1) — sem
+        // pintura esse slot não ganha a top-8 de um mundo de relva.
+        let mut paint = crate::terrain::paint::PaintGrid::new(64.0, 65);
+        // (5,5) mundo: dentro do chunk (1,1) — origem do chunk (0,0), longe
+        // da borda; cell_center(37,37) = (-32+37, -32+37) = (5,5).
+        let painted = paint.cell_center(37, 37);
+        assert!((painted.x - 5.0).abs() < 1e-6);
+        paint
+            .paint_circle(painted, 10.0, 8, 1.0)
+            .expect("dentro do mapa");
+        let splats = generate_chunk_splats(
+            &world.grid,
+            &world.water,
+            &world.roads,
+            &params(),
+            32.0,
+            2,
+            None,
+            Some(&paint),
+        );
+        // chunk (1,1) contém o ponto pintado (row-major: cz*rows+cx)
+        let chunk = &splats[1 * 2 + 1];
+        assert!(
+            chunk.slots.contains(&8),
+            "slot pintado tem de entrar na eleição: {:?}",
+            chunk.slots
+        );
+        // o texel sob o centro pintado fica quase todo no slot pintado
+        // (coordenadas LOCAIS ao chunk: origem do chunk (1,1) é (0,0))
+        let texel = 32.0 / CHUNK_SPLAT_TEXELS as f32;
+        let local = ((painted.x - 0.0) / texel) as usize % CHUNK_SPLAT_TEXELS as usize;
+        let local_z = ((painted.y - 0.0) / texel) as usize % CHUNK_SPLAT_TEXELS as usize;
+        let index = local_z * CHUNK_SPLAT_TEXELS as usize + local;
+        let channel = chunk.slots.iter().position(|&slot| slot == 8).unwrap();
+        let byte = if channel < 4 {
+            chunk.rgba[index * 4 + channel]
+        } else {
+            chunk.rgba2[index * 4 + channel - 4]
+        };
+        assert!(byte > 200, "texel pintado ~100% no slot (veio {byte})");
+        // um chunk longe da pintura não muda: desert_sand não é eleito lá
+        let far = &splats[0];
+        assert!(!far.slots.contains(&8));
+    }
+
+    #[test]
     fn test_generate_chunk_splats_renormalizes_and_picks_top8() {
         let world = flat_world();
         let chunk_edge = 32.0; // flat_world é um mundo 64 m → 2×2 chunks
@@ -1709,6 +1846,7 @@ mod tests {
             &params(),
             chunk_edge,
             rows,
+            None,
             None,
         );
         assert_eq!(splats.len(), (rows * rows) as usize);

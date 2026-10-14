@@ -114,10 +114,29 @@ pub struct DialogueNpc {
 }
 
 /// Pending `<GltfScene>`: the handle loads async; [`gltf_scene_spawner`]
-/// swaps it for a `SceneRoot` once loaded (and drops it on failure).
+/// swaps it for a `SceneRoot` once loaded (and drops it on failure). Os
+/// handles de LOD opcionais (`lod1-url`/`lod2-url`) constroem a ladder de
+/// [`crate::render_lod::MeshLod`] quando todos os tiers resolvem.
 #[derive(Component)]
 pub struct GltfScenePending {
     pub handle: Handle<Gltf>,
+    pub lod1: Option<Handle<Gltf>>,
+    pub lod2: Option<Handle<Gltf>>,
+    pub lod_near: f32,
+    pub lod_mid: f32,
+}
+
+impl GltfScenePending {
+    /// Pendente sem ladder (o formato pré-LOD — player, interiores).
+    pub fn single(handle: Handle<Gltf>) -> Self {
+        Self {
+            handle,
+            lod1: None,
+            lod2: None,
+            lod_near: crate::recipes::DEFAULT_LOD_NEAR,
+            lod_mid: crate::recipes::DEFAULT_LOD_MID,
+        }
+    }
 }
 
 /// Declarative terrain collected from the entity tree, consumed by the
@@ -378,6 +397,75 @@ pub struct SpawnStats {
 }
 
 /// Exclusive startup system: consumes [`PendingWorld`] and builds the scene.
+/// Hierarquia de editor: uma entidade-raiz por categoria, para a árvore de
+/// entidades de ferramentas externas (ViberEditor / bevy_inspector) ser
+/// navegável — sem estes grupos, milhares de instâncias de spawners nascem
+/// soltas na raiz.
+///
+/// Os grupos têm `Transform` de identidade e `Visibility::Inherited`, logo
+/// reparentar para eles não move nada nem quebra o culling por distância.
+#[derive(Resource, Clone, Copy)]
+pub struct EditorGroups {
+    pub environment: Entity,
+    pub terrain: Entity,
+    pub vegetation: Entity,
+    pub props: Entity,
+    pub interiors: Entity,
+    pub gameplay: Entity,
+    /// Grupo genérico: entidades sem categoria conhecida.
+    pub world: Entity,
+}
+
+/// Marca as entidades-grupo de [`EditorGroups`] — filtra-as de queries que
+/// procuram hierarquia autoral (ex.: raízes de composição em testes).
+#[derive(Component)]
+pub struct EditorGroup;
+
+impl EditorGroups {
+    fn spawn_groups(world: &mut World) -> Self {
+        let mut named = |name: &'static str| {
+            world
+                .spawn((
+                    EditorGroup,
+                    Name::new(name),
+                    Visibility::Inherited,
+                    Transform::default(),
+                ))
+                .id()
+        };
+        Self {
+            environment: named("Environment"),
+            terrain: named("Terrain"),
+            vegetation: named("Vegetation"),
+            props: named("Props"),
+            interiors: named("Interiors"),
+            gameplay: named("Gameplay"),
+            world: named("World"),
+        }
+    }
+
+    /// O grupo de topo para uma entidade sem pai no world.xml, pela tag XML
+    /// de origem (`EntitySpec::tag`).
+    pub fn for_tag(&self, tag: Option<&str>) -> Entity {
+        match tag {
+            Some("Sky")
+            | Some("DayCycle")
+            | Some("Weather")
+            | Some("BiomeRegion")
+            | Some("PointLight")
+            | Some("DirectionalLight")
+            | Some("AmbientLight") => self.environment,
+            Some("InteriorScene") => self.interiors,
+            Some("PlayerGltf")
+            | Some("ThirdPersonCamera")
+            | Some("DialogueNpc")
+            | Some("DynamicSpawner") => self.gameplay,
+            // `Group` aninhado de topo, GLTFs soltos, landmarks e afins.
+            _ => self.world,
+        }
+    }
+}
+
 pub fn startup(world: &mut World) {
     let Some(pending) = world.remove_resource::<PendingWorld>() else {
         return;
@@ -407,6 +495,7 @@ pub fn startup(world: &mut World) {
     // Prototypes para spawn em runtime (viber.spawn_prototype) — o WorldIR
     // morre aqui; a biblioteca sobrevive.
     world.insert_resource(PrototypeLibrary(parsed.prototypes.clone()));
+    world.insert_resource(StaticWorld(parsed.static_world));
     if let Some([r, g, b]) = parsed.clear_color {
         world.insert_resource(ClearColor(Color::srgb(r, g, b)));
     }
@@ -430,6 +519,8 @@ pub fn startup(world: &mut World) {
     // `<StaticSpawner>` groups: collect specs and start their template loads;
     // `spawner::instantiate_spawn_groups` places instances once the terrain
     // runtime and the assets are ready.
+    let editor_groups = EditorGroups::spawn_groups(world);
+    world.insert_resource(editor_groups);
     let mut spawn_groups = Vec::new();
     let mut exclusions = Vec::new();
     collect_spawn_groups(
@@ -438,7 +529,27 @@ pub fn startup(world: &mut World) {
         &mut spawn_groups,
         &mut exclusions,
         Vec2::ZERO,
+        editor_groups,
     );
+    // Instâncias pré-geradas (`instances="….vinst"`, mundo estático): lidas aqui, relativas
+    // à pasta do mundo — o runtime não calcula colocações para estes grupos.
+    for group in &mut spawn_groups {
+        let Some(file) = group.spec.instances_file.clone() else {
+            continue;
+        };
+        let path = world_dir
+            .as_deref()
+            .unwrap_or(std::path::Path::new("."))
+            .join(file.trim_start_matches('/'));
+        match crate::vinst::read(&path) {
+            Ok(instances) => group.spec.preplaced = Some(std::sync::Arc::new(instances)),
+            Err(error) => {
+                bevy::log::warn!("instâncias pré-geradas: {error:#} — grupo omitido");
+                group.done = true;
+                group.failed = true;
+            }
+        }
+    }
     // Os discos ficam em DOIS sítios de propósito: no `PendingSpawnGroups`
     // (consumidos e removidos no fim da colocação) e num recurso próprio, que
     // sobrevive — a relva procedural lê-os mais tarde (`src/grass.rs`).
@@ -480,12 +591,21 @@ pub fn startup(world: &mut World) {
             ui_trees: std::cell::RefCell::new(Vec::new()),
             worldsys: Default::default(),
             sky_request: std::cell::RefCell::new(None),
+            static_world: parsed.static_world,
         };
         for spec in &parsed.entities {
             if is_ground_feature(&spec.kind) {
                 continue;
             }
-            spawn_entity(world, &mut ctx, spec, None, &mut stats, &mut ambient);
+            let parent = editor_groups.for_tag(spec.tag.as_deref());
+            spawn_entity(
+                world,
+                &mut ctx,
+                spec,
+                Some(parent),
+                &mut stats,
+                &mut ambient,
+            );
         }
         // `<Sky>`: domo procedural (o shader especializado com a config do
         // mundo é escrito no world dir pelo run()).
@@ -565,6 +685,93 @@ pub fn startup(world: &mut World) {
             },
         ));
     }
+}
+
+/// Tipos que podem nascer a meio do jogo pelo MESMO `spawn_entity` do arranque, sem efeitos
+/// globais (terreno, céu, UI, HUD, spawners e recursos de mundo são montados uma vez no
+/// `startup` e exigem recarregar o mundo).
+pub fn spawns_incrementally(spec: &EntitySpec) -> bool {
+    let kind_ok = matches!(
+        spec.kind,
+        EntityKind::Group
+            | EntityKind::Composition { .. }
+            | EntityKind::Primitive { .. }
+            | EntityKind::PointLight { .. }
+            | EntityKind::GltfScene { .. }
+            | EntityKind::ParticleSystem { .. }
+    );
+    kind_ok && spec.children.iter().all(spawns_incrementally)
+}
+
+/// Spawna `specs` a meio do jogo debaixo de `parent` (o sync documento→ECS do
+/// `crate::scene`). Recusa — sem spawnar nada — se algum não for
+/// [`spawns_incrementally`]. Devolve as raízes criadas.
+pub fn spawn_specs(
+    world: &mut World,
+    specs: &[EntitySpec],
+    parent: Option<Entity>,
+) -> Result<Vec<Entity>, String> {
+    if let Some(bad) = specs.iter().find(|spec| !spawns_incrementally(spec)) {
+        return Err(format!(
+            "`{}` não nasce a quente — recarrega o mundo para ver a mudança",
+            bad.tag.as_deref().or(bad.name.as_deref()).unwrap_or("nó")
+        ));
+    }
+    let (
+        Some(mut meshes),
+        Some(mut materials),
+        Some(mut sky_mats),
+        Some(asset_server),
+        Some(mut tiled),
+    ) = (
+        world.remove_resource::<Assets<Mesh>>(),
+        world.remove_resource::<Assets<StandardMaterial>>(),
+        world.remove_resource::<Assets<crate::sky::SkyMaterial>>(),
+        world.remove_resource::<AssetServer>(),
+        world.remove_resource::<crate::textures::WorldTiledTextures>(),
+    )
+    else {
+        return Err("spawn_specs: a App não tem os stores de assets do arranque".into());
+    };
+    let mut stats = SpawnStats::default();
+    let mut ambient = None;
+    let roots = {
+        let mut ctx = SpawnCtx {
+            meshes: &mut meshes,
+            materials: &mut materials,
+            sky_mats: &mut sky_mats,
+            asset_server: &asset_server,
+            game_config: world.get_resource::<crate::config::GameConfig>().cloned(),
+            tiled: &mut tiled,
+            mesh_cache: std::collections::HashMap::new(),
+            material_cache: std::collections::HashMap::new(),
+            chip_counter: std::cell::Cell::new(0),
+            mixer: std::cell::RefCell::new(None),
+            chips: std::cell::RefCell::new(Vec::new()),
+            hud: std::cell::RefCell::new(Vec::new()),
+            ui_styles: std::cell::RefCell::new(Vec::new()),
+            ui_pending_sheets: std::cell::RefCell::new(Vec::new()),
+            ui_tree_sheets: std::cell::RefCell::new(Vec::new()),
+            ui_trees: std::cell::RefCell::new(Vec::new()),
+            worldsys: Default::default(),
+            sky_request: std::cell::RefCell::new(None),
+            static_world: world
+                .get_resource::<StaticWorld>()
+                .is_some_and(|mode| mode.0),
+        };
+        specs
+            .iter()
+            .filter_map(|spec| {
+                spawn_entity(world, &mut ctx, spec, parent, &mut stats, &mut ambient)
+            })
+            .collect()
+    };
+    world.insert_resource(meshes);
+    world.insert_resource(materials);
+    world.insert_resource(sky_mats);
+    world.insert_resource(asset_server);
+    world.insert_resource(tiled);
+    Ok(roots)
 }
 
 /// Raw attributes of one HUD element.
@@ -675,7 +882,13 @@ struct SpawnCtx<'a> {
     worldsys: crate::worldsys::PendingWorldSystems,
     /// `<Sky>` attrs — constrói o domo no fim do startup.
     sky_request: std::cell::RefCell<Option<Vec<(String, String)>>>,
+    /// Mundo pré-gerado: as poses do XML são finais (sem assentar nem `place`).
+    static_world: bool,
 }
+
+/// O mundo carregado é estático (`<world static="true">`) — lido pelo spawn incremental.
+#[derive(Resource, Debug, Clone, Copy, Default)]
+pub struct StaticWorld(pub bool);
 
 /// Malha de primitiva com dedup: as partes repetidas de uma
 /// composition/protótipo (paredes iguais, postes iguais) partilham o mesmo
@@ -724,6 +937,7 @@ fn push_shore_rock_group(
     candidates: Vec<bevy::math::Vec2>,
     at: bevy::math::Vec2,
     rocks: &crate::terrain::shore_rocks::ShoreRocksSpec,
+    groups: EditorGroups,
 ) {
     if candidates.is_empty() {
         return;
@@ -800,6 +1014,8 @@ fn push_shore_rock_group(
         max_slope_attempts: 4,
         density_per_km2: 0.0,
         max_instances: 0,
+        instances_file: None,
+        preplaced: None,
     };
     out.push(crate::spawner::SpawnGroupState {
         template_collider: spec.template_collider.clone(),
@@ -809,6 +1025,8 @@ fn push_shore_rock_group(
         done: false,
         failed: false,
         dynamic: false,
+        // Rochas de margem: cenário, sob Props.
+        editor_group: groups.props,
         template_script: None,
         activation_radius: crate::luau::DEFAULT_ACTIVATION_RADIUS,
         template_destructible: None,
@@ -827,6 +1045,7 @@ fn collect_spawn_groups(
     out: &mut Vec<crate::spawner::SpawnGroupState>,
     exclusions: &mut Vec<crate::spawner::SpawnExclusion>,
     offset: Vec2,
+    groups: EditorGroups,
 ) {
     for spec in specs {
         let child_offset =
@@ -836,9 +1055,23 @@ fn collect_spawn_groups(
                 if lake.rocks {
                     let lake = shift_lake(lake, offset);
                     let candidates = crate::terrain::shore_rocks::lake_candidates(&lake, out.len());
-                    push_shore_rock_group(out, asset_server, candidates, lake.at, &lake.rocks_spec);
+                    push_shore_rock_group(
+                        out,
+                        asset_server,
+                        candidates,
+                        lake.at,
+                        &lake.rocks_spec,
+                        groups,
+                    );
                 }
-                collect_spawn_groups(&spec.children, asset_server, out, exclusions, child_offset);
+                collect_spawn_groups(
+                    &spec.children,
+                    asset_server,
+                    out,
+                    exclusions,
+                    child_offset,
+                    groups,
+                );
             }
             EntityKind::River { spec: river } => {
                 if river.rocks && river.path.len() >= 2 {
@@ -867,9 +1100,17 @@ fn collect_spawn_groups(
                         candidates,
                         centroid,
                         &river.rocks_spec,
+                        groups,
                     );
                 }
-                collect_spawn_groups(&spec.children, asset_server, out, exclusions, child_offset);
+                collect_spawn_groups(
+                    &spec.children,
+                    asset_server,
+                    out,
+                    exclusions,
+                    child_offset,
+                    groups,
+                );
             }
             EntityKind::StaticSpawner { spec: group }
             | EntityKind::DynamicSpawner { spec: group } => {
@@ -914,6 +1155,12 @@ fn collect_spawn_groups(
                     failed: false,
                     // `<DynamicSpawner>` instances are driven by the AI system.
                     dynamic: matches!(spec.kind, EntityKind::DynamicSpawner { .. }),
+                    // Criaturas sob Gameplay; cenário estático sob Props.
+                    editor_group: if matches!(spec.kind, EntityKind::DynamicSpawner { .. }) {
+                        groups.gameplay
+                    } else {
+                        groups.props
+                    },
                     template_script: group.template_script.clone(),
                     activation_radius: group.activation_radius,
                     template_collider: group.template_collider.clone(),
@@ -942,7 +1189,8 @@ fn collect_spawn_groups(
             }
             EntityKind::Vegetation { spec } => {
                 let spawner_spec = spec.to_spawner_spec();
-                if spawner_spec.count == 0 || spawner_spec.template_urls.is_empty() {
+                let empty = spawner_spec.count == 0 && spawner_spec.instances_file.is_none();
+                if empty || spawner_spec.template_urls.is_empty() {
                     continue;
                 }
                 let handles = spawner_spec
@@ -959,6 +1207,7 @@ fn collect_spawn_groups(
                     // Erva não tem ladder: as malhas de `<Vegetation>` já são
                     // de algumas dezenas de KB.
                     lod_handles: Vec::new(),
+                    editor_group: groups.vegetation,
                     template_script: spawner_spec.template_script.clone(),
                     activation_radius: spawner_spec.activation_radius,
                     template_collider: spawner_spec.template_collider.clone(),
@@ -984,7 +1233,14 @@ fn collect_spawn_groups(
                     dynamic: false,
                 });
             }
-            _ => collect_spawn_groups(&spec.children, asset_server, out, exclusions, child_offset),
+            _ => collect_spawn_groups(
+                &spec.children,
+                asset_server,
+                out,
+                exclusions,
+                child_offset,
+                groups,
+            ),
         }
     }
 }
@@ -1091,6 +1347,10 @@ fn spawn_entity(
     if let Some(name) = &spec.name {
         entity.insert(Name::new(name.clone()));
     }
+    // Proveniência: o nó XML que declarou a entidade (editor/agentes editam por aí).
+    if let Some(source) = &spec.source {
+        entity.insert(crate::scene::SceneSource(source.clone()));
+    }
     // Script Luau da entidade: o runtime executa `on_update(dt)` por frame.
     if let Some(path) = &spec.script {
         entity.insert(crate::luau::LuaScriptRef { path: path.clone() });
@@ -1113,8 +1373,10 @@ fn spawn_entity(
         EntityKind::Group => {
             // Grupos autorais a y≈0 assentam no terreno real (a vila fica a
             // ~24.6 m no heightmap); conteúdo autoral elevado mantém offset
-            // relativo ao novo y.
-            entity.insert(crate::worldsys::SeatOnTerrain);
+            // relativo ao novo y. Num mundo estático o bake já escreveu a cota.
+            if !ctx.static_world {
+                entity.insert(crate::worldsys::SeatOnTerrain);
+            }
         }
         EntityKind::Composition {
             body, place, seat, ..
@@ -1128,7 +1390,9 @@ fn spawn_entity(
             // Colocação: `place` explícito ganha (amostra o terreno onde o
             // autor pediu); sem `place`, assenta como os grupos (a menos que
             // `seat="none"` — objeto flutuante, mantém a cota autoral).
-            if let Some(place) = place {
+            if ctx.static_world {
+                // Pose final já no XML (o bake resolveu `place` e o assentamento).
+            } else if let Some(place) = place {
                 entity.insert(crate::worldsys::PendingPlace {
                     at: Vec2::new(place.at[0], place.at[1]),
                     align_to_terrain: place.align_to_terrain,
@@ -1149,42 +1413,20 @@ fn spawn_entity(
             return None;
         }
         EntityKind::ParticleSystem { spec } => {
-            let resolved = crate::particles::resolve(spec);
-            let capacity = crate::particles::emitter_capacity(&resolved);
-            let mesh = ctx.meshes.add(crate::particles::particle_mesh(capacity));
-            let material = ctx.materials.add(StandardMaterial {
-                base_color: Color::WHITE,
-                unlit: true,
-                alpha_mode: if resolved.additive {
-                    AlphaMode::Add
-                } else {
-                    AlphaMode::Blend
-                },
-                ..Default::default()
-            });
-            entity.insert((
-                Mesh3d(mesh),
-                MeshMaterial3d(material),
-                Visibility::Inherited,
-                NotShadowCaster,
-                crate::particles::ParticleEmitter {
-                    // Seed derivada da posição (a transform já está na
-                    // entidade): emissores distintos têm sequências
-                    // distintas — sem flicker em lockstep.
-                    sim: crate::particles::EmitterSim::seeded(
-                        spec,
-                        entity
-                            .get::<Transform>()
-                            .map(|t| t.translation)
-                            .unwrap_or_default(),
-                    ),
-                    capacity,
-                    culled: false,
-                    idle: false,
-                },
-            ));
+            // MARKER de lifecycle (`crate::particles::ambient_fx_manager`): o
+            // bundle de render (mesh/material/emissor) só é montado quando a
+            // câmara se aproxima — FX distante não existe no pipeline de
+            // render. A entidade (nome/hierarquia/scripts) fica; a mesh vem
+            // do pool e o material é um dos dois partilhados.
+            entity.insert(crate::particles::AmbientFx { spec: spec.clone() });
         }
-        EntityKind::GltfScene { url } => {
+        EntityKind::GltfScene {
+            url,
+            lod1,
+            lod2,
+            lod_near,
+            lod_mid,
+        } => {
             let path = url.trim_start_matches('/');
             let handle: Handle<Gltf> = crate::meshopt::load_gltf(ctx.asset_server, path.to_owned());
             // Cristais/vidro (r3): a URL marca os materiais da cena para o
@@ -1192,7 +1434,21 @@ fn spawn_entity(
             if path.contains("crystal") || path.contains("glass") {
                 entity.insert(crate::prop_tint::TransmissiveGltf);
             }
-            entity.insert(GltfScenePending { handle });
+            let lod_load = |url: &Option<String>| {
+                url.as_ref().map(|u| {
+                    crate::meshopt::load_gltf(
+                        ctx.asset_server,
+                        u.trim_start_matches('/').to_owned(),
+                    )
+                })
+            };
+            entity.insert(GltfScenePending {
+                handle,
+                lod1: lod_load(lod1),
+                lod2: lod_load(lod2),
+                lod_near: *lod_near,
+                lod_mid: *lod_mid,
+            });
         }
         EntityKind::Primitive { shape, material } => {
             // UV world-space (`texture-tile-size` > 0 em Plane/Cuboid, a
@@ -1516,7 +1772,7 @@ fn spawn_entity(
             let path = url.trim_start_matches('/');
             let handle: Handle<Gltf> = crate::meshopt::load_gltf(ctx.asset_server, path.to_owned());
             entity.insert((
-                GltfScenePending { handle },
+                GltfScenePending::single(handle),
                 crate::player::Player::default(),
                 // Character controller: the hero is moved by code but has to be
                 // stopped by the world's static colliders (walls, buildings,
@@ -1885,7 +2141,7 @@ pub fn gltf_scene_spawner(
                 if let Some(gltf) = gltfs.get(&scene.handle) {
                     match gltf.default_scene.clone() {
                         Some(root) => {
-                            commands.entity(entity).insert(WorldAssetRoot(root));
+                            commands.entity(entity).insert(WorldAssetRoot(root.clone()));
                             // Characters ship a catalogue of clips; ask the
                             // animation module to bind them once the scene has
                             // spawned its `AnimationPlayer`.
@@ -1895,6 +2151,37 @@ pub fn gltf_scene_spawner(
                                     .insert(crate::animation::AnimatedScene {
                                         gltf: scene.handle.clone(),
                                     });
+                            }
+                            // Ladder de LOD (instâncias estáticas do bake): os
+                            // tiers entram quando já resolveram — um lod1
+                            // ainda a carregar degrada para a ladder curta,
+                            // como nos templates de spawner.
+                            let mut tiers = vec![root];
+                            let mut gltf_tiers = vec![scene.handle.clone()];
+                            for lod in [&scene.lod1, &scene.lod2] {
+                                let Some(handle) = lod else {
+                                    continue;
+                                };
+                                if !matches!(server.get_load_state(handle), Some(LoadState::Loaded))
+                                {
+                                    continue;
+                                }
+                                if let Some(scene) =
+                                    gltfs.get(handle).and_then(|g| g.default_scene.clone())
+                                {
+                                    tiers.push(scene);
+                                    gltf_tiers.push(handle.clone());
+                                }
+                            }
+                            if tiers.len() > 1 {
+                                commands.entity(entity).insert(crate::render_lod::MeshLod {
+                                    tiers,
+                                    gltf_tiers,
+                                    near: scene.lod_near,
+                                    mid: scene.lod_mid,
+                                    current: 0,
+                                    no_shadows: false,
+                                });
                             }
                         }
                         None => {
@@ -2054,6 +2341,9 @@ pub fn apply_script_spawns(world: &mut World) {
         ui_trees: std::cell::RefCell::new(Vec::new()),
         worldsys: Default::default(),
         sky_request: std::cell::RefCell::new(None),
+        static_world: world
+            .get_resource::<StaticWorld>()
+            .is_some_and(|mode| mode.0),
     };
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
@@ -2122,6 +2412,7 @@ mod terrain_collect_tests {
                 .collect(),
             text: String::new(),
             children: vec![],
+            origin: None,
         }
     }
 

@@ -1003,6 +1003,7 @@ fn simple_box_spec() -> crate::recipes::EntitySpec {
             material: crate::recipes::MaterialSpec::default(),
         },
         children: Vec::new(),
+        source: None,
     }
 }
 

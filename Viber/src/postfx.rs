@@ -631,6 +631,10 @@ impl Plugin for PostFxPlugin {
         // combate/skills escrevem-no (kick_exposure/punch_impact) e é só o
         // drive que não corre — sem o init, esses sistemas panica-iam.
         app.init_resource::<PostFxState>();
+        // DLSS (feature `dlss`): teleporte = corte de câmara, o histórico
+        // temporal do NGX limpa-se por um frame (src/dlss.rs).
+        #[cfg(feature = "dlss")]
+        crate::dlss::register_teleport_reset(app);
         if std::env::var_os("VIBER_NO_POSTFX").is_some() {
             info!("postfx: desligado por VIBER_NO_POSTFX");
             return;
@@ -722,6 +726,13 @@ fn attach_postfx_to_cameras(
     mut curves: ResMut<Assets<AutoExposureCompensationCurve>>,
     // Uma curva por processo, partilhada por todas as câmaras.
     mut curve: ResMut<AutoExposureCurve>,
+    // DLSS (feature `dlss`): o recurso só existe quando a máquina suporta
+    // NGX (RTX + driver + backend Vulkan); o config.yaml traz o modo
+    // autorado. Sem a feature, nenhum dos dois parâmetros existe.
+    #[cfg(feature = "dlss")] dlss_supported: Option<
+        Res<bevy::anti_alias::dlss::DlssSuperResolutionSupported>,
+    >,
+    #[cfg(feature = "dlss")] dlss_config: Option<Res<crate::config::GameConfig>>,
 ) {
     if cameras.is_empty() {
         return;
@@ -851,18 +862,70 @@ fn attach_postfx_to_cameras(
         if gates.aerial {
             commands.entity(camera).insert(AerialPerspective);
         }
-        if taa_enabled() {
-            commands.entity(camera).insert((
-                TemporalAntiAliasing::default(),
-                // Espiral Jimenez (CoD:AW) + rotação por noise — desenho PARA
-                // o TAA; suaviza a penumbra do PCSS.
-                bevy::light::ShadowFilteringMethod::Temporal,
-            ));
-        } else {
-            commands.entity(camera).insert((
-                Fxaa::default(),
-                bevy::light::ShadowFilteringMethod::Gaussian,
-            ));
+        // DLSS (feature `dlss`, src/dlss.rs): TROCA o TAA pelo upscale NGX —
+        // o DLSS faz o seu próprio anti-alias temporal (o jitter HALTON e o
+        // ShadowFilteringMethod::Temporal continuam; o bevy injeta jitter/
+        // mip-bias/motion-vectors/MainPassResolutionOverride sozinho a partir
+        // do componente `Dlss`). Ligado por omissão quando a feature está
+        // compilada; sem suporte na máquina (sem RTX/NGX/Vulkan) cai para o
+        // TAA de sempre com warn — a câmara nunca fica sem AA. On/off é gate
+        // de arranque (como o TAA); o MODO troca ao vivo na REPL.
+        #[cfg(feature = "dlss")]
+        let dlss_attached = {
+            use bevy::anti_alias::dlss::Dlss;
+            let setting = crate::dlss::requested(
+                dlss_config
+                    .as_deref()
+                    .and_then(|config| config.dlss.as_deref()),
+            );
+            match (
+                crate::dlss::quality_mode(setting),
+                dlss_supported.as_deref(),
+            ) {
+                (Some(mode), Some(_)) => {
+                    info!(
+                        "dlss: {} ativo (substitui o TAA; VIBER_DLSS/config.yaml desligam)",
+                        setting.label()
+                    );
+                    commands.entity(camera).insert((
+                        Dlss::<bevy::anti_alias::dlss::DlssSuperResolutionFeature> {
+                            perf_quality_mode: mode,
+                            ..Default::default()
+                        },
+                        // O jitter continua ativo com DLSS — o filtro temporal
+                        // das sombras (espiral Jimenez) mantém-se. Se a QA
+                        // apanhar ghosting nas penumbras: Cascade2Px.
+                        bevy::light::ShadowFilteringMethod::Temporal,
+                    ));
+                    true
+                }
+                (Some(_), None) => {
+                    warn!(
+                        "dlss: pedido {} mas sem suporte nesta máquina \
+                         (RTX/NGX/backend Vulkan) — TAA",
+                        setting.label()
+                    );
+                    false
+                }
+                (None, _) => false,
+            }
+        };
+        #[cfg(not(feature = "dlss"))]
+        let dlss_attached = false;
+        if !dlss_attached {
+            if taa_enabled() {
+                commands.entity(camera).insert((
+                    TemporalAntiAliasing::default(),
+                    // Espiral Jimenez (CoD:AW) + rotação por noise — desenho PARA
+                    // o TAA; suaviza a penumbra do PCSS.
+                    bevy::light::ShadowFilteringMethod::Temporal,
+                ));
+            } else {
+                commands.entity(camera).insert((
+                    Fxaa::default(),
+                    bevy::light::ShadowFilteringMethod::Gaussian,
+                ));
+            }
         }
         // SSR da água (`VIBER_WATER_SSR=1`, src/water_ssr.rs): o marcador
         // ativa o passe no Core3d (entre o TAA e o tonemapping). Os prepasses
@@ -2181,15 +2244,22 @@ fn aerial_schedule_configs()
             .before(tonemapping_pass)
             .into_configs()
     } else {
-        // Braço default: `EarlyPostProcess` corre inteiro ANTES do
-        // `PostProcess` na chain do `Core3d`, portanto ficar ANTES do TAA
-        // ordena o passe contra TUDO o que vem depois (water SSR, motion
-        // blur, bloom, DOF, effect stack, auto-exposure, tonemap) sem criar o
-        // ciclo que o `before(temporal_anti_alias)` dava a partir do
-        // `PostProcess`.
+        // Braço default: entre o `MainPass` e o `EarlyPostProcess` INTEIRO —
+        // ordena o passe contra TUDO o que vem depois (TAA, DLSS, water SSR,
+        // motion blur, bloom, DOF, effect stack, auto-exposure, tonemap) sem
+        // criar ciclo. Antes era `in_set(EarlyPostProcess)` +
+        // `before(temporal_anti_alias)`, mas o DLSS (feature `dlss`) vive no
+        // MESMO set com sistemas PRIVADOS no crate (não há símbolo contra o
+        // qual ordenar) — e dois passes sem ordem no mesmo set serializam em
+        // ordem ARBITRÁRIA frame a frame (o fetch_xor do
+        // `post_process_write`, ver water_ssr.rs). Ordenar contra os SETS
+        // públicos é determinístico contra os dois. Com DLSS o main pass
+        // corre à resolução reduzida (`MainPassResolutionOverride`): o grade
+        // aéreo aplica-se ANTES do upscale — o scattering é low-frequency, o custo de
+        // o desenhar a render-res é zero em qualidade e poupa pixeis.
         aerial_pass
-            .in_set(Core3dSystems::EarlyPostProcess)
-            .before(temporal_anti_alias)
+            .after(Core3dSystems::MainPass)
+            .before(Core3dSystems::EarlyPostProcess)
             .into_configs()
     }
 }

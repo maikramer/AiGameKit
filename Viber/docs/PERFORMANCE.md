@@ -1,5 +1,75 @@
 # Performance — o que domina o frame no Viber
 
+> **Onde o DLSS deixou de dar (estudo 2026-10-10):** depois do +29 % do DLSS,
+> o frame do `simple-rpg` (equilibrado, 720p) ficou preso em ~20,8 ms NÃO por
+> GPU — por **CPU do pipeline de render do bevy**. Provas interleaved na
+> mesma engine: sombras do sol OFF (−6,4 ms de GPU, passe some do `gpu[]`)
+> → frame 20,74↔20,87 (imóvel); `desempenho` (cull 0,7, 2 cascatas, heavy
+> FX off) → 20,90; janela 1600×900 (+56 % pixeis) → 21,23; o pipeline de
+> render (prepare_views ~7,6 + render/encode ~7,4 + prepare_assets/bind
+> ~3,6) soma ~19 ms de CPU contra `render_wait` ~12 — o main espera pelo
+> render app. O passe NGX em si custa **0,90 ms** e os passes de pixel
+> escalam mesmo com o modo (DLAA→Performance: opaques 2,49→1,27,
+> transparentes 2,25→0,68, volumétrico 2,28→1,46) — o upscaler faz a parte
+> dele; o que falta cortar é draw/prep: **25 254 malhas (~3 000 visíveis)**,
+> 691 chunks de terreno com material único cada, **402 emissores de partículas**
+> (cada um um draw no passe transparente + prepare por vista). Janela de
+> 960×540 apanhou 16,66 ms (vsync 60) num momento quieto — o motor CHEGA
+> aos 60 quando o CPU respira. **Fronteira seguinte: dieta de draw-call**
+> (batching/merge de chunks de terreno, emissores de espuma fundidos,
+> entidades estáticas) — nenhum knob de preset ou de DLSS mexe mais neste
+> piso. Nota: `viber.debug.fps()` na REPL dá ~9 numa engine a 50+ — medir
+> com `prof --samples`, sempre.
+
+> **Resultado negativo (2026-10-10): esconder emissores culled com
+> `Visibility::Hidden` REGREDIU o frame**
+> (22,5 → 34,7 ms; `render.prepare_views` 9,4 → 21,7 — mesmo binário, braço
+> de controlo por env). ⚠ Esta noite de medições foi DEPOIS confundida por
+> dois factores identificados: (a) a **cauda de streaming do arranque** — o
+> `prepare_views` do mesmo boot decai de ~9,4 para ~6,9 ao longo de ~10 min
+> à medida que as colunas de terreno acabam de assar; (b) as **lanternas do
+> crepúsculo** — a vila acende luzes minuto a minuto e cada PointLight com
+> sombra vale 6 vistas de cube no prepare (o braço "pior" media sempre mais
+> tarde no relógio do jogo). No único teste LIMPO (pântano, mesmo frame,
+> esconder 58 espumas AO VIVO pela REPL) o efeito foi ≈ 0,1 ms —
+> **os emissores são baratos no prepare; o muro é terreno/props**. Lição de
+> método: A/B de prepare_views exige relógio CONGELADO e uptime igual.
+
+> **Lifecycle de FX ambiente (2026-10-10, OPT-IN `VIBER_FX_LIFECYCLE=1`):**
+> markers `AmbientFx` + `ambient_fx_manager` montam/desmontam o bundle de
+> render por proximidade (~110 m + banda de histerese; meshes recicladas do
+> `BurstPool`, 2 materiais partilhados em vez de 404). Funcional: simple-rpg
+> 399 markers → ~90 vivos; suite verde; QA visual ok. **Opt-in porque o ganho
+> de fps não mediu limpo** (confounds acima; o ganho honesto esperado é
+> ~0,1–0,5 ms, não o 1–2 ms estimado). A via "certa" da desativação por
+> distância está pronta a ligar com uma medição limpa; os 402 emissores
+> vêm de 3 fontes: ~90 `<ParticleSystem>` autorais, espuma de margens (cap
+> 40/corpo) e clones de templates com partículas (fogo × instância).
+
+> **DLSS Super Resolution (2026-10-10, feature `dlss`; AGENTS.md tem o setup):**
+> `simple-rpg` release/preset equilibrado, vila, relógio preso a 720 (meio-dia),
+> GPU-bound a 99 % nos DOIS braços — **TAA (`VIBER_DLSS=0`): 44,5–45,2 fps /
+> 21,7 ms** vs **DLSS (auto): ~58 fps / 17,8 ms = +29 % fps / −3,9 ms**.
+> Braços de reboot (on/off é gate de arranque como o TAA), mesmas condições,
+> janela visível. Dentro do DLSS os modos NÃO diferem a 720p (DLAA 58,2 /
+> Quality 58,3 / Performance 56,8 — a 720p a pass NGX ≈ as poupanças de
+> pixel; em janelas maiores espera-se que o Performance abra vantagem —
+> não medido). Custo de imagem medido (high-pass do crop central):
+> **Performance perde ~41 % do detalhe fino a 720p** (6,74→3,96), Quality/DLAA
+> imunes — é por isto que o default é `auto`. Flicker ~0 (`burst --stats`:
+> max_consecutive_delta 0,085/255; a reordenação do `aerial_pass` contra os
+> sets públicos segura o `post_process_write`). O `viber.debug.fps()` da REPL
+> dá ~9 numa engine a 58 — medir com `prof --samples`, sempre.
+
+> **Upgrade bevy 0.20-rc.2 (2026-10-09):** sem penhasco de performance —
+> `simple-rpg` release/preset equilibrado no pântano: **~47 fps / 20.8 ms**
+> (baseline 0.19: ~26 ms na vila — locais diferentes, ordem de grandeza
+> mantida; flicker do pós-processo 0.084, seguro nos schedules fracos do
+> 0.20). **OIT** (`VIBER_OIT=1`) funciona sem artefactos (fogo aditivo
+> limpo) mas pesa: 34.8 ms na vila no arranque — fica opt-in até A/B
+> mesmo-local e tuning do `sorted_fragment_max_count`.
+
+
 Medido no `simple-rpg` (mundo de 4 km, ~9700 cenas glTF, 61k entidades) numa
 **RTX 4050 Laptop (6 GiB)**. Todos os números vêm de
 `viber debug prof --samples 10` e `viber debug lua 'return viber.debug.stats()'`.

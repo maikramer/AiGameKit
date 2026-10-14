@@ -5,26 +5,13 @@ use std::process::Command as StdCommand;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use bevy::app::PluginGroup;
-use bevy::ecs::schedule::IntoScheduleConfigs;
-use bevy::log::info;
-use bevy_kira_audio::AudioApp;
 use clap::{CommandFactory, Parser, Subcommand};
 use serde_json::Value;
 
+use viber::app::{load_world, world_asset_dirs, world_base_dir};
 use viber::bridge::{self, client::BridgeClient};
-use viber::combat;
-use viber::luau;
-use viber::profiler::{Group, timed};
 use viber::recipes::ParsedWorld;
-use viber::recipes::spawn::{self, PendingWorld};
-use viber::ui;
-use viber::{
-    ai, ambient, animation, audit, camera, economy, feedback, grass, harvest, hud, impact, menus,
-    meshopt, music, nav, particles, physics, physics_fx, player, postfx, profiler, prop_tint,
-    prune, quests, recipes, render_lod, save, scaffold, skills, sky, spawner, terrain, textures,
-    trail, travel, vitals, worldsys, xml,
-};
+use viber::{audit, prune, recipes, scaffold};
 
 /// Native Bevy engine for AiGameKit declarative worlds.
 #[derive(Parser)]
@@ -62,6 +49,15 @@ enum Command {
         /// Always use this binary — never delegate to cargo in a checkout
         #[arg(long)]
         no_cargo: bool,
+        /// Delega com `--features dlss` (binário de jogo com DLSS; requer o
+        /// SDK da NVIDIA em build — `DLSS_SDK`, ver src/dlss.rs)
+        #[arg(long)]
+        dlss: bool,
+        /// Modo de câmara: `free` troca a câmara de jogo por uma câmara de
+        /// EDITOR (orbit/pan/zoom via bridge `viber.camera.*`) e desliga o
+        /// input do jogador — a navegação de mundos do ViberEditor.
+        #[arg(long, value_enum)]
+        camera: Option<CameraMode>,
     },
     /// Manual target/ housekeeping — the same pruning `viber run` does at
     /// startup (drops the OPPOSITE profile's build/test binaries and
@@ -79,6 +75,67 @@ enum Command {
         #[arg(long)]
         strict: bool,
     },
+    /// Generate the STATIC world (the source of truth agents and the editor edit) from a
+    /// procedural world.xml: the carved heightmap (bake/terrain.baked.ahgt), the resolved
+    /// document (bake/bake.json), world.static.xml + its includes mirrored in static/ with
+    /// spawners as explicit instances and settled poses. Refuses to overwrite an existing
+    /// static world without --force
+    Bake {
+        /// Path to the world XML file
+        path: PathBuf,
+        /// Output directory (default: <world_dir>/bake)
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// After baking, verify the static world: parse it clean and
+        /// recompute the kept vegetation groups against bake.json
+        #[arg(long)]
+        verify: bool,
+        /// Regenerate over an existing world.static.xml — it is the source of truth, so its
+        /// manual/agent edits are LOST
+        #[arg(long)]
+        force: bool,
+    },
+    /// Edit a world's XML documents (agents): ls/get/find, set/insert/rm/mv/dup, apply a JSON
+    /// batch of ops. JSON output; edits are saved to the exact file each node lives in
+    Scene {
+        /// World XML (default: world.xml or worlds/*.xml in the current directory)
+        #[arg(long, global = true)]
+        world: Option<PathBuf>,
+        /// Edit the RUNNING engine (bridge `viber.scene.*`): history, live sync, save
+        #[arg(long, global = true)]
+        live: bool,
+        /// Bridge port for --live (default: the engine serving --world)
+        #[arg(long, global = true)]
+        port: Option<u16>,
+        #[command(subcommand)]
+        command: viber::scene::cli::SceneCommand,
+    },
+    /// Terrain editing (agents): brushes on the pre-generated heightmap as undoable scene ops
+    /// (the editor's terrain tool uses the same op), and height sampling
+    Terrain {
+        #[arg(long, global = true)]
+        world: Option<PathBuf>,
+        #[arg(long, global = true)]
+        live: bool,
+        #[arg(long, global = true)]
+        port: Option<u16>,
+        #[command(subcommand)]
+        command: viber::scene::terrain::TerrainCommand,
+    },
+    /// Generator tools (agents and the editor): `list` the `<Scatter>` recipes, `scatter`
+    /// regenerates one's output group on the current terrain as one undoable edit
+    Tool {
+        /// World XML (default: world.static.xml, world.xml or worlds/*.xml in the cwd)
+        #[arg(long, global = true)]
+        world: Option<PathBuf>,
+        /// Run in the RUNNING engine (bridge `viber.tool.*`): live sync + undo there
+        #[arg(long, global = true)]
+        live: bool,
+        #[arg(long, global = true)]
+        port: Option<u16>,
+        #[command(subcommand)]
+        command: viber::scene::tools::ToolCommand,
+    },
     /// Drive a running engine (`viber run --bridge`): screenshot, input, tree, logs
     Debug {
         /// Mundo que identifica a engine alvo — forma curta, antes do
@@ -94,6 +151,13 @@ enum Command {
         #[command(subcommand)]
         command: SessionCommand,
     },
+}
+
+/// Modos de câmara do `viber run --camera <MODO>`.
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+enum CameraMode {
+    /// Câmara livre de editor (orbit/pan/zoom via `viber.camera.*`).
+    Free,
 }
 
 #[derive(Subcommand)]
@@ -505,64 +569,15 @@ enum SessionCommand {
 /// (sem re-delegar em `cargo run` — evita recursão).
 const CARGO_DELEGATE_GUARD: &str = "VIBER_CLI_NO_CARGO_DELEGATE";
 
-/// Tamanho do cube shadow map das PointLight (`VIBER_POINT_SHADOW_SIZE`).
-///
-/// Default 1024 (ver o comentário no recurso); `1536` devolve o valor do
-/// passe visual r1. Tem de ser u32 par e >= 4 — o wgpu recusa tamanhos
-/// ímpares em algumas plataformas.
-/// Tamanho do shadow map da DIRECIONAL (`VIBER_DIR_SHADOW_SIZE`, default
-/// 4096). É UMA textura de 4 camadas (~268 MB a 4096, metade a 2048).
-fn dir_shadow_size() -> usize {
-    std::env::var("VIBER_DIR_SHADOW_SIZE")
-        .ok()
-        .and_then(|raw| raw.parse::<usize>().ok())
-        .filter(|size| *size >= 256 && size % 2 == 0)
-        .unwrap_or_else(viber::graphics::dir_shadow_size)
-}
-
-fn point_shadow_size() -> usize {
-    std::env::var("VIBER_POINT_SHADOW_SIZE")
-        .ok()
-        .and_then(|raw| raw.parse::<usize>().ok())
-        .filter(|size| *size >= 4 && size % 2 == 0)
-        .unwrap_or(1024)
-}
-
-/// Profiling do lado do RENDER (`VIBER_PROF_GPU=1`).
-///
-/// Os sistemas instrumentados pelo `timed` somam ~4 ms de um frame de ~44 ms
-/// no `simple-rpg` — os outros 40 ms são o render app (extract, prepare,
-/// queue e os passes na GPU) e não eram observáveis por via nenhuma. Com o gate ON
-/// pedimos os `TIMESTAMP_QUERY` ao wgpu e ligamos o `RenderDiagnosticsPlugin`,
-/// que mede cada span do render graph em CPU **e** GPU; o snapshot do
-/// profiler publica-os em `gpu[]` (`viber debug prof --json`).
-///
-/// OPT-IN de propósito: pedir ao device uma feature que o adapter não tenha
-/// FALHA a criação do renderer (Metal/WebGPU não têm timestamps), e as
-/// próprias queries custam tempo por frame.
-fn gpu_profiling_enabled() -> bool {
-    matches!(
-        std::env::var("VIBER_PROF_GPU").as_deref(),
-        Ok("1" | "true" | "on")
-    )
-}
-
-fn load_world(path: &Path) -> Result<ParsedWorld> {
-    let loaded = xml::include::load_world(path)?;
-    recipes::parse_world(&loaded.root_attrs, &loaded.nodes)
-}
-
-fn world_base_dir(path: &Path) -> Option<PathBuf> {
-    path.parent()
-        .map(|p| p.to_path_buf())
-        .filter(|p| !p.as_os_str().is_empty())
-}
-
 /// Resolve o mundo a usar: caminho explícito ou auto-descoberta no cwd
 /// (`world.xml`, depois o primeiro `worlds/*.xml` por ordem alfabética).
 fn resolve_world_path(path: Option<PathBuf>) -> Result<PathBuf> {
     let Some(path) = path else {
         let cwd = std::env::current_dir().context("reading the current directory")?;
+        // O mundo estático (pré-gerado por `viber bake`) é o canónico quando existe.
+        if let Some(static_world) = viber::bake::static_world_in(&cwd) {
+            return Ok(static_world);
+        }
         let default_world = cwd.join("world.xml");
         if default_world.is_file() {
             return Ok(default_world);
@@ -581,7 +596,7 @@ fn resolve_world_path(path: Option<PathBuf>) -> Result<PathBuf> {
             }
         }
         anyhow::bail!(
-            "no world found in {} (looked for world.xml and worlds/*.xml) — pass one: `viber run world.xml`",
+            "no world found in {} (looked for world.static.xml, world.xml and worlds/*.xml) — pass one: `viber run world.xml`",
             cwd.display()
         );
     };
@@ -611,7 +626,13 @@ fn viber_checkout_root(from: &Path) -> Option<PathBuf> {
 /// para correr o motor a partir do código-fonte (como `vibegame run` reconstrói
 /// a engine). Devolve `Ok(None)` quando não há delegação (sem checkout, cargo
 /// ausente ou guard activo) — o chamador corre in-process.
-fn delegate_run_to_cargo(world: &Path, debug: bool, bridge: Option<u16>) -> Result<Option<i32>> {
+fn delegate_run_to_cargo(
+    world: &Path,
+    debug: bool,
+    bridge: Option<u16>,
+    dlss: bool,
+    camera_free: bool,
+) -> Result<Option<i32>> {
     if std::env::var_os(CARGO_DELEGATE_GUARD).is_some() {
         return Ok(None);
     }
@@ -629,16 +650,26 @@ fn delegate_run_to_cargo(world: &Path, debug: bool, bridge: Option<u16>) -> Resu
     if !debug {
         command.arg("--release");
     }
+    // `--dlss` é EXPLÍCITO de propósito: a feature arrasta o SDK da NVIDIA
+    // para o build (DLSS_SDK/VULKAN_SDK, src/dlss.rs) e agentes paralelos
+    // não podem apanhar builds surpresa na árvore partilhada.
+    if dlss {
+        command.arg("--features").arg("dlss");
+    }
     command.arg("--").arg("run").arg(&world);
     if let Some(port) = bridge {
         command.arg("--bridge").arg(port.to_string());
     }
+    if camera_free {
+        command.arg("--camera").arg("free");
+    }
     command.arg("--no-cargo");
     command.env(CARGO_DELEGATE_GUARD, "1");
     eprintln!(
-        "viber: Viber checkout detected at {} — delegating to `cargo run{}`",
+        "viber: Viber checkout detected at {} — delegating to `cargo run{}{}`",
         root.display(),
-        if debug { "" } else { " --release" }
+        if debug { "" } else { " --release" },
+        if dlss { " --features dlss" } else { "" }
     );
     match command.status() {
         Ok(status) => Ok(Some(status.code().unwrap_or(1))),
@@ -869,556 +900,83 @@ fn analyze(path: &Path, strict: bool) -> Result<()> {
     Ok(())
 }
 
-/// world_dir (scripts/estilos relativos) + asset roots por ordem de
-/// precedência (docs/ASSETS.md): a pasta do mundo SEMPRE primeiro (é lá que
-/// os shaders especializados são escritos e os overrides vivem), as roots
-/// extra do `config.yaml` do jogo a seguir. A engine não descobre nada por
-/// conta própria — quem serve o quê é declarado pelo jogo.
-fn world_asset_dirs(path: &Path, config: &viber::config::GameConfig) -> (PathBuf, Vec<PathBuf>) {
-    let world_dir = world_base_dir(path).unwrap_or_else(|| PathBuf::from("."));
-    let roots = config.asset_roots(&world_dir);
-    (world_dir, roots)
+fn run(path: &Path, bridge_port: Option<u16>, camera_free: bool) -> Result<()> {
+    viber::app::build_app(
+        path,
+        viber::app::AppOptions {
+            mode: viber::app::RunMode::Game,
+            bridge_port,
+            camera_free,
+            window_title: None,
+        },
+    )?
+    .run();
+    Ok(())
 }
 
 fn total_skipped(world: &ParsedWorld) -> usize {
     world.skipped_tags.values().sum()
 }
 
-fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
-    // Absolute from here on: the asset root and terrain base_dir must not
-    // depend on the CWD (bevy resolves relative asset roots against the exe).
-    let path = &std::path::absolute(path)?;
-    let world = load_world(path)?;
-    // O config.yaml do jogo é OBRIGATÓRIO e lido antes de tudo: é dele que
-    // vêm as asset roots e os diretórios (docs/ASSETS.md).
-    let world_dir_pre = world_base_dir(path).unwrap_or_else(|| PathBuf::from("."));
-    let config = viber::config::load(&world_dir_pre)?;
-    // Preset de gráficos ANTES de construir a App: as cascatas do sol, o
-    // shadow map e o raymarch volumétrico são lidos durante o spawn do mundo.
-    let graphics = viber::graphics::resolve(config.graphics.as_deref());
-    info!("graphics preset: {}", graphics.name());
-    let title = config.title.clone().unwrap_or_else(|| {
-        format!(
-            "Viber — {}",
-            path.file_name().and_then(|n| n.to_str()).unwrap_or("world")
-        )
-    });
-    // Asset roots por ordem de precedência: a pasta do mundo primeiro, as
-    // roots extra do config a seguir (`VIBER_ASSET_POOL` continua a ganhar
-    // para debug/CI). Calculadas ANTES de escrever o shader: materiais
-    // custom resolvem o shader especializado pela 1.ª root, e o `run`
-    // escreve-o sempre nela — as roots extra nunca são escritas.
-    let (world_dir, asset_roots) = world_asset_dirs(path, &config);
-    let asset_root = asset_roots[0].clone();
-    // O shader do céu é ESPECIALIZADO por mundo: a config do <Sky>/<DayCycle>/
-    // <Weather> é injectada como consts WGSL (o uniform de material custom no
-    // Bevy 0.19 nunca re-uploads — ver sky.rs). O mesmo para a água (relógio
-    // do glint + vento das ondas) e para o blend de camadas do terreno
-    // (world span dos splats) — este último só se algum <Terrain> pedir
-    // `layers`; mundos sem camadas nem tocam no ficheiro. O diretório é
-    // SEMPRE `shaders/` da 1.ª root: os `Material::fragment_shader()` são fns
-    // ESTÁTICAS que lêem `shaders/{sky,water,terrain_chunk}.wgsl` contra as
-    // roots — a escrita e a leitura têm de casar (contrato de conteúdo,
-    // docs/ASSETS.md).
-    let sky_config = sky::SkyConfig::from_world(&world.entities).with_env_override();
-    let water_config = terrain::water_material::WaterSurfaceConfig::from_world(&world.entities);
-    let layers_config = terrain::layer_material::TerrainChunkConfig::from_world(&world.entities);
-    let shaders_dir = asset_root.join("shaders");
-    let _ = std::fs::create_dir_all(&shaders_dir);
-    for (name, contents) in [
-        ("sky.wesl", sky_config.render_world_shader()),
-        ("water.wesl", water_config.render_world_shader()),
-    ] {
-        if let Err(e) = std::fs::write(shaders_dir.join(name), contents) {
-            eprintln!(
-                "viber: falha ao escrever {}/{name}: {e}",
-                shaders_dir.display()
-            );
-        }
-    }
-    if let Some(layers_config) = &layers_config
-        && let Err(e) = std::fs::write(
-            shaders_dir.join("terrain_chunk.wesl"),
-            layers_config.render_world_shader(),
-        )
-    {
-        eprintln!(
-            "viber: falha ao escrever {}/terrain_chunk.wesl: {e}",
-            shaders_dir.display()
-        );
-    }
-    // SSR da água (Fase B): shader ESTÁTICO (sem especialização por mundo) —
-    // só se escreve com o gate ligado, para não tocar no disco de mundos que
-    // não o usam.
-    if viber::water_ssr::water_ssr_requested()
-        && let Err(e) = std::fs::write(
-            shaders_dir.join("water_ssr.wesl"),
-            viber::water_ssr::WATER_SSR_WGSL,
-        )
-    {
-        eprintln!(
-            "viber: falha ao escrever {}/water_ssr.wesl: {e}",
-            shaders_dir.display()
-        );
-    }
-    let mut app = bevy::app::App::new();
-    // Registered before `AssetPlugin`, which snapshots the sources when it
-    // builds. The reader is multi-root (world → extras do config) and expands
-    // `EXT_meshopt_compression`, so the engine reads compressed GLBs as
-    // authored — no per-example mirror.
-    meshopt::register_asset_source(&mut app, asset_roots.clone());
-    // O config viaja COMO RESOURCE: ambient (sfx_dir), save (dir), terreno
-    // (textures_dir) e o spawn (bgm_dir) leem-no de lá.
-    app.insert_resource(config.clone());
-    app.insert_resource(save::SaveDir(Some(config.save_dir().to_path_buf())));
-    // Quests do MUNDO, lidas do DISCO (dir do config, default `quests/` ao
-    // lado do world.xml) — o conteúdo deixou de vir embutido na engine. O
-    // insert é ANTES dos plugins: o `init_resource` do QuestsPlugin não
-    // substitui o que já existe.
-    app.insert_resource(quests::QuestLog::with_dir(
-        &config.quests_dir_on(&world_dir),
-    ));
-    // O modelo do céu também viaja como resource — o IBL (`ibl.rs`) pinta o
-    // cubemap com a MESMA radiância que o domo desenha e os probes regionais
-    // (`probes.rs`) usam os mesmos coeficientes. Sem ele os dois lêem `None` e
-    // ficam presos em `analytic`, qualquer que seja o `<Sky model>`.
-    app.insert_resource(sky::SkyModelState::from_config(&sky_config));
-    // (a linha do modelo resolvido sai depois de `add_plugins` — o subscriber
-    // de tracing só existe a partir daí; ver `viber debug logs`)
-    let mut plugins = bevy::DefaultPlugins
-        .set(bevy::window::WindowPlugin {
-            primary_window: Some(bevy::window::Window {
-                title,
-                ..Default::default()
-            }),
-            ..Default::default()
-        })
-        .set(bevy::asset::AssetPlugin {
-            file_path: asset_root.to_string_lossy().into_owned(),
-            ..Default::default()
-        });
-    if bridge_port.is_some() {
-        // A layer de logs do bridge tem de ser instalada no LogPlugin no boot.
-        plugins = plugins.set(bridge::logs::log_plugin_with_bridge());
-    }
-    if gpu_profiling_enabled() {
-        // As queries de timestamp são uma feature do DEVICE: têm de ser
-        // pedidas na criação do renderer, não dá para ligar depois. Partimos
-        // do default (que traz o `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES`
-        // de que o KTX2 depende) e só acrescentamos as três de timestamp.
-        use bevy::render::settings::{WgpuFeatures, WgpuSettings};
-        let base = WgpuSettings::default();
-        plugins = plugins.set(bevy::render::RenderPlugin {
-            render_creation: WgpuSettings {
-                features: base.features
-                    | WgpuFeatures::TIMESTAMP_QUERY
-                    | WgpuFeatures::TIMESTAMP_QUERY_INSIDE_ENCODERS
-                    | WgpuFeatures::TIMESTAMP_QUERY_INSIDE_PASSES,
-                ..base
-            }
-            .into(),
-            ..Default::default()
-        });
-    }
-    app.add_plugins(plugins);
-    if gpu_profiling_enabled() {
-        app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin);
-        info!(
-            "profiler: render diagnostics ON (VIBER_PROF_GPU) — `viber debug prof --json` traz gpu[]"
-        );
-    }
-    // SSR de reflexões raster (Fase B, src/water_ssr.rs): reflexo de cena na
-    // água + chão molhado na chuva por raymarch sobre o depth prepass.
-    // OPT-IN (`VIBER_WATER_SSR=1`) enquanto não existir acumulação temporal
-    // própria do passe — sem ela o reflexo dança com as ondas (medido).
-    app.add_plugins(viber::water_ssr::WaterSsrPlugin);
-    // Probes regionais (src/probes.rs): bounce de bioma nos pads com tint,
-    // parallax-corrected. DEFAULT ON — `VIBER_PROBES=0` desliga.
-    app.add_plugins(viber::probes::RegionalProbesPlugin);
-    // Céu/dia/noite, IBL e probes regionais resolvem o modelo por AQUI (o
-    // subscriber de tracing já existe): é a linha que confirma na QA que o
-    // gate `<Sky model>`/`VIBER_SKY_MODEL` chegou ao render e ao IBL.
-    info!(
-        "sky: modelo {} (attr <Sky model> / VIBER_SKY_MODEL)",
-        match sky_config.model {
-            sky::SkyModel::Nishita => "nishita",
-            sky::SkyModel::Analytic => "analytic",
-        }
-    );
-    // Áudio: backend kira (bevy_kira_audio) com buses tipados — o
-    // `AudioMixerSettings` (save/menu/XML) empurra volumes para os canais
-    // (crate::music::mixer_sync) e tudo o que está a tocar responde ao vivo.
-    // O bevy_audio/rodio do Bevy fica compilado mas sem players — nenhum
-    // som nasce por ele.
-    app.add_plugins(bevy_kira_audio::AudioPlugin);
-    app.add_audio_channel::<viber::music::MusicBus>();
-    app.add_audio_channel::<viber::music::SfxBus>();
-    if let Some(port) = bridge_port {
-        app.add_plugins(bridge::BridgePlugin { port });
-        // O ping passa a identificar o mundo servido — o `viber debug
-        // --world` valida-o contra o engine.json (registo stale → erro, não
-        // mutação do mundo errado).
-        app.insert_resource(bridge::BridgeIdentity {
-            world: path.display().to_string(),
-        });
-        // Regista a engine no registo de sessões MESMO fora de `session up`:
-        // assim qualquer `viber debug …` descobre a porta sozinho. Se já há
-        // uma engine viva registada (sessão de outro agente), não mexe — o
-        // descobridor encontra-a a ela.
-        let session = viber::session::SessionPaths::for_world(path);
-        let register = match session.engine_info() {
-            Some(existing) if existing.pid != std::process::id() => {
-                !bridge::client::port_alive(existing.port)
-            }
-            _ => true,
-        };
-        if register {
-            let _ = session.write_engine(&viber::session::EngineInfo {
-                pid: std::process::id(),
-                port,
-                world: path.display().to_string(),
-                started_at_ms: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0),
-                log: String::new(),
-            });
-        }
-        // O agente que lançou a engine lê esta linha: o caminho para APONTAR
-        // os seus `viber debug` a ESTA engine (e não à de outro agente).
-        eprintln!(
-            "viber: debug bridge at http://127.0.0.1:{port} — viber debug --world {} … (ou export VIBER_BRIDGE_PORT={port})",
-            path.display()
-        );
-    }
-    app.insert_resource(save::WorldSaveKey(save::world_save_key(path)));
-    app.insert_resource(PendingWorld {
-        world,
-        base_dir: world_base_dir(path),
-    });
-    // `worldsys::sun_drive` aims the directional light from it; nothing was
-    // creating it, so that system failed parameter validation.
-    app.init_resource::<worldsys::SunState>();
-    // Luz de interior (ambiente fixo, sem noite) — ver `InteriorLighting`.
-    app.init_resource::<worldsys::InteriorLighting>();
-    // Sombras de qualidade (passe visual r1): mapa DIRECIONAL 4096 — o
-    // default (2048) deixava as sombras das árvores granuladas mesmo ao pé do
-    // herói; é UMA textura (4 cascatas), ~268 MB, e o sol justifica-a.
-    // `VIBER_DIR_SHADOW_SIZE` para o A/B 4096→2048 que o PERFORMANCE.md lista
-    // desde a 1.ª passagem (o default fica 4096 — sombras das árvores ao pé
-    // do herói, decisão do r1). Os gêmeos das point lights e das cascatas:
-    // `VIBER_POINT_SHADOW_SIZE` (aqui) e `VIBER_SHADOW_CASCADES`/
-    // `VIBER_SHADOW_DISTANCE` (recipes::sun_shadow_*).
-    app.insert_resource(bevy::light::DirectionalLightShadowMap {
-        size: dir_shadow_size(),
-    });
-    // Point light: 1024. O array é `size² × 4 B × 6 faces × nº de luzes com
-    // sombra` — a 1536 eram ~56 MB POR LANTERNA, ~680 MB com o orçamento de 12
-    // cheio, e cada mudança de contagem REALOCA o array inteiro com o pico
-    // transitório de ambos (foi o `point_light_shadow_map_texture` a falhar o
-    // OOM que matou uma sessão de 10 h a 2026-09-12 03:06). O r1 subiu para
-    // 1536 pelos GRANULADOS da DIRECIONAL — nas point lights o PCSS
-    // (`soft_shadow_size` = radius da lanterna) desfaz a borda e o mapa
-    // cobre o `range` (20 m): ~2,6 cm/texel a 1024 contra ~1,7 a 1536, numa
-    // sombra cujo caster está a metros da luz. A 1024: ~25 MB/lanterna,
-    // ~300 MB no pior caso. `VIBER_POINT_SHADOW_SIZE=1536` devolve o r1
-    // (A/B visual de QA — os dois valores têm de ser comparados com o
-    // protocolo do controle antes de reclamar diferença nenhuma).
-    app.insert_resource(bevy::light::PointLightShadowMap {
-        size: point_shadow_size(),
-    });
-    // `hud_menu_system` corre sempre (main loop), mas o `HudMenuState` só
-    // nascia dentro de `build_menu` — mundos sem `TabbedModal` (o HUD é agora
-    // declarativo) panicas na validação do `ResMut` todos os frames.
-    app.init_resource::<hud::menu::HudMenuState>();
-    // `sky::spawn_sky` needs `Assets<SkyMaterial>`; without this plugin the
-    // startup system panics and leaves `Assets<Mesh>` taken out of the world.
-    // O mesmo para o material de água (`Assets<WaterMaterial>` no bootstrap
-    // do terreno).
-    app.add_plugins(bevy::pbr::MaterialPlugin::<sky::SkyMaterial>::default());
-    app.add_plugins(bevy::pbr::MaterialPlugin::<
-        terrain::water_material::WaterMaterial,
-    >::default());
-    // O material das camadas de terreno POR CHUNK (`layers="…"`): o
-    // bootstrap precisa de `Assets<TerrainChunkMaterial>` — sem este plugin
-    // um mundo com camadas degradaria para o caminho legado.
-    app.add_plugins(bevy::pbr::MaterialPlugin::<
-        terrain::layer_material::TerrainChunkMaterial,
-    >::default());
-    app.add_plugins(animation::AnimationPlugin);
-    app.add_plugins(physics::PhysicsPlugin {
-        debug: std::env::var_os("VIBER_PHYSICS_DEBUG").is_some(),
-    });
-    // Pós-processamento (exposição/bloom/SSAO) na câmara do mundo; os
-    // `pp-*` das `<BiomeRegion>` conduzem-no. `VIBER_NO_POSTFX=1` desliga.
-    app.add_plugins(postfx::PostFxPlugin);
-    // `<PostFxDebugToggle>`: teclas que comutam os gates de pós-processo ao
-    // vivo (inerte sem a tag no mundo).
-    app.add_plugins(viber::postfx_toggle::PostFxDebugTogglePlugin);
-    // `<AdaptiveQuality>`: tiers de qualidade pelo frame-time real (SSAO,
-    // volumétrico, sombras de ponto, cortes de efeitos).
-    app.add_plugins(viber::adaptive_quality::AdaptiveQualityPlugin);
-    // `<SpawnGate>`: segura a entidade-alvo no ar até haver collider de
-    // terreno sob ela (inerte sem a tag).
-    app.add_plugins(viber::spawn_gate::SpawnGatePlugin);
-    // `<ProjectileTemplate>` + `viber.fire_projectile`: projéteis simples
-    // (linha reta ou arco balístico) com dano por facção.
-    app.add_plugins(viber::projectile::ProjectilePlugin);
-    // IBL vivo do céu (LightProbe + cubemap da paleta da atmosfera, filtrado
-    // na GPU) — ambiente/reflexos que seguem a hora do dia. `VIBER_NO_IBL=1`.
-    app.add_plugins(viber::ibl::SkyIblPlugin);
-    app.add_plugins(terrain::TerrainPlugin);
-    app.add_plugins(terrain::runtime::TerrainFeaturesPlugin);
-    // Sub-bosque instanciado (a relva que o `<Vegetation>` não consegue ser):
-    // tiles de lâminas fundidas a 16 m à volta da câmara, vento no vertex
-    // shader, paleta por bioma. `VIBER_GRASS=0` desliga; `VIBER_GRASS_DENSITY`
-    // escala as densidades.
-    app.add_plugins(grass::GrassPlugin);
-    // Escritor único de samplers/mipmaps das texturas carregadas (o registro
-    // `WorldTiledTextures` é consumido aqui; escrever o sampler noutro
-    // sistema reabria a corrida clamp/REPEAT das texturas de chão).
-    app.add_plugins(textures::TexturesPlugin);
-    // Fase 2: Luau — scripts do `scripts_dir` do config, com `on_update(dt)`.
-    // O árbitro das interações (`interact::InteractionFocus`) é registado pelo
-    // próprio `LuauScriptPlugin` — quem o lê é o `viber.interacted`.
-    app.add_plugins(luau::LuauScriptPlugin {
-        scripts_dir: config.scripts_dir_on(&world_dir),
-    });
-
-    // ── Preset RPG (config.yaml `gameplay`, default "rpg") ─────────────
-    // Combat/skills/vitals/feedback/economia/travel/save/quests/colheita
-    // são DOMÍNIO de RPG: com `gameplay: none` não entram no App e um jogo
-    // novo vive só de XML + Luau (worlds/lua-demo). `gameplay_rpg()` cobre
-    // o default.
-    let rpg = config.gameplay_rpg();
-    // Diagnóstico do preset (o gate decide quais plugins entram): visível no
-    // arranque e no analyze — `gameplay: none` sem efeito era invisível.
-    info!(
-        target: "viber",
-        "gameplay preset: {} (config `gameplay: {}`)",
-        if rpg { "rpg" } else { "none (só engine)" },
-        config.gameplay.as_deref().unwrap_or("<ausente → default rpg>")
-    );
-    // Serviços de ENGINE que os plugins RPG costumavam registar e que o resto
-    // do runtime lê: o semáforo de input tem de existir mesmo sem RPG
-    // (player_movement/profiler leem-no) e os toasts de script são UX de
-    // engine — o MenusPlugin fica FORA do gate (o seu lado RPG — catálogo da
-    // loja — é inerte sem vault, e `own_action` de Lua manda quando existe).
-    app.init_resource::<menus::MenusOpen>();
-    app.add_plugins(menus::MenusPlugin);
-    // Save/load & opções: serviço de ENGINE (grava `world_kv`/posição/vitais
-    // em qualquer preset; os campos RPG só entram quando os recursos existem).
-    app.add_plugins(save::SavePlugin);
-    // FX puros para mundos SEM o preset RPG: o CombatPlugin registra o kick
-    // de FOV e o hit-stop; sem ele, as primitivas `viber.fov_kick/hit_stop`
-    // (e o shake/kick/punch que vivem em recursos incondicionais) ficariam
-    // inertes. Registo CONDICIONAL — registar o mesmo sistema 2× duplica a
-    // instância no schedule e panica ao inicializar.
-    if !rpg {
-        app.init_resource::<camera::CameraFx>();
-        app.add_systems(bevy::app::Update, camera::fov_kick_system);
-        app.init_resource::<combat::HitStop>();
-        app.init_resource::<combat::BaseTimeScale>();
-        app.add_systems(bevy::app::Update, combat::hit_stop_system);
-    }
-    if rpg {
-        app.add_plugins(combat::CombatPlugin);
-        // Vitals juice (passe de juice r1): deteção robusta de level-up
-        // (qualquer fonte de XP) + fanfarra.
-        app.add_plugins(vitals::VitalsPlugin);
-        // Feedback de combate (loop 2): dano flutuante, vignette/i-frames,
-        // TargetBar/BossBar reais, respawn, status effects.
-        app.add_plugins(feedback::FeedbackPlugin);
-        // Economia (loop 4): vault ouro/madeira/pedra, chips vivos, hotbar
-        // [1]/[2]. (O RECURSO Vault é criado à pressa pelo primeiro
-        // `viber.vault_*`? NÃO — scripts recebem Option; um jogo sem RPG
-        // que queira economia constrói a sua em Lua.)
-        app.add_plugins(economy::EconomyPlugin);
-        // Travel/Nota/wayfinding (loop 6): marcos, viagem rápida, waypoint,
-        // registry de hostis por região.
-        app.add_plugins(travel::TravelPlugin);
-        // Skills/abilities/bombas (loop 8): dash/cura/golpe forte, passivas,
-        // guard/parry, profundidade do melee.
-        app.add_plugins(skills::SkillsPlugin);
-    } // fim do preset RPG
-
-    // Mundo vivo (loop 9): fog/tint por BiomeRegion, orçamento de luzes,
-    // gestos idle de NPC, SFX.
-    app.add_plugins(ambient::AmbientPlugin);
-    // day_tint para os materiais dos GltfScene (copas/casas/props) — sem
-    // isto ficam com albedo de dia sob o luar e leem-se "recortados" à noite
-    // (peça exploração, r10; mecanismo documentado no módulo).
-    app.add_plugins(prop_tint::PropTintPlugin);
-    // Física Fase 3 (loop 10): knockback cinemático + destrutíveis com queda.
-    app.add_plugins(physics_fx::PhysicsFxPlugin);
-    // Colheita nativa (port do plugin `destructible`): árvores/rochas
-    // destrutíveis — ferramenta na mão, quedas, estilhaços, loot no vault.
-    if rpg {
-        app.add_plugins(harvest::HarvestPlugin);
-    }
-    // Sword trace (ribbon da lâmina) + bursts one-shot de partícula.
-    app.add_plugins(trail::TrailPlugin);
-    app.add_plugins(particles::BurstPlugin);
-    // FX de impacto de combate: recoil (squash-and-stretch) do inimigo
-    // atingido + anéis de onda de choque (finisher/slam/bomba/abate).
-    app.add_plugins(impact::ImpactFxPlugin);
-    // FX de água: splash na entrada/saída e esteira de ondas de quem
-    // caminha dentro do lago/rio (a lâmina é estática — o rasto tem de
-    // viver no ECS, ver `terrain::water_fx`).
-    app.add_plugins(terrain::water_fx::WaterFxPlugin);
-    // Trauma da camera shake — o melee (e o dano recebido) somam aqui.
-    app.init_resource::<camera::CameraShake>();
-    // Solavanco direcional da câmara no impacto (mola; o combate soma impulsos).
-    app.init_resource::<camera::CameraKick>();
-    // Quests & diálogo (loop 3): 21 quests JSON, flow [E] nos DialogueNPC,
-    // QuestTracker, hooks viber.quest_* p/ Luau.
-    if rpg {
-        app.add_plugins(quests::QuestsPlugin);
-    }
-    // IA (FSM Rust + respawn): criaturas de <DynamicSpawner> SEM script caem
-    // aqui — sem este plugin nasciam estátuas eternas e a RespawnQueue
-    // nunca drenava.
-    app.add_plugins(ai::AiPlugin);
-    // Navegação: navmesh Recast num tile que segue o herói, A* + evitamento
-    // RVO (bevy_landmass) e preferência por estradas via custo por tipo de
-    // polígono. Sem isto a IA volta à linha recta de sempre — o que é
-    // exactamente o que `VIBER_NAV=0` faz.
-    app.add_plugins(nav::NavPlugin);
-    // LOD de render: culling por distância nas instâncias de spawner +
-    // orçamento de sombras. Sem isto as ~9700 cenas glTF do simple-rpg
-    // (60k entidades) entram todas nas 4 cascatas de sombra a cada frame.
-    // `VIBER_RENDER_LOD=0` desliga o culling + a ladder de LOD: é o A/B
-    // honesto para medir o ganho sem trocar de binário.
-    if std::env::var("VIBER_RENDER_LOD").as_deref() != Ok("0") {
-        app.add_plugins(render_lod::RenderLodPlugin);
-    }
-    // Profiler: overlay F3 (fps/frame/entidades/scripts ativos) + `viber.profiler`.
-    app.add_plugins(profiler::ProfilerPlugin);
-    // UI declarativa (XML + folha de estilo + `viber.ui` no Luau): o HUD do
-    // mundo é autoria, não código.
-    app.add_plugins(ui::UiPlugin);
-    // A instalação de `viber.ui` tem de ganhar ao runtime Luau: sem ordem,
-    // um script activado no frame 1 via `luau_on_add` podia ver `viber.ui`
-    // nil (morria — `Added` dispara 1×) ou queimar o warn-once.
-    app.add_systems(
-        bevy::app::Update,
-        ui::install_ui_script_api
-            .before(luau::luau_on_add)
-            .before(luau::luau_update),
-    );
-    // As mutações que os scripts enfileiram via `viber.ui.*` têm de ser
-    // aplicadas DEPOIS de `luau_update` as produzir — sem ordem, chegavam um
-    // frame tarde (ou em corrida com o produtor). Ordena-se o SET: o
-    // `apply_ui_commands` já vive no `UiSet::Script` e re-adicioná-lo aqui
-    // duplicava a instância no schedule (pânico "more than one instance").
-    // Sem ciclo: a chain luau não referencia UiSets.
-    app.configure_sets(
-        bevy::app::Update,
-        ui::UiSet::Script.after(luau::luau_update),
-    );
-    // E a UI PUBLICA antes dos scripts lerem: os cliques de um frame chegam
-    // ao `on_update` NO MESMO frame, haja como for a ordem arbitrária entre
-    // plugins — sem isto, `viber.ui.clicked(…)` perdia cliques por corrida
-    // (o publish rodava depois do script e limpava a vista).
-    app.configure_sets(
-        bevy::app::Update,
-        (ui::UiSet::Collect, ui::UiSet::Build, ui::UiSet::Bind).before(luau::luau_update),
-    );
-    app.add_systems(bevy::app::Startup, spawn::startup);
-    // Spawn RUNTIME de prototypes (viber.spawn_prototype): exclusivo, no
-    // PostUpdate (depois dos scripts do Update — as callbacks da entidade nova
-    // correm aqui) e ANTES da propagação: sem a aresta a entidade podia
-    // renderizar um frame com o `GlobalTransform` identidade (na origem).
-    app.add_systems(
-        bevy::app::PostUpdate,
-        recipes::spawn::apply_script_spawns.before(bevy::transform::TransformSystems::Propagate),
-    );
-    app.add_systems(
-        bevy::app::Update,
-        (
-            timed(Group::Hud, hud::hud_health_sync),
-            hud::hud_xp_sync,
-            // Balão de diálogo: única via que decrementa o timer e volta a
-            // esconder — sem registo, o balão ficava no ecrã para sempre.
-            timed(Group::Hud, hud::hud_balloon_update),
-            // Modal [Q]: sincroniza abas/conteúdos e trata cliques.
-            timed(Group::Hud, hud::menu::hud_menu_system),
-        ),
-    );
-    app.add_systems(
-        bevy::app::Update,
-        (
-            // Deterministic order: the rigid follow skips third-person
-            // cameras, the player steers their yaw with A/D, then the
-            // third-person camera trails it. All three touch OrbitCamera.
-            (
-                timed(Group::Camera, spawn::orbit_camera_follow),
-                timed(Group::Player, player::player_movement),
-                timed(Group::Camera, camera::third_person_camera),
-            )
-                .chain(),
-            timed(Group::Camera, spawn::auto_orbit),
-            timed(Group::Spawner, spawn::gltf_scene_spawner),
-            timed(Group::Player, player::dialogue_interaction),
-            hud::hud_prompt_update,
-            hud::compass::hud_compass_update,
-            timed(Group::Hud, hud::hud_minimap_update),
-            timed(Group::World, music::audio_loop_starter),
-            timed(Group::World, music::mixer_sync),
-            timed(Group::World, music::music_driver),
-            // A bandeira de interior é lida pelo `daycycle_drive` e pelo
-            // tint dos props — decidida ANTES deles, no mesmo frame.
-            timed(Group::World, worldsys::interior_lighting_drive).before(worldsys::daycycle_drive),
-            timed(Group::World, worldsys::daycycle_drive),
-            // Regime de interior por CIMA dos drivers do mundo (sol/IBL).
-            timed(Group::World, worldsys::interior_lighting_apply)
-                .after(worldsys::sun_drive)
-                .after(worldsys::daycycle_drive),
-            // `weather_drive`/`atmosphere_drive` vivem no AmbientPlugin (dono
-            // do `AtmosphereState`), ordenados contra este `sun_drive`.
-            timed(Group::World, worldsys::sun_drive),
-        ),
-    );
-    // Tuplo dividido: o Bevy limita tuples de sistemas a 20 elementos.
-    // Constraints são explícitas (.after), a separação não muda semântica.
-    app.add_systems(
-        bevy::app::Update,
-        (
-            // Clamp da borda DEPOIS do movimento/dash do player (mesmo frame) —
-            // sem ordem, o clamp viajava um frame atrás do WASD. A aresta para
-            // `abilities_system` é no-op no preset `gameplay: none` (alvo
-            // ausente do schedule é tolerado) e mantém a semântica no RPG.
-            worldsys::world_border_clamp
-                .after(player::player_movement)
-                .after(skills::abilities_system),
-            sky::sky_follow_camera,
-            worldsys::seat_statics_once,
-            worldsys::resolve_pending_place.after(worldsys::seat_statics_once),
-            hud::hud_toggle,
-            timed(Group::Fx, particles::particle_emitter_update),
-            timed(Group::Spawner, spawner::instantiate_spawn_groups),
-        ),
-    );
-    // Debug de vitais [H/N/K] (preset RPG). O shake no dano recebido vive no
-    // FeedbackPlugin — registá-lo também aqui corria-o 2× por frame.
-    // O debug de vitais [H] dano / [N] cura total / [K] +XP é batota em jogo
-    // normal (o [K] ainda colidia com a loja): só com `VIBER_DEBUG_KEYS=1`.
-    if rpg && std::env::var_os("VIBER_DEBUG_KEYS").is_some_and(|v| v != "0") {
-        app.add_systems(bevy::app::Update, vitals::debug_damage);
-    }
-    app.run();
-    Ok(())
-}
-
 fn dispatch(command: Command) -> Result<std::process::ExitCode> {
     match command {
         Command::Create { name } => create(&name).map(|_| std::process::ExitCode::SUCCESS),
+        Command::Terrain {
+            world,
+            live,
+            port,
+            command,
+        } => {
+            let out = if live {
+                let (method, params) = viber::scene::terrain::live_request(&command)?;
+                let port = bridge::client::resolve_port(port, world.as_deref())?;
+                BridgeClient::localhost(port).call(method, params)?
+            } else {
+                viber::scene::terrain::run_cli(&resolve_world_path(world)?, command)?
+            };
+            println!("{}", serde_json::to_string_pretty(&out)?);
+            Ok(std::process::ExitCode::SUCCESS)
+        }
+        Command::Tool {
+            world,
+            live,
+            port,
+            command,
+        } => {
+            let out = if live {
+                let (method, params) = viber::scene::tools::live_request(&command)?;
+                let port = bridge::client::resolve_port(port, world.as_deref())?;
+                BridgeClient::localhost(port).call(method, params)?
+            } else {
+                viber::scene::tools::run_cli(&resolve_world_path(world)?, command)?
+            };
+            println!("{}", serde_json::to_string_pretty(&out)?);
+            Ok(std::process::ExitCode::SUCCESS)
+        }
+        Command::Scene {
+            world,
+            live,
+            port,
+            command,
+        } => {
+            let out = if live {
+                let (method, params) = viber::scene::cli::live_request(command)?;
+                let port = bridge::client::resolve_port(port, world.as_deref())?;
+                BridgeClient::localhost(port).call(method, params)?
+            } else {
+                viber::scene::cli::run(&resolve_world_path(world)?, command)?
+            };
+            println!("{}", serde_json::to_string_pretty(&out)?);
+            Ok(std::process::ExitCode::SUCCESS)
+        }
         Command::Run {
             path,
             bridge,
             debug,
             release: _,
             no_cargo,
+            dlss,
+            camera,
         } => {
             run_target_housekeeping(debug, no_cargo);
             let world = resolve_world_path(path)?;
@@ -1430,10 +988,13 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
                 Some(Some(port)) => Some(port),
                 Some(None) => Some(free_bridge_port(bridge::DEFAULT_BRIDGE_PORT)?),
             };
-            if !no_cargo && let Some(code) = delegate_run_to_cargo(&world, debug, bridge)? {
+            let camera_free = matches!(camera, Some(CameraMode::Free));
+            if !no_cargo
+                && let Some(code) = delegate_run_to_cargo(&world, debug, bridge, dlss, camera_free)?
+            {
                 return Ok(std::process::ExitCode::from(code as u8));
             }
-            run(&world, bridge)
+            run(&world, bridge, camera_free)
                 .map(|_| std::process::ExitCode::SUCCESS)
                 .with_context(|| format!("running {}", world.display()))
         }
@@ -1453,6 +1014,52 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
                 .map(|_| std::process::ExitCode::SUCCESS)
                 .with_context(|| format!("analyzing {}", world.display()))
         }),
+        Command::Bake {
+            path,
+            out,
+            verify,
+            force,
+        } => {
+            let world = std::path::absolute(&path)?;
+            viber::bake::check_bake_target(&world, force)?;
+            let out_dir = out.unwrap_or_else(|| {
+                world
+                    .parent()
+                    .map(|dir| dir.join("bake"))
+                    .unwrap_or_else(|| PathBuf::from("bake"))
+            });
+            let report = viber::bake::run_bake(&world, &out_dir)
+                .with_context(|| format!("baking {}", world.display()))?;
+            println!(
+                "viber: bake: {} groups / {} instances — pads {}, lakes {}, rivers {}, roads {}",
+                report.groups,
+                report.instances,
+                report.pads,
+                report.lakes,
+                report.rivers,
+                report.roads
+            );
+            println!("viber: bake: {}", report.ahgt_path.display());
+            println!("viber: bake: {}", report.bake_json_path.display());
+            if let Some(static_path) = &report.static_world_path {
+                println!(
+                    "viber: bake: {} (run with `viber run`)",
+                    static_path.display()
+                );
+            }
+            if verify {
+                let static_path = report
+                    .static_world_path
+                    .clone()
+                    .context("--verify precisa de um world.static.xml")?;
+                let checked = viber::bake::verify_static(&static_path, &report.bake_json_path)?;
+                println!(
+                    "viber: bake: verify OK — {} vegetation instances match bake.json",
+                    checked
+                );
+            }
+            Ok(std::process::ExitCode::SUCCESS)
+        }
         Command::Debug { world, command } => {
             run_debug(command, world).map(|_| std::process::ExitCode::SUCCESS)
         }

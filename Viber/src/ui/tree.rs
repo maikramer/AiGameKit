@@ -125,6 +125,11 @@ pub fn build_ui_tree(
         ZIndex(0),
         UiTransform::default(),
     ));
+    // Proveniência (o nó XML que declarou o elemento): o editor e o
+    // `viber.scene.entities` endereçam os nós de UI como qualquer outro.
+    if let Some(origin) = &node.origin {
+        entity.insert(crate::scene::SceneSource(origin.clone()));
+    }
 
     if let Some(id) = attr(node, "id") {
         entity.insert(UiId(id.to_string()));
@@ -624,6 +629,7 @@ mod tests {
             attrs: vec![("id".into(), id.into())],
             text: String::new(),
             children: Vec::new(),
+            origin: None,
         }
     }
 

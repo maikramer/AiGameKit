@@ -223,6 +223,7 @@ mod tests {
             physics: PhysicsSpec::default(),
             kind,
             children: Vec::new(),
+            source: None,
         }
     }
 

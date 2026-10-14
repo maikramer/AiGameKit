@@ -6,6 +6,90 @@ spawn → terreno → Luau → física; port do simple-rpg feito em 10 loops).
 Nomenclatura segue **Bevy** (`translation`, `euler`, `half-size`, `base-color`),
 não Unity/three.js.
 
+## Mundos estáticos + edição por agentes (2026-10-13) — LER PRIMEIRO
+
+O Viber é feito para ser construído por **agentes de IA**; o ViberEditor é a UI de debug e
+trabalho manual. Os dois têm **paridade**: toda a edição vive em `viber::scene` e sai igual
+pela CLI, pelo bridge e pelo editor.
+
+* **O estático manda.** `world.xml` procedural é só GERADOR. `viber bake world.xml` produz o
+  mundo estático: `world.static.xml` + includes espelhados em `static/**` (modular, um
+  ficheiro por include), `bake/terrain.baked.ahgt` e `bake/bake.json`. É ESSE que agentes e
+  editor editam e que `viber run`/`scene`/`analyze` abrem por omissão (auto-descoberta prefere
+  `world.static.xml`). `viber bake` recusa sobrescrevê-lo sem `--force` (que PERDE edições).
+* **`<world static="true">`:** o runtime não assenta (`SeatOnTerrain`) nem coloca (`place`) —
+  as poses do XML são finais (o bake escreveu-as). `<StaticSpawner>` e `place` num estático
+  são avisos do `analyze` (correr a ferramenta/bake em vez disso), tal como `<Vegetation>` sem
+  `instances` e `<Lake|River rocks="1">`. Única geração em runtime que fica, de propósito:
+  `<DynamicSpawner>` (criaturas com IA/respawn = gameplay). O re-carve das features sobre a
+  grelha pré-carvada ainda corre (idempotente).
+* **Vegetação pré-gerada:** `<Vegetation instances="bake/veg/NNN.vinst">` — binário
+  (`src/vinst.rs`: zlib, posição/quat/escala/template por instância); os outros atributos
+  ficam como receita. O runtime carrega as instâncias e não calcula nada.
+* **Geradores = ferramentas:** cada spawner vira `<Scatter id=…>` (a RECEITA, nunca executada
+  em runtime) + `<Group name="spawn/…" generated-by="id">` (o resultado, editável à mão).
+  `viber tool list` / `viber tool scatter id=grp-3 [--dry-run|--live]` (bridge
+  `viber.tool.list|scatter`, botão no Inspector do editor) recalcula sobre o terreno ATUAL,
+  com ocupação dos outros geradores, e substitui o grupo numa transação (desfazível).
+  Determinístico: regenerar logo após o bake dá as mesmas colocações (testado).
+* **Terreno editável:** o `.ahgt` do `<Terrain heightmap>` faz parte do documento
+  (carregado na 1.ª op de terreno). Ops `terrain_brush {mode: raise|lower|flatten|smooth|crater,
+  at:[x,z], radius, amount, height?}` e `terrain_patch` (inversa exata, base64 u16) — undo
+  byte a byte, gravado no `save`, sync ao vivo via `DeltaGrid::set_cells` (re-mesh só das
+  colunas tocadas). Traços do editor agrupam-se num undo (`History::apply_coalesced`).
+  `viber terrain brush raise --at "-70 -70" --radius 25 --amount 4 [--live]`,
+  `viber terrain sample X Z`. Props/vegetação NÃO se re-assentam sozinhos sobre terreno
+  editado (estático = poses finais).
+* **Mais ferramentas (paridade com o editor):** `viber tool settle SEL` (assenta no terreno
+  atual — depois de pincéis; um grupo assenta os filhos; tolerância 2 cm, silencioso num
+  estático acabado de bakear), `viber tool canonicalize [SEL]` (poses canónicas sem mudar a
+  pose; idempotente), `viber scene catalog|add TAG|drop GLB --at "x y z"` (o Add Node e o
+  drag-drop do editor; `--at` é MUNDO, convertido para o pai com `scene::pose::world_frame`),
+  `viber terrain paint` (camada do pool, sidecar `.paint`). Bridge: `viber.tool.settle|
+  canonicalize`, `viber.scene.catalog|drop|files`.
+* **Pose canónica:** `translation`/`euler` (graus XYZ, 4 casas, (-180, 180]) / `scale`. Na
+  ordem XYZ o ângulo do meio é o YAW: com |Y| ≈ 90° e inclinação a string euler não é estável
+  em f32 — aí `rotation` em quaternião (6 casas, w ≥ 0). Uma rotação que não muda e já está
+  canónica NUNCA é re-decomposta (`pose_op`) — é isso que dá diffs estáveis.
+* **Agente dentro do editor:** `vibereditor --bridge PORT` expõe `viber.scene.*`/`viber.tool.*`
+  do documento ABERTO no editor — humano e agente partilham undo e veem as edições ao vivo
+  (`viber scene --live --port PORT …`, `viber terrain --live --port PORT …`).
+* **Editar = operações** (`src/scene/ops.rs`): `set` / `replace_attrs` / `set_text` / `insert`
+  / `remove` / `move` / `duplicate`, em lotes atómicos JSON, cada uma com inversa (undo).
+  Nós por seletor: `world/village.xml#3/0` (ficheiro + caminho) ou `name=well` (único).
+  Pose escrita sempre canónica (`translation`/`euler` graus/`scale`; aliases `pos`/
+  `rotation`/`transform` removidos) — `scene::pose::pose_op`.
+
+```bash
+viber scene ls [SEL] --depth 2        # árvore com seletores (um Include lista o ficheiro)
+viber scene find --tag GltfScene --attr name=well
+viber scene get name=well
+viber scene set name=well translation="4 0 3" --unset scale [--dry-run]
+viber scene insert 'static/world/village.xml#' '<Entity name="cart" />' --index 0
+viber scene mv name=cart name=props   |  viber scene dup name=crate  |  viber scene rm name=crate
+viber scene apply ops.json            # lote atómico; a saída traz `inverse` (o undo offline)
+viber scene files --depth 4           # a pasta do mundo em árvore JSON (world/scene/lua/glb/…)
+viber terrain paint --layer dirt_trail --at "40 -30" --radius 12   # pincel de MATERIAL (undo = splat_patch)
+viber scene --live set name=chapel translation="10 8 25"   # engine a correr: grava + sync ao vivo
+viber scene --live undo | redo
+```
+
+Add Node / drag-drop de GLB (Fase 3, paridade): o catálogo de tags com snippets válidos e o
+builder da op de arrastar um `.glb` vivem em `scene::catalog` — o diálogo do editor e um
+agente (`viber scene insert` com o snippet, ou `catalog::glb_drop`) produzem o mesmo XML.
+
+Bridge (mesma API): `viber.scene.ls|get|find|apply|undo|redo|save|pick|entities`
+(`src/bridge/scene.rs`). `viber.scene.entities {selector}` mostra as entidades vivas do nó
+(pose local + mundo) — verificar o efeito de uma edição. `viber.scene.pick {x,y}` devolve o
+seletor do nó sob um pixel (câmara de editor).
+
+**Sync ao vivo** (`src/scene/sync.rs`): mudanças de pose → patch do `Transform` (e teleporte
+do corpo Rapier: o writeback reverteria corpos filhos); inserir/remover/mover → spawn/despawn
+incremental com REALINHAMENTO das origens dos irmãos; tipos não incrementais (terreno, céu,
+UI, spawners) ficam em `SceneSyncStatus::needs_reload`. Proveniência: cada `XmlNode` tem
+`origin` (ficheiro+caminho, carimbado no `load_world`), cada `EntitySpec` tem `source`, cada
+entidade spawnada tem `scene::SceneSource`.
+
 ## Bevy 0.20 (WESL + forks vendored + OIT)
 
 * **WESL substituiu o naga_oil** — os shaders do motor são `.wesl`: `#import a::b::{x}` → `import a::b::{x};` (imports no topo, podem ser condicionais), `#ifdef X` → `@if(X)` (anexado a declarações/instruções; blocos `@if(BINDLESS) { … } @else { … }` embrulham regiões inteiras), `#{CONST}` → `constants::CONST` (defs numéricas), e os módulos do PBR ganharam o prefixo `bevy_pbr::render::` (`prepass_utils`→`bevy_pbr::prepass::utils`, `ssao_utils`→`bevy_pbr::ssao::utils`). Os ficheiros gerados em `<mundo>/shaders/` são `.wesl`; WGSL puro SEM diretivas continua válido (`AERIAL_WGSL`/`water_ssr` ficam `from_wgsl`). Harnesses: `tests/common/mod.rs` compila WESL com `wesl::compile` + stubs por módulo + o módulo especial `constants` — o padrão do `bevy_shader::shader_cache`.
@@ -17,13 +101,18 @@ não Unity/three.js.
 
 | Tarefa | Ficheiro(s) | Notas |
 |--------|-------------|-------|
+| Edição de mundos (agentes + editor) | `src/scene/` | `doc.rs` (documento por ficheiro, seletores), `ops.rs` (ops + inversas + `History`), `pose.rs` (pose canónica), `live.rs` (edição viva + `SceneEdited`), `sync.rs` (doc→ECS), `pick.rs` (raio→nó), `cli.rs` (`viber scene`), `files.rs` (árvore da pasta do mundo), `catalog.rs` (Add Node + drop GLB) |
+| Ferramentas geradoras + terreno editável | `src/scene/tools.rs`, `src/scene/terrain.rs`, `src/vinst.rs` | `scatter` (receita `<Scatter>` → grupo `generated-by`), pincéis de terreno como ops, vegetação `.vinst` |
+| Bake → mundo estático | `src/bake.rs` | `run_bake` corre o arranque headless (spawn + carve + assentamento) e escreve o estático como ops sobre um `SceneDoc` retargetado (`static/`), mapeando runtime→XML pela proveniência |
 | CLI (`run` / `analyze`) | `src/main.rs` | `analyze` é headless, exit 1 em erro; `run()` monta os plugins por ordem |
 | `config.yaml` do jogo (contrato de paths) | `src/config.rs` | `GameConfig` OBRIGATÓRIO ao lado do `world.xml` (asset roots extra, bgm/sfx/texturas/scripts/save) — lido no `run`/`analyze`; schema em [`docs/ASSETS.md`](docs/ASSETS.md); `viber create` gera um completo |
 | Auditoria de assets | `src/audit.rs` | corre no `analyze`: GLBs/texturas/heightmaps/BGM/scripts/estilos ausentes, Draco/Basis (não suportados; meshopt é expandido), magia inválida, glTF sem collider; estradas × lagos/rios/cliffs (lâmina/banda, pontes só nas pontas); `--strict` falha com ficheiros ausentes |
 | XML: parse, includes, valores | `src/xml/` | `include.rs` (expansão), `values.rs` (parsers tolerantes) |
 | IR de entidades + spawn Bevy | `src/recipes/` | `mod.rs` (IR + `KNOWN_TAGS`), `spawn.rs`, `transform.rs` (euler→quat) |
 | Interiores (bolsa fora do mapa) | `examples/simple-rpg/world/interiors.xml` (**gerado**), `tools/gen_interiors.py`, `scripts/building-portal.lua` (**gerado**) | Uma `<InteriorScene>` põe 9 salas numa bolsa FORA da pegada do heightmap, onde não há terreno, bioma nem chuva. O XML das salas, o registo porta↔saída do script de portais e o retângulo da bolsa saem todos da MESMA tabela em `tools/gen_interiors.py` (mudar a bolsa = mudar `POCKET` lá). NPCs por papel com fallback para o elenco de rua; `interior-folk.lua`/`interior-keeper.lua` são as FSM de sala |
+| Camada de pintura do terreno | `src/terrain/paint.rs` | `PaintGrid` (sidecar `<ahgt>.paint`), blend + eleição forçada nos chunks (`splat.rs bake_chunk`), repaint in-place (`runtime::repaint_chunks`), op `terrain_paint`/`splat_patch` |
 | Terreno (specs, sampler, mesh, LOD) | `src/terrain/` | `spec.rs` (contrato), `sampler.rs`/`heightmap.rs` (altura), `mesh.rs` (chunks), `plugin.rs` (LOD runtime + rebuild por edições), `runtime.rs` (bootstrap + carve + applier das edições vivas), `cliffs.rs` (cliffs procedurais + sharpen + CliffMask), `delta.rs` (**terreno vivo**: overlay de edições, Fase 3) |
+| Preview de estado de UI (editor) | `src/ui/runtime.rs` | `UiPreviewState(StyleState)` sobrepõe a interação na cascata (`:hover`/`:active` sem ponteiro); entidades de UI carimbadas com `scene::SceneSource` |
 | Scripts Luau + API `viber.*` | `src/luau/` | módulos categorizados: `host` (VM/chunks), `ctx` (snapshot), `commands` (fila Lua→engine), `runtime` (sistemas), `api` + `input`/`events`/`timers`/`entity`/`game` (grupos da API), `sfx`; referência completa em **`docs/LUA_API.md`**; hooks `on_update(dt)`/`on_player_attack`; "LOD de IA" via `ScriptActivation` |
 | Hot-reload de scripts | `src/hot_reload.rs` | watcher (`notify`) sobre `<mundo>/scripts/` — recarga ao gravar com re-corrida do top-level; erro de compilação mantém o chunk antigo; `VIBER_HOT_RELOAD=0` desliga |
 | UI declarativa (`UiRoot`/`UiStyle`) + `viber.ui.*` | `src/ui/` | `tree.rs` (XML→bevy_ui), `style.rs` (stylesheet), `palette.rs` (cores Tailwind), `anim.rs` (movimento), `widgets.rs` (check/slider/input/tooltip/cursor), `script.rs` (API Luau), `bind.rs` (bindings), `modal.rs` (modais autorais) |
@@ -38,6 +127,7 @@ não Unity/three.js.
 | RNG determinístico | `src/rng.rs` | SplitMix64 ÚNICO da engine ("mesma seed, mesmo mundo") — spawner/terreno/IA/clima; sequência congelada por golden test. `splitmix64` counter-style para o heightmap procedural |
 | Travel & wayfinding | `src/travel.rs` | A Nota [F], viagem rápida [G], registry de hostis (alimenta `viber.alive_in_region`) |
 | Mundo vivo | `src/worldsys.rs`, `src/ambient.rs`, `src/sky.rs`, `src/postfx.rs`, `src/animation.rs`, `src/music.rs` | DayCycle/Weather/WorldBorder/BiomeRegion como recursos; fog/tint/gestos de NPC/SFX; céu WGSL especializado por mundo; exposure/bloom/SSAO; clips glTF; BGM crossfade |
+| DLSS (upscaling NGX) | `src/dlss.rs` (+ ramo no attach do `src/postfx.rs`) | feature cargo `dlss` (NÃO-default; SDK da NVIDIA em build — secção "DLSS Super Resolution" abaixo); troca o TAA, gate `VIBER_DLSS`/config.yaml `dlss:`, modo ao vivo na REPL `viber.debug.dlss(...)` |
 | Física | `src/physics.rs`, `src/physics_fx.rs` | Rapier (`bevy_rapier3d`): `collider`/`rigidbody` declarativos; knockback cinemático (o do herói passa pelo character controller — não atravessa paredes) + destrutíveis |
 | IA sem script | `src/ai.rs` | wander/chase determinístico p/ criaturas de `DynamicSpawner` sem script + respawn |
 | Debug bridge + REPL Luau | `src/bridge/` | `mod.rs` (métodos BRP `viber.*`), `lua.rs` (método `viber.lua` + API `viber.debug.*`), `client.rs` (cliente std-only), `logs.rs` (layer de tracing); QA headless via `viber debug …` |
@@ -67,6 +157,40 @@ de frame — o `desempenho` é o preset dos 60 fps. Fonte:
 > **Ao medir performance:** a janela tem de estar VISÍVEL. Ocluída, o
 > compositor estrangula a apresentação e o `render.prepare_views` salta de 8
 > para 15–26 ms com a GPU a 34 % — qualquer A/B feito assim é lixo.
+
+### DLSS Super Resolution (feature `dlss`, `src/dlss.rs`)
+
+Upscaling NGX da NVIDIA **via NATIVA do Bevy 0.20** (`bevy_anti_alias`/`dlss`,
+por cima do `dlss_wgpu` 6.0.0 — Linux/Vulkan, RTX necessário). O componente
+`Dlss` na câmara TROCA o TAA (faz o seu próprio AA temporal; jitter HALTON,
+mip bias, motion-vector prepass e `MainPassResolutionOverride` — main pass a
+resolução reduzida, upscale no `EarlyPostProcess`, postfx restante e UI
+full-res — são injetados pelo próprio Bevy).
+
+* **Build**: feature NÃO-default de propósito — `cargo build --release
+  --features dlss` ou `viber run --dlss` (delegação acrescenta a flag).
+  Exige em build: `DLSS_SDK` (clone de github.com/NVIDIA/DLSS tag **v310.9.1**,
+  fora do repo) + `VULKAN_SDK` (headers; shim `~/vulkan-sdk` com symlink de
+  /usr/include/vulkan) + libclang (bindgen). Em runtime: copiar
+  `lib/Linux_x86_64/rel/libnvidia-ngx-dlss.so.310.9.1` do SDK para junto do
+  binário (`target/release/`, `~/.local/bin/`) — o rpath `$ORIGIN` do
+  `.cargo/config.toml` fá-lo achar. ⚠ lock: `prettyplease` ancorado em 0.2.37
+  (bindgen 0.73.x liga syn 2; prettyplease 0.3 usa syn 3 — incompatíveis).
+* **Runtime**: LIGADO por omissão quando a feature está compilada; sem
+  suporte (sem RTX/NGX/Vulkan) → warn + TAA. Gate: `VIBER_DLSS` > `dlss:` do
+  config.yaml > `auto` (off|auto|dlaa|quality|balanced|performance|ultra).
+  On/off é gate de arranque (como o TAA); o MODO troca AO VIVO na REPL:
+  `viber debug lua 'viber.debug.dlss("performance") return true'` — A/B de
+  modos interleaved no MESMO processo.
+* **Ghosting**: teleporte = corte de câmara; o observer em `src/dlss.rs`
+  põe `Dlss.reset = true` por um frame em cada `TeleportSettle` (portais,
+  viagem rápida, `viber.debug.tp`). Snap de sala de interior = follow-up.
+* **Ordenação de passes**: o `aerial_pass` corre ENTRE `MainPass` e
+  `EarlyPostProcess` (sets públicos) — os nós do DLSS são privados no crate e
+  dois passes sem ordem no mesmo set serializam em ordem arbitrária
+  (`post_process_write`/fetch_xor; ver `water_ssr.rs`). O `water_ssr_pass`
+  (PostProcess) já fica depois do DLSS por construção.
+* QA/benchmarks e o que medir: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
 
 ### Preset de gameplay (`config.yaml` → `gameplay`)
 
@@ -723,7 +847,7 @@ em **[`docs/ASSETS.md`](docs/ASSETS.md)**; `viber create` gera um completo.
 | `OrbitCamera` | `target` (nome de entidade), `distance`, `height`, `pitch` (graus; quando presente sobrepõe `height` via `height = distance·tan(pitch)`) |
 | `GltfScene` | `url` (obrigatório; `/assets/...` resolve contra as asset roots por ordem — a pasta do jogo SEMPRE 1.ª, as roots extra do `config.yaml` a seguir (tipicamente o pool partilhado); guarda anti-regressão `tests/asset_pool_dedup.rs`, ver **[`docs/ASSETS.md`](docs/ASSETS.md)**) + attrs universais; cena default do GLB spawna como filhos da entidade (transform aplica); load assíncrono, falha = warn + nó vazio. GLBs do pipeline vêm meshopt-comprimidos — o `MeshoptAssetReader` (`src/meshopt.rs`) descomprime EXT_meshopt à leitura; NÃO há espelho nem cópias por exemplo |
 | `StaticSpawner` | `count`, `seed`, `region-min`/`region-max` ("x y z"), `density-per-km2`+`max-instances` (modo de contagem alternativo: `count = densidade × área km²` da região XZ, teto `max-instances` — 0 = sem teto; `count` explícito ganha), `cluster-count`/`cluster-radius`, `footprint-radius`+`avoid-overlaps` (0 = AUTO: meia-largura XZ do AABB do GLB, fallback 0.8 m), `max-slope-deg`, `max-slope-attempts` (32 — tentativas POR instância; esgotadas, a instância é omitida), `avoid-water`, `in-water` (à lâmina de água), `near-water`+`near-water-radius`, `avoid-road` (default ON), `avoid-cliff` (default ON — nada nasce em parede de cliff nem a `cliff-margin` dela; `"0"` restaura), `cliff-margin` (2 m — folga além da vergem da máscara de cliffs, distância REAL medida por `CliffMask::is_cliff_within`), `activation-radius` (LOD de IA dos scripts), `align-to-terrain`, `base-y-offset` (soma ao Y pós-assentamento), `scale-min`/`max`+`scale-axis-min`/`max`, `random-yaw`, `max-distance`; template = primeiro glTF (`GLTFLoader`/`GltfScene`) na subárvore filho. Colocação determinística (SplitMix64 por seed). Espelha `src/spawner.rs` (função pura `compute_placements`) — ver **Spawner: colocação** abaixo |
-| `ParticleSystem` | `preset` (fire, smoke, fireflies, ground-dust, sparkle, leaves, snow, sand-dust, magic, core; desconhecido = core) + `transform="pos: x y z"` (component-string) + overrides em `particle-emitter="preset: …; emission-rate: …; start-life-min/max: …; start-speed-min/max: …; start-size-min/max: …; start-color: #hex; looping: …; world-space: …"`. Emissor CPU billboard (`src/particles.rs`): mesh de capacidade FIXA por emissor (quads degenerados nos slots livres — realocar por frame tripava use-after-free no slab allocator), vertex color com fade por vida, material unlit Add (fogo/magic/sparkle/fireflies) ou Blend (resto) |
+| `ParticleSystem` | `preset` (fire, smoke, fireflies, ground-dust, sparkle, leaves, snow, sand-dust, magic, core; desconhecido = core) + `transform="pos: x y z"` (component-string) + overrides em `particle-emitter="preset: …; emission-rate: …; start-life-min/max: …; start-speed-min/max: …; start-size-min/max: …; start-color: #hex; looping: …; world-space: …"`. Emissor CPU billboard (`src/particles.rs`): mesh de capacidade FIXA por emissor (quads degenerados nos slots livres — realocar por frame tripava use-after-free no slab allocator), vertex color com fade por vida, material unlit Add (fogo/magic/sparkle/fireflies) ou Blend (resto). **Lifecycle por proximidade (OPT-IN `VIBER_FX_LIFECYCLE=1`)**: `<ParticleSystem>` e os FX da água nascem como markers `AmbientFx` leves; o `ambient_fx_manager` (scan 0,5 s + rescan em teleporte) monta/desmonta o bundle render (`Mesh3d`/material partilhado/emissor, mesh reciclada do `BurstPool`) dentro de ~110 m com banda de histerese — FX distante NÃO EXISTE no pipeline (simple-rpg: 399 markers → ~90 vivos). `VIBER_FX_SPAWN_RADIUS` afina o raio; a chuva/bursts seguem o player e ficam de fora. **Porque é opt-in**: o ganho de fps não mediu limpo (2026-10-10 — confounds de streaming/lanternas do crepúsculo; no teste limpo os emissores custam ≈0,1 ms no prepare) — ligar após A/B com relógio congelado; sem a env o comportamento é o antigo (tudo montado) |
 | `PlayerGLTF` | `model-url` (obrigatório), `name` (default `player`), `pos` (alias de `translation` — tags verbatim mantêm `pos`), `speed`. Componente `Player` + WASD/setas relativo à câmara (Shift = sprint ×1.5, Space = salto com buffer/coyote), assenta no terreno via `TerrainRuntime::sample` todos os frames (`src/player.rs`) |
 | `ThirdPersonCamera` | alias interactivo do `OrbitCamera` com defaults `target="player"`, `distance` 4, `height` 1.6; attrs `mouse-sensitivity`, `follow-lag`, `turn-lag`, `min-terrain-distance`, `fov`. Drag (qualquer botão) = yaw/pitch, scroll = zoom (clamp 2–80 m), anti-clip com o terreno; câmaras extra são rebaixadas a Group com warning |
 | `DialogueNPC` | `dialogue-id` (obrigatório; ausente = skip), `marker-height` (2.5 — marcador flutuante), `portrait-url`/`voice-sfx` aceites sem efeito. Componente `DialogueNpc` + marcador esférico dourado emissivo; [E] a <3.5 m abre o **diálogo real** (linhas intro/progress/complete das quests JSON, `src/quests.rs`) com balão no HUD |
@@ -939,7 +1063,11 @@ ribbons planas (GLB chega com glTF). Mundo demo:
 - Bools tolerantes: bare (`<PointLight shadows>`) e `true/1/yes/on` / `false/0/no/off`.
 - `<Include src>`: profundidade máx. 8, ciclos fail-fast; caminhos com `/` resolvem
   contra o dir do ficheiro raiz, relativos contra o dir do ficheiro que inclui;
-  fragmentos com raiz `<world>`/`<scene>` contribuem os filhos.
+  fragmentos com raiz `<world>`/`<scene>` contribuem os filhos. **Transform no
+  include** (`translation`/`euler`/`scale`): o fragmento entra embrulhado num
+  `<Group>` com essa pose e a origin do próprio include — mover o include move todo o
+  conteúdo do ficheiro (edição viva patcha o wrapper, filhos seguem); sem attrs de pose
+  nada é embrulhado (comportamento inalterado).
 - Atributos desconhecidos = **warning** (impresso no `analyze`); tags desconhecidas = **skip no-op** com relatório no `analyze` (`--strict` trata como erro).
 - **Auditoria de assets no `analyze`** (`src/audit.rs`, headless — lê só cabeçalhos): recolhe TODAS as refs a ficheiros do XML (GLB de scenes/player/spawner templates/vegetation/colliders `mesh-url`, texturas de primitivas/terreno/estradas/decals, heightmaps, BGM por convenção `assets/audio/bgm/<layer>.ogg`, scripts Luau, estilos UiStyle) e verifica: ficheiro ausente (✗ — erro em `--strict`), GLB sem magic "glTF" / com Draco ou Basis (⚠ — a engine não lê; meshopt É expandido pelo asset reader), textura com extensão fora de png/jpg/webp/ktx2/hdr/tga ou magia PNG/JPEG inválida (⚠), áudio fora de .ogg (⚠) e modelos glTF sem collider próprio nem herdado do ancestral (ℹ — passam através; o herói fica fora: character controller próprio). Caminhos resolvem como no runtime: url `/assets/…` contra a asset root; scripts contra `<mundo>/scripts`. Nota: `texture=` num `<Entity>` puro (sem primitiva) é atributo ignorado pelo parser — o audit não o conta.
 - **Auditoria de conflitos de features no `analyze`** (`src/audit.rs`): o traçado de cada `<Road>`/`<RoadNetwork>` (segmentos expandidos, translações XZ acumuladas) é testado contra lagos, rios e cliffs SEMPRE contando a **meia-largura do ribbon** (a borda da estrada conta — a linha central sozinha deixava passar trilhos com a borda na água; caso real: o trilho NE da Lagoa Grande do simple-rpg): entrar no contorno orgânico REAL de um lago (`LakeShape::contour`, ±45%) ou na lâmina de um rio (`half + meia-largura`) avisa (⚠) com o ponto do pior cruzamento no rótulo. Atravessar a banda de um cliff (`width/2 + estrada/2 + 1 m`, ⚠) idem. Pontes (`profile="bridge"`) são ⚠ SEMPRE que cruzam água: o deck é ribbon plana **sem collider** no terreno voxel — travessia quebrada para o herói; a travessia real é uma `<Bridge>` volumétrica (Viber-only) fora da rede. Mesmo com pontas secas avisam (apontam o cruzamento); avisam mais forte se as PONTAS ficarem dentro do worst-case do contorno (`radius × CONTOUR_PEAK`) ou dentro da banca de margem do rio (poços abrem ×1.2 com `pool-spacing`). O carve-guard já evita ESCAVAÇÃO em zona de água — o que o audit apanha é o RIBBON submerso/rasgado (caso real: ponte da Lagoa Grande do simple-rpg).

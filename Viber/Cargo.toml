@@ -33,6 +33,8 @@ bevy = { version = "0.20", features = [
     # `ScheduleData` (schedule_data::serde) alimenta a tab Sistemas do profiler
     # com os reads/writes por sistema — os mesmos dados do BRP `schedule.graph`.
     "bevy_dev_tools",
+    # Highlight de seleção do editor (bridge `viber.select` → gizmo AABB).
+    "bevy_gizmos",
 ] }
 clap = { version = "4.6", features = ["derive"] }
 
@@ -113,12 +115,29 @@ tempfile = "3"
 # `#[cfg(feature = ...)]` do código da engine (spawn.rs).
 default = ["experimental_pbr_pcss"]
 experimental_pbr_pcss = ["bevy/experimental_pbr_pcss"]
+# DLSS Super Resolution (NVIDIA NGX, Linux/Vulkan): NÃO-default de propósito —
+# o `dlss_wgpu` precisa do SDK da NVIDIA em build (`DLSS_SDK` aponta para o
+# clone de github.com/NVIDIA/DLSS na tag v310.9.1, + `VULKAN_SDK` com headers
+# e libclang para o bindgen). Sem isto, `cargo test/check` (CI e agentes
+# paralelos) segue como hoje. O binário jogável constrói-se com
+# `cargo build --release --features dlss` (ou `viber run --dlss`), e em runtime
+# o gate é `VIBER_DLSS`/config.yaml (`src/dlss.rs`) — ligado por omissão
+# quando a feature está compilada e a GPU suporta.
+dlss = ["bevy/dlss"]
 
 [profile.dev]
 opt-level = 1
+# Disco: cada binário de teste (tests/*.rs) linka o engine inteiro; com o
+# debuginfo embutido eram ~2,6 GB POR binário (123 GB medidos em
+# target/debug/deps, 2026-10-13). `unpacked` deixa o debuginfo nos objetos
+# (partilhados) em vez de o copiar para cada executável.
+split-debuginfo = "unpacked"
 
 [profile.dev.package."*"]
 opt-level = 3
+# Sem debuginfo nas dependências (Bevy/Rapier/wgpu): era o grosso do peso e
+# ninguém faz step-debug dentro delas. Backtraces mantêm os nomes.
+debug = false
 
 [profile.release]
 lto = "thin"

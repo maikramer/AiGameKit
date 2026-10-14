@@ -1724,6 +1724,8 @@ mod tests {
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         });
         app.add_systems(bevy::app::Update, seat_statics_once);
 
@@ -1803,6 +1805,8 @@ mod tests {
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         });
         app.add_systems(bevy::app::Update, seat_statics_once);
 
@@ -1867,6 +1871,8 @@ mod tests {
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         });
         app.add_systems(bevy::app::Update, seat_statics_once);
 
@@ -2104,6 +2110,8 @@ mod place_tests {
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         };
         runtime
     }

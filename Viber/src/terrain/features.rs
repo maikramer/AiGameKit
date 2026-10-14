@@ -132,6 +132,21 @@ pub fn apply_features(grid: &mut BrushGrid, features: &TerrainFeatures) -> Featu
 
     // 1. Pads — flatten (cut and fill), resolve auto heights in order.
     for (i, pad) in features.pads.iter().enumerate() {
+        // `pre-carved` (contrato idempotente do bake): a grelha já contém o
+        // pad — o anel de falloff é um BLEND, e re-blendar puxava o anel
+        // outra vez para o alvo. Regista-se a âncora e segue-se.
+        if pad.pre_carved
+            && let Some(height) = pad.height
+        {
+            result.pads.push(ResolvedPad {
+                at: pad.at,
+                size: pad.size,
+                falloff: pad.falloff,
+                corner_radius: pad.corner_radius,
+                height,
+            });
+            continue;
+        }
         let height = grid.flatten_rect(
             pad.at,
             pad.size,
@@ -282,6 +297,8 @@ mod tests {
                 falloff: 8.0,
                 corner_radius: 4.0,
                 height: None,
+
+                pre_carved: false,
             }],
             lakes: vec![LakeSpec {
                 at: Vec2::new(-40.0, 40.0),

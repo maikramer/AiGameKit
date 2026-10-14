@@ -123,6 +123,41 @@ pub struct DeltaGrid {
 }
 
 impl DeltaGrid {
+    /// Recorte de alturas ABSOLUTAS (metros) vindas do documento do mundo — o sync de
+    /// `crate::scene` (pincéis de terreno do editor/agentes, undo/redo): as células
+    /// `[i0, i0+cols) × [j0, j0+rows)` do lattice da grid. Entra como qualquer edição (o mais
+    /// recente ganha, fusão com o topo) e sobe a revisão → re-mesh só das colunas tocadas.
+    pub fn set_cells(
+        &mut self,
+        grid: &BrushGrid,
+        i0: usize,
+        j0: usize,
+        cols: usize,
+        rows: usize,
+        data: Vec<f32>,
+    ) -> bool {
+        if cols < 2 || rows < 2 || data.len() != cols * rows || data.iter().any(|h| !h.is_finite())
+        {
+            return false;
+        }
+        let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
+        for h in &data {
+            lo = lo.min(*h);
+            hi = hi.max(*h);
+        }
+        let rect = DeltaRect {
+            min: grid.cell_center(i0, j0),
+            texel: grid.texel(),
+            cols,
+            rows,
+            data,
+            lo,
+            hi,
+        };
+        self.commit(grid, rect);
+        true
+    }
+
     /// Altura editada em XZ, se algum recorte a cobrir (o mais recente
     /// primeiro); `None` = a grid base manda.
     pub fn sample(&self, x: f32, z: f32) -> Option<f32> {
@@ -383,7 +418,7 @@ impl TerrainEdit {
 }
 
 /// Falloff suave `1 → 0` em `t = d/raio` (smootherstep), com o corte a 1.
-fn falloff(t: f32) -> f32 {
+pub(crate) fn falloff(t: f32) -> f32 {
     if t >= 1.0 {
         return 0.0;
     }
@@ -393,7 +428,7 @@ fn falloff(t: f32) -> f32 {
 
 /// Perfil ASSINADO da cratera (fracção da profundidade): tigela NEGATIVA
 /// até 0.7·r, rebordo POSITIVO 0.7..1.0·r (zeros em t=0.7 e t=1 — contínuo).
-fn crater_profile(t: f32) -> f32 {
+pub(crate) fn crater_profile(t: f32) -> f32 {
     const RIM: f32 = 0.7;
     if t >= 1.0 {
         0.0

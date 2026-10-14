@@ -705,6 +705,8 @@ mod tests {
             falloff: 6.0,
             corner_radius: 2.0,
             height: Some(25.0),
+
+            pre_carved: false,
         };
         let resolved = s.apply_pads(&[pad]);
         assert_eq!(resolved.len(), 1);
@@ -734,6 +736,8 @@ mod tests {
             falloff: 4.0,
             corner_radius: 2.0,
             height: None,
+
+            pre_carved: false,
         };
         let resolved = s.apply_pads(&[pad]);
         assert!(
@@ -758,6 +762,8 @@ mod tests {
                 falloff: 3.0,
                 corner_radius: 1.0,
                 height: Some(12.0),
+
+                pre_carved: false,
             },
             TerrainPadSpec {
                 at: Vec2::new(7.0, -5.0),
@@ -765,6 +771,8 @@ mod tests {
                 falloff: 3.0,
                 corner_radius: 1.0,
                 height: None,
+
+                pre_carved: false,
             },
         ];
         let resolved = s.apply_pads(&pads);
@@ -793,6 +801,8 @@ mod tests {
             falloff: 12.0,
             corner_radius: 2.0,
             height: Some(30.0),
+
+            pre_carved: false,
         };
         s.apply_pads(&[pad]);
         let mut prev = 30.0;
@@ -831,6 +841,8 @@ mod tests {
             falloff: 8.0,
             corner_radius: 4.0,
             height: Some(10.0),
+
+            pre_carved: false,
         };
         s.apply_pads(&[pad]);
         let target_raw = 10_000u16; // quantized 10 m == the low plateau
@@ -862,6 +874,8 @@ mod tests {
             falloff: 8.0,
             corner_radius: 2.0,
             height: Some(40.0),
+
+            pre_carved: false,
         };
         s.apply_pads(&[pad]);
         let target_raw = 40_000u16; // quantized 40 m
@@ -880,6 +894,8 @@ mod tests {
             falloff: 6.0,
             corner_radius: 2.0,
             height: Some(10_000.0 / 65535.0 * MAX_H), // already the terrain height
+
+            pre_carved: false,
         };
         s.apply_pads(std::slice::from_ref(&noop));
         assert_eq!(s.revision(), 0, "no-op pad must not bump the revision");
@@ -900,6 +916,8 @@ mod tests {
             falloff: 8.0,
             corner_radius: 4.0,
             height: Some(3.0),
+
+            pre_carved: false,
         };
         let resolved = s.apply_pads(&[far]);
         assert_eq!(resolved.len(), 1);
@@ -920,6 +938,8 @@ mod tests {
             falloff: 6.0,
             corner_radius: 2.0,
             height: Some(3.0),
+
+            pre_carved: false,
         };
         let resolved = s.apply_pads(&[bad]);
         assert_eq!(resolved.len(), 1);
@@ -935,6 +955,8 @@ mod tests {
             falloff: 4.0,
             corner_radius: 2.0,
             height: Some(20.0),
+
+            pre_carved: false,
         };
         // Overlapping pad with auto height: must sample the already-flattened
         // plane (20 m), not the original 0 m terrain.
@@ -944,6 +966,8 @@ mod tests {
             falloff: 4.0,
             corner_radius: 2.0,
             height: None,
+
+            pre_carved: false,
         };
         let resolved = s.apply_pads(&[first, second]);
         assert!(

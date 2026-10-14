@@ -367,6 +367,11 @@ pub struct TerrainPadSpec {
     pub corner_radius: f32,
     /// Target height (meters); `None` = sample the terrain at the pad center.
     pub height: Option<f32>,
+    /// `pre-carved="1"` — o heightmap JÁ contém este pad (contrato
+    /// idempotente do `viber bake`): regista a âncora [`ResolvedPad`] sem
+    /// voltar a achatar (o anel de falloff é um blend, e re-blendar por cima
+    /// puxava o anel outra vez para o alvo). Requer `height` explícito.
+    pub pre_carved: bool,
 }
 
 impl Default for TerrainPadSpec {
@@ -377,6 +382,7 @@ impl Default for TerrainPadSpec {
             falloff: 8.0,
             corner_radius: 4.0,
             height: None,
+            pre_carved: false,
         }
     }
 }

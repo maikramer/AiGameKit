@@ -267,6 +267,7 @@ fn update_voxel_columns(
     mut state: ResMut<ChunkLodState>,
     runtime: Option<Res<TerrainRuntime>>,
     published: Option<Res<TerrainChunkMaterials>>,
+    editor: Query<&GlobalTransform, With<crate::editor_camera::EditorCamera>>,
     cameras: Query<&GlobalTransform, With<Camera3d>>,
     players: Query<&GlobalTransform, With<crate::player::Player>>,
     mut columns: Query<(Entity, &mut TerrainChunk, Option<&mut ColumnBuild>)>,
@@ -281,7 +282,10 @@ fn update_voxel_columns(
     if !state.adopted {
         return;
     }
-    let Ok(cam) = cameras.single() else {
+    // Modo editor (`--camera free`): há DUAS `Camera3d` (a de jogo está
+    // inactiva) — `single()` falhava em silêncio e o LOD das colunas nunca
+    // re-selecionava. O olho activo vem do helper (câmara de editor primeiro).
+    let Some(cam) = crate::editor_camera::active_camera_eye(&editor, &cameras) else {
         return;
     };
     let cam_xz = Vec2::new(cam.translation().x, cam.translation().z);
@@ -980,6 +984,8 @@ mod tests {
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         });
 
         let root = app
@@ -1258,6 +1264,8 @@ mod tests {
             pads: Vec::new(),
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         });
 
         let root = app

@@ -372,6 +372,11 @@ pub struct LakeSpec {
     pub depth: f32,
     /// Water surface drop below the rim (meters).
     pub water_offset: f32,
+    /// Superfície EXPLÍCITA (`water-level`) — `None` = a auto (aro mínimo −
+    /// `water_offset`). O `viber bake` escreve o valor resolvido para o
+    /// re-carve sobre a grelha já carvada ser idempotente (re-amostrar o
+    /// aro pós-carve escavava o lago uma segunda vez).
+    pub water_level: Option<f32>,
     /// Water body color (sRGB 0..1).
     pub color: [f32; 3],
     /// Water surface opacity (0..1).
@@ -398,6 +403,7 @@ impl Default for LakeSpec {
             radius: 6.0,
             depth: 1.5,
             water_offset: 0.5,
+            water_level: None,
             color: [0.184, 0.478, 0.604], // #2f7a9a
             // `opacity` deixou de ser um alpha constante: o shader lê-o
             // como a ESCALA DE EXTINÇÃO da coluna de água (uv.x), pelo que
@@ -425,6 +431,11 @@ pub struct RiverSpec {
     pub depth: f32,
     /// Water surface drop below the smoothed axis (meters).
     pub water_offset: f32,
+    /// Superfícies EXPLÍCITAS por estação (`water-levels="y y y …"`, uma por
+    /// estação re-amostrada) — `None` = prefix-min do eixo amostrado. O
+    /// `viber bake` escreve os valores resolvidos: re-amostrar o LEITO já
+    /// carvado re-escavava o canal uma profundidade inteira por passada.
+    pub water_levels: Option<Vec<f32>>,
     /// Bank band width outside the water (meters).
     pub bank_width: f32,
     /// Bank raise height (meters).
@@ -474,6 +485,7 @@ impl Default for RiverSpec {
             width: 6.0,
             depth: 1.5,
             water_offset: 0.3,
+            water_levels: None,
             bank_width: 2.0,
             bank_height: 0.9,
             color: [0.165, 0.4, 0.522], // #2a6685
@@ -864,8 +876,12 @@ impl Default for LakeShape {
     }
 }
 
-/// Lake mirror height: the 64-ray rim minimum minus `water_offset`.
+/// Lake mirror height: the 64-ray rim minimum minus `water_offset`. Um
+/// `water-level` autoral ganha sempre — é o contrato idempotente do bake.
 pub fn lake_water_height(grid: &BrushGrid, spec: &LakeSpec) -> f32 {
+    if let Some(level) = spec.water_level {
+        return level;
+    }
     let shape = LakeShape::from_authoring(spec.at, &spec.shape);
     let mut rim = f32::INFINITY;
     for i in 0..RIM_RAYS {
@@ -1147,14 +1163,42 @@ pub fn carve_river_with_falls(
     if stations.len() < 2 {
         return None;
     }
+    // Eixo amostrado (pré-água): alimenta o prefix-min da superfície e, a
+    // jusante, o grading dos feathers e o teto dos banks.
     let mut axis: Vec<f32> = stations.iter().map(|p| grid.sample(p.x, p.y)).collect();
     box_smooth(&mut axis, 2);
-    let mut surface = Vec::with_capacity(axis.len());
-    let mut running = f32::INFINITY;
-    for &h in &axis {
-        running = running.min(h - spec.water_offset);
-        surface.push(running);
-    }
+    // Superfícies autorais (`water-levels`, o contrato idempotente do bake):
+    // a grid já está carvada — re-amostrar o leito escavava o canal outra
+    // profundidade inteira por passada. Os valores vêm um por estação
+    // re-amostrada (contagem estável: path e spacing são os mesmos); o
+    // pós-processo (confluência, falls, pools) aplica-se igual — sobre os
+    // níveis do bake é no-op/idempotente.
+    let mut surface: Vec<f32> = match &spec.water_levels {
+        Some(levels) if levels.len() == stations.len() => levels.clone(),
+        Some(levels) => {
+            bevy::log::warn!(
+                "river water-levels: {} valores para {} estações — a ignorar",
+                levels.len(),
+                stations.len()
+            );
+            let mut surface = Vec::with_capacity(axis.len());
+            let mut running = f32::INFINITY;
+            for &h in &axis {
+                running = running.min(h - spec.water_offset);
+                surface.push(running);
+            }
+            surface
+        }
+        None => {
+            let mut surface = Vec::with_capacity(axis.len());
+            let mut running = f32::INFINITY;
+            for &h in &axis {
+                running = running.min(h - spec.water_offset);
+                surface.push(running);
+            }
+            surface
+        }
+    };
 
     // Confluência rio→lago: dentro do contorno de água de um lago, a
     // superfície SOBE à cota do espelho — o prefix-min descia para dentro
@@ -2129,6 +2173,7 @@ mod tests {
             width: 6.0,
             depth: 2.0,
             water_offset: 0.4,
+            water_levels: None,
             bank_width: 2.5,
             bank_height: 0.8,
             color: [0.2, 0.4, 0.5],

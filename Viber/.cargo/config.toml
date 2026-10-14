@@ -1,0 +1,6 @@
+# DLSS (feature `dlss`, `src/dlss.rs`): a lib do modelo (`libnvidia-ngx-dlss.so.*`,
+# do SDK da NVIDIA — `DLSS_SDK`) é carregada por `dlopen` junto ao binário;
+# `$ORIGIN` põe target/release e ~/.local/bin no caminho de busca sem
+# LD_LIBRARY_PATH. Inofensivo para todos os outros builds (é só um rpath).
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,-rpath,$ORIGIN"]

@@ -40,6 +40,7 @@ pub mod features;
 pub mod heightmap;
 pub mod layer_material;
 pub mod mesh;
+pub mod paint;
 pub mod paths;
 pub mod plateau;
 pub mod plugin;

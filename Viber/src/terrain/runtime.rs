@@ -393,6 +393,16 @@ pub struct TerrainRuntime {
     /// bootstrap NUNCA é mutada; o overlay é a única diferença entre
     /// "mundo como autorado" e "mundo como ficou".
     pub deltas: std::sync::Arc<crate::terrain::delta::DeltaGrid>,
+    /// Camada de PINCEL de material (Fase 2): overrides por célula sobre os
+    /// pesos splat procedurais, persistida ao lado do `.ahgt`
+    /// (`` `<ahgt>`.paint ``) e repintada in-place nos materiais de chunk
+    /// ([`repaint_chunks`]).
+    /// `Arc`: dezenas de MB num mapa grande — o repaint e o sync partilham, não clonam.
+    pub paint: std::sync::Arc<crate::terrain::paint::PaintGrid>,
+    /// O ÚLTIMO tuning aplicado por `viber.debug.ground` — a repintura ao
+    /// vivo usa-o para não reverter os ajustes (default enquanto ninguém
+    /// mexer).
+    pub splat_tuning: super::splat::SplatTuning,
 }
 
 /// Shared read handle over the carved world, for readers outside the ECS
@@ -691,6 +701,7 @@ pub fn bootstrap(world: &mut World) {
     // render-distance=950 do simple-rpg): encolhe o raio de streaming sem
     // editar o XML. O analyze nunca corre o bootstrap — lê o valor autorado.
     spec.apply_env_render_distance();
+    let mut heightmap_file: Option<PathBuf> = None;
     let map = match &spec.heightmap {
         Some(path) => match load_heightmap(pending.base_dir.as_deref(), &asset_roots, path) {
             Ok(loaded) => {
@@ -721,6 +732,7 @@ pub fn bootstrap(world: &mut World) {
                         );
                     }
                 }
+                heightmap_file = Some(loaded.resolved_path.clone());
                 loaded.map
             }
             Err(error) => {
@@ -929,6 +941,23 @@ pub fn bootstrap(world: &mut World) {
     } else {
         Some(TerrainChunkConfig::from_terrain_spec(&spec))
     };
+    // A camada de pintura vive ao lado do `.ahgt`; mundos sem ficheiro
+    // (procedurais) pintam só em memória. O lado acompanha o heightmap
+    // carregado (a pintura endereça as mesmas células).
+    let paint = heightmap_file
+        .as_deref()
+        .and_then(
+            |ahgt| match crate::terrain::paint::PaintGrid::load(ahgt, spec.world_size) {
+                Ok(painted) => painted,
+                Err(error) => {
+                    warn!("terrain paint layer unreadable ({error:#}) — starting clean");
+                    None
+                }
+            },
+        )
+        .unwrap_or_else(|| crate::terrain::paint::PaintGrid::new(spec.world_size, grid.width()));
+    let paint = std::sync::Arc::new(paint);
+
     let layer_map = if spec.layers.is_empty() {
         None
     } else if asset_server.is_none() {
@@ -951,6 +980,7 @@ pub fn bootstrap(world: &mut World) {
             &spec,
             &grid,
             &result,
+            &paint,
             &cliff_mask,
             asset_server.as_ref().expect("checked above"),
             world,
@@ -1157,7 +1187,6 @@ pub fn bootstrap(world: &mut World) {
         world,
         &mut meshes,
         &mut water_materials,
-        &mut materials,
         &grid,
         &voxel,
         root,
@@ -1195,6 +1224,8 @@ pub fn bootstrap(world: &mut World) {
         pads: result.pads,
         voxel: Arc::new(voxel),
         deltas: Arc::new(crate::terrain::delta::DeltaGrid::default()),
+        paint,
+        splat_tuning: super::splat::SplatTuning::default(),
     });
 }
 
@@ -1289,6 +1320,7 @@ fn spawn_chunk_materials(
     spec: &TerrainSpec,
     grid: &BrushGrid,
     result: &FeatureResult,
+    paint: &crate::terrain::paint::PaintGrid,
     cliff: &crate::terrain::cliffs::CliffMask,
     server: &AssetServer,
     world: &mut World,
@@ -1462,6 +1494,7 @@ fn spawn_chunk_materials(
         edge,
         rows,
         Some(cliff),
+        Some(paint),
     );
     info!(
         "terrain chunk materials: {} chunks × 8 layers (2× {}² texel splats)",
@@ -1634,6 +1667,15 @@ pub fn rebake_chunk_splats(world: &mut World, tuning: super::splat::SplatTuning)
         biomes: spec.biomes.clone(),
         tuning,
     };
+    let paint = world
+        .get_resource::<TerrainRuntime>()
+        .map(|rt| rt.paint.clone())
+        .unwrap_or_else(|| {
+            std::sync::Arc::new(crate::terrain::paint::PaintGrid::new(
+                spec.world_size,
+                grid.width(),
+            ))
+        });
     let splats = super::splat::generate_chunk_splats(
         &grid,
         &water,
@@ -1642,46 +1684,133 @@ pub fn rebake_chunk_splats(world: &mut World, tuning: super::splat::SplatTuning)
         edge,
         rows,
         Some(cliff),
+        Some(&paint),
     );
+    // retém o tuning: a próxima repintura (pincel) não o reverte
+    if let Some(mut rt) = world.get_resource_mut::<TerrainRuntime>() {
+        rt.splat_tuning = tuning;
+    }
     let half = spec.world_size * 0.5;
     let mut rebaked = 0;
     for (index, chunk_splat) in splats.iter().enumerate() {
         let cx = index as u32 % rows;
         let cz = index as u32 / rows;
-        let Some(handle) = layer_map.get(cx, cz) else {
-            continue;
-        };
-        // Bloco próprio: o `Mut<TerrainChunkMaterial>` toma a Assets
-        // emprestada — os planos de splat trocam DEPOIS, no fim do escopo.
-        let mut assets = world.get_resource_mut::<Assets<TerrainChunkMaterial>>();
-        let (splat, splat2) = {
-            let Some(mut material) = assets.as_mut().and_then(|a| a.get_mut(handle)) else {
-                continue;
-            };
-            let origin = [-half + cx as f32 * edge, -half + cz as f32 * edge];
-            let day_tint = material.params.day_tint;
-            let sun_dir = material.params.sun_dir;
-            let mut params =
-                TerrainChunkParams::from_slots(chunk_splat.slots, origin, edge, &config);
-            params.day_tint = day_tint;
-            params.sun_dir = sun_dir;
-            material.params = params;
-            (material.splat.clone(), material.splat2.clone())
-        };
-        // Mesmos handles → trocar por AssetId substitui in-place e re-uploads.
-        if let Some(mut images) = world.get_resource_mut::<Assets<Image>>() {
-            let _ = images.insert(
-                splat.id(),
-                super::splat::chunk_splat_plane_image(chunk_splat, 0),
-            );
-            let _ = images.insert(
-                splat2.id(),
-                super::splat::chunk_splat_plane_image(chunk_splat, 1),
-            );
+        if swap_chunk_planes(world, &layer_map, &config, chunk_splat, cx, cz, edge, half) {
+            rebaked += 1;
         }
-        rebaked += 1;
     }
     rebaked
+}
+
+/// Troca os planos de splat e os slots de um chunk IN-PLACE (mesmos handles
+/// de material/imagem → re-upload sem recriar entidades). O caminho partilhado
+/// do re-bake (tuning) e da repintura (pincel).
+#[allow(clippy::too_many_arguments)]
+fn swap_chunk_planes(
+    world: &mut World,
+    layer_map: &ChunkLayerMap,
+    config: &TerrainChunkConfig,
+    chunk_splat: &super::splat::ChunkSplat,
+    cx: u32,
+    cz: u32,
+    edge: f32,
+    half: f32,
+) -> bool {
+    let Some(handle) = layer_map.get(cx, cz) else {
+        return false;
+    };
+    // Bloco próprio: o `Mut<TerrainChunkMaterial>` toma a Assets emprestada —
+    // os planos de splat trocam DEPOIS, no fim do escopo.
+    let mut assets = world.get_resource_mut::<Assets<TerrainChunkMaterial>>();
+    let (splat, splat2) = {
+        let Some(mut material) = assets.as_mut().and_then(|a| a.get_mut(handle)) else {
+            return false;
+        };
+        let origin = [-half + cx as f32 * edge, -half + cz as f32 * edge];
+        let day_tint = material.params.day_tint;
+        let sun_dir = material.params.sun_dir;
+        let mut params = TerrainChunkParams::from_slots(chunk_splat.slots, origin, edge, config);
+        params.day_tint = day_tint;
+        params.sun_dir = sun_dir;
+        material.params = params;
+        (material.splat.clone(), material.splat2.clone())
+    };
+    // Mesmos handles → trocar por AssetId substitui in-place e re-uploads.
+    if let Some(mut images) = world.get_resource_mut::<Assets<Image>>() {
+        let _ = images.insert(
+            splat.id(),
+            super::splat::chunk_splat_plane_image(chunk_splat, 0),
+        );
+        let _ = images.insert(
+            splat2.id(),
+            super::splat::chunk_splat_plane_image(chunk_splat, 1),
+        );
+    }
+    true
+}
+
+/// Repinta IN-PLACE os chunks que intersectam a janela mundo `[min, max]` com
+/// a camada de pintura ATUAL de [`TerrainRuntime::paint`] e o último tuning —
+/// o caminho ao vivo da op `terrain_paint` (editor e agentes). Devolve o nº
+/// de chunks repintados (0 = sem terreno/material/`layers`).
+pub fn repaint_chunks(world: &mut World, min: Vec2, max: Vec2) -> usize {
+    let Some((spec, grid, water, roads, cliff, layer_map, config, paint, tuning)) = world
+        .get_resource::<TerrainRuntime>()
+        .zip(world.get_resource::<TerrainChunkMaterials>())
+        .and_then(|(rt, chunks)| {
+            let map = chunks.layer.clone()?;
+            let config = chunks.config.clone()?;
+            let cliff = world
+                .get_resource::<crate::terrain::cliffs::CliffMask>()?
+                .clone();
+            Some((
+                rt.spec.clone(),
+                rt.grid.clone(),
+                rt.water.clone(),
+                rt.roads.clone(),
+                cliff,
+                map,
+                config,
+                rt.paint.clone(),
+                rt.splat_tuning,
+            ))
+        })
+    else {
+        return 0;
+    };
+    let (edge, rows) = chunk_grid(&spec);
+    let half = spec.world_size * 0.5;
+    let params = super::splat::SplatParams {
+        shore_width: spec.shore_width,
+        snow_height: spec.tint.snow_height,
+        seed: spec.seed,
+        texel: spec.splat_texel,
+        biomes: spec.biomes.clone(),
+        tuning,
+    };
+    let chunk_of = |v: f32| (((v + half) / edge).floor().clamp(0.0, (rows - 1) as f32)) as u32;
+    let (cx0, cz0) = (chunk_of(min.x), chunk_of(min.y));
+    let (cx1, cz1) = (chunk_of(max.x), chunk_of(max.y));
+    let mut repainted = 0;
+    for cz in cz0..=cz1 {
+        for cx in cx0..=cx1 {
+            let origin = Vec2::new(-half + cx as f32 * edge, -half + cz as f32 * edge);
+            let chunk_splat = super::splat::bake_chunk(
+                &grid,
+                &water,
+                &roads,
+                &params,
+                edge,
+                Some(&cliff),
+                Some(&paint),
+                origin,
+            );
+            if swap_chunk_planes(world, &layer_map, &config, &chunk_splat, cx, cz, edge, half) {
+                repainted += 1;
+            }
+        }
+    }
+    repainted
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1689,7 +1818,6 @@ fn spawn_water(
     world: &mut World,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<WaterMaterial>,
-    standard_materials: &mut Assets<StandardMaterial>,
     grid: &BrushGrid,
     voxel: &VoxelField,
     parent: Entity,
@@ -1796,10 +1924,8 @@ fn spawn_water(
             if voxel.density(grid, Vec3::new(p.x, y + 0.1, p.y)) < 0.0 {
                 continue;
             }
-            crate::particles::spawn_looping(
+            crate::particles::spawn_ambient_marker(
                 world,
-                meshes,
-                standard_materials,
                 &foam_spec,
                 Vec3::new(p.x, y + 0.03, p.y),
             );
@@ -1833,10 +1959,8 @@ fn spawn_water(
                     ..mist_spec.clone()
                 };
                 if voxel.density(grid, Vec3::new(st.x, c.bot_y + 0.2, st.y)) >= 0.0 {
-                    crate::particles::spawn_looping(
+                    crate::particles::spawn_ambient_marker(
                         world,
-                        meshes,
-                        standard_materials,
                         &big,
                         Vec3::new(st.x, c.bot_y + 0.05, st.y),
                     );
@@ -1852,10 +1976,8 @@ fn spawn_water(
                         ..foam_spec.clone()
                     };
                     if voxel.density(grid, Vec3::new(lip.x, c.top_y + 0.2, lip.y)) >= 0.0 {
-                        crate::particles::spawn_looping(
+                        crate::particles::spawn_ambient_marker(
                             world,
-                            meshes,
-                            standard_materials,
                             &spray,
                             Vec3::new(lip.x, c.top_y, lip.y),
                         );
@@ -1867,10 +1989,8 @@ fn spawn_water(
                     shape_radius: Some(body.half_width_at(c.base) * 1.3),
                     ..foam_spec.clone()
                 };
-                crate::particles::spawn_looping(
+                crate::particles::spawn_ambient_marker(
                     world,
-                    meshes,
-                    standard_materials,
                     &ring,
                     Vec3::new(st.x, c.bot_y + 0.04, st.y),
                 );
@@ -1884,10 +2004,8 @@ fn spawn_water(
                 if voxel.density(grid, Vec3::new(p.x, y + 0.2, p.y)) < 0.0 {
                     continue;
                 }
-                crate::particles::spawn_looping(
+                crate::particles::spawn_ambient_marker(
                     world,
-                    meshes,
-                    standard_materials,
                     &mist_spec,
                     Vec3::new(p.x, y + 0.05, p.y),
                 );
@@ -2064,6 +2182,8 @@ pub struct LoadedHeightmap {
     pub max_height: Option<f32>,
     /// Campo de biomas declarado pelo `.ahgt` (vazio para PNG / sem bloco).
     pub biomes: crate::terrain::splat::BiomeField,
+    /// O caminho FS que serviu o ficheiro (para sidecars, ex.: a pintura).
+    pub resolved_path: PathBuf,
 }
 
 /// Teto de dimensão para heightmaps PNG — 16 k² por eixo cobre qualquer
@@ -2102,6 +2222,7 @@ fn load_heightmap(
             world_size: meta.world_size,
             max_height: meta.max_height,
             biomes: meta.biomes,
+            resolved_path: resolved.clone(),
         });
     }
     let img = image::load_from_memory(&bytes)
@@ -2115,6 +2236,7 @@ fn load_heightmap(
     }
     let data = img.to_luma16().into_raw();
     Ok(LoadedHeightmap {
+        resolved_path: resolved.clone(),
         map: HeightMapU16 { width, depth, data },
         world_size: None,
         max_height: None,
@@ -2147,6 +2269,8 @@ mod tests {
             pads: Vec::new(),
             voxel: std::sync::Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         });
         app.init_resource::<TerrainEditQueue>();
 
@@ -2201,6 +2325,8 @@ mod tests {
             pads: Vec::new(),
             voxel: std::sync::Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: std::sync::Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         });
         app.init_resource::<TerrainEditQueue>();
         app.world_mut()
@@ -2264,6 +2390,8 @@ mod tests {
             pads: Vec::new(),
             voxel: Arc::new(VoxelField::default()),
             deltas: Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         };
         for i in 0..8 {
             let x = -14.0 + 4.0 * i as f32;
@@ -2304,6 +2432,8 @@ mod tests {
                 falloff: 8.0,
                 corner_radius: 4.0,
                 height: None,
+
+                pre_carved: false,
             }],
             lakes: vec![crate::terrain::LakeSpec {
                 at: Vec2::new(-30.0, 30.0),

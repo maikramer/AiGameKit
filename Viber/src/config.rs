@@ -45,6 +45,12 @@ pub struct GameConfig {
     /// `VIBER_GRAPHICS` sobrepõe-se e cada knob individual ganha a ambos.
     #[serde(default)]
     pub graphics: Option<String>,
+    /// DLSS (upscaling NGX): `"off | auto (default) | dlaa | quality |
+    /// balanced | performance | ultra"`. Só tem efeito no binário construído
+    /// com `--features dlss` (ver [`crate::dlss`]); `VIBER_DLSS` sobrepõe-se.
+    /// Sem suporte na máquina a engine cai para o TAA com aviso.
+    #[serde(default)]
+    pub dlss: Option<String>,
     pub assets: AssetsConfig,
     pub game: GameDirs,
     pub save: SaveConfig,
@@ -254,7 +260,9 @@ pub fn load(world_dir: &Path) -> Result<GameConfig> {
 /// Aviso (não erro) em chaves desconhecidas — o config cresce, e um jogo com
 /// um campo futuro não deve rebentar numa engine antiga (igual aos attrs XML).
 fn warn_unknown_keys(path: &Path, value: &serde_yaml::Value) {
-    const TOP: &[&str] = &["title", "gameplay", "graphics", "assets", "game", "save"];
+    const TOP: &[&str] = &[
+        "title", "gameplay", "graphics", "dlss", "assets", "game", "save",
+    ];
     const ASSETS: &[&str] = &["roots", "bgm_dir", "sfx_dir", "terrain_textures_dir"];
     const GAME: &[&str] = &["scripts_dir", "quests_dir"];
     const SAVE: &[&str] = &["dir"];
@@ -318,6 +326,7 @@ pub(crate) fn fixture() -> GameConfig {
         title: None,
         gameplay: None, // default: preset RPG (gameplay_rpg() == true)
         graphics: None, // default: preset `equilibrado` (crate::graphics)
+        dlss: None,     // default: auto (só com a feature `dlss` compilada)
         assets: AssetsConfig {
             roots: Vec::new(),
             bgm_dir: PathBuf::from("assets/audio/bgm"),

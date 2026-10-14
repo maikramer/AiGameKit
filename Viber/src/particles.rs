@@ -912,6 +912,14 @@ fn idle_gate_enabled() -> bool {
     std::env::var("VIBER_PARTICLE_IDLE_GATE").as_deref() != Ok("0")
 }
 
+// NOTA (2026-10-10, medido): esconder emissores culled com `Visibility::Hidden`
+// REGREDIU o frame (22,5 → 34,7 ms; `render.prepare_views` 9,4 → 21,7 — o
+// mesmo binário, `VIBER_EMITTER_HIDE` como braço de controlo). O mecanismo não
+// é óbvio no bevy 0.20 e a direção certa para "desativação por distância" é
+// NÃO TER as entidades (spawn/despawn por proximidade — a espuma é a cara
+// disto: 402 emissores no simple-rpg, a maioria a centenas de metros) —
+// ver docs/PERFORMANCE.md, "fronteira seguinte".
+
 /// Advance every emitter and rewrite its billboard mesh.
 pub fn particle_emitter_update(
     time: Res<Time>,
@@ -1125,39 +1133,12 @@ pub fn spawn_burst(commands: &mut Commands, spec: &ParticleSpec, position: Vec3,
     });
 }
 
-/// Spawna um emissor CONTÍNUO `preset` em `position` — espuma da linha de
-/// água, braseiros ambientais: emite para sempre ao contrário do burst.
-pub fn spawn_looping(
-    world: &mut World,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    spec: &ParticleSpec,
-    position: Vec3,
-) {
-    let resolved = resolve(spec);
-    let capacity = ((resolved.emission_rate * resolved.life.1).ceil() as usize + 16).min(1024);
-    let sim = EmitterSim::seeded(spec, position);
-    let mesh = meshes.add(particle_mesh(capacity));
-    let material = materials.add(emitter_material(&sim.resolved));
-    world.spawn((
-        Transform::from_translation(position),
-        Visibility::Inherited,
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
-        NotShadowCaster,
-        ParticleEmitter {
-            sim,
-            capacity,
-            idle: false,
-            culled: false,
-        },
-        Name::new("fx:ambient"),
-    ));
-}
-
-/// Variante de [`spawn_looping`] para SISTEMAS: só `&mut World` (o
-/// `Commands::queue` não consegue emprestar os `Assets` em separado).
-/// Devolve a entidade para o chamador anexar os seus próprios markers.
+/// Spawna um emissor CONTÍNUO `preset` em `position`, SEMPRE VIVO — só para
+/// FX que acompanha o jogador (a chuva): emissores de mundo (espuma da água,
+/// `<ParticleSystem>` autorais) devem usar [`spawn_ambient_marker`] e o
+/// lifecycle por proximidade de [`ambient_fx_manager`]. Para SISTEMAS: só
+/// `&mut World` (o `Commands::queue` não consegue emprestar os `Assets` em
+/// separado). Devolve a entidade para o chamador anexar os seus markers.
 pub fn spawn_looping_in_world(world: &mut World, spec: &ParticleSpec, position: Vec3) -> Entity {
     let resolved = resolve(spec);
     let capacity = ((resolved.emission_rate * resolved.life.1).ceil() as usize + 16).min(1024);
@@ -1186,6 +1167,256 @@ pub fn spawn_looping_in_world(world: &mut World, spec: &ParticleSpec, position: 
             Name::new("fx:ambient"),
         ))
         .id()
+}
+
+// ── lifecycle de FX ambiente por proximidade ─────────────────────────────
+//
+// "Desativação por distância" por CICLO DE VIDA, não por Visibility: o frame
+// do simple-rpg está preso no CPU do render (prepare/encode ~15 ms sobre o
+// conjunto visível) e os 402 emissores — espuma/névoa/spray da água +
+// `<ParticleSystem>` autorais + clones de `<Use>` — pagavam extract/queue/
+// encode mesmo a centenas de metros (sub-pixel). Esconder com
+// `Visibility::Hidden` REGREDIU `prepare_views` 9,4→21,7 ms (medido
+// 2026-10-10); a direção certa é os componentes de render/emissor NÃO
+// EXISTIREM longe. O marker é leve e permanente (nome/hierarquia ficam para
+// scripts, `world_hash` e QA); o bundle pesado é montado/desmontado pelo
+// manager com meshes recicladas do `BurstPool`.
+
+/// Marker de um ponto de FX ambiente. A entidade nasce SEM componentes de
+/// render; [`ambient_fx_manager`] monta/desmonta o bundle
+/// (`Mesh3d`/material/`Visibility`/`ParticleEmitter`) pela distância da
+/// câmara, com histerese.
+#[derive(Component)]
+pub struct AmbientFx {
+    pub spec: ParticleSpec,
+}
+
+/// Raio de montagem (m) — alinhado com [`EMITTER_CULL_DISTANCE`]: o emissor
+/// nasce pouco antes de a simulação começar a valer. `VIBER_FX_SPAWN_RADIUS`
+/// sobrepõe (QA, GPUs fracas).
+pub const FX_SPAWN_RADIUS: f32 = 110.0;
+/// Banda de histerese (m): desmonta só além de spawn + isto (a fronteira
+/// não flica frame a frame).
+pub const FX_DESPAWN_BAND: f32 = 20.0;
+/// Cadência do scan (s) — 402 distâncias é barato, mas não é trabalho
+/// por-frame.
+pub const FX_SCAN_INTERVAL: f32 = 0.5;
+/// Salto grande da câmara (teleporte) força rescan imediato acima disto.
+pub const FX_RESCAN_JUMP: f32 = 30.0;
+/// Máximo de montagens por frame — chegar a uma vila com dezenas de
+/// braseiros não pode estrangular um frame só (o padrão
+/// `MAX_LOD_SWAPS_PER_FRAME` do render_lod).
+pub const FX_SPAWN_BUDGET: usize = 8;
+
+/// `VIBER_FX_LIFECYCLE=1` LIGA o lifecycle (OPT-IN): os bundles só existem
+/// dentro do raio. Sem a env, o comportamento é o antigo — monta tudo no
+/// arranque, nunca desmonta. O mecanismo é funcional (simple-rpg: 399
+/// markers → ~90 vivos; testes; QA visual ok) mas o GANHO de fps não ficou
+/// limpo nas medições de 2026-10-10 — o `prepare_views` da vila é dominado
+/// por terreno/props e por confounds (cauda de streaming de arranque +
+/// lanternas do crepúsculo acesas minuto a minuto, cada uma com 6 vistas de
+/// cube shadow). No teste LIMPO disponível (pântano, esconder 58 espumas ao
+/// vivo) o custo dos emissores no prepare ≈ 0,1 ms — prometer −1/−2 ms seria
+/// desonesto. Liga-se quando houver A/B com relógio congelado e uptime
+/// igual; o braço antigo é o controlo do A/B.
+fn fx_lifecycle_enabled() -> bool {
+    std::env::var("VIBER_FX_LIFECYCLE").as_deref() == Ok("1")
+}
+
+fn fx_spawn_radius() -> f32 {
+    std::env::var("VIBER_FX_SPAWN_RADIUS")
+        .ok()
+        .and_then(|raw| raw.parse::<f32>().ok())
+        .filter(|radius| radius.is_finite() && *radius > 0.0)
+        .unwrap_or(FX_SPAWN_RADIUS)
+}
+
+/// A decisão do lifecycle, pura (histerese de banda): só monta DENTRO do
+/// raio, só desmonta ALÉM de raio + banda — a fronteira não flica.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FxAction {
+    Mount,
+    Dismount,
+    Keep,
+}
+
+pub fn fx_action(distance: f32, radius: f32, mounted: bool) -> FxAction {
+    match (mounted, distance) {
+        (false, d) if d <= radius => FxAction::Mount,
+        (true, d) if d > radius + FX_DESPAWN_BAND => FxAction::Dismount,
+        _ => FxAction::Keep,
+    }
+}
+
+/// Spawna o MARKER de FX ambiente (água: espuma/névoa/spray). O bundle de
+/// render só existe perto da câmara — ver [`ambient_fx_manager`].
+pub fn spawn_ambient_marker(world: &mut World, spec: &ParticleSpec, position: Vec3) -> Entity {
+    world
+        .spawn((
+            Transform::from_translation(position),
+            AmbientFx { spec: spec.clone() },
+            Name::new("fx:ambient"),
+        ))
+        .id()
+}
+
+/// Monta o bundle de render de um marker: mesh reciclada do pool (zeroed na
+/// desmontagem — sem frame fantasma), material partilhado (só existe um Add
+/// e um Blend no mundo inteiro) e a sim re-seeded da posição (determinístico:
+/// mesmo ponto, mesma sequência, montou agora ou no arranque).
+#[allow(clippy::too_many_arguments)]
+fn mount_ambient_fx(
+    commands: &mut Commands,
+    entity: Entity,
+    spec: &ParticleSpec,
+    world_position: Vec3,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    pool: &mut BurstPool,
+) {
+    let resolved = resolve(spec);
+    let capacity = emitter_capacity(&resolved);
+    let mesh = match pool.take_mesh(capacity) {
+        Some(handle) => handle,
+        None => meshes.add(particle_mesh(capacity)),
+    };
+    let material = match pool.material(resolved.additive) {
+        Some(handle) => handle,
+        None => {
+            let handle = materials.add(emitter_material(&resolved));
+            pool.park_material(resolved.additive, handle.clone());
+            handle
+        }
+    };
+    commands.entity(entity).insert((
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        Visibility::Inherited,
+        NotShadowCaster,
+        ParticleEmitter {
+            sim: EmitterSim::seeded(spec, world_position),
+            capacity,
+            culled: false,
+            idle: false,
+        },
+    ));
+}
+
+/// Desmonta: zera o POSITION (a mesh volta ao pool e não pode estrear com
+/// as partículas de quem a usou — um frame de fantasma), devolve-a ao
+/// escadote e remove o bundle inteiro. A entidade marker fica.
+fn dismount_ambient_fx(
+    commands: &mut Commands,
+    entity: Entity,
+    emitter: &ParticleEmitter,
+    mesh: &Mesh3d,
+    meshes: &mut Assets<Mesh>,
+    pool: &mut BurstPool,
+) {
+    if let Some(mut mesh_asset) = meshes.get_mut(&mesh.0)
+        && let Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)) =
+            mesh_asset.attribute_mut(bevy::mesh::Mesh::ATTRIBUTE_POSITION)
+    {
+        positions.fill([0.0; 3]);
+    }
+    pool.park_mesh(emitter.capacity, mesh.0.clone());
+    commands.entity(entity).remove::<(
+        Mesh3d,
+        MeshMaterial3d<StandardMaterial>,
+        Visibility,
+        NotShadowCaster,
+        ParticleEmitter,
+    )>();
+}
+
+/// O manager de proximidade: scan a cada [`FX_SCAN_INTERVAL`] (ou imediato
+/// em saltos grandes da câmara — teleporte), monta até [`FX_SPAWN_BUDGET`]
+/// markers por frame dentro do raio e desmonta os que passaram da banda de
+/// histerese. Sem o lifecycle (`VIBER_FX_LIFECYCLE=0`) monta tudo e não
+/// desmonta nada — o mundo de antes.
+/// O que o gestor de FX ambientes precisa por marcador (o alias existe para o
+/// clippy ler a assinatura do sistema).
+type AmbientFxItem<'w, 's> = (
+    Entity,
+    &'w GlobalTransform,
+    &'w AmbientFx,
+    Option<(&'w ParticleEmitter, &'w Mesh3d)>,
+);
+
+#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
+pub fn ambient_fx_manager(
+    time: Res<Time>,
+    cameras: Query<&GlobalTransform, With<Camera>>,
+    mut markers: Query<AmbientFxItem<'_, '_>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut pool: ResMut<BurstPool>,
+    mut commands: Commands,
+    mut scan: Local<f32>,
+    mut last_camera: Local<Option<Vec3>>,
+) {
+    let Ok(camera) = cameras.single() else {
+        return;
+    };
+    let camera_pos = camera.translation();
+    *scan -= time.delta_secs();
+    let jumped = last_camera.is_some_and(|last| last.distance(camera_pos) > FX_RESCAN_JUMP);
+    if *scan > 0.0 && !jumped {
+        return;
+    }
+    *scan = FX_SCAN_INTERVAL;
+    *last_camera = Some(camera_pos);
+    let radius = fx_spawn_radius();
+    let lifecycle = fx_lifecycle_enabled();
+    // Sem o lifecycle (default): monta tudo ao longo dos frames, nunca
+    // desmonta — o comportamento/controlo de antes.
+    let mut budget = if lifecycle {
+        FX_SPAWN_BUDGET
+    } else {
+        usize::MAX
+    };
+    for (entity, transform, fx, active) in &mut markers {
+        let distance = transform.translation().distance(camera_pos);
+        let action = if lifecycle {
+            fx_action(distance, radius, active.is_some())
+        } else if active.is_none() {
+            // Default (sem `VIBER_FX_LIFECYCLE=1`): monta tudo, nunca
+            // desmonta — o mundo de antes, ao longo dos frames.
+            FxAction::Mount
+        } else {
+            FxAction::Keep
+        };
+        match action {
+            FxAction::Mount if budget > 0 => {
+                budget -= 1;
+                mount_ambient_fx(
+                    &mut commands,
+                    entity,
+                    &fx.spec,
+                    transform.translation(),
+                    &mut meshes,
+                    &mut materials,
+                    &mut pool,
+                );
+            }
+            FxAction::Dismount => {
+                if let Some((emitter, mesh)) = active {
+                    dismount_ambient_fx(
+                        &mut commands,
+                        entity,
+                        emitter,
+                        mesh,
+                        &mut meshes,
+                        &mut pool,
+                    );
+                }
+            }
+            // Mount com budget esgotado: fica para o próximo scan — chegar
+            // a uma vila não pode estrangular um frame (ver FX_SPAWN_BUDGET).
+            FxAction::Mount | FxAction::Keep => {}
+        }
+    }
 }
 
 /// Despawna o emissor quando o burst termina (as partículas morrem com ele) e
@@ -1353,6 +1584,98 @@ mod tests {
         assert_eq!(ripple.emission_rate, 0.0, "burst, não loop");
         assert!(ripple.life.1 <= 0.35, "vida curta: {:?}", ripple.life);
         assert!(ripple.additive == rain.additive, "também Blend");
+    }
+
+    /// Histerese de banda do lifecycle: monta dentro do raio, desmonta só
+    /// além de raio + banda — a fronteira não flica (função pura).
+    #[test]
+    fn test_fx_action_hysteresis_band() {
+        use super::FxAction::{self, *};
+        let radius = super::FX_SPAWN_RADIUS;
+        let band = super::FX_DESPAWN_BAND;
+        // Desmontado: monta dentro do raio, mantém fora.
+        assert_eq!(super::fx_action(0.0, radius, false), Mount);
+        assert_eq!(super::fx_action(radius - 0.1, radius, false), Mount);
+        assert_eq!(super::fx_action(radius + 0.1, radius, false), Keep);
+        // Montado: só desmonta além do raio + banda (a banda é o tampão).
+        assert_eq!(super::fx_action(radius + 0.1, radius, true), Keep);
+        assert_eq!(
+            super::fx_action(radius + band - 0.1, radius, true),
+            Keep,
+            "dentro da banda mantém — a fronteira não flica"
+        );
+        assert_eq!(
+            super::fx_action(radius + band + 0.1, radius, true),
+            Dismount
+        );
+        // Raio custom (VIBER_FX_SPAWN_RADIUS/QA) escala tudo.
+        assert_eq!(super::fx_action(50.1, 50.0, false), Keep);
+        assert_eq!(super::fx_action(49.9, 50.0, false), Mount);
+        let _ = FxAction::Keep; // silencia unused-import em builds não-test
+    }
+
+    /// O manager monta o bundle SÓ nos markers dentro do raio — o primeiro
+    /// scan dispara no arranque (timer a zero) e o longe fica sem NENHUM
+    /// componente de render (é o contrato do lifecycle).
+    #[test]
+    fn test_ambient_fx_manager_mounts_near_markers_only() {
+        // O lifecycle é OPT-IN (`VIBER_FX_LIFECYCLE=1`); sem a env o manager
+        // monta tudo (o comportamento antigo). Este teste liga-a.
+        // (set_var é unsafe na edition 2024; seguro aqui porque nenhum outro
+        // teste lê esta env.)
+        unsafe { std::env::set_var("VIBER_FX_LIFECYCLE", "1") };
+        let mut app = bevy::app::App::new();
+        app.add_plugins(bevy::MinimalPlugins);
+        // O manager lê GlobalTransform: sem o TransformPlugin nada propaga e
+        // todos os markers ficam "na origem" (distância 0 = tudo monta).
+        app.add_plugins(bevy::transform::TransformPlugin);
+        app.init_resource::<Assets<Mesh>>();
+        app.init_resource::<Assets<StandardMaterial>>();
+        app.init_resource::<BurstPool>();
+        app.add_systems(bevy::app::Update, super::ambient_fx_manager);
+        let spec = crate::recipes::ParticleSpec {
+            preset: "foam".into(),
+            emission_rate: Some(6.0),
+            shape_radius: Some(0.8),
+            looping: true,
+            ..crate::recipes::ParticleSpec {
+                preset: String::new(),
+                emission_rate: None,
+                life: None,
+                speed: None,
+                size: None,
+                color: None,
+                shape_radius: None,
+                looping: false,
+                world_space: false,
+            }
+        };
+        app.world_mut()
+            .spawn((Camera::default(), Transform::default()));
+        let near = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(20.0, 0.0, 0.0),
+                super::AmbientFx { spec: spec.clone() },
+            ))
+            .id();
+        let far = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(400.0, 0.0, 0.0),
+                super::AmbientFx { spec },
+            ))
+            .id();
+        app.update();
+        let world = app.world_mut();
+        assert!(
+            world.get::<ParticleEmitter>(near).is_some(),
+            "marker a 20 m monta o emissor no primeiro scan"
+        );
+        assert!(
+            world.get::<ParticleEmitter>(far).is_none() && world.get::<Mesh3d>(far).is_none(),
+            "marker a 400 m fica SEM componentes de render"
+        );
     }
 
     /// `size_y` separa a escala X e Y dos cantos do billboard (função pura).

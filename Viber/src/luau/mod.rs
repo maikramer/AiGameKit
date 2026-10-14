@@ -136,7 +136,10 @@ impl bevy::app::Plugin for LuauScriptPlugin {
                 timed(Group::Scripts, aggro_alert_system),
                 luau_on_remove,
             )
-                .chain(),
+                .chain()
+                // Modo Edit (ViberEditor): a cena está congelada — nenhum
+                // `on_update` corre enquanto se edita.
+                .run_if(crate::app::scripts_enabled),
         );
     }
 }

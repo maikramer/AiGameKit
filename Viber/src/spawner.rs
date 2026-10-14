@@ -582,7 +582,9 @@ pub fn compute_placements(
 /// do spawn — um tilt de nascimento ficava colado ao corpo. Só a ROTAÇÃO
 /// perde o alinhamento: o Y continua a vir do `align-to-terrain` (desligá-lo
 /// punha as criaturas na base da região, enterradas no relevo até andarem).
-fn stand_upright(instances: &mut [PlacedInstance]) {
+/// `pub(crate)`: o `viber bake` replica o passe de colocações e aplica a
+/// mesma regra às instâncias dinâmicas que emite.
+pub(crate) fn stand_upright(instances: &mut [PlacedInstance]) {
     for instance in instances {
         instance.rotation = Quat::from_rotation_y(instance.yaw_deg.to_radians());
     }
@@ -599,6 +601,9 @@ pub struct SpawnGroupState {
     /// True para `<DynamicSpawner>` — as instâncias nascem com
     /// [`crate::ai::EnemyCreature`] e o driver de IA conduz-as.
     pub dynamic: bool,
+    /// Entidade-grupo de editor sob a qual as instâncias nascem
+    /// (`crate::recipes::EditorGroups`) — hierarquia navegável no ViberEditor.
+    pub editor_group: Entity,
     /// Script do template (criaturas): cada instância spawna com
     /// [`LuaScriptRef`] e o comportamento vive no Luau.
     pub template_script: Option<String>,
@@ -974,7 +979,11 @@ pub fn instantiate_spawn_groups(
                 })
             })
             .collect();
-        let (mut instances, stats) = compute_placements(&group.spec, occupancy, &mut sample);
+        // Mundo estático: instâncias pré-geradas, já com os gates aplicados no bake.
+        let (mut instances, stats) = match &group.spec.preplaced {
+            Some(preplaced) => ((**preplaced).clone(), PlacementStats::default()),
+            None => compute_placements(&group.spec, occupancy, &mut sample),
+        };
         if group.dynamic {
             stand_upright(&mut instances);
         }
@@ -1035,7 +1044,12 @@ fn spawn_instance(
     let Some(scene) = scenes[instance.template_index.min(scenes.len() - 1)].clone() else {
         return;
     };
-    let mut entity = commands.spawn((transform, Visibility::Inherited, WorldAssetRoot(scene)));
+    let mut entity = commands.spawn((
+        transform,
+        Visibility::Inherited,
+        WorldAssetRoot(scene),
+        ChildOf(group.editor_group),
+    ));
     // LOD de render: o mesmo raio para todas as instâncias do grupo (ver
     // `render_lod`).
     entity.insert(cull);
@@ -1174,6 +1188,8 @@ mod tests {
             density_per_km2: 0.0,
             max_instances: 0,
             fixed_candidates: Vec::new(),
+            instances_file: None,
+            preplaced: None,
         }
     }
 
@@ -1339,6 +1355,7 @@ mod tests {
             max_instances: 800,
             cull_distance: crate::render_lod::DEFAULT_VEGETATION_CULL,
             cast_shadows: false,
+            instances: None,
         };
         // 380×264 m = 0.1 km² × 100k = ~10 028 → capped at 800
         assert_eq!(v.instance_count(), 800);

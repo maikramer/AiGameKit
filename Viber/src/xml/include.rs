@@ -2,9 +2,16 @@
 //!
 //! Semantics (inherited from the original engine, tightened where it was
 //! sloppy): depth limit of 8, cycle detection on canonical paths, fragments
-//! unwrapped (a `<world>`/`<scene>` root contributes its children, any other
+//! unwrapped (a `<world>`/`<scene>` root contributes their children, any other
 //! root element is used as-is), paths starting with `/` resolve against the
 //! root file's directory, other paths against the including file's directory.
+//!
+//! An `<Include>` may carry a transform (`translation`/`euler`/`scale`, the
+//! usual aliases): the fragment is then spliced wrapped in a `<Group>` that
+//! carries it, so moving the include moves everything the file declares —
+//! like any group. The wrapper keeps the include's own origin, which is what
+//! ties live edits of the include to the wrapper entity. Without transform
+//! attributes nothing is wrapped and behavior is unchanged.
 
 use std::path::{Path, PathBuf};
 
@@ -32,13 +39,25 @@ fn parent_dir(path: &Path) -> Result<PathBuf> {
         .ok_or_else(|| anyhow!("caminho inválido (sem directório pai): {}", path.display()))
 }
 
+/// Caminho (não canónico) de um `<Include src>`: `/…` relativo à pasta do
+/// ficheiro RAIZ, o resto relativo à pasta do ficheiro que inclui. Público
+/// para o ViberEditor abrir os includes como sub-cenas com a mesma regra.
+pub fn resolve_include_path(src: &str, dir: &Path, root_dir: &Path) -> PathBuf {
+    if src.starts_with('/') {
+        root_dir.join(src.trim_start_matches('/'))
+    } else {
+        dir.join(src)
+    }
+}
+
 /// Load a world file and expand every `<Include>`.
 pub fn load_world(path: &Path) -> Result<LoadedWorld> {
     let path = path
         .canonicalize()
         .with_context(|| format!("world file not found: {}", path.display()))?;
     let root_dir = parent_dir(&path)?;
-    let doc = super::parse_file(&path)?;
+    let mut doc = super::parse_file(&path)?;
+    super::stamp_origins(&mut doc.children, &std::sync::Arc::from(path.as_path()));
     if doc.root_tag != "world" && doc.root_tag != "scene" {
         bail!(
             "{}: root element must be <world> (got <{}>)",
@@ -52,6 +71,37 @@ pub fn load_world(path: &Path) -> Result<LoadedWorld> {
         root_attrs: doc.root_attrs,
         nodes,
     })
+}
+
+/// Pose attributes an `<Include>` may carry (kept in lockstep with
+/// `crate::scene::sync::POSE_KEYS` by a test).
+const INCLUDE_POSE_KEYS: &[&str] = &[
+    "translation",
+    "pos",
+    "euler",
+    "rotation",
+    "scale",
+    "transform",
+];
+
+/// The wrapper `<Group>` attributes of an `<Include>` — its pose plus `name`, for the
+/// runtime entity — or `None` when the include has no pose (no wrapper is synthesized).
+fn include_group_attrs(node: &XmlNode) -> Option<Vec<(String, String)>> {
+    let mut attrs: Vec<(String, String)> = node
+        .attrs
+        .iter()
+        .filter(|(key, _)| INCLUDE_POSE_KEYS.contains(&key.as_str()))
+        .cloned()
+        .collect();
+    if attrs.is_empty() {
+        return None;
+    }
+    if !attrs.iter().any(|(key, _)| key == "name")
+        && let Some(name) = node.attr("name")
+    {
+        attrs.push(("name".into(), name.to_owned()));
+    }
+    Some(attrs)
 }
 
 fn expand(
@@ -79,12 +129,7 @@ fn expand(
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .context("<Include> requires a src attribute")?;
-        let resolved = if src.starts_with('/') {
-            root_dir.join(src.trim_start_matches('/'))
-        } else {
-            dir.join(src)
-        };
-        let resolved = resolved
+        let resolved = resolve_include_path(src, dir, root_dir)
             .canonicalize()
             .with_context(|| format!("include not found: {src} (from {})", chain(stack)))?;
         if stack.contains(&resolved) {
@@ -101,7 +146,9 @@ fn expand(
             );
         }
         stack.push(resolved.clone());
-        let doc = super::parse_file(&resolved)?;
+        let mut doc = super::parse_file(&resolved)?;
+        let file: std::sync::Arc<Path> = std::sync::Arc::from(resolved.as_path());
+        super::stamp_origins(&mut doc.children, &file);
         let file_dir = parent_dir(&resolved)?;
         // Unwrap: a <world>/<scene> root contributes its children; any other
         // single-root fragment is used as-is.
@@ -113,10 +160,26 @@ fn expand(
                 attrs: doc.root_attrs,
                 text: doc.root_text,
                 children: doc.children,
+                origin: Some(std::sync::Arc::new(super::NodeOrigin {
+                    file: file.clone(),
+                    path: Vec::new(),
+                })),
             }]
         };
-        out.extend(expand(fragment, &file_dir, root_dir, stack)?);
+        let expanded = expand(fragment, &file_dir, root_dir, stack)?;
         stack.pop();
+        match include_group_attrs(&node) {
+            Some(attrs) => out.push(XmlNode {
+                tag: "Group".into(),
+                attrs,
+                text: String::new(),
+                children: expanded,
+                // The wrapper IS the include at runtime: live edits of the include and
+                // picking resolve to this entity through its origin.
+                origin: node.origin.clone(),
+            }),
+            None => out.extend(expanded),
+        }
     }
     Ok(out)
 }
@@ -255,6 +318,82 @@ mod tests {
         );
         let world = load_at(dir.path(), "sub/m.xml").unwrap();
         assert_eq!(world.nodes[0].attr("name"), Some("abs"));
+    }
+
+    #[test]
+    fn test_include_with_pose_wraps_fragment_in_group() {
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            &dir.path().join("child.xml"),
+            "<world><Entity name=\"a\" /><Entity name=\"b\" /></world>",
+        );
+        write(
+            &dir.path().join("m.xml"),
+            "<world><Include src=\"child.xml\" translation=\"10 0 0\" name=\"village\" /></world>",
+        );
+        let world = load_at(dir.path(), "m.xml").unwrap();
+        assert_eq!(world.nodes.len(), 1, "tudo dentro do wrapper");
+        let group = &world.nodes[0];
+        assert!(group.tag.eq_ignore_ascii_case("Group"));
+        assert_eq!(group.attr("translation"), Some("10 0 0"));
+        assert_eq!(group.attr("name"), Some("village"));
+        assert_eq!(group.children.len(), 2);
+        assert_eq!(group.children[0].attr("name"), Some("a"));
+        // O wrapper fica com a origin do próprio Include (ficheiro pai, índice 0) — é
+        // isso que liga a edição viva do include a esta entidade.
+        let origin = group.origin.as_deref().expect("origin");
+        assert!(origin.file.ends_with("m.xml"), "{:?}", origin.file);
+        assert_eq!(origin.path, vec![0]);
+    }
+
+    #[test]
+    fn test_include_without_pose_attrs_is_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            &dir.path().join("child.xml"),
+            "<world><Entity name=\"a\" /><Entity name=\"b\" /></world>",
+        );
+        write(
+            &dir.path().join("m.xml"),
+            "<world><Include src=\"child.xml\" name=\"village\" /></world>",
+        );
+        let world = load_at(dir.path(), "m.xml").unwrap();
+        assert_eq!(
+            world.nodes.len(),
+            2,
+            "sem wrapper: o nome sozinho não chega"
+        );
+        assert_eq!(world.nodes[0].attr("name"), Some("a"));
+    }
+
+    #[test]
+    fn test_nested_includes_with_pose_compose() {
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            &dir.path().join("leaf.xml"),
+            "<world><Entity name=\"deep\" /></world>",
+        );
+        write(
+            &dir.path().join("mid.xml"),
+            "<world><Include src=\"leaf.xml\" translation=\"0 5 0\" /></world>",
+        );
+        write(
+            &dir.path().join("m.xml"),
+            "<world><Include src=\"mid.xml\" translation=\"10 0 0\" /></world>",
+        );
+        let world = load_at(dir.path(), "m.xml").unwrap();
+        assert_eq!(world.nodes.len(), 1);
+        let outer = &world.nodes[0];
+        assert_eq!(outer.attr("translation"), Some("10 0 0"));
+        let inner = &outer.children[0];
+        assert!(inner.tag.eq_ignore_ascii_case("Group"));
+        assert_eq!(inner.attr("translation"), Some("0 5 0"));
+        assert_eq!(inner.children[0].attr("name"), Some("deep"));
+    }
+
+    #[test]
+    fn test_include_pose_keys_match_sync_pose_keys() {
+        assert_eq!(INCLUDE_POSE_KEYS, crate::scene::sync::POSE_KEYS);
     }
 
     #[test]

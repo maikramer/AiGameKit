@@ -11,6 +11,7 @@ do formato: `AGENTS.md` da raiz do Viber.
 | `mod.rs` | `XmlNode` (`tag`/`attrs`/`text`/`children`) + parse do documento. Nomes de tag/attr preservados tal como escritos; o matching case-insensitive acontece a jusante (recipes). `text` = conteúdo direto aparado (o que `<UiText>100/100</UiText>` mete entre tags) |
 | `include.rs` | expansão `<Include src>`: profundidade máx. **8**, ciclos fail-fast; caminhos com `/` resolvem contra o dir do ficheiro raiz, relativos contra o dir do ficheiro que inclui; fragmentos com raiz `<world>`/`<scene>` contribuem os filhos |
 | `values.rs` | parsers tolerantes: vetores `"x y z"` com broadcast de 1 valor (**2 valores = erro**), bools bare + `true/1/yes/on` / `false/0/no/off`, rejeição de `NaN`/`inf` |
+| `emit.rs` | serialização da árvore owned (`emit_document`) + API de edição mínima (`XmlNode::new`/`set_attr`/`push_child`/`duplicate`) — fundação do `world.static.xml` do `viber bake`. Comentários não existem no modelo (o parse descarta-os); CDATA entra como `text` |
 
 ## Regras
 

@@ -362,6 +362,7 @@ fn lua_table_to_node(
         attrs,
         text: String::new(),
         children,
+        origin: None,
     })
 }
 

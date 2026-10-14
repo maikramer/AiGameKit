@@ -21,7 +21,7 @@ use bevy::ui::widget::ImageNode;
 use bevy::ui::{BoxShadow, FocusPolicy, Val2};
 use bevy::window::PrimaryWindow;
 
-use super::style::{
+pub use super::style::{
     Decoration, GradientSpec, GradientStop, LetterSpacingSpec, StyleProps, StyleSheet, StyleState,
     fade,
 };
@@ -207,6 +207,12 @@ impl UiRegistry {
     }
 }
 
+/// Editor state PREVIEW: when present, overrides the interaction state in the
+/// cascade so `:hover`/`:active` styles can be previewed without a pointer.
+/// Only the editor's UI canvas sets it; the game never does.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct UiPreviewState(pub StyleState);
+
 /// Interaction state of an element, from its `Interaction` and `UiDisabled`.
 ///
 /// `pointer_none` flattens everything to `Normal`: a `pointer-events: none`
@@ -243,6 +249,7 @@ type StyleLookup<'w, 's> = Query<
         Has<UiPointerNone>,
         Option<&'static ChildOf>,
         Option<&'static super::widgets::UiCheck>,
+        Option<&'static UiPreviewState>,
     ),
 >;
 
@@ -336,8 +343,8 @@ fn ancestry(entity: Entity, lookup: &StyleLookup) -> Vec<Entity> {
     let mut chain = vec![entity];
     let mut current = entity;
     while chain.len() < MAX_ANCESTRY {
-        // (…, ChildOf, UiCheck) — o último campo é o check; o pai é o penúltimo.
-        let Ok((.., Some(parent), _)) = lookup.get(current) else {
+        // (…, ChildOf, UiCheck, UiPreviewState) — o pai é o antepenúltimo.
+        let Ok((.., Some(parent), _, _)) = lookup.get(current) else {
             break;
         };
         current = parent.parent();
@@ -443,7 +450,7 @@ pub fn apply_ui_styles(
             .map(
                 |(
                     element,
-                    (tag, id, classes, interaction, disabled, pointer_none, parent, check),
+                    (tag, id, classes, interaction, disabled, pointer_none, parent, check, preview),
                 )| {
                     // Posição entre irmãos: índice no Children do PAI, na
                     // ordem do DOM (a que `:nth-child` fala).
@@ -471,7 +478,9 @@ pub fn apply_ui_styles(
                         tag.0.clone(),
                         id.map(|i| i.0.clone()),
                         classes.map(|c| c.0.clone()).unwrap_or_default(),
-                        state_of(interaction, disabled, pointer_none),
+                        preview
+                            .map(|preview| preview.0)
+                            .unwrap_or_else(|| state_of(interaction, disabled, pointer_none)),
                         focused,
                         checked,
                         empty,

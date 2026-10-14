@@ -35,6 +35,8 @@ use crate::xml::{XmlNode, values};
 /// Anything else parses as a no-op skip; `analyze` reports the coverage.
 pub const KNOWN_TAGS: &[&str] = &[
     "entity",
+    // Definição de gerador (ferramenta `scatter`) — nunca corre em runtime.
+    "scatter",
     "group",
     "cuboid",
     // VibeGame spelling — inside `<Composition>` (and anywhere else) a
@@ -113,6 +115,9 @@ pub const KNOWN_TAGS: &[&str] = &[
 #[derive(Debug, Clone, Default)]
 pub struct ParsedWorld {
     pub clear_color: Option<[f32; 3]>,
+    /// `<world static="true">`: mundo pré-gerado (`viber bake`). O runtime não assenta nem
+    /// coloca nada (`SeatOnTerrain`/`place`) — as poses do XML são finais.
+    pub static_world: bool,
     pub entities: Vec<EntitySpec>,
     pub warnings: Vec<String>,
     /// Elements skipped because their tag is not implemented, by tag name.
@@ -421,6 +426,13 @@ pub enum EntityKind {
     /// to the engine asset root.
     GltfScene {
         url: String,
+        /// Ladder de LOD opcional (`lod1-url`/`lod2-url` +
+        /// `lod-threshold-near/mid`) — o mesmo contrato do template de
+        /// spawner, para entidades soltas (instâncias estáticas do bake).
+        lod1: Option<String>,
+        lod2: Option<String>,
+        lod_near: f32,
+        lod_mid: f32,
     },
     /// `<StaticSpawner>` — instancias `count` do template GLB sobre o terreno
     /// (posições determinísticas por `seed`; regras de água/declive/sobreposição).
@@ -580,6 +592,20 @@ pub enum EntityKind {
         /// Rótulo do toast de retorno; vazio → heurística de direção.
         label: String,
     },
+}
+
+impl EntityKind {
+    /// `<GltfScene>` sem ladder de LOD — a forma curta que testes/audit
+    /// constroem (o parse usa sempre os campos completos).
+    pub fn gltf_scene(url: impl Into<String>) -> Self {
+        Self::GltfScene {
+            url: url.into(),
+            lod1: None,
+            lod2: None,
+            lod_near: DEFAULT_LOD_NEAR,
+            lod_mid: DEFAULT_LOD_MID,
+        }
+    }
 }
 
 /// `<DayCycle>` clock config (ambient light driver).
@@ -830,6 +856,11 @@ pub struct StaticSpawnerSpec {
     /// gates normais (água/estrada/declive/ocupação); rejeitada = omitida.
     /// Vazio = o modo aleatório habitual (região/clusters).
     pub fixed_candidates: Vec<bevy::math::Vec2>,
+    /// `instances="bake/veg/N.vinst"` (relativo à pasta do mundo): instâncias PRÉ-GERADAS
+    /// (`crate::vinst`). Com elas o runtime não calcula colocações — mundo estático.
+    pub instances_file: Option<String>,
+    /// As instâncias carregadas de [`Self::instances_file`] (no arranque).
+    pub preplaced: Option<std::sync::Arc<Vec<crate::spawner::PlacedInstance>>>,
 }
 
 /// `<Vegetation>`: dense foliage spread by density per km². The original
@@ -868,6 +899,8 @@ pub struct VegetationSpec {
     pub cull_distance: f32,
     /// Erva a projetar sombra em 4 cascatas não se lê e custa o mundo.
     pub cast_shadows: bool,
+    /// `instances`: binário `.vinst` pré-gerado (o `viber bake`/ferramenta de scatter).
+    pub instances: Option<String>,
 }
 
 impl VegetationSpec {
@@ -924,6 +957,8 @@ impl VegetationSpec {
             density_per_km2: 0.0,
             max_instances: 0,
             fixed_candidates: Vec::new(),
+            instances_file: self.instances.clone(),
+            preplaced: None,
         }
     }
 }
@@ -953,17 +988,23 @@ pub struct EntitySpec {
     pub physics: PhysicsSpec,
     pub kind: EntityKind,
     pub children: Vec<EntitySpec>,
+    /// O nó XML que declarou esta entidade (ficheiro + caminho) — vira o componente
+    /// `scene::SceneSource` no spawn. Num `<Use>`, o próprio `<Use>`; os filhos de um
+    /// protótipo apontam para a definição dentro do `<Prototype>`.
+    pub source: Option<std::sync::Arc<crate::xml::NodeOrigin>>,
 }
 
 /// Parse the root of an expanded world.
 pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result<ParsedWorld> {
     let mut ctx = ParseCtx::default();
     let mut clear_color = None;
+    let mut static_world = false;
     for (key, value) in root_attrs {
         match key.as_str() {
             "clear-color" => {
                 clear_color = Some(values::parse_color(value, "<world clear-color>")?);
             }
+            "static" => static_world = values::parse_bool(value, "<world static>")?,
             other => ctx
                 .warnings
                 .push(format!("<world>: ignored attribute `{other}`")),
@@ -1004,8 +1045,12 @@ pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result
             summary.join(", ")
         ));
     }
+    if static_world {
+        static_world_findings(&entities, &mut warnings);
+    }
     Ok(ParsedWorld {
         clear_color,
+        static_world,
         entities,
         warnings,
         skipped_tags: ctx.skipped,
@@ -1013,6 +1058,33 @@ pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result
         prototype_instances: instances,
         unknown_prototypes: unknown,
     })
+}
+
+/// Num mundo estático, geradores e colocação em runtime não têm efeito: avisa (o
+/// `analyze --strict` falha) para o agente correr a ferramenta em vez disso.
+fn static_world_findings(specs: &[EntitySpec], warnings: &mut Vec<String>) {
+    for spec in specs {
+        match &spec.kind {
+            EntityKind::StaticSpawner { .. } => warnings.push(
+                "mundo estático: <StaticSpawner> não corre em runtime — gera as instâncias com `viber bake` (ou a ferramenta de scatter)".into(),
+            ),
+            EntityKind::Lake { spec } if spec.rocks => warnings.push(
+                "mundo estático: <Lake rocks> gera pedras em runtime — `viber bake` escreve-as explícitas".into(),
+            ),
+            EntityKind::River { spec } if spec.rocks => warnings.push(
+                "mundo estático: <River rocks> gera pedras em runtime — `viber bake` escreve-as explícitas".into(),
+            ),
+            EntityKind::Vegetation { spec } if spec.instances.is_none() => warnings.push(
+                "mundo estático: <Vegetation> sem `instances` é gerada em runtime — `viber bake` (ou a ferramenta de scatter) pré-gera-a".into(),
+            ),
+            EntityKind::Composition { place: Some(_), .. } => warnings.push(format!(
+                "mundo estático: `place` em {} é ignorado — a pose é `translation`",
+                spec.name.as_deref().unwrap_or("<Composition>")
+            )),
+            _ => {}
+        }
+        static_world_findings(&spec.children, warnings);
+    }
 }
 
 /// Recolhe `<Prototype id>` de TODO o raw tree (qualquer profundidade —
@@ -1250,6 +1322,17 @@ fn parse_entities(nodes: &[XmlNode], ctx: &mut ParseCtx) -> Result<Vec<EntitySpe
 
 /// `Ok(None)` = element skipped as a no-op (unknown tag), subtree included.
 fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>> {
+    let mut spec = parse_entity_kind(node, ctx)?;
+    if let Some(spec) = spec.as_mut()
+        && node.origin.is_some()
+    {
+        // Sempre o nó que o declarou — num `<Use>` substitui a origem clonada do protótipo.
+        spec.source = node.origin.clone();
+    }
+    Ok(spec)
+}
+
+fn parse_entity_kind(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>> {
     let lower = node.tag.to_ascii_lowercase();
     match lower.as_str() {
         "entity" | "group" => finish_group(node, ctx).map(Some),
@@ -1260,6 +1343,9 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
         // Definições são recolhidas pela passagem 0 (`collect_prototypes`);
         // aqui são no-op para não caírem no aviso de tag desconhecida.
         "prototype" => Ok(None),
+        // `<Scatter>` = RECEITA de um gerador (a ferramenta `scatter` de `crate::scene::tools`
+        // regenera o `<Group generated-by>` dela); o mundo nunca a executa.
+        "scatter" => Ok(None),
         "use" => finish_use(node, ctx).map(Some),
         "pointlight" => finish_point_light(node, ctx).map(Some),
         "directionallight" => finish_directional_light(node, ctx).map(Some),
@@ -1371,7 +1457,7 @@ struct Common {
 /// (comportamento histórico); 3 componentes = euler em RADIANOS — a
 /// convenção das partes de `<Composition>` do VibeGame, aceite em qualquer
 /// entidade para os mundos migrarem sem reescrever rotações.
-fn parse_rotation_attr(value: &str, ctx: &str) -> Result<[f32; 4]> {
+pub fn parse_rotation_attr(value: &str, ctx: &str) -> Result<[f32; 4]> {
     if value.split_whitespace().count() == 3 {
         let e = values::parse_vec3(value, ctx)?;
         return Ok(transform::euler_rad_to_quat(e));
@@ -1397,6 +1483,8 @@ fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(Stri
         physics: PhysicsSpec::default(),
     };
     let mut rest = Vec::new();
+    let mut resource_kind: Option<String> = None;
+    let mut resource_yield: u32 = 1;
     for (key, value) in &node.attrs {
         match key.as_str() {
             "name" => common.name = Some(value.clone()),
@@ -1405,6 +1493,15 @@ fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(Stri
             // Component-string do plugin `destructible` do VibeGame — o
             // prop nasce colhível (árvores/rochas dos spawners).
             "destructible" => common.destructible = Some(DestructibleSpec::parse(value)),
+            // `<ResourceNode kind yield>` em forma de attr — é assim que o
+            // `viber bake` emite árvores colhíveis estáticas (o nó filho
+            // só é parseado dentro de templates de spawner).
+            "resource-kind" => resource_kind = Some(value.trim().to_string()),
+            // Metadados de edição (`crate::scene::tools`): que gerador produziu este grupo e o
+            // id de uma receita — sem efeito no runtime.
+            "generated-by" | "id"
+                if matches!(node.tag.to_ascii_lowercase().as_str(), "group" | "scatter") => {}
+            "resource-yield" => resource_yield = value.trim().parse::<u32>().unwrap_or(1).max(1),
             "collider" => {
                 let (shape, warning) = parse_collider(value);
                 common.physics.collider = shape;
@@ -1462,6 +1559,14 @@ fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(Stri
             other => rest.push((other.to_string(), value.clone())),
         }
     }
+    // Merge do resource no destructible (colheita sem `destructible` não
+    // existe — o spec default leva os defaults de hits/break do harvest).
+    if let Some(kind) = resource_kind.filter(|k| !k.is_empty()) {
+        let spec = common
+            .destructible
+            .get_or_insert_with(DestructibleSpec::default);
+        spec.resource = Some((kind, resource_yield));
+    }
     Ok((common, rest))
 }
 
@@ -1500,6 +1605,7 @@ fn finish_group(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Group,
         children: parse_entities(&node.children, ctx)?,
+        source: None,
     })
 }
 
@@ -1579,6 +1685,7 @@ fn finish_composition(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
             seat,
         },
         children: parsed_children?,
+        source: None,
     })
 }
 
@@ -1603,6 +1710,7 @@ fn finish_use(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             physics: PhysicsSpec::default(),
             kind: EntityKind::Group,
             children: Vec::new(),
+            source: None,
         });
     };
     let overrides: Vec<(String, String)> = node
@@ -1623,6 +1731,7 @@ fn finish_use(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             overrides,
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -1716,6 +1825,7 @@ fn finish_primitive(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Primitive { shape, material },
         children: parse_entities(&node.children, ctx)?,
+        source: None,
     })
 }
 
@@ -1752,6 +1862,7 @@ fn finish_point_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
             shadows,
         },
         children: parse_entities(&node.children, ctx)?,
+        source: None,
     })
 }
 
@@ -1788,6 +1899,7 @@ fn finish_directional_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Entity
             shadows,
         },
         children: parse_entities(&node.children, ctx)?,
+        source: None,
     })
 }
 
@@ -1815,6 +1927,7 @@ fn finish_ambient_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
         destructible: common.destructible,
         kind: EntityKind::AmbientLight { color, brightness },
         children: parse_entities(&node.children, ctx)?,
+        source: None,
     })
 }
 
@@ -1883,6 +1996,7 @@ fn finish_orbit_camera(
         destructible: common.destructible,
         kind,
         children: parse_entities(&node.children, ctx)?,
+        source: None,
     })
 }
 
@@ -1992,6 +2106,18 @@ fn collect_resource_node(node: &XmlNode) -> Option<(String, u32)> {
     node.children.iter().find_map(collect_resource_node)
 }
 
+/// A receita de um `<Scatter>` (mesmos atributos e template de um `<StaticSpawner>`) — para
+/// a ferramenta de scatter; os avisos do parse vão para `warnings`.
+pub fn parse_scatter(node: &XmlNode, warnings: &mut Vec<String>) -> Result<StaticSpawnerSpec> {
+    let mut ctx = ParseCtx::default();
+    let spec = finish_static_spawner(node, false, &mut ctx)?;
+    warnings.extend(ctx.warnings);
+    match spec.kind {
+        EntityKind::StaticSpawner { spec } => Ok(spec),
+        _ => unreachable!("finish_static_spawner devolve sempre um StaticSpawner"),
+    }
+}
+
 fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
@@ -2037,6 +2163,8 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
         density_per_km2: 0.0,
         max_instances: 0,
         fixed_candidates: Vec::new(),
+        instances_file: None,
+        preplaced: None,
     };
     collect_template_meshes(node, &mut spec.template_urls, &mut spec.template_lods);
     spec.template_script = collect_template_script(node);
@@ -2082,6 +2210,7 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
                 EntityKind::StaticSpawner { spec }
             },
             children: Vec::new(),
+            source: None,
         });
     }
     let mut count_authored = false;
@@ -2156,6 +2285,7 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
             EntityKind::StaticSpawner { spec }
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2252,6 +2382,7 @@ fn finish_particle_system(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySp
         destructible: common.destructible,
         kind: EntityKind::ParticleSystem { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2283,6 +2414,7 @@ fn finish_spawn_exclusion(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySp
         destructible: common.destructible,
         kind: EntityKind::SpawnExclusion { center, radius },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2318,6 +2450,7 @@ fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         max_instances: 800,
         cull_distance: crate::render_lod::DEFAULT_VEGETATION_CULL,
         cast_shadows: false,
+        instances: None,
     };
     for (key, value) in rest {
         let kctx = format!("{ctx_tag} {key}");
@@ -2346,6 +2479,7 @@ fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             "max-instances" => spec.max_instances = values::parse_u32(&value, &kctx)?.min(200_000),
             "cull-distance" => spec.cull_distance = values::parse_f32(&value, &kctx)?.max(0.0),
             "cast-shadows" => spec.cast_shadows = values::parse_bool(&value, &kctx)?,
+            "instances" => spec.instances = Some(value.trim().to_owned()).filter(|v| !v.is_empty()),
             // accepted no-ops: VibeGame instancing/appearance details
             "smart"
             | "wind"
@@ -2373,6 +2507,7 @@ fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Vegetation { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2394,6 +2529,7 @@ fn finish_player_gltf(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result
         physics: common.physics,
         kind: EntityKind::PlayerGltf { url },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2431,6 +2567,7 @@ fn finish_dialogue_npc(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
             marker_height,
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2467,6 +2604,7 @@ fn finish_resource_chip(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
             target,
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2497,6 +2635,7 @@ fn finish_audio_mixer(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
         destructible: common.destructible,
         kind: EntityKind::AudioMixer { master, music, sfx },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2527,6 +2666,7 @@ fn finish_music_layer(node: &XmlNode, layer: &str, ctx: &mut ParseCtx) -> Result
         destructible: common.destructible,
         kind: EntityKind::MusicLayer { layer, base_volume },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2597,6 +2737,7 @@ fn finish_daycycle(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             min_sun_elevation: c.min_sun_elevation,
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2641,6 +2782,7 @@ fn finish_weather(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             cycle: w.cycle,
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2726,6 +2868,7 @@ fn finish_biome_region(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
             rain_scale,
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2759,6 +2902,7 @@ fn finish_world_border(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
             margin,
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2827,6 +2971,7 @@ fn finish_interior_scene(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpe
             camera_yaw_deg,
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2851,6 +2996,7 @@ fn finish_engine_config(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
                 .collect(),
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2923,6 +3069,7 @@ fn finish_landmark(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: None,
         kind: EntityKind::Landmark { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2959,6 +3106,7 @@ fn finish_spawn_point(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
         destructible: None,
         kind: EntityKind::SpawnPoint { at, label },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -2984,6 +3132,7 @@ fn finish_sky(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
                 .collect(),
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3006,6 +3155,7 @@ fn finish_hud_element(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
                 .collect(),
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3037,6 +3187,7 @@ fn finish_ui_style(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::UiStyle { source },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3055,15 +3206,43 @@ fn finish_ui_tree(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             node: Box::new(node.clone()),
         },
         children: Vec::new(),
+        source: None,
     })
 }
 
 fn finish_gltf_scene(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node, ctx)?;
     // `url` is this tag's own attribute — already consumed by the caller.
+    // A ladder de LOD é o mesmo contrato do template de spawner, agora em
+    // entidades soltas (o bake emite instâncias com LODs explícitos).
+    let lod1 = node
+        .attr("lod1-url")
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let lod2 = node
+        .attr("lod2-url")
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let lod_near = node
+        .attr("lod-threshold-near")
+        .and_then(|v| v.trim().parse::<f32>().ok())
+        .unwrap_or(DEFAULT_LOD_NEAR);
+    let lod_mid = node
+        .attr("lod-threshold-mid")
+        .and_then(|v| v.trim().parse::<f32>().ok())
+        .unwrap_or(DEFAULT_LOD_MID);
     warn_ignored(
         node,
-        rest.into_iter().filter(|(key, _)| key != "url").collect(),
+        rest.into_iter()
+            .filter(|(key, _)| {
+                !matches!(
+                    key.as_str(),
+                    "url" | "lod1-url" | "lod2-url" | "lod-threshold-near" | "lod-threshold-mid"
+                )
+            })
+            .collect(),
         ctx,
     );
     Ok(EntitySpec {
@@ -3073,8 +3252,15 @@ fn finish_gltf_scene(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result<
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
-        kind: EntityKind::GltfScene { url },
+        kind: EntityKind::GltfScene {
+            url,
+            lod1,
+            lod2,
+            lod_near,
+            lod_mid,
+        },
         children: parse_entities(&node.children, ctx)?,
+        source: None,
     })
 }
 
@@ -3219,6 +3405,7 @@ fn finish_terrain(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Terrain { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3241,6 +3428,8 @@ fn finish_terrain_pad(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
             "falloff" => spec.falloff = values::parse_f32(&value, &kctx)?,
             "corner-radius" => spec.corner_radius = values::parse_f32(&value, &kctx)?,
             "height" => spec.height = Some(values::parse_f32(&value, &kctx)?),
+            // Contrato idempotente do bake: regista a âncora sem re-achatar.
+            "pre-carved" => spec.pre_carved = values::parse_bool(&value, &kctx)?,
             other => ctx
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
@@ -3255,6 +3444,7 @@ fn finish_terrain_pad(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
         destructible: common.destructible,
         kind: EntityKind::TerrainPad { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3299,6 +3489,8 @@ fn finish_lake(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             "radius" => spec.radius = values::parse_f32(&value, &kctx)?,
             "depth" => spec.depth = values::parse_f32(&value, &kctx)?,
             "water-offset" => spec.water_offset = values::parse_f32(&value, &kctx)?,
+            // Superfície explícita (contrato idempotente do bake).
+            "water-level" => spec.water_level = Some(values::parse_f32(&value, &kctx)?),
             "color" => spec.color = values::parse_color(&value, &kctx)?,
             "opacity" => spec.opacity = values::parse_f32(&value, &kctx)?,
             "ripple" => spec.ripple = values::parse_f32(&value, &kctx)?,
@@ -3348,6 +3540,7 @@ fn finish_lake(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Lake { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3408,6 +3601,7 @@ fn finish_cut(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Cut { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3466,6 +3660,7 @@ fn finish_plateau(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Plateau { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3539,6 +3734,7 @@ fn finish_ground_decal(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
         destructible: common.destructible,
         kind: EntityKind::GroundDecal { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3560,6 +3756,16 @@ fn finish_river(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             "width" => spec.width = values::parse_f32(&value, &kctx)?,
             "depth" => spec.depth = values::parse_f32(&value, &kctx)?,
             "water-offset" => spec.water_offset = values::parse_f32(&value, &kctx)?,
+            // Superfícies explícitas por estação (contrato idempotente do
+            // bake) — uma por estação re-amostrada.
+            "water-levels" => {
+                spec.water_levels = Some(
+                    value
+                        .split_whitespace()
+                        .map(|tok| tok.parse::<f32>().unwrap_or(0.0))
+                        .collect(),
+                )
+            }
             "bank-width" => spec.bank_width = values::parse_f32(&value, &kctx)?,
             "bank-height" => spec.bank_height = values::parse_f32(&value, &kctx)?,
             "color" => spec.color = values::parse_color(&value, &kctx)?,
@@ -3610,6 +3816,7 @@ fn finish_river(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::River { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3684,6 +3891,7 @@ fn finish_cliff(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Cliff { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3774,6 +3982,7 @@ fn finish_cave(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Cave { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -3933,6 +4142,7 @@ fn finish_arch(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Arch { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -4021,6 +4231,7 @@ fn finish_bridge(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Bridge { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -4127,6 +4338,7 @@ fn finish_rock_features(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
         destructible: common.destructible,
         kind: EntityKind::RockFeatures { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -4255,6 +4467,7 @@ fn finish_road(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: common.destructible,
         kind: EntityKind::Road { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -4421,6 +4634,7 @@ fn finish_road_network(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
         destructible: common.destructible,
         kind: EntityKind::RoadNetwork { spec },
         children: Vec::new(),
+        source: None,
     })
 }
 
@@ -4662,6 +4876,7 @@ mod tests {
                 .collect(),
             text: String::new(),
             children: vec![],
+            origin: None,
         }
     }
 
@@ -5060,7 +5275,7 @@ mod tests {
         ))
         .unwrap();
         assert!(w.is_empty(), "{w:?}");
-        let EntityKind::GltfScene { url } = spec.kind else {
+        let EntityKind::GltfScene { url, .. } = spec.kind else {
             panic!("expected gltf scene");
         };
         assert_eq!(url, "/assets/meshes/tree.glb");
@@ -6256,6 +6471,7 @@ mod composition_tests {
                 .collect(),
             text: String::new(),
             children: vec![],
+            origin: None,
         }
     }
 

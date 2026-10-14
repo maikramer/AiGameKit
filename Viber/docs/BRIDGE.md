@@ -26,7 +26,10 @@ Métodos BRP: `viber.ping` (devolve `pid`+`world`), `viber.screenshot` +
 `viber.screenshot_status` (request/poll; o PNG só é "captured" quando o
 ficheiro tem IEND), `viber.burst` + `viber.burst_status`, `viber.tree`,
 `viber.logs`, `viber.profiler`/`.tab`/`.export`/`.extra_toggle`, `viber.lua`,
-`viber.input.key/text/click/move`, `viber.raycast` — mais os métodos builtin
+`viber.input.key/text/click/move`, `viber.raycast`, `viber.camera.orbit/pan/
+zoom/look_at/pose` (câmara livre de editor — só com `viber run --camera free`;
+fora do modo respondem com o erro claro "camera mode is not free") — mais os
+métodos builtin
 do `bevy_remote` (`world.query`, `world.spawn_entity`,
 `world.mutate_components`, …) para inspecção/mutação ECS crua.
 

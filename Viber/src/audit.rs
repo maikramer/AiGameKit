@@ -360,7 +360,7 @@ fn collect_entities(
             });
         }
         match &entity.kind {
-            EntityKind::GltfScene { url } | EntityKind::PlayerGltf { url } => {
+            EntityKind::GltfScene { url, .. } | EntityKind::PlayerGltf { url } => {
                 // O herói tem character controller próprio (colisão via
                 // Rapier, não via attr); o resto herda collider do ancestral.
                 if !collider_covered && matches!(entity.kind, EntityKind::GltfScene { .. }) {
@@ -1420,6 +1420,7 @@ mod tests {
             },
             kind,
             children: vec![],
+            source: None,
         }
     }
 
@@ -1489,7 +1490,7 @@ mod tests {
         let (_dir, world_dir, asset_root) = setup();
         std::fs::write(asset_root.join("assets/meshes/a.glb"), glb_bytes(None)).unwrap();
         std::fs::write(asset_root.join("assets/meshes/b.glb"), glb_bytes(None)).unwrap();
-        let glb = |url: &str| EntityKind::GltfScene { url: url.into() };
+        let glb = |url: &str| EntityKind::gltf_scene(url);
         // "cobre": Group com collider → filhos GltfScene NÃO são colliderless.
         let mut group = entity("muro", EntityKind::Group, ColliderShape::Auto);
         group.children = vec![entity(
@@ -1528,7 +1529,7 @@ mod tests {
         let glb_scene = |url: &str, name: &str| {
             entity(
                 name,
-                EntityKind::GltfScene { url: url.into() },
+                EntityKind::gltf_scene(url),
                 ColliderShape::Box {
                     size: Default::default(),
                     offset: Default::default(),
@@ -1595,9 +1596,7 @@ mod tests {
         let mut world = world;
         world.entities.push(entity(
             "c",
-            EntityKind::GltfScene {
-                url: "/assets/meshes/falso.glb".into(),
-            },
+            EntityKind::gltf_scene("/assets/meshes/falso.glb"),
             ColliderShape::Auto,
         ));
         // O png ok existe mas não é referenciado — acrescentar 2.ª textura ok
@@ -1641,9 +1640,7 @@ mod tests {
         std::fs::write(asset_root.join("assets/audio/bgm/explore.ogg"), b"ogg").unwrap();
         let mut lobo = entity(
             "lobo",
-            EntityKind::GltfScene {
-                url: "/assets/meshes/lobo.glb".into(),
-            },
+            EntityKind::gltf_scene("/assets/meshes/lobo.glb"),
             ColliderShape::Auto,
         );
         lobo.script = Some("lobo.lua".into());
@@ -1652,9 +1649,7 @@ mod tests {
                 lobo,
                 entity(
                     "fantasma",
-                    EntityKind::GltfScene {
-                        url: "/assets/meshes/fantasma.glb".into(),
-                    },
+                    EntityKind::gltf_scene("/assets/meshes/fantasma.glb"),
                     ColliderShape::Auto,
                 ),
                 entity(
@@ -1742,23 +1737,17 @@ mod tests {
             entities: vec![
                 entity(
                     "a",
-                    EntityKind::GltfScene {
-                        url: "/assets/meshes/do_pool.glb".into(),
-                    },
+                    EntityKind::gltf_scene("/assets/meshes/do_pool.glb"),
                     ColliderShape::Auto,
                 ),
                 entity(
                     "b",
-                    EntityKind::GltfScene {
-                        url: "/assets/meshes/override.glb".into(),
-                    },
+                    EntityKind::gltf_scene("/assets/meshes/override.glb"),
                     ColliderShape::Auto,
                 ),
                 entity(
                     "c",
-                    EntityKind::GltfScene {
-                        url: "/assets/meshes/fantasma.glb".into(),
-                    },
+                    EntityKind::gltf_scene("/assets/meshes/fantasma.glb"),
                     ColliderShape::Auto,
                 ),
             ],

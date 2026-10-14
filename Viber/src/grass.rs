@@ -594,6 +594,7 @@ fn stream_grass_tiles(
     regions: Option<Res<BiomeRegions>>,
     cliffs: Option<Res<crate::terrain::cliffs::CliffMask>>,
     exclusions: Option<Res<crate::spawner::SpawnExclusions>>,
+    editor: Query<&GlobalTransform, With<crate::editor_camera::EditorCamera>>,
     cameras: Query<&GlobalTransform, With<Camera3d>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<GrassMaterial>>,
@@ -605,7 +606,8 @@ fn stream_grass_tiles(
     let Some(terrain) = terrain else {
         return;
     };
-    let Some(camera) = cameras.iter().next() else {
+    // Modo editor: o anel segue a câmara de editor (ver `active_camera_eye`).
+    let Some(camera) = crate::editor_camera::active_camera_eye(&editor, &cameras) else {
         return;
     };
     let eye = camera.translation();

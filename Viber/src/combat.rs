@@ -1413,7 +1413,7 @@ pub fn cycle_weapon(
         .spawn((
             transform,
             Visibility::Inherited,
-            crate::recipes::spawn::GltfScenePending { handle },
+            crate::recipes::spawn::GltfScenePending::single(handle),
         ))
         .id();
     commands.entity(bone).add_child(spawned);

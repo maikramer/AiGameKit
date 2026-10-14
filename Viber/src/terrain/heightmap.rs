@@ -228,6 +228,86 @@ impl HeightMapU16 {
         ))
     }
 
+    /// Encodes this grid as an `.ahgt` blob — the symmetric of
+    /// [`HeightMapU16::from_ahgt`]: magic + v1 header + JSON meta +
+    /// zlib-deflated little-endian u16 payload. Used by `viber bake` to
+    /// freeze a carved grid; the biome field round-trips through the same
+    /// `biomes` meta contract the reader parses.
+    ///
+    /// # Errors
+    /// Fails when the meta lacks `worldSize`/`maxHeight`, when they are
+    /// degenerate, or when the grid is inconsistent with its own extents.
+    pub fn to_ahgt(&self, meta: &AhgtMeta) -> anyhow::Result<Vec<u8>> {
+        use std::io::Write as _;
+
+        let (Some(world_size), Some(max_height)) = (meta.world_size, meta.max_height) else {
+            anyhow::bail!("AHGT: meta needs worldSize/maxHeight to encode");
+        };
+        if world_size <= 0.0 || !world_size.is_finite() || max_height <= 0.0 {
+            anyhow::bail!("AHGT: degenerate worldSize/maxHeight ({world_size}/{max_height})");
+        }
+        if self.width == 0 || self.depth == 0 || self.data.len() != self.width * self.depth {
+            anyhow::bail!(
+                "AHGT: inconsistent grid ({}x{} with {} samples)",
+                self.width,
+                self.depth,
+                self.data.len()
+            );
+        }
+        if self.width > u16::MAX as usize || self.depth > u16::MAX as usize {
+            anyhow::bail!(
+                "AHGT: {}x{} grid exceeds the u16 header extents",
+                self.width,
+                self.depth
+            );
+        }
+
+        let mut meta_json = serde_json::Map::new();
+        meta_json.insert("worldSize".into(), serde_json::json!(world_size));
+        meta_json.insert("maxHeight".into(), serde_json::json!(max_height));
+        if !meta.biomes.wedges.is_empty() {
+            let wedges: Vec<_> = meta
+                .biomes
+                .wedges
+                .iter()
+                .map(|w| {
+                    serde_json::json!({
+                        "dir": [w.dir.x, w.dir.y],
+                        "biome": w.biome.name(),
+                    })
+                })
+                .collect();
+            meta_json.insert(
+                "biomes".into(),
+                serde_json::json!({
+                    "core": meta.biomes.core,
+                    "blend": meta.biomes.blend,
+                    "wedges": wedges,
+                }),
+            );
+        }
+        let meta_bytes = serde_json::to_vec(&serde_json::Value::Object(meta_json))?;
+
+        let mut raw = Vec::with_capacity(self.data.len() * 2);
+        for v in &self.data {
+            raw.extend_from_slice(&v.to_le_bytes());
+        }
+        let mut zlib = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        zlib.write_all(&raw)?;
+        let payload = zlib.finish()?;
+
+        let mut out = Vec::with_capacity(20 + meta_bytes.len() + payload.len());
+        out.extend_from_slice(&0x5447_4841u32.to_le_bytes()); // "AHGT"
+        out.extend_from_slice(&1u16.to_le_bytes()); // versão
+        out.extend_from_slice(&(self.width as u16).to_le_bytes());
+        out.extend_from_slice(&(self.depth as u16).to_le_bytes());
+        out.extend_from_slice(&[0u8; 6]); // padding reservado do header
+        out.extend_from_slice(&(meta_bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&meta_bytes);
+        out.extend_from_slice(&payload);
+        Ok(out)
+    }
+
     pub fn from_image(image: &Image) -> anyhow::Result<Self> {
         if image.texture_descriptor.dimension != TextureDimension::D2 {
             anyhow::bail!(
@@ -753,5 +833,66 @@ mod tests {
             0,
             "empty map reads 0"
         );
+    }
+
+    #[test]
+    fn test_to_ahgt_roundtrips_grid_and_meta() {
+        use bevy::math::Vec2;
+
+        // Grid irregular (não quadrada) com padrão determinístico.
+        let mut map = HeightMapU16::filled(37, 23, 0);
+        for z in 0..map.depth {
+            for x in 0..map.width {
+                map.data[z * map.width + x] = ((x * 977 + z * 131) % 65_536) as u16;
+            }
+        }
+        let meta = AhgtMeta {
+            world_size: Some(4000.0),
+            max_height: Some(200.0),
+            biomes: BiomeField {
+                wedges: vec![BiomeWedge {
+                    dir: Vec2::new(1.0, 0.0),
+                    biome: Biome::Desert,
+                }],
+                core: 90.0,
+                blend: 150.0,
+            },
+        };
+        let bytes = map.to_ahgt(&meta).expect("encode");
+        let (back, back_meta) = HeightMapU16::from_ahgt(&bytes).expect("re-decode");
+        assert_eq!(back, map, "grid idêntica");
+        assert_eq!(back_meta.world_size, Some(4000.0));
+        assert_eq!(back_meta.max_height, Some(200.0));
+        assert_eq!(back_meta.biomes.wedges.len(), 1, "wedge sobrevive");
+        assert!(matches!(back_meta.biomes.wedges[0].biome, Biome::Desert));
+        let wedge = &back_meta.biomes.wedges[0];
+        assert!(
+            (wedge.dir.x - 1.0).abs() < 1e-6 && wedge.dir.y.abs() < 1e-6,
+            "direção normalizada preservada: {:?}",
+            wedge.dir
+        );
+    }
+
+    #[test]
+    fn test_to_ahgt_refuses_degenerate_inputs() {
+        let map = HeightMapU16::filled(4, 4, 10);
+        let no_meta = AhgtMeta::default();
+        assert!(map.to_ahgt(&no_meta).is_err(), "sem worldSize/maxHeight");
+        let bad = AhgtMeta {
+            world_size: Some(0.0),
+            max_height: Some(200.0),
+            biomes: Default::default(),
+        };
+        assert!(map.to_ahgt(&bad).is_err(), "worldSize zero");
+        // Meta sem wedges não escreve o bloco biomas — o re-decode volta
+        // com o campo vazio (contrato: ausência ≠ default autorado).
+        let plain = AhgtMeta {
+            world_size: Some(100.0),
+            max_height: Some(50.0),
+            biomes: Default::default(),
+        };
+        let bytes = map.to_ahgt(&plain).expect("encode plain");
+        let (_, meta) = HeightMapU16::from_ahgt(&bytes).expect("decode plain");
+        assert!(meta.biomes.wedges.is_empty());
     }
 }

@@ -31,6 +31,7 @@ fn node(tag: &str, attrs: &[(&str, &str)]) -> XmlNode {
             .collect(),
         text: String::new(),
         children: vec![],
+        origin: None,
     }
 }
 

@@ -595,12 +595,15 @@ pub fn sky_material_drive(
 /// `Camera` apanhava também a câmara 2d da UI e o `single()` falhava em
 /// silêncio — o domo ficava para trás e o rim aparecia no topo do frame).
 pub fn sky_follow_camera(
+    editor: Query<&GlobalTransform, With<crate::editor_camera::EditorCamera>>,
     cameras: Query<&GlobalTransform, With<bevy::camera::Camera3d>>,
     mut domes: Query<&mut Transform, With<SkyDome>>,
 ) {
     // `iter().next()` e não `single()`: ≥2 câmaras 3d falhavam o `single()`
-    // e o domo ficava para trás (mesma semântica do 1.º player).
-    let Some(camera) = cameras.iter().next() else {
+    // e o domo ficava para trás (mesma semântica do 1.º player). Em modo
+    // editor (`--camera free`) a câmara de editor é que doma — ver
+    // `editor_camera::active_camera_eye`.
+    let Some(camera) = crate::editor_camera::active_camera_eye(&editor, &cameras) else {
         return;
     };
     for mut transform in &mut domes {
@@ -698,6 +701,7 @@ mod tests {
             physics: PhysicsSpec::default(),
             kind,
             children: Vec::new(),
+            source: None,
         };
         let world = vec![
             spec(EntityKind::Group),

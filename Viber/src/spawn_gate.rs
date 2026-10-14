@@ -289,6 +289,8 @@ mod tests {
             pads: vec![],
             voxel: Arc::new(crate::terrain::voxel::VoxelField::default()),
             deltas: Arc::new(crate::terrain::delta::DeltaGrid::default()),
+            paint: std::sync::Arc::new(crate::terrain::paint::PaintGrid::default()),
+            splat_tuning: Default::default(),
         }
     }
 
