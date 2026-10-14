@@ -5,7 +5,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-4.2 39.0093 60">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-4.2 39.0093 60" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -14,7 +14,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="4.2 38.9245 60">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="4.2 38.9245 60" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -23,7 +23,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-6.2 46.7953 96">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-6.2 46.7953 96" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -32,7 +32,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="2.2 45.0873 96">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="2.2 45.0873 96" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -41,7 +41,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-4.2 38.7304 -58">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-4.2 38.7304 -58" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -50,7 +50,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="4.2 38.7304 -58">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="4.2 38.7304 -58" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -59,7 +59,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-2.2 47.4676 -84">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-2.2 47.4676 -84" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -68,7 +68,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="6.2 47.4654 -84">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="6.2 47.4654 -84" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -77,7 +77,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="60 38.9245 -4.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="60 38.9245 -4.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -86,7 +86,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="60 39.0093 4.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="60 39.0093 4.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -95,7 +95,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="96 41.1855 -2.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="96 41.1855 -2.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -104,7 +104,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="96 41.1885 6.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="96 41.1885 6.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -113,7 +113,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-58 38.7304 -4.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-58 38.7304 -4.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -122,7 +122,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-58 38.7304 4.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-58 38.7304 4.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -131,7 +131,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-80 31.5894 -6.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-80 31.5894 -6.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -140,7 +140,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-80 31.3752 2.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-80 31.3752 2.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -149,7 +149,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-3.2 38.7304 20">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-3.2 38.7304 20" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -158,7 +158,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="3.2 38.7304 20">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="3.2 38.7304 20" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -167,7 +167,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-5.2 44.8291 78">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-5.2 44.8291 78" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -176,7 +176,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="3 44.8247 78">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="3 44.8247 78" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -185,7 +185,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-6.8 47.0008 116">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-6.8 47.0008 116" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -194,7 +194,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="1.6 45.4048 116">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="1.6 45.4048 116" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -203,7 +203,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-3.2 38.7304 -20">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-3.2 38.7304 -20" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -212,7 +212,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="3.2 38.7304 -20">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="3.2 38.7304 -20" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -221,7 +221,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-3.4 42.5371 -70">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-3.4 42.5371 -70" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -230,7 +230,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="5 42.5979 -70">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="5 42.5979 -70" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -239,7 +239,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-2.6 53.6551 -102">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-2.6 53.6551 -102" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -248,7 +248,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="5.8 53.6209 -102">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="5.8 53.6209 -102" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -257,7 +257,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="18 38.7304 -3.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="18 38.7304 -3.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -266,7 +266,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="18 38.7304 3.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="18 38.7304 3.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -275,7 +275,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="78 40.8302 -3.4">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="78 40.8302 -3.4" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -284,7 +284,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="78 40.839 5">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="78 40.839 5" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -293,7 +293,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="112 41.7392 -2.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="112 41.7392 -2.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -302,7 +302,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="112 41.7508 6.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="112 41.7508 6.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -311,7 +311,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-20 38.7304 -3.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-20 38.7304 -3.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -320,7 +320,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-20 38.7304 3.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-20 38.7304 3.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -329,7 +329,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-69 35.2771 -5.2">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-69 35.2771 -5.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -338,7 +338,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-69 35.1848 3">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-69 35.1848 3" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -347,7 +347,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-98 30.804 -3.8">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-98 30.804 -3.8" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />
@@ -356,7 +356,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-98 30.7648 4.6">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-98 30.7648 4.6" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="120000" radius="0.5" shadows="true" />

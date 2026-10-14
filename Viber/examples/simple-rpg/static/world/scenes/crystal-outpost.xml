@@ -12,29 +12,22 @@
       <Cylinder translation="0 2.5 0" half-height="0.9" radius="0.05" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
       <Box translation="0 0.1 -2.2" half-size="1.1 0.1 1.1" texture="/assets/textures/mountain_stone/albedo.ktx2" texture-tile-size="3.0" normal-map="/assets/textures/mountain_stone/normal.ktx2" />
       <Box translation="0 0.1 2.2" half-size="1.1 0.1 1.1" texture="/assets/textures/mountain_stone/albedo.ktx2" texture-tile-size="3.0" normal-map="/assets/textures/mountain_stone/normal.ktx2" />
-      <PointLight translation="0 3 0" color="0xffd9a0" intensity="6000" radius="0.9" />
+      <PointLight translation="0 3.0 0" color="0xffd9a0" intensity="6000" radius="0.9" />
     </Composition>
-    <Scatter profile="tree" count="3" seed="7811" region-min="786 0 716" region-max="800 0 730" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="30" max-slope-attempts="48" scale-min="1.2" scale-max="2.0" avoid-overlaps="1" random-yaw="true" variation="rock" max-distance="1260" id="grp-88">
-      <GameObject role="static" destructible="popup-text: Crystal; popup-color: #9fc4e8; preset: rockshards; burst-count: 26; hits: 4; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 14; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
-        <GLTFLoader role="visual" url="/assets/meshes/props/crystal_blue_lod0.glb" lod1-url="/assets/meshes/props/crystal_blue_lod1.glb" lod2-url="/assets/meshes/props/crystal_blue_lod2.glb" lod-threshold-near="45" lod-threshold-mid="120" />
-        <ResourceNode kind="stone" yield="5" scale="1" translation="0 0 0" />
-      </GameObject>
-    </Scatter>
-    <Group name="spawn/grp-88" generated-by="grp-88" />
-    <Entity name="outpost-vein-a" translation="793 0 719" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="0 25 0" scale="2.4">
+    <Entity name="outpost-vein-a" translation="793 0 719" transform="rotation: 0 25 0; scale: 2.4 2.4 2.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
       <PointLight translation="0 1.4 0" color="0x8fd0ff" intensity="3200" radius="0.9" shadows="false" />
     </Entity>
-    <Entity name="outpost-vein-b" translation="790 0 724" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="180 20 180" scale="1.8">
+    <Entity name="outpost-vein-b" translation="790 0 724" transform="rotation: 0 160 0; scale: 1.8 1.8 1.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
-    <Entity translation="805 0 722" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base" euler="180 75 180" scale="1">
+    <Entity translation="805 0 722" transform="rotation: 0 105 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
-    <Entity translation="808 0 726" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base" euler="0 -20 0" scale="1">
+    <Entity translation="808 0 726" transform="rotation: 0 -20 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
-    <Entity translation="806 0 729" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base" euler="0 30 0" scale="1">
+    <Entity translation="806 0 729" transform="rotation: 0 30 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <Entity translation="809 0 719" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
@@ -43,7 +36,7 @@
     <Entity translation="795 0 732" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/quench_trough_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/quench_trough_lod0.glb" />
     </Entity>
-    <Entity translation="803 0 734" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9" euler="0 70 0" scale="1">
+    <Entity translation="803 0 734" transform="rotation: 0 70 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9">
       <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
     </Entity>
     <Entity translation="794 0 726" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/notice_board_collision.glb; mesh-anchor: base">
@@ -53,22 +46,22 @@
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="806 0 714">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 28; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 28; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="806 0 714" body="none" collider="none">
       <PointLight translation="0 1.1 0" color="0xffa83a" intensity="4200" radius="0.6" />
     </Group>
-    <Entity translation="812 0 724" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/terrain/form_stack_6_lod0.glb" euler="180 -30 180" scale="1.1">
+    <Entity translation="812 0 724" transform="rotation: 0 210 0; scale: 1.1 1.1 1.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/terrain/form_stack_6_lod0.glb">
       <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
     </Entity>
-    <Entity name="npc_outpost_foreman" translation="798 0 727" euler="0 15 0" scale="1">
+    <Entity name="npc_outpost_foreman" translation="798 0 727" transform="rotation: 0 15 0">
       <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
       <DialogueNPC dialogue-id="outpost_veins" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="outpost-miner-a" translation="802 0 731" script="townsfolk.lua" euler="180 -60 180" scale="1">
+    <Entity name="outpost-miner-a" translation="802 0 731" transform="rotation: 0 240 0" script="townsfolk.lua">
       <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
     </Entity>
-    <Entity name="outpost-miner-b" translation="795 0 722" script="townsfolk.lua" euler="0 60 0" scale="1">
+    <Entity name="outpost-miner-b" translation="795 0 722" transform="rotation: 0 60 0" script="townsfolk.lua">
       <GltfScene url="/assets/meshes/characters/npc_cook_lod0.glb" />
     </Entity>
   </Group>

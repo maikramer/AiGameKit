@@ -55,7 +55,7 @@
       <PointLight translation="0 1.1 0" color="0x6ec8ff" intensity="1600" />
     </Entity>
     <Entity translation="104 48.8549 236">
-      <ParticleSystem preset="magic" scale="1" translation="0 1.4 0" />
+      <ParticleSystem preset="magic" transform="pos: 0 1.4 0" />
     </Entity>
     <SpawnExclusion at="104 236" radius="34" />
     <Entity name="forest-logging-camp" translation="-60 44.4659 128" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_collision.glb; mesh-anchor: base" euler="0 -18 0" scale="0.62">
@@ -77,7 +77,7 @@
       <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
     </Entity>
     <Entity translation="-60 44.4659 128">
-      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 4; start-life-min: 2.4; start-life-max: 4.2; start-speed-min: 0.3; start-speed-max: 0.8; start-size-min: 0.35; start-size-max: 0.8; start-color: #9a9a9a; looping: 1; world-space: 1" scale="1" translation="0 4.2 0" />
+      <ParticleSystem preset="smoke" transform="pos: 0 4.2 0" particle-emitter="preset: smoke; emission-rate: 4; start-life-min: 2.4; start-life-max: 4.2; start-speed-min: 0.3; start-speed-max: 0.8; start-size-min: 0.35; start-size-max: 0.8; start-color: #9a9a9a; looping: 1; world-space: 1" />
     </Entity>
     <SpawnExclusion at="-60 128" radius="22" />
     <Entity name="forest-crossroads-well" translation="28 42.2241 192" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_collision.glb; mesh-anchor: base">

@@ -10,28 +10,6 @@
   </Cave>
   <Group name="fantasy.grutas.bocas" translation="0 0 0">
     <SpawnExclusion at="-60 -216" radius="14" />
-    <Scatter profile="tree" count="14" seed="5311" region-min="-50 0 -198" region-max="-22 0 -170" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="56" max-slope-attempts="96" scale-min="0.7" scale-max="1.6" avoid-overlaps="1" footprint-radius="1.5" pick-strategy="random" random-yaw="true" variation="rock" max-distance="1962" id="grp-76">
-      <GameObject role="static">
-        <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
-      </GameObject>
-      <GameObject role="static">
-        <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
-      </GameObject>
-    </Scatter>
-    <Group name="spawn/grp-76" generated-by="grp-76" />
-    <Scatter profile="tree" count="10" seed="5312" region-min="-92 0 -214" region-max="-70 0 -194" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="52" max-slope-attempts="96" scale-min="0.6" scale-max="1.4" avoid-overlaps="1" footprint-radius="1.4" pick-strategy="random" random-yaw="true" variation="rock" max-distance="1962" id="grp-77">
-      <GameObject role="static">
-        <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
-      </GameObject>
-    </Scatter>
-    <Group name="spawn/grp-77" generated-by="grp-77" />
-    <Scatter profile="tree" count="7" seed="5301" region-min="-76 0 -232" region-max="-48 0 -204" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="48" max-slope-attempts="64" scale-min="1.0" scale-max="1.8" avoid-overlaps="1" random-yaw="true" variation="rock" max-distance="1962" id="grp-78">
-      <GameObject role="static" destructible="popup-text: Crystal; popup-color: #9fc4e8; preset: rockshards; burst-count: 26; hits: 4; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 14; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
-        <GLTFLoader role="visual" url="/assets/meshes/props/crystal_blue_lod0.glb" lod1-url="/assets/meshes/props/crystal_blue_lod1.glb" lod2-url="/assets/meshes/props/crystal_blue_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
-        <ResourceNode kind="stone" yield="6" scale="1" translation="0 0 0" />
-      </GameObject>
-    </Scatter>
-    <Group name="spawn/grp-78" generated-by="grp-78" />
     <Entity translation="-52 95.41 -210" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base" euler="0 24 0" scale="1">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
@@ -48,7 +26,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-68 87.509 -204">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-68 87.509 -204" body="none" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3200" radius="0.6" />
@@ -57,7 +35,7 @@
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="-56 102.0949 -222">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-56 102.0949 -222" body="none" collider="none">
       <PointLight translation="0 1.1 0" color="0xffa83a" intensity="4200" radius="0.6" />
@@ -72,16 +50,16 @@
       </GameObject>
     </Scatter>
     <Group name="spawn/grp-79" generated-by="grp-79">
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0000" translation="521.0519 86.4419 -74.8327" scale="0.8269" euler="1.3738 29.3758 5.3292" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0001" translation="521.4019 86.0301 -68.8228" scale="1.0327" euler="159.3199 -54.4392 154.9899" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0002" translation="527.7123 88.4583 -67.5596" scale="1.6653" euler="-24.3531 46.6779 16.9869" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0003" translation="525.1865 87.7977 -51.2648" scale="1.3901" euler="-176.2691 10.9119 165.2471" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0004" translation="514.4404 85.1004 -74.2737" scale="0.8178" euler="-174.4738 -28.5171 175.3273" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0005" translation="525.4946 87.1755 -75.9918" scale="1.5104" euler="-67.8085 76.3743 69.5254" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0006" translation="519.8342 85.6395 -64.1706" scale="0.7013" euler="-174.5651 15.4416 163.8719" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0007" translation="523.0113 86.4106 -56.6707" scale="1.1216" euler="40.8548 -61.9068 44.6672" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0008" translation="519.4216 85.1527 -48.1" scale="0.8649" euler="-165.5338 26.6954 157.8021" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0009" translation="531.1487 89.3089 -53.5795" scale="1.4144" euler="-0.8026 19.4797 11.483" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-79-0000" translation="521.0519 86.4419 -74.8327" euler="1.3738 29.3758 5.3292" scale="0.8269" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-79-0001" translation="521.4019 86.0301 -68.8228" euler="159.3199 -54.4392 154.9899" scale="1.0327" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-79-0002" translation="527.7123 88.4583 -67.5596" euler="-24.3531 46.6779 16.9869" scale="1.6653" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-79-0003" translation="525.1865 87.7977 -51.2648" euler="-176.2691 10.9119 165.2471" scale="1.3901" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-79-0004" translation="514.4404 85.1004 -74.2737" euler="-174.4738 -28.5171 175.3273" scale="0.8178" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-79-0005" translation="525.4946 87.1755 -75.9918" euler="-67.8085 76.3743 69.5254" scale="1.5104" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-79-0006" translation="519.8342 85.6395 -64.1706" euler="-174.5651 15.4416 163.8719" scale="0.7013" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-79-0007" translation="523.0113 86.4106 -56.6707" euler="40.8548 -61.9068 44.6672" scale="1.1216" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-79-0008" translation="519.4216 85.1527 -48.1" euler="-165.5338 26.6954 157.8021" scale="0.8649" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-79-0009" translation="531.1487 89.3089 -53.5795" euler="-0.8026 19.4797 11.483" scale="1.4144" />
     </Group>
     <Entity name="ermo-pillar-a" translation="500.7 80.8985 -62.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.3 5.0 1.3; pos-offset-y: 2.5" euler="0 -69 0" scale="1" />
     <Entity name="ermo-pillar-b" translation="499.3 81.0287 -53.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.3 5.0 1.3; pos-offset-y: 2.5" euler="0 -69 0" scale="1" />
@@ -95,7 +73,7 @@
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="494 80.8973 -58">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 32; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 32; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="494 80.8973 -58" body="none" collider="none">
       <PointLight translation="0 1.1 0" color="0xffa83a" intensity="4600" radius="0.7" />
@@ -113,18 +91,18 @@
       </GameObject>
     </Scatter>
     <Group name="spawn/grp-80" generated-by="grp-80">
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0000" translation="744.154 175.4753 -49.5201" scale="0.9395" euler="0 -77.2756 0" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0001" translation="740.1635 175.4856 -54.1193" scale="1.619" euler="0 -23.7977 0" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0002" translation="738.0634 175.728 -67.0756" scale="1.4033" euler="180 -4.0613 180" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0003" translation="739.3806 175.2672 -46.9401" scale="1.2763" euler="0 -87.1921 0" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0004" translation="755.7144 175.8647 -46.8837" scale="1.1389" euler="0 47.4454 0" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0005" translation="741.3893 175.7599 -61.6883" scale="1.0525" euler="180 80.6908 180" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0006" translation="745.9005 176.1289 -63.9908" scale="1.2858" euler="180 -69.1378 180" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0007" translation="757.0201 176.853 -65.4536" scale="1.6572" euler="180 -87.1683 180" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0008" translation="747.1402 175.9816 -57.6558" scale="0.9144" euler="0 -80.216 0" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0009" translation="751.7306 176.3099 -60.8523" scale="1.524" euler="0 -23.8947 0" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0010" translation="748.611 176.4914 -68.2955" scale="0.7715" euler="180 74.9537 180" />
-      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0011" translation="748.7479 175.7372 -51.7152" scale="1.2669" euler="180 -78.8459 180" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0000" translation="744.154 175.4753 -49.5201" euler="0 -77.2756 0" scale="0.9395" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0001" translation="740.1635 175.4856 -54.1193" euler="0 -23.7977 0" scale="1.619" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0002" translation="738.0634 175.728 -67.0756" euler="180 -4.0613 180" scale="1.4033" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0003" translation="739.3806 175.2672 -46.9401" euler="0 -87.1921 0" scale="1.2763" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0004" translation="755.7144 175.8647 -46.8837" euler="0 47.4454 0" scale="1.1389" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0005" translation="741.3893 175.7599 -61.6883" euler="180 80.6908 180" scale="1.0525" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0006" translation="745.9005 176.1289 -63.9908" euler="180 -69.1378 180" scale="1.2858" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0007" translation="757.0201 176.853 -65.4536" euler="180 -87.1683 180" scale="1.6572" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0008" translation="747.1402 175.9816 -57.6558" euler="0 -80.216 0" scale="0.9144" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0009" translation="751.7306 176.3099 -60.8523" euler="0 -23.8947 0" scale="1.524" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0010" translation="748.611 176.4914 -68.2955" euler="180 74.9537 180" scale="0.7715" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-80-0011" translation="748.7479 175.7372 -51.7152" euler="180 -78.8459 180" scale="1.2669" />
     </Group>
     <Entity name="ermo-pillar-c" translation="719.4 174.9849 -61" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.3 5.0 1.3; pos-offset-y: 2.5" euler="180 84 180" scale="1" />
     <Entity name="ermo-pillar-d" translation="720.6 174.7886 -51" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.3 5.0 1.3; pos-offset-y: 2.5" euler="180 84 180" scale="1" />
@@ -138,7 +116,7 @@
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="726 175.0531 -56">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 32; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 32; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="726 175.0531 -56" body="none" collider="none">
       <PointLight translation="0 1.1 0" color="0xffa83a" intensity="4600" radius="0.7" />
@@ -157,23 +135,23 @@
   <Entity name="mina-do-veio-hoard" translation="-88 92.9 -256" script="chest.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
     <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
   </Entity>
-  <Entity translation="-91.5 93.4 -258.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="0 30 0" scale="2.2">
+  <Entity translation="-91.5 93.4 -258.5" transform="rotation: 0 30 0; scale: 2.2 2.2 2.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
     <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
   </Entity>
-  <Entity translation="-84.5 93.5 -259" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="180 10 180" scale="1.7">
+  <Entity translation="-84.5 93.5 -259" transform="rotation: 0 170 0; scale: 1.7 1.7 1.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
     <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
   </Entity>
-  <Entity translation="-91 93.5 -252.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="180 -80 180" scale="1.9">
+  <Entity translation="-91 93.5 -252.5" transform="rotation: 0 260 0; scale: 1.9 1.9 1.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
     <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
   </Entity>
-  <Entity translation="-85 93.5 -252.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="0 80 0" scale="1.3">
+  <Entity translation="-85 93.5 -252.5" transform="rotation: 0 80 0; scale: 1.3 1.3 1.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
     <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
   </Entity>
-  <Entity translation="-92.5 93.5 -255" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="180 -30 180" scale="2.6">
+  <Entity translation="-92.5 93.5 -255" transform="rotation: 0 210 0; scale: 2.6 2.6 2.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
     <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
   </Entity>
-  <ParticleSystem preset="sparkle" scale="1" translation="-88 93.8 -256" />
-  <ParticleSystem preset="magic" particle-emitter="preset: magic; emission-rate: 14; shape-radius: 3.4; start-life-min: 1.2; start-life-max: 2.6; start-speed-min: 0.15; start-speed-max: 0.5; start-size-min: 0.1; start-size-max: 0.24; looping: 1; world-space: 1" scale="1" translation="-88 95.2 -256" />
+  <ParticleSystem preset="sparkle" transform="pos: -88 93.8 -256" />
+  <ParticleSystem preset="magic" transform="pos: -88 95.2 -256" particle-emitter="preset: magic; emission-rate: 14; shape-radius: 3.4; start-life-min: 1.2; start-life-max: 2.6; start-speed-min: 0.15; start-speed-max: 0.5; start-size-min: 0.1; start-size-max: 0.24; looping: 1; world-space: 1" />
   <PointLight translation="540 84.4 -52" color="0xffb066" intensity="2800" radius="0.9" />
   <PointLight translation="640 147.9 -46" color="0xffb066" intensity="2800" radius="0.9" />
   <PointLight translation="690 160.5 -52" color="0xbfe6ff" intensity="2600" radius="0.9" />
@@ -182,21 +160,21 @@
   <Entity name="porta-do-ermo-hoard" translation="590 112.45 -46" script="chest.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
     <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
   </Entity>
-  <Entity translation="587 112.9 -48" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="0 40 0" scale="1.8">
+  <Entity translation="587 112.9 -48" transform="rotation: 0 40 0; scale: 1.8 1.8 1.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
     <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
   </Entity>
-  <Entity translation="593 113 -48.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="180 -20 180" scale="2.4">
+  <Entity translation="593 113 -48.5" transform="rotation: 0 200 0; scale: 2.4 2.4 2.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
     <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
   </Entity>
-  <Entity translation="587.5 113.05 -43" euler="0 -60 0" scale="1.5">
+  <Entity translation="587.5 113.05 -43" transform="rotation: 0 300 0; scale: 1.5 1.5 1.5">
     <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
   </Entity>
   <Entity translation="590 112.8 -49" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
     <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
   </Entity>
   <Entity translation="590 113.4 -49">
-    <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 0 0" />
+    <ParticleSystem preset="fire" transform="pos: 0 0 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
   </Entity>
-  <ParticleSystem preset="sparkle" scale="1" translation="590 113.4 -45" />
-  <ParticleSystem preset="dust" particle-emitter="preset: dust; emission-rate: 10; start-life-min: 1.6; start-life-max: 3.0; start-speed-min: 0.1; start-speed-max: 0.4; start-size-min: 0.12; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="620 133.4 -45" />
+  <ParticleSystem preset="sparkle" transform="pos: 590 113.4 -45" />
+  <ParticleSystem preset="dust" transform="pos: 620 133.4 -45" particle-emitter="preset: dust; emission-rate: 10; start-life-min: 1.6; start-life-max: 3.0; start-speed-min: 0.1; start-speed-max: 0.4; start-size-min: 0.12; start-size-max: 0.3; looping: 1; world-space: 1" />
 </world>

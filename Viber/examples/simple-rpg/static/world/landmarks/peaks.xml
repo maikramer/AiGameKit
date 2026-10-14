@@ -33,7 +33,7 @@
       <PointLight translation="0 0.9 0" color="0xff8a33" intensity="1760" />
     </Group>
     <Entity translation="-38 67.4998 -172">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
     </Entity>
     <Entity translation="-40 72.3263 -178" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
@@ -60,7 +60,7 @@
       <PointLight translation="0 1.6 0" color="0x5ab0ff" intensity="1920" />
     </Group>
     <Entity translation="-56 99.6043 -216">
-      <ParticleSystem preset="sparkle" scale="1" translation="0 1.6 0" />
+      <ParticleSystem preset="sparkle" transform="pos: 0 1.6 0" />
     </Entity>
     <Entity translation="-64 92.9404 -208" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
@@ -70,12 +70,6 @@
     </Entity>
     <SpawnExclusion at="-60 -216" radius="22" />
     <Lake at="68 -184" radius="22" depth="2.2" water-offset="0.4" color="#8fc7dd" opacity="0.62" ripple="0.25" water-level="79.44013" rocks="0" />
-    <Scatter profile="tree" count="28" seed="9201" region-min="40 0 -212" region-max="96 0 -156" near-water="1" avoid-water="0" align-to-terrain="1" ground-align="auto" max-slope-deg="58" max-slope-attempts="96" scale-min="1.0" scale-max="2.2" avoid-overlaps="1" footprint-radius="2.6" max-distance="245" random-yaw="true" variation="rock" id="grp-53">
-      <GameObject role="static">
-        <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" />
-      </GameObject>
-    </Scatter>
-    <Group name="spawn/grp-53" generated-by="grp-53" />
     <Entity name="peaks-frost-cairn" translation="60 78.0202 -176" script="poi/frost-cairn.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
@@ -111,19 +105,19 @@
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Group translation="-12 110.0663 -276" body="none" collider="none">
-      <PointLight translation="0 1 0" color="0xff8a33" intensity="1920" />
+      <PointLight translation="0 1.0 0" color="0xff8a33" intensity="1920" />
     </Group>
     <Entity translation="-12 110.0664 -304" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Group translation="-12 110.0664 -304" body="none" collider="none">
-      <PointLight translation="0 1 0" color="0xff8a33" intensity="1920" />
+      <PointLight translation="0 1.0 0" color="0xff8a33" intensity="1920" />
     </Group>
     <Entity translation="-12 110.0663 -276">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
     </Entity>
     <Entity translation="-12 110.0664 -304">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
     </Entity>
     <SpawnExclusion at="-12 -290" radius="40" />
     <Entity name="ambient_water_ice_lake" translation="68 77.6414 -184" script="ambient-water.lua" />

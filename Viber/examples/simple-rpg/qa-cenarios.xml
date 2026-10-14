@@ -9,7 +9,7 @@
   arrancar e há sempre outra engine (de outro agente) a competir pela placa.
   Este arranca em ~2 GB e mostra exactamente o que esta ronda mudou.
 
-  AVISOS DO `analyze` SÃO ESPERADOS AQUI: o audit cruza as 25 quests com o
+  AVISOS DO `analyze` SÃO ESPERADOS AQUI: o audit cruza as 27 quests com o
   mundo e este mundo não traz os NPCs de quest (`world/ai/npcs.xml`) nem os
   marcos dos biomas — sai um ⚠ por quest sem dador e por marco de `visit`
   ausente. Serve para confirmar que o cruzamento funciona; a `world.xml`
@@ -26,7 +26,7 @@
   </PlayerGLTF>
   <SpawnGate target-entity="player" y-fallback="150" />
   <Group name="world-base" translation="0 0 0">
-    <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="/assets/terrain/terrain.ahgt" skirt-width="0.015625" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92"
+    <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="/assets/terrain/terrain.ahgt" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92"
            cliff-angle="50" sharpen="true" sharpen-angle="35" sharpen-seed="7"
            cliff-streaks="0.55" cliff-moss="0.4" />
     <NavMesh />

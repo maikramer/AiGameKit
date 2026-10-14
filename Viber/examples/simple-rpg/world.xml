@@ -1,8 +1,7 @@
 <!--
-  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
-  implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: canvas, far, follow-lag, fov, mouse-sensitivity, near, resume-audio-on-user-gesture, turn-lag
-  Verbatim (no-op) tags: BossBar x1, Compass x1, DialogueBalloon x1, HealthBar x1, HudScreenLayer x1, InteractionPrompt x1, Minimap x1, NavMesh x1, PlayerGLTF x1, PostFxDebugToggle x1, ProjectileTemplate x1, QuestTracker x1, ResourceChip x3, SpawnGate x1, TabbedModal x1, TargetBar x1, Terrain x1, WaypointArrow x1, XpBar x1
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py (as tags que o
+  migrador marcava como no-op — Terrain, PlayerGLTF, NavMesh, HUD… — já têm
+  consumidor nativo; este cabeçalho mantém-se só como nota de origem).
 -->
 <world clear-color="#8fc2ef">
   <!-- Projectile template used by ranged enemies (e.g. the archer). The
@@ -34,8 +33,8 @@
   <Group name="world-base" translation="0 0 0">
     <!-- ============================================================
            §2 TERRENO + NAVMESH
-           Quadtree LOD chunks; world-size/max-height batem com
-           public/assets/terrain/terrain.json. Física: uma heightfield
+           Quadtree LOD chunks; world-size/max-height batem com o
+           terrain.json em /assets/terrain/. Física: uma heightfield
            Rapier por chunk visual, criada/libertada dinamicamente.
            levels 4→5 e resolution 64→128: o mundo mantém os 4 km, mas o
            ground sampling quadruplica por eixo — chunks-folha 4× (metade do
@@ -46,7 +45,7 @@
          (substitui o height tint; snow-height reutilizado para snow_peak).
          Areia/desert_sand nos fundos e margens de lagos/rios, dirt_trail +
          dirt_road sob as fitas de estrada, mountain_stone nos penhascos. -->
-    <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="/assets/terrain/terrain.ahgt" skirt-width="0.015625" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92"
+    <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="/assets/terrain/terrain.ahgt" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92"
            cliff-angle="50" sharpen="true" sharpen-angle="35" sharpen-seed="7"
            cliff-streaks="0.55" cliff-moss="0.4" />
     <NavMesh />

@@ -109,10 +109,10 @@
       <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
     </Entity>
     <!-- Pátio de treino NE (city_wall_seg_c), longe do cepo em 21,32. -->
-    <Entity name="city_drill_wall_e" translation="15.4 0 34.8" overlap-max="1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+    <Entity name="city_drill_wall_e" translation="15.4 0 34.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
     </Entity>
-    <Entity name="city_drill_wall_s" translation="18.6 0 33" transform="rotation: 0 90 0" overlap-max="1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+    <Entity name="city_drill_wall_s" translation="18.6 0 33" transform="rotation: 0 90 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
     </Entity>
     <Entity translation="16.6 0 33.2" transform="rotation: 0 20 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base">

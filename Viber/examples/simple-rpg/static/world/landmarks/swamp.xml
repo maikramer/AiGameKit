@@ -22,7 +22,7 @@
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
     <Entity translation="-216 26.6756 56">
-      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 3.0; start-life-max: 5.0; start-speed-min: 0.15; start-speed-max: 0.4; start-size-min: 0.9; start-size-max: 2.0; start-color: #7d8f80; looping: 1; world-space: 1" scale="1" translation="0 0.6 0" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.6 0" particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 3.0; start-life-max: 5.0; start-speed-min: 0.15; start-speed-max: 0.4; start-size-min: 0.9; start-size-max: 2.0; start-color: #7d8f80; looping: 1; world-space: 1" />
     </Entity>
     <SpawnExclusion at="-216 56" radius="18" />
     <Entity translation="-220 26.9934 58" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base" euler="180 68 180" scale="1">
@@ -74,7 +74,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-167 26.1452 7">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-167 26.1452 7" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
@@ -83,7 +83,7 @@
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-213 26.123 7.6">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-213 26.123 7.6" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
@@ -92,7 +92,7 @@
       <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
     </Entity>
     <Entity translation="-187.5 26.0039 13.5">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 42; shape-radius: 0.28; start-life-min: 0.5; start-life-max: 1.3; start-speed-min: 1.3; start-speed-max: 2.7; start-size-min: 0.3; start-size-max: 0.62; looping: 1; world-space: 1" scale="1" translation="0 0.42 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 0.42 0" particle-emitter="preset: fire; emission-rate: 42; shape-radius: 0.28; start-life-min: 0.5; start-life-max: 1.3; start-speed-min: 1.3; start-speed-max: 2.7; start-size-min: 0.3; start-size-max: 0.62; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-187.5 26.0039 13.5" body="fixed" collider="none">
       <PointLight translation="0 0.7 0" color="0xff8a33" intensity="1920" shadows="false" />
@@ -113,13 +113,13 @@
     <Entity name="ambient_water_east_lagoon" translation="-236 32.8225 -84" script="ambient-water.lua" />
     <Entity name="swamp-sunken-graves" translation="-232 26.8512 16">
       <PointLight translation="0 1.7 0" color="0x7dff8a" intensity="65000" radius="0.7" shadows="false" />
-      <Entity translation="-4 0 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base" euler="0 14 0" scale="1">
+      <Entity translation="-4 0 0" transform="rotation: 0 14 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base">
         <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
       </Entity>
-      <Entity translation="3 0 2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base" euler="180 84 180" scale="1">
+      <Entity translation="3 0 2" transform="rotation: 0 96 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base">
         <GltfScene url="/assets/meshes/terrain/form_stack_11_lod0.glb" />
       </Entity>
-      <Entity translation="0 0 -4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base" euler="0 51 0" scale="1">
+      <Entity translation="0 0 -4" transform="rotation: 0 51 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base">
         <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
       </Entity>
     </Entity>

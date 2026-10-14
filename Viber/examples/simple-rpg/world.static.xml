@@ -2,10 +2,10 @@
 <world clear-color="#8fc2ef" static="true">
   <ProjectileTemplate id="enemy-arrow" speed="16" damage="8" max-life="2.5" sensor-radius="0.3" faction="enemy" />
   <Include src="/static/world/environment.xml" />
-  <PlayerGLTF name="player" model-url="/assets/meshes/characters/hero_lod0.glb" translation="0 150 0" />
+  <PlayerGLTF name="player" pos="0 150 0" model-url="/assets/meshes/characters/hero_lod0.glb" />
   <SpawnGate target-entity="player" y-fallback="150" />
   <Group name="world-base" translation="0 38.7304 0">
-    <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="bake/terrain.baked.ahgt" skirt-width="0.015625" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92" cliff-angle="50" sharpen="true" sharpen-angle="35" sharpen-seed="7" cliff-streaks="0.55" cliff-moss="0.4" />
+    <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="bake/terrain.baked.ahgt" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92" cliff-angle="50" sharpen="true" sharpen-angle="35" sharpen-seed="7" cliff-streaks="0.55" cliff-moss="0.4" />
     <NavMesh />
   </Group>
   <Include src="/static/world/cities/discordia.xml" />
@@ -59,16 +59,21 @@
     <WaypointArrow margin="64" />
     <DialogueBalloon />
   </Group>
-  <Group name="spawn/engine-53">
-    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" name="inst-grp-53-0000" translation="-168.5387 25.7204 0.9943" scale="0.6676 0.7179 0.6695" euler="-0.8377 10.9483 1.6815" />
-    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" name="inst-grp-53-0001" translation="-187.301 25.4647 9.5789" scale="1.3935 1.3283 1.4821" euler="-1.8765 -60.1545 -0.0547" />
-    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" name="inst-grp-53-0002" translation="-208.9275 25.6009 -4.0821" scale="1.2208 1.3417 1.355" euler="1.9524 30.0204 -4.5387" />
-    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" name="inst-grp-53-0003" translation="-209.9875 25.7244 -10.6583" scale="1.2721 1.2042 1.1789" euler="179.8496 3.9366 -176.1676" />
-    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" name="inst-grp-53-0004" translation="-208.6157 25.5394 -16.9709" scale="0.8974 0.867 0.775" euler="-161.6807 -76.1329 -160.8174" />
-    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" name="inst-grp-53-0005" translation="-206.6825 25.8794 -38.5531" scale="0.8389 0.7978 0.7466" euler="-179.8408 33.261 -179.371" />
-    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" name="inst-grp-53-0006" translation="-201.6627 25.4681 -38.657" scale="0.9522 0.8446 0.7904" euler="-178.559 3.9793 -178.2799" />
-    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" name="inst-grp-53-0007" translation="-170.3065 25.8703 -27.9578" scale="0.948 1.0694 0.9704" euler="0.1546 33.6939 1.9011" />
-    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" name="inst-grp-53-0008" translation="-168.8329 25.8298 -25.0518" scale="1.1303 1.3022 1.24" euler="-1.2875 51.3578 3.0664" />
+  <Scatter id="engine-53" profile="shore-rocks" count="9" seed="13943144449614675968" region-min="-210.0 0 -38.7" region-max="-168.5 0 9.6" avoid-water="0" avoid-road="1" avoid-cliff="1" align-to-terrain="1" random-yaw="1" avoid-overlaps="1" footprint-radius="0.8" max-slope-deg="55" max-slope-attempts="4" scale-min="0.55" scale-max="1.4" scale-axis-min="0.85" scale-axis-max="1.15" base-y-offset="-0.12">
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+  </Scatter>
+  <Group name="spawn/engine-53" generated-by="engine-53">
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0000" translation="-168.5387 25.7204 0.9943" euler="-0.8377 10.9483 1.6815" scale="0.6676 0.7179 0.6695" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0001" translation="-187.301 25.4647 9.5789" euler="-1.8765 -60.1545 -0.0547" scale="1.3935 1.3283 1.4821" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0002" translation="-208.9275 25.6009 -4.0821" euler="1.9524 30.0204 -4.5387" scale="1.2208 1.3417 1.355" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0003" translation="-209.9875 25.7244 -10.6583" euler="179.8496 3.9366 -176.1676" scale="1.2721 1.2042 1.1789" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0004" translation="-208.6157 25.5394 -16.9709" euler="-161.6807 -76.1329 -160.8174" scale="0.8974 0.867 0.775" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0005" translation="-206.6825 25.8794 -38.5531" euler="-179.8408 33.261 -179.371" scale="0.8389 0.7978 0.7466" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0006" translation="-201.6627 25.4681 -38.657" euler="-178.559 3.9793 -178.2799" scale="0.9522 0.8446 0.7904" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0007" translation="-170.3065 25.8703 -27.9578" euler="0.1546 33.6939 1.9011" scale="0.948 1.0694 0.9704" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0008" translation="-168.8329 25.8298 -25.0518" euler="-1.2875 51.3578 3.0664" scale="1.1303 1.3022 1.24" />
   </Group>
-  <Group name="spawn/engine-82" />
 </world>

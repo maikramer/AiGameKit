@@ -38,7 +38,7 @@
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="-9 38.7304 -6">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 1.05 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-9 38.7304 -6" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
@@ -53,7 +53,7 @@
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="-2.9 38.7304 34.5">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 1.05 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-2.9 38.7304 34.5" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
@@ -62,7 +62,7 @@
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="2.9 38.7304 34.5">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 1.05 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="2.9 38.7304 34.5" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
@@ -71,7 +71,7 @@
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="-2.9 38.7304 -34.5">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 1.05 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="-2.9 38.7304 -34.5" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
@@ -80,7 +80,7 @@
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="2.9 38.7304 -34.5">
-      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 1.05 0" />
+      <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
     <Group translation="2.9 38.7304 -34.5" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />

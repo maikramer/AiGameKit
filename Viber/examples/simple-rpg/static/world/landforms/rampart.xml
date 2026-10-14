@@ -19,7 +19,7 @@
       <Box translation="1.4 0.5 4.6" half-size="1.3 0.5 0.9" euler="0 38 14" texture-url="/assets/textures/mountain_stone/albedo.ktx2" texture-tile-size="3" base-color="#7e786e" roughness="0.95" />
       <Box translation="-0.8 0.4 5.4" half-size="1.0 0.4 0.7" euler="0 -30 -8" texture-url="/assets/textures/mountain_stone/albedo.ktx2" texture-tile-size="3" base-color="#827c72" roughness="0.95" />
       <Box translation="3.2 0.45 3.4" half-size="0.8 0.45 0.6" euler="0 62 22" texture-url="/assets/textures/mountain_stone/albedo.ktx2" texture-tile-size="3" base-color="#7a746a" roughness="0.95" />
-      <Cylinder translation="-2.6 0.4 3" radius="0.7" half-height="0.4" euler="12 0 30" texture-url="/assets/textures/mountain_stone/albedo.ktx2" texture-tile-size="3" base-color="#7e786e" roughness="0.95" />
+      <Cylinder translation="-2.6 0.4 3.0" radius="0.7" half-height="0.4" euler="12 0 30" texture-url="/assets/textures/mountain_stone/albedo.ktx2" texture-tile-size="3" base-color="#7e786e" roughness="0.95" />
     </Composition>
     <Cliff name="crescente-do-ermo" path="396 100 416 94 434 104 444 124 440 148" width="12" height="24" profile="columnar" side="left" noise="0.24" seed="94" gullies="0.2" talus="1" />
     <Arch name="arco-do-ermo" at="352 96" profile="natural" width="20" height="12" thickness="6" depth="7" yaw="40" />

@@ -8,17 +8,17 @@
   bioma (névoa/tinta/exposição) e a chuva. O que sobra é distância: >2 km não
   entra em render-distance, cull-distance nem raio de ativação de IA.
 
-  ENTRADAS: o portal de saída de cada sala é colocado no vão −Z a partir da
-  MESMA tabela de salas que `scripts/building-portal.lua` usa (ROOMS); o
-  script confere no arranque que a sala existe a <1 m do sítio esperado, para
-  XML e Lua não se afastarem em silêncio.
+  ENTRADAS: cada sala tem `portal.exit_<room>` no vão -Z. O par porta↔saída
+  é DATA-DRIVEN — o `scripts/building-portal.lua` casa pelo NOME das
+  entidades (`portal.<room>[.sufixo]` na rua), sem tabela espelhada: mover
+  uma porta no editor não desincroniza nada.
 
   Regenerar:  python3 tools/gen_interiors.py
 -->
 <world>
   <InteriorScene at="2658 2656" size="189 173" room-size="60 55" room-origin="2600 2600" camera-distance="24" camera-pitch="58" camera-yaw="0" />
 
-  <!-- ══════════════════ CAPELA (24×18) ══════════════════ -->
+  <!-- ══════════════════ CAPELA (24x18) ══════════════════ -->
     <Composition name="interior.chapel.shell" translation="2660 0 2600" body="fixed" collider="auto">
       <Box texture="/assets/textures/cobblestone_road/albedo.ktx2" texture-tile-size="3.2" normal-map="/assets/textures/cobblestone_road/normal.ktx2" translation="0.00 0.06 0.00" half-size="12.60 0.06 9.60" />
       <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="0.00 1.20 9.00" half-size="12.00 1.20 0.14" />
@@ -150,7 +150,7 @@
     </Group>
     <Entity name="portal.exit_chapel" translation="2660 0 2590.0" script="building-portal.lua" />
 
-  <!-- ══════════════════ FERRARIA (22×16) ══════════════════ -->
+  <!-- ══════════════════ FERRARIA (22x16) ══════════════════ -->
     <Composition name="interior.forge.shell" translation="2720 0 2600" body="fixed" collider="auto">
       <Box texture="/assets/textures/dirt_road/albedo.ktx2" texture-tile-size="3.0" translation="0.00 0.06 0.00" half-size="11.60 0.06 8.60" />
       <Box texture="/assets/textures/mountain_stone/albedo.ktx2" texture-tile-size="3.6" normal-map="/assets/textures/mountain_stone/normal.ktx2" translation="0.00 1.20 8.00" half-size="11.00 1.20 0.14" />
@@ -230,7 +230,7 @@
     </Group>
     <Entity name="portal.exit_forge" translation="2720 0 2591.0" script="building-portal.lua" />
 
-  <!-- ══════════════════ CASA COMUM (20×16) ══════════════════ -->
+  <!-- ══════════════════ CASA COMUM (20x16) ══════════════════ -->
     <Composition name="interior.house_a.shell" translation="2600 0 2600" body="fixed" collider="auto">
       <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="3.0" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="0.00 0.06 0.00" half-size="10.60 0.06 8.60" />
       <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="0.00 1.20 8.00" half-size="10.00 1.20 0.14" />
@@ -319,7 +319,7 @@
     </Group>
     <Entity name="portal.exit_house_a" translation="2600 0 2591.0" script="building-portal.lua" />
 
-  <!-- ══════════════════ CASA DO ESCRIBA (20×16) ══════════════════ -->
+  <!-- ══════════════════ CASA DO ESCRIBA (20x16) ══════════════════ -->
     <Composition name="interior.house_b.shell" translation="2600 0 2655" body="fixed" collider="auto">
       <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="3.0" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="0.00 0.06 0.00" half-size="10.60 0.06 8.60" />
       <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="0.00 1.20 8.00" half-size="10.00 1.20 0.14" />
@@ -397,7 +397,7 @@
     </Group>
     <Entity name="portal.exit_house_b" translation="2600 0 2646.0" script="building-portal.lua" />
 
-  <!-- ══════════════════ COZINHA (20×16) ══════════════════ -->
+  <!-- ══════════════════ COZINHA (20x16) ══════════════════ -->
     <Composition name="interior.house_c.shell" translation="2660 0 2655" body="fixed" collider="auto">
       <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="3.0" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="0.00 0.06 0.00" half-size="10.60 0.06 8.60" />
       <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="0.00 1.20 8.00" half-size="10.00 1.20 0.14" />
@@ -486,7 +486,7 @@
     </Group>
     <Entity name="portal.exit_house_c" translation="2660 0 2646.0" script="building-portal.lua" />
 
-  <!-- ══════════════════ CABANA DO PASTOR (18×14) ══════════════════ -->
+  <!-- ══════════════════ CABANA DO PASTOR (18x14) ══════════════════ -->
     <Composition name="interior.shepherd.shell" translation="2720 0 2655" body="fixed" collider="auto">
       <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="3.0" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="0.00 0.06 0.00" half-size="9.60 0.06 7.60" />
       <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="0.00 1.20 7.00" half-size="9.00 1.20 0.14" />
@@ -566,7 +566,7 @@
     </Group>
     <Entity name="portal.exit_shepherd" translation="2720 0 2647.0" script="building-portal.lua" />
 
-  <!-- ══════════════════ CELEIRO (28×20) ══════════════════ -->
+  <!-- ══════════════════ CELEIRO (28x20) ══════════════════ -->
     <Composition name="interior.barn.shell" translation="2600 0 2710" body="fixed" collider="auto">
       <Box texture="/assets/textures/dirt_road/albedo.ktx2" texture-tile-size="3.0" translation="0.00 0.06 0.00" half-size="14.60 0.06 10.60" />
       <Box texture="/assets/textures/mountain_stone/albedo.ktx2" texture-tile-size="3.6" normal-map="/assets/textures/mountain_stone/normal.ktx2" translation="0.00 1.20 10.00" half-size="14.00 1.20 0.14" />
@@ -646,7 +646,7 @@
     </Group>
     <Entity name="portal.exit_barn" translation="2600 0 2699.0" script="building-portal.lua" />
 
-  <!-- ══════════════════ TABERNA (28×20) ══════════════════ -->
+  <!-- ══════════════════ TABERNA (28x20) ══════════════════ -->
     <Composition name="interior.longhouse.shell" translation="2660 0 2710" body="fixed" collider="auto">
       <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="3.0" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="0.00 0.06 0.00" half-size="14.60 0.06 10.60" />
       <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="0.00 1.20 10.00" half-size="14.00 1.20 0.14" />
@@ -758,7 +758,7 @@
     </Group>
     <Entity name="portal.exit_longhouse" translation="2660 0 2699.0" script="building-portal.lua" />
 
-  <!-- ══════════════════ BANCA DO MERCADO (18×14) ══════════════════ -->
+  <!-- ══════════════════ BANCA DO MERCADO (18x14) ══════════════════ -->
     <Composition name="interior.market.shell" translation="2720 0 2710" body="fixed" collider="auto">
       <Box texture="/assets/textures/cobblestone_road/albedo.ktx2" texture-tile-size="3.2" normal-map="/assets/textures/cobblestone_road/normal.ktx2" translation="0.00 0.06 0.00" half-size="9.60 0.06 7.60" />
     </Composition>

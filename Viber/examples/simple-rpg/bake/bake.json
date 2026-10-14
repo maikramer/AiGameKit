@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": {
-    "world": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/Viber/examples/simple-rpg/world.xml",
+    "world": "world.xml",
     "viber_version": "0.1.0"
   },
   "terrain": {
@@ -269712,7 +269712,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-53-0000",
+          "name": "inst-engine-53-0000",
           "translation": [
             -168.5387,
             25.72036,
@@ -269733,7 +269733,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-53-0001",
+          "name": "inst-engine-53-0001",
           "translation": [
             -187.30098,
             25.46469,
@@ -269754,7 +269754,7 @@
           "asset": "/assets/meshes/props/rock_boulder_lod0.glb"
         },
         {
-          "name": "inst-grp-53-0002",
+          "name": "inst-engine-53-0002",
           "translation": [
             -208.92752,
             25.60093,
@@ -269775,7 +269775,7 @@
           "asset": "/assets/meshes/swamp/moss_rock_lod0.glb"
         },
         {
-          "name": "inst-grp-53-0003",
+          "name": "inst-engine-53-0003",
           "translation": [
             -209.98753,
             25.724394,
@@ -269796,7 +269796,7 @@
           "asset": "/assets/meshes/farm/flint_rock_lod0.glb"
         },
         {
-          "name": "inst-grp-53-0004",
+          "name": "inst-engine-53-0004",
           "translation": [
             -208.6157,
             25.539423,
@@ -269817,7 +269817,7 @@
           "asset": "/assets/meshes/farm/flint_rock_lod0.glb"
         },
         {
-          "name": "inst-grp-53-0005",
+          "name": "inst-engine-53-0005",
           "translation": [
             -206.6825,
             25.879387,
@@ -269838,7 +269838,7 @@
           "asset": "/assets/meshes/props/rock_boulder_lod0.glb"
         },
         {
-          "name": "inst-grp-53-0006",
+          "name": "inst-engine-53-0006",
           "translation": [
             -201.66269,
             25.46805,
@@ -269859,7 +269859,7 @@
           "asset": "/assets/meshes/props/rock_boulder_lod0.glb"
         },
         {
-          "name": "inst-grp-53-0007",
+          "name": "inst-engine-53-0007",
           "translation": [
             -170.30647,
             25.87034,
@@ -269880,7 +269880,7 @@
           "asset": "/assets/meshes/props/rock_boulder_lod0.glb"
         },
         {
-          "name": "inst-grp-53-0008",
+          "name": "inst-engine-53-0008",
           "translation": [
             -168.83286,
             25.829828,
@@ -270130,7 +270130,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-57-0000",
+          "name": "inst-grp-56-0000",
           "translation": [
             207.58708,
             48.286034,
@@ -270183,7 +270183,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-58-0000",
+          "name": "inst-grp-57-0000",
           "translation": [
             268.5106,
             51.84617,
@@ -270204,7 +270204,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-58-0001",
+          "name": "inst-grp-57-0001",
           "translation": [
             296.47214,
             71.686745,
@@ -270225,7 +270225,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-58-0002",
+          "name": "inst-grp-57-0002",
           "translation": [
             300.0,
             54.296616,
@@ -270246,7 +270246,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-58-0003",
+          "name": "inst-grp-57-0003",
           "translation": [
             287.27808,
             70.84195,
@@ -270267,7 +270267,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-58-0004",
+          "name": "inst-grp-57-0004",
           "translation": [
             259.7773,
             51.696404,
@@ -270320,7 +270320,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-59-0000",
+          "name": "inst-grp-58-0000",
           "translation": [
             192.68199,
             164.18062,
@@ -270341,7 +270341,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_5_lod0.glb"
         },
         {
-          "name": "inst-grp-59-0001",
+          "name": "inst-grp-58-0001",
           "translation": [
             330.0,
             154.84319,
@@ -270362,7 +270362,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_2_lod0.glb"
         },
         {
-          "name": "inst-grp-59-0002",
+          "name": "inst-grp-58-0002",
           "translation": [
             302.0959,
             153.21454,
@@ -270383,7 +270383,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_5_lod0.glb"
         },
         {
-          "name": "inst-grp-59-0003",
+          "name": "inst-grp-58-0003",
           "translation": [
             308.92487,
             153.7302,
@@ -270404,7 +270404,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_2_lod0.glb"
         },
         {
-          "name": "inst-grp-59-0004",
+          "name": "inst-grp-58-0004",
           "translation": [
             205.1852,
             163.5122,
@@ -270425,7 +270425,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_2_lod0.glb"
         },
         {
-          "name": "inst-grp-59-0005",
+          "name": "inst-grp-58-0005",
           "translation": [
             302.29266,
             153.51971,
@@ -270446,7 +270446,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_5_lod0.glb"
         },
         {
-          "name": "inst-grp-59-0006",
+          "name": "inst-grp-58-0006",
           "translation": [
             316.71414,
             153.9939,
@@ -270467,7 +270467,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_2_lod0.glb"
         },
         {
-          "name": "inst-grp-59-0007",
+          "name": "inst-grp-58-0007",
           "translation": [
             293.32584,
             154.07568,
@@ -270488,7 +270488,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_2_lod0.glb"
         },
         {
-          "name": "inst-grp-59-0008",
+          "name": "inst-grp-58-0008",
           "translation": [
             273.77118,
             154.04303,
@@ -270509,7 +270509,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_2_lod0.glb"
         },
         {
-          "name": "inst-grp-59-0009",
+          "name": "inst-grp-58-0009",
           "translation": [
             330.0,
             157.03056,
@@ -270562,7 +270562,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-60-0000",
+          "name": "inst-grp-59-0000",
           "translation": [
             317.42014,
             151.65668,
@@ -270583,7 +270583,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0001",
+          "name": "inst-grp-59-0001",
           "translation": [
             430.22992,
             131.00697,
@@ -270604,7 +270604,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0002",
+          "name": "inst-grp-59-0002",
           "translation": [
             458.8132,
             132.59096,
@@ -270625,7 +270625,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0003",
+          "name": "inst-grp-59-0003",
           "translation": [
             373.53116,
             138.99376,
@@ -270646,7 +270646,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0004",
+          "name": "inst-grp-59-0004",
           "translation": [
             311.6681,
             151.56384,
@@ -270667,7 +270667,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0005",
+          "name": "inst-grp-59-0005",
           "translation": [
             300.0,
             152.19106,
@@ -270688,7 +270688,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0006",
+          "name": "inst-grp-59-0006",
           "translation": [
             328.71176,
             148.81128,
@@ -270709,7 +270709,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0007",
+          "name": "inst-grp-59-0007",
           "translation": [
             421.35016,
             131.26314,
@@ -270730,7 +270730,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0008",
+          "name": "inst-grp-59-0008",
           "translation": [
             411.789,
             131.08057,
@@ -270751,7 +270751,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0009",
+          "name": "inst-grp-59-0009",
           "translation": [
             338.6953,
             144.87152,
@@ -270772,7 +270772,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0010",
+          "name": "inst-grp-59-0010",
           "translation": [
             352.11465,
             143.5604,
@@ -270793,7 +270793,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0011",
+          "name": "inst-grp-59-0011",
           "translation": [
             440.3571,
             130.44218,
@@ -270814,7 +270814,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0012",
+          "name": "inst-grp-59-0012",
           "translation": [
             373.65588,
             136.7153,
@@ -270835,7 +270835,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0013",
+          "name": "inst-grp-59-0013",
           "translation": [
             401.80936,
             132.38574,
@@ -270856,7 +270856,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0014",
+          "name": "inst-grp-59-0014",
           "translation": [
             387.95938,
             134.78426,
@@ -270877,7 +270877,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0015",
+          "name": "inst-grp-59-0015",
           "translation": [
             335.67722,
             148.16422,
@@ -270898,7 +270898,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0016",
+          "name": "inst-grp-59-0016",
           "translation": [
             314.79752,
             151.71117,
@@ -270919,7 +270919,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0017",
+          "name": "inst-grp-59-0017",
           "translation": [
             338.6675,
             146.25243,
@@ -270940,7 +270940,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0018",
+          "name": "inst-grp-59-0018",
           "translation": [
             466.41217,
             133.83945,
@@ -270961,7 +270961,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0019",
+          "name": "inst-grp-59-0019",
           "translation": [
             300.0,
             152.68036,
@@ -270982,7 +270982,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0020",
+          "name": "inst-grp-59-0020",
           "translation": [
             316.0843,
             152.3075,
@@ -271003,7 +271003,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0021",
+          "name": "inst-grp-59-0021",
           "translation": [
             374.28326,
             138.81384,
@@ -271024,7 +271024,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0022",
+          "name": "inst-grp-59-0022",
           "translation": [
             395.0877,
             137.63681,
@@ -271045,7 +271045,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0023",
+          "name": "inst-grp-59-0023",
           "translation": [
             322.81125,
             150.23502,
@@ -271066,7 +271066,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0024",
+          "name": "inst-grp-59-0024",
           "translation": [
             394.93454,
             135.04706,
@@ -271087,7 +271087,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0025",
+          "name": "inst-grp-59-0025",
           "translation": [
             321.1556,
             150.42747,
@@ -271108,7 +271108,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0026",
+          "name": "inst-grp-59-0026",
           "translation": [
             350.56546,
             143.96135,
@@ -271129,7 +271129,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0027",
+          "name": "inst-grp-59-0027",
           "translation": [
             339.60837,
             146.29059,
@@ -271150,7 +271150,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0028",
+          "name": "inst-grp-59-0028",
           "translation": [
             391.7042,
             136.63322,
@@ -271171,7 +271171,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0029",
+          "name": "inst-grp-59-0029",
           "translation": [
             300.0,
             152.18254,
@@ -271192,7 +271192,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0030",
+          "name": "inst-grp-59-0030",
           "translation": [
             306.7547,
             152.64941,
@@ -271213,7 +271213,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0031",
+          "name": "inst-grp-59-0031",
           "translation": [
             441.3897,
             130.18645,
@@ -271234,7 +271234,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0032",
+          "name": "inst-grp-59-0032",
           "translation": [
             403.74838,
             133.21912,
@@ -271255,7 +271255,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0033",
+          "name": "inst-grp-59-0033",
           "translation": [
             305.55667,
             152.56897,
@@ -271276,7 +271276,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0034",
+          "name": "inst-grp-59-0034",
           "translation": [
             300.0,
             152.5385,
@@ -271297,7 +271297,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0035",
+          "name": "inst-grp-59-0035",
           "translation": [
             300.0,
             152.30951,
@@ -271318,7 +271318,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0036",
+          "name": "inst-grp-59-0036",
           "translation": [
             354.44574,
             144.4817,
@@ -271339,7 +271339,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0037",
+          "name": "inst-grp-59-0037",
           "translation": [
             434.89594,
             129.47527,
@@ -271360,7 +271360,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0038",
+          "name": "inst-grp-59-0038",
           "translation": [
             417.22433,
             130.84053,
@@ -271381,7 +271381,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0039",
+          "name": "inst-grp-59-0039",
           "translation": [
             403.3652,
             133.38913,
@@ -271402,7 +271402,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0040",
+          "name": "inst-grp-59-0040",
           "translation": [
             325.62753,
             149.65454,
@@ -271423,7 +271423,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0041",
+          "name": "inst-grp-59-0041",
           "translation": [
             344.50818,
             144.01334,
@@ -271444,7 +271444,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0042",
+          "name": "inst-grp-59-0042",
           "translation": [
             381.52872,
             135.12784,
@@ -271465,7 +271465,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0043",
+          "name": "inst-grp-59-0043",
           "translation": [
             300.0,
             151.39737,
@@ -271486,7 +271486,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0044",
+          "name": "inst-grp-59-0044",
           "translation": [
             315.76294,
             152.04813,
@@ -271507,7 +271507,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0045",
+          "name": "inst-grp-59-0045",
           "translation": [
             300.0,
             152.17072,
@@ -271528,7 +271528,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0046",
+          "name": "inst-grp-59-0046",
           "translation": [
             420.62277,
             131.27516,
@@ -271549,7 +271549,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0047",
+          "name": "inst-grp-59-0047",
           "translation": [
             367.5826,
             139.89948,
@@ -271570,7 +271570,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0048",
+          "name": "inst-grp-59-0048",
           "translation": [
             312.39047,
             150.09018,
@@ -271591,7 +271591,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0049",
+          "name": "inst-grp-59-0049",
           "translation": [
             418.8927,
             130.84827,
@@ -271612,7 +271612,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0050",
+          "name": "inst-grp-59-0050",
           "translation": [
             324.4791,
             149.85416,
@@ -271633,7 +271633,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0051",
+          "name": "inst-grp-59-0051",
           "translation": [
             363.95886,
             141.82233,
@@ -271654,7 +271654,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0052",
+          "name": "inst-grp-59-0052",
           "translation": [
             428.04193,
             130.59515,
@@ -271675,7 +271675,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0053",
+          "name": "inst-grp-59-0053",
           "translation": [
             442.97037,
             133.21011,
@@ -271696,7 +271696,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0054",
+          "name": "inst-grp-59-0054",
           "translation": [
             418.60406,
             131.11699,
@@ -271717,7 +271717,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0055",
+          "name": "inst-grp-59-0055",
           "translation": [
             383.16556,
             137.41039,
@@ -271738,7 +271738,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0056",
+          "name": "inst-grp-59-0056",
           "translation": [
             425.42688,
             132.91396,
@@ -271759,7 +271759,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0057",
+          "name": "inst-grp-59-0057",
           "translation": [
             311.07547,
             151.86859,
@@ -271780,7 +271780,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0058",
+          "name": "inst-grp-59-0058",
           "translation": [
             333.6169,
             148.13786,
@@ -271801,7 +271801,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0059",
+          "name": "inst-grp-59-0059",
           "translation": [
             356.81232,
             143.79878,
@@ -271822,7 +271822,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0060",
+          "name": "inst-grp-59-0060",
           "translation": [
             359.72882,
             140.8919,
@@ -271843,7 +271843,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0061",
+          "name": "inst-grp-59-0061",
           "translation": [
             300.0,
             153.04025,
@@ -271864,7 +271864,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0062",
+          "name": "inst-grp-59-0062",
           "translation": [
             317.34564,
             149.71503,
@@ -271885,7 +271885,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0063",
+          "name": "inst-grp-59-0063",
           "translation": [
             337.63425,
             147.41367,
@@ -271906,7 +271906,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0064",
+          "name": "inst-grp-59-0064",
           "translation": [
             343.52527,
             144.58322,
@@ -271927,7 +271927,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0065",
+          "name": "inst-grp-59-0065",
           "translation": [
             424.68317,
             131.98477,
@@ -271948,7 +271948,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0066",
+          "name": "inst-grp-59-0066",
           "translation": [
             330.03128,
             148.35477,
@@ -271969,7 +271969,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0067",
+          "name": "inst-grp-59-0067",
           "translation": [
             333.50555,
             148.03459,
@@ -271990,7 +271990,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0068",
+          "name": "inst-grp-59-0068",
           "translation": [
             354.57678,
             142.62646,
@@ -272011,7 +272011,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0069",
+          "name": "inst-grp-59-0069",
           "translation": [
             426.63712,
             129.73758,
@@ -272032,7 +272032,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0070",
+          "name": "inst-grp-59-0070",
           "translation": [
             439.2215,
             128.46545,
@@ -272053,7 +272053,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0071",
+          "name": "inst-grp-59-0071",
           "translation": [
             430.57983,
             130.79288,
@@ -272074,7 +272074,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0072",
+          "name": "inst-grp-59-0072",
           "translation": [
             321.8028,
             149.0256,
@@ -272095,7 +272095,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0073",
+          "name": "inst-grp-59-0073",
           "translation": [
             300.0,
             151.50238,
@@ -272116,7 +272116,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0074",
+          "name": "inst-grp-59-0074",
           "translation": [
             412.81522,
             131.24207,
@@ -272137,7 +272137,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0075",
+          "name": "inst-grp-59-0075",
           "translation": [
             397.10712,
             134.60342,
@@ -272158,7 +272158,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0076",
+          "name": "inst-grp-59-0076",
           "translation": [
             368.68472,
             140.80734,
@@ -272179,7 +272179,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0077",
+          "name": "inst-grp-59-0077",
           "translation": [
             415.05975,
             131.61108,
@@ -272200,7 +272200,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0078",
+          "name": "inst-grp-59-0078",
           "translation": [
             326.13034,
             149.6344,
@@ -272221,7 +272221,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0079",
+          "name": "inst-grp-59-0079",
           "translation": [
             396.75458,
             133.69583,
@@ -272242,7 +272242,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0080",
+          "name": "inst-grp-59-0080",
           "translation": [
             357.36456,
             142.23308,
@@ -272263,7 +272263,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0081",
+          "name": "inst-grp-59-0081",
           "translation": [
             333.73444,
             152.16211,
@@ -272284,7 +272284,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0082",
+          "name": "inst-grp-59-0082",
           "translation": [
             435.74545,
             129.30139,
@@ -272305,7 +272305,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0083",
+          "name": "inst-grp-59-0083",
           "translation": [
             324.359,
             150.6265,
@@ -272326,7 +272326,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0084",
+          "name": "inst-grp-59-0084",
           "translation": [
             312.1653,
             151.49142,
@@ -272347,7 +272347,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0085",
+          "name": "inst-grp-59-0085",
           "translation": [
             364.9478,
             141.53735,
@@ -272368,7 +272368,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0086",
+          "name": "inst-grp-59-0086",
           "translation": [
             300.0,
             153.03444,
@@ -272389,7 +272389,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0087",
+          "name": "inst-grp-59-0087",
           "translation": [
             402.33658,
             132.24872,
@@ -272410,7 +272410,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0088",
+          "name": "inst-grp-59-0088",
           "translation": [
             406.92325,
             131.6174,
@@ -272431,7 +272431,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0089",
+          "name": "inst-grp-59-0089",
           "translation": [
             400.67953,
             139.53958,
@@ -272452,7 +272452,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0090",
+          "name": "inst-grp-59-0090",
           "translation": [
             300.0,
             152.61163,
@@ -272473,7 +272473,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0091",
+          "name": "inst-grp-59-0091",
           "translation": [
             380.39685,
             138.09651,
@@ -272494,7 +272494,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0092",
+          "name": "inst-grp-59-0092",
           "translation": [
             343.40637,
             146.68962,
@@ -272515,7 +272515,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0093",
+          "name": "inst-grp-59-0093",
           "translation": [
             425.89676,
             130.0064,
@@ -272536,7 +272536,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0094",
+          "name": "inst-grp-59-0094",
           "translation": [
             439.09097,
             131.58011,
@@ -272557,7 +272557,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0095",
+          "name": "inst-grp-59-0095",
           "translation": [
             419.41956,
             132.1728,
@@ -272578,7 +272578,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0096",
+          "name": "inst-grp-59-0096",
           "translation": [
             350.6753,
             143.82571,
@@ -272599,7 +272599,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0097",
+          "name": "inst-grp-59-0097",
           "translation": [
             342.08954,
             145.79874,
@@ -272620,7 +272620,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0098",
+          "name": "inst-grp-59-0098",
           "translation": [
             324.22772,
             149.60289,
@@ -272641,7 +272641,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0099",
+          "name": "inst-grp-59-0099",
           "translation": [
             346.4301,
             146.51625,
@@ -272662,7 +272662,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0100",
+          "name": "inst-grp-59-0100",
           "translation": [
             332.5326,
             148.94128,
@@ -272683,7 +272683,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0101",
+          "name": "inst-grp-59-0101",
           "translation": [
             358.08487,
             148.36432,
@@ -272704,7 +272704,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0102",
+          "name": "inst-grp-59-0102",
           "translation": [
             333.49515,
             146.2998,
@@ -272725,7 +272725,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0103",
+          "name": "inst-grp-59-0103",
           "translation": [
             317.1035,
             151.4294,
@@ -272746,7 +272746,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0104",
+          "name": "inst-grp-59-0104",
           "translation": [
             323.23004,
             149.5849,
@@ -272767,7 +272767,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0105",
+          "name": "inst-grp-59-0105",
           "translation": [
             450.50223,
             132.32571,
@@ -272788,7 +272788,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0106",
+          "name": "inst-grp-59-0106",
           "translation": [
             387.65775,
             138.84203,
@@ -272809,7 +272809,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0107",
+          "name": "inst-grp-59-0107",
           "translation": [
             406.60846,
             138.91614,
@@ -272830,7 +272830,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0108",
+          "name": "inst-grp-59-0108",
           "translation": [
             346.41052,
             145.36392,
@@ -272851,7 +272851,7 @@
           "asset": "/assets/meshes/terrain/form_cliff_20_lod0.glb"
         },
         {
-          "name": "inst-grp-60-0109",
+          "name": "inst-grp-59-0109",
           "translation": [
             379.52887,
             142.07166,
@@ -272904,7 +272904,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-61-0000",
+          "name": "inst-grp-60-0000",
           "translation": [
             248.65338,
             158.08344,
@@ -272925,7 +272925,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0001",
+          "name": "inst-grp-60-0001",
           "translation": [
             278.184,
             156.6983,
@@ -272946,7 +272946,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0002",
+          "name": "inst-grp-60-0002",
           "translation": [
             260.97128,
             159.2272,
@@ -272967,7 +272967,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0003",
+          "name": "inst-grp-60-0003",
           "translation": [
             255.39128,
             157.554,
@@ -272988,7 +272988,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0004",
+          "name": "inst-grp-60-0004",
           "translation": [
             300.0,
             153.1257,
@@ -273009,7 +273009,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0005",
+          "name": "inst-grp-60-0005",
           "translation": [
             270.6566,
             157.83226,
@@ -273030,7 +273030,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0006",
+          "name": "inst-grp-60-0006",
           "translation": [
             236.82405,
             159.49193,
@@ -273051,7 +273051,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0007",
+          "name": "inst-grp-60-0007",
           "translation": [
             226.06462,
             164.43445,
@@ -273072,7 +273072,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0008",
+          "name": "inst-grp-60-0008",
           "translation": [
             226.14055,
             161.35654,
@@ -273093,7 +273093,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0009",
+          "name": "inst-grp-60-0009",
           "translation": [
             261.77383,
             155.8979,
@@ -273114,7 +273114,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0010",
+          "name": "inst-grp-60-0010",
           "translation": [
             281.4438,
             153.8165,
@@ -273135,7 +273135,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0011",
+          "name": "inst-grp-60-0011",
           "translation": [
             250.87904,
             161.29204,
@@ -273156,7 +273156,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0012",
+          "name": "inst-grp-60-0012",
           "translation": [
             176.0,
             166.04123,
@@ -273177,7 +273177,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0013",
+          "name": "inst-grp-60-0013",
           "translation": [
             258.831,
             158.06776,
@@ -273198,7 +273198,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0014",
+          "name": "inst-grp-60-0014",
           "translation": [
             217.82088,
             163.18259,
@@ -273219,7 +273219,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0015",
+          "name": "inst-grp-60-0015",
           "translation": [
             216.02824,
             165.25764,
@@ -273240,7 +273240,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0016",
+          "name": "inst-grp-60-0016",
           "translation": [
             263.11932,
             156.06088,
@@ -273261,7 +273261,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0017",
+          "name": "inst-grp-60-0017",
           "translation": [
             290.87863,
             152.91887,
@@ -273282,7 +273282,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0018",
+          "name": "inst-grp-60-0018",
           "translation": [
             230.18262,
             162.16211,
@@ -273303,7 +273303,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0019",
+          "name": "inst-grp-60-0019",
           "translation": [
             281.14914,
             152.86803,
@@ -273324,7 +273324,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0020",
+          "name": "inst-grp-60-0020",
           "translation": [
             179.15233,
             166.68768,
@@ -273345,7 +273345,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0021",
+          "name": "inst-grp-60-0021",
           "translation": [
             196.73369,
             165.61064,
@@ -273366,7 +273366,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0022",
+          "name": "inst-grp-60-0022",
           "translation": [
             226.7475,
             164.0162,
@@ -273387,7 +273387,7 @@
           "asset": "/assets/meshes/forest/dead_tree_lod0.glb"
         },
         {
-          "name": "inst-grp-61-0023",
+          "name": "inst-grp-60-0023",
           "translation": [
             245.86398,
             160.17395,
@@ -273440,7 +273440,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-62-0000",
+          "name": "inst-grp-61-0000",
           "translation": [
             -319.2599,
             143.7572,
@@ -273461,7 +273461,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_8_lod0.glb"
         },
         {
-          "name": "inst-grp-62-0001",
+          "name": "inst-grp-61-0001",
           "translation": [
             -330.0,
             145.68944,
@@ -273544,7 +273544,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-64-0000",
+          "name": "inst-grp-63-0000",
           "translation": [
             -213.42618,
             66.43251,
@@ -273565,7 +273565,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_5_lod0.glb"
         },
         {
-          "name": "inst-grp-64-0001",
+          "name": "inst-grp-63-0001",
           "translation": [
             -231.98624,
             69.14243,
@@ -273586,7 +273586,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_2_lod0.glb"
         },
         {
-          "name": "inst-grp-64-0002",
+          "name": "inst-grp-63-0002",
           "translation": [
             -261.32605,
             71.91399,
@@ -273607,7 +273607,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_5_lod0.glb"
         },
         {
-          "name": "inst-grp-64-0003",
+          "name": "inst-grp-63-0003",
           "translation": [
             -315.02493,
             88.73794,
@@ -273628,7 +273628,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_2_lod0.glb"
         },
         {
-          "name": "inst-grp-64-0004",
+          "name": "inst-grp-63-0004",
           "translation": [
             -250.93942,
             70.89346,
@@ -273649,7 +273649,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_5_lod0.glb"
         },
         {
-          "name": "inst-grp-64-0005",
+          "name": "inst-grp-63-0005",
           "translation": [
             -221.29916,
             65.723045,
@@ -273670,7 +273670,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_2_lod0.glb"
         },
         {
-          "name": "inst-grp-64-0006",
+          "name": "inst-grp-63-0006",
           "translation": [
             -244.91666,
             70.908905,
@@ -273753,7 +273753,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-66-0000",
+          "name": "inst-grp-65-0000",
           "translation": [
             325.74368,
             70.857666,
@@ -273806,7 +273806,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-67-0000",
+          "name": "inst-grp-66-0000",
           "translation": [
             324.33066,
             148.92422,
@@ -273827,7 +273827,7 @@
           "asset": "/assets/meshes/terrain/form_stack_11_lod0.glb"
         },
         {
-          "name": "inst-grp-67-0001",
+          "name": "inst-grp-66-0001",
           "translation": [
             320.88257,
             155.43863,
@@ -273880,7 +273880,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-68-0000",
+          "name": "inst-grp-67-0000",
           "translation": [
             -199.11743,
             160.02206,
@@ -273901,7 +273901,7 @@
           "asset": "/assets/meshes/terrain/form_stack_11_lod0.glb"
         },
         {
-          "name": "inst-grp-68-0001",
+          "name": "inst-grp-67-0001",
           "translation": [
             -236.84595,
             160.9072,
@@ -273922,7 +273922,7 @@
           "asset": "/assets/meshes/terrain/form_stack_6_lod0.glb"
         },
         {
-          "name": "inst-grp-68-0002",
+          "name": "inst-grp-67-0002",
           "translation": [
             -292.9673,
             142.92982,
@@ -273975,7 +273975,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-69-0000",
+          "name": "inst-grp-68-0000",
           "translation": [
             -190.59305,
             58.81077,
@@ -273996,7 +273996,7 @@
           "asset": "/assets/meshes/terrain/form_stack_11_lod0.glb"
         },
         {
-          "name": "inst-grp-69-0001",
+          "name": "inst-grp-68-0001",
           "translation": [
             -232.41843,
             64.48636,
@@ -274017,7 +274017,7 @@
           "asset": "/assets/meshes/terrain/form_stack_6_lod0.glb"
         },
         {
-          "name": "inst-grp-69-0002",
+          "name": "inst-grp-68-0002",
           "translation": [
             -278.7533,
             69.65886,
@@ -274038,7 +274038,7 @@
           "asset": "/assets/meshes/terrain/form_stack_11_lod0.glb"
         },
         {
-          "name": "inst-grp-69-0003",
+          "name": "inst-grp-68-0003",
           "translation": [
             -267.72443,
             72.00514,
@@ -274059,7 +274059,7 @@
           "asset": "/assets/meshes/terrain/form_stack_11_lod0.glb"
         },
         {
-          "name": "inst-grp-69-0004",
+          "name": "inst-grp-68-0004",
           "translation": [
             -299.4391,
             66.06027,
@@ -274080,7 +274080,7 @@
           "asset": "/assets/meshes/terrain/form_stack_6_lod0.glb"
         },
         {
-          "name": "inst-grp-69-0005",
+          "name": "inst-grp-68-0005",
           "translation": [
             -276.48203,
             68.670586,
@@ -274133,7 +274133,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-70-0000",
+          "name": "inst-grp-69-0000",
           "translation": [
             809.14636,
             175.74121,
@@ -274154,7 +274154,7 @@
           "asset": "/assets/meshes/desert/sandstone_arch_lod0.glb"
         },
         {
-          "name": "inst-grp-70-0001",
+          "name": "inst-grp-69-0001",
           "translation": [
             800.67175,
             175.74121,
@@ -274175,7 +274175,7 @@
           "asset": "/assets/meshes/terrain/form_outcrop_8_lod0.glb"
         },
         {
-          "name": "inst-grp-70-0002",
+          "name": "inst-grp-69-0002",
           "translation": [
             840.0,
             193.0856,
@@ -274228,7 +274228,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-71-0000",
+          "name": "inst-grp-70-0000",
           "translation": [
             -840.0,
             188.64308,
@@ -274249,7 +274249,7 @@
           "asset": "/assets/meshes/swamp/dead_willow_lod0.glb"
         },
         {
-          "name": "inst-grp-71-0001",
+          "name": "inst-grp-70-0001",
           "translation": [
             -830.2167,
             189.73302,
@@ -274302,7 +274302,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-72-0000",
+          "name": "inst-grp-71-0000",
           "translation": [
             608.696,
             192.42114,
@@ -274323,7 +274323,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-72-0001",
+          "name": "inst-grp-71-0001",
           "translation": [
             638.53784,
             191.15485,
@@ -274344,7 +274344,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-72-0002",
+          "name": "inst-grp-71-0002",
           "translation": [
             664.1795,
             193.92966,
@@ -274365,7 +274365,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-72-0003",
+          "name": "inst-grp-71-0003",
           "translation": [
             598.6779,
             191.80449,
@@ -274386,7 +274386,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-72-0004",
+          "name": "inst-grp-71-0004",
           "translation": [
             -265.94083,
             174.71837,
@@ -274407,7 +274407,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-72-0005",
+          "name": "inst-grp-71-0005",
           "translation": [
             -396.2021,
             170.09473,
@@ -274428,7 +274428,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-72-0006",
+          "name": "inst-grp-71-0006",
           "translation": [
             -377.03378,
             169.58058,
@@ -274449,7 +274449,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-72-0007",
+          "name": "inst-grp-71-0007",
           "translation": [
             -521.13965,
             171.25919,
@@ -274470,7 +274470,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-72-0008",
+          "name": "inst-grp-71-0008",
           "translation": [
             -564.14417,
             174.16814,
@@ -274491,7 +274491,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-72-0009",
+          "name": "inst-grp-71-0009",
           "translation": [
             -203.93578,
             176.89825,
@@ -274512,7 +274512,7 @@
           "asset": "/assets/meshes/forest/pine_dark_lod0.glb"
         },
         {
-          "name": "inst-grp-72-0010",
+          "name": "inst-grp-71-0010",
           "translation": [
             -383.33057,
             169.35762,
@@ -275159,7 +275159,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-80-0000",
+          "name": "inst-grp-79-0000",
           "translation": [
             521.05194,
             86.4419,
@@ -275180,7 +275180,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-80-0001",
+          "name": "inst-grp-79-0001",
           "translation": [
             521.4019,
             86.03013,
@@ -275201,7 +275201,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-80-0002",
+          "name": "inst-grp-79-0002",
           "translation": [
             527.7123,
             88.458275,
@@ -275222,7 +275222,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-80-0003",
+          "name": "inst-grp-79-0003",
           "translation": [
             525.18646,
             87.79766,
@@ -275243,7 +275243,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-80-0004",
+          "name": "inst-grp-79-0004",
           "translation": [
             514.4404,
             85.1004,
@@ -275264,7 +275264,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-80-0005",
+          "name": "inst-grp-79-0005",
           "translation": [
             525.4946,
             87.17549,
@@ -275285,7 +275285,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-80-0006",
+          "name": "inst-grp-79-0006",
           "translation": [
             519.8342,
             85.639465,
@@ -275306,7 +275306,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-80-0007",
+          "name": "inst-grp-79-0007",
           "translation": [
             523.0113,
             86.41063,
@@ -275327,7 +275327,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-80-0008",
+          "name": "inst-grp-79-0008",
           "translation": [
             519.4216,
             85.152695,
@@ -275348,7 +275348,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-80-0009",
+          "name": "inst-grp-79-0009",
           "translation": [
             531.14874,
             89.308945,
@@ -275401,7 +275401,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-81-0000",
+          "name": "inst-grp-80-0000",
           "translation": [
             744.154,
             175.47534,
@@ -275422,7 +275422,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-81-0001",
+          "name": "inst-grp-80-0001",
           "translation": [
             740.1635,
             175.48557,
@@ -275443,7 +275443,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-81-0002",
+          "name": "inst-grp-80-0002",
           "translation": [
             738.0634,
             175.72803,
@@ -275464,7 +275464,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-81-0003",
+          "name": "inst-grp-80-0003",
           "translation": [
             739.38055,
             175.26724,
@@ -275485,7 +275485,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-81-0004",
+          "name": "inst-grp-80-0004",
           "translation": [
             755.7144,
             175.86469,
@@ -275506,7 +275506,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-81-0005",
+          "name": "inst-grp-80-0005",
           "translation": [
             741.38934,
             175.75995,
@@ -275527,7 +275527,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-81-0006",
+          "name": "inst-grp-80-0006",
           "translation": [
             745.9005,
             176.12888,
@@ -275548,7 +275548,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-81-0007",
+          "name": "inst-grp-80-0007",
           "translation": [
             757.02014,
             176.85295,
@@ -275569,7 +275569,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-81-0008",
+          "name": "inst-grp-80-0008",
           "translation": [
             747.1402,
             175.98157,
@@ -275590,7 +275590,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-81-0009",
+          "name": "inst-grp-80-0009",
           "translation": [
             751.7306,
             176.30988,
@@ -275611,7 +275611,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-81-0010",
+          "name": "inst-grp-80-0010",
           "translation": [
             748.61096,
             176.49136,
@@ -275632,7 +275632,7 @@
           "asset": "/assets/meshes/props/rock_mossy_lod0.glb"
         },
         {
-          "name": "inst-grp-81-0011",
+          "name": "inst-grp-80-0011",
           "translation": [
             748.74786,
             175.73715,
@@ -275715,7 +275715,7 @@
       },
       "instances": [
         {
-          "name": "inst-grp-83-0000",
+          "name": "inst-grp-81-0000",
           "translation": [
             316.84213,
             71.80411,
@@ -275736,7 +275736,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0001",
+          "name": "inst-grp-81-0001",
           "translation": [
             120.47216,
             72.76819,
@@ -275757,7 +275757,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0002",
+          "name": "inst-grp-81-0002",
           "translation": [
             99.316345,
             72.88402,
@@ -275778,7 +275778,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0003",
+          "name": "inst-grp-81-0003",
           "translation": [
             80.5618,
             74.86864,
@@ -275799,7 +275799,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0004",
+          "name": "inst-grp-81-0004",
           "translation": [
             78.116905,
             84.52572,
@@ -275820,7 +275820,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0005",
+          "name": "inst-grp-81-0005",
           "translation": [
             173.59691,
             75.86775,
@@ -275841,7 +275841,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0006",
+          "name": "inst-grp-81-0006",
           "translation": [
             218.2252,
             73.60471,
@@ -275862,7 +275862,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0007",
+          "name": "inst-grp-81-0007",
           "translation": [
             350.15326,
             69.36083,
@@ -275883,7 +275883,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0008",
+          "name": "inst-grp-81-0008",
           "translation": [
             341.66754,
             71.4801,
@@ -275904,7 +275904,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0009",
+          "name": "inst-grp-81-0009",
           "translation": [
             325.97272,
             72.166245,
@@ -275925,7 +275925,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0010",
+          "name": "inst-grp-81-0010",
           "translation": [
             228.43202,
             74.44484,
@@ -275946,7 +275946,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0011",
+          "name": "inst-grp-81-0011",
           "translation": [
             170.42003,
             79.07222,
@@ -275967,7 +275967,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0012",
+          "name": "inst-grp-81-0012",
           "translation": [
             301.21112,
             74.72354,
@@ -275988,7 +275988,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0013",
+          "name": "inst-grp-81-0013",
           "translation": [
             336.8917,
             70.19577,
@@ -276009,7 +276009,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0014",
+          "name": "inst-grp-81-0014",
           "translation": [
             202.27202,
             79.66719,
@@ -276030,7 +276030,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0015",
+          "name": "inst-grp-81-0015",
           "translation": [
             360.0,
             70.10582,
@@ -276051,7 +276051,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0016",
+          "name": "inst-grp-81-0016",
           "translation": [
             75.50836,
             84.206696,
@@ -276072,7 +276072,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0017",
+          "name": "inst-grp-81-0017",
           "translation": [
             182.75903,
             73.71473,
@@ -276093,7 +276093,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0018",
+          "name": "inst-grp-81-0018",
           "translation": [
             192.39087,
             74.48954,
@@ -276114,7 +276114,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0019",
+          "name": "inst-grp-81-0019",
           "translation": [
             202.50928,
             73.70972,
@@ -276135,7 +276135,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0020",
+          "name": "inst-grp-81-0020",
           "translation": [
             176.20828,
             74.85162,
@@ -276156,7 +276156,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0021",
+          "name": "inst-grp-81-0021",
           "translation": [
             165.68578,
             73.2625,
@@ -276177,7 +276177,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0022",
+          "name": "inst-grp-81-0022",
           "translation": [
             224.19237,
             79.36246,
@@ -276198,7 +276198,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0023",
+          "name": "inst-grp-81-0023",
           "translation": [
             247.2402,
             72.098495,
@@ -276219,7 +276219,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0024",
+          "name": "inst-grp-81-0024",
           "translation": [
             301.27332,
             74.331505,
@@ -276240,7 +276240,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0025",
+          "name": "inst-grp-81-0025",
           "translation": [
             288.1131,
             73.13754,
@@ -276261,7 +276261,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0026",
+          "name": "inst-grp-81-0026",
           "translation": [
             317.22797,
             71.987526,
@@ -276282,7 +276282,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0027",
+          "name": "inst-grp-81-0027",
           "translation": [
             235.61856,
             73.02846,
@@ -276303,7 +276303,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0028",
+          "name": "inst-grp-81-0028",
           "translation": [
             337.10983,
             72.47778,
@@ -276324,7 +276324,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0029",
+          "name": "inst-grp-81-0029",
           "translation": [
             249.80394,
             73.74855,
@@ -276345,7 +276345,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0030",
+          "name": "inst-grp-81-0030",
           "translation": [
             206.14827,
             73.68796,
@@ -276366,7 +276366,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0031",
+          "name": "inst-grp-81-0031",
           "translation": [
             248.30992,
             71.71324,
@@ -276387,7 +276387,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0032",
+          "name": "inst-grp-81-0032",
           "translation": [
             188.50314,
             74.86329,
@@ -276408,7 +276408,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0033",
+          "name": "inst-grp-81-0033",
           "translation": [
             94.98128,
             74.59575,
@@ -276429,7 +276429,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0034",
+          "name": "inst-grp-81-0034",
           "translation": [
             291.17172,
             72.69162,
@@ -276450,7 +276450,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0035",
+          "name": "inst-grp-81-0035",
           "translation": [
             164.59917,
             75.88248,
@@ -276471,7 +276471,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0036",
+          "name": "inst-grp-81-0036",
           "translation": [
             172.75304,
             73.530754,
@@ -276492,7 +276492,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0037",
+          "name": "inst-grp-81-0037",
           "translation": [
             330.13583,
             71.805725,
@@ -276513,7 +276513,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0038",
+          "name": "inst-grp-81-0038",
           "translation": [
             348.70773,
             70.46758,
@@ -276534,7 +276534,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0039",
+          "name": "inst-grp-81-0039",
           "translation": [
             174.5554,
             76.34766,
@@ -276555,7 +276555,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0040",
+          "name": "inst-grp-81-0040",
           "translation": [
             224.06927,
             73.49179,
@@ -276576,7 +276576,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0041",
+          "name": "inst-grp-81-0041",
           "translation": [
             237.1364,
             72.8021,
@@ -276597,7 +276597,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0042",
+          "name": "inst-grp-81-0042",
           "translation": [
             309.4262,
             72.04486,
@@ -276618,7 +276618,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0043",
+          "name": "inst-grp-81-0043",
           "translation": [
             311.162,
             72.95125,
@@ -276639,7 +276639,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0044",
+          "name": "inst-grp-81-0044",
           "translation": [
             60.0,
             84.475525,
@@ -276660,7 +276660,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0045",
+          "name": "inst-grp-81-0045",
           "translation": [
             239.67966,
             74.93097,
@@ -276681,7 +276681,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0046",
+          "name": "inst-grp-81-0046",
           "translation": [
             94.610825,
             74.62041,
@@ -276702,7 +276702,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0047",
+          "name": "inst-grp-81-0047",
           "translation": [
             220.18161,
             78.2991,
@@ -276723,7 +276723,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0048",
+          "name": "inst-grp-81-0048",
           "translation": [
             109.82217,
             72.85501,
@@ -276744,7 +276744,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0049",
+          "name": "inst-grp-81-0049",
           "translation": [
             193.5292,
             73.59231,
@@ -276765,7 +276765,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0050",
+          "name": "inst-grp-81-0050",
           "translation": [
             230.66547,
             75.050285,
@@ -276786,7 +276786,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0051",
+          "name": "inst-grp-81-0051",
           "translation": [
             108.188614,
             74.48072,
@@ -276807,7 +276807,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0052",
+          "name": "inst-grp-81-0052",
           "translation": [
             212.4726,
             77.43746,
@@ -276828,7 +276828,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0053",
+          "name": "inst-grp-81-0053",
           "translation": [
             346.53256,
             71.19631,
@@ -276849,7 +276849,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0054",
+          "name": "inst-grp-81-0054",
           "translation": [
             212.40363,
             79.99089,
@@ -276870,7 +276870,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0055",
+          "name": "inst-grp-81-0055",
           "translation": [
             108.66948,
             73.12577,
@@ -276891,7 +276891,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0056",
+          "name": "inst-grp-81-0056",
           "translation": [
             60.0,
             85.81136,
@@ -276912,7 +276912,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0057",
+          "name": "inst-grp-81-0057",
           "translation": [
             353.576,
             71.35927,
@@ -276933,7 +276933,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0058",
+          "name": "inst-grp-81-0058",
           "translation": [
             322.61227,
             74.11281,
@@ -276954,7 +276954,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0059",
+          "name": "inst-grp-81-0059",
           "translation": [
             102.42214,
             72.9471,
@@ -276975,7 +276975,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0060",
+          "name": "inst-grp-81-0060",
           "translation": [
             238.05049,
             73.19046,
@@ -276996,7 +276996,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0061",
+          "name": "inst-grp-81-0061",
           "translation": [
             205.46854,
             78.32971,
@@ -277017,7 +277017,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0062",
+          "name": "inst-grp-81-0062",
           "translation": [
             69.66937,
             84.35736,
@@ -277038,7 +277038,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0063",
+          "name": "inst-grp-81-0063",
           "translation": [
             118.49355,
             72.823715,
@@ -277059,7 +277059,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0064",
+          "name": "inst-grp-81-0064",
           "translation": [
             337.1684,
             71.90485,
@@ -277080,7 +277080,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0065",
+          "name": "inst-grp-81-0065",
           "translation": [
             214.15681,
             73.60187,
@@ -277101,7 +277101,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0066",
+          "name": "inst-grp-81-0066",
           "translation": [
             226.38788,
             74.04332,
@@ -277122,7 +277122,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0067",
+          "name": "inst-grp-81-0067",
           "translation": [
             338.01413,
             71.86975,
@@ -277143,7 +277143,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0068",
+          "name": "inst-grp-81-0068",
           "translation": [
             281.26193,
             73.0869,
@@ -277164,7 +277164,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0069",
+          "name": "inst-grp-81-0069",
           "translation": [
             166.24197,
             73.00894,
@@ -277185,7 +277185,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0070",
+          "name": "inst-grp-81-0070",
           "translation": [
             347.12408,
             71.357925,
@@ -277206,7 +277206,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0071",
+          "name": "inst-grp-81-0071",
           "translation": [
             230.22743,
             79.43997,
@@ -277227,7 +277227,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0072",
+          "name": "inst-grp-81-0072",
           "translation": [
             185.72041,
             77.88635,
@@ -277248,7 +277248,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0073",
+          "name": "inst-grp-81-0073",
           "translation": [
             176.79247,
             77.81697,
@@ -277269,7 +277269,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0074",
+          "name": "inst-grp-81-0074",
           "translation": [
             340.73636,
             71.912735,
@@ -277290,7 +277290,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0075",
+          "name": "inst-grp-81-0075",
           "translation": [
             310.75644,
             71.97838,
@@ -277311,7 +277311,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0076",
+          "name": "inst-grp-81-0076",
           "translation": [
             208.55232,
             78.97644,
@@ -277332,7 +277332,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0077",
+          "name": "inst-grp-81-0077",
           "translation": [
             124.457344,
             73.26803,
@@ -277353,7 +277353,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0078",
+          "name": "inst-grp-81-0078",
           "translation": [
             272.81076,
             74.19147,
@@ -277374,7 +277374,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0079",
+          "name": "inst-grp-81-0079",
           "translation": [
             242.85701,
             72.25261,
@@ -277395,7 +277395,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0080",
+          "name": "inst-grp-81-0080",
           "translation": [
             303.57587,
             75.43631,
@@ -277416,7 +277416,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0081",
+          "name": "inst-grp-81-0081",
           "translation": [
             337.41937,
             69.365616,
@@ -277437,7 +277437,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0082",
+          "name": "inst-grp-81-0082",
           "translation": [
             84.87288,
             74.81913,
@@ -277458,7 +277458,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0083",
+          "name": "inst-grp-81-0083",
           "translation": [
             107.74636,
             74.51249,
@@ -277479,7 +277479,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0084",
+          "name": "inst-grp-81-0084",
           "translation": [
             324.54944,
             71.45859,
@@ -277500,7 +277500,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0085",
+          "name": "inst-grp-81-0085",
           "translation": [
             179.63255,
             76.43066,
@@ -277521,7 +277521,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0086",
+          "name": "inst-grp-81-0086",
           "translation": [
             324.20737,
             71.77818,
@@ -277542,7 +277542,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0087",
+          "name": "inst-grp-81-0087",
           "translation": [
             178.0276,
             73.05542,
@@ -277563,7 +277563,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0088",
+          "name": "inst-grp-81-0088",
           "translation": [
             217.55739,
             81.60881,
@@ -277584,7 +277584,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0089",
+          "name": "inst-grp-81-0089",
           "translation": [
             314.68405,
             72.62349,
@@ -277605,7 +277605,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0090",
+          "name": "inst-grp-81-0090",
           "translation": [
             271.43848,
             73.64456,
@@ -277626,7 +277626,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0091",
+          "name": "inst-grp-81-0091",
           "translation": [
             360.0,
             71.54518,
@@ -277647,7 +277647,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0092",
+          "name": "inst-grp-81-0092",
           "translation": [
             315.50146,
             75.45526,
@@ -277668,7 +277668,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0093",
+          "name": "inst-grp-81-0093",
           "translation": [
             309.97852,
             71.36772,
@@ -277689,7 +277689,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0094",
+          "name": "inst-grp-81-0094",
           "translation": [
             249.75682,
             72.96885,
@@ -277710,7 +277710,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0095",
+          "name": "inst-grp-81-0095",
           "translation": [
             166.56651,
             76.326195,
@@ -277731,7 +277731,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0096",
+          "name": "inst-grp-81-0096",
           "translation": [
             164.16693,
             75.06117,
@@ -277752,7 +277752,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0097",
+          "name": "inst-grp-81-0097",
           "translation": [
             187.79327,
             76.06868,
@@ -277773,7 +277773,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0098",
+          "name": "inst-grp-81-0098",
           "translation": [
             107.69741,
             72.86345,
@@ -277794,7 +277794,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0099",
+          "name": "inst-grp-81-0099",
           "translation": [
             94.77205,
             74.804306,
@@ -277815,7 +277815,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0100",
+          "name": "inst-grp-81-0100",
           "translation": [
             185.1876,
             79.059715,
@@ -277836,7 +277836,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0101",
+          "name": "inst-grp-81-0101",
           "translation": [
             184.36606,
             74.24302,
@@ -277857,7 +277857,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0102",
+          "name": "inst-grp-81-0102",
           "translation": [
             228.44977,
             75.16179,
@@ -277878,7 +277878,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0103",
+          "name": "inst-grp-81-0103",
           "translation": [
             359.91888,
             71.23186,
@@ -277899,7 +277899,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0104",
+          "name": "inst-grp-81-0104",
           "translation": [
             71.533195,
             85.46736,
@@ -277920,7 +277920,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0105",
+          "name": "inst-grp-81-0105",
           "translation": [
             222.8346,
             73.84837,
@@ -277941,7 +277941,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0106",
+          "name": "inst-grp-81-0106",
           "translation": [
             195.79448,
             79.57846,
@@ -277962,7 +277962,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0107",
+          "name": "inst-grp-81-0107",
           "translation": [
             335.7142,
             71.60124,
@@ -277983,7 +277983,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0108",
+          "name": "inst-grp-81-0108",
           "translation": [
             312.5892,
             74.02316,
@@ -278004,7 +278004,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0109",
+          "name": "inst-grp-81-0109",
           "translation": [
             215.76616,
             73.686584,
@@ -278025,7 +278025,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0110",
+          "name": "inst-grp-81-0110",
           "translation": [
             320.19135,
             71.67192,
@@ -278046,7 +278046,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0111",
+          "name": "inst-grp-81-0111",
           "translation": [
             327.50067,
             72.00507,
@@ -278067,7 +278067,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0112",
+          "name": "inst-grp-81-0112",
           "translation": [
             291.37042,
             75.46732,
@@ -278088,7 +278088,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0113",
+          "name": "inst-grp-81-0113",
           "translation": [
             238.79741,
             73.81699,
@@ -278109,7 +278109,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0114",
+          "name": "inst-grp-81-0114",
           "translation": [
             182.02223,
             75.57533,
@@ -278130,7 +278130,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0115",
+          "name": "inst-grp-81-0115",
           "translation": [
             333.68185,
             72.09776,
@@ -278151,7 +278151,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0116",
+          "name": "inst-grp-81-0116",
           "translation": [
             297.99237,
             72.50202,
@@ -278172,7 +278172,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0117",
+          "name": "inst-grp-81-0117",
           "translation": [
             101.515755,
             74.56317,
@@ -278193,7 +278193,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0118",
+          "name": "inst-grp-81-0118",
           "translation": [
             164.14519,
             77.49197,
@@ -278214,7 +278214,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0119",
+          "name": "inst-grp-81-0119",
           "translation": [
             63.222023,
             84.463806,
@@ -278235,7 +278235,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0120",
+          "name": "inst-grp-81-0120",
           "translation": [
             192.10013,
             81.24986,
@@ -278256,7 +278256,7 @@
           "asset": "/assets/meshes/props/mushroom_red_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0121",
+          "name": "inst-grp-81-0121",
           "translation": [
             302.45935,
             73.31641,
@@ -278277,7 +278277,7 @@
           "asset": "/assets/meshes/forest/mushroom_glow_lod0.glb"
         },
         {
-          "name": "inst-grp-83-0122",
+          "name": "inst-grp-81-0122",
           "translation": [
             360.0,
             71.221405,

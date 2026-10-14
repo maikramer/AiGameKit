@@ -51,7 +51,7 @@
     </Group>
     <!-- LOOP C: a FORJA era o único edifício sem luz própria — e é a única
          que devia arder acesa toda a noite (a boca da fornalha). Luz quente
-         e ALTA na boca do portal (portal.village_forge, -30.47 -29.06). -->
+         e ALTA na boca do portal (portal.forge, -30.47 -29.06). -->
     <Group translation="-30.47 0 -29.06" body="fixed" collider="none">
       <PointLight translation="0 1.6 0" color="0xff9030" intensity="160000" radius="0.6" shadows="false" />
     </Group>
