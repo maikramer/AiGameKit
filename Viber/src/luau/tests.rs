@@ -990,6 +990,7 @@ fn test_game_state_and_load_module() {
 /// Spec mínima de caixa para os testes de spawn de prototypes.
 fn simple_box_spec() -> crate::recipes::EntitySpec {
     crate::recipes::EntitySpec {
+        prototype_instance: None,
         name: Some("crystal".to_string()),
         tag: None,
         script: None,
@@ -1628,6 +1629,58 @@ fn test_entity_position_and_nearby_snapshot() {
         mlua::Value::String(n) => assert_eq!(n.to_string_lossy(), "alvo"),
         other => panic!("nome em falta: {other:?}"),
     }
+}
+
+#[test]
+fn test_entity_name_self_foreign_and_unnamed() {
+    // `entity_name(id?)`: com id = o nome de mundo dessa entidade; sem id =
+    // o nome da PRÓPRIA (é o que deixa um script partilhado por várias
+    // entidades descobrir quem é — portais do simple-rpg); id fora do
+    // snapshot de nomes (spawn de spawner sem `Name`) = nil, não erro.
+    let host = host_with(
+        "proprio = nil\nalheio = nil\nsem_nome = nil\n\
+             function on_update(dt)\n\
+               local st = viber.state()\n\
+               if st.done then return end\n\
+               st.done = true\n\
+               proprio = viber.entity_name()\n\
+               alheio = viber.entity_name(viber.find('alvo'))\n\
+               if viber.entity_name(0) == nil then sem_nome = true end\n\
+             end",
+        "nomes.lua",
+    );
+    let mut app = test_app(host);
+    app.world_mut().spawn((
+        Name::new("alvo"),
+        Transform::from_xyz(4.0, 0.0, 0.0),
+        GlobalTransform::from_xyz(4.0, 0.0, 0.0),
+    ));
+    app.world_mut().spawn((
+        Name::new("portal.house_a"),
+        Transform::default(),
+        LuaScriptRef {
+            path: "nomes.lua".to_string(),
+        },
+    ));
+    app.update();
+    let host = app.world().resource::<LuaScriptHost>();
+    match host.script_global("nomes.lua", "proprio").unwrap() {
+        mlua::Value::String(n) => assert_eq!(
+            n.to_string_lossy(),
+            "portal.house_a",
+            "sem id devolve o nome da própria entidade"
+        ),
+        other => panic!("nome próprio em falta: {other:?}"),
+    }
+    match host.script_global("nomes.lua", "alheio").unwrap() {
+        mlua::Value::String(n) => assert_eq!(n.to_string_lossy(), "alvo"),
+        other => panic!("nome alheio em falta: {other:?}"),
+    }
+    assert_eq!(
+        host.script_global("nomes.lua", "sem_nome").unwrap(),
+        mlua::Value::Boolean(true),
+        "id fora do snapshot devolve nil (não erro)"
+    );
 }
 
 #[test]

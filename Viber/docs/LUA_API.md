@@ -355,6 +355,7 @@ que só dependem de componentes/mensagens sempre registados.
 | Função | Devolve |
 |--------|---------|
 | `viber.entity_position(id?)` | `ok, x, y, z` do snapshot do frame (`ok == false` sem entrada; sem `id` = a própria) |
+| `viber.entity_name(id?)` | nome de MUNDO da entidade (`nil` se não nomeada — spawns de spawner podem não ter; sem `id` = a própria). É o que deixa um script partilhado por várias entidades descobrir QUEM é (ex.: `portal.<room>[.sufixo]`) |
 | `viber.nearby(raio [, limite])` | lista `{id, name, x, y, z, distance}` de entidades NOMEADAS à volta da própria, mais perto 1.º (cap 64; default 16) |
 | `viber.player_forward()` | `dx, dz` — forward do herói no plano (modelo olha +Z), para dash/mira |
 

@@ -93,6 +93,13 @@ pub struct LuauRuntimeLocals<'w, 's> {
     /// Nomes + posição para os snapshots `viber.find`/`entity_position`/
     /// `nearby` (herói excluído).
     pub names: Query<'w, 's, (Entity, &'static Name, &'static GlobalTransform), Without<Player>>,
+    /// `Name` de QUALQUER entidade — semeia o `ctx.self_name` de cada script
+    /// ao frame. O snapshot `names` tem CAP (`NAMED_SNAPSHOT_CAP`): em mundos
+    /// grandes (dezenas de milhares de instâncias nomeadas) o `.take(cap)`
+    /// corta por ordem arbitrária de query e um script perdia o PRÓPRIO nome
+    /// em `viber.entity_name()` — o nome próprio não pode depender de sorte
+    /// de truncagem (repro: portais do simple-rpg, 20 portais em ~79k nomes).
+    pub entity_names: Query<'w, 's, &'static Name>,
     /// Warn 1× por entidade de dano/cura em quem não tem `Health`.
     pub entity_vitals_warned: bevy::ecs::system::Local<'s, HashSet<Entity>>,
     /// Warn 1× por chave para avisos que um script repete por frame (plugin
@@ -393,6 +400,9 @@ pub fn luau_update(
         // Range de interação da entidade actual (para `viber.interacted`).
         if let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
             ctx.interaction_range = interaction.map(|i| i.range);
+            // Nome PRÓPRIO da entidade que vai correr (fora do snapshot com
+            // cap — ver `entity_names`).
+            ctx.self_name = locals.entity_names.get(entity).ok().map(Name::to_string);
         }
         // Secção "scripts" do profiler: um escopo por ficheiro (igual ao
         // `script/<file>` do VibeGame). record_script auto-gateia em freeze.

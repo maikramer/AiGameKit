@@ -48,6 +48,12 @@ pub struct ScriptCtx {
     /// Posição de MUNDO das entidades nomeadas (`viber.entity_position`,
     /// `viber.nearby`) — o mesmo snapshot de nomes, com o GlobalTransform.
     pub pos_snapshot: std::collections::HashMap<i64, (String, Vec3)>,
+    /// Nome de MUNDO da entidade que corre o script (`viber.entity_name()`
+    /// sem id). Semeado por chamada em [`super::runtime::luau_update`] a
+    /// partir da query `Name` — NÃO do snapshot com cap: em mundos grandes o
+    /// `.take(NAMED_SNAPSHOT_CAP)` corta entidades por ordem arbitrária e a
+    /// própria entidade perdia o nome.
+    pub self_name: Option<String>,
     /// Forward do herói no plano (x, z) — `viber.player_forward()`.
     pub player_forward: Vec2,
     /// Dir raiz dos scripts (`<mundo>/scripts`) — `viber.load` resolve

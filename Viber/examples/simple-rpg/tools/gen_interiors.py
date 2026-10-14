@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Gera ``world/interiors.xml`` — a bolsa de interiores do simple-rpg.
+"""Gera os PORTAIS e a BOLSA DE INTERIORES do simple-rpg.
+
+Ficheiros escritos (os dois lados — procedural e estático):
+
+* ``world/interiors.xml`` + ``static/world/interiors.xml``
+* ``world/cities/discordia/portals.xml`` + ``static/world/cities/discordia/portals.xml``
+* ``scripts/building-portal.lua`` (template data-driven; só as CONSTANTES
+  — POCKET e a grelha — vêm daqui)
 
 PORQUÊ UM GERADOR: nove salas partilham a mesma anatomia (soalho, paredes com
 vão e janelas, postes, vigas, rodapé, mobília, luzes, NPCs, portal de saída).
@@ -13,9 +20,12 @@ a engine já não gera colunas de terreno nem colliders — ver
 que isenta a fronteira do mundo, tira o bioma (névoa/tinta/exposição) e a chuva.
 A distância (>2 km) desliga o resto por si: render, culling, IA e spawners.
 
-O REGISTO DE PORTAIS: as saídas são colocadas a partir da MESMA tabela que o
-``scripts/building-portal.lua`` usa (``ROOMS`` — espelhada lá, com um teste de
-consistência no arranque). Mudar a bolsa = mudar ``POCKET`` aqui e ali.
+O REGISTO DE PORTAIS é DATA-DRIVEN (v6): o ``building-portal.lua`` NÃO embute
+tabela nenhuma — percorre ``viber.find_all("portal.")`` e casa pelo NOME
+(``portal.<room>``/``portal.<room>.<sufixo>`` na rua, ``portal.exit_<room>``
+na bolsa). Mover/renomear/multiplicar portas no editor já não desincroniza
+nada; este gerador apenas decide os NOMES canónicos e as posições de partida.
+Mudar a bolsa = mudar ``POCKET`` aqui (o script herda a constante).
 
 Correr:  python3 tools/gen_interiors.py
 """
@@ -189,12 +199,25 @@ class Room:
     beams: bool = True  # no-op desde 2026-09-13 (ver `shell`)
     windows: int = 2
     # Porta de rua (world/cities/discordia/portals.xml): o par
-    # porta↔saída vive NUMA linha, não em duas listas alinhadas por ordem.
+    # porta↔saída vive no NOME (`portal.<id>`/`portal.<id>.<sufixo>` ↔
+    # `portal.exit_<id>`), não em tabelas alinhadas por ordem.
     door: tuple[float, float] = (0.0, 0.0)
+    # Sufixo da porta primária (`market` → "stall_a"): None = `portal.<id>` puro.
+    door_suffix: str | None = None
+    # Portas EXTRA da mesma sala ((x, z), sufixo) — ex.: as 3 bancas do mercado.
+    extra_doors: list[tuple[tuple[float, float], str]] = field(default_factory=list)
+    # Nota de colocação (comentário no portals.xml: edifício/yaw/origem da porta).
+    door_note: str = ""
     props: list[Prop] = field(default_factory=list)
     npcs: list[Npc] = field(default_factory=list)
     lights: list[tuple] = field(default_factory=list)  # (cor, intensidade, x, z, y)
     open_air: bool = False  # banca/mercado: sem paredes, só postes e toldo
+
+    def street_doors(self) -> list[tuple[float, float, str]]:
+        """Todas as portas de rua da sala: [(x, z, sufixo|None), …]."""
+        doors = [(self.door[0], self.door[1], self.door_suffix)]
+        doors.extend((x, z, suffix) for (x, z), suffix in self.extra_doors)
+        return doors
 
     @property
     def cx(self) -> float:
@@ -301,6 +324,7 @@ def rooms() -> list[Room]:
             1,
             0,
             door=(7.46, 22.46),
+            door_note="chapel @ (10,25) yaw -135 — +Z arched door",
             floor="stone_floor",
             wall="plaster",
             windows=2,
@@ -354,6 +378,7 @@ def rooms() -> list[Room]:
             2,
             0,
             door=(-30.47, -29.06),
+            door_note="village_forge @ (-31,-33) yaw 0 — +Z mouth slightly +X, north",
             floor="dirt_floor",
             wall="stone_wall",
             windows=2,
@@ -386,6 +411,7 @@ def rooms() -> list[Room]:
             0,
             0,
             door=(26.35, 8.44),
+            door_note="house_a @ (25,12) yaw -90 — village_house door on local -X → world south",
             floor="wood_floor",
             props=[
                 Prop("interiors/fireplace_hearth_lod0", 0, 6.2, 180, fire=True, light=("0xffb070", 11_000, 1.4)),
@@ -420,6 +446,7 @@ def rooms() -> list[Room]:
             0,
             1,
             door=(-17.44, 22.47),
+            door_note="house_b @ (-19,19) yaw 135 — door local -X → world NE",
             floor="wood_floor",
             props=[
                 Prop("interiors/fireplace_hearth_lod0", 0, 6.2, 180, fire=True, light=("0xffb070", 8_000, 1.4)),
@@ -449,6 +476,7 @@ def rooms() -> list[Room]:
             1,
             1,
             door=(-20.47, -18.44),
+            door_note="house_c @ (-17,-20) yaw 45 — door local -X → world SW",
             floor="wood_floor",
             props=[
                 Prop("interiors/fireplace_hearth_lod0", 0, 6.2, 180, fire=True, light=("0xffb070", 11_000, 1.4)),
@@ -479,6 +507,7 @@ def rooms() -> list[Room]:
             2,
             1,
             door=(-22.33, 12.95),
+            door_note="shepherd_cottage @ (-21,8) yaw 0 — +Z door left of center",
             floor="wood_floor",
             props=[
                 Prop("interiors/fireplace_hearth_lod0", 0, 5.2, 180, fire=True, light=("0xffb070", 9_000, 1.4)),
@@ -511,6 +540,7 @@ def rooms() -> list[Room]:
             0,
             2,
             door=(-26.11, 30.00),
+            door_note="village_barn @ (-33.1,30) yaw 90 — +Z doors → world east",
             floor="dirt_floor",
             wall="stone_wall",
             windows=1,
@@ -545,6 +575,7 @@ def rooms() -> list[Room]:
             1,
             2,
             door=(35.53, -37.53),
+            door_note="longhouse @ (31,-33) yaw 135 — +Z gable doors",
             floor="wood_floor",
             windows=2,
             props=[
@@ -588,6 +619,11 @@ def rooms() -> list[Room]:
             2,
             2,
             door=(10.10, -15.70),
+            door_suffix="stall_a",
+            # As 3 bancas partilham a sala `market`: o sufixo distingue as
+            # portas, o NOME comum é o que as liga à sala (data-driven).
+            extra_doors=[((11.7, -14.4), "stall_b"), ((18.9, -20.3), "stall_c")],
+            door_note="market stalls — +Z counter",
             floor="stone_floor",
             open_air=True,
             props=[
@@ -697,9 +733,8 @@ def check_inside(R: list[Room]) -> None:
                 raise SystemExit(f"{r.id}: prop {p.asset} tapa o vão da porta ({p.x},{p.z})")
 
 
-def main() -> None:
-    R = rooms()
-    check_inside(R)
+def interiors_xml(R: list[Room]) -> str:
+    """A bolsa de interiores (lado PROCEDURAL — com comentários de autor)."""
     out: list[str] = []
     add = out.append
     add("<!--")
@@ -712,10 +747,10 @@ def main() -> None:
     add("  bioma (névoa/tinta/exposição) e a chuva. O que sobra é distância: >2 km não")
     add("  entra em render-distance, cull-distance nem raio de ativação de IA.")
     add("")
-    add("  ENTRADAS: o portal de saída de cada sala é colocado no vão -Z a partir da")
-    add("  MESMA tabela de salas que `scripts/building-portal.lua` usa (ROOMS); o")
-    add("  script confere no arranque que a sala existe a <1 m do sítio esperado, para")
-    add("  XML e Lua não se afastarem em silêncio.")
+    add("  ENTRADAS: cada sala tem `portal.exit_<room>` no vão -Z. O par porta↔saída")
+    add("  é DATA-DRIVEN — o `scripts/building-portal.lua` casa pelo NOME das")
+    add("  entidades (`portal.<room>[.sufixo]` na rua), sem tabela espelhada: mover")
+    add("  uma porta no editor não desincroniza nada.")
     add("")
     add("  Regenerar:  python3 tools/gen_interiors.py")
     add("-->")
@@ -757,60 +792,249 @@ def main() -> None:
         )
         add("")
     add("</world>")
+    return "\n".join(out) + "\n"
+
+
+# Anel de partículas à porta. LOOP D: o preset `magic` é TEAL (color_a
+# [0.6,0.35,1.0] → color_b [0.3,0.8,1.0]) e à noite os anéis das portas
+# liam-se como "chamas turquesa" no meio da vila (blobs R−B ≈ −60 medidos no
+# frame do crítico). `start-color: #ffb35c` trava a matiz num dourado quente —
+# o anel mantém o movimento mágico mas lê como luz de lareira à porta.
+RING_BIG = (
+    'preset: magic; start-color: #ffb35c; emission-rate: 16; shape-radius: 0.65; '
+    "start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; "
+    "start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+)
+RING_SMALL = (
+    'preset: magic; start-color: #ffb35c; emission-rate: 12; shape-radius: 0.5; '
+    "start-life-min: 0.6; start-life-max: 1.2; start-speed-min: 0.1; start-speed-max: 0.4; "
+    "start-size-min: 0.08; start-size-max: 0.18; looping: 1; world-space: 1"
+)
+
+
+def portals_xml(R: list[Room]) -> str:
+    """As portas de rua (lado PROCEDURAL — com comentários de colocação).
+
+    NOMES canónicos: `portal.<room_id>` puro, ou `portal.<room_id>.<sufixo>`
+    quando a sala tem várias portas (as bancas do mercado). É o NOME que o
+    `building-portal.lua` casa — NÃO a posição.
+    """
+    out: list[str] = []
+    add = out.append
+    add("<!--")
+    add("  Discordia — portas de edifícios (marcadores à frente da porta).")
+    add("  GERADO por tools/gen_interiors.py (posições de partida + nomes canónicos;")
+    add("  depois disso o editor manda: o building-portal.lua é data-driven e lê")
+    add("  nome+posição das entidades ao vivo).")
+    add("")
+    add("  NOME = sala: `portal.<room>` ou `portal.<room>.<sufixo>` (multi-porta;")
+    add("  dentro da bolsa, `portal.exit_<room>` devolve à rua.")
+    add("-->")
+    add("<world>")
+    add('  <Group name="city.portals" translation="0 0 0">')
+    for room in R:
+        for i, (x, z, suffix) in enumerate(room.street_doors()):
+            name = f"portal.{room.id}.{suffix}" if suffix else f"portal.{room.id}"
+            emitter = RING_SMALL if room.open_air else RING_BIG
+            y = "0.3" if room.open_air else "0.35"
+            if room.door_note and i == 0:
+                add(f"    <!-- {room.door_note} -->")
+            add(
+                f'    <Entity name="{name}" translation="{x:g} 0 {z:g}" script="building-portal.lua">'
+            )
+            add(
+                f'      <ParticleSystem preset="magic" transform="pos: 0 {y} 0" '
+                f'particle-emitter="{emitter}" />'
+            )
+            add("    </Entity>")
+    add("  </Group>")
+    add("</world>")
+    return "\n".join(out) + "\n"
+
+
+def static_for(text: str) -> str:
+    """Lado ESTÁTICO: mesmo conteúdo sem os comentários de autor (o estilo do
+    `viber bake`), com a declaração XML ao topo. Re-correr `viber bake --force`
+    re-normaliza este ficheiro — o que está aqui é para o static tree committed
+    não ficar com nomes/portas velhos quando a tool regenera o lado procedural."""
+
+    import re
+
+    body = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    lines = [ln.rstrip() for ln in body.splitlines()]
+    body = "\n".join(ln for ln in lines if ln.strip())
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + body + "\n"
+
+
+def main() -> None:
+    R = rooms()
+    check_inside(R)
     raiz = Path(__file__).resolve().parents[1]
-    destino = raiz / "world" / "interiors.xml"
-    destino.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+    interiors = interiors_xml(R)
+    portals = portals_xml(R)
+    ficheiros = {
+        raiz / "world" / "interiors.xml": interiors,
+        raiz / "static" / "world" / "interiors.xml": static_for(interiors),
+        raiz / "world" / "cities" / "discordia" / "portals.xml": portals,
+        raiz / "static" / "world" / "cities" / "discordia" / "portals.xml": static_for(portals),
+    }
+    for destino, conteudo in ficheiros.items():
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_text(conteudo, encoding="utf-8")
+        print(f"{destino.relative_to(raiz)}")
+
     portal = raiz / "scripts" / "building-portal.lua"
-    portal.write_text(portal_lua(R), encoding="utf-8")
-    print(f"{destino}: {len(R)} salas, {sum(len(r.props) for r in R)} props, {sum(len(r.npcs) for r in R)} NPCs")
-    print(f"{portal}: registo de {len(R)} portais + lógica")
+    portal.write_text(portal_lua(), encoding="utf-8")
+    portas = sum(len(r.street_doors()) for r in R)
+    print(f"{portal.relative_to(raiz)}: lógica data-driven ({len(R)} salas, {portas} portas)")
 
-
-PORTAL_HEADER = """-- building-portal.lua: portas bidireccionais entre a VILA e a BOLSA DE INTERIORES.
+PORTAL_LUA = r"""-- building-portal.lua: portas bidireccionais entre a VILA e a BOLSA DE INTERIORES.
 --
--- GERADO por tools/gen_interiors.py — a tabela ROOMS do fim é derivada da
--- MESMA tabela de salas que gera world/interiors.xml. Não editar à mão: mudar
--- a bolsa (`POCKET`) ou as salas é mudar o gerador.
+-- GERADO por tools/gen_interiors.py (só as CONSTANTES vêm de lá — POCKET e a
+-- grelha têm de bater com o <InteriorScene> que a tool emite). Não editar à
+-- mão: a lógica vive no template PORTAL_LUA do gerador.
 --
--- v5 (2026-09-11): a grelha de interiores saiu da área do mapa. Vive numa bolsa
--- declarada por <InteriorScene> a FORA da pegada do heightmap (world-size
--- 4000), onde a engine não gera colunas de terreno nem colliders. Um NPC/portal
--- que a navegue não tem terreno para pisar: o chão é o soalho da sala.
+-- v6 (2026-10-14), DATA-DRIVEN: o registo porta↔sala sai dos NOMES das
+-- entidades — `portal.<room>`/`portal.<room>.<sufixo>` (porta de rua) e
+-- `portal.exit_<room>` (saída na bolsa) — lidos com `viber.find_all` +
+-- `viber.entity_name`/`viber.entity_position`. A v5 embutia uma tabela ROOMS
+-- gerada: mover uma porta no editor desincronizava-a em silêncio e uma porta
+-- a >3 m da posição gerada morria (ex-portal.market_stall_c, a 9,9 m da
+-- sala). Agora o NOME carrega a sala e a POSIÇÃO sai da própria entidade —
+-- mover/renomear portas no editor (ou multiplicá-las por sala) simplesmente
+-- funciona.
 --
--- SENTIDO: decidido pela POSIÇÃO. Dentro da bolsa (muito para lá de POCKET) a
--- entidade é uma SAÍDA interior; fora é uma porta de rua. Nada de tabelas
--- inversas mantidas à mão — o par porta↔saída sai de uma linha só.
---
--- OS Y's NÃO SÃO ADIVINHADOS: dentro da bolsa o destino é o soalho (0.6 m,
--- não há terreno); fora, `viber.ground_below` resolve a cota do adro. A versão
--- anterior teleportava para y≈0.3 na vila e o herói caía 24 m.
+-- A bolsa vive FORA da pegada do heightmap (world-size 4000), declarada por
+-- <InteriorScene>: a engine não gera terreno nem colliders lá — o chão é o
+-- soalho da sala (FLOOR_Y). Os Y's NÃO são adivinhados: fora, `viber.
+-- ground_below` resolve a cota do adro (a v4 teleportava para y≈0.3 na vila
+-- e o herói caía 24 m).
 local POCKET = { x = %(px).1f, z = %(pz).1f }
 local POCKET_MIN_X = POCKET.x - 200.0   -- tudo acima disto é interiores
 
 local FLOOR_Y = 0.6      -- soalho da sala (a laje está a 0.12)
 local INWARD = 6.0       -- quanto o herói entra para dentro ao chegar
-local MATCH_R = 3.0      -- raio de casamento porta↔saída
+local MATCH_R = 3.0      -- sanity: a saída tem de estar PERTO da parede -Z
 local AUTO_EXIT_R = 1.6  -- encostar à porta POR DENTRO sai sem tecla
+local ROOM_W = %(room_w).1f      -- passo X da grelha (= <InteriorScene room-size>)
+local ROOM_H = %(room_h).1f      -- passo Z da grelha
+local HEAL_EVERY = 2.0   -- de quanto em quanto tempo se re-tenta o registo
 
--- ── REGISTO (gerado) ──
--- ANTES da lógica de propósito: em Luau um `local` declarado DEPOIS de uma
--- função não entra no escopo dela — a tabela no fim do ficheiro chegava ao
--- `on_update` como global nil e o [E] das portas morria em
--- `ipairs(nil)` (repro do utilizador 2026-09-12: "na porta da igreja aperto
--- E e não faz nada"). Campos por NOME: a lógica lê `r.door_x`/`r.ox`/…,
--- e as linhas posicionais antigas davam nil em todos eles.
-local ROOMS = {
-%(linhas)s}
+-- ── REGISTO derivado das entidades ──────────────────────────────────────
+-- Construído 1× e cacheado em `viber.game().portal_registry` (sobrevive a
+-- hot-reload e ao save). Cada portal VALIDA A PRÓPRIA entrada em cada frame
+-- (`self_stale`) — mover/renomear uma porta ao vivo reconstrói o registo.
+--   doors[room] = { {x=…, z=…}, … }         portas de rua (várias por sala OK)
+--   rooms[room] = { ox=…, oz=…, exit_dz=… } saída na bolsa → célula da grelha
+--
+-- NOTA (snapshot com cap): o registo é construído nos primeiros frames, quando
+-- os portais (spawnados antes da vegetação em massa) ainda cabem no snapshot
+-- de nomes da engine; DEPOIS de construído, o on_update só precisa do NOME
+-- próprio (`viber.entity_name()`, semeado fora do cap) e de posições em cache.
+-- Se a minha sala não estiver no registo, `heal` re-tenta periodicamente.
+local function build_registry()
+  local ids = viber.find_all("portal.")
+  if #ids == 0 then return nil end  -- entidades ainda não spawnaram: NÃO cachear
+  local reg = { doors = {}, rooms = {} }
+  for _, id in ipairs(ids) do
+    local name = viber.entity_name(id)
+    local ok, x, y, z = viber.entity_position(id)
+    if name and ok then
+      local exit_room = name:match("^portal%%.exit_([%%w_]+)$")
+      if exit_room then
+        -- Posição relativa à bolsa → célula da grelha (ox/oz, o CENTRO da
+        -- sala) + o resta até à saída (exit_dz, ~1 m fora da parede -Z).
+        local rx, rz = x - POCKET.x, z - POCKET.z
+        local ox = math.floor(rx / ROOM_W + 0.5) * ROOM_W
+        local oz = math.floor(rz / ROOM_H + 0.5) * ROOM_H
+        local exit_dz = rz - oz
+        -- Sanity (MATCH_R): a saída pertence à parede -Z da célula — um
+        -- exit_dz perto de 0 (centro da sala) ou além do limite da célula é
+        -- grelha↔XML desincronizadas, avisa em vez de adivinhar.
+        if exit_dz > -MATCH_R or exit_dz < -ROOM_H * 0.5 then
+          viber.log("building-portal: saída '" .. name .. "' fora da parede -Z da célula"
+            .. " (exit_dz=" .. string.format("%%.1f", exit_dz) .. ") — grelha e XML dessincronizados?")
+        end
+        reg.rooms[exit_room] = { ox = ox, oz = oz, exit_dz = exit_dz }
+      else
+        local room = name:match("^portal%%.([%%w_]+)%%.[%%w_]+$")
+          or name:match("^portal%%.([%%w_]+)$")
+        if room then
+          reg.doors[room] = reg.doors[room] or {}
+          reg.doors[room][#reg.doors[room] + 1] = { x = x, z = z }
+        end
+        -- Nomes que não casam nenhum padrão são avisados pelo DONO (on_update).
+      end
+    end
+  end
+  return reg
+end
+
+-- A MINHA entrada no registo ainda bate com a minha posição? (O registo é um
+-- cache; uma porta MOVIDA ao vivo no editor tinha entradas velhas — cada
+-- entidade valida-se a si própria e dispara o rebuild geral.)
+local function self_stale(reg, name, x, z, inside)
+  if inside then
+    local room = name and name:match("^portal%%.exit_([%%w_]+)$")
+    local r = room and reg.rooms[room]
+    if not r then return false end  -- sem entrada: o on_update trata (heal)
+    local rx, rz = x - POCKET.x, z - POCKET.z
+    local ox = math.floor(rx / ROOM_W + 0.5) * ROOM_W
+    local oz = math.floor(rz / ROOM_H + 0.5) * ROOM_H
+    return r.ox ~= ox or r.oz ~= oz or r.exit_dz ~= (rz - oz)
+  end
+  local room = name
+    and (name:match("^portal%%.([%%w_]+)%%.[%%w_]+$") or name:match("^portal%%.([%%w_]+)$"))
+  local doors = room and reg.doors[room]
+  if not doors then return false end
+  for _, d in ipairs(doors) do
+    local dx, dz = d.x - x, d.z - z
+    if dx * dx + dz * dz <= 0.25 then return false end  -- 0,5 m: cobre-me
+  end
+  return true  -- nome válido mas NENHUMA entrada me cobre → mudei
+end
+
+-- Re-tenta o registo de tanto em tanto (a minha sala não tem entrada): o
+-- snapshot de nomes da engine tem cap e o registo pode ter sido construído
+-- a meio; se os portais voltarem a estar visíveis ao `find_all`, a
+-- reconstrução cura o registo sozinha.
+local function heal(st, g, dt, msg)
+  if not st.warned then
+    st.warned = true
+    viber.log("building-portal: " .. msg)
+  end
+  st.retry = (st.retry or 0.0) + dt
+  if st.retry >= HEAL_EVERY then
+    st.retry = 0.0
+    g.portal_registry = nil
+  end
+end
 
 function on_update(dt)
+  local g = viber.game()
+  if not g.portal_registry then
+    g.portal_registry = build_registry()  -- nil se find_all vazio → retry
+  end
+  local reg = g.portal_registry
+
   local st = viber.state()
   local x, y, z = viber.position()
   local inside_pocket = x > POCKET_MIN_X
+  local my_name = viber.entity_name()
+
+  -- Cache fresco? Cada portal valida a própria entrada (ver self_stale).
+  if reg and my_name and self_stale(reg, my_name, x, z, inside_pocket) then
+    reg = build_registry()
+    g.portal_registry = reg
+  end
+  if not reg then return end  -- entidades ainda a spawnar; retry no próximo frame
 
   if not st.ready then
     st.ready = true
-    viber.set_interaction(st.inside and "Sair" or "Entrar", "e", 2.8)
+    viber.set_interaction(inside_pocket and "Sair" or "Entrar", "e", 2.8)
   end
+
   -- SAÍDA AUTOMÁTICA (interiores): a porta de uma sala é um vão aberto sobre
   -- o vazio — encostar a ela tem de tirar o herói dali, não pedir uma tecla
   -- (pedido do utilizador 2026-09-13: "bloquear e imediatamente me fazer
@@ -827,58 +1051,74 @@ function on_update(dt)
   if st.cd then return end
 
   if inside_pocket then
-    -- Saída interior: casar a minha posição RELATIVA à bolsa com uma sala.
-    local rx, rz = x - POCKET.x, z - POCKET.z
-    local best, bd = nil, MATCH_R * MATCH_R
-    for _, r in ipairs(ROOMS) do
-      local dx, dz = r.ox - rx, r.oz + r.exit_dz - rz
-      local d = dx * dx + dz * dz
-      if d < bd then bd, best = d, r end
-    end
-    if not best then
-      viber.log("building-portal: saída sem sala a <" .. MATCH_R .. "m — grelha e XML fora de sincronia?")
+    -- Sou `portal.exit_<room>`: a sala vem do NOME (sem matching por raio).
+    local room = my_name and my_name:match("^portal%%.exit_([%%w_]+)$")
+    if not room then
+      if not st.warned then
+        st.warned = true
+        viber.log("building-portal: '" .. tostring(my_name)
+          .. "' não casa portal.exit_<room> — renomear a entidade no editor")
+      end
       return
     end
+    local doors = reg.doors[room]
+    if not doors or #doors == 0 then
+      heal(st, g, dt, "sala '" .. room .. "' sem porta de rua registada (portals.xml?)")
+      return
+    end
+    -- Várias portas para a mesma sala (market.stall_a/b/c): sair pela porta
+    -- por onde se ENTROU (g.last_door, tolerância 1 m — a porta pode ter
+    -- sido movida um pouco); sem memória, a 1.ª registada. A distância ao
+    -- jogador não discrimina (as portas ficam a ~2,6 km daqui).
+    local door = doors[1]
+    local want = g.last_door and g.last_door[room]
+    if want then
+      local bd = 1.0
+      for _, d in ipairs(doors) do
+        local dx, dz = d.x - want.x, d.z - want.z
+        local dd = dx * dx + dz * dz
+        if dd <= bd then bd, door = dd, d end
+      end
+    end
     st.cd = true
-    local gy = viber.ground_below(best.door_x, 200.0, best.door_z)
+    local gy = viber.ground_below(door.x, 200.0, door.z)
     viber.sound("door_close")
-    viber.teleport_player(best.door_x, (gy or 25.0) + 0.25, best.door_z)
+    viber.teleport_player(door.x, (gy or 25.0) + 0.25, door.z)
     viber.toast("A porta devolve-te à vila.")
   else
-    -- Porta de rua: casar com a porta mais próxima.
-    local best, bd = nil, MATCH_R * MATCH_R
-    for _, r in ipairs(ROOMS) do
-      local dx, dz = r.door_x - x, r.door_z - z
-      local d = dx * dx + dz * dz
-      if d < bd then bd, best = d, r end
+    -- Sou `portal.<room>[.sufixo]`: a sala vem do NOME.
+    local room = my_name
+      and (my_name:match("^portal%%.([%%w_]+)%%.[%%w_]+$") or my_name:match("^portal%%.([%%w_]+)$"))
+    if not room then
+      if not st.warned then
+        st.warned = true
+        viber.log("building-portal: '" .. tostring(my_name)
+          .. "' não casa portal.<room>[.sufixo] — renomear a entidade no editor")
+      end
+      return
     end
-    if not best then
-      viber.log("building-portal: porta sem sala declarada a <" .. MATCH_R .. "m")
+    local r = reg.rooms[room]
+    if not r then
+      heal(st, g, dt, "porta '" .. room .. "' sem sala na bolsa (portal.exit_"
+        .. room .. " em falta no interiors.xml?)")
       return
     end
     st.cd = true
+    -- Memória da porta usada: a MINHA posição (sou a porta de rua) — ao sair,
+    -- o herói devolve a esta porta em vez da 1.ª da sala.
+    g.last_door = g.last_door or {}
+    g.last_door[room] = { x = x, z = z }
     viber.sound("door_open")
-    viber.teleport_player(POCKET.x + best.ox, FLOOR_Y, POCKET.z + best.oz + best.exit_dz + INWARD)
+    viber.teleport_player(POCKET.x + r.ox, FLOOR_Y, POCKET.z + r.oz + r.exit_dz + INWARD)
     viber.toast("Entras no edifício.")
   end
 end
-
 """
 
 
-def portal_lua(R: list[Room]) -> str:
-    linhas = "".join(
-        f'  {{ id = "{r.id}",'
-        f" door_x = {r.door[0]:8.2f}, door_z = {r.door[1]:8.2f},"
-        f" ox = {r.ix * STEP_X:7.1f}, oz = {r.iz * STEP_Z:7.1f},"
-        f" exit_dz = {r.exit_z:7.2f} }},\n"
-        for r in R
-    )
-    return PORTAL_HEADER % {
-        "px": POCKET[0],
-        "pz": POCKET[1],
-        "linhas": linhas,
-    }
+def portal_lua() -> str:
+    """O script data-driven — só POCKET e a grelha vêm do gerador."""
+    return PORTAL_LUA % {"px": POCKET[0], "pz": POCKET[1], "room_w": STEP_X, "room_h": STEP_Z}
 
 
 if __name__ == "__main__":

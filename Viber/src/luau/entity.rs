@@ -1,7 +1,8 @@
 //! Vitais GENÉRICAS de entidade e procura por nome: `viber.entity_hp`,
 //! `viber.entity_damage`, `viber.entity_heal`, `viber.entity_set_max_hp`,
-//! `viber.find`/`viber.find_all`. É o que deixa um jogo fazer o SEU combate
-//! em Lua sem recorrer ao melee nativo nem à bridge de debug.
+//! `viber.entity_name`, `viber.find`/`viber.find_all`. É o que deixa um jogo
+//! fazer o SEU combate em Lua sem recorrer ao melee nativo nem à bridge de
+//! debug.
 //!
 //! Leitura por snapshot (`ctx.hp_snapshot`, sem head de frame); escrita por
 //! comando (aplicada pós-frame — o HP chega às leituras no frame seguinte,
@@ -35,6 +36,27 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
             match ctx.hp_snapshot.get(&bits) {
                 Some((cur, max)) => Ok((true, *cur, *max)),
                 None => Ok((false, 0.0, 0.0)),
+            }
+        })?,
+    )?;
+
+    // viber.entity_name(id?) -> string | nil — o NOME de mundo da entidade
+    // (o mesmo que `viber.find` procura; spawns de spawner sem `<Entity
+    // name>` não têm). Sem id = a própria entidade (nome semeado por chamada
+    // em `ctx.self_name`, FORA do snapshot com cap — ver `ctx.rs`); com id =
+    // do snapshot (`find`/`nearby` leem o mesmo). É o que deixa um script
+    // partilhado por várias entidades descobrir QUEM é sem tabelas geradas
+    // (portais `portal.<room>[.sufixo]` do simple-rpg).
+    api.set(
+        "entity_name",
+        lua.create_function(|lua, id: Option<i64>| {
+            let ctx = lua.app_data_ref::<ScriptCtx>();
+            let Some(ctx) = ctx.as_ref() else {
+                return Ok(None);
+            };
+            match id {
+                None => Ok(ctx.self_name.clone()),
+                Some(bits) => Ok(ctx.pos_snapshot.get(&bits).map(|(name, _)| name.clone())),
             }
         })?,
     )?;
