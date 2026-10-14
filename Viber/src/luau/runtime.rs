@@ -94,11 +94,9 @@ pub struct LuauRuntimeLocals<'w, 's> {
     /// `nearby` (herói excluído).
     pub names: Query<'w, 's, (Entity, &'static Name, &'static GlobalTransform), Without<Player>>,
     /// `Name` de QUALQUER entidade — semeia o `ctx.self_name` de cada script
-    /// ao frame. O snapshot `names` tem CAP (`NAMED_SNAPSHOT_CAP`): em mundos
-    /// grandes (dezenas de milhares de instâncias nomeadas) o `.take(cap)`
-    /// corta por ordem arbitrária de query e um script perdia o PRÓPRIO nome
-    /// em `viber.entity_name()` — o nome próprio não pode depender de sorte
-    /// de truncagem (repro: portais do simple-rpg, 20 portais em ~79k nomes).
+    /// ao frame, FORA do snapshot de nomes (o snapshot é completo hoje, mas o
+    /// nome próprio não pode depender de nunca truncar: repro histórica dos
+    /// portais do simple-rpg, 20 portais em ~79k nomes com cap 4096).
     pub entity_names: Query<'w, 's, &'static Name>,
     /// Warn 1× por entidade de dano/cura em quem não tem `Health`.
     pub entity_vitals_warned: bevy::ecs::system::Local<'s, HashSet<Entity>>,
@@ -300,13 +298,23 @@ pub fn luau_update(
         ctx.surfaces = locals.surfaces.clone();
         // Snapshots de nomes e HP para `viber.find`/`entity_hp` — início de
         // frame: entidades novas são vistas no frame seguinte (como tudo).
+        // SEM cap: o `.take(4096)` antigo cortava por ordem arbitrária de
+        // query e em mundos grandes (`simple-rpg`: ~79k entidades nomeadas)
+        // `find`/`find_all`/`entity_position(id)` perdiam entidades — 10 dos
+        // 20 portais do simple-rpg eram invisíveis aos scripts. Os vetores
+        // por nome ficam ORDENADOS por bits de entidade: `find_all` devolve
+        // ordem estável entre frames/máquinas (scripts que cacheiam registos
+        // no arranque não podem ver ordens diferentes).
         {
             let mut named: HashMap<String, Vec<i64>> = HashMap::new();
             let mut positions: HashMap<i64, (String, Vec3)> = HashMap::new();
-            for (e, name, transform) in locals.names.iter().take(ScriptCtx::NAMED_SNAPSHOT_CAP) {
+            for (e, name, transform) in locals.names.iter() {
                 let bits = e.to_bits() as i64;
                 named.entry(name.to_string()).or_default().push(bits);
                 positions.insert(bits, (name.to_string(), transform.translation()));
+            }
+            for bits in named.values_mut() {
+                bits.sort_unstable();
             }
             ctx.named_entities = named;
             ctx.pos_snapshot = positions;

@@ -135,7 +135,11 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
         })?,
     )?;
 
-    // viber.find_all(nome) -> {bits...} — TODAS as correspondências.
+    // viber.find_all(nome) -> {bits...} — TODAS as correspondências, ordem
+    // ESTÁVEL: nomes por ordem lexicográfica e, dentro de cada nome, os bits
+    // por ordem (o snapshot já entrega vetores ordenados). Um script que
+    // cacheia registos no arranque não pode ver ordens diferentes entre
+    // frames/máquinas.
     api.set(
         "find_all",
         lua.create_function(|lua, name: String| {
@@ -144,13 +148,17 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
             let Some(ctx) = ctx.as_ref() else {
                 return Ok(out);
             };
+            let mut keys: Vec<&String> = ctx
+                .named_entities
+                .keys()
+                .filter(|key| *key == &name || key.contains(&name))
+                .collect();
+            keys.sort();
             let mut i = 1u32;
-            for key in ctx.named_entities.keys() {
-                if key == &name || key.contains(&name) {
-                    for bits in &ctx.named_entities[key] {
-                        out.raw_set(i, *bits)?;
-                        i += 1;
-                    }
+            for key in keys {
+                for bits in &ctx.named_entities[key.as_str()] {
+                    out.raw_set(i, *bits)?;
+                    i += 1;
                 }
             }
             Ok(out)

@@ -304,7 +304,7 @@ aplica pós-frame.
 | Função | Devolve |
 |--------|---------|
 | `viber.find(nome)` | bits da entidade (exato primeiro, substring depois) ou `nil` |
-| `viber.find_all(nome)` | array com TODAS as correspondências |
+| `viber.find_all(nome)` | array com TODAS as correspondências — ordem estável entre frames (nomes lexicográficos, bits dentro de cada nome) |
 
 ## Estado de jogo e módulos
 

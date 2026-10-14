@@ -39,8 +39,9 @@ pub struct ScriptCtx {
     pub mouse_pressed: Vec<bevy::input::mouse::MouseButton>,
     pub mouse_down: Vec<bevy::input::mouse::MouseButton>,
     pub mouse_released: Vec<bevy::input::mouse::MouseButton>,
-    /// Snapshot `nome → bits` das entidades nomeadas do mundo (cap
-    /// NAMED_SNAPSHOT_CAP) para `viber.find`/`viber.find_all`.
+    /// Snapshot `nome → bits` de TODAS as entidades nomeadas do mundo para
+    /// `viber.find`/`viber.find_all` (vetores ordenados por bits de entidade:
+    /// `find_all` devolve ordem estável entre frames/máquinas).
     pub named_entities: std::collections::HashMap<String, Vec<i64>>,
     /// Snapshot `(current, max)` do HP de cada entidade COM `Health` (sem o
     /// player — esse já vive em `player_hp`) para `viber.entity_hp(id)`.
@@ -50,9 +51,8 @@ pub struct ScriptCtx {
     pub pos_snapshot: std::collections::HashMap<i64, (String, Vec3)>,
     /// Nome de MUNDO da entidade que corre o script (`viber.entity_name()`
     /// sem id). Semeado por chamada em [`super::runtime::luau_update`] a
-    /// partir da query `Name` — NÃO do snapshot com cap: em mundos grandes o
-    /// `.take(NAMED_SNAPSHOT_CAP)` corta entidades por ordem arbitrária e a
-    /// própria entidade perdia o nome.
+    /// partir da query `Name` (fora do snapshot — o nome próprio não pode
+    /// depender de truncagem de snapshot).
     pub self_name: Option<String>,
     /// Forward do herói no plano (x, z) — `viber.player_forward()`.
     pub player_forward: Vec2,
@@ -151,10 +151,6 @@ impl ScriptCtx {
     /// Cap por linha: um `viber.log` gigante não pode reter dezenas de MB
     /// no ring de 256 linhas (trunca em char boundary, igual ao bridge).
     const MAX_LOG_MESSAGE: usize = 8192;
-    /// Cap do snapshot de entidades nomeadas (`viber.find`) — o mesmo teto
-    /// do `viber.debug.entities`.
-    pub(crate) const NAMED_SNAPSHOT_CAP: usize = 4096;
-
     pub(crate) fn push_log(&mut self, mut line: String) {
         if line.len() > Self::MAX_LOG_MESSAGE {
             let mut end = Self::MAX_LOG_MESSAGE;

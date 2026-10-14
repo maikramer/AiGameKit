@@ -1684,6 +1684,71 @@ fn test_entity_name_self_foreign_and_unnamed() {
 }
 
 #[test]
+fn find_sees_every_named_entity_beyond_the_old_snapshot_cap() {
+    // O `.take(4096)` do snapshot cortava por ordem arbitrária de query: em
+    // mundos grandes `find`/`find_all`/`entity_position(id)` perdiam
+    // entidades (repro: 10 dos 20 portais do simple-rpg em ~79k nomes). Sem
+    // cap, TODAS as nomeadas são visíveis e `find_all` devolve ordem
+    // ESTÁVEL entre frames (nomes lexicográficos, bits dentro do nome) — um
+    // script que cacheia registos no arranque não pode ver ordens
+    // diferentes.
+    let host = host_with(
+        "contagem = 0\nprimeiro_ok = false\nlinha1 = nil\nlinha2 = nil\n\
+             function on_update(dt)\n\
+               local all = viber.find_all('lote-')\n\
+               contagem = #all\n\
+               primeiro_ok = all[1] == viber.find('lote-0000')\n\
+               local linha = table.concat(all, ',')\n\
+               if linha1 == nil then linha1 = linha else linha2 = linha end\n\
+             end",
+        "cap.lua",
+    );
+    let mut app = test_app(host);
+    for i in 0..4200 {
+        app.world_mut().spawn((
+            Name::new(format!("lote-{i:04}")),
+            Transform::default(),
+            GlobalTransform::from_xyz(0.0, 0.0, 0.0),
+        ));
+    }
+    app.world_mut().spawn((
+        Name::new("portal.find-me"),
+        Transform::default(),
+        LuaScriptRef {
+            path: "cap.lua".to_string(),
+        },
+    ));
+    app.update();
+    app.update();
+    let host = app.world().resource::<LuaScriptHost>();
+    match host.script_global("cap.lua", "contagem").unwrap() {
+        mlua::Value::Integer(n) => assert_eq!(
+            n, 4200,
+            "find_all vê TODAS as nomeadas (o cap antigo cortava)"
+        ),
+        other => panic!("contagem: {other:?}"),
+    }
+    // O primeiro da lista é a chave em ordem lexicográfica — `find` (exato)
+    // tem de concordar.
+    assert_eq!(
+        host.script_global("cap.lua", "primeiro_ok").unwrap(),
+        mlua::Value::Boolean(true),
+        "all[1] é o mesmo que find('lote-0000')"
+    );
+    match (
+        host.script_global("cap.lua", "linha1").unwrap(),
+        host.script_global("cap.lua", "linha2").unwrap(),
+    ) {
+        (mlua::Value::String(a), mlua::Value::String(b)) => assert_eq!(
+            a.to_string_lossy(),
+            b.to_string_lossy(),
+            "find_all devolve a MESMA ordem em frames diferentes"
+        ),
+        (a, b) => panic!("linhas: {a:?} vs {b:?}"),
+    }
+}
+
+#[test]
 fn test_play_clip_on_foreign_entity_warns_not_panics() {
     // Entidade alvo SEM animator: `play_clip` com `id` degrada para warn
     // 1× (nunca panica nem derruba o frame).
