@@ -390,7 +390,14 @@ pub fn poll_play_from_here(
         return;
     };
     if !matches!(bridge.status, EngineStatus::Connected { .. }) {
-        // ainda a arrancar: mantém o alvo até ligar
+        // ainda a arrancar: mantém o alvo até ligar — a menos que o processo
+        // tenha morrido/timeout: aí o pending não tem quem o consuma e
+        // sobreviveria até ao PRÓXIMO Play (mesmo F5), teleportando o herói
+        // para um alvo antigo.
+        if matches!(bridge.status, EngineStatus::Failed(_)) {
+            warn!("play-from-here: o jogo não arrancou — alvo pendente descartado");
+            return;
+        }
         pending.0 = Some(at);
         return;
     }
@@ -454,6 +461,10 @@ fn play(world: &mut World) {
         Ok(binary) => binary,
         Err(error) => {
             error!("play: no viber binary — {error:#}");
+            // Sem launch não há ligação onde teleportar: um pending
+            // "from here" sobrevivo até ao PRÓXIMO Play e mandava o herói
+            // para um alvo antigo (repro: F9 falha → F5 teleporta).
+            world.resource_mut::<PendingPlayFrom>().0 = None;
             return;
         }
     };
@@ -461,6 +472,10 @@ fn play(world: &mut World) {
     let mut bridge = world.resource_mut::<ViberBridge>();
     match bridge.play(&binary, &path) {
         Ok(()) => info!("play: {} on bridge :{}", path.display(), bridge.port),
-        Err(error) => error!("play failed: {error:#}"),
+        Err(error) => {
+            error!("play failed: {error:#}");
+            // Idem: o spawn falhou, o pending nunca vai ser consumido.
+            world.resource_mut::<PendingPlayFrom>().0 = None;
+        }
     }
 }

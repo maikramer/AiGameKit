@@ -99,6 +99,7 @@ impl Plugin for CanvasPlugin {
 pub fn canvas_overlay_scene() -> impl Scene {
     bsn! {
         CanvasOverlay
+        GlobalZIndex(11)
         Node {
             position_type: PositionType::Absolute,
             display: Display::None,
@@ -519,12 +520,18 @@ fn clear_info(world: &mut World, mode: EditorMode) {
     }
 }
 
-/// The first `<UiList source>` attr at or under the node.
+/// The first `<UiList bind>` attr at or under the node. The engine reads
+/// `bind` (`Viber/src/ui/tree.rs`) — `source` is accepted as a legacy alias
+/// from the VibeGame spelling, but the canonical key is `bind`.
 fn list_source(xml: &viber::xml::XmlNode) -> Option<String> {
     let is_list = |node: &viber::xml::XmlNode| {
         node.tag
             .eq_ignore_ascii_case("uilist")
-            .then(|| node.attr("source").map(str::to_owned))
+            .then(|| {
+                node.attr("bind")
+                    .or_else(|| node.attr("source"))
+                    .map(str::to_owned)
+            })
             .flatten()
     };
     if let Some(source) = is_list(xml) {

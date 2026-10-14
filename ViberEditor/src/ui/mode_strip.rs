@@ -79,6 +79,7 @@ impl Plugin for ModeStripPlugin {
 pub fn mode_strip() -> impl Scene {
     bsn! {
         ModeStrip
+        GlobalZIndex(11)
         Node {
             position_type: PositionType::Absolute,
             left: percent(50),
@@ -116,15 +117,18 @@ fn mode_button(mode: EditorMode, glyph: char, key: StrKey) -> impl Scene {
 pub fn script_panel() -> impl Scene {
     bsn! {
         ScriptPanel
+        GlobalZIndex(10)
         Node {
+            position_type: PositionType::Absolute,
             width: percent(100),
             height: percent(100),
             display: Display::None,
             flex_direction: FlexDirection::Row,
             column_gap: px(6),
-            padding: px(10),
+            padding: UiRect::axes(px(10), px(44)),
         }
         BackgroundColor(Color::srgb(0.09, 0.1, 0.12))
+        Pickable::IGNORE
         Children [
             // esquerda: a lista de scripts
             Node {
@@ -150,8 +154,9 @@ pub fn script_panel() -> impl Scene {
             Children [
                 Node {
                     flex_direction: FlexDirection::Row,
-                    column_gap: px(6),
+                    column_gap: px(12),
                     align_items: AlignItems::Center,
+                    flex_wrap: FlexWrap::NoWrap,
                 }
                 Children [
                     @caption(t(Lang::default(), StrKey::ScriptTitle)) ScriptTitle
@@ -251,12 +256,14 @@ fn refresh_mode_strip(
 }
 
 /// Applies the mode: camera swap + letterbox (UI) and the script panel (Script).
+#[allow(clippy::type_complexity)]
 fn apply_mode(
     state: Res<EditorModeState>,
     windows: Query<&Window>,
+    mut commands: Commands,
     mut editor_cameras: Query<&mut Camera, With<viber::editor_camera::EditorCamera>>,
     mut ui_cameras: Query<
-        &mut Camera,
+        (Entity, &mut Camera),
         (
             With<crate::viewport::GameUiCamera>,
             Without<viber::editor_camera::EditorCamera>,
@@ -264,12 +271,28 @@ fn apply_mode(
     >,
     mut panels: Query<&mut Node, With<ScriptPanel>>,
 ) {
+    // B4: em modo UI o marker `KeepCameraActive` é assegurado TODOS os frames
+    // — o `suppress_game_cameras` da engine desativa TODA a câmara sem
+    // `EditorCamera`/`KeepCameraActive` em cada frame, e o `is_active = true`
+    // abaixo só é escrito enquanto `state` está "changed" (~2 frames). Sem o
+    // marker, da 3.ª frame nenhuma câmara ficava activa → letterbox preto. O
+    // insert também cobre câmaras (re)spawnadas depois da troca de modo
+    // (rebuild do viewport). Insert de componente existente = no-op barato.
+    if state.0 == EditorMode::Ui {
+        for (entity, _) in &ui_cameras {
+            commands
+                .entity(entity)
+                .insert(viber::editor_camera::KeepCameraActive);
+        }
+    }
     if !state.is_changed() {
         return;
     }
     let mode = state.0;
     // UI mode: a câmara de UI do jogo fica ativa, em letterbox 16:9 centrado.
-    if let (Ok(window), Ok(mut ui_camera)) = (windows.single(), ui_cameras.single_mut()) {
+    if let (Ok(window), Ok((ui_entity, mut ui_camera))) =
+        (windows.single(), ui_cameras.single_mut())
+    {
         match mode {
             EditorMode::Ui => {
                 ui_camera.is_active = true;
@@ -288,6 +311,11 @@ fn apply_mode(
                 });
             }
             EditorMode::ThreeD | EditorMode::Script => {
+                // Sai do modo UI: devolve a câmara à regra comum (o suppress
+                // da engine volta a desativá-la).
+                commands
+                    .entity(ui_entity)
+                    .remove::<viber::editor_camera::KeepCameraActive>();
                 ui_camera.is_active = false;
                 ui_camera.viewport = None;
             }

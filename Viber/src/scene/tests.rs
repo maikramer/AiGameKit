@@ -393,6 +393,32 @@ fn catalog_snippets_parse_and_are_accepted_by_the_parser() {
         let nodes = crate::xml::parse_fragment(template.snippet)
             .unwrap_or_else(|error| panic!("{}: {error}", template.tag));
         assert_eq!(nodes.len(), 1, "{}: snippet com um elemento", template.tag);
+        // <Include> é expandido ANTES do parse (xml::include::load_world) —
+        // no parser cru é ERRO explícito (nunca um skip silencioso).
+        if template.tag == "include" {
+            let error = crate::recipes::parse_world(&[], &nodes)
+                .expect_err("include deve recusar o parse não-expandido");
+            assert!(
+                error.to_string().contains("must be expanded"),
+                "{}: {error}",
+                template.tag
+            );
+            continue;
+        }
+        // <ResourceNode> é tag de SUBÁRVORE: só é consumido dentro do
+        // template de um spawner (collect_resource_node). Ao nível do mundo
+        // é o no-op reportado pelo `analyze` — o snippet documenta o uso.
+        if template.tag == "resourcenode" {
+            let parsed = crate::recipes::parse_world(&[], &nodes)
+                .unwrap_or_else(|error| panic!("{}: {error}", template.tag));
+            assert_eq!(
+                parsed.skipped_tags.get("ResourceNode"),
+                Some(&1),
+                "{}: esperado o no-op documentado",
+                template.tag
+            );
+            continue;
+        }
         let parsed = crate::recipes::parse_world(&[], &nodes)
             .unwrap_or_else(|error| panic!("{}: {error}", template.tag));
         assert!(
@@ -413,6 +439,12 @@ fn catalog_snippets_parse_and_are_accepted_by_the_parser() {
 #[test]
 fn catalog_tags_are_known_and_snippet_fallback_is_generic() {
     for template in super::catalog::templates() {
+        // `include` (expande antes do parse) e `resourcenode` (tag de
+        // subárvore de spawner) não são tags de mundo de topo — KNOWN_TAGS
+        // lista o vocabulário do `<world>` root.
+        if matches!(template.tag, "include" | "resourcenode") {
+            continue;
+        }
         assert!(
             crate::recipes::KNOWN_TAGS.contains(&template.tag),
             "{} não está em KNOWN_TAGS",
@@ -422,6 +454,11 @@ fn catalog_tags_are_known_and_snippet_fallback_is_generic() {
     assert_eq!(
         super::catalog::template_for("Cuboid").unwrap().tag,
         "cuboid"
+    );
+    assert_eq!(
+        super::catalog::template_for("Box").unwrap().tag,
+        "box",
+        "alias Box→Cuboid tem entrada própria"
     );
     assert_eq!(
         super::catalog::snippet_for("cliff"),

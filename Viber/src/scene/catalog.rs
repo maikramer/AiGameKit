@@ -39,7 +39,13 @@ pub struct NodeTemplate {
 
 /// O catálogo: só tags cujo snippet passa pelo parser (garantido por teste). Tags conhecidas
 /// fora do catálogo continuam a inserir-se com o snippet genérico `<Tag />`.
+///
+/// Duas exceções documentadas (testadas em `tests.rs`): `<Include>` é expandido
+/// ANTES do parse (`xml::include::load_world`) — o parser cru recusa-o com erro
+/// explícito; `<ResourceNode>` é tag de SUBÁRVORE (só vive dentro do template de
+/// um spawner) — ao nível do mundo é o no-op reportado pelo `analyze`.
 pub const TEMPLATES: &[NodeTemplate] = &[
+    // ── content ──────────────────────────────────────────────────────────
     NodeTemplate {
         group: TemplateGroup::Content,
         tag: "entity",
@@ -59,10 +65,41 @@ pub const TEMPLATES: &[NodeTemplate] = &[
         snippet: r#"<GltfScene url="/assets/meshes/model.glb" />"#,
     },
     NodeTemplate {
+        group: TemplateGroup::Content,
+        tag: "composition",
+        label: "Composition (cascas de caixas + colisor composto)",
+        snippet: r#"<Composition name="shell" collider="auto"><Cuboid half-size="1 0.5 1" translation="0 0.5 0" /></Composition>"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Content,
+        tag: "include",
+        label: "Include (composição por ficheiro)",
+        snippet: r#"<Include src="/world/bonus.xml" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Content,
+        tag: "playergltf",
+        label: "PlayerGLTF (herói GLB + movimento nativo)",
+        snippet: r#"<PlayerGLTF name="player" pos="0 150 0" model-url="/assets/meshes/characters/hero_lod0.glb" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Content,
+        tag: "particlesystem",
+        label: "ParticleSystem (FX de partículas)",
+        snippet: r#"<ParticleSystem preset="fire" translation="0 0.5 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.2" />"#,
+    },
+    // ── shape ────────────────────────────────────────────────────────────
+    NodeTemplate {
         group: TemplateGroup::Shape,
         tag: "cuboid",
         label: "Cuboid",
         snippet: r#"<Cuboid half-size="0.5 0.5 0.5" translation="0 0.5 0" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Shape,
+        tag: "box",
+        label: "Box (alias Cuboid, spelling VibeGame)",
+        snippet: r#"<Box half-size="0.5 0.5 0.5" translation="0 0.5 0" />"#,
     },
     NodeTemplate {
         group: TemplateGroup::Shape,
@@ -88,6 +125,7 @@ pub const TEMPLATES: &[NodeTemplate] = &[
         label: "Capsule",
         snippet: r#"<Capsule translation="0 0.8 0" />"#,
     },
+    // ── light ────────────────────────────────────────────────────────────
     NodeTemplate {
         group: TemplateGroup::Light,
         tag: "pointlight",
@@ -106,6 +144,7 @@ pub const TEMPLATES: &[NodeTemplate] = &[
         label: "AmbientLight",
         snippet: r#"<AmbientLight color="0xc8d8e8" brightness="110" />"#,
     },
+    // ── water ────────────────────────────────────────────────────────────
     NodeTemplate {
         group: TemplateGroup::Water,
         tag: "lake",
@@ -118,6 +157,13 @@ pub const TEMPLATES: &[NodeTemplate] = &[
         label: "River",
         snippet: r#"<River path="0 0 30 4 60 2" width="12" depth="2.5" />"#,
     },
+    // ── feature ──────────────────────────────────────────────────────────
+    NodeTemplate {
+        group: TemplateGroup::Feature,
+        tag: "terrain",
+        label: "Terrain (heightfield procedural + layers)",
+        snippet: r#"<Terrain name="world" world-size="512" max-height="60" chunk-size="64" layers="grass vale_grass dirt dirt_trail" seed="7" />"#,
+    },
     NodeTemplate {
         group: TemplateGroup::Feature,
         tag: "terrainpad",
@@ -129,6 +175,60 @@ pub const TEMPLATES: &[NodeTemplate] = &[
         tag: "road",
         label: "Road",
         snippet: r#"<Road path="0 0 20 6 40 8" width="6" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Feature,
+        tag: "roadnetwork",
+        label: "RoadNetwork (rede de Ways + Segments)",
+        snippet: r#"<RoadNetwork default-width="6"><Way id="plaza" xz="0 0" /><Way id="gate" xz="40 20" /><Segment a="plaza" b="gate" /></RoadNetwork>"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Feature,
+        tag: "grounddecal",
+        label: "GroundDecal (mancha no terreno)",
+        snippet: r#"<GroundDecal at="12 -8" radius="6" texture="/assets/textures/dirt_road/albedo.ktx2" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Feature,
+        tag: "vegetation",
+        label: "Vegetation (flores/erva densa instanciada)",
+        snippet: r#"<Vegetation meshes="/assets/meshes/vegetation/plant_flatShort.glb" density-per-km2="8000" seed="21" region-min="-60 0 -60" region-max="60 0 60" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Feature,
+        tag: "scatter",
+        label: "Scatter (receita do gerador — saída do bake)",
+        snippet: r#"<Scatter id="scatter.rocks" profile="rock" count="24" seed="31" region-min="-60 0 -60" region-max="60 0 60" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Feature,
+        tag: "dynamicspawner",
+        label: "DynamicSpawner (criaturas/props com template)",
+        snippet: r#"<DynamicSpawner profile="creature" count="3" seed="11" region-min="-40 0 -40" region-max="40 0 40"><GameObject><GLTFLoader url="/assets/meshes/characters/npc_scout_lod0.glb" /></GameObject></DynamicSpawner>"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Feature,
+        tag: "resourcenode",
+        label: "ResourceNode (colheita — dentro do template de um spawner)",
+        snippet: r#"<ResourceNode kind="wood" yield="3" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Feature,
+        tag: "spawnexclusion",
+        label: "SpawnExclusion (círculo sem spawn)",
+        snippet: r#"<SpawnExclusion at="0 0" radius="24" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Feature,
+        tag: "spawngate",
+        label: "SpawnGate (âncora de spawn do player)",
+        snippet: r#"<SpawnGate target-entity="player" y-fallback="150" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Feature,
+        tag: "navmesh",
+        label: "NavMesh (config da engine)",
+        snippet: r#"<NavMesh />"#,
     },
 ];
 

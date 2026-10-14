@@ -352,7 +352,21 @@ fn report(world: &mut World, tx: &Transaction, save: bool) -> BrpResult {
         let doc = doc(world)?;
         doc.dirty_paths()
     };
+    // O sync do documento→ECS só correria no próximo PostUpdate; a resposta
+    // traz-lo AGORA para o campo `needs_reload` — é o que diz ao agente (ou ao
+    // CLI --live) o que exige Ctrl+R, em vez de ele descobrir pelo log. O
+    // recurso acumula (a toolbar do editor lê-o a cada frame): reportamos só o
+    // DELTA desta transação.
+    let before = world
+        .get_resource::<crate::scene::sync::SceneSyncStatus>()
+        .map_or(0, |status| status.needs_reload.len());
+    crate::scene::sync::sync_scene(world);
+    let needs_reload: Vec<String> = world
+        .get_resource::<crate::scene::sync::SceneSyncStatus>()
+        .map(|status| status.needs_reload[before.min(status.needs_reload.len())..].to_vec())
+        .unwrap_or_default();
     let mut out = transaction_json(doc(world)?, tx, &files, save);
+    out["needs_reload"] = json!(needs_reload);
     let history = world.resource::<History>();
     out["can_undo"] = json!(history.can_undo());
     out["can_redo"] = json!(history.can_redo());
@@ -367,6 +381,7 @@ mod tests {
     fn app(dir: &std::path::Path) -> App {
         let mut app = App::new();
         app.add_plugins(live::ScenePlugin);
+        app.add_plugins(crate::scene::sync::SceneSyncPlugin);
         app.insert_resource(SceneDoc::load(&fixture(dir)).unwrap());
         app
     }
@@ -444,6 +459,44 @@ mod tests {
             call(&mut app, undo_method, json!({})).unwrap()["applied"],
             0
         );
+    }
+
+    /// A resposta do apply/undo/redo informa o AGENTE do que ficou
+    /// `needs_reload` (o sync corre agora, não no próximo PostUpdate) — sem o
+    /// campo, ele só descobriria pelo log da engine.
+    #[test]
+    fn apply_response_reports_needs_reload_delta() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = app(tmp.path());
+        // Edição pose-only: nada exige reload.
+        let pose = call(
+            &mut app,
+            apply_method,
+            json!({"ops": [{"op": "set", "node": "name=well", "attrs": {"translation": "9 0 9"}}]}),
+        )
+        .unwrap();
+        assert_eq!(pose["needs_reload"], json!([]));
+        // Inserir um <Lake> (carve de feature) não nasce a quente: a resposta
+        // tem de dizer logo que exige recarregar.
+        let lake = call(
+            &mut app,
+            apply_method,
+            json!({"ops": [{"op": "insert", "parent": "#", "xml": "<Lake at=\"0 0\" radius=\"10\" />"}]}),
+        )
+        .unwrap();
+        assert_eq!(lake["applied"], 1);
+        let reload = lake["needs_reload"].as_array().unwrap();
+        assert_eq!(reload.len(), 1, "{lake}");
+        assert!(reload[0].as_str().unwrap().contains("recarregar"));
+        // O delta é POR TRANSAÇÃO: uma edição pose-only a seguir zera o campo
+        // (o recurso acumula para a toolbar do editor; a resposta não).
+        let again = call(
+            &mut app,
+            apply_method,
+            json!({"ops": [{"op": "set", "node": "name=well", "attrs": {"translation": "4 0 2"}}]}),
+        )
+        .unwrap();
+        assert_eq!(again["needs_reload"], json!([]));
     }
 
     #[test]

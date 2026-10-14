@@ -176,5 +176,9 @@ Done (Fases 2–5 + polish):
 7. ✅ Review pass: rect-scoped live paint sync, frame-correct GLB drop (world → parent),
    `settle` and `canonicalize` tools, Ctrl+R reload, dropped/added nodes get selected.
 
-Next: feature point handles for `<RoadNetwork>`, drag-reorder in the Objects tree,
-regenerating vegetation `.vinst` from the tool (today only `viber bake`).
+Next: feature point handles for `<RoadNetwork>`, a Regenerate button for
+`<Vegetation instances>` in the Inspector (agents already regenerate via
+`viber tool scatter <sel>` — writes the `.vinst` atomically), a text editor in
+the Script mode (today read-only preview + open externally), and rendering the
+game UI to the `GameUiCamera` in UI mode (the letterbox stays empty —
+`KeepCameraActive` is set but the UI pass doesn't target that camera yet).
