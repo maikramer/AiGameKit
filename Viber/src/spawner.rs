@@ -895,50 +895,6 @@ pub fn instantiate_spawn_groups(
                 .fold(None::<f32>, |acc, r| Some(acc.map_or(r, |max| max.max(r))));
             group.spec.footprint_radius = auto.unwrap_or(0.8);
         }
-        let near_radius = group.spec.near_water_radius;
-        // Margem de cliff em metros reais: a máscara é amostrada com folga =
-        // margem autoral + meia-largura da pegada na maior escala possível —
-        // "a 2 m do cliff" conta a partir do SÍTIO onde o prop vai caber.
-        let cliff_clearance = group.spec.cliff_margin.max(0.0)
-            + group.spec.footprint_radius.max(0.0)
-                * group.spec.scale_min.max(group.spec.scale_max).max(0.0);
-        let mut sample = |x: f32, z: f32| {
-            // Altura da SUPERFÍCIE renderizada (lattice LOD0): entre vértices
-            // o mesh só desenha cordas lineares, e a amostra analítica
-            // flutuava acima delas nas cristas.
-            let height = runtime.sample_mesh_surface(x, z);
-            TerrainSample {
-                height,
-                // Gradiente do CAMPO voxel no ponto (fiel a cliffs/caves/arch
-                // — a matriz 3×3 da grelha crua era cega aos mods e inclinava
-                // props para paredes que a grelha nem via).
-                normal: runtime.voxel.gradient(
-                    &runtime.base(),
-                    bevy::math::Vec3::new(x, height, z),
-                    0.5,
-                ),
-                water: runtime.in_water(x, z),
-                // Lâmina de água no ponto (`in-water` assenta à superfície).
-                water_surface: runtime.water_surface_at(x, z),
-                // A shoreline test: banda EXATA em torno da linha de água
-                // (distance_to_waterline, a mesma métrica do splatter) — as
-                // 4 sondas antigas liam o carve radius (que passa da lâmina
-                // vários metros) e punham "margem" em encosta seca.
-                near_water: runtime.water.iter().any(|body| {
-                    body.distance_to_waterline(bevy::math::Vec2::new(x, z))
-                        .abs()
-                        <= near_radius
-                }),
-                road: runtime.on_road(x, z),
-                cliff: cliffs.as_deref().is_some_and(|mask| {
-                    mask.is_cliff_within(bevy::math::Vec2::new(x, z), cliff_clearance)
-                }),
-                // Laje fina por cima de vazio (banda de arco, brow de overhang
-                // raso): o gate rejeita — raízes não nascem em pedra suspensa.
-                // Em mundo flat é sempre false, sem custo.
-                roof: runtime.has_thin_roof(x, z),
-            }
-        };
         // As exclusões são lidas por referência: clonar aqui (por grupo, por
         // frame de loading) era lixo puro — a Vec pode ter centenas de
         // entradas.
@@ -982,7 +938,7 @@ pub fn instantiate_spawn_groups(
         // Mundo estático: instâncias pré-geradas, já com os gates aplicados no bake.
         let (mut instances, stats) = match &group.spec.preplaced {
             Some(preplaced) => ((**preplaced).clone(), PlacementStats::default()),
-            None => compute_placements(&group.spec, occupancy, &mut sample),
+            None => crate::placement::place(&group.spec, occupancy, &runtime, cliffs.as_deref()),
         };
         if group.dynamic {
             stand_upright(&mut instances);

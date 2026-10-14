@@ -40,13 +40,10 @@ use bevy::asset::AssetApp;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::ecs::world::World;
-use bevy::math::{Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 
 use crate::recipes::spawn::PendingWorld;
-use crate::spawner::{
-    PendingSpawnGroups, PlacedInstance, SpawnOccupancy, TerrainSample, compute_placements,
-};
+use crate::spawner::{PendingSpawnGroups, PlacedInstance, SpawnOccupancy};
 use crate::terrain::cliffs::CliffMask;
 use crate::terrain::heightmap::{AhgtMeta, HeightMapU16};
 use crate::terrain::runtime::TerrainRuntime;
@@ -565,19 +562,8 @@ pub fn run_bake(world_path: &Path, out_dir: &Path) -> Result<BakeReport> {
             String::new()
         };
         let (instances, _stats) = {
-            let (near_radius, cliff_clearance) = sample_params(&group.spec);
-            let mut sample = |x: f32, z: f32| {
-                terrain_sample(
-                    &runtime,
-                    cliffs.as_ref(),
-                    x,
-                    z,
-                    near_radius,
-                    cliff_clearance,
-                )
-            };
             let (mut instances, stats) =
-                compute_placements(&group.spec, &mut occupancy, &mut sample);
+                crate::placement::place(&group.spec, &mut occupancy, &runtime, cliffs.as_ref());
             if group.dynamic {
                 crate::spawner::stand_upright(&mut instances);
             }
@@ -751,46 +737,6 @@ pub(crate) fn headless_app(
     });
     app.init_resource::<BakeFeatureSnapshot>();
     Ok(app)
-}
-
-/// Os parâmetros da closure de amostragem de um grupo — partilhado pelo bake,
-/// pelo `verify_static` e pela ferramenta `scatter` (`crate::scene::tools`):
-/// o raio de `near-water` e a folga de cliff (margem + pegada × escala máxima).
-pub(crate) fn sample_params(spec: &crate::recipes::StaticSpawnerSpec) -> (f32, f32) {
-    (
-        spec.near_water_radius,
-        spec.cliff_margin.max(0.0)
-            + spec.footprint_radius.max(0.0) * spec.scale_min.max(spec.scale_max).max(0.0),
-    )
-}
-
-/// A closure de amostragem do `instantiate_spawn_groups`, replicada — é o
-/// contrato de gates (superfície renderizada, gradiente voxel, linha de
-/// água EXATA, ribbon de estrada, máscara de cliff dilatada, laje fina).
-pub(crate) fn terrain_sample(
-    runtime: &TerrainRuntime,
-    cliffs: Option<&CliffMask>,
-    x: f32,
-    z: f32,
-    near_radius: f32,
-    cliff_clearance: f32,
-) -> TerrainSample {
-    let height = runtime.sample_mesh_surface(x, z);
-    TerrainSample {
-        height,
-        normal: runtime
-            .voxel
-            .gradient(&runtime.base(), Vec3::new(x, height, z), 0.5),
-        water: runtime.in_water(x, z),
-        water_surface: runtime.water_surface_at(x, z),
-        near_water: runtime
-            .water
-            .iter()
-            .any(|body| body.distance_to_waterline(Vec2::new(x, z)).abs() <= near_radius),
-        road: runtime.on_road(x, z),
-        cliff: cliffs.is_some_and(|mask| mask.is_cliff_within(Vec2::new(x, z), cliff_clearance)),
-        roof: runtime.has_thin_roof(x, z),
-    }
 }
 
 /// Walk DFS pré-order (a ordem do `collect_spawn_groups`) apanhando os nós
@@ -1729,20 +1675,8 @@ pub fn verify_static(static_path: &Path, bake_path: &Path) -> Result<usize> {
     let mut checked = 0usize;
     let mut drift_warnings = 0usize;
     for (group, baked_group) in static_veg.iter().zip(baked_veg.iter()) {
-        let (near_radius, cliff_clearance) = sample_params(&group.spec);
-        let (instances, _) = {
-            let mut sample = |x: f32, z: f32| {
-                terrain_sample(
-                    &runtime,
-                    cliffs.as_ref(),
-                    x,
-                    z,
-                    near_radius,
-                    cliff_clearance,
-                )
-            };
-            compute_placements(&group.spec, &mut occupancy, &mut sample)
-        };
+        let (instances, _) =
+            crate::placement::place(&group.spec, &mut occupancy, &runtime, cliffs.as_ref());
         if instances.len() != baked_group.instances.len() {
             anyhow::bail!(
                 "vegetation '{}': {} instâncias no estático vs {} no bake",

@@ -34,6 +34,7 @@ pub mod nav;
 pub mod particles;
 pub mod physics;
 pub mod physics_fx;
+pub mod placement;
 pub mod player;
 pub mod postfx;
 pub mod postfx_toggle;

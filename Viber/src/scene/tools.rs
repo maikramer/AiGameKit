@@ -20,7 +20,7 @@ use serde_json::{Value, json};
 use super::SceneSource;
 use super::doc::{NodeRef, SceneDoc};
 use super::ops::{EditOp, fragment_xml};
-use crate::spawner::{SpawnExclusions, SpawnOccupancy, compute_placements};
+use crate::spawner::{SpawnExclusions, SpawnOccupancy};
 use crate::terrain::cliffs::CliffMask;
 use crate::terrain::runtime::TerrainRuntime;
 use crate::xml::NodeOrigin;
@@ -113,11 +113,7 @@ pub fn scatter(world: &mut World, selector: &str) -> Result<ToolOutput> {
         .get_resource::<TerrainRuntime>()
         .ok_or_else(|| anyhow!("scatter: o terreno não está carregado (TerrainRuntime)"))?;
     let cliffs = world.get_resource::<CliffMask>();
-    let (near_radius, cliff_clearance) = crate::bake::sample_params(&spec);
-    let mut sample = |x: f32, z: f32| {
-        crate::bake::terrain_sample(runtime, cliffs, x, z, near_radius, cliff_clearance)
-    };
-    let (instances, stats) = compute_placements(&spec, &mut occupancy, &mut sample);
+    let (instances, stats) = crate::placement::place(&spec, &mut occupancy, runtime, cliffs);
     if instances.is_empty() {
         warnings.push(format!("scatter `{id}`: 0 colocadas ({stats:?})"));
     }
@@ -197,11 +193,7 @@ fn scatter_vegetation(world: &mut World, recipe: crate::xml::XmlNode) -> Result<
         .get_resource::<TerrainRuntime>()
         .ok_or_else(|| anyhow!("scatter: o terreno não está carregado (TerrainRuntime)"))?;
     let cliffs = world.get_resource::<CliffMask>();
-    let (near_radius, cliff_clearance) = crate::bake::sample_params(&spec);
-    let mut sample = |x: f32, z: f32| {
-        crate::bake::terrain_sample(runtime, cliffs, x, z, near_radius, cliff_clearance)
-    };
-    let (instances, stats) = compute_placements(&spec, &mut occupancy, &mut sample);
+    let (instances, stats) = crate::placement::place(&spec, &mut occupancy, runtime, cliffs);
     if instances.is_empty() {
         warnings.push(format!(
             "scatter vegetation `{rel}`: 0 colocadas ({stats:?})"
