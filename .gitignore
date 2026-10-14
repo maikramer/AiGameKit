@@ -22,9 +22,11 @@ tools/bfg-*.jar
 dist/
 build/
 pip-wheel-metadata/
-# Rust — artefactos de build do crate Viber (o Materialize usa o seu .gitignore local)
+# Rust — artefactos de build dos crates Viber/ViberEditor (o Materialize usa o seu .gitignore local)
 Viber/target/
 Viber/Cargo.lock
+ViberEditor/target/
+ViberEditor/Cargo.lock
 # Viber simple-rpg — assets POR-JOGO versionados (ícones HUD próprios); o
 # resto é derivado/scratch (meshes_enriched do passe de materiais). Assets
 # PARTILHADOS vivem só no pool shared-assets (Viber/docs/ASSETS.md; guarda:
