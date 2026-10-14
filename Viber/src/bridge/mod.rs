@@ -224,6 +224,7 @@ impl Plugin for BridgePlugin {
                     .with_method_main(scene::METHOD_PICK, scene::pick_method)
                     .with_method_main(scene::METHOD_ENTITIES, scene::entities_method)
                     .with_method_main(scene::METHOD_CATALOG, scene::catalog_method)
+                    .with_method_main(scene::METHOD_LINT, scene::lint_method)
                     .with_method_main(scene::METHOD_DROP, scene::drop_method)
                     .with_method_main(scene::METHOD_FILES, scene::files_method)
                     .with_method_main(scene::METHOD_TOOL_LIST, scene::tool_list_method)

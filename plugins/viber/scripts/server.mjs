@@ -284,13 +284,14 @@ const tools = [
       "estado vivo), pick --x N --y N [--max-distance M] (só --live: px do ecrã → nó), entities [SEL] " +
       "(só --live: entidades vivas + pose mundo; sem SEL = todas), apply ops.json|- [--coalesce K] " +
       "(--coalesce só --live: N applies com a mesma chave = 1 undo), " +
-      "catalog, add TAG [--parent SEL], drop GLB --at 'x y z' (MUNDO) [--parent SEL], files [--depth N]. " +
+      "catalog, lint [--strict] (offline: sintaxe Luau/viber.load/quest schema/nomes duplicados), " +
+      "add TAG [--parent SEL], drop GLB --at 'x y z' (MUNDO) [--parent SEL], files [--depth N]. " +
       "Seletores: name=well ou world/village.xml#3/0. live + terreno/céu/UI/spawners = needs_reload. " +
       "Requer binário viber rebuilt (>=2026-10-13).",
     inputSchema: {
       type: "object",
       properties: {
-        sub: { type: "string", description: "Subcomando scene (ls|get|find|set|insert|rm|mv|dup|undo|redo|save|pick|entities|apply|catalog|add|drop|files)" },
+        sub: { type: "string", description: "Subcomando scene (ls|get|find|set|insert|rm|mv|dup|undo|redo|save|pick|entities|apply|catalog|lint|add|drop|files)" },
         args: { type: "array", items: { type: "string" }, description: "Argumentos posicionais do subcomando (strings exatas)" },
         live: { type: "boolean", description: "Default true: engine a correr via bridge" },
         world: { type: "string" },

@@ -107,6 +107,12 @@ pub fn save_path_for(world_key: Option<&str>, save_dir: Option<&Path>) -> PathBu
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SaveGame {
+    /// Versão do schema do save. Saves antigos (sem o campo) carregam como 0;
+    /// um save de versão MAIS NOVA que a engine [`SAVE_VERSION`] carrega na
+    /// mesma (campos a mais são ignorados pelo serde) mas o load avisa — os
+    /// campos novos perdem-se ao regravar por cima.
+    #[serde(default)]
+    pub version: u32,
     // Campos nucleares com `#[serde(default)]`: um save antigo/parcial sem
     // `volumes`/`nota_marked`/`items`/… carrega em vez de ser recusado inteiro.
     // XP, vitais, posição e volumes são `Option`: o zero do tipo matava o
@@ -153,8 +159,13 @@ pub struct SaveGame {
     pub world_kv: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
+/// Versão do schema [`SaveGame`] que ESTA engine escreve. Incrementar ao
+/// acrescentar campos cuja ausência muda a leitura (hoje tudo tem default —
+/// o 1 existe para o save mais novo que a engine avisar no load).
+pub const SAVE_VERSION: u32 = 1;
+
 /// Captura o estado do jogo (puro sobre os recursos; xp/posição vêm de fora).
-/// Captura o estado do jogo. Os recursos RPG entram como `Option`: num mundo
+/// Os recursos RPG entram como `Option`: num mundo
 /// `gameplay: none` não há Vault/Nota/SkillTree/quests de apresentação e o
 /// save fica com os campos por omissão — `world_kv`, posição e vitais viajam
 /// SEMPRE (é o que torna o `viber.game()` persistente em qualquer preset).
@@ -171,6 +182,7 @@ pub fn capture(
     volumes: (f32, f32, f32),
 ) -> SaveGame {
     SaveGame {
+        version: SAVE_VERSION,
         xp: Some(xp),
         health: Some(health),
         position: Some(position),
@@ -503,6 +515,17 @@ fn options_system(
     if (on_system_tab && keys.just_pressed(KeyCode::KeyL)) || load_requested {
         match load_from_disk(&save_path_for(world_key, save_dir)) {
             Ok(game) => {
+                // Save de uma engine MAIS NOVA: carrega na mesma (serde ignora
+                // campos desconhecidos), mas regravar por cima perde os campos
+                // novos — avisar antes de o jogador os destruir sem saber.
+                if game.version > SAVE_VERSION {
+                    bevy::log::warn!(
+                        "save '{}' é da versão {} (esta engine escreve {}) — campos novos perdem-se se gravares por cima",
+                        save_path_for(world_key, save_dir).display(),
+                        game.version,
+                        SAVE_VERSION
+                    );
+                }
                 // Stats PRÉVIO capturado ANTES de apply_save o substituir —
                 // o delta tem de ser sessão→save; capturar depois (quando
                 // stats.0 já é o do save) multiplicava a speed de novo a
@@ -619,6 +642,36 @@ mod tests {
 
     /// R2-G4: o XpLevel sincronizado do save mantém o level_up_detector
     /// silencioso — `xp.next` (aplicado pelo load) == `last_next` (do save).
+    #[test]
+    fn test_save_version_roundtrip_and_future_loads() {
+        // Gravação nova estampa a versão corrente.
+        let game = capture(
+            None,
+            None,
+            None,
+            None,
+            1,
+            (0, 10),
+            (10.0, 10.0),
+            [0.0; 3],
+            (1.0, 1.0, 1.0),
+        );
+        assert_eq!(game.version, SAVE_VERSION);
+        let json = serde_json::to_string(&game).unwrap();
+        assert!(json.contains("\"version\""), "{json}");
+
+        // Save antigo SEM campo: default 0, carrega igual.
+        let legacy: SaveGame = serde_json::from_str("{}").unwrap();
+        assert_eq!(legacy.version, 0);
+
+        // Save de engine MAIS NOVA: campos desconhecidos ignorados, load OK —
+        // o warn do load (options_system) é o que diz ao jogador para não
+        // regravar por cima.
+        let future: SaveGame = serde_json::from_str(r#"{"version": 99, "gold": 7}"#).unwrap();
+        assert_eq!(future.version, 99);
+        assert_eq!(future.gold, 7);
+    }
+
     #[test]
     fn test_saved_xp_level_keeps_detector_silent() {
         let game = SaveGame {

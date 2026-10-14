@@ -86,6 +86,7 @@ builder da op de arrastar um `.glb` vivem em `scene::catalog` — o diálogo do 
 agente (`viber scene insert` com o snippet, ou `catalog::glb_drop`) produzem o mesmo XML.
 
 Bridge (mesma API): `viber.scene.ls|get|find|apply|undo|redo|save|pick|entities`
+Bridge (mesma API): `viber.scene.ls|get|find|apply|undo|redo|save|pick|entities|lint`
 (`src/bridge/scene.rs`). `viber.scene.entities {selector}` mostra as entidades vivas do nó
 (pose local + mundo) — verificar o efeito de uma edição. `viber.scene.pick {x,y}` devolve o
 seletor do nó sob um pixel (câmara de editor).
@@ -149,6 +150,7 @@ entidade spawnada tem `scene::SceneSource`.
 cd Viber && cargo run -- analyze <world.xml>   # valida headless (exit 1 em erro)
 cd Viber && cargo run -- run <world.xml>       # janela Bevy
 cd Viber && cargo run -- bake <world.xml>      # procedural → world.static.xml + static/ + bake/
+cd Viber && cargo run -- scene lint --strict   # lint estático: sintaxe Luau, viber.load, quest schema, nomes duplicados
 cd Viber && cargo run -- scene ls              # edição de mundos (offline ou --live; ver acima)
 cd Viber && cargo run -- terrain sample X Z    # pincéis de terreno + amostragem
 cd Viber && cargo run -- tool list             # geradores <Scatter>: list/scatter/settle/canonicalize

@@ -35,6 +35,7 @@ viber create <nome>            # scaffold <nome>/{world.xml,config.yaml}
 # editar o XML (contrato em references/xml-contract.md)
 viber analyze <world.xml>      # valida headless: assets, conflitos, tags — exit 1 em erro
 viber analyze <world.xml> --json   # o mesmo relatório num objeto JSON estável (agentes/CI)
+viber scene --world w.xml lint [--strict]   # sintaxe Luau de TODOS os scripts, viber.load, quest schema, nomes duplicados
 viber bake <world.xml>         # gera world.static.xml + static/** + bake/
 viber scene ls                 # árvore com seletores (abre o estático por omissão)
 viber scene set name=well translation="4 0 3"           # edição offline

@@ -132,6 +132,16 @@ pub enum SceneCommand {
     },
     /// O catálogo Add Node: tags com snippets válidos (o mesmo diálogo do editor)
     Catalog,
+    /// Lint estático do mundo: sintaxe Luau de TODOS os scripts, alvos
+    /// `viber.load("…")`, referências das quests (`npc` ↔ DialogueNPC,
+    /// `visit` ↔ Landmark) e nomes de entidade duplicados. Sem engine.
+    /// `--strict` devolve exit non-zero se houver erros (relatório sai na
+    /// mesma em stdout).
+    Lint {
+        /// Falhar quando houver findings de severidade error
+        #[arg(long)]
+        strict: bool,
+    },
     /// Insere o snippet do catálogo de uma tag (o "Add Node" do editor)
     Add {
         tag: String,
@@ -295,6 +305,9 @@ fn request(command: SceneCommand) -> Result<Request> {
         SceneCommand::Entities { selector } => Request::Entities { selector },
         SceneCommand::Files { depth } => Request::Files { depth },
         SceneCommand::Catalog => Request::Catalog,
+        // `run` trata o lint ANTES de carregar o documento; `live_request`
+        // encaminha para a bridge. Nunca chega aqui.
+        SceneCommand::Lint { .. } => bail!("lint não passa pelo documento de edição"),
         SceneCommand::Add {
             tag,
             parent,
@@ -321,6 +334,9 @@ fn request(command: SceneCommand) -> Result<Request> {
 
 /// Corre um subcomando contra os ficheiros de `world` (offline) e devolve o JSON a imprimir.
 pub fn run(world: &Path, command: SceneCommand) -> Result<Value> {
+    if let SceneCommand::Lint { strict } = command {
+        return crate::lint::run_cli(world, strict);
+    }
     let mut doc = SceneDoc::load(world)?;
     let (ops, dry_run) = match request(command)? {
         Request::Ls { selector, depth } => {
@@ -394,6 +410,11 @@ pub fn run(world: &Path, command: SceneCommand) -> Result<Value> {
 
 /// O mesmo subcomando contra a engine a correr: o método `viber.scene.*` e os params.
 pub fn live_request(command: SceneCommand) -> Result<(&'static str, Value)> {
+    // O lint não passa pelo documento — contra a engine, o método lê os
+    // MESMOS ficheiros do disco (a engine tem o root_dir do mundo).
+    if let SceneCommand::Lint { strict } = command {
+        return Ok(("viber.scene.lint", json!({ "strict": strict })));
+    }
     Ok(match request(command)? {
         Request::Ls { selector, depth } => (
             "viber.scene.ls",

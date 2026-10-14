@@ -11,6 +11,7 @@
 //! | `viber.scene.undo` / `redo` | `{save?: true}` | transação ou `{"applied": 0}` |
 //! | `viber.scene.save` | — | `{files}` |
 //! | `viber.scene.catalog` | — | catálogo Add Node (tags + snippets) |
+//! | `viber.scene.lint` | `{strict?}` | lint estático do mundo (sintaxe Luau, `viber.load`, quest-parse, nomes duplicados); `strict` com erros → BrpError |
 //! | `viber.scene.drop` | `{glb, at: [x,y,z] mundo, parent?: "#", save?}` | transação (Entity + GltfScene) |
 //! | `viber.scene.files` | `{depth?: 6}` | árvore da pasta do mundo |
 //! | `viber.tool.list` | — | geradores `<Scatter>` |
@@ -41,6 +42,7 @@ pub const METHOD_SAVE: &str = "viber.scene.save";
 pub const METHOD_PICK: &str = "viber.scene.pick";
 pub const METHOD_ENTITIES: &str = "viber.scene.entities";
 pub const METHOD_CATALOG: &str = "viber.scene.catalog";
+pub const METHOD_LINT: &str = "viber.scene.lint";
 pub const METHOD_DROP: &str = "viber.scene.drop";
 pub const METHOD_FILES: &str = "viber.scene.files";
 pub const METHOD_TOOL_LIST: &str = "viber.tool.list";
@@ -167,6 +169,34 @@ pub fn save_method(_input: In<Option<Value>>, world: &mut World) -> BrpResult {
 
 pub fn catalog_method(_input: In<Option<Value>>, _world: &mut World) -> BrpResult {
     Ok(crate::scene::catalog::to_json())
+}
+
+/// Lint estático do mundo A CORRER (lê os ficheiros do `root_dir` do
+/// documento — o mesmo relatório do `viber scene lint` offline). `strict`
+/// devolve BrpError se houver findings de severidade error.
+pub fn lint_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        #[serde(default)]
+        strict: bool,
+    }
+    let p: Params = params(METHOD_LINT, input.0)?;
+    // `files[0]` é o world root — existe no HEAD e no refactor em curso
+    // (o `world_path()` novo é o mesmo caminho).
+    let world_xml = doc(world)?
+        .files
+        .first()
+        .map(|file| file.path.clone())
+        .ok_or_else(|| invalid("documento sem ficheiros".into()))?;
+    let report = crate::lint::lint_world(&world_xml).map_err(|e| invalid(format!("{e:#}")))?;
+    let out = crate::lint::report_json(&report);
+    if p.strict && report.errors().count() > 0 {
+        return Err(invalid(format!(
+            "lint: {} erro(s) — ver o campo errors do relatório",
+            report.errors().count()
+        )));
+    }
+    Ok(out)
 }
 
 pub fn drop_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {

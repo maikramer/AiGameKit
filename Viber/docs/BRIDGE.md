@@ -54,6 +54,7 @@ chamada.
 | `viber.scene.pick` | pixel {x,y} (câmara de editor) → seletor do nó sob o raio |
 | `viber.scene.entities` | entidades VIVAS do nó (pose local + mundo) — verificar o efeito de uma edição |
 | `viber.scene.catalog` | catálogo de tags com snippets válidos (o Add Node do editor) |
+| `viber.scene.lint` | lint estático do mundo (`{strict?}`): sintaxe Luau de todos os scripts, alvos `viber.load`, quest JSON vs schema, nomes duplicados — `{strict: true}` devolve erro se houver findings de severidade error |
 | `viber.scene.drop` | drop de um `.glb` no mundo → op de insert (o drag-drop do editor) |
 | `viber.scene.files` | a pasta do mundo em árvore JSON (world/scene/lua/glb/…) |
 | `viber.tool.list` | enumera as receitas `<Scatter>` (geradores) do mundo |
