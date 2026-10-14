@@ -4,7 +4,7 @@
 // Zero dependências: JSON-RPC newline-delimited sobre stdin/stdout (MCP stdio).
 //
 // Tools: viber_status, viber_screenshot (PNG inline), viber_burst, viber_tree,
-// viber_logs, viber_input, viber_lua, viber_scene.
+// viber_logs, viber_input, viber_lua, viber_scene, viber_tool, viber_terrain.
 //
 // Binário: env VIBER_BIN (default "viber" — userConfig.viberBin do plugin injeta-o).
 
@@ -280,13 +280,14 @@ const tools = [
     description:
       "Edição de cena: `viber scene <sub>` offline ou --live (engine a correr; grava + sync ao vivo + undo/redo). " +
       "Subs: ls [SEL] [--depth], get SEL, find --tag X [--attr k=v], set SEL k=v… [--unset k] [--dry-run], " +
-      "insert PARENT '<xml>' [--index], rm SEL, mv SEL PARENT, dup SEL, undo|redo (só --live), apply ops.json|-. " +
+      "insert PARENT '<xml>' [--index], rm SEL, mv SEL PARENT, dup SEL, undo|redo (só --live), apply ops.json|-, " +
+      "catalog, add TAG [--parent SEL], drop GLB --at 'x y z' (MUNDO) [--parent SEL], files [--depth N]. " +
       "Seletores: name=well ou world/village.xml#3/0. live + terreno/céu/UI/spawners = needs_reload. " +
       "Requer binário viber rebuilt (>=2026-10-13).",
     inputSchema: {
       type: "object",
       properties: {
-        sub: { type: "string", description: "Subcomando scene (ls|get|find|set|insert|rm|mv|dup|undo|redo|apply)" },
+        sub: { type: "string", description: "Subcomando scene (ls|get|find|set|insert|rm|mv|dup|undo|redo|apply|catalog|add|drop|files)" },
         args: { type: "array", items: { type: "string" }, description: "Argumentos posicionais do subcomando (strings exatas)" },
         live: { type: "boolean", description: "Default true: engine a correr via bridge" },
         world: { type: "string" },
@@ -312,7 +313,58 @@ const tools = [
           };
     },
   },
+  cliTool(
+    "viber_tool",
+    "tool",
+    "Ferramentas geradoras: `viber tool <sub>` offline ou --live. Subs: list, scatter SEL " +
+      "(regenera o <Group generated-by> de um <Scatter id>), settle SEL [--offset m] (assenta no " +
+      "terreno atual; um grupo assenta os filhos), canonicalize [SEL] (poses canónicas, idempotente). " +
+      "Cada uma = UMA transação desfazível.",
+    "list|scatter|settle|canonicalize"
+  ),
+  cliTool(
+    "viber_terrain",
+    "terrain",
+    "Terreno pré-gerado (.ahgt + camada de pintura): `viber terrain <sub>` offline ou --live. " +
+      "Subs: sample X Z (usar '--' antes de negativos), brush MODE --at 'x z' --radius R --amount A " +
+      "(MODE raise|lower|flatten|smooth|crater|noise; --height H no flatten), paint --at 'x z' " +
+      "--radius R --layer ALIAS [--amount 0..1]. Undo exato; props não se re-assentam (viber_tool settle).",
+    "sample|brush|paint"
+  ),
 ];
+
+/// Ferramenta MCP que embrulha `viber <command> [--live] [--world] [--port] <sub> args…`.
+function cliTool(name, command, description, subs) {
+  return {
+    name,
+    description: description + " Requer binário viber rebuilt (>=2026-10-14).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sub: { type: "string", description: `Subcomando (${subs})` },
+        args: { type: "array", items: { type: "string" }, description: "Argumentos do subcomando (strings exatas)" },
+        live: { type: "boolean", description: "Default false: ficheiros do mundo; true = engine/editor a correr" },
+        world: { type: "string" },
+        port: { type: "number" },
+      },
+      required: ["sub"],
+    },
+    handler: async (a) => {
+      const args = [command];
+      if (a.live === true) args.push("--live");
+      if (a.world) args.push("--world", String(a.world));
+      if (a.port) args.push("--port", String(a.port));
+      args.push(a.sub, ...((a.args || []).map(String)));
+      const r = await run(args, 120_000);
+      return r.ok
+        ? { content: [text((r.stdout || r.stderr).trim() || "(ok)")] }
+        : {
+            content: errorContent(r, `\`${command}\` exige binário rebuilt (./install.sh viber).`),
+            isError: true,
+          };
+    },
+  };
+}
 
 const toolMap = new Map(tools.map((t) => [t.name, t]));
 

@@ -41,9 +41,33 @@ viber scene --live set name=well translation="10 8 25"  # engine a correr (undo/
 ```
 
 Edição = operações atómicas (`src/scene/ops.rs`): `set`/`replace_attrs`/`set_text`/
-`insert`/`remove`/`move`/`duplicate`, em lotes (`scene apply ops.json`), cada uma com
-inversa. Seletores: `world/village.xml#3/0` (ficheiro+path) ou `name=well` (único).
-Pose escrita sempre canónica: `translation`/`euler` (graus)/`scale`.
+`insert`/`remove`/`move`/`duplicate` + `terrain_brush`/`terrain_patch`/`terrain_paint`/
+`splat_patch`, em lotes (`scene apply ops.json`), cada uma com inversa (a saída traz
+`inverse` = o undo offline). Seletores: `world/village.xml#3/0` (ficheiro+path) ou
+`name=well` (único; ambíguo = erro com os caminhos). Pose escrita sempre canónica:
+`translation`/`euler` (graus XYZ)/`scale`, 4 casas; perto de yaw ±90° com inclinação, onde o
+euler não é estável, `rotation` em quaternião.
+
+```bash
+viber scene catalog                                   # tags do "Add Node" com snippets válidos
+viber scene add PointLight --parent name=plaza        # insere o snippet do catálogo
+viber scene drop /assets/meshes/props/barrel.glb --at "12 40 -3" --parent name=city
+#   --at é MUNDO: convertido para o referencial do pai (exato num estático)
+viber scene files --depth 3                           # a pasta do mundo (o dock FileSystem)
+
+viber terrain sample -- -70 -70                       # altura do heightmap (documento)
+viber terrain brush raise --at "-70 -70" --radius 25 --amount 4   # raise|lower|flatten|smooth|crater|noise
+viber terrain paint --at "10 10" --radius 6 --layer dirt_trail   # camada do pool (splat)
+
+viber tool list                                       # geradores <Scatter id> do mundo
+viber tool scatter id=grp-3                           # regenera o grupo generated-by (determinístico)
+viber tool settle generated-by=grp-3                  # assenta props no terreno atual (após pincéis)
+viber tool canonicalize                               # poses na forma canónica (idempotente)
+```
+
+Todos aceitam `--dry-run` (offline) e `--live [--port P]` (engine a correr ou o
+editor aberto com `vibereditor --bridge P`: undo partilhado, sync ao vivo). Depois de
+mexer no terreno, props/árvores NÃO se re-assentam sozinhos — `tool settle`.
 
 Dentro do checkout do Viber, `viber run` delega a `cargo run` (rebuild da engine);
 `analyze` nunca delega. `viber run` corre em **release** por omissão (dev = 8 fps).
