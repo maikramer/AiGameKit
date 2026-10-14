@@ -74,6 +74,9 @@ enum Command {
         /// Treat not-implemented (skipped) tags as errors
         #[arg(long)]
         strict: bool,
+        /// Print a single stable JSON object instead of text (machine report for agents/CI)
+        #[arg(long)]
+        json: bool,
     },
     /// Generate the STATIC world (the source of truth agents and the editor edit) from a
     /// procedural world.xml: the carved heightmap (bake/terrain.baked.ahgt), the resolved
@@ -726,7 +729,160 @@ fn create(name: &str) -> Result<()> {
     Ok(())
 }
 
-fn analyze(path: &Path, strict: bool) -> Result<()> {
+/// Sentinela do modo `--json`: o objeto com `"error"` JÁ foi impresso em
+/// stdout — o dispatch só tem de devolver exit non-zero (sem texto anyhow
+/// solto a poluir a saída que o agente está a parsear).
+#[derive(Debug)]
+struct JsonReported;
+impl std::fmt::Display for JsonReported {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("relatório JSON já impresso")
+    }
+}
+impl std::error::Error for JsonReported {}
+
+/// `viber analyze --json` — o mesmo relatório do analyze em TEXTO num único
+/// objeto estável em stdout (agentes/CI parseiam JSON, não texto). Exit
+/// codes idênticos ao modo texto: erro de parse/IO ou `--strict` violado ⇒
+/// non-zero, com a causa no campo `error`. Formato (contrato estável):
+/// `{world, static, entities{…}, ambient_light, terrain{…}, ui{…},
+/// spawn_groups{…}, prototypes{…}, skipped_tags{…}, assets{…}, infos[],
+/// warnings[], unknown_prototypes[], error?}`.
+fn analyze_json(path: &Path, strict: bool) -> Result<()> {
+    fn reported(object: serde_json::Value) -> anyhow::Error {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&object).expect("serialize")
+        );
+        anyhow::Error::new(JsonReported)
+    }
+    let path = std::path::absolute(path)?;
+    let world = match load_world(&path) {
+        Ok(world) => world,
+        Err(e) => {
+            return Err(reported(serde_json::json!({
+                "world": path.display().to_string(),
+                "error": format!("{e:#}"),
+            })));
+        }
+    };
+    let summary = recipes::summarize(&world);
+    let world_dir = world_base_dir(&path).unwrap_or_else(|| PathBuf::from("."));
+    let audit_report = match viber::config::load(&world_dir) {
+        Ok(config) => {
+            let (world_dir, asset_roots) = world_asset_dirs(&path, &config);
+            audit::audit(&world, &world_dir, &asset_roots, &config)
+        }
+        Err(e) => {
+            return Err(reported(serde_json::json!({
+                "world": path.display().to_string(),
+                "error": format!("config: {e:#}"),
+            })));
+        }
+    };
+    let mut object = serde_json::json!({
+        "world": path.display().to_string(),
+        "static": world.static_world,
+        "entities": {
+            "total": summary.entities(),
+            "groups": summary.groups,
+            "compositions": summary.compositions,
+            "composition_parts": summary.composition_parts,
+            "primitives": summary.primitives,
+            "point_lights": summary.point_lights,
+            "directional_lights": summary.directional_lights,
+            "cameras": summary.cameras,
+            "gltf_scenes": summary.gltf_scenes,
+            "players": summary.players,
+        },
+        "ambient_light": if summary.has_ambient { "world-defined" } else { "bevy default" },
+        "terrain": {
+            "heightfields": summary.terrain,
+            "ground_features": summary.ground_features(),
+            "pads": summary.terrain_pads,
+            "lakes": summary.lakes,
+            "rivers": summary.rivers,
+            "cuts": summary.cuts,
+            "plateaus": summary.plateaus,
+            "cliffs": summary.cliffs,
+            "caves": summary.caves,
+            "arches": summary.arches,
+            "bridges": summary.bridges,
+            "rock_fields": summary.rock_fields,
+            "roads": summary.roads,
+            "road_networks": summary.road_networks,
+            "ground_decals": summary.ground_decals,
+        },
+        "ui": {
+            "roots": summary.ui_roots,
+            "elements": summary.ui_elements,
+            "stylesheets": summary.ui_stylesheets,
+        },
+        "spawn_groups": {
+            "static": summary.static_spawners,
+            "dynamic": summary.dynamic_spawners,
+            "vegetation": summary.vegetation,
+            "exclusions": summary.spawn_exclusions,
+        },
+        "prototypes": {
+            "definitions": world.prototypes.len(),
+            "instances": world.prototype_instances.values().sum::<usize>(),
+            "used": world.prototype_instances,
+        },
+        "skipped_tags": world.skipped_tags,
+        "assets": {
+            "references": audit_report.references,
+            "issues": audit_report
+                .issues
+                .iter()
+                .map(|issue| {
+                    serde_json::json!({
+                        "severity": match issue.severity {
+                            audit::Severity::Missing => "missing",
+                            audit::Severity::Warning => "warning",
+                            audit::Severity::Info => "info",
+                        },
+                        "message": issue.message,
+                    })
+                })
+                .collect::<Vec<_>>(),
+            "colliderless": audit_report.colliderless,
+        },
+        "infos": world.infos,
+        "warnings": world.warnings,
+        "unknown_prototypes": world.unknown_prototypes,
+    });
+    if strict && !world.skipped_tags.is_empty() {
+        object["error"] = serde_json::json!(format!(
+            "strict mode: {} not-implemented tags present ({} elements)",
+            world.skipped_tags.len(),
+            total_skipped(&world)
+        ));
+        return Err(reported(object));
+    }
+    if strict && !world.unknown_prototypes.is_empty() {
+        object["error"] = serde_json::json!(format!(
+            "strict mode: {} <Use> com protótipo desconhecido: {}",
+            world.unknown_prototypes.len(),
+            world.unknown_prototypes.join(", ")
+        ));
+        return Err(reported(object));
+    }
+    if strict && audit_report.missing_count() > 0 {
+        object["error"] = serde_json::json!(format!(
+            "strict mode: {} asset(s) ausente(s)",
+            audit_report.missing_count()
+        ));
+        return Err(reported(object));
+    }
+    println!("{}", serde_json::to_string_pretty(&object)?);
+    Ok(())
+}
+
+fn analyze(path: &Path, strict: bool, json: bool) -> Result<()> {
+    if json {
+        return analyze_json(path, strict);
+    }
     let path = &std::path::absolute(path)?;
     let world = load_world(path)?;
     let summary = recipes::summarize(&world);
@@ -1014,11 +1170,26 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
             }
             Ok(std::process::ExitCode::SUCCESS)
         }
-        Command::Analyze { path, strict } => resolve_world_path(path).and_then(|world| {
-            analyze(&world, strict)
-                .map(|_| std::process::ExitCode::SUCCESS)
-                .with_context(|| format!("analyzing {}", world.display()))
-        }),
+        Command::Analyze { path, strict, json } => {
+            let world = match resolve_world_path(path) {
+                Ok(world) => world,
+                Err(e) if json => {
+                    println!("{}", serde_json::json!({ "error": format!("{e:#}") }));
+                    return Ok(std::process::ExitCode::FAILURE);
+                }
+                Err(e) => return Err(e),
+            };
+            match analyze(&world, strict, json) {
+                Ok(()) => Ok(std::process::ExitCode::SUCCESS),
+                // O objeto com `"error"` já foi impresso — só o exit code.
+                Err(e) if json && e.is::<JsonReported>() => Ok(std::process::ExitCode::FAILURE),
+                Err(e) if json => {
+                    println!("{}", serde_json::json!({ "error": format!("{e:#}") }));
+                    Ok(std::process::ExitCode::FAILURE)
+                }
+                Err(e) => Err(e).with_context(|| format!("analyzing {}", world.display())),
+            }
+        }
         Command::Bake {
             path,
             out,

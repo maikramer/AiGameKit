@@ -57,6 +57,53 @@ fn test_analyze_hello_fixture_succeeds() {
 }
 
 #[test]
+fn test_analyze_json_is_a_stable_machine_report() {
+    // `--json`: UM objeto em stdout (sem texto solto), mesmos exit codes do
+    // modo texto — o contrato que agentes/CI parseiam.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hello.xml");
+    std::fs::write(&path, r#"<world>
+  <Group name="props">
+    <Cuboid half-size="1 1 1" />
+    <Sphere radius="1" />
+  </Group>
+  <PointLight at="0 2 0" />
+  <OrbitCamera />
+</world>"#)
+    .unwrap();
+    write_config(dir.path());
+    let (code, stdout, stderr) = viber(&["analyze", "--json", path.to_str().unwrap()]);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    let report: serde_json::Value =
+        serde_json::from_str(&stdout).expect("stdout é um único objeto JSON");
+    assert_eq!(report["static"], serde_json::json!(false));
+    assert_eq!(report["entities"]["groups"], 1);
+    assert_eq!(report["entities"]["primitives"], 2);
+    assert_eq!(report["entities"]["point_lights"], 1);
+    assert_eq!(report["entities"]["cameras"], 1);
+    assert!(report["warnings"].is_array());
+    assert!(report["assets"]["references"].is_number());
+
+    // strict violado ⇒ objeto com "error" e exit non-zero (o stdout continua
+    // parseável — texto anyhow NÃO sai em modo json).
+    let path = dir.path().join("bad.xml");
+    std::fs::write(&path, "<world><GameObject /></world>").unwrap();
+    let (code, stdout, _) = viber(&["analyze", "--json", "--strict", path.to_str().unwrap()]);
+    assert_ne!(code, 0);
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("objeto JSON no stdout");
+    let error = report["error"].as_str().expect("causa no campo error");
+    assert!(error.contains("strict mode"), "{error}");
+
+    // Parse partido ⇒ {"error": …} e exit non-zero, sem panics.
+    let broken = dir.path().join("broken.xml");
+    std::fs::write(&broken, "<world><Entity name=\"x\"</world>").unwrap();
+    let (code, stdout, _) = viber(&["analyze", "--json", broken.to_str().unwrap()]);
+    assert_ne!(code, 0);
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("objeto JSON no stdout");
+    assert!(report["error"].as_str().is_some());
+}
+
+#[test]
 fn test_analyze_unknown_tag_is_skipped_with_warning() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bad.xml");
