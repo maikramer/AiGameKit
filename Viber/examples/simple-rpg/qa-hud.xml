@@ -22,6 +22,6 @@
   <Compass />
   <DialogueBalloon />
 
-  <Include src="/world/hud.xml" />
-  <Include src="/world/menu.xml" />
+  <Include src="/static/world/hud.xml" />
+  <Include src="/static/world/menu.xml" />
 </world>
