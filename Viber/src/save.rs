@@ -37,6 +37,10 @@ pub struct WorldSaveKey(pub Option<String>);
 /// (`simple-rpg/world.xml` → `simple-rpg`, o nome dos saves existentes) e
 /// `pasta-ficheiro` para os restantes — mundos irmãos na mesma pasta
 /// (`worlds/qa-agua.xml`, `worlds/qa-cliffs.xml`) deixam de partilhar o save.
+/// O sufixo `.static` do stem é removido (`world.static.xml`, o default
+/// pós-`viber bake`, partilha a chave do `world.xml` de onde veio — a
+/// continuidade dos saves não pode depender do caminho de arranque; só o
+/// sufixo exato conta, `qa-static.xml` fica `qa-static`).
 /// O caminho é tornado absoluto: `viber run world.xml` a partir da pasta do
 /// jogo tem `parent()` vazio e caía no nome global.
 pub fn world_save_key(world_file: &Path) -> Option<String> {
@@ -45,7 +49,10 @@ pub fn world_save_key(world_file: &Path) -> Option<String> {
         .or_else(|_| std::path::absolute(world_file))
         .ok()?;
     let dir = abs.parent()?.file_name()?.to_string_lossy().into_owned();
-    let stem = abs.file_stem()?.to_string_lossy().into_owned();
+    let mut stem = abs.file_stem()?.to_string_lossy().into_owned();
+    if let Some(base) = stem.strip_suffix(".static") {
+        stem = base.to_owned();
+    }
     Some(if stem.eq_ignore_ascii_case("world") {
         dir
     } else {
@@ -702,22 +709,47 @@ mod tests {
     }
 
     /// A chave é por ficheiro de mundo: `world.xml` fica com o nome da pasta
-    /// (saves existentes) e irmãos na mesma pasta não colidem.
+    /// (saves existentes) e irmãos na mesma pasta não colidem. O default
+    /// pós-bake (`world.static.xml`) partilha a chave do `world.xml` de onde
+    /// veio — só o sufixo exato `.static` do stem conta.
     #[test]
     fn test_world_save_key_per_world_file() {
         let dir = tempfile::tempdir().unwrap();
         let game = dir.path().join("meu-jogo");
         std::fs::create_dir_all(&game).unwrap();
-        for name in ["world.xml", "qa-agua.xml", "qa-cliffs.xml"] {
+        for name in [
+            "world.xml",
+            "world.static.xml",
+            "qa-agua.xml",
+            "qa-cliffs.xml",
+            "qa-static.xml",
+            "outpost.static.xml",
+        ] {
             std::fs::write(game.join(name), "<world/>").unwrap();
         }
         assert_eq!(
             world_save_key(&game.join("world.xml")).as_deref(),
             Some("meu-jogo")
         );
+        // Continuidade arranque antigo ↔ default pós-bake: mesma chave.
+        assert_eq!(
+            world_save_key(&game.join("world.static.xml")).as_deref(),
+            Some("meu-jogo"),
+            "world.static.xml partilha o save do world.xml"
+        );
         assert_eq!(
             world_save_key(&game.join("qa-agua.xml")).as_deref(),
             Some("meu-jogo-qa-agua")
+        );
+        // "static" no meio do nome NÃO é o sufixo do stem.
+        assert_eq!(
+            world_save_key(&game.join("qa-static.xml")).as_deref(),
+            Some("meu-jogo-qa-static")
+        );
+        // Um `.static` genuíno sem par: o sufixo sai, o resto do nome conta.
+        assert_eq!(
+            world_save_key(&game.join("outpost.static.xml")).as_deref(),
+            Some("meu-jogo-outpost")
         );
         assert_ne!(
             world_save_key(&game.join("qa-agua.xml")),

@@ -440,6 +440,17 @@ impl History {
         !self.redo.is_empty()
     }
 
+    /// As labels do histórico de undo (a mais recente última) — o painel de
+    /// Histórico do editor. O índice de cada linha é quantos undos ela custa.
+    pub fn undo_labels(&self) -> Vec<&str> {
+        self.undo.iter().map(|tx| tx.label.as_str()).collect()
+    }
+
+    /// As labels do histórico de redo (a próxima primeira).
+    pub fn redo_labels(&self) -> Vec<&str> {
+        self.redo.iter().rev().map(|tx| tx.label.as_str()).collect()
+    }
+
     /// Rótulo da próxima transação a desfazer.
     pub fn undo_label(&self) -> Option<&str> {
         self.undo.last().map(|tx| tx.label.as_str())

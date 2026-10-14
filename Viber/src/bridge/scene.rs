@@ -7,7 +7,7 @@
 //! | `viber.scene.ls` | `{selector?, depth?}` | filhos com seletores |
 //! | `viber.scene.get` | `{selector}` | o nó |
 //! | `viber.scene.find` | `{tag?, attr?: "k=v", limit?}` | nós |
-//! | `viber.scene.apply` | `{ops, label?, save?: true}` | transação (changes, inverse) |
+//! | `viber.scene.apply` | `{ops, label?, save?: true, coalesce?}` | transação (changes, inverse); `coalesce` (u64) funde lotes seguidos com a mesma chave num só undo |
 //! | `viber.scene.undo` / `redo` | `{save?: true}` | transação ou `{"applied": 0}` |
 //! | `viber.scene.save` | — | `{files}` |
 //! | `viber.scene.catalog` | — | catálogo Add Node (tags + snippets) |
@@ -17,7 +17,7 @@
 //! | `viber.tool.canonicalize` | `{selector?, save?: true}` | poses na forma canónica |
 //! | `viber.tool.settle` | `{selector, offset?: 0, save?: true}` | assenta no terreno atual |
 //! | `viber.tool.scatter` | `{selector, save?: true}` | transação + resumo da ferramenta |
-//! | `viber.scene.entities` | `{selector}` | entidades vivas do nó (pose local + mundo) |
+//! | `viber.scene.entities` | `{selector?}` (omisso: todas) | entidades vivas do nó (pose local + mundo) |
 //! | `viber.scene.pick` | `{x, y}` (px da janela, câmara de editor) | `{hit, selector?, node?, point?}` |
 
 use bevy::ecs::system::In;
@@ -129,10 +129,18 @@ pub fn apply_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
         label: Option<String>,
         #[serde(default = "yes")]
         save: bool,
+        /// Chave de coalescência (traços de pincel): lotes seguidos com a mesma
+        /// chave fundem-se numa única transação de undo.
+        #[serde(default)]
+        coalesce: Option<u64>,
     }
     let p: Params = params(METHOD_APPLY, input.0)?;
     let label = p.label.unwrap_or_else(|| "bridge".into());
-    let tx = live::apply(world, &label, &p.ops).map_err(|e| invalid(format!("{e:#}")))?;
+    let tx = match p.coalesce {
+        Some(key) => live::apply_coalesced(world, &label, &p.ops, key),
+        None => live::apply(world, &label, &p.ops),
+    }
+    .map_err(|e| invalid(format!("{e:#}")))?;
     report(world, &tx, p.save)
 }
 
@@ -261,15 +269,20 @@ pub fn tool_settle_method(input: In<Option<Value>>, world: &mut World) -> BrpRes
 pub fn entities_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
     #[derive(Deserialize)]
     struct Params {
-        selector: String,
+        /// Seletor do nó origem; omisso = todas as entidades vivas do documento.
+        #[serde(default)]
+        selector: Option<String>,
     }
     let p: Params = params(METHOD_ENTITIES, input.0)?;
-    let origin = {
-        let doc = doc(world)?;
-        let node = doc
-            .resolve(&p.selector)
-            .map_err(|e| invalid(format!("{e:#}")))?;
-        doc.origin_of(&node)
+    let origin = match p.selector.as_deref() {
+        Some(selector) => {
+            let doc = doc(world)?;
+            let node = doc
+                .resolve(selector)
+                .map_err(|e| invalid(format!("{e:#}")))?;
+            Some(doc.origin_of(&node))
+        }
+        None => None,
     };
     let mut query = world.query::<(
         Entity,
@@ -279,7 +292,7 @@ pub fn entities_method(input: In<Option<Value>>, world: &mut World) -> BrpResult
     )>();
     let entities: Vec<Value> = query
         .iter(world)
-        .filter(|(_, source, _, _)| *source.0 == origin)
+        .filter(|(_, source, _, _)| origin.as_ref().is_none_or(|origin| *source.0 == *origin))
         .map(|(entity, _, transform, global)| {
             let world_position = global.map(|g| g.translation().to_array());
             json!({
@@ -396,6 +409,37 @@ mod tests {
             on_disk.contains("translation=\"4 0 2\""),
             "undo gravado: {on_disk}"
         );
+        assert_eq!(
+            call(&mut app, undo_method, json!({})).unwrap()["applied"],
+            0
+        );
+    }
+
+    #[test]
+    fn apply_with_coalesce_merges_strokes_into_one_undo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = app(tmp.path());
+        for translation in ["5 0 2", "6 0 2"] {
+            let out = call(
+                &mut app,
+                apply_method,
+                json!({
+                    "ops": [{"op": "set", "node": "name=well", "attrs": {"translation": translation}}],
+                    "label": "agent",
+                    "coalesce": 42
+                }),
+            )
+            .unwrap();
+            assert_eq!(out["applied"], 1);
+        }
+        // As duas aplicações fundiram-se: um undo devolve o original.
+        let undone = call(&mut app, undo_method, json!({})).unwrap();
+        assert_eq!(
+            undone["applied"], 2,
+            "a transação fundida desfaz as duas ops"
+        );
+        let on_disk = std::fs::read_to_string(tmp.path().join("world/village.xml")).unwrap();
+        assert!(on_disk.contains("translation=\"4 0 2\""), "{on_disk}");
         assert_eq!(
             call(&mut app, undo_method, json!({})).unwrap()["applied"],
             0

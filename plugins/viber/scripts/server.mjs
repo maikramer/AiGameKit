@@ -280,14 +280,17 @@ const tools = [
     description:
       "Edição de cena: `viber scene <sub>` offline ou --live (engine a correr; grava + sync ao vivo + undo/redo). " +
       "Subs: ls [SEL] [--depth], get SEL, find --tag X [--attr k=v], set SEL k=v… [--unset k] [--dry-run], " +
-      "insert PARENT '<xml>' [--index], rm SEL, mv SEL PARENT, dup SEL, undo|redo (só --live), apply ops.json|-, " +
+      "insert PARENT '<xml>' [--index], rm SEL, mv SEL PARENT, dup SEL, undo|redo|save (só --live; save grava o " +
+      "estado vivo), pick --x N --y N [--max-distance M] (só --live: px do ecrã → nó), entities [SEL] " +
+      "(só --live: entidades vivas + pose mundo; sem SEL = todas), apply ops.json|- [--coalesce K] " +
+      "(--coalesce só --live: N applies com a mesma chave = 1 undo), " +
       "catalog, add TAG [--parent SEL], drop GLB --at 'x y z' (MUNDO) [--parent SEL], files [--depth N]. " +
       "Seletores: name=well ou world/village.xml#3/0. live + terreno/céu/UI/spawners = needs_reload. " +
       "Requer binário viber rebuilt (>=2026-10-13).",
     inputSchema: {
       type: "object",
       properties: {
-        sub: { type: "string", description: "Subcomando scene (ls|get|find|set|insert|rm|mv|dup|undo|redo|apply|catalog|add|drop|files)" },
+        sub: { type: "string", description: "Subcomando scene (ls|get|find|set|insert|rm|mv|dup|undo|redo|save|pick|entities|apply|catalog|add|drop|files)" },
         args: { type: "array", items: { type: "string" }, description: "Argumentos posicionais do subcomando (strings exatas)" },
         live: { type: "boolean", description: "Default true: engine a correr via bridge" },
         world: { type: "string" },

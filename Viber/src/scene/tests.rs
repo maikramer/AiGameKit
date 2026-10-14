@@ -672,3 +672,110 @@ fn canonicalize_rewrites_aliases_once_and_keeps_the_pose() {
         None
     );
 }
+
+// ── CLI: save / pick / entities / apply --coalesce ─────────────────────────────────
+
+#[test]
+fn save_offline_persists_a_mutation_left_by_ops() {
+    // O que o pedido Save faz offline: ficheiros sujos por ops (o estado que um
+    // `--dry-run` anterior deixou sem gravar) são escritos e reportados.
+    let (tmp, mut doc) = load();
+    apply_batch(
+        &mut doc,
+        "cli",
+        &[set("name=well", &[("translation", Some("9 0 9"))])],
+    )
+    .unwrap();
+    let files = doc.dirty_paths();
+    let written = doc.save().unwrap();
+    assert_eq!(files, ["world/village.xml"]);
+    assert_eq!(written, 1);
+    let on_disk = std::fs::read_to_string(tmp.path().join("world/village.xml")).unwrap();
+    assert!(on_disk.contains("translation=\"9 0 9\""), "{on_disk}");
+    assert_eq!(doc.save().unwrap(), 0, "nada sujo de novo");
+}
+
+#[test]
+fn save_subcommand_offline_reports_a_clean_document() {
+    // Os subcomandos offline gravam logo: um save a seguir não tem nada pendente.
+    let tmp = tempfile::tempdir().unwrap();
+    let world = fixture(tmp.path());
+    let out = super::cli::run(&world, super::cli::SceneCommand::Save).unwrap();
+    assert_eq!(out["files"], serde_json::json!([]));
+    assert_eq!(out["written"], 0);
+}
+
+#[test]
+fn pick_and_entities_offline_ask_for_live() {
+    let (tmp, _doc) = load();
+    let world = tmp.path().join("world.xml");
+    let pick = super::cli::run(
+        &world,
+        super::cli::SceneCommand::Pick {
+            x: 10.0,
+            y: 20.0,
+            max_distance: None,
+        },
+    )
+    .unwrap_err();
+    assert!(format!("{pick:#}").contains("--live"), "{pick:#}");
+    let entities = super::cli::run(
+        &world,
+        super::cli::SceneCommand::Entities { selector: None },
+    )
+    .unwrap_err();
+    assert!(format!("{entities:#}").contains("--live"), "{entities:#}");
+}
+
+#[test]
+fn apply_with_coalesce_is_refused_offline() {
+    let (tmp, _doc) = load();
+    let ops = tmp.path().join("ops.json");
+    std::fs::write(
+        &ops,
+        r#"[{"op": "set", "node": "name=hero", "attrs": {"scale": "2"}}]"#,
+    )
+    .unwrap();
+    let error = super::cli::run(
+        &tmp.path().join("world.xml"),
+        super::cli::SceneCommand::Apply {
+            file: ops.to_string_lossy().into_owned(),
+            dry_run: false,
+            coalesce: Some(3),
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("--coalesce") && format!("{error:#}").contains("--live"),
+        "{error:#}"
+    );
+}
+
+#[test]
+fn live_routing_of_save_pick_and_entities() {
+    let (method, params) = super::cli::live_request(super::cli::SceneCommand::Save).unwrap();
+    assert_eq!(method, "viber.scene.save");
+    assert_eq!(params, serde_json::json!({}));
+
+    let (method, params) = super::cli::live_request(super::cli::SceneCommand::Pick {
+        x: 4.0,
+        y: 5.0,
+        max_distance: None,
+    })
+    .unwrap();
+    assert_eq!(method, "viber.scene.pick");
+    assert_eq!(params["x"], 4.0);
+    assert_eq!(params["y"], 5.0);
+    assert_eq!(params["max_distance"], serde_json::json!(null));
+
+    let (method, params) = super::cli::live_request(super::cli::SceneCommand::Entities {
+        selector: Some("name=props".into()),
+    })
+    .unwrap();
+    assert_eq!(method, "viber.scene.entities");
+    assert_eq!(params["selector"], "name=props");
+    let (method, params) =
+        super::cli::live_request(super::cli::SceneCommand::Entities { selector: None }).unwrap();
+    assert_eq!(method, "viber.scene.entities");
+    assert_eq!(params["selector"], serde_json::json!(null));
+}

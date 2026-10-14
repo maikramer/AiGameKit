@@ -132,6 +132,43 @@ mod tests {
     }
 
     #[test]
+    fn coalesced_applies_with_the_same_key_are_one_undo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = app(tmp.path());
+        let stroke = |translation: &str| EditOp::Set {
+            node: "name=well".into(),
+            attrs: [("translation".to_string(), Some(translation.to_string()))]
+                .into_iter()
+                .collect(),
+        };
+        apply_coalesced(app.world_mut(), "brush", &[stroke("5 0 2")], 1).unwrap();
+        apply_coalesced(app.world_mut(), "brush", &[stroke("6 0 2")], 1).unwrap();
+        // Chave diferente: transação própria.
+        apply_coalesced(app.world_mut(), "outra", &[stroke("7 0 2")], 2).unwrap();
+        let translation = |app: &App| {
+            let doc = app.world().resource::<SceneDoc>();
+            doc.node(&doc.resolve("name=well").unwrap())
+                .unwrap()
+                .attr("translation")
+                .unwrap()
+                .to_string()
+        };
+        // 3 applies, 2 undos: o primeiro desfaz a chave 2, o segundo AS DUAS da chave 1.
+        undo(app.world_mut()).unwrap();
+        assert_eq!(translation(&app), "6 0 2");
+        undo(app.world_mut()).unwrap();
+        assert_eq!(
+            translation(&app),
+            "4 0 2",
+            "as duas pinceladas fundidas desfazem juntas"
+        );
+        assert!(
+            undo(app.world_mut()).unwrap().is_none(),
+            "histórico esgotado em 2 undos"
+        );
+    }
+
+    #[test]
     fn failed_apply_publishes_nothing_and_keeps_history() {
         let tmp = tempfile::tempdir().unwrap();
         let mut app = app(tmp.path());

@@ -870,6 +870,11 @@ fn analyze(path: &Path, strict: bool) -> Result<()> {
             );
         }
     }
+    // Findings informativos (nível distinto dos warnings): dicas de workflow —
+    // não-fatais, `--strict` NÃO falha por causa deles.
+    for info in &world.infos {
+        println!("  info: {info}");
+    }
     for warning in &world.warnings {
         eprintln!("warning: {warning}");
     }

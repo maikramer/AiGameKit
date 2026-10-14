@@ -120,6 +120,9 @@ pub struct ParsedWorld {
     pub static_world: bool,
     pub entities: Vec<EntitySpec>,
     pub warnings: Vec<String>,
+    /// Findings INFORMATIVOS (não-fatais, não quebram `analyze --strict`): dicas
+    /// de workflow, ex.: mundo procedural com geradores → `viber bake`.
+    pub infos: Vec<String>,
     /// Elements skipped because their tag is not implemented, by tag name.
     pub skipped_tags: BTreeMap<String, usize>,
     /// `<Prototype id>` definitions (collected from the whole expanded tree
@@ -1048,11 +1051,16 @@ pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result
     if static_world {
         static_world_findings(&entities, &mut warnings);
     }
+    let mut infos = Vec::new();
+    if !static_world {
+        procedural_world_info(&entities, &mut infos);
+    }
     Ok(ParsedWorld {
         clear_color,
         static_world,
         entities,
         warnings,
+        infos,
         skipped_tags: ctx.skipped,
         prototypes,
         prototype_instances: instances,
@@ -1084,6 +1092,32 @@ fn static_world_findings(specs: &[EntitySpec], warnings: &mut Vec<String>) {
             _ => {}
         }
         static_world_findings(&spec.children, warnings);
+    }
+}
+
+/// Num mundo PROCEDURAL (não-estático), geradores a correr em runtime é o
+/// comportamento pretendido — mas o caminho editável (fonte da verdade) é o
+/// mundo estático: finding informativo, um só por mundo (não-fatal, não quebra
+/// `analyze --strict`, impresso com nível `info`).
+fn procedural_world_info(specs: &[EntitySpec], infos: &mut Vec<String>) {
+    fn count_generators(specs: &[EntitySpec]) -> usize {
+        specs
+            .iter()
+            .map(|spec| {
+                let own = match &spec.kind {
+                    EntityKind::StaticSpawner { .. } => 1,
+                    EntityKind::Vegetation { spec } if spec.instances.is_none() => 1,
+                    _ => 0,
+                };
+                own + count_generators(&spec.children)
+            })
+            .sum()
+    }
+    let generators = count_generators(specs);
+    if generators > 0 {
+        infos.push(format!(
+            "mundo procedural com {generators} geradores — `viber bake` converte-o em estático editável (fonte da verdade)"
+        ));
     }
 }
 
@@ -4894,6 +4928,50 @@ mod tests {
         assert!(matches!(spec.kind, EntityKind::Group));
         assert_eq!(spec.transform.scale, [1.0; 3]);
         assert_eq!(spec.transform.translation, [0.0; 3]);
+    }
+
+    #[test]
+    fn test_procedural_world_info_points_to_bake() {
+        // Geradores num mundo procedural: um finding INFORMATIVO (não warning,
+        // não quebra `analyze --strict`) — o runtime é o comportamento pretendido.
+        let mut spawner = node("StaticSpawner", &[]);
+        spawner.children = vec![node("GltfScene", &[("url", "/assets/props/barrel.glb")])];
+        let generators = vec![
+            spawner,
+            node("Vegetation", &[("meshes", "/assets/veg/grass.glb")]),
+        ];
+        let parsed = parse_world(&[], &generators).unwrap();
+        assert!(parsed.warnings.is_empty(), "{:?}", parsed.warnings);
+        assert_eq!(parsed.infos.len(), 1, "{:?}", parsed.infos);
+        let info = &parsed.infos[0];
+        assert!(
+            info.contains("2 geradores") && info.contains("viber bake"),
+            "{info}"
+        );
+
+        // Mundo pequeno sem geradores (ex.: worlds/hello.xml): nada a dizer.
+        let plain = parse_world(&[], &[node("Entity", &[("name", "hero")])]).unwrap();
+        assert!(plain.infos.is_empty(), "{:?}", plain.infos);
+
+        // <Vegetation instances=…> já veio pré-gerada do bake: não conta.
+        let pregenerated = parse_world(
+            &[],
+            &[node(
+                "Vegetation",
+                &[
+                    ("meshes", "/assets/veg/grass.glb"),
+                    ("instances", "bake/veg/0.vinst"),
+                ],
+            )],
+        )
+        .unwrap();
+        assert!(pregenerated.infos.is_empty(), "{:?}", pregenerated.infos);
+
+        // Mundo estático: os geradores são WARNING (o runtime não os corre) —
+        // o nível info não se mistura com o de avisos.
+        let stat = parse_world(&[("static".to_string(), "true".to_string())], &generators).unwrap();
+        assert!(stat.infos.is_empty(), "{:?}", stat.infos);
+        assert!(!stat.warnings.is_empty());
     }
 
     #[test]

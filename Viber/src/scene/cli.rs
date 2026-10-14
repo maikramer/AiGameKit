@@ -14,6 +14,10 @@
 //! viber scene apply ops.json                  # lote atómico (ver viber::scene::ops)
 //! viber scene --live set name=well translation="4 0 3"   # na engine a correr (bridge)
 //! viber scene --live undo
+//! viber scene --live save                     # grava os ficheiros alterados na engine
+//! viber scene --live pick --x 400 --y 300     # px do ecrã → nó (câmara de editor)
+//! viber scene --live entities 'name=props'    # entidades vivas + pose mundo
+//! viber scene --live apply ops.json --coalesce k   # N applies com a mesma chave = 1 undo
 //! ```
 //!
 //! Com `--live` o MESMO subcomando vai para a engine a correr (`viber.scene.*`): a edição
@@ -96,11 +100,35 @@ pub enum SceneCommand {
     Undo,
     /// Refaz a última edição desfeita (só `--live`)
     Redo,
+    /// Grava os ficheiros alterados do documento (offline: flush do que está sujo; com
+    /// `--live`: o estado vivo da engine — o mesmo `viber.scene.save` da bridge)
+    Save,
+    /// Píxeis do ecrã → nó do documento (raycast pela câmara de editor; só `--live`)
+    Pick {
+        /// Coordenada X na janela (px lógicos)
+        #[arg(long)]
+        x: f32,
+        /// Coordenada Y na janela (px lógicos)
+        #[arg(long)]
+        y: f32,
+        /// Alcance máximo do raycast em metros (omisso: 2000)
+        #[arg(long)]
+        max_distance: Option<f32>,
+    },
+    /// Entidades vivas de um nó (pose local + mundo; sem seletor: todas as do documento)
+    Entities {
+        /// Seletor do nó origem (`name=…`, `ficheiro#i/j`); omisso = todas
+        selector: Option<String>,
+    },
     /// Aplica um lote JSON de operações, atomicamente (`-` lê do stdin)
     Apply {
         file: String,
         #[arg(long)]
         dry_run: bool,
+        /// Funda este lote com o anterior que tenha a mesma chave (só `--live`):
+        /// N applies com a mesma chave = 1 undo (um traço de pincel)
+        #[arg(long)]
+        coalesce: Option<u64>,
     },
     /// O catálogo Add Node: tags com snippets válidos (o mesmo diálogo do editor)
     Catalog,
@@ -152,9 +180,19 @@ enum Request {
     Ops {
         ops: Vec<EditOp>,
         dry_run: bool,
+        coalesce: Option<u64>,
     },
     Undo,
     Redo,
+    Save,
+    Pick {
+        x: f32,
+        y: f32,
+        max_distance: Option<f32>,
+    },
+    Entities {
+        selector: Option<String>,
+    },
     Files {
         depth: usize,
     },
@@ -197,6 +235,7 @@ fn request(command: SceneCommand) -> Result<Request> {
                     attrs,
                 }],
                 dry_run,
+                coalesce: None,
             }
         }
         SceneCommand::Insert {
@@ -207,10 +246,12 @@ fn request(command: SceneCommand) -> Result<Request> {
         } => Request::Ops {
             ops: vec![EditOp::Insert { parent, index, xml }],
             dry_run,
+            coalesce: None,
         },
         SceneCommand::Rm { selector, dry_run } => Request::Ops {
             ops: vec![EditOp::Remove { node: selector }],
             dry_run,
+            coalesce: None,
         },
         SceneCommand::Mv {
             selector,
@@ -224,12 +265,18 @@ fn request(command: SceneCommand) -> Result<Request> {
                 index,
             }],
             dry_run,
+            coalesce: None,
         },
         SceneCommand::Dup { selector, dry_run } => Request::Ops {
             ops: vec![EditOp::Duplicate { node: selector }],
             dry_run,
+            coalesce: None,
         },
-        SceneCommand::Apply { file, dry_run } => {
+        SceneCommand::Apply {
+            file,
+            dry_run,
+            coalesce,
+        } => {
             let text = if file == "-" {
                 std::io::read_to_string(std::io::stdin()).context("lendo ops do stdin")?
             } else {
@@ -238,10 +285,14 @@ fn request(command: SceneCommand) -> Result<Request> {
             Request::Ops {
                 ops: parse_ops(&text)?,
                 dry_run,
+                coalesce,
             }
         }
         SceneCommand::Undo => Request::Undo,
         SceneCommand::Redo => Request::Redo,
+        SceneCommand::Save => Request::Save,
+        SceneCommand::Pick { x, y, max_distance } => Request::Pick { x, y, max_distance },
+        SceneCommand::Entities { selector } => Request::Entities { selector },
         SceneCommand::Files { depth } => Request::Files { depth },
         SceneCommand::Catalog => Request::Catalog,
         SceneCommand::Add {
@@ -252,6 +303,7 @@ fn request(command: SceneCommand) -> Result<Request> {
         } => Request::Ops {
             ops: vec![super::catalog::add_node(&parent, &tag, index)],
             dry_run,
+            coalesce: None,
         },
         SceneCommand::Drop {
             glb,
@@ -294,6 +346,21 @@ pub fn run(world: &Path, command: SceneCommand) -> Result<Value> {
                 "undo/redo só existem com --live: offline cada comando grava logo (desfaz com o `inverse` que ele devolveu, ou com o git)"
             )
         }
+        Request::Save => {
+            // Offline os subcomandos gravam logo: o flush só tem trabalho se o
+            // documento veio sujo do disco (o caminho útil é o `--live`).
+            let files = doc.dirty_paths();
+            let written = doc.save()?;
+            return Ok(json!({ "files": files, "written": written }));
+        }
+        Request::Pick { .. } => {
+            bail!("pick precisa da engine viva — usa --live (o raycast é pela câmara da janela)")
+        }
+        Request::Entities { .. } => {
+            bail!(
+                "entities precisa da engine viva — usa --live (só a engine tem as entidades com pose)"
+            )
+        }
         Request::Catalog => return Ok(super::catalog::to_json()),
         Request::Drop {
             glb,
@@ -304,7 +371,18 @@ pub fn run(world: &Path, command: SceneCommand) -> Result<Value> {
             vec![super::catalog::glb_drop(&doc, &parent, &glb, at)?],
             dry_run,
         ),
-        Request::Ops { ops, dry_run } => (ops, dry_run),
+        Request::Ops {
+            coalesce: Some(_), ..
+        } => {
+            bail!(
+                "--coalesce só existe com --live: offline não há histórico a fundir (cada comando grava logo)"
+            )
+        }
+        Request::Ops {
+            ops,
+            dry_run,
+            coalesce: None,
+        } => (ops, dry_run),
     };
     let tx = apply_batch(&mut doc, "cli", &ops)?;
     let dirty: Vec<String> = doc.dirty_paths();
@@ -329,9 +407,18 @@ pub fn live_request(command: SceneCommand) -> Result<(&'static str, Value)> {
         Request::Ops { dry_run: true, .. } => {
             bail!("--dry-run não existe com --live (a engine aplicaria a edição); corre sem --live")
         }
-        Request::Ops { ops, .. } => ("viber.scene.apply", json!({ "ops": ops, "label": "cli" })),
+        Request::Ops { ops, coalesce, .. } => (
+            "viber.scene.apply",
+            json!({ "ops": ops, "label": "cli", "coalesce": coalesce }),
+        ),
         Request::Undo => ("viber.scene.undo", json!({})),
         Request::Redo => ("viber.scene.redo", json!({})),
+        Request::Save => ("viber.scene.save", json!({})),
+        Request::Pick { x, y, max_distance } => (
+            "viber.scene.pick",
+            json!({ "x": x, "y": y, "max_distance": max_distance }),
+        ),
+        Request::Entities { selector } => ("viber.scene.entities", json!({ "selector": selector })),
         Request::Files { depth } => ("viber.scene.files", json!({ "depth": depth })),
         Request::Catalog => ("viber.scene.catalog", json!({})),
         Request::Drop { dry_run: true, .. } => {
