@@ -365,6 +365,10 @@ fn options_system(
         Option<ResMut<crate::luau::LuaScriptHost>>,
         Option<ResMut<SaveRequest>>,
         Commands,
+        // Catálogo de marcos: diagnóstico de marcas órfãs no load (o editor
+        // permite renomear/remover `<Landmark>`; o save continua a nomear) —
+        // na tupla para não estourar o teto de slots do sistema.
+        Option<Res<crate::travel::LandmarkCatalog>>,
     ),
     mut heroes: Query<
         (
@@ -513,6 +517,19 @@ fn options_system(
                     tree.as_deref_mut(),
                     stats.as_deref_mut(),
                 );
+                // Marcos renomeados/removidos no editor deixam marcas órfãs no
+                // save (a quest `visit` fica incompletável em silêncio) —
+                // diagnosticar sem MUTAR o save: o marco pode voltar.
+                if let Some(catalog) = world_save_host_request.5.as_deref() {
+                    for name in &game.nota_marked {
+                        if crate::travel::landmark_by_name(catalog, name).is_none() {
+                            bevy::log::warn!(
+                                "save: landmark '{name}' (nota_marked) não existe no mundo atual \
+                                 — marcação órfã (renomeado/removido no editor?)"
+                            );
+                        }
+                    }
+                }
                 // Estado de jogo Lua reposto (viber.game()).
                 if let Some(host) = host.as_mut() {
                     crate::luau::game::json_to_game(&host.lua, &game.world_kv);
