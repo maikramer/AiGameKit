@@ -1,7 +1,7 @@
 # API Lua do Viber (`viber.*`)
 
 Referência da superfície Luau exposta a scripts de entidade. Fonte da verdade:
-`src/luau.rs` (`install_viber_api`) e `src/ui/script.rs` (`viber.ui`).
+`src/luau/` (`host.rs`: `install_viber_api`) e `src/ui/script.rs` (`viber.ui`).
 
 Um script é um ficheiro em `<dir-do-mundo>/scripts/<path>` ligado a uma entidade
 via atributo universal `script="caminho.lua"` (ou `script="enemies/wolf.lua"` —
@@ -195,7 +195,7 @@ foldarms/lean/idle`.
 | Função | Notas |
 |--------|-------|
 | `viber.gesture(name)` | gesto one-shot no rig da entidade; **alternativas** separadas por `,` são tentadas por ordem — `viber.gesture("salute,yes")` toca `salute` se o rig tiver, senão `yes` |
-| `viber.sound(clip)` | SFX curto na posição da entidade (`assets/audio/sfx`, volume cai com a distância). Registry completo (case-insensitive; desconhecido = erro de script, warn 1×): `hit whoosh harvest ui chop_hit chop_break mine_hit mine_break levelup quest_complete travel loot chest_open footstep footstep_water hurt heal game_over quest_accept notification coin buy error save load shop_open enemy_hurt enemy_death wolf_growl/growl slime_squish boss_roar/roar shield_block/block door_open door_close bomb_drop jump dash`. Os OGGs vivem no pool partilhado (`examples/shared-assets/manifests/audio-sfx-*.yaml` — regenerar com `regen_audio.py`) e são espelhados para o exemplo pelo `scripts/sync_assets.py` |
+| `viber.sound(clip)` | SFX curto na posição da entidade (`assets/audio/sfx`, volume cai com a distância). Registry completo (case-insensitive; desconhecido = erro de script, warn 1×): `hit whoosh harvest ui chop_hit chop_break mine_hit mine_break levelup quest_complete travel loot chest_open footstep footstep_water hurt heal game_over quest_accept notification coin buy error save load shop_open enemy_hurt enemy_death wolf_growl/growl slime_squish boss_roar/roar shield_block/block door_open door_close bomb_drop jump dash`. Os OGGs vivem no pool partilhado (`examples/shared-assets/manifests/audio-sfx-*.yaml` — regenerar com `regen_audio.py`), servido diretamente pela engine via fallback de asset roots — nunca copiados para o exemplo |
 
 ## Combate & progressão
 

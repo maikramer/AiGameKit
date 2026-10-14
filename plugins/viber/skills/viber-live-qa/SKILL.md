@@ -104,7 +104,10 @@ performance (ocluída = números de lixo).
 
 Com o plugin instalado, as tools MCP (`viber_screenshot` devolve a imagem inline,
 `viber_lua`, `viber_scene`, `viber_input`, `viber_status`, `viber_tree`,
-`viber_logs`, `viber_burst`) envolvem o mesmo CLI — mesmas flags `--world`/`--port`.
+`viber_logs`, `viber_burst`, `viber_tool`, `viber_terrain`) envolvem o mesmo
+CLI — mesmas flags `--world`/`--port`. `viber_tool` (list/scatter/settle/
+canonicalize) e `viber_terrain` (sample/brush/paint) editam o mundo estático
+com transações desfazíveis, offline ou `--live`.
 O protocolo de sessão (claim/release) continua pela shell.
 
 ## Referências

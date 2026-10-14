@@ -7,7 +7,10 @@ receitas rápidas.
 
 Módulo: `src/bridge/` (`mod.rs` servidor BRP, `lua.rs` a REPL, `events.rs`
 eventos, `burst.rs` frames, `diff.rs` diff visual, `client.rs` cliente CLI,
-`logs.rs` ring de tracing). Testes: `src/bridge/tests.rs` — App mínima +
+`logs.rs` ring de tracing, `scene.rs` edição de mundos `viber.scene.*`/
+`viber.tool.*`, `selection.rs` picking/highlight do editor (`viber.pick`/
+`viber.select`), `fork_compat.rs` compatibilidade de entidades BRP com o
+cliente do Bevy main fork). Testes: `src/bridge/tests.rs` — App mínima +
 bridge real em loopback, uma porta por teste.
 
 ## Transporte e descoberta
@@ -28,10 +31,35 @@ ficheiro tem IEND), `viber.burst` + `viber.burst_status`, `viber.tree`,
 `viber.logs`, `viber.profiler`/`.tab`/`.export`/`.extra_toggle`, `viber.lua`,
 `viber.input.key/text/click/move`, `viber.raycast`, `viber.camera.orbit/pan/
 zoom/look_at/pose` (câmara livre de editor — só com `viber run --camera free`;
-fora do modo respondem com o erro claro "camera mode is not free") — mais os
-métodos builtin
+fora do modo respondem com o erro claro "camera mode is not free"), a família
+de edição `viber.scene.*`/`viber.tool.*` (abaixo) — mais os métodos builtin
 do `bevy_remote` (`world.query`, `world.spawn_entity`,
 `world.mutate_components`, …) para inspecção/mutação ECS crua.
+
+### Edição de mundos (`viber.scene.*` / `viber.tool.*` — `src/bridge/scene.rs`)
+
+A MESMA API da CLI `viber scene`/`viber tool` e do ViberEditor, sobre o
+documento do mundo carregado — histórico (undo/redo), sync ao vivo e save
+(`src/scene/live.rs`). Ferramentas de QA além do debug: editar o mundo é uma
+chamada.
+
+| Método | O que faz |
+|--------|-----------|
+| `viber.scene.ls` | lista os filhos de um seletor (árvore com seletores `file#path`/`name=…`) |
+| `viber.scene.get` | devolve o nó (tag, attrs, filhos) de um seletor |
+| `viber.scene.find` | procura nós por tag/attr (`--tag GltfScene --attr name=well`) |
+| `viber.scene.apply` | aplica um lote atómico de ops (`set`/`insert`/`remove`/`move`/`duplicate`…); devolve `inverse` (o undo) |
+| `viber.scene.undo` / `viber.scene.redo` | history do documento — desfaz/refaz a última transação |
+| `viber.scene.save` | grava os ficheiros XML tocados (o `apply` com `save: true` já o faz) |
+| `viber.scene.pick` | pixel {x,y} (câmara de editor) → seletor do nó sob o raio |
+| `viber.scene.entities` | entidades VIVAS do nó (pose local + mundo) — verificar o efeito de uma edição |
+| `viber.scene.catalog` | catálogo de tags com snippets válidos (o Add Node do editor) |
+| `viber.scene.drop` | drop de um `.glb` no mundo → op de insert (o drag-drop do editor) |
+| `viber.scene.files` | a pasta do mundo em árvore JSON (world/scene/lua/glb/…) |
+| `viber.tool.list` | enumera as receitas `<Scatter>` (geradores) do mundo |
+| `viber.tool.scatter` | recalcula o grupo `generated-by` de um gerador sobre o terreno ATUAL (transação desfazível) |
+| `viber.tool.settle` | assenta entidades/grupo no terreno atual (útil depois de pincéis) |
+| `viber.tool.canonicalize` | reescreve poses na forma canónica sem as mudar (diffs estáveis) |
 
 ## As quatro capacidades
 

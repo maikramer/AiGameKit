@@ -74,8 +74,8 @@ Conversion rules (the test suite next to this file is the executable spec):
   header.  Exception: ``<Include src>`` files are migrated and the tree is
   mirrored so include paths stay valid.
 * ``GltfScene`` urls keep their leading ``/``: the engine resolves them
-  against the world's asset root (``assets/`` next to world.xml), which
-  ``sync_assets.py`` populates from the shared-assets pool.
+  against the world's asset roots (the game folder first, then the extra
+  roots declared in ``config.yaml``, typically the shared-assets pool).
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@
 Dois guias canónicos, consumidos por humanos e agentes:
 
 - **`LUA_API.md`** — toda a superfície Luau exposta a scripts de entidade.
-  É a referência a citar quando se escreve ou revê um `.lua` (os ~38 scripts
+  É a referência a citar quando se escreve ou revê um `.lua` (os ~46 scripts
   de `examples/simple-rpg/scripts/` são os exemplos vivos).
 - **`UI.md`** — como construir HUD/menus com a UI declarativa
   (`<UiRoot>`/`<UiStyle>` + `viber.ui.*`).

@@ -1,6 +1,9 @@
 # Contrato XML do Viber (resumo)
 
-Raiz: `<world>` (ou `<scene>`), attr `clear-color`. Tag case-insensitive.
+Raiz: `<world>` (ou `<scene>`), attrs `clear-color` e **`static="true"`** (mundo
+estático do `viber bake`: poses do XML são FINAIS — o runtime desliga seating/
+`place`/geradores; `<StaticSpawner>`, `place` e `<Vegetation>` sem `instances`
+são warnings do `analyze`). Tag case-insensitive.
 Fonte canónica: `Viber/AGENTS.md` §CONTRATO XML + `Viber/src/recipes/mod.rs` (`KNOWN_TAGS`).
 
 ## Atributos universais (qualquer entidade)
@@ -64,7 +67,15 @@ Primitivas aceitam material: `base-color`, `metallic`, `roughness`, `opacity`
   engine (wander/chase+respawn); com `script` = Luau. Sempre verticais.
 - `SpawnExclusion` — `at` ("x z"), `radius`; honrada por TODOS os spawners
 - `Vegetation` — `meshes` (lista), `density-per-km2`, `max-instances` (800/tag),
-  `max-distance`, `cluster-*`; `avoid-road`/`avoid-cliff` default ON
+  `max-distance`, `cluster-*`; `avoid-road`/`avoid-cliff` default ON;
+  **`instances`** = `.vinst` pré-gerado pelo bake (ex.
+  `instances="bake/veg/NNN.vinst"`) — o runtime carrega as instâncias e não
+  calcula nada; os outros attrs ficam como receita
+- `Scatter` — **saída do bake**, NO-OP em runtime: a RECEITA de um gerador
+  (attrs de colocação do `StaticSpawner` + `id`). Cada spawner cozido vira
+  `<Scatter id=…>` + `<Group name="spawn/…" generated-by="id">` com as
+  instâncias (editável). Regenerar sobre o terreno atual:
+  `viber tool scatter id=…` (offline ou `--live`, transação desfazível)
 
 ### Colheita (attr `destructible`, component-string)
 `preset` (burst), `hits` (3), `hit-preset`, `shake-on-hit`, `crack-on-hit`,
