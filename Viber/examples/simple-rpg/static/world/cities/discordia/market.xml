@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="city.market" translation="0 0 0">
+    <GroundDecal name="city.market.apron" at="15 -17" size="14 12.5" feather="3" noise="0.16" texture="/assets/textures/forest_floor/albedo.ktx2" texture-scale="6" base-color="#b09a7c" roughness="0.95" />
+    <Entity translation="10.1 0 -17.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.2 2.0 1.4">
+      <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
+    </Entity>
+    <Entity translation="13.7 0 -14.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.2 2.0 1.4" euler="0 -90 0" scale="1">
+      <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
+    </Entity>
+    <Entity translation="18.9 0 -18.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.2 2.0 1.4" euler="180 0 180" scale="1">
+      <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
+    </Entity>
+    <Entity translation="11.75 0 -18.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <Entity translation="12.66 0 -20.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <Entity translation="34.5 0 -18.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="35.3 0 -21" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base" euler="0 25 0" scale="1">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity name="merchant" translation="16.3 0 -14.4" script="merchant.lua">
+      <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
+    </Entity>
+  </Group>
+</world>

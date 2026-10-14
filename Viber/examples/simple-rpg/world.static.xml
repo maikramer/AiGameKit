@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world clear-color="#8fc2ef" static="true">
+  <ProjectileTemplate id="enemy-arrow" speed="16" damage="8" max-life="2.5" sensor-radius="0.3" faction="enemy" />
+  <Include src="/static/world/environment.xml" />
+  <PlayerGLTF name="player" model-url="/assets/meshes/characters/hero_lod0.glb" translation="0 150 0" />
+  <SpawnGate target-entity="player" y-fallback="150" />
+  <Group name="world-base" translation="0 38.7304 0">
+    <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="bake/terrain.baked.ahgt" skirt-width="0.015625" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92" cliff-angle="50" sharpen="true" sharpen-angle="35" sharpen-seed="7" cliff-streaks="0.55" cliff-moss="0.4" />
+    <NavMesh />
+  </Group>
+  <Include src="/static/world/cities/discordia.xml" />
+  <Include src="/static/world/spawn/ring.xml" />
+  <Include src="/static/world/spawn/dressing.xml" />
+  <Include src="/static/world/paths/network.xml" />
+  <Include src="/static/world/paths/trails.xml" />
+  <Include src="/static/world/paths/ground-wear.xml" />
+  <Include src="/static/world/bridges/ponte-norte.xml" />
+  <Include src="/static/world/gameplay.xml" />
+  <Include src="/static/world/bridges/passadeira-da-bruxa.xml" />
+  <Include src="/static/world/paths/lanterns.xml" />
+  <Include src="/static/world/vegetation/forest.xml" />
+  <Include src="/static/world/vegetation/desert.xml" />
+  <Include src="/static/world/vegetation/swamp.xml" />
+  <Include src="/static/world/vegetation/peaks.xml" />
+  <Include src="/static/world/landmarks/forest.xml" />
+  <Include src="/static/world/landmarks/desert.xml" />
+  <Include src="/static/world/landmarks/swamp.xml" />
+  <Include src="/static/world/landmarks/peaks.xml" />
+  <Include src="/static/world/landmarks/wilds.xml" />
+  <Include src="/static/world/landmarks/village.xml" />
+  <Include src="/static/world/landmarks.xml" />
+  <Include src="/static/world/interiors.xml" />
+  <Include src="/static/world/frontier/ridges.xml" />
+  <Include src="/static/world/frontier/cliffs.xml" />
+  <Include src="/static/world/frontier/horizon.xml" />
+  <Include src="/static/world/landforms/rampart.xml" />
+  <Include src="/static/world/landforms/gate-arms.xml" />
+  <Include src="/static/world/fantasy/alto-de-vael.xml" />
+  <Include src="/static/world/fantasy/grutas.xml" />
+  <Include src="/static/world/fantasy/bosque-encantado.xml" />
+  <Include src="/static/world/fantasy/cidadela-caida.xml" />
+  <Include src="/static/world/scenes/pilgrims-camp.xml" />
+  <Include src="/static/world/scenes/crystal-outpost.xml" />
+  <Include src="/static/world/scenes/battlefield.xml" />
+  <Include src="/static/world/scenes/smugglers.xml" />
+  <Include src="/static/world/atmosphere/ambient-fx.xml" />
+  <Include src="/static/world/creatures/enemies.xml" />
+  <Include src="/static/world/creatures/bosses.xml" />
+  <Include src="/static/world/ai/npcs.xml" />
+  <OrbitCamera distance="3.3" height="1.55" pitch="18.3" fov="64" follow-lag="0.18" turn-lag="0.38" min-terrain-distance="1.0" />
+  <Group name="ui" translation="0 38.7304 0">
+    <PostFxDebugToggle />
+    <Include src="/static/world/hud.xml" />
+    <Include src="/static/world/menu.xml" />
+    <Include src="/static/world/profiler.xml" />
+    <HudScreenLayer />
+    <Minimap range="60" />
+    <Compass />
+    <WaypointArrow margin="64" />
+    <DialogueBalloon />
+  </Group>
+  <Group name="spawn/engine-53">
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" name="inst-grp-53-0000" translation="-168.5387 25.7204 0.9943" scale="0.6676 0.7179 0.6695" euler="-0.8377 10.9483 1.6815" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" name="inst-grp-53-0001" translation="-187.301 25.4647 9.5789" scale="1.3935 1.3283 1.4821" euler="-1.8765 -60.1545 -0.0547" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" name="inst-grp-53-0002" translation="-208.9275 25.6009 -4.0821" scale="1.2208 1.3417 1.355" euler="1.9524 30.0204 -4.5387" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" name="inst-grp-53-0003" translation="-209.9875 25.7244 -10.6583" scale="1.2721 1.2042 1.1789" euler="179.8496 3.9366 -176.1676" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" name="inst-grp-53-0004" translation="-208.6157 25.5394 -16.9709" scale="0.8974 0.867 0.775" euler="-161.6807 -76.1329 -160.8174" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" name="inst-grp-53-0005" translation="-206.6825 25.8794 -38.5531" scale="0.8389 0.7978 0.7466" euler="-179.8408 33.261 -179.371" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" name="inst-grp-53-0006" translation="-201.6627 25.4681 -38.657" scale="0.9522 0.8446 0.7904" euler="-178.559 3.9793 -178.2799" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" name="inst-grp-53-0007" translation="-170.3065 25.8703 -27.9578" scale="0.948 1.0694 0.9704" euler="0.1546 33.6939 1.9011" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" name="inst-grp-53-0008" translation="-168.8329 25.8298 -25.0518" scale="1.1303 1.3022 1.24" euler="-1.2875 51.3578 3.0664" />
+  </Group>
+  <Group name="spawn/engine-82" />
+</world>

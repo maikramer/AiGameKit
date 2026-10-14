@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="biome.peaks.landmarks" translation="0 0 0">
+    <TerrainPad at="-12 -290" size="76 76" falloff="34" corner-radius="24" height="110.066376" pre-carved="1" />
+    <TerrainPad at="-28 -300" size="44 44" falloff="26" corner-radius="16" height="110.066376" pre-carved="1" />
+    <TerrainPad at="12 -244" size="40 40" falloff="24" corner-radius="14" height="110.035774" pre-carved="1" />
+    <TerrainPad at="-32 -280" size="36 36" falloff="22" corner-radius="12" height="110.066376" pre-carved="1" />
+    <Entity name="peaks-cairn-1" translation="8 68.8936 -156" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base" scale="1.6">
+      <GltfScene url="/assets/meshes/terrain/stone_cairn_lod0.glb" />
+      <PointLight translation="0 2.2 0" color="0x5ab0ff" intensity="65000" radius="0.7" shadows="false" />
+    </Entity>
+    <Entity name="peaks-cairn-2" translation="-6 85.2007 -200" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base" euler="0 -50 0" scale="1.6">
+      <GltfScene url="/assets/meshes/terrain/stone_cairn_lod0.glb" />
+      <PointLight translation="0 2.2 0" color="0x5ab0ff" intensity="65000" radius="0.7" shadows="false" />
+    </Entity>
+    <Entity name="peaks-cairn-3" translation="12 110.0359 -244" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base" euler="180 -65 180" scale="1.6">
+      <GltfScene url="/assets/meshes/terrain/stone_cairn_lod0.glb" />
+      <PointLight translation="0 2.2 0" color="0x5ab0ff" intensity="65000" radius="0.7" shadows="false" />
+    </Entity>
+    <Entity name="peaks-stack-a" translation="4 76.1912 -178" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base" euler="0 -72 0" scale="1">
+      <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
+    </Entity>
+    <Entity name="peaks-stack-b" translation="-2 109.9884 -222" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base" euler="180 -60 180" scale="1">
+      <GltfScene url="/assets/meshes/terrain/form_stack_11_lod0.glb" />
+    </Entity>
+    <Entity name="peaks-goblin-outpost" translation="-44 65.6727 -172" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base" euler="180 -50 180" scale="0.85">
+      <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
+    </Entity>
+    <Entity translation="-38 67.4998 -172" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Group translation="-38 67.4998 -172" body="none" collider="none">
+      <PointLight translation="0 0.9 0" color="0xff8a33" intensity="1760" />
+    </Group>
+    <Entity translation="-38 67.4998 -172">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+    </Entity>
+    <Entity translation="-40 72.3263 -178" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="-54 60.8333 -166" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_cliff_1_collision.glb; mesh-anchor: base" euler="180 -75 180" scale="1.4">
+      <GltfScene url="/assets/meshes/terrain/form_cliff_1_lod0.glb" />
+    </Entity>
+    <SpawnExclusion at="-42 -172" radius="20" />
+    <Entity name="peaks-crystal-mine" translation="-60 96.0728 -216" euler="180 -35 180" scale="1">
+      <GltfScene url="/assets/meshes/terrain/crystal_mine_entrance_lod0.glb" />
+    </Entity>
+    <Entity name="peaks-crystal-mine-jamb-a" translation="-61.31 96.6849 -215.08" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.9 3.5 3.2; pos-offset-y: 1.75" euler="180 -35 180" scale="1" />
+    <Entity name="peaks-crystal-mine-jamb-b" translation="-58.69 96.6845 -216.92" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.9 3.5 3.2; pos-offset-y: 1.75" euler="180 -35 180" scale="1" />
+    <Entity translation="-68 103.319 -230" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_cliff_20_collision.glb; mesh-anchor: base" euler="0 -70 0" scale="1.6">
+      <GltfScene url="/assets/meshes/terrain/form_cliff_20_lod0.glb" />
+    </Entity>
+    <Entity translation="-55 102.2595 -222" scale="3.2">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity translation="-54 95.4149 -211" scale="2.4">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Group translation="-56 99.6043 -216" body="none" collider="none">
+      <PointLight translation="0 1.6 0" color="0x5ab0ff" intensity="1920" />
+    </Group>
+    <Entity translation="-56 99.6043 -216">
+      <ParticleSystem preset="sparkle" scale="1" translation="0 1.6 0" />
+    </Entity>
+    <Entity translation="-64 92.9404 -208" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="-68 93.7684 -211" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <SpawnExclusion at="-60 -216" radius="22" />
+    <Lake at="68 -184" radius="22" depth="2.2" water-offset="0.4" color="#8fc7dd" opacity="0.62" ripple="0.25" water-level="79.44013" rocks="0" />
+    <Scatter profile="tree" count="28" seed="9201" region-min="40 0 -212" region-max="96 0 -156" near-water="1" avoid-water="0" align-to-terrain="1" ground-align="auto" max-slope-deg="58" max-slope-attempts="96" scale-min="1.0" scale-max="2.2" avoid-overlaps="1" footprint-radius="2.6" max-distance="245" random-yaw="true" variation="rock" id="grp-53">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" />
+      </GameObject>
+    </Scatter>
+    <Group name="spawn/grp-53" generated-by="grp-53" />
+    <Entity name="peaks-frost-cairn" translation="60 78.0202 -176" script="poi/frost-cairn.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <SpawnExclusion at="68 -184" radius="26" />
+    <Entity translation="-24 85.6899 -190" scale="2.6">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity translation="-29 86.5958 -194" scale="2">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity translation="-30 80 -187" scale="2.3">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Group translation="-27 84.7694 -190" body="none" collider="none">
+      <PointLight translation="0 1.6 0" color="0x5ab0ff" intensity="1440" />
+    </Group>
+    <Entity translation="-28 110.0664 -300" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="4 110.0664 -304" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base" euler="0 -60 0" scale="1">
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="-32 110.0664 -280" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base" euler="180 -65 180" scale="1">
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="8 110.0513 -276" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base" euler="0 -35 0" scale="1">
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="-12 110.0664 -312" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base" scale="1.2">
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="-12 110.0663 -276" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Group translation="-12 110.0663 -276" body="none" collider="none">
+      <PointLight translation="0 1 0" color="0xff8a33" intensity="1920" />
+    </Group>
+    <Entity translation="-12 110.0664 -304" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Group translation="-12 110.0664 -304" body="none" collider="none">
+      <PointLight translation="0 1 0" color="0xff8a33" intensity="1920" />
+    </Group>
+    <Entity translation="-12 110.0663 -276">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+    </Entity>
+    <Entity translation="-12 110.0664 -304">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+    </Entity>
+    <SpawnExclusion at="-12 -290" radius="40" />
+    <Entity name="ambient_water_ice_lake" translation="68 77.6414 -184" script="ambient-water.lua" />
+  </Group>
+</world>

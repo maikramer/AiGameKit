@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="fantasy.cidadela" translation="0 0 0">
+    <TerrainPad at="-880 -300" size="140 140" falloff="40" corner-radius="34" height="188.57436" pre-carved="1" />
+    <SpawnExclusion at="-880 -300" radius="44" />
+    <Entity translation="-880 188.574 -238" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-873.52 188.574 -238.34" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base" euler="0 6 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-867.11 188.574 -239.35" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base" euler="0 12 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-860.84 188.574 -241.03" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base" euler="0 18 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-854.78 188.574 -243.36" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base" euler="0 24 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-849 188.574 -246.31" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base" euler="0 30 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-843.56 188.574 -249.84" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base" euler="0 36 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-838.51 188.574 -253.93" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base" euler="0 42 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-833.93 188.574 -258.51" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base" euler="0 48 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-829.84 188.574 -263.56" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base" euler="0 54 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-826.31 188.574 -269" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base" euler="0 60 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-823.36 188.574 -274.78" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base" euler="0 66 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-821.03 188.574 -280.84" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base" euler="0 72 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-880 188.574 -362" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base" euler="180 0 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-886.48 188.574 -361.66" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base" euler="180 -6 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-892.89 188.574 -360.65" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base" euler="180 -12 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-899.16 188.574 -358.97" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base" euler="180 -18 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-905.22 188.574 -356.64" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base" euler="180 -24 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-911 188.574 -353.69" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base" euler="180 -30 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-916.44 188.574 -350.16" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base" euler="180 -36 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-921.49 188.574 -346.07" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base" euler="180 -42 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-926.07 188.574 -341.49" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base" euler="180 -48 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-930.16 188.574 -336.44" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base" euler="180 -54 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity translation="-933.69 188.574 -331" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base" euler="180 -60 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
+    </Entity>
+    <Entity translation="-936.64 188.574 -325.22" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base" euler="180 -66 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" />
+    </Entity>
+    <Entity translation="-938.97 188.574 -319.16" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base" euler="180 -72 180" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" />
+    </Entity>
+    <Entity name="cidadela-gate" translation="-818 188.574 -300" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_gate_arch_collision.glb; mesh-anchor: base" euler="0 90 0" scale="1">
+      <GltfScene url="/assets/meshes/infra/city_gate_arch_lod0.glb" />
+      <PointLight translation="0 4.2 0" color="0xffb060" intensity="70000" radius="1.0" shadows="false" />
+    </Entity>
+    <Entity translation="-829.84 188.574 -336.44" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base" euler="180 54 180" scale="0.95">
+      <GltfScene url="/assets/meshes/infra/city_wall_corner_lod0.glb" />
+    </Entity>
+    <Entity translation="-930.16 188.574 -263.56" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base" euler="0 -54 0" scale="0.95">
+      <GltfScene url="/assets/meshes/infra/city_wall_corner_lod0.glb" />
+    </Entity>
+    <Entity name="cidadela-keep" translation="-880 188.574 -300" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base" euler="0 20 0" scale="1.5">
+      <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
+    </Entity>
+    <Entity translation="-892 188.574 -314" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_collision.glb; mesh-anchor: base" euler="180 62 180" scale="0.85">
+      <GltfScene url="/assets/meshes/village/village_longhouse_lod0.glb" />
+    </Entity>
+    <Entity translation="-866 188.574 -318" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_altar_collision.glb; mesh-anchor: base" euler="180 -20 180" scale="1.4">
+      <GltfScene url="/assets/meshes/interiors/chapel_altar_lod0.glb" />
+    </Entity>
+    <Entity translation="-872 188.574 -324" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_statue_collision.glb; mesh-anchor: base" euler="180 -20 180" scale="1.3">
+      <GltfScene url="/assets/meshes/interiors/chapel_statue_lod0.glb" />
+    </Entity>
+    <Entity translation="-860 188.574 -312" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_statue_collision.glb; mesh-anchor: base" euler="0 20 0" scale="1.3">
+      <GltfScene url="/assets/meshes/interiors/chapel_statue_lod0.glb" />
+    </Entity>
+    <Entity translation="-868 188.574 -320" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base" euler="180 -20 180" scale="1">
+      <GltfScene url="/assets/meshes/interiors/chapel_pew_lod0.glb" />
+    </Entity>
+    <Entity translation="-866 188.574 -316" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base" euler="180 -20 180" scale="1">
+      <GltfScene url="/assets/meshes/interiors/chapel_pew_lod0.glb" />
+    </Entity>
+    <Entity name="cidadela-relic" translation="-880 188.574 -288" script="poi/ruin-relic.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="0 30 0" scale="2.6">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+      <PointLight translation="0 1.8 0" color="0x9fd8ff" intensity="5600" radius="1.1" shadows="false" />
+    </Entity>
+    <SpawnExclusion at="-880 -288" radius="10" />
+    <Entity translation="-889 188.574 -293" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="180 60 180" scale="1.9">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity translation="-871 188.574 -293" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="180 -60 180" scale="2.1">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity translation="-880 188.574 -296.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="0 -60 0" scale="1.4">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity translation="-880 188.574 -288">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; emission-rate: 24; shape-radius: 3.0; start-life-min: 1.4; start-life-max: 3.2; start-speed-min: 0.2; start-speed-max: 0.7; start-size-min: 0.12; start-size-max: 0.3; looping: 1; world-space: 1" scale="1" translation="0 2.2 0" />
+    </Entity>
+    <Entity name="cidadela-chest" translation="-886 188.574 -310" script="chest.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base" euler="0 40 0" scale="1">
+      <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
+    </Entity>
+    <Entity translation="-892 188.574 -292" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
+    </Entity>
+    <Entity translation="-892 188.574 -292">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 40; shape-radius: 0.28; start-life-min: 0.5; start-life-max: 1.3; start-speed-min: 1.3; start-speed-max: 2.7; start-size-min: 0.3; start-size-max: 0.62; looping: 1; world-space: 1" scale="1" translation="0 0.42 0" />
+    </Entity>
+    <Group translation="-892 188.574 -292" body="fixed" collider="none">
+      <PointLight translation="0 0.7 0" color="0xff8a33" intensity="5400" radius="0.8" />
+    </Group>
+    <Entity name="cidadela-desk" translation="-874 188.574 -296" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base" euler="180 80 180" scale="1">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="-888 188.574 -304" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base" euler="0 -30 0" scale="1">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <Entity translation="-846 188.574 -282" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 3.0 1.0 1.0" euler="0 34 78" scale="1">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="-902 188.574 -334" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 3.0 1.0 1.0" euler="180 -30 -96" scale="1">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="-910 188.574 -282" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 3.0 1.0 1.0" euler="180 84 -110" scale="1">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="-838 188.574 -312" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base" euler="0 -60 0" scale="1.4">
+      <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
+    </Entity>
+    <Entity translation="-918 188.574 -306" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base" euler="0 60 0" scale="1.4">
+      <GltfScene url="/assets/meshes/terrain/form_stack_11_lod0.glb" />
+    </Entity>
+    <Entity translation="-852 188.574 -334" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base" euler="180 0 180" scale="1.2">
+      <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
+    </Entity>
+    <Entity translation="-924 188.574 -288" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_lod0.glb" euler="0 12 0" scale="1.1">
+      <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
+    </Entity>
+    <Entity translation="-898 188.574 -276" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb" euler="0 74 0" scale="1.3">
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" />
+    </Entity>
+    <Entity translation="-862 188.574 -270" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_lod0.glb" euler="180 -40 180" scale="1.2">
+      <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
+    </Entity>
+    <Entity translation="-880 188.574 -244" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Entity translation="-880 188.574 -244">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 20; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+    </Entity>
+    <Group translation="-880 188.574 -244" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <Entity translation="-874.5 188.574 -256.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base" euler="0 30 0" scale="1">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Entity translation="-874.5 188.574 -256.5">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 20; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+    </Entity>
+    <Group translation="-874.5 188.574 -256.5" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <Entity translation="-836 188.574 -256.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base" euler="0 -30 0" scale="1">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Entity translation="-836 188.574 -256.5">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 20; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+    </Entity>
+    <Group translation="-836 188.574 -256.5" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <Entity translation="-880 188.574 -356" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base" euler="180 0 180" scale="1">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Entity translation="-880 188.574 -356">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 20; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 2.14 0" />
+    </Entity>
+    <Group translation="-880 188.574 -356" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <Entity translation="-910 188.574 -348" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base" euler="180 -34 180" scale="1">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Group translation="-910 188.574 -348" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <Entity translation="-926 188.574 -330" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base" euler="180 -58 180" scale="1">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Group translation="-926 188.574 -330" body="none" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3000" radius="0.6" />
+    </Group>
+    <Entity translation="-880 188.574 -300">
+      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 5; start-life-min: 5; start-life-max: 9; start-speed-min: 0.06; start-speed-max: 0.22; start-size-min: 2.0; start-size-max: 4.0; start-color: #9aa8b4; looping: 1; world-space: 1" scale="1" translation="0 0.9 0" />
+    </Entity>
+    <Entity translation="-902 188.574 -320">
+      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 5; start-life-min: 5; start-life-max: 9; start-speed-min: 0.06; start-speed-max: 0.22; start-size-min: 2.0; start-size-max: 4.0; start-color: #9aa8b4; looping: 1; world-space: 1" scale="1" translation="0 0.9 0" />
+    </Entity>
+    <Entity translation="-856 188.574 -276">
+      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 4; start-life-min: 5; start-life-max: 9; start-speed-min: 0.06; start-speed-max: 0.22; start-size-min: 2.0; start-size-max: 3.6; start-color: #9aa8b4; looping: 1; world-space: 1" scale="1" translation="0 0.9 0" />
+    </Entity>
+    <Entity translation="-880 188.574 -352">
+      <ParticleSystem preset="sparkle" scale="1" translation="0 1.2 0" />
+    </Entity>
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="8" seed="9901" region-min="-916 0 -336" region-max="-844 0 -264" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="1440">
+      <Creature role="enemy" script="enemies/shade.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/shade_lod0.glb" lod1-url="/assets/meshes/characters/shade_lod1.glb" lod2-url="/assets/meshes/characters/shade_lod2.glb" lod-threshold-near="20" lod-threshold-mid="60" />
+      </Creature>
+    </DynamicSpawner>
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="6" seed="9902" region-min="-1040 0 -420" region-max="-900 0 -300" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="1440">
+      <Creature role="enemy" script="enemies/wolf.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/wolf_lod0.glb" lod1-url="/assets/meshes/characters/wolf_lod1.glb" lod2-url="/assets/meshes/characters/wolf_lod2.glb" lod-threshold-near="20" lod-threshold-mid="60" />
+      </Creature>
+    </DynamicSpawner>
+  </Group>
+</world>

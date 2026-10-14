@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="bridge.passadeira-da-bruxa" translation="0 38.7304 0">
+    <Road path="-52 198 -60 184 -68 172" width="3" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.6" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/forest_floor/albedo.ktx2" normal-map-url="/assets/textures/forest_floor/normal.ktx2" />
+    <Road path="-34 248 -26 258 -20 270" width="3" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.6" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/forest_floor/albedo.ktx2" normal-map-url="/assets/textures/forest_floor/normal.ktx2" />
+  </Group>
+</world>

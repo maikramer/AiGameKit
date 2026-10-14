@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="city.chapel" translation="0 0 0">
+    <Entity name="chapel" translation="10 0 25" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chapel_collision.glb; mesh-anchor: base" euler="180 -45 180" scale="1">
+      <GltfScene url="/assets/meshes/village/chapel_lod0.glb" />
+    </Entity>
+    <Entity name="npc_healer" translation="5 0 21" script="healer.lua" euler="0 -20 0" scale="1">
+      <GltfScene url="/assets/meshes/characters/npc_healer_lod0.glb" />
+    </Entity>
+  </Group>
+</world>

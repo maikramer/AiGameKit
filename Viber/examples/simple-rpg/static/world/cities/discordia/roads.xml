@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="city.roads" translation="0 0 0">
+    <GroundDecal name="city.plaza.floor" at="0 0" radius="10.5" feather="3.5" noise="0.09" texture="/assets/textures/cobblestone_road/albedo.ktx2" texture-scale="9" base-color="#9d9891" roughness="0.9" />
+    <GroundDecal name="city.gate.n.w" at="-7.5 48" size="8 18" feather="3" noise="0.16" seed="71" texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5" base-color="#a28a6a" roughness="0.95" />
+    <GroundDecal name="city.gate.n.e" at="7.5 48" size="8 18" feather="3" noise="0.16" seed="72" texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5" base-color="#9c8666" roughness="0.95" />
+    <GroundDecal name="city.gate.e.n" at="48 7.5" size="18 8" feather="3" noise="0.16" seed="75" texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5" base-color="#a08a6a" roughness="0.95" />
+    <GroundDecal name="city.gate.e.s" at="48 -7.5" size="18 8" feather="3" noise="0.16" seed="76" texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5" base-color="#9a8466" roughness="0.95" />
+    <GroundDecal name="city.gate.w.n" at="-48 7.5" size="18 8" feather="3" noise="0.16" seed="77" texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5" base-color="#a48e6e" roughness="0.95" />
+    <GroundDecal name="city.gate.w.s" at="-48 -7.5" size="18 8" feather="3" noise="0.16" seed="78" texture="/assets/textures/dirt/albedo.ktx2" texture-scale="5" base-color="#9e8a68" roughness="0.95" />
+  </Group>
+</world>

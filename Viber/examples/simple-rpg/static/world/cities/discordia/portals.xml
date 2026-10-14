@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="city.portals" translation="0 0 0">
+    <Entity name="portal.house_a" translation="26.35 0 8.44" script="building-portal.lua">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; start-color: #ffb35c; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1" scale="1" translation="0 0.35 0" />
+    </Entity>
+    <Entity name="portal.house_b" translation="-17.44 0 22.47" script="building-portal.lua">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; start-color: #ffb35c; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1" scale="1" translation="0 0.35 0" />
+    </Entity>
+    <Entity name="portal.house_c" translation="-20.47 0 -18.44" script="building-portal.lua">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; start-color: #ffb35c; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1" scale="1" translation="0 0.35 0" />
+    </Entity>
+    <Entity name="portal.shepherd_cottage" translation="-22.33 0 12.95" script="building-portal.lua">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; start-color: #ffb35c; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1" scale="1" translation="0 0.35 0" />
+    </Entity>
+    <Entity name="portal.chapel" translation="7.46 0 22.46" script="building-portal.lua">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; start-color: #ffb35c; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1" scale="1" translation="0 0.35 0" />
+    </Entity>
+    <Entity name="portal.village_forge" translation="-30.47 0 -29.06" script="building-portal.lua">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; start-color: #ffb35c; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1" scale="1" translation="0 0.35 0" />
+    </Entity>
+    <Entity name="portal.village_barn" translation="-26.11 0 30" script="building-portal.lua">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; start-color: #ffb35c; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1" scale="1" translation="0 0.35 0" />
+    </Entity>
+    <Entity name="portal.longhouse" translation="35.53 0 -37.53" script="building-portal.lua">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; start-color: #ffb35c; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1" scale="1" translation="0 0.35 0" />
+    </Entity>
+    <Entity name="portal.market_stall_a" translation="10.1 0 -15.7" script="building-portal.lua">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; start-color: #ffb35c; emission-rate: 12; shape-radius: 0.5; start-life-min: 0.6; start-life-max: 1.2; start-speed-min: 0.1; start-speed-max: 0.4; start-size-min: 0.08; start-size-max: 0.18; looping: 1; world-space: 1" scale="1" translation="0 0.3 0" />
+    </Entity>
+    <Entity name="portal.market_stall_b" translation="11.7 0 -14.4" script="building-portal.lua">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; start-color: #ffb35c; emission-rate: 12; shape-radius: 0.5; start-life-min: 0.6; start-life-max: 1.2; start-speed-min: 0.1; start-speed-max: 0.4; start-size-min: 0.08; start-size-max: 0.18; looping: 1; world-space: 1" scale="1" translation="0 0.3 0" />
+    </Entity>
+    <Entity name="portal.market_stall_c" translation="18.9 0 -20.3" script="building-portal.lua">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; start-color: #ffb35c; emission-rate: 12; shape-radius: 0.5; start-life-min: 0.6; start-life-max: 1.2; start-speed-min: 0.1; start-speed-max: 0.4; start-size-min: 0.08; start-size-max: 0.18; looping: 1; world-space: 1" scale="1" translation="0 0.3 0" />
+    </Entity>
+  </Group>
+</world>

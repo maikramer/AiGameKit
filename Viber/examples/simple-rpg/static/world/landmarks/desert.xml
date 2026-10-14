@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="biome.desert.landmarks" translation="0 0 0">
+    <Entity name="desert-arch" translation="190 51.2528 64" euler="0 35 0" scale="1">
+      <GltfScene url="/assets/meshes/desert/sandstone_arch_lod0.glb" />
+      <PointLight translation="0 1.5 0" color="0xffc766" intensity="70000" radius="0.7" shadows="false" />
+    </Entity>
+    <Entity name="desert-arch-pillar-a" translation="194.68 51.3354 60.74" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.5 7.0 2.8; pos-offset-y: 3.5" euler="0 35 0" scale="1" />
+    <Entity name="desert-arch-pillar-b" translation="185.32 51.2116 67.26" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.5 7.0 2.8; pos-offset-y: 3.5" euler="0 35 0" scale="1" />
+    <SpawnExclusion at="190 64" radius="24" />
+    <Entity name="desert-form-arch" translation="148 44.4375 28" euler="0 55 0" scale="1">
+      <GltfScene url="/assets/meshes/terrain/form_arch_3_lod0.glb" />
+    </Entity>
+    <Entity translation="152 44.1152 24" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.8 0.8 0.8">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity name="desert-caravan-wreck" translation="216 43.8972 -36" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base" euler="0 -24 0" scale="1">
+      <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
+      <PointLight translation="0 1.3 0" color="0xff8a33" intensity="70000" radius="0.7" shadows="false" />
+    </Entity>
+    <Entity translation="211 43.5062 -32" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="220 44.8353 -29" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <Entity translation="218 43.9584 -40" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.35 0.9 0.15" euler="0 -50 0" scale="1">
+      <GltfScene url="/assets/meshes/props/axe_lod0.glb" />
+    </Entity>
+    <SpawnExclusion at="216 -36" radius="18" />
+    <Entity name="desert-sun-obelisk" translation="240 50.6763 80" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/desert_obelisk_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/desert/desert_obelisk_lod0.glb" />
+    </Entity>
+    <Group translation="240 50.6763 80" body="none" collider="none">
+      <PointLight translation="0 8.1 0" color="0xffc766" intensity="1280" />
+    </Group>
+    <Entity name="desert-sun-relic" translation="248 50.9511 74" script="poi/sun-relic.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity translation="240 50.6763 80">
+      <ParticleSystem preset="sparkle" scale="1" translation="0 8.4 0" />
+    </Entity>
+    <SpawnExclusion at="240 80" radius="20" />
+    <Entity name="desert-dry-cistern" translation="156 51.9585 -116" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/medieval_well_lod0.glb" />
+    </Entity>
+    <Entity translation="161 53.9713 -121">
+      <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
+    </Entity>
+    <SpawnExclusion at="156 -116" radius="14" />
+    <Entity translation="288 49.5445 112" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base" euler="0 12 0" scale="1">
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="300 48.9142 116" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base" euler="0 -20 0" scale="1.25">
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="312 46.0551 124" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base" euler="0 40 0" scale="1">
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="304 50.1311 134" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base" euler="0 -8 0" scale="0.9">
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
+    </Entity>
+    <SpawnExclusion at="300 122" radius="22" />
+    <Lake at="140 92" radius="14" depth="2.4" water-offset="0.45" color="#3a9ab5" opacity="0.72" water-level="48.82192" rocks="0" />
+    <Scatter profile="tree" count="24" seed="7201" region-min="120 0 72" region-max="160 0 112" near-water="1" avoid-water="0" align-to-terrain="1" ground-align="auto" max-slope-deg="55" max-slope-attempts="96" scale-min="0.9" scale-max="1.9" avoid-overlaps="1" pick-strategy="random" footprint-radius="2.2" max-distance="208" random-yaw="true" variation="rock" id="grp-51">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" />
+      </GameObject>
+    </Scatter>
+    <Group name="spawn/grp-51" generated-by="grp-51">
+      <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" name="inst-grp-51-0000" translation="134.7771 48.3855 102.2789" scale="1.348" euler="171.6029 46.546 174.7466" />
+      <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" name="inst-grp-51-0001" translation="130.0629 49.7996 108.4405" scale="1.713" euler="151.6915 1.165 176.9886" />
+      <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" name="inst-grp-51-0002" translation="147.8835 48.9622 76.7196" scale="1.4898" euler="-175.2561 21.5353 176.4305" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" name="inst-grp-51-0003" translation="120.2177 49.552 86.2581" scale="1.6034" euler="180 13.3025 180" />
+      <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" name="inst-grp-51-0004" translation="152.5683 48.1811 88.9685" scale="1.1244" euler="0.1017 15.7679 5.2612" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" name="inst-grp-51-0005" translation="132.5431 50.0778 76.1173" scale="1.1107" euler="-142.4377 -30.8779 -167.8581" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" name="inst-grp-51-0006" translation="141.0112 46.9094 93.0833" scale="1.5038" euler="0 -23.8896 0" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" name="inst-grp-51-0007" translation="140.6819 49.7985 107.3936" scale="1.3136" euler="149.9561 4.334 -178.5422" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" name="inst-grp-51-0008" translation="151.4689 50.8862 106.9107" scale="1.6349" euler="0 -54.9055 0" />
+      <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" name="inst-grp-51-0009" translation="139.3201 50.4282 72.4976" scale="1.7408" euler="32.4974 24.8974 -15.5846" />
+    </Group>
+    <Scatter profile="tree" count="18" seed="327" region-min="128 0 80" region-max="152 0 104" in-water="1" max-slope-attempts="128" scale-min="0.8" scale-max="1.4" avoid-overlaps="1" max-distance="197" random-yaw="true" variation="foliage" id="grp-52">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" />
+      </GameObject>
+    </Scatter>
+    <Group name="spawn/grp-52" generated-by="grp-52">
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0000" translation="128.2487 48.8219 90.7187" scale="0.8384" euler="0 -80.6505 0" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0001" translation="131.3688 48.8219 89.8533" scale="1.3115" euler="180 -62.1702 180" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0002" translation="148.4981 48.8219 89.3236" scale="1.1832" euler="180 65.6201 180" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0003" translation="149.0277 48.9387 101.2138" scale="0.8184" euler="0 87.9273 0" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0004" translation="146.9842 48.8219 80.522" scale="0.943" euler="180 75.1919 180" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0005" translation="149.9633 48.8219 81.4097" scale="1.0401" euler="0 -35.9578 0" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0006" translation="149.7581 48.8219 81.9461" scale="1.2454" euler="0 -26.4048 0" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0007" translation="137.145 48.8219 91.0502" scale="1.3021" euler="180 22.318 180" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0008" translation="141.968 48.8219 101.1001" scale="0.8262" euler="180 -11.6134 180" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0009" translation="133.0876 48.8219 91.9488" scale="1.2809" euler="0 -39.8504 0" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0010" translation="149.289 48.8219 91.6049" scale="1.03" euler="180 37.7382 180" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0011" translation="135.0762 48.8219 80.9635" scale="1.3274" euler="0 -68.3556 0" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0012" translation="131.861 48.8219 89.3351" scale="1.116" euler="0 23.1178 0" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0013" translation="145.995 48.9539 102.2344" scale="0.9296" euler="180 31.4298 180" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0014" translation="147.0399 48.8219 87.0658" scale="1.3061" euler="180 -56.9786 180" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0015" translation="136.4301 48.8219 97.4442" scale="1.3985" euler="0 -36.7632 0" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0016" translation="148.1328 48.8219 83.3589" scale="1.2652" euler="0 -53.7244 0" />
+      <GltfScene url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" name="inst-grp-52-0017" translation="143.1945 48.8219 97.1991" scale="1.1287" euler="0 -57.5377 0" />
+    </Group>
+    <Entity name="desert-campfire" translation="170.8 43.0773 -73.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
+    </Entity>
+    <Entity translation="170.8 43.0773 -73.2">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 42; shape-radius: 0.32; start-life-min: 0.45; start-life-max: 1.25; start-speed-min: 1.2; start-speed-max: 2.7; start-size-min: 0.3; start-size-max: 0.62; looping: 1; world-space: 1" scale="1" translation="0 0.3 0" />
+    </Entity>
+    <Group translation="170.8 43.0773 -73.2" body="none" collider="none">
+      <PointLight translation="0 0.7 0" color="0xff8a33" intensity="1760" />
+    </Group>
+    <Entity translation="176 42.1206 -64" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <SpawnExclusion at="170 -70" radius="18" />
+    <Entity name="scorpion-nest" translation="260 49.4627 16" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/scorpion_nest_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/desert/scorpion_nest_lod0.glb" />
+    </Entity>
+    <Entity translation="260 49.4627 16">
+      <ParticleSystem preset="ground-dust" scale="1" translation="0 0.3 0" />
+    </Entity>
+    <SpawnExclusion at="260 16" radius="14" />
+    <Entity name="ambient_water_oasis" translation="140 46.8761 92" script="ambient-water.lua" />
+  </Group>
+</world>

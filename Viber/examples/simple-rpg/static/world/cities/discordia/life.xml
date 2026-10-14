@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="city.life" translation="0 0 0">
+    <Entity translation="11.9 0 -20.9" euler="0 12 0" scale="1">
+      <Box translation="0 0.45 0" half-size="0.75 0.35 0.55" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+    </Entity>
+    <Entity translation="9.1 0 -19.6" euler="0 -25 0" scale="1">
+      <Box translation="0 0.45 0" half-size="0.75 0.35 0.55" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+    </Entity>
+    <Entity name="banner-plaza-n" translation="0 0 37.6" euler="180 0 180" scale="1">
+      <Box translation="0 4.4 0" half-size="0.9 0.06 0.06" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.2" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 0.12" half-size="0.75 1.15 0.04" base-color="#8e2b2b" roughness="0.95" metallic="0.0" />
+      <Box translation="0 1.95 0.12" half-size="0.75 0.14 0.04" base-color="#d9b25a" roughness="0.5" metallic="0.4" />
+    </Entity>
+    <Entity name="banner-plaza-s" translation="0 0 -37.6" scale="1">
+      <Box translation="0 4.4 0" half-size="0.9 0.06 0.06" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.2" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 -0.12" half-size="0.75 1.15 0.04" base-color="#8e2b2b" roughness="0.95" metallic="0.0" />
+      <Box translation="0 1.95 -0.12" half-size="0.75 0.14 0.04" base-color="#d9b25a" roughness="0.5" metallic="0.4" />
+    </Entity>
+    <Entity name="banner-plaza-e" translation="37.6 0 0" euler="0 -90 0" scale="1">
+      <Box translation="0 4.4 0" half-size="0.9 0.06 0.06" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.2" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 -0.12" half-size="0.75 1.15 0.04" base-color="#2b558e" roughness="0.95" metallic="0.0" />
+      <Box translation="0 1.95 -0.12" half-size="0.75 0.14 0.04" base-color="#d9b25a" roughness="0.5" metallic="0.4" />
+    </Entity>
+    <Entity name="banner-plaza-w" translation="-37.6 0 0" euler="0 90 0" scale="1">
+      <Box translation="0 4.4 0" half-size="0.9 0.06 0.06" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.2" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 0.12" half-size="0.75 1.15 0.04" base-color="#2b558e" roughness="0.95" metallic="0.0" />
+      <Box translation="0 1.95 0.12" half-size="0.75 0.14 0.04" base-color="#d9b25a" roughness="0.5" metallic="0.4" />
+    </Entity>
+    <Entity name="street-lamp-n" translation="4 0 26" euler="180 0 180" scale="1">
+      <Cylinder translation="0 1.6 0" half-height="1.6" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.25 0.45" half-size="0.05 0.05 0.45" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 0.85" half-size="0.22 0.3 0.22" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3.2 0.85" color="0xffc98a" intensity="4200" radius="0.5" shadows="false" />
+    </Entity>
+    <Entity name="street-lamp-s" translation="-4 0 -26" scale="1">
+      <Cylinder translation="0 1.6 0" half-height="1.6" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.25 -0.45" half-size="0.05 0.05 0.45" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 -0.85" half-size="0.22 0.3 0.22" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3.2 -0.85" color="0xffc98a" intensity="4200" radius="0.5" shadows="false" />
+    </Entity>
+    <Entity name="street-lamp-e" translation="26 0 -4" euler="0 -90 0" scale="1">
+      <Cylinder translation="0 1.6 0" half-height="1.6" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.25 -0.45" half-size="0.05 0.05 0.45" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 -0.85" half-size="0.22 0.3 0.22" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3.2 -0.85" color="0xffc98a" intensity="4200" radius="0.5" shadows="false" />
+    </Entity>
+    <Entity name="street-lamp-w" translation="-26 0 4" euler="0 90 0" scale="1">
+      <Cylinder translation="0 1.6 0" half-height="1.6" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.25 0.45" half-size="0.05 0.05 0.45" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.2 0.85" half-size="0.22 0.3 0.22" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3.2 0.85" color="0xffc98a" intensity="4200" radius="0.5" shadows="false" />
+    </Entity>
+    <Entity name="street-lamp-market-a" translation="6.5 0 -21.5" euler="180 40 180" scale="1">
+      <Cylinder translation="0 1.5 0" half-height="1.5" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.05 -0.4" half-size="0.05 0.05 0.4" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3 -0.75" half-size="0.2 0.28 0.2" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3 -0.75" color="0xffc98a" intensity="3800" radius="0.5" shadows="false" />
+    </Entity>
+    <Entity name="street-lamp-market-b" translation="22.5 0 -12.5" euler="0 -30 0" scale="1">
+      <Cylinder translation="0 1.5 0" half-height="1.5" radius="0.08" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3.05 0.4" half-size="0.05 0.05 0.4" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
+      <Box translation="0 3 0.75" half-size="0.2 0.28 0.2" base-color="#ffe6b0" emissive="#ffca80" roughness="0.35" metallic="0.0" />
+      <PointLight translation="0 3 0.75" color="0xffc98a" intensity="3800" radius="0.5" shadows="false" />
+    </Entity>
+  </Group>
+</world>

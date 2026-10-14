@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <UiStyle src="ui/theme.css" />
+  <UiStyle src="ui/menu.css" />
+  <UiRoot id="menu-layer" script="ui/menu.lua" class="menu-layer">
+    <UiModal id="menu" key="q" class="overlay">
+      <UiColumn class="frame">
+        <UiRow class="frame-head">
+          <UiColumn class="title-block">
+            <UiText class="frame-title">DIÁRIO</UiText>
+            <UiText class="frame-sub" bind="clock">06:00</UiText>
+          </UiColumn>
+          <UiSpacer />
+          <UiRow class="head-stats">
+            <UiPanel class="head-stat">
+              <UiText class="head-stat-key">VIDA</UiText>
+              <UiText class="head-stat-value" bind="health.text">100/100</UiText>
+            </UiPanel>
+            <UiPanel class="head-stat">
+              <UiText class="head-stat-key">NÍVEL</UiText>
+              <UiText class="head-stat-value" bind="level.text">1</UiText>
+            </UiPanel>
+            <UiPanel class="head-stat">
+              <UiText class="head-stat-key">OURO</UiText>
+              <UiText class="head-stat-value" bind="gold">0</UiText>
+            </UiPanel>
+          </UiRow>
+          <UiButton id="menu-close" class="close">
+            <UiText>×</UiText>
+          </UiButton>
+        </UiRow>
+        <UiRow class="tabbar">
+          <UiButton class="tab" tab-group="menu" tab="quests">
+            <UiText>Missões</UiText>
+          </UiButton>
+          <UiButton class="tab" tab-group="menu" tab="bag">
+            <UiText>Mochila</UiText>
+          </UiButton>
+          <UiButton class="tab" tab-group="menu" tab="skills">
+            <UiText>Talentos</UiText>
+          </UiButton>
+          <UiButton class="tab" tab-group="menu" tab="shop">
+            <UiText>Loja</UiText>
+          </UiButton>
+          <UiButton class="tab" tab-group="menu" tab="controls">
+            <UiText>Controlos</UiText>
+          </UiButton>
+          <UiButton class="tab" tab-group="menu" tab="system">
+            <UiText>Sistema</UiText>
+          </UiButton>
+        </UiRow>
+        <UiColumn class="page" tab-group="menu" tab="quests">
+          <UiList class="rows" bind="quests" scroll="y">
+            <UiTemplate>
+              <UiRow id="quest-{id}" class="row quest {status}">
+                <UiPanel class="row-flag" />
+                <UiColumn class="row-body">
+                  <UiRow class="row-line">
+                    <UiText class="row-title">{title}</UiText>
+                    <UiSpacer />
+                    <UiText class="row-tag">{status_text}</UiText>
+                  </UiRow>
+                  <UiText class="row-note">{objective} · {biome_name}</UiText>
+                  <UiRow class="row-line">
+                    <UiBar class="row-bar" value="{progress}" />
+                    <UiText class="row-count">{progress_text}</UiText>
+                  </UiRow>
+                </UiColumn>
+              </UiRow>
+            </UiTemplate>
+            <UiEmpty>
+              <UiText class="empty">Nenhuma missão registada. Fala com os aldeões.</UiText>
+            </UiEmpty>
+          </UiList>
+        </UiColumn>
+        <UiColumn class="page" tab-group="menu" tab="bag">
+          <UiList class="grid" bind="bag" scroll="y">
+            <UiTemplate>
+              <UiColumn id="bag-{id}" class="cell {kind} {status}" tooltip="{label} ×{count}">
+                <UiPanel class="cell-icon {id}" />
+                <UiText class="cell-label">{label}</UiText>
+                <UiText class="cell-count">{count}</UiText>
+              </UiColumn>
+            </UiTemplate>
+            <UiEmpty>
+              <UiText class="empty">Mochila vazia.</UiText>
+            </UiEmpty>
+          </UiList>
+        </UiColumn>
+        <UiColumn class="page" tab-group="menu" tab="skills">
+          <UiList class="rows" bind="skills" scroll="y">
+            <UiTemplate>
+              <UiButton id="skill-{id}" class="row skill {status}">
+                <UiPanel class="row-flag" />
+                <UiColumn class="row-body">
+                  <UiRow class="row-line">
+                    <UiText class="row-title">{label}</UiText>
+                    <UiSpacer />
+                    <UiText class="row-tag">{status_text}</UiText>
+                  </UiRow>
+                  <UiText class="row-note">requisitos: {requires}</UiText>
+                </UiColumn>
+              </UiButton>
+            </UiTemplate>
+          </UiList>
+        </UiColumn>
+        <UiColumn class="page" tab-group="menu" tab="shop">
+          <UiList class="rows" bind="shop" scroll="y">
+            <UiTemplate>
+              <UiButton id="shop-{id}" class="row trade {status}">
+                <UiPanel class="row-flag" />
+                <UiColumn class="row-body">
+                  <UiRow class="row-line">
+                    <UiText class="row-title">{label}</UiText>
+                    <UiSpacer />
+                    <UiText class="row-price">{price}</UiText>
+                  </UiRow>
+                </UiColumn>
+              </UiButton>
+            </UiTemplate>
+          </UiList>
+        </UiColumn>
+        <UiColumn class="page" tab-group="menu" tab="controls">
+          <UiList class="rows tight" bind="controls" scroll="y">
+            <UiTemplate>
+              <UiRow class="row keyline">
+                <UiPanel class="keycap wide">
+                  <UiText>{key}</UiText>
+                </UiPanel>
+                <UiText class="row-note">{action}</UiText>
+              </UiRow>
+            </UiTemplate>
+          </UiList>
+        </UiColumn>
+        <UiColumn class="page" tab-group="menu" tab="system">
+          <UiList class="rows tight" bind="system">
+            <UiTemplate>
+              <UiRow class="row keyline">
+                <UiText class="row-note">{key}</UiText>
+                <UiSpacer />
+                <UiText class="row-title">{value}</UiText>
+              </UiRow>
+            </UiTemplate>
+          </UiList>
+          <UiRow class="actions">
+            <UiButton id="act-save" class="action">
+              <UiText>Guardar</UiText>
+            </UiButton>
+            <UiButton id="act-load" class="action">
+              <UiText>Carregar</UiText>
+            </UiButton>
+            <UiButton id="act-profiler" class="action ghost">
+              <UiText>Profiler [P]</UiText>
+            </UiButton>
+          </UiRow>
+        </UiColumn>
+        <UiRow class="frame-foot">
+          <UiText class="foot-note">1-6 salta de separador · , . percorre · roda do rato desliza · Q ou ESC fecha</UiText>
+        </UiRow>
+      </UiColumn>
+    </UiModal>
+  </UiRoot>
+</world>

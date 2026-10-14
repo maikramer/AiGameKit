@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="fantasy.alto-de-vael" translation="0 0 0">
+    <TerrainPad at="880 780" size="92 84" falloff="34" corner-radius="28" height="194.76022" pre-carved="1" />
+    <SpawnExclusion at="880 780" radius="60" />
+    <Entity name="vael-choir-0" translation="880 194.7601 797" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" scale="4.6">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-1" translation="890.9 194.7601 793" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="0 40 0" scale="5.9">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-2" translation="896.7 194.7601 783" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="0 80 0" scale="7.2">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-3" translation="894.7 194.7601 771.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="180 60 180" scale="5.25">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-4" translation="885.8 194.7601 764" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="180 20 180" scale="6.55">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-5" translation="874.2 194.7601 764" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="180 -20 180" scale="4.6">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-6" translation="865.3 194.7601 771.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="180 -60 180" scale="5.9">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-7" translation="863.3 194.7601 783" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="0 -80 0" scale="7.2">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-choir-8" translation="869.1 194.7601 793" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb" euler="0 -40 0" scale="5.25">
+      <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+    </Entity>
+    <Entity name="vael-altar" translation="880 194.7601 780" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/druid_stone_altar_collision.glb; mesh-anchor: base" scale="2.1">
+      <GltfScene url="/assets/meshes/terrain/druid_stone_altar_lod0.glb" />
+      <PointLight translation="0 2.4 0" color="0x7cc4ff" intensity="7200" radius="1.2" shadows="false" />
+      <PointLight translation="0 9.5 0" color="0xa8dcff" intensity="5200" radius="1.6" shadows="false" />
+    </Entity>
+    <Entity name="vael-needle" translation="880 194.7601 780" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/desert_obelisk_collision.glb; mesh-anchor: base" scale="1.35">
+      <GltfScene url="/assets/meshes/desert/desert_obelisk_lod0.glb" />
+    </Entity>
+    <Entity translation="880 194.7601 780">
+      <ParticleSystem preset="magic" particle-emitter="preset: magic; emission-rate: 26; shape-radius: 4.5; start-life-min: 1.4; start-life-max: 3.2; start-speed-min: 0.25; start-speed-max: 0.9; start-size-min: 0.14; start-size-max: 0.34; looping: 1; world-space: 1" scale="1" translation="0 3.2 0" />
+    </Entity>
+    <Entity translation="850 194.7601 780" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" euler="0 90 0" scale="1.3">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="910 194.7601 780" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" euler="0 -90 0" scale="1.3">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="880 194.7601 750" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" euler="180 0 180" scale="1.3">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="878 194.7601 809" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.4 1.0 1.0" euler="0 64 76" scale="1">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="872 194.7601 812" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Entity translation="872 194.7601 812">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 34; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+    </Entity>
+    <Group translation="872 194.7601 812" body="none" collider="none">
+      <PointLight translation="0 1.1 0" color="0xffa83a" intensity="5400" radius="0.6" />
+    </Group>
+    <Entity translation="888 194.7601 812" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Entity translation="888 194.7601 812">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 34; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+    </Entity>
+    <Group translation="888 194.7601 812" body="none" collider="none">
+      <PointLight translation="0 1.1 0" color="0xffa83a" intensity="5400" radius="0.6" />
+    </Group>
+    <Entity name="vael-shrine" translation="882 194.7601 782" script="crystal-shrine.lua" />
+    <Entity name="vael-shard-a" translation="880 244 780">
+      <Entity translation="0 0 0" scale="4.6">
+        <GltfScene url="/assets/meshes/terrain/form_outcrop_5_lod0.glb" />
+      </Entity>
+      <Entity translation="0 6.5 0" euler="0 30 0" scale="4.2">
+        <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+      </Entity>
+      <Entity translation="0 -1.5 0">
+        <ParticleSystem preset="sparkle" scale="1" translation="0 0 0" />
+      </Entity>
+      <PointLight translation="0 7.5 0" color="0x8fd0ff" intensity="9000" radius="1.4" shadows="false" />
+    </Entity>
+    <Entity name="vael-shard-b" translation="818 259 756">
+      <Entity translation="0 0 0" euler="180 40 180" scale="3.1">
+        <GltfScene url="/assets/meshes/terrain/form_outcrop_8_lod0.glb" />
+      </Entity>
+      <Entity translation="0 4.4 0" euler="180 -20 180" scale="3">
+        <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+      </Entity>
+      <Entity translation="0 -1.2 0">
+        <ParticleSystem preset="sparkle" scale="1" translation="0 0 0" />
+      </Entity>
+      <PointLight translation="0 5.2 0" color="0x8fd0ff" intensity="6400" radius="1.2" shadows="false" />
+    </Entity>
+    <Entity name="vael-shard-c" translation="938 233 798">
+      <Entity translation="0 0 0" euler="180 -70 180" scale="2.4">
+        <GltfScene url="/assets/meshes/terrain/form_outcrop_2_lod0.glb" />
+      </Entity>
+      <Entity translation="0 3.4 0" euler="0 80 0" scale="2.4">
+        <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
+      </Entity>
+      <PointLight translation="0 4 0" color="0x8fd0ff" intensity="4800" radius="1.1" shadows="false" />
+    </Entity>
+    <Entity name="vael-way-1" translation="705 176.2772 40.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="0 20 0" scale="1.35">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity name="vael-way-2" translation="715.1 179.0802 137.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="180 84 180" scale="1.15">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity name="vael-way-3" translation="702.9 180.0499 234.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="180 -25 180" scale="1.5">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+      <PointLight translation="0 4.3 0" color="0x9fd8ff" intensity="7200" radius="0.8" shadows="false" />
+    </Entity>
+    <Entity name="vael-way-4" translation="721.1 177.327 330.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="0 -72 0" scale="1.25">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity name="vael-way-5" translation="720 182.3526 429" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="0 44 0" scale="1.45">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+      <PointLight translation="0 4.3 0" color="0x9fd8ff" intensity="7200" radius="0.8" shadows="false" />
+    </Entity>
+    <Entity name="vael-way-6" translation="763.4 185.4177 516.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="180 30 180" scale="1.2">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity name="vael-way-7" translation="781.5 190.5665 613.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.9 0.8 0.8" euler="0 30 82" scale="1">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity name="vael-way-8" translation="832.4 194.9067 697.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="180 -80 180" scale="1.4">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+      <PointLight translation="0 4.3 0" color="0x9fd8ff" intensity="7200" radius="0.8" shadows="false" />
+    </Entity>
+    <TerrainPad at="700 210" size="16 16" falloff="9" corner-radius="6" height="182.57797" pre-carved="1" />
+    <SpawnExclusion at="700 210" radius="16" />
+    <Entity name="vael-rim-cairn" translation="700 182.5773 210" script="poi/mirante-vista.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base" scale="1.8">
+      <GltfScene url="/assets/meshes/terrain/stone_cairn_lod0.glb" />
+      <PointLight translation="0 2.6 0" color="0x9fd8ff" intensity="65000" radius="0.7" shadows="false" />
+    </Entity>
+    <Entity translation="694 182.5773 205" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
+    </Entity>
+    <Entity translation="694 182.5773 205">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" scale="1" translation="0 1 0" />
+    </Entity>
+    <Group translation="694 182.5773 205" body="none" collider="none">
+      <PointLight translation="0 1.1 0" color="0xffa83a" intensity="4800" radius="0.6" />
+    </Group>
+    <Entity translation="703 182.5773 203" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.6 0.9 0.55" euler="180 -70 180" scale="1">
+      <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
+    </Entity>
+    <SpawnExclusion at="770 730" radius="24" />
+    <Entity name="vael-watch" translation="770 196.3114 730" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base" euler="180 -30 180" scale="1.15">
+      <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
+      <PointLight translation="0 5.2 0" color="0xffb060" intensity="70000" radius="1.0" shadows="false" />
+    </Entity>
+    <Entity translation="762 196.216 736" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base" euler="0 -40 0" scale="1">
+      <GltfScene url="/assets/meshes/village/weapon_rack_lod0.glb" />
+    </Entity>
+    <Entity translation="778 196.3093 722" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="781 196.3102 727" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <Entity translation="766 196.279 720" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9" euler="0 70 0" scale="1">
+      <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
+    </Entity>
+    <Entity translation="759 196.2505 726" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
+    </Entity>
+    <Entity translation="759 196.2505 726">
+      <ParticleSystem preset="fire" particle-emitter="preset: fire; emission-rate: 40; shape-radius: 0.28; start-life-min: 0.5; start-life-max: 1.3; start-speed-min: 1.3; start-speed-max: 2.7; start-size-min: 0.3; start-size-max: 0.62; looping: 1; world-space: 1" scale="1" translation="0 0.42 0" />
+    </Entity>
+    <Group translation="759 196.2505 726" body="fixed" collider="none">
+      <PointLight translation="0 0.7 0" color="0xff8a33" intensity="5400" radius="0.8" />
+    </Group>
+    <Entity translation="759 196.2505 726">
+      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 2.4; start-life-max: 4.4; start-speed-min: 0.3; start-speed-max: 0.8; start-size-min: 0.35; start-size-max: 0.8; start-color: #9a9a9a; looping: 1; world-space: 1" scale="1" translation="0 1.5 0" />
+    </Entity>
+    <RockFeatures name="vael-escarpment" region="450 -300 800 430" seed="61831" arches="6" caves="2" bridges="2" min-slope="16" max-slope="58" min-drop="5" min-rise="3" spacing="42" clear-of-roads="14" />
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="6" seed="7741" region-min="950 0 700" region-max="1030 0 820" random-yaw="true" avoid-overlaps="false" max-slope-deg="30" max-distance="1220">
+      <Creature role="enemy" script="enemies/shade.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/shade_lod0.glb" />
+      </Creature>
+    </DynamicSpawner>
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="5" seed="7742" region-min="740 0 560" region-max="880 0 670" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="1280">
+      <Creature role="enemy" script="enemies/wolf.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/wolf_lod0.glb" />
+      </Creature>
+    </DynamicSpawner>
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="7" seed="7743" region-min="760 0 830" region-max="900 0 940" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="1260">
+      <Creature role="enemy" script="enemies/shade.lua">
+        <GLTFLoader role="visual" url="/assets/meshes/characters/shade_lod0.glb" />
+      </Creature>
+    </DynamicSpawner>
+  </Group>
+</world>

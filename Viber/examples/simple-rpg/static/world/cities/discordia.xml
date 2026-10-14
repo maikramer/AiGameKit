@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="city" translation="0 38.7304 0">
+    <SpawnExclusion at="0 0" radius="52" />
+    <TerrainPad at="0 0" size="120 120" falloff="20" corner-radius="18" height="38.730545" pre-carved="1" />
+    <Include src="/static/world/cities/discordia/walls.xml" />
+    <Include src="/static/world/cities/discordia/roads.xml" />
+    <Include src="/static/world/cities/discordia/utilities.xml" />
+    <Include src="/static/world/cities/discordia/houses.xml" />
+    <Include src="/static/world/cities/discordia/forge.xml" />
+    <Include src="/static/world/cities/discordia/barn.xml" />
+    <Include src="/static/world/cities/discordia/watch.xml" />
+    <Include src="/static/world/cities/discordia/chapel.xml" />
+    <Include src="/static/world/cities/discordia/market.xml" />
+    <Include src="/static/world/cities/discordia/longhouse.xml" />
+    <Include src="/static/world/cities/discordia/portals.xml" />
+    <Include src="/static/world/cities/discordia/skirts.xml" />
+    <Include src="/static/world/cities/discordia/clutter.xml" />
+    <Include src="/static/world/cities/discordia/approach.xml" />
+    <Include src="/static/world/cities/discordia/grid.xml" />
+    <Include src="/static/world/cities/discordia/life.xml" />
+  </Group>
+</world>

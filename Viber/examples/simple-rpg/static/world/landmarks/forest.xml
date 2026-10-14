@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="biome.forest.landmarks" translation="0 0 0">
+    <Entity name="forest-outpost-tower" translation="-92 44.2767 176" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base" euler="0 24 0" scale="1">
+      <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
+      <PointLight translation="0 2.6 0" color="0xffb060" intensity="70000" radius="0.7" shadows="false" />
+    </Entity>
+    <Entity translation="-86 44.246 172" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="-98 45.0666 173" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <Entity translation="-90 44.6848 170" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9" euler="0 40 0" scale="1">
+      <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
+    </Entity>
+    <Entity translation="-88 43.9805 176" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
+    </Entity>
+    <Entity translation="-80 43.6958 174" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base" euler="0 -30 0" scale="1">
+      <GltfScene url="/assets/meshes/village/weapon_rack_lod0.glb" />
+    </Entity>
+    <Entity translation="-81 43.5359 176" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.15 1.0 0.12" euler="0 15 0" scale="1">
+      <GltfScene url="/assets/meshes/props/sword_hero_lod0.glb" />
+    </Entity>
+    <Entity name="forest-watch-tome" translation="-84 42.8974 183" script="poi/watch-tome.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
+    </Entity>
+    <Entity translation="104 53.6132 250" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" scale="1.5">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="114 51.339 246" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" euler="0 45 0" scale="1.4">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="118 48.1967 236" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" euler="0 90 0" scale="1.55">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="114 46.3393 226" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" euler="180 45 180" scale="1.35">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="104 45.9784 222" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" euler="180 0 180" scale="1.5">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="94 46.5251 226" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" euler="180 -45 180" scale="1.4">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="90 47.8449 236" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" euler="0 -90 0" scale="1.6">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity translation="94 51.888 246" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" euler="0 -45 0" scale="1.45">
+      <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
+    </Entity>
+    <Entity name="forest-stone-circle" translation="104 48.8549 236" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/druid_stone_altar_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/terrain/druid_stone_altar_lod0.glb" />
+      <PointLight translation="0 1.1 0" color="0x6ec8ff" intensity="1600" />
+    </Entity>
+    <Entity translation="104 48.8549 236">
+      <ParticleSystem preset="magic" scale="1" translation="0 1.4 0" />
+    </Entity>
+    <SpawnExclusion at="104 236" radius="34" />
+    <Entity name="forest-logging-camp" translation="-60 44.4659 128" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_collision.glb; mesh-anchor: base" euler="0 -18 0" scale="0.62">
+      <GltfScene url="/assets/meshes/village/village_longhouse_lod0.glb" />
+    </Entity>
+    <Entity translation="-42 45.7084 120" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base" euler="0 -14 0" scale="1">
+      <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
+    </Entity>
+    <Entity translation="-36.8 46.4098 117.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base" euler="0 20 0" scale="1">
+      <GltfScene url="/assets/meshes/village/chopping_block_lod0.glb" />
+    </Entity>
+    <Entity translation="-76 42.8121 117" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Entity translation="-79 43.8971 122" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
+    </Entity>
+    <Entity translation="-47 46.7561 138">
+      <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
+    </Entity>
+    <Entity translation="-60 44.4659 128">
+      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 4; start-life-min: 2.4; start-life-max: 4.2; start-speed-min: 0.3; start-speed-max: 0.8; start-size-min: 0.35; start-size-max: 0.8; start-color: #9a9a9a; looping: 1; world-space: 1" scale="1" translation="0 4.2 0" />
+    </Entity>
+    <SpawnExclusion at="-60 128" radius="22" />
+    <Entity name="forest-crossroads-well" translation="28 42.2241 192" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/medieval_well_lod0.glb" />
+    </Entity>
+    <Entity translation="33.2 41.9331 188.8" euler="0 30 0" scale="1">
+      <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
+    </Entity>
+    <Group translation="23.2 40.5554 194.8" body="none" collider="none">
+      <PointLight translation="0 2.15 0" color="0xffb060" intensity="1120" />
+    </Group>
+    <SpawnExclusion at="28 192" radius="12" />
+    <Entity name="witch-hut" translation="-20 48.5093 270" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/forest/witch_hut_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/forest/witch_hut_lod0.glb" />
+    </Entity>
+    <Group translation="-8 47.2529 260" body="none" collider="none">
+      <PointLight translation="0 1.1 0" color="0x55e055" intensity="1760" />
+    </Group>
+    <SpawnExclusion at="-20 266" radius="24" />
+    <Entity translation="-14 47.3827 264" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cauldron_iron_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/interiors/cauldron_iron_lod0.glb" />
+    </Entity>
+    <Entity translation="-24 49.83 272" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.8 0.8 0.8" euler="0 50 0" scale="1">
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+    </Entity>
+    <Group translation="36 49.2989 144" body="none" collider="none">
+      <PointLight translation="0 0.8 0" color="0x6ee8d8" intensity="1120" />
+    </Group>
+    <Entity translation="34.4 49.4668 142.8" euler="0 40 0" scale="1">
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
+    </Entity>
+    <Entity translation="38.2 49.0408 145.2" euler="180 20 180" scale="0.85">
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
+    </Entity>
+    <Entity translation="36.8 49.3604 141" euler="180 -80 180" scale="1.15">
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
+    </Entity>
+    <Entity name="forage-mushroom-1" translation="-44 45.9428 124" script="mushroom.lua" />
+    <Entity name="forage-mushroom-2" translation="52 42.8371 192" script="mushroom.lua" />
+  </Group>
+</world>

@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Group name="atmosphere.ambient" translation="0 0 0">
+    <Entity translation="170 44.3773 0">
+      <ParticleSystem preset="ground-dust" scale="1" translation="0 0.25 0" />
+    </Entity>
+    <Entity translation="220 51.4594 70">
+      <ParticleSystem preset="ground-dust" scale="1" translation="0 0.25 0" />
+    </Entity>
+    <Entity translation="210 45.8168 -80">
+      <ParticleSystem preset="ground-dust" scale="1" translation="0 0.25 0" />
+    </Entity>
+    <Entity translation="260 50.9661 20">
+      <ParticleSystem preset="ground-dust" scale="1" translation="0 0.25 0" />
+    </Entity>
+    <Entity translation="190 41.1863 -40">
+      <ParticleSystem preset="ground-dust" scale="1" translation="0 0.25 0" />
+    </Entity>
+    <Entity translation="290 51.98 -30">
+      <ParticleSystem preset="ground-dust" scale="1" translation="0 0.25 0" />
+    </Entity>
+    <Entity translation="320 51.7318 90">
+      <ParticleSystem preset="ground-dust" scale="1" translation="0 0.25 0" />
+    </Entity>
+    <Entity translation="250 54.2105 -130">
+      <ParticleSystem preset="ground-dust" scale="1" translation="0 0.25 0" />
+    </Entity>
+    <Entity translation="236 52.1052 40">
+      <ParticleSystem preset="sand-dust" scale="1" translation="0 2.4 0" />
+    </Entity>
+    <Entity translation="300 51.6794 -60">
+      <ParticleSystem preset="sand-dust" scale="1" translation="0 2.4 0" />
+    </Entity>
+    <Entity translation="0 46.1652 180">
+      <ParticleSystem preset="fireflies" scale="1" translation="0 1.2 0" />
+    </Entity>
+    <Entity translation="-50 40.2998 230">
+      <ParticleSystem preset="fireflies" scale="1" translation="0 1.2 0" />
+    </Entity>
+    <Entity translation="44 42.4422 210">
+      <ParticleSystem preset="fireflies" scale="1" translation="0 1.2 0" />
+    </Entity>
+    <Entity translation="-100 45.8299 156">
+      <ParticleSystem preset="fireflies" scale="1" translation="0 1.2 0" />
+    </Entity>
+    <Entity translation="80 80 300">
+      <ParticleSystem preset="fireflies" scale="1" translation="0 1.2 0" />
+    </Entity>
+    <Entity translation="-28 93.2526 330">
+      <ParticleSystem preset="fireflies" scale="1" translation="0 1.2 0" />
+    </Entity>
+    <Entity translation="12 41.2726 192">
+      <ParticleSystem preset="leaves" particle-emitter="preset: leaves; emission-rate: 5; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1" scale="1" translation="0 6.5 0" />
+    </Entity>
+    <Entity translation="-76 39.4085 240">
+      <ParticleSystem preset="leaves" particle-emitter="preset: leaves; emission-rate: 4; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1" scale="1" translation="0 6.5 0" />
+    </Entity>
+    <Entity translation="-16 47.7294 270">
+      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 8; start-life-min: 2; start-life-max: 4; start-speed-min: 0.4; start-speed-max: 1.0; start-size-min: 0.4; start-size-max: 0.9; start-color: #888888; looping: 1; world-space: 1" scale="1" translation="0 1.5 0" />
+    </Entity>
+    <Entity translation="-170 25.6348 0">
+      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.4; start-color: #93a596; looping: 1; world-space: 1" scale="1" translation="0 0.8 0" />
+    </Entity>
+    <Entity translation="-240 28.5109 60">
+      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.4; start-color: #93a596; looping: 1; world-space: 1" scale="1" translation="0 0.8 0" />
+    </Entity>
+    <Entity translation="-210 34.1818 -68">
+      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.0; start-color: #93a596; looping: 1; world-space: 1" scale="1" translation="0 0.8 0" />
+    </Entity>
+    <Entity translation="-310 34.5335 -8">
+      <ParticleSystem preset="smoke" particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.0; start-color: #93a596; looping: 1; world-space: 1" scale="1" translation="0 0.8 0" />
+    </Entity>
+    <Entity translation="0 73.3645 -170">
+      <ParticleSystem preset="snow" particle-emitter="preset: snow; emission-rate: 10; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1" scale="1" translation="0 9 0" />
+    </Entity>
+    <Entity translation="-8 110.0233 -230">
+      <ParticleSystem preset="snow" particle-emitter="preset: snow; emission-rate: 10; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1" scale="1" translation="0 9 0" />
+    </Entity>
+    <Entity translation="-12 110.0664 -290">
+      <ParticleSystem preset="snow" particle-emitter="preset: snow; emission-rate: 12; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1" scale="1" translation="0 9 0" />
+    </Entity>
+    <Entity translation="-26 85.0148 -190">
+      <ParticleSystem preset="sparkle" scale="1" translation="0 1.6 0" />
+    </Entity>
+    <Entity translation="74 46.7121 72">
+      <ParticleSystem preset="fireflies" scale="1" translation="0 1.1 0" />
+    </Entity>
+    <Entity translation="-76 39.4996 66">
+      <ParticleSystem preset="fireflies" scale="1" translation="0 1.1 0" />
+    </Entity>
+    <Entity translation="70 40.9409 -74">
+      <ParticleSystem preset="fireflies" scale="1" translation="0 1.1 0" />
+    </Entity>
+    <Entity translation="-70 35.3539 -70">
+      <ParticleSystem preset="fireflies" scale="1" translation="0 1.1 0" />
+    </Entity>
+    <Entity translation="88 41.6964 22">
+      <ParticleSystem preset="leaves" particle-emitter="preset: leaves; emission-rate: 4; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.2; looping: 1; world-space: 1" scale="1" translation="0 6 0" />
+    </Entity>
+    <Entity translation="-90 31.1711 -20">
+      <ParticleSystem preset="leaves" particle-emitter="preset: leaves; emission-rate: 4; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.2; looping: 1; world-space: 1" scale="1" translation="0 6 0" />
+    </Entity>
+    <Entity translation="-66 41.1635 96">
+      <ParticleSystem preset="sparkle" scale="1" translation="0 1 0" />
+    </Entity>
+  </Group>
+</world>
