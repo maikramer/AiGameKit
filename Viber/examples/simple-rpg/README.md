@@ -98,7 +98,7 @@ espelho nem cópia local do pool** (guarda anti-regressão:
   HUD/UI) via a API `viber.*` (`Viber/docs/LUA_API.md`)
 - `config.yaml` — **contrato de paths com a engine** (obrigatório; roots,
   dirs de áudio/texturas/scripts/UI, save) — `Viber/docs/ASSETS.md`
-- `ui/*.css` + `world/hud.xml`/`world/menu.xml` — HUD e menu declarativos
+- `ui/*.css` + `static/world/hud.xml`/`static/world/menu.xml` — HUD e menu declarativos
 - `tools/` — scripts de geração por-jogo (ex.: `gen_heightmap.py`)
 - `qa-*.xml` / `ui-showcase.xml` — mundos QA pequenos, procedurais de
   propósito (dispensam bake)

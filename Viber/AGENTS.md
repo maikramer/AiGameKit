@@ -26,12 +26,19 @@ pela CLI, pelo bridge e pelo editor.
 * **Vegetação pré-gerada:** `<Vegetation instances="bake/veg/NNN.vinst">` — binário
   (`src/vinst.rs`: zlib, posição/quat/escala/template por instância); os outros atributos
   ficam como receita. O runtime carrega as instâncias e não calcula nada.
+  Regenerável pós-bake: `viber tool scatter ficheiro#i/j` sobre o nó `<Vegetation>`
+  reescreve o `.vinst` atómico contra o terreno atual (binário: sem undo via
+  History — git ou re-scatter).
 * **Geradores = ferramentas:** cada spawner vira `<Scatter id=…>` (a RECEITA, nunca executada
   em runtime) + `<Group name="spawn/…" generated-by="id">` (o resultado, editável à mão).
   `viber tool list` / `viber tool scatter id=grp-3 [--dry-run|--live]` (bridge
   `viber.tool.list|scatter`, botão no Inspector do editor) recalcula sobre o terreno ATUAL,
   com ocupação dos outros geradores, e substitui o grupo numa transação (desfazível).
   Determinístico: regenerar logo após o bake dá as mesmas colocações (testado).
+  As pedras de margem dos lagos saem do bake como `<Scatter id="engine-N">` (regeneráveis
+  pela mesma tool); grupos gerados vazios não se emitem. Nome canónico das instâncias:
+  `inst-{scatter_id}-{i:04}` no bake, na tool e no estático (bake.json usa o índice do
+  grupo para vegetation/dynamic).
 * **Terreno editável:** o `.ahgt` do `<Terrain heightmap>` faz parte do documento
   (carregado na 1.ª op de terreno). Ops `terrain_brush {mode: raise|lower|flatten|smooth|crater,
   at:[x,z], radius, amount, height?}` e `terrain_patch` (inversa exata, base64 u16) — undo
@@ -86,7 +93,10 @@ seletor do nó sob um pixel (câmara de editor).
 **Sync ao vivo** (`src/scene/sync.rs`): mudanças de pose → patch do `Transform` (e teleporte
 do corpo Rapier: o writeback reverteria corpos filhos); inserir/remover/mover → spawn/despawn
 incremental com REALINHAMENTO das origens dos irmãos; tipos não incrementais (terreno, céu,
-UI, spawners) ficam em `SceneSyncStatus::needs_reload`. Proveniência: cada `XmlNode` tem
+UI, spawners) ficam em `SceneSyncStatus::needs_reload` — e a resposta de
+`viber.scene.apply|undo|redo` (e do `viber scene --live` equivalente) traz o campo
+`needs_reload: [...]` com o DELTA da transação: o agente vê logo o que exige reload em vez
+de descobrir pelo log. Proveniência: cada `XmlNode` tem
 `origin` (ficheiro+caminho, carimbado no `load_world`), cada `EntitySpec` tem `source`, cada
 entidade spawnada tem `scene::SceneSource`.
 

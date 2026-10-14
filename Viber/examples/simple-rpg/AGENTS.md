@@ -32,10 +32,9 @@ Contrato completo (bake, ops, paridade editor/CLI): `Viber/AGENTS.md`, secção
 | `world.xml` + `world/**.xml` | fonte PROCEDURAL (gerador) — só para `viber bake --force` |
 | `quests/*.json` | definições das 27 quests — lidas do DISCO no arranque (reiniciar a engine; sem `cargo build`) |
 | `scripts/**.lua` | comportamento (inimigos/bosses, colheita, POIs, HUD/UI) — hot-reload ao gravar (`src/hot_reload.rs`; `VIBER_HOT_RELOAD=0` desliga) |
-| `ui/*.css` + `world/hud.xml` / `world/menu.xml` | HUD e menu [Q] declarativos |
+| `ui/*.css` + `static/world/hud.xml` / `static/world/menu.xml` | HUD e menu [Q] declarativos (o lado `world/` é só a fonte procedural) |
 | `shaders/*.wesl` | céu/terreno/água — **reescritos em disco a cada `run`** (especializados pelos attrs); não editar à mão expectando persistência |
 | `qa-*.xml`, `ui-showcase.xml` | mundos QA pequenos — **procedurais de propósito** (dispensam bake) |
-| `public/` | conteúdo original migrado (referência histórica) |
 
 ## Regras ao editar
 
@@ -48,7 +47,19 @@ Contrato completo (bake, ops, paridade editor/CLI): `Viber/AGENTS.md`, secção
 - **Regenerar conteúdo espalhado** (árvores, pedras, dressing): não re-bakear —
   `viber tool list` / `viber tool scatter id=grp-N [--live]` recalcula só aquele
   gerador sobre o terreno ATUAL e substitui o grupo `spawn/…` numa transação
-  desfazível.
+  desfazível. Os `<Scatter id="engine-N">` da raiz do `world.static.xml` são as
+  pedras de margem dos lagos — também regeneráveis pela mesma tool. As
+  `<Vegetation instances="bake/veg/NNN.vinst">` regeneram com
+  `viber tool scatter ficheiro#i/j` (reescreve o `.vinst` atómico; binário,
+  NÃO desfazível via History — git ou re-scatter).
+- **Pinceladas de terreno/pintura gravam sidecar**: `bake/terrain.baked.ahgt`
+  + `bake/terrain.baked.ahgt.paint` são PARTE DO ESTADO DO MUNDO — commita-os
+  como o resto do estático (não estão no .gitignore de propósito).
+- **Portais das casas são data-driven**: `scripts/building-portal.lua` deriva
+  o registo dos NOMES das entidades (`portal.<sala>[.<sufixo>]` fora,
+  `portal.exit_<sala>` dentro da bolsa) — mover/acrecentar portas no editor
+  FUNCIONA sem tocar no script. Salas novas: `tools/gen_interiors.py`
+  (regenera interiors+portals nos DOIS lados).
 - Depois de qualquer edição: `viber analyze` (exit 1 em erro; warnings listam
   attrs desconhecidos; `<StaticSpawner>`/`place` num estático = warning).
 - **Gotcha self-closing:** acrescentar filhos a `<Entity … />` cria um
