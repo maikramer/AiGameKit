@@ -1,0 +1,26 @@
+{
+  "name": "viber",
+  "version": "0.1.0",
+  "description": "Viber (engine nativa Bevy do AiGameKit) para agentes ZCode: autorar mundos declarativos XML+Luau e QA vivo via debug bridge — worlds authoring, live QA, screenshot, scene editing.",
+  "author": { "name": "AiGameKit" },
+  "license": "MIT",
+  "skills": "skills",
+  "commands": "commands",
+  "mcpServers": {
+    "viber": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${ZCODE_PLUGIN_ROOT}/scripts/server.mjs"],
+      "env": { "VIBER_BIN": "${user_config.viberBin}" },
+      "cwd": "${ZCODE_PROJECT_DIR}"
+    }
+  },
+  "userConfig": {
+    "viberBin": {
+      "type": "string",
+      "default": "viber",
+      "title": "Binário viber",
+      "description": "Caminho do CLI viber (default: viber no PATH; ex. ~/.local/bin/viber)"
+    }
+  }
+}
