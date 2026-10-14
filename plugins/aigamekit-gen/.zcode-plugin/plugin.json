@@ -1,0 +1,8 @@
+{
+  "name": "aigamekit-gen",
+  "version": "0.2.0",
+  "description": "Ferramentas básicas de geração do AiGameKit — text2d, text3d, paint3d, rigging3d, animator3d e gameassets — pipeline encadeado texto → mesh → textura → rig → animação, mais servidor MCP com tools executáveis para todos os CLIs.",
+  "author": { "name": "AiGameKit" },
+  "skills": "./skills",
+  "mcpServers": "./.mcp.json"
+}

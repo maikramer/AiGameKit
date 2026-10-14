@@ -1,0 +1,19 @@
+{
+  "name": "dev-aigamekit-61ddb669",
+  "plugins": [
+    {
+      "name": "aigamekit-gen",
+      "source": "./aigamekit-gen",
+      "version": "0.2.0",
+      "description": "Ferramentas básicas de geração do AiGameKit — text2d, text3d, paint3d, rigging3d, animator3d e gameassets — pipeline encadeado texto → mesh → textura → rig → animação, mais servidor MCP com tools executáveis para todos os CLIs.",
+      "displayName": "AiGameKit Gen"
+    },
+    {
+      "name": "viber",
+      "source": "./viber",
+      "version": "0.1.0",
+      "description": "Viber (engine nativa Bevy do AiGameKit) para agentes ZCode: autorar mundos declarativos XML+Luau e QA vivo via debug bridge — worlds authoring, live QA, screenshot, scene editing.",
+      "displayName": "Viber (AiGameKit)"
+    }
+  ]
+}
