@@ -34,6 +34,7 @@ Luau em `references/luau-api-map.md`.
 viber create <nome>            # scaffold <nome>/{world.xml,config.yaml}
 # editar o XML (contrato em references/xml-contract.md)
 viber analyze <world.xml>      # valida headless: assets, conflitos, tags — exit 1 em erro
+viber analyze <world.xml> --json   # o mesmo relatório num objeto JSON estável (agentes/CI)
 viber bake <world.xml>         # gera world.static.xml + static/** + bake/
 viber scene ls                 # árvore com seletores (abre o estático por omissão)
 viber scene set name=well translation="4 0 3"           # edição offline
@@ -59,8 +60,9 @@ viber terrain sample -- -70 -70                       # altura do heightmap (doc
 viber terrain brush raise --at "-70 -70" --radius 25 --amount 4   # raise|lower|flatten|smooth|crater|noise
 viber terrain paint --at "10 10" --radius 6 --layer dirt_trail   # camada do pool (splat)
 
-viber tool list                                       # geradores <Scatter id> do mundo
+viber tool list                                       # geradores <Scatter id> E <Vegetation instances> do mundo
 viber tool scatter id=grp-3                           # regenera o grupo generated-by (determinístico)
+viber tool scatter 'ficheiro.xml#i/j'                 # idem numa <Vegetation>: reescreve o .vinst (binário, SEM undo — git/re-scatter)
 viber tool settle generated-by=grp-3                  # assenta props no terreno atual (após pincéis)
 viber tool canonicalize                               # poses na forma canónica (idempotente)
 ```

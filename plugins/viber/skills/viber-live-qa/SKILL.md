@@ -50,7 +50,7 @@ disable/enable/kill/heal/give/quest_force/vault_set/spawn("box:2,1,2", x,y,z, {�
 set_material/set_light/postfx{bloom=false,…}/set_clock(1380= noite)/set_camera/
 sun{…}/ground{…}/physics_set/rain_look/set_weather`), input sintético
 (`key/text/click/move`), edição viva `viber scene --live …` (undo/redo; ops com
-inversas; terreno/céu/UI/spawners ficam `needs_reload`).
+inversas; terreno/céu/UI/spawners ficam `needs_reload` — a RESPOSTA do apply/undo/redo traz o campo `needs_reload: [...]` com o que exige recarregar (Ctrl+R), sem ler logs).
 
 **PROVAR** — `events --since N` (ring estruturado de dano/morte/quest/toast),
 `step <n>`/`play` (pausa e avança EXATAMENTE n frames; `step 0` só congela),
