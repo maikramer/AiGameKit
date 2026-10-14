@@ -11,9 +11,11 @@
 //!   poliline do rio, ribbons de estrada) + placements por grupo de spawn
 //!   com pose final (posição/quaternião/escala) e nomes estáveis;
 //! * `world.static.xml` (ao LADO do world.xml original, para herdar o
-//!   config.yaml) — spawners `<StaticSpawner>`/`<DynamicSpawner>`
-//!   substituídos por `<Group>`s de templates duplicados com a pose de cada
-//!   instância; `<Vegetation>` MANTIDO (determinístico, caminho de
+//!   config.yaml) — spawners `<StaticSpawner>` substituídos por `<Scatter id>`
+//!   (a receita) + `<Group generated-by>` de templates duplicados com a pose
+//!   de cada instância (grupos que resolveram 0 instâncias saem por inteiro;
+//!   as pedras de margem da engine saem como `<Scatter id="engine-N">`
+//!   sintéticos); `<Vegetation>` MANTIDO (determinístico, caminho de
 //!   instancing próprio); tags de features mantidas (o re-carve sobre a
 //!   grelha já carvada é idempotente: pads flatten para os mesmos valores,
 //!   água é lower-only, rio é prefix-min) com `height` explícito nos pads.
@@ -379,6 +381,11 @@ struct ResolvedGroup {
     xml_index: Option<usize>,
     kind: GroupKind,
     name: Option<String>,
+    /// Id do `<Scatter>` que o representa no estático (engine-N, o `name` do
+    /// spawner, ou grp-<nó>) — bake e ferramenta `scatter` nomeiam as
+    /// instâncias a partir dele (`inst-{id}-{i:04}`). Vazio para dynamic
+    /// (fica no runtime) e vegetation (mantém a tag).
+    scatter_id: String,
     spec: crate::recipes::StaticSpawnerSpec,
     instances: Vec<PlacedInstance>,
 }
@@ -518,6 +525,7 @@ pub fn run_bake(world_path: &Path, out_dir: &Path) -> Result<BakeReport> {
     }
 
     let mut total_instances = 0usize;
+    let mut scatter_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     for (index, group) in pending.groups.iter().enumerate() {
         let engine_generated = !group.spec.fixed_candidates.is_empty();
         let (xml_index, kind, name) = if engine_generated {
@@ -540,11 +548,24 @@ pub fn run_bake(world_path: &Path, out_dir: &Path) -> Result<BakeReport> {
             xml_cursor += 1;
             (Some(slot), kind, node.attr("name").map(str::to_string))
         };
+        // O id do `<Scatter>` do estático, calculado UMA VEZ para bake.json e
+        // world.static.xml usarem o mesmo (e a tool `scatter` repeti-lo nos
+        // nomes): `name` do spawner, senão o índice do nó; dedup por sufixo.
+        let scatter_id = if engine_generated {
+            format!("engine-{index}")
+        } else if kind == GroupKind::Static {
+            let slot = xml_index.expect("não-engine tem xml_index");
+            let mut id = name.clone().unwrap_or_else(|| format!("grp-{slot}"));
+            if !scatter_ids.insert(id.clone()) {
+                id = format!("{id}-{slot}");
+                scatter_ids.insert(id.clone());
+            }
+            id
+        } else {
+            String::new()
+        };
         let (instances, _stats) = {
-            let near_radius = group.spec.near_water_radius;
-            let cliff_clearance = group.spec.cliff_margin.max(0.0)
-                + group.spec.footprint_radius.max(0.0)
-                    * group.spec.scale_min.max(group.spec.scale_max).max(0.0);
+            let (near_radius, cliff_clearance) = sample_params(&group.spec);
             let mut sample = |x: f32, z: f32| {
                 terrain_sample(
                     &runtime,
@@ -567,6 +588,7 @@ pub fn run_bake(world_path: &Path, out_dir: &Path) -> Result<BakeReport> {
             xml_index,
             kind,
             name,
+            scatter_id,
             spec: group.spec.clone(),
             instances,
         });
@@ -731,6 +753,17 @@ pub(crate) fn headless_app(
     Ok(app)
 }
 
+/// Os parâmetros da closure de amostragem de um grupo — partilhado pelo bake,
+/// pelo `verify_static` e pela ferramenta `scatter` (`crate::scene::tools`):
+/// o raio de `near-water` e a folga de cliff (margem + pegada × escala máxima).
+pub(crate) fn sample_params(spec: &crate::recipes::StaticSpawnerSpec) -> (f32, f32) {
+    (
+        spec.near_water_radius,
+        spec.cliff_margin.max(0.0)
+            + spec.footprint_radius.max(0.0) * spec.scale_min.max(spec.scale_max).max(0.0),
+    )
+}
+
 /// A closure de amostragem do `instantiate_spawn_groups`, replicada — é o
 /// contrato de gates (superfície renderizada, gradiente voxel, linha de
 /// água EXATA, ribbon de estrada, máscara de cliff dilatada, laje fina).
@@ -804,10 +837,17 @@ fn build_bake_document(
     pending: &PendingSpawnGroups,
 ) -> BakeDocument {
     let spec = &runtime.spec;
+    // `source.world` RELATIVO à pasta do mundo (só o nome do ficheiro): o
+    // bake.json vive em `<mundo>/bake/` e tem de ser portável entre clones —
+    // caminhos absolutos da máquina que bakeou são lixo para outrem.
+    let source_world = world_path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| world_path.display().to_string());
     let mut doc = BakeDocument {
         schema: 1,
         source: BakeSource {
-            world: world_path.display().to_string(),
+            world: source_world,
             viber_version: env!("CARGO_PKG_VERSION").to_string(),
         },
         terrain: BakeTerrain {
@@ -955,6 +995,14 @@ fn build_bake_document(
 
     for (index, group) in groups.iter().enumerate() {
         let spec = &group.spec;
+        // Prefixo dos nomes de instância: o id do `<Scatter>` do estático
+        // (`inst-{id}-{i:04}`) — vegetation/dynamic não têm Scatter e usam o
+        // id do grupo do bake.json (`inst-grp-{index}-{i:04}`).
+        let name_prefix = if group.scatter_id.is_empty() {
+            format!("grp-{index}")
+        } else {
+            group.scatter_id.clone()
+        };
         doc.spawn_groups.push(BakeSpawnGroup {
             id: format!("grp-{index}"),
             name: group.name.clone(),
@@ -981,7 +1029,7 @@ fn build_bake_document(
                 .iter()
                 .enumerate()
                 .map(|(i, inst)| BakeInstance {
-                    name: format!("inst-grp-{index}-{i:04}"),
+                    name: format!("inst-{name_prefix}-{i:04}"),
                     translation: [inst.position.x, inst.position.y, inst.position.z],
                     rotation: [
                         inst.rotation.x,
@@ -1020,7 +1068,9 @@ type SettledPose = (
 /// Constrói o mundo estático como um [`SceneDoc`] — os ficheiros da fonte, um a um (sem
 /// achatar includes), editados pelas "ferramentas" do bake:
 ///
-/// 1. spawners (não vegetation) → `<Group name="spawn/…">` de instâncias explícitas;
+/// 1. spawners (não vegetation) → `<Scatter id>` (receita) + `<Group name="spawn/…"
+///    generated-by>` de instâncias explícitas — grupos que resolveram 0 instâncias
+///    saem por inteiro (nem receita nem grupo);
 /// 2. features de terreno com os valores resolvidos (`height` + `pre-carved` nos pads,
 ///    `water-level(s)` na água, `flatten="0"` nas estradas, `heightmap` carvado);
 /// 3. poses assentadas/colocadas escritas no XML (`translation`/`euler` canónicos, `place`
@@ -1056,11 +1106,11 @@ fn build_static_scene(
 
     // 1. Spawners → Groups de instâncias (por origem: o nó exato no ficheiro exato).
     let spawner_nodes = collect_spawner_nodes(&loaded.nodes);
-    let mut engine_groups: Vec<XmlNode> = Vec::new();
+    let mut engine_outputs: Vec<(XmlNode, XmlNode)> = Vec::new();
+    let mut removals: Vec<NodeRef> = Vec::new();
     let mut vegetation_index = 0usize;
-    let mut scatter_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut pending_outputs: Vec<(NodeRef, XmlNode)> = Vec::new();
-    for (group_index, group) in groups.iter().enumerate() {
+    for group in groups.iter() {
         if group.kind == GroupKind::Dynamic {
             // Criaturas com IA/respawn são GAMEPLAY, não geração de mundo: o
             // `<DynamicSpawner>` fica e corre em runtime.
@@ -1089,46 +1139,42 @@ fn build_static_scene(
             doc.touch(target.file);
             continue;
         }
-        let url_of = |inst: &PlacedInstance| {
-            group
-                .spec
-                .template_urls
-                .get(inst.template_index)
-                .map(String::as_str)
-        };
         let Some(spawner_index) = group.xml_index else {
-            // Grupo da engine (pedras de margem): sem nó XML — instâncias nuas por URL.
-            let name = group
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("engine-{group_index}"));
-            let mut replacement = XmlNode::new("Group").with_attr("name", format!("spawn/{name}"));
-            for (i, inst) in group.instances.iter().enumerate() {
-                if let Some(url) = url_of(inst) {
-                    replacement.push_child(static_instance_node(
-                        &XmlNode::new("GltfScene").with_attr("url", url),
-                        inst,
-                        &format!("inst-grp-{group_index}-{i:04}"),
-                    ));
-                }
+            // Grupo da engine (pedras de margem), agora COM receita: o `<Scatter
+            // id="engine-N">` sintético + o grupo `generated-by` — regenerável
+            // por `viber tool scatter` (o Lake/River mantém `rocks="0"`; a
+            // receita não volta a correr em runtime). Grupo vazio não se emite.
+            if group.instances.is_empty() {
+                continue;
             }
-            engine_groups.push(replacement);
+            let id = group.scatter_id.clone();
+            let recipe = engine_scatter_node(&id, &group.spec, &group.instances);
+            let output = generated_group(
+                &recipe,
+                &id,
+                &group.instances,
+                &group.spec.template_urls,
+                bevy::math::Affine3A::IDENTITY,
+                &format!("inst-{id}"),
+            );
+            engine_outputs.push((recipe, output));
             continue;
         };
         let spawner = spawner_nodes
             .get(spawner_index)
             .ok_or_else(|| anyhow::anyhow!("nó do spawner {spawner_index} fora do documento"))?;
         let target = node_of(&doc, spawner, "spawner")?;
+        // Grupo que resolveu 0 instâncias NÃO se emite — nem o `<Scatter>` nem
+        // o `<Group generated-by>`: não há nada para regenerar nem para
+        // mostrar, e o spawner original não existe no lado estático (o
+        // `<StaticSpawner>` num mundo estático nunca correria — zero perda).
+        if group.instances.is_empty() {
+            removals.push(target);
+            continue;
+        }
         // A receita fica: o spawner vira `<Scatter id>` (a ferramenta `scatter` regenera o
         // resultado) e o grupo gerado entra logo a seguir, com `generated-by`.
-        let mut id = group
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("grp-{spawner_index}"));
-        if !scatter_ids.insert(id.clone()) {
-            id = format!("{id}-{spawner_index}");
-            scatter_ids.insert(id.clone());
-        }
+        let id = group.scatter_id.clone();
         let parent_world = parent_world_frame(&doc, &target, &globals);
         let output = generated_group(
             spawner,
@@ -1136,7 +1182,7 @@ fn build_static_scene(
             &group.instances,
             &group.spec.template_urls,
             parent_world,
-            &format!("inst-grp-{group_index}"),
+            &format!("inst-{id}"),
         );
         let recipe = doc.node_mut(&target).expect("resolvido");
         recipe.tag = "Scatter".into();
@@ -1145,8 +1191,9 @@ fn build_static_scene(
         pending_outputs.push((target, output));
     }
     let world_root = NodeRef::root(0);
-    for group in engine_groups {
-        doc.children_mut(&world_root).expect("raiz").push(group);
+    for (recipe, output) in engine_outputs {
+        doc.children_mut(&world_root).expect("raiz").push(recipe);
+        doc.children_mut(&world_root).expect("raiz").push(output);
     }
 
     // 2. Features com os valores resolvidos — pela ordem de recolha do carve (lagos e rios
@@ -1268,17 +1315,47 @@ fn build_static_scene(
     pose_ops.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
     crate::scene::ops::apply_batch(&mut doc, "bake: poses assentadas", &pose_ops)?;
 
-    // 3b. Os grupos gerados entram a seguir às receitas — no FIM, por ordem de documento
-    //     decrescente, para não deslocar os caminhos que os passos acima resolveram.
-    pending_outputs.sort_by(|a, b| (b.0.file, &b.0.path).cmp(&(a.0.file, &a.0.path)));
+    // 3b. As mutações estruturais da secção 1 — grupos gerados a seguir às
+    //     receitas e spawners vazios removidos — aplicadas no FIM, juntas e
+    //     por ordem de (ficheiro, caminho) DECRESCENTE: cada uma não desloca
+    //     os caminhos das que ainda vêm (menores), e as do passo 3 acima já
+    //     correram contra os caminhos originais.
+    enum PendingEdit {
+        Output { recipe: NodeRef, xml: XmlNode },
+        Remove(NodeRef),
+    }
+    let mut edits: Vec<PendingEdit> = pending_outputs
+        .into_iter()
+        .map(|(recipe, xml)| PendingEdit::Output { recipe, xml })
+        .chain(removals.into_iter().map(PendingEdit::Remove))
+        .collect();
+    edits.sort_by(|a, b| {
+        let key = |e: &PendingEdit| match e {
+            PendingEdit::Output { recipe, .. } => (recipe.file, recipe.path.clone()),
+            PendingEdit::Remove(node) => (node.file, node.path.clone()),
+        };
+        key(b).cmp(&key(a))
+    });
     let mut touched = std::collections::BTreeSet::new();
-    for (recipe, output) in pending_outputs {
-        let parent = recipe.parent().expect("um spawner nunca é raiz");
-        let index = recipe.path.last().copied().unwrap_or(0) + 1;
-        doc.children_mut(&parent)
-            .expect("pai do spawner")
-            .insert(index, output);
-        touched.insert(recipe.file);
+    for edit in edits {
+        let file = match edit {
+            PendingEdit::Output { recipe, xml } => {
+                let parent = recipe.parent().expect("um spawner nunca é raiz");
+                let index = recipe.path.last().copied().unwrap_or(0) + 1;
+                doc.children_mut(&parent)
+                    .expect("pai do spawner")
+                    .insert(index, xml);
+                recipe.file
+            }
+            PendingEdit::Remove(node) => {
+                let index = *node.path.last().expect("um spawner nunca é raiz");
+                doc.children_mut(&node.parent().expect("um spawner nunca é raiz"))
+                    .expect("pai do spawner")
+                    .remove(index);
+                node.file
+            }
+        };
+        touched.insert(file);
     }
     for file in touched {
         doc.reindex_includes(file);
@@ -1415,6 +1492,76 @@ fn retarget_static(doc: &mut crate::scene::doc::SceneDoc) -> Result<()> {
         doc.files[file].dirty = true;
     }
     Ok(())
+}
+
+/// A receita `<Scatter>` SINTÉTICA de um grupo da engine (pedras de margem de
+/// `<Lake rocks>`/`<River rocks>`): os parâmetros de placement da spec
+/// (count real pós-gates, seed, escala, gates de água/declive) e, por região,
+/// a caixa XZ das colocações; os templates do pool como filhos, com a ladder
+/// de LOD — o `generated_group`/`parse_scatter` leem daqui o que copiam para
+/// as instâncias. O anel EXACTO das margens vem de `fixed_candidates`
+/// (engine-interna, derivados do corpo de água em runtime) e não é
+/// serializável — a receita cobre a MESMA faixa para `viber tool scatter`
+/// regenerar depois de o terreno mudar; o bake do procedural é que refaz o
+/// anel fiel.
+fn engine_scatter_node(
+    id: &str,
+    spec: &crate::recipes::StaticSpawnerSpec,
+    instances: &[PlacedInstance],
+) -> XmlNode {
+    let mut min = [f32::MAX; 2];
+    let mut max = [f32::MIN; 2];
+    for inst in instances {
+        min[0] = min[0].min(inst.position.x);
+        min[1] = min[1].min(inst.position.z);
+        max[0] = max[0].max(inst.position.x);
+        max[1] = max[1].max(inst.position.z);
+    }
+    let coord = |v: f32| format!("{v:.1}");
+    let flag = |b: bool| if b { "1" } else { "0" };
+    let mut node = XmlNode::new("Scatter")
+        .with_attr("id", id)
+        // Metadado (no-op no parse): a origem da receita.
+        .with_attr("profile", "shore-rocks")
+        .with_attr("count", instances.len().to_string())
+        .with_attr("seed", spec.seed.to_string())
+        .with_attr(
+            "region-min",
+            format!("{} 0 {}", coord(min[0]), coord(min[1])),
+        )
+        .with_attr(
+            "region-max",
+            format!("{} 0 {}", coord(max[0]), coord(max[1])),
+        )
+        .with_attr("avoid-water", flag(spec.avoid_water))
+        .with_attr("avoid-road", flag(spec.avoid_road))
+        .with_attr("avoid-cliff", flag(spec.avoid_cliff))
+        .with_attr("align-to-terrain", flag(spec.align_to_terrain))
+        .with_attr("random-yaw", flag(spec.random_yaw))
+        .with_attr("avoid-overlaps", flag(spec.avoid_overlaps))
+        .with_attr("footprint-radius", format!("{}", spec.footprint_radius))
+        .with_attr("max-slope-deg", format!("{}", spec.max_slope_deg))
+        .with_attr("max-slope-attempts", spec.max_slope_attempts.to_string())
+        .with_attr("scale-min", format!("{}", spec.scale_min))
+        .with_attr("scale-max", format!("{}", spec.scale_max))
+        .with_attr("scale-axis-min", format!("{}", spec.scale_axis_min))
+        .with_attr("scale-axis-max", format!("{}", spec.scale_axis_max))
+        .with_attr("base-y-offset", format!("{}", spec.base_y_offset));
+    for (index, url) in spec.template_urls.iter().enumerate() {
+        let mut child = XmlNode::new("GltfScene").with_attr("url", url.clone());
+        if let Some(lod) = spec.template_lods.get(index) {
+            if let Some(lod1) = &lod.lod1_url {
+                child.set_attr("lod1-url", lod1.clone());
+            }
+            if let Some(lod2) = &lod.lod2_url {
+                child.set_attr("lod2-url", lod2.clone());
+            }
+            child.set_attr("lod-threshold-near", format!("{}", lod.near));
+            child.set_attr("lod-threshold-mid", format!("{}", lod.mid));
+        }
+        node.push_child(child);
+    }
+    node
 }
 
 /// O filho-template cujo subtree carrega o glTF escolhido para a instância
@@ -1561,12 +1708,16 @@ pub fn verify_static(static_path: &Path, bake_path: &Path) -> Result<usize> {
         .iter()
         .filter(|g| g.kind == "vegetation")
         .collect();
-    // No estático só sobram spawners vegetation (+ os grupos de engine das
-    // pedras de margem, que se re-geram a partir dos lagos — fora do zip).
+    // No estático só sobra vegetation como grupo pending (os `<StaticSpawner>`
+    // viraram `<Scatter>` no-op e as pedras de margem vêm da receita
+    // `engine-N`, também Scatter). Os `<DynamicSpawner>` ficam de propósito
+    // (gameplay) e têm de ficar FORA da contagem: o filtro antigo
+    // (`fixed_candidates.is_empty()`) apanhava-os e inflava o lado do estático
+    // em qualquer mundo com criaturas (31 vs 9 no simple-rpg real).
     let static_veg: Vec<&crate::spawner::SpawnGroupState> = pending
         .groups
         .iter()
-        .filter(|g| g.spec.fixed_candidates.is_empty())
+        .filter(|g| !g.dynamic && g.spec.fixed_candidates.is_empty())
         .collect();
     if static_veg.len() != baked_veg.len() {
         anyhow::bail!(
@@ -1578,10 +1729,7 @@ pub fn verify_static(static_path: &Path, bake_path: &Path) -> Result<usize> {
     let mut checked = 0usize;
     let mut drift_warnings = 0usize;
     for (group, baked_group) in static_veg.iter().zip(baked_veg.iter()) {
-        let near_radius = group.spec.near_water_radius;
-        let cliff_clearance = group.spec.cliff_margin.max(0.0)
-            + group.spec.footprint_radius.max(0.0)
-                * group.spec.scale_min.max(group.spec.scale_max).max(0.0);
+        let (near_radius, cliff_clearance) = sample_params(&group.spec);
         let (instances, _) = {
             let mut sample = |x: f32, z: f32| {
                 terrain_sample(
@@ -1657,9 +1805,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("world.xml"), MINIMAL_WORLD).unwrap();
         std::fs::create_dir_all(dir.path().join("assets/meshes/test")).unwrap();
-        // A forma mínima do CONFIG_YAML_TEMPLATE do scaffold (docs/ASSETS.md).
+        write_test_config(dir.path());
+        dir
+    }
+
+    /// A forma mínima do CONFIG_YAML_TEMPLATE do scaffold (docs/ASSETS.md) — comum aos
+    /// mundos de teste que não usam [`write_minimal_world`].
+    fn write_test_config(dir: &Path) {
         std::fs::write(
-            dir.path().join("config.yaml"),
+            dir.join("config.yaml"),
             "title: Bake Test\n\
              assets:\n  \
              roots: []\n  \
@@ -1672,13 +1826,14 @@ mod tests {
              dir: ~/.local/share/viber\n",
         )
         .unwrap();
-        dir
     }
 
     #[test]
     fn test_bake_document_serializes_roundtrip() {
-        let mut doc = BakeDocument::default();
-        doc.schema = 1;
+        let mut doc = BakeDocument {
+            schema: 1,
+            ..BakeDocument::default()
+        };
         doc.source.world = "world.xml".into();
         doc.terrain.world_size = 4000.0;
         doc.features.pads.push(BakePad {
@@ -1740,6 +1895,18 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(&report.bake_json_path).unwrap())
                 .unwrap();
         assert_eq!(doc.schema, 1);
+        // Portável: o caminho da fonte é RELATIVO (só o nome do ficheiro) e o
+        // JSON não embute caminhos absolutos da máquina que bakeou.
+        assert_eq!(doc.source.world, "world.xml");
+        let raw_json = std::fs::read_to_string(&report.bake_json_path).unwrap();
+        assert!(
+            !raw_json.contains("/home/") && !raw_json.contains("/media/"),
+            "bake.json sem caminhos absolutos"
+        );
+        assert!(
+            !raw_json.contains(dir.path().display().to_string().as_str()),
+            "bake.json sem o caminho do mundo que o gerou"
+        );
         assert_eq!(doc.features.pads.len(), 1, "um pad resolvido");
         assert!(!doc.features.pads[0].explicit_height, "height era auto");
         assert_eq!(doc.features.lakes.len(), 1);
@@ -1785,6 +1952,35 @@ mod tests {
             xml.contains(&format!("height=\"{pad_height}\"")),
             "pad com height explícito {pad_height}"
         );
+    }
+
+    /// Regressão do `verify_static`: os `<DynamicSpawner>` ficam no estático de
+    /// propósito (gameplay em runtime) e NÃO contam como grupos vegetation — o
+    /// filtro antigo (`fixed_candidates.is_empty()`) apanhava-os e fazia o
+    /// verify falhar em qualquer mundo com criaturas (31 vs 9 no simple-rpg).
+    #[test]
+    fn test_verify_ignores_dynamic_spawners_when_counting_vegetation() {
+        let dir = write_minimal_world();
+        let world_xml = dir.path().join("world.xml");
+        let with_dynamic = MINIMAL_WORLD.replace(
+            "</world>",
+            r#"  <DynamicSpawner count="2" seed="55" region-min="-20 0 -20" region-max="20 0 20" random-yaw="true">
+    <Creature role="enemy">
+      <GLTFLoader role="visual" url="/assets/meshes/test/cube_lod0.glb" />
+    </Creature>
+  </DynamicSpawner>
+</world>"#,
+        );
+        std::fs::write(&world_xml, with_dynamic).unwrap();
+        let report = run_bake(&world_xml, &dir.path().join("bake")).expect("bake corre");
+        // O estático mantém o <DynamicSpawner> e a vegetation; o verify cruza
+        // SÓ vegetation (1 == 1) — sem o fix falhava com "2 grupos vs 1".
+        let static_path = report.static_world_path.expect("estático escrito");
+        let xml = std::fs::read_to_string(&static_path).unwrap();
+        assert!(xml.contains("<DynamicSpawner"), "dinâmico preservado");
+        let checked =
+            verify_static(&static_path, &report.bake_json_path).expect("verify só vegetation");
+        assert!(checked > 0, "instâncias de vegetation verificadas");
     }
 
     /// O estático é modular (includes espelhados em `static/`), marcado `static="true"`,
@@ -1949,10 +2145,21 @@ mod tests {
 
         let doc = crate::scene::doc::SceneDoc::load(&static_world).unwrap();
         let scatters = crate::scene::tools::list_scatters(&doc);
-        assert_eq!(scatters.as_array().unwrap().len(), 1, "{scatters}");
-        let selector = scatters[0]["selector"].as_str().unwrap().to_owned();
-        let id = scatters[0]["id"].as_str().unwrap().to_owned();
-        let baked_count = scatters[0]["instances"].as_u64().unwrap();
+        let of_kind = |kind: &str| {
+            scatters
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|entry| entry["kind"] == kind)
+                .count()
+        };
+        assert_eq!(of_kind("scatter"), 1, "{scatters}");
+        assert_eq!(of_kind("vegetation"), 1, "o menu também lista o .vinst");
+        let entry = &scatters.as_array().unwrap()[0];
+        assert_eq!(entry["kind"], "scatter");
+        let selector = entry["selector"].as_str().unwrap().to_owned();
+        let id = entry["id"].as_str().unwrap().to_owned();
+        let baked_count = entry["instances"].as_u64().unwrap();
         assert!(baked_count > 0);
         let poses = |doc: &crate::scene::doc::SceneDoc| -> Vec<String> {
             let group = doc.find_by_attr("generated-by", &id)[0].clone();
@@ -1991,6 +2198,185 @@ mod tests {
             before,
             "undo byte a byte"
         );
+    }
+
+    /// Frente "scatter de vegetation": `viber tool scatter` num `<Vegetation instances>`
+    /// regenera o .vinst sobre o terreno atual (o XML não muda) — a contagem bate com o
+    /// `compute_placements` do bake (mesma spec, mesma exclusão), byte a byte.
+    #[test]
+    fn test_scatter_tool_regenerates_vegetation_vinst() {
+        // Sem StaticSpawner: a ocupação da tool (exclusões) é EXATAMENTE a do bake —
+        // o .vinst regenerado tem de ser idêntico ao que o bake escreveu.
+        let world = MINIMAL_WORLD.replace(
+            r#"  <StaticSpawner profile="tree" count="5" seed="42" region-min="-40 0 -40" region-max="40 0 40" avoid-water="1" random-yaw="true">
+    <GameObject role="static" destructible="popup-text: Test Wood; hits: 2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/test/cube_lod0.glb">
+      <GLTFLoader url="/assets/meshes/test/cube_lod0.glb" lod1-url="/assets/meshes/test/cube_lod1.glb" lod-threshold-near="30" lod-threshold-mid="90" />
+      <ResourceNode kind="test-wood" yield="2" />
+    </GameObject>
+  </StaticSpawner>
+"#,
+            "",
+        );
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("world.xml"), world).unwrap();
+        std::fs::create_dir_all(dir.path().join("assets/meshes/test")).unwrap();
+        write_test_config(dir.path());
+        run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
+        let static_world = dir.path().join(STATIC_WORLD);
+        let vinst = dir.path().join("bake/veg/000.vinst");
+        let baked_bytes = std::fs::read(&vinst).unwrap();
+        let baked = crate::vinst::read(&vinst).unwrap();
+        assert!(!baked.is_empty(), "vegetation com instâncias");
+        let xml_before = std::fs::read_to_string(&static_world).unwrap();
+
+        let doc = crate::scene::doc::SceneDoc::load(&static_world).unwrap();
+        let veg = doc.find_by_attr("instances", "bake/veg/000.vinst")[0].clone();
+        let selector = doc.selector(&veg);
+
+        // dry-run: honesto — o .vinst fica COMO ESTAVA (o scatter grava, o dry-run repõe).
+        let dry =
+            crate::scene::tools::run_offline(&static_world, &selector, true).expect("dry-run");
+        assert_eq!(dry["tool"]["kind"], "vegetation", "{dry}");
+        assert_eq!(
+            std::fs::read(&vinst).unwrap(),
+            baked_bytes,
+            "dry-run não muda o binário"
+        );
+
+        let out =
+            crate::scene::tools::run_offline(&static_world, &selector, false).expect("scatter");
+        assert_eq!(out["tool"]["kind"], "vegetation", "{out}");
+        assert_eq!(
+            out["tool"]["placed"].as_u64(),
+            Some(baked.len() as u64),
+            "contagem = compute_placements com a mesma ocupação"
+        );
+        assert_eq!(
+            out["tool"]["undo"].as_str().unwrap(),
+            "binary vinst: não desfazível via History — git ou re-scatter"
+        );
+        assert_eq!(
+            std::fs::read(&vinst).unwrap(),
+            baked_bytes,
+            "mesma spec + mesmo terreno = mesmo binário"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&static_world).unwrap(),
+            xml_before,
+            "o XML não muda (o attr instances já apontava ao ficheiro)"
+        );
+    }
+
+    /// Pedras de margem COM receita: o grupo da engine sai como `<Scatter id="engine-N">` +
+    /// `<Group generated-by>` (regenerável pela tool) e os nomes das instâncias seguem o id
+    /// do Scatter — o grupo `spawn/grp-0` contém `inst-grp-0-*`, nunca `inst-grp-{índice
+    /// global}-*` (o bug do desalinhamento com engine groups intercalados).
+    #[test]
+    fn test_bake_shore_rocks_get_scatter_recipe() {
+        let world = MINIMAL_WORLD.replace(
+            r#"<Lake at="-30 20" radius="8" depth="4" water-offset="0.25" />"#,
+            r#"<Lake at="-30 20" radius="8" depth="4" water-offset="0.25" rocks="1" rocks-density="0.3" />"#,
+        );
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("world.xml"), world).unwrap();
+        std::fs::create_dir_all(dir.path().join("assets/meshes/test")).unwrap();
+        write_test_config(dir.path());
+        let report =
+            run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
+
+        // O engine group (pedras) tem Scatter + grupo gerado; o count real vem das
+        // instâncias que passaram os gates.
+        let static_world = dir.path().join(STATIC_WORLD);
+        let xml = std::fs::read_to_string(&static_world).unwrap();
+        assert!(
+            xml.contains("<Scatter") && xml.contains(r#"id="engine-0""#),
+            "receita sintética do grupo da engine"
+        );
+        assert!(xml.contains(r#"profile="shore-rocks""#));
+        assert!(
+            xml.contains(r#"<Group name="spawn/engine-0" generated-by="engine-0">"#),
+            "grupo com generated-by"
+        );
+        assert!(xml.contains(r#"name="inst-engine-0-0000""#));
+        assert!(xml.contains(r#"rocks="0""#), "o lago não as volta a gerar");
+
+        // O spawner (2.º grupo do pending, 1.º nó XML) usa o SEU id: grp-0 — não o
+        // índice global (1) do array de grupos.
+        assert!(xml.contains(r#"id="grp-0""#));
+        assert!(xml.contains(r#"name="inst-grp-0-0000""#));
+        assert!(
+            !xml.contains("inst-grp-1-"),
+            "o nome segue o id do Scatter, não o índice global do grupo"
+        );
+
+        // bake.json com os MESMOS prefixos (engine-0 / grp-0).
+        let baked: BakeDocument =
+            serde_json::from_str(&std::fs::read_to_string(&report.bake_json_path).unwrap())
+                .unwrap();
+        assert!(
+            baked.spawn_groups[0]
+                .instances
+                .first()
+                .is_some_and(|i| i.name.starts_with("inst-engine-0-")),
+            "prefixo do grupo da engine no bake.json"
+        );
+        assert!(
+            baked.spawn_groups[1]
+                .instances
+                .first()
+                .is_some_and(|i| i.name.starts_with("inst-grp-0-")),
+            "prefixo do spawner no bake.json"
+        );
+
+        // Regenerável: a tool vê a receita da engine no menu.
+        let doc = crate::scene::doc::SceneDoc::load(&static_world).unwrap();
+        let scatters = crate::scene::tools::list_scatters(&doc);
+        assert!(
+            scatters.to_string().contains("engine-0"),
+            "a receita engine-0 está no menu da tool"
+        );
+    }
+
+    /// Grupos gerados VAZIOS não se emitem: um spawner cuja região inteira afunda num lago
+    /// resolve 0 instâncias — nem `<Scatter>` nem `<Group generated-by>` saem no estático
+    /// (o spawner original também não: um `<StaticSpawner>` num mundo estático nunca correria).
+    #[test]
+    fn test_bake_omits_empty_generated_groups() {
+        let world = r#"<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Terrain world-size="128" max-height="40" seed="7" />
+  <Lake at="0 0" radius="30" depth="8" water-offset="0.5" />
+  <StaticSpawner profile="tree" count="10" seed="11" region-min="-5 0 -5" region-max="5 0 5" avoid-water="1">
+    <GameObject role="static"><GLTFLoader url="/assets/meshes/test/cube_lod0.glb" /></GameObject>
+  </StaticSpawner>
+</world>
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("world.xml"), world).unwrap();
+        std::fs::create_dir_all(dir.path().join("assets/meshes/test")).unwrap();
+        write_test_config(dir.path());
+        let report =
+            run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
+
+        let baked: BakeDocument =
+            serde_json::from_str(&std::fs::read_to_string(&report.bake_json_path).unwrap())
+                .unwrap();
+        assert!(
+            baked.spawn_groups.iter().all(|g| g.instances.is_empty()),
+            "a região afogada não coloca nada"
+        );
+        let xml = std::fs::read_to_string(dir.path().join(STATIC_WORLD)).unwrap();
+        assert!(
+            !xml.contains("<StaticSpawner"),
+            "o spawner saiu do estático"
+        );
+        assert!(!xml.contains("generated-by"), "sem grupo gerado vazio");
+        assert!(!xml.contains("<Scatter"), "sem receita de grupo vazio");
+        // O mundo estático continua a carregar limpo (parse sem tags estranhas).
+        let loaded =
+            crate::xml::include::load_world(dir.path().join(STATIC_WORLD).as_path()).unwrap();
+        let parsed = crate::recipes::parse_world(&loaded.root_attrs, &loaded.nodes).unwrap();
+        assert!(parsed.skipped_tags.is_empty());
     }
 
     /// Pincéis de terreno como operações: traço agrupado num undo, persistência no `.ahgt`,

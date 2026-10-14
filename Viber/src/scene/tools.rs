@@ -6,9 +6,11 @@
 //! `scatter` regenera o `<Group generated-by="{id}">` de um `<Scatter id>`: recalcula as
 //! colocações sobre o terreno ATUAL (o mesmo `compute_placements` e os mesmos gates do jogo),
 //! com a ocupação das instâncias geradas pelos OUTROS scatters, e substitui o grupo antigo.
+//! Um seletor de `<Vegetation instances="…vinst">` regenera o BINÁRIO pré-gerado (o XML não
+//! muda — sem transação, sem undo; ver [`scatter`]).
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow, bail};
 use bevy::math::Affine3A;
@@ -36,17 +38,40 @@ pub struct ToolOutput {
     pub ops: Vec<EditOp>,
     pub placed: usize,
     pub warnings: Vec<String>,
+    /// Campos extra do resumo (o scatter de `<Vegetation>` reporta o binário
+    /// gravado e o `undo` que o History não cobre); `Null` nas restantes.
+    pub info: Value,
+    /// Binário já gravado pela ferramenta (scatter de `<Vegetation>`): o path e
+    /// os bytes ANTERIORES (`None` = não existia) — o `run_offline` com
+    /// `--dry-run` repõe-nos (o History não cobre ficheiros binários).
+    pub undo_binary: Option<(PathBuf, Option<Vec<u8>>)>,
 }
 
 impl ToolOutput {
     pub fn summary(&self) -> Value {
-        json!({ "label": self.label, "placed": self.placed, "ops": self.ops.len(), "warnings": self.warnings })
+        let mut summary = json!({
+            "label": self.label,
+            "placed": self.placed,
+            "ops": self.ops.len(),
+            "warnings": self.warnings,
+        });
+        if let (Value::Object(base), Value::Object(extra)) = (&mut summary, &self.info) {
+            for (key, value) in extra {
+                base.insert(key.clone(), value.clone());
+            }
+        }
+        summary
     }
 }
 
-/// Regenera o resultado do `<Scatter>` em `selector`. Precisa de um mundo com o terreno
+/// Regenera o resultado do gerador em `selector`. Precisa de um mundo com o terreno
 /// carregado (`TerrainRuntime`) e o documento (`SceneDoc`) — a engine viva, o editor ou a App
 /// headless de [`run_offline`].
+///
+/// Aceita um `<Scatter id>` (regenera o grupo `generated-by`, transação desfazível) ou um
+/// `<Vegetation instances="…vinst">` (regenera o BINÁRIO pré-gerado: as colocações
+/// recomputam, o `.vinst` é gravado ATÓMICO — e o XML não muda, logo não há EditOp nem undo
+/// pelo History; `git` ou um novo scatter repõem).
 pub fn scatter(world: &mut World, selector: &str) -> Result<ToolOutput> {
     let (node, recipe, existing) = {
         let doc = world
@@ -57,6 +82,9 @@ pub fn scatter(world: &mut World, selector: &str) -> Result<ToolOutput> {
             .node(&node)
             .cloned()
             .ok_or_else(|| anyhow!("scatter: `{selector}` não é um nó"))?;
+        if recipe.tag.eq_ignore_ascii_case("vegetation") {
+            return scatter_vegetation(world, recipe);
+        }
         if !recipe.tag.eq_ignore_ascii_case("scatter") {
             bail!("scatter: `{selector}` é <{}>, não <Scatter>", recipe.tag);
         }
@@ -78,42 +106,14 @@ pub fn scatter(world: &mut World, selector: &str) -> Result<ToolOutput> {
 
     // Frames mundo das entidades vivas, por origem (para ocupação e para o referencial).
     let frames = live_frames(world);
+    let (mut occupancy, others) = doc_occupancy(world, &frames, Some(&id));
     let doc = world.resource::<SceneDoc>();
-    let mut occupancy = SpawnOccupancy::new();
-    if let Some(exclusions) = world.get_resource::<SpawnExclusions>() {
-        for exclusion in &exclusions.0 {
-            occupancy.register(exclusion.center.x, exclusion.center.y, exclusion.radius);
-        }
-    }
-    // O que os OUTROS geradores já puseram no mundo ocupa espaço.
-    let mut others = 0;
-    let mut generated = Vec::new();
-    doc.walk(|node, xml| {
-        if xml.attr("generated-by").is_some_and(|by| by != id) {
-            generated.push(node.clone());
-        }
-    });
-    for group in generated {
-        for index in 0..doc.children(&group).map_or(0, Vec::len) {
-            if let Some(frame) = frames.get(&doc.origin_of(&group.child(index))) {
-                let (scale, _, translation) = frame.to_scale_rotation_translation();
-                occupancy.register(
-                    translation.x,
-                    translation.z,
-                    DEFAULT_FOOTPRINT * scale.x.max(scale.z),
-                );
-                others += 1;
-            }
-        }
-    }
 
     let runtime = world
         .get_resource::<TerrainRuntime>()
         .ok_or_else(|| anyhow!("scatter: o terreno não está carregado (TerrainRuntime)"))?;
     let cliffs = world.get_resource::<CliffMask>();
-    let near_radius = spec.near_water_radius;
-    let cliff_clearance = spec.cliff_margin.max(0.0)
-        + spec.footprint_radius.max(0.0) * spec.scale_min.max(spec.scale_max).max(0.0);
+    let (near_radius, cliff_clearance) = crate::bake::sample_params(&spec);
     let mut sample = |x: f32, z: f32| {
         crate::bake::terrain_sample(runtime, cliffs, x, z, near_radius, cliff_clearance)
     };
@@ -165,7 +165,125 @@ pub fn scatter(world: &mut World, selector: &str) -> Result<ToolOutput> {
         placed: instances.len(),
         ops,
         warnings,
+        info: Value::Null,
+        undo_binary: None,
     })
+}
+
+/// Regenera o `.vinst` de um `<Vegetation instances>` sobre o terreno ATUAL — o mesmo
+/// caminho do bake: `compute_placements` com a spec canónica do parse (densidade→count,
+/// cap, pegada), a ocupação das exclusões + dos geradores do documento, e a gravação
+/// ATÓMICA em [`crate::vinst::write_atomic`].
+fn scatter_vegetation(world: &mut World, recipe: crate::xml::XmlNode) -> Result<ToolOutput> {
+    let Some(rel) = recipe.attr("instances").map(str::to_owned) else {
+        bail!(
+            "scatter: `<Vegetation>` sem `instances` — só se regenera folhagem pré-gerada \
+             (`viber bake` escreve o .vinst)"
+        );
+    };
+    // A spec EXATA do arranque (density→count com cap, footprint 0.4, gates): re-parse do
+    // nó pelo parser canónico em vez de duplicarmos os attrs aqui.
+    let mut warnings = Vec::new();
+    let parsed = crate::recipes::parse_world(&[], std::slice::from_ref(&recipe))?;
+    warnings.extend(parsed.warnings);
+    let spec = match parsed.entities.into_iter().next().map(|entity| entity.kind) {
+        Some(crate::recipes::EntityKind::Vegetation { spec }) => spec.to_spawner_spec(),
+        _ => bail!("scatter: o nó selecionado não parseia como <Vegetation>"),
+    };
+
+    let frames = live_frames(world);
+    let (mut occupancy, others) = doc_occupancy(world, &frames, None);
+    let runtime = world
+        .get_resource::<TerrainRuntime>()
+        .ok_or_else(|| anyhow!("scatter: o terreno não está carregado (TerrainRuntime)"))?;
+    let cliffs = world.get_resource::<CliffMask>();
+    let (near_radius, cliff_clearance) = crate::bake::sample_params(&spec);
+    let mut sample = |x: f32, z: f32| {
+        crate::bake::terrain_sample(runtime, cliffs, x, z, near_radius, cliff_clearance)
+    };
+    let (instances, stats) = compute_placements(&spec, &mut occupancy, &mut sample);
+    if instances.is_empty() {
+        warnings.push(format!(
+            "scatter vegetation `{rel}`: 0 colocadas ({stats:?})"
+        ));
+    }
+
+    let doc = world.resource::<SceneDoc>();
+    let path: PathBuf = doc.root_dir.join(&rel);
+    let previous = if path.is_file() {
+        Some(std::fs::read(&path).map_err(|e| anyhow!("ler {}: {e}", path.display()))?)
+    } else {
+        None
+    };
+    let before = previous
+        .as_deref()
+        .and_then(|bytes| crate::vinst::decode(bytes).ok())
+        .map_or(0, |old: Vec<_>| old.len());
+    crate::vinst::write_atomic(&path, &instances)?;
+    debug!(
+        "scatter vegetation `{rel}`: {before}→{} instâncias, {others} instâncias de \
+         geradores na ocupação",
+        instances.len()
+    );
+    // O XML não muda (o attr `instances` já aponta ao ficheiro): ZERO EditOps, nada para
+    // o History desfazer — o relatório diz-o explicitamente.
+    Ok(ToolOutput {
+        label: format!("scatter vegetation {rel} ({} instâncias)", instances.len()),
+        placed: instances.len(),
+        ops: Vec::new(),
+        warnings,
+        info: json!({
+            "kind": "vegetation",
+            "instances_file": rel,
+            "path": path.display().to_string(),
+            "before": before,
+            "after": instances.len(),
+            "undo": "binary vinst: não desfazível via History — git ou re-scatter",
+        }),
+        undo_binary: Some((path, previous)),
+    })
+}
+
+/// A ocupação de partida de um scatter: as `<SpawnExclusion>` do mundo (o arranque
+/// publica-as como recurso) mais o que os OUTROS geradores já puseram no documento
+/// (os filhos dos grupos `generated-by`; `self_id` exclui o grupo do próprio).
+/// Devolve a ocupação e quantas instâncias alheias entraram nela.
+fn doc_occupancy(
+    world: &mut World,
+    frames: &HashMap<NodeOrigin, Affine3A>,
+    self_id: Option<&str>,
+) -> (SpawnOccupancy, usize) {
+    let mut occupancy = SpawnOccupancy::new();
+    if let Some(exclusions) = world.get_resource::<SpawnExclusions>() {
+        for exclusion in &exclusions.0 {
+            occupancy.register(exclusion.center.x, exclusion.center.y, exclusion.radius);
+        }
+    }
+    let doc = world.resource::<SceneDoc>();
+    let mut generated = Vec::new();
+    doc.walk(|node, xml| {
+        if xml
+            .attr("generated-by")
+            .is_some_and(|by| Some(by) != self_id)
+        {
+            generated.push(node.clone());
+        }
+    });
+    let mut others = 0;
+    for group in generated {
+        for index in 0..doc.children(&group).map_or(0, Vec::len) {
+            if let Some(frame) = frames.get(&doc.origin_of(&group.child(index))) {
+                let (scale, _, translation) = frame.to_scale_rotation_translation();
+                occupancy.register(
+                    translation.x,
+                    translation.z,
+                    DEFAULT_FOOTPRINT * scale.x.max(scale.z),
+                );
+                others += 1;
+            }
+        }
+    }
+    (occupancy, others)
 }
 
 /// Assenta no terreno ATUAL do documento (o heightmap com as pinceladas, gravadas ou não):
@@ -232,6 +350,8 @@ pub fn settle(doc: &mut SceneDoc, selector: &str, offset: f32) -> Result<ToolOut
         placed: ops.len(),
         ops,
         warnings,
+        info: Value::Null,
+        undo_binary: None,
     })
 }
 
@@ -297,6 +417,8 @@ pub fn canonicalize(doc: &SceneDoc, selector: Option<&str>) -> Result<ToolOutput
         placed: ops.len(),
         ops,
         warnings,
+        info: Value::Null,
+        undo_binary: None,
     })
 }
 
@@ -371,24 +493,52 @@ pub fn run_offline(world_path: &Path, selector: &str, dry_run: bool) -> Result<V
     let files: Vec<String> = doc.dirty_paths();
     if !dry_run {
         doc.save()?;
+    } else if let Some((path, previous)) = &output.undo_binary {
+        // `--dry-run` com um binário de por meio (scatter de `<Vegetation>`): a
+        // ferramenta JÁ gravou o .vinst — repomos os bytes anteriores para o
+        // dry-run ficar honesto (não havia History para o fazer).
+        match previous {
+            Some(bytes) => {
+                std::fs::write(path, bytes).map_err(|e| anyhow!("repôr {}: {e}", path.display()))?
+            }
+            None => {
+                std::fs::remove_file(path).map_err(|e| anyhow!("apagar {}: {e}", path.display()))?
+            }
+        }
     }
     let mut out = super::cli::transaction_json(&doc, &tx, &files, !dry_run);
     out["tool"] = output.summary();
     Ok(out)
 }
 
-/// Lista as receitas `<Scatter>` do mundo (o "menu" de ferramentas de um agente).
+/// Lista os geradores do mundo (o "menu" de ferramentas de um agente): as receitas
+/// `<Scatter id>` e os `<Vegetation instances>` pré-gerados (regeneráveis pela MESMA
+/// ferramenta `scatter` — a kind distingue-os no output).
 pub fn list_scatters(doc: &SceneDoc) -> Value {
     let mut out = Vec::new();
     doc.walk(|node, xml| {
-        if xml.tag.eq_ignore_ascii_case("scatter") {
+        let tag = xml.tag.to_ascii_lowercase();
+        if tag == "scatter" {
             let id = xml.attr("id").unwrap_or_default();
             let generated = doc.find_by_attr("generated-by", id);
             out.push(json!({
+                "kind": "scatter",
                 "selector": doc.selector(node),
                 "id": id,
                 "output": generated.first().map(|g| doc.selector(g)),
                 "instances": generated.first().and_then(|g| doc.children(g)).map_or(0, Vec::len),
+            }));
+        } else if tag == "vegetation" && xml.attr("instances").is_some() {
+            let file = xml.attr("instances").unwrap_or_default();
+            let count = std::fs::read(doc.root_dir.join(file))
+                .ok()
+                .and_then(|bytes| crate::vinst::decode(&bytes).ok())
+                .map_or(0, |instances: Vec<_>| instances.len());
+            out.push(json!({
+                "kind": "vegetation",
+                "selector": doc.selector(node),
+                "instances_file": file,
+                "instances": count,
             }));
         }
     });
@@ -400,9 +550,11 @@ pub fn list_scatters(doc: &SceneDoc) -> Value {
 pub enum ToolCommand {
     /// Lista os geradores `<Scatter>` do mundo (seletor, id, grupo gerado, nº de instâncias)
     List,
-    /// Regenera o grupo gerado de um `<Scatter>` sobre o terreno atual (uma transação)
+    /// Regenera um gerador sobre o terreno atual: `<Scatter id>` substitui o grupo
+    /// gerado (uma transação); `<Vegetation instances>` regrava o binário .vinst
+    /// (sem transação — o History não cobre binários)
     Scatter {
-        /// Seletor do `<Scatter>` (`id=forest-pines`, `static/world/forest.xml#4`)
+        /// Seletor do `<Scatter>`/`<Vegetation>` (`id=forest-pines`, `static/world/forest.xml#4`)
         selector: String,
         #[arg(long)]
         dry_run: bool,

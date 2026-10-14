@@ -97,6 +97,21 @@ pub fn write(path: &Path, instances: &[PlacedInstance]) -> Result<()> {
     std::fs::write(path, encode(instances)?).with_context(|| format!("escrever {}", path.display()))
 }
 
+/// [`write`] ATÓMICO: grava num `.tmp` ao lado e faz `rename` — um scatter
+/// interrompido no meio nunca deixa meio ficheiro no lugar do `.vinst`
+/// (o loader rejeitaria a magia e o mundo ficava sem folhagem).
+pub fn write_atomic(path: &Path, instances: &[PlacedInstance]) -> Result<()> {
+    let bytes = encode(instances)?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).with_context(|| format!("criar {}", dir.display()))?;
+    }
+    let mut tmp = path.as_os_str().to_os_string();
+    tmp.push(".tmp");
+    let tmp = Path::new(&tmp);
+    std::fs::write(tmp, &bytes).with_context(|| format!("escrever {}", tmp.display()))?;
+    std::fs::rename(tmp, path).with_context(|| format!("renomear {}", path.display()))
+}
+
 pub fn read(path: &Path) -> Result<Vec<PlacedInstance>> {
     decode(&std::fs::read(path).with_context(|| format!("ler {}", path.display()))?)
         .with_context(|| path.display().to_string())
