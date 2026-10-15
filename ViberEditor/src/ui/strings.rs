@@ -84,8 +84,59 @@ pub enum StrKey {
     SecMaterial,
     SecShape,
     SecGltf,
+    SecSky,
+    SecDayCycle,
+    SecBiomes,
+    SecScript,
+    ScriptOpen,
+    PropReset,
+    PropUnknown,
+    PropDefault,
+    ScriptSignals,
+    SignalTip,
+    SaveBranch,
+    SaveBranchTip,
+    FilesInstance,
+    FilesInstanceTip,
+    TabGame,
+    GameClock,
+    GameWeather,
+    GameRain,
+    GameClouds,
+    GameWind,
+    GameRuntime,
+    GameSun,
+    GameSunYaw,
+    GameSunPitch,
+    GameSunLight,
+    ScriptReload,
+    ScriptReloadTip,
+    ScriptReloaded,
+    BrushTarget,
+    BrushMode,
+    ViewTitle,
+    ViewGrid,
+    ViewColliders,
+    ViewPersp,
+    ViewFront,
+    ViewTop,
+    ViewRight,
+    FilesStamp,
+    FilesStampTip,
+    HintStamp,
     EditTransform,
     EditPaste,
+    MenuDuplicate,
+    MenuDelete,
+    MenuRename,
+    MenuCopy,
+    MenuPaste,
+    MenuGroup,
+    GroupSameParent,
+    MenuMove,
+    TabHistory,
+    HistoryEmpty,
+    HistoryRedo,
     ModeUi,
     ModeScript,
     ScriptTitle,
@@ -142,6 +193,17 @@ pub enum StrKey {
 impl StrKey {
     /// Every key (the test checks both languages for all of them).
     pub const ALL: &[StrKey] = &[
+        StrKey::SecScript,
+        StrKey::ScriptOpen,
+        StrKey::PropReset,
+        StrKey::PropUnknown,
+        StrKey::PropDefault,
+        StrKey::ScriptSignals,
+        StrKey::SignalTip,
+        StrKey::SaveBranch,
+        StrKey::SaveBranchTip,
+        StrKey::FilesInstance,
+        StrKey::FilesInstanceTip,
         StrKey::DockScene,
         StrKey::DockInspector,
         StrKey::TabConsole,
@@ -252,9 +314,9 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
         }
         StrKey::TabWorldDoc => {
             if en {
-                "World Overview"
+                "World"
             } else {
-                "Resumo do Mundo"
+                "Mundo"
             }
         }
         StrKey::TabFiles => {
@@ -470,6 +532,333 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
                 "colar"
             }
         }
+        StrKey::MenuDuplicate => {
+            if en {
+                "Duplicate"
+            } else {
+                "Duplicar"
+            }
+        }
+        StrKey::MenuDelete => {
+            if en {
+                "Delete"
+            } else {
+                "Eliminar"
+            }
+        }
+        StrKey::MenuRename => {
+            if en {
+                "Rename (F2)"
+            } else {
+                "Renomear (F2)"
+            }
+        }
+        StrKey::MenuCopy => {
+            if en {
+                "Copy"
+            } else {
+                "Copiar"
+            }
+        }
+        StrKey::MenuPaste => {
+            if en {
+                "Paste"
+            } else {
+                "Colar"
+            }
+        }
+        StrKey::MenuGroup => {
+            if en {
+                "Group selection"
+            } else {
+                "Agrupar seleção"
+            }
+        }
+        StrKey::GroupSameParent => {
+            if en {
+                "group: selection must share one parent"
+            } else {
+                "agrupar: a seleção tem de partilhar o mesmo pai"
+            }
+        }
+        StrKey::MenuMove => {
+            if en {
+                "move"
+            } else {
+                "mover"
+            }
+        }
+        StrKey::TabHistory => {
+            if en {
+                "History"
+            } else {
+                "Histórico"
+            }
+        }
+        StrKey::HistoryEmpty => {
+            if en {
+                "no edits yet"
+            } else {
+                "sem edições"
+            }
+        }
+        StrKey::HistoryRedo => {
+            if en {
+                "redo"
+            } else {
+                "refazer"
+            }
+        }
+        StrKey::SecSky => "Céu",
+        StrKey::SecScript => "Script",
+        StrKey::ScriptOpen => {
+            if en {
+                "Open script"
+            } else {
+                "Abrir script"
+            }
+        }
+        StrKey::PropReset => {
+            if en {
+                "Reset to the script's default (removes prop-*)"
+            } else {
+                "Repor o default do script (remove o prop-*)"
+            }
+        }
+        StrKey::PropUnknown => {
+            if en {
+                "not exported by the script — remove"
+            } else {
+                "o script não exporta — remover"
+            }
+        }
+        StrKey::ScriptSignals => {
+            if en {
+                "Signals → targets (target:method; @group:method)"
+            } else {
+                "Sinais → alvos (alvo:método; @grupo:método)"
+            }
+        }
+        StrKey::SignalTip => {
+            if en {
+                "who hears viber.emit — `self`, an entity name or @group, then the target script's function"
+            } else {
+                "quem ouve o viber.emit — `self`, um nome de entidade ou @grupo, e a função do script do alvo"
+            }
+        }
+        StrKey::SaveBranch => {
+            if en {
+                "Save branch as scene"
+            } else {
+                "Salvar ramo como cena"
+            }
+        }
+        StrKey::SaveBranchTip => {
+            if en {
+                "Moves this node into scenes/<name>.xml and leaves an <Include> with its pose (Ctrl+Z undoes)"
+            } else {
+                "Passa este nó para scenes/<nome>.xml e deixa um <Include> com a pose dele (Ctrl+Z desfaz)"
+            }
+        }
+        StrKey::FilesInstance => {
+            if en {
+                "Instance"
+            } else {
+                "Instanciar"
+            }
+        }
+        StrKey::FilesInstanceTip => {
+            if en {
+                "Instance this scene as an <Include> (on the terrain under the cursor)"
+            } else {
+                "Instancia esta cena como <Include> (no terreno sob o cursor)"
+            }
+        }
+        StrKey::PropDefault => {
+            if en {
+                "default"
+            } else {
+                "padrão"
+            }
+        }
+        StrKey::SecDayCycle => {
+            if en {
+                "Day cycle"
+            } else {
+                "Ciclo dia/noite"
+            }
+        }
+        StrKey::TabGame => {
+            if en {
+                "Game"
+            } else {
+                "Jogo"
+            }
+        }
+        StrKey::GameClock => {
+            if en {
+                "Clock"
+            } else {
+                "Relógio"
+            }
+        }
+        StrKey::GameWeather => {
+            if en {
+                "Weather"
+            } else {
+                "Tempo"
+            }
+        }
+        StrKey::GameRain => {
+            if en {
+                "rain"
+            } else {
+                "chuva"
+            }
+        }
+        StrKey::GameClouds => {
+            if en {
+                "clouds"
+            } else {
+                "nuvens"
+            }
+        }
+        StrKey::GameWind => {
+            if en {
+                "wind"
+            } else {
+                "vento"
+            }
+        }
+        StrKey::GameRuntime => {
+            if en {
+                "Runtime — selected entity"
+            } else {
+                "Runtime — entidade selecionada"
+            }
+        }
+        StrKey::BrushTarget => {
+            if en {
+                "target"
+            } else {
+                "alvo"
+            }
+        }
+        StrKey::ViewTitle => {
+            if en {
+                "View"
+            } else {
+                "Vista"
+            }
+        }
+        StrKey::ViewGrid => {
+            if en {
+                "Ground grid"
+            } else {
+                "Grelha de chão"
+            }
+        }
+        StrKey::ViewColliders => {
+            if en {
+                "Colliders (running game)"
+            } else {
+                "Colliders (jogo a correr)"
+            }
+        }
+        StrKey::ViewPersp => "Persp",
+        StrKey::ViewFront => {
+            if en {
+                "Front"
+            } else {
+                "Frente"
+            }
+        }
+        StrKey::ViewTop => "Topo",
+        StrKey::ViewRight => {
+            if en {
+                "Right"
+            } else {
+                "Direita"
+            }
+        }
+        StrKey::BrushMode => {
+            if en {
+                "mode"
+            } else {
+                "modo"
+            }
+        }
+        StrKey::SecBiomes => "Biomas",
+        StrKey::ScriptReload => {
+            if en {
+                "Reload"
+            } else {
+                "Recarregar"
+            }
+        }
+        StrKey::ScriptReloadTip => {
+            if en {
+                "Reload this script in the RUNNING game"
+            } else {
+                "Recarrega este script no JOGO a correr"
+            }
+        }
+        StrKey::ScriptReloaded => {
+            if en {
+                "script reloaded ({count} entities)"
+            } else {
+                "script recarregado ({count} entidades)"
+            }
+        }
+        StrKey::HintStamp => {
+            if en {
+                "S stamp"
+            } else {
+                "S carimbo"
+            }
+        }
+        StrKey::FilesStamp => {
+            if en {
+                "Stamp"
+            } else {
+                "Carimbar"
+            }
+        }
+        StrKey::FilesStampTip => {
+            if en {
+                "Activate the stamp tool with this GLB (click the terrain to place)"
+            } else {
+                "Ativa o stamp tool com este GLB (clique no terreno para colocar)"
+            }
+        }
+        StrKey::GameSun => {
+            if en {
+                "Sun"
+            } else {
+                "Sol"
+            }
+        }
+        StrKey::GameSunYaw => {
+            if en {
+                "yaw"
+            } else {
+                "azimute"
+            }
+        }
+        StrKey::GameSunPitch => {
+            if en {
+                "elevation"
+            } else {
+                "elevação"
+            }
+        }
+        StrKey::GameSunLight => {
+            if en {
+                "light"
+            } else {
+                "luz"
+            }
+        }
         StrKey::BtnSave => {
             if en {
                 "Save"
@@ -648,9 +1037,9 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
         }
         StrKey::WdNoBake => {
             if en {
-                "no bake — pass --bake <dir>, or place one at <world_dir>/bake"
+                "no bake — pass --bake <dir>, or bake the world (`viber bake` → <stem>.data/)"
             } else {
-                "sem bake — passa --bake <dir>, ou coloca-o em <world_dir>/bake"
+                "sem bake — passa --bake <dir>, ou converte o mundo (`viber bake` → <stem>.data/)"
             }
         }
         StrKey::WdTerrain => {
@@ -1437,7 +1826,7 @@ mod tests {
         for (key, pt, en) in [
             (StrKey::DockScene, "Objetos", "Objects"),
             (StrKey::DockInspector, "Inspetor", "Inspector"),
-            (StrKey::TabWorldDoc, "Resumo do Mundo", "World Overview"),
+            (StrKey::TabWorldDoc, "Mundo", "World"),
             (StrKey::BtnSave, "Guardar", "Save"),
             (StrKey::WdFailed, "FALHOU", "FAILED"),
             (StrKey::AddAttr, "novo (chave=valor)", "new (key=value)"),

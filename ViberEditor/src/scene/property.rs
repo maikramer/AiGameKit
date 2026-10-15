@@ -16,6 +16,7 @@ use bevy::feathers::controls::{
     ColorInputValue, FeathersCheckbox, FeathersColorInput, FeathersNumberInput, FeathersSelect,
     NumberInputPrecision, NumberInputStep, NumberInputValue, OptionIndex, list_rows_from_strings,
 };
+use bevy::feathers::display::caption;
 use bevy::prelude::*;
 use bevy::ui_widgets::ValueChange;
 use viber::scene::doc::{NodeRef, SceneDoc};
@@ -45,6 +46,21 @@ pub enum FieldTarget {
     Name,
     /// The node's direct text (`<UiText>100/100</UiText>`), via `set_text`.
     NodeText,
+    /// O raio do núcleo do campo de biomas (via `terrain_biomes`, preserva as
+    /// cunhas).
+    TerrainBiomesCore,
+    /// A largura de transição do campo de biomas (idem).
+    TerrainBiomesBlend,
+    /// A script-exported prop (`prop-<name>`, `--@export`): `default` shows when the
+    /// instance has no value; `int` rounds the number input.
+    Prop {
+        name: String,
+        default: Option<String>,
+        int: bool,
+    },
+    /// A free-text attribute whose key is only known at runtime (`groups`,
+    /// `connect-<signal>` of a script's `--@signal`).
+    Link { key: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,6 +83,8 @@ pub enum FieldKind {
     Enum { options: &'static [&'static str] },
     /// Free text (committed on Enter).
     Text,
+    /// A dropdown over runtime options (script `enum(…)` props).
+    Choice(Vec<String>),
 }
 
 /// One typed field of a section.
@@ -86,6 +104,10 @@ pub enum SectionId {
     Material,
     Shape,
     Gltf,
+    Sky,
+    DayCycle,
+    Script,
+    Biomes,
 }
 
 impl SectionId {
@@ -97,6 +119,10 @@ impl SectionId {
             SectionId::Material => t(lang, StrKey::SecMaterial),
             SectionId::Shape => t(lang, StrKey::SecShape),
             SectionId::Gltf => t(lang, StrKey::SecGltf),
+            SectionId::Sky => t(lang, StrKey::SecSky),
+            SectionId::DayCycle => t(lang, StrKey::SecDayCycle),
+            SectionId::Script => t(lang, StrKey::SecScript),
+            SectionId::Biomes => t(lang, StrKey::SecBiomes),
         }
     }
 }
@@ -163,6 +189,8 @@ pub const TRANSFORMABLE_TAGS: &[&str] = &[
     "staticspawner",
     "prototype",
 ];
+
+const SKY_MODELS: &[&str] = &["analytic", "nishita"];
 
 const COLLIDER_SHAPES: &[&str] = &[
     "auto",
@@ -261,7 +289,10 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
             ],
         ));
     }
-    if transformable && tag != "playergltf" {
+    let has_physics = transformable
+        && tag != "playergltf"
+        && !matches!(tag.as_str(), "pointlight" | "directionallight");
+    if has_physics {
         sections.push((
             SectionId::Physics,
             vec![
@@ -273,13 +304,12 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                     COLLIDER_SHAPES,
                     "forma do collider",
                 ),
-                num(
+                text(
                     FieldTarget::Component {
                         attr: "collider",
                         key: "size",
                     },
-                    0.1,
-                    "m (tamanho total)",
+                    "tamanho total (m): 1 ou larg prof alt",
                 ),
                 num(
                     FieldTarget::Component {
@@ -324,6 +354,162 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
         ));
     }
     match tag.as_str() {
+        "sky" => sections.push((
+            SectionId::Sky,
+            vec![
+                enumeration(
+                    FieldTarget::Attr { key: "model" },
+                    SKY_MODELS,
+                    "modelo atmosférico",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "sun-elevation",
+                    },
+                    1.0,
+                    "° acima do horizonte",
+                ),
+                num(FieldTarget::Attr { key: "sun-azimuth" }, 5.0, "° (bússola)"),
+                num(
+                    FieldTarget::Attr {
+                        key: "sun-intensity",
+                    },
+                    0.1,
+                    "intensidade do sol",
+                ),
+                num(
+                    FieldTarget::Attr { key: "rayleigh" },
+                    0.1,
+                    "dispersão Rayleigh",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "mie-coefficient",
+                    },
+                    0.001,
+                    "dispersão Mie",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "mie-directional-g",
+                    },
+                    0.05,
+                    "-0.99..0.99",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "cloud-coverage",
+                    },
+                    0.05,
+                    "0..1",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "cloud-density",
+                    },
+                    0.05,
+                    "0..1",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "cloud-elevation",
+                    },
+                    0.05,
+                    "0..1",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "star-density",
+                    },
+                    0.1,
+                    "estrelas",
+                ),
+                num(FieldTarget::Attr { key: "aurora" }, 0.1, "0..2"),
+                num(FieldTarget::Attr { key: "nebula" }, 0.1, "0..1.5"),
+                num(
+                    FieldTarget::Attr { key: "nishita-mie" },
+                    0.1,
+                    "mie do Nishita",
+                ),
+            ],
+        )),
+        "daycycle" => sections.push((
+            SectionId::DayCycle,
+            vec![
+                num(
+                    FieldTarget::Attr {
+                        key: "minute-of-day",
+                    },
+                    15.0,
+                    "0..1440",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "minutes-per-real-second",
+                    },
+                    0.5,
+                    "min de jogo / s real",
+                ),
+                num(FieldTarget::Attr { key: "dawn-minute" }, 15.0, "0..1440"),
+                num(FieldTarget::Attr { key: "dusk-minute" }, 15.0, "0..1440"),
+                num(
+                    FieldTarget::Attr {
+                        key: "ambient-day-intensity",
+                    },
+                    0.05,
+                    "luz ambiente de dia",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "ambient-night-intensity",
+                    },
+                    0.05,
+                    "luz ambiente de noite",
+                ),
+                bool_field(
+                    FieldTarget::Attr {
+                        key: "drive-ambient",
+                    },
+                    "ambient pela hora",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "max-sun-elevation",
+                    },
+                    2.0,
+                    "° ao meio-dia",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "min-sun-elevation",
+                    },
+                    2.0,
+                    "° à meia-noite",
+                ),
+                num(
+                    FieldTarget::Attr {
+                        key: "sun-azimuth-base",
+                    },
+                    5.0,
+                    "° (bússola base)",
+                ),
+            ],
+        )),
+        "terrain" => sections.push((
+            SectionId::Biomes,
+            vec![
+                num(
+                    FieldTarget::TerrainBiomesCore,
+                    5.0,
+                    "raio do núcleo neutro (m)",
+                ),
+                num(
+                    FieldTarget::TerrainBiomesBlend,
+                    10.0,
+                    "transição núcleo→cunhas (m)",
+                ),
+            ],
+        )),
         "pointlight" => sections.push((
             SectionId::Light,
             vec![
@@ -408,13 +594,14 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
 
 /// The keys the typed sections own (hidden from the fallback list).
 pub fn covered_keys(tag: &str) -> Vec<&'static str> {
-    let mut keys: Vec<&'static str> = vec!["collider", "rigidbody"];
+    let mut keys: Vec<&'static str> = vec!["collider", "rigidbody", "name"];
     for (_section, fields) in sections_for(tag) {
         for field in fields {
             match &field.target {
                 FieldTarget::Attr { key } => keys.push(key),
                 FieldTarget::Component { attr, .. } => keys.push(attr),
-                FieldTarget::NodeText => {}
+                FieldTarget::NodeText | FieldTarget::Prop { .. } | FieldTarget::Link { .. } => {}
+                FieldTarget::TerrainBiomesCore | FieldTarget::TerrainBiomesBlend => {}
                 FieldTarget::Pose { .. } => {
                     keys.extend([
                         "translation",
@@ -487,7 +674,7 @@ pub struct SectionOpen(pub HashSet<SectionId>);
 
 impl SectionOpen {
     pub fn with_defaults() -> Self {
-        Self([SectionId::Transform].into())
+        Self([SectionId::Transform, SectionId::Script].into())
     }
 }
 
@@ -523,13 +710,23 @@ pub enum PropertyEvent {
 #[derive(Resource, Debug, Default)]
 pub struct PropertyEvents(pub Vec<PropertyEvent>);
 
+/// The options of a [`FieldKind::Choice`] dropdown (dynamic, unlike the static enums).
+#[derive(Component, Debug, Clone)]
+pub struct FieldChoices(pub Vec<String>);
+
 /// Marker on a typed control: maps `ValueChange.source` back to the field.
 #[derive(Component, Debug, Clone)]
 pub struct FieldControl(pub FieldTarget);
 
-/// Marker on a text row (committed on Enter).
+/// Marker on a text row (committed on Enter). `initial` is injected on the
+/// frame after spawn — feathers' TextInput keeps its own buffer, so writing
+/// the `Text` component alone does not fill it.
 #[derive(Component, Debug, Clone)]
-pub struct FieldText(pub FieldTarget);
+pub struct FieldText {
+    pub target: FieldTarget,
+    pub initial: String,
+    pub prefilled: bool,
+}
 
 /// The property panel plugin: registers the widget observers.
 pub struct PropertyPlugin;
@@ -604,8 +801,50 @@ pub fn render_sections(
         };
         spawn_field(commands, parent, doc, node, &xml, &rename, lang);
     }
+    // Script primeiro (como as "Script Variables" do Godot): é o que dá identidade à
+    // instância — falas, loot, velocidades.
+    super::script_props::render(commands, parent, doc, node, &xml, open, lang);
     for (section, fields) in sections_for(&xml.tag) {
+        let body = spawn_section(
+            commands,
+            parent,
+            section,
+            open,
+            section.title(lang).to_owned(),
+        );
+        for field in fields {
+            if !field_applies(&xml, &field.target) {
+                continue;
+            }
+            spawn_field(commands, body, doc, node, &xml, &field, lang);
+        }
+    }
+}
+
+/// A collapsible section: the header (disclosure + title) and its body, which is returned
+/// for the caller to fill. `title` is usually [`SectionId::title`].
+pub fn spawn_section(
+    commands: &mut Commands,
+    parent: Entity,
+    section: SectionId,
+    open: &SectionOpen,
+    title: String,
+) -> Entity {
+    {
         let expanded = open.0.contains(&section);
+        // HEADER primeiro, corpo depois (a ordem de spawn é a ordem visual).
+        let header = commands
+            .spawn((
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: px(6),
+                    margin: UiRect::top(px(8)),
+                    ..default()
+                },
+                ChildOf(parent),
+            ))
+            .id();
         let body = commands
             .spawn((
                 Node {
@@ -617,18 +856,6 @@ pub fn render_sections(
                         Display::None
                     },
                     padding: UiRect::left(px(8)),
-                    ..default()
-                },
-                ChildOf(parent),
-            ))
-            .id();
-        let header = commands
-            .spawn((
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: px(6),
-                    margin: UiRect::top(px(8)),
                     ..default()
                 },
                 ChildOf(parent),
@@ -647,35 +874,33 @@ pub fn render_sections(
                 },
                 ChildOf(header),
             ));
-        commands.spawn((
-            Text::new(section.title(lang).to_owned()),
-            TextFont::from_font_size(12.0),
-            TextColor(Color::srgb(0.72, 0.76, 0.82)),
-            Pickable::IGNORE,
-            ChildOf(header),
-        ));
+        commands
+            .spawn_scene(bsn! {
+                @caption(title)
+            })
+            .insert((
+                TextColor(Color::srgb(0.72, 0.76, 0.82)),
+                Pickable::IGNORE,
+                ChildOf(header),
+            ));
         commands
             .entity(header)
             .insert(SectionBody { body, section });
-        for field in fields {
-            if !field_applies(&xml, &field.target) {
-                continue;
-            }
-            spawn_field(commands, body, doc, node, &xml, &field, lang);
-        }
+        body
     }
 }
 
-/// Spawns one field row with the right control for its kind.
-fn spawn_field(
+/// Spawns one field row with the right control for its kind; returns the row (callers
+/// may append to it, e.g. a reset button).
+pub fn spawn_field(
     commands: &mut Commands,
     parent: Entity,
-    _doc: &SceneDoc,
+    doc: &SceneDoc,
     _node: &NodeRef,
     xml: &XmlNode,
     field: &FieldDef,
     _lang: Lang,
-) {
+) -> Entity {
     let row = commands
         .spawn((
             Node {
@@ -690,21 +915,35 @@ fn spawn_field(
         ))
         .id();
     let label = field_label(&field.target);
-    commands.spawn((
-        Text::new(label),
-        TextFont::from_font_size(11.0),
-        TextColor(Color::srgb(0.62, 0.66, 0.72)),
-        Node {
-            width: px(86),
-            ..default()
-        },
-        Pickable::IGNORE,
-        ChildOf(row),
-    ));
+    commands
+        .spawn_scene(bsn! {
+            @caption(label)
+        })
+        .insert((
+            TextColor(Color::srgb(0.62, 0.66, 0.72)),
+            Node {
+                width: px(132),
+                flex_shrink: 0.0,
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(row),
+        ));
     let _ = field.tip;
     match &field.kind {
         FieldKind::Number { step } => {
-            let current = field_number(xml, &field.target).unwrap_or(0.0);
+            let mut current = field_number(xml, &field.target).unwrap_or(0.0);
+            if matches!(
+                field.target,
+                FieldTarget::TerrainBiomesCore | FieldTarget::TerrainBiomesBlend
+            ) && let Some(terrain) = doc.terrain.as_ref()
+            {
+                current = match field.target {
+                    FieldTarget::TerrainBiomesCore => terrain.meta.biomes.core,
+                    FieldTarget::TerrainBiomesBlend => terrain.meta.biomes.blend,
+                    _ => current,
+                };
+            }
             commands
                 .spawn_scene(bsn! {
                     @FeathersNumberInput {
@@ -759,7 +998,14 @@ fn spawn_field(
                     @bevy::feathers::controls::FeathersTextInputContainer
                     Node { flex_grow: 1.0 }
                 })
-                .insert((FieldText(field.target.clone()), ChildOf(row)))
+                .insert((
+                    FieldText {
+                        target: field.target.clone(),
+                        initial: current.clone(),
+                        prefilled: false,
+                    },
+                    ChildOf(row),
+                ))
                 .id();
             commands
                 .spawn_scene(bsn! {
@@ -767,7 +1013,29 @@ fn spawn_field(
                 })
                 .insert((Text::new(current), ChildOf(container)));
         }
+        FieldKind::Choice(options) => {
+            let current = field_enum(
+                xml,
+                &field.target,
+                &options.iter().map(String::as_str).collect::<Vec<_>>(),
+            );
+            let list = list_rows_from_strings(options.iter().map(String::as_str), current);
+            commands
+                .spawn_scene(bsn! {
+                    @FeathersSelect {
+                        @options: {list},
+                        @max_visible: 8usize,
+                    }
+                    Node { flex_grow: 1.0 }
+                })
+                .insert((
+                    FieldControl(field.target.clone()),
+                    FieldChoices(options.clone()),
+                    ChildOf(row),
+                ));
+        }
     }
+    row
 }
 
 fn axis_label(target: &FieldTarget) -> Option<&'static str> {
@@ -794,6 +1062,7 @@ fn precision_for(target: &FieldTarget) -> i32 {
             ..
         } => 1,
         FieldTarget::Pose { .. } => 2,
+        FieldTarget::Prop { int: true, .. } => 0,
         _ => 3,
     }
 }
@@ -820,6 +1089,15 @@ fn field_label(target: &FieldTarget) -> String {
         FieldTarget::Component { attr, key } => return format!("{attr}:{key}"),
         FieldTarget::Name => "name",
         FieldTarget::NodeText => "text",
+        FieldTarget::TerrainBiomesCore => return "biomas:núcleo".to_owned(),
+        FieldTarget::TerrainBiomesBlend => return "biomas:transição".to_owned(),
+        FieldTarget::Prop { name, .. } => return name.clone(),
+        FieldTarget::Link { key } => {
+            return match viber::luau::exports::connect_signal(key) {
+                Some(signal) => format!("{signal} →"),
+                None => key.clone(),
+            };
+        }
     };
     if axis.is_empty() {
         name.to_owned()
@@ -838,25 +1116,37 @@ fn attr_value(xml: &XmlNode, target: &FieldTarget) -> Option<String> {
             xml.attr(attr).and_then(|value| component_get(value, key))
         }
         FieldTarget::NodeText => Some(xml.text.clone()),
+        FieldTarget::TerrainBiomesCore | FieldTarget::TerrainBiomesBlend => None,
         FieldTarget::Pose { .. } => None,
+        FieldTarget::Link { key } => xml.attr(key).map(str::to_owned),
+        FieldTarget::Prop { name, default, .. } => xml
+            .attr(&viber::luau::exports::prop_attr(name))
+            .map(str::to_owned)
+            .or_else(|| default.clone()),
     }
 }
 
 pub fn field_number(xml: &XmlNode, target: &FieldTarget) -> Option<f32> {
+    // -0.0 lê-se "-0" no NumberInput; +0.0 é o canónico
+    fn clean(value: f32) -> f32 {
+        value + 0.0
+    }
     match target {
         FieldTarget::Pose { part, axis } => {
             let axis = (*axis).min(2);
             let pose = pose::read_pose(xml).ok()?;
             match part {
-                PosePart::Translation => Some(pose.translation[axis]),
+                PosePart::Translation => Some(clean(pose.translation[axis])),
                 PosePart::Euler => {
                     let (x, y, z) = pose.rotation.to_euler(bevy::math::EulerRot::XYZ);
-                    Some([x, y, z][axis].to_degrees())
+                    Some(clean([x, y, z][axis].to_degrees()))
                 }
-                PosePart::Scale => Some(pose.scale[axis]),
+                PosePart::Scale => Some(clean(pose.scale[axis])),
             }
         }
-        _ => attr_value(xml, target).and_then(|value| value.trim().parse::<f32>().ok()),
+        _ => attr_value(xml, target)
+            .and_then(|value| value.trim().parse::<f32>().ok())
+            .map(clean),
     }
 }
 
@@ -922,8 +1212,14 @@ pub fn apply_property_changes(world: &mut World) {
             PropertyEvent::Color { value, .. } => {
                 apply_value(world, &target, &color_to_xml(&value));
             }
-            PropertyEvent::Option { row, .. } => {
+            PropertyEvent::Option { source, row } => {
                 let index = world.get::<OptionIndex>(row).map(|index| index.0);
+                if let Some(choices) = world.get::<FieldChoices>(source) {
+                    if let Some(option) = index.and_then(|index| choices.0.get(index)).cloned() {
+                        apply_value(world, &target, &option);
+                    }
+                    continue;
+                }
                 let options = enum_options_of(&target);
                 if let (Some(index), Some(options)) = (index, options)
                     && let Some(option) = options.get(index)
@@ -1027,6 +1323,44 @@ fn apply_number(world: &mut World, target: &FieldTarget, value: f32, is_final: b
 
 /// Writes a plain attr / component member / name as ONE op.
 fn apply_value(world: &mut World, target: &FieldTarget, value: &str) {
+    // BIOMAS: core/blend via `terrain_biomes` preservando as cunhas
+    if matches!(
+        target,
+        FieldTarget::TerrainBiomesCore | FieldTarget::TerrainBiomesBlend
+    ) {
+        let Some(parsed) = value.parse::<f32>().ok() else {
+            return;
+        };
+        let terrain = world
+            .resource::<SceneDoc>()
+            .terrain
+            .as_ref()
+            .map(|terrain| terrain.meta.biomes.clone());
+        let Some(terrain) = terrain else {
+            return;
+        };
+        let op = EditOp::TerrainBiomes {
+            core: if matches!(target, FieldTarget::TerrainBiomesCore) {
+                parsed
+            } else {
+                terrain.core
+            },
+            blend: if matches!(target, FieldTarget::TerrainBiomesBlend) {
+                parsed
+            } else {
+                terrain.blend
+            },
+            wedges: terrain
+                .wedges
+                .iter()
+                .map(|w| (w.dir.x, w.dir.y, w.biome.name().to_owned()))
+                .collect(),
+        };
+        world
+            .resource_mut::<PendingEdits>()
+            .push("biomas".to_owned(), vec![op]);
+        return;
+    }
     let Some(node) = world.resource::<Selection>().primary().cloned() else {
         return;
     };
@@ -1044,7 +1378,14 @@ fn apply_value(world: &mut World, target: &FieldTarget, value: &str) {
             let merged = component_set(xml.attr(attr).unwrap_or(""), key, value);
             ((*attr).to_owned(), Some(merged))
         }
-        FieldTarget::Pose { .. } => return,
+        FieldTarget::Prop { name, .. } => (
+            viber::luau::exports::prop_attr(name),
+            (!value.is_empty()).then(|| value.to_owned()),
+        ),
+        FieldTarget::Link { key } => (key.clone(), (!value.is_empty()).then(|| value.to_owned())),
+        FieldTarget::Pose { .. }
+        | FieldTarget::TerrainBiomesCore
+        | FieldTarget::TerrainBiomesBlend => return,
         FieldTarget::NodeText => {
             world.resource_mut::<PendingEdits>().push(
                 "text".to_string(),
@@ -1088,6 +1429,32 @@ fn preview_pose(world: &mut World, node: &NodeRef, pose: &Pose) {
     }
 }
 
+/// Injects the initial value into freshly spawned text fields (the same
+/// `TextEdit::Insert` flow the fallback inspector uses).
+pub fn prefill_text_fields(
+    mut fields: Query<(&mut FieldText, &Children), Changed<FieldText>>,
+    mut inputs: Query<&mut Text>,
+    mut editable: Query<&mut bevy::text::EditableText>,
+) {
+    for (mut field, children) in &mut fields {
+        if field.prefilled {
+            continue;
+        }
+        field.prefilled = true;
+        for child in children.iter() {
+            let Ok(mut text) = inputs.get_mut(child) else {
+                continue;
+            };
+            if text.0.is_empty() && !field.initial.is_empty() {
+                text.0 = field.initial.clone();
+            }
+            if let Ok(mut editable) = editable.get_mut(child) {
+                editable.queue_edit(bevy::text::TextEdit::Insert(field.initial.as_str().into()));
+            }
+        }
+    }
+}
+
 /// Commits a typed text field on Enter.
 pub fn commit_text_fields(world: &mut World) {
     let Some(focused) = world
@@ -1109,7 +1476,7 @@ pub fn commit_text_fields(world: &mut World) {
     let mut current = focused;
     let target = loop {
         if let Some(field) = world.get::<FieldText>(current) {
-            break field.0.clone();
+            break field.target.clone();
         }
         match world.get::<ChildOf>(current).map(|child| child.parent()) {
             Some(parent) => current = parent,

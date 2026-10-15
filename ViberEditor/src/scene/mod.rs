@@ -6,7 +6,9 @@
 pub mod add_node;
 pub mod inspector;
 pub mod property;
+pub mod script_props;
 pub mod tree;
+pub mod tree_drag;
 
 pub use viber::scene::doc;
 
@@ -108,10 +110,14 @@ impl Plugin for ScenePlugin {
                 Update,
                 (
                     property::apply_property_changes,
+                    property::prefill_text_fields,
                     property::commit_text_fields,
                     property::sync_section_toggles,
+                    autosave,
                 ),
             )
+            .init_resource::<tree_drag::TreeDrag>()
+            .init_resource::<tree::RenameState>()
             .init_resource::<tree::TreeView>()
             .init_resource::<inspector::InspectorView>()
             .add_systems(
@@ -121,6 +127,7 @@ impl Plugin for ScenePlugin {
                     apply_pending_edits,
                     validate_selection,
                     tree::apply_tree_search,
+                    tree::commit_rename,
                     tree::render_tree,
                     inspector::render_inspector,
                     inspector::prefill_inputs,
@@ -161,6 +168,7 @@ fn shortcuts(world: &mut World) {
     let delete = pressed(KeyCode::Delete);
     let copy = ctrl && pressed(KeyCode::KeyC);
     let paste = ctrl && pressed(KeyCode::KeyV);
+    let rename = pressed(KeyCode::F2);
 
     if reload {
         crate::app::reload_world(world);
@@ -206,6 +214,9 @@ fn shortcuts(world: &mut World) {
                 select_after: Some(copy),
                 select_inserted: false,
             });
+        }
+        if rename {
+            world.resource_mut::<tree::RenameState>().0 = Some(primary.clone());
         }
         if copy {
             let xmls: Vec<String> = editable
@@ -255,6 +266,27 @@ fn shortcuts(world: &mut World) {
             .push_selecting_inserted(format!("{} {selector}", paste_str(lang)), ops);
     }
 }
+
+/// Autosave (Fase A5): every 2 minutes with dirty files, saves silently.
+pub fn autosave(world: &mut World) {
+    world.get_resource_or_insert_with::<AutosaveTimer>(|| AutosaveTimer(0.0));
+    let delta = world.resource::<Time<Real>>().delta_secs();
+    world.resource_mut::<AutosaveTimer>().0 += delta;
+    if world.resource::<AutosaveTimer>().0 < 120.0 {
+        return;
+    }
+    world.resource_mut::<AutosaveTimer>().0 = 0.0;
+    let dirty = world.resource::<SceneDoc>().dirty_paths();
+    if dirty.is_empty() {
+        return;
+    }
+    save_world(world);
+    info!("autosave: {} file(s)", dirty.len());
+}
+
+/// O cronómetro do autosave (segundos desde o último).
+#[derive(Resource, Debug, Default)]
+pub struct AutosaveTimer(pub f32);
 
 /// Writes every edited file (Ctrl+S, the Save button, and before ▶ Play).
 pub fn save_world(world: &mut World) {

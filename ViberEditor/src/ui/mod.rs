@@ -2,18 +2,23 @@
 //! around the viewport. Drawn by a dedicated camera, apart from the game's UI. All
 //! user-visible text is bilingual (PT default, EN) via [`strings`].
 
+mod biomes;
 mod canvas;
 mod console;
+pub mod context_menu;
 mod files;
+mod game;
+pub mod history;
 pub mod icons;
 mod layout;
 mod logs;
-mod mode_strip;
+pub mod mode_strip;
 mod profiler;
 pub mod strings;
 mod toolbar;
 mod tools;
 pub mod tooltip;
+pub mod view_options;
 pub mod worlddoc;
 
 use bevy::prelude::*;
@@ -36,6 +41,11 @@ impl Plugin for EditorUiPlugin {
                 tools::ToolStripPlugin,
                 mode_strip::ModeStripPlugin,
                 canvas::CanvasPlugin,
+                context_menu::ContextMenuPlugin,
+                history::HistoryPlugin,
+                game::GamePanelPlugin,
+                view_options::ViewOptionsPlugin,
+                biomes::BiomesPlugin,
                 profiler::ProfilerPlugin,
             ))
             .add_systems(
@@ -44,7 +54,11 @@ impl Plugin for EditorUiPlugin {
             )
             .add_systems(
                 Update,
-                (layout::apply_startup_tab, mode_strip::apply_startup_mode),
+                (
+                    layout::apply_startup_tab,
+                    layout::update_status_bar,
+                    mode_strip::apply_startup_mode,
+                ),
             )
             .add_systems(
                 Update,

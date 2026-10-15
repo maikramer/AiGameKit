@@ -15,6 +15,19 @@ use crate::ui::strings::Lang;
 use crate::ui::worlddoc::default_bake_dir;
 use crate::viewport::ViewportPlugin;
 
+/// Substitui o default_font do Bevy (FiraMono-subset, SEM acentos —
+/// "Histórico"/"Transformação" liam-se caixas) pela FiraSans completa: um
+/// replace no handle default cobre todos os `Text` sem fonte explícita.
+fn install_default_font(fonts: &mut Assets<Font>) {
+    let bytes = include_bytes!("assets/fonts/FiraSans-Regular.ttf");
+    let font = Font::from_bytes(bytes.to_vec());
+    let _ = fonts.insert(&Handle::default(), font);
+}
+
+fn install_default_font_system(mut fonts: ResMut<Assets<Font>>) {
+    install_default_font(&mut fonts);
+}
+
 /// Static editor configuration resolved from the CLI.
 #[derive(Resource)]
 pub struct EditorConfig {
@@ -26,6 +39,8 @@ pub struct EditorConfig {
     pub startup_tab: Option<String>,
     /// Editor mode at startup (QA/agents).
     pub startup_mode: Option<String>,
+    /// View options at startup (QA/agents).
+    pub startup_views: Option<String>,
 }
 
 /// `--screenshot`: capture after N frames, then exit.
@@ -51,6 +66,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
     let bake_dir = cli.bake.or_else(|| default_bake_dir(&world));
     let startup_tab = cli.tab.clone();
     let startup_mode = cli.mode.clone();
+    let startup_views = cli.views.clone();
     let lang = match cli.lang.as_deref().map(Lang::parse) {
         Some(parsed) => parsed.unwrap_or_else(|| {
             eprintln!(
@@ -61,6 +77,19 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         }),
         None => Lang::default(),
     };
+
+    // Persiste o último mundo aberto (o `viber editor` sem caminho reabre este).
+    if let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) {
+        let file = home
+            .join(".cache")
+            .join("viber")
+            .join("editor-last-world.txt");
+        if let Some(dir) = file.parent()
+            && std::fs::create_dir_all(dir).is_ok()
+        {
+            let _ = std::fs::write(&file, world.display().to_string());
+        }
+    }
 
     let title = format!(
         "Viber Editor — {}",
@@ -81,6 +110,10 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
     // Embedded from this file (crate-root level) so the asset id is the clean
     // `embedded://vibereditor/assets/fonts/fa-solid-900.ttf`.
     bevy::asset::embedded_asset!(app, "assets/fonts/fa-solid-900.ttf");
+    // FiraSans COMPLETA: substitui o default_font do Bevy (FiraMono-SUBSET,
+    // sem acentos — "Histórico"/"Transformação" liam-se caixas). Um único
+    // replace cobre TODOS os Text sem fonte explícita (árvore, labels…).
+    bevy::asset::embedded_asset!(app, "assets/fonts/FiraSans-Regular.ttf");
     bevy::asset::embedded_asset!(app, "assets/icons/logo.png");
     bevy::asset::embedded_asset!(app, "assets/icons/pick.png");
     bevy::asset::embedded_asset!(app, "assets/icons/world.png");
@@ -92,12 +125,14 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         EditorUiPlugin,
     ))
     .insert_resource(UiTheme(create_dark_theme()))
+    .add_systems(PreStartup, install_default_font_system)
     .insert_resource(ViberBridge::new(port))
     .insert_resource(EditorConfig {
         viber_bin: cli.viber_bin,
         bake_dir,
         startup_tab,
         startup_mode,
+        startup_views,
     })
     .insert_resource(lang);
     if let Some(selector) = cli.select {
@@ -236,7 +271,7 @@ fn screenshot_and_exit(
 /// The demo world shipped with the sibling Viber checkout.
 fn default_world() -> PathBuf {
     let dir = launch::viber_checkout().join("examples").join("simple-rpg");
-    viber::bake::static_world_in(&dir).unwrap_or_else(|| dir.join("world.xml"))
+    dir.join("world.xml")
 }
 
 #[cfg(test)]

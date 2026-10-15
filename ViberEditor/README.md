@@ -5,8 +5,9 @@ agent-first engine. Every edit goes through the engine's own editing API (`viber
 same one agents use via `viber scene …` and the `viber.scene.*` bridge: an edit made here and
 the same edit made by an agent produce the same XML.
 
-By default it opens the **static** world (`world.static.xml`, produced by `viber bake` — the
-source of truth); a procedural `world.xml` still opens, read as-is.
+It opens **static** worlds only (`<world static="true">` — the source of truth, with binary
+data in `<stem>.data/`); a legacy procedural world is refused with a pointer to `viber bake`,
+which converts it in place once.
 
 The editor links the engine as a library and loads the world **in-process** in
 `viber::app::RunMode::Edit`: the scene renders live in the viewport at full frame rate, the
@@ -50,6 +51,21 @@ document.
   icon while paused and the status line says so. Play always starts unpaused.
 - **UI separation** — the editor panels use their own UI camera; the game's UI (HUD, menus,
   loading screen) targets an inactive default UI camera, so it never draws over the editor.
+- **Script props (Godot `@export`)** — a node with `script=` shows a **Script** section at
+  the top of the Inspector: the props its Luau script declares (`--@export name: type =
+  default -- help`, parsed by `viber::luau::exports`) as typed fields — numbers (range,
+  ints rounded), checkboxes, color pickers, dropdowns for `enum(…)`, text for strings/lists
+  (`a|b|c`)/vec3/entity names. A value is a plain `prop-<name>` attribute: one undoable
+  `set`, synced live without respawning (the script keeps its state). Overridden props show
+  ↺ (back to the script's default); `prop-*` the script doesn't export show in red with ✕.
+  **Open script** jumps to Script mode on that file. Agents: `viber scene schema <node>`.
+  Below the props: **Signals → targets** — one text field per `--@signal` the script declares
+  (`connect-<signal>="target:method; @group:method"`, unknown `connect-*` in red with ✕) — and
+  the node's `groups`.
+- **Save branch as scene** — Inspector button on a Group/Entity: the same `extract` op as
+  `viber scene extract` (the branch moves to `scenes/<name>.xml`, an `<Include>` with its pose
+  stays in place; Ctrl+Z undoes, file included). A scene `.xml` in **Files** has **Instance**
+  (`viber scene instance`: another `<Include>` on the terrain under the cursor).
 - **Inspector (v2, Godot-style)** — typed property SECTIONS with collapsible headers on
   top of the raw attrs: **Transform** (translation m / euler° / scale × as scrubbing number
   inputs with X/Y/Z sigils — drag to scrub, Shift for fine steps; the commit is the same
@@ -77,7 +93,7 @@ document.
 - **Profiler** — the Debugger's live systems panel: polls `viber.debug.prof()` on the
   running game every ~1.5 s (fps, frame ms avg/p95, top systems by average, hot rows in red).
 - **World Overview** — baked world summary + hillshade minimap (`--bake <dir>` or
-  `<world dir>/bake`). The minimap is **clickable**: the editor camera jumps to the clicked
+  `<world dir>/<stem>.data`). The minimap is **clickable**: the editor camera jumps to the clicked
   world XZ.
 - **Files** — the world's folder as a tree (the same scan as `viber scene files`): filter by
   kind (All/Scenes/GLB/Scripts), select a file for its action — a `.glb` inserts into the

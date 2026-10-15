@@ -55,6 +55,10 @@ pub struct PauseIcon;
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct PlayHereButton;
 
+/// O botão "Vista" (popover com grid/colliders/projeção/vistas).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct ViewOptionsButton;
+
 /// O alvo pendente do play-from-here (consumido quando a bridge liga).
 #[derive(Resource, Debug, Default)]
 pub struct PendingPlayFrom(pub Option<[f32; 2]>);
@@ -164,6 +168,17 @@ pub fn toolbar() -> impl Scene {
             LangTooltip(StrKey::TipStop)
             on(stop_clicked)
             --
+            @FeathersToolButton {
+                @variant: ButtonVariant::Plain,
+                @caption: bsn! {
+                    @icon_caption(fa::COMPASS, t(lang, StrKey::ViewTitle), icons::ICON)
+                },
+            }
+            ViewOptionsButton
+            Tooltip(t(lang, StrKey::ViewTitle))
+            LangTooltip(StrKey::ViewTitle)
+            on(super::view_options::view_options_clicked)
+            --
             @flex_spacer()
             --
             // The language toggle: caption shows the active code (PT/EN), flipped by the
@@ -251,6 +266,7 @@ pub fn update_status(
         crate::viewport::gizmo::Mode::Rotate => t(*lang, StrKey::HintRotate),
         crate::viewport::gizmo::Mode::Scale => t(*lang, StrKey::HintScale),
         crate::viewport::gizmo::Mode::Terrain => t(*lang, StrKey::HintTerrain),
+        crate::viewport::gizmo::Mode::Stamp => t(*lang, StrKey::HintStamp),
     };
     let space = if tool.local { "local" } else { "global" };
     let (game, dot) = match &bridge.status {

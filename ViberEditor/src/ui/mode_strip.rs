@@ -63,6 +63,7 @@ impl Plugin for ModeStripPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EditorModeState>()
             .init_resource::<ScriptState>()
+            .init_resource::<ScriptReloadTask>()
             .add_systems(
                 Update,
                 (
@@ -70,6 +71,7 @@ impl Plugin for ModeStripPlugin {
                     apply_mode,
                     render_script_panel,
                     open_script_clicked,
+                    poll_script_reload,
                 ),
             );
     }
@@ -174,6 +176,20 @@ pub fn script_panel() -> impl Scene {
                     ScriptOpenPlaceholder
                     Tooltip(t(Lang::default(), StrKey::FilesOpenExternalTip))
                     on(open_script_button)
+                    --
+                    @FeathersToolButton {
+                        @variant: ButtonVariant::Plain,
+                        @caption: bsn! {
+                            @icon_caption(
+                                fa::ROTATE_RIGHT,
+                                t(Lang::default(), StrKey::ScriptReload),
+                                icons::ICON_DIM
+                            )
+                        },
+                    }
+                    ScriptReloadButton
+                    Tooltip(t(Lang::default(), StrKey::ScriptReloadTip))
+                    on(script_reload_button)
                 ]
                 --
                 Node {
@@ -196,6 +212,10 @@ pub struct ScriptList;
 /// Placeholder button replaced per selection (keeps the bsn! spawn simple).
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct ScriptOpenPlaceholder;
+
+/// "Recarregar" — pede ao JOGO a correr para recarregar o script selecionado.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct ScriptReloadButton;
 
 #[derive(Component, Debug, Clone, Copy, Default)]
 struct ScriptTitle;
@@ -441,6 +461,59 @@ fn open_script_button(
         return;
     }
     commands.queue(open_script_clicked);
+}
+
+/// Task do reload em voo (o resultado vira linha de status).
+#[derive(Resource, Debug, Default)]
+pub struct ScriptReloadTask(
+    pub Option<bevy::tasks::Task<Result<serde_json::Value, crate::bridge::BrpClientError>>>,
+);
+
+fn script_reload_button(
+    activate: On<Activate>,
+    buttons: Query<(), With<ScriptReloadButton>>,
+    state: Res<ScriptState>,
+    bridge: Res<crate::bridge::ViberBridge>,
+    mut task: ResMut<ScriptReloadTask>,
+    lang: Res<Lang>,
+) {
+    if !buttons.contains(activate.event_target()) {
+        return;
+    }
+    let Some(path) = state.selected.clone() else {
+        return;
+    };
+    if !matches!(bridge.status, crate::bridge::EngineStatus::Connected { .. }) {
+        return;
+    }
+    let _ = lang;
+    task.0 = Some(crate::bridge::methods::scripts_reload(
+        &bridge.client,
+        &path,
+    ));
+}
+
+/// Drena o task do reload e escreve o resultado no status.
+pub fn poll_script_reload(
+    bridge: Res<crate::bridge::ViberBridge>,
+    mut task: ResMut<ScriptReloadTask>,
+    mut status: ResMut<crate::scene::EditStatus>,
+    lang: Res<Lang>,
+) {
+    let Some(current) = task.0.as_mut() else {
+        return;
+    };
+    if let Some(result) = bevy::tasks::block_on(bevy::tasks::poll_once(current)) {
+        task.0 = None;
+        status.0 = match result {
+            Ok(value) => {
+                let count = value.get("entities").and_then(|v| v.as_u64()).unwrap_or(0);
+                t(*lang, StrKey::ScriptReloaded).replace("{count}", &count.to_string())
+            }
+            Err(error) => format!("{error}"),
+        };
+    }
+    let _ = bridge;
 }
 
 fn open_script_clicked(world: &mut World) {

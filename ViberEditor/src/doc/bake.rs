@@ -324,7 +324,7 @@ mod debug_real_bake {
     fn debug_parse_real_simple_rpg_bake() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../Viber/examples/simple-rpg/bake/bake.json"
+            "/../Viber/examples/simple-rpg/world.data/bake.json"
         );
         let Ok(bytes) = std::fs::read(path) else {
             eprintln!("bake real ausente ({path}) — skip");

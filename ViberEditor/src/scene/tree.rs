@@ -178,6 +178,14 @@ fn push_children(
 }
 
 /// Rebuilds the rows when the document, the expansion or the selection changed.
+/// O input de renomeação inline.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TreeRenameInput;
+
+/// O nó em renomeação inline (F2 / menu de contexto).
+#[derive(Resource, Debug, Default, Clone)]
+pub struct RenameState(pub Option<NodeRef>);
+
 /// A caixa de pesquisa do dock Objects.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct TreeSearchInput;
@@ -226,8 +234,57 @@ pub fn apply_tree_search(world: &mut World) {
     }
 }
 
+/// Enter no input de renomeação escreve o `name` (uma op `set`).
+pub fn commit_rename(world: &mut World) {
+    let Some(focused) = world
+        .get_resource::<bevy::input_focus::InputFocus>()
+        .and_then(|focus| focus.get())
+    else {
+        return;
+    };
+    if !world.get::<TreeRenameInput>(focused).is_some() {
+        return;
+    }
+    let keys = world.resource::<ButtonInput<KeyCode>>();
+    let enter = keys.just_pressed(KeyCode::Enter);
+    let escape = keys.just_pressed(KeyCode::Escape);
+    if !enter && !escape {
+        return;
+    }
+    let node = world.resource::<RenameState>().0.clone();
+    let text = world.get::<Text>(focused).cloned();
+    world.resource_mut::<RenameState>().0 = None;
+    if let Some(mut focus) = world.get_resource_mut::<bevy::input_focus::InputFocus>() {
+        focus.clear();
+    }
+    if !enter {
+        return;
+    }
+    let (Some(node), Some(text)) = (node, text) else {
+        return;
+    };
+    let doc = world.resource::<SceneDoc>().clone();
+    let Some(xml) = doc.node(&node) else {
+        return;
+    };
+    let value = text.0.trim().to_owned();
+    if value.is_empty() || value == xml.attr("name").unwrap_or_default() {
+        return;
+    }
+    let selector = doc.selector(&node);
+    world.resource_mut::<crate::scene::PendingEdits>().push(
+        format!("rename {selector}"),
+        vec![viber::scene::ops::EditOp::Set {
+            node: selector,
+            attrs: [("name".to_owned(), Some(value))].into_iter().collect(),
+        }],
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn render_tree(
     mut commands: Commands,
+    rename: Res<RenameState>,
     doc: Res<SceneDoc>,
     expansion: Res<TreeExpansion>,
     selection: Res<Selection>,
@@ -243,7 +300,8 @@ pub fn render_tree(
         || expansion.is_changed()
         || selection.is_changed()
         || lang.is_changed()
-        || view.filter_rev != view.last_filter_rev;
+        || view.filter_rev != view.last_filter_rev
+        || rename.is_changed();
     view.last_filter_rev = view.filter_rev;
     if !stale {
         return;
@@ -251,6 +309,7 @@ pub fn render_tree(
     view.built = true;
 
     commands.entity(body).despawn_related::<Children>();
+    let mut drag_rows: Vec<(Entity, NodeRef)> = Vec::new();
     for row in visible_rows(&doc, &expansion, *lang, &view.filter) {
         let selected = selection.0.contains(&row.node);
         let chevron = match (row.expandable, row.expanded) {
@@ -282,6 +341,7 @@ pub fn render_tree(
         if selected {
             row_entity.insert(ThemeBackgroundColor(tokens::BUTTON_PRIMARY_BG));
         }
+        drag_rows.push((row_entity.id(), row.node.clone()));
         row_entity
             .observe(select_row)
             .with_children(|row_children| {
@@ -303,13 +363,40 @@ pub fn render_tree(
                     },
                     Pickable::IGNORE,
                 ));
-                row_children.spawn((
-                    Text::new(row.label),
-                    TextFont::from_font_size(12.0),
-                    TextColor(text_color),
-                    Pickable::IGNORE,
-                ));
+                if rename.0.as_ref() == Some(&row.node) {
+                    // renomeação inline (F2): input no sítio do label
+                    let current = doc
+                        .node(&row.node)
+                        .and_then(|node| node.attr("name"))
+                        .unwrap_or_default()
+                        .to_owned();
+                    row_children
+                        .spawn((
+                            bevy::feathers::controls::FeathersTextInputContainer,
+                            Node {
+                                flex_grow: 1.0,
+                                ..default()
+                            },
+                        ))
+                        .with_children(|input| {
+                            input.spawn((
+                                bevy::feathers::controls::FeathersTextInput,
+                                TreeRenameInput,
+                                Text::new(current),
+                            ));
+                        });
+                } else {
+                    row_children.spawn((
+                        Text::new(row.label.clone()),
+                        TextFont::from_font_size(12.0),
+                        TextColor(text_color),
+                        Pickable::IGNORE,
+                    ));
+                }
             });
+    }
+    for (entity, node) in drag_rows {
+        super::tree_drag::attach(&mut commands, entity, &node);
     }
 }
 
@@ -317,11 +404,24 @@ fn select_row(
     click: On<PointerClick>,
     rows: Query<&TreeRow>,
     keys: Res<ButtonInput<KeyCode>>,
+    windows: Query<&Window>,
     mut selection: ResMut<Selection>,
+    mut commands: Commands,
 ) {
     let Ok(row) = rows.get(click.event_target()) else {
         return;
     };
+    // botão direito: menu de contexto (seleciona e abre)
+    if click.button == PointerButton::Secondary
+        && let Some(at) = windows.single().ok().and_then(Window::cursor_position)
+    {
+        let node = row.0.clone();
+        selection.set_one(node.clone());
+        commands.queue(move |world: &mut World| {
+            crate::ui::context_menu::open_for(world, Some(node.clone()), at);
+        });
+        return;
+    }
     let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
     if ctrl {

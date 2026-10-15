@@ -29,7 +29,7 @@ pub struct Cli {
     #[arg(long)]
     viber_bin: Option<PathBuf>,
 
-    /// Bake directory backing the World Doc panel (default: `<world dir>/bake` when present).
+    /// Bake directory backing the World Doc panel (default: `<world dir>/<stem>.data` when present).
     #[arg(long)]
     bake: Option<PathBuf>,
 
@@ -40,6 +40,10 @@ pub struct Cli {
     /// Editor mode at startup (QA/agents): 3d|ui|script
     #[arg(long)]
     mode: Option<String>,
+
+    /// View options at startup (QA/agents): comma list grid,colliders,ortho
+    #[arg(long)]
+    views: Option<String>,
 
     /// Save a screenshot of the editor window to this PNG after `--frames` frames, then exit
     /// (visual QA without a human at the keyboard).

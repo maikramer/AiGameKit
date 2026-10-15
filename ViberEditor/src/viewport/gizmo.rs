@@ -38,6 +38,25 @@ const CLICK_PX: f32 = 4.0;
 const SNAP_MOVE: f32 = 1.0;
 const SNAP_ROTATE_DEG: f32 = 15.0;
 const SNAP_SCALE: f32 = 0.1;
+
+/// Passos de snap configuráveis (dialog Vista → Snap). Defaults = o que as
+/// constantes eram.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct SnapSettings {
+    pub move_m: f32,
+    pub rotate_deg: f32,
+    pub scale: f32,
+}
+
+impl Default for SnapSettings {
+    fn default() -> Self {
+        Self {
+            move_m: SNAP_MOVE,
+            rotate_deg: SNAP_ROTATE_DEG,
+            scale: SNAP_SCALE,
+        }
+    }
+}
 const RING_SEGMENTS: usize = 48;
 const AXES: [Vec3; 3] = [Vec3::X, Vec3::Y, Vec3::Z];
 const AXIS_COLORS: [Srgba; 3] = [
@@ -55,6 +74,8 @@ pub enum Mode {
     Scale,
     /// Terrain brush ([`super::terrain_tool`]).
     Terrain,
+    /// Asset stamp ([`super::stamp_tool`]) — clique carimba o GLB ativo.
+    Stamp,
 }
 
 /// The gizmo's systems (the terrain tool runs after them).
@@ -87,6 +108,9 @@ struct Drag {
     node: NodeRef,
     entity: Entity,
     start_local: Transform,
+    /// Os RESTantes nós selecionados (multi-select): mesmo delta no preview e
+    /// no commit (um lote atómico).
+    group: Vec<(NodeRef, Entity, Transform)>,
     parent_world: Affine3A,
     origin: Vec3,
     axis_dir: Vec3,
@@ -110,6 +134,7 @@ impl Plugin for GizmoPlugin {
         app.init_resource::<GizmoTool>()
             .init_resource::<SelectedEntity>()
             .init_resource::<ViewportCursor>()
+            .init_resource::<SnapSettings>()
             .init_resource::<GizmoInput>()
             .add_systems(Startup, configure_gizmos)
             .add_systems(
@@ -270,7 +295,7 @@ fn hovered_handle(
     let mut best: Option<(usize, f32)> = None;
     for (index, axis) in axes.iter().enumerate() {
         let distance = match mode {
-            Mode::Select | Mode::Terrain => return None,
+            Mode::Select | Mode::Terrain | Mode::Stamp => return None,
             Mode::Translate | Mode::Scale => {
                 let (Some(a), Some(b)) = (project(origin), project(origin + *axis * size)) else {
                     continue;
@@ -345,6 +370,10 @@ fn gizmo_interaction(world: &mut World) {
     {
         return;
     }
+    // O rubber-band também: um arrasto de seleção não é um clique.
+    if world.get_resource::<super::rubber::RubberGrab>().is_some() {
+        return;
+    }
     if buttons.just_pressed(MouseButton::Left) && world.resource::<ViewportHover>().0 {
         let Some(screen) = cursor.screen else {
             return;
@@ -365,6 +394,28 @@ fn gizmo_interaction(world: &mut World) {
         return;
     }
 
+    // Botão direito: menu de contexto do nó sob o cursor (pick por raio).
+    if buttons.just_pressed(MouseButton::Right)
+        && world.resource::<ViewportHover>().0
+        && let Some(ray) = cursor.ray
+    {
+        let picked = viber::scene::pick::pick(world, ray.origin, *ray.direction, 400.0)
+            .map(|picked| picked.node);
+        let at = world
+            .query::<&Window>()
+            .iter(world)
+            .next()
+            .and_then(|window| window.cursor_position());
+        if let Some(at) = at {
+            if let Some(node) = picked.clone() {
+                let doc = world.resource::<SceneDoc>().clone();
+                crate::scene::reveal(&doc, &node, &mut world.resource_mut::<TreeExpansion>());
+                world.resource_mut::<Selection>().set_one(node.clone());
+            }
+            crate::ui::context_menu::open_for(world, picked, at);
+        }
+        return;
+    }
     if buttons.just_released(MouseButton::Left) {
         let press = world.resource_mut::<GizmoInput>().press.take();
         if let Some(drag) = world.resource_mut::<GizmoInput>().drag.take() {
@@ -394,6 +445,22 @@ fn start_drag(
     let Some(start_local) = world.get::<Transform>(entity).copied() else {
         return;
     };
+    // grupo: os outros nós selecionados com entidade viva e transform próprio
+    let doc = world.resource::<SceneDoc>().clone();
+    let mut sources = world.query::<(Entity, &SceneSource)>();
+    let mut group = Vec::new();
+    for other in &world.resource::<Selection>().0 {
+        if *other == node || other.is_root() {
+            continue;
+        }
+        let origin = doc.origin_of(other);
+        let Some((entity, _)) = sources.iter(world).find(|(_, source)| *source.0 == origin) else {
+            continue;
+        };
+        if let Some(local) = world.get::<Transform>(entity).copied() {
+            group.push((other.clone(), entity, local));
+        }
+    }
     let parent_world = world
         .get::<ChildOf>(entity)
         .and_then(|child_of| world.get::<GlobalTransform>(child_of.parent()))
@@ -415,6 +482,7 @@ fn start_drag(
         node,
         entity,
         start_local,
+        group,
         parent_world,
         origin,
         axis_dir,
@@ -428,11 +496,12 @@ fn update_drag(world: &mut World, mode: Mode, ray: Ray3d, snapping: bool) {
     let Some(mut drag) = world.resource::<GizmoInput>().drag.clone() else {
         return;
     };
+    let steps = *world.resource::<SnapSettings>();
     let to_local = drag.parent_world.inverse();
     let parent_rotation = drag.parent_world.to_scale_rotation_translation().1;
     let mut preview = drag.start_local;
     match mode {
-        Mode::Select | Mode::Terrain => return,
+        Mode::Select | Mode::Terrain | Mode::Stamp => return,
         Mode::Translate => {
             let Some(t) = closest_on_axis(drag.origin, drag.axis_dir, ray.origin, *ray.direction)
             else {
@@ -440,7 +509,7 @@ fn update_drag(world: &mut World, mode: Mode, ray: Ray3d, snapping: bool) {
             };
             let mut delta = t - drag.start_param;
             if snapping {
-                delta = snap(delta, SNAP_MOVE);
+                delta = snap(delta, steps.move_m);
             }
             let world_position = drag.origin + drag.axis_dir * delta;
             preview.translation = to_local.transform_point3(world_position);
@@ -453,7 +522,7 @@ fn update_drag(world: &mut World, mode: Mode, ray: Ray3d, snapping: bool) {
             };
             let mut delta = angle_delta(drag.start_param, angle);
             if snapping {
-                delta = snap(delta, SNAP_ROTATE_DEG.to_radians());
+                delta = snap(delta, steps.rotate_deg.to_radians());
             }
             let world_rotation =
                 Quat::from_axis_angle(drag.axis_dir, delta) * drag.start_world_rotation;
@@ -469,7 +538,7 @@ fn update_drag(world: &mut World, mode: Mode, ray: Ray3d, snapping: bool) {
             }
             let mut factor = (t / drag.start_param).max(0.01);
             if snapping {
-                factor = snap(factor, SNAP_SCALE).max(SNAP_SCALE);
+                factor = snap(factor, steps.scale).max(steps.scale);
             }
             // Scale handles act on the node's own axes.
             let mut scale = drag.start_local.scale;
@@ -483,6 +552,46 @@ fn update_drag(world: &mut World, mode: Mode, ray: Ray3d, snapping: bool) {
     }
     // A rigid body owns its pose (Rapier writes it back every frame): move the body too.
     viber::scene::sync::teleport_body(world, drag.entity, preview);
+    // GRUPO: o mesmo delta aplicado aos restantes selecionados.
+    for (node, entity, start) in &drag.group {
+        let Some(parent_world) = world
+            .get::<ChildOf>(*entity)
+            .and_then(|child_of| world.get::<GlobalTransform>(child_of.parent()))
+            .map(GlobalTransform::affine)
+        else {
+            continue;
+        };
+        let mut next = *start;
+        match mode {
+            Mode::Stamp => {}
+            Mode::Translate => {
+                let delta_world = drag.preview.translation - drag.start_local.translation;
+                let delta_parent =
+                    (parent_world * Affine3A::IDENTITY).transform_vector3(delta_world);
+                // delta em espaço do pai da PRIMÁRIA aplicado ao espaço do pai do outro
+                let primary_parent = drag.parent_world;
+                let delta_local = primary_parent.inverse().transform_vector3(delta_world);
+                let _ = delta_parent;
+                next.translation += parent_world
+                    .transform_vector3(primary_parent.inverse().transform_vector3(delta_world));
+                let _ = delta_local;
+            }
+            Mode::Rotate => {
+                let world_rotation = drag.preview.rotation * drag.start_local.rotation.inverse();
+                next.rotation = (world_rotation * next.rotation).normalize();
+            }
+            Mode::Scale => {
+                let factor = drag.preview.scale / drag.start_local.scale.max(Vec3::splat(1e-5));
+                next.scale *= factor;
+            }
+            Mode::Select | Mode::Terrain => {}
+        }
+        if let Some(mut transform) = world.get_mut::<Transform>(*entity) {
+            *transform = next;
+        }
+        viber::scene::sync::teleport_body(world, *entity, next);
+        let _ = node;
+    }
     world.resource_mut::<GizmoInput>().drag = Some(drag);
 }
 
@@ -507,7 +616,7 @@ fn commit_drag(world: &mut World, mode: Mode, drag: Drag) {
             rotation: false,
             scale: true,
         },
-        Mode::Select | Mode::Terrain => return,
+        Mode::Select | Mode::Terrain | Mode::Stamp => return,
     };
     let pose = Pose {
         translation: drag.preview.translation,
@@ -520,12 +629,55 @@ fn commit_drag(world: &mut World, mode: Mode, drag: Drag) {
         Mode::Rotate => crate::ui::strings::t(lang, crate::ui::strings::StrKey::VerbRotate),
         _ => crate::ui::strings::t(lang, crate::ui::strings::StrKey::VerbScale),
     };
-    match pose_op(&selector, xml, pose, parts) {
-        Ok(op) => world
-            .resource_mut::<PendingEdits>()
-            .push(format!("{verb} {selector}"), vec![op]),
-        Err(error) => warn!("{verb} {selector}: {error:#}"),
+    let mut ops = vec![match pose_op(&selector, xml, pose, parts) {
+        Ok(op) => op,
+        Err(error) => {
+            warn!("{verb} {selector}: {error:#}");
+            return;
+        }
+    }];
+    // GRUPO: o mesmo delta relativo por nó (uma transação = um undo).
+    for (node, entity, start) in &drag.group {
+        let Some(xml) = doc.node(node) else {
+            continue;
+        };
+        let parent_world = world
+            .get::<ChildOf>(*entity)
+            .and_then(|child_of| world.get::<GlobalTransform>(child_of.parent()))
+            .map(GlobalTransform::affine)
+            .unwrap_or(Affine3A::IDENTITY);
+        let mut next = *start;
+        match mode {
+            Mode::Stamp => {}
+            Mode::Translate => {
+                let delta_local_primary = drag.preview.translation - drag.start_local.translation;
+                let delta_world = drag.parent_world.transform_vector3(delta_local_primary);
+                next.translation += parent_world.transform_vector3(delta_world);
+            }
+            Mode::Rotate => {
+                let world_rotation = drag.preview.rotation * drag.start_local.rotation.inverse();
+                next.rotation = (world_rotation * next.rotation).normalize();
+            }
+            Mode::Scale => {
+                let factor = drag.preview.scale / drag.start_local.scale.max(Vec3::splat(1e-5));
+                next.scale *= factor;
+            }
+            Mode::Select | Mode::Terrain => {}
+        }
+        let group_selector = doc.selector(node);
+        let group_pose = Pose {
+            translation: next.translation,
+            rotation: next.rotation,
+            scale: next.scale,
+        };
+        match pose_op(&group_selector, xml, group_pose, parts) {
+            Ok(op) => ops.push(op),
+            Err(error) => warn!("{verb} {group_selector}: {error:#}"),
+        }
     }
+    world
+        .resource_mut::<PendingEdits>()
+        .push(format!("{verb} {selector}"), ops);
 }
 
 fn pick_at(world: &mut World, ray: Ray3d) {
@@ -574,7 +726,7 @@ fn draw_handles(In((bounds, frame, mode, hover)): In<DrawInput>, mut gizmos: Giz
             AXIS_COLORS[index]
         };
         match mode {
-            Mode::Select | Mode::Terrain => {}
+            Mode::Select | Mode::Terrain | Mode::Stamp => {}
             Mode::Translate => {
                 gizmos.arrow(origin, origin + *axis * size, color);
             }

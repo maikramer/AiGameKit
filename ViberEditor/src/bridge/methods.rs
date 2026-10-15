@@ -54,6 +54,20 @@ pub fn entity_tree(client: &BrpClient, max_depth: u32) -> Task<Result<Value, Brp
     client.spawn_call("viber.tree", Some(json!({ "max_depth": max_depth })))
 }
 
+/// Liga/desliga o wireframe de colliders do jogo a correr (o launch do Play
+/// define `VIBER_PHYSICS_DEBUG=1` para o plugin existir).
+pub fn colliders_toggle(client: &BrpClient, on: bool) -> Task<Result<Value, BrpClientError>> {
+    client.spawn_call(
+        "viber.profiler.extra_toggle",
+        Some(json!({ "id": "colliders", "on": on })),
+    )
+}
+
+/// Recarrega um script Luau no jogo a correndo (`viber.scripts.reload`).
+pub fn scripts_reload(client: &BrpClient, path: &str) -> Task<Result<Value, BrpClientError>> {
+    client.spawn_call("viber.scripts.reload", Some(json!({ "path": path })))
+}
+
 pub fn lua_eval(client: &BrpClient, code: &str) -> Task<Result<Value, BrpClientError>> {
     client.spawn_call("viber.lua", Some(json!({ "code": code })))
 }

@@ -2,7 +2,7 @@
 //!
 //! Shows the terrain summary, every carved feature kind with counts and key fields, the spawn
 //! groups, and a hillshade minimap with feature outlines drawn on top. The bake is loaded once
-//! at startup from `--bake <dir>` (default: `<world_dir>/bake` when it exists); without a bake
+//! at startup from `--bake <dir>` (default: `<world_dir>/<stem>.data` when it exists); without a bake
 //! the panel stays in an explicit empty state.
 
 use bevy::prelude::*;
@@ -673,7 +673,7 @@ pub fn minimap_click(
 }
 
 pub fn default_bake_dir(world: &Path) -> Option<std::path::PathBuf> {
-    let dir = world.parent()?.join("bake");
+    let dir = viber::bake::data_dir(world);
     dir.is_dir().then_some(dir)
 }
 
@@ -862,8 +862,11 @@ mod tests {
         let world = dir.path().join("world.xml");
         assert_eq!(default_bake_dir(&world), None);
 
-        std::fs::create_dir(dir.path().join("bake")).unwrap();
-        assert_eq!(default_bake_dir(&world), Some(dir.path().join("bake")));
+        std::fs::create_dir(dir.path().join("world.data")).unwrap();
+        assert_eq!(
+            default_bake_dir(&world),
+            Some(dir.path().join("world.data"))
+        );
     }
 
     #[test]

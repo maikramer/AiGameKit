@@ -37,6 +37,10 @@ pub struct FileRow {
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct InsertGlb(pub String);
 
+/// "Carimbar" — ativa o stamp tool com este GLB.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct StampGlb(pub String);
+
 /// Open a world/scene XML in a NEW editor window.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct OpenWorld(pub String);
@@ -216,8 +220,32 @@ pub fn render_file_header(
                 })
                 .insert((InsertGlb(path.clone()), ChildOf(header)))
                 .observe(insert_glb);
+            commands
+                .spawn_scene(bsn! {
+                    @FeathersToolButton {
+                        @variant: ButtonVariant::Plain,
+                        @caption: bsn! {
+                            @icon_caption(fa::STAMP, t(*lang, StrKey::FilesStamp), icons::ICON)
+                        },
+                    }
+                    Tooltip({t(*lang, StrKey::FilesStampTip)})
+                })
+                .insert((StampGlb(path.clone()), ChildOf(header)))
+                .observe(stamp_glb);
         }
         if kind.is_scene() {
+            commands
+                .spawn_scene(bsn! {
+                    @FeathersToolButton {
+                        @variant: ButtonVariant::Plain,
+                        @caption: bsn! {
+                            @icon_caption(fa::CUBE, t(*lang, StrKey::FilesInstance), icons::ICON)
+                        },
+                    }
+                    Tooltip({t(*lang, StrKey::FilesInstanceTip)})
+                })
+                .insert((InstanceScene(path.clone()), ChildOf(header)))
+                .observe(instance_scene);
             commands
                 .spawn_scene(bsn! {
                     @FeathersToolButton {
@@ -298,6 +326,35 @@ fn insert_glb(activate: On<Activate>, buttons: Query<&InsertGlb>, mut commands: 
     });
 }
 
+/// The "instance this scene" button (an `.xml` of the world folder).
+#[derive(Component, Debug, Clone)]
+pub struct InstanceScene(pub String);
+
+/// Scene → `<Include src>` at the root, on the terrain under the cursor (the same op as
+/// `viber scene instance`).
+fn instance_scene(activate: On<Activate>, buttons: Query<&InstanceScene>, mut commands: Commands) {
+    let Ok(button) = buttons.get(activate.event_target()) else {
+        return;
+    };
+    let scene = button.0.clone();
+    commands.queue(move |world: &mut World| {
+        let at = drop_point(world).map(|at| [at.x, at.y, at.z]);
+        let doc = world.resource::<SceneDoc>();
+        let parent = doc.selector(&viber::scene::doc::NodeRef::root(0));
+        let op = match viber::scene::catalog::scene_instance(doc, &parent, &scene, at) {
+            Ok(op) => op,
+            Err(error) => {
+                world.resource_mut::<crate::scene::EditStatus>().0 = format!("{error:#}");
+                return;
+            }
+        };
+        let label = t(*world.resource::<Lang>(), StrKey::FilesInstance).to_string();
+        world
+            .resource_mut::<PendingEdits>()
+            .push_selecting_inserted(label, vec![op]);
+    });
+}
+
 /// Where a dropped/inserted GLB lands: the terrain under the last viewport ray.
 pub fn drop_point(world: &mut World) -> Option<Vec3> {
     let cursor = *world.resource::<crate::viewport::gizmo::ViewportCursor>();
@@ -306,6 +363,22 @@ pub fn drop_point(world: &mut World) -> Option<Vec3> {
     viber::scene::terrain::ray_ground(ray.origin, *ray.direction, 4000.0, |x, z| {
         runtime.sample(x, z)
     })
+}
+
+/// "Carimbar": ativa o stamp tool com este GLB.
+fn stamp_glb(activate: On<Activate>, buttons: Query<&StampGlb>, mut commands: Commands) {
+    let Ok(button) = buttons.get(activate.event_target()) else {
+        return;
+    };
+    let glb = button.0.clone();
+    commands.queue(move |world: &mut World| {
+        world
+            .resource_mut::<crate::viewport::stamp_tool::ActiveStamp>()
+            .0 = Some(glb);
+        world
+            .resource_mut::<crate::viewport::gizmo::GizmoTool>()
+            .mode = crate::viewport::gizmo::Mode::Stamp;
+    });
 }
 
 fn open_external(

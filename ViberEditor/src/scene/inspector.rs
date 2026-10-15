@@ -23,6 +23,7 @@ use crate::ui::icons::{self, fa, icon_caption, image_icon};
 use crate::ui::strings::{
     Lang, StrKey, attr_display, fact_display, scatter_failed, set_label, t, tag_display,
 };
+use crate::ui::tooltip::Tooltip;
 
 /// The container the inspector rows are spawned into.
 #[derive(Component, Debug, Clone, Copy, Default)]
@@ -71,6 +72,30 @@ fn run_settle(activate: On<Activate>, buttons: Query<&SettleButton>, mut command
     });
 }
 
+/// The "Save branch as scene" button.
+#[derive(Component, Debug, Clone, Default)]
+pub struct SaveBranchButton(pub NodeRef);
+
+/// `extract` (the same op as `viber scene extract`): default file `scenes/<name>.xml`.
+fn save_branch(
+    activate: On<Activate>,
+    buttons: Query<&SaveBranchButton>,
+    doc: Res<SceneDoc>,
+    lang: Res<Lang>,
+    mut edits: ResMut<PendingEdits>,
+) {
+    let Ok(button) = buttons.get(activate.event_target()) else {
+        return;
+    };
+    edits.push(
+        t(*lang, StrKey::SaveBranch).to_string(),
+        vec![EditOp::Extract {
+            node: doc.selector(&button.0),
+            to: None,
+        }],
+    );
+}
+
 /// Runs the scatter tool on the recipe and queues its result as one undoable edit.
 fn run_scatter(activate: On<Activate>, buttons: Query<&ScatterButton>, mut commands: Commands) {
     let Ok(button) = buttons.get(activate.event_target()) else {
@@ -116,6 +141,8 @@ pub enum Line {
     Scatter,
     /// A posed node (or a group of them): a button that settles it on the current terrain.
     Settle,
+    /// "Save branch as scene": the node moves to its own file behind an `<Include>`.
+    SaveBranch,
 }
 
 pub fn inspector_lines(doc: &SceneDoc, selection: &Selection, lang: Lang) -> Vec<Line> {
@@ -172,11 +199,25 @@ pub fn inspector_lines(doc: &SceneDoc, selection: &Selection, lang: Lang) -> Vec
     {
         lines.push(Line::Settle);
     }
+    if ["group", "entity", "composition"]
+        .iter()
+        .any(|tag| node.tag.eq_ignore_ascii_case(tag))
+    {
+        lines.push(Line::SaveBranch);
+    }
     let covered = super::property::covered_keys(&node.tag);
+    // Com script, `prop-*`/`connect-*`/`groups` vivem na secção Script; sem script ficam aqui.
+    let scripted = node.attr("script").is_some();
     lines.extend(
         node.attrs
             .iter()
             .filter(|(k, _)| !covered.contains(&k.as_str()))
+            .filter(|(k, _)| {
+                !(scripted
+                    && (viber::luau::exports::prop_name(k).is_some()
+                        || viber::luau::exports::connect_signal(k).is_some()
+                        || k == "groups"))
+            })
             .map(|(k, v)| Line::Attr(k.clone(), v.clone())),
     );
     lines.push(Line::Add);
@@ -295,6 +336,20 @@ pub fn render_inspector(
                     })
                     .insert((SettleButton(node.clone()), ChildOf(row)))
                     .observe(run_settle);
+            }
+            Line::SaveBranch => {
+                commands
+                    .spawn_scene(bsn! {
+                        @FeathersToolButton {
+                            @variant: ButtonVariant::Plain,
+                            @caption: bsn! {
+                                @icon_caption(fa::FILE_LINES, t(*lang, StrKey::SaveBranch), Color::WHITE)
+                            },
+                        }
+                        Tooltip({t(*lang, StrKey::SaveBranchTip)})
+                    })
+                    .insert((SaveBranchButton(node.clone()), ChildOf(row)))
+                    .observe(save_branch);
             }
         }
     }
@@ -497,7 +552,7 @@ mod tests {
     fn root_selection_edits_root_attributes() {
         let tmp = tempfile::tempdir().unwrap();
         let doc = doc(tmp.path());
-        let lines = inspector_lines(&doc, &Selection(Some(NodeRef::root(0))), Lang::Pt);
+        let lines = inspector_lines(&doc, &Selection(vec![NodeRef::root(0)]), Lang::Pt);
         assert!(lines.contains(&Line::Attr("static".into(), "true".into())));
     }
 
@@ -506,10 +561,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let doc = doc(tmp.path());
         assert!(matches!(
-            inspector_lines(&doc, &Selection(None), Lang::Pt)[0],
+            inspector_lines(&doc, &Selection::default(), Lang::Pt)[0],
             Line::Heading { .. }
         ));
-        let stale = Selection(Some(NodeRef::new(0, vec![3])));
+        let stale = Selection(vec![NodeRef::new(0, vec![3])]);
         assert!(matches!(
             &inspector_lines(&doc, &stale, Lang::Pt)[0],
             Line::Heading { title, .. } if title.contains("já não existe")

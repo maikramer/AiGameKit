@@ -20,7 +20,7 @@ use super::gizmo::{GizmoTool, Mode, ViewportCursor};
 use crate::scene::EditStatus;
 
 /// Time between dabs while dragging.
-const DAB_INTERVAL: Duration = Duration::from_millis(50);
+pub const DAB_INTERVAL: Duration = Duration::from_millis(50);
 const RADIUS_RANGE: (f32, f32) = (1.0, 96.0);
 const RING_SEGMENTS: usize = 64;
 
@@ -235,6 +235,37 @@ fn paint(world: &mut World) {
         stroke.since_dab = Duration::ZERO;
         stroke.key.expect("set above")
     };
+    // PINCEL DE VEGETAÇÃO: um `<Scatter>` escolhido no painel → o dab coloca
+    // instâncias na região do cursor (mesma colocação da ferramenta).
+    let lang = *world.resource::<crate::ui::strings::Lang>();
+    if let Some(selector) = world
+        .resource::<crate::viewport::brush_panel::BrushTarget>()
+        .0
+        .clone()
+    {
+        match viber::scene::tools::scatter_in_region(
+            world,
+            &selector,
+            Vec2::new(at.x, at.z),
+            brush.radius,
+        ) {
+            Ok(output) => {
+                for warning in &output.warnings {
+                    warn!("{warning}");
+                }
+                if output.placed > 0 {
+                    let _ =
+                        viber::scene::live::apply_coalesced(world, &output.label, &output.ops, key);
+                    world.resource_mut::<EditStatus>().0 = output.label;
+                }
+            }
+            Err(error) => {
+                world.resource_mut::<EditStatus>().0 =
+                    crate::ui::strings::terrain_failed(lang, &anyhow::anyhow!("{error:#}"));
+            }
+        }
+        return;
+    }
     let op = if let Some(slot) = brush.paint {
         let layer = viber::terrain::splat::DEFAULT_LAYERS
             .get(slot)

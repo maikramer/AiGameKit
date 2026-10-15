@@ -120,6 +120,11 @@ pub mod fa {
     pub const GEM: char = '\u{f3a5}';
 
     // Editor chrome.
+    pub const STAMP: char = '\u{f5bf}';
+
+    pub const CLOCK: char = '\u{f017}';
+    pub const CLOUD_RAIN: char = '\u{f73d}';
+
     pub const GAUGE_HIGH: char = '\u{f625}';
 
     // Status.

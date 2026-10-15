@@ -29,7 +29,25 @@ use bevy::ui_widgets::Activate;
 
 use super::canvas::canvas_overlay_scene;
 use super::console::{ConsoleBody, ConsoleHistory, ConsoleInput};
+use super::context_menu::{ContextBody, ContextPanel};
 use super::files::{FilesBody, FilesHeader};
+/// The Biomes editor: preview + wedges for the selected <Terrain>.
+fn biomes_section() -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            flex_direction: FlexDirection::Row,
+            column_gap: px(10),
+            padding: px(8),
+        }
+        BiomesBody
+        Children []
+    }
+}
+
+use super::biomes::BiomesBody;
+use super::game::game_body;
+use super::history::HistoryBody;
 use super::icons::{self, fa, icon, icon_caption};
 use super::logs::LogsBody;
 use super::mode_strip::{mode_strip, script_panel};
@@ -70,6 +88,8 @@ pub enum TabKind {
     Profiler,
     WorldDoc,
     Files,
+    History,
+    Game,
 }
 
 pub(crate) fn camera() -> impl Scene {
@@ -132,6 +152,15 @@ pub(crate) fn editor_root() -> impl Scene {
                 --
                 @inspector_dock()
             ]
+            --
+            // The status bar: cursor XZ, selected count, dirty files.
+            @status_bar()
+            --
+            // The view options popover (Vista button on the toolbar).
+            @super::view_options::view_panel()
+            --
+            // The context menu floats near the cursor (right-click).
+            @context_panel()
             --
             // The UI-canvas overlay (selection rect + handles + chips) sits
             // under the dialog and the tooltip.
@@ -246,6 +275,18 @@ fn center_column() -> impl Scene {
                 // The tool strip floats above the viewport image (z_index in the strip).
                 @tool_strip()
                 --
+                // The rubber-band marquee (drag in Select mode).
+                Node {
+                    position_type: PositionType::Absolute,
+                    display: Display::None,
+                    border: UiRect::all(px(1)),
+                }
+                GlobalZIndex(10)
+                crate::viewport::rubber::RubberRect
+                BorderColor::all(Color::srgba(0.45, 0.85, 1.0, 0.9))
+                BackgroundColor(Color::srgba(0.45, 0.85, 1.0, 0.12))
+                Pickable::IGNORE
+                --
                 // The terrain brush settings float top-right (only with B).
                 @brush_panel()
                 --
@@ -293,7 +334,12 @@ fn dock_tabs() -> impl Scene {
             flex_direction: FlexDirection::Column,
         }
         Children [
-            Node { flex_direction: FlexDirection::Row, column_gap: px(4) }
+            Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: px(2),
+                min_width: px(0),
+                overflow: Overflow::clip_x(),
+            }
             Children [
                 @editor_tab(TabKind::Console, fa::TERMINAL, StrKey::TabConsole)
                 --
@@ -304,6 +350,10 @@ fn dock_tabs() -> impl Scene {
                 @editor_tab(TabKind::WorldDoc, fa::MAP, StrKey::TabWorldDoc)
                 --
                 @editor_tab(TabKind::Files, fa::FOLDER, StrKey::TabFiles)
+                --
+                @editor_tab(TabKind::History, fa::ROTATE_LEFT, StrKey::TabHistory)
+                --
+                @editor_tab(TabKind::Game, fa::GEARS, StrKey::TabGame)
             ]
             --
             @tab_body(TabKind::Console)
@@ -313,13 +363,37 @@ fn dock_tabs() -> impl Scene {
             Children [ @logs_body() ]
             --
             @tab_body(TabKind::WorldDoc)
-            Children [ @worlddoc_body() ]
+            Children [
+                @worlddoc_body()
+                --
+                @biomes_section()
+            ]
             --
             @tab_body(TabKind::Files)
             Children [ @files_body() ]
             --
             @tab_body(TabKind::Profiler)
             Children [ @profiler_body() ]
+            --
+            @tab_body(TabKind::History)
+            Children [ @history_body() ]
+            --
+            @tab_body(TabKind::Game)
+            Children [ @game_body() ]
+        ]
+    }
+}
+
+/// The History dock body: the engine's undo/redo stacks, clickable.
+fn history_body() -> impl Scene {
+    bsn! {
+        @subpane()
+        Node { width: percent(100) }
+        Children [
+            @subpane_body()
+            Node { overflow: Overflow::scroll_y(), flex_direction: FlexDirection::Column }
+        HistoryBody
+            Children []
         ]
     }
 }
@@ -371,18 +445,152 @@ fn files_body() -> impl Scene {
     }
 }
 
+/// The context menu: a small bordered column at the cursor.
+/// The status bar: the world position under the cursor, the selection count,
+/// the dirty files and the editor's fps — Godot's bottom line.
+fn status_bar() -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            min_height: px(20),
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: px(16),
+            padding: UiRect::axes(px(8), px(2)),
+            border: UiRect::top(px(1)),
+        }
+        BorderColor::all(Color::srgb(0.25, 0.27, 0.3))
+        BackgroundColor(Color::srgb(0.08, 0.09, 0.11))
+        Children [
+            @caption("—") StatusBarCursor Pickable::IGNORE
+            --
+            @caption("—") StatusBarSelection Pickable::IGNORE
+            --
+            @flex_spacer()
+            --
+            @caption("—") StatusBarDirty Pickable::IGNORE
+        ]
+    }
+}
+
+/// Markers for the status bar's text spans.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct StatusBarCursor;
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct StatusBarSelection;
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct StatusBarDirty;
+
+/// Refreshes the status bar from the live state.
+#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
+pub fn update_status_bar(
+    cursor: Res<crate::viewport::gizmo::ViewportCursor>,
+    runtime: Option<Res<viber::terrain::runtime::TerrainRuntime>>,
+    selection: Res<crate::scene::Selection>,
+    doc: Res<viber::scene::doc::SceneDoc>,
+    time: Res<Time>,
+    mut cursor_label: Query<&mut Text, With<StatusBarCursor>>,
+    mut selection_label: Query<&mut Text, (With<StatusBarSelection>, Without<StatusBarCursor>)>,
+    mut dirty_label: Query<
+        &mut Text,
+        (
+            With<StatusBarDirty>,
+            Without<StatusBarCursor>,
+            Without<StatusBarSelection>,
+        ),
+    >,
+) {
+    // cursor XZ no mundo (o ray do viewport + o terreno)
+    let at = cursor.ray.and_then(|ray| {
+        runtime.as_deref().and_then(|runtime| {
+            viber::scene::terrain::ray_ground(ray.origin, *ray.direction, 4000.0, |x, z| {
+                runtime.sample(x, z)
+            })
+        })
+    });
+    let cursor_text = at.map_or_else(
+        || "—".to_owned(),
+        |at| format!("X {:.0}  Z {:.0}  Y {:.1}", at.x, at.z, at.y),
+    );
+    if let Ok(mut text) = cursor_label.single_mut()
+        && text.0 != cursor_text
+    {
+        text.0 = cursor_text;
+    }
+    let count = selection.0.len();
+    let selection_text = if count == 0 {
+        "—".to_owned()
+    } else {
+        format!("{count} node(s)")
+    };
+    if let Ok(mut text) = selection_label.single_mut()
+        && text.0 != selection_text
+    {
+        text.0 = selection_text;
+    }
+    let dirty = doc.dirty_paths();
+    let dirty_text = if dirty.is_empty() {
+        // média móvel (um delta de frame faz 100000 fps)
+        let dt = time.delta_secs();
+        let smoothed = 1.0 / dt.max(1e-4);
+        format!("{:.0} fps", smoothed.clamp(0.0, 999.0))
+    } else {
+        format!("{} file(s) dirty", dirty.len())
+    };
+    if let Ok(mut text) = dirty_label.single_mut()
+        && text.0 != dirty_text
+    {
+        text.0 = dirty_text;
+    }
+}
+
+fn context_panel() -> impl Scene {
+    bsn! {
+        ContextPanel
+        Node {
+            position_type: PositionType::Absolute,
+            display: Display::None,
+            flex_direction: FlexDirection::Column,
+            padding: px(4),
+            border: UiRect::all(px(1)),
+            border_radius: px(6),
+            min_width: px(150),
+        }
+        BackgroundColor(Color::srgb(0.1, 0.11, 0.13))
+        BorderColor::all(Color::srgb(0.35, 0.38, 0.44))
+        Children [
+            Node {
+                flex_direction: FlexDirection::Column,
+            }
+        ContextBody
+            Children []
+        ]
+    }
+}
+
 fn editor_tab(kind: TabKind, glyph: char, key: StrKey) -> impl Scene {
     bsn! {
         @FeathersToolButton {
             @variant: ButtonVariant::Plain,
             @caption: bsn! {
-                Node { column_gap: px(6), align_items: AlignItems::Center }
+                Node {
+                    column_gap: px(4),
+                    align_items: AlignItems::Center,
+                    flex_shrink: 0.0,
+                    overflow: Overflow::clip(),
+                }
                 Children [
                     @icon(glyph, 12.0, icons::ICON_DIM)
                     --
                     @caption(t(Lang::default(), key)) LangLabel(key)
                 ]
             },
+        }
+        Node {
+            flex_shrink: 0.0,
+            min_width: px(0),
+            overflow: Overflow::clip(),
         }
         EditorTab(kind)
         Tooltip(t(Lang::default(), key))
@@ -539,6 +747,8 @@ pub fn apply_startup_tab(
         "worlddoc" | "world" | "doc" => TabKind::WorldDoc,
         "files" | "ficheiros" => TabKind::Files,
         "profiler" | "prof" => TabKind::Profiler,
+        "history" | "hist" => TabKind::History,
+        "game" | "jogo" => TabKind::Game,
         _ => return,
     };
     for (body, mut node) in &mut bodies {

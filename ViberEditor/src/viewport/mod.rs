@@ -17,6 +17,8 @@ pub mod feature_handles;
 pub mod gizmo;
 pub mod gizmo_math;
 pub mod nav;
+pub mod rubber;
+pub mod stamp_tool;
 pub mod terrain_tool;
 
 use bevy::camera::RenderTarget;
@@ -60,6 +62,8 @@ impl Plugin for ViewportPlugin {
             gizmo::GizmoPlugin,
             terrain_tool::TerrainToolPlugin,
             brush_panel::BrushPanelPlugin,
+            rubber::RubberPlugin,
+            stamp_tool::StampToolPlugin,
             drop::DropPlugin,
             feature_handles::FeatureHandlesPlugin,
         ))

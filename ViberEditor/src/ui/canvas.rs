@@ -6,6 +6,7 @@
 //! and a `menu_data` info line for `<UiList>` selections. Every commit is ONE
 //! canonical `set` op — the same edit an agent makes with `viber scene set`.
 
+use crate::viewport::EditorViewport as EditorViewportAlias;
 use bevy::feathers::controls::{ButtonVariant, FeathersToolButton};
 use bevy::feathers::display::caption;
 use bevy::prelude::*;
@@ -41,6 +42,10 @@ pub struct StateChip(pub UiStatePreview);
 /// The info line (dims + menu_data).
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CanvasInfo;
+
+/// The chips+info block, positioned inside the VIEWPORT (not the window).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct CanvasChips;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum UiStatePreview {
@@ -126,6 +131,7 @@ pub fn canvas_overlay_scene() -> impl Scene {
                 flex_direction: FlexDirection::Column,
                 row_gap: px(6),
             }
+        CanvasChips
             Children [
                 Node {
                     flex_direction: FlexDirection::Row,
@@ -312,6 +318,19 @@ fn canvas_overlay(world: &mut World) {
         window_rect.max,
         Vec2::new(window_rect.min.x, window_rect.max.y),
     ];
+    // chips/info: o canto SUPERIOR ESQUERDO do viewport (o overlay vive na
+    // janela; sem isto os chips caem sobre o dock Objects).
+    let mut viewports =
+        world.query_filtered::<(&ComputedNode, &UiGlobalTransform), With<EditorViewportAlias>>();
+    if let Ok((node, transform)) = viewports.single_mut(world) {
+        let vsize = node.size();
+        let top_left = transform.translation - vsize * 0.5;
+        let mut chips = world.query_filtered::<&mut Node, With<CanvasChips>>();
+        if let Ok(mut chip_node) = chips.single_mut(world) {
+            chip_node.left = Val::Px(top_left.x + 56.0);
+            chip_node.top = Val::Px(top_left.y + 44.0);
+        }
+    }
     let mut rects = world.query_filtered::<&mut Node, With<CanvasRect>>();
     if let Ok(mut node) = rects.single_mut(world) {
         node.position_type = PositionType::Absolute;

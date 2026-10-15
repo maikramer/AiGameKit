@@ -64,6 +64,8 @@ pub fn spawn_engine(
     command
         // Never re-delegate through cargo; we already picked the binary ourselves.
         .env("VIBER_CLI_NO_CARGO_DELEGATE", "1")
+        // Debug render do Rapier disponível para o toggle "colliders" do editor.
+        .env("VIBER_PHYSICS_DEBUG", "1")
         .spawn()
         .with_context(|| format!("failed to spawn engine {}", binary.display()))
 }
