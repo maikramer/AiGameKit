@@ -23,6 +23,7 @@ use crate::ui::icons::{self, fa, icon_caption, image_icon};
 use crate::ui::strings::{
     Lang, StrKey, attr_display, fact_display, scatter_failed, set_label, t, tag_display,
 };
+use crate::ui::theme;
 use crate::ui::tooltip::Tooltip;
 
 /// The container the inspector rows are spawned into.
@@ -96,6 +97,76 @@ fn save_branch(
     );
 }
 
+/// What a cinematic button does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CinematicAction {
+    Preview,
+    Stop,
+    Shot,
+}
+
+/// A button of the Cinematic row.
+#[derive(Component, Debug, Clone)]
+pub struct CinematicButton(pub NodeRef, pub CinematicAction);
+
+/// Preview plays the DOCUMENT version in the viewport (the editor camera follows the
+/// shots); Shot appends `<Shot>` from the editor camera — the same op as
+/// `viber cinematic shot --live`.
+fn cinematic_action(
+    activate: On<Activate>,
+    buttons: Query<&CinematicButton>,
+    mut commands: Commands,
+) {
+    let Ok(button) = buttons.get(activate.event_target()) else {
+        return;
+    };
+    let (node, action) = (button.0.clone(), button.1);
+    commands.queue(move |world: &mut World| {
+        let parsed = {
+            let doc = world.resource::<SceneDoc>();
+            doc.node(&node).map(viber::cinematic::parse)
+        };
+        let spec = match parsed {
+            Some(Ok(spec)) => spec,
+            Some(Err(error)) => {
+                world.resource_mut::<super::EditStatus>().0 = error;
+                return;
+            }
+            None => return,
+        };
+        match action {
+            CinematicAction::Preview => {
+                world.write_message(viber::cinematic::PlayCinematic {
+                    id: spec.id.clone(),
+                    anchor: None,
+                    inline: Some(spec),
+                });
+            }
+            CinematicAction::Stop => {
+                world.write_message(viber::cinematic::StopCinematic);
+            }
+            CinematicAction::Shot => {
+                let Some((eye, look)) = viber::bridge::scene::active_camera_pose(world) else {
+                    return;
+                };
+                let op = {
+                    let doc = world.resource::<SceneDoc>();
+                    viber::cinematic_cli::shot_op(doc, &spec.id, eye, look, 4.0)
+                };
+                match op {
+                    Ok(op) => {
+                        let label = t(*world.resource::<Lang>(), StrKey::CineShot).to_string();
+                        world.resource_mut::<PendingEdits>().push(label, vec![op]);
+                    }
+                    Err(error) => {
+                        world.resource_mut::<super::EditStatus>().0 = format!("{error:#}");
+                    }
+                }
+            }
+        }
+    });
+}
+
 /// Runs the scatter tool on the recipe and queues its result as one undoable edit.
 fn run_scatter(activate: On<Activate>, buttons: Query<&ScatterButton>, mut commands: Commands) {
     let Ok(button) = buttons.get(activate.event_target()) else {
@@ -143,6 +214,8 @@ pub enum Line {
     Settle,
     /// "Save branch as scene": the node moves to its own file behind an `<Include>`.
     SaveBranch,
+    /// A `<Cinematic>`: preview in the viewport, stop, add a shot from the camera.
+    Cinematic,
 }
 
 pub fn inspector_lines(doc: &SceneDoc, selection: &Selection, lang: Lang) -> Vec<Line> {
@@ -205,6 +278,9 @@ pub fn inspector_lines(doc: &SceneDoc, selection: &Selection, lang: Lang) -> Vec
     {
         lines.push(Line::SaveBranch);
     }
+    if node.tag.eq_ignore_ascii_case("cinematic") {
+        lines.push(Line::Cinematic);
+    }
     let covered = super::property::covered_keys(&node.tag);
     // Com script, `prop-*`/`connect-*`/`groups` vivem na secção Script; sem script ficam aqui.
     let scripted = node.attr("script").is_some();
@@ -246,71 +322,97 @@ pub fn render_inspector(
         return;
     }
     let node = selection.primary().cloned().unwrap_or_default();
-    for line in inspector_lines(&doc, &selection, *lang) {
-        let row = commands
-            .spawn((
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: px(8),
-                    padding: UiRect::vertical(px(2)),
-                    ..default()
-                },
-                ChildOf(body),
-            ))
-            .id();
+    let lines = inspector_lines(&doc, &selection, *lang);
+    // 1. Cartão de identidade: ícone + título, e os factos (ficheiro, caminho, filhos)
+    //    em pequeno por baixo — informação, não campos.
+    let card = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: px(3),
+                padding: UiRect::all(px(8)),
+                border_radius: BorderRadius::all(px(6)),
+                ..default()
+            },
+            BackgroundColor(theme::BG_HEADER),
+            ChildOf(body),
+        ))
+        .id();
+    // 2. Ações (assentar, salvar ramo, regenerar, cinemática): uma linha que quebra.
+    let actions = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: px(4),
+                row_gap: px(4),
+                padding: UiRect::vertical(px(4)),
+                ..default()
+            },
+            ChildOf(body),
+        ))
+        .id();
+    let mut attrs: Vec<(Option<String>, String)> = Vec::new();
+    for line in lines {
         match line {
             Line::Heading { tag, title } => {
-                // Type heading: the tag's icon in its category color, then the friendly name.
+                let row = commands
+                    .spawn((
+                        Node {
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            column_gap: px(8),
+                            ..default()
+                        },
+                        ChildOf(card),
+                    ))
+                    .id();
                 commands.spawn((
-                    icons::icon_text(icons::tag_icon(&tag), 13.0, icons::tag_color(&tag)),
-                    Node {
-                        width: px(18),
-                        ..default()
-                    },
+                    icons::icon_text(icons::tag_icon(&tag), 14.0, icons::tag_color(&tag)),
                     Pickable::IGNORE,
                     ChildOf(row),
                 ));
                 commands.spawn((
-                    text_node(title, 13.0),
-                    TextColor(Color::srgb(0.95, 0.85, 0.55)),
+                    text_node(title, 14.0),
+                    TextColor(Color::srgb(0.96, 0.87, 0.6)),
                     ChildOf(row),
                 ));
             }
             Line::Fact(key, value) => {
-                commands.spawn((key_node(fact_display(*lang, &key).into()), ChildOf(row)));
-                commands.spawn((text_node(value, 12.0), ChildOf(row)));
-            }
-            Line::Attr(key, value) => {
-                commands.spawn((key_node(attr_display(*lang, &key).into()), ChildOf(row)));
-                // The raw XML key in small gray: the name the XML and the CLI actually use.
-                if attr_display(*lang, &key) != key {
-                    commands.spawn((
-                        text_node(key.clone(), 10.0),
-                        TextColor(Color::srgb(0.45, 0.48, 0.54)),
+                let row = commands
+                    .spawn((
                         Node {
-                            flex_shrink: 0.0,
+                            flex_direction: FlexDirection::Row,
+                            column_gap: px(8),
                             ..default()
                         },
-                        Pickable::IGNORE,
-                        ChildOf(row),
-                    ));
-                }
-                spawn_input(&mut commands, row, node.clone(), Some(key), value);
-            }
-            Line::Add => {
+                        ChildOf(card),
+                    ))
+                    .id();
                 commands.spawn((
-                    icons::icon_text(fa::PLUS, 12.0, icons::ICON_DIM),
+                    text_node(fact_display(*lang, &key).into(), 11.0),
+                    TextColor(theme::TEXT_DIM),
                     Node {
-                        width: px(18),
+                        width: px(64),
+                        flex_shrink: 0.0,
                         ..default()
                     },
-                    Pickable::IGNORE,
                     ChildOf(row),
                 ));
-                commands.spawn((key_node(t(*lang, StrKey::AddAttr).into()), ChildOf(row)));
-                spawn_input(&mut commands, row, node.clone(), None, String::new());
+                commands.spawn((
+                    text_node(value, 11.0),
+                    TextColor(theme::TEXT),
+                    Node {
+                        flex_grow: 1.0,
+                        flex_basis: px(0),
+                        min_width: px(0),
+                        ..default()
+                    },
+                    ChildOf(row),
+                ));
             }
+            Line::Attr(key, value) => attrs.push((Some(key), value)),
+            Line::Add => attrs.push((None, String::new())),
             Line::Scatter => {
                 commands
                     .spawn_scene(bsn! {
@@ -321,42 +423,170 @@ pub fn render_inspector(
                             },
                         }
                     })
-                    .insert((ScatterButton(node.clone()), ChildOf(row)))
+                    .insert((ScatterButton(node.clone()), ChildOf(actions)))
                     .observe(run_scatter);
             }
             Line::Settle => {
                 commands
                     .spawn_scene(bsn! {
                         @FeathersToolButton {
-                            @variant: ButtonVariant::Plain,
+                            @variant: ButtonVariant::Normal,
                             @caption: bsn! {
-                                @icon_caption(fa::MOUNTAIN, t(*lang, StrKey::BtnSettle), Color::WHITE)
+                                @icon_caption(fa::MOUNTAIN, t(*lang, StrKey::BtnSettle), icons::ICON)
                             },
                         }
                     })
-                    .insert((SettleButton(node.clone()), ChildOf(row)))
+                    .insert((SettleButton(node.clone()), ChildOf(actions)))
                     .observe(run_settle);
             }
             Line::SaveBranch => {
                 commands
                     .spawn_scene(bsn! {
                         @FeathersToolButton {
-                            @variant: ButtonVariant::Plain,
+                            @variant: ButtonVariant::Normal,
                             @caption: bsn! {
-                                @icon_caption(fa::FILE_LINES, t(*lang, StrKey::SaveBranch), Color::WHITE)
+                                @icon_caption(fa::FILE_LINES, t(*lang, StrKey::SaveBranch), icons::ICON)
                             },
                         }
                         Tooltip({t(*lang, StrKey::SaveBranchTip)})
                     })
-                    .insert((SaveBranchButton(node.clone()), ChildOf(row)))
+                    .insert((SaveBranchButton(node.clone()), ChildOf(actions)))
                     .observe(save_branch);
+            }
+            Line::Cinematic => {
+                for (action, glyph, label, tip) in [
+                    (
+                        CinematicAction::Preview,
+                        fa::PLAY,
+                        StrKey::CinePreview,
+                        StrKey::CinePreviewTip,
+                    ),
+                    (
+                        CinematicAction::Stop,
+                        fa::STOP,
+                        StrKey::CineStop,
+                        StrKey::CineStop,
+                    ),
+                    (
+                        CinematicAction::Shot,
+                        fa::VIDEO,
+                        StrKey::CineShot,
+                        StrKey::CineShotTip,
+                    ),
+                ] {
+                    commands
+                        .spawn_scene(bsn! {
+                            @FeathersToolButton {
+                                @variant: ButtonVariant::Normal,
+                                @caption: bsn! {
+                                    @icon_caption(glyph, t(*lang, label), icons::ICON)
+                                },
+                            }
+                            Tooltip({t(*lang, tip)})
+                        })
+                        .insert((CinematicButton(node.clone(), action), ChildOf(actions)))
+                        .observe(cinematic_action);
+                }
             }
         }
     }
-    // As SECÇÕES TIPODAS (Transform/Física/Luz/…) — no fim do painel, por baixo
-    // dos attrs genéricos que não lhes pertencem.
+    // 3. As SECÇÕES TIPADAS (nome, Script, Transform, Física, Luz, …).
     if let Some(node) = selection.primary().cloned() {
         super::property::render_sections(&mut commands, body, &doc, &node, &open, *lang);
+    }
+    // 4. No fim: os atributos que nenhuma secção cobre, e a linha para acrescentar um.
+    if attrs.is_empty() {
+        return;
+    }
+    let header = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: px(6),
+                margin: UiRect::top(px(6)),
+                padding: UiRect::axes(px(8), px(5)),
+                border_radius: BorderRadius::all(px(4)),
+                ..default()
+            },
+            BackgroundColor(theme::BG_HEADER),
+            ChildOf(body),
+        ))
+        .id();
+    commands.spawn((
+        icons::icon_text(fa::TAGS, 11.0, icons::ICON_DIM),
+        Pickable::IGNORE,
+        ChildOf(header),
+    ));
+    commands.spawn((
+        text_node(t(*lang, StrKey::InspectorOtherAttrs).into(), 13.0),
+        TextColor(theme::TEXT),
+        ChildOf(header),
+    ));
+    for (key, value) in attrs {
+        let row = commands
+            .spawn((
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: px(8),
+                    padding: UiRect::new(px(8), px(2), px(2), px(2)),
+                    ..default()
+                },
+                ChildOf(body),
+            ))
+            .id();
+        match key {
+            Some(key) => {
+                let shown = attr_display(*lang, &key);
+                let label = commands
+                    .spawn((
+                        Node {
+                            flex_direction: FlexDirection::Column,
+                            width: px(110),
+                            flex_shrink: 0.0,
+                            ..default()
+                        },
+                        Pickable::IGNORE,
+                        ChildOf(row),
+                    ))
+                    .id();
+                commands.spawn((key_node(shown.into()), ChildOf(label)));
+                // The raw XML key in small gray: the name the XML and the CLI actually use.
+                if shown != key {
+                    commands.spawn((
+                        text_node(key.clone(), 10.0),
+                        TextColor(Color::srgb(0.45, 0.48, 0.54)),
+                        Pickable::IGNORE,
+                        ChildOf(label),
+                    ));
+                }
+                spawn_input(&mut commands, row, node.clone(), Some(key), value);
+            }
+            None => {
+                let label = commands
+                    .spawn((
+                        Node {
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            column_gap: px(6),
+                            width: px(110),
+                            flex_shrink: 0.0,
+                            ..default()
+                        },
+                        Pickable::IGNORE,
+                        ChildOf(row),
+                    ))
+                    .id();
+                commands.spawn((
+                    icons::icon_text(fa::PLUS, 11.0, icons::ICON_DIM),
+                    Pickable::IGNORE,
+                    ChildOf(label),
+                ));
+                commands.spawn((key_node(t(*lang, StrKey::AddAttr).into()), ChildOf(label)));
+                spawn_input(&mut commands, row, node.clone(), None, String::new());
+            }
+        }
     }
 }
 
@@ -393,12 +623,7 @@ fn key_node(key: String) -> impl Bundle {
     (
         Text::new(key),
         TextFont::from_font_size(12.0),
-        TextColor(Color::srgb(0.6, 0.65, 0.72)),
-        Node {
-            width: px(96),
-            flex_shrink: 0.0,
-            ..default()
-        },
+        TextColor(theme::TEXT_DIM),
     )
 }
 

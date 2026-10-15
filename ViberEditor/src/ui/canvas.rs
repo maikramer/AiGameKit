@@ -6,6 +6,7 @@
 //! and a `menu_data` info line for `<UiList>` selections. Every commit is ONE
 //! canonical `set` op — the same edit an agent makes with `viber scene set`.
 
+use super::theme;
 use crate::viewport::EditorViewport as EditorViewportAlias;
 use bevy::feathers::controls::{ButtonVariant, FeathersToolButton};
 use bevy::feathers::display::caption;
@@ -122,15 +123,26 @@ pub fn canvas_overlay_scene() -> impl Scene {
             BorderColor::all(Color::srgb(0.45, 0.85, 1.0))
             Pickable::IGNORE
             --
-            @corner(0) @corner(1) @corner(2) @corner(3)
+            @corner(0)
+            --
+            @corner(1)
+            --
+            @corner(2)
+            --
+            @corner(3)
             --
             Node {
                 position_type: PositionType::Absolute,
                 left: px(16),
                 top: px(48),
                 flex_direction: FlexDirection::Column,
-                row_gap: px(6),
+                row_gap: px(4),
+                padding: px(6),
+                border: UiRect::all(px(1)),
+                border_radius: px(6),
             }
+            BackgroundColor(theme::BG_OVERLAY)
+            BorderColor::all(theme::BORDER_STRONG)
         CanvasChips
             Children [
                 Node {
@@ -139,7 +151,9 @@ pub fn canvas_overlay_scene() -> impl Scene {
                 }
                 Children [
                     @state_chip(UiStatePreview::Normal, StrKey::StateNormal)
+                    --
                     @state_chip(UiStatePreview::Hover, StrKey::StateHover)
+                    --
                     @state_chip(UiStatePreview::Pressed, StrKey::StatePressed)
                 ]
                 --
@@ -250,7 +264,9 @@ fn selected_ui_entities(world: &mut World) -> Vec<Entity> {
         .collect()
 }
 
-/// Maps a game-UI rect to WINDOW logical px through the letterboxed viewport.
+/// Maps a game-UI rect to WINDOW logical px: the game's UI camera draws into the viewport
+/// image (letterboxed 16:9 inside it), and that image is shown by the viewport node — so
+/// the canvas origin is the node's top-left plus the letterbox offset.
 fn canvas_to_window(world: &mut World, rect: Rect) -> Option<Rect> {
     let mut cameras = world.try_query_filtered::<&Camera, With<crate::viewport::GameUiCamera>>()?;
     let camera = cameras.single(world).ok()?;
@@ -261,12 +277,19 @@ fn canvas_to_window(world: &mut World, rect: Rect) -> Option<Rect> {
         .next()
         .map(|window| window.scale_factor())
         .unwrap_or(1.0);
-    let origin = viewport.physical_position.as_vec2();
-    let size = viewport.physical_size.as_vec2();
-    let center = origin + size / 2.0;
-    let map = |p: Vec2| Vec2::new(center.x + p.x * scale, center.y - p.y * scale) / scale;
-    let (min, max) = (map(rect.min), map(rect.max));
-    Some(Rect::new(min.x, min.y, max.x, max.y))
+    let mut nodes =
+        world.query_filtered::<(&ComputedNode, &UiGlobalTransform), With<EditorViewportAlias>>();
+    let (node, transform) = nodes.single(world).ok()?;
+    // UI transforms/sizes are physical px; the game rect is logical px from the canvas'
+    // top-left (y down), so it only needs the canvas origin added.
+    let node_origin = transform.translation - node.size() * 0.5;
+    let origin = (node_origin + viewport.physical_position.as_vec2()) / scale;
+    Some(Rect::new(
+        origin.x + rect.min.x,
+        origin.y + rect.min.y,
+        origin.x + rect.max.x,
+        origin.y + rect.max.y,
+    ))
 }
 
 /// Shows/positions the overlay (with the live drag preview applied).
@@ -324,11 +347,12 @@ fn canvas_overlay(world: &mut World) {
         world.query_filtered::<(&ComputedNode, &UiGlobalTransform), With<EditorViewportAlias>>();
     if let Ok((node, transform)) = viewports.single_mut(world) {
         let vsize = node.size();
-        let top_left = transform.translation - vsize * 0.5;
+        let top_left = (transform.translation - vsize * 0.5) / scale;
         let mut chips = world.query_filtered::<&mut Node, With<CanvasChips>>();
         if let Ok(mut chip_node) = chips.single_mut(world) {
-            chip_node.left = Val::Px(top_left.x + 56.0);
-            chip_node.top = Val::Px(top_left.y + 44.0);
+            // canto inferior esquerdo do viewport (o topo é do HUD do jogo)
+            chip_node.left = Val::Px(top_left.x + 12.0);
+            chip_node.top = Val::Px(top_left.y + vsize.y / scale - 82.0);
         }
     }
     let mut rects = world.query_filtered::<&mut Node, With<CanvasRect>>();

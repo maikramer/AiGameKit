@@ -839,9 +839,12 @@ pub fn spawn_section(
                     flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     column_gap: px(6),
-                    margin: UiRect::top(px(8)),
+                    margin: UiRect::top(px(6)),
+                    padding: UiRect::axes(px(6), px(4)),
+                    border_radius: BorderRadius::all(px(4)),
                     ..default()
                 },
+                BackgroundColor(crate::ui::theme::BG_HEADER),
                 ChildOf(parent),
             ))
             .id();
@@ -855,31 +858,26 @@ pub fn spawn_section(
                     } else {
                         Display::None
                     },
-                    padding: UiRect::left(px(8)),
+                    padding: UiRect::new(px(8), px(2), px(4), px(2)),
                     ..default()
                 },
                 ChildOf(parent),
             ))
             .id();
-        commands
-            .spawn_scene(bsn! {
-                @FeathersCheckbox
-            })
-            .insert((
-                bevy::ui::Checked,
-                Node {
-                    width: px(14),
-                    height: px(14),
-                    ..default()
-                },
-                ChildOf(header),
-            ));
+        // Disclosure (chevron) — o estado inicial segue `SectionOpen`.
+        let mut toggle = commands.spawn_scene(bsn! {
+            @bevy::feathers::controls::FeathersDisclosureToggle
+        });
+        toggle.insert(ChildOf(header));
+        if expanded {
+            toggle.insert(bevy::ui::Checked);
+        }
         commands
             .spawn_scene(bsn! {
                 @caption(title)
             })
             .insert((
-                TextColor(Color::srgb(0.72, 0.76, 0.82)),
+                TextColor(crate::ui::theme::TEXT),
                 Pickable::IGNORE,
                 ChildOf(header),
             ));
@@ -920,7 +918,7 @@ pub fn spawn_field(
             @caption(label)
         })
         .insert((
-            TextColor(Color::srgb(0.62, 0.66, 0.72)),
+            TextColor(crate::ui::theme::TEXT_DIM),
             Node {
                 width: px(132),
                 flex_shrink: 0.0,

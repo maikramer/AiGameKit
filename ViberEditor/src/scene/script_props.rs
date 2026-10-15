@@ -333,7 +333,7 @@ fn reset_prop(
     };
     let attr = button.0.clone();
     edits.push(
-        format!("{attr} ↺"),
+        format!("{attr}: repor default"),
         vec![EditOp::Set {
             node: doc.selector(node),
             attrs: [(attr, None)].into_iter().collect(),

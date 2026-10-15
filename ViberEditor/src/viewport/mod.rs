@@ -69,7 +69,10 @@ impl Plugin for ViewportPlugin {
         ))
         .init_resource::<ViewportHover>()
         .init_resource::<nav::FlyState>()
-        .add_systems(PreStartup, (create_viewport_image, spawn_game_ui_camera))
+        .add_systems(
+            PreStartup,
+            (create_viewport_image, spawn_game_ui_camera).chain(),
+        )
         .add_systems(
             Update,
             (
@@ -90,18 +93,42 @@ fn create_viewport_image(mut commands: Commands, mut images: ResMut<Assets<Image
     commands.insert_resource(ViewportImage(images.add(image)));
 }
 
-fn spawn_game_ui_camera(mut commands: Commands) {
+/// The game's UI camera draws into the SAME image as the editor camera (inactive while
+/// editing 3D): in UI mode the viewport node shows the game's UI, letterboxed inside it.
+/// Drawing to the window instead put the canvas UNDER the editor's opaque panels.
+fn spawn_game_ui_camera(mut commands: Commands, image: Res<ViewportImage>) {
     commands.spawn((
         GameUiCamera,
         Name::new("GameUiCamera"),
         Camera2d,
         Camera {
             is_active: false,
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.05, 0.055, 0.065)),
             ..default()
         },
+        RenderTarget::Image(image.0.clone().into()),
         IsDefaultUiCamera,
     ));
+    // Clears the WHOLE image under the letterboxed game UI (the bars would otherwise keep
+    // the last 3D frame). Draws nothing itself: an empty render layer, order below the UI.
+    commands.spawn((
+        LetterboxClearCamera,
+        Name::new("LetterboxClearCamera"),
+        Camera2d,
+        Camera {
+            is_active: false,
+            order: -1,
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.035, 0.038, 0.045)),
+            ..default()
+        },
+        RenderTarget::Image(image.0.clone().into()),
+        bevy::camera::visibility::RenderLayers::layer(31),
+    ));
 }
+
+/// See [`spawn_game_ui_camera`]: active with the game UI camera, in UI mode only.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct LetterboxClearCamera;
 
 /// Points the engine's editor camera at the viewport image and shows it in the layout.
 fn attach_editor_camera(

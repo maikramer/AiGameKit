@@ -126,6 +126,8 @@ pub mod fa {
     pub const CLOUD_RAIN: char = '\u{f73d}';
 
     pub const GAUGE_HIGH: char = '\u{f625}';
+    pub const LOCATION_CROSSHAIRS: char = '\u{f601}';
+    pub const OBJECT_GROUP: char = '\u{f247}';
 
     // Status.
     pub const CIRCLE_CHECK: char = '\u{f058}';

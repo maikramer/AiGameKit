@@ -96,6 +96,11 @@ pub enum StrKey {
     SignalTip,
     SaveBranch,
     SaveBranchTip,
+    CinePreview,
+    CinePreviewTip,
+    CineStop,
+    CineShot,
+    CineShotTip,
     FilesInstance,
     FilesInstanceTip,
     TabGame,
@@ -109,6 +114,10 @@ pub enum StrKey {
     GameSunYaw,
     GameSunPitch,
     GameSunLight,
+    TabProblems,
+    ProblemsClean,
+    ProblemsRevalidate,
+    ProblemsRevalidateTip,
     ScriptReload,
     ScriptReloadTip,
     ScriptReloaded,
@@ -148,9 +157,7 @@ pub enum StrKey {
     TipSave,
     BtnPlay,
     TipPlay,
-    BtnPause,
     TipPause,
-    BtnStop,
     TipStop,
     TipLang,
     // Tool strip tooltips.
@@ -171,6 +178,10 @@ pub enum StrKey {
     InspectNone,
     InspectGone,
     AddAttr,
+    InspectorOtherAttrs,
+    LogsEmpty,
+    ConsoleHint,
+    ProfilerEmpty,
     BtnRegen,
     BtnSettle,
     // World Doc.
@@ -202,6 +213,11 @@ impl StrKey {
         StrKey::SignalTip,
         StrKey::SaveBranch,
         StrKey::SaveBranchTip,
+        StrKey::CinePreview,
+        StrKey::CinePreviewTip,
+        StrKey::CineStop,
+        StrKey::CineShot,
+        StrKey::CineShotTip,
         StrKey::FilesInstance,
         StrKey::FilesInstanceTip,
         StrKey::DockScene,
@@ -244,9 +260,7 @@ impl StrKey {
         StrKey::TipSave,
         StrKey::BtnPlay,
         StrKey::TipPlay,
-        StrKey::BtnPause,
         StrKey::TipPause,
-        StrKey::BtnStop,
         StrKey::TipStop,
         StrKey::TipLang,
         StrKey::TipSelect,
@@ -264,6 +278,10 @@ impl StrKey {
         StrKey::InspectNone,
         StrKey::InspectGone,
         StrKey::AddAttr,
+        StrKey::InspectorOtherAttrs,
+        StrKey::LogsEmpty,
+        StrKey::ConsoleHint,
+        StrKey::ProfilerEmpty,
         StrKey::BtnRegen,
         StrKey::BtnSettle,
         StrKey::WdNoBake,
@@ -660,6 +678,41 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
                 "Passa este nó para scenes/<nome>.xml e deixa um <Include> com a pose dele (Ctrl+Z desfaz)"
             }
         }
+        StrKey::CinePreview => {
+            if en {
+                "Preview"
+            } else {
+                "Pré-visualizar"
+            }
+        }
+        StrKey::CinePreviewTip => {
+            if en {
+                "Plays this cinematic (document version) in the viewport — the editor camera follows the shots"
+            } else {
+                "Toca esta cinemática (versão do documento) no viewport — a câmara de editor segue os planos"
+            }
+        }
+        StrKey::CineStop => {
+            if en {
+                "Stop"
+            } else {
+                "Parar"
+            }
+        }
+        StrKey::CineShot => {
+            if en {
+                "+ Shot from camera"
+            } else {
+                "+ Plano da câmara"
+            }
+        }
+        StrKey::CineShotTip => {
+            if en {
+                "Appends a 4 s <Shot> with the current editor camera pose (= viber cinematic shot --live)"
+            } else {
+                "Acrescenta um <Shot> de 4 s com a pose atual da câmara de editor (= viber cinematic shot --live)"
+            }
+        }
         StrKey::FilesInstance => {
             if en {
                 "Instance"
@@ -859,6 +912,34 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
                 "luz"
             }
         }
+        StrKey::TabProblems => {
+            if en {
+                "Problems"
+            } else {
+                "Problemas"
+            }
+        }
+        StrKey::ProblemsClean => {
+            if en {
+                "no problems found"
+            } else {
+                "sem problemas"
+            }
+        }
+        StrKey::ProblemsRevalidate => {
+            if en {
+                "Revalidate"
+            } else {
+                "Revalidar"
+            }
+        }
+        StrKey::ProblemsRevalidateTip => {
+            if en {
+                "Save and re-run the world lint (scripts, props, quests…)"
+            } else {
+                "Grava e re-corre o lint do mundo (scripts, props, quests…)"
+            }
+        }
         StrKey::BtnSave => {
             if en {
                 "Save"
@@ -881,25 +962,11 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
                 "Correr o mundo num processo à parte (F5)"
             }
         }
-        StrKey::BtnPause => {
-            if en {
-                "Pause"
-            } else {
-                "Pausa"
-            }
-        }
         StrKey::TipPause => {
             if en {
                 "Freeze / resume the running game (F6)"
             } else {
                 "Congelar / retomar o jogo (F6)"
-            }
-        }
-        StrKey::BtnStop => {
-            if en {
-                "Stop"
-            } else {
-                "Parar"
             }
         }
         StrKey::TipStop => {
@@ -911,9 +978,9 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
         }
         StrKey::TipLang => {
             if en {
-                "Switch language (PT ⇄ EN)"
+                "Switch language (PT / EN)"
             } else {
-                "Mudar língua (PT ⇄ EN)"
+                "Mudar língua (PT / EN)"
             }
         }
         StrKey::TipSelect => {
@@ -1019,6 +1086,34 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
                 "new (key=value)"
             } else {
                 "novo (chave=valor)"
+            }
+        }
+        StrKey::InspectorOtherAttrs => {
+            if en {
+                "Other attributes"
+            } else {
+                "Outros atributos"
+            }
+        }
+        StrKey::LogsEmpty => {
+            if en {
+                "No logs yet — run the game (Play) and its log lines show up here."
+            } else {
+                "Ainda sem registos — corre o jogo (Play) e as linhas de log aparecem aqui."
+            }
+        }
+        StrKey::ProfilerEmpty => {
+            if en {
+                "The profiler reads the running game — press Play to see fps, frame time and the slowest systems."
+            } else {
+                "O profiler lê o jogo a correr — carrega em Play para ver fps, tempo de frame e os sistemas mais lentos."
+            }
+        }
+        StrKey::ConsoleHint => {
+            if en {
+                "Luau on the running game — type an expression and press Enter (Play first)."
+            } else {
+                "Luau no jogo a correr — escreve uma expressão e Enter (Play primeiro)."
             }
         }
         StrKey::BtnRegen => {

@@ -8,6 +8,7 @@ use bevy::ui_widgets::Activate;
 
 use super::icons::{self, fa, icon};
 use super::strings::{Lang, LangTooltip, StrKey, t};
+use super::theme;
 use super::tooltip::Tooltip;
 use crate::viewport::gizmo::{GizmoTool, Mode, SelectedEntity};
 
@@ -27,9 +28,14 @@ pub struct SpaceIcon;
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct FrameButton;
 
+/// Marks the strip (hidden outside the 3D mode).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct ToolStrip;
+
 /// The strip, as a scene (child of the viewport container, above the game image).
 pub fn tool_strip() -> impl Scene {
     bsn! {
+        ToolStrip
         Node {
             position_type: PositionType::Absolute,
             left: px(10),
@@ -41,8 +47,8 @@ pub fn tool_strip() -> impl Scene {
             border_radius: px(6),
         }
         GlobalZIndex(10)
-        BackgroundColor(Color::srgba(0.07, 0.08, 0.1, 0.9))
-        BorderColor::all(Color::srgba(0.3, 0.33, 0.38, 0.9))
+        BackgroundColor(theme::BG_OVERLAY)
+        BorderColor::all(theme::BORDER_STRONG)
         Children [
             @tool_button(Mode::Select, fa::ARROW_POINTER, StrKey::TipSelect)
             --

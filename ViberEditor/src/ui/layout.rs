@@ -17,7 +17,7 @@
 
 use crate::scene::tree::TreeSearchInput;
 use bevy::feathers::constants::fonts;
-use bevy::feathers::containers::{flex_spacer, subpane, subpane_body, subpane_header};
+use bevy::feathers::containers::flex_spacer;
 use bevy::feathers::controls::{
     ButtonVariant, FeathersTextInput, FeathersTextInputContainer, FeathersToolButton,
 };
@@ -35,10 +35,10 @@ use super::files::{FilesBody, FilesHeader};
 fn biomes_section() -> impl Scene {
     bsn! {
         Node {
-            width: percent(100),
+            flex_shrink: 0.0,
             flex_direction: FlexDirection::Row,
             column_gap: px(10),
-            padding: px(8),
+            padding: px(6),
         }
         BiomesBody
         Children []
@@ -51,8 +51,10 @@ use super::history::HistoryBody;
 use super::icons::{self, fa, icon, icon_caption};
 use super::logs::LogsBody;
 use super::mode_strip::{mode_strip, script_panel};
+use super::problems::problems_body;
 use super::profiler::ProfilerBody;
 use super::strings::{Lang, LangLabel, LangTooltip, StrKey, t};
+use super::theme;
 use super::toolbar::toolbar;
 use super::tools::tool_strip;
 use super::tooltip::{Tooltip, tooltip_root};
@@ -63,10 +65,55 @@ use crate::scene::tree::SceneTreeBody;
 use crate::viewport::ViewportBody;
 use crate::viewport::brush_panel::brush_panel;
 
-/// Width of the side docks, in pixels.
+/// Default width of the side docks, in pixels (resizable by the splitters).
 const SIDE_DOCK_PX: f32 = 280.0;
-/// Height of the bottom dock, in pixels.
+/// Default height of the bottom dock, in pixels (resizable by its splitter).
 const BOTTOM_DOCK_PX: f32 = 220.0;
+/// Splitter hit area (the hairline is drawn in its middle).
+const SPLITTER_PX: f32 = 6.0;
+
+/// Sizes of the resizable docks, dragged by the [`Splitter`]s.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct DockSizes {
+    pub left: f32,
+    pub right: f32,
+    pub bottom: f32,
+}
+
+impl Default for DockSizes {
+    fn default() -> Self {
+        Self {
+            left: SIDE_DOCK_PX,
+            right: SIDE_DOCK_PX + 20.0,
+            bottom: BOTTOM_DOCK_PX,
+        }
+    }
+}
+
+/// Which dock a [`Splitter`] (or a sized node) belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DockSide {
+    #[default]
+    Left,
+    Right,
+    Bottom,
+}
+
+/// A node whose size follows [`DockSizes`].
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct DockSized(pub DockSide);
+
+/// A draggable splitter between a dock and the viewport.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct Splitter(pub DockSide);
+
+/// The bottom-dock tab currently shown.
+#[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ActiveDockTab(pub TabKind);
+
+/// The accent bar under a tab (visible on the active one).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TabUnderline(pub TabKind);
 
 /// The camera that draws the editor's own panels (never the game's).
 #[derive(Component, Debug, Clone, Copy, Default)]
@@ -90,6 +137,7 @@ pub enum TabKind {
     Files,
     History,
     Game,
+    Problems,
 }
 
 pub(crate) fn camera() -> impl Scene {
@@ -123,16 +171,14 @@ pub(crate) fn editor_root() -> impl Scene {
             position_type: PositionType::Absolute,
             width: percent(100),
             height: percent(100),
-            padding: px(6),
             flex_direction: FlexDirection::Column,
-            row_gap: px(6),
         }
-        BackgroundColor(Color::srgb(0.11, 0.12, 0.14))
+        BackgroundColor(theme::BG_WINDOW)
         // Root-level font: every themed label outside a button (dock headers, status,
         // tooltips) uses feathers' Fira Sans at 13px. Buttons set their own closer font.
         InheritableFont {
             font: fonts::REGULAR,
-            font_size: {FontSize::Px(13.0)},
+            font_size: {FontSize::Px(theme::FONT_BODY)},
             weight: {FontWeight::NORMAL},
         }
         Children [
@@ -143,17 +189,21 @@ pub(crate) fn editor_root() -> impl Scene {
                 flex_grow: 1.0,
                 min_height: px(0),
                 flex_direction: FlexDirection::Row,
-                column_gap: px(6),
+                padding: px(6),
             }
             Children [
                 @scene_dock()
                 --
+                @splitter(DockSide::Left)
+                --
                 @center_column()
+                --
+                @splitter(DockSide::Right)
                 --
                 @inspector_dock()
             ]
             --
-            // The status bar: cursor XZ, selected count, dirty files.
+            // The status bar: game state, cursor XZ, selected count, dirty files.
             @status_bar()
             --
             // The view options popover (Vista button on the toolbar).
@@ -172,6 +222,111 @@ pub(crate) fn editor_root() -> impl Scene {
             // Last child: the hover tooltip floats above every panel.
             @tooltip_root()
         ]
+    }
+}
+
+/// A framed dock panel: rounded, bordered, clipped — the header and body live inside.
+fn dock_frame() -> impl Scene {
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Column,
+            border: UiRect::all(px(1)),
+            border_radius: px(6),
+            overflow: Overflow::clip(),
+            min_width: px(0),
+            min_height: px(0),
+        }
+        BackgroundColor(theme::BG_PANEL)
+        BorderColor::all(theme::BORDER)
+    }
+}
+
+/// A dock header: icon + caption on the left, actions on the right.
+fn dock_header() -> impl Scene {
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: px(6),
+            padding: UiRect::axes(px(10), px(0)),
+            height: px(theme::TABBAR_PX),
+            flex_shrink: 0.0,
+            border: UiRect::bottom(px(1)),
+        }
+        BackgroundColor(theme::BG_HEADER)
+        BorderColor::all(theme::BORDER)
+    }
+}
+
+/// A vertical splitter (between a side dock and the viewport): drag to resize the dock.
+fn splitter(side: DockSide) -> impl Scene {
+    bsn! {
+        Node {
+            width: px(SPLITTER_PX),
+            height: percent(100),
+            flex_shrink: 0.0,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+        }
+        Splitter(side)
+        bevy::picking::cursor::EntityCursor::System(bevy::window::SystemCursorIcon::ColResize)
+        on(drag_splitter)
+        Children [
+            Node { width: px(2), height: px(48), border_radius: px(1) }
+            BackgroundColor(theme::BORDER)
+            Pickable::IGNORE
+        ]
+    }
+}
+
+/// The horizontal splitter above the bottom dock.
+fn splitter_bottom() -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            height: px(SPLITTER_PX),
+            flex_shrink: 0.0,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+        }
+        Splitter(DockSide::Bottom)
+        bevy::picking::cursor::EntityCursor::System(bevy::window::SystemCursorIcon::RowResize)
+        on(drag_splitter)
+        Children [
+            Node { width: px(48), height: px(2), border_radius: px(1) }
+            BackgroundColor(theme::BORDER)
+            Pickable::IGNORE
+        ]
+    }
+}
+
+fn drag_splitter(
+    drag: On<bevy::picking::events::PointerDrag>,
+    splitters: Query<&Splitter>,
+    mut sizes: ResMut<DockSizes>,
+) {
+    let Ok(splitter) = splitters.get(drag.event_target()) else {
+        return;
+    };
+    let delta = drag.delta;
+    match splitter.0 {
+        DockSide::Left => sizes.left = (sizes.left + delta.x).clamp(180.0, 560.0),
+        DockSide::Right => sizes.right = (sizes.right - delta.x).clamp(200.0, 620.0),
+        DockSide::Bottom => sizes.bottom = (sizes.bottom - delta.y).clamp(90.0, 640.0),
+    }
+}
+
+/// Applies [`DockSizes`] to the sized docks (only when a splitter moved).
+pub fn apply_dock_sizes(sizes: Res<DockSizes>, mut nodes: Query<(&DockSized, &mut Node)>) {
+    if !sizes.is_changed() {
+        return;
+    }
+    for (sized, mut node) in &mut nodes {
+        match sized.0 {
+            DockSide::Left => node.width = px(sizes.left),
+            DockSide::Right => node.width = px(sizes.right),
+            DockSide::Bottom => node.height = px(sizes.bottom),
+        }
     }
 }
 
@@ -196,8 +351,8 @@ fn add_node_panel() -> impl Scene {
             border: UiRect::all(px(1)),
             border_radius: px(8),
         }
-        BackgroundColor(Color::srgb(0.1, 0.11, 0.13))
-        BorderColor::all(Color::srgb(0.35, 0.38, 0.44))
+        BackgroundColor(theme::BG_POPOVER)
+        BorderColor::all(theme::BORDER_STRONG)
         Children [
             @caption(t(Lang::default(), StrKey::AddNodeTitle)) LangLabel(StrKey::AddNodeTitle)
             --
@@ -216,10 +371,11 @@ fn add_node_panel() -> impl Scene {
 /// Left: the world object tree.
 fn scene_dock() -> impl Scene {
     bsn! {
-        @subpane()
+        @dock_frame()
         Node { width: px(SIDE_DOCK_PX), flex_shrink: 0.0 }
+        DockSized(DockSide::Left)
         Children [
-            @subpane_header()
+            @dock_header()
             Children [
                 @icon(fa::SITEMAP, 12.0, icons::ICON_DIM)
                 --
@@ -229,14 +385,28 @@ fn scene_dock() -> impl Scene {
                 --
                 @FeathersToolButton {
                     @variant: ButtonVariant::Plain,
-                    @caption: bsn! { @icon(fa::PLUS, 13.0, icons::ICON) },
+                    @caption: bsn! { @icon(fa::PLUS, 12.0, icons::ICON) },
                 }
                 AddNodeButton
                 Tooltip(t(Lang::default(), StrKey::BtnAddNode))
                 on(open_add_node)
+            ]
+            --
+            // Search row: magnifier + filter input over the whole dock width.
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: px(6),
+                padding: UiRect::axes(px(8), px(5)),
+                flex_shrink: 0.0,
+                border: UiRect::bottom(px(1)),
+            }
+            BorderColor::all(theme::BORDER)
+            Children [
+                @icon(fa::MAGNIFYING_GLASS, 11.0, icons::ICON_DIM)
                 --
                 @FeathersTextInputContainer
-                Node { width: px(90) }
+                Node { flex_grow: 1.0, min_width: px(0) }
                 Children [
                     @FeathersTextInput {
                         @visible_width: 8f32,
@@ -245,8 +415,13 @@ fn scene_dock() -> impl Scene {
                 ]
             ]
             --
-            @subpane_body()
-            Node { overflow: Overflow::scroll_y(), flex_direction: FlexDirection::Column }
+            Node {
+                flex_grow: 1.0,
+                min_height: px(0),
+                overflow: Overflow::scroll_y(),
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::axes(px(4), px(4)),
+            }
             SceneTreeBody
             Children []
         ]
@@ -260,7 +435,6 @@ fn center_column() -> impl Scene {
             flex_grow: 1.0,
             min_width: px(0),
             flex_direction: FlexDirection::Column,
-            row_gap: px(6),
         }
         Children [
             Node {
@@ -268,8 +442,10 @@ fn center_column() -> impl Scene {
                 flex_grow: 1.0,
                 min_height: px(0),
                 border: UiRect::all(px(1)),
+                border_radius: px(6),
+                overflow: Overflow::clip(),
             }
-            BorderColor::all(Color::srgb(0.25, 0.27, 0.3))
+            BorderColor::all(theme::BORDER)
             ViewportBody
             Children [
                 // The tool strip floats above the viewport image (z_index in the strip).
@@ -297,6 +473,8 @@ fn center_column() -> impl Scene {
                 @script_panel()
             ]
             --
+            @splitter_bottom()
+            --
             @dock_tabs()
         ]
     }
@@ -305,10 +483,11 @@ fn center_column() -> impl Scene {
 /// Right: the Inspector.
 fn inspector_dock() -> impl Scene {
     bsn! {
-        @subpane()
-        Node { width: px(SIDE_DOCK_PX), flex_shrink: 0.0 }
+        @dock_frame()
+        Node { width: px(SIDE_DOCK_PX + 20.0), flex_shrink: 0.0 }
+        DockSized(DockSide::Right)
         Children [
-            @subpane_header()
+            @dock_header()
             Children [
                 @icon(fa::SLIDERS, 12.0, icons::ICON_DIM)
                 --
@@ -316,44 +495,49 @@ fn inspector_dock() -> impl Scene {
                 LangLabel(StrKey::DockInspector)
             ]
             --
-            @subpane_body()
-            Node { overflow: Overflow::scroll_y(), flex_direction: FlexDirection::Column }
+            Node {
+                flex_grow: 1.0,
+                min_height: px(0),
+                overflow: Overflow::scroll_y(),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(4),
+                padding: px(6),
+            }
             InspectorBody
             Children []
         ]
     }
 }
 
-/// The bottom dock: Console | Logs | World Overview.
+/// The bottom dock: a tab bar over the active tab's body.
 fn dock_tabs() -> impl Scene {
     bsn! {
+        @dock_frame()
         Node {
             width: percent(100),
             height: px(BOTTOM_DOCK_PX),
             flex_shrink: 0.0,
-            flex_direction: FlexDirection::Column,
         }
+        DockSized(DockSide::Bottom)
         Children [
-            Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: px(2),
-                min_width: px(0),
-                overflow: Overflow::clip_x(),
-            }
+            @dock_header()
+            Node { column_gap: px(0), padding: UiRect::horizontal(px(2)), overflow: Overflow::clip_x() }
             Children [
                 @editor_tab(TabKind::Console, fa::TERMINAL, StrKey::TabConsole)
                 --
                 @editor_tab(TabKind::Logs, fa::FILE_LINES, StrKey::TabLogs)
                 --
-                @editor_tab(TabKind::Profiler, fa::GAUGE_HIGH, StrKey::TabProfiler)
-                --
-                @editor_tab(TabKind::WorldDoc, fa::MAP, StrKey::TabWorldDoc)
+                @editor_tab(TabKind::Problems, fa::TRIANGLE_EXCLAMATION, StrKey::TabProblems)
                 --
                 @editor_tab(TabKind::Files, fa::FOLDER, StrKey::TabFiles)
+                --
+                @editor_tab(TabKind::WorldDoc, fa::MAP, StrKey::TabWorldDoc)
                 --
                 @editor_tab(TabKind::History, fa::ROTATE_LEFT, StrKey::TabHistory)
                 --
                 @editor_tab(TabKind::Game, fa::GEARS, StrKey::TabGame)
+                --
+                @editor_tab(TabKind::Profiler, fa::GAUGE_HIGH, StrKey::TabProfiler)
             ]
             --
             @tab_body(TabKind::Console)
@@ -380,6 +564,9 @@ fn dock_tabs() -> impl Scene {
             --
             @tab_body(TabKind::Game)
             Children [ @game_body() ]
+            --
+            @tab_body(TabKind::Problems)
+            Children [ @problems_body() ]
         ]
     }
 }
@@ -387,10 +574,9 @@ fn dock_tabs() -> impl Scene {
 /// The History dock body: the engine's undo/redo stacks, clickable.
 fn history_body() -> impl Scene {
     bsn! {
-        @subpane()
-        Node { width: percent(100) }
+        @theme::pane()
         Children [
-            @subpane_body()
+            @theme::pane_body()
             Node { overflow: Overflow::scroll_y(), flex_direction: FlexDirection::Column }
         HistoryBody
             Children []
@@ -401,10 +587,9 @@ fn history_body() -> impl Scene {
 /// The Profiler dock body: the running game's systems, polled live.
 fn profiler_body() -> impl Scene {
     bsn! {
-        @subpane()
-        Node { width: percent(100) }
+        @theme::pane()
         Children [
-            @subpane_body()
+            @theme::pane_body()
             Node { overflow: Overflow::scroll_y(), flex_direction: FlexDirection::Column }
             ProfilerBody
             Children []
@@ -415,10 +600,9 @@ fn profiler_body() -> impl Scene {
 /// The Files dock body: a header (filters + actions) over the scrollable tree.
 fn files_body() -> impl Scene {
     bsn! {
-        @subpane()
-        Node { width: percent(100) }
+        @theme::pane()
         Children [
-            @subpane_body()
+            @theme::pane_body()
             Node { width: percent(100), row_gap: px(4) }
             Children [
                 Node {
@@ -426,8 +610,9 @@ fn files_body() -> impl Scene {
                     align_items: AlignItems::Center,
                     column_gap: px(4),
                     flex_wrap: FlexWrap::Wrap,
+                    flex_shrink: 0.0,
                 }
-                Children [ FilesHeader ]
+                FilesHeader
                 --
                 // O corpo é o próprio nó de scroll (o padrão do SceneTreeBody):
                 // as linhas penduram diretamente nele.
@@ -445,31 +630,51 @@ fn files_body() -> impl Scene {
     }
 }
 
-/// The context menu: a small bordered column at the cursor.
-/// The status bar: the world position under the cursor, the selection count,
-/// the dirty files and the editor's fps — Godot's bottom line.
+/// The status bar: the running game's state (dot + text), the world position under the
+/// cursor, the selection count, the dirty files and the editor's fps — Godot's bottom line.
 fn status_bar() -> impl Scene {
     bsn! {
         Node {
             width: percent(100),
-            min_height: px(20),
+            height: px(theme::STATUS_PX),
+            flex_shrink: 0.0,
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            column_gap: px(16),
-            padding: UiRect::axes(px(8), px(2)),
+            column_gap: px(18),
+            padding: UiRect::axes(px(10), px(0)),
             border: UiRect::top(px(1)),
+            overflow: Overflow::clip(),
         }
-        BorderColor::all(Color::srgb(0.25, 0.27, 0.3))
-        BackgroundColor(Color::srgb(0.08, 0.09, 0.11))
+        BorderColor::all(theme::BORDER)
+        BackgroundColor(theme::BG_HEADER)
         Children [
-            @caption("—") StatusBarCursor Pickable::IGNORE
-            --
-            @caption("—") StatusBarSelection Pickable::IGNORE
+            @super::toolbar::status_area()
             --
             @flex_spacer()
             --
-            @caption("—") StatusBarDirty Pickable::IGNORE
+            @status_cell(fa::LOCATION_CROSSHAIRS)
+            Children [ @caption("—") StatusBarCursor Pickable::IGNORE ]
+            --
+            @status_cell(fa::OBJECT_GROUP)
+            Children [ @caption("—") StatusBarSelection Pickable::IGNORE ]
+            --
+            @status_cell(fa::GAUGE_HIGH)
+            Children [ @caption("—") StatusBarDirty Pickable::IGNORE ]
         ]
+    }
+}
+
+/// A status bar cell: a dim icon before the value.
+fn status_cell(glyph: char) -> impl Scene {
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: px(6),
+            flex_shrink: 0.0,
+        }
+        Pickable::IGNORE
+        Children [ @icon(glyph, 10.0, icons::ICON_DIM) ]
     }
 }
 
@@ -557,8 +762,8 @@ fn context_panel() -> impl Scene {
             border_radius: px(6),
             min_width: px(150),
         }
-        BackgroundColor(Color::srgb(0.1, 0.11, 0.13))
-        BorderColor::all(Color::srgb(0.35, 0.38, 0.44))
+        BackgroundColor(theme::BG_POPOVER)
+        BorderColor::all(theme::BORDER_STRONG)
         Children [
             Node {
                 flex_direction: FlexDirection::Column,
@@ -575,13 +780,12 @@ fn editor_tab(kind: TabKind, glyph: char, key: StrKey) -> impl Scene {
             @variant: ButtonVariant::Plain,
             @caption: bsn! {
                 Node {
-                    column_gap: px(4),
+                    column_gap: px(6),
                     align_items: AlignItems::Center,
                     flex_shrink: 0.0,
-                    overflow: Overflow::clip(),
                 }
                 Children [
-                    @icon(glyph, 12.0, icons::ICON_DIM)
+                    @icon(glyph, 11.0, icons::ICON_DIM)
                     --
                     @caption(t(Lang::default(), key)) LangLabel(key)
                 ]
@@ -589,13 +793,28 @@ fn editor_tab(kind: TabKind, glyph: char, key: StrKey) -> impl Scene {
         }
         Node {
             flex_shrink: 0.0,
-            min_width: px(0),
-            overflow: Overflow::clip(),
+            height: percent(100),
+            padding: UiRect::horizontal(px(10)),
+            border_radius: BorderRadius::ZERO,
         }
         EditorTab(kind)
         Tooltip(t(Lang::default(), key))
         LangTooltip(key)
         on(select_dock_tab)
+        Children [
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(6),
+                right: px(6),
+                bottom: px(0),
+                height: px(2),
+                border_radius: px(1),
+                display: {if kind == TabKind::Console { Display::Flex } else { Display::None }},
+            }
+            BackgroundColor(theme::ACCENT)
+            TabUnderline(kind)
+            Pickable::IGNORE
+        ]
     }
 }
 
@@ -616,10 +835,9 @@ fn tab_body(kind: TabKind) -> impl Scene {
 /// The Luau REPL against the running game: a line input plus the scrolling history.
 fn console_body() -> impl Scene {
     bsn! {
-        @subpane()
-        Node { width: percent(100) }
+        @theme::pane()
         Children [
-            @subpane_body()
+            @theme::pane_body()
             ConsoleBody
             Node { row_gap: px(6) }
             Children [
@@ -632,10 +850,10 @@ fn console_body() -> impl Scene {
                     @icon(fa::ANGLE_RIGHT, 12.0, icons::ICON_DIM)
                     --
                     @FeathersTextInputContainer
-                    Node { flex_grow: 1.0 }
+                    Node { flex_grow: 1.0, min_width: px(0) }
                     Children [
                         @FeathersTextInput {
-                            @visible_width: 120f32,
+                            @visible_width: 20f32,
                         }
                         ConsoleInput
                     ]
@@ -645,6 +863,7 @@ fn console_body() -> impl Scene {
                     flex_grow: 1.0,
                     min_height: px(0),
                     overflow: Overflow::scroll_y(),
+                    flex_direction: FlexDirection::Column,
                 }
                 ConsoleHistory
                 Children []
@@ -655,10 +874,9 @@ fn console_body() -> impl Scene {
 
 fn logs_body() -> impl Scene {
     bsn! {
-        @subpane()
-        Node { width: percent(100) }
+        @theme::pane()
         Children [
-            @subpane_body()
+            @theme::pane_body()
             Node { width: percent(100), flex_direction: FlexDirection::Column }
             Children [
                 // Debugger: a árvore de entidades da ENGINE A CORRER, a um clique.
@@ -668,12 +886,18 @@ fn logs_body() -> impl Scene {
                         @icon_caption(fa::SITEMAP, t(Lang::default(), StrKey::BtnRemoteTree), icons::ICON_DIM)
                     },
                 }
+                Node { align_self: AlignSelf::FlexStart }
                 RemoteTreeButton
                 Tooltip(t(Lang::default(), StrKey::TipRemoteTree))
                 LangTooltip(StrKey::TipRemoteTree)
                 on(dump_remote_tree)
                 --
-                Node { flex_grow: 1.0, min_height: px(0), overflow: Overflow::scroll_y() }
+                Node {
+                    flex_grow: 1.0,
+                    min_height: px(0),
+                    overflow: Overflow::scroll_y(),
+                    flex_direction: FlexDirection::Column,
+                }
                 LogsBody
                 Children []
             ]
@@ -698,25 +922,25 @@ fn dump_remote_tree(
 /// The baked world document: minimap on top, feature summary below.
 fn worlddoc_body() -> impl Scene {
     bsn! {
-        @subpane()
-        Node { width: percent(100) }
+        @theme::pane()
         Children [
-            @subpane_body()
+            @theme::pane_body()
             WorldDocBody
-            Node {
-                overflow: Overflow::scroll_y(),
-                row_gap: px(2),
-            }
+            Node { flex_direction: FlexDirection::Row, column_gap: px(10) }
             Children [
+                // The minimap fills the dock height (square), the summary scrolls beside it.
                 Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    padding: px(6),
+                    height: percent(100),
+                    aspect_ratio: {Some(1.0)},
+                    flex_shrink: 0.0,
                 }
                 WorldDocMinimap
                 --
                 Node {
-                    width: percent(100),
+                    flex_grow: 1.0,
+                    min_width: px(0),
+                    min_height: px(0),
+                    overflow: Overflow::scroll_y(),
                     flex_direction: FlexDirection::Column,
                     row_gap: px(2),
                 }
@@ -727,12 +951,11 @@ fn worlddoc_body() -> impl Scene {
     }
 }
 
-/// Shows the body matching the clicked dock tab.
 /// Applies `--tab` once (QA/agents): the named bottom-dock tab opens at startup.
 pub fn apply_startup_tab(
     config: Res<crate::app::EditorConfig>,
     mut ran: Local<bool>,
-    mut bodies: Query<(&TabBody, &mut Node)>,
+    mut active: ResMut<ActiveDockTab>,
 ) {
     if *ran {
         return;
@@ -749,30 +972,38 @@ pub fn apply_startup_tab(
         "profiler" | "prof" => TabKind::Profiler,
         "history" | "hist" => TabKind::History,
         "game" | "jogo" => TabKind::Game,
+        "problems" | "problemas" => TabKind::Problems,
         _ => return,
     };
-    for (body, mut node) in &mut bodies {
-        node.display = if body.0 == kind {
-            Display::Flex
-        } else {
-            Display::None
-        };
-    }
+    active.0 = kind;
 }
 
 fn select_dock_tab(
     activate: On<Activate>,
     tabs: Query<&EditorTab>,
-    mut bodies: Query<(&TabBody, &mut Node)>,
+    mut active: ResMut<ActiveDockTab>,
 ) {
-    let Ok(tab) = tabs.get(activate.event_target()) else {
+    if let Ok(tab) = tabs.get(activate.event_target())
+        && active.0 != tab.0
+    {
+        active.0 = tab.0;
+    }
+}
+
+/// Shows the active tab's body and its underline; hides the rest.
+pub fn apply_active_tab(
+    active: Res<ActiveDockTab>,
+    mut bodies: Query<(&TabBody, &mut Node), Without<TabUnderline>>,
+    mut underlines: Query<(&TabUnderline, &mut Node), Without<TabBody>>,
+) {
+    if !active.is_changed() {
         return;
-    };
+    }
+    let display = |on: bool| if on { Display::Flex } else { Display::None };
     for (body, mut node) in &mut bodies {
-        node.display = if body.0 == tab.0 {
-            Display::Flex
-        } else {
-            Display::None
-        };
+        node.display = display(body.0 == active.0);
+    }
+    for (line, mut node) in &mut underlines {
+        node.display = display(line.0 == active.0);
     }
 }

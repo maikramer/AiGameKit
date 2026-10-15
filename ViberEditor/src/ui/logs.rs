@@ -112,20 +112,29 @@ pub fn dump_tree(world: &mut World) {
 pub fn render_logs(
     mut commands: Commands,
     mut logs: ResMut<BridgeLogs>,
+    lang: Res<crate::ui::strings::Lang>,
     bodies: Query<Entity, With<LogsBody>>,
+    mut built: Local<bool>,
 ) {
-    if !logs.dirty {
+    if !logs.dirty && *built && !lang.is_changed() {
         return;
     }
-    logs.dirty = false;
     let Ok(body) = bodies.single() else {
         return;
     };
+    logs.dirty = false;
+    *built = true;
     commands.despawn_all::<With<LogLine>>();
+    if logs.entries.is_empty() {
+        let text = crate::ui::strings::t(*lang, crate::ui::strings::StrKey::LogsEmpty);
+        commands.spawn((LogLine, crate::ui::theme::hint(text), ChildOf(body)));
+        return;
+    }
     for entry in &logs.entries {
         commands.spawn((
             LogLine,
             Text::new(format_line(entry)),
+            crate::ui::theme::mono(12.0),
             TextColor(level_color(&entry.level)),
             Node {
                 margin: UiRect::bottom(px(1)),

@@ -12,8 +12,6 @@
 use bevy::feathers::containers::flex_spacer;
 use bevy::feathers::controls::{ButtonVariant, FeathersToolButton};
 use bevy::feathers::display::caption;
-use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use bevy::feathers::tokens;
 use bevy::prelude::*;
 use bevy::tasks::{Task, block_on, poll_once};
 use bevy::ui_widgets::Activate;
@@ -21,9 +19,10 @@ use serde_json::Value;
 
 use super::icons::{self, fa, icon, icon_caption};
 use super::strings::{
-    Lang, LangButton, LangLabel, LangTooltip, StrKey, game_running, game_starting, needs_reload,
+    Lang, LangButton, LangTooltip, StrKey, game_running, game_starting, needs_reload,
     paused_suffix, t,
 };
+use super::theme;
 use super::tooltip::Tooltip;
 use crate::app::EditorConfig;
 use crate::bridge::{BrpClientError, EngineStatus, ViberBridge, launch, methods};
@@ -78,28 +77,28 @@ pub fn toolbar() -> impl Scene {
     bsn! {
         Node {
             width: percent(100),
-            min_height: px(36),
+            height: px(theme::TOOLBAR_PX),
+            flex_shrink: 0.0,
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            column_gap: px(12),
-            padding: px(8),
-            border: UiRect::all(px(1)),
-            border_radius: px(4),
+            column_gap: px(6),
+            padding: UiRect::horizontal(px(8)),
+            border: UiRect::bottom(px(1)),
         }
-        ThemeBackgroundColor(tokens::SUBPANE_HEADER_BG)
-        ThemeBorderColor(tokens::SUBPANE_HEADER_BORDER)
+        BackgroundColor(theme::BG_HEADER)
+        BorderColor::all(theme::BORDER)
         Children [
             @logo_badge()
+            --
+            // The open world (file name, with a dot while there are unsaved edits).
+            @caption("world.xml") WorldTitle
+            --
+            @toolbar_separator()
             --
             @FeathersToolButton {
                 @variant: ButtonVariant::Plain,
                 @caption: bsn! {
-                    Node { column_gap: px(6), align_items: AlignItems::Center }
-                    Children [
-                        @icon(fa::FLOPPY_DISK, 13.0, icons::ICON)
-                        --
-                        @caption(t(lang, StrKey::BtnSave)) LangLabel(StrKey::BtnSave)
-                    ]
+                    @icon_caption(fa::FLOPPY_DISK, t(lang, StrKey::BtnSave), icons::ICON)
                 },
             }
             SaveButton
@@ -109,64 +108,60 @@ pub fn toolbar() -> impl Scene {
             --
             @flex_spacer()
             --
-            @FeathersToolButton {
-                @variant: ButtonVariant::Primary,
-                @caption: bsn! {
-                    Node { column_gap: px(6), align_items: AlignItems::Center }
-                    Children [
-                        @icon(fa::PLAY, 13.0, Color::WHITE)
-                        --
-                        @caption(t(lang, StrKey::BtnPlay)) LangLabel(StrKey::BtnPlay)
-                    ]
-                },
+            // Run controls, grouped Godot-style in the middle.
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: px(2),
+                padding: px(3),
+                border: UiRect::all(px(1)),
+                border_radius: px(7),
             }
-            PlayButton
-            Tooltip(t(lang, StrKey::TipPlay))
-            LangTooltip(StrKey::TipPlay)
-            on(play_clicked)
+            BackgroundColor(theme::BG_WINDOW)
+            BorderColor::all(theme::BORDER)
+            Children [
+                @FeathersToolButton {
+                    @variant: ButtonVariant::Primary,
+                    @caption: bsn! {
+                        @icon_caption(fa::PLAY, t(lang, StrKey::BtnPlay), Color::WHITE)
+                    },
+                }
+                PlayButton
+                Tooltip(t(lang, StrKey::TipPlay))
+                LangTooltip(StrKey::TipPlay)
+                on(play_clicked)
+                --
+                @FeathersToolButton {
+                    @variant: ButtonVariant::Plain,
+                    @caption: bsn! {
+                        @icon_caption(fa::LOCATION_DOT, t(lang, StrKey::BtnPlayHere), Color::srgb(0.55, 0.85, 0.6))
+                    },
+                }
+                PlayHereButton
+                Tooltip(t(lang, StrKey::TipPlayHere))
+                LangTooltip(StrKey::TipPlayHere)
+                on(play_here_clicked)
+                --
+                @FeathersToolButton {
+                    @variant: ButtonVariant::Plain,
+                    @caption: bsn! { @icon(fa::PAUSE, 12.0, icons::ICON) PauseIcon },
+                }
+                PauseButton
+                Tooltip(t(lang, StrKey::TipPause))
+                LangTooltip(StrKey::TipPause)
+                on(pause_clicked)
+                --
+                @FeathersToolButton {
+                    @variant: ButtonVariant::Plain,
+                    @caption: bsn! { @icon(fa::STOP, 12.0, Color::srgb(0.95, 0.55, 0.5)) },
+                }
+                StopButton
+                Tooltip(t(lang, StrKey::TipStop))
+                LangTooltip(StrKey::TipStop)
+                on(stop_clicked)
+            ]
             --
-            @FeathersToolButton {
-                @variant: ButtonVariant::Plain,
-                @caption: bsn! {
-                    @icon_caption(fa::LOCATION_DOT, t(lang, StrKey::BtnPlayHere), Color::srgb(0.55, 0.85, 0.6))
-                },
-            }
-            PlayHereButton
-            Tooltip(t(lang, StrKey::TipPlayHere))
-            LangTooltip(StrKey::TipPlayHere)
-            on(play_here_clicked)
-            --
-            @FeathersToolButton {
-                @variant: ButtonVariant::Plain,
-                @caption: bsn! {
-                    Node { column_gap: px(6), align_items: AlignItems::Center }
-                    Children [
-                        @icon(fa::PAUSE, 13.0, icons::ICON) PauseIcon
-                        --
-                        @caption(t(lang, StrKey::BtnPause)) LangLabel(StrKey::BtnPause)
-                    ]
-                },
-            }
-            PauseButton
-            Tooltip(t(lang, StrKey::TipPause))
-            LangTooltip(StrKey::TipPause)
-            on(pause_clicked)
-            --
-            @FeathersToolButton {
-                @variant: ButtonVariant::Plain,
-                @caption: bsn! {
-                    Node { column_gap: px(6), align_items: AlignItems::Center }
-                    Children [
-                        @icon(fa::STOP, 13.0, Color::srgb(0.95, 0.55, 0.5))
-                        --
-                        @caption(t(lang, StrKey::BtnStop)) LangLabel(StrKey::BtnStop)
-                    ]
-                },
-            }
-            StopButton
-            Tooltip(t(lang, StrKey::TipStop))
-            LangTooltip(StrKey::TipStop)
-            on(stop_clicked)
+            @flex_spacer()
             --
             @FeathersToolButton {
                 @variant: ButtonVariant::Plain,
@@ -179,8 +174,6 @@ pub fn toolbar() -> impl Scene {
             LangTooltip(StrKey::ViewTitle)
             on(super::view_options::view_options_clicked)
             --
-            @flex_spacer()
-            --
             // The language toggle: caption shows the active code (PT/EN), flipped by the
             // observer; `sync_lang_labels` rewrites it alongside every other label.
             @FeathersToolButton {
@@ -188,7 +181,7 @@ pub fn toolbar() -> impl Scene {
                 @caption: bsn! {
                     Node { column_gap: px(6), align_items: AlignItems::Center }
                     Children [
-                        @icon(fa::GLOBE, 13.0, icons::ICON)
+                        @icon(fa::GLOBE, 12.0, icons::ICON)
                         --
                         @caption(lang.code()) LangButton
                     ]
@@ -197,9 +190,39 @@ pub fn toolbar() -> impl Scene {
             Tooltip(t(lang, StrKey::TipLang))
             LangTooltip(StrKey::TipLang)
             on(super::strings::toggle_lang)
-            --
-            @status_area()
         ]
+    }
+}
+
+/// The world name on the toolbar.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct WorldTitle;
+
+/// A thin vertical hairline between toolbar groups.
+fn toolbar_separator() -> impl Scene {
+    bsn! {
+        Node { width: px(1), height: px(18), margin: UiRect::horizontal(px(4)) }
+        BackgroundColor(theme::BORDER)
+        Pickable::IGNORE
+    }
+}
+
+/// Keeps the toolbar title on the open world: `name.xml`, `name.xml •` with unsaved edits.
+pub fn update_world_title(doc: Res<SceneDoc>, mut titles: Query<&mut Text, With<WorldTitle>>) {
+    let name = doc
+        .world_path()
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let title = if doc.dirty_paths().is_empty() {
+        name
+    } else {
+        format!("{name}  •")
+    };
+    for mut text in &mut titles {
+        if text.0 != title {
+            text.0.clone_from(&title);
+        }
     }
 }
 
@@ -216,13 +239,16 @@ fn logo_badge() -> impl Scene {
     }
 }
 
-/// The status area on the right: a state-colored dot, then the status label.
-fn status_area() -> impl Scene {
+/// The status area (status bar, left): a state-colored dot, then the status label.
+pub fn status_area() -> impl Scene {
     bsn! {
         Node {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
             column_gap: px(8),
+            flex_shrink: 1.0,
+            min_width: px(0),
+            overflow: Overflow::clip(),
         }
         Pickable::IGNORE
         Children [

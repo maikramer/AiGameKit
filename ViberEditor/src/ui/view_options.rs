@@ -16,6 +16,7 @@ use bevy::ui_widgets::Activate;
 use viber::editor_camera::{EditorCamState, EditorCamera};
 
 use super::strings::{Lang, StrKey, t};
+use super::theme;
 use crate::bridge::{EngineStatus, ViberBridge, methods};
 
 /// The view toggles.
@@ -97,8 +98,8 @@ pub fn view_panel() -> impl Scene {
             border_radius: px(6),
             width: px(190),
         }
-        BackgroundColor(Color::srgb(0.1, 0.11, 0.13))
-        BorderColor::all(Color::srgb(0.35, 0.38, 0.44))
+        BackgroundColor(theme::BG_POPOVER)
+        BorderColor::all(theme::BORDER_STRONG)
         Children [
             @caption(t(Lang::default(), StrKey::ViewTitle)) Pickable::IGNORE
             --

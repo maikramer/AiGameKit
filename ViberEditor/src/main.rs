@@ -5,6 +5,7 @@ mod app;
 mod bridge;
 mod doc;
 mod scene;
+mod startup_error;
 mod ui;
 mod viewport;
 

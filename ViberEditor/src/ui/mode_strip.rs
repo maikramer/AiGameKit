@@ -17,6 +17,7 @@ use viber::scene::files::{FileEntry, FileKind};
 use super::files::FilesState;
 use super::icons::{self, fa, icon_caption};
 use super::strings::{Lang, StrKey, t};
+use super::theme;
 use super::tooltip::Tooltip;
 use crate::scene::EditStatus;
 
@@ -80,25 +81,35 @@ impl Plugin for ModeStripPlugin {
 /// The strip, as a scene (child of the viewport container, top-center).
 pub fn mode_strip() -> impl Scene {
     bsn! {
-        ModeStrip
-        GlobalZIndex(11)
+        // Full-width carrier so the strip centers itself (left: 50% put its LEFT edge at
+        // the center); the carrier never catches the pointer.
         Node {
             position_type: PositionType::Absolute,
-            left: percent(50),
+            left: px(0),
+            right: px(0),
             top: px(10),
-            flex_direction: FlexDirection::Row,
-            column_gap: px(4),
-            padding: px(4),
-            border: UiRect::all(px(1)),
-            border_radius: px(6),
+            justify_content: JustifyContent::Center,
         }
-        BackgroundColor(Color::srgba(0.07, 0.08, 0.1, 0.9))
-        BorderColor::all(Color::srgba(0.3, 0.33, 0.38, 0.9))
+        GlobalZIndex(11)
         Pickable::IGNORE
         Children [
-            @mode_button(EditorMode::ThreeD, fa::CUBES, StrKey::Mode3D)
-            @mode_button(EditorMode::Ui, fa::DISPLAY, StrKey::ModeUi)
-            @mode_button(EditorMode::Script, fa::TERMINAL, StrKey::ModeScript)
+            ModeStrip
+            Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: px(2),
+                padding: px(3),
+                border: UiRect::all(px(1)),
+                border_radius: px(7),
+            }
+            BackgroundColor(theme::BG_OVERLAY)
+            BorderColor::all(theme::BORDER)
+            Children [
+                @mode_button(EditorMode::ThreeD, fa::CUBES, StrKey::Mode3D)
+                --
+                @mode_button(EditorMode::Ui, fa::DISPLAY, StrKey::ModeUi)
+                --
+                @mode_button(EditorMode::Script, fa::TERMINAL, StrKey::ModeScript)
+            ]
         ]
     }
 }
@@ -127,9 +138,9 @@ pub fn script_panel() -> impl Scene {
             display: Display::None,
             flex_direction: FlexDirection::Row,
             column_gap: px(6),
-            padding: UiRect::axes(px(10), px(44)),
+            padding: UiRect::new(px(10), px(10), px(52), px(10)),
         }
-        BackgroundColor(Color::srgb(0.09, 0.1, 0.12))
+        BackgroundColor(theme::BG_WINDOW)
         Pickable::IGNORE
         Children [
             // esquerda: a lista de scripts
@@ -144,7 +155,8 @@ pub fn script_panel() -> impl Scene {
                 border_radius: px(6),
             }
         ScriptList
-            BorderColor::all(Color::srgb(0.25, 0.27, 0.3))
+            BorderColor::all(theme::BORDER)
+            BackgroundColor(theme::BG_PANEL)
             --
             // direita: o preview + abrir fora
             Node {
@@ -161,7 +173,9 @@ pub fn script_panel() -> impl Scene {
                     flex_wrap: FlexWrap::NoWrap,
                 }
                 Children [
-                    @caption(t(Lang::default(), StrKey::ScriptTitle)) ScriptTitle
+                    @caption(t(Lang::default(), StrKey::ScriptTitle))
+                    Node { flex_grow: 1.0, flex_shrink: 1.0, min_width: px(0) }
+                    ScriptTitle
                     --
                     @FeathersToolButton {
                         @variant: ButtonVariant::Plain,
@@ -259,10 +273,7 @@ fn refresh_mode_strip(
     mut buttons: Query<(&ModeButton, &mut ButtonVariant)>,
     strips: Query<(), With<ModeStrip>>,
 ) {
-    let _ = strips;
-    if !state.is_changed() && !lang.is_changed() {
-        return;
-    }
+    let _ = (strips, lang);
     for (button, mut variant) in &mut buttons {
         let wanted = if state.0 == button.0 {
             ButtonVariant::Primary
@@ -276,10 +287,11 @@ fn refresh_mode_strip(
 }
 
 /// Applies the mode: camera swap + letterbox (UI) and the script panel (Script).
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn apply_mode(
     state: Res<EditorModeState>,
-    windows: Query<&Window>,
+    image: Res<crate::viewport::ViewportImage>,
+    images: Res<Assets<Image>>,
     mut commands: Commands,
     mut editor_cameras: Query<&mut Camera, With<viber::editor_camera::EditorCamera>>,
     mut ui_cameras: Query<
@@ -289,7 +301,16 @@ fn apply_mode(
             Without<viber::editor_camera::EditorCamera>,
         ),
     >,
-    mut panels: Query<&mut Node, With<ScriptPanel>>,
+    mut clear_cameras: Query<
+        (Entity, &mut Camera),
+        (
+            With<crate::viewport::LetterboxClearCamera>,
+            Without<crate::viewport::GameUiCamera>,
+            Without<viber::editor_camera::EditorCamera>,
+        ),
+    >,
+    mut panels: Query<&mut Node, (With<ScriptPanel>, Without<super::tools::ToolStrip>)>,
+    mut strips: Query<&mut Node, (With<super::tools::ToolStrip>, Without<ScriptPanel>)>,
 ) {
     // B4: em modo UI o marker `KeepCameraActive` é assegurado TODOS os frames
     // — o `suppress_game_cameras` da engine desativa TODA a câmara sem
@@ -304,32 +325,50 @@ fn apply_mode(
                 .entity(entity)
                 .insert(viber::editor_camera::KeepCameraActive);
         }
+        for (entity, _) in &clear_cameras {
+            commands
+                .entity(entity)
+                .insert(viber::editor_camera::KeepCameraActive);
+        }
+    }
+    // UI mode: a câmara de UI do jogo desenha na imagem do viewport, em letterbox 16:9
+    // centrado — recalculado todos os frames (os splitters mudam o tamanho da imagem).
+    if state.0 == EditorMode::Ui
+        && let Some(size) = images.get(&image.0).map(|image| image.size())
+        && let Ok((_, mut ui_camera)) = ui_cameras.single_mut()
+    {
+        let viewport = letterbox(size);
+        let same = ui_camera.viewport.as_ref().is_some_and(|current| {
+            current.physical_position == viewport.physical_position
+                && current.physical_size == viewport.physical_size
+        });
+        if !same {
+            ui_camera.viewport = Some(viewport);
+        }
     }
     if !state.is_changed() {
         return;
     }
     let mode = state.0;
-    // UI mode: a câmara de UI do jogo fica ativa, em letterbox 16:9 centrado.
-    if let (Ok(window), Ok((ui_entity, mut ui_camera))) =
-        (windows.single(), ui_cameras.single_mut())
-    {
+    for (entity, mut camera) in &mut clear_cameras {
+        camera.is_active = mode == EditorMode::Ui;
+        if mode != EditorMode::Ui {
+            commands
+                .entity(entity)
+                .remove::<viber::editor_camera::KeepCameraActive>();
+        }
+    }
+    // As ferramentas de gizmo 3D só fazem sentido no modo 3D.
+    for mut strip in &mut strips {
+        strip.display = if mode == EditorMode::ThreeD {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    if let Ok((ui_entity, mut ui_camera)) = ui_cameras.single_mut() {
         match mode {
-            EditorMode::Ui => {
-                ui_camera.is_active = true;
-                let (w, h) = (window.width(), window.height());
-                let target = 16.0 / 9.0;
-                let (view_w, view_h) = if w / h > target {
-                    (h * target, h)
-                } else {
-                    (w, w / target)
-                };
-                let (x, y) = ((w - view_w) * 0.5, (h - view_h) * 0.5);
-                ui_camera.viewport = Some(bevy::camera::Viewport {
-                    physical_position: UVec2::new(x as u32, y as u32),
-                    physical_size: UVec2::new(view_w as u32, view_h as u32),
-                    ..default()
-                });
-            }
+            EditorMode::Ui => ui_camera.is_active = true,
             EditorMode::ThreeD | EditorMode::Script => {
                 // Sai do modo UI: devolve a câmara à regra comum (o suppress
                 // da engine volta a desativá-la).
@@ -352,6 +391,22 @@ fn apply_mode(
         } else {
             Display::None
         };
+    }
+}
+
+/// The 16:9 rect centered in an image of `size` physical px.
+fn letterbox(size: UVec2) -> bevy::camera::Viewport {
+    let (w, h) = (size.x.max(1) as f32, size.y.max(1) as f32);
+    let target = 16.0 / 9.0;
+    let (view_w, view_h) = if w / h > target {
+        (h * target, h)
+    } else {
+        (w, w / target)
+    };
+    bevy::camera::Viewport {
+        physical_position: UVec2::new(((w - view_w) * 0.5) as u32, ((h - view_h) * 0.5) as u32),
+        physical_size: UVec2::new(view_w.max(1.0) as u32, view_h.max(1.0) as u32),
+        ..default()
     }
 }
 

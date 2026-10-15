@@ -149,16 +149,24 @@ pub fn poll_console(lang: Res<Lang>, bridge: Res<ViberBridge>, mut state: ResMut
 pub fn render_console(
     mut commands: Commands,
     mut state: ResMut<ConsoleState>,
+    lang: Res<crate::ui::strings::Lang>,
     histories: Query<Entity, With<ConsoleHistory>>,
+    mut built: Local<bool>,
 ) {
-    if !state.dirty {
+    if !state.dirty && *built && !lang.is_changed() {
         return;
     }
-    state.dirty = false;
     let Ok(history) = histories.single() else {
         return;
     };
+    state.dirty = false;
+    *built = true;
     commands.despawn_all::<With<ConsoleLine>>();
+    if state.history.is_empty() {
+        let text = crate::ui::strings::t(*lang, crate::ui::strings::StrKey::ConsoleHint);
+        commands.spawn((ConsoleLine, crate::ui::theme::hint(text), ChildOf(history)));
+        return;
+    }
     for block in &state.history {
         let (text, color) = match block {
             Block::Input { code } => (format!("> {code}"), Color::srgb(0.78, 0.84, 0.95)),
@@ -168,6 +176,7 @@ pub fn render_console(
         commands.spawn((
             ConsoleLine,
             Text::new(text),
+            crate::ui::theme::mono(12.0),
             TextColor(color),
             Node {
                 margin: UiRect::bottom(px(2)),

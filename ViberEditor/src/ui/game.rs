@@ -5,7 +5,6 @@
 //! One combined poll per second fills the readouts; slider drags push
 //! commands immediately and are not overwritten by the next poll.
 
-use bevy::feathers::containers::{subpane, subpane_body};
 use bevy::feathers::controls::FeathersSlider;
 use bevy::feathers::display::caption;
 use bevy::prelude::*;
@@ -17,6 +16,7 @@ use crate::bridge::{BrpClientError, EngineStatus, ViberBridge, methods};
 use crate::scene::Selection;
 use crate::ui::icons::{self, fa, icon_caption};
 use crate::ui::strings::{Lang, StrKey, t};
+use crate::ui::theme;
 
 /// The dock body.
 /// Poll interval for the readouts.
@@ -87,44 +87,27 @@ impl Plugin for GamePanelPlugin {
 /// The dock body, as a scene.
 pub fn game_body() -> impl Scene {
     bsn! {
-        @subpane()
-        Node { width: percent(100) }
+        @theme::pane()
         Children [
-            @subpane_body()
+            @theme::pane_body()
             Node {
-                width: percent(100),
-                flex_direction: FlexDirection::Column,
+                flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
+                align_items: AlignItems::FlexStart,
+                column_gap: px(8),
                 row_gap: px(8),
-                padding: px(6),
                 overflow: Overflow::scroll_y(),
             }
             GameBody
             Children [
-                // RELÓGIO
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: px(8),
-                }
+                // AMBIENTE: relógio + tempo
+                @game_card()
                 Children [
-                    @icon_caption(fa::CLOCK, t(Lang::default(), StrKey::GameClock), icons::ICON_DIM)
+                    @card_title(fa::CLOCK, StrKey::GameClock)
                     --
-                    @FeathersSlider {
-                        @min: 0.0f32,
-                        @max: 1440.0f32,
-                    }
-                    Node { width: px(150) }
-                    ClockSlider
-                ]
-                --
-                // TEMPO
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: px(8),
-                }
-                Children [
-                    @icon_caption(fa::CLOUD_RAIN, t(Lang::default(), StrKey::GameWeather), icons::ICON_DIM)
+                    @clock_slider()
+                    --
+                    @card_title(fa::CLOUD_RAIN, StrKey::GameWeather)
                     --
                     @rain_slider()
                     --
@@ -134,35 +117,21 @@ pub fn game_body() -> impl Scene {
                 ]
                 --
                 // SOL
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: px(8),
-                }
+                @game_card()
                 Children [
-                    @icon_caption(fa::SUN, t(Lang::default(), StrKey::GameSun), icons::ICON_DIM)
+                    @card_title(fa::SUN, StrKey::GameSun)
                     --
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: px(4),
-                    }
-                    Children [
-                        @sun_yaw_slider()
-                        --
-                        @sun_pitch_slider()
-                        --
-                        @sun_light_slider()
-                    ]
+                    @sun_yaw_slider()
+                    --
+                    @sun_pitch_slider()
+                    --
+                    @sun_light_slider()
                 ]
                 --
                 // RUNTIME (entidade selecionada, enquanto joga)
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(2),
-                    margin: UiRect::top(px(8)),
-                }
+                @game_card()
                 Children [
-                    @caption(t(Lang::default(), StrKey::GameRuntime)) Pickable::IGNORE
+                    @card_title(fa::GEARS, StrKey::GameRuntime)
                     --
                     Node {
                         flex_direction: FlexDirection::Column,
@@ -176,6 +145,48 @@ pub fn game_body() -> impl Scene {
     }
 }
 
+/// A card in the Game tab: a titled column of slider rows.
+fn game_card() -> impl Scene {
+    bsn! {
+        Node {
+            flex_grow: 1.0,
+            flex_basis: px(200),
+            min_width: px(200),
+            max_width: px(340),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(5),
+            padding: px(8),
+            border_radius: px(6),
+        }
+        BackgroundColor(theme::BG_HEADER)
+    }
+}
+
+fn card_title(glyph: char, key: StrKey) -> impl Scene {
+    bsn! {
+        @icon_caption(glyph, t(Lang::default(), key), icons::ICON_DIM)
+        Pickable::IGNORE
+    }
+}
+
+fn clock_slider() -> impl Scene {
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: px(6),
+        }
+        Children [
+            @FeathersSlider {
+                @min: 0.0f32,
+                @max: 1440.0f32,
+            }
+            Node { flex_grow: 1.0, min_width: px(90) }
+            ClockSlider
+        ]
+    }
+}
+
 fn rain_slider() -> impl Scene {
     bsn! {
         Node {
@@ -184,13 +195,13 @@ fn rain_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameRain)) Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameRain)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
                 @max: 1.0f32,
             }
-            Node { width: px(130) }
+            Node { flex_grow: 1.0, min_width: px(90) }
             RainSlider
         ]
     }
@@ -204,13 +215,13 @@ fn clouds_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameClouds)) Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameClouds)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
                 @max: 1.0f32,
             }
-            Node { width: px(130) }
+            Node { flex_grow: 1.0, min_width: px(90) }
             CloudsSlider
         ]
     }
@@ -224,13 +235,13 @@ fn sun_yaw_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameSunYaw)) Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameSunYaw)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
                 @max: 360.0f32,
             }
-            Node { width: px(130) }
+            Node { flex_grow: 1.0, min_width: px(90) }
             SunYawSlider
         ]
     }
@@ -244,13 +255,13 @@ fn sun_pitch_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameSunPitch)) Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameSunPitch)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
                 @max: 90.0f32,
             }
-            Node { width: px(130) }
+            Node { flex_grow: 1.0, min_width: px(90) }
             SunPitchSlider
         ]
     }
@@ -264,13 +275,13 @@ fn sun_light_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameSunLight)) Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameSunLight)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
                 @max: 20000.0f32,
             }
-            Node { width: px(130) }
+            Node { flex_grow: 1.0, min_width: px(90) }
             SunIlluminanceSlider
         ]
     }
@@ -284,13 +295,13 @@ fn wind_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameWind)) Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameWind)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
                 @max: 10.0f32,
             }
-            Node { width: px(130) }
+            Node { flex_grow: 1.0, min_width: px(90) }
             WindSlider
         ]
     }
@@ -372,35 +383,50 @@ fn poll_game(world: &mut World) {
     }
     // 1. drena o task de comandos/leitura combinada
     let mut task = world.resource_mut::<GameState>().task.take();
-    if let Some(task) = task.as_mut()
-        && let Some(Ok(value)) = block_on(poll_once(task))
-    {
-        let minute = value.get("minute").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let rain = value.get("rain").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let clouds = value.get("clouds").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let wind = value.get("wind").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let (h, m) = (
-            (minute / 60.0).floor() as u32,
-            minute.rem_euclid(60.0) as u32,
-        );
-        world.resource_mut::<GameState>().readout =
-            format!("{h:02}:{m:02}   ☔ {rain:#}   ☁ {clouds:#}   💨 {wind:#}");
-        world.resource_mut::<GameState>().dirty = true;
+    if let Some(current) = task.as_mut() {
+        match block_on(poll_once(current)) {
+            Some(Ok(value)) => {
+                let minute = value.get("minute").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let rain = value.get("rain").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let clouds = value.get("clouds").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let wind = value.get("wind").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let (h, m) = (
+                    (minute / 60.0).floor() as u32,
+                    minute.rem_euclid(60.0) as u32,
+                );
+                world.resource_mut::<GameState>().readout =
+                    format!("{h:02}:{m:02} · chuva {rain:#} · nuvens {clouds:#} · vento {wind:#}");
+                world.resource_mut::<GameState>().dirty = true;
+                task = None;
+            }
+            Some(Err(error)) => {
+                warn!("game panel: {error}");
+                task = None;
+            }
+            None => {}
+        }
     }
-    if let Some(task) = task {
-        world.resource_mut::<GameState>().task = Some(task);
+    if let Some(current) = task {
+        world.resource_mut::<GameState>().task = Some(current);
     }
     // 2. drena o task do runtime info
     let mut info = world.resource_mut::<GameState>().info_task.take();
-    if let Some(info) = info.as_mut()
-        && let Some(Ok(value)) = block_on(poll_once(info))
-    {
-        let lines = runtime_lines(&value);
-        world.resource_mut::<GameState>().runtime = lines;
-        world.resource_mut::<GameState>().dirty = true;
+    if let Some(current) = info.as_mut() {
+        match block_on(poll_once(current)) {
+            Some(Ok(value)) => {
+                world.resource_mut::<GameState>().runtime = runtime_lines(&value);
+                world.resource_mut::<GameState>().dirty = true;
+                info = None;
+            }
+            Some(Err(error)) => {
+                warn!("game panel: info: {error}");
+                info = None;
+            }
+            None => {}
+        }
     }
-    if let Some(info) = info {
-        world.resource_mut::<GameState>().info_task = Some(info);
+    if let Some(current) = info {
+        world.resource_mut::<GameState>().info_task = Some(current);
     }
     // 3. a cada POLL: relê clock/weather e pede o info da seleção
     let delta = world.resource::<Time>().delta_secs();

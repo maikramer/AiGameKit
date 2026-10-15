@@ -73,14 +73,17 @@ fn render_history(
     mut state: ResMut<HistoryState>,
     lang: Res<Lang>,
     bodies: Query<Entity, With<HistoryBody>>,
+    mut built: Local<bool>,
 ) {
-    if !state.dirty {
+    // 1.ª passagem também desenha (o estado vazio "sem edições" não esperava por uma)
+    if !state.dirty && *built && !lang.is_changed() {
         return;
     }
-    state.dirty = false;
     let Ok(body) = bodies.single() else {
         return;
     };
+    state.dirty = false;
+    *built = true;
     commands.entity(body).despawn_related::<Children>();
     if state.undo.is_empty() && state.redo.is_empty() {
         let label = t(*lang, StrKey::HistoryEmpty).to_owned();

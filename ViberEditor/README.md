@@ -18,13 +18,21 @@ camera replaces the game camera. **Play (F5)** saves and runs the world as a sep
 ## Layout
 
 ```
-┌ Toolbar: ▣ · Save · Play (F5) · Play here (F9) · Pause (F6) · Stop (F8) · lang · ● ─┐
-├ Objects(+)┬ Viewport (editor camera) ─────────────────┬ Inspector ───┤
-│ world     │ ▤ tool strip (Q/W/E/R/B · T · F)          │ the selected  │
-│ tree,     │ 3D | UI | Script selector (top-center)     │ node's        │
-│ Includes  ├ Console | Logs | World Overview | Files ───┤ attributes    │
-└───────────┴────────────────────────────────────────────┴───────────────┘
+┌ Toolbar: ▣ world.xml • · Save ──── [ Play · Play here · ⏸ · ⏹ ] ──── View · PT ─┐
+├ Objects(+)┊ Viewport (editor camera) ────────────────┊ Inspector ────┤
+│ 🔍 search ┊ ▤ tool strip (3D mode: Q/W/E/R/B · T · F) ┊ identity card │
+│ world     ┊ 3D | UI | Script selector (top-center)    ┊ actions       │
+│ tree      ├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┤ sections ▸    │
+│           │ Console│Logs│Problems│Files│World│History… │ other attrs   │
+└ status: ● game state · last edit ─────────── cursor XZ · selection · fps ┘
 ```
+
+**Look and feel** (`src/ui/theme.rs`): one palette (`BG_*`, `BORDER`, `ACCENT`, `TEXT*`) and
+one 13 px body font. The docks are framed panels; the **┊ splitters are draggable** (left,
+right and bottom docks resize). The bottom tab bar underlines the active tab; empty tabs
+explain themselves (Logs/Console/Profiler/History). `theme::repair_text_fonts` exists
+because feathers propagates its font only through `ThemedText` nodes — a plain wrapper
+`Node` used to drop labels to Bevy's 20 px default.
 
 The UI is **bilingual: Portuguese by default, English via the toolbar's globe button or
 `--lang en`** — `src/ui/strings.rs` owns every user-visible name. Names are friendly

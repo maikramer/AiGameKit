@@ -116,8 +116,8 @@ pub fn render_world_doc(
                 .spawn((
                     ImageNode::new(handle),
                     Node {
-                        width: px(MINIMAP_SIDE as f32),
-                        aspect_ratio: Some(1.0),
+                        width: percent(100),
+                        height: percent(100),
                         ..default()
                     },
                     MinimapImage,

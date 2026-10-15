@@ -80,9 +80,9 @@ fn format_snapshot(value: &serde_json::Value) -> Vec<(String, bool)> {
     let header = match (fps, avg) {
         (Some(fps), Some(avg)) => {
             let p95_text = p95.map(|p| format!(", p95 {p:.1} ms")).unwrap_or_default();
-            format!("▶ {fps:.0} fps — frame {avg:.1} ms{p95_text}")
+            format!("{fps:.0} fps — frame {avg:.1} ms{p95_text}")
         }
-        _ => "▶ sem amostras".to_string(),
+        _ => "sem amostras".to_string(),
     };
     out.push((header, false));
     if let Some(systems) = value.get("systems").and_then(|v| v.as_array()) {
@@ -126,21 +126,29 @@ fn format_snapshot(value: &serde_json::Value) -> Vec<(String, bool)> {
 fn render_profiler(
     mut commands: Commands,
     mut state: ResMut<ProfilerState>,
+    lang: Res<crate::ui::strings::Lang>,
     bodies: Query<Entity, With<ProfilerBody>>,
+    mut built: Local<bool>,
 ) {
-    if !state.dirty {
+    if !state.dirty && *built && !lang.is_changed() {
         return;
     }
-    state.dirty = false;
     let Ok(body) = bodies.single() else {
         return;
     };
+    state.dirty = false;
+    *built = true;
     commands.despawn_all::<With<ProfilerLine>>();
+    if state.lines.is_empty() {
+        let text = crate::ui::strings::t(*lang, crate::ui::strings::StrKey::ProfilerEmpty);
+        commands.spawn((ProfilerLine, crate::ui::theme::hint(text), ChildOf(body)));
+        return;
+    }
     for (text, hot) in &state.lines {
         commands.spawn((
             ProfilerLine,
             Text::new(text.clone()),
-            TextFont::from_font_size(12.0),
+            crate::ui::theme::mono(12.0),
             TextColor(if *hot {
                 Color::srgb(0.95, 0.55, 0.45)
             } else {

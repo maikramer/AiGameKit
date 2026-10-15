@@ -13,8 +13,10 @@ pub mod icons;
 mod layout;
 mod logs;
 pub mod mode_strip;
+mod problems;
 mod profiler;
 pub mod strings;
+pub mod theme;
 mod toolbar;
 mod tools;
 pub mod tooltip;
@@ -36,7 +38,10 @@ impl Plugin for EditorUiPlugin {
             .init_resource::<toolbar::GamePause>()
             .init_resource::<toolbar::PendingPlayFrom>()
             .init_resource::<files::FilesState>()
+            .init_resource::<layout::DockSizes>()
+            .init_resource::<layout::ActiveDockTab>()
             .add_plugins((
+                theme::ThemePlugin,
                 tooltip::TooltipPlugin,
                 tools::ToolStripPlugin,
                 mode_strip::ModeStripPlugin,
@@ -46,6 +51,7 @@ impl Plugin for EditorUiPlugin {
                 game::GamePanelPlugin,
                 view_options::ViewOptionsPlugin,
                 biomes::BiomesPlugin,
+                problems::ProblemsPlugin,
                 profiler::ProfilerPlugin,
             ))
             .add_systems(
@@ -56,7 +62,10 @@ impl Plugin for EditorUiPlugin {
                 Update,
                 (
                     layout::apply_startup_tab,
+                    layout::apply_active_tab.after(layout::apply_startup_tab),
+                    layout::apply_dock_sizes,
                     layout::update_status_bar,
+                    toolbar::update_world_title,
                     mode_strip::apply_startup_mode,
                 ),
             )

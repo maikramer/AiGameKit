@@ -4,7 +4,7 @@
 use bevy::feathers::{FeathersPlugins, dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use viber::app::{AppOptions, RunMode};
 
 use crate::Cli;
@@ -98,6 +98,31 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             .map(|name| name.to_string_lossy())
             .unwrap_or_default()
     );
+    // Pré-validação (Fase O1): config.yaml inválido/ausente e mundo
+    // procedural abrem um PAINEL DE ERRO em vez de sair para o stderr.
+    if let Err(error) = viber::config::load(
+        &world
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| world.clone()),
+    ) {
+        let hint = if error.to_string().contains("já é um mundo estático") {
+            crate::startup_error::StartupHint::NeedsBake
+        } else {
+            crate::startup_error::StartupHint::CreateConfig
+        };
+        // App mínima de erro: mostra o painel e sai (sem mundo).
+        let mut app = crate::startup_error::error_app(
+            format!("{error:#}"),
+            hint,
+            world,
+            cli.screenshot.clone(),
+            cli.frames,
+        );
+        app.run();
+        return Ok(());
+    }
+
     let mut app = viber::app::build_app(
         &world,
         AppOptions {

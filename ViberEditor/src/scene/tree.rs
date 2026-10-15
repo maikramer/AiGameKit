@@ -348,7 +348,17 @@ pub fn render_tree(
                 row_children
                     .spawn((
                         TreeToggle(row.node.clone()),
-                        icons::icon_text(chevron, 9.0, icons::ICON_DIM),
+                        // sem filhos: texto vazio (um espaço na fonte de ícones
+                        // desenha o glifo "em falta" ⊠)
+                        if chevron == ' ' {
+                            (
+                                Text::default(),
+                                TextFont::default(),
+                                TextColor(icons::ICON_DIM),
+                            )
+                        } else {
+                            icons::icon_text(chevron, 9.0, icons::ICON_DIM)
+                        },
                         Node {
                             width: px(10),
                             ..default()
