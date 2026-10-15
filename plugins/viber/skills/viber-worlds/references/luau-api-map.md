@@ -20,6 +20,8 @@ Módulos: `Viber/src/luau/`.
 | Categoria | Destaques |
 |---|---|
 | Geral | log, `viber.state()`, `viber.self()` |
+| Props exportadas | `--@export nome: tipo = default` + `viber.prop(nome)`/`viber.props()` — valor por instância em `prop-<nome>` |
+| Sinais / grupos | `--@signal nome(args)` + `viber.emit(nome, …)`; ouvintes em `connect-<nome>` do emissor; `viber.call_group`, `viber.group`, `viber.in_group`, `viber.sender` |
 | Perceção do player | posição/distância/direção do player |
 | Terreno vivo | `viber.terrain.lower/raise/flatten/crater(x, z, raio, …)` — overlay esparso, EDITS_PER_FRAME=4, raio ≤ 96 m, Δh ≤ 64 m; não persiste no save (v1) |
 | Movimento & rotação | terrain-snapped, nominais de locomoção |

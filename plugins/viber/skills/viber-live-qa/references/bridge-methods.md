@@ -18,7 +18,8 @@ Fonte canónica: `Viber/docs/BRIDGE.md` + `Viber/src/bridge/mod.rs`.
 | `viber.raycast` | raio contra a física (primeira entidade + ponto/normal) |
 | `viber.camera.orbit/pan/zoom/look_at/pose` | SÓ com `viber run --camera free` (fora: erro claro) |
 | `viber.pick`, `viber.select` | picking |
-| `viber.scene.ls/get/find/apply/undo/redo/save/pick/entities` | edição viva (mesma API do `viber scene`) |
+| `viber.scene.ls/get/find/apply/undo/redo/save/pick/entities/schema` | edição viva (mesma API do `viber scene`); `schema {target}` = props `--@export` + sinais/métodos/conexões + valores; `prop-*` aplica-se sem respawn |
+| `viber.scene.groups` / `viber.scene.instance` | `{name?}` → grupos e membros; `{scene, parent?, at?}` → `<Include>` de uma cena (spawn ao vivo). `apply` aceita `extract` (ramo → cena) |
 | `viber.tool.list/scatter` | ferramentas de mundo (receitas `<Scatter>`) |
 
 Mais os BRP builtin (`world.query`, `world.spawn_entity`, `world.insert_components`,

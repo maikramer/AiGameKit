@@ -1,6 +1,6 @@
 ---
 name: viber-worlds
-description: Usar ao criar ou editar mundos do Viber (engine nativa Bevy do AiGameKit) — world.xml declarativo, config.yaml, tags XML (Terrain, Lake, River, Road, StaticSpawner, Composition, Prototype, UiRoot), atributos universais (script, collider, rigidbody), mundos estáticos com viber bake, edição via viber scene, scripts Luau (API viber.*). Viber world authoring, declarative XML, Luau scripting.
+description: Usar ao criar ou editar mundos do Viber (engine nativa Bevy do AiGameKit) — world.xml declarativo, config.yaml, tags XML (Terrain, Lake, River, Road, StaticSpawner, Composition, Prototype, UiRoot), atributos universais (script, collider, rigidbody), mundos estáticos (viber bake converte procedurais antigos), edição via viber scene, scripts Luau (API viber.*). Viber world authoring, declarative XML, Luau scripting.
 ---
 
 # Viber — autorar mundos
@@ -15,29 +15,29 @@ Doc canónica no checkout: `Viber/AGENTS.md` (contrato completo), `Viber/docs/`
 os detalhes de tags/atributos vivem em `references/xml-contract.md` e o mapa da API
 Luau em `references/luau-api-map.md`.
 
-## Regra de ouro: o estático manda
+## Regra de ouro: só há mundo estático
 
-- `world.xml` procedural é só **GERADOR**. `viber bake world.xml` produz o mundo
-  estático: `world.static.xml` + includes espelhados em `static/**` +
-  `bake/terrain.baked.ahgt` + `bake/bake.json`.
-- É o **estático** que agentes e editor editam; `viber run`/`scene`/`analyze`
-  abrem-no por omissão (auto-descoberta prefere `world.static.xml`).
-- `viber bake` **recusa** sobrescrever o estático sem `--force` — e `--force`
-  **PERDE as edições** feitas no estático. Regra: editar o estático;
-  re-gerar só quando o procedural muda e se aceita perder edições.
-- `<world static="true">`: o runtime não assenta nem coloca — as poses do XML são
-  finais. `<StaticSpawner>` e `place` num estático são avisos do `analyze`.
+- O runtime (e o ViberEditor) só carrega `<world static="true">`. O `world.xml` (+ os
+  includes, cada um marcado) **é** a fonte da verdade; os dados binários vivem em
+  `world.data/` (`<stem>.data/`): `terrain.ahgt` (+ `.paint`), `veg/NNN.vinst`, `bake.json`.
+- Sem geração em runtime: `<StaticSpawner>`, `place`, `<Vegetation>` sem `instances` e
+  `<Lake|River rocks="1">` num estático são **ERRO de parse** — usar as ferramentas
+  (`viber tool scatter|settle`, `viber scene drop`, pincéis de terreno). As poses do XML
+  são finais. Só o `<DynamicSpawner>` (criaturas = gameplay) corre em runtime.
+- `viber create` já gera um mundo estático (terreno plano editável).
+- `viber bake velho.xml` = conversão ÚNICA, no sítio, de um mundo procedural antigo
+  (reescreve os mesmos ficheiros + `<stem>.data/`; recusa um mundo já estático; nunca
+  reescreve includes que já são estáticos; os comentários XML perdem-se).
 
 ## Fluxo de trabalho do agente
 
 ```bash
-viber create <nome>            # scaffold <nome>/{world.xml,config.yaml}
-# editar o XML (contrato em references/xml-contract.md)
+viber create <nome>            # scaffold estático <nome>/{world.xml,config.yaml,world.data/}
+# editar com viber scene/tool/terrain (contrato das tags em references/xml-contract.md)
 viber analyze <world.xml>      # valida headless: assets, conflitos, tags — exit 1 em erro
 viber analyze <world.xml> --json   # o mesmo relatório num objeto JSON estável (agentes/CI)
 viber scene --world w.xml lint [--strict]   # sintaxe Luau de TODOS os scripts, viber.load, quest schema, nomes duplicados
-viber bake <world.xml>         # gera world.static.xml + static/** + bake/
-viber scene ls                 # árvore com seletores (abre o estático por omissão)
+viber scene ls                 # árvore com seletores
 viber scene set name=well translation="4 0 3"           # edição offline
 viber scene --live set name=well translation="10 8 25"  # engine a correr (undo/redo)
 ```
@@ -56,6 +56,12 @@ viber scene add PointLight --parent name=plaza        # insere o snippet do cat�
 viber scene drop /assets/meshes/props/barrel.glb --at "12 40 -3" --parent name=city
 #   --at é MUNDO: convertido para o referencial do pai (exato num estático)
 viber scene files --depth 3                           # a pasta do mundo (o dock FileSystem)
+viber scene schema name=bram                          # props --@export do script + valores efetivos
+viber scene set name=bram prop-speed=0.8 prop-banter="Olá|Adeus"   # afinar a instância (sem tocar no .lua)
+viber scene set name=chest connect-opened="@discordia:notice"      # quem ouve o sinal `opened`
+viber scene groups discordia                          # membros do grupo
+viber scene extract name=forja --to scenes/forja.xml  # ramo → cena reutilizável
+viber scene instance scenes/forja.xml --at "120 0 -40"
 
 viber terrain sample -- -70 -70                       # altura do heightmap (documento)
 viber terrain brush raise --at "-70 -70" --radius 25 --amount 4   # raise|lower|flatten|smooth|crater|noise
@@ -96,6 +102,24 @@ do pool são **KTX2/UASTC** — conteúdo novo entra já comprimido.
   Controllers sempre ativos: `tag="always-active"`.
 - Setters enfileiram comandos aplicados pós-frame; orçamento 500 ms/entrada e
   heap 512 MiB por VM; erros dão warn 1× e a engine segue.
+- **Props exportadas (`@export` do Godot)**: o script declara
+  `--@export speed: number(0..4) = 1.1 -- ajuda` (tipos `number`, `int`, `bool`, `string`,
+  `string[]` com `a|b`, `enum(a,b)`, `color`, `vec3`, `entity`); cada instância guarda o
+  valor em `prop-<nome>` no XML e o script lê `viber.prop("speed")` no `on_update` (o
+  top-level recusa). Para diferenciar NPCs/baús/interações, **exporta e define props** —
+  não copies o script. `scene schema` mostra o esquema; `scene lint` apanha
+  `script-prop-unknown|type|entity|orphan`; `--live` muda a instância sem respawn.
+- **Sinais + grupos (Godot)**: `--@signal opened(gold)` + `viber.emit("opened", g)` no
+  emissor; quem ouve é DADO do emissor — `connect-opened="@grupo:metodo; nome:metodo; self:m"`
+  (método = função global do script do alvo). `groups="a b"` em qualquer entidade;
+  `viber.call_group(g, "m", …)`, `viber.group(g)`, `viber.in_group(g)`, `viber.sender()`.
+  Para "quando X acontece, Y reage", **liga por `connect-*`** em vez de procurar entidades por
+  nome no código. `scene schema` lista `signals`/`methods`/`connections` (`nodes: 0` = alvo
+  partido); `scene groups [g]`; lint `connect-syntax|orphan|signal|target|method`, `script-emit`.
+- **Cenas reutilizáveis**: `viber scene extract SEL [--to scenes/x.xml]` ("Salvar ramo como
+  cena": o ramo vai para um ficheiro, fica `<Include>` com a pose) e `viber scene instance
+  scenes/x.xml --at "x y z"` (mais instâncias; editar o ficheiro muda todas). Undo offline =
+  aplicar o `inverse` (apaga a cena criada).
 - **Hot-reload** ao gravar o `.lua` (re-corre o top-level; `viber.state()` sobrevive;
   erro de compilação mantém o chunk antigo). `VIBER_HOT_RELOAD=0` desliga.
 - API completa: `Viber/docs/LUA_API.md` (~30 grupos: perceção, movimento, IA,

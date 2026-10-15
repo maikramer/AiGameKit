@@ -6,7 +6,7 @@ allowed-tools: Bash
 
 # Analisar um mundo Viber (headless)
 
-Mundo alvo: `$ARGUMENTS` (se vazio: `viber analyze` procura `world.static.xml` →
+Mundo alvo: `$ARGUMENTS` (se vazio: `viber analyze` procura
 `world.xml` → `worlds/*.xml` no cwd). `analyze` NUNCA delega a cargo e é exit 1
 em erro — CI-ready. Corre da pasta do mundo ou passa o caminho.
 
@@ -33,10 +33,9 @@ Interpretar e reportar por severidade (skill **viber-worlds**, references/xml-co
   `biome` em falta derruba o FICHEIRO inteiro.
 - **ℹ / no-ops**: tags desconhecidas (mundos VibeGame degradam com garcia —
   decidir se é intenção), glTF sem collider, estrada × cut.
-- **Avisos de mundo estático**: `<StaticSpawner>`/`place` num `world.static.xml`
-  (correr a ferramenta/bake em vez disso).
-
-Se o mundo é procedural com estático já cozido, o analyze abre o ESTÁTICO por
-ordem de preferência — para auditar o gerador, apontar o `world.xml` explícito.
+- **Erros de mundo estático**: `<StaticSpawner>`/`place`/`<Vegetation>` sem
+  `instances` num `<world static="true">` falham o parse (usar `viber tool
+  scatter|settle`/`viber scene drop`). Um mundo SEM `static="true"` é procedural
+  antigo: o `run` recusa-o — converter uma vez com `viber bake mundo.xml`.
 Terminar com veredicto: LIMPO / avisos (lista) / erros (lista + correção
 sugerida). Em CI: `--strict`.

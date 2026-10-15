@@ -12,6 +12,9 @@ Fonte canónica: `Viber/AGENTS.md` §CONTRATO XML + `Viber/src/recipes/mod.rs` (
 |---|---|
 | `name`, `tag` | identificação/seleção; `tag="always-active"` ignora o LOD de IA |
 | `script` | Luau em `<mundo>/scripts/` |
+| `prop-<nome>` | valor de instância de um prop `--@export` do script (tipado pela anotação; `viber.prop`) — ver `viber scene schema` |
+| `connect-<sinal>` | quem ouve um `--@signal` do script deste nó: `alvo:método; @grupo:método; self:método` (método = função global do script do alvo) |
+| `groups` | grupos da entidade (`"a b"` ou `"a, b"`): alvos `@grupo`, `viber.group`/`call_group`; `viber scene groups` |
 | `translation` | "x y z" |
 | `euler` | graus XYZ |
 | `rotation` | quat "x y z w" (ganha sobre `euler`; **3 valores = euler em radianos**) |
@@ -69,7 +72,7 @@ Primitivas aceitam material: `base-color`, `metallic`, `roughness`, `opacity`
 - `Vegetation` — `meshes` (lista), `density-per-km2`, `max-instances` (800/tag),
   `max-distance`, `cluster-*`; `avoid-road`/`avoid-cliff` default ON;
   **`instances`** = `.vinst` pré-gerado pelo bake (ex.
-  `instances="bake/veg/NNN.vinst"`) — o runtime carrega as instâncias e não
+  `instances="world.data/veg/NNN.vinst"`) — o runtime carrega as instâncias e não
   calcula nada; os outros attrs ficam como receita
 - `Scatter` — **saída do bake**, NO-OP em runtime: a RECEITA de um gerador
   (attrs de colocação do `StaticSpawner` + `id`). Cada spawner cozido vira
@@ -84,7 +87,7 @@ Primitivas aceitam material: `base-color`, `metallic`, `roughness`, `opacity`
 herói equipa picareta/machado; `fall` = árvore tomba e fica toco; loot → vault+XP+quests.
 
 ### Terreno (100% volumétrico — transvoxel sobre campo voxel)
-- `Terrain` — `heightmap` (PNG/.ahgt; ausente = procedural por `seed`),
+- `Terrain` — `heightmap` (PNG/.ahgt; OBRIGATÓRIO num estático — ex. `world.data/terrain.ahgt`; ausente = procedural por `seed`, só em mundos a converter),
   `world-size` (256), `max-height` (50), `chunk-size` (64), `resolution` (64),
   `levels` (3), `lod-distance-ratio`, `render-distance`, `height-smoothing`,
   `collision-resolution` (64; **0 desliga colliders**), `cliff-angle` (50°),

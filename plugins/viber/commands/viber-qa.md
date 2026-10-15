@@ -6,7 +6,7 @@ allowed-tools: Bash, Read, mcp__viber__viber_status, mcp__viber__viber_screensho
 
 # QA vivo de um mundo Viber
 
-Mundo alvo: `$ARGUMENTS` (se vazio: descobrir — `world.static.xml` → `world.xml` →
+Mundo alvo: `$ARGUMENTS` (se vazio: descobrir — `world.xml` →
 `worlds/*.xml` no cwd; perguntar só se houver ambiguidade real).
 
 Segue o skill **viber-live-qa** (protocolo de sessão é OBRIGATÓRIO) e executa:
