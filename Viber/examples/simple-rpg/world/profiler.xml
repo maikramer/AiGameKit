@@ -1,21 +1,8 @@
-<!-- Profiler [P] — o análogo nativo do painel ?profiler=1 do VibeGame, na
-     stack declarativa da engine (docs/UI.md): estrutura aqui, pintura em
-     ui/profiler.css, comportamento em scripts/ui/profiler.lua.
-
-     O <UiModal key="p"> faz o toggle nativo (P abre/fecha, ESC fecha); as
-     abas são o widget declarativo tab-group (clique troca o painel sem
-     Luau); as listas são <UiList> alimentadas pelo driver via
-     viber.ui.list. Os dados chegam de viber.profiler() (snapshot publicado
-     pela engine a 4 Hz com o modal aberto) e as ações vão por
-     viber.profiler_cmd("freeze|reset|export|tab:…|radius:…|extra:…").
-     Teclas engine-side: F5 (aba), F12/Pause (congelar), ` (exportar),
-     PageUp/PageDown (raio). -->
-<world>
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
   <UiStyle src="ui/profiler.css" />
-
   <UiRoot id="profiler" script="ui/profiler.lua">
-    <UiModal id="profiler-win" key="p" escape-closes class="prof-overlay">
-      <!-- ── cabeçalho: título + fps sempre visíveis ── -->
+    <UiModal id="profiler-win" key="p" escape-closes="true" class="prof-overlay">
       <UiRow class="head">
         <UiColumn class="titles">
           <UiText class="title">PROFILER</UiText>
@@ -27,134 +14,268 @@
           <UiText class="fps-key">FPS</UiText>
         </UiColumn>
       </UiRow>
-
-      <!-- ── abas (widget declarativo: clique troca o painel) ── -->
       <UiRow class="tabbar">
-        <UiButton id="prof-tab-systems" class="tab" tab-group="prof" tab="systems"><UiText>SISTEMAS</UiText></UiButton>
-        <UiButton id="prof-tab-world" class="tab" tab-group="prof" tab="world"><UiText>MUNDO</UiText></UiButton>
-        <UiButton id="prof-tab-physics" class="tab" tab-group="prof" tab="physics"><UiText>FÍSICA</UiText></UiButton>
-        <UiButton id="prof-tab-audio" class="tab" tab-group="prof" tab="audio"><UiText>ÁUDIO</UiText></UiButton>
-        <UiButton id="prof-tab-extras" class="tab" tab-group="prof" tab="extras"><UiText>EXTRAS</UiText></UiButton>
+        <UiButton id="prof-tab-systems" class="tab" tab-group="prof" tab="systems">
+          <UiText>SISTEMAS</UiText>
+        </UiButton>
+        <UiButton id="prof-tab-world" class="tab" tab-group="prof" tab="world">
+          <UiText>MUNDO</UiText>
+        </UiButton>
+        <UiButton id="prof-tab-physics" class="tab" tab-group="prof" tab="physics">
+          <UiText>FÍSICA</UiText>
+        </UiButton>
+        <UiButton id="prof-tab-audio" class="tab" tab-group="prof" tab="audio">
+          <UiText>ÁUDIO</UiText>
+        </UiButton>
+        <UiButton id="prof-tab-extras" class="tab" tab-group="prof" tab="extras">
+          <UiText>EXTRAS</UiText>
+        </UiButton>
       </UiRow>
-
-      <!-- ══ ABA SISTEMAS ══ -->
       <UiColumn class="pane" tab-group="prof" tab="systems">
         <UiRow class="statgrid">
-          <UiColumn class="stat"><UiText class="k">FRAME</UiText><UiText id="prof-frame" class="v">—</UiText></UiColumn>
-          <UiColumn class="stat"><UiText class="k">P95</UiText><UiText id="prof-p95" class="v">—</UiText></UiColumn>
-          <UiColumn class="stat"><UiText class="k">PIOR FPS</UiText><UiText id="prof-worst" class="v">—</UiText></UiColumn>
-          <UiColumn class="stat"><UiText class="k">MARGEM 60</UiText><UiText id="prof-head" class="v">—</UiText></UiColumn>
+          <UiColumn class="stat">
+            <UiText class="k">FRAME</UiText>
+            <UiText id="prof-frame" class="v">—</UiText>
+          </UiColumn>
+          <UiColumn class="stat">
+            <UiText class="k">P95</UiText>
+            <UiText id="prof-p95" class="v">—</UiText>
+          </UiColumn>
+          <UiColumn class="stat">
+            <UiText class="k">PIOR FPS</UiText>
+            <UiText id="prof-worst" class="v">—</UiText>
+          </UiColumn>
+          <UiColumn class="stat">
+            <UiText class="k">MARGEM 60</UiText>
+            <UiText id="prof-head" class="v">—</UiText>
+          </UiColumn>
         </UiRow>
         <UiRow class="actions">
-          <UiButton id="prof-freeze" class="btn"><UiText id="prof-freeze-label">CONGELAR</UiText></UiButton>
-          <UiButton id="prof-reset" class="btn"><UiText>RESET</UiText></UiButton>
-          <UiButton id="prof-copy-systems" class="btn"><UiText>COPIAR</UiText></UiButton>
-          <UiButton id="prof-export-systems" class="btn"><UiText>EXPORTAR</UiText></UiButton>
+          <UiButton id="prof-freeze" class="btn">
+            <UiText id="prof-freeze-label">CONGELAR</UiText>
+          </UiButton>
+          <UiButton id="prof-reset" class="btn">
+            <UiText>RESET</UiText>
+          </UiButton>
+          <UiButton id="prof-copy-systems" class="btn">
+            <UiText>COPIAR</UiText>
+          </UiButton>
+          <UiButton id="prof-export-systems" class="btn">
+            <UiText>EXPORTAR</UiText>
+          </UiButton>
         </UiRow>
         <UiText class="sect">GRUPOS (ms · % do frame)</UiText>
         <UiList class="rows" bind="prof-groups" scroll="y">
           <UiTemplate>
-            <UiRow class="lrow"><UiText class="l-name">{name}</UiText><UiSpacer /><UiText class="l-val">{val}</UiText></UiRow>
+            <UiRow class="lrow">
+              <UiText class="l-name">{name}</UiText>
+              <UiSpacer />
+              <UiText class="l-val">{val}</UiText>
+            </UiRow>
           </UiTemplate>
-          <UiEmpty><UiText class="empty">sem amostras</UiText></UiEmpty>
+          <UiEmpty>
+            <UiText class="empty">sem amostras</UiText>
+          </UiEmpty>
         </UiList>
         <UiText class="sect">SISTEMAS (média · p95)</UiText>
         <UiList class="rows tall" bind="prof-systems" scroll="y">
           <UiTemplate>
-            <UiRow class="lrow"><UiText class="l-name">{name}</UiText><UiSpacer /><UiText class="l-val">{val}</UiText></UiRow>
+            <UiRow class="lrow">
+              <UiText class="l-name">{name}</UiText>
+              <UiSpacer />
+              <UiText class="l-val">{val}</UiText>
+            </UiRow>
           </UiTemplate>
-          <UiEmpty><UiText class="empty">sem amostras</UiText></UiEmpty>
+          <UiEmpty>
+            <UiText class="empty">sem amostras</UiText>
+          </UiEmpty>
         </UiList>
         <UiText class="sect">SCRIPTS LUAU (média por ficheiro)</UiText>
         <UiList class="rows" bind="prof-scripts" scroll="y">
           <UiTemplate>
-            <UiRow class="lrow"><UiText class="l-name">{name}</UiText><UiSpacer /><UiText class="l-val">{val}</UiText></UiRow>
+            <UiRow class="lrow">
+              <UiText class="l-name">{name}</UiText>
+              <UiSpacer />
+              <UiText class="l-val">{val}</UiText>
+            </UiRow>
           </UiTemplate>
-          <UiEmpty><UiText class="empty">nenhum script activo</UiText></UiEmpty>
+          <UiEmpty>
+            <UiText class="empty">nenhum script activo</UiText>
+          </UiEmpty>
         </UiList>
       </UiColumn>
-
-      <!-- ══ ABA MUNDO ══ -->
       <UiColumn class="pane" tab-group="prof" tab="world">
         <UiRow class="actions">
-          <UiButton id="prof-radius-down" class="btn"><UiText>RAIO −</UiText></UiButton>
-          <UiButton id="prof-radius-up" class="btn"><UiText>RAIO +</UiText></UiButton>
-          <UiButton id="prof-copy-world" class="btn"><UiText>COPIAR</UiText></UiButton>
-          <UiButton id="prof-export-world" class="btn"><UiText>EXPORTAR</UiText></UiButton>
+          <UiButton id="prof-radius-down" class="btn">
+            <UiText>RAIO −</UiText>
+          </UiButton>
+          <UiButton id="prof-radius-up" class="btn">
+            <UiText>RAIO +</UiText>
+          </UiButton>
+          <UiButton id="prof-copy-world" class="btn">
+            <UiText>COPIAR</UiText>
+          </UiButton>
+          <UiButton id="prof-export-world" class="btn">
+            <UiText>EXPORTAR</UiText>
+          </UiButton>
           <UiSpacer />
           <UiText id="prof-nearby" class="chipv">—</UiText>
         </UiRow>
-        <UiRow class="statline"><UiText class="k">PLAYER</UiText><UiSpacer /><UiText id="prof-player" class="v">—</UiText></UiRow>
-        <UiRow class="statline"><UiText class="k">CÂMERA</UiText><UiSpacer /><UiText id="prof-cam" class="v">—</UiText></UiRow>
-        <UiRow class="statline"><UiText class="k">ENTIDADES</UiText><UiSpacer /><UiText id="prof-entities" class="v">—</UiText></UiRow>
+        <UiRow class="statline">
+          <UiText class="k">PLAYER</UiText>
+          <UiSpacer />
+          <UiText id="prof-player" class="v">—</UiText>
+        </UiRow>
+        <UiRow class="statline">
+          <UiText class="k">CÂMERA</UiText>
+          <UiSpacer />
+          <UiText id="prof-cam" class="v">—</UiText>
+        </UiRow>
+        <UiRow class="statline">
+          <UiText class="k">ENTIDADES</UiText>
+          <UiSpacer />
+          <UiText id="prof-entities" class="v">—</UiText>
+        </UiRow>
         <UiText class="sect">PRÓXIMAS (nome · dist · pos · tags)</UiText>
         <UiList class="rows tall" bind="prof-nearby-rows" scroll="y">
           <UiTemplate>
-            <UiRow class="lrow"><UiText class="l-name">{name}</UiText><UiSpacer /><UiText class="l-val">{val}</UiText></UiRow>
+            <UiRow class="lrow">
+              <UiText class="l-name">{name}</UiText>
+              <UiSpacer />
+              <UiText class="l-val">{val}</UiText>
+            </UiRow>
           </UiTemplate>
-          <UiEmpty><UiText class="empty">nada no raio</UiText></UiEmpty>
+          <UiEmpty>
+            <UiText class="empty">nada no raio</UiText>
+          </UiEmpty>
         </UiList>
       </UiColumn>
-
-      <!-- ══ ABA FÍSICA ══ -->
       <UiColumn class="pane" tab-group="prof" tab="physics">
         <UiRow class="actions">
-          <UiButton id="prof-copy-physics" class="btn"><UiText>COPIAR</UiText></UiButton>
-          <UiButton id="prof-export-physics" class="btn"><UiText>EXPORTAR</UiText></UiButton>
+          <UiButton id="prof-copy-physics" class="btn">
+            <UiText>COPIAR</UiText>
+          </UiButton>
+          <UiButton id="prof-export-physics" class="btn">
+            <UiText>EXPORTAR</UiText>
+          </UiButton>
         </UiRow>
-        <UiRow class="statline"><UiText class="k">CORPOS</UiText><UiSpacer /><UiText id="prof-bodies" class="v">—</UiText></UiRow>
-        <UiRow class="statline"><UiText class="k">SONO</UiText><UiSpacer /><UiText id="prof-sleep" class="v">—</UiText></UiRow>
-        <UiRow class="statline"><UiText class="k">COLISORES</UiText><UiSpacer /><UiText id="prof-colliders" class="v">—</UiText></UiRow>
-        <UiRow class="statline"><UiText class="k">STEP</UiText><UiSpacer /><UiText id="prof-step" class="v">—</UiText></UiRow>
-        <UiRow class="statline"><UiText class="k">RAPIER</UiText><UiSpacer /><UiText id="prof-rapier" class="v">—</UiText></UiRow>
+        <UiRow class="statline">
+          <UiText class="k">CORPOS</UiText>
+          <UiSpacer />
+          <UiText id="prof-bodies" class="v">—</UiText>
+        </UiRow>
+        <UiRow class="statline">
+          <UiText class="k">SONO</UiText>
+          <UiSpacer />
+          <UiText id="prof-sleep" class="v">—</UiText>
+        </UiRow>
+        <UiRow class="statline">
+          <UiText class="k">COLISORES</UiText>
+          <UiSpacer />
+          <UiText id="prof-colliders" class="v">—</UiText>
+        </UiRow>
+        <UiRow class="statline">
+          <UiText class="k">STEP</UiText>
+          <UiSpacer />
+          <UiText id="prof-step" class="v">—</UiText>
+        </UiRow>
+        <UiRow class="statline">
+          <UiText class="k">RAPIER</UiText>
+          <UiSpacer />
+          <UiText id="prof-rapier" class="v">—</UiText>
+        </UiRow>
         <UiText class="sect">FORMAS</UiText>
         <UiList class="rows" bind="prof-shapes" scroll="y">
           <UiTemplate>
-            <UiRow class="lrow"><UiText class="l-name">{name}</UiText><UiSpacer /><UiText class="l-val">{val}</UiText></UiRow>
+            <UiRow class="lrow">
+              <UiText class="l-name">{name}</UiText>
+              <UiSpacer />
+              <UiText class="l-val">{val}</UiText>
+            </UiRow>
           </UiTemplate>
-          <UiEmpty><UiText class="empty">sem contexto Rapier</UiText></UiEmpty>
+          <UiEmpty>
+            <UiText class="empty">sem contexto Rapier</UiText>
+          </UiEmpty>
         </UiList>
       </UiColumn>
-
-      <!-- ══ ABA ÁUDIO ══ -->
       <UiColumn class="pane" tab-group="prof" tab="audio">
         <UiRow class="actions">
-          <UiButton id="prof-copy-audio" class="btn"><UiText>COPIAR</UiText></UiButton>
-          <UiButton id="prof-export-audio" class="btn"><UiText>EXPORTAR</UiText></UiButton>
+          <UiButton id="prof-copy-audio" class="btn">
+            <UiText>COPIAR</UiText>
+          </UiButton>
+          <UiButton id="prof-export-audio" class="btn">
+            <UiText>EXPORTAR</UiText>
+          </UiButton>
         </UiRow>
-        <UiRow class="statline"><UiText class="k">BUSES</UiText><UiSpacer /><UiText id="prof-buses" class="v">—</UiText></UiRow>
-        <UiRow class="statline"><UiText class="k">SINKS</UiText><UiSpacer /><UiText id="prof-sinks" class="v">—</UiText></UiRow>
+        <UiRow class="statline">
+          <UiText class="k">BUSES</UiText>
+          <UiSpacer />
+          <UiText id="prof-buses" class="v">—</UiText>
+        </UiRow>
+        <UiRow class="statline">
+          <UiText class="k">SINKS</UiText>
+          <UiSpacer />
+          <UiText id="prof-sinks" class="v">—</UiText>
+        </UiRow>
         <UiText class="sect">MÚSICA (layers)</UiText>
         <UiList class="rows" bind="prof-layers" scroll="y">
           <UiTemplate>
-            <UiRow class="lrow"><UiText class="l-name">{name}</UiText><UiSpacer /><UiText class="l-val">{val}</UiText></UiRow>
+            <UiRow class="lrow">
+              <UiText class="l-name">{name}</UiText>
+              <UiSpacer />
+              <UiText class="l-val">{val}</UiText>
+            </UiRow>
           </UiTemplate>
-          <UiEmpty><UiText class="empty">sem layers activos</UiText></UiEmpty>
+          <UiEmpty>
+            <UiText class="empty">sem layers activos</UiText>
+          </UiEmpty>
         </UiList>
         <UiText class="sect">SINKS (a tocar primeiro)</UiText>
         <UiList class="rows tall" bind="prof-sink-rows" scroll="y">
           <UiTemplate>
-            <UiRow class="lrow"><UiText class="l-name">{name}</UiText><UiSpacer /><UiText class="l-val">{val}</UiText></UiRow>
+            <UiRow class="lrow">
+              <UiText class="l-name">{name}</UiText>
+              <UiSpacer />
+              <UiText class="l-val">{val}</UiText>
+            </UiRow>
           </UiTemplate>
-          <UiEmpty><UiText class="empty">sem sinks</UiText></UiEmpty>
+          <UiEmpty>
+            <UiText class="empty">sem sinks</UiText>
+          </UiEmpty>
         </UiList>
       </UiColumn>
-
-      <!-- ══ ABA EXTRAS ══ -->
       <UiColumn class="pane" tab-group="prof" tab="extras">
         <UiRow class="actions">
-          <UiButton id="prof-copy-extras" class="btn"><UiText>COPIAR</UiText></UiButton>
-          <UiButton id="prof-export-extras" class="btn"><UiText>EXPORTAR</UiText></UiButton>
+          <UiButton id="prof-copy-extras" class="btn">
+            <UiText>COPIAR</UiText>
+          </UiButton>
+          <UiButton id="prof-export-extras" class="btn">
+            <UiText>EXPORTAR</UiText>
+          </UiButton>
         </UiRow>
         <UiText class="sect">TOGGLES DE DEBUG DA ENGINE</UiText>
-        <UiButton id="prof-extra-1" class="extra"><UiText id="prof-extra-label-1" class="l-name">—</UiText><UiSpacer /><UiText id="prof-extra-state-1" class="state">—</UiText></UiButton>
-        <UiButton id="prof-extra-2" class="extra"><UiText id="prof-extra-label-2" class="l-name">—</UiText><UiSpacer /><UiText id="prof-extra-state-2" class="state">—</UiText></UiButton>
-        <UiButton id="prof-extra-3" class="extra"><UiText id="prof-extra-label-3" class="l-name">—</UiText><UiSpacer /><UiText id="prof-extra-state-3" class="state">—</UiText></UiButton>
-        <UiButton id="prof-extra-4" class="extra"><UiText id="prof-extra-label-4" class="l-name">—</UiText><UiSpacer /><UiText id="prof-extra-state-4" class="state">—</UiText></UiButton>
+        <UiButton id="prof-extra-1" class="extra">
+          <UiText id="prof-extra-label-1" class="l-name">—</UiText>
+          <UiSpacer />
+          <UiText id="prof-extra-state-1" class="state">—</UiText>
+        </UiButton>
+        <UiButton id="prof-extra-2" class="extra">
+          <UiText id="prof-extra-label-2" class="l-name">—</UiText>
+          <UiSpacer />
+          <UiText id="prof-extra-state-2" class="state">—</UiText>
+        </UiButton>
+        <UiButton id="prof-extra-3" class="extra">
+          <UiText id="prof-extra-label-3" class="l-name">—</UiText>
+          <UiSpacer />
+          <UiText id="prof-extra-state-3" class="state">—</UiText>
+        </UiButton>
+        <UiButton id="prof-extra-4" class="extra">
+          <UiText id="prof-extra-label-4" class="l-name">—</UiText>
+          <UiSpacer />
+          <UiText id="prof-extra-state-4" class="state">—</UiText>
+        </UiButton>
         <UiText id="prof-extra-desc" class="desc" />
       </UiColumn>
-
-      <!-- rodapé de estado (última ação: export/congelação/raio) -->
       <UiText id="prof-status" class="status">—</UiText>
     </UiModal>
   </UiRoot>

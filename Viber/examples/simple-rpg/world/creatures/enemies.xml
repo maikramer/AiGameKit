@@ -1,29 +1,6 @@
-<!--
-  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
-  implementadas passam verbatim e fazem no-op na engine.
-  Verbatim (no-op) tags: DynamicSpawner x10
--->
-<world>
-  <!--
-  Inimigos por bioma (DynamicSpawner). Loaded via Include. Chefes em bosses.xml.
-
-  Grounding: <Creature> = kinematic Rigidbody + capsule + CharacterController.
-  Rapier CCT plants Y on the terrain chunk heightfield (same authority as player).
-  NavMesh steers CharacterMovement.desiredVel (does not write Transform XZ).
-  Spawn seeds Transform.posY once from the surface sample; no AABB lift /
-  TerrainSpawned / script snap. goblin_collision.glb still unused (capsule CCT).
-
-  Ao contrário dos props, cada inimigo é uma entidade com script + IA + agente
-  de NavMesh — não é instanciado. Contagens sobem devagar; o DistanceCull é
-  que evita pagar IA por quem está longe.
-
-  Sombras: o shade_*.glb já existe no pool (é o mesmo que a Cidadela Caída
-  usa) — o remendo antigo com o mesh do bogling a 1.4× foi retirado.
--->
-  <Group name="creatures" translation="0 0 0">
-    <!-- ============================================================
-       NORTE — Floresta Sombria
-       ============================================================ -->
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
+  <Group name="creatures" translation="0 38.7304 0">
     <DynamicSpawner avoid-water="1" count="20" seed="101" region-min="-170 0 124" region-max="170 0 350" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="402">
       <Creature role="enemy" script="enemies/wolf.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/wolf_lod0.glb" lod1-url="/assets/meshes/characters/wolf_lod1.glb" lod2-url="/assets/meshes/characters/wolf_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
@@ -34,9 +11,6 @@
         <GLTFLoader role="visual" url="/assets/meshes/characters/shade_lod0.glb" lod1-url="/assets/meshes/characters/shade_lod1.glb" lod2-url="/assets/meshes/characters/shade_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
-    <!-- ============================================================
-       LESTE — Deserto
-       ============================================================ -->
     <DynamicSpawner avoid-water="1" count="20" seed="303" region-min="124 0 -160" region-max="350 0 160" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="397">
       <Creature role="enemy" script="enemies/scorpion.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/scorpion_lod0.glb" lod1-url="/assets/meshes/characters/scorpion_lod1.glb" lod2-url="/assets/meshes/characters/scorpion_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
@@ -47,18 +21,11 @@
         <GLTFLoader role="visual" url="/assets/meshes/characters/bandit_lod0.glb" lod1-url="/assets/meshes/characters/bandit_lod1.glb" lod2-url="/assets/meshes/characters/bandit_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
-    <!-- Extra plains bandits (was archer.ts + enemy-arrow). Same bandit mesh
-       with rangedTemplate looked like melee from afar then whiffed up close
-       — attack clip in ATTACK mode, lunge suppressed. Melee until a real
-       archer asset exists. -->
     <DynamicSpawner avoid-water="1" count="12" seed="555" region-min="140 0 -140" region-max="320 0 140" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="362">
-      <Creature role="enemy" script="enemies/bandit.lua">
+      <Creature role="enemy" script="enemies/bandit-archer.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/bandit_lod0.glb" lod1-url="/assets/meshes/characters/bandit_lod1.glb" lod2-url="/assets/meshes/characters/bandit_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
-    <!-- ============================================================
-       OESTE — Pântano (bacias baixas)
-       ============================================================ -->
     <DynamicSpawner avoid-water="1" count="22" seed="505" region-min="-350 0 -170" region-max="-124 0 170" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="402">
       <Creature role="enemy" script="enemies/bogling.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/bogling_lod0.glb" lod1-url="/assets/meshes/characters/bogling_lod1.glb" lod2-url="/assets/meshes/characters/bogling_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
@@ -69,18 +36,11 @@
         <GLTFLoader role="visual" url="/assets/meshes/characters/wolf_lod0.glb" lod1-url="/assets/meshes/characters/wolf_lod1.glb" lod2-url="/assets/meshes/characters/wolf_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
-    <!-- ============================================================
-       SUL — Picos Gelados (encostas íngremes z<0).
-       max-slope 50° alinha com navmesh walkableSlopeAngle 55°.
-       ============================================================ -->
     <DynamicSpawner avoid-water="1" count="18" seed="707" region-min="-110 0 -330" region-max="110 0 -124" random-yaw="true" avoid-overlaps="false" max-slope-deg="50" max-distance="360">
       <Creature role="enemy" script="enemies/goblin.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/goblin_lod0.glb" lod1-url="/assets/meshes/characters/goblin_lod1.glb" lod2-url="/assets/meshes/characters/goblin_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
-    <!-- Tutorial: slimes do corredor SUL, colados ao portão sul (fora da
-         muralha ±39.8), dentro do raio de ativação do congelamento ao
-         se aproximar. -->
     <DynamicSpawner avoid-water="1" count="12" seed="808" region-min="-40 0 -115" region-max="40 0 -50" random-yaw="true" avoid-overlaps="false" max-slope-deg="50" max-distance="134">
       <Creature role="enemy" script="enemies/slime.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/slime_lod0.glb" lod1-url="/assets/meshes/characters/slime_lod1.glb" lod2-url="/assets/meshes/characters/slime_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
@@ -92,5 +52,4 @@
       </Creature>
     </DynamicSpawner>
   </Group>
-  <!-- FIM creatures -->
 </world>

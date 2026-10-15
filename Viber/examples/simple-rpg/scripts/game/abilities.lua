@@ -2,7 +2,7 @@
 -- reclama os sistemas nativos [C]/[E]/[R] e [B] (`viber.own_system`) — os
 -- handlers da engine calam — e reimplementa-os sobre a API genérica:
 --
---   [C] dash     → player_forward + teleport_player (assenta no terreno) + FOV kick
+--   [C] dash     → player_forward + push_player (colide; i-frames) + FOV kick
 --   [E] cura     → heal_player + número flutuante
 --   [R] radial   → radial_damage (falloff + knockback + morte com paridade
 --                  nativa: cadáver/XP/quests/evento Kill) + juice (burst/ring/shake/hit_stop)
@@ -19,7 +19,8 @@ viber.own_system("abilities")
 viber.own_system("bomb")
 
 local CD_DASH, CD_HEAL, CD_STRIKE = 6.0, 12.0, 8.0
-local DASH_DISTANCE = 4.2
+local DASH_DISTANCE = 5.0 -- o controller perde ~15 % no atrito: anda ~4,2 m
+local DASH_IFRAMES = 0.35
 local HEAL_AMOUNT = 50
 local STRIKE_RADIUS, STRIKE_DAMAGE, STRIKE_KNOCKBACK = 4.8, 60, 7
 local BOMB_LAUNCH_DISTANCE = 2.6
@@ -68,7 +69,9 @@ function on_update(dt)
     st.cd.dash = CD_DASH
     local fx, fz = viber.player_forward()
     viber.face_player()
-    viber.teleport_player(px + fx * DASH_DISTANCE, py, pz + fz * DASH_DISTANCE)
+    -- Pelo character controller: colide com muros (o teleporte atravessava
+    -- a muralha) e dá i-frames durante a rajada.
+    viber.push_player(fx * DASH_DISTANCE, fz * DASH_DISTANCE, DASH_IFRAMES)
     viber.fov_kick(8)
     viber.sound("dash")
     viber.burst("ground-dust", px, py + 0.2, pz, 10)

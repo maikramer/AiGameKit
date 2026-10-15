@@ -1,26 +1,8 @@
-<!--
-  ACAMPAMENTO DOS CONTRABANDISTAS — o covil da orla da Floresta Sombria.
-  Loaded via Include.
-
-  ONDE E PORQUÊ: (-90,240), numa clareira baixa (39 m, declive 1,2°) na orla
-  sul da floresta, à vista do trilho que sobe para o norte mas escondido do
-  vale pelo arvoredo. A floresta tinha a bruxa, o posto avançado e o círculo de
-  menires — todas coisas ANTIGAS. Faltava-lhe gente de agora, e um sítio que
-  justifique o `DynamicSpawner` de bandidos que já rondava a região.
-
-  É o cenário da quest `smugglers_cache`: a ranger Mira (na subida, fora do
-  acampamento) manda o herói desmontar o covil. Os bandidos são criaturas do
-  spawner (`enemies/bandit.lua`) — não há NPC-hostil estático — e o cofre do
-  acampamento é um `<Entity script="chest.lua">`, portanto dá loot a sério.
-
-  VISITAS: `smugglers-camp` (a fogueira) e `smugglers-stash` (o cofre).
--->
-  <world>
-  <Group name="scene.smugglers" translation="0 0 0">
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
+  <Group name="scene.smugglers" translation="0 39.2443 0">
     <SpawnExclusion at="-90 -240" radius="34" />
     <SpawnExclusion at="-90 240" radius="34" />
-    <!-- A fogueira do covil: nome registado pelo travel → ponto de viagem
-         rápida escondido (só se descobre indo lá). -->
     <Entity name="smugglers-campfire" translation="-90 0 240" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
     </Entity>
@@ -33,18 +15,15 @@
     <Entity translation="-88 0 237.6" transform="rotation: 0 -20 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.6 0.9 0.55">
       <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
     </Entity>
-    <!-- Tenda grande (lona da banca) + duas pequenas. -->
     <Entity translation="-95 0 244" transform="rotation: 0 20 0; scale: 1.35 1.35 1.35" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
     <Entity translation="-84 0 245" transform="rotation: 0 200 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
-    <!-- O cofre do saque: dá ouro e poção ([E]). -->
-    <Entity name="smugglers-stash" translation="-92 0 236" transform="rotation: 0 115 0" script="chest.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
+    <Entity name="smugglers-stash" translation="-92 0 236" transform="rotation: 0 115 0" script="chest.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base" prop-gold="45" prop-item="antidote" prop-item_count="1" prop-item_label="antídoto" prop-prompt="Revistar o esconderijo" prop-xp="20">
       <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
     </Entity>
-    <!-- Carga empilhada e escondida sob ramos. -->
     <Entity translation="-97 0 238" transform="rotation: 0 40 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
@@ -60,7 +39,6 @@
     <Entity translation="-86 0 234" transform="rotation: 0 60 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9">
       <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
     </Entity>
-    <!-- Vigia: torre pequena a olhar o trilho. -->
     <Entity translation="-99 0 249" transform="rotation: 0 145 0; scale: 0.72 0.72 0.72" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
       <PointLight translation="0 3.6 0" color="0xffb060" intensity="4600" radius="0.8" shadows="false" />
@@ -77,20 +55,14 @@
     <Entity translation="-80 0 246" transform="rotation: 0 -70 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/weapon_rack_lod0.glb" />
     </Entity>
-    <!-- Os contrabandistas (criaturas; objetivo de abate da quest). -->
-    <DynamicSpawner avoid-water="1" avoid-road="1" count="6" seed="6171"
-                    region-min="-118 0 218" region-max="-62 0 262"
-                    random-yaw="true" avoid-overlaps="false" max-slope-deg="30" max-distance="300">
+    <DynamicSpawner avoid-water="1" avoid-road="1" count="6" seed="6171" region-min="-118 0 218" region-max="-62 0 262" random-yaw="true" avoid-overlaps="false" max-slope-deg="30" max-distance="300">
       <Creature role="enemy" script="enemies/bandit.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/bandit_lod0.glb" lod1-url="/assets/meshes/characters/bandit_lod1.glb" lod2-url="/assets/meshes/characters/bandit_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
-    <!-- A ranger que manda desmontar o covil: ficada na subida, à vista do
-         acampamento mas fora dele (o SpawnExclusion r=34 cobre o covil). -->
     <Entity name="npc_ranger_mira" translation="-72 0 222" transform="rotation: 0 210 0">
       <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="smugglers_cache" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
   </Group>
-  <!-- FIM scene.smugglers -->
-  </world>
+</world>

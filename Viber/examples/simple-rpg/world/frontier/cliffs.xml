@@ -1,52 +1,10 @@
-<!--
-  Penhascos procedurais dos Picos Gelados (sul, cunha z<0). Loaded via
-  Include.
-
-  O relevo Terrain3D é gentil (92.7% do mapa abaixo de 25°) — estas paredes
-  <Cliff> criam as escarpas que o bioma pede. Desenhadas sobre o heightmap
-  real com folga a TODOS os constraints (artéria do ogro, pads, landmarks,
-  lagoa gelada — mínimo ~30 m):
-
-  - picos-escarpa-leste   — grande parede concava a leste da artéria, atrás
-    da lagoa gelada; face NW para o corredor (auto apanha o lado alto SE).
-  - picos-outcrop-oeste   — afloramento CONVEXO (abdômen: sobrancelha
-    redonda no creste, mergulho no pé) a oeste do trilho dos cairns.
-  - picos-gargela-oeste   — 100% auto: a queda natural 125→111 m atravessando
-    a linha faz a parede sem poço no pé. Face NE, para o corredor da arena.
-  - picos-anfiteatro-leste— parede concava a leste da reta final da arena —
-    o anfiteatro onde o ogro luta tem muralha própria.
-  - picos-horizonte       — silhueta terraced por trás (a sul) da arena,
-    face norte.
-
-  Regras do sistema (src/terrain/cliffs.rs): `height` ausente = a parede
-  adapta-se à diferença natural do lugar; determinístico por `seed`; o lado
-  de cima da linha de creste nunca é tocado. O <Terrain> liga
-  `sharpen` (terraça só nos rampas > sharpen-angle) e `cliff-angle`
-  (gatilho de LOD peak-preserving + triplanar de rocha no shader).
-
-  v7 (pele da vida real): `gullies` ravina a face (cortes one-sided entre
-  bútresses), `notches` faz colos no creste (fração da queda local),
-  `talus` levanta o cone de detritos no pé (raise-only, ângulo `talus-angle`)
-  — o splat pinta cascalho sobre o apron e relva/spawners evitam-no. No
-  <Terrain>, `cliff-streaks`/`cliff-moss` doses a pele do shader
-  (escorrimentos verticais, musgo nos ombros).
--->
-<world>
-  <Group name="biome.peaks.cliffs" translation="0 0 0">
-    <Cliff name="picos-escarpa-leste" path="92 -156 126 -150 164 -156"
-           width="12" height="22" profile="columnar" side="auto"
-           noise="0.22" seed="31" gullies="0.25" notches="0.15" talus="1" />
-    <Cliff name="picos-outcrop-oeste" path="-96 -118 -70 -112 -52 -118"
-           width="8" height="14" profile="convex" side="auto"
-           noise="0.3" seed="83" talus="1" />
-    <Cliff name="picos-gargela-oeste" path="-150 -256 -112 -266 -82 -280"
-           width="14" profile="concave" side="auto"
-           noise="0.25" seed="47" talus="1" />
-    <Cliff name="picos-anfiteatro-leste" path="58 -254 82 -268 72 -290"
-           width="12" height="20" profile="columnar" side="auto"
-           noise="0.25" seed="71" gullies="0.25" />
-    <Cliff name="picos-horizonte" path="-100 -348 -76 -342 -58 -348"
-           width="16" height="26" profile="terraced" side="auto"
-           noise="0.3" seed="59" notches="0.12" />
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
+  <Group name="biome.peaks.cliffs" translation="0 38.7304 0">
+    <Cliff name="picos-escarpa-leste" path="92 -156 126 -150 164 -156" width="12" height="22" profile="columnar" side="auto" noise="0.22" seed="31" gullies="0.25" notches="0.15" talus="1" />
+    <Cliff name="picos-outcrop-oeste" path="-96 -118 -70 -112 -52 -118" width="8" height="14" profile="convex" side="auto" noise="0.3" seed="83" talus="1" />
+    <Cliff name="picos-gargela-oeste" path="-150 -256 -112 -266 -82 -280" width="14" profile="concave" side="auto" noise="0.25" seed="47" talus="1" />
+    <Cliff name="picos-anfiteatro-leste" path="58 -254 82 -268 72 -290" width="12" height="20" profile="columnar" side="auto" noise="0.25" seed="71" gullies="0.25" />
+    <Cliff name="picos-horizonte" path="-100 -348 -76 -342 -58 -348" width="16" height="26" profile="terraced" side="auto" noise="0.3" seed="59" notches="0.12" />
   </Group>
 </world>

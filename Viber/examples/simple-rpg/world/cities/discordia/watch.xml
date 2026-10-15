@@ -1,20 +1,9 @@
-<!--
-  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
-  implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: lod-threshold-mid, lod-threshold-near, lod1-url, lod2-url, place:align-to-terrain, role
--->
-<world>
-  <!--
-  Discordia district fragment. Loaded via Include from cities/discordia.xml.
-  Edit this file for this district only. Cell coords: space-separated (at="4 2").
--->
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
   <Group name="city.watch" translation="0 0 0">
-    <!-- Torre de vigia GLB + guarda. Sem bandeira Composition. -->
     <Entity name="watchtower" translation="32 0 32" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
     </Entity>
-    <!-- Guarda: [F] pinta os quatro portões na bússola. Script carrega
-               o GLB com idle (igual merchant/healer). -->
     <Entity name="npc_guard" translation="29 0 29" transform="rotation: 0 200 0" script="watch-guard.lua">
       <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
     </Entity>

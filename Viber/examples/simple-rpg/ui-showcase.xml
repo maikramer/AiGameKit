@@ -1,67 +1,60 @@
-<!-- ============================================================
-     ui-showcase — vitrina da UI declarativa (src/ui)
-     ============================================================
-     Um mundo pequeno cujo objectivo é mostrar TODAS as peças da
-     API de interface: widgets (grelha, check, slider, input),
-     propriedades de estilo (box-shadow, paleta Tailwind, grid),
-     animação (`anim`) e tooltips. Corre com:
-
-       viber run examples/simple-rpg/ui-showcase.xml
-
-     Teclas: [M] abre o menu de demonstração. O comportamento vive
-     em scripts/ui/showcase.lua; o desenho em ui/showcase.css.
-     ============================================================ -->
-<world clear-color="#1b2432">
-
+<?xml version="1.0" encoding="UTF-8"?>
+<world clear-color="#1b2432" static="true">
   <Sky sun-size="1.4" />
   <DayCycle minute-of-day="540" minutes-per-real-second="4" />
-
-  <!-- Chão discreto só para os widgets terem fundo. -->
-  <Terrain world-size="256" max-height="18" seed="7" />
-
+  <Terrain world-size="256" max-height="18" seed="7" heightmap="ui-showcase.data/terrain.ahgt" />
   <UiStyle src="ui/showcase.css" />
-
   <UiRoot id="showcase" script="ui/showcase.lua">
-
-    <!-- Painel principal: grid de inventário + widgets interativos.
-         Cada elemento mostra uma capacidade diferente da API. -->
     <UiColumn id="stage" class="stage">
-
       <UiText id="heading" class="heading">UI Showcase</UiText>
-
-      <!-- ── UiGrid: grelha de slots (inventory-style) ───────── -->
       <UiGrid id="inv" class="inv" cols="repeat(5, 44)" rows="repeat(2, 44)">
-        <UiPanel class="slot" tooltip="Espada curta — dano 8"><UiText class="slot-glyph">S</UiText></UiPanel>
-        <UiPanel class="slot rare" tooltip="Arco élfico — item RARO"><UiText class="slot-glyph">A</UiText></UiPanel>
-        <UiPanel class="slot" tooltip="Poção (12)"><UiIcon class="slot-icon" src="/assets/icons/icon_potion.png" /></UiPanel>
-        <UiPanel class="slot" tooltip="Poção de antídoto"><UiIcon class="slot-icon" src="/assets/icons/icon_antidote.png" /></UiPanel>
+        <UiPanel class="slot" tooltip="Espada curta — dano 8">
+          <UiText class="slot-glyph">S</UiText>
+        </UiPanel>
+        <UiPanel class="slot rare" tooltip="Arco élfico — item RARO">
+          <UiText class="slot-glyph">A</UiText>
+        </UiPanel>
+        <UiPanel class="slot" tooltip="Poção (12)">
+          <UiIcon class="slot-icon" src="/assets/icons/icon_potion.png" />
+        </UiPanel>
+        <UiPanel class="slot" tooltip="Poção de antídoto">
+          <UiIcon class="slot-icon" src="/assets/icons/icon_antidote.png" />
+        </UiPanel>
         <UiPanel class="slot empty" tooltip="Vazio — arrasta itens para aqui" />
-        <UiPanel class="slot" tooltip="Ouro"><UiIcon class="slot-icon" src="/assets/icons/hud_gold.png" /></UiPanel>
-        <UiPanel class="slot" tooltip="Madeira"><UiIcon class="slot-icon" src="/assets/icons/hud_wood.png" /></UiPanel>
-        <UiPanel class="slot" tooltip="Pedra"><UiIcon class="slot-icon" src="/assets/icons/hud_stone.png" /></UiPanel>
-        <UiPanel class="slot legendary" tooltip="Item LENDÁRIO"><UiText class="slot-glyph">!</UiText></UiPanel>
+        <UiPanel class="slot" tooltip="Ouro">
+          <UiIcon class="slot-icon" src="/assets/icons/hud_gold.png" />
+        </UiPanel>
+        <UiPanel class="slot" tooltip="Madeira">
+          <UiIcon class="slot-icon" src="/assets/icons/hud_wood.png" />
+        </UiPanel>
+        <UiPanel class="slot" tooltip="Pedra">
+          <UiIcon class="slot-icon" src="/assets/icons/hud_stone.png" />
+        </UiPanel>
+        <UiPanel class="slot legendary" tooltip="Item LENDÁRIO">
+          <UiText class="slot-glyph">!</UiText>
+        </UiPanel>
         <UiPanel class="slot empty" tooltip="Vazio" />
       </UiGrid>
-
-      <!-- ── UiCheck: toggles com estado ────────────────────────
-           O filho `.tick` aparece/desaparece com o estado; as
-           classes `checked`/`unchecked` ficam no próprio elemento. -->
       <UiColumn class="group">
         <UiCheck id="check-hud" class="check" value="1">
-          <UiPanel class="check-box"><UiPanel class="tick" /></UiPanel>
+          <UiPanel class="check-box">
+            <UiPanel class="tick" />
+          </UiPanel>
           <UiText class="check-label">Mostrar HUD</UiText>
         </UiCheck>
         <UiCheck id="check-anim" class="check" value="1">
-          <UiPanel class="check-box"><UiPanel class="tick" /></UiPanel>
+          <UiPanel class="check-box">
+            <UiPanel class="tick" />
+          </UiPanel>
           <UiText class="check-label">Animação do selo</UiText>
         </UiCheck>
         <UiCheck id="check-sfx" class="check">
-          <UiPanel class="check-box"><UiPanel class="tick" /></UiPanel>
+          <UiPanel class="check-box">
+            <UiPanel class="tick" />
+          </UiPanel>
           <UiText class="check-label">Som ambiente</UiText>
         </UiCheck>
       </UiColumn>
-
-      <!-- ── UiSlider: volume arrastável (min/max/step) ──────── -->
       <UiColumn class="group">
         <UiRow class="slider-line">
           <UiText class="slider-label">Volume</UiText>
@@ -70,14 +63,10 @@
           </UiSlider>
         </UiRow>
       </UiColumn>
-
-      <!-- ── UiInput: campo de texto ─────────────────────────── -->
       <UiColumn class="group">
         <UiText class="label">Nome do herói</UiText>
         <UiInput id="hero-name" class="input" placeholder="Escreve aqui…" max-length="16" />
       </UiColumn>
-
-      <!-- ── Barras + cooldown + animação ────────────────────── -->
       <UiColumn class="group">
         <UiBar id="bar-xp" class="track" bind="xp" value="0.62" />
         <UiRow class="slots">
@@ -87,19 +76,11 @@
           <UiCooldown id="cd-b" class="slot" bind="cd.heal" value="0">
             <UiIcon class="glyph" src="/assets/icons/glyph_heal.png" />
           </UiCooldown>
-          <!-- O selo roda quando o check-anim está ligado (script). -->
           <UiPanel id="seal" class="seal" anim="spin 6" tooltip="Selo em rotação — `anim=`">
             <UiText class="seal-glyph">V</UiText>
           </UiPanel>
         </UiRow>
       </UiColumn>
-
-      <!-- ── UI v2: gradientes, motion CSS, seletores novos ────
-           O banner é um linear-gradient; o texto tem
-           text-transform + letter-spacing; o botão tem
-           transition (hover suave); o painel de perigo corre
-           um @keyframes em loop; a grelha de slots é listrada por
-           :nth-child no CSS. -->
       <UiColumn class="group">
         <UiPanel id="banner" class="banner" bind="demo.gradiente:on-tag">
           <UiText class="banner-text">gradiente + transição</UiText>
@@ -113,27 +94,22 @@
           </UiPanel>
         </UiRow>
       </UiColumn>
-
-      <!-- ── UI v2: área dinâmica — o script CRIA linhas aqui
-           (viber.ui.create + tween de entrada) e conta-as com
-           viber.ui.query(".linha-dinamica"). -->
       <UiColumn id="dynamic-area" class="group dynamic">
         <UiText class="label">Área dinâmica (create/destroy por script):</UiText>
       </UiColumn>
     </UiColumn>
-
-    <!-- Cartão de leitura: o script escreve aqui o estado dos widgets
-         (viber.ui.read) — a prova de que a volta completa funciona. -->
     <UiColumn id="readout" class="readout">
       <UiText id="readout-text" class="readout-text">—</UiText>
     </UiColumn>
-
-    <!-- ── Menu de listas [M]: abas + UiList alimentada POR SCRIPT ── -->
     <UiModal id="demo-menu" key="m" class="overlay">
       <UiColumn class="frame">
         <UiRow class="tabbar">
-          <UiButton class="tab" tab-group="demo" tab="quests"><UiText>Missões</UiText></UiButton>
-          <UiButton class="tab" tab-group="demo" tab="bag"><UiText>Mochila</UiText></UiButton>
+          <UiButton class="tab" tab-group="demo" tab="quests">
+            <UiText>Missões</UiText>
+          </UiButton>
+          <UiButton class="tab" tab-group="demo" tab="bag">
+            <UiText>Mochila</UiText>
+          </UiButton>
         </UiRow>
         <UiColumn class="page" tab-group="demo" tab="quests" scroll="y">
           <UiList id="demo-quests" class="rows" bind="quests">
@@ -143,12 +119,12 @@
                 <UiText class="row-count">{progress_text}</UiText>
               </UiRow>
             </UiTemplate>
-            <UiEmpty><UiText class="empty">Sem missões.</UiText></UiEmpty>
+            <UiEmpty>
+              <UiText class="empty">Sem missões.</UiText>
+            </UiEmpty>
           </UiList>
         </UiColumn>
         <UiColumn class="page" tab-group="demo" tab="bag" scroll="y">
-          <!-- `bag-demo` não é fonte da engine: é alimentada por
-               viber.ui.list("bag-demo", …) no script. -->
           <UiList id="demo-bag" class="rows" bind="bag-demo">
             <UiTemplate>
               <UiRow class="row">
@@ -156,11 +132,12 @@
                 <UiText class="row-count">×{count}</UiText>
               </UiRow>
             </UiTemplate>
-            <UiEmpty><UiText class="empty">Mochila vazia.</UiText></UiEmpty>
+            <UiEmpty>
+              <UiText class="empty">Mochila vazia.</UiText>
+            </UiEmpty>
           </UiList>
         </UiColumn>
       </UiColumn>
     </UiModal>
-
   </UiRoot>
 </world>

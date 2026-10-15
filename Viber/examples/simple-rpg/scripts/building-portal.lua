@@ -1,8 +1,7 @@
 -- building-portal.lua: portas bidireccionais entre a VILA e a BOLSA DE INTERIORES.
 --
--- GERADO por tools/gen_interiors.py (só as CONSTANTES vêm de lá — POCKET e a
--- grelha têm de bater com o <InteriorScene> que a tool emite). Não editar à
--- mão: a lógica vive no template PORTAL_LUA do gerador.
+-- As CONSTANTES (POCKET e a grelha) têm de bater com o <InteriorScene> de
+-- world/interiors.xml.
 --
 -- v6 (2026-10-14), DATA-DRIVEN: o registo porta↔sala sai dos NOMES das
 -- entidades — `portal.<room>`/`portal.<room>.<sufixo>` (porta de rua) e
@@ -29,6 +28,19 @@ local AUTO_EXIT_R = 1.6  -- encostar à porta POR DENTRO sai sem tecla
 local ROOM_W = 60.0      -- passo X da grelha (= <InteriorScene room-size>)
 local ROOM_H = 55.0      -- passo Z da grelha
 local HEAL_EVERY = 2.0   -- de quanto em quanto tempo se re-tenta o registo
+
+-- Frase de entrada por sala (as salas novas caem no genérico).
+local ROOM_NAMES = {
+  chapel = "Entras na capela.",
+  forge = "Entras na forja do Bram.",
+  house_a = "Entras numa casa da vila.",
+  house_b = "Entras numa casa da vila.",
+  house_c = "Entras numa casa da vila.",
+  shepherd = "Entras na casa do pastor.",
+  barn = "Entras no celeiro.",
+  longhouse = "Entras no salão comunal.",
+  market = "Entras nas traseiras do mercado.",
+}
 
 -- ── REGISTO derivado das entidades ──────────────────────────────────────
 -- Construído 1× e cacheado em `viber.game().portal_registry` (sobrevive a
@@ -219,6 +231,6 @@ function on_update(dt)
     g.last_door[room] = { x = x, z = z }
     viber.sound("door_open")
     viber.teleport_player(POCKET.x + r.ox, FLOOR_Y, POCKET.z + r.oz + r.exit_dz + INWARD)
-    viber.toast("Entras no edifício.")
+    viber.toast(ROOM_NAMES[room] or "Entras no edifício.")
   end
 end

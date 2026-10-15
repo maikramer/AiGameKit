@@ -1,27 +1,8 @@
-<!--
-  ACAMPAMENTO DOS PEREGRINOS — a romaria do Alto de Vael. Loaded via Include.
-
-  ONDE E PORQUÊ: a boca BAIXA da Porta do Ermo (500,-58) é a única entrada do
-  túnel que sobe ao planalto, e o Ermo é deserto aberto: quem chega de longe
-  precisa de um sítio para dormir, encher os odres e ouvir o que vem à frente.
-  O acampamento é o degrau humano antes da subida — e o sítio onde o Mestre da
-  Romaria dá a quest que manda o herói aos marcos do alto
-  (`quests/fantasy_quests.json`: pilgrimage_vael).
-
-  CHÃO: a encosta ali tem 8-10° de declive e o acampamento pedia mesa. O
-  `<TerrainPad>` achata um terraço de 34×30 m no sopé e o falloff devolve o
-  relevo em volta — sem ele as tendas ficavam em escada.
-
-  VISITAS DA QUEST: os marcos estão no planalto (`vael-way-*`, `vael-choir-*`,
-  `vael-watch`, `vael-rim-cairn`), não aqui. Esta cena dá o PONTO DE PARTIDA e
-  um segundo destino visitável (`pilgrim-camp`) para o diário.
--->
-  <world>
-  <Group name="scene.pilgrims-camp" translation="0 0 0">
-    <TerrainPad at="484 -70" size="34 30" falloff="12" corner-radius="10" />
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
+  <Group name="scene.pilgrims-camp" translation="0 80.8973 0">
+    <TerrainPad at="484 -70" size="34 30" falloff="12" corner-radius="10" height="80.89815" pre-carved="1" />
     <SpawnExclusion at="484 -70" radius="26" />
-    <!-- Tendas: a banca de mercado é o único GLB do pool com lona esticada —
-         lê-se como tenda de campanha virada ao contrário, e é o que há. -->
     <Entity name="pilgrim-tent-a" translation="476 0 -76" transform="rotation: 0 25 0; scale: 1.25 1.25 1.25" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
@@ -31,8 +12,6 @@
     <Entity name="pilgrim-tent-c" translation="484 0 -56" transform="rotation: 0 300 0; scale: 1.3 1.3 1.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
-    <!-- A fogueira do acampamento: nome registado pelo travel, é ponto de
-         viagem rápida ([G]) — a romaria começa e acaba aqui. -->
     <Entity name="pilgrim-camp" translation="484 0 -70" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
     </Entity>
@@ -51,18 +30,15 @@
     <Entity translation="487 0 -67" transform="rotation: 0 25 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.6 0.9 0.55">
       <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
     </Entity>
-    <!-- Água: o poço é o que permite encher os odres antes da subida seca. -->
     <Entity name="pilgrim-well" translation="494 0 -64" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/medieval_well_lod0.glb" />
     </Entity>
     <Entity translation="497 0 -68" transform="rotation: 0 30 0">
       <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
     </Entity>
-    <!-- A rota afixada: o quadro diz onde estão os marcos (liga à quest). -->
     <Entity name="pilgrim-board" translation="472 0 -64" transform="rotation: 0 105 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/notice_board_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/notice_board_lod0.glb" />
     </Entity>
-    <!-- Carga da romaria: caixas, barris e toros para o lume. -->
     <Entity translation="474 0 -80" transform="rotation: 0 20 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
@@ -93,22 +69,19 @@
     <Group translation="500 0 -78" body="none" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa83a" intensity="3600" radius="0.6" />
     </Group>
-    <!-- A oferenda: um cristal do alto trazido por quem já subiu e voltou. -->
     <Entity translation="480 0 -62" transform="rotation: 0 35 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
       <PointLight translation="0 0.9 0" color="0x8fd0ff" intensity="2600" radius="0.8" shadows="false" />
     </Entity>
-    <!-- GENTE: o mestre da romaria (dá a quest) e dois peregrinos. -->
     <Entity name="npc_pilgrim_master" translation="482 0 -66" transform="rotation: 0 20 0">
       <GltfScene url="/assets/meshes/characters/npc_elder_lod0.glb" />
       <DialogueNPC dialogue-id="pilgrimage_vael" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="pilgrim-folk-a" translation="489 0 -73" transform="rotation: 0 200 0" script="townsfolk.lua">
+    <Entity name="pilgrim-folk-a" translation="489 0 -73" transform="rotation: 0 200 0" script="townsfolk.lua" prop-banter="“Caminhamos até ao santuário desde o amanhecer.”|“Partilhas o nosso lume?”" prop-speed="0.8">
       <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
     </Entity>
-    <Entity name="pilgrim-folk-b" translation="477 0 -72" transform="rotation: 0 120 0" script="townsfolk.lua">
+    <Entity name="pilgrim-folk-b" translation="477 0 -72" transform="rotation: 0 120 0" script="townsfolk.lua" prop-banter="“A estrada é longa, mas a fé é mais.”|“Ouvi passos na noite passada...”" prop-speed="0.8">
       <GltfScene url="/assets/meshes/characters/npc_healer_lod0.glb" />
     </Entity>
   </Group>
-  <!-- FIM scene.pilgrims-camp -->
-  </world>
+</world>

@@ -1,177 +1,220 @@
-<!--
-  BOSQUE ENCANTADO — a bacia escondida do extremo norte. Loaded via Include.
-
-  PORQUÊ: a norte do vale há uma MURALHA — a cota sobe de ~58 m (fim da
-  artéria, -8/286) a ~176 m no cavalgamento das colinas — e do outro lado
-  dela existe a maior bacia plana do mapa: ~73 m de cota, declive 0-4°, de
-  x=-100 a x=400 e de z=1230 a z=1800. Estava vazia e ninguém lá chegava. É
-  o sítio perfeito para o que o resto do mapa não tem: um lugar calmo e
-  estranho, alcançado por uma subida dura.
-
-  COMO SE CHEGA: trilho novo em paths/trails.xml (dock em n_end, -8 286:
-  sobe a muralha por noroeste e desce à bacia). O perfil medido tem pernos
-  de 54 % e 41 % de grau (28-35°) — duro, mas dentro do
-  `HERO_MAX_SLOPE_DEG` = 55° e coerente com os outros trilhos de montanha
-  do mapa (o do Mirante da Caldeira chega a 61 %).
-
-  COTAS MEDIDAS (tools/height_probe.py):
-    clareira (180,1330) 73.9 declive 3.2   altar (150,1300) 74.1 declive 2.6
-    lagoa    (200,1400) 72.7 declive 0.5   portão (240,1250) 79.2 declive 2.7
-  Tudo dentro de 6 m de amplitude: o pad só é preciso sob o anel de pedras,
-  para as oito pedras assentarem ao mesmo nível.
--->
-  <world>
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
   <Group name="fantasy.bosque-encantado" translation="0 0 0">
-    <!-- ============================================================
-       §1 A LAGOA DOS LUMES — espelho de água escuro no meio da bacia. O
-       `rocks="1"` traz as pedras de margem do pipeline automático (as
-       mesmas dos lagos do pântano), e a cor puxa a verde para o bioma ler
-       como "água viva", não como o azul dos lagos do vale.
-       ============================================================ -->
-    <Lake at="200 1400" radius="22" depth="2.6" water-offset="0.4" color="#2b7f86" opacity="0.7" ripple="0.35" rocks="1" rocks-density="0.16" rocks-scale-max="1.8" />
+    <Lake at="200 1400" radius="22" depth="2.6" water-offset="0.4" color="#2b7f86" opacity="0.7" ripple="0.35" rocks="0" rocks-density="0.16" rocks-scale-max="1.8" water-level="72.30618" />
     <SpawnExclusion at="200 1400" radius="36" />
-    <Entity name="ambient_water_lumes" translation="200 0 1400" script="ambient-water.lua" />
-    <!-- ============================================================
-       §2 ANEL DOS ANTIGOS — oito menires a 26 m do centro da lagoa, sobre um
-       pad para assentarem todos à mesma cota (2 m de desnível natural às
-       voltas do anel lêem-se como colocação torta). Não é um círculo de
-       culto: não tem altar nem luz quente, é só pedra e a marca que ela
-       deixa.
-       ============================================================ -->
-    <TerrainPad at="200 1400" size="66 66" falloff="22" corner-radius="18" />
-    <Entity translation="200 0 1426" transform="rotation: 0 12 0; scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+    <Entity name="ambient_water_lumes" translation="200 70.1069 1400" script="ambient-water.lua" />
+    <TerrainPad at="200 1400" size="66 66" falloff="22" corner-radius="18" height="72.70645" pre-carved="1" />
+    <Entity translation="200 72.5749 1426" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="0 12 0" scale="1.5">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="218.4 0 1418.4" transform="rotation: 0 57 0; scale: 1.35 1.35 1.35" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+    <Entity translation="218.4 72.393 1418.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="0 57 0" scale="1.35">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="225.5 0 1400" transform="rotation: 0 102 0; scale: 1.55 1.55 1.55" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+    <Entity translation="225.5 72.2048 1400" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="180 78 180" scale="1.55">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="218.4 0 1381.6" transform="rotation: 0 147 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+    <Entity translation="218.4 72.4747 1381.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="180 33 180" scale="1.4">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="200 0 1374" transform="rotation: 0 192 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+    <Entity translation="200 72.7062 1374" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="180 -12 180" scale="1.6">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="181.6 0 1381.6" transform="rotation: 0 237 0; scale: 1.45 1.45 1.45" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+    <Entity translation="181.6 72.4293 1381.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="180 -57 180" scale="1.45">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="174.5 0 1400" transform="rotation: 0 282 0; scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb">
+    <Entity translation="174.5 72.496 1400" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb" euler="0 -78 0" scale="1.5">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <!-- O oitavo caiu para dentro da lagoa. -->
-    <Entity translation="186 0 1420" transform="rotation: 0 40 74" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.2 0.9 0.9">
+    <Entity translation="186 72.7062 1420" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.2 0.9 0.9" euler="0 40 74" scale="1">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <!-- ============================================================
-       §3 COGUMELOS QUE BRILHAM — o mesmo `forest/mushroom_glow` do sub-bosque
-       da Floresta Sombria, aqui à escala 2.2-4.2. É o que dá o tom do sítio:
-       de dia são cogumelos grandes, de noite são lanternas. Um tapete
-       disperso por toda a bacia e um anel denso na margem da lagoa.
-       ============================================================ -->
-    <StaticSpawner profile="tree" count="150" seed="8801" region-min="60 0 1240" region-max="360 0 1720"
-                    align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1"
-                    max-slope-deg="26" max-slope-attempts="64" scale-min="1.6" scale-max="3.2"
-                    avoid-overlaps="1" footprint-radius="1.6" cluster-count="18" cluster-radius="16"
-                    random-yaw="true" variation="foliage" max-distance="1980">
+    <Scatter profile="tree" count="150" seed="8801" region-min="60 0 1240" region-max="360 0 1720" align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1" max-slope-deg="26" max-slope-attempts="64" scale-min="1.6" scale-max="3.2" avoid-overlaps="1" footprint-radius="1.6" cluster-count="18" cluster-radius="16" random-yaw="true" variation="foliage" max-distance="1980" id="grp-81">
       <GameObject role="static">
         <GLTFLoader role="visual" url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
       </GameObject>
       <GameObject role="static">
         <GLTFLoader role="visual" url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
       </GameObject>
-    </StaticSpawner>
-    <!-- Anel denso à volta da água: `near-water` é o anel em SECO à lâmina. -->
-    <StaticSpawner profile="tree" count="70" seed="8802" region-min="150 0 1350" region-max="250 0 1450"
-                    near-water="1" avoid-water="0" align-to-terrain="1" ground-align="auto"
-                    max-slope-deg="30" max-slope-attempts="96" scale-min="2.4" scale-max="4.2"
-                    avoid-overlaps="1" footprint-radius="2.4" random-yaw="true" variation="foliage" max-distance="1960">
-      <GameObject role="static">
-        <GLTFLoader role="visual" url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
-      </GameObject>
-    </StaticSpawner>
-    <!-- Os cinco maiores, postos à mão: são marcos, não tapete. -->
-    <Entity translation="228 0 1408" transform="rotation: 0 20 0; scale: 5.4 5.4 5.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb">
+    </Scatter>
+    <Group name="spawn/grp-81" generated-by="grp-81">
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0000" translation="316.8421 71.8041 1385.1603" euler="180 -38.5406 180" scale="2.0755" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0001" translation="120.4722 72.7682 1378.7368" euler="180 32.4606 180" scale="2.455" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0002" translation="99.3163 72.884 1379.0701" euler="0 20.4619 0" scale="2.8367" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0003" translation="80.5618 74.8686 1466.8691" euler="180 -84.1057 180" scale="2.4873" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0004" translation="78.1169 84.5257 1698.8008" euler="180 -39.4054 180" scale="2.8044" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0005" translation="173.5969 75.8678 1590.8937" euler="180 11.2004 180" scale="2.0356" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0006" translation="218.2252 73.6047 1549.0133" euler="180 -77.0295 180" scale="3.1462" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0007" translation="350.1533 69.3608 1585.5854" euler="0 88.0147 0" scale="2.7296" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0008" translation="341.6675 71.4801 1345.0421" euler="0 -83.3313 0" scale="2.9506" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0009" translation="325.9727 72.1662 1656.1299" euler="0 -45.207 0" scale="2.4406" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0010" translation="228.432 74.4448 1646.7524" euler="177.9999 51.0488 -178.6829" scale="1.6775" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0011" translation="170.42 79.0722 1245.9927" euler="-178.6819 -59.1101 178.0706" scale="2.6927" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0012" translation="301.2111 74.7235 1277.0571" euler="180 13.9778 180" scale="1.8975" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0013" translation="336.8917 70.1958 1601.5026" euler="178.957 -47.7873 -179.8707" scale="2.0186" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0014" translation="202.272 79.6672 1695.9531" euler="-11.423 69.3394 7.9485" scale="1.8745" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0015" translation="360 70.1058 1595.067" euler="180 -29.7211 180" scale="2.9295" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0016" translation="75.5084 84.2067 1716.0593" euler="180 67.0253 180" scale="2.8096" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0017" translation="182.759 73.7147 1339.6632" euler="180 -86.9636 180" scale="3.132" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0018" translation="192.3909 74.4895 1334.5488" euler="180 -43.4144 180" scale="2.4338" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0019" translation="202.5093 73.7097 1559.5872" euler="180 -75.5726 180" scale="2.8221" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0020" translation="176.2083 74.8516 1574.3854" euler="0 30.267 0" scale="2.9107" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0021" translation="165.6858 73.2625 1334.7308" euler="0 -58.3475 0" scale="2.7404" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0022" translation="224.1924 79.3625 1247.8931" euler="180 48.2331 180" scale="2.4277" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0023" translation="247.2402 72.0985 1446.457" euler="0 30.8284 0" scale="2.4907" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0024" translation="301.2733 74.3315 1287.0699" euler="-178.4224 8.3288 -177.6474" scale="2.1121" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0025" translation="288.1131 73.1375 1333.3732" euler="-0.0056 -50.0525 -0.216" scale="3.1547" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0026" translation="317.228 71.9875 1370.6243" euler="180 -54.0156 180" scale="2.0851" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0027" translation="235.6186 73.0285 1464.8864" euler="179.7305 33.6389 -178.48" scale="1.7435" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0028" translation="337.1098 72.4778 1651.0343" euler="180 -11.8029 180" scale="1.6234" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0029" translation="249.8039 73.7486 1658.8273" euler="180 56.3774 180" scale="3.1416" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0030" translation="206.1483 73.688 1549.0391" euler="0 -86.3003 0" scale="1.6979" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0031" translation="248.3099 71.7132 1461.1471" euler="179.6985 34.1166 -175.1248" scale="2.1661" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0032" translation="188.5031 74.8633 1579.3146" euler="177.9083 78.4416 -178.6262" scale="1.6874" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0033" translation="94.9813 74.5957 1477.7732" euler="180 -10.5651 180" scale="2.1089" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0034" translation="291.1717 72.6916 1348.319" euler="0 54.9281 0" scale="2.2652" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0035" translation="164.5992 75.8825 1591.2928" euler="180 -70.2957 180" scale="3.1378" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0036" translation="172.753 73.5308 1327.0151" euler="180 23.3951 180" scale="2.8678" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0037" translation="330.1358 71.8057 1381.8125" euler="180 51.8707 180" scale="2.4505" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0038" translation="348.7077 70.4676 1604.8198" euler="178.6693 -51.7743 179.5502" scale="2.7009" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0039" translation="174.5554 76.3477 1272.5851" euler="0 20.9804 0" scale="3.1522" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0040" translation="224.0693 73.4918 1563.0254" euler="0 -66.0023 0" scale="2.7226" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0041" translation="237.1364 72.8021 1444.1039" euler="180 53.2095 180" scale="2.6695" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0042" translation="309.4262 72.0449 1654.7813" euler="0 -69.2002 0" scale="1.8723" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0043" translation="311.162 72.9512 1296.8842" euler="-179.3961 -23.9805 -179.8267" scale="1.8088" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0044" translation="60 84.4755 1708.71" euler="0 76.5186 0" scale="2.6525" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0045" translation="239.6797 74.931 1670.8798" euler="173.4526 58.4674 -175.4756" scale="2.0738" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0046" translation="94.6108 74.6204 1458.7305" euler="0 43.5716 0" scale="2.0929" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0047" translation="220.1816 78.2991 1256.9769" euler="0 -60.9918 0" scale="2.5634" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0048" translation="109.8222 72.855 1381.2415" euler="180 19.733 180" scale="2.4079" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0049" translation="193.5292 73.5923 1347.1281" euler="0.9087 -60.9332 0.7128" scale="3.1645" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0050" translation="230.6655 75.0503 1656.2277" euler="177.9166 -46.0836 -178.7384" scale="1.6239" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0051" translation="108.1886 74.4807 1477.4297" euler="0 16.2266 0" scale="1.7442" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0052" translation="212.4726 77.4375 1674.038" euler="-0.8262 1.7219 -0.0536" scale="2.707" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0053" translation="346.5326 71.1963 1335.6155" euler="-3.5727 -1.6483 0.874" scale="2.8662" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0054" translation="212.4036 79.9909 1241.0375" euler="-177.0953 -56.0996 178.8393" scale="2.4396" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0055" translation="108.6695 73.1258 1394.5068" euler="180 -5.8342 180" scale="1.646" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0056" translation="60 85.8114 1698.6705" euler="3.2 11.8126 -1.4577" scale="2.9642" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0057" translation="353.576 71.3593 1350.6947" euler="0 30.3415 0" scale="2.7861" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0058" translation="322.6123 74.1128 1284.9413" euler="0.0355 56.8897 0.3171" scale="2.3811" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0059" translation="102.4221 72.9471 1388.949" euler="180 -67.4946 180" scale="3.1184" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0060" translation="238.0505 73.1905 1640.4001" euler="1.7859 67.7684 -3.451" scale="2.7665" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0061" translation="205.4685 78.3297 1683.5387" euler="175.5341 -32.0892 -179.0969" scale="2.4052" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0062" translation="69.6694 84.3574 1704.6027" euler="0 42.4705 0" scale="2.0681" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0063" translation="118.4936 72.8237 1368.4941" euler="180 -69.5402 180" scale="2.5548" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0064" translation="337.1684 71.9048 1392.7327" euler="180 -12.027 180" scale="1.6021" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0065" translation="214.1568 73.6019 1561.1125" euler="180 87.203 180" scale="2.6607" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0066" translation="226.3879 74.0433 1458.4266" euler="179.9016 32.5719 -179.8621" scale="3.1763" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0067" translation="338.0141 71.8698 1374.677" euler="0 71.1024 0" scale="1.9839" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0068" translation="281.2619 73.0869 1349.0753" euler="0 3.9839 0" scale="2.5355" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0069" translation="166.242 73.0089 1345.6783" euler="180 -74.54 180" scale="2.0587" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0070" translation="347.1241 71.3579 1364.2687" euler="0 81.2485 0" scale="3.1319" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0071" translation="230.2274 79.44 1240" euler="2.5546 33.5398 -1.7123" scale="1.673" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0072" translation="185.7204 77.8864 1261.412" euler="0 -25.4166 0" scale="2.0037" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0073" translation="176.7925 77.817 1255.9722" euler="-174.3508 21.9616 176.857" scale="2.7103" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0074" translation="340.7364 71.9127 1385.1775" euler="0 76.1616 0" scale="2.7473" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0075" translation="310.7564 71.9784 1378.0872" euler="0 -1.1701 0" scale="1.9225" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0076" translation="208.5523 78.9764 1252.5078" euler="3.3665 -54.2088 1.6663" scale="1.6306" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0077" translation="124.4573 73.268 1392.0333" euler="180 73.0826 180" scale="2.0925" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0078" translation="272.8108 74.1915 1330.6183" euler="0 -27.3883 0" scale="1.8725" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0079" translation="242.857 72.2526 1435.8365" euler="0 79.7369 0" scale="2.2202" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0080" translation="303.5759 75.4363 1267.5398" euler="-178.0047 -36.4463 -179.7953" scale="1.8344" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0081" translation="337.4194 69.3656 1591.5947" euler="0 37.1817 0" scale="2.565" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0082" translation="84.8729 74.8191 1477.2308" euler="180 -10.0948 180" scale="1.8736" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0083" translation="107.7464 74.5125 1463.5333" euler="180 40.1698 180" scale="2.5653" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0084" translation="324.5494 71.4586 1637.8285" euler="0 30.1299 0" scale="1.8401" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0085" translation="179.6326 76.4307 1598.6132" euler="0 13.7838 0" scale="1.6612" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0086" translation="324.2074 71.7782 1394.1825" euler="180 -54.8867 180" scale="2.2448" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0087" translation="178.0276 73.0554 1350.1791" euler="0 -2.5172 0" scale="1.7476" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0088" translation="217.5574 81.6088 1695.9609" euler="175.9559 8.1788 -179.9101" scale="1.8477" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0089" translation="314.6841 72.6235 1661.9993" euler="-2.3614 -52.7469 -0.4911" scale="2.8879" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0090" translation="271.4385 73.6446 1346.9153" euler="-179.5064 -50.7863 -178.4069" scale="1.7115" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0091" translation="360 71.5452 1342.1722" euler="180 -74.2242 180" scale="2.5681" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0092" translation="315.5015 75.4553 1270.7452" euler="-177.1111 -55.0132 -179.7608" scale="1.6391" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0093" translation="309.9785 71.3677 1641.2694" euler="180 -3.0586 180" scale="2.7859" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0094" translation="249.7568 72.9688 1646.2" euler="0 -48.7454 0" scale="1.6126" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0095" translation="166.5665 76.3262 1265.2296" euler="-150.5911 83.5009 154.3201" scale="2.3704" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0096" translation="164.1669 75.0612 1575.7766" euler="180 -44.6467 180" scale="2.1177" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0097" translation="187.7933 76.0687 1592.4193" euler="180 87.2349 180" scale="1.6924" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0098" translation="107.6974 72.8634 1370.3424" euler="0 -27.9985 0" scale="3.138" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0099" translation="94.772 74.8043 1467.8749" euler="180 -58.7697 180" scale="2.4154" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0100" translation="185.1876 79.0597 1248.3961" euler="2.2025 -34.6409 -0.1842" scale="1.8765" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0101" translation="184.3661 74.243 1326.9229" euler="0 -84.9702 0" scale="1.8318" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0102" translation="228.4498 75.1618 1664.9355" euler="0 72.4174 0" scale="2.4276" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0103" translation="359.9189 71.2319 1361.2781" euler="180 -33.6351 180" scale="2.1057" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0104" translation="71.5332 85.4674 1689.9615" euler="180 -7.2369 180" scale="3.0617" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0105" translation="222.8346 73.8484 1447.9005" euler="178.0868 -0.3367 -179.0303" scale="2.669" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0106" translation="195.7945 79.5785 1687.9136" euler="-4.599 -41.356 -10.046" scale="1.6774" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0107" translation="335.7142 71.6012 1353.6975" euler="0 -3.1152 0" scale="2.9051" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0108" translation="312.5892 74.0232 1286.1948" euler="0 -62.167 0" scale="2.672" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0109" translation="215.7662 73.6866 1571.6416" euler="0 -47.6628 0" scale="2.546" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0110" translation="320.1913 71.6719 1647.4779" euler="0 56.8589 0" scale="2.5649" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0111" translation="327.5007 72.0051 1370.394" euler="180 33.7549 180" scale="1.7158" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0112" translation="291.3704 75.4673 1284.2161" euler="-179.5287 45.3494 -178.3303" scale="2.4213" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0113" translation="238.7974 73.817 1651.8766" euler="176.5535 27.6437 -175.5948" scale="3.0017" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0114" translation="182.0222 75.5753 1585.5398" euler="0 -41.1495 0" scale="2.5285" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0115" translation="333.6819 72.0978 1642.3264" euler="-0.3864 10.7463 0.7948" scale="2.2632" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0116" translation="297.9924 72.502 1340.5629" euler="0 17.8318 0" scale="2.8497" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0117" translation="101.5158 74.5632 1484.3165" euler="0 57.9191 0" scale="2.4434" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0118" translation="164.1452 77.492 1255.3872" euler="4.965 -39.7731 1.7814" scale="2.4679" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0119" translation="63.222 84.4638 1719.4642" euler="180 68.7065 180" scale="3.1826" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0120" translation="192.1001 81.2499 1679.8564" euler="1.6779 32.6807 -2.7525" scale="2.2582" />
+      <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0121" translation="302.4594 73.3164 1296.8308" euler="1.5801 -32.507 -0.4955" scale="2.6262" />
+      <GltfScene url="/assets/meshes/props/mushroom_red_lod0.glb" lod1-url="/assets/meshes/props/mushroom_red_lod1.glb" lod2-url="/assets/meshes/props/mushroom_red_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" name="inst-grp-81-0122" translation="360 71.2214 1607.767" euler="-1.3988 53.7615 0.2383" scale="3.0439" />
+    </Group>
+    <Entity translation="228 72.6564 1408" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb" euler="0 20 0" scale="5.4">
       <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
       <PointLight translation="0 3.4 0" color="0x66e8c0" intensity="5200" radius="1.4" shadows="false" />
     </Entity>
-    <Entity translation="164 0 1440" transform="rotation: 0 130 0; scale: 4.6 4.6 4.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb">
+    <Entity translation="164 74.9863 1440" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb" euler="180 50 180" scale="4.6">
       <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
       <PointLight translation="0 3.0 0" color="0x66e8c0" intensity="4400" radius="1.3" shadows="false" />
     </Entity>
-    <Entity translation="242 0 1352" transform="rotation: 0 250 0; scale: 4.0 4.0 4.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb">
+    <Entity translation="242 74.3869 1352" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb" euler="180 -70 180" scale="4">
       <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
       <PointLight translation="0 2.6 0" color="0x66e8c0" intensity="3800" radius="1.2" shadows="false" />
     </Entity>
-    <Entity translation="140 0 1300" transform="rotation: 0 70 0; scale: 3.4 3.4 3.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb">
+    <Entity translation="140 74.098 1300" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb" euler="0 70 0" scale="3.4">
       <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
     </Entity>
-    <Entity translation="285 0 1420" transform="rotation: 0 310 0; scale: 3.0 3.0 3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb">
+    <Entity translation="285 71.7161 1420" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/mushroom_glow_lod0.glb" euler="0 -50 0" scale="3">
       <GltfScene url="/assets/meshes/forest/mushroom_glow_lod0.glb" />
     </Entity>
-    <!-- ============================================================
-       §4 ALTAR DO CREPÚSCULO (150,1300) — o altar druida do pool, sozinho na
-       borda oeste da clareira. Recompensa mística ([F], crystal-shrine.lua).
-       ============================================================ -->
     <SpawnExclusion at="150 1300" radius="16" />
-    <Entity name="bosque-altar" translation="150 0 1300" transform="scale: 1.9 1.9 1.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/druid_stone_altar_collision.glb; mesh-anchor: base">
+    <Entity name="bosque-altar" translation="150 74.1316 1300" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/druid_stone_altar_collision.glb; mesh-anchor: base" scale="1.9">
       <GltfScene url="/assets/meshes/terrain/druid_stone_altar_lod0.glb" />
       <PointLight translation="0 1.2 0" color="0x7cffd0" intensity="3200" radius="1.0" shadows="false" />
     </Entity>
-    <Entity name="bosque-shrine" translation="151 0 1302" script="crystal-shrine.lua" />
-    <Entity translation="150 0 1300">
+    <Entity name="bosque-shrine" translation="151 74.0402 1302" script="crystal-shrine.lua" />
+    <Entity translation="150 74.1316 1300">
       <ParticleSystem preset="magic" transform="pos: 0 1.4 0" particle-emitter="preset: magic; emission-rate: 20; shape-radius: 2.2; start-life-min: 1.4; start-life-max: 3.2; start-speed-min: 0.2; start-speed-max: 0.7; start-size-min: 0.12; start-size-max: 0.28; looping: 1; world-space: 1" />
     </Entity>
-    <!-- Cogumelos forrageáveis: [F] come e cura 40 HP (mushroom.lua). -->
-    <Entity name="bosque-forage-1" translation="168 0 1322" script="mushroom.lua" />
-    <Entity name="bosque-forage-2" translation="216 0 1462" script="mushroom.lua" />
-    <Entity name="bosque-forage-3" translation="132 0 1386" script="mushroom.lua" />
-    <!-- ============================================================
-       §5 PORTÃO DA BACIA — dois arcos de ROCHA voxel (as primeiras
-       `<Arch>` do mapa, sólidos union com vão em arco e colisão própria).
-       O `natural` curva uma banda de cones de pé a pé: lê-se como a rocha que
-       o tempo furou, não como um arco que alguém construiu. Ficam no
-       estreitamento por onde o trilho desce à bacia, um antes do outro,
-       enquadrando a descida.
-       ============================================================ -->
+    <Entity name="bosque-forage-1" translation="168 73.5258 1322" script="mushroom.lua" prop-label="Cogumelo encantado" prop-xp="8" />
+    <Entity name="bosque-forage-2" translation="216 74.9399 1462" script="mushroom.lua" prop-label="Cogumelo encantado" prop-xp="8" />
+    <Entity name="bosque-forage-3" translation="132 72.7864 1386" script="mushroom.lua" prop-label="Cogumelo encantado" prop-xp="8" />
     <Arch name="bosque-portao" at="240 1250" width="9" height="7.5" thickness="2.4" depth="4.5" yaw="205" profile="natural" />
     <Arch name="bosque-portao-2" at="205 1580" width="8" height="6.5" thickness="2.2" depth="4" yaw="90" profile="natural" />
-    <!-- ============================================================
-       §6 VAGA-LUMES E NÉVOA — a bacia é funda e húmida: névoa rasteira presa
-       no fundo (as encostas fecham-na) e vaga-lumes por todo o lado. Os
-       emissores vivem DENTRO do grupo, a y=0 local, que é o idioma do
-       atmosphere/ambient-fx.xml: o seating levanta o wrapper ao chão e o
-       emissor fica à altura local pedida.
-       ============================================================ -->
-    <Entity translation="200 0 1400">
+    <Entity translation="200 70.1069 1400">
       <ParticleSystem preset="fireflies" transform="pos: 0 1.2 0" particle-emitter="preset: fireflies; emission-rate: 26; shape-radius: 16; start-life-min: 2.5; start-life-max: 5.5; start-speed-min: 0.1; start-speed-max: 0.5; start-size-min: 0.12; start-size-max: 0.3; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="140 0 1330">
+    <Entity translation="140 73.0989 1330">
       <ParticleSystem preset="fireflies" transform="pos: 0 1.1 0" particle-emitter="preset: fireflies; emission-rate: 20; shape-radius: 12; start-life-min: 2.5; start-life-max: 5.0; start-speed-min: 0.1; start-speed-max: 0.45; start-size-min: 0.1; start-size-max: 0.26; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="270 0 1450">
+    <Entity translation="270 70.2632 1450">
       <ParticleSystem preset="fireflies" transform="pos: 0 1.1 0" particle-emitter="preset: fireflies; emission-rate: 20; shape-radius: 12; start-life-min: 2.5; start-life-max: 5.0; start-speed-min: 0.1; start-speed-max: 0.45; start-size-min: 0.1; start-size-max: 0.26; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="200 0 1520">
+    <Entity translation="200 74.5533 1520">
       <ParticleSystem preset="smoke" transform="pos: 0 0.8 0" particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.8; start-size-max: 3.6; start-color: #8fb0a4; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="130 0 1420">
+    <Entity translation="130 74.3981 1420">
       <ParticleSystem preset="smoke" transform="pos: 0 0.8 0" particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.8; start-size-max: 3.4; start-color: #8fb0a4; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="270 0 1360">
+    <Entity translation="270 73.9161 1360">
       <ParticleSystem preset="smoke" transform="pos: 0 0.8 0" particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.8; start-size-max: 3.4; start-color: #8fb0a4; looping: 1; world-space: 1" />
     </Entity>
-    <!-- Brilho na lâmina da lagoa. -->
-    <Entity translation="186 0 1386">
+    <Entity translation="186 71.6435 1386">
       <ParticleSystem preset="sparkle" transform="pos: 0 0.9 0" />
     </Entity>
-    <!-- ============================================================
-       §7 A BACIA É DELES — boglings (o povo do brejo, que é o que esta bacia
-       é) e limos. Regiões nos prados a leste e a oeste, longe do altar e do
-       portão, para o sítio continuar a ser um refúgio se o jogador não
-       mexer.
-       ============================================================ -->
     <DynamicSpawner avoid-water="1" avoid-road="1" count="6" seed="8811" region-min="250 0 1300" region-max="340 0 1450" random-yaw="true" avoid-overlaps="false" max-slope-deg="26" max-distance="2000">
       <Creature role="enemy" script="enemies/bogling.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/bogling_lod0.glb" lod1-url="/assets/meshes/characters/bogling_lod1.glb" lod2-url="/assets/meshes/characters/bogling_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
@@ -188,5 +231,4 @@
       </Creature>
     </DynamicSpawner>
   </Group>
-  <!-- FIM fantasy.bosque-encantado -->
-  </world>
+</world>

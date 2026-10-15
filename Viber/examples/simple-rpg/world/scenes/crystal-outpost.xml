@@ -1,25 +1,7 @@
-<!--
-  POSTO DOS ESCAVADORES — a mina do alto. Loaded via Include.
-
-  ONDE E PORQUÊ: (800,730), na mesa do Alto de Vael, a 30 m da Atalaia e a
-  80 m do coro de cristal. O planalto é o ponto mais alto e mais liso do mapa
-  (195 m, declive 0,9°) e não tinha NINGUÉM: era um sítio bonito e vazio. Um
-  posto de escavação explica o veio de cristal do coro, dá ofício ao lugar e
-  serve de quest hub do bioma (`quests/fantasy_quests.json`: outpost_veins).
-
-  VISITAS DA QUEST: `outpost-derrick` (o guincho), `outpost-vein-a/b` (os veios
-  colhíveis). O herói pode ainda colher `stone` aqui para o objetivo de
-  recolha — os veios são `<StaticSpawner>` com `destructible` + `ResourceNode`,
-  portanto dão loot a sério (um `<Entity destructible>` sozinho só dá XP).
-
-  GUINCHO: `<Composition>` de primitivas com as texturas do pool (madeira nas
-  pernas e na viga, pedra na base) — a mesma anatomia dos cascos dos interiores,
-  aqui ao ar livre a emoldurar a entrada da escavação.
--->
-  <world>
-  <Group name="scene.crystal-outpost" translation="0 0 0">
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
+  <Group name="scene.crystal-outpost" translation="0 196.1229 0">
     <SpawnExclusion at="800 730" radius="22" />
-    <!-- ── Guincho: 4 pernas, viga, sarilho e cabo ─────────────────────── -->
     <Composition name="outpost-derrick" translation="800 0 730" body="fixed" collider="auto">
       <Box translation="-2.6 1.9 0" half-size="0.16 1.9 0.16" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
       <Box translation="2.6 1.9 0" half-size="0.16 1.9 0.16" texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.4" normal-map="/assets/textures/wood_planks/normal.ktx2" />
@@ -32,16 +14,6 @@
       <Box translation="0 0.1 2.2" half-size="1.1 0.1 1.1" texture="/assets/textures/mountain_stone/albedo.ktx2" texture-tile-size="3.0" normal-map="/assets/textures/mountain_stone/normal.ktx2" />
       <PointLight translation="0 3.0 0" color="0xffd9a0" intensity="6000" radius="0.9" />
     </Composition>
-    <!-- ── Veios expostos: colhíveis, com loot (stone) ─────────────────── -->
-    <StaticSpawner profile="tree" count="3" seed="7811" region-min="786 0 716" region-max="800 0 730"
-                    align-to-terrain="1" ground-align="auto" avoid-water="1" avoid-road="1"
-                    max-slope-deg="30" max-slope-attempts="48" scale-min="1.2" scale-max="2.0"
-                    avoid-overlaps="1" random-yaw="true" variation="rock" max-distance="1260">
-      <GameObject role="static" destructible="popup-text: Crystal; popup-color: #9fc4e8; preset: rockshards; burst-count: 26; hits: 4; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 14; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
-        <GLTFLoader role="visual" url="/assets/meshes/props/crystal_blue_lod0.glb" lod1-url="/assets/meshes/props/crystal_blue_lod1.glb" lod2-url="/assets/meshes/props/crystal_blue_lod2.glb" lod-threshold-near="45" lod-threshold-mid="120" />
-        <ResourceNode kind="stone" yield="5" transform="pos: 0 0 0" />
-      </GameObject>
-    </StaticSpawner>
     <Entity name="outpost-vein-a" translation="793 0 719" transform="rotation: 0 25 0; scale: 2.4 2.4 2.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
       <PointLight translation="0 1.4 0" color="0x8fd0ff" intensity="3200" radius="0.9" shadows="false" />
@@ -49,7 +21,6 @@
     <Entity name="outpost-vein-b" translation="790 0 724" transform="rotation: 0 160 0; scale: 1.8 1.8 1.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb">
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
-    <!-- ── Estaleiro: carrinho, caixas, água, ferramenta ───────────────── -->
     <Entity translation="805 0 722" transform="rotation: 0 105 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
@@ -83,17 +54,15 @@
     <Entity translation="812 0 724" transform="rotation: 0 210 0; scale: 1.1 1.1 1.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/terrain/form_stack_6_lod0.glb">
       <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
     </Entity>
-    <!-- GENTE: o capataz (dá a quest) e dois escavadores. -->
     <Entity name="npc_outpost_foreman" translation="798 0 727" transform="rotation: 0 15 0">
       <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
       <DialogueNPC dialogue-id="outpost_veins" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="outpost-miner-a" translation="802 0 731" transform="rotation: 0 240 0" script="townsfolk.lua">
+    <Entity name="outpost-miner-a" translation="802 0 731" transform="rotation: 0 240 0" script="townsfolk.lua" prop-banter="“Os cristais cantam quando se partem.”|“Cuidado com as escarpas.”" prop-radius="2">
       <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
     </Entity>
-    <Entity name="outpost-miner-b" translation="795 0 722" transform="rotation: 0 60 0" script="townsfolk.lua">
+    <Entity name="outpost-miner-b" translation="795 0 722" transform="rotation: 0 60 0" script="townsfolk.lua" prop-banter="“Mais um dia, mais um veio.”|“Já viste o santuário de cristal?”" prop-radius="2">
       <GltfScene url="/assets/meshes/characters/npc_cook_lod0.glb" />
     </Entity>
   </Group>
-  <!-- FIM scene.crystal-outpost -->
-  </world>
+</world>

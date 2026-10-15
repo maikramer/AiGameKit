@@ -19,6 +19,7 @@ local TABLE = {
   scorpion   = { 3, 5, 0.05, 0.18 },
   shade      = { 4, 7, 0.10, 0.00 },
   bandit     = { 5, 9, 0.10, 0.05 },
+  ["bandit-archer"] = { 6, 10, 0.12, 0.05 },
   -- Chefes: bolsa + 2 poções garantidas (p > 1 = garantido, parte inteira).
   witch        = { 60, 90, 2.0, 1.0 },
   ["sand-worm"]  = { 70, 100, 2.0, 1.0 },
@@ -39,6 +40,14 @@ end
 local function pay(kind, id)
   local entry = TABLE[kind]
   if not entry then return end
+  -- Elites (lib/fsm.lua regista-os): ouro ×3, poção garantida e chance de
+  -- bomba — vale a pena o risco.
+  local elites = viber.game().elites
+  local elite = elites and elites[id]
+  if elite then
+    elites[id] = nil
+    entry = { entry[1] * 3, entry[2] * 3, entry[3] + 1, entry[4] }
+  end
   local ok, x, y, z = viber.entity_position(id)
   if not ok then
     local _, px, py, pz = viber.player_position()
@@ -53,6 +62,14 @@ local function pay(kind, id)
   if potions > 0 then
     viber.item_add("potion", potions)
     viber.damage_number("+" .. potions .. " poção", { color = ITEM_COLOR, x = x, y = y + 2.2, z = z })
+  end
+  if elite then
+    viber.toast("Elite derrotado!")
+    viber.burst("sparkle", x, y + 1.0, z, 24)
+    if math.random() < 0.35 then
+      viber.item_add("bomb", 1)
+      viber.damage_number("+1 bomba", { color = ITEM_COLOR, x = x, y = y + 3.0, z = z })
+    end
   end
   if antidotes > 0 then
     viber.item_add("antidote", antidotes)

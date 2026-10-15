@@ -1,202 +1,134 @@
-<!--
-  peça "exploração" (gauntlet BOTW) — Vida noturna de Discordia.
-
-  O baseline à noite era breu total: as casas/mercado/portões da vila não
-  tinham NENHUMA luz própria (só fogueira + 2 tochas da praça) e o frame de
-  referência BOTW (aldeia à noite) vive de janelas quentes, lanternas e
-  braseiros contra a noite azul. Este ficheiro ADICIONA apenas luzes/parts
-  autoriais — não toca na geometria dos distritos (cities/discordia/**).
-
-  Padrões reutilizados dos ficheiros existentes:
-  - "Janela acesa" = PointLight quente (0xffb264, ~600 lm, sem sombras) a
-    1.9 m por cima do portal da porta — pinta a fachada e um pool no crueiro
-    sem precisar de abrir buracos no GLB.
-  - Braseiro = iron_brazier GLB + partícula fire + PointLight (igual ao
-    mirante da caldeira em wilds.xml).
-  Tudo sob o orçamento de PointLights do motor (12 mais próximas da câmara,
-  src/ambient.rs light_budget_system): o total do mundo sobe, o custo por
-  frame não — só as 12 mais próximas estão acesas.
--->
-<world>
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
   <Group name="landmarks.village.night-life" translation="0 0 0">
-    <!-- ============================================================
-       §1 JANELAS ACESAS — um halo quente por porta (portais de
-          portals.xml), altura do peitoral da janela.
-       ============================================================ -->
-    <Group translation="26.35 0 8.44" body="fixed" collider="none">
+    <Group translation="26.35 38.7304 8.44" body="fixed" collider="none">
       <PointLight translation="0 1.9 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
     </Group>
-    <Group translation="-17.44 0 22.47" body="fixed" collider="none">
+    <Group translation="-17.44 38.7304 22.47" body="fixed" collider="none">
       <PointLight translation="0 1.9 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
     </Group>
-    <Group translation="-20.47 0 -18.44" body="fixed" collider="none">
+    <Group translation="-20.47 38.7304 -18.44" body="fixed" collider="none">
       <PointLight translation="0 1.9 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
     </Group>
-    <Group translation="-22.33 0 12.95" body="fixed" collider="none">
+    <Group translation="-22.33 38.7304 12.95" body="fixed" collider="none">
       <PointLight translation="0 1.7 0" color="0xffb264" intensity="130000" radius="0.6" shadows="false" />
     </Group>
-    <!-- Capela: velas na fachada + brilho interior pelos vitrais. -->
-    <Group translation="7.46 0 22.46" body="fixed" collider="none">
+    <Group translation="7.46 38.7304 22.46" body="fixed" collider="none">
       <PointLight translation="0 2.1 0" color="0xffc890" intensity="165000" radius="0.4" shadows="false" />
     </Group>
-    <Group translation="10.5 0 24" body="fixed" collider="none">
+    <Group translation="10.5 38.7304 24" body="fixed" collider="none">
       <PointLight translation="0 1.6 0" color="0xffc890" intensity="140000" radius="0.6" shadows="false" />
     </Group>
-    <!-- Celeiro + lonhouse (as portas ficam viradas para fora). -->
-    <Group translation="-26.11 0 30" body="fixed" collider="none">
+    <Group translation="-26.11 38.7304 30" body="fixed" collider="none">
       <PointLight translation="0 1.9 0" color="0xffb264" intensity="140000" radius="0.6" shadows="false" />
     </Group>
-    <Group translation="35.53 0 -37.53" body="fixed" collider="none">
+    <Group translation="35.53 38.7304 -37.53" body="fixed" collider="none">
       <PointLight translation="0 1.9 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
     </Group>
-    <!-- LOOP C: a FORJA era o único edifício sem luz própria — e é a única
-         que devia arder acesa toda a noite (a boca da fornalha). Luz quente
-         e ALTA na boca do portal (portal.forge, -30.47 -29.06). -->
-    <Group translation="-30.47 0 -29.06" body="fixed" collider="none">
+    <Group translation="-30.47 38.7304 -29.06" body="fixed" collider="none">
       <PointLight translation="0 1.6 0" color="0xff9030" intensity="160000" radius="0.6" shadows="false" />
     </Group>
-
-    <!-- ============================================================
-       §2 MERCADO — lanternas de banca (bancas a/b/c do market.xml).
-       ============================================================ -->
-    <Group translation="11 0 -15" body="fixed" collider="none">
+    <Group translation="11 38.7304 -15" body="fixed" collider="none">
       <PointLight translation="0 2.1 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
     </Group>
-    <Group translation="18.9 0 -20.3" body="fixed" collider="none">
+    <Group translation="18.9 38.7304 -20.3" body="fixed" collider="none">
       <PointLight translation="0 2.1 0" color="0xffb264" intensity="160000" radius="0.6" shadows="false" />
     </Group>
-
-    <!-- Braseiro do canto SO da praça: ancora o primeiro plano nas
-       composições do portão sul e aquece o cantão junto ao quadro de
-       anúncios. Mesma receita dos braseiros dos portões (§4). -->
-    <Entity translation="-9 0 -6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="-9 38.7304 -6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
-    <Entity translation="-9 0 -6">
+    <Entity translation="-9 38.7304 -6">
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Group translation="-9 0 -6" body="fixed" collider="none">
+    <Group translation="-9 38.7304 -6" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
     </Group>
-
-    <!-- Lanterna do quadro de anúncios (5,-12.5, utilities.xml):pool de
-       luz quente sobre o centro-sul da praça — ilumina os townsfolk que
-       ali passeiam nos frames de noite (peça exploração R4). -->
-    <Group translation="5 0 -11" body="fixed" collider="none">
+    <Group translation="5 38.7304 -11" body="fixed" collider="none">
       <PointLight translation="0 2.3 0" color="0xffb264" intensity="130000" radius="0.7" shadows="false" />
     </Group>
-
-    <!-- ============================================================
-       §3 POÇO DA PRAÇA — lanterninha suspensa (o well já tem script;
-          aqui só a luz por cima).
-       ============================================================ -->
-    <Group translation="-6 0 4" body="fixed" collider="none">
+    <Group translation="-6 38.7304 4" body="fixed" collider="none">
       <PointLight translation="0 1.8 0" color="0xffb264" intensity="130000" radius="0.6" shadows="false" />
     </Group>
-
-    <!-- ============================================================
-       §4 BRASEIROS NOS PORTÕES — boas-vindas a quem chega de noite
-          (portas norte (0,38) e sul (0,-38) das muralhas ±38).
-       ============================================================ -->
-    <Entity translation="-2.9 0 34.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="-2.9 38.7304 34.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
-    <Entity translation="-2.9 0 34.5">
+    <Entity translation="-2.9 38.7304 34.5">
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Group translation="-2.9 0 34.5" body="fixed" collider="none">
+    <Group translation="-2.9 38.7304 34.5" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
     </Group>
-    <Entity translation="2.9 0 34.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="2.9 38.7304 34.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
-    <Entity translation="2.9 0 34.5">
+    <Entity translation="2.9 38.7304 34.5">
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Group translation="2.9 0 34.5" body="fixed" collider="none">
+    <Group translation="2.9 38.7304 34.5" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
     </Group>
-    <Entity translation="-2.9 0 -34.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="-2.9 38.7304 -34.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
-    <Entity translation="-2.9 0 -34.5">
+    <Entity translation="-2.9 38.7304 -34.5">
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Group translation="-2.9 0 -34.5" body="fixed" collider="none">
+    <Group translation="-2.9 38.7304 -34.5" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
     </Group>
-    <Entity translation="2.9 0 -34.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="2.9 38.7304 -34.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
-    <Entity translation="2.9 0 -34.5">
+    <Entity translation="2.9 38.7304 -34.5">
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Group translation="2.9 0 -34.5" body="fixed" collider="none">
+    <Group translation="2.9 38.7304 -34.5" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffa83a" intensity="300000" radius="0.6" shadows="false" />
     </Group>
-
-    <!-- ============================================================
-       §5 POIs DA VILA — o farol da torre de vigia, o pilar rúnico e
-          o santuário de cristal lêem-se de qualquer ponto da vila.
-       ============================================================ -->
-    <Group translation="32 0 32" body="fixed" collider="none">
+    <Group translation="32 38.7304 32" body="fixed" collider="none">
       <PointLight translation="0 7.2 0" color="0xffa050" intensity="120000" radius="0.6" shadows="false" />
     </Group>
-    <Group translation="-35 0 17" body="fixed" collider="none">
+    <Group translation="-35 38.7304 17" body="fixed" collider="none">
       <PointLight translation="0 1.7 0" color="0xffaa55" intensity="130000" radius="0.6" shadows="false" />
     </Group>
-    <Group translation="35 0 17" body="fixed" collider="none">
+    <Group translation="35 38.7304 17" body="fixed" collider="none">
       <PointLight translation="0 1.3 0" color="0x3f8fff" intensity="45000" radius="0.6" shadows="false" />
     </Group>
-    <!-- ============================================================
-       §6 PONTO FOCAL + PRIMEIRO PLANO (peça exploração R5)
-       O olho precisa de aterrar: 3 aldeãos à volta do braseiro SO
-       (estáticos com idle automático — padrão quest-npcs sem
-       DialogueNPC para não abrir balões vazios no [E]) + vinheta de
-       banca no primeiro plano esquerdo e lenho/barrel no direito.
-       ============================================================ -->
-    <!-- Aldeãos junto ao braseiro SO (-9,-6). -->
-    <Entity name="fogo_aldeao_1" translation="-10.4 0 -4.6" transform="rotation: 0 -140 0">
+    <Entity name="fogo_aldeao_1" translation="-10.4 38.7304 -4.6" euler="180 -40 180" scale="1">
       <GltfScene url="/assets/meshes/characters/npc_elder_lod0.glb" />
     </Entity>
-    <Entity name="fogo_aldeao_2" translation="-7.6 0 -4.9" transform="rotation: 0 150 0">
+    <Entity name="fogo_aldeao_2" translation="-7.6 38.7304 -4.9" euler="180 30 180" scale="1">
       <GltfScene url="/assets/meshes/characters/npc_healer_lod0.glb" />
     </Entity>
-    <Entity name="fogo_aldeao_3" translation="-8.8 0 -7.8" transform="rotation: 0 20 0">
+    <Entity name="fogo_aldeao_3" translation="-8.8 38.7304 -7.8" euler="0 20 0" scale="1">
       <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
     </Entity>
-    <!-- Vinheta de primeiro plano esquerda: banca de feira com lanterna. -->
-    <Entity translation="-12 0 9" transform="rotation: 0 115 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base">
+    <Entity translation="-12 38.7304 9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base" euler="180 65 180" scale="1">
       <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
-    <Entity translation="-10.2 0 11.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
+    <Entity translation="-10.2 38.7304 11.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
-    <Group translation="-12 0 9" body="fixed" collider="none">
+    <Group translation="-12 38.7304 9" body="fixed" collider="none">
       <PointLight translation="0 2.1 0" color="0xffb264" intensity="130000" radius="0.7" shadows="false" />
     </Group>
-    <!-- R9: vinheta de 1.º plano CENTRO (no terço inferior do enquadramento
-       canónico d11): caixote+barrel com lanterna — pool quente sob a câmara. -->
-    <Entity translation="-1 0 4" transform="rotation: 0 25 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
+    <Entity translation="-1 38.7304 4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55" euler="0 25 0" scale="1">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
-    <Entity translation="0.9 0 4.7" transform="rotation: 0 -40 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+    <Entity translation="0.9 38.7304 4.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base" euler="0 -40 0" scale="1">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
-    <Group translation="-1 0 4" body="fixed" collider="none">
+    <Group translation="-1 38.7304 4" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffb264" intensity="26000" radius="0.5" shadows="false" />
     </Group>
-    <!-- Lanterna baixa no monte de lenho (direita do 1.º plano). -->
-    <Group translation="7.5 0 10" body="fixed" collider="none">
+    <Group translation="7.5 38.7304 10" body="fixed" collider="none">
       <PointLight translation="0 0.9 0" color="0xffb264" intensity="20000" radius="0.5" shadows="false" />
     </Group>
-    <!-- Vinheta de primeiro plano direita: lenho + barrel. -->
-    <Entity translation="7.5 0 10" transform="rotation: 0 -25 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base">
+    <Entity translation="7.5 38.7304 10" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base" euler="0 -25 0" scale="1">
       <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
     </Entity>
-    <Entity translation="9.3 0 9.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+    <Entity translation="9.3 38.7304 9.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
   </Group>
-  <!-- FIM landmarks.village.night-life -->
 </world>

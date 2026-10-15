@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<world>
-  <Group name="city.barn" translation="0 0 0">
-    <Entity name="village_barn" transform="rotation: 0 90 0" translation="-31.1 0 30" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_barn_collision.glb; mesh-anchor: base">
-      <GltfScene url="/assets/meshes/village/village_barn_lod0.glb" />
-    </Entity>
-  </Group>
-</world>

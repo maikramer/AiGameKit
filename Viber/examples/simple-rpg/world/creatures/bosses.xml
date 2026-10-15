@@ -1,35 +1,17 @@
-<!--
-  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
-  implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: lod-threshold-mid, lod-threshold-near, lod1-url, lod2-url, place:align-to-terrain, role
--->
-<world>
-  <!--
-  Chefes de bioma. Loaded via Include.
-  Estavam misturados na vegetação; um chefe é conteúdo de criaturas, não
-  cenário. name="boss" é contrato com src/main.ts (<BossBar target-entity>).
--->
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
   <Group name="creatures.bosses" translation="0 0 0">
-    <!-- Norte — Bruxa da Floresta, NA CLAREIRA dela (cabana/caldeirão em
-         landmarks/forest.xml §5, chão plano a ~47 m, dentro da exclusão de
-         spawn de r=24). Estava em (16, 290), 36 m ao lado, numa encosta de
-         ~45° (48→72 m em 24 m): o combate de chefe fazia-se a subir. -->
-    <Entity name="boss-witch" translation="-4 0 282" script="bosses/witch.lua">
+    <Entity name="boss-witch" translation="-4 47.2541 282" script="bosses/witch.lua">
       <GltfScene url="/assets/meshes/characters/witch_boss_lod0.glb" />
     </Entity>
-    <!-- Leste — Verme das Areias (fundo do deserto). -->
-    <Entity name="boss-sandworm" translation="290 0 -12" script="bosses/sand-worm.lua">
+    <Entity name="boss-sandworm" translation="290 48.1554 -12" script="bosses/sand-worm.lua">
       <GltfScene url="/assets/meshes/characters/sand_worm_lod0.glb" />
     </Entity>
-    <!-- Oeste — Bog Warden (fundo do pântano). -->
-    <Entity name="boss-bogwarden" translation="-290 0 12" script="bosses/bog-warden.lua">
+    <Entity name="boss-bogwarden" translation="-290 26.8406 12" script="bosses/bog-warden.lua">
       <GltfScene url="/assets/meshes/characters/bog_warden_boss_lod0.glb" />
     </Entity>
-    <!-- Sul — Ogro da Montanha: chefe FINAL, gated (aparece quando os
-       inimigos normais morrem). name="boss" alimenta a <BossBar>. -->
-    <Entity name="boss" translation="-12 0 -290" script="bosses/boss.lua">
+    <Entity name="boss" translation="-12 110.0664 -290" script="bosses/boss.lua">
       <GltfScene url="/assets/meshes/characters/boss_ogre_lod0.glb" />
     </Entity>
   </Group>
-  <!-- FIM creatures.bosses -->
 </world>

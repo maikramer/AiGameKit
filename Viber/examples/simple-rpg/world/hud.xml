@@ -1,15 +1,8 @@
-<!-- HUD do Vale v3 — CONTEXTUAL: cada card vive no ecrã quando informa e
-     recua quando não (gesto BOTW). Valores ligados à engine via binds; os
-     estados liga/desliga são class-binds `nome:classe` (engine-driven, sem
-     loop de Luau); a apresentação vive em ui/hud.css sobre o tema partilhado.
-     Reveals: vitais esbate com vida cheia (piso 0.85 — nunca vidro), dock
-     surge em combate (fantasma 0.12 fora), XP acende o valor 3 s. -->
-<world>
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
   <UiStyle src="ui/theme.css" />
   <UiStyle src="ui/hud.css" />
-
   <UiRoot id="hud" script="ui/hud.lua">
-    <!-- ── VITAIS + RECURSOS (topo-esq): fade com PISO — nunca vidro ── -->
     <UiColumn class="anchor-vitals" bind="vitals.active" fade="0.5 0.9 0.85">
       <UiPanel id="vitals" class="hud-card vitals" bind="health.low:danger">
         <UiRow class="vitals-heading">
@@ -28,8 +21,6 @@
             <UiBar id="hp-bar" class="track hp" bind="health" value="1" />
             <UiRow class="xp-line">
               <UiBar id="xp-bar" class="track xp" bind="xp" value="0" />
-              <!-- O valor numérico só ocupa o ecrã nos 3 s a seguir a ganhar XP
-                   (class-bind `xp.recent` → display; sem espaço fantasma). -->
               <UiPanel class="xp-pop" bind="xp.recent:shown">
                 <UiText class="xp-value" bind="xp.text">0/100</UiText>
               </UiPanel>
@@ -38,26 +29,37 @@
         </UiRow>
         <UiText id="health-warning" class="health-warning">VIDA BAIXA</UiText>
       </UiPanel>
-      <!-- Estado de veneno: display por class-bind (sem espaço fantasma). -->
       <UiPanel id="venom-chip" class="chip venom" bind="status.venom:shown">
         <UiText class="venom-label">ENVENENADO</UiText>
         <UiSpacer />
         <UiText class="venom-hint">antídoto [2]</UiText>
       </UiPanel>
-      <!-- RECURSOS (vault): painel fixo com ícones — ouro/madeira/pedra
-           sempre no ecrã, valores ligados à engine. -->
       <UiPanel id="purse" class="hud-card purse">
-        <UiRow class="resource" tooltip="Ouro"><UiIcon class="resource-icon" src="/assets/icons/hud_gold.png" /><UiText class="resource-label">OURO</UiText><UiSpacer /><UiText bind="gold">0</UiText></UiRow>
-        <UiRow class="resource" tooltip="Madeira"><UiIcon class="resource-icon" src="/assets/icons/hud_wood.png" /><UiText class="resource-label">MAD.</UiText><UiSpacer /><UiText bind="wood">0</UiText></UiRow>
-        <UiRow class="resource" tooltip="Pedra"><UiIcon class="resource-icon" src="/assets/icons/hud_stone.png" /><UiText class="resource-label">PEDRA</UiText><UiSpacer /><UiText bind="stone">0</UiText></UiRow>
+        <UiRow class="resource" tooltip="Ouro">
+          <UiIcon class="resource-icon" src="/assets/icons/hud_gold.png" />
+          <UiText class="resource-label">OURO</UiText>
+          <UiSpacer />
+          <UiText bind="gold">0</UiText>
+        </UiRow>
+        <UiRow class="resource" tooltip="Madeira">
+          <UiIcon class="resource-icon" src="/assets/icons/hud_wood.png" />
+          <UiText class="resource-label">MAD.</UiText>
+          <UiSpacer />
+          <UiText bind="wood">0</UiText>
+        </UiRow>
+        <UiRow class="resource" tooltip="Pedra">
+          <UiIcon class="resource-icon" src="/assets/icons/hud_stone.png" />
+          <UiText class="resource-label">PEDRA</UiText>
+          <UiSpacer />
+          <UiText bind="stone">0</UiText>
+        </UiRow>
       </UiPanel>
     </UiColumn>
-
     <UiColumn class="anchor-journal">
       <UiButton id="open-journal" class="journal-button" tooltip="Abrir missões, mochila e opções">
-        <UiText class="journal-key">Q</UiText><UiText>DIÁRIO</UiText>
+        <UiText class="journal-key">Q</UiText>
+        <UiText>DIÁRIO</UiText>
       </UiButton>
-      <!-- `quest.recent` acende a borda 6 s após título/progresso mudarem. -->
       <UiPanel class="quest-fresh" bind="quest.recent:fresh">
         <UiPanel id="quest" class="hud-card quest-card" bind="quest.active" fade="0.2 0.3">
           <UiText class="hud-label">MISSÃO ATIVA</UiText>
@@ -66,8 +68,6 @@
           <UiText id="quest-count" bind="quest.text" />
         </UiPanel>
       </UiPanel>
-      <!-- As OUTRAS missões em curso (a do cartão fica de fora): linhas
-           escritas pelo hud.lua a 2 Hz; "pronta" = voltar ao dador. -->
       <UiColumn id="quest-others" class="quest-others" bind="quests.others" fade="0.2 0.4">
         <UiText id="quest-other-1" class="quest-other" />
         <UiText id="quest-other-2" class="quest-other" />
@@ -75,15 +75,12 @@
         <UiText id="quest-other-more" class="quest-other more" />
       </UiColumn>
     </UiColumn>
-
     <UiColumn id="target" class="anchor-target" bind="target.alive" fade="0.15 0.3">
       <UiPanel class="hud-card target-card">
         <UiText id="target-name" bind="target.name" />
         <UiBar id="target-bar" class="track hp" bind="target" value="1" />
       </UiPanel>
     </UiColumn>
-    <!-- Barra de chefe: binds de SCRIPT (`viber.ui.set` em lib/fsm.lua);
-         o hud.lua apaga-a quando o chefe deixa de dar sinal (morto/longe). -->
     <UiColumn id="bossbar" class="anchor-boss" bind="boss.active" fade="0.25 0.6">
       <UiPanel class="hud-card boss-card" bind="boss.enraged:enraged">
         <UiRow class="boss-head">
@@ -97,14 +94,15 @@
     <UiColumn id="combo" class="anchor-combo" bind="combo" fade="0.15 0.3">
       <UiText id="combo-text" bind="combo.text" />
     </UiColumn>
-
-    <!-- ── AMBIENTE (encima do minimapa): zona, hora e CLIMA ── -->
     <UiColumn class="anchor-clock">
       <UiPanel id="clock-card" class="hud-card clock-card">
         <UiText class="clock-zone" bind="zone.name">O Vale</UiText>
-        <UiRow class="clock-line"><UiText class="hud-label">HORA LOCAL</UiText><UiSpacer /><UiText class="clock-time" bind="clock">06:00</UiText></UiRow>
+        <UiRow class="clock-line">
+          <UiText class="hud-label">HORA LOCAL</UiText>
+          <UiSpacer />
+          <UiText class="clock-time" bind="clock">06:00</UiText>
+        </UiRow>
         <UiBar id="day-bar" class="track day" bind="day" value="0" />
-        <!-- Chuva do <Weather>: display por class-bind, intensidade na calha. -->
         <UiRow class="weather-row" bind="weather.wet:wet">
           <UiIcon class="weather-icon" src="/assets/icons/icon_rain.png" />
           <UiText class="hud-label">CHUVA</UiText>
@@ -113,74 +111,92 @@
         </UiRow>
       </UiPanel>
     </UiColumn>
-
-    <!-- ── DOCK: barra sempre legível no ecrã; quem esbate são os SLOTS
-         INACTIVOS (em recarga) via class-bind `cd.*.ready:ready` no cell ── -->
     <UiColumn id="dock-anchor" class="anchor-dock">
-      <UiRow class="dock-caption"><UiText>J  ATACAR</UiText><UiSpacer /><UiText>L  DEFENDER</UiText></UiRow>
+      <UiRow class="dock-caption">
+        <UiText>J  ATACAR</UiText>
+        <UiSpacer />
+        <UiText>L  DEFENDER</UiText>
+      </UiRow>
       <UiRow id="dock" class="hud-card dock">
-        <!-- As habilidades são do JOGO (scripts/game/abilities.lua): os binds
-             `ab.*` vêm do script (`viber.ui.set`), não da engine — os `cd.*`
-             nativos ficam a zero quando o Lua reclama o sistema. `ab.*.ready`
-             acende o slot (fio de ouro) via class-bind no cell. -->
         <UiColumn class="action-cell ability" bind="ab.dash.ready:ready">
           <UiCooldown id="cd-dash" class="action-slot" bind="ab.dash" value="0" tooltip="Investida [C]">
             <UiIcon class="slot-icon" src="/assets/icons/ability_dash.png" />
-            <UiPanel class="slot-key"><UiText class="action-key">C</UiText></UiPanel>
+            <UiPanel class="slot-key">
+              <UiText class="action-key">C</UiText>
+            </UiPanel>
             <UiBar class="cooldown-track" bind="ab.dash" />
-          </UiCooldown><UiText class="action-name">Esquiva</UiText>
+          </UiCooldown>
+          <UiText class="action-name">Esquiva</UiText>
         </UiColumn>
         <UiColumn class="action-cell ability" bind="ab.heal.ready:ready">
           <UiCooldown id="cd-heal" class="action-slot" bind="ab.heal" value="0" tooltip="Curar [E], longe de personagens e interações">
             <UiIcon class="slot-icon" src="/assets/icons/ability_heal.png" />
-            <UiPanel class="slot-key"><UiText class="action-key">E</UiText></UiPanel>
+            <UiPanel class="slot-key">
+              <UiText class="action-key">E</UiText>
+            </UiPanel>
             <UiBar class="cooldown-track" bind="ab.heal" />
-          </UiCooldown><UiText class="action-name">Cura</UiText>
+          </UiCooldown>
+          <UiText class="action-name">Cura</UiText>
         </UiColumn>
         <UiColumn class="action-cell ability" bind="ab.strike.ready:ready">
           <UiCooldown id="cd-strike" class="action-slot" bind="ab.strike" value="0" tooltip="Golpe radial [R]">
             <UiIcon class="slot-icon" src="/assets/icons/ability_power.png" />
-            <UiPanel class="slot-key"><UiText class="action-key">R</UiText></UiPanel>
+            <UiPanel class="slot-key">
+              <UiText class="action-key">R</UiText>
+            </UiPanel>
             <UiBar class="cooldown-track" bind="ab.strike" />
-          </UiCooldown><UiText class="action-name">Impacto</UiText>
+          </UiCooldown>
+          <UiText class="action-name">Impacto</UiText>
         </UiColumn>
         <UiPanel class="dock-divider" />
-        <!-- `*.empty` cinzeia o vial quando o stock chega a zero. -->
         <UiColumn class="action-cell">
           <UiPanel id="vial-potion" class="action-slot consumable" bind="potion.empty:depleted" tooltip="Poção [1]: recupera 50 de vida">
             <UiIcon class="slot-icon" src="/assets/icons/potion_health.png" />
-            <UiPanel class="slot-key"><UiText class="action-key">1</UiText></UiPanel>
+            <UiPanel class="slot-key">
+              <UiText class="action-key">1</UiText>
+            </UiPanel>
             <UiText class="item-count" bind="potion">0</UiText>
-          </UiPanel><UiText class="action-name">Poção</UiText>
+          </UiPanel>
+          <UiText class="action-name">Poção</UiText>
         </UiColumn>
         <UiColumn class="action-cell">
           <UiPanel id="vial-antidote" class="action-slot consumable" bind="antidote.empty:depleted" tooltip="Antídoto [2]: remove o veneno">
             <UiIcon class="slot-icon" src="/assets/icons/item_antidote.png" />
-            <UiPanel class="slot-key"><UiText class="action-key">2</UiText></UiPanel>
+            <UiPanel class="slot-key">
+              <UiText class="action-key">2</UiText>
+            </UiPanel>
             <UiText class="item-count" bind="antidote">0</UiText>
-          </UiPanel><UiText class="action-name">Antídoto</UiText>
+          </UiPanel>
+          <UiText class="action-name">Antídoto</UiText>
         </UiColumn>
         <UiColumn class="action-cell">
           <UiPanel id="vial-bomb" class="action-slot consumable" bind="bomb.empty:depleted" tooltip="Bomba [B]: rebenta em área">
             <UiIcon class="slot-icon" src="/assets/icons/item_bomb.png" />
-            <UiPanel class="slot-key"><UiText class="action-key">B</UiText></UiPanel>
+            <UiPanel class="slot-key">
+              <UiText class="action-key">B</UiText>
+            </UiPanel>
             <UiText class="item-count" bind="bomb">0</UiText>
-          </UiPanel><UiText class="action-name">Bomba</UiText>
+          </UiPanel>
+          <UiText class="action-name">Bomba</UiText>
         </UiColumn>
       </UiRow>
     </UiColumn>
-
     <UiRow id="prompt" class="anchor-prompt" bind="prompt.active" fade="0.12 0.2">
       <UiPanel class="hud-card prompt-card">
-        <UiPanel class="prompt-key"><UiText bind="prompt.key">E</UiText></UiPanel>
+        <UiPanel class="prompt-key">
+          <UiText bind="prompt.key">E</UiText>
+        </UiPanel>
         <UiText id="prompt-label" bind="prompt.label" />
       </UiPanel>
     </UiRow>
     <UiColumn id="zone" class="anchor-zone" bind="zone.active" fade="0.4 0.8">
-      <UiText class="zone-label">EXPLORAR</UiText><UiText id="zone-name" bind="zone.name" />
+      <UiText class="zone-label">EXPLORAR</UiText>
+      <UiText id="zone-name" bind="zone.name" />
     </UiColumn>
     <UiColumn id="notification" class="anchor-notification" bind="toast.active" fade="0.12 0.25">
-      <UiPanel class="hud-card notification-card"><UiText id="notification-text" bind="toast" /></UiPanel>
+      <UiPanel class="hud-card notification-card">
+        <UiText id="notification-text" bind="toast" />
+      </UiPanel>
     </UiColumn>
   </UiRoot>
 </world>

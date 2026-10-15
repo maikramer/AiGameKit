@@ -1,83 +1,23 @@
-<!--
-  Migrated from VibeGame by scripts/migrate_from_vibegame.py (as tags que o
-  migrador marcava como no-op — Terrain, PlayerGLTF, NavMesh, HUD… — já têm
-  consumidor nativo; este cabeçalho mantém-se só como nota de origem).
--->
-<world clear-color="#8fc2ef">
-  <!-- Projectile template used by ranged enemies (e.g. the archer). The
-           archer script fires this via spawnProjectileFromTemplate. Visual is
-           attached by main.ts's projectile watcher; the template only defines
-           kinematics + damage + the 'enemy' faction so player collision applies. -->
+<?xml version="1.0" encoding="UTF-8"?>
+<world clear-color="#8fc2ef" static="true">
   <ProjectileTemplate id="enemy-arrow" speed="16" damage="8" max-life="2.5" sensor-radius="0.3" faction="enemy" />
-  <!-- ============================================================
-           GRUPO "environment": céu, iluminação global, pós-processamento,
-           áudio, clima e as 4 cunhas de bioma cardeais. Tudo aqui é global
-           (luz ambiente/direcional, skybox, mixer, regiões de bioma) — não
-           tem posicionar no mundo, pelo que o Group fica na origem (0 0 0)
-           e funciona como contentor semântico. Movê-lo não é expectável,
-           mas se algum dia for útil (e.g. skybox offset) todos os filhos
-           acompanham via hierarquia de transforms.
-           ============================================================ -->
   <Include src="/world/environment.xml" />
-  <!-- §3 HERÓI — nasce no centro da praça da cidade. Fora de qualquer
-           <Group> porque <PlayerGLTF> é um recipe merge:true: se fosse child
-           de um Group, o seu pos="0 150 0" fundir-se-ia no parent e elevaria
-           o terreno inteiro (o terrain field lê o WorldTransform.posY da
-           entidade onde faz merge). -->
-  <PlayerGLTF name="player" pos="0 150 0" model-url="/assets/meshes/characters/hero_lod0.glb">
-      </PlayerGLTF>
-  <!-- Hold player until heightmap + heightfield ready, then seat once (CCT). -->
+  <PlayerGLTF name="player" pos="0 150 0" model-url="/assets/meshes/characters/hero_lod0.glb" />
   <SpawnGate target-entity="player" y-fallback="150" />
-  <!-- GRUPO "world-base": terreno (heightfield + NavMesh). O <Terrain>
-           é merge:true — o Group TEM de ficar em pos="0 0 0". -->
-  <Group name="world-base" translation="0 0 0">
-    <!-- ============================================================
-           §2 TERRENO + NAVMESH
-           Quadtree LOD chunks; world-size/max-height batem com o
-           terrain.json em /assets/terrain/. Física: uma heightfield
-           Rapier por chunk visual, criada/libertada dinamicamente.
-           levels 4→5 e resolution 64→128: o mundo mantém os 4 km, mas o
-           ground sampling quadruplica por eixo — chunks-folha 4× (metade do
-           lado) com o dobro de vértices por lado. collision-resolution
-           acompanha (32→64) para a heightfield física seguir a malha.
-           ============================================================ -->
-    <!-- `layers`: blend de 12 texturas de solo do pool por splat map
-         (substitui o height tint; snow-height reutilizado para snow_peak).
-         Areia/desert_sand nos fundos e margens de lagos/rios, dirt_trail +
-         dirt_road sob as fitas de estrada, mountain_stone nos penhascos. -->
-    <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="/assets/terrain/terrain.ahgt" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92"
-           cliff-angle="50" sharpen="true" sharpen-angle="35" sharpen-seed="7"
-           cliff-streaks="0.55" cliff-moss="0.4" />
+  <Group name="world-base" translation="0 38.7304 0">
+    <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="world.data/terrain.ahgt" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92" cliff-angle="50" sharpen="true" sharpen-angle="35" sharpen-seed="7" cliff-streaks="0.55" cliff-moss="0.4" />
     <NavMesh />
   </Group>
-  <!-- FIM world-base -->
   <Include src="/world/cities/discordia.xml" />
   <Include src="/world/spawn/ring.xml" />
   <Include src="/world/spawn/dressing.xml" />
   <Include src="/world/paths/network.xml" />
   <Include src="/world/paths/trails.xml" />
-  <!-- Desgaste de chão autoral (LOOP E): ombreiras nos portões ficam em
-       cities/discordia/roads.xml; aqui vivem o caminho do mercado, a lama
-       da boca do pântano, os scuffs do outeiro-miradouro e os remendos de
-       terra batida dos campos. Depois de trails.xml: lê o heightfield
-       final ( GroundDecal é puramente visual). -->
   <Include src="/world/paths/ground-wear.xml" />
-  <!-- Pontes composition — uma travessia de água por ficheiro: a Ponte de
-       Pedra do Norte (artéria × rio, centrada no eixo x=4) e a passadeira
-       de rocha natural do loop oeste da floresta. Os <Bridge> são mods
-       voxel aditivos com collider próprio; cada ficheiro traz também a
-       decoração e os esporões de trilho das cabeças. A Lagoa Grande NÃO tem
-       travessia: a artéria contorna-a por terra (decisão autoral — o
-       contorno lê-se melhor que um viaduto no canto da lagoa). -->
   <Include src="/world/bridges/ponte-norte.xml" />
   <Include src="/world/gameplay.xml" />
   <Include src="/world/bridges/passadeira-da-bruxa.xml" />
-  <!-- Aleia de lanternas nas quatro artérias (postes + chama + luz
-           quente). Depois de network.xml: o poste assenta no leito já
-           planado da estrada. -->
   <Include src="/world/paths/lanterns.xml" />
-  <!-- Biomas: vegetação (tapete + dossel) e landmarks (destinos) em
-           ficheiros separados por cunha cardeal. -->
   <Include src="/world/vegetation/forest.xml" />
   <Include src="/world/vegetation/desert.xml" />
   <Include src="/world/vegetation/swamp.xml" />
@@ -87,53 +27,18 @@
   <Include src="/world/landmarks/swamp.xml" />
   <Include src="/world/landmarks/peaks.xml" />
   <Include src="/world/landmarks/wilds.xml" />
-  <!-- Vida noturna de Discordia (peça exploração): janelas, mercado,
-       braseiros nos portões, faróis dos POIs. Só luzes/parts aditivas. -->
   <Include src="/world/landmarks/village.xml" />
-  <!-- Catálogos declaráveis da Nota + respawn (Fases B2/B3): 12 <Landmark> e
-       5 <SpawnPoint> que espelham as tabelas hardcoded da engine. DEPOIS dos
-       landmarks físicos (que os `name` descrevem). -->
   <Include src="/world/landmarks.xml" />
-  <!-- Cena separada: ambientes internos (portais das portas → salas em
-           (-410, 120); saídas teleportam de volta para as portas exteriores). -->
   <Include src="/world/interiors.xml" />
   <Include src="/world/frontier/ridges.xml" />
   <Include src="/world/frontier/cliffs.xml" />
   <Include src="/world/frontier/horizon.xml" />
-  <!-- ============================================================
-       LANDFORMS (world/landforms/) — verticalidade e vistas (loop
-       D-terreno): o ramparte do vale fecha os eixos mortos do horizonte
-       (sela NO em escada, crescente do Ermo + arco, parede do pântano,
-       Torre Quebrada no massiço N); os braços do portão embutem a vila
-       (braço O e ombro da capela na artéria N, outeiro-miradouro a S).
-       ANTES dos spawners de criaturas: as SpawnExclusion destes sítios
-       (torre, outeiro) têm de estar registadas quando os grupos
-       computam as colocações.
-       ============================================================ -->
   <Include src="/world/landforms/rampart.xml" />
   <Include src="/world/landforms/gate-arms.xml" />
-  <!-- ============================================================
-       CAMADA DE FANTASIA (world/fantasy/) — os três destinos que faltavam
-       ao mapa: a mesa alta a leste (Alto de Vael), os primeiros túneis voxel
-       (`<Cave>`) e a ruína monumental do planalto oeste. Cada um traz o seu
-       trilho em paths/trails.xml. Ordem: depois do terreno e dos trilhos
-       (as bocas das grutas assentam sobre o relevo já vestido), antes dos
-       spawners de criaturas — as exclusões de spawn destes sítios têm de
-       estar registadas quando os grupos de spawner computam as colocações.
-       ============================================================ -->
   <Include src="/world/fantasy/alto-de-vael.xml" />
   <Include src="/world/fantasy/grutas.xml" />
   <Include src="/world/fantasy/bosque-encantado.xml" />
   <Include src="/world/fantasy/cidadela-caida.xml" />
-  <!-- ============================================================
-       CENÁRIOS (world/scenes/) — peças de sítio com gente dentro: o
-       acampamento de peregrinos à boca do Ermo, o posto dos escavadores na
-       mesa do Alto, o campo da última batalha à porta da Cidadela e o covil
-       dos contrabandistas na orla da floresta. Cada um dá uma quest a um NPC
-       seu (`quests/fantasy_quests.json`) e traz âncoras visitáveis para o
-       objetivo de tipo `visit`. Depois das features de fantasia: assentam e
-       decoram sítios que esses ficheiros criaram.
-       ============================================================ -->
   <Include src="/world/scenes/pilgrims-camp.xml" />
   <Include src="/world/scenes/crystal-outpost.xml" />
   <Include src="/world/scenes/battlefield.xml" />
@@ -142,42 +47,33 @@
   <Include src="/world/creatures/enemies.xml" />
   <Include src="/world/creatures/bosses.xml" />
   <Include src="/world/ai/npcs.xml" />
-  <!-- Câmera 3ª pessoa, gamepad-style: A/D giram a câmera (yaw com lag
-           turn-lag), W/S andam, sem mouse. follow-lag desacopla a câmera do
-           character (sprint adianta, câmera alcança), min-terrain-distance
-           puxa a câmera quando o terreno bloqueia. Valores = simple-rpg
-           VibeGame (pitch 0.32 rad ≈ 18.3°). -->
-  <OrbitCamera distance="3.3" height="1.55" pitch="18.3" fov="64"
-               follow-lag="0.18" turn-lag="0.38" min-terrain-distance="1.0" />
-  <!-- GRUPO "ui": HUD (health/xp/bars/minimap/compass), prompts de
-           diálogo, e o menu tabbed (pause/inventário/skills/opções/quests).
-           Elementos DOM; o Group serve como contentor lógico. -->
-  <Group name="ui" translation="0 0 0">
-    <!-- ============================================================
-           §11 CÂMERA, HUD E UI
-           ============================================================ -->
+  <OrbitCamera distance="3.3" height="1.55" pitch="18.3" fov="64" follow-lag="0.18" turn-lag="0.38" min-terrain-distance="1.0" />
+  <Group name="ui" translation="0 38.7304 0">
     <PostFxDebugToggle />
-    <!-- HUD declarativo (engine `src/ui`): estrutura em world/hud.xml,
-         aparência em ui/hud.css, comportamento em scripts/ui/hud.lua.
-         O script corre sempre (a UI não é um NPC com raio de activação). -->
     <Include src="/world/hud.xml" />
-    <!-- Menu do jogo: modal com Missões / Mochila / Talentos / Loja /
-         Controlos / Sistema, todo em XML + CSS + Luau. Abre em [Q]. -->
     <Include src="/world/menu.xml" />
-    <!-- Profiler [P]: mesma stack declarativa — painel em world/profiler.xml,
-         pintura em ui/profiler.css, driver em scripts/ui/profiler.lua. Dados
-         via viber.profiler() (engine src/profiler/script.rs). -->
     <Include src="/world/profiler.xml" />
-    <!-- Widgets que desenham dados do mundo (pontos, agulhas, marcadores):
-         continuam nativos porque o conteúdo é geométrico, não estilizável.
-         O enquadramento visual deles vive na mesma paleta do hud.css. -->
     <HudScreenLayer />
     <Minimap range="60" />
     <Compass />
     <WaypointArrow margin="64" />
-    <!-- Diálogo (instância única). QuestTriggerSystem abre ao [F] perto
-         de um <DialogueNPC>. -->
     <DialogueBalloon />
   </Group>
-  <!-- FIM ui -->
+  <Scatter id="engine-53" profile="shore-rocks" count="9" seed="13943144449614675968" region-min="-210.0 0 -38.7" region-max="-168.5 0 9.6" avoid-water="0" avoid-road="1" avoid-cliff="1" align-to-terrain="1" random-yaw="1" avoid-overlaps="1" footprint-radius="0.8" max-slope-deg="55" max-slope-attempts="4" scale-min="0.55" scale-max="1.4" scale-axis-min="0.85" scale-axis-max="1.15" base-y-offset="-0.12">
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+  </Scatter>
+  <Group name="spawn/engine-53" generated-by="engine-53">
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0000" translation="-168.5387 25.7204 0.9943" euler="-0.8377 10.9483 1.6815" scale="0.6676 0.7179 0.6695" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0001" translation="-187.301 25.4647 9.5789" euler="-1.8765 -60.1545 -0.0547" scale="1.3935 1.3283 1.4821" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0002" translation="-208.9275 25.6009 -4.0821" euler="1.9524 30.0204 -4.5387" scale="1.2208 1.3417 1.355" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0003" translation="-209.9875 25.7244 -10.6583" euler="179.8496 3.9366 -176.1676" scale="1.2721 1.2042 1.1789" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0004" translation="-208.6157 25.5394 -16.9709" euler="-161.6807 -76.1329 -160.8174" scale="0.8974 0.867 0.775" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0005" translation="-206.6825 25.8794 -38.5531" euler="-179.8408 33.261 -179.371" scale="0.8389 0.7978 0.7466" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0006" translation="-201.6627 25.4681 -38.657" euler="-178.559 3.9793 -178.2799" scale="0.9522 0.8446 0.7904" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0007" translation="-170.3065 25.8703 -27.9578" euler="0.1546 33.6939 1.9011" scale="0.948 1.0694 0.9704" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0008" translation="-168.8329 25.8298 -25.0518" euler="-1.2875 51.3578 3.0664" scale="1.1303 1.3022 1.24" />
+  </Group>
 </world>

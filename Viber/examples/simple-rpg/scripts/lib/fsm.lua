@@ -44,7 +44,17 @@
 --                 at = "self" | "player", clip = "roar", color = "#ff4a2a",
 --                 label = "…", on_hit = function() … end },
 --     enrage = { at = 0.4, toast = "…", speed = 1.2, cooldown = 0.7 },
+--     -- Atiradores: dispara um `<ProjectileTemplate>` entre `min` e `range`
+--     -- metros (com aviso de `windup` s); mais perto do que `min` recua
+--     -- (a arma de perto só sai encurralado).
+--     ranged = { range = 15, min = 5, cooldown = 2.4, windup = 0.7,
+--                projectile = "enemy-arrow" },
+--     elite_chance = 0.08,            -- opcional (default 0.08; chefes 0)
 --   }
+--
+-- ELITES: cada criatura não-chefe tem `elite_chance` de nascer elite —
+-- maior (×1,3), 2,5× a vida e golpes ×1,4; regista-se em
+-- `viber.game().elites[id]` e o `game/loot.lua` paga a triplicar.
 --   function on_player_attack(px, pz) fsm.alert() end
 --   function on_update(dt) fsm.update(dt) end
 --
@@ -68,6 +78,11 @@ local TELEGRAPH_COLOR = "#ffb347"
 local STAGGER = 0.3
 local STAGGER_INTERRUPT = 0.5
 local STAGGER_BOSS = 0.7
+-- Cor do aviso de disparo dos atiradores.
+local SHOT_COLOR = "#ff6a3d"
+-- Elites: vida ×, dano ×, escala e cor da aura.
+local ELITE_HP, ELITE_DAMAGE, ELITE_SCALE = 2.5, 1.4, 1.3
+local ELITE_COLOR = "#ffd35a"
 -- A barra de chefe do HUD apaga-se este tempo após o último sinal (s).
 M.BOSS_BAR_TTL = 1.5
 
@@ -87,6 +102,7 @@ function M.new(cfg)
   cfg.recover = cfg.recover or 0.35
   cfg.radius = cfg.radius or 8
   if cfg.anti_stuck == nil then cfg.anti_stuck = true end
+  if cfg.elite_chance == nil then cfg.elite_chance = cfg.boss and 0 or 0.08 end
 
   local self = { cfg = cfg }
 
@@ -202,11 +218,29 @@ function M.new(cfg)
     st.pulse = 0
   end
 
+  -- Começa um disparo (atiradores): aviso curto, dispara no fim do windup.
+  local function begin_shot(st)
+    st.phase, st.pt, st.kind = "windup", cfg.ranged.windup or 0.7, "shot"
+    st.pulse = 0
+    viber.play_clip("shoot,attack")
+  end
+
+  -- Dano do golpe (elites batem mais).
+  local function dmg(st)
+    return cfg.damage * (st.elite and ELITE_DAMAGE or 1.0)
+  end
+
   -- Resolve o impacto do golpe em curso.
   local function land_attack(st)
     local has, px, py, pz = viber.player_position()
     if not has then return end
     local x, y, z = viber.position()
+    if st.kind == "shot" then
+      -- O projétil voa (tem tempo de viagem): sair da linha esquiva-o.
+      viber.fire_projectile(cfg.ranged.projectile or "enemy-arrow")
+      viber.sound("whoosh")
+      return
+    end
     if st.kind == "special" then
       local sp = cfg.special
       local r = sp.radius or 4.5
@@ -215,14 +249,14 @@ function M.new(cfg)
       viber.shake(0.4)
       viber.sound("hit")
       if dist2(px, pz, st.ax, st.az) <= r and math.abs(py - y) <= REACH_VERTICAL + 1.0 then
-        viber.damage_player(cfg.damage * (sp.mult or 1.6))
+        viber.damage_player(dmg(st) * (sp.mult or 1.6))
         if sp.on_hit then sp.on_hit() end
       else
         viber.damage_number("ESQUIVA", { color = "#9fd8ff", x = px, y = py + 2.0, z = pz })
       end
     else
       if dist2(px, pz, x, z) <= cfg.range + REACH_SLACK and math.abs(py - y) <= REACH_VERTICAL then
-        viber.damage_player(cfg.damage)
+        viber.damage_player(dmg(st))
         if cfg.on_attack then cfg.on_attack() end
       else
         viber.sound("whoosh")
@@ -243,6 +277,14 @@ function M.new(cfg)
         if st.pulse <= 0 then
           st.pulse = TELEGRAPH_PULSE
           viber.ring(st.ax, st.az, cfg.special.radius or 4.5, cfg.special.color or "#ff4a2a")
+        end
+      elseif st.kind == "shot" then
+        -- Arco a tensar: anel pequeno no atirador (lê-se "vai disparar").
+        st.pulse = st.pulse - dt
+        if st.pulse <= 0 then
+          st.pulse = TELEGRAPH_PULSE
+          local x, _, z = viber.position()
+          viber.ring(x, z, 0.9, SHOT_COLOR)
         end
       else
         st.pulse = st.pulse - dt
@@ -282,8 +324,29 @@ function M.new(cfg)
     local has, px, _, pz = viber.player_position()
     if not has then return end
     local x, _, z = viber.position()
+    -- Herói caído (à espera do respawn): ninguém morde o cadáver — larga o
+    -- golpe em curso e volta ao passeio.
+    local hero_ok, hero_hp = viber.player_hp()
+    if hero_ok and hero_hp <= 0 then
+      st.phase, st.state, st.aggro_until = nil, "wander", 0
+      px, pz = x + 1e4, z + 1e4
+    end
 
     local ok, hp, max = viber.entity_hp()
+    -- Elite: rolado UMA vez por entidade, quando acorda.
+    if ok and st.elite == nil then
+      st.elite = cfg.elite_chance > 0 and math.random() < cfg.elite_chance
+      if st.elite then
+        local id = viber.self_id()
+        viber.entity_set_max_hp(max * ELITE_HP)
+        viber.entity_heal(max * ELITE_HP)
+        viber.set_scale(ELITE_SCALE)
+        local g = viber.game()
+        g.elites = g.elites or {}
+        if id then g.elites[id] = true end
+        st.hp = max * ELITE_HP -- a cura não é "dano negativo"
+      end
+    end
     if ok then
       if hp <= 0 then return end
       react_to_damage(st, hp, max)
@@ -317,13 +380,40 @@ function M.new(cfg)
     st.state = viber.next_state(st.state or "wander", fsm_dist, cfg.aggro, cfg.deaggro)
 
     -- Hook na TRANSIÇÃO wander → chase (não repete por tick).
-    if st.state == "chase" and st.pstate ~= "chase" and cfg.on_chase then
-      cfg.on_chase()
+    if st.state == "chase" and st.pstate ~= "chase" then
+      if cfg.on_chase then cfg.on_chase() end
+      if st.elite then
+        -- Elite a acordar: aura dourada — o jogador sabe que este é diferente.
+        local _, y = viber.position()
+        viber.ring(x, z, 2.2, ELITE_COLOR)
+        viber.burst("sparkle", x, y + 1.2, z, 16)
+      end
     end
     st.pstate = st.state
 
     if st.state == "chase" then
       if ok then boss_bar(st, hp, max) end
+      local rg = cfg.ranged
+      if rg and dist <= rg.range then
+        -- Atirador: abaixo de `min` recua (a arma de perto só sai encurralado —
+        -- colado ao herói há mais de 1,5 s); entre `min` e `range` dispara.
+        if dist < (rg.min or 0) then
+          st.flee_t = (st.flee_t or 0) + dt
+          if not (dist <= cfg.range and st.flee_t > 1.5) then
+            viber.move_towards(x + (x - px), z + (z - pz), chase_speed(st))
+            return
+          end
+        else
+          st.flee_t = 0
+          viber.face_player()
+          st.rt = (st.rt or (rg.cooldown or 2.4) * 0.5) + dt
+          if st.rt >= (rg.cooldown or 2.4) then
+            st.rt = 0
+            begin_shot(st)
+          end
+          return
+        end
+      end
       if dist > cfg.range then
         viber.move_towards(px, pz, chase_speed(st))
         -- Ao chegar ao alcance, o 1.º golpe sai a meio da cadência (não
