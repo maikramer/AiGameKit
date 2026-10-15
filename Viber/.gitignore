@@ -1,5 +1,7 @@
 worlds/shaders/
-# sky.wgsl é GERADO a cada `viber run` (especializado por mundo).
+# WESL (sky/water/terrain_chunk) são GERADOS por `viber run` — especializados
+# por mundo, escritos junto a ele (worlds/<nome>/shaders/ e examples/*/shaders/).
+worlds/*/shaders/
 examples/*/shaders/
 worlds/assets
 # Screenshots de QA/debug capturados na raiz do pacote não vão para o git
