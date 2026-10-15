@@ -187,6 +187,11 @@ pub enum ScriptCommand {
     /// Vitais GENÉRICAS de entidade (`viber.entity_set_max_hp`): cria o
     /// `Health` se faltar (current = max); numa entidade existente
     /// redimensiona (current clampe ao novo max).
+    /// Toca uma cinemática (`viber.cinematic`); `anchor` = âncora `self`.
+    PlayCinematic {
+        id: String,
+        anchor: Option<Entity>,
+    },
     /// Escala uniforme da entidade (`viber.set_scale`) — elites maiores, etc.
     SetScale {
         entity: Entity,

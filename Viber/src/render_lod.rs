@@ -195,6 +195,7 @@ fn update_mesh_lod(
     editor: Query<&GlobalTransform, With<crate::editor_camera::EditorCamera>>,
     cameras: Query<&GlobalTransform, With<Camera3d>>,
     mut stats: ResMut<MeshLodStats>,
+    boost: Option<Res<crate::cinematic::StreamingBoost>>,
     mut instances: Query<(
         &GlobalTransform,
         &mut MeshLod,
@@ -208,7 +209,13 @@ fn update_mesh_lod(
         return;
     };
     let eye = camera.translation();
-    let mut budget = swap_budget();
+    // Corte de cinemática em curso (ecrã em negro): drenar a fila depressa.
+    let mut budget = swap_budget()
+        * if boost.as_deref().is_some_and(|b| b.0) {
+            10
+        } else {
+            1
+        };
     let mut swaps = 0usize;
     let mut pending = 0usize;
     for (transform, mut lod, mut root, visibility) in &mut instances {

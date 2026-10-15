@@ -341,7 +341,7 @@ pub fn apply_bind_classes(
 }
 
 /// Pushes [`UiData`] into every bound element.
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn apply_ui_bindings(
     data: Res<UiData>,
     script_binds: Option<Res<UiScriptBinds>>,

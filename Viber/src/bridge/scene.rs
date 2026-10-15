@@ -595,3 +595,148 @@ mod tests {
         assert_eq!(found.as_array().unwrap().len(), 2);
     }
 }
+
+// ── cinemáticas (`viber.cinematic.*`) ──────────────────────────────────
+
+pub const METHOD_CINEMATIC_LIST: &str = "viber.cinematic.list";
+pub const METHOD_CINEMATIC_SHOW: &str = "viber.cinematic.show";
+pub const METHOD_CINEMATIC_PLAY: &str = "viber.cinematic.play";
+pub const METHOD_CINEMATIC_STOP: &str = "viber.cinematic.stop";
+pub const METHOD_CINEMATIC_SHOT: &str = "viber.cinematic.shot";
+
+#[derive(Deserialize)]
+struct CinematicId {
+    id: String,
+}
+
+/// Com documento: as cinemáticas do documento (as editadas); sem ele, a biblioteca.
+pub fn cinematic_list_method(_input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    if let Some(doc) = world.get_resource::<SceneDoc>() {
+        return Ok(crate::cinematic_cli::list_json(doc));
+    }
+    let library = world.resource::<crate::cinematic::CinematicLibrary>();
+    let mut rows: Vec<Value> = library
+        .0
+        .values()
+        .map(|spec| json!({ "id": spec.id, "duration": spec.duration, "shots": spec.shots.len() }))
+        .collect();
+    rows.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
+    Ok(json!(rows))
+}
+
+fn cinematic_spec(
+    world: &World,
+    id: &str,
+) -> Result<crate::cinematic::CinematicSpec, bevy::remote::BrpError> {
+    if let Some(doc) = world.get_resource::<SceneDoc>() {
+        return crate::cinematic_cli::doc_spec(doc, id)
+            .map(|(_, spec)| spec)
+            .map_err(|e| invalid(format!("{e:#}")));
+    }
+    world
+        .resource::<crate::cinematic::CinematicLibrary>()
+        .0
+        .get(id)
+        .cloned()
+        .ok_or_else(|| invalid(format!("cinemática `{id}` não existe")))
+}
+
+pub fn cinematic_show_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    let p: CinematicId = params(METHOD_CINEMATIC_SHOW, input.0)?;
+    Ok(cinematic_spec(world, &p.id)?.to_json())
+}
+
+/// Toca a versão do DOCUMENTO (edições aparecem sem recarregar o mundo).
+pub fn cinematic_play_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        id: String,
+        #[serde(default)]
+        anchor: Option<String>,
+    }
+    let p: Params = params(METHOD_CINEMATIC_PLAY, input.0)?;
+    let spec = cinematic_spec(world, &p.id)?;
+    let anchor = match &p.anchor {
+        Some(name) => {
+            let mut query = world.query::<(Entity, &Name)>();
+            let found = query
+                .iter(world)
+                .find(|(_, n)| n.as_str() == name)
+                .map(|(e, _)| e);
+            Some(found.ok_or_else(|| {
+                invalid(format!("âncora `{name}`: nenhuma entidade com esse name"))
+            })?)
+        }
+        None => None,
+    };
+    let duration = spec.duration;
+    world.write_message(crate::cinematic::PlayCinematic {
+        id: p.id.clone(),
+        anchor,
+        inline: Some(spec),
+    });
+    Ok(json!({ "playing": p.id, "duration": duration }))
+}
+
+pub fn cinematic_stop_method(_input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    let playing = world
+        .resource::<crate::cinematic::CinematicPlayback>()
+        .playing()
+        .map(str::to_owned);
+    world.write_message(crate::cinematic::StopCinematic);
+    Ok(json!({ "stopped": playing }))
+}
+
+/// Pose da câmara ativa: (olho, ponto olhado). Câmara de jogo → olha o herói.
+pub fn active_camera_pose(world: &mut World) -> Option<(Vec3, Vec3)> {
+    let mut editor =
+        world.query_filtered::<&GlobalTransform, With<crate::editor_camera::EditorCamera>>();
+    if let Some(eye) = editor.iter(world).next().copied() {
+        let at = eye.translation();
+        return Some((at, at + eye.forward() * 12.0));
+    }
+    let mut game =
+        world.query_filtered::<&GlobalTransform, With<crate::recipes::spawn::OrbitCamera>>();
+    let eye = *game.iter(world).next()?;
+    let mut players = world.query_filtered::<&GlobalTransform, With<crate::player::Player>>();
+    let look = players
+        .iter(world)
+        .next()
+        .map(|p| p.translation() + Vec3::Y * 1.4)
+        .unwrap_or(eye.translation() + eye.forward() * 12.0);
+    Some((eye.translation(), look))
+}
+
+/// Acrescenta um `<Shot>` — pose explícita ou a da câmara ativa.
+pub fn cinematic_shot_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        id: String,
+        #[serde(default = "four")]
+        duration: f32,
+        #[serde(default)]
+        from: Option<String>,
+        #[serde(default)]
+        look: Option<String>,
+        #[serde(default = "yes")]
+        save: bool,
+    }
+    fn four() -> f32 {
+        4.0
+    }
+    let p: Params = params(METHOD_CINEMATIC_SHOT, input.0)?;
+    let parse = |raw: &str, what: &str| {
+        crate::xml::values::parse_vec3(raw, what)
+            .map(Vec3::from)
+            .map_err(|e| invalid(format!("{e:#}")))
+    };
+    let (eye, look) = match (&p.from, &p.look) {
+        (Some(from), Some(look)) => (parse(from, "from")?, parse(look, "look")?),
+        _ => active_camera_pose(world).ok_or_else(|| invalid("sem câmara ativa".into()))?,
+    };
+    let op = crate::cinematic_cli::shot_op(doc(world)?, &p.id, eye, look, p.duration)
+        .map_err(|e| invalid(format!("{e:#}")))?;
+    let tx = live::apply(world, &format!("plano {}", p.id), &[op])
+        .map_err(|e| invalid(format!("{e:#}")))?;
+    report(world, &tx, p.save)
+}

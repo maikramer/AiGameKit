@@ -229,6 +229,11 @@ impl Plugin for BridgePlugin {
                     .with_method_main(scene::METHOD_LINT, scene::lint_method)
                     .with_method_main(scene::METHOD_SCHEMA, scene::schema_method)
                     .with_method_main(scene::METHOD_GROUPS, scene::groups_method)
+                    .with_method_main(scene::METHOD_CINEMATIC_LIST, scene::cinematic_list_method)
+                    .with_method_main(scene::METHOD_CINEMATIC_SHOW, scene::cinematic_show_method)
+                    .with_method_main(scene::METHOD_CINEMATIC_PLAY, scene::cinematic_play_method)
+                    .with_method_main(scene::METHOD_CINEMATIC_STOP, scene::cinematic_stop_method)
+                    .with_method_main(scene::METHOD_CINEMATIC_SHOT, scene::cinematic_shot_method)
                     .with_method_main(scene::METHOD_INSTANCE, scene::instance_method)
                     .with_method_main(scene::METHOD_DROP, scene::drop_method)
                     .with_method_main(scene::METHOD_FILES, scene::files_method)
@@ -324,6 +329,9 @@ fn frame_stepper_system(world: &mut World) {
 struct PendingMouseClick {
     press: Option<(f32, f32, MouseButton)>,
     release: Option<MouseButton>,
+    /// O press atual é um `press` (arrasto): NÃO solta no frame seguinte —
+    /// espera um `state: release` explícito.
+    hold: bool,
 }
 
 /// Faz o RELEASE de um clique sintético no frame SEGUINTE ao press.
@@ -371,7 +379,11 @@ fn deferred_mouse_release(
             window: entity,
         });
         input.press(button);
-        pending.release = Some(button);
+        if std::mem::take(&mut pending.hold) {
+            // arrasto: o botão fica em baixo até ao `release` explícito
+        } else {
+            pending.release = Some(button);
+        }
         return;
     }
     // 2) RELEASE no frame seguinte: sem isto, `just_released` no mesmo frame
@@ -1180,13 +1192,41 @@ fn input_click(params: In<Option<Value>>, world: &mut World) -> BrpResult {
         x: f32,
         y: f32,
         button: Option<MouseButton>,
+        /// `click` (omissão) | `press` | `release`
+        state: Option<String>,
     }
     let params: Params = parse_params(params.0)?;
     let button = params.button.unwrap_or(MouseButton::Left);
-    // O clique INTEIRO é injectado no PreUpdate do frame seguinte (ver
-    // `deferred_mouse_release`) — no meio do frame, focus/input já correram.
-    world.resource_mut::<PendingMouseClick>().press = Some((params.x, params.y, button));
-    Ok(json!({ "x": params.x, "y": params.y, "button": format!("{button:?}") }))
+    let state = params.state.as_deref().unwrap_or("click");
+    let mut pending = world.resource_mut::<PendingMouseClick>();
+    match state {
+        // O clique INTEIRO é injectado no PreUpdate do frame seguinte (ver
+        // `deferred_mouse_release`) — no meio do frame, focus/input já correram.
+        "click" => {
+            pending.press = Some((params.x, params.y, button));
+            pending.hold = false;
+        }
+        // Arrasto: press sem release automático (`viber debug drag`).
+        "press" => {
+            pending.press = Some((params.x, params.y, button));
+            pending.hold = true;
+        }
+        "release" => {
+            drop(pending);
+            send_cursor(world, Vec2::new(params.x, params.y));
+            world.resource_mut::<PendingMouseClick>().release = Some(button);
+        }
+        other => {
+            return Err(BrpError {
+                code: bevy::remote::error_codes::INVALID_PARAMS,
+                message: format!(
+                    "invalid params: state `{other}` — esperado click | press | release"
+                ),
+                data: None,
+            });
+        }
+    }
+    Ok(json!({ "x": params.x, "y": params.y, "button": format!("{button:?}"), "state": state }))
 }
 
 fn input_move(params: In<Option<Value>>, world: &mut World) -> BrpResult {

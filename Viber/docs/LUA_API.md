@@ -157,6 +157,24 @@ end
 - `groups="a b"` funciona em qualquer entidade (com ou sem script); `<DynamicSpawner>` passa os
   `groups`/`connect-*` do template a cada instância.
 
+
+## Cinemáticas (`viber.cinematic`)
+
+Sequências de câmara declaradas no XML (`<Cinematic id>` com `<Shot>`, `<Line>`,
+`<Title>`, `<Fade>`, `<Sound>` — contrato em `src/cinematic.rs`, edição com
+`viber cinematic …`/`viber scene …` ou no Inspector do editor).
+
+| Função | Retorno | Notas |
+|---|---|---|
+| `viber.cinematic(id[, anchor_id])` | — | toca; `anchor_id` (ex. `viber.self_id()`) é a âncora `self` dos planos |
+| `viber.cinematic_playing()` | id \| `nil` | a cinemática a tocar neste frame |
+
+- Durante a cena o herói não anda nem ataca (`MenusOpen::cinematic`), fica invulnerável e o
+  HUD esconde-se; [Esc]/[Espaço]/[Enter] saltam (`skippable`).
+- No fim chega `{type="cinematic_end", id, skipped}` em `viber.events()`.
+- "Só uma vez": guarda uma chave primitiva em `viber.game()` (persiste no save) — ver
+  `scripts/cinematic-trigger.lua` do `simple-rpg`.
+
 ## Geral
 
 | Função | Devolve | Notas |

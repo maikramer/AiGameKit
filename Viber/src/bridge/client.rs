@@ -354,6 +354,14 @@ impl BridgeClient {
         )
     }
 
+    /// `state`: `press` (botão fica em baixo) ou `release` — o arrasto.
+    pub fn mouse_state(&self, x: f32, y: f32, button: &str, state: &str) -> Result<Value> {
+        self.call(
+            "viber.input.click",
+            json!({ "x": x, "y": y, "button": normalize_mouse(button), "state": state }),
+        )
+    }
+
     pub fn move_cursor(&self, x: f32, y: f32) -> Result<Value> {
         self.call("viber.input.move", json!({ "x": x, "y": y }))
     }

@@ -41,6 +41,8 @@ pub enum ScriptGameEvent {
     /// a TODOS os scripts subscritos; os handlers nativos também correm, salvo
     /// as ações reclamadas por `viber.ui.own_action`.
     UiAction { name: String, arg: String },
+    /// Uma cinemática acabou (`skipped` = o jogador saltou-a).
+    CinematicEnd { id: String, skipped: bool },
 }
 
 impl ScriptGameEvent {
@@ -54,6 +56,7 @@ impl ScriptGameEvent {
             Self::QuestDone { .. } => "quest_done",
             Self::LevelUp { .. } => "level_up",
             Self::UiAction { .. } => "ui_action",
+            Self::CinematicEnd { .. } => "cinematic_end",
         }
     }
 
@@ -86,6 +89,10 @@ impl ScriptGameEvent {
             Self::UiAction { name, arg } => {
                 t.raw_set("name", name.clone())?;
                 t.raw_set("arg", arg.clone())?;
+            }
+            Self::CinematicEnd { id, skipped } => {
+                t.raw_set("id", id.clone())?;
+                t.raw_set("skipped", *skipped)?;
             }
         }
         Ok(t)

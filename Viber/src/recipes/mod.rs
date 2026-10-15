@@ -91,6 +91,7 @@ pub const KNOWN_TAGS: &[&str] = &[
     // Catálogos RPG declaráveis (Fases B2/B3).
     "landmark",
     "spawnpoint",
+    "cinematic",
     "projectiletemplate",
     "questtracker",
     "waypointarrow",
@@ -133,6 +134,8 @@ pub struct ParsedWorld {
     pub prototype_instances: BTreeMap<String, usize>,
     /// Ids referenced by `<Use>` sem definição (warning; `--strict` = erro).
     pub unknown_prototypes: Vec<String>,
+    /// `<Cinematic id>` declaradas (`crate::cinematic`) — nunca spawnam.
+    pub cinematics: Vec<crate::cinematic::CinematicSpec>,
 }
 
 /// Accumulates non-fatal parse findings.
@@ -145,6 +148,8 @@ struct ParseCtx {
     /// exato derivado da forma no spawn). Grupos são transparentes ao
     /// contexto (sub-pivots não o desligam).
     composition_depth: usize,
+    /// `<Cinematic>` lidas pelo caminho (o mundo as toca, não as spawna).
+    cinematics: Vec<crate::cinematic::CinematicSpec>,
 }
 
 /// Local transform of an entity (world transform comes from the hierarchy).
@@ -1127,6 +1132,7 @@ pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result
         prototypes,
         prototype_instances: instances,
         unknown_prototypes: unknown,
+        cinematics: ctx.cinematics,
     })
 }
 
@@ -1489,6 +1495,15 @@ fn parse_entity_kind(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<Entity
         "navmesh" | "spawngate" | "projectiletemplate" | "postfxdebugtoggle"
         | "adaptivequality" => finish_engine_config(node, ctx).map(Some),
         "landmark" => finish_landmark(node, ctx).map(Some),
+        // Timeline de câmara/legendas (`crate::cinematic`): os filhos são
+        // planos e falas, não entidades.
+        "cinematic" => {
+            match crate::cinematic::parse(node) {
+                Ok(spec) => ctx.cinematics.push(spec),
+                Err(error) => ctx.warnings.push(error),
+            }
+            Ok(None)
+        }
         "spawnpoint" => finish_spawn_point(node, ctx).map(Some),
         "daycycle" => finish_daycycle(node, ctx).map(Some),
         "weather" => finish_weather(node, ctx).map(Some),

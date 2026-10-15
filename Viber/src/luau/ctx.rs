@@ -68,6 +68,8 @@ pub struct ScriptCtx {
     /// Snapshot `grupo → bits` (ordenados) das entidades com `groups=` —
     /// `viber.group`/`in_group` e os alvos `@grupo` das conexões.
     pub groups: std::collections::HashMap<String, Vec<i64>>,
+    /// Id da cinemática a tocar (`viber.cinematic_playing()`), snapshot do frame.
+    pub cinematic: Option<String>,
     /// Emissor do sinal/`call_group` em entrega (`viber.sender()`); `None` fora
     /// de um handler.
     pub sender: Option<i64>,

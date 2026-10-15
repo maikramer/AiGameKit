@@ -63,6 +63,29 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
 
     // viber.entity_set_max_hp(max, id?) — cria o `Health` se faltar
     // (current = max); numa entidade existente redimensiona (current clampe).
+    // viber.cinematic(id[, anchor_id]) — toca uma `<Cinematic>` do mundo.
+    api.set(
+        "cinematic",
+        lua.create_function(|lua, (id, anchor): (String, Option<i64>)| {
+            let anchor = anchor.map(entity_from_id).transpose()?;
+            lua.app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                .commands
+                .push(ScriptCommand::PlayCinematic { id, anchor });
+            Ok(())
+        })?,
+    )?;
+
+    // viber.cinematic_playing() -> id | nil
+    api.set(
+        "cinematic_playing",
+        lua.create_function(|lua, ()| {
+            Ok(lua
+                .app_data_ref::<ScriptCtx>()
+                .and_then(|ctx| ctx.cinematic.clone()))
+        })?,
+    )?;
+
     // viber.self_id() -> bits da entidade que corre o script | nil
     api.set(
         "self_id",

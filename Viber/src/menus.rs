@@ -102,11 +102,14 @@ pub struct MenusOpen {
     /// aberto o player andava (W/S navegavam E moviam) e o [J] que confirma
     /// a viagem disparava o melee.
     pub travel: bool,
+    /// Uma cinemática está a tocar (`crate::cinematic`): o herói não anda,
+    /// não ataca e a hotbar cala-se.
+    pub cinematic: bool,
 }
 
 impl MenusOpen {
     pub fn any(&self) -> bool {
-        self.modal || self.shop || self.travel
+        self.modal || self.shop || self.travel || self.cinematic
     }
 }
 

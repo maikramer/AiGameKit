@@ -108,7 +108,7 @@ pub fn hud_compass_update(
                 if node.left != Val::Px(230.0 + offset) {
                     node.left = Val::Px(230.0 + offset);
                 }
-                Visibility::Visible
+                Visibility::Inherited
             }
             None => Visibility::Hidden,
         };
@@ -137,7 +137,7 @@ pub fn hud_compass_update(
         }
         let sector = sector_distance(&bearings, dist.bearing_deg, 22.5);
         let wanted_visibility = if sector.is_some() {
-            Visibility::Visible
+            Visibility::Inherited
         } else {
             Visibility::Hidden
         };

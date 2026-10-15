@@ -117,6 +117,21 @@ enum Command {
         #[command(subcommand)]
         command: viber::scene::cli::SceneCommand,
     },
+    /// Cinematics (agents): list/show/play/stop and capture camera poses as shots — the
+    /// same `<Cinematic>` XML the editor previews and the game plays
+    Cinematic {
+        /// World XML (default: world.xml or worlds/*.xml in the current directory)
+        #[arg(long, global = true)]
+        world: Option<PathBuf>,
+        /// Talk to the RUNNING engine (bridge `viber.cinematic.*`)
+        #[arg(long, global = true)]
+        live: bool,
+        /// Bridge port for --live (default: the engine serving --world)
+        #[arg(long, global = true)]
+        port: Option<u16>,
+        #[command(subcommand)]
+        command: viber::cinematic_cli::CinematicCommand,
+    },
     /// Terrain editing (agents): brushes on the pre-generated heightmap as undoable scene ops
     /// (the editor's terrain tool uses the same op), and height sampling
     Terrain {
@@ -491,6 +506,28 @@ enum DebugCommand {
     Click {
         x: f32,
         y: f32,
+        #[arg(long, default_value = "left")]
+        button: String,
+        #[arg(long)]
+        port: Option<u16>,
+        /// Mundo que identifica a engine alvo (caminho, nome de ficheiro ou
+        /// stem) — resolve a porta pelo engine.json da sessão desse mundo.
+        #[arg(long)]
+        world: Option<PathBuf>,
+    },
+    /// Arrasto sintético: press em (x0,y0), cursor em `steps` passos até (x1,y1),
+    /// release — splitters, sliders, gizmos, drag-and-drop de UI
+    Drag {
+        #[arg(allow_hyphen_values = true)]
+        x0: f32,
+        #[arg(allow_hyphen_values = true)]
+        y0: f32,
+        #[arg(allow_hyphen_values = true)]
+        x1: f32,
+        #[arg(allow_hyphen_values = true)]
+        y1: f32,
+        #[arg(long, default_value_t = 8)]
+        steps: u32,
         #[arg(long, default_value = "left")]
         button: String,
         #[arg(long)]
@@ -1222,6 +1259,23 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
                 BridgeClient::localhost(port).call(method, params)?
             } else {
                 viber::scene::cli::run(&resolve_world_path(world)?, command)?
+            };
+            println!("{}", serde_json::to_string_pretty(&out)?);
+            Ok(std::process::ExitCode::SUCCESS)
+        }
+        Command::Cinematic {
+            world,
+            live,
+            port,
+            command,
+        } => {
+            let out = if live {
+                let port = bridge::client::resolve_port(port, world.as_deref())?;
+                let client = BridgeClient::localhost(port);
+                let call = |method: &str, params: Value| client.call(method, params);
+                viber::cinematic_cli::run(Path::new(""), command, Some(&call))?
+            } else {
+                viber::cinematic_cli::run(&resolve_world_path(world)?, command, None)?
             };
             println!("{}", serde_json::to_string_pretty(&out)?);
             Ok(std::process::ExitCode::SUCCESS)
@@ -2363,6 +2417,34 @@ fn run_debug(command: DebugCommand, parent_world: Option<PathBuf>) -> Result<()>
             let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
             let client = BridgeClient::localhost(port);
             client.click(x, y, &button)?;
+        }
+        DebugCommand::Drag {
+            x0,
+            y0,
+            x1,
+            y1,
+            steps,
+            button,
+            port,
+            world,
+        } => {
+            let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;
+            let client = BridgeClient::localhost(port);
+            // Cada passo dá uns frames à engine (o picking precisa de ver o
+            // cursor mexer entre o press e o release).
+            let pause = std::time::Duration::from_millis(60);
+            client.move_cursor(x0, y0)?;
+            std::thread::sleep(pause);
+            client.mouse_state(x0, y0, &button, "press")?;
+            std::thread::sleep(pause);
+            let steps = steps.max(1);
+            for i in 1..=steps {
+                let k = i as f32 / steps as f32;
+                client.move_cursor(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k)?;
+                std::thread::sleep(pause);
+            }
+            client.mouse_state(x1, y1, &button, "release")?;
+            println!("drag ({x0}, {y0}) → ({x1}, {y1}) em {steps} passos");
         }
         DebugCommand::Move { x, y, port, world } => {
             let port = bridge::client::resolve_port(port, merge_world(&world, &parent_world))?;

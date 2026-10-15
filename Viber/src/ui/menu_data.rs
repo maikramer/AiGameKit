@@ -83,6 +83,8 @@ pub fn item_label(id: &str) -> String {
         "potion" => "Poção".into(),
         "antidote" => "Antídoto".into(),
         "bomb" => "Bomba".into(),
+        // As quatro Notas do Coro (história do simple-rpg — STORY.md).
+        "nota" => "Nota de Vael".into(),
         "gold" => "Ouro".into(),
         "wood" => "Madeira".into(),
         "stone" => "Pedra".into(),

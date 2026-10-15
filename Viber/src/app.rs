@@ -232,6 +232,15 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
         );
     }
     let mut app = App::new();
+    // Cinemáticas do mundo (`<Cinematic>`): biblioteca antes do plugin (o
+    // `init_resource` dele não a substitui).
+    app.insert_resource(crate::cinematic::CinematicLibrary(
+        world
+            .cinematics
+            .iter()
+            .map(|spec| (spec.id.clone(), spec.clone()))
+            .collect(),
+    ));
     // O modo viaja como resource: os run conditions (`scripts_enabled`, …)
     // leem-no para congelar a simulação no editor.
     app.insert_resource(mode);
@@ -565,6 +574,7 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
             crate::quest_guide::QuestGuidePlugin,
         ));
     }
+    app.add_plugins(crate::cinematic::CinematicPlugin);
     // IA (FSM Rust + respawn): criaturas de <DynamicSpawner> SEM script caem
     // aqui — sem este plugin nasciam estátuas eternas e a RespawnQueue
     // nunca drenava.

@@ -60,6 +60,9 @@ pub struct TerrainChunk {
 /// Per-terrain tracking state for the LOD plugin.
 #[derive(Resource, Debug, Default)]
 pub struct ChunkLodState {
+    /// Último passe acabou com trabalho por fazer (colunas a construir) —
+    /// público para quem espera pelo streaming (`crate::cinematic`).
+    pub busy: bool,
     /// `true` after the one-shot adopt scan.
     adopted: bool,
     /// Terrain root entity (chunks attach here on respawn).
@@ -239,6 +242,8 @@ fn adopt_chunks(
 /// heightfield, contado em CAIXAS para uma coluna LOD-0 complete em um ou
 /// dois passes em vez de hitchar um frame único.
 const VOXEL_MAX_MESH_BUILDS_PER_FRAME: u32 = 4;
+/// Multiplicador do orçamento durante um corte de cinemática (ecrã em negro).
+const STREAMING_BOOST: u32 = 10;
 
 /// Estado de construção de uma coluna a meio de uma troca de LOD: as caixas
 /// do `target` nascem escondidas (`staged`) sob o orçamento do frame; quando
@@ -274,6 +279,7 @@ fn update_voxel_columns(
     boxes: Query<(), With<super::voxel::VoxelChunk>>,
     children_q: Query<&Children>,
     mut meshes: ResMut<Assets<Mesh>>,
+    boost: Option<Res<crate::cinematic::StreamingBoost>>,
     mut commands: Commands,
 ) {
     let Some(runtime) = runtime else {
@@ -282,6 +288,8 @@ fn update_voxel_columns(
     if !state.adopted {
         return;
     }
+    // `busy` = o passe anterior deixou trabalho (atualizado no fim).
+    state.busy = state.pending;
     // Modo editor (`--camera free`): há DUAS `Camera3d` (a de jogo está
     // inactiva) — `single()` falhava em silêncio e o LOD das colunas nunca
     // re-selecionava. O olho activo vem do helper (câmara de editor primeiro).
@@ -331,7 +339,14 @@ fn update_voxel_columns(
         state.chunks.insert(chunk.coords, entity);
     }
 
-    let mut budget = VOXEL_MAX_MESH_BUILDS_PER_FRAME;
+    // Cortes de cinemática pedem o terreno do destino JÁ (ecrã em negro):
+    // o orçamento por frame multiplica enquanto o `StreamingBoost` vale.
+    let mut budget = VOXEL_MAX_MESH_BUILDS_PER_FRAME
+        * if boost.as_deref().is_some_and(|b| b.0) {
+            STREAMING_BOOST
+        } else {
+            1
+        };
     state.pending = false;
 
     let spec = &runtime.spec;

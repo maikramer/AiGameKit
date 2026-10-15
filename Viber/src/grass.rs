@@ -175,6 +175,9 @@ impl Default for GrassSettings {
 /// Live tiles, keyed by tile coordinate.
 #[derive(Resource, Default)]
 pub struct GrassField {
+    /// Ainda há tiles por construir à volta da câmara (`crate::cinematic`
+    /// espera por isto num corte em negro).
+    pub busy: bool,
     tiles: HashMap<(i32, i32), LiveTile>,
     material: Option<Handle<GrassMaterial>>,
     /// Blades emitted by the last full rebuild — profiler / QA readout.
@@ -599,6 +602,7 @@ fn stream_grass_tiles(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<GrassMaterial>>,
     mut starve: Local<StarveDiag>,
+    boost: Option<Res<crate::cinematic::StreamingBoost>>,
 ) {
     if !settings.enabled {
         return;
@@ -688,6 +692,7 @@ fn stream_grass_tiles(
     }
     if wanted.is_empty() {
         starve.frames = 0;
+        field.busy = false;
         return;
     }
     wanted.sort_by(|a, b| a.2.total_cmp(&b.2));
@@ -696,7 +701,12 @@ fn stream_grass_tiles(
         BUILD_BUDGET_COLD
     } else {
         BUILD_BUDGET
+    } * if boost.as_deref().is_some_and(|b| b.0) {
+        6
+    } else {
+        1
     };
+    field.busy = wanted.len() > budget;
     starve.frames += 1;
     starve.wanted += wanted.len();
     starve.budget = budget;

@@ -84,6 +84,12 @@ pela CLI, pelo bridge e pelo editor.
   é patchado no `ScriptProps` SEM respawn: o NPC muda a correr e mantém o `viber.state()`. No
   editor é a secção **Script** do Inspector. Antes de copiar um script para mudar uma fala ou
   um número, exporta-o.
+* **Guia de missões (`src/quest_guide.rs`, `src/quest_marker.rs`, `src/hud/waypoint.rs`):**
+  o `QuestGuide` decide PARA ONDE ir (entregar → cumprir: marco por visitar / presa
+  viva mais próxima, `quests::kill_matches` conta variantes `bandit-archer`→`bandit` →
+  missão nova) e os faróis do minimapa/bússola (só NPC com missão por aceitar/entregar).
+  O `<DialogueNPC>` tem cápsula de colisão, marcador billboard "!"/"?" pelo estado e
+  vira-se para o herói a < 7 m. `<WaypointArrow margin>` pousa no alvo ou encosta à borda.
 * **Sinais + grupos (o `signal`/`groups` do Godot):** o script declara o que emite —
   `--@signal opened(gold, xp)` — e dispara com `viber.emit("opened", …)`; QUEM ouve é dado do
   emissor: `connect-opened="@discordia:notice; porta:abrir"` (alvo = nome, `@grupo` ou `self`;

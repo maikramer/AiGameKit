@@ -20,6 +20,14 @@ use super::host::LuaScriptHost;
 use super::input::key_code_from_str;
 use super::sfx::match_gesture_clip;
 
+/// Entidade nomeada com pose (snapshot de `viber.find`/`entity_position`).
+type NamedPose = (Entity, &'static Name, &'static GlobalTransform);
+/// Filtro do delta do snapshot: nome ou pose mudaram (herói excluído).
+type NameOrPoseChanged = (
+    Without<Player>,
+    Or<(Changed<Name>, Changed<GlobalTransform>)>,
+);
+
 /// Tira `bits` do snapshot de nomes (`find`) e de posições.
 fn forget_named(
     named: &mut HashMap<String, Vec<i64>>,
@@ -119,18 +127,12 @@ pub struct LuauRuntimeLocals<'w, 's> {
     pub groups: Query<'w, 's, (Entity, &'static crate::luau::Groups)>,
     /// Conexões de sinal dos emissores (`connect-*`).
     pub connections: Query<'w, 's, &'static crate::luau::SignalConnections>,
+    /// Cinemática a tocar (`viber.cinematic_playing`).
+    pub cinematic: Option<bevy::ecs::system::Res<'w, crate::cinematic::CinematicPlayback>>,
     /// Snapshot de nomes semeado (a partir daí só deltas).
     pub names_seeded: bevy::ecs::system::Local<'s, bool>,
     /// Entidades nomeadas cujo nome ou pose mudou desde o último frame.
-    pub names_changed: Query<
-        'w,
-        's,
-        (Entity, &'static Name, &'static GlobalTransform),
-        (
-            Without<Player>,
-            Or<(Changed<Name>, Changed<GlobalTransform>)>,
-        ),
-    >,
+    pub names_changed: Query<'w, 's, NamedPose, NameOrPoseChanged>,
     /// Nomes removidos (inclui despawns) — saem do snapshot.
     pub names_removed: bevy::ecs::lifecycle::RemovedComponents<'w, 's, Name>,
     /// Props `prop-*` das entidades com script — semeia `ctx.self_props`.
@@ -321,6 +323,10 @@ pub fn luau_update(
             .and_then(|(_, _, health, _)| health.as_deref().map(|h| (h.current, h.max)));
         // Forward do herói (modelo olha +Z) para `viber.player_forward`.
         ctx.player_forward = player_forward;
+        ctx.cinematic = locals
+            .cinematic
+            .as_deref()
+            .and_then(|c| c.playing().map(str::to_owned));
         // Handle de leitura do terreno para `viber.ground_below` — dois
         // clones de Arc por frame; o terreno é imutável pós-bootstrap.
         ctx.terrain = terrain.as_deref().map(|rt| rt.reader());
@@ -1051,6 +1057,15 @@ pub fn luau_update(
                         });
                     commands.entity(entity).try_remove::<LuaScriptRef>();
                 }
+            }
+            ScriptCommand::PlayCinematic { id, anchor } => {
+                commands.queue(move |world: &mut World| {
+                    world.write_message(crate::cinematic::PlayCinematic {
+                        id,
+                        anchor,
+                        inline: None,
+                    });
+                });
             }
             ScriptCommand::SetScale { entity, scale } => {
                 if let Ok((_, _, Some(mut transform), _, _, _)) = scripts.get_mut(entity) {

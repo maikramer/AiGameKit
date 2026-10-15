@@ -85,6 +85,14 @@ pub fn tier_name(tier: u8) -> &'static str {
 }
 
 /// O que cada tier corta: gates de pós-processo + teto de sombras de ponto.
+///
+/// SSAO e contact shadows NUNCA saem da câmara em runtime — só BAIXAM de
+/// qualidade/passos. São chaves do pipeline de malhas do Bevy
+/// (`MeshPipelineKey::SCREEN_SPACE_AMBIENT_OCCLUSION`/`CONTACT_SHADOWS`):
+/// tirá-las a meio do jogo recompila TODOS os pipelines de malha, e enquanto
+/// compilam as malhas não se desenham — o ecrã ficava 1–2 s só céu e névoa
+/// (o "cinzento" de quem rodava a câmara ou saía de uma cena; medido
+/// 2026-10-15: `tier → low` a 37,10 s, frame lavado na captura seguinte).
 pub fn tier_levers(tier: u8) -> (QualityGates, Option<usize>) {
     match tier {
         0 => (QualityGates::default(), None),
@@ -93,29 +101,25 @@ pub fn tier_levers(tier: u8) -> (QualityGates, Option<usize>) {
                 off: Vec::new(),
                 ssao: Some(Ssao::Medium),
                 volumetric_steps: Some(32),
+                contact_steps: None,
             },
             Some(8),
         ),
         2 => (
             QualityGates {
-                off: vec!["DOF", "MOTION_BLUR", "CONTACT_SHADOWS"],
+                off: vec!["DOF", "MOTION_BLUR"],
                 ssao: Some(Ssao::Low),
                 volumetric_steps: Some(24),
+                contact_steps: Some(12),
             },
             Some(4),
         ),
         _ => (
             QualityGates {
-                off: vec![
-                    "DOF",
-                    "MOTION_BLUR",
-                    "CONTACT_SHADOWS",
-                    "SSAO",
-                    "VOLUMETRICS",
-                    "CHROMATIC",
-                ],
+                off: vec!["DOF", "MOTION_BLUR", "VOLUMETRICS", "CHROMATIC"],
                 ssao: Some(Ssao::Low),
                 volumetric_steps: Some(24),
+                contact_steps: Some(8),
             },
             Some(0),
         ),
@@ -302,10 +306,17 @@ fn drive_adaptive_quality(
     time: Res<Time<Real>>,
     state: Option<ResMut<AdaptiveQuality>>,
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    cinematic: Option<Res<crate::cinematic::CinematicPlayback>>,
 ) {
     let Some(mut state) = state else {
         return;
     };
+    // Numa cinemática o streaming corre com orçamento multiplicado de
+    // propósito (esperas em negro): esses frames lentos não são carga real, e
+    // um tier trocado a meio da cena era um pop visível no plano seguinte.
+    if cinematic.is_some_and(|c| c.playing().is_some()) {
+        return;
+    }
     if let Ok(window) = windows.single() {
         use bevy::window::PresentMode;
         let vsync = matches!(
@@ -495,6 +506,12 @@ mod tests {
             assert!(cap <= prev_cap);
             prev_off = gates.off.len();
             prev_cap = cap;
+            for key in ["SSAO", "CONTACT_SHADOWS"] {
+                assert!(
+                    !gates.off.contains(&key),
+                    "tier {tier} tira {key} — chave do pipeline de malhas (recompila tudo → ecrã cinzento)"
+                );
+            }
         }
         assert_eq!(
             tier_levers(0),

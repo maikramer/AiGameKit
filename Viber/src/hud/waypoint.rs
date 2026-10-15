@@ -140,7 +140,7 @@ pub fn spawn_waypoint_arrow(world: &mut World, hud: &super::assets::HudAssets, m
 }
 
 /// Coloca a seta a cada frame.
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn update_waypoint_arrow(
     guide: Option<Res<QuestGuide>>,
     interior: Option<Res<crate::worldsys::InteriorLighting>>,

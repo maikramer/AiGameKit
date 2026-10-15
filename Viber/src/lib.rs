@@ -12,6 +12,8 @@ pub mod audit;
 pub mod bake;
 pub mod bridge;
 pub mod camera;
+pub mod cinematic;
+pub mod cinematic_cli;
 pub mod combat;
 pub mod config;
 pub mod dlss;

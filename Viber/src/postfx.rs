@@ -274,6 +274,10 @@ pub struct QualityGates {
     pub ssao: Option<ScreenSpaceAmbientOcclusionQualityLevel>,
     /// Passos do raymarch volumétrico do tier (`None` = default).
     pub volumetric_steps: Option<u32>,
+    /// Passos lineares das contact shadows do tier (`None` = default). O tier
+    /// BAIXA os passos em vez de tirar o componente (chave do pipeline de
+    /// malhas — ver `adaptive_quality::tier_levers`).
+    pub contact_steps: Option<u32>,
 }
 
 static FX_QUALITY: std::sync::LazyLock<std::sync::Mutex<QualityGates>> =
@@ -959,7 +963,7 @@ fn ssao_component() -> ScreenSpaceAmbientOcclusion {
 /// resolução. Passo linear 24 ≈ raios de 0.5 m.
 fn contact_shadows_component() -> ContactShadows {
     ContactShadows {
-        linear_steps: 24,
+        linear_steps: quality_gates().contact_steps.unwrap_or(24),
         thickness: 0.2,
         length: 0.5,
     }
@@ -1099,7 +1103,7 @@ fn sync_postfx_gates(
             Entity,
             Has<AutoExposure>,
             Has<DepthOfField>,
-            Has<ContactShadows>,
+            Option<&mut ContactShadows>,
             Has<Vignette>,
             Has<ChromaticAberration>,
             Has<ContrastAdaptiveSharpening>,
@@ -1130,12 +1134,22 @@ fn sync_postfx_gates(
             _ => {}
         }
         toggle(&mut entity, gates.dof, dof, dof_component);
-        toggle(
-            &mut entity,
-            gates.contact_shadows,
-            contact,
-            contact_shadows_component,
-        );
+        match (gates.contact_shadows, contact) {
+            (true, Some(mut contact)) => {
+                // Mudar os passos não mexe no pipeline de malhas (só o uniform).
+                let steps = contact_shadows_component().linear_steps;
+                if contact.linear_steps != steps {
+                    contact.linear_steps = steps;
+                }
+            }
+            (true, None) => {
+                entity.insert(contact_shadows_component());
+            }
+            (false, Some(_)) => {
+                entity.remove::<ContactShadows>();
+            }
+            (false, None) => {}
+        }
         toggle(&mut entity, gates.vignette, vignette, vignette_component);
         toggle(&mut entity, gates.chromatic, chromatic, chromatic_component);
         toggle(
@@ -2441,6 +2455,7 @@ fn drive_dof_focus(
     time: Res<Time>,
     players: Query<&GlobalTransform, With<Player>>,
     mut cameras: Query<(&GlobalTransform, &mut DepthOfField), With<Camera3d>>,
+    cinematic: Option<Res<crate::cinematic::CinematicPlayback>>,
     mut focus: Local<Option<f32>>,
 ) {
     let Ok(player) = players.single() else {
@@ -2448,11 +2463,17 @@ fn drive_dof_focus(
     };
     let player_pos = player.translation();
     let t = (time.delta_secs() * 6.0).clamp(0.0, 1.0);
+    // Numa cinemática o foco é o que a CÂMARA olha (o herói pode estar a 1 km
+    // — com o foco nele o plano inteiro saía desfocado); nos cortes salta.
+    let scene_focus = cinematic.as_deref().and_then(|c| c.focus());
     for (camera_tf, mut dof) in &mut cameras {
-        let target = camera_tf.translation().distance(player_pos).max(0.5);
+        let (target, snap) = match scene_focus {
+            Some((distance, cut)) => (distance, cut),
+            None => (camera_tf.translation().distance(player_pos).max(0.5), false),
+        };
         let next = match *focus {
-            Some(prev) => prev + (target - prev) * t,
-            None => target,
+            Some(prev) if !snap => prev + (target - prev) * t,
+            _ => target,
         };
         *focus = Some(next);
         if (dof.focal_distance - next).abs() > 1e-3 {

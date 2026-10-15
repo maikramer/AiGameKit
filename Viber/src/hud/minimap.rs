@@ -203,8 +203,8 @@ fn set_blip(transform: &mut UiTransform, visibility: &mut Visibility, wanted: Op
             if *transform != wanted {
                 *transform = wanted;
             }
-            if *visibility != Visibility::Visible {
-                *visibility = Visibility::Visible;
+            if *visibility != Visibility::Inherited {
+                *visibility = Visibility::Inherited;
             }
         }
         None => {

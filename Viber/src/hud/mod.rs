@@ -51,13 +51,17 @@ pub struct HideInInterior;
 /// Esconde/repõe os [`HideInInterior`] quando o herói entra/sai de um interior.
 pub fn hide_world_hud_in_interior(
     interior: Option<bevy::prelude::Res<crate::worldsys::InteriorLighting>>,
+    cinematic: Option<bevy::prelude::Res<crate::cinematic::CinematicPlayback>>,
     mut panels: bevy::prelude::Query<
         &mut bevy::prelude::Visibility,
         bevy::prelude::With<HideInInterior>,
     >,
 ) {
     use bevy::prelude::{DetectChangesMut, Visibility};
-    let inside = interior.as_deref().is_some_and(|state| state.active);
+    // Também durante uma cinemática (este sistema repunha-os por cima do
+    // esconder-HUD da cena).
+    let inside = interior.as_deref().is_some_and(|state| state.active)
+        || cinematic.as_deref().is_some_and(|c| c.playing().is_some());
     let wanted = if inside {
         Visibility::Hidden
     } else {

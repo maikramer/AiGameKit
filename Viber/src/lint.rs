@@ -152,6 +152,11 @@ pub fn lint_world(world_xml: &Path) -> Result<LintReport> {
         &config.scripts_dir_on(&world_dir),
         &world.entities,
     ));
+    findings.extend(check_cinematics(
+        &loaded.nodes,
+        &config.scripts_dir_on(&world_dir),
+        &world.entities,
+    ));
     findings.extend(check_quests(&world_dir, &config));
     findings.extend(check_duplicate_names(duplicates));
     Ok(LintReport { findings })
@@ -543,6 +548,131 @@ fn check_signals(scripts_dir: &Path, entities: &[EntitySpec]) -> Vec<Finding> {
     findings
 }
 
+/// Cinemáticas (`<Cinematic>`):
+/// * `cinematic-parse` — o XML não forma uma cinemática (sem id, sem planos, …);
+/// * `cinematic-duplicate` — dois `<Cinematic>` com o mesmo id;
+/// * `cinematic-sound` — `<Sound clip>` que a engine não conhece;
+/// * `cinematic-anchor` — `anchor="nome"` sem entidade com esse `name`;
+/// * `cinematic-ref` — `viber.cinematic("x")`, `intro = "x"` (lib/fsm) ou
+///   `prop-cinematic="x"` para um id que não existe.
+fn check_cinematics(
+    nodes: &[crate::xml::XmlNode],
+    scripts_dir: &Path,
+    entities: &[EntitySpec],
+) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    let mut ids: HashMap<String, usize> = HashMap::new();
+    let mut specs = Vec::new();
+    fn rec<'a>(nodes: &'a [crate::xml::XmlNode], out: &mut Vec<&'a crate::xml::XmlNode>) {
+        for node in nodes {
+            if node.tag.eq_ignore_ascii_case("cinematic") {
+                out.push(node);
+            } else {
+                rec(&node.children, out);
+            }
+        }
+    }
+    let mut raw = Vec::new();
+    rec(nodes, &mut raw);
+    for node in raw {
+        match crate::cinematic::parse(node) {
+            Ok(spec) => {
+                *ids.entry(spec.id.clone()).or_default() += 1;
+                specs.push(spec);
+            }
+            Err(error) => findings.push(Finding::error("cinematic-parse", error)),
+        }
+    }
+    for (id, count) in &ids {
+        if *count > 1 {
+            findings.push(Finding::error(
+                "cinematic-duplicate",
+                format!("<Cinematic id=\"{id}\"> declarada {count}×"),
+            ));
+        }
+    }
+    let mut names: HashSet<String> = HashSet::new();
+    walk(entities, &mut |spec| {
+        if let Some(name) = &spec.name {
+            names.insert(name.clone());
+        }
+    });
+    for spec in &specs {
+        for cue in &spec.sounds {
+            if crate::luau::sfx_clip_from_str(&cue.clip).is_none() {
+                findings.push(Finding::error(
+                    "cinematic-sound",
+                    format!("{}: <Sound clip=\"{}\"> desconhecido", spec.id, cue.clip),
+                ));
+            }
+        }
+        for shot in &spec.shots {
+            if let crate::cinematic::Anchor::Named(name) = &shot.anchor
+                && !names.contains(name)
+            {
+                findings.push(Finding::error(
+                    "cinematic-anchor",
+                    format!("{}: anchor=\"{name}\" não nomeia nenhuma entidade", spec.id),
+                ));
+            }
+        }
+    }
+    // Referências: literais nos scripts e `prop-cinematic` nos nós.
+    let mut refs: Vec<(String, String)> = Vec::new();
+    if let Ok(entries) = walk_lua(scripts_dir) {
+        for path in entries {
+            let Ok(source) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let label = path
+                .strip_prefix(scripts_dir)
+                .unwrap_or(&path)
+                .display()
+                .to_string();
+            for needle in ["viber.cinematic(\"", "intro = \""] {
+                let mut rest = source.as_str();
+                while let Some(start) = rest.find(needle) {
+                    let after = &rest[start + needle.len()..];
+                    let Some(end) = after.find('"') else { break };
+                    refs.push((label.clone(), after[..end].to_owned()));
+                    rest = &after[end..];
+                }
+            }
+        }
+    }
+    walk(entities, &mut |spec| {
+        if let Some((_, id)) = spec.props.iter().find(|(k, _)| k == "cinematic")
+            && !id.is_empty()
+        {
+            refs.push((spec_label(spec), id.clone()));
+        }
+    });
+    for (owner, id) in refs {
+        if !ids.contains_key(&id) {
+            findings.push(Finding::error(
+                "cinematic-ref",
+                format!("{owner}: cinemática `{id}` não existe (viber cinematic list)"),
+            ));
+        }
+    }
+    findings
+}
+
+/// Todos os `.lua` debaixo de `dir` (recursivo).
+fn walk_lua(dir: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            out.extend(walk_lua(&path)?);
+        } else if path.extension().is_some_and(|e| e == "lua") {
+            out.push(path);
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
 /// `viber.emit("x"` / `viber.emit('x'` — sinais emitidos por literal.
 fn emit_literals(source: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -865,6 +995,48 @@ mod tests {
             "{:?}",
             report.findings
         );
+    }
+
+    #[test]
+    fn cinematics_are_checked() {
+        let dir = fixture(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Entity name="altar" />
+  <Entity name="trig" script="trigger.lua" prop-cinematic="sumida" />
+  <Cinematic id="ok"><Shot from="0 1 2" look="0 0 0" anchor="altar" /><Sound clip="roar" /></Cinematic>
+  <Cinematic id="ok"><Shot from="0 1 2" look="0 0 0" /></Cinematic>
+  <Cinematic id="mau"><Shot from="0 1 2" look="0 0 0" anchor="ninguem" /><Sound clip="kazoo" /></Cinematic>
+  <Cinematic id="vazia" />
+</world>
+"#,
+            &[
+                (
+                    "trigger.lua",
+                    "--@export cinematic: string = \"\"\nfunction on_update(dt) end\n",
+                ),
+                (
+                    "boss.lua",
+                    "local f = { intro = \"fantasma\" }\nfunction on_update(dt) viber.cinematic(\"ok\") end\n",
+                ),
+            ],
+            &[],
+        );
+        let report = lint_world(&dir.path().join("world.xml")).unwrap();
+        let found = |kind: &str, needle: &str| {
+            report
+                .findings
+                .iter()
+                .any(|f| f.kind == kind && f.message.contains(needle))
+        };
+        assert!(found("cinematic-duplicate", "ok"), "{:?}", report.findings);
+        assert!(found("cinematic-parse", "vazia"));
+        assert!(found("cinematic-sound", "kazoo"));
+        assert!(found("cinematic-anchor", "ninguem"));
+        assert!(found("cinematic-ref", "fantasma"));
+        assert!(found("cinematic-ref", "sumida"));
+        assert!(!found("cinematic-ref", "`ok`"));
+        assert!(!found("cinematic-anchor", "altar"));
     }
 
     #[test]
