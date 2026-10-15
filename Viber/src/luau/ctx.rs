@@ -54,6 +54,23 @@ pub struct ScriptCtx {
     /// partir da query `Name` (fora do snapshot — o nome próprio não pode
     /// depender de truncagem de snapshot).
     pub self_name: Option<String>,
+    /// Props `prop-*` da entidade que corre o script (`viber.prop`), semeados
+    /// por chamada como o `self_name`.
+    pub self_props: Option<std::sync::Arc<Vec<(String, String)>>>,
+    /// Esquema `--@export` de cada script carregado (por path) — atualizado
+    /// pelo `LuaScriptHost::load_script` (e portanto pelo hot-reload).
+    pub exports: std::collections::HashMap<String, std::sync::Arc<super::exports::ScriptExports>>,
+    /// True enquanto corre o TOP-LEVEL de um chunk (partilhado por todas as
+    /// instâncias) — `viber.prop` recusa-se aí.
+    pub top_level: bool,
+    /// Avisos já dados de valores `prop-*` inválidos (1× por script+prop+valor).
+    pub prop_warned: std::collections::HashSet<String>,
+    /// Snapshot `grupo → bits` (ordenados) das entidades com `groups=` —
+    /// `viber.group`/`in_group` e os alvos `@grupo` das conexões.
+    pub groups: std::collections::HashMap<String, Vec<i64>>,
+    /// Emissor do sinal/`call_group` em entrega (`viber.sender()`); `None` fora
+    /// de um handler.
+    pub sender: Option<i64>,
     /// Forward do herói no plano (x, z) — `viber.player_forward()`.
     pub player_forward: Vec2,
     /// Dir raiz dos scripts (`<mundo>/scripts`) — `viber.load` resolve

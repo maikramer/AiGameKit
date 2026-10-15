@@ -166,6 +166,112 @@ pub fn scatter(world: &mut World, selector: &str) -> Result<ToolOutput> {
     })
 }
 
+/// Pincel de VEGETAÇÃO: coloca instâncias de um `<Scatter>` RESTRICTAS à
+/// região do cursor (`center`/`radius`, XZ mundo) — a mesma colocação da
+/// ferramenta (`placement::place`), mas a contagem escala pela ÁREA do dab
+/// (densidade→count quando o XML usa densidade; proporção quando usa count).
+/// As instâncias APPEND no grupo gerado existente (sem o remover) — o undo do
+/// pincel é a transação coalescida do traço.
+pub fn scatter_in_region(
+    world: &mut World,
+    selector: &str,
+    center: bevy::math::Vec2,
+    radius: f32,
+) -> Result<ToolOutput> {
+    let (node, recipe, existing) = {
+        let doc = world
+            .get_resource::<SceneDoc>()
+            .ok_or_else(|| anyhow!("scatter_brush: sem documento"))?;
+        let node = doc.resolve(selector)?;
+        let recipe = doc
+            .node(&node)
+            .cloned()
+            .ok_or_else(|| anyhow!("scatter_brush: `{selector}` não é um nó"))?;
+        if !recipe.tag.eq_ignore_ascii_case("scatter") {
+            bail!(
+                "scatter_brush: `{selector}` é <{}>, não <Scatter>",
+                recipe.tag
+            );
+        }
+        let id = recipe
+            .attr("id")
+            .ok_or_else(|| anyhow!("scatter_brush: <Scatter> sem `id`"))?;
+        let existing = doc.find_by_attr("generated-by", id).into_iter().next();
+        (node, recipe, existing)
+    };
+    let id = recipe.attr("id").expect("verificado").to_owned();
+    let mut warnings = Vec::new();
+    let mut spec = crate::recipes::parse_scatter(&recipe, &mut warnings)?;
+    if spec.template_urls.is_empty() {
+        bail!("scatter_brush `{id}`: o template não tem glTF");
+    }
+    if spec.avoid_overlaps && spec.footprint_radius <= 0.0 {
+        spec.footprint_radius = DEFAULT_FOOTPRINT;
+    }
+    // região = o dab; contagem escala pela fração de área
+    let half = spec_region_half(&recipe, &mut warnings);
+    let full_area = (half.x * 2.0).max(1.0) * (half.y * 2.0).max(1.0);
+    let dab_area = (radius * 2.0).powi(2).min(full_area);
+    let fraction = (dab_area / full_area).clamp(0.001, 1.0);
+    spec.region_min = [center.x - radius, 0.0, center.y - radius];
+    spec.region_max = [center.x + radius, 0.0, center.y + radius];
+    if spec.count > 0 {
+        spec.count = ((spec.count as f32) * fraction).round().max(1.0) as u32;
+    }
+    let frames = live_frames(world);
+    let (mut occupancy, _others) = doc_occupancy(world, &frames, Some(&id));
+    let runtime = world
+        .get_resource::<TerrainRuntime>()
+        .ok_or_else(|| anyhow!("scatter_brush: o terreno não está carregado"))?;
+    let cliffs = world.get_resource::<CliffMask>();
+    let (instances, stats) = crate::placement::place(&spec, &mut occupancy, runtime, cliffs);
+    if instances.is_empty() {
+        warnings.push(format!("scatter_brush `{id}`: 0 colocadas ({stats:?})"));
+    }
+    // APPEND no grupo gerado (ou cria-o a seguir à receita)
+    let doc = world.resource::<SceneDoc>().clone();
+    let parent = match &existing {
+        Some(group) => group.clone(),
+        None => node.parent().expect("não-raiz"),
+    };
+    let parent_world = node_frame(&doc, &parent, &frames);
+    let output = crate::bake::generated_group(
+        &recipe,
+        &id,
+        &instances,
+        &spec.template_urls,
+        parent_world,
+        &format!("inst-{id}"),
+    );
+    let mut ops = Vec::new();
+    for child in &output.children {
+        ops.push(EditOp::Insert {
+            parent: doc.selector(&parent),
+            index: None,
+            xml: fragment_xml(std::slice::from_ref(child)),
+        });
+    }
+    Ok(ToolOutput {
+        label: format!("pincel {id} ({} instâncias)", instances.len()),
+        placed: instances.len(),
+        ops,
+        warnings,
+        info: Value::Null,
+        undo_binary: None,
+    })
+}
+
+/// A MEIA-largura XZ da região declarada no `<Scatter>` (para escalar a
+/// contagem por área). Ausente/zero = 100×100 m.
+fn spec_region_half(recipe: &crate::xml::XmlNode, warnings: &mut Vec<String>) -> bevy::math::Vec2 {
+    let spec = crate::recipes::parse_scatter(recipe, warnings).ok();
+    let min = spec.as_ref().map(|s| s.region_min).unwrap_or([0.0; 3]);
+    let max = spec.as_ref().map(|s| s.region_max).unwrap_or([0.0; 3]);
+    let half_x = ((max[0] - min[0]) * 0.5).abs().max(50.0);
+    let half_z = ((max[2] - min[2]) * 0.5).abs().max(50.0);
+    bevy::math::Vec2::new(half_x, half_z)
+}
+
 /// Regenera o `.vinst` de um `<Vegetation instances>` sobre o terreno ATUAL — o mesmo
 /// caminho do bake: `compute_placements` com a spec canónica do parse (densidade→count,
 /// cap, pegada), a ocupação das exclusões + dos geradores do documento, e a gravação
@@ -546,7 +652,7 @@ pub enum ToolCommand {
     /// gerado (uma transação); `<Vegetation instances>` regrava o binário .vinst
     /// (sem transação — o History não cobre binários)
     Scatter {
-        /// Seletor do `<Scatter>`/`<Vegetation>` (`id=forest-pines`, `static/world/forest.xml#4`)
+        /// Seletor do `<Scatter>`/`<Vegetation>` (`id=forest-pines`, `world/vegetation/forest.xml#4`)
         selector: String,
         #[arg(long)]
         dry_run: bool,

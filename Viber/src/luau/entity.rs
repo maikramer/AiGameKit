@@ -63,6 +63,39 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
 
     // viber.entity_set_max_hp(max, id?) — cria o `Health` se faltar
     // (current = max); numa entidade existente redimensiona (current clampe).
+    // viber.self_id() -> bits da entidade que corre o script | nil
+    api.set(
+        "self_id",
+        lua.create_function(|lua, ()| {
+            let bits = lua
+                .app_data_ref::<ScriptCtx>()
+                .and_then(|ctx| ctx.entity)
+                .map(|e| e.to_bits() as i64);
+            match bits {
+                Some(bits) => bits.into_lua(lua),
+                None => Ok(mlua::Value::Nil),
+            }
+        })?,
+    )?;
+
+    // viber.set_scale(s[, id]) — escala uniforme (0.05..20)
+    api.set(
+        "set_scale",
+        lua.create_function(|lua, (scale, id): (f32, Option<i64>)| {
+            if !scale.is_finite() || !(0.05..=20.0).contains(&scale) {
+                return Err(mlua::Error::runtime(
+                    "viber.set_scale: escala tem de estar em 0.05..20",
+                ));
+            }
+            let entity = resolve_entity(lua, id)?;
+            lua.app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                .commands
+                .push(ScriptCommand::SetScale { entity, scale });
+            Ok(())
+        })?,
+    )?;
+
     api.set(
         "entity_set_max_hp",
         lua.create_function(|lua, (max, id): (f32, Option<i64>)| {

@@ -20,4 +20,4 @@ Documentação canónica do Viber para autores de mundo e scripts.
 
 Os exemplos de código dos docs devem compilar semanticamente contra
 `docs/LUA_API.md` ↔ `src/luau/`; validação rápida de mundo:
-`cargo run -- analyze examples/simple-rpg/world.static.xml`.
+`cargo run -- analyze examples/simple-rpg/world.xml`.

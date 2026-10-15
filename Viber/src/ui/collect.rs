@@ -338,6 +338,9 @@ pub struct RevealMemory {
     zone: Option<String>,
 }
 
+/// Id de zona sintético enquanto o herói está numa sala da bolsa de interior.
+pub const INTERIOR_ZONE_ID: &str = "interior";
+
 /// Nome de exposição de uma região de bioma.
 ///
 /// Um cartão de descoberta que diz `dark-forest` é uma etiqueta de debug; o
@@ -351,6 +354,7 @@ pub fn zone_display_name(display_name: Option<&str>, id: Option<&str>) -> String
     }
     match id {
         None => "O Vale".to_string(),
+        Some(INTERIOR_ZONE_ID) => "Interior".to_string(),
         Some("dark-forest") => "Floresta Sombria".to_string(),
         Some("desert") => "Ermo Rubro".to_string(),
         Some("swamp") => "Pântano da Bruma".to_string(),
@@ -385,13 +389,21 @@ pub fn collect_ui_reveals(
     mut memory: Local<RevealMemory>,
     biome: Option<Res<crate::ambient::CurrentBiome>>,
     biomes: Option<Res<crate::worldsys::BiomeRegions>>,
+    interior: Option<Res<crate::worldsys::InteriorLighting>>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
     let purse = (data.gold, data.wood, data.stone);
     let belt = (data.potions, data.antidotes, data.bombs);
     let xp = (data.xp, data.level);
-    let zone = biome.as_deref().and_then(|b| b.id.clone());
+    // Dentro de uma sala da bolsa a "zona" é o interior — o bioma lá fora
+    // (o vale a 2,6 km) não é onde o herói está.
+    let inside = interior.as_deref().is_some_and(|state| state.active);
+    let zone = if inside {
+        Some(INTERIOR_ZONE_ID.to_string())
+    } else {
+        biome.as_deref().and_then(|b| b.id.clone())
+    };
     // O `display-name` da região activa vem do XML (Tinta Quente: o mundo é
     // quem nomeia os sítios); sem attr, `zone_display_name` cai na tabela.
     let authored = zone.as_deref().and_then(|id| {

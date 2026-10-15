@@ -37,6 +37,13 @@ pub enum ScriptCommand {
         turn_rate: Option<f32>,
     },
     TeleportPlayer(Vec3),
+    /// Empurrão do herói (dash/salto lateral) pelo character controller —
+    /// colide com paredes, ao contrário do teleporte. `iframes` > 0 dá
+    /// invulnerabilidade durante o movimento.
+    PushPlayer {
+        velocity: Vec3,
+        iframes: f32,
+    },
     AddXp(u32),
     DamagePlayer {
         amount: f32,
@@ -180,6 +187,11 @@ pub enum ScriptCommand {
     /// Vitais GENÉRICAS de entidade (`viber.entity_set_max_hp`): cria o
     /// `Health` se faltar (current = max); numa entidade existente
     /// redimensiona (current clampe ao novo max).
+    /// Escala uniforme da entidade (`viber.set_scale`) — elites maiores, etc.
+    SetScale {
+        entity: Entity,
+        scale: f32,
+    },
     EntitySetMaxHp {
         entity: Entity,
         max: f32,

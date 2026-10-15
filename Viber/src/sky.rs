@@ -693,9 +693,12 @@ mod tests {
         use crate::recipes::{EntityKind, EntitySpec, TransformSpec};
 
         let spec = |kind: EntityKind| EntitySpec {
+            prototype_instance: None,
             name: None,
             tag: None,
             script: None,
+            props: Vec::new(),
+            links: Default::default(),
             destructible: None,
             transform: TransformSpec::default(),
             physics: PhysicsSpec::default(),

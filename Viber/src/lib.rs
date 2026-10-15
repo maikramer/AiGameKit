@@ -44,6 +44,8 @@ pub mod profiler;
 pub mod projectile;
 pub mod prop_tint;
 pub mod prune;
+pub mod quest_guide;
+pub mod quest_marker;
 pub mod quests;
 pub mod recipes;
 pub mod render_lod;

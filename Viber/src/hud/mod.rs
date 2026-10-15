@@ -20,6 +20,7 @@ pub mod interact;
 pub mod menu;
 pub mod minimap;
 pub mod vitals;
+pub mod waypoint;
 pub mod widgets;
 
 pub use assets::HudAssets;
@@ -40,3 +41,29 @@ pub use vitals::{
     HudHealthFill, HudHealthLabel, HudXpFill, HudXpLabel, health_label_text, hud_health_sync,
     hud_xp_sync, xp_label_text,
 };
+
+/// Painéis do HUD que só fazem sentido no MUNDO aberto (bússola, minimapa):
+/// dentro de uma sala da bolsa de interior mostravam distâncias de 2,6 km e
+/// um mapa vazio.
+#[derive(bevy::prelude::Component, Debug, Clone, Copy, Default)]
+pub struct HideInInterior;
+
+/// Esconde/repõe os [`HideInInterior`] quando o herói entra/sai de um interior.
+pub fn hide_world_hud_in_interior(
+    interior: Option<bevy::prelude::Res<crate::worldsys::InteriorLighting>>,
+    mut panels: bevy::prelude::Query<
+        &mut bevy::prelude::Visibility,
+        bevy::prelude::With<HideInInterior>,
+    >,
+) {
+    use bevy::prelude::{DetectChangesMut, Visibility};
+    let inside = interior.as_deref().is_some_and(|state| state.active);
+    let wanted = if inside {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    };
+    for mut visibility in &mut panels {
+        visibility.set_if_neq(wanted);
+    }
+}

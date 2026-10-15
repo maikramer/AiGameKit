@@ -12,18 +12,29 @@ O Viber é feito para ser construído por **agentes de IA**; o ViberEditor é a 
 trabalho manual. Os dois têm **paridade**: toda a edição vive em `viber::scene` e sai igual
 pela CLI, pelo bridge e pelo editor.
 
-* **O estático manda.** `world.xml` procedural é só GERADOR. `viber bake world.xml` produz o
-  mundo estático: `world.static.xml` + includes espelhados em `static/**` (modular, um
-  ficheiro por include), `bake/terrain.baked.ahgt` e `bake/bake.json`. É ESSE que agentes e
-  editor editam e que `viber run`/`scene`/`analyze` abrem por omissão (auto-descoberta prefere
-  `world.static.xml`). `viber bake` recusa sobrescrevê-lo sem `--force` (que PERDE edições).
-* **`<world static="true">`:** o runtime não assenta (`SeatOnTerrain`) nem coloca (`place`) —
-  as poses do XML são finais (o bake escreveu-as). `<StaticSpawner>` e `place` num estático
-  são avisos do `analyze` (correr a ferramenta/bake em vez disso), tal como `<Vegetation>` sem
-  `instances` e `<Lake|River rocks="1">`. Única geração em runtime que fica, de propósito:
-  `<DynamicSpawner>` (criaturas com IA/respawn = gameplay). O re-carve das features sobre a
-  grelha pré-carvada ainda corre (idempotente).
-* **Vegetação pré-gerada:** `<Vegetation instances="bake/veg/NNN.vinst">` — binário
+* **O runtime só corre mundos ESTÁTICOS** (`<world static="true">`, 2026-10-14). Não há mundo
+  procedural no arranque: `viber run`/editor recusam um `world.xml` sem a marca, apontando
+  para `viber bake`. O estático é a fonte da verdade — agentes e editor editam-no, nos MESMOS
+  ficheiros (`world.xml` + `world/**`).
+* **Layout de um mundo:** `world.xml` (+ includes) = XML estático; `world.data/` (pasta de
+  dados, `<stem>.data` — `viber::bake::data_dir`) = `terrain.ahgt` (+ `.paint`),
+  `veg/NNN.vinst`, `bake.json` (o documento do World Overview). `viber create` já gera um
+  mundo estático com terreno plano editável (`world.data/terrain.ahgt`).
+* **`viber bake mundo.xml` = conversão ÚNICA, no sítio**, de um mundo procedural antigo
+  (spawners, `place`, relevo procedural) para estático: reescreve o mundo e os includes nos
+  mesmos caminhos (marcados `static="true"`) e escreve `<stem>.data/`. Recusa um mundo já
+  estático; **nunca reescreve um include que já é estático** (fragmento partilhado — os
+  mundos de QA do simple-rpg incluem o principal; avisa se o bake o teria mudado). Mundo sem
+  `<Terrain>`: só marca (e remove `place`, que sem terreno nunca teve efeito). Os
+  comentários XML perdem-se (o modelo não os guarda).
+* **`<world static="true">` sem geração em runtime:** `<StaticSpawner>`, `place`,
+  `<Vegetation>` sem `instances` e `<Lake|River rocks="1">` são ERRO de parse (o mundo não
+  carrega) — usa as ferramentas. O `<Terrain>` exige `heightmap` (sem relevo procedural);
+  as features não carvam nem afiam (`sharpen`) — só resolvem água/estradas/pads sobre uma
+  cópia. O runtime não regista `seat_statics_once`/`resolve_pending_place` (só o bake).
+  Única geração em runtime que fica, de propósito: `<DynamicSpawner>` (criaturas com
+  IA/respawn = gameplay).
+* **Vegetação pré-gerada:** `<Vegetation instances="world.data/veg/NNN.vinst">` — binário
   (`src/vinst.rs`: zlib, posição/quat/escala/template por instância); os outros atributos
   ficam como receita. O runtime carrega as instâncias e não calcula nada.
   Regenerável pós-bake: `viber tool scatter ficheiro#i/j` sobre o nó `<Vegetation>`
@@ -61,8 +72,38 @@ pela CLI, pelo bridge e pelo editor.
 * **Agente dentro do editor:** `vibereditor --bridge PORT` expõe `viber.scene.*`/`viber.tool.*`
   do documento ABERTO no editor — humano e agente partilham undo e veem as edições ao vivo
   (`viber scene --live --port PORT …`, `viber terrain --live --port PORT …`).
+* **Props exportadas de scripts (o `@export` do Godot):** um script declara o que cada
+  instância pode afinar em anotações — `--@export speed: number(0..4) = 1.1 -- m/s`
+  (tipos `number[(min..max)]`, `int`, `bool`, `string`, `string[]` (`a|b`), `enum(a,b)`,
+  `color`, `vec3`, `entity`; contrato único em `src/luau/exports.rs`). Cada instância guarda o
+  valor num atributo normal `prop-<nome>` (`<Use>` sobrepõe ao protótipo; `<DynamicSpawner>`
+  passa os do template). Lua lê com `viber.prop("speed")`/`viber.props()` (no `on_update` —
+  o top-level é partilhado e recusa). Fluxo de agente: `viber scene schema name=npc` (esquema
+  + valores efetivos + `unknown`) → `viber scene set name=npc prop-speed=0.8` → `viber scene
+  lint` (`script-export`, `script-prop-unknown|type|entity|orphan`). Com `--live`, um `prop-*`
+  é patchado no `ScriptProps` SEM respawn: o NPC muda a correr e mantém o `viber.state()`. No
+  editor é a secção **Script** do Inspector. Antes de copiar um script para mudar uma fala ou
+  um número, exporta-o.
+* **Sinais + grupos (o `signal`/`groups` do Godot):** o script declara o que emite —
+  `--@signal opened(gold, xp)` — e dispara com `viber.emit("opened", …)`; QUEM ouve é dado do
+  emissor: `connect-opened="@discordia:notice; porta:abrir"` (alvo = nome, `@grupo` ou `self`;
+  método = função global do script do alvo). `groups="a b"` em qualquer entidade (`viber.group`,
+  `viber.in_group`, `viber.call_group`). Fluxo de agente: `viber scene schema name=chest`
+  (sinais, `methods` chamáveis, `connections` com `nodes` alcançados — 0 = alvo partido) →
+  `viber scene groups [nome]` → `viber scene set name=chest connect-opened="@g:metodo"` →
+  `viber scene lint` (`connect-syntax|orphan|signal|target|method`, `script-emit`). No editor:
+  secção **Script** (linhas "Sinais → alvos" + `groups`).
+* **Cenas reutilizáveis ("Save Branch as Scene" + instanciar):** `viber scene extract name=forja
+  [--to scenes/forja.xml]` passa o nó (e a subárvore) para um ficheiro novo e deixa no lugar
+  `<Include src="/scenes/forja.xml">` com a POSE do nó (a cena fica na origem). `viber scene
+  instance scenes/forja.xml --at "x y z" [--parent SEL]` acrescenta outra instância (o insert
+  CARREGA o ficheiro no documento; o sync spawna o conteúdo ao vivo). Ops: `extract` (inversa =
+  `remove` + `insert` + `drop_file`), `create_file`/`drop_file` — o `inverse` de um extract
+  offline apaga a cena criada. Editar o ficheiro da cena muda TODAS as instâncias. No editor:
+  botão **Salvar ramo como cena** no Inspector e **Instanciar** num `.xml` do dock Ficheiros.
 * **Editar = operações** (`src/scene/ops.rs`): `set` / `replace_attrs` / `set_text` / `insert`
-  / `remove` / `move` / `duplicate`, em lotes atómicos JSON, cada uma com inversa (undo).
+  / `remove` / `move` / `duplicate` / `extract` (+ `create_file`/`drop_file`), em lotes
+  atómicos JSON, cada uma com inversa (undo).
   Nós por seletor: `world/village.xml#3/0` (ficheiro + caminho) ou `name=well` (único).
   Pose escrita sempre canónica (`translation`/`euler` graus/`scale`; aliases `pos`/
   `rotation`/`transform` removidos) — `scene::pose::pose_op`.
@@ -72,10 +113,16 @@ viber scene ls [SEL] --depth 2        # árvore com seletores (um Include lista 
 viber scene find --tag GltfScene --attr name=well
 viber scene get name=well
 viber scene set name=well translation="4 0 3" --unset scale [--dry-run]
-viber scene insert 'static/world/village.xml#' '<Entity name="cart" />' --index 0
+viber scene insert 'world/landmarks/village.xml#' '<Entity name="cart" />' --index 0
 viber scene mv name=cart name=props   |  viber scene dup name=crate  |  viber scene rm name=crate
 viber scene apply ops.json            # lote atómico; a saída traz `inverse` (o undo offline)
 viber scene files --depth 4           # a pasta do mundo em árvore JSON (world/scene/lua/glb/…)
+viber scene schema name=townsfolk_plaza   # props --@export do script + valores da instância
+viber scene set name=townsfolk_plaza prop-speed=0.8 prop-banter="Olá|Adeus"
+viber scene groups discordia              # membros do grupo (alvos `@discordia` dos sinais)
+viber scene set name=chest connect-opened="@discordia:notice"   # quem ouve o sinal
+viber scene extract name=forja --to scenes/forja.xml   # ramo → cena + <Include> no lugar
+viber scene instance scenes/forja.xml --at "120 0 -40"  # mais uma instância da cena
 viber terrain paint --layer dirt_trail --at "40 -30" --radius 12   # pincel de MATERIAL (undo = splat_patch)
 viber scene --live set name=chapel translation="10 8 25"   # engine a correr: grava + sync ao vivo
 viber scene --live undo | redo
@@ -85,14 +132,14 @@ Add Node / drag-drop de GLB (Fase 3, paridade): o catálogo de tags com snippets
 builder da op de arrastar um `.glb` vivem em `scene::catalog` — o diálogo do editor e um
 agente (`viber scene insert` com o snippet, ou `catalog::glb_drop`) produzem o mesmo XML.
 
-Bridge (mesma API): `viber.scene.ls|get|find|apply|undo|redo|save|pick|entities`
-Bridge (mesma API): `viber.scene.ls|get|find|apply|undo|redo|save|pick|entities|lint`
+Bridge (mesma API): `viber.scene.ls|get|find|apply|undo|redo|save|pick|entities|lint|schema|groups|instance`
 (`src/bridge/scene.rs`). `viber.scene.entities {selector}` mostra as entidades vivas do nó
 (pose local + mundo) — verificar o efeito de uma edição. `viber.scene.pick {x,y}` devolve o
 seletor do nó sob um pixel (câmara de editor).
 
 **Sync ao vivo** (`src/scene/sync.rs`): mudanças de pose → patch do `Transform` (e teleporte
-do corpo Rapier: o writeback reverteria corpos filhos); inserir/remover/mover → spawn/despawn
+do corpo Rapier: o writeback reverteria corpos filhos); `prop-*` → patch do `ScriptProps`; um `<Include>` novo (`instance`/`extract`) spawna o
+conteúdo do ficheiro dentro de um Group com a pose do include; inserir/remover/mover → spawn/despawn
 incremental com REALINHAMENTO das origens dos irmãos; tipos não incrementais (terreno, céu,
 UI, spawners) ficam em `SceneSyncStatus::needs_reload` — e a resposta de
 `viber.scene.apply|undo|redo` (e do `viber scene --live` equivalente) traz o campo
@@ -114,13 +161,13 @@ entidade spawnada tem `scene::SceneSource`.
 |--------|-------------|-------|
 | Edição de mundos (agentes + editor) | `src/scene/` | `doc.rs` (documento por ficheiro, seletores), `ops.rs` (ops + inversas + `History`), `pose.rs` (pose canónica), `live.rs` (edição viva + `SceneEdited`), `sync.rs` (doc→ECS), `pick.rs` (raio→nó), `cli.rs` (`viber scene`), `files.rs` (árvore da pasta do mundo), `catalog.rs` (Add Node + drop GLB) |
 | Ferramentas geradoras + terreno editável | `src/scene/tools.rs`, `src/scene/terrain.rs`, `src/vinst.rs` | `scatter` (receita `<Scatter>` → grupo `generated-by`), pincéis de terreno como ops, vegetação `.vinst` |
-| Bake → mundo estático | `src/bake.rs` | `run_bake` corre o arranque headless (spawn + carve + assentamento) e escreve o estático como ops sobre um `SceneDoc` retargetado (`static/`), mapeando runtime→XML pela proveniência |
+| Bake → mundo estático (conversão no sítio) | `src/bake.rs` | `run_bake` corre o arranque headless (spawn + carve + assentamento) e reescreve o mundo NOS MESMOS ficheiros como ops sobre um `SceneDoc` (`promote_static`: marca `static="true"`, salta includes já estáticos), mapeando runtime→XML pela proveniência; dados em `<stem>.data/` (`data_dir`) |
 | CLI (`run` / `analyze`) | `src/main.rs` | `analyze` é headless, exit 1 em erro; `run()` monta os plugins por ordem |
 | `config.yaml` do jogo (contrato de paths) | `src/config.rs` | `GameConfig` OBRIGATÓRIO ao lado do `world.xml` (asset roots extra, bgm/sfx/texturas/scripts/save) — lido no `run`/`analyze`; schema em [`docs/ASSETS.md`](docs/ASSETS.md); `viber create` gera um completo |
 | Auditoria de assets | `src/audit.rs` | corre no `analyze`: GLBs/texturas/heightmaps/BGM/scripts/estilos ausentes, Draco/Basis (não suportados; meshopt é expandido), magia inválida, glTF sem collider; estradas × lagos/rios/cliffs (lâmina/banda, pontes só nas pontas); `--strict` falha com ficheiros ausentes |
 | XML: parse, includes, valores | `src/xml/` | `include.rs` (expansão), `values.rs` (parsers tolerantes) |
 | IR de entidades + spawn Bevy | `src/recipes/` | `mod.rs` (IR + `KNOWN_TAGS`), `spawn.rs`, `transform.rs` (euler→quat) |
-| Interiores (bolsa fora do mapa) | `examples/simple-rpg/world/interiors.xml` (**gerado**), `tools/gen_interiors.py`, `scripts/building-portal.lua` (**gerado**) | Uma `<InteriorScene>` põe 9 salas numa bolsa FORA da pegada do heightmap, onde não há terreno, bioma nem chuva. O XML das salas, o registo porta↔saída do script de portais e o retângulo da bolsa saem todos da MESMA tabela em `tools/gen_interiors.py` (mudar a bolsa = mudar `POCKET` lá). NPCs por papel com fallback para o elenco de rua; `interior-folk.lua`/`interior-keeper.lua` são as FSM de sala |
+| Interiores (bolsa fora do mapa) | `examples/simple-rpg/world/interiors.xml`, `scripts/building-portal.lua` | Uma `<InteriorScene>` põe 9 salas numa bolsa FORA da pegada do heightmap, onde não há terreno, bioma nem chuva. As salas são XML estático (editar com `viber scene`/editor — o antigo gerador `tools/gen_interiors.py` saiu, fica no histórico do git); os portais são data-driven (`viber.entity_name` + nomes das portas). NPCs de sala usam o MESMO `townsfolk.lua` de rua, afinado por props (`prop-radius="1.6" prop-speed="0.6"` dentro de casa, `prop-radius="0"` ao balcão, falas em `prop-banter`) |
 | Camada de pintura do terreno | `src/terrain/paint.rs` | `PaintGrid` (sidecar `<ahgt>.paint`), blend + eleição forçada nos chunks (`splat.rs bake_chunk`), repaint in-place (`runtime::repaint_chunks`), op `terrain_paint`/`splat_patch` |
 | Terreno (specs, sampler, mesh, LOD) | `src/terrain/` | `spec.rs` (contrato), `sampler.rs`/`heightmap.rs` (altura), `mesh.rs` (chunks), `plugin.rs` (LOD runtime + rebuild por edições), `runtime.rs` (bootstrap + carve + applier das edições vivas), `cliffs.rs` (cliffs procedurais + sharpen + CliffMask), `delta.rs` (**terreno vivo**: overlay de edições, Fase 3) |
 | Preview de estado de UI (editor) | `src/ui/runtime.rs` | `UiPreviewState(StyleState)` sobrepõe a interação na cascata (`:hover`/`:active` sem ponteiro); entidades de UI carimbadas com `scene::SceneSource` |
@@ -149,17 +196,17 @@ entidade spawnada tem `scene::SceneSource`.
 ```bash
 cd Viber && cargo run -- analyze <world.xml>   # valida headless (exit 1 em erro)
 cd Viber && cargo run -- run <world.xml>       # janela Bevy
-cd Viber && cargo run -- bake <world.xml>      # procedural → world.static.xml + static/ + bake/
-cd Viber && cargo run -- scene lint --strict   # lint estático: sintaxe Luau, viber.load, quest schema, nomes duplicados
+cd Viber && cargo run -- bake <world.xml>      # converte um mundo procedural antigo → estático, no sítio (+ <stem>.data/)
 cd Viber && cargo run -- scene ls              # edição de mundos (offline ou --live; ver acima)
 cd Viber && cargo run -- terrain sample X Z    # pincéis de terreno + amostragem
+cd Viber && cargo run -- scene lint --strict   # lint estático: sintaxe Luau, viber.load, quest schema, nomes duplicados
 cd Viber && cargo run -- tool list             # geradores <Scatter>: list/scatter/settle/canonicalize
 cd Viber && cargo test                          # testes headless
 make test-viber                                 # atalho monorepo
 ```
 
 Sem caminho, `run`/`analyze`/`scene`/`tool` descobrem o mundo por ordem:
-`world.static.xml` → `world.xml` → `worlds/*.xml` (o estático manda).
+`world.xml` → `worlds/*.xml`. O `run` só aceita mundos estáticos.
 
 ### Preset de gráficos (`config.yaml` → `graphics`)
 
@@ -657,7 +704,7 @@ Dentro da bolsa declarada por `<InteriorScene>` a câmara muda de regime
 | Soalho DURO a `INTERIOR_FLOOR_Y` | `player_movement` | as salas são ilhas sem terreno: um passo fora do soalho era queda infinita |
 | Sair encostando à porta | `building-portal.lua` (`AUTO_EXIT_R`) | o vão é aberto sobre o vazio: encostar tem de tirar dali, não pedir tecla. Só de DENTRO — a porta de rua continua a exigir [E] |
 
-Sem vigas de tecto nas salas (`gen_interiors.shell`): a câmara olha de cima e
+Sem vigas de tecto nas salas: a câmara olha de cima e
 o esqueleto do telhado cortava a divisão em tiras.
 
 **Teleportes assentam.** `viber.teleport_player` (e as portas) passam por
@@ -865,7 +912,7 @@ em **[`docs/ASSETS.md`](docs/ASSETS.md)**; `viber create` gera um completo.
 | `AmbientLight` | `color`, `brightness` — aplicado como recurso `GlobalAmbientLight`, não entidade |
 | `OrbitCamera` | `target` (nome de entidade), `distance`, `height`, `pitch` (graus; quando presente sobrepõe `height` via `height = distance·tan(pitch)`) |
 | `GltfScene` | `url` (obrigatório; `/assets/...` resolve contra as asset roots por ordem — a pasta do jogo SEMPRE 1.ª, as roots extra do `config.yaml` a seguir (tipicamente o pool partilhado); guarda anti-regressão `tests/asset_pool_dedup.rs`, ver **[`docs/ASSETS.md`](docs/ASSETS.md)**) + attrs universais; cena default do GLB spawna como filhos da entidade (transform aplica); load assíncrono, falha = warn + nó vazio. GLBs do pipeline vêm meshopt-comprimidos — o `MeshoptAssetReader` (`src/meshopt.rs`) descomprime EXT_meshopt à leitura; NÃO há espelho nem cópias por exemplo |
-| `StaticSpawner` | `count`, `seed`, `region-min`/`region-max` ("x y z"), `density-per-km2`+`max-instances` (modo de contagem alternativo: `count = densidade × área km²` da região XZ, teto `max-instances` — 0 = sem teto; `count` explícito ganha), `cluster-count`/`cluster-radius`, `footprint-radius`+`avoid-overlaps` (0 = AUTO: meia-largura XZ do AABB do GLB, fallback 0.8 m), `max-slope-deg`, `max-slope-attempts` (32 — tentativas POR instância; esgotadas, a instância é omitida), `avoid-water`, `in-water` (à lâmina de água), `near-water`+`near-water-radius`, `avoid-road` (default ON), `avoid-cliff` (default ON — nada nasce em parede de cliff nem a `cliff-margin` dela; `"0"` restaura), `cliff-margin` (2 m — folga além da vergem da máscara de cliffs, distância REAL medida por `CliffMask::is_cliff_within`), `activation-radius` (LOD de IA dos scripts), `align-to-terrain`, `base-y-offset` (soma ao Y pós-assentamento), `scale-min`/`max`+`scale-axis-min`/`max`, `random-yaw`, `max-distance`; template = primeiro glTF (`GLTFLoader`/`GltfScene`) na subárvore filho. Colocação determinística (SplitMix64 por seed). Espelha `src/spawner.rs` (função pura `compute_placements`) — ver **Spawner: colocação** abaixo. **Gerador:** o `viber bake` converte-o em `<Scatter id=…>` (receita) + `<Group name="spawn/…" generated-by=…>` (instâncias editáveis); num mundo estático é no-op (warning do `analyze`) |
+| `StaticSpawner` | `count`, `seed`, `region-min`/`region-max` ("x y z"), `density-per-km2`+`max-instances` (modo de contagem alternativo: `count = densidade × área km²` da região XZ, teto `max-instances` — 0 = sem teto; `count` explícito ganha), `cluster-count`/`cluster-radius`, `footprint-radius`+`avoid-overlaps` (0 = AUTO: meia-largura XZ do AABB do GLB, fallback 0.8 m), `max-slope-deg`, `max-slope-attempts` (32 — tentativas POR instância; esgotadas, a instância é omitida), `avoid-water`, `in-water` (à lâmina de água), `near-water`+`near-water-radius`, `avoid-road` (default ON), `avoid-cliff` (default ON — nada nasce em parede de cliff nem a `cliff-margin` dela; `"0"` restaura), `cliff-margin` (2 m — folga além da vergem da máscara de cliffs, distância REAL medida por `CliffMask::is_cliff_within`), `activation-radius` (LOD de IA dos scripts), `align-to-terrain`, `base-y-offset` (soma ao Y pós-assentamento), `scale-min`/`max`+`scale-axis-min`/`max`, `random-yaw`, `max-distance`; template = primeiro glTF (`GLTFLoader`/`GltfScene`) na subárvore filho. Colocação determinística (SplitMix64 por seed). Espelha `src/spawner.rs` (função pura `compute_placements`) — ver **Spawner: colocação** abaixo. **Gerador:** o `viber bake` converte-o em `<Scatter id=…>` (receita) + `<Group name="spawn/…" generated-by=…>` (instâncias editáveis); num mundo estático é ERRO de parse (só mundos procedurais antigos, à espera do `viber bake`) |
 | `ParticleSystem` | `preset` (fire, smoke, fireflies, ground-dust, sparkle, leaves, snow, sand-dust, magic, core; desconhecido = core) + `transform="pos: x y z"` (component-string) + overrides em `particle-emitter="preset: …; emission-rate: …; start-life-min/max: …; start-speed-min/max: …; start-size-min/max: …; start-color: #hex; looping: …; world-space: …"`. Emissor CPU billboard (`src/particles.rs`): mesh de capacidade FIXA por emissor (quads degenerados nos slots livres — realocar por frame tripava use-after-free no slab allocator), vertex color com fade por vida, material unlit Add (fogo/magic/sparkle/fireflies) ou Blend (resto). **Lifecycle por proximidade (OPT-IN `VIBER_FX_LIFECYCLE=1`)**: `<ParticleSystem>` e os FX da água nascem como markers `AmbientFx` leves; o `ambient_fx_manager` (scan 0,5 s + rescan em teleporte) monta/desmonta o bundle render (`Mesh3d`/material partilhado/emissor, mesh reciclada do `BurstPool`) dentro de ~110 m com banda de histerese — FX distante NÃO EXISTE no pipeline (simple-rpg: 399 markers → ~90 vivos). `VIBER_FX_SPAWN_RADIUS` afina o raio; a chuva/bursts seguem o player e ficam de fora. **Porque é opt-in**: o ganho de fps não mediu limpo (2026-10-10 — confounds de streaming/lanternas do crepúsculo; no teste limpo os emissores custam ≈0,1 ms no prepare) — ligar após A/B com relógio congelado; sem a env o comportamento é o antigo (tudo montado) |
 | `PlayerGLTF` | `model-url` (obrigatório), `name` (default `player`), `pos` (alias de `translation` — tags verbatim mantêm `pos`), `speed`. Componente `Player` + WASD/setas relativo à câmara (Shift = sprint ×1.5, Space = salto com buffer/coyote), assenta no terreno via `TerrainRuntime::sample` todos os frames (`src/player.rs`) |
 | `ThirdPersonCamera` | alias interactivo do `OrbitCamera` com defaults `target="player"`, `distance` 4, `height` 1.6; attrs `mouse-sensitivity`, `follow-lag`, `turn-lag`, `min-terrain-distance`, `fov`. Drag (qualquer botão) = yaw/pitch, scroll = zoom (clamp 2–80 m), anti-clip com o terreno; câmaras extra são rebaixadas a Group com warning |
@@ -931,7 +978,7 @@ margem); não combinar com `in-water`. `avoid-water` ganha se ambos estiverem
 autrados. Zonas de exclusão autorais: `<SpawnExclusion at="x z" radius="n">`
 — sempre honrada por TODOS os spawners, mesmo com `avoid-overlaps="0"`.
 | `destructible` (attr universal) | component-string de colheita nativa (`src/harvest.rs`): `popup-text`, `popup-color` (#hex), `preset` (burst de break), `burst-count`, `hits` (3), `hit-preset` (sparks/rockshards→sparks, woodchips→leaves), `hit-burst-count`, `shake-on-hit`, `crack-on-hit`+`crack-style` (voronoi/vertical → darken ×0.85 por golpe), `break-style` (`burst` \| `fall` \| `shatter`), `cut-height` (aceite; os GLBs de árvore já vêm pré-divididos em meshes `Stump`+`Top`), `range` (3.5). Num template de spawner aplica-se a CADA instância; filho `<ResourceNode kind="wood\|stone" yield="N"/>` do template define o loot. [J]/clique perto do prop: o herói equipa picareta (mine) ou machado (fall), toca o clip `mine`/`chop`, impacto a 35 % do clip, faíscas+wobble+darken por golpe; no último: `fall` tomba o `Top` longe do player com pivô no corte e fica o toco com collider, `shatter` lança 9 pedaços balísticos que pousam e desvanecem. Loot → vault (`ResourceNode`) + 30 XP + quests de recolha (lêem o vault) + popup flutuante + SFX `chop/mine-hit/break` (`assets/audio/sfx/combat/*.ogg`) |
-| `Vegetation` | `meshes` (lista separada por espaços), `density-per-km2`, `seed`, `region-*`, `scale-*`, `max-slope-deg`, `avoid-water`, `avoid-road` (default ON — `avoid-road="0"` deixa a erva entrar nas fitas), `avoid-cliff`/`cliff-margin` (idem spawners, default ON/2 m), `max-distance`, `cluster-*`, **`instances`** (`.vinst` pré-gerado pelo bake — ex. `instances="bake/veg/NNN.vinst"`, binário `src/vinst.rs`; o runtime carrega as instâncias e NÃO calcula nada — sem `instances` num mundo estático é warning do `analyze`); count = densidade × área km² com cap `max-instances` (default 800/tag — o original GPU-instancia ~100k; instancing é follow-up). `smart`/`wind`/`flower-*`/`plant-*` aceites sem efeito |
+| `Vegetation` | `meshes` (lista separada por espaços), `density-per-km2`, `seed`, `region-*`, `scale-*`, `max-slope-deg`, `avoid-water`, `avoid-road` (default ON — `avoid-road="0"` deixa a erva entrar nas fitas), `avoid-cliff`/`cliff-margin` (idem spawners, default ON/2 m), `max-distance`, `cluster-*`, **`instances`** (`.vinst` pré-gerado pelo bake — ex. `instances="world.data/veg/NNN.vinst"`, binário `src/vinst.rs`; o runtime carrega as instâncias e NÃO calcula nada — sem `instances` num mundo estático é ERRO de parse); count = densidade × área km² com cap `max-instances` (default 800/tag — o original GPU-instancia ~100k; instancing é follow-up). `smart`/`wind`/`flower-*`/`plant-*` aceites sem efeito |
 | `Scatter` | **saída do bake** (receita de um gerador — tag NO-OP em runtime): o `viber bake` converte cada `<StaticSpawner>` em `<Scatter id=… attrs-de-colocação>` + um `<Group name="spawn/…" generated-by="id">` com as instâncias. `viber tool list` enumera-as; `viber tool scatter id=… [--live]` recalcula o grupo sobre o terreno atual, com ocupação dos outros geradores, numa transação desfazível |
 | `Sky` | domo de céu procedural WGSL (`src/sky.rs`: sol, nuvens FBM, lua, estrelas, aurora, meteoros); os attrs crus são injectados como consts no shader **escrito em disco** (`<asset_root>/shaders/sky.wesl`) a cada `run` — especialização por mundo (o Bevy não re-uploads uniforms de material custom). `model` (`analytic`, default — o gradiente estilizado — ou `nishita`, o scattering físico portado do `bevy_atmosphere`) escolhe o modelo; `VIBER_SKY_MODEL` sobrepõe-no sem editar o XML. O modelo é resolvido UMA vez no `run` (`SkyConfig::with_env_override`) e viaja como resource `SkyModelState` para o IBL e os probes regionais — é o mesmo valor no shader e no ambiente, e o arranque loga `sky: modelo …` (o gate fica visível no `viber debug logs`) |
 | `DayCycle` | relógio dia/noite que conduz ambiente + sol: `minute-of-day` (normalizado a 0..1440), `minutes-per-real-second`, `dawn-minute`, `dusk-minute` (dawn tem de vir antes de dusk dentro de 0..1440 — senão avisa e volta a 330/1170), `ambient-day-intensity`, `ambient-night-intensity`, `drive-ambient`, `max-sun-elevation`, `sun-azimuth-base`. As rampas de luz são circulares (sem salto à meia-noite) (`src/worldsys.rs`) |

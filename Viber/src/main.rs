@@ -28,6 +28,14 @@ enum Command {
         /// Project folder name, created inside the current directory
         name: String,
     },
+    /// Open a world in the ViberEditor (GUI editor). No path = the last
+    /// world opened by the editor (persisted in ~/.cache/viber)
+    Editor {
+        /// Path to the world XML (default: the editor's last-opened world)
+        path: Option<PathBuf>,
+        /// Extra args passed through to the editor binary (--tab, --mode…)
+        extra: Vec<String>,
+    },
     /// Run a world XML file in a Bevy window
     Run {
         /// Path to the world XML file (default: world.xml or worlds/*.xml in the current directory)
@@ -78,25 +86,21 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Generate the STATIC world (the source of truth agents and the editor edit) from a
-    /// procedural world.xml: the carved heightmap (bake/terrain.baked.ahgt), the resolved
-    /// document (bake/bake.json), world.static.xml + its includes mirrored in static/ with
-    /// spawners as explicit instances and settled poses. Refuses to overwrite an existing
-    /// static world without --force
+    /// Convert a PROCEDURAL world into a static one IN PLACE (the runtime only loads static
+    /// worlds): the world XML and its includes are rewritten at the same paths with
+    /// `static="true"` (spawners as explicit instances, settled poses, resolved features);
+    /// binary data goes to <stem>.data/ (terrain.ahgt + .paint, veg/*.vinst, bake.json).
+    /// Includes that are already static are never rewritten. Refuses a static world
     Bake {
         /// Path to the world XML file
         path: PathBuf,
-        /// Output directory (default: <world_dir>/bake)
+        /// Data directory (default: <world_dir>/<stem>.data)
         #[arg(short, long)]
         out: Option<PathBuf>,
         /// After baking, verify the static world: parse it clean and
         /// recompute the kept vegetation groups against bake.json
         #[arg(long)]
         verify: bool,
-        /// Regenerate over an existing world.static.xml — it is the source of truth, so its
-        /// manual/agent edits are LOST
-        #[arg(long)]
-        force: bool,
     },
     /// Edit a world's XML documents (agents): ls/get/find, set/insert/rm/mv/dup, apply a JSON
     /// batch of ops. JSON output; edits are saved to the exact file each node lives in
@@ -128,7 +132,7 @@ enum Command {
     /// Generator tools (agents and the editor): `list` the `<Scatter>` recipes, `scatter`
     /// regenerates one's output group on the current terrain as one undoable edit
     Tool {
-        /// World XML (default: world.static.xml, world.xml or worlds/*.xml in the cwd)
+        /// World XML (default: world.xml or worlds/*.xml in the cwd)
         #[arg(long, global = true)]
         world: Option<PathBuf>,
         /// Run in the RUNNING engine (bridge `viber.tool.*`): live sync + undo there
@@ -577,10 +581,6 @@ const CARGO_DELEGATE_GUARD: &str = "VIBER_CLI_NO_CARGO_DELEGATE";
 fn resolve_world_path(path: Option<PathBuf>) -> Result<PathBuf> {
     let Some(path) = path else {
         let cwd = std::env::current_dir().context("reading the current directory")?;
-        // O mundo estático (pré-gerado por `viber bake`) é o canónico quando existe.
-        if let Some(static_world) = viber::bake::static_world_in(&cwd) {
-            return Ok(static_world);
-        }
         let default_world = cwd.join("world.xml");
         if default_world.is_file() {
             return Ok(default_world);
@@ -599,11 +599,107 @@ fn resolve_world_path(path: Option<PathBuf>) -> Result<PathBuf> {
             }
         }
         anyhow::bail!(
-            "no world found in {} (looked for world.static.xml, world.xml and worlds/*.xml) — pass one: `viber run world.xml`",
+            "no world found in {} (looked for world.xml and worlds/*.xml) — pass one: `viber run world.xml`",
             cwd.display()
         );
     };
     Ok(path)
+}
+
+/// O ficheiro com o caminho do último mundo aberto pelo editor.
+fn editor_last_world_file() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from)?;
+    Some(
+        home.join(".cache")
+            .join("viber")
+            .join("editor-last-world.txt"),
+    )
+}
+
+/// `viber editor [path] [extra…]` — abre o ViberEditor (GUI). Sem `path`,
+/// abre o ÚLTIMO mundo aberto pelo editor (persistido em
+/// `~/.cache/viber/editor-last-world.txt`). Procura o binário do editor
+/// nesta ordem: PATH → checkout vizinho (binário compilado) → checkout
+/// vizinho via `cargo run --release`.
+fn editor(path: Option<PathBuf>, extra: Vec<String>) -> anyhow::Result<()> {
+    let target = match path {
+        Some(path) => path,
+        None => {
+            let stored = editor_last_world_file()
+                .and_then(|file| std::fs::read_to_string(file).ok())
+                .map(|text| text.trim().to_owned())
+                .filter(|text| !text.is_empty());
+            match stored {
+                Some(stored) => PathBuf::from(stored),
+                None => anyhow::bail!(
+                    "viber editor: sem caminho e sem último mundo gravado — passa o world.xml (ex.: `viber editor exemplos/simple-rpg/world.xml`) ou abre o editor uma vez com o caminho"
+                ),
+            }
+        }
+    };
+    if !target.is_file() {
+        anyhow::bail!("viber editor: {} não existe", target.display());
+    }
+    let mut args: Vec<String> = vec![target.display().to_string()];
+    args.extend(extra);
+
+    // 1. binário no PATH
+    let editor_on_path = std::env::var_os("PATH").and_then(|paths| {
+        std::env::split_paths(&paths)
+            .map(|dir| dir.join("vibereditor"))
+            .find(|candidate| candidate.is_file())
+    });
+    if let Some(editor) = editor_on_path {
+        println!("viber editor: {} {:?}", editor.display(), args);
+        std::process::Command::new(editor)
+            .args(&args)
+            .spawn()
+            .map_err(|e| anyhow::anyhow!("viber editor: {e}"))?;
+        return Ok(());
+    }
+    // 2. checkout vizinho com binário compilado
+    let checkout = viber_checkout_root(&std::env::current_exe()?);
+    if let Some(checkout) = checkout {
+        let built = checkout.parent().map(|parent| {
+            parent
+                .join("ViberEditor")
+                .join("target")
+                .join("release")
+                .join("vibereditor")
+        });
+        if let Some(built) = built.filter(|built| built.is_file()) {
+            println!("viber editor: {} {:?}", built.display(), args);
+            std::process::Command::new(built)
+                .args(&args)
+                .spawn()
+                .map_err(|e| anyhow::anyhow!("viber editor: {e}"))?;
+            return Ok(());
+        }
+        // 3. checkout via cargo (build release, pode demorar na 1.ª vez)
+        let manifest = checkout
+            .parent()
+            .map(|parent| parent.join("ViberEditor").join("Cargo.toml"));
+        if let Some(manifest) = manifest.filter(|manifest| manifest.is_file()) {
+            println!(
+                "viber editor: compilando o editor (cargo run --release — só demora na 1.ª vez)…"
+            );
+            let status = std::process::Command::new("cargo")
+                .arg("run")
+                .arg("--release")
+                .arg("--manifest-path")
+                .arg(manifest)
+                .args(&args)
+                .status()
+                .map_err(|e| anyhow::anyhow!("viber editor: cargo: {e}"))?;
+            if !status.success() {
+                anyhow::bail!("viber editor: o build do editor falhou");
+            }
+            return Ok(());
+        }
+    }
+    anyhow::bail!(
+        "viber editor: editor não encontrado — instala com `./install.sh vibereditor`, compila com `cargo build --release -p vibereditor` (em ViberEditor/) ou põe o binário no PATH"
+    )
 }
 
 /// Procura um checkout do Viber (Cargo.toml do pacote `viber`) subindo a partir
@@ -1130,6 +1226,9 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
             println!("{}", serde_json::to_string_pretty(&out)?);
             Ok(std::process::ExitCode::SUCCESS)
         }
+        Command::Editor { path, extra } => {
+            editor(path, extra).map(|_| std::process::ExitCode::SUCCESS)
+        }
         Command::Run {
             path,
             bridge,
@@ -1190,20 +1289,10 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
                 Err(e) => Err(e).with_context(|| format!("analyzing {}", world.display())),
             }
         }
-        Command::Bake {
-            path,
-            out,
-            verify,
-            force,
-        } => {
+        Command::Bake { path, out, verify } => {
             let world = std::path::absolute(&path)?;
-            viber::bake::check_bake_target(&world, force)?;
-            let out_dir = out.unwrap_or_else(|| {
-                world
-                    .parent()
-                    .map(|dir| dir.join("bake"))
-                    .unwrap_or_else(|| PathBuf::from("bake"))
-            });
+            viber::bake::check_bake_target(&world)?;
+            let out_dir = out.unwrap_or_else(|| viber::bake::data_dir(&world));
             let report = viber::bake::run_bake(&world, &out_dir)
                 .with_context(|| format!("baking {}", world.display()))?;
             println!(
@@ -1215,8 +1304,14 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
                 report.rivers,
                 report.roads
             );
-            println!("viber: bake: {}", report.ahgt_path.display());
-            println!("viber: bake: {}", report.bake_json_path.display());
+            for warning in &report.warnings {
+                eprintln!("viber: bake: aviso: {warning}");
+            }
+            for data in [&report.ahgt_path, &report.bake_json_path] {
+                if !data.as_os_str().is_empty() {
+                    println!("viber: bake: {}", data.display());
+                }
+            }
             if let Some(static_path) = &report.static_world_path {
                 println!(
                     "viber: bake: {} (run with `viber run`)",
@@ -1227,7 +1322,7 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
                 let static_path = report
                     .static_world_path
                     .clone()
-                    .context("--verify precisa de um world.static.xml")?;
+                    .context("--verify precisa do mundo estático escrito")?;
                 let checked = viber::bake::verify_static(&static_path, &report.bake_json_path)?;
                 println!(
                     "viber: bake: verify OK — {} vegetation instances match bake.json",

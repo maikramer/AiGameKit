@@ -1,6 +1,5 @@
-<?xml version="1.0"?>
-<!-- Viber hello world: um cubo sobre um plano, luz e câmara orbital. -->
-<world clear-color="#87ceeb">
+<?xml version="1.0" encoding="UTF-8"?>
+<world clear-color="#87ceeb" static="true">
   <AmbientLight brightness="300" />
   <Entity name="ground">
     <Plane half-size="12 12" base-color="#4a7d3a" roughness="0.9" />

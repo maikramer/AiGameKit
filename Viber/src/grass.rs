@@ -1067,7 +1067,10 @@ fn build_tile(
                 // A bush is a squat, dense fan of very wide blades — the
                 // same primitive, used at a different aspect ratio.
                 let bush_yaw = rng.range(0.0, std::f32::consts::TAU);
-                let bush_h = profile.height * rng.range(1.4, 2.4);
+                // ≤ 1,4× a relva: a 2,4× (1,8 m na floresta) cada folha de
+                // 11 cm de largura lia-se como uma tira de papel à frente
+                // da câmara de 3ª pessoa.
+                let bush_h = profile.height * rng.range(0.9, 1.4);
                 let bush_shade = rng.range(0.62, 0.88) * zone_shade;
                 for leaf in 0..7u32 {
                     let angle = bush_yaw + leaf as f32 * (std::f32::consts::TAU / 7.0);
@@ -1083,7 +1086,7 @@ fn build_tile(
                         normal,
                         angle,
                         bush_h * rng.range(0.6, 1.0),
-                        profile.width * 3.4 * rng.range(0.8, 1.2),
+                        profile.width * 2.4 * rng.range(0.8, 1.2),
                         profile.curve * rng.range(1.4, 2.2),
                         bush_shade,
                         rng.next_f32() * 0.4,

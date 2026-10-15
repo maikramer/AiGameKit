@@ -20,6 +20,23 @@ use super::host::LuaScriptHost;
 use super::input::key_code_from_str;
 use super::sfx::match_gesture_clip;
 
+/// Tira `bits` do snapshot de nomes (`find`) e de posições.
+fn forget_named(
+    named: &mut HashMap<String, Vec<i64>>,
+    positions: &mut HashMap<i64, (String, Vec3)>,
+    bits: i64,
+) {
+    let Some((name, _)) = positions.remove(&bits) else {
+        return;
+    };
+    if let Some(list) = named.get_mut(&name) {
+        list.retain(|b| *b != bits);
+        if list.is_empty() {
+            named.remove(&name);
+        }
+    }
+}
+
 /// Hook `on_add`: when a [`LuaScriptRef`] appears, ensure its chunk is loaded
 /// (from `<scripts_dir>/<path>`) and run its top level. Errors warn once and
 /// never abort. A posição de spawn (`Transform` autoral — o `GlobalTransform`
@@ -98,6 +115,26 @@ pub struct LuauRuntimeLocals<'w, 's> {
     /// nome próprio não pode depender de nunca truncar: repro histórica dos
     /// portais do simple-rpg, 20 portais em ~79k nomes com cap 4096).
     pub entity_names: Query<'w, 's, &'static Name>,
+    /// Grupos (`groups=`) — snapshot `ctx.groups` por frame.
+    pub groups: Query<'w, 's, (Entity, &'static crate::luau::Groups)>,
+    /// Conexões de sinal dos emissores (`connect-*`).
+    pub connections: Query<'w, 's, &'static crate::luau::SignalConnections>,
+    /// Snapshot de nomes semeado (a partir daí só deltas).
+    pub names_seeded: bevy::ecs::system::Local<'s, bool>,
+    /// Entidades nomeadas cujo nome ou pose mudou desde o último frame.
+    pub names_changed: Query<
+        'w,
+        's,
+        (Entity, &'static Name, &'static GlobalTransform),
+        (
+            Without<Player>,
+            Or<(Changed<Name>, Changed<GlobalTransform>)>,
+        ),
+    >,
+    /// Nomes removidos (inclui despawns) — saem do snapshot.
+    pub names_removed: bevy::ecs::lifecycle::RemovedComponents<'w, 's, Name>,
+    /// Props `prop-*` das entidades com script — semeia `ctx.self_props`.
+    pub script_props: Query<'w, 's, &'static crate::luau::ScriptProps>,
     /// Warn 1× por entidade de dano/cura em quem não tem `Health`.
     pub entity_vitals_warned: bevy::ecs::system::Local<'s, HashSet<Entity>>,
     /// Warn 1× por chave para avisos que um script repete por frame (plugin
@@ -306,18 +343,65 @@ pub fn luau_update(
         // ordem estável entre frames/máquinas (scripts que cacheiam registos
         // no arranque não podem ver ordens diferentes).
         {
-            let mut named: HashMap<String, Vec<i64>> = HashMap::new();
-            let mut positions: HashMap<i64, (String, Vec3)> = HashMap::new();
-            for (e, name, transform) in locals.names.iter() {
-                let bits = e.to_bits() as i64;
-                named.entry(name.to_string()).or_default().push(bits);
-                positions.insert(bits, (name.to_string(), transform.translation()));
+            // INCREMENTAL: reconstruir 79k nomes por frame custava ~18 ms
+            // (simple-rpg). Semeia 1× e depois só aplica o que mudou
+            // (Name/GlobalTransform alterados, Names removidos/despawns) —
+            // a vegetação e os props estáticos não custam nada por frame.
+            if !*locals.names_seeded {
+                *locals.names_seeded = true;
+                locals.names_removed.clear();
+                let mut named: HashMap<String, Vec<i64>> = HashMap::new();
+                let mut positions: HashMap<i64, (String, Vec3)> = HashMap::new();
+                for (e, name, transform) in locals.names.iter() {
+                    let bits = e.to_bits() as i64;
+                    named.entry(name.to_string()).or_default().push(bits);
+                    positions.insert(bits, (name.to_string(), transform.translation()));
+                }
+                for bits in named.values_mut() {
+                    bits.sort_unstable();
+                }
+                ctx.named_entities = named;
+                ctx.pos_snapshot = positions;
+            } else {
+                let ctx = &mut *ctx;
+                for e in locals.names_removed.read() {
+                    forget_named(
+                        &mut ctx.named_entities,
+                        &mut ctx.pos_snapshot,
+                        e.to_bits() as i64,
+                    );
+                }
+                for (e, name, transform) in locals.names_changed.iter() {
+                    let bits = e.to_bits() as i64;
+                    let name = name.as_str();
+                    let renamed = ctx
+                        .pos_snapshot
+                        .get(&bits)
+                        .is_some_and(|(old, _)| old != name);
+                    if renamed {
+                        forget_named(&mut ctx.named_entities, &mut ctx.pos_snapshot, bits);
+                    }
+                    let list = ctx.named_entities.entry(name.to_owned()).or_default();
+                    if let Err(at) = list.binary_search(&bits) {
+                        list.insert(at, bits);
+                    }
+                    ctx.pos_snapshot
+                        .insert(bits, (name.to_owned(), transform.translation()));
+                }
             }
-            for bits in named.values_mut() {
+            let mut groups: HashMap<String, Vec<i64>> = HashMap::new();
+            for (e, member_of) in locals.groups.iter() {
+                for group in member_of.0.iter() {
+                    groups
+                        .entry(group.clone())
+                        .or_default()
+                        .push(e.to_bits() as i64);
+                }
+            }
+            for bits in groups.values_mut() {
                 bits.sort_unstable();
             }
-            ctx.named_entities = named;
-            ctx.pos_snapshot = positions;
+            ctx.groups = groups;
             let mut hp: HashMap<i64, (f32, f32)> = HashMap::new();
             for (e, h, _) in locals.healths.iter() {
                 hp.insert(e.to_bits() as i64, (h.current, h.max));
@@ -411,6 +495,7 @@ pub fn luau_update(
             // Nome PRÓPRIO da entidade que vai correr (fora do snapshot com
             // cap — ver `entity_names`).
             ctx.self_name = locals.entity_names.get(entity).ok().map(Name::to_string);
+            ctx.self_props = locals.script_props.get(entity).ok().map(|p| p.0.clone());
         }
         // Secção "scripts" do profiler: um escopo por ficheiro (igual ao
         // `script/<file>` do VibeGame). record_script auto-gateia em freeze.
@@ -422,6 +507,121 @@ pub fn luau_update(
             &lref.path,
             script_t0.elapsed().as_secs_f32() * 1000.0,
         );
+    }
+
+    // Sinais (`viber.emit`) e `viber.call_group`: entregues DEPOIS dos
+    // on_update, no mesmo frame, com o contexto do alvo. Handlers que emitem
+    // abrem nova vaga; o que sobrar das vagas fica para o frame seguinte.
+    // Alvos fora do raio de ativação recebem na mesma (um sinal é um evento —
+    // a porta longe tem de abrir).
+    for _ in 0..super::signals::MAX_SIGNAL_ROUNDS {
+        let calls = super::signals::drain(&host.lua);
+        if calls.is_empty() {
+            break;
+        }
+        let mut deliveries: Vec<(Entity, String, mlua::Table, Option<i64>)> = Vec::new();
+        if let Some(ctx) = host.lua.app_data_ref::<ScriptCtx>() {
+            let members = |bits: Option<&Vec<i64>>| bits.cloned().unwrap_or_default();
+            for call in calls {
+                match &call.kind {
+                    super::signals::CallKind::Emit { signal } => {
+                        let Some(emitter) = call.from.and_then(|b| Entity::try_from_bits(b as u64))
+                        else {
+                            continue;
+                        };
+                        let Ok(connections) = locals.connections.get(emitter) else {
+                            continue; // sinal sem ouvintes: como no Godot, nada acontece
+                        };
+                        for conn in connections.of(signal) {
+                            use super::exports::ConnTarget;
+                            let targets = match &conn.target {
+                                ConnTarget::Name(name) if name == "self" => {
+                                    vec![emitter.to_bits() as i64]
+                                }
+                                ConnTarget::Name(name) => members(ctx.named_entities.get(name)),
+                                ConnTarget::Group(group) => members(ctx.groups.get(group)),
+                            };
+                            if targets.is_empty()
+                                && locals
+                                    .once_warned
+                                    .insert(format!("signal-target:{signal}:{conn}"))
+                            {
+                                warn!(
+                                    "[luau] sinal '{signal}': alvo '{}' sem entidades",
+                                    conn.target
+                                );
+                            }
+                            for bits in targets {
+                                if let Some(target) = Entity::try_from_bits(bits as u64) {
+                                    deliveries.push((
+                                        target,
+                                        conn.method.clone(),
+                                        call.args.clone(),
+                                        call.from,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    super::signals::CallKind::Group { group, method } => {
+                        for bits in members(ctx.groups.get(group)) {
+                            if let Some(target) = Entity::try_from_bits(bits as u64) {
+                                deliveries.push((
+                                    target,
+                                    method.clone(),
+                                    call.args.clone(),
+                                    call.from,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (target, method, args, from) in deliveries {
+            let Ok((_, lref, transform, global, _, interaction)) = scripts.get(target) else {
+                if locals
+                    .once_warned
+                    .insert(format!("signal-noscript:{target}:{method}"))
+                {
+                    warn!("[luau] {method}: o alvo {target} não tem script — ignorado");
+                }
+                continue;
+            };
+            let path = lref.path.clone();
+            let origin = global
+                .map(GlobalTransform::translation)
+                .or_else(|| transform.as_ref().map(|t| t.translation))
+                .unwrap_or_default();
+            if let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
+                ctx.interaction_range = interaction.map(|i| i.range);
+                ctx.self_name = locals.entity_names.get(target).ok().map(Name::to_string);
+                ctx.self_props = locals.script_props.get(target).ok().map(|p| p.0.clone());
+            }
+            match host.run_method(
+                target,
+                &path,
+                origin,
+                &method,
+                super::signals::unpack(&args),
+                from,
+            ) {
+                Ok(true) => {}
+                Ok(false) => {
+                    if locals
+                        .once_warned
+                        .insert(format!("signal-method:{path}:{method}"))
+                    {
+                        warn!(
+                            "[luau] {path}: não define `function {method}(…)` (alvo de sinal/grupo)"
+                        );
+                    }
+                }
+                Err(e) => {
+                    host.warn_once(&path, &e);
+                }
+            }
+        }
     }
 
     // Recolhe os comandos enfileirados por TODOS os scripts (as teclas já
@@ -549,6 +749,18 @@ pub fn luau_update(
                     commands
                         .entity(*entity)
                         .try_insert(crate::player::TeleportSettle::default());
+                }
+            }
+            ScriptCommand::PushPlayer { velocity, iframes } => {
+                if let Some((entity, _, _, _)) = player_components.as_ref() {
+                    commands
+                        .entity(*entity)
+                        .try_insert(crate::physics_fx::Knockback { velocity });
+                    if iframes > 0.0 {
+                        commands
+                            .entity(*entity)
+                            .try_insert(crate::feedback::Invulnerable { timer: iframes });
+                    }
                 }
             }
             ScriptCommand::AddXp(gain) => {
@@ -838,6 +1050,11 @@ pub fn luau_update(
                             initial,
                         });
                     commands.entity(entity).try_remove::<LuaScriptRef>();
+                }
+            }
+            ScriptCommand::SetScale { entity, scale } => {
+                if let Ok((_, _, Some(mut transform), _, _, _)) = scripts.get_mut(entity) {
+                    transform.scale = Vec3::splat(scale);
                 }
             }
             ScriptCommand::EntitySetMaxHp { entity, max } => {

@@ -44,6 +44,7 @@ pub const METHOD_SCREENSHOT_STATUS: &str = "viber.screenshot_status";
 pub const METHOD_BURST: &str = "viber.burst";
 pub const METHOD_BURST_STATUS: &str = "viber.burst_status";
 pub const METHOD_TREE: &str = "viber.tree";
+pub const METHOD_SCRIPTS_RELOAD: &str = "viber.scripts.reload";
 pub const METHOD_LOGS: &str = "viber.logs";
 pub const METHOD_PROFILER: &str = "viber.profiler";
 pub const METHOD_PROFILER_TAB: &str = "viber.profiler.tab";
@@ -192,6 +193,7 @@ impl Plugin for BridgePlugin {
                     .with_method_main(METHOD_PING, ping)
                     .with_method_main("app.info", app_info)
                     .with_method_main(METHOD_SCREENSHOT, screenshot_request)
+                    .with_method_main(METHOD_SCRIPTS_RELOAD, scripts_reload)
                     .with_method_main(METHOD_SCREENSHOT_STATUS, screenshot_status)
                     .with_method_main(METHOD_BURST, burst_request)
                     .with_method_main(METHOD_BURST_STATUS, burst_status)
@@ -225,6 +227,9 @@ impl Plugin for BridgePlugin {
                     .with_method_main(scene::METHOD_ENTITIES, scene::entities_method)
                     .with_method_main(scene::METHOD_CATALOG, scene::catalog_method)
                     .with_method_main(scene::METHOD_LINT, scene::lint_method)
+                    .with_method_main(scene::METHOD_SCHEMA, scene::schema_method)
+                    .with_method_main(scene::METHOD_GROUPS, scene::groups_method)
+                    .with_method_main(scene::METHOD_INSTANCE, scene::instance_method)
                     .with_method_main(scene::METHOD_DROP, scene::drop_method)
                     .with_method_main(scene::METHOD_FILES, scene::files_method)
                     .with_method_main(scene::METHOD_TOOL_LIST, scene::tool_list_method)
@@ -520,6 +525,42 @@ fn app_info(_params: In<Option<Value>>, _world: &mut World) -> BrpResult {
         "bevy_version": "0.20.0",
         "sub_app": "main",
     }))
+}
+
+/// Recarrega um script Luau no jogo a correndo — o caminho do dock de scripts
+/// do editor (que corre fora do processo). Params: `{"path": "ui/hud.lua"}`.
+fn scripts_reload(params: In<Option<Value>>, world: &mut World) -> BrpResult {
+    let path = params
+        .0
+        .as_ref()
+        .and_then(|value| value.get("path"))
+        .and_then(|value| value.as_str())
+        .map(str::to_owned)
+        .ok_or_else(|| invalid("scripts.reload: precisa de `path`".into()))?;
+    // entidades primeiro (leitura), depois o host mutável
+    let entities: Vec<(Entity, Vec3)> = {
+        let mut query = world.query::<(Entity, &crate::luau::LuaScriptRef, Option<&Transform>)>();
+        query
+            .iter(world)
+            .filter(|(_, script, _)| script.path == path)
+            .map(|(entity, _script, transform)| {
+                (
+                    entity,
+                    transform.map_or(Vec3::ZERO, |transform| transform.translation),
+                )
+            })
+            .collect()
+    };
+    let Some(mut host) = world.get_resource_mut::<crate::luau::LuaScriptHost>() else {
+        return Err(invalid(
+            "scripts.reload: sem LuauScriptHost (mundo sem scripts?)".into(),
+        ));
+    };
+    let scripts_dir = host.scripts_dir.clone();
+    match crate::hot_reload::reload_script(&mut host, &scripts_dir, &path, &entities) {
+        Ok(count) => Ok(json!({ "reloaded": true, "entities": count })),
+        Err(error) => Err(invalid(format!("scripts.reload: {error}"))),
+    }
 }
 
 fn screenshot_request(_params: In<Option<Value>>, world: &mut World) -> BrpResult {

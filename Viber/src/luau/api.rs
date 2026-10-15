@@ -10,7 +10,7 @@ use super::commands::ScriptCommand;
 use super::ctx::ScriptCtx;
 use super::input::key_code_from_str;
 use super::sfx::{SFX_NAME_REGISTRY, sfx_clip_from_str};
-use super::{entity, events, game, input, terrain, timers};
+use super::{entity, events, game, input, props, terrain, timers};
 
 /// Installs the `viber` API table on the VM globals:
 /// `log(msg)`, `time()`, `position()`, `set_position(x, y, z)`,
@@ -1245,6 +1245,29 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
+    // viber.push_player(dx, dz[, iframes]) — desloca o herói ~(dx, dz) metros
+    // pelo character controller (colide com muros; o dash não atravessa
+    // paredes como o teleporte). `iframes` = segundos invulnerável.
+    api.set(
+        "push_player",
+        lua.create_function(|lua, (dx, dz, iframes): (f32, f32, Option<f32>)| {
+            let iframes = iframes.unwrap_or(0.0);
+            if !(dx.is_finite() && dz.is_finite() && iframes.is_finite()) {
+                return Err(mlua::Error::runtime(
+                    "viber.push_player: valores não finitos (NaN/inf)",
+                ));
+            }
+            lua.app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                .commands
+                .push(ScriptCommand::PushPlayer {
+                    velocity: crate::physics_fx::push_velocity(Vec3::new(dx, 0.0, dz)),
+                    iframes: iframes.clamp(0.0, 2.0),
+                });
+            Ok(())
+        })?,
+    )?;
+
     // ── UI / interação ──────────────────────────────────────────────
     api.set(
         "toast",
@@ -1333,6 +1356,8 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     timers::install(lua, &api)?;
     entity::install(lua, &api)?;
     game::install(lua, &api)?;
+    props::install(lua, &api)?;
+    super::signals::install(lua, &api)?;
 
     lua.globals().set("viber", api)?;
     let states = lua.create_table()?;

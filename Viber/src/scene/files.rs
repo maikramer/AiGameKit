@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKind {
     Dir,
-    /// `world.xml` / `world.static.xml` — pontos de entrada de mundo.
+    /// `world.xml` — o ponto de entrada do mundo.
     World,
     /// Qualquer outro `.xml` (sub-cenas, includes, fixtures de QA).
     Scene,
@@ -21,7 +21,7 @@ pub enum FileKind {
     Gltf,
     /// `.png` `.jpg` `.jpeg` `.webp` `.ktx2` `.basis`
     Texture,
-    /// `.ahgt` (heightmap do bake)
+    /// `.ahgt` (heightmap, na pasta `<stem>.data/`)
     Heightmap,
     /// `.vinst` (instâncias de vegetação pré-geradas)
     Instances,
@@ -34,7 +34,7 @@ impl FileKind {
     /// Classifica pelo nome do ficheiro (último componente do caminho).
     pub fn from_name(name: &str) -> Self {
         let lower = name.to_ascii_lowercase();
-        if matches!(lower.as_str(), "world.xml" | "world.static.xml") {
+        if lower == "world.xml" {
             return FileKind::World;
         }
         let ext = lower

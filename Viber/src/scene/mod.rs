@@ -33,6 +33,11 @@ use serde_json::{Value, json};
 use crate::xml::NodeOrigin;
 use doc::{NodeRef, SceneDoc, node_label};
 
+/// A entidade é o ROOT de uma instância `<Use prototype="…">` — o editor
+/// distingue instância da definição (banner, reset aos overrides).
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct PrototypeInstance(pub String);
+
 /// O nó XML que declarou uma entidade viva (posto pelo spawn a partir de
 /// `EntitySpec::source`). [`SceneDoc::node_ref_for`] converte-o num [`NodeRef`].
 #[derive(Component, Debug, Clone, PartialEq)]
@@ -71,7 +76,183 @@ pub fn describe(doc: &SceneDoc, node: &NodeRef) -> Value {
     if let Some(target) = doc.include_target(node) {
         entry["include"] = json!(doc.relative_path(target));
     }
+    // Nó com script: os props exportados efetivos (o esquema completo é `scene schema`).
+    if doc
+        .node(node)
+        .is_some_and(|xml| xml.attr("script").is_some())
+        && let Ok(schema) = script_schema(doc, &doc.selector(node))
+    {
+        entry["script_props"] = schema["values"].clone();
+    }
     entry
+}
+
+/// Pasta de scripts do mundo do documento (`config.yaml` → `game.scripts_dir`; sem
+/// config, `<mundo>/scripts`).
+pub fn scripts_dir(doc: &SceneDoc) -> std::path::PathBuf {
+    let world_dir = doc.files[0]
+        .path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
+    match crate::config::load(&world_dir) {
+        Ok(config) => config.scripts_dir_on(&world_dir),
+        Err(_) => world_dir.join("scripts"),
+    }
+}
+
+/// O esquema de um script (`--@export` + `--@signal` + funções globais) e, num nó, os
+/// valores efetivos da instância e as ligações:
+/// `{script, exports:[{name,type,attr,default,doc,min,max,options}], signals:[{name,args,
+/// attr,doc}], methods:[…], errors, values:{nome:{value, source:"instance"|"default",
+/// error?}}, unknown:[…], groups:[…], connections:{sinal:{value,targets,declared}}}`.
+/// `target` é um seletor de nó (com `script=`) ou o caminho de um `.lua` (só o esquema).
+/// É o que um agente lê antes de `scene set <nó> prop-<nome>=…`.
+pub fn script_schema(doc: &SceneDoc, target: &str) -> anyhow::Result<Value> {
+    use crate::luau::exports::{parse_exports, prop_name};
+    let scripts_dir = scripts_dir(doc);
+    let (script, props, selector) = if target.ends_with(".lua") {
+        (target.to_owned(), None, None)
+    } else {
+        let node = doc.resolve(target)?;
+        let xml = doc
+            .node(&node)
+            .ok_or_else(|| anyhow::anyhow!("{target}: nó sem atributos"))?;
+        let script = xml
+            .attr("script")
+            .ok_or_else(|| anyhow::anyhow!("{target}: o nó não tem script="))?
+            .to_owned();
+        let props: Vec<(String, String)> = xml
+            .attrs
+            .iter()
+            .filter_map(|(k, v)| prop_name(k).map(|name| (name.to_owned(), v.clone())))
+            .collect();
+        let selector = doc.selector(&node);
+        (script, Some((props, node)), Some(selector))
+    };
+    let path = crate::lint::resolve_script(&scripts_dir, &script);
+    let source = std::fs::read_to_string(&path)
+        .map_err(|e| anyhow::anyhow!("a ler {}: {e}", path.display()))?;
+    let exports = parse_exports(&source);
+    let mut out = exports.to_json();
+    out["script"] = json!(script);
+    if let Some(selector) = selector {
+        out["selector"] = json!(selector);
+    }
+    if let Some((props, node)) = props {
+        out["values"] = props_values(&exports, &props);
+        out["unknown"] = json!(exports.unknown(&props));
+        let xml = doc.node(&node).expect("resolvido acima");
+        let links = crate::recipes::NodeLinks::of_node(xml);
+        out["groups"] = json!(links.groups);
+        out["connections"] = connections_json(doc, &exports, &links);
+    }
+    Ok(out)
+}
+
+/// `{sinal: {value, targets:[{target, method, nodes}], declared, error?}}` — cada sinal
+/// declarado (ligado ou não) e cada `connect-*` do nó; `nodes` = quantos nós o alvo
+/// alcança no documento (0 = alvo partido).
+fn connections_json(
+    doc: &SceneDoc,
+    exports: &crate::luau::exports::ScriptExports,
+    links: &crate::recipes::NodeLinks,
+) -> Value {
+    use crate::luau::exports::{ConnTarget, parse_connections};
+    let mut out = serde_json::Map::new();
+    for signal in &exports.signals {
+        out.insert(
+            signal.name.clone(),
+            json!({ "value": null, "targets": [], "declared": true }),
+        );
+    }
+    let index = group_index(doc);
+    for (signal, raw) in &links.connections {
+        let mut entry = json!({
+            "value": raw,
+            "declared": exports.signal(signal).is_some(),
+        });
+        match parse_connections(raw) {
+            Ok(conns) => {
+                entry["targets"] = conns
+                    .iter()
+                    .map(|conn| {
+                        let nodes = match &conn.target {
+                            ConnTarget::Name(name) if name == "self" => 1,
+                            ConnTarget::Name(name) => doc.find_by_attr("name", name).len(),
+                            ConnTarget::Group(group) => index.get(group).map_or(0, Vec::len),
+                        };
+                        json!({ "target": conn.target.to_string(), "method": conn.method, "nodes": nodes })
+                    })
+                    .collect();
+            }
+            Err(error) => {
+                entry["targets"] = json!([]);
+                entry["error"] = json!(error);
+            }
+        }
+        out.insert(signal.clone(), entry);
+    }
+    Value::Object(out)
+}
+
+/// grupo → nós com `groups="…"` que o contêm (todos os ficheiros, pré-ordem).
+pub fn group_index(doc: &SceneDoc) -> std::collections::BTreeMap<String, Vec<NodeRef>> {
+    let mut index: std::collections::BTreeMap<String, Vec<NodeRef>> = Default::default();
+    doc.walk(|node_ref, xml| {
+        if let Some(value) = xml.attr("groups") {
+            for group in crate::luau::exports::parse_groups(value).0 {
+                index.entry(group).or_default().push(node_ref.clone());
+            }
+        }
+    });
+    index
+}
+
+/// `viber scene groups [nome]`: `{grupo: [{selector, tag, label, script?}]}`.
+pub fn groups(doc: &SceneDoc, only: Option<&str>) -> Value {
+    let mut out = serde_json::Map::new();
+    for (group, nodes) in group_index(doc) {
+        if only.is_some_and(|only| only != group) {
+            continue;
+        }
+        let members: Vec<Value> = nodes
+            .iter()
+            .filter_map(|node| {
+                let xml = doc.node(node)?;
+                let mut entry = json!({
+                    "selector": doc.selector(node),
+                    "tag": xml.tag,
+                    "label": node_label(xml),
+                });
+                if let Some(script) = xml.attr("script") {
+                    entry["script"] = json!(script);
+                }
+                Some(entry)
+            })
+            .collect();
+        out.insert(group, json!(members));
+    }
+    Value::Object(out)
+}
+
+/// `{nome: {value, source, error?}}` — o valor efetivo de cada export.
+fn props_values(
+    exports: &crate::luau::exports::ScriptExports,
+    props: &[(String, String)],
+) -> Value {
+    let mut values = serde_json::Map::new();
+    for prop in exports.resolve(props) {
+        let mut entry = json!({
+            "value": prop.value.as_ref().map(crate::luau::exports::PropValue::to_json),
+            "source": prop.source.as_str(),
+        });
+        if let Some(error) = &prop.error {
+            entry["error"] = json!(error);
+        }
+        values.insert(prop.def.name.clone(), entry);
+    }
+    Value::Object(values)
 }
 
 /// Nós que casam com `tag` (sem distinguir maiúsculas) e/ou `attr=value` (`value` vazio:

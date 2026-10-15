@@ -15,7 +15,7 @@ use viber::{recipes, xml};
 #[test]
 fn river_channel_stays_below_the_waterline() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let path = root.join("examples/simple-rpg/world.static.xml");
+    let path = root.join("examples/simple-rpg/world.xml");
     let loaded = xml::include::load_world(&path).expect("world loads");
     let world = recipes::parse_world(&loaded.root_attrs, &loaded.nodes).expect("world parses");
     let mut pending = recipes::spawn::PendingTerrain::default();

@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use bevy::asset::LoadState;
 
 use bevy::gltf::Gltf;
-use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::shape::{Capsule3d, Cuboid, Cylinder, Plane3d, Sphere};
 use bevy::world_serialization::WorldAssetRoot;
@@ -105,6 +104,11 @@ pub struct PendingWorld {
     pub world: ParsedWorld,
     pub base_dir: Option<PathBuf>,
 }
+
+/// Cápsula dos NPC de diálogo (m): raio, meia-altura entre tampas e centro.
+const NPC_CAPSULE_RADIUS: f32 = 0.32;
+const NPC_CAPSULE_HALF_HEIGHT: f32 = 0.55;
+const NPC_CAPSULE_CENTER: f32 = NPC_CAPSULE_HALF_HEIGHT + NPC_CAPSULE_RADIUS;
 
 /// `<DialogueNPC>` marker: this entity is a dialogue target with the given
 /// quest/dialogue id (dialogue UI lands with the HUD phase).
@@ -1007,6 +1011,8 @@ fn push_shore_rock_group(
         cluster_radius: 0.0,
         max_distance: 0.0,
         template_script: None,
+        template_props: Vec::new(),
+        template_links: Default::default(),
         activation_radius: crate::luau::DEFAULT_ACTIVATION_RADIUS,
         template_destructible: None,
         cull_distance: crate::render_lod::DEFAULT_STATIC_CULL,
@@ -1351,9 +1357,29 @@ fn spawn_entity(
     if let Some(source) = &spec.source {
         entity.insert(crate::scene::SceneSource(source.clone()));
     }
+    if let Some(prototype) = &spec.prototype_instance {
+        entity.insert(crate::scene::PrototypeInstance(prototype.clone()));
+    }
+    // Grupos + conexões de sinal (com ou sem script: uma porta sem script
+    // pode estar num grupo e ser alvo de `@grupo`).
+    if !spec.links.is_empty() {
+        let label = spec.name.as_deref().unwrap_or("<entidade>");
+        let (groups, connections) = crate::luau::link_components(&spec.links, label);
+        if let Some(groups) = groups {
+            entity.insert(groups);
+        }
+        if let Some(connections) = connections {
+            entity.insert(connections);
+        }
+    }
     // Script Luau da entidade: o runtime executa `on_update(dt)` por frame.
     if let Some(path) = &spec.script {
         entity.insert(crate::luau::LuaScriptRef { path: path.clone() });
+        if !spec.props.is_empty() {
+            entity.insert(crate::luau::ScriptProps(std::sync::Arc::new(
+                spec.props.clone(),
+            )));
+        }
         // `tag="always-active"`: o script NUNCA congela pelo LOD de ativação
         // (mesma política dos scripts de UI). Para CONTROLLERS de jogo que
         // precisam de correr onde o herói andar (ex.: habilidades em Lua).
@@ -1680,22 +1706,27 @@ fn spawn_entity(
                     dialogue_id: dialogue_id.clone(),
                 },
                 Visibility::Inherited,
+                // Corpo do NPC: o herói deixava de o atravessar (cápsula de
+                // ~1,8 m nos pés do NPC, como a do herói).
+                bevy_rapier3d::prelude::RigidBody::Fixed,
+                bevy_rapier3d::prelude::Collider::compound(vec![(
+                    Vec3::Y * NPC_CAPSULE_CENTER,
+                    Quat::IDENTITY,
+                    bevy_rapier3d::prelude::Collider::capsule_y(
+                        NPC_CAPSULE_HALF_HEIGHT,
+                        NPC_CAPSULE_RADIUS,
+                    ),
+                )]),
             ));
-            let marker_mesh = ctx.meshes.add(Mesh::from(Sphere::new(0.16)));
-            let marker_mat = ctx.materials.add(StandardMaterial {
-                base_color: Color::srgb(1.0, 0.82, 0.15),
-                emissive: LinearRgba::new(3.0, 2.4, 0.5, 1.0),
-                unlit: true,
-                ..Default::default()
-            });
-            // with_children auto-parents the marker (no extra world borrow).
+            // "!"/"?" conforme o estado da quest (`crate::quest_marker`).
             entity.with_children(|children| {
                 children.spawn((
-                    Mesh3d(marker_mesh),
-                    MeshMaterial3d(marker_mat),
+                    crate::quest_marker::QuestMarker3d {
+                        dialogue_id: dialogue_id.clone(),
+                        height: *marker_height,
+                    },
                     Transform::from_translation(Vec3::Y * *marker_height),
-                    Visibility::Inherited,
-                    NotShadowCaster,
+                    Visibility::Hidden,
                 ));
             });
         }

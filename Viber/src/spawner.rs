@@ -1022,6 +1022,21 @@ fn spawn_instance(
     if !group.spec.cast_shadows {
         entity.insert(crate::render_lod::NoShadowSubtree);
     }
+    if !group.spec.template_links.is_empty() {
+        let (groups, connections) =
+            crate::luau::link_components(&group.spec.template_links, "template de spawner");
+        if let Some(groups) = groups {
+            entity.insert(groups);
+        }
+        if let Some(connections) = connections {
+            entity.insert(connections);
+        }
+    }
+    if group.template_script.is_some() && !group.spec.template_props.is_empty() {
+        entity.insert(crate::luau::ScriptProps(std::sync::Arc::new(
+            group.spec.template_props.clone(),
+        )));
+    }
     match (group.dynamic, group.template_script.as_ref()) {
         // Com script no template o comportamento é do Luau (a engine só
         // provê os blocos).
@@ -1133,6 +1148,8 @@ mod tests {
             max_distance: 0.0,
             template_urls: vec!["/assets/meshes/a.glb".into()],
             template_script: None,
+            template_props: Vec::new(),
+            template_links: Default::default(),
             template_collider: None,
             template_destructible: None,
             activation_radius: 45.0,

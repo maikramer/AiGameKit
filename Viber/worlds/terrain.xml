@@ -1,80 +1,56 @@
-<!--
-  Terrain feature demo. Exercises every declarative ground feature of the
-  Viber native terrain: heightfield, pads, lake, river, cliffs, roads and a
-  road network with a bridge segment. "cargo run: analyze worlds/terrain.xml"
-  must report 1 heightfield + ground features (incl. 3 cliffs) and no skipped
-  tags.
--->
-<world clear-color="#87ceeb">
+<?xml version="1.0" encoding="UTF-8"?>
+<world clear-color="#87ceeb" static="true">
   <AmbientLight color="#bfd4e0" brightness="400" />
-  <DirectionalLight direction="-0.5 -1 -0.3" illuminance="28000" shadows="true" />
-
-  <!-- Heightfield: procedural (no heightmap attribute), 512 m world.
-       `layers` liga o blend das 13 texturas de solo do pool (substitui o
-       tint por altura) — areia nas margens e LEITO DE SEIXO (pebbles) no
-       fundo de lagos/rios. `cliff-angle` é o gatilho de parede (LOD
-       peak-preserving + triplanar do shader); `sharpen` terraceia rampas >
-       sharpen-angle no campo final. -->
-  <Terrain name="vale" world-size="512" max-height="60" chunk-size="64"
-           levels="4" resolution="64" collision-resolution="32"
-           height-smoothing="1" seed="7"
-           base-color="#c9c5ba"
-           layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road pebbles"
-           shore-width="5" snow-height="0.92"
-           cliff-angle="50" sharpen="true" sharpen-angle="38" sharpen-seed="7"
-           cliff-streaks="0.55" cliff-moss="0.4" />
-
-  <!-- Cliffs de demonstração: uma escarpa concave no quadrante NW (parede
-       de pedreira virada a sul, com cone de detritos), uma muralha vertical
-       a leste com ravinas de erosão e uma banda terraced no norte com colos
-       no creste. Auto height em todas — a parede adapta-se à diferença
-       natural do lugar. -->
-  <Cliff name="escarpa_nw" path="-180 -40 -120 -60 -70 -50"
-         width="10" profile="concave" side="auto" noise="0.25" seed="3"
-         talus="1" />
-  <Cliff name="muralha_e" path="220 60 220 -60"
-         width="6" height="22" angle="72" profile="vertical" side="left" noise="0.1" seed="11"
-         gullies="0.3" />
-  <Cliff name="terracas_n" path="-60 200 40 190 120 205"
-         width="14" profile="terraced" side="auto" noise="0.3" seed="23"
-         notches="0.15" />
-
-  <!-- Plaza pad at the world center. -->
-  <TerrainPad name="plaza" at="0 0" size="48 48" falloff="14" corner-radius="10" />
-
-  <!-- Lake in the southwest quadrant: beach esculpida + pedras de margem
-       (`rocks`, determinísticas pela posição do lago). -->
-  <Lake name="lagoa" at="-140 -120" radius="26" depth="3.2" water-offset="0.6"
-        color="#2f5a4a" opacity="0.62" ripple="0.9"
-        bank="beach" rocks="1" rocks-density="0.14" />
-
-  <!-- River crossing the map from north to south, through the east side. -->
-  <River name="rio" path="150 220 170 120 150 20 175 -80 150 -200"
-         width="14" depth="3.4" water-offset="1.0"
-         bank-width="5.5" bank-height="0.9" color="#2a6685" opacity="0.72" />
-
-  <!-- A dirt trail (decal only — no terrain carve). -->
-  <Road name="trilha" path="-60 32 -10 24 40 30"
-        width="3" flatten="0" texture-scale="6" edge-feather="1.0" />
-
-  <!-- Road network: plaza crossings + a bridge over the river. -->
-  <RoadNetwork name="estradas" default-profile="artery" default-width="6"
-               crossing-flare="true" flatten="true"
-               flatten-falloff="18" flatten-window="56" flatten-max-grade="0.3"
-               texture-scale="9">
+  <DirectionalLight direction="-0.5 -1 -0.3" illuminance="28000" shadows="true" euler="-73.3008 25.5904 19.1818" />
+  <Terrain name="vale" world-size="512" max-height="60" chunk-size="64" levels="4" resolution="64" collision-resolution="32" height-smoothing="1" seed="7" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road pebbles" shore-width="5" snow-height="0.92" cliff-angle="50" sharpen="true" sharpen-angle="38" sharpen-seed="7" cliff-streaks="0.55" cliff-moss="0.4" heightmap="terrain.data/terrain.ahgt" />
+  <Cliff name="escarpa_nw" path="-180 -40 -120 -60 -70 -50" width="10" profile="concave" side="auto" noise="0.25" seed="3" talus="1" />
+  <Cliff name="muralha_e" path="220 60 220 -60" width="6" height="22" angle="72" profile="vertical" side="left" noise="0.1" seed="11" gullies="0.3" />
+  <Cliff name="terracas_n" path="-60 200 40 190 120 205" width="14" profile="terraced" side="auto" noise="0.3" seed="23" notches="0.15" />
+  <TerrainPad name="plaza" at="0 0" size="48 48" falloff="14" corner-radius="10" height="19.884254" pre-carved="1" />
+  <Lake name="lagoa" at="-140 -120" radius="26" depth="3.2" water-offset="0.6" color="#2f5a4a" opacity="0.62" ripple="0.9" bank="beach" rocks="0" rocks-density="0.14" water-level="39.02429" />
+  <River name="rio" path="150 220 170 120 150 20 175 -80 150 -200" width="14" depth="3.4" water-offset="1.0" bank-width="5.5" bank-height="0.9" color="#2a6685" opacity="0.72" water-levels="19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 19.491524 18.955105 17.165668 15.618931 14.54455 13.929628 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427 13.656427" rocks="0" />
+  <Road name="trilha" path="-60 32 -10 24 40 30" width="3" flatten="0" texture-scale="6" edge-feather="1.0" />
+  <RoadNetwork name="estradas" default-profile="artery" default-width="6" crossing-flare="true" flatten="0" flatten-falloff="18" flatten-window="56" flatten-max-grade="0.3" texture-scale="9">
     <Way id="plaza" xz="0 0" width="8" />
     <Way id="oeste" xz="-60 0" />
     <Way id="nascente" xz="120 0" />
     <Way id="ponte_o" xz="128 0" />
     <Way id="ponte_e" xz="160 0" />
     <Way id="leste" xz="190 0" />
-
     <Segment a="plaza" b="oeste" />
     <Segment a="plaza" b="nascente" />
-    <!-- Bridge: spans the river channel; no corridor carve. -->
     <Segment a="ponte_o" b="ponte_e" profile="bridge" />
     <Segment a="ponte_e" b="leste" />
   </RoadNetwork>
-
   <OrbitCamera target="plaza" distance="120" height="55" pitch="24" />
+  <Scatter id="engine-0" profile="shore-rocks" count="22" seed="14046727241040920576" region-min="-166.4 0 -152.7" region-max="-107.3 0 -89.9" avoid-water="0" avoid-road="1" avoid-cliff="1" align-to-terrain="1" random-yaw="1" avoid-overlaps="1" footprint-radius="0.8" max-slope-deg="55" max-slope-attempts="4" scale-min="0.55" scale-max="1.4" scale-axis-min="0.85" scale-axis-max="1.15" base-y-offset="-0.12">
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+  </Scatter>
+  <Group name="spawn/engine-0" generated-by="engine-0">
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0000" translation="-112.3066 39.0617 -120.8835" euler="4.2707 -31.0358 3.9822" scale="0.6823 0.7437 0.8209" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0001" translation="-107.2558 39.2432 -110.4616" euler="-145.8601 88.213 145.8739" scale="1.3623 1.3618 1.4845" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0002" translation="-108.7682 39.1104 -106.9996" euler="179.9934 9.8584 178.6776" scale="0.8647 0.9592 0.8159" />
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0003" translation="-116.5055 38.8468 -96.4079" euler="-179.3756 57.6731 178.0476" scale="0.9499 0.8417 0.9315" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0004" translation="-123.7549 38.8648 -92.7005" euler="-2.5066 -4.2441 0.2482" scale="0.8066 0.8735 0.9993" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0005" translation="-128.4012 39.2972 -89.9149" euler="177.6743 10.1704 -179.3634" scale="1.0236 1.1366 1.1397" />
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0006" translation="-143.3623 39.0977 -94.0694" euler="178.8796 71.3564 177.4169" scale="1.0079 0.8936 0.9424" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0007" translation="-152.9271 38.8479 -96.8515" euler="-1.3534 -24.6033 -1.284" scale="0.7744 0.7191 0.8174" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0008" translation="-158.0459 38.8348 -103.9984" euler="177.5106 3.8831 -176.513" scale="1.2757 1.3381 1.5035" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0009" translation="-161.7392 39.2288 -104.4129" euler="-3.1463 -39.3816 -2.5046" scale="1.2581 1.283 1.4148" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0010" translation="-165.729 39.0515 -111.722" euler="-1.4122 -0.693 -2.7033" scale="1.2958 1.1682 1.0394" />
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0011" translation="-166.4099 38.9665 -116.7555" euler="-176.3822 -49.8379 -175.0927" scale="1.0289 0.9482 1.0724" />
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0012" translation="-163.5705 38.8252 -127.5549" euler="-170.2294 -67.2355 -170.4327" scale="1.3955 1.2998 1.2808" />
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0013" translation="-165.9968 39.2836 -131.3278" euler="2.3746 48.1469 -2.4525" scale="0.8476 0.8846 0.824" />
+    <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0014" translation="-158.638 38.8168 -136.9161" euler="-19.5781 -82.8714 -22.2081" scale="1.0902 1.0174 1.0361" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0015" translation="-154.1804 38.7417 -140.954" euler="-173.1233 -55.7121 -174.7338" scale="1.1048 0.9991 0.9123" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0016" translation="-148.5639 38.8795 -148.4449" euler="-179.6569 48.8552 -177.5115" scale="0.9481 0.8472 0.7543" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0017" translation="-140.6474 39.2212 -152.7178" euler="-178.4485 4.9677 179.4191" scale="1.25 1.1852 1.014" />
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0018" translation="-132.6982 38.8041 -141.249" euler="-139.9956 80.0818 143.6208" scale="1.1972 1.3484 1.2615" />
+    <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0019" translation="-123.5943 38.7171 -133.7726" euler="-171.3622 53.6443 174.2568" scale="0.5538 0.58 0.5061" />
+    <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0020" translation="-119.5053 39.2375 -134.2885" euler="1.184 16.8716 2.4368" scale="0.8513 0.7769 0.7528" />
+    <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" lod1-url="/assets/meshes/farm/flint_rock_lod1.glb" lod2-url="/assets/meshes/farm/flint_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-0-0021" translation="-112.3947 39.3647 -124.7502" euler="1.246 -6.2558 1.4969" scale="0.8385 0.8236 0.7337" />
+  </Group>
 </world>

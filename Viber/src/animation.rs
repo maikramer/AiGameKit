@@ -1355,7 +1355,7 @@ mod tests {
             ("witch", vec![1.4, 3.6]),
             ("sand-worm", vec![1.2, 4.0]),
             ("townsfolk", vec![1.1]),
-            ("interior-folk", vec![0.6]),
+            ("townsfolk (interior)", vec![0.6]),
         ];
         for (name, speeds) in rigs {
             let mut profile = LocomotionProfile::default();

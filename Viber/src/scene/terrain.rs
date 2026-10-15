@@ -123,7 +123,7 @@ impl TerrainDoc {
 
     pub fn save(&mut self) -> Result<()> {
         let bytes = self.map.to_ahgt(&self.meta)?;
-        std::fs::write(&self.path, bytes)
+        super::doc::write_atomic(&self.path, &bytes)
             .with_context(|| format!("escrever {}", self.path.display()))?;
         self.dirty = false;
         if self.paint_dirty {

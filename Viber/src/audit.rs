@@ -1407,9 +1407,12 @@ mod tests {
 
     fn entity(name: &str, kind: EntityKind, collider: ColliderShape) -> EntitySpec {
         EntitySpec {
+            prototype_instance: None,
             name: Some(name.into()),
             tag: None,
             script: None,
+            props: Vec::new(),
+            links: Default::default(),
             destructible: None,
             transform: TransformSpec::default(),
             physics: PhysicsSpec {

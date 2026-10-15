@@ -132,7 +132,11 @@ pub(crate) fn arrow_image() -> Image {
 /// Renderer de ícones com anti-aliasing de caixa: desenha a `ss`× a
 /// resolução final e faz a média dos sub-píxeis. O `shade` devolve a cor
 /// RGBA por ponto em coordenadas FINAIS — é tudo o que um glifo precisa.
-fn supersampled_image(side: usize, ss: usize, shade: impl Fn(f32, f32) -> [u8; 4]) -> Image {
+pub(crate) fn supersampled_image(
+    side: usize,
+    ss: usize,
+    shade: impl Fn(f32, f32) -> [u8; 4],
+) -> Image {
     let big = side * ss;
     let mut sum = vec![[0u32; 4]; side * side];
     for sy in 0..big {

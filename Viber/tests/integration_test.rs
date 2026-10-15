@@ -62,14 +62,17 @@ fn test_analyze_json_is_a_stable_machine_report() {
     // modo texto — o contrato que agentes/CI parseiam.
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("hello.xml");
-    std::fs::write(&path, r#"<world>
+    std::fs::write(
+        &path,
+        r#"<world>
   <Group name="props">
     <Cuboid half-size="1 1 1" />
     <Sphere radius="1" />
   </Group>
   <PointLight at="0 2 0" />
   <OrbitCamera />
-</world>"#)
+</world>"#,
+    )
     .unwrap();
     write_config(dir.path());
     let (code, stdout, stderr) = viber(&["analyze", "--json", path.to_str().unwrap()]);

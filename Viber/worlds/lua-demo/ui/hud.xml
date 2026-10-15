@@ -1,6 +1,5 @@
-<!-- HUD mínimo do demo: um card com o contador — alimentado por Lua
-     (viber.ui.set_text), sem binds engine (não há RPG aqui). -->
-<world>
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
   <UiStyle src="ui/hud.css" />
   <UiRoot id="hud" script="ui/hud.lua">
     <UiColumn class="anchor">

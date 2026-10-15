@@ -10,7 +10,7 @@
 //! Tudo offline (lê XML + ficheiros; não precisa de engine). A bridge expõe o
 //! mesmo relatório (`viber.scene.lint`) para lint de um mundo a correr.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -144,6 +144,14 @@ pub fn lint_world(world_xml: &Path) -> Result<LintReport> {
 
     let mut findings = Vec::new();
     findings.extend(check_scripts(&world_dir, &config, &referenced_scripts));
+    findings.extend(check_script_props(
+        &config.scripts_dir_on(&world_dir),
+        &world.entities,
+    ));
+    findings.extend(check_signals(
+        &config.scripts_dir_on(&world_dir),
+        &world.entities,
+    ));
     findings.extend(check_quests(&world_dir, &config));
     findings.extend(check_duplicate_names(duplicates));
     Ok(LintReport { findings })
@@ -250,6 +258,12 @@ fn check_scripts(
                 findings.push(Finding::error("script-syntax", format!("{rel}: {error}")));
                 continue; // sem sintaxe não faz sentido procurar viber.load
             }
+            for error in crate::luau::exports::parse_exports(&source).errors {
+                findings.push(Finding::error(
+                    "script-export",
+                    format!("{rel}: --@export {error}"),
+                ));
+            }
             // (3) módulos carregados por script
             for target in viber_load_targets(&source) {
                 if seen.insert(target.clone()) {
@@ -267,9 +281,291 @@ fn check_scripts(
     findings
 }
 
+/// Props exportados (`prop-*` ↔ `--@export`): cada valor de instância tem de
+/// ser exportado pelo script (`script-prop-unknown` — typos), respeitar o
+/// tipo/intervalo/enum (`script-prop-type`) e, num `entity`, nomear uma
+/// entidade do mundo (`script-prop-entity`). Props num nó sem script são
+/// órfãos (`script-prop-orphan`).
+fn check_script_props(scripts_dir: &Path, entities: &[EntitySpec]) -> Vec<Finding> {
+    let mut names: HashSet<String> = HashSet::new();
+    // (rótulo, script, props) de cada uso.
+    type PropUse = (String, Option<String>, Vec<(String, String)>);
+    let mut uses: Vec<PropUse> = Vec::new();
+    walk(entities, &mut |spec| {
+        if let Some(name) = &spec.name {
+            names.insert(name.clone());
+        }
+        let label = spec_label(spec);
+        if let EntityKind::StaticSpawner { spec: spawner }
+        | EntityKind::DynamicSpawner { spec: spawner } = &spec.kind
+            && !spawner.template_props.is_empty()
+        {
+            uses.push((
+                format!("{label} (template)"),
+                spawner.template_script.clone(),
+                spawner.template_props.clone(),
+            ));
+        }
+        if !spec.props.is_empty() {
+            uses.push((label, spec.script.clone(), spec.props.clone()));
+        }
+    });
+    let mut cache: HashMap<String, Option<crate::luau::exports::ScriptExports>> = HashMap::new();
+    let mut findings = Vec::new();
+    for (label, script, props) in uses {
+        let Some(script) = script else {
+            findings.push(Finding::warning(
+                "script-prop-orphan",
+                format!("{label}: prop-* sem script= — ninguém os lê"),
+            ));
+            continue;
+        };
+        let exports = cache.entry(script.clone()).or_insert_with(|| {
+            std::fs::read_to_string(resolve_script(scripts_dir, &script))
+                .ok()
+                .map(|source| crate::luau::exports::parse_exports(&source))
+        });
+        let Some(exports) = exports else {
+            continue; // script em falta: já é `script-ref`
+        };
+        for name in exports.unknown(&props) {
+            findings.push(Finding::error(
+                "script-prop-unknown",
+                format!("{label}: prop-{name} não é exportado por {script}"),
+            ));
+        }
+        for prop in exports.resolve(&props) {
+            if let Some(error) = &prop.error {
+                findings.push(Finding::error(
+                    "script-prop-type",
+                    format!("{label}: prop-{} ({}): {error}", prop.def.name, prop.def.ty),
+                ));
+            } else if prop.def.ty == crate::luau::exports::PropType::Entity
+                && let Some(crate::luau::exports::PropValue::Text(target)) = &prop.value
+                && !names.contains(target)
+            {
+                findings.push(Finding::warning(
+                    "script-prop-entity",
+                    format!(
+                        "{label}: prop-{} = `{target}` não nomeia nenhuma entidade do mundo",
+                        prop.def.name
+                    ),
+                ));
+            }
+        }
+    }
+    findings
+}
+
+/// `name=` quando existe; senão o nó de origem (`ficheiro#caminho`).
+fn spec_label(spec: &EntitySpec) -> String {
+    spec.name.clone().unwrap_or_else(|| match &spec.source {
+        Some(origin) => format!(
+            "{}#{}",
+            origin.file.file_name().unwrap_or_default().display(),
+            origin
+                .path
+                .iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join("/")
+        ),
+        None => "<sem nome>".to_owned(),
+    })
+}
+
+/// Sinais e grupos (`--@signal` ↔ `viber.emit` ↔ `connect-<sinal>` ↔ `groups=`):
+/// * `connect-syntax` — valor que não é `alvo:método; @grupo:método`;
+/// * `connect-orphan` — `connect-*` num nó sem script (nada emite);
+/// * `connect-signal` — o script do emissor não declara o sinal;
+/// * `connect-target` — nome que não existe (erro) / grupo sem membros (aviso);
+/// * `connect-method` — o alvo não tem script, ou o script não define o método;
+/// * `script-emit` — `viber.emit("x")` literal de um sinal não declarado.
+fn check_signals(scripts_dir: &Path, entities: &[EntitySpec]) -> Vec<Finding> {
+    use crate::luau::exports::{ConnTarget, ScriptExports, parse_connections, parse_exports};
+    // nome → scripts das entidades com esse nome; grupo → scripts dos membros
+    // (`None` = membro sem script).
+    let mut names: HashMap<String, Vec<Option<String>>> = HashMap::new();
+    let mut groups: HashMap<String, Vec<Option<String>>> = HashMap::new();
+    // (rótulo, script do emissor, ligações)
+    type Emitter = (String, Option<String>, Vec<(String, String)>);
+    let mut emitters: Vec<Emitter> = Vec::new();
+    let mut scripts: HashSet<String> = HashSet::new();
+    walk(entities, &mut |spec| {
+        let label = spec_label(spec);
+        if let Some(name) = &spec.name {
+            names
+                .entry(name.clone())
+                .or_default()
+                .push(spec.script.clone());
+        }
+        for group in &spec.links.groups {
+            groups
+                .entry(group.clone())
+                .or_default()
+                .push(spec.script.clone());
+        }
+        if let Some(script) = &spec.script {
+            scripts.insert(script.clone());
+        }
+        if !spec.links.connections.is_empty() {
+            emitters.push((
+                label.clone(),
+                spec.script.clone(),
+                spec.links.connections.clone(),
+            ));
+        }
+        if let EntityKind::StaticSpawner { spec: spawner }
+        | EntityKind::DynamicSpawner { spec: spawner } = &spec.kind
+        {
+            for group in &spawner.template_links.groups {
+                groups
+                    .entry(group.clone())
+                    .or_default()
+                    .push(spawner.template_script.clone());
+            }
+            if !spawner.template_links.connections.is_empty() {
+                emitters.push((
+                    format!("{label} (template)"),
+                    spawner.template_script.clone(),
+                    spawner.template_links.connections.clone(),
+                ));
+            }
+        }
+    });
+    let mut cache: HashMap<String, Option<(ScriptExports, String)>> = HashMap::new();
+    let mut load = |script: &str| -> Option<(ScriptExports, String)> {
+        cache
+            .entry(script.to_owned())
+            .or_insert_with(|| {
+                std::fs::read_to_string(resolve_script(scripts_dir, script))
+                    .ok()
+                    .map(|source| (parse_exports(&source), source))
+            })
+            .clone()
+    };
+    let mut findings = Vec::new();
+    // `viber.emit("x")` literal sem `--@signal x`.
+    let mut sorted: Vec<&String> = scripts.iter().collect();
+    sorted.sort();
+    for script in sorted {
+        let Some((exports, source)) = load(script) else {
+            continue;
+        };
+        for signal in emit_literals(&source) {
+            if exports.signal(&signal).is_none() {
+                findings.push(Finding::error(
+                    "script-emit",
+                    format!("{script}: viber.emit(\"{signal}\") sem `--@signal {signal}`"),
+                ));
+            }
+        }
+    }
+    for (label, script, connections) in emitters {
+        let exports = script.as_deref().and_then(&mut load).map(|(e, _)| e);
+        for (signal, raw) in connections {
+            let parsed = match parse_connections(&raw) {
+                Ok(parsed) => parsed,
+                Err(error) => {
+                    findings.push(Finding::error(
+                        "connect-syntax",
+                        format!("{label}: connect-{signal}: {error}"),
+                    ));
+                    continue;
+                }
+            };
+            match (&script, &exports) {
+                (None, _) => findings.push(Finding::error(
+                    "connect-orphan",
+                    format!("{label}: connect-{signal} sem script= — nada emite o sinal"),
+                )),
+                (Some(script), Some(exports)) if exports.signal(&signal).is_none() => findings
+                    .push(Finding::error(
+                        "connect-signal",
+                        format!(
+                            "{label}: connect-{signal}: {script} não declara `--@signal {signal}`"
+                        ),
+                    )),
+                _ => {}
+            }
+            for conn in parsed {
+                let members: Vec<Option<String>> = match &conn.target {
+                    ConnTarget::Name(name) if name == "self" => vec![script.clone()],
+                    ConnTarget::Name(name) => match names.get(name) {
+                        Some(found) => found.clone(),
+                        None => {
+                            findings.push(Finding::error(
+                                "connect-target",
+                                format!("{label}: connect-{signal} → `{name}` não nomeia nenhuma entidade"),
+                            ));
+                            continue;
+                        }
+                    },
+                    ConnTarget::Group(group) => match groups.get(group) {
+                        Some(found) => found.clone(),
+                        None => {
+                            findings.push(Finding::warning(
+                                "connect-target",
+                                format!("{label}: connect-{signal} → grupo `@{group}` sem membros"),
+                            ));
+                            continue;
+                        }
+                    },
+                };
+                let mut reported = HashSet::new();
+                for member in members {
+                    let problem = match member.as_deref() {
+                        None => Some(format!(
+                            "{label}: connect-{signal} → `{}` sem script",
+                            conn.target
+                        )),
+                        Some(target_script) => match load(target_script) {
+                            Some((target_exports, _))
+                                if !target_exports.has_method(&conn.method) =>
+                            {
+                                Some(format!(
+                                    "{label}: connect-{signal} → {target_script} não define `function {}(…)`",
+                                    conn.method
+                                ))
+                            }
+                            _ => None,
+                        },
+                    };
+                    if let Some(problem) = problem
+                        && reported.insert(problem.clone())
+                    {
+                        findings.push(Finding::error("connect-method", problem));
+                    }
+                }
+            }
+        }
+    }
+    findings
+}
+
+/// `viber.emit("x"` / `viber.emit('x'` — sinais emitidos por literal.
+fn emit_literals(source: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for quote in ['"', '\''] {
+        let needle = format!("viber.emit({quote}");
+        let mut rest = source;
+        while let Some(start) = rest.find(&needle) {
+            let after = &rest[start + needle.len()..];
+            let Some(end) = after.find(quote) else {
+                break;
+            };
+            if !out.iter().any(|s| s == &after[..end]) {
+                out.push(after[..end].to_owned());
+            }
+            rest = &after[end..];
+        }
+    }
+    out
+}
+
 /// O `scripts_dir` é a raiz de resolução; caminhos com `scripts/` prefixado
 /// (estilo antigo) também resolvem — o runtime aceita ambos.
-fn resolve_script(scripts_dir: &Path, script: &str) -> std::path::PathBuf {
+pub fn resolve_script(scripts_dir: &Path, script: &str) -> std::path::PathBuf {
     let trimmed = script.trim_start_matches("./");
     let direct = scripts_dir.join(trimmed);
     if direct.exists() {
@@ -483,6 +779,91 @@ mod tests {
                 .iter()
                 .any(|f| f.kind == "quest-ref" && f.message.contains("notice_board")),
             "notice_board é convenção válida"
+        );
+    }
+
+    #[test]
+    fn script_props_are_checked_against_exports() {
+        let dir = fixture(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Entity name="ok" script="npc.lua" prop-speed="2" prop-home="well" />
+  <Entity name="typo" script="npc.lua" prop-sped="2" />
+  <Entity name="bad" script="npc.lua" prop-speed="9" prop-home="ninguem" />
+  <Entity name="orphan" prop-speed="1" />
+  <Entity name="well" />
+</world>
+"#,
+            &[(
+                "npc.lua",
+                "--@export speed: number(0..5) = 1\n--@export home: entity\n--@export x: float\nfunction on_update(dt) end\n",
+            )],
+            &[],
+        );
+        let report = lint_world(&dir.path().join("world.xml")).unwrap();
+        let found = |kind: &str, needle: &str| {
+            report
+                .findings
+                .iter()
+                .any(|f| f.kind == kind && f.message.contains(needle))
+        };
+        assert!(found("script-export", "npc.lua"), "{:?}", report.findings);
+        assert!(found("script-prop-unknown", "typo: prop-sped"));
+        assert!(found("script-prop-type", "bad: prop-speed"));
+        assert!(found("script-prop-entity", "ninguem"));
+        assert!(found("script-prop-orphan", "orphan"));
+        assert!(
+            !report.findings.iter().any(|f| f.message.starts_with("ok:")),
+            "{:?}",
+            report.findings
+        );
+    }
+
+    #[test]
+    fn signal_connections_are_checked() {
+        let dir = fixture(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <Entity name="chest" script="chest.lua" connect-opened="door:open; @guards:alarm" />
+  <Entity name="door" script="door.lua" groups="guards" />
+  <Entity name="mute" script="door.lua" groups="guards" connect-opened="door:open" />
+  <Entity name="bad" script="chest.lua" connect-opened="ninguem:open; door:fly; @vazio:x" connect-shut="door:open" connect-x="semmetodo" />
+  <Entity name="plain" groups="guards" connect-opened="door:open" />
+</world>
+"#,
+            &[
+                (
+                    "chest.lua",
+                    "--@signal opened(gold)\nfunction on_update(dt) viber.emit(\"opened\", 1) viber.emit('typo') end\n",
+                ),
+                ("door.lua", "function open() end\nfunction alarm() end\n"),
+            ],
+            &[],
+        );
+        let report = lint_world(&dir.path().join("world.xml")).unwrap();
+        let found = |kind: &str, needle: &str| {
+            report
+                .findings
+                .iter()
+                .any(|f| f.kind == kind && f.message.contains(needle))
+        };
+        assert!(found("script-emit", "typo"), "{:?}", report.findings);
+        assert!(found("connect-signal", "mute: connect-opened"));
+        assert!(found("connect-target", "ninguem"));
+        assert!(found("connect-target", "@vazio"));
+        assert!(found("connect-method", "function fly"));
+        assert!(found("connect-signal", "bad: connect-shut"));
+        assert!(found("connect-syntax", "bad: connect-x"));
+        assert!(found("connect-orphan", "plain"));
+        // o grupo `guards` inclui `plain` (sem script): alarm não chega lá
+        assert!(found("connect-method", "`@guards` sem script"));
+        assert!(
+            !report
+                .findings
+                .iter()
+                .any(|f| f.message.starts_with("door:")),
+            "{:?}",
+            report.findings
         );
     }
 

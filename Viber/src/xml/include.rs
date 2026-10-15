@@ -75,7 +75,7 @@ pub fn load_world(path: &Path) -> Result<LoadedWorld> {
 
 /// Pose attributes an `<Include>` may carry (kept in lockstep with
 /// `crate::scene::sync::POSE_KEYS` by a test).
-const INCLUDE_POSE_KEYS: &[&str] = &[
+pub const INCLUDE_POSE_KEYS: &[&str] = &[
     "translation",
     "pos",
     "euler",

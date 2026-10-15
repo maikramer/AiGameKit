@@ -17,12 +17,13 @@ contratos de terreno, render wgpu. Nomenclatura segue **Bevy**
   (voxel/SDF meshado por transvoxel; pads/água/estradas/carve + LOD) (1);
   scripts Luau sandboxed com API `viber.*` / `viber.ui.*` (2); física Rapier
   declarativa (3).
-- **Estático-first:** `viber bake world.xml` produz `world.static.xml` +
-  `static/**` + `bake/**` — a FONTE DA VERDADE que `run`/`scene`/`analyze`
-  abrem por omissão. Edição por operações (`viber scene`, offline ou
-  `--live`) com undo, em paridade total com o ViberEditor; re-bake exige
-  `--force` e perde as edições do estático. Contrato completo no
-  `AGENTS.md` ("Mundos estáticos + edição por agentes").
+- **Só estático:** o runtime só carrega `<world static="true">` — o
+  `world.xml` (+ includes) É a fonte da verdade, com os dados binários em
+  `world.data/` (heightmap + pintura, vegetação `.vinst`, `bake.json`).
+  Edição por operações (`viber scene`, `viber tool`, `viber terrain`, offline
+  ou `--live`) com undo, em paridade total com o ViberEditor. `viber bake` é
+  só a conversão única, no sítio, de mundos procedurais antigos. Contrato
+  completo no `AGENTS.md` ("Mundos estáticos + edição por agentes").
 - O exemplo `examples/simple-rpg` é **jogável de ponta a ponta**: combate,
   27 quests, economia, travel, save/load, mundo vivo, física — portado em 10 loops.
 - Scripts Luau com **hot-reload** ao gravar (`src/hot_reload.rs`;
@@ -34,17 +35,17 @@ contratos de terreno, render wgpu. Nomenclatura segue **Bevy**
 ```bash
 cd Viber && cargo run -- analyze <world.xml>   # valida headless (exit 1 em erro)
 cd Viber && cargo run -- run <world.xml>       # janela Bevy
-cd Viber && cargo run -- bake <world.xml>      # procedural → mundo estático
+cd Viber && cargo run -- bake <world.xml>      # converte um procedural antigo, no sítio
 cd Viber && cargo run -- scene ls              # editar mundos (offline ou --live)
 cd Viber && cargo test                          # testes headless
 make test-viber                                 # atalho monorepo
 ```
 
 Sem caminho, `run`/`analyze`/`scene`/`tool` descobrem o mundo por ordem:
-`world.static.xml` → `world.xml` → `worlds/*.xml`.
+`world.xml` → `worlds/*.xml`.
 
 CLI instalado (`./install.sh viber` na raiz do monorepo): `viber create |
-analyze | run | bake <world.xml> [--force|--verify] | scene (ls/get/find/set/
+analyze | run | bake <world.xml> [--verify] | scene (ls/get/find/set/
 insert/rm/mv/dup/apply/undo/redo/catalog/add/drop/files) | terrain (sample/
 brush/paint) | tool (list/scatter/settle/canonicalize) | debug … | session …`.
 QA headless:
@@ -58,7 +59,7 @@ QA headless:
 | `src/xml/` | parse XML, includes, parsers tolerantes de valores |
 | `src/recipes/` | IR de entidades (nomenclatura Bevy) + spawn |
 | `src/scene/` | documento de cena + ops com inversas (edição agentes/editor): `doc`, `ops`, `pose`, `live`, `sync`, `pick`, `cli`, `files`, `catalog`, `tools` (geradores), `terrain` (pincéis) |
-| `src/bake.rs` | bake procedural → mundo estático (`world.static.xml` + `static/**` + `bake/**`) |
+| `src/bake.rs` | conversão procedural → estático no sítio (mesmos ficheiros + `<stem>.data/`) |
 | `src/vinst.rs` | binário `.vinst` de vegetação pré-gerada (zlib; posição/quat/escala/template) |
 | `src/app.rs` | `build_app`: lê mundo + `config.yaml`, monta plugins, especializa shaders |
 | `src/terrain/` | terreno volumétrico: sampler/carve (`brush`, features), colunas voxel meshadas por transvoxel (`voxel/`), LOD, pintura (`paint`), edições vivas (`delta`) |
@@ -88,10 +89,10 @@ QA headless:
   trabalhar neste repo); **nunca commitar**; esperar `cargo check` a 0 erros
   antes de verificação visual; engines simultâneas podem esgotar VRAM —
   verificar o log antes de culpar código.
-- **Estático-first:** editar `world.static.xml`/`static/**` via `viber scene`
+- **Só estático:** editar `world.xml`/`world/**` via `viber scene`/`viber tool`
   (offline/`--live`) ou ViberEditor — nunca hand-edit à espera de
-  seating/settle em runtime (não corre em estáticos); `viber bake --force`
-  descarta edições.
+  seating/settle/geração em runtime (não existem; `place`/spawners num
+  estático são erro de parse). Depois de pincéis de terreno: `viber tool settle`.
 - **XML self-closing:** acrescentar filhos a `<Entity … />` cria um *irmão*
   afixado à origem (= spawn do player); converter para forma aberta — o
   `analyze` **não** apanha isto.

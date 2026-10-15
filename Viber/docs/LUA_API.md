@@ -75,6 +75,88 @@ function on_update(dt)
 end
 ```
 
+## Props exportadas (`viber.prop` / `viber.props`)
+
+O `@export` do Godot: o script declara o que cada instância pode afinar e o valor vive no XML
+da instância, editável no Inspector (secção **Script**), por `viber scene set` ou ao vivo.
+
+```lua
+--@export speed: number(0..4) = 1.1        -- m/s a passear (o texto após `--` é a ajuda)
+--@export banter: string[] = "Olá." | "Bom dia."
+--@export mood: enum(calm, grumpy) = calm
+function on_update(dt)
+  viber.move_towards(tx, tz, viber.prop("speed"))
+end
+```
+
+```xml
+<Entity name="bram" script="townsfolk.lua" prop-speed="0.8" prop-banter="Olá|Até logo" />
+```
+
+| Tipo | Valor no XML | Em Lua |
+|---|---|---|
+| `number` / `number(min..max)` | `1.5` | número (fora do intervalo = inválido) |
+| `int` / `int(min..max)` | `3` | inteiro |
+| `bool` | `true`/`false` | boolean |
+| `string` | texto | string |
+| `string[]` | `a\|b\|c` | tabela `{ "a", "b", "c" }` |
+| `enum(a, b)` | `a` | string |
+| `color` | `#rrggbb` | string `#rrggbb` |
+| `vec3` | `x y z` | `{ x=, y=, z= }` |
+| `entity` | nome de entidade | string (o lint avisa se não existir) |
+
+| Função | Retorno | Notas |
+|---|---|---|
+| `viber.prop(nome)` | valor tipado \| `nil` | instância → default da anotação → `nil`. Nome não exportado = erro Lua (typo visível no log) |
+| `viber.props()` | tabela | todos os exports com valor |
+
+- Leia props no `on_update`/hooks: o top-level corre UMA vez por ficheiro, partilhado por todas
+  as instâncias, e lá `viber.prop` dá erro.
+- Valor de instância inválido → aviso único no log e o default.
+- Hot-reload relê as anotações; `viber scene --live set … prop-x=…` muda a instância a correr
+  sem respawn (o `viber.state()` mantém-se).
+- Esquema para agentes: `viber scene schema <seletor|x.lua>`; validação: `viber scene lint`.
+
+## Sinais e grupos (`viber.emit` / `viber.call_group` / `viber.group`)
+
+O `signal` + `groups` do Godot, com as ligações como DADO: o script declara o que emite e o
+XML do emissor diz quem ouve — trocar o ouvinte é um `viber scene set`, não código.
+
+```lua
+-- chest.lua (emissor)
+--@signal opened(gold, xp)           -- o texto após `--` é a ajuda
+viber.emit("opened", p.gold, p.xp)   -- num hook/on_update; sinal não declarado = erro Lua
+
+-- townsfolk.lua (ouvinte): qualquer função GLOBAL do script do alvo
+function notice(gold, xp)
+  viber.face_player()
+  if viber.in_group("discordia") then viber.toast("Hã?") end
+end
+```
+
+```xml
+<Entity name="chest" script="chest.lua" connect-opened="@discordia:notice; porta:abrir" />
+<Entity name="townsfolk_plaza" script="townsfolk.lua" groups="discordia guardas" />
+```
+
+| Função | Retorno | Notas |
+|---|---|---|
+| `viber.emit(sinal, ...)` | — | só sinais `--@signal`; os alvos vêm do `connect-<sinal>` da entidade que emite |
+| `viber.call_group(grupo, método, ...)` | — | chama `método(...)` em todos os membros do grupo |
+| `viber.group(nome)` | `{bits…}` | membros (ordem estável) |
+| `viber.in_group(nome[, id])` | boolean | sem id: a entidade corrente |
+| `viber.sender()` | bits \| `nil` | dentro de um handler: quem emitiu/chamou |
+
+- `connect-<sinal>="alvo:método; …"`: alvo = nome de entidade, `@grupo` ou `self`.
+- Entrega DEPOIS dos `on_update`, no mesmo frame, com o contexto do ALVO (`viber.position()`,
+  `viber.prop` são dele) — também para alvos fora do raio de ativação (um sinal é um evento).
+- Um handler pode emitir de novo: até 8 vagas por frame; o resto fica para o frame seguinte
+  (um ciclo A→B→A não congela). Fila com teto de 1024 chamadas.
+- Sinal sem `connect-*` = nada acontece (como no Godot). Alvo sem script / método em falta =
+  aviso único no log; o `viber scene lint` apanha antes (`connect-*`, `script-emit`).
+- `groups="a b"` funciona em qualquer entidade (com ou sem script); `<DynamicSpawner>` passa os
+  `groups`/`connect-*` do template a cada instância.
+
 ## Geral
 
 | Função | Devolve | Notas |
@@ -207,7 +289,8 @@ foldarms/lean/idle`.
 | `viber.apply_status(kind, secs)` | status effect no herói; hoje só `kind = "venom"` (tick 1/s) |
 | `viber.add_xp(gain)` | XP direto no herói |
 | `viber.topple()` | destrutível (`break-style: fall`): tomba na direção herói→entidade, remove o script e despawna no fim da queda |
-| `viber.teleport_player(x, y, z)` | move o herói |
+| `viber.teleport_player(x, y, z)` | move o herói (teleporte: atravessa tudo — para viagens, não para dash) |
+| `viber.push_player(dx, dz[, iframes])` | desloca o herói ~(dx, dz) m pelo character controller (colide com muros — o dash certo; `iframes` s invulnerável) |
 
 ## Quests
 
@@ -296,6 +379,8 @@ aplica pós-frame.
 |--------|--------|
 | `viber.entity_hp(id?)` | `ok, cur, max` ( snapshots de entidades com `Health`) |
 | `viber.entity_set_max_hp(max, id?)` | cria o `Health` se faltar (current = max); redimensiona se existir |
+| `viber.self_id()` | bits da entidade que corre o script (`nil` fora) — chave para tabelas partilhadas em `viber.game()` |
+| `viber.set_scale(s, id?)` | escala uniforme 0.05..20 (ex.: elites maiores) |
 | `viber.entity_damage(amount, id?)` | dano direto (sem i-frames — esses são do path do player). HP ≤ 0 EMITE `{type="kill"}` e NÃO corre o caminho nativo (cadáver/XP/quests são do melee) — o script decide |
 | `viber.entity_heal(amount, id?)` | cura, clampe ao max |
 

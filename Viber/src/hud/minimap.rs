@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
 use crate::player::Player;
-use crate::recipes::spawn::{DialogueNpc, OrbitCamera};
+use crate::recipes::spawn::OrbitCamera;
 use crate::terrain::runtime::TerrainRuntime;
 
 /// The minimap player arrow (rotation mirrors the camera heading).
@@ -229,7 +229,8 @@ pub fn hud_minimap_update(
     mut images: ResMut<Assets<Image>>,
     cameras: Query<&OrbitCamera>,
     players: Query<&GlobalTransform, With<Player>>,
-    npcs: Query<&GlobalTransform, With<DialogueNpc>>,
+    // Só os NPC que valem a pena (missão por aceitar/entregar) — o guia.
+    guide: Option<Res<crate::quest_guide::QuestGuide>>,
     threats: Query<&GlobalTransform, With<crate::ai::EnemyCreature>>,
     waypoint: Option<Res<crate::travel::Waypoint>>,
     runtime: Option<Res<TerrainRuntime>>,
@@ -371,9 +372,10 @@ pub fn hud_minimap_update(
     let offset = |x: f32, z: f32| ((x - player_pos.x) * scale, (z - player_pos.z) * scale);
 
     // Pontos de quest: NPCs, os mais próximos primeiro.
-    let mut near: Vec<(f32, f32)> = npcs
+    let beacons: &[Vec3] = guide.as_deref().map_or(&[], |g| g.beacons.as_slice());
+    let mut near: Vec<(f32, f32)> = beacons
         .iter()
-        .map(|t| offset(t.translation().x, t.translation().z))
+        .map(|p| offset(p.x, p.z))
         .filter(|(x, z)| inside_panel(*x, *z))
         .collect();
     // Distância AO QUADRADO: `hypot` faz um `sqrt` por comparação (O(n log n)

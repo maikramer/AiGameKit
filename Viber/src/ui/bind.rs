@@ -264,6 +264,16 @@ impl BoundValue {
 #[derive(Debug, Default, Resource)]
 pub struct UiBindWarnings(HashSet<String>);
 
+/// Segundos de jogo antes de um bind em falta ser aviso: os binds de script
+/// (`viber.ui.set`) só existem depois do 1.º `on_update` — avisar no frame 0
+/// enchia o arranque de falsos "unknown binding" (`boss`, `ab.*`, …).
+pub const BIND_WARN_GRACE_SECS: f32 = 3.0;
+
+/// `true` se `key` deve ser avisado AGORA (fora da graça e ainda não dito).
+pub fn should_warn_unknown(seen: &mut HashSet<String>, key: &str, elapsed: f32) -> bool {
+    elapsed >= BIND_WARN_GRACE_SECS && seen.insert(key.to_owned())
+}
+
 /// Splits a class binding `nome:classe` into `(nome, classe)`.
 ///
 /// Devolve `None` para binds normais (nenhum nome de binding contém `:` —
@@ -309,15 +319,17 @@ pub fn apply_bind_classes(
     // Option: apps mínimas de teste não registam os binds de script.
     script_binds: Option<Res<UiScriptBinds>>,
     mut warned: ResMut<UiBindWarnings>,
+    time: Option<Res<Time>>,
     mut binds: Query<(Entity, &UiBind, &mut UiClasses)>,
 ) {
+    let elapsed = time.map_or(f32::MAX, |t| t.elapsed_secs());
     let script_binds = script_binds.as_deref();
     for (entity, bind, mut classes) in &mut binds {
         let Some((name, class)) = split_class_bind(&bind.0) else {
             continue;
         };
         let Some(value) = resolve_binding(&data, script_binds, name) else {
-            if warned.0.insert(bind.0.clone()) {
+            if should_warn_unknown(&mut warned.0, &bind.0, elapsed) {
                 warn!("ui: unknown binding `{name}` — class `{class}` left untouched");
             }
             continue;
@@ -334,6 +346,7 @@ pub fn apply_ui_bindings(
     data: Res<UiData>,
     script_binds: Option<Res<UiScriptBinds>>,
     mut warned: ResMut<UiBindWarnings>,
+    time: Option<Res<Time>>,
     mut bars: Query<(&UiBind, &mut UiBar)>,
     mut cooldowns: Query<(&UiBind, &mut UiCooldown)>,
     mut texts: Query<(&UiBind, &mut Text)>,
@@ -350,6 +363,7 @@ pub fn apply_ui_bindings(
     >,
 ) {
     let script_binds = script_binds.as_deref();
+    let elapsed = time.map_or(f32::MAX, |t| t.elapsed_secs());
     let mut resolve = |name: &str| -> Option<BoundValue> {
         // Class binds (`nome:classe`) são do `apply_bind_classes`, não de
         // valor — nunca chegam a "unknown binding".
@@ -359,7 +373,7 @@ pub fn apply_ui_bindings(
         match resolve_binding(&data, script_binds, name) {
             Some(value) => Some(value),
             None => {
-                if warned.0.insert(name.to_string()) {
+                if should_warn_unknown(&mut warned.0, name, elapsed) {
                     warn!("ui: unknown binding `{name}` — element left untouched");
                 }
                 None

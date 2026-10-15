@@ -822,6 +822,11 @@ pub struct StaticSpawnerSpec {
     /// Script Luau declarado no template (`<Creature script="…">`) — cada
     /// instância spawna com [`LuaScriptRef`] e roda o seu próprio FSM.
     pub template_script: Option<String>,
+    /// `prop-*` do nó que declara o script do template (valores dos props
+    /// exportados, partilhados por todas as instâncias).
+    pub template_props: Vec<(String, String)>,
+    /// Grupos/conexões do mesmo nó do template (todas as instâncias).
+    pub template_links: NodeLinks,
     /// Raio de ativação (congelamento) das instâncias — `activation-radius`.
     pub activation_radius: f32,
     /// Collider declarado no template (`<GameObject collider="…">`) — cada
@@ -948,6 +953,8 @@ impl VegetationSpec {
             max_distance: self.max_distance,
             template_urls: self.meshes.clone(),
             template_script: None,
+            template_props: Vec::new(),
+            template_links: Default::default(),
             activation_radius: crate::luau::DEFAULT_ACTIVATION_RADIUS,
             template_collider: None,
             template_destructible: None,
@@ -974,6 +981,46 @@ pub const DEFAULT_NEAR_WATER_RADIUS: f32 = 4.0;
 /// (face + vergem dilatada) um prop pode nascer (`cliff-margin`).
 pub const DEFAULT_CLIFF_MARGIN: f32 = 2.0;
 
+/// Grupos (`groups="guardas aldeia"`) e conexões de sinal
+/// (`connect-<sinal>="alvo:método; @grupo:método"`) de um nó — o par
+/// grupos+sinais do Godot. Texto cru; o contrato vive em `crate::luau::exports`.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct NodeLinks {
+    pub groups: Vec<String>,
+    /// `(sinal, valor cru)` de cada `connect-<sinal>`.
+    pub connections: Vec<(String, String)>,
+}
+
+impl NodeLinks {
+    pub fn is_empty(&self) -> bool {
+        self.groups.is_empty() && self.connections.is_empty()
+    }
+
+    /// Aplica um atributo `groups`/`connect-*` (substitui o anterior);
+    /// `false` = não é um atributo de ligação.
+    pub fn apply_attr(&mut self, key: &str, value: &str) -> bool {
+        if key == "groups" {
+            self.groups = crate::luau::exports::parse_groups(value).0;
+            return true;
+        }
+        let Some(signal) = crate::luau::exports::connect_signal(key) else {
+            return false;
+        };
+        self.connections.retain(|(existing, _)| existing != signal);
+        self.connections.push((signal.to_owned(), value.to_owned()));
+        true
+    }
+
+    /// As ligações declaradas num nó.
+    pub fn of_node(node: &XmlNode) -> Self {
+        let mut links = Self::default();
+        for (key, value) in &node.attrs {
+            links.apply_attr(key, value);
+        }
+        links
+    }
+}
+
 /// A resolved recipe: everything needed to spawn one Bevy entity.
 #[derive(Debug, Clone)]
 pub struct EntitySpec {
@@ -981,9 +1028,13 @@ pub struct EntitySpec {
     /// Runtime element tag (parsed; consumed by later phases).
     #[allow(dead_code)]
     pub tag: Option<String>,
-    /// Script file reserved for the Luau runtime (parsed, not yet executed).
-    #[allow(dead_code)]
+    /// Script Luau da entidade (`script="…"`, relativo a `<mundo>/scripts/`).
     pub script: Option<String>,
+    /// Valores por instância dos props exportados pelo script (`prop-<nome>`,
+    /// sem o prefixo) — `crate::luau::exports`.
+    pub props: Vec<(String, String)>,
+    /// Grupos e conexões de sinal do nó (`groups=`, `connect-<sinal>=`).
+    pub links: NodeLinks,
     /// `destructible="…"` — prop colhível/destrutível (`crate::harvest`).
     pub destructible: Option<DestructibleSpec>,
     pub transform: TransformSpec,
@@ -995,6 +1046,9 @@ pub struct EntitySpec {
     /// `scene::SceneSource` no spawn. Num `<Use>`, o próprio `<Use>`; os filhos de um
     /// protótipo apontam para a definição dentro do `<Prototype>`.
     pub source: Option<std::sync::Arc<crate::xml::NodeOrigin>>,
+    /// `Some(id)` quando a entidade é o ROOT de uma instância `<Use>` — o
+    /// editor mostra "instância de {id}" e a definição é endereçável.
+    pub prototype_instance: Option<String>,
 }
 
 /// Parse the root of an expanded world.
@@ -1049,7 +1103,15 @@ pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result
         ));
     }
     if static_world {
-        static_world_findings(&entities, &mut warnings);
+        let mut violations = Vec::new();
+        static_world_findings(&entities, &mut violations);
+        if !violations.is_empty() {
+            bail!(
+                "mundo estático com geração em runtime ({} problema(s)):\n  {}\nUm estático é editado por `viber scene`/`viber tool`/ViberEditor; gera com `viber tool scatter` ou converte o procedural com `viber bake`.",
+                violations.len(),
+                violations.join("\n  ")
+            );
+        }
     }
     let mut infos = Vec::new();
     if !static_world {
@@ -1068,8 +1130,8 @@ pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result
     })
 }
 
-/// Num mundo estático, geradores e colocação em runtime não têm efeito: avisa (o
-/// `analyze --strict` falha) para o agente correr a ferramenta em vez disso.
+/// Num mundo estático não há geração nem colocação em runtime: cada uma destas é um ERRO de
+/// parse (o mundo não carrega) com a ferramenta a usar em vez disso.
 fn static_world_findings(specs: &[EntitySpec], warnings: &mut Vec<String>) {
     for spec in specs {
         match &spec.kind {
@@ -1212,6 +1274,11 @@ fn expand_uses(
             stack.pop();
             if let Some(mut inst) = expanded.pop() {
                 apply_use_overrides(&mut inst, &overrides, &prototype, ctx);
+                // Proveniência da INSTÂNCIA: o `<Use>` (não o nó dentro do
+                // protótipo) — o picking endereça a instância; o id do
+                // protótipo permite o banner "a editar definição".
+                inst.source = spec.source.clone();
+                inst.prototype_instance = Some(prototype.clone());
                 *instances.entry(prototype).or_insert(0) += 1;
                 out.push(inst);
             }
@@ -1255,6 +1322,13 @@ fn apply_use_overrides(
                 spec.script = Some(value.clone());
                 None
             }
+            key if crate::luau::exports::prop_name(key).is_some() => {
+                let name = crate::luau::exports::prop_name(key).unwrap_or_default();
+                spec.props.retain(|(existing, _)| existing != name);
+                spec.props.push((name.to_owned(), value.clone()));
+                None
+            }
+            key if spec.links.apply_attr(key, value) => None,
             "destructible" => {
                 spec.destructible = Some(DestructibleSpec::parse(value));
                 None
@@ -1481,6 +1555,9 @@ struct Common {
     name: Option<String>,
     tag: Option<String>,
     script: Option<String>,
+    /// `prop-<nome>` (sem o prefixo) — props exportados do script.
+    props: Vec<(String, String)>,
+    links: NodeLinks,
     destructible: Option<DestructibleSpec>,
     transform: TransformSpec,
     /// Colliders / rigid bodies (`collider`, `rigidbody`, `body`).
@@ -1512,6 +1589,8 @@ fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(Stri
         name: None,
         tag: None,
         script: None,
+        props: Vec::new(),
+        links: Default::default(),
         destructible: None,
         transform: TransformSpec::default(),
         physics: PhysicsSpec::default(),
@@ -1524,6 +1603,11 @@ fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(Stri
             "name" => common.name = Some(value.clone()),
             "tag" => common.tag = Some(value.clone()),
             "script" => common.script = Some(value.clone()),
+            key if crate::luau::exports::prop_name(key).is_some() => {
+                let name = crate::luau::exports::prop_name(key).unwrap_or_default();
+                common.props.push((name.to_owned(), value.clone()));
+            }
+            key if common.links.apply_attr(key, value) => {}
             // Component-string do plugin `destructible` do VibeGame — o
             // prop nasce colhível (árvores/rochas dos spawners).
             "destructible" => common.destructible = Some(DestructibleSpec::parse(value)),
@@ -1631,9 +1715,12 @@ fn finish_group(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node, ctx)?;
     warn_ignored(node, rest, ctx);
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -1701,9 +1788,12 @@ fn finish_composition(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
     let parsed_children = parse_entities(&node.children, ctx);
     ctx.composition_depth = outer_depth;
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: crate::physics::PhysicsSpec {
             collider: crate::physics::ColliderShape::None,
@@ -1736,9 +1826,12 @@ fn finish_use(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         ctx.warnings
             .push(format!("{ctx_tag}: missing prototype — skipped"));
         return Ok(EntitySpec {
+            prototype_instance: None,
             name: None,
             tag: None,
             script: None,
+            props: Vec::new(),
+            links: Default::default(),
             destructible: None,
             transform: TransformSpec::default(),
             physics: PhysicsSpec::default(),
@@ -1754,9 +1847,12 @@ fn finish_use(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         .cloned()
         .collect();
     Ok(EntitySpec {
+        prototype_instance: None,
         name: None,
         tag: None,
         script: None,
+        props: Vec::new(),
+        links: Default::default(),
         destructible: None,
         transform: TransformSpec::default(),
         physics: PhysicsSpec::default(),
@@ -1851,9 +1947,12 @@ fn finish_primitive(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         common.physics.collider = crate::physics::ColliderShape::Auto;
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -1883,9 +1982,12 @@ fn finish_point_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -1920,9 +2022,12 @@ fn finish_directional_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Entity
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -1953,9 +2058,12 @@ fn finish_ambient_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2022,9 +2130,12 @@ fn finish_orbit_camera(
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2098,10 +2209,21 @@ fn collect_template_meshes(node: &XmlNode, out: &mut Vec<String>, lods: &mut Vec
     }
 }
 
-/// Primeiro attr `script=` na subárvore do template (`<Creature script>`).
-fn collect_template_script(node: &XmlNode) -> Option<String> {
+/// `(script, props, ligações)` do nó que declara o script de um template.
+type TemplateScript = (String, Vec<(String, String)>, NodeLinks);
+
+/// Primeiro attr `script=` na subárvore do template (`<Creature script>`),
+/// com os `prop-*` e as ligações (`groups`/`connect-*`) desse mesmo nó.
+fn collect_template_script(node: &XmlNode) -> Option<TemplateScript> {
     if let Some(script) = node.attr("script").map(str::trim).filter(|s| !s.is_empty()) {
-        return Some(script.to_string());
+        let props = node
+            .attrs
+            .iter()
+            .filter_map(|(key, value)| {
+                crate::luau::exports::prop_name(key).map(|name| (name.to_owned(), value.clone()))
+            })
+            .collect();
+        return Some((script.to_string(), props, NodeLinks::of_node(node)));
     }
     for child in &node.children {
         if let Some(found) = collect_template_script(child) {
@@ -2186,6 +2308,8 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
         max_distance: 0.0,
         template_urls: Vec::new(),
         template_script: None,
+        template_props: Vec::new(),
+        template_links: Default::default(),
         activation_radius: crate::luau::DEFAULT_ACTIVATION_RADIUS,
         template_collider: None,
         template_destructible: None,
@@ -2201,7 +2325,11 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
         preplaced: None,
     };
     collect_template_meshes(node, &mut spec.template_urls, &mut spec.template_lods);
-    spec.template_script = collect_template_script(node);
+    if let Some((script, props, links)) = collect_template_script(node) {
+        spec.template_script = Some(script);
+        spec.template_props = props;
+        spec.template_links = links;
+    }
     // Destrutível do template: o attr `destructible` + o loot do
     // `<ResourceNode kind yield>` filho (árvores→wood, rochas→stone).
     spec.template_destructible = collect_template_destructible(node);
@@ -2232,9 +2360,12 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
         ctx.warnings
             .push(format!("{ctx_tag}: no template glTF url found — skipped"));
         return Ok(EntitySpec {
+            prototype_instance: None,
             name: common.name,
             tag: common.tag,
             script: common.script,
+            props: common.props,
+            links: common.links,
             transform: common.transform,
             physics: common.physics,
             destructible: common.destructible,
@@ -2307,9 +2438,12 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
         spec.count = 0;
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2408,9 +2542,12 @@ fn finish_particle_system(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySp
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2440,9 +2577,12 @@ fn finish_spawn_exclusion(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySp
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2533,9 +2673,12 @@ fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             .push(format!("{ctx_tag}: no meshes listed — skipped"));
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2555,9 +2698,12 @@ fn finish_player_gltf(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result
         ctx,
     );
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name.or_else(|| Some("player".to_string())),
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         destructible: common.destructible,
         transform: common.transform,
         physics: common.physics,
@@ -2590,9 +2736,12 @@ fn finish_dialogue_npc(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2626,9 +2775,12 @@ fn finish_resource_chip(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
             .push(format!("{ctx_tag}: missing resource — skipped"));
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2661,9 +2813,12 @@ fn finish_audio_mixer(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2692,9 +2847,12 @@ fn finish_music_layer(node: &XmlNode, layer: &str, ctx: &mut ParseCtx) -> Result
     }
     let _ = sound;
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2752,9 +2910,12 @@ fn finish_daycycle(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         c.dusk_minute = 1170.0;
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2802,9 +2963,12 @@ fn finish_weather(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2885,9 +3049,12 @@ fn finish_biome_region(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2924,9 +3091,12 @@ fn finish_world_border(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -2988,9 +3158,12 @@ fn finish_interior_scene(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpe
     }
     let half = [size[0] * 0.5, size[1] * 0.5];
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3015,9 +3188,12 @@ fn finish_interior_scene(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpe
 fn finish_engine_config(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, _rest) = parse_common(node, ctx)?;
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3095,9 +3271,12 @@ fn finish_landmark(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         }),
     };
     Ok(EntitySpec {
+        prototype_instance: None,
         name: None,
         tag: None,
         script: None,
+        props: Vec::new(),
+        links: Default::default(),
         transform: TransformSpec::default(),
         physics: PhysicsSpec::default(),
         destructible: None,
@@ -3132,9 +3311,12 @@ fn finish_spawn_point(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
     }
     let at = at.ok_or_else(|| anyhow!("{ctx_tag}: `at` com \"x z\" é obrigatório"))?;
     Ok(EntitySpec {
+        prototype_instance: None,
         name: None,
         tag: None,
         script: None,
+        props: Vec::new(),
+        links: Default::default(),
         transform: TransformSpec::default(),
         physics: PhysicsSpec::default(),
         destructible: None,
@@ -3151,9 +3333,12 @@ fn finish_sky(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node, ctx)?;
     let _ = rest;
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3174,9 +3359,12 @@ fn finish_hud_element(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
     let (common, _rest) = parse_common(node, ctx)?;
     // Raw attrs are the data — hud.rs interprets them, nothing to warn about.
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3213,9 +3401,12 @@ fn finish_ui_style(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         }
     };
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3230,9 +3421,12 @@ fn finish_ui_style(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
 fn finish_ui_tree(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, _rest) = parse_common(node, ctx)?;
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3280,9 +3474,12 @@ fn finish_gltf_scene(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result<
         ctx,
     );
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3431,9 +3628,12 @@ fn finish_terrain(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     spec.validate()
         .map_err(|e| anyhow::anyhow!("{ctx_tag}: {e}"))?;
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3470,9 +3670,12 @@ fn finish_terrain_pad(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3566,9 +3769,12 @@ fn finish_lake(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     }
     spec.islands = islands;
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3627,9 +3833,12 @@ fn finish_cut(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         bail!("{ctx_tag}: depth must be > 0 (got {})", spec.depth);
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3686,9 +3895,12 @@ fn finish_plateau(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         bail!("{ctx_tag}: height must be > 0 (got {})", spec.height);
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3760,9 +3972,12 @@ fn finish_ground_decal(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
         spec.seed = spec.at.x.to_bits() ^ spec.at.y.to_bits().rotate_left(16);
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3842,9 +4057,12 @@ fn finish_river(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         bail!("{ctx_tag}: depth must be > 0 (got {})", spec.depth);
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -3917,9 +4135,12 @@ fn finish_cliff(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         bail!("{ctx_tag}: angle must be > 0 (got {a})");
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -4008,9 +4229,12 @@ fn finish_cave(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         ));
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -4168,9 +4392,12 @@ fn finish_arch(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         bail!("{ctx_tag}: yaw must be a finite number");
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -4257,9 +4484,12 @@ fn finish_bridge(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         ));
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -4364,9 +4594,12 @@ fn finish_rock_features(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
         ));
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -4493,9 +4726,12 @@ fn finish_road(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         spec.texture_scale = s;
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -4660,9 +4896,12 @@ fn finish_road_network(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
         }
     }
     Ok(EntitySpec {
+        prototype_instance: None,
         name: common.name,
         tag: common.tag,
         script: common.script,
+        props: common.props,
+        links: common.links,
         transform: common.transform,
         physics: common.physics,
         destructible: common.destructible,
@@ -4967,11 +5206,15 @@ mod tests {
         .unwrap();
         assert!(pregenerated.infos.is_empty(), "{:?}", pregenerated.infos);
 
-        // Mundo estático: os geradores são WARNING (o runtime não os corre) —
-        // o nível info não se mistura com o de avisos.
-        let stat = parse_world(&[("static".to_string(), "true".to_string())], &generators).unwrap();
-        assert!(stat.infos.is_empty(), "{:?}", stat.infos);
-        assert!(!stat.warnings.is_empty());
+        // Mundo estático: geradores são ERRO (o mundo não carrega) — a mensagem diz que
+        // ferramenta usar e lista cada violação.
+        let error = parse_world(&[("static".to_string(), "true".to_string())], &generators)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("2 problema(s)") && error.contains("viber tool scatter"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -6768,6 +7011,36 @@ mod composition_tests {
         assert!(
             matches!(inst.children[0].physics.collider, ColliderShape::Auto),
             "as marcas de colisor por parte sobrevivem à expansão"
+        );
+    }
+
+    /// `prop-*` vira `EntitySpec::props` (sem o prefixo, sem aviso); o `<Use>`
+    /// sobrepõe por nome e herda os restantes do protótipo.
+    #[test]
+    fn test_script_props_parse_and_use_override() {
+        let mut proto = node("Prototype", &[("id", "npc")]);
+        proto.children = vec![node(
+            "Entity",
+            &[
+                ("script", "npc.lua"),
+                ("prop-speed", "1"),
+                ("prop-lines", "a|b"),
+            ],
+        )];
+        let use_a = node(
+            "Use",
+            &[("prototype", "npc"), ("name", "bram"), ("prop-speed", "2")],
+        );
+        let world = parse_world(&[], &[proto, use_a]).unwrap();
+        assert!(world.warnings.is_empty(), "{:?}", world.warnings);
+        let inst = &world.entities[0];
+        assert_eq!(inst.script.as_deref(), Some("npc.lua"));
+        assert_eq!(
+            inst.props,
+            vec![
+                ("lines".to_owned(), "a|b".to_owned()),
+                ("speed".to_owned(), "2".to_owned()),
+            ]
         );
     }
 

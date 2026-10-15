@@ -11,6 +11,9 @@
 //! | `viber.scene.undo` / `redo` | `{save?: true}` | transação ou `{"applied": 0}` |
 //! | `viber.scene.save` | — | `{files}` |
 //! | `viber.scene.catalog` | — | catálogo Add Node (tags + snippets) |
+//! | `viber.scene.schema` | `{target}` (seletor com `script=` ou `x.lua`) | props `--@export` do script + valores efetivos da instância |
+//! | `viber.scene.groups` | `{name?}` | grupos (`groups="…"`) → membros (seletor, tag, script) |
+//! | `viber.scene.instance` | `{scene, parent?: "#", at?: [x,y,z] mundo, save?}` | transação (`<Include src>` da cena) |
 //! | `viber.scene.lint` | `{strict?}` | lint estático do mundo (sintaxe Luau, `viber.load`, quest-parse, nomes duplicados); `strict` com erros → BrpError |
 //! | `viber.scene.drop` | `{glb, at: [x,y,z] mundo, parent?: "#", save?}` | transação (Entity + GltfScene) |
 //! | `viber.scene.files` | `{depth?: 6}` | árvore da pasta do mundo |
@@ -43,6 +46,9 @@ pub const METHOD_PICK: &str = "viber.scene.pick";
 pub const METHOD_ENTITIES: &str = "viber.scene.entities";
 pub const METHOD_CATALOG: &str = "viber.scene.catalog";
 pub const METHOD_LINT: &str = "viber.scene.lint";
+pub const METHOD_SCHEMA: &str = "viber.scene.schema";
+pub const METHOD_GROUPS: &str = "viber.scene.groups";
+pub const METHOD_INSTANCE: &str = "viber.scene.instance";
 pub const METHOD_DROP: &str = "viber.scene.drop";
 pub const METHOD_FILES: &str = "viber.scene.files";
 pub const METHOD_TOOL_LIST: &str = "viber.tool.list";
@@ -171,6 +177,28 @@ pub fn catalog_method(_input: In<Option<Value>>, _world: &mut World) -> BrpResul
     Ok(crate::scene::catalog::to_json())
 }
 
+/// Props exportados de um script (`--@export`) e os valores efetivos do nó — o mesmo
+/// JSON de `viber scene schema`.
+pub fn schema_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        target: String,
+    }
+    let p: Params = params(METHOD_SCHEMA, input.0)?;
+    crate::scene::script_schema(doc(world)?, &p.target).map_err(|e| invalid(format!("{e:#}")))
+}
+
+/// Grupos do mundo e os seus membros — o mesmo JSON de `viber scene groups`.
+pub fn groups_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize, Default)]
+    struct Params {
+        #[serde(default)]
+        name: Option<String>,
+    }
+    let p: Params = params(METHOD_GROUPS, input.0)?;
+    Ok(crate::scene::groups(doc(world)?, p.name.as_deref()))
+}
+
 /// Lint estático do mundo A CORRER (lê os ficheiros do `root_dir` do
 /// documento — o mesmo relatório do `viber scene lint` offline). `strict`
 /// devolve BrpError se houver findings de severidade error.
@@ -216,6 +244,29 @@ pub fn drop_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
     let op = crate::scene::catalog::glb_drop(doc(world)?, &p.parent, &p.glb, p.at)
         .map_err(|e| invalid(format!("{e:#}")))?;
     let tx = live::apply(world, &format!("drop {}", p.glb), &[op])
+        .map_err(|e| invalid(format!("{e:#}")))?;
+    report(world, &tx, p.save)
+}
+
+/// Instancia uma cena (`<Include src>`), o mesmo de `viber scene instance --live`.
+pub fn instance_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        scene: String,
+        #[serde(default = "root")]
+        parent: String,
+        #[serde(default)]
+        at: Option<[f32; 3]>,
+        #[serde(default = "yes")]
+        save: bool,
+    }
+    fn root() -> String {
+        "#".into()
+    }
+    let p: Params = params(METHOD_INSTANCE, input.0)?;
+    let op = crate::scene::catalog::scene_instance(doc(world)?, &p.parent, &p.scene, p.at)
+        .map_err(|e| invalid(format!("{e:#}")))?;
+    let tx = live::apply(world, &format!("instance {}", p.scene), &[op])
         .map_err(|e| invalid(format!("{e:#}")))?;
     report(world, &tx, p.save)
 }

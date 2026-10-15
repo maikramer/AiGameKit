@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "source": {
+    "world": "qa-tint-dry.xml",
+    "viber_version": "0.1.0"
+  },
+  "terrain": {
+    "world_size": 2048.0,
+    "max_height": 45.0,
+    "heightmap": "bake/terrain.ahgt",
+    "source_heightmap": null,
+    "layers": [
+      "grass",
+      "vale_grass",
+      "dirt",
+      "",
+      "",
+      "gravel",
+      "mountain_stone",
+      "sand"
+    ],
+    "spec": {
+      "chunk_size": 64.0,
+      "levels": 3,
+      "resolution": 64,
+      "collision_resolution": 64,
+      "render_distance": null,
+      "lod_hysteresis": 1.2,
+      "lod_distance_ratio": 2.0,
+      "shore_width": 5.0,
+      "seed": 0
+    }
+  },
+  "features": {
+    "pads": [],
+    "lakes": [],
+    "rivers": [],
+    "road_networks": [],
+    "roads": [],
+    "cliffs": [],
+    "arches": [],
+    "caves": [],
+    "exclusions": []
+  },
+  "spawn_groups": []
+}

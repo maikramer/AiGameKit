@@ -57,6 +57,13 @@ pub fn knockback_after(direction: Vec3, strength: f32) -> Knockback {
     }
 }
 
+/// Velocidade inicial de knockback que percorre `displacement` (XZ) até
+/// parar: com o decaimento linear `v *= 1 − k·dt`, a distância total é
+/// ≈ v₀/k — o dash pede metros, não m/s.
+pub fn push_velocity(displacement: Vec3) -> Vec3 {
+    displacement.with_y(0.0) * KNOCKBACK_DECAY
+}
+
 /// Tombamento de `angle_deg` em torno de `axis`. Eixo nulo (herói em cima do
 /// tronco) cai para +X: `from_axis_angle(ZERO, a)` dá um quaternião NÃO
 /// unitário, que no `Transform` encolhia o prop (a meio a 90°) em vez de o

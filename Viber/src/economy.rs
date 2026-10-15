@@ -168,7 +168,7 @@ impl Plugin for EconomyPlugin {
                     timed(Group::World, hotbar_use_system),
                     timed(Group::World, vault_chips_system),
                     vault_loot_sfx_system,
-                    debug_give_system,
+                    debug_give_system.run_if(crate::quests::debug_keys_enabled),
                 ),
             );
     }

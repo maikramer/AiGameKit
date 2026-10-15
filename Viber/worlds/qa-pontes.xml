@@ -1,77 +1,18 @@
-<!--
-  QA das travessias volumétricas. O que este mundo prova, e que o ribbon de
-  `<Road profile="bridge">` NÃO consegue: existe um tabuleiro com collider por
-  cima do leito do rio — o herói atravessa em vez de cair.
-
-  Correr:
-    cargo run : analyze worlds/qa-pontes.xml
-    viber session up worlds/qa-pontes.xml   (protocolo de sessão: nunca `run` directo)
-
-  A ribeira desce pelo centro do mundo. A `ponte_pedra` atravessa-a de nascente
-  a poente: pilares assentes no chão, o intradorso dos arcos e o tímpano a
-  encher até ao tabuleiro, com guardas nas duas bordas. Tudo aditivo — nenhuma
-  ponte pode escavar o terreno que atravessa. O `arco_natural` atravessa a
-  mesma ribeira mais a norte sem um único pilar — só rocha, grossa nas
-  margens e fina no fecho, que é a forma que a água deixa.
-
-  A poente há um sistema de cavernas com galeria e chaminé; a nascente, um
-  arco natural numa encosta (pernas a alturas diferentes) e um viaduto de
-  quatro vãos.
-
-  A coluna a meio de cada vão tem DOIS spans sólidos (tabuleiro + leito), e é
-  isso que `tests/voxel_terrain.rs` e `tests/terrain_collision.rs` medem.
--->
-<world clear-color="#87ceeb">
+<?xml version="1.0" encoding="UTF-8"?>
+<world clear-color="#87ceeb" static="true">
   <AmbientLight color="#bfd4e0" brightness="400" />
-  <DirectionalLight direction="-0.5 -1 -0.3" illuminance="28000" shadows="true" />
-
-  <Terrain name="colina" world-size="256" max-height="45" chunk-size="64"
-           levels="3" resolution="64" collision-resolution="32"
-           height-smoothing="1" seed="11"
-           base-color="#c9c5ba" cliff-angle="50" />
-
-  <!-- A ribeira que as duas travessias atravessam. -->
-  <River name="ribeira" path="-14 -120  -2 -40  4 20  -8 96"
-         width="13" depth="3.6" water-offset="0.9"
-         bank-width="5" bank-height="0.9" color="#2a6685" opacity="0.72" />
-
-  <!-- Obra de pedra: 3 arcos. `thickness` 2 m = duas células do LOD0, que é
-       o mínimo para o tabuleiro não desaparecer nos níveis grosseiros. -->
-  <Bridge name="ponte_pedra" path="-40 0  40 0" width="6" style="stone"
-          rise="2.5" thickness="2" spans="3" pier-width="3" parapet="0.9" />
-
-  <!-- Rocha natural: sem pilares, sem guardas, ancas a alargar nas margens. -->
-  <Bridge name="arco_natural" path="-34 62  -4 68  28 62" width="9"
-          style="natural" rise="6" thickness="4" />
-
-  <!-- Sistema de cavernas: o tubo estreita, abre numa galeria e volta a
-       estreitar (`radius` como perfil), com uma sala à parte e uma chaminé
-       que sobe à superfície. A chaminé é a segunda entrada e a única luz. -->
+  <DirectionalLight direction="-0.5 -1 -0.3" illuminance="28000" shadows="true" euler="-73.3008 25.5904 19.1818" />
+  <Terrain name="colina" world-size="256" max-height="45" chunk-size="64" levels="3" resolution="64" collision-resolution="32" height-smoothing="1" seed="11" base-color="#c9c5ba" cliff-angle="50" heightmap="qa-pontes.data/terrain.ahgt" />
+  <River name="ribeira" path="-14 -120  -2 -40  4 20  -8 96" width="13" depth="3.6" water-offset="0.9" bank-width="5" bank-height="0.9" color="#2a6685" opacity="0.72" water-levels="15.998405 15.998405 15.998405 15.998405 15.998405 15.927729 15.465385 15.043598 14.721036 14.61042 14.61042 14.61042 14.61042 14.61042 14.61042 14.61042 14.61042 14.2938 13.794788 13.327806 12.945648 12.740166 12.576252 12.289112 11.85163 11.280086 10.683826 10.18076 9.766158 9.321241 8.775098 8.082415 7.2373385 6.4508667 5.8145995 5.276958 4.7081885 4.0872636 3.4492402 2.6875372 1.7779723 0.9031738 0.36350513 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365 -0.026340365" rocks="0" />
+  <Bridge name="ponte_pedra" path="-40 0  40 0" width="6" style="stone" rise="2.5" thickness="2" spans="3" pier-width="3" parapet="0.9" />
+  <Bridge name="arco_natural" path="-34 62  -4 68  28 62" width="9" style="natural" rise="6" thickness="4" />
   <Cave name="mina" path="-104 -84  -76 -62  -44 -52" radius="2.5 5 3" depth="10">
     <Chamber name="salao" at="-76 -62" radius="9" height="7" />
     <Shaft name="chamine" at="-76 -62" radius="1.8" />
   </Cave>
-
-  <!-- Arco natural numa encosta: cada perna assenta no seu próprio chão, por
-       isso o arco inclina com o terreno em vez de flutuar de um lado. -->
-  <Arch name="arco_da_encosta" path="58 -72  82 -58" profile="natural"
-        height="8" thickness="2.5" />
-
-  <!-- Viaduto: 4 vãos espalhados pelo mesmo path, cada bloco com a base no
-       terreno local. -->
-  <Arch name="aqueduto" path="66 18  114 26" spans="4" height="11"
-        thickness="2" depth="3" />
-
-  <!-- Dispersão procedural na faixa norte: mesma seed, mesmas rochas, sempre.
-       As caves só nascem no pé de encostas (`min-rise`) e o path INTEIRO de
-       cada um é validado contra água, estradas, paredes, pads e o que já
-       existe no mundo — as rejeições saem no log de arranque. -->
-  <RockFeatures name="rochedos" region="-124 -124  124 -24" seed="9"
-                arches="3" caves="2" bridges="1"
-                min-slope="18" max-slope="75" min-drop="5" spacing="34" />
-
-  <!-- Câmara quase ao nível do tabuleiro e a olhar ao longo da ribeira: é
-       assim que o vão da ponte de pedra se recorta contra o céu. -->
+  <Arch name="arco_da_encosta" path="58 -72  82 -58" profile="natural" height="8" thickness="2.5" />
+  <Arch name="aqueduto" path="66 18  114 26" spans="4" height="11" thickness="2" depth="3" />
+  <RockFeatures name="rochedos" region="-124 -124  124 -24" seed="9" arches="3" caves="2" bridges="1" min-slope="18" max-slope="75" min-drop="5" spacing="34" />
   <Entity name="mirante" translation="0 12 0" />
   <OrbitCamera target="mirante" distance="62" height="6" pitch="4" />
 </world>

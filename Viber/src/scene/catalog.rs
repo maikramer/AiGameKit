@@ -270,6 +270,18 @@ pub fn glb_drop(
     glb_path: &str,
     world_pos: [f32; 3],
 ) -> anyhow::Result<EditOp> {
+    glb_drop_pose(doc, parent, glb_path, world_pos, 0.0, 1.0)
+}
+
+/// Como [`glb_drop`], com rotação Y (graus) e escala uniforme — o stamp tool.
+pub fn glb_drop_pose(
+    doc: &super::doc::SceneDoc,
+    parent: &str,
+    glb_path: &str,
+    world_pos: [f32; 3],
+    yaw_deg: f32,
+    scale: f32,
+) -> anyhow::Result<EditOp> {
     let parent_ref = doc.resolve(parent)?;
     let name = Path::new(glb_path)
         .file_stem()
@@ -281,16 +293,62 @@ pub fn glb_drop(
         &parent_ref,
         pose::Pose {
             translation: bevy::math::Vec3::from(world_pos),
-            ..pose::Pose::default()
+            rotation: bevy::math::Quat::from_rotation_y(yaw_deg.to_radians()),
+            scale: bevy::math::Vec3::splat(scale.max(0.01)),
         },
     );
     let translation = pose::format_vec3(local.translation);
+    let euler = pose::format_euler(local.rotation);
+    let scale_text = pose::format_scale(local.scale);
     Ok(EditOp::Insert {
         parent: parent.to_string(),
         index: None,
         xml: format!(
-            r#"<Entity name="{name}" translation="{translation}"><GltfScene url="{url}" /></Entity>"#
+            r#"<Entity name="{name}" translation="{translation}" euler="{euler}" scale="{scale_text}"><GltfScene url="{url}" /></Entity>"#
         ),
+    })
+}
+
+/// Instancia uma cena (`.xml` da pasta do mundo — ex. um ramo extraído com `extract`):
+/// `<Include src="/cena.xml">` debaixo de `parent`, na posição MUNDO `at` convertida para o
+/// referencial do pai (omissa: na origem do pai). O insert carrega o ficheiro no documento.
+pub fn scene_instance(
+    doc: &super::doc::SceneDoc,
+    parent: &str,
+    scene: &str,
+    world_pos: Option<[f32; 3]>,
+) -> anyhow::Result<EditOp> {
+    let parent_ref = doc.resolve(parent)?;
+    let rel = scene
+        .trim()
+        .trim_start_matches("./")
+        .trim_start_matches('/');
+    if !rel.ends_with(".xml") {
+        anyhow::bail!("instance: `{scene}` não é um .xml");
+    }
+    if doc.file_by_path(rel).is_none() && !doc.root_dir.join(rel).is_file() {
+        anyhow::bail!("instance: `{rel}` não existe na pasta do mundo");
+    }
+    let mut xml = format!(r#"<Include src="/{rel}""#);
+    if let Some(world_pos) = world_pos {
+        let local = pose::world_to_local(
+            doc,
+            &parent_ref,
+            pose::Pose {
+                translation: bevy::math::Vec3::from(world_pos),
+                ..pose::Pose::default()
+            },
+        );
+        xml.push_str(&format!(
+            r#" translation="{}""#,
+            pose::format_vec3(local.translation)
+        ));
+    }
+    xml.push_str(" />");
+    Ok(EditOp::Insert {
+        parent: parent.to_string(),
+        index: None,
+        xml,
     })
 }
 

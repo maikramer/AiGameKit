@@ -4,7 +4,7 @@
 use bevy::prelude::*;
 
 use crate::player::Player;
-use crate::recipes::spawn::{DialogueNpc, OrbitCamera};
+use crate::recipes::spawn::OrbitCamera;
 
 /// One direction letter in the sliding compass strip.
 #[derive(Component)]
@@ -68,7 +68,7 @@ pub fn compass_offset_px(delta_deg: f32, half_width: f32, span_deg: f32) -> Opti
 pub fn hud_compass_update(
     cameras: Query<&OrbitCamera>,
     players: Query<&GlobalTransform, With<Player>>,
-    npcs: Query<&GlobalTransform, With<DialogueNpc>>,
+    guide: Option<Res<crate::quest_guide::QuestGuide>>,
     mut letters: Query<(&mut Node, &mut Visibility, &CompassLetter), Without<CompassTick>>,
     mut ticks: Query<(&mut Node, &CompassTick), (Without<CompassLetter>, Without<CompassDistance>)>,
     mut distances: Query<
@@ -85,9 +85,11 @@ pub fn hud_compass_update(
         .next()
         .map(|player| {
             let origin = player.translation();
-            npcs.iter()
-                .map(|t| {
-                    let p = t.translation();
+            guide
+                .as_deref()
+                .map_or(&[][..], |g| g.beacons.as_slice())
+                .iter()
+                .map(|p| {
                     (
                         world_bearing_deg(p.x - origin.x, p.z - origin.z),
                         p.distance(origin),

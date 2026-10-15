@@ -204,6 +204,13 @@ impl LuaScriptHost {
             .set_name(path)
             .set_environment(env.clone())
             .into_function()?;
+        let exports = super::exports::parse_exports(code);
+        for error in &exports.errors {
+            warn!("[luau] {path}: --@export {error}");
+        }
+        if let Some(mut ctx) = self.lua.app_data_mut::<ScriptCtx>() {
+            ctx.exports.insert(path.to_string(), Arc::new(exports));
+        }
         self.registry.insert(
             path.to_string(),
             LoadedScript {
@@ -280,7 +287,14 @@ impl LuaScriptHost {
         if !script.ran {
             let chunk = script.chunk.clone();
             let _budget = self.budget_guard();
-            chunk.call::<()>(())?;
+            if let Some(mut ctx) = self.lua.app_data_mut::<ScriptCtx>() {
+                ctx.top_level = true;
+            }
+            let ran = chunk.call::<()>(());
+            if let Some(mut ctx) = self.lua.app_data_mut::<ScriptCtx>() {
+                ctx.top_level = false;
+            }
+            ran?;
             let script = self
                 .registry
                 .get_mut(path)
@@ -356,6 +370,44 @@ impl LuaScriptHost {
         };
         let _budget = self.budget_guard();
         cb.call::<()>((attacker_pos.x, attacker_pos.z))
+    }
+
+    /// Entrega um sinal/`call_group`: chama a função global `method` do script
+    /// de `entity` com `args` e `viber.sender()` = `sender`. `Ok(false)` quando
+    /// o script não define o método (o chamador avisa).
+    pub fn run_method(
+        &mut self,
+        entity: Entity,
+        path: &str,
+        origin: Vec3,
+        method: &str,
+        args: mlua::MultiValue,
+        sender: Option<i64>,
+    ) -> mlua::Result<bool> {
+        let Some(script) = self.registry.get(path) else {
+            return Ok(false);
+        };
+        let Some(func) = script.env.raw_get::<Option<Function>>(method)? else {
+            return Ok(false);
+        };
+        {
+            let mut ctx = self
+                .lua
+                .app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+            ctx.entity = Some(entity);
+            ctx.path = Some(path.to_string());
+            ctx.origin = origin;
+            ctx.sender = sender;
+        }
+        let result = {
+            let _budget = self.budget_guard();
+            func.call::<()>(args)
+        };
+        if let Some(mut ctx) = self.lua.app_data_mut::<ScriptCtx>() {
+            ctx.sender = None;
+        }
+        result.map(|()| true)
     }
 
     /// Drains all queued `set_position` commands (called once per frame after

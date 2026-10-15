@@ -1,55 +1,13 @@
-<!--
-  QA do terreno voxel. O que este mundo prova, e que o heightfield NÃO
-  consegue representar de todo: existe rocha POR CIMA da cabeça do jogador,
-  em três formas — gruta, arco autónomo e overhang.
-
-  Correr:
-    cargo run : analyze worlds/qa-voxel.xml
-    viber session up worlds/qa-voxel.xml   (protocolo de sessão: nunca `run` directo)
-
-  O vale fica no centro (o ponto baixo do terreno procedural) e o alto
-  planalto fica no canto sudeste. Os dois túneis cruzam-no junto ao fundo;
-  as bocas sobem à superfície (`open-ends`, o default), senão a gruta era
-  uma bolha selada que ninguém alcança. O portal fica no flanco do vale
-  (atravessa-se a pé); `janela` é um <Cliff profile="arch"> na subida sul —
-  parede com um vão em arco aberto no meio da banda; `beiral` é o saliência
-  na escarpa oeste, com rocha por cima da cabeça.
--->
-<world clear-color="#87ceeb">
+<?xml version="1.0" encoding="UTF-8"?>
+<world clear-color="#87ceeb" static="true">
   <AmbientLight color="#bfd4e0" brightness="400" />
-  <DirectionalLight direction="-0.5 -1 -0.3" illuminance="28000" shadows="true" />
-
-  <!-- Mundo pequeno e sem `layers`: o tint legado chega para QA de forma e
-       mantém o bootstrap barato. `sharpen` fica desligado (é opt-in e mexe
-       em alturas). -->
-  <Terrain name="colina" world-size="256" max-height="45" chunk-size="64"
-           levels="3" resolution="64" collision-resolution="32"
-           height-smoothing="1" seed="11"
-           base-color="#c9c5ba" cliff-angle="50" />
-
-  <!-- O túnel. `depth` 9 m com raio 3.5 deixa ~5.5 m de tecto no miolo. -->
-  <Cave name="mina" path="-90 6  -40 0  10 -4  60 2  95 8"
-        radius="3.5" depth="9" />
-
-  <!-- Segundo túnel, cruzando o primeiro em ângulo: a interseção de dois
-       sólidos subtractivos tem de dar uma câmara, não uma costura. -->
-  <Cave name="galeria" path="4 -70  8 -10  12 40  6 85"
-        radius="3" depth="7" />
-
-  <!-- Portal de rocha autónomo: sólido union com vão em arco; a coluna no
-       centro do vão tem DOIS spans sólidos (chão + fita do arco). -->
+  <DirectionalLight direction="-0.5 -1 -0.3" illuminance="28000" shadows="true" euler="-73.3008 25.5904 19.1818" />
+  <Terrain name="colina" world-size="256" max-height="45" chunk-size="64" levels="3" resolution="64" collision-resolution="32" height-smoothing="1" seed="11" base-color="#c9c5ba" cliff-angle="50" heightmap="qa-voxel.data/terrain.ahgt" />
+  <Cave name="mina" path="-90 6  -40 0  10 -4  60 2  95 8" radius="3.5" depth="9" />
+  <Cave name="galeria" path="4 -70  8 -10  12 40  6 85" radius="3" depth="7" />
   <Arch name="portal" at="72 -18" width="7" height="6" yaw="35" />
-
-  <!-- Parede com janela: o contorno é vertical, o vão é uma cápsula
-       subtractiva pelo meio da banda (só abre se a queda local ≥ 3 m). -->
   <Cliff name="janela" profile="arch" path="-25 18 25 18" width="12" />
-
-  <!-- Saliência na escarpa oeste: a face corta para trás por baixo da
-       verga — abrigo com rocha por cima da cabeça. -->
   <Cliff name="beiral" profile="overhang" path="-85 -45 -80 -25" width="8" />
-
-  <!-- Câmara QA apontada à boca oeste da mina (mudar o target para
-       "colina" dá a vista geral do mundo). -->
   <Entity name="mirante" translation="-78 26 6" />
   <OrbitCamera target="mirante" distance="28" height="5" pitch="12" />
 </world>

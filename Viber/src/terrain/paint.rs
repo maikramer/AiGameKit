@@ -277,7 +277,7 @@ impl PaintGrid {
     /// Grava ao lado do `.ahgt` (`` `<ahgt>`.paint ``).
     pub fn save(&self, ahgt: &std::path::Path) -> Result<()> {
         let path = paint_path(ahgt);
-        std::fs::write(&path, self.to_bytes())
+        crate::scene::doc::write_atomic(&path, &self.to_bytes())
             .with_context(|| format!("escrever {}", path.display()))
     }
 
@@ -301,7 +301,7 @@ impl PaintGrid {
     }
 }
 
-/// O caminho do ficheiro de pintura de um `.ahgt` (`terrain.baked.ahgt` → `terrain.baked.ahgt.paint`).
+/// O caminho do ficheiro de pintura de um `.ahgt` (`terrain.ahgt` → `terrain.ahgt.paint`).
 pub fn paint_path(ahgt: &std::path::Path) -> std::path::PathBuf {
     ahgt.with_extension("ahgt.paint")
 }
@@ -382,7 +382,7 @@ mod tests {
     #[test]
     fn save_load_next_to_the_ahgt() {
         let tmp = tempfile::tempdir().unwrap();
-        let ahgt = tmp.path().join("terrain.baked.ahgt");
+        let ahgt = tmp.path().join("terrain.ahgt");
         assert!(PaintGrid::load(&ahgt, 200.0).unwrap().is_none());
         let mut grid = PaintGrid::new(200.0, 16);
         let at = grid.cell_center(8, 8);

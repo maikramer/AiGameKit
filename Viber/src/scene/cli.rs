@@ -132,6 +132,9 @@ pub enum SceneCommand {
     },
     /// O catálogo Add Node: tags com snippets válidos (o mesmo diálogo do editor)
     Catalog,
+    /// Props exportados de um script (`--@export`): o esquema tipado e, num nó, os valores
+    /// efetivos da instância (`prop-<nome>`). Alvo: seletor de nó com `script=` ou `x.lua`
+    Schema { target: String },
     /// Lint estático do mundo: sintaxe Luau de TODOS os scripts, alvos
     /// `viber.load("…")`, referências das quests (`npc` ↔ DialogueNPC,
     /// `visit` ↔ Landmark) e nomes de entidade duplicados. Sem engine.
@@ -164,6 +167,34 @@ pub enum SceneCommand {
         parent: String,
         #[arg(long)]
         dry_run: bool,
+    },
+    /// "Salvar ramo como cena": o nó (e a subárvore) passa para um ficheiro novo e fica no
+    /// lugar um `<Include>` com a pose dele (desfazível: o `inverse` repõe tudo)
+    Extract {
+        selector: String,
+        /// Ficheiro da cena, relativo à pasta do mundo (omisso: `scenes/<nome>.xml`)
+        #[arg(long)]
+        to: Option<String>,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Instancia uma cena (`.xml` da pasta do mundo) como `<Include>` — o "Instance Child
+    /// Scene" do Godot. Várias instâncias partilham o ficheiro: editá-lo muda todas
+    Instance {
+        scene: String,
+        /// Contentor (omisso: raiz do mundo)
+        #[arg(long, default_value = "#")]
+        parent: String,
+        /// Posição MUNDO "x y z" (convertida para o referencial do pai)
+        #[arg(long, allow_hyphen_values = true)]
+        at: Option<String>,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Grupos (`groups="…"`) do mundo e os seus membros — os alvos `@grupo` dos sinais
+    Groups {
+        /// Só este grupo
+        name: Option<String>,
     },
     /// Lista a pasta do mundo em árvore (world/scene/lua/glb/… — o dock FileSystem do editor)
     Files {
@@ -207,6 +238,18 @@ enum Request {
         depth: usize,
     },
     Catalog,
+    Schema {
+        target: String,
+    },
+    Groups {
+        name: Option<String>,
+    },
+    Instance {
+        scene: String,
+        parent: String,
+        at: Option<[f32; 3]>,
+        dry_run: bool,
+    },
     Drop {
         glb: String,
         at: [f32; 3],
@@ -305,6 +348,30 @@ fn request(command: SceneCommand) -> Result<Request> {
         SceneCommand::Entities { selector } => Request::Entities { selector },
         SceneCommand::Files { depth } => Request::Files { depth },
         SceneCommand::Catalog => Request::Catalog,
+        SceneCommand::Schema { target } => Request::Schema { target },
+        SceneCommand::Groups { name } => Request::Groups { name },
+        SceneCommand::Extract {
+            selector,
+            to,
+            dry_run,
+        } => Request::Ops {
+            ops: vec![EditOp::Extract { node: selector, to }],
+            dry_run,
+            coalesce: None,
+        },
+        SceneCommand::Instance {
+            scene,
+            parent,
+            at,
+            dry_run,
+        } => Request::Instance {
+            scene,
+            parent,
+            at: at
+                .map(|at| crate::xml::values::parse_vec3(&at, "--at"))
+                .transpose()?,
+            dry_run,
+        },
         // `run` trata o lint ANTES de carregar o documento; `live_request`
         // encaminha para a bridge. Nunca chega aqui.
         SceneCommand::Lint { .. } => bail!("lint não passa pelo documento de edição"),
@@ -378,6 +445,17 @@ pub fn run(world: &Path, command: SceneCommand) -> Result<Value> {
             )
         }
         Request::Catalog => return Ok(super::catalog::to_json()),
+        Request::Schema { target } => return super::script_schema(&doc, &target),
+        Request::Groups { name } => return Ok(super::groups(&doc, name.as_deref())),
+        Request::Instance {
+            scene,
+            parent,
+            at,
+            dry_run,
+        } => (
+            vec![super::catalog::scene_instance(&doc, &parent, &scene, at)?],
+            dry_run,
+        ),
         Request::Drop {
             glb,
             at,
@@ -442,6 +520,17 @@ pub fn live_request(command: SceneCommand) -> Result<(&'static str, Value)> {
         Request::Entities { selector } => ("viber.scene.entities", json!({ "selector": selector })),
         Request::Files { depth } => ("viber.scene.files", json!({ "depth": depth })),
         Request::Catalog => ("viber.scene.catalog", json!({})),
+        Request::Schema { target } => ("viber.scene.schema", json!({ "target": target })),
+        Request::Groups { name } => ("viber.scene.groups", json!({ "name": name })),
+        Request::Instance { dry_run: true, .. } => {
+            bail!("--dry-run não existe com --live (a engine aplicaria a edição); corre sem --live")
+        }
+        Request::Instance {
+            scene, parent, at, ..
+        } => (
+            "viber.scene.instance",
+            json!({ "scene": scene, "parent": parent, "at": at }),
+        ),
         Request::Drop { dry_run: true, .. } => {
             bail!("--dry-run não existe com --live (a engine aplicaria a edição); corre sem --live")
         }
@@ -468,6 +557,7 @@ pub fn transaction_json(doc: &SceneDoc, tx: &Transaction, files: &[String], save
             Change::Removed { node } => json!({ "kind": "removed", "node": doc.selector(node) }),
             Change::Terrain { rect } => json!({ "kind": "terrain", "cells": rect }),
             Change::Paint { rect } => json!({ "kind": "paint", "cells": rect }),
+            Change::Biomes => json!({ "kind": "biomes" }),
         })
         .collect();
     json!({

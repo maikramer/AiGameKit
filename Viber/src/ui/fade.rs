@@ -158,7 +158,7 @@ pub fn drive_ui_fades(
             match resolve_binding(&data, script_binds, &bind.0) {
                 Some(value) => fade.shown = value.truthy,
                 None => {
-                    if warned.insert(bind.0.clone()) {
+                    if super::bind::should_warn_unknown(&mut warned, &bind.0, time.elapsed_secs()) {
                         warn!("ui: unknown binding `{}` — fade left untouched", bind.0);
                     }
                 }

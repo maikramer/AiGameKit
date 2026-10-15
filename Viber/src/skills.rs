@@ -563,7 +563,6 @@ pub fn abilities_system(
     mut numbers: MessageWriter<DamageNumberEvent>,
     mut toasts: MessageWriter<ScriptToast>,
     stats: Res<PlayerStatsResource>,
-    terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     mut commands: Commands,
     mut fx: AbilityFx,
     mut quests: Option<ResMut<QuestLog>>,
@@ -596,17 +595,14 @@ pub fn abilities_system(
     if keys.just_pressed(KeyCode::KeyC) && cds.dash <= 0.0 {
         // O modelo olha +Z (convenção da pipeline) — o `forward()` (−Z)
         // dashava PARA TRÁS (mesma correção do melee, `combat::hero_forward`).
+        // Pelo character controller (knockback): colide com muros e casas —
+        // o teleporte antigo atravessava a muralha da cidade e paredes.
         let forward = crate::combat::hero_forward(global) * DASH_DISTANCE;
-        let (x, z) = (pos.x + forward.x, pos.z + forward.z);
-        // PISO SOB O HERÓI (Y conhecido → surface_below): o dash sob um
-        // overhang não teleporta para cima da rocha; em campo aberto segue
-        // o relevo como antes. Enterrado (a atravessar uma parede) mantém a
-        // superfície renderizada — o dash continua a cruzar obstáculos.
-        let y = terrain
-            .as_ref()
-            .map(|t| crate::player::ground_near(t, x, z, pos.y))
-            .unwrap_or(pos.y);
-        transform.translation = Vec3::new(x, y, z);
+        commands
+            .entity(entity)
+            .insert(crate::physics_fx::Knockback {
+                velocity: crate::physics_fx::push_velocity(forward),
+            });
         commands.entity(entity).insert(Invulnerable {
             timer: DASH_IFRAMES,
         });

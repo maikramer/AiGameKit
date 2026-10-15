@@ -351,13 +351,12 @@ fn file_tree_scans_dirs_first_classifies_and_skips() {
 fn file_tree_json_and_filters_are_stable() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
-    std::fs::write(root.join("world.static.xml"), "<world />").unwrap();
+    std::fs::write(root.join("world.xml"), "<world static=\"true\" />").unwrap();
     std::fs::create_dir_all(root.join("assets/meshes")).unwrap();
     std::fs::write(root.join("assets/meshes/hero.glb"), "").unwrap();
-    std::fs::create_dir_all(root.join("bake")).unwrap();
-    std::fs::write(root.join("bake/terrain.baked.ahgt"), "").unwrap();
-    std::fs::create_dir_all(root.join("bake/veg")).unwrap();
-    std::fs::write(root.join("bake/veg/000.vinst"), "").unwrap();
+    std::fs::create_dir_all(root.join("world.data/veg")).unwrap();
+    std::fs::write(root.join("world.data/terrain.ahgt"), "").unwrap();
+    std::fs::write(root.join("world.data/veg/000.vinst"), "").unwrap();
 
     let entries = super::files::scan(root, 6);
     let json = super::files::to_json(&entries);
@@ -372,7 +371,7 @@ fn file_tree_json_and_filters_are_stable() {
         "",
         &mut heights,
     );
-    assert_eq!(heights, ["bake/terrain.baked.ahgt"]);
+    assert_eq!(heights, ["world.data/terrain.ahgt"]);
     let mut instances = Vec::new();
     super::files::paths_of(
         &entries,
@@ -380,11 +379,24 @@ fn file_tree_json_and_filters_are_stable() {
         "",
         &mut instances,
     );
-    assert_eq!(instances, ["bake/veg/000.vinst"]);
-    // world.static.xml é ponto de entrada, não cena qualquer
+    assert_eq!(instances, ["world.data/veg/000.vinst"]);
+    // world.xml é ponto de entrada, não cena qualquer
     let mut worlds = Vec::new();
     super::files::paths_of(&entries, super::files::FileKind::World, "", &mut worlds);
-    assert_eq!(worlds, ["world.static.xml"]);
+    assert_eq!(worlds, ["world.xml"]);
+}
+
+#[test]
+fn glb_drop_pose_writes_yaw_and_scale() {
+    let (tmp, doc) = load();
+    let op = super::catalog::glb_drop_pose(&doc, "#", "/x/model.glb", [1.0, 0.0, 2.0], 45.0, 2.0)
+        .expect("op");
+    let super::ops::EditOp::Insert { xml, .. } = op else {
+        panic!("não é insert");
+    };
+    assert!(xml.contains("euler=\"0 45 0\""), "{xml}");
+    assert!(xml.contains("scale=\"2\""), "{xml}");
+    assert!(xml.contains("translation=\"1 0 2\""), "{xml}");
 }
 
 #[test]
@@ -465,6 +477,69 @@ fn catalog_tags_are_known_and_snippet_fallback_is_generic() {
         "<cliff />",
         "tag conhecida fora do catálogo usa o snippet genérico"
     );
+}
+
+#[test]
+fn terrain_biomes_op_applies_and_undo_restores_field() {
+    let (tmp, mut doc) = load();
+    use crate::terrain::heightmap::{AhgtMeta, HeightMapU16};
+    let ahgt = tmp.path().join("bake.ahgt");
+    let map = HeightMapU16::filled(65, 65, u16::MAX / 2);
+    std::fs::write(
+        &ahgt,
+        map.to_ahgt(&AhgtMeta {
+            world_size: Some(64.0),
+            max_height: Some(50.0),
+            ..Default::default()
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    apply_batch(
+        &mut doc,
+        "test",
+        &[EditOp::Insert {
+            parent: "#".into(),
+            index: Some(0),
+            xml: r#"<Terrain heightmap="bake.ahgt" />"#.into(),
+        }],
+    )
+    .unwrap();
+
+    let op = EditOp::TerrainBiomes {
+        core: 60.0,
+        blend: 100.0,
+        wedges: vec![(1.0, 0.0, "forest".into()), (0.0, 1.0, "desert".into())],
+    };
+    let mut history = History::default();
+    let tx = history.apply(&mut doc, "biomas", &[op]).unwrap();
+    assert!(matches!(
+        tx.changes.first(),
+        Some(crate::scene::ops::Change::Biomes)
+    ));
+    let field = &doc.terrain.as_ref().unwrap().meta.biomes;
+    assert_eq!(field.wedges.len(), 2);
+    assert!((field.core - 60.0).abs() < 1e-4);
+    assert_eq!(field.wedges[0].biome.name(), "forest");
+    // direção normalizada
+    assert!((field.wedges[0].dir.length() - 1.0).abs() < 1e-4);
+    // bioma desconhecido é recusado sem aplicar
+    assert!(
+        history
+            .apply(
+                &mut doc,
+                "biomas",
+                &[EditOp::TerrainBiomes {
+                    core: 10.0,
+                    blend: 10.0,
+                    wedges: vec![(1.0, 0.0, "pizza".into())],
+                }],
+            )
+            .is_err()
+    );
+    // undo devolve o campo vazio original
+    history.undo(&mut doc).unwrap();
+    assert!(doc.terrain.as_ref().unwrap().meta.biomes.wedges.is_empty());
 }
 
 #[test]
@@ -815,4 +890,198 @@ fn live_routing_of_save_pick_and_entities() {
         super::cli::live_request(super::cli::SceneCommand::Entities { selector: None }).unwrap();
     assert_eq!(method, "viber.scene.entities");
     assert_eq!(params["selector"], serde_json::json!(null));
+}
+
+#[test]
+fn script_schema_reports_exports_and_instance_values() {
+    let tmp = tempfile::tempdir().unwrap();
+    let world = fixture(tmp.path());
+    let scripts = tmp.path().join("scripts");
+    std::fs::create_dir_all(&scripts).unwrap();
+    std::fs::write(
+        scripts.join("well.lua"),
+        "--@export depth: number(0..) = 3 -- metros\n--@export bucket: bool = true\nfunction on_update(dt) end\n",
+    )
+    .unwrap();
+    let mut doc = SceneDoc::load(&world).unwrap();
+    apply_batch(
+        &mut doc,
+        "t",
+        &[set(
+            "name=well",
+            &[
+                ("script", Some("well.lua")),
+                ("prop-depth", Some("7")),
+                ("prop-dept", Some("1")),
+            ],
+        )],
+    )
+    .unwrap();
+    let schema = super::script_schema(&doc, "name=well").unwrap();
+    assert_eq!(schema["script"], "well.lua");
+    assert_eq!(schema["exports"][0]["name"], "depth");
+    assert_eq!(schema["exports"][0]["type"], "number(0..)");
+    assert_eq!(schema["exports"][0]["attr"], "prop-depth");
+    assert_eq!(schema["exports"][0]["doc"], "metros");
+    assert_eq!(schema["values"]["depth"]["value"], 7.0);
+    assert_eq!(schema["values"]["depth"]["source"], "instance");
+    assert_eq!(schema["values"]["bucket"]["value"], true);
+    assert_eq!(schema["values"]["bucket"]["source"], "default");
+    assert_eq!(schema["unknown"], serde_json::json!(["dept"]));
+    // `scene get` carrega os valores efetivos.
+    let node = doc.resolve("name=well").unwrap();
+    assert_eq!(describe(&doc, &node)["script_props"]["depth"]["value"], 7.0);
+    // Só o esquema, pelo caminho do script.
+    let only = super::script_schema(&doc, "well.lua").unwrap();
+    assert!(only.get("values").is_none());
+    assert_eq!(only["exports"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn extract_saves_branch_as_scene_and_undo_restores_it() {
+    let (tmp, mut doc) = load();
+    let mut history = History::default();
+    history
+        .apply(
+            &mut doc,
+            "extract",
+            &[EditOp::Extract {
+                node: "name=hero".into(),
+                to: None,
+            }],
+        )
+        .unwrap();
+    // O ramo vive no ficheiro novo; no lugar fica o <Include> com a pose.
+    let hero = doc.resolve("name=hero").unwrap();
+    assert_eq!(doc.relative_path(hero.file), "scenes/hero.xml");
+    assert_eq!(doc.node(&hero).unwrap().attr("translation"), None);
+    let include = doc.node(&NodeRef::new(0, vec![0])).unwrap();
+    assert_eq!(include.tag, "Include");
+    assert_eq!(include.attr("src"), Some("/scenes/hero.xml"));
+    assert_eq!(include.attr("translation"), Some("0 1 0"));
+    assert_eq!(
+        doc.include_target(&NodeRef::new(0, vec![0])),
+        Some(hero.file)
+    );
+    doc.save().unwrap();
+    let scene = tmp.path().join("scenes/hero.xml");
+    let written = std::fs::read_to_string(&scene).unwrap();
+    assert!(written.contains("static=\"true\"") && written.contains("name=\"hero\""));
+    // Do disco: o include carrega a cena.
+    let reloaded = SceneDoc::load(&tmp.path().join("world.xml")).unwrap();
+    assert!(reloaded.resolve("name=hero").is_ok());
+    // Undo: o nó volta, o ficheiro some do documento e (no save) do disco.
+    history.undo(&mut doc).unwrap().expect("undo");
+    let hero = doc.resolve("name=hero").unwrap();
+    assert_eq!(hero, NodeRef::new(0, vec![0]));
+    assert_eq!(doc.node(&hero).unwrap().attr("translation"), Some("0 1 0"));
+    assert!(doc.file_by_path("scenes/hero.xml").is_none());
+    assert!(doc.dirty_paths().contains(&"scenes/hero.xml".to_owned()));
+    doc.save().unwrap();
+    assert!(!scene.exists(), "o undo gravado apaga a cena criada");
+    // Redo reaviva o ficheiro.
+    history.redo(&mut doc).unwrap().expect("redo");
+    assert_eq!(
+        doc.relative_path(doc.resolve("name=hero").unwrap().file),
+        "scenes/hero.xml"
+    );
+    // Um destino que já existe é recusado (sem tocar no documento).
+    std::fs::write(tmp.path().join("scenes/taken.xml"), "<world />").unwrap();
+    let before = snapshot(&doc);
+    let err = apply_batch(
+        &mut doc,
+        "x",
+        &[EditOp::Extract {
+            node: "name=barrel".into(),
+            to: Some("scenes/taken.xml".into()),
+        }],
+    )
+    .unwrap_err();
+    assert!(format!("{err:#}").contains("já existe"), "{err:#}");
+    assert_eq!(snapshot(&doc), before);
+    // Caminhos fora do mundo também.
+    assert!(
+        apply_batch(
+            &mut doc,
+            "x",
+            &[EditOp::Extract {
+                node: "name=barrel".into(),
+                to: Some("../fora.xml".into()),
+            }],
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn instance_loads_the_scene_file_and_groups_list_members() {
+    let (tmp, mut doc) = load();
+    std::fs::create_dir_all(tmp.path().join("scenes")).unwrap();
+    std::fs::write(
+        tmp.path().join("scenes/tower.xml"),
+        r#"<world static="true"><Entity name="tower_top" groups="guards, lookouts" /></world>"#,
+    )
+    .unwrap();
+    let op = super::catalog::scene_instance(&doc, "#", "scenes/tower.xml", Some([5.0, 0.0, 1.0]))
+        .unwrap();
+    apply_batch(&mut doc, "instance", &[op]).unwrap();
+    let top = doc
+        .resolve("name=tower_top")
+        .expect("cena carregada pelo insert");
+    assert_eq!(doc.relative_path(top.file), "scenes/tower.xml");
+    let include = doc.node(&NodeRef::new(0, vec![3])).unwrap();
+    assert_eq!(include.attr("translation"), Some("5 0 1"));
+    assert!(super::catalog::scene_instance(&doc, "#", "scenes/nope.xml", None).is_err());
+    apply_batch(
+        &mut doc,
+        "g",
+        &[set("name=crate", &[("groups", Some("guards"))])],
+    )
+    .unwrap_err(); // `name=crate` é ambíguo (props e village)
+    apply_batch(&mut doc, "g", &[set("#1/0", &[("groups", Some("guards"))])]).unwrap();
+    let groups = super::groups(&doc, None);
+    assert_eq!(groups["guards"].as_array().unwrap().len(), 2);
+    assert_eq!(groups["lookouts"][0]["label"], "Entity \"tower_top\"");
+    assert!(
+        super::groups(&doc, Some("lookouts"))
+            .get("guards")
+            .is_none()
+    );
+}
+
+#[test]
+fn schema_reports_signals_methods_and_connections() {
+    let (tmp, mut doc) = load();
+    std::fs::create_dir_all(tmp.path().join("scripts")).unwrap();
+    std::fs::write(
+        tmp.path().join("scripts/chest.lua"),
+        "--@signal opened(gold) -- abriu\n--@export gold: int = 5\nfunction on_update(dt) end\nfunction reset() end\n",
+    )
+    .unwrap();
+    apply_batch(
+        &mut doc,
+        "s",
+        &[set(
+            "name=hero",
+            &[
+                ("script", Some("chest.lua")),
+                ("groups", Some("loot")),
+                (
+                    "connect-opened",
+                    Some("barrel:open; @loot:reset; ninguem:x"),
+                ),
+            ],
+        )],
+    )
+    .unwrap();
+    let schema = super::script_schema(&doc, "name=hero").unwrap();
+    assert_eq!(schema["signals"][0]["name"], "opened");
+    assert_eq!(schema["signals"][0]["attr"], "connect-opened");
+    assert_eq!(schema["methods"], serde_json::json!(["on_update", "reset"]));
+    assert_eq!(schema["groups"], serde_json::json!(["loot"]));
+    let targets = &schema["connections"]["opened"]["targets"];
+    assert_eq!(targets[0]["nodes"], 1);
+    assert_eq!(targets[1]["target"], "@loot");
+    assert_eq!(targets[1]["nodes"], 1);
+    assert_eq!(targets[2]["nodes"], 0, "alvo partido");
 }

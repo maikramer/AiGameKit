@@ -71,6 +71,12 @@ pub struct SceneFile {
     pub dirty: bool,
     /// Caminho do nó `<Include>` → o ficheiro que ele carrega.
     pub includes: Vec<(Vec<usize>, FileId)>,
+    /// Nasceu de uma edição (`create_file`, "Salvar ramo como cena") ou foi esquecido
+    /// por `drop_file`: esquecido (`detached`), o `save` apaga-o do disco.
+    pub created: bool,
+    /// Esquecido por `drop_file`: sem conteúdo, invisível a seletores e
+    /// includes. O id fica (os `FileId` nunca se deslocam).
+    pub detached: bool,
 }
 
 /// O mundo em edição.
@@ -84,6 +90,19 @@ pub struct SceneDoc {
     /// O heightmap do `<Terrain heightmap>`, carregado pela primeira operação de terreno
     /// (`terrain_brush`/`terrain_patch`) — dezenas de MB, por isso nunca à cabeça.
     pub terrain: Option<super::terrain::TerrainDoc>,
+}
+
+/// Escrita atómica com backup: escreve num `.tmp` ao lado, roda o `.bak`
+/// anterior e faz rename — um crash nunca deixa um ficheiro a meio.
+pub fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> anyhow::Result<()> {
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, bytes)?;
+    let bak = path.with_extension("bak");
+    if path.exists() {
+        let _ = std::fs::rename(path, &bak);
+    }
+    std::fs::rename(&tmp, path)?;
+    Ok(())
 }
 
 impl SceneDoc {
@@ -113,6 +132,8 @@ impl SceneDoc {
             doc: parsed,
             dirty: false,
             includes: Vec::new(),
+            created: false,
+            detached: false,
         });
         if depth >= MAX_INCLUDE_DEPTH {
             return Ok(id);
@@ -157,7 +178,8 @@ impl SceneDoc {
     pub fn file_by_path(&self, rel: &str) -> Option<FileId> {
         let rel = rel.trim().trim_start_matches("./");
         (0..self.files.len()).find(|&file| {
-            self.relative_path(file) == rel || self.files[file].path == Path::new(rel)
+            !self.files[file].detached
+                && (self.relative_path(file) == rel || self.files[file].path == Path::new(rel))
         })
     }
 
@@ -349,15 +371,129 @@ impl SceneDoc {
             .unwrap_or_default();
         let mut includes = Vec::new();
         for (node_path, src) in found {
-            let Ok(resolved) = resolve_include_path(&src, &dir, &self.root_dir).canonicalize()
-            else {
-                continue;
-            };
-            if let Some(target) = self.files.iter().position(|f| f.path == resolved) {
+            let candidate = resolve_include_path(&src, &dir, &self.root_dir);
+            // Um ficheiro criado nesta sessão ainda não existe no disco: casa pelo
+            // caminho léxico (a pasta do mundo já é canónica).
+            let resolved = candidate.canonicalize().unwrap_or(candidate);
+            if let Some(target) = self
+                .files
+                .iter()
+                .position(|f| !f.detached && f.path == resolved)
+            {
                 includes.push((node_path, target));
             }
         }
         self.files[file].includes = includes;
+    }
+
+    /// Como [`Self::reindex_includes`], mas CARREGA os ficheiros que um `<Include>` novo
+    /// referencia e o documento ainda não tem (instanciar uma cena: `insert <Include src>`).
+    pub fn link_includes(&mut self, file: FileId) {
+        let Some(scene_file) = self.files.get(file) else {
+            return;
+        };
+        let mut found = Vec::new();
+        collect_includes(&scene_file.doc.children, &mut Vec::new(), &mut found);
+        let dir = scene_file
+            .path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        let root_dir = self.root_dir.clone();
+        for (_, src) in found {
+            let Ok(resolved) = resolve_include_path(&src, &dir, &root_dir).canonicalize() else {
+                continue;
+            };
+            if self.files.iter().any(|f| !f.detached && f.path == resolved) {
+                continue;
+            }
+            if let Err(error) = self.load_file(&resolved, &root_dir, 1) {
+                bevy::log::warn!("include {src}: {error:#}");
+            }
+        }
+        self.reindex_includes(file);
+    }
+
+    /// Um ficheiro de cena NOVO (`rel` relativo à pasta do mundo), sujo até ao `save`.
+    /// Recusa caminhos fora do mundo e ficheiros que já existem (no disco ou no
+    /// documento) — um ficheiro esquecido por `drop_file` é reavivado (redo).
+    pub fn create_file(&mut self, rel: &str, content: XmlDocument) -> Result<FileId> {
+        let rel = rel.trim().trim_start_matches('/');
+        let rel_path = Path::new(rel);
+        if rel.is_empty()
+            || !rel.ends_with(".xml")
+            || rel_path.is_absolute()
+            || rel_path
+                .components()
+                .any(|c| !matches!(c, std::path::Component::Normal(_)))
+        {
+            bail!("create_file: `{rel}` tem de ser um .xml relativo à pasta do mundo (sem `..`)");
+        }
+        let path = self.root_dir.join(rel_path);
+        if let Some(id) = self.files.iter().position(|f| f.path == path) {
+            let file = &mut self.files[id];
+            if !file.detached {
+                bail!("create_file: `{rel}` já faz parte do mundo");
+            }
+            file.doc = content;
+            file.detached = false;
+            file.dirty = true;
+            file.includes.clear();
+            self.revision += 1;
+            self.reindex_includes(id);
+            return Ok(id);
+        }
+        if path.exists() {
+            bail!("create_file: `{rel}` já existe no disco — escolhe outro nome");
+        }
+        let id = self.files.len();
+        self.files.push(SceneFile {
+            path,
+            doc: content,
+            dirty: true,
+            includes: Vec::new(),
+            created: true,
+            detached: false,
+        });
+        self.revision += 1;
+        self.reindex_includes(id);
+        Ok(id)
+    }
+
+    /// Esquece um ficheiro de cena que já nenhum `<Include>` carrega (a inversa de
+    /// [`Self::create_file`]); o `save` apaga-o do disco. Devolve o conteúdo que tinha.
+    pub fn drop_file(&mut self, rel: &str) -> Result<XmlDocument> {
+        let id = self
+            .file_by_path(rel.trim().trim_start_matches('/'))
+            .ok_or_else(|| anyhow!("drop_file: `{rel}` não faz parte do mundo"))?;
+        if id == 0 {
+            bail!("drop_file: o próprio mundo não se esquece");
+        }
+        // Só um ficheiro que nenhum <Include> carrega (a inversa de `extract` remove o
+        // include ANTES) — offline, o `inverse` de outro processo também desfaz.
+        if let Some(user) = (0..self.files.len()).find(|&f| {
+            !self.files[f].detached && self.files[f].includes.iter().any(|(_, t)| *t == id)
+        }) {
+            bail!(
+                "drop_file: `{rel}` ainda é incluído por {} (remove o <Include> primeiro)",
+                self.relative_path(user)
+            );
+        }
+        let file = &mut self.files[id];
+        // Esquecido = o `save` apaga-o do disco.
+        file.created = true;
+        let empty = XmlDocument {
+            root_tag: file.doc.root_tag.clone(),
+            root_attrs: Vec::new(),
+            root_text: String::new(),
+            children: Vec::new(),
+        };
+        let content = std::mem::replace(&mut file.doc, empty);
+        file.detached = true;
+        file.dirty = false;
+        file.includes.clear();
+        self.revision += 1;
+        Ok(content)
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -367,7 +503,10 @@ impl SceneDoc {
     /// Ficheiros com alterações por gravar (relativos ao mundo), heightmap incluído.
     pub fn dirty_paths(&self) -> Vec<String> {
         let mut out: Vec<String> = (0..self.files.len())
-            .filter(|&file| self.files[file].dirty)
+            .filter(|&file| {
+                let f = &self.files[file];
+                f.dirty || (f.detached && f.created && f.path.exists())
+            })
             .map(|file| self.relative_path(file))
             .collect();
         let mut terrain_paths = |dirty: bool, path: &std::path::Path| {
@@ -426,12 +565,20 @@ impl SceneDoc {
     /// Escreve de volta todos os ficheiros alterados; devolve quantos.
     pub fn save(&mut self) -> Result<usize> {
         let mut written = 0;
+        // Ficheiros criados e depois desfeitos: o disco volta a não os ter.
+        for file in self.files.iter().filter(|f| f.detached && f.created) {
+            if file.path.exists() {
+                std::fs::remove_file(&file.path)
+                    .with_context(|| format!("removing {}", file.path.display()))?;
+                written += 1;
+            }
+        }
         for file in self.files.iter_mut().filter(|file| file.dirty) {
             if let Some(dir) = file.path.parent() {
                 std::fs::create_dir_all(dir)
                     .with_context(|| format!("creating {}", dir.display()))?;
             }
-            std::fs::write(&file.path, emit_document(&file.doc))
+            write_atomic(&file.path, emit_document(&file.doc).as_bytes())
                 .with_context(|| format!("writing {}", file.path.display()))?;
             file.dirty = false;
             written += 1;

@@ -316,6 +316,7 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                     BorderColor::all(Color::srgba(0.957, 0.925, 0.847, 0.4)),
                     Name::new("hud:minimap"),
                     MinimapRange(range),
+                    super::HideInInterior,
                     panel_shadow(),
                 ))
                 .with_children(|map| {
@@ -473,6 +474,7 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                         ..Default::default()
                     },
                     Name::new("hud:compass"),
+                    super::HideInInterior,
                 ))
                 .with_children(|wrap| {
                     const DIRECTIONS: [(&str, f32); 8] = [
@@ -689,6 +691,12 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
             // engine — cai em F1).
             let key = super::menu::toggle_key_from_attr(attr(attrs, "key"));
             super::menu::build_menu(world, &hud, key);
+        }
+        "waypointarrow" => {
+            let margin = attr(attrs, "margin")
+                .and_then(|v| v.parse::<f32>().ok())
+                .unwrap_or(super::waypoint::DEFAULT_MARGIN);
+            super::waypoint::spawn_waypoint_arrow(world, &hud, margin);
         }
         other => {
             bevy::log::warn!("hud: unhandled element `{other}` — skipped");

@@ -19,6 +19,52 @@ pub struct LuaScriptRef {
     /// Script path relative to `world_dir/scripts/` (e.g. `"doors/gate.lua"`).
     pub path: String,
 }
+
+/// Valores por instância dos props exportados pelo script (atributos
+/// `prop-<nome>` do nó, sem o prefixo, texto cru). O tipo vem das anotações
+/// `--@export` do script ([`super::exports`]) e é aplicado em `viber.prop`.
+#[derive(Debug, Clone, Default, Component, PartialEq)]
+pub struct ScriptProps(pub std::sync::Arc<Vec<(String, String)>>);
+
+/// Grupos da entidade (`groups="guardas aldeia"`) — `viber.group`,
+/// `viber.in_group`, `viber.call_group` e os alvos `@grupo` das conexões.
+#[derive(Debug, Clone, Default, Component, PartialEq)]
+pub struct Groups(pub std::sync::Arc<Vec<String>>);
+
+/// Conexões de sinal do EMISSOR (`connect-<sinal>="alvo:método; …"`): o que
+/// um `viber.emit(sinal, …)` desta entidade chama.
+#[derive(Debug, Clone, Default, Component, PartialEq)]
+pub struct SignalConnections(pub std::sync::Arc<Vec<(String, Vec<super::exports::Connection>)>>);
+
+impl SignalConnections {
+    pub fn of(&self, signal: &str) -> &[super::exports::Connection] {
+        self.0
+            .iter()
+            .find(|(name, _)| name == signal)
+            .map(|(_, conns)| conns.as_slice())
+            .unwrap_or(&[])
+    }
+}
+
+/// Os componentes de grupos/conexões de um nó (`None` quando não declara).
+/// Um `connect-*` mal escrito avisa e cai (o `viber scene lint` aponta-o).
+pub fn link_components(
+    links: &crate::recipes::NodeLinks,
+    label: &str,
+) -> (Option<Groups>, Option<SignalConnections>) {
+    let groups =
+        (!links.groups.is_empty()).then(|| Groups(std::sync::Arc::new(links.groups.clone())));
+    let mut parsed = Vec::new();
+    for (signal, raw) in &links.connections {
+        match super::exports::parse_connections(raw) {
+            Ok(conns) if !conns.is_empty() => parsed.push((signal.clone(), conns)),
+            Ok(_) => {}
+            Err(error) => warn!("{label}: connect-{signal}: {error}"),
+        }
+    }
+    let connections = (!parsed.is_empty()).then(|| SignalConnections(std::sync::Arc::new(parsed)));
+    (groups, connections)
+}
 /// Evento disparado quando um script pede `viber.toast(msg)` — o HUD pode
 /// consumir; enquanto isso cada toast também vai para o log (bridge).
 #[derive(Debug, Clone, bevy::ecs::message::Message)]

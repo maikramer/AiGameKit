@@ -731,7 +731,9 @@ fn respawn_system(
                     if let Some(events) = events.as_deref_mut() {
                         events.push(crate::luau::ScriptGameEvent::PlayerDied);
                     }
-                    toasts.write(ScriptToast(format!("De volta à {label} — levanta e luta!")));
+                    toasts.write(ScriptToast(format!(
+                        "Renasceste: {label} — levanta e luta!"
+                    )));
                     info!(
                         target: "viber::feedback",
                         "respawn na {label} ({point:?}) — HP cheio + {RESPAWN_DELAY}s de i-frames"

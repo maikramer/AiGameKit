@@ -14,7 +14,8 @@
 //!   {"op": "move", "node": "name=cart", "parent": "name=props", "index": 0},
 //!   {"op": "duplicate", "node": "name=crate"},
 //!   {"op": "set_text", "node": "#4/2", "text": "100/100"},
-//!   {"op": "remove", "node": "name=barrel"}
+//!   {"op": "remove", "node": "name=barrel"},
+//!   {"op": "extract", "node": "name=forge", "to": "scenes/forge.xml"}
 //! ]
 //! ```
 //!
@@ -66,6 +67,19 @@ pub enum EditOp {
     },
     /// Duplica o nó logo a seguir a ele próprio.
     Duplicate { node: String },
+    /// "Salvar ramo como cena" (Godot): o nó e a subárvore passam para um ficheiro NOVO
+    /// `to` (relativo à pasta do mundo; omisso: `scenes/<nome>.xml`) e no lugar fica
+    /// `<Include src="/to">` com a pose do nó — a cena fica reutilizável (`instance`).
+    Extract {
+        node: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        to: Option<String>,
+    },
+    /// Cria um ficheiro de cena (`<world static="true">` + `xml`), gravado no `save`.
+    /// Recusa ficheiros que já existem. Base do `extract` (e a sua inversa é `drop_file`).
+    CreateFile { path: String, xml: String },
+    /// Esquece um ficheiro criado nesta sessão (o `save` apaga-o do disco).
+    DropFile { path: String },
     /// Pincel no heightmap do mundo (`at` = XZ mundo, `radius` m). `amount`: metros para
     /// raise/lower/crater, força 0..1 para flatten/smooth (omisso 1). `height`: alvo do
     /// flatten (omisso: a cota no centro).
@@ -99,6 +113,14 @@ pub enum EditOp {
         rect: super::terrain::CellRect,
         data: String,
     },
+    /// Campo de BIOMAS completo (núcleo + transição + cunhas) — o editor de
+    /// biomas. A inversa é o snapshot do campo anterior.
+    TerrainBiomes {
+        core: f32,
+        blend: f32,
+        /// `[dir_x, dir_y, biome]` por cunha (biome = nome canónico).
+        wedges: Vec<(f32, f32, String)>,
+    },
 }
 
 fn one() -> f32 {
@@ -118,6 +140,8 @@ pub enum Change {
     Terrain { rect: super::terrain::CellRect },
     /// Células da camada de material (pintura) mudaram — repintar só os chunks tocados.
     Paint { rect: super::terrain::CellRect },
+    /// O campo de biomas mudou — re-bake completo dos splats.
+    Biomes,
 }
 
 /// Resultado de aplicar uma operação.
@@ -156,12 +180,19 @@ pub fn apply(doc: &mut SceneDoc, op: &EditOp) -> Result<Applied> {
             if let Some((bad, _)) = attrs.iter().find(|(key, _)| !valid_attr_name(key)) {
                 bail!("replace_attrs: nome de atributo inválido `{bad}`");
             }
-            let mut keys: Vec<String> = attrs_of(doc, &node)
-                .iter()
-                .map(|(k, _)| k.clone())
-                .collect();
             let previous = std::mem::replace(attrs_of_mut(doc, &node), attrs.clone());
-            keys.extend(attrs.iter().map(|(k, _)| k.clone()));
+            // Só as chaves cujo valor mudou: o undo de um `set` de pose/prop é um
+            // `replace_attrs` com a lista inteira, e reportar tudo forçava o sync a
+            // re-spawnar (o script perdia o estado) em vez de patchar.
+            let value = |list: &[(String, String)], key: &str| {
+                list.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
+            };
+            let mut keys: Vec<String> = previous
+                .iter()
+                .chain(attrs.iter())
+                .map(|(k, _)| k.clone())
+                .filter(|k| value(&previous, k) != value(attrs, k))
+                .collect();
             keys.sort();
             keys.dedup();
             doc.touch(node.file);
@@ -291,6 +322,51 @@ pub fn apply(doc: &mut SceneDoc, op: &EditOp) -> Result<Applied> {
                 changes: vec![Change::Paint { rect }],
             })
         }
+        EditOp::TerrainBiomes {
+            core,
+            blend,
+            wedges,
+        } => {
+            use crate::terrain::splat::{Biome, BiomeField, BiomeWedge};
+            let terrain = doc.terrain_mut()?;
+            let mut parsed = Vec::with_capacity(wedges.len());
+            for (dx, dy, biome) in wedges {
+                let biome = Biome::from_name(biome)
+                    .ok_or_else(|| anyhow!("terrain_biomes: bioma desconhecido `{biome}`"))?;
+                let dir = bevy::math::Vec2::new(*dx, *dy);
+                let len = dir.length();
+                if len < 1e-4 {
+                    bail!("terrain_biomes: cunha com direção zero");
+                }
+                parsed.push(BiomeWedge {
+                    dir: dir / len,
+                    biome,
+                });
+            }
+            let previous = terrain.meta.biomes.clone();
+            terrain.meta.biomes = BiomeField {
+                wedges: parsed,
+                core: *core,
+                blend: *blend,
+            };
+            terrain.dirty = true;
+            doc.revision += 1;
+            // inversa: reconstruir o campo anterior (nomes canónicos)
+            let inv = EditOp::TerrainBiomes {
+                core: previous.core,
+                blend: previous.blend,
+                wedges: previous
+                    .wedges
+                    .iter()
+                    .map(|w| (w.dir.x, w.dir.y, w.biome.name().to_owned()))
+                    .collect(),
+            };
+            Ok(Applied {
+                forward: op.clone(),
+                inverse: vec![inv],
+                changes: vec![Change::Biomes],
+            })
+        }
         EditOp::SplatPatch { rect, data } => {
             let terrain = doc.terrain_mut()?;
             let before = terrain.paint_snapshot(*rect);
@@ -303,6 +379,35 @@ pub fn apply(doc: &mut SceneDoc, op: &EditOp) -> Result<Applied> {
                     data: before,
                 }],
                 changes: vec![Change::Paint { rect: *rect }],
+            })
+        }
+        EditOp::Extract { node, to } => {
+            let node = doc.resolve(node)?;
+            extract(doc, &node, to.as_deref())
+        }
+        EditOp::CreateFile { path, xml } => {
+            let children = parse_fragment(xml)?;
+            let rel = path.trim().trim_start_matches('/').to_owned();
+            doc.create_file(&rel, scene_document(children))?;
+            Ok(Applied {
+                forward: EditOp::CreateFile {
+                    path: rel.clone(),
+                    xml: xml.clone(),
+                },
+                inverse: vec![EditOp::DropFile { path: rel }],
+                changes: Vec::new(),
+            })
+        }
+        EditOp::DropFile { path } => {
+            let rel = path.trim().trim_start_matches('/').to_owned();
+            let content = doc.drop_file(&rel)?;
+            Ok(Applied {
+                forward: EditOp::DropFile { path: rel.clone() },
+                inverse: vec![EditOp::CreateFile {
+                    path: rel,
+                    xml: fragment_xml(&content.children),
+                }],
+                changes: Vec::new(),
             })
         }
         EditOp::Duplicate { node } => {
@@ -484,10 +589,14 @@ pub fn op_name(op: &EditOp) -> &'static str {
         EditOp::Remove { .. } => "remove",
         EditOp::Move { .. } => "move",
         EditOp::Duplicate { .. } => "duplicate",
+        EditOp::Extract { .. } => "extract",
+        EditOp::CreateFile { .. } => "create_file",
+        EditOp::DropFile { .. } => "drop_file",
         EditOp::TerrainBrush { .. } => "terrain_brush",
         EditOp::TerrainPatch { .. } => "terrain_patch",
         EditOp::TerrainPaint { .. } => "terrain_paint",
         EditOp::SplatPatch { .. } => "splat_patch",
+        EditOp::TerrainBiomes { .. } => "terrain_biomes",
     }
 }
 
@@ -542,14 +651,6 @@ fn set_attrs(
 }
 
 /// Os atributos de um nó (do raiz: os do elemento raiz do ficheiro). O nó tem de existir.
-fn attrs_of<'a>(doc: &'a SceneDoc, node: &NodeRef) -> &'a Vec<(String, String)> {
-    if node.is_root() {
-        &doc.files[node.file].doc.root_attrs
-    } else {
-        &doc.node(node).expect("resolvido").attrs
-    }
-}
-
 fn attrs_of_mut<'a>(doc: &'a mut SceneDoc, node: &NodeRef) -> &'a mut Vec<(String, String)> {
     if node.is_root() {
         &mut doc.files[node.file].doc.root_attrs
@@ -581,7 +682,9 @@ fn insert_nodes(
         children.insert(at + offset, node);
     }
     doc.touch(parent.file);
-    doc.reindex_includes(parent.file);
+    // `link`: um `<Include>` novo de uma cena que o documento ainda não tem
+    // (instanciar) carrega-a — fica editável e o sync spawna o conteúdo.
+    doc.link_includes(parent.file);
     // Desfazer N irmãos inseridos em `at` = remover N vezes o índice `at`.
     let first = doc.selector(&parent.child(at));
     Ok(Applied {
@@ -681,6 +784,120 @@ fn move_node(
             parent: doc.selector(&back_parent),
             index: Some(old_index),
         }],
+        changes,
+    })
+}
+
+/// Um ficheiro de cena com estes nós (`<world static="true">`, como os includes).
+fn scene_document(children: Vec<XmlNode>) -> XmlDocument {
+    XmlDocument {
+        root_tag: "world".into(),
+        root_attrs: vec![("static".into(), "true".into())],
+        root_text: String::new(),
+        children,
+    }
+}
+
+/// Caminho por omissão de um ramo extraído: `scenes/<nome|tag>.xml`, com sufixo
+/// `-2`, `-3`… se já existir (no disco ou no documento).
+pub fn default_scene_path(doc: &SceneDoc, xml: &XmlNode) -> String {
+    let base = xml.attr("name").unwrap_or(&xml.tag);
+    let mut slug: String = base
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    slug = slug.trim_matches('-').to_owned();
+    if slug.is_empty() {
+        slug = "scene".into();
+    }
+    let taken = |rel: &str| doc.file_by_path(rel).is_some() || doc.root_dir.join(rel).exists();
+    let mut rel = format!("scenes/{slug}.xml");
+    let mut n = 2;
+    while taken(&rel) {
+        rel = format!("scenes/{slug}-{n}.xml");
+        n += 1;
+    }
+    rel
+}
+
+/// `extract`: cria o ficheiro, troca o nó por `<Include>` com a pose dele.
+fn extract(doc: &mut SceneDoc, node: &NodeRef, to: Option<&str>) -> Result<Applied> {
+    let Some(parent) = node.parent() else {
+        bail!("extract: o elemento raiz de um ficheiro não se extrai");
+    };
+    let original = doc.node(node).expect("resolvido").clone();
+    if original.tag.eq_ignore_ascii_case("include") {
+        bail!(
+            "extract: o nó já é um <Include> (a cena é `{}`)",
+            original.attr("src").unwrap_or("?")
+        );
+    }
+    let rel = match to {
+        Some(to) => to.trim().trim_start_matches('/').to_owned(),
+        None => default_scene_path(doc, &original),
+    };
+    let selector = doc.selector(node);
+    let index = *node.path.last().expect("não-raiz");
+    // A pose fica na INSTÂNCIA (o `<Include>`); a cena guarda o ramo na origem.
+    let pose_keys = crate::xml::include::INCLUDE_POSE_KEYS;
+    let mut branch = original.clone();
+    branch
+        .attrs
+        .retain(|(k, _)| !pose_keys.contains(&k.as_str()));
+    let mut include = XmlNode {
+        tag: "Include".into(),
+        attrs: vec![("src".into(), format!("/{rel}"))],
+        text: String::new(),
+        children: Vec::new(),
+        origin: None,
+    };
+    include.attrs.extend(
+        original
+            .attrs
+            .iter()
+            .filter(|(k, _)| pose_keys.contains(&k.as_str()))
+            .cloned(),
+    );
+    let branch_xml = fragment_xml(std::slice::from_ref(&branch));
+    let mut applied = apply(
+        doc,
+        &EditOp::CreateFile {
+            path: rel.clone(),
+            xml: branch_xml,
+        },
+    )?;
+    let removed = remove_node(doc, node);
+    let inserted = removed.and_then(|removed| {
+        insert_nodes(doc, &parent, Some(index), vec![include]).map(|inserted| (removed, inserted))
+    });
+    let (removed, inserted) = match inserted {
+        Ok(pair) => pair,
+        Err(error) => {
+            // Repor: o ficheiro e (se saiu) o nó.
+            if doc.node(node).is_none_or(|n| *n != original) {
+                let _ = insert_nodes(doc, &parent, Some(index), vec![original]);
+            }
+            let _ = doc.drop_file(&rel);
+            return Err(error);
+        }
+    };
+    let mut inverse = inserted.inverse;
+    inverse.extend(removed.inverse);
+    inverse.append(&mut applied.inverse);
+    let mut changes = removed.changes;
+    changes.extend(inserted.changes);
+    Ok(Applied {
+        forward: EditOp::Extract {
+            node: selector,
+            to: Some(rel),
+        },
+        inverse,
         changes,
     })
 }

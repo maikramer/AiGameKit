@@ -347,7 +347,7 @@ impl Plugin for TravelPlugin {
                     travel_fade_system,
                     timed(Group::Hud, waypoint_hud_system),
                     enemy_registry_system,
-                    quest_debug_landmark,
+                    quest_debug_landmark.run_if(crate::quests::debug_keys_enabled),
                 ),
             );
     }

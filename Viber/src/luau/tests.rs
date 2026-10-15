@@ -783,6 +783,8 @@ fn test_simple_rpg_npc_scripts_compile() {
     for path in [
         "townsfolk.lua",
         "merchant.lua",
+        "chest.lua",
+        "mushroom.lua",
         "healer.lua",
         "watch-guard.lua",
         "lib/fsm.lua",
@@ -805,6 +807,9 @@ fn test_simple_rpg_npc_scripts_compile() {
     ] {
         host.load_script_from_dir(path)
             .unwrap_or_else(|e| panic!("{path} deve compilar: {e}"));
+        let source = std::fs::read_to_string(base.join(path)).unwrap();
+        let exports = crate::luau::exports::parse_exports(&source);
+        assert!(exports.errors.is_empty(), "{path}: {:?}", exports.errors);
     }
 }
 
@@ -994,6 +999,8 @@ fn simple_box_spec() -> crate::recipes::EntitySpec {
         name: Some("crystal".to_string()),
         tag: None,
         script: None,
+        props: Vec::new(),
+        links: Default::default(),
         destructible: None,
         transform: crate::recipes::TransformSpec::default(),
         physics: crate::physics::PhysicsSpec::default(),
@@ -1986,4 +1993,160 @@ fn test_script_kill_is_emitted_once_with_the_script_kind() {
         })
         .collect();
     assert_eq!(kills, vec!["goblin".to_string()]);
+}
+
+#[test]
+fn test_exported_props_are_per_instance() {
+    let code = r#"
+--@export speed: number(0..5) = 1.1  -- m/s
+--@export lines: string[] = "a" | "b"
+--@export mood: enum(calm, grumpy) = calm
+seen = {}
+function on_update(dt)
+  local props = viber.props()
+  seen[viber.entity_name()] = {
+    speed = viber.prop("speed"),
+    lines = #viber.prop("lines"),
+    mood = props.mood,
+  }
+  local ok, err = pcall(viber.prop, "sped")
+  assert(not ok and tostring(err):find("não é exportado"), tostring(err))
+end
+"#;
+    let mut app = test_app(host_with(code, "npc.lua"));
+    let props = |pairs: &[(&str, &str)]| {
+        ScriptProps(std::sync::Arc::new(
+            pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        ))
+    };
+    app.world_mut().spawn((
+        Name::new("bram"),
+        Transform::default(),
+        LuaScriptRef {
+            path: "npc.lua".into(),
+        },
+        props(&[("speed", "2.5"), ("lines", "x|y|z"), ("mood", "grumpy")]),
+    ));
+    app.world_mut().spawn((
+        Name::new("ana"),
+        Transform::default(),
+        LuaScriptRef {
+            path: "npc.lua".into(),
+        },
+        // Valor inválido cai para o default.
+        props(&[("mood", "happy")]),
+    ));
+    app.update();
+    app.update();
+    let host = app.world().resource::<LuaScriptHost>();
+    let seen = match host.script_global("npc.lua", "seen").expect("seen") {
+        mlua::Value::Table(t) => t,
+        other => panic!("expected table, got {other:?}"),
+    };
+    let bram: Table = seen.get("bram").expect("bram ran");
+    assert_eq!(bram.get::<f64>("speed").unwrap(), 2.5);
+    assert_eq!(bram.get::<i64>("lines").unwrap(), 3);
+    assert_eq!(bram.get::<String>("mood").unwrap(), "grumpy");
+    let ana: Table = seen.get("ana").expect("ana ran");
+    assert_eq!(ana.get::<f64>("speed").unwrap(), 1.1);
+    assert_eq!(ana.get::<i64>("lines").unwrap(), 2);
+    assert_eq!(ana.get::<String>("mood").unwrap(), "calm");
+}
+
+#[test]
+fn test_props_at_top_level_is_an_error() {
+    let mut host = host_with(
+        "--@export speed: number = 1\nlocal s = viber.prop('speed')",
+        "top.lua",
+    );
+    let mut world = World::new();
+    let err = host
+        .activate(world.spawn_empty().id(), "top.lua")
+        .expect_err("top-level prop read must fail");
+    assert!(err.to_string().contains("on_update"), "{err}");
+}
+
+#[test]
+fn test_signals_reach_named_and_group_targets_with_sender() {
+    use crate::luau::exports::parse_connections;
+    let chest = r#"
+--@signal opened(gold, tag) -- o baú abriu
+function on_update(dt)
+  if not fired then
+    fired = true
+    viber.emit("opened", 7, "x")
+    local ok, err = pcall(viber.emit, "nope")
+    assert(not ok and tostring(err):find("não é um sinal"), tostring(err))
+  end
+end
+"#;
+    let door = r#"
+got = {}
+alarms = 0
+function open(gold, tag)
+  got[#got + 1] = viber.entity_name() .. ":" .. gold .. ":" .. tag .. ":" .. tostring(viber.sender() ~= nil)
+  if viber.in_group("guards") then
+    viber.call_group("guards", "alarm", 1)
+  end
+end
+function alarm(n)
+  alarms = alarms + n
+  members = #viber.group("guards")
+end
+"#;
+    let mut host = host_with(chest, "chest.lua");
+    host.load_script("door.lua", door).unwrap();
+    let mut app = test_app(host);
+    let connections = SignalConnections(std::sync::Arc::new(vec![(
+        "opened".to_string(),
+        parse_connections("door_a:open; @guards:open").unwrap(),
+    )]));
+    app.world_mut().spawn((
+        Name::new("chest"),
+        Transform::default(),
+        LuaScriptRef {
+            path: "chest.lua".into(),
+        },
+        connections,
+    ));
+    let guards = || Groups(std::sync::Arc::new(vec!["guards".to_string()]));
+    for (name, guard) in [("door_a", false), ("door_b", true), ("door_c", true)] {
+        let mut entity = app.world_mut().spawn((
+            Name::new(name),
+            Transform::default(),
+            LuaScriptRef {
+                path: "door.lua".into(),
+            },
+        ));
+        if guard {
+            entity.insert(guards());
+        }
+    }
+    app.update();
+    app.update();
+    let host = app.world().resource::<LuaScriptHost>();
+    let got = match host.script_global("door.lua", "got").expect("got") {
+        mlua::Value::Table(t) => t,
+        other => panic!("expected table, got {other:?}"),
+    };
+    let mut got: Vec<String> = got
+        .sequence_values::<String>()
+        .map(Result::unwrap)
+        .collect();
+    got.sort();
+    assert_eq!(
+        got,
+        ["door_a:7:x:true", "door_b:7:x:true", "door_c:7:x:true"]
+    );
+    // 2 guardas × call_group para os 2 membros (vaga seguinte, mesmo frame).
+    let number = |key: &str| -> f64 {
+        host.lua
+            .unpack(host.script_global("door.lua", key).unwrap())
+            .unwrap()
+    };
+    assert_eq!(number("alarms"), 4.0);
+    assert_eq!(number("members"), 2.0);
 }

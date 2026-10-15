@@ -13,7 +13,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use bevy::app::{App, PluginGroup};
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::ecs::system::{Res, ResMut};
@@ -147,6 +147,16 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
     // depend on the CWD (bevy resolves relative asset roots against the exe).
     let path = &std::path::absolute(path)?;
     let world = load_world(path)?;
+    // O runtime só corre mundos ESTÁTICOS (`<world static="true">`): poses finais, terreno
+    // pré-gerado, vegetação em `.vinst`. Um mundo procedural é material para `viber bake`,
+    // que o converte no próprio sítio — nada é gerado nem assentado no arranque.
+    if !world.static_world {
+        bail!(
+            "{}: mundo procedural (sem `<world static=\"true\">`) — o runtime só carrega mundos estáticos. Converte-o com `viber bake {}` (escreve o estático nos mesmos ficheiros).",
+            path.display(),
+            path.display()
+        );
+    }
     // O config.yaml do jogo é OBRIGATÓRIO e lido antes de tudo: é dele que
     // vêm as asset roots e os diretórios (docs/ASSETS.md).
     let world_dir_pre = world_base_dir(path).unwrap_or_else(|| PathBuf::from("."));
@@ -549,7 +559,11 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
     // Quests & diálogo (loop 3): 21 quests JSON, flow [E] nos DialogueNPC,
     // QuestTracker, hooks viber.quest_* p/ Luau.
     if rpg {
-        app.add_plugins(quests::QuestsPlugin);
+        app.add_plugins((
+            quests::QuestsPlugin,
+            crate::quest_marker::QuestMarkerPlugin,
+            crate::quest_guide::QuestGuidePlugin,
+        ));
     }
     // IA (FSM Rust + respawn): criaturas de <DynamicSpawner> SEM script caem
     // aqui — sem este plugin nasciam estátuas eternas e a RespawnQueue
@@ -651,6 +665,8 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
             timed(Group::Player, player::dialogue_interaction),
             hud::hud_prompt_update,
             hud::compass::hud_compass_update,
+            hud::hide_world_hud_in_interior,
+            hud::waypoint::update_waypoint_arrow,
             timed(Group::Hud, hud::hud_minimap_update),
             timed(Group::World, music::audio_loop_starter),
             timed(Group::World, music::mixer_sync),
@@ -681,8 +697,6 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
                 .after(player::player_movement)
                 .after(skills::abilities_system),
             sky::sky_follow_camera,
-            worldsys::seat_statics_once,
-            worldsys::resolve_pending_place.after(worldsys::seat_statics_once),
             hud::hud_toggle,
             // Lifecycle de FX ambiente por proximidade (`src/particles.rs`):
             // monta/desmonta os bundles dos markers `AmbientFx` (espuma da

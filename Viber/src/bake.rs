@@ -1,24 +1,21 @@
-//! `viber bake` — congela a montagem automática de um mundo em artefactos
-//! estáticos editáveis (o contrato do ViberEditor).
+//! `viber bake` — converte um mundo PROCEDURAL em estático, no próprio sítio.
 //!
-//! O pipeline normal é one-way: XML declarativo → carve determinístico →
-//! entidades. Este módulo é o caminho de volta, EMITIDO UMA VEZ:
+//! O runtime só carrega mundos estáticos (`<world static="true">`); o bake é a
+//! conversão única de um mundo procedural (geradores, `place`, relevo
+//! procedural) para essa forma. Escreve:
 //!
-//! * `bake/terrain.baked.ahgt` — a grelha u16 FINAL (pós-carve de pads,
-//!   lagos, rios, estradas) via [`HeightMapU16::to_ahgt`];
-//! * `bake/bake.json` — tudo o que era "automático", agora explícito:
-//!   features resolvidas (altura do pad, contorno orgânico do lago,
-//!   poliline do rio, ribbons de estrada) + placements por grupo de spawn
-//!   com pose final (posição/quaternião/escala) e nomes estáveis;
-//! * `world.static.xml` (ao LADO do world.xml original, para herdar o
-//!   config.yaml) — spawners `<StaticSpawner>` substituídos por `<Scatter id>`
-//!   (a receita) + `<Group generated-by>` de templates duplicados com a pose
-//!   de cada instância (grupos que resolveram 0 instâncias saem por inteiro;
-//!   as pedras de margem da engine saem como `<Scatter id="engine-N">`
-//!   sintéticos); `<Vegetation>` MANTIDO (determinístico, caminho de
-//!   instancing próprio); tags de features mantidas (o re-carve sobre a
-//!   grelha já carvada é idempotente: pads flatten para os mesmos valores,
-//!   água é lower-only, rio é prefix-min) com `height` explícito nos pads.
+//! * os MESMOS ficheiros XML (o mundo + os includes), reescritos no sítio com
+//!   `static="true"` — spawners `<StaticSpawner>` substituídos por
+//!   `<Scatter id>` (a receita) + `<Group generated-by>` de instâncias com a
+//!   pose de cada uma (grupos vazios saem por inteiro; as pedras de margem da
+//!   engine saem como `<Scatter id="engine-N">` sintéticos); `<Vegetation>`
+//!   com `instances` em binário; poses assentadas e `place` resolvido; features
+//!   com os valores resolvidos (`height` nos pads, níveis de água). Includes
+//!   que JÁ são estáticos (partilhados com outro mundo convertido) nunca são
+//!   reescritos;
+//! * `<stem>.data/` ([`data_dir`]): `terrain.ahgt` (a grelha u16 FINAL,
+//!   pós-carve) + `.paint`, `veg/NNN.vinst` e `bake.json` (tudo o que era
+//!   automático, explícito — o documento do World Overview do editor).
 //!
 //! Como corre: uma App headless (`MinimalPlugins`) com o MESMO arranque do
 //! jogo (`recipes::spawn::startup` → `terrain::runtime::bootstrap`), sem
@@ -51,10 +48,31 @@ use crate::xml::XmlNode;
 
 /// Nome do ficheiro de documento dentro do dir do bake.
 pub const BAKE_JSON: &str = "bake.json";
-/// Nome do heightmap carvado dentro do dir do bake.
-pub const BAKE_AHGT: &str = "terrain.baked.ahgt";
-/// Nome do mundo estático (escrito ao lado do world.xml original).
-pub const STATIC_WORLD: &str = "world.static.xml";
+/// Nome do heightmap carvado dentro da pasta de dados do mundo.
+pub const BAKE_AHGT: &str = "terrain.ahgt";
+/// Sufixo da pasta de dados binários de um mundo: `world.xml` → `world.data/`
+/// (heightmap + `.paint`, vegetação `.vinst`, `bake.json`).
+pub const DATA_SUFFIX: &str = ".data";
+
+/// A pasta de dados de um mundo (`<dir>/<stem>.data`) — onde o bake e o `viber create`
+/// escrevem o heightmap, a pintura e a vegetação.
+pub fn data_dir(world_path: &Path) -> PathBuf {
+    let stem = world_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("world");
+    world_path
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join(format!("{stem}{DATA_SUFFIX}"))
+}
+
+/// `true` quando a raiz do ficheiro XML declara `static="true"`.
+pub fn is_static_root(attrs: &[(String, String)]) -> bool {
+    attrs
+        .iter()
+        .any(|(key, value)| key == "static" && matches!(value.trim(), "true" | "1"))
+}
 
 // ---------------------------------------------------------------------------
 // Documento bake.json (contrato schema 1 — espelhado no ViberEditor)
@@ -333,14 +351,15 @@ pub struct BakeInstance {
     pub asset: Option<String>,
 }
 
-/// Resumo do que o bake escreveu (stdout do CLI + testes).
+/// Resumo do que o bake escreveu (stdout do CLI + testes). Num mundo sem `<Terrain>` não há
+/// dados: `out_dir`/`ahgt_path`/`bake_json_path` ficam vazios.
 #[derive(Debug, Clone, Default)]
 pub struct BakeReport {
     pub out_dir: PathBuf,
     pub ahgt_path: PathBuf,
     pub bake_json_path: PathBuf,
     pub static_world_path: Option<PathBuf>,
-    /// Ficheiros do estático (o mundo + os includes espelhados em `static/`).
+    /// Ficheiros XML reescritos no sítio (o mundo + os includes que não eram estáticos).
     pub static_files: usize,
     pub groups: usize,
     pub instances: usize,
@@ -408,43 +427,27 @@ impl GroupKind {
 // Pipeline
 // ---------------------------------------------------------------------------
 
-/// O mundo estático (o canónico) da pasta `world_dir`, se já foi gerado.
-pub fn static_world_in(world_dir: &Path) -> Option<PathBuf> {
-    let path = world_dir.join(STATIC_WORLD);
-    path.is_file().then_some(path)
-}
-
-/// Recusa gerar por cima de um estático existente sem `force`: o estático é a fonte da
-/// verdade (agentes e o editor editam-no) e regenerar apaga essas edições. Também recusa
-/// "bakear" um mundo que já é estático.
-pub fn check_bake_target(world_path: &Path, force: bool) -> Result<()> {
+/// Recusa converter um mundo que já é estático: o estático é a fonte da verdade (agentes e
+/// o editor editam-no) e não há nada procedural para converter. Regenerar partes dele é
+/// trabalho das ferramentas (`viber tool scatter|settle`, pincéis de terreno).
+pub fn check_bake_target(world_path: &Path) -> Result<()> {
     let doc = crate::xml::parse_file(world_path)?;
-    let is_static = doc
-        .root_attrs
-        .iter()
-        .any(|(key, value)| key == "static" && matches!(value.as_str(), "true" | "1"));
-    if is_static {
+    if is_static_root(&doc.root_attrs) {
         anyhow::bail!(
-            "{} já é um mundo estático — o bake gera-o a partir do mundo procedural (world.xml)",
-            world_path.display()
-        );
-    }
-    let dir = world_path.parent().unwrap_or(Path::new("."));
-    if !force && let Some(existing) = static_world_in(dir) {
-        anyhow::bail!(
-            "{} já existe e é a fonte da verdade do mundo (edições de agentes/editor vivem lá). \
-             `viber bake --force` regenera-o a partir de {} e PERDE essas edições",
-            existing.display(),
+            "{} já é um mundo estático — edita-o com `viber scene`/`viber tool`/ViberEditor \
+             (o bake só converte mundos procedurais)",
             world_path.display()
         );
     }
     Ok(())
 }
 
-/// Corre o bake completo de um mundo.
+/// Converte um mundo procedural em estático NO PRÓPRIO SÍTIO.
 ///
-/// `out_dir` é o diretório do bake (default `<world_dir>/bake`); o mundo
-/// estático é sempre escrito ao lado do `world.xml` original.
+/// O mundo e os seus includes são reescritos nos mesmos caminhos (marcados
+/// `static="true"`); os dados binários vão para `out_dir` (default [`data_dir`]:
+/// `<stem>.data/`). Includes que já são estáticos (fragmentos partilhados com outro mundo
+/// já convertido) nunca são reescritos.
 ///
 /// # Errors
 /// Falha quando o mundo não parseia, quando o bootstrap não publica o
@@ -494,10 +497,37 @@ pub fn run_bake(world_path: &Path, out_dir: &Path) -> Result<BakeReport> {
             .collect()
     };
 
-    let runtime = app
-        .world_mut()
-        .remove_resource::<TerrainRuntime>()
-        .context("o bootstrap do terreno não publicou o TerrainRuntime")?;
+    let Some(runtime) = app.world_mut().remove_resource::<TerrainRuntime>() else {
+        // Mundo SEM `<Terrain>` (cenas de primitivas, UI): não há dados para gerar — a
+        // conversão é só a marca estática. Geradores precisam de terreno onde assentar.
+        let generators = app
+            .world()
+            .get_resource::<PendingSpawnGroups>()
+            .map_or(0, |pending| pending.groups.len());
+        anyhow::ensure!(
+            generators == 0,
+            "{generators} gerador(es) de spawn sem <Terrain> onde assentar — o bake precisa do terreno"
+        );
+        let mut doc = crate::scene::doc::SceneDoc::load(world_path)?;
+        let mut report = BakeReport::default();
+        // `place` sem terreno nunca teve efeito (a pose autoral ficava): sai do XML.
+        let mut placed = Vec::new();
+        doc.walk(|node, xml| {
+            if xml.attr("place").is_some() {
+                placed.push(node.clone());
+            }
+        });
+        for node in placed {
+            if let Some(xml) = doc.node_mut(&node) {
+                xml.remove_attr("place");
+            }
+            doc.touch(node.file);
+        }
+        promote_static(&mut doc, &mut report.warnings);
+        report.static_files = doc.save().context("gravar o mundo estático")?;
+        report.static_world_path = Some(doc.files[0].path.clone());
+        return Ok(report);
+    };
     let cliffs = app.world_mut().remove_resource::<CliffMask>();
     let pending = app
         .world_mut()
@@ -639,7 +669,7 @@ pub fn run_bake(world_path: &Path, out_dir: &Path) -> Result<BakeReport> {
     .with_context(|| format!("escrever {}", bake_json_path.display()))?;
     report.bake_json_path = bake_json_path;
 
-    // 3. O mundo estático: `world.static.xml` + o espelho modular em `static/`.
+    // 3. O mundo estático: os MESMOS ficheiros, reescritos no sítio.
     let mut warnings = Vec::new();
     let mut static_doc = build_static_scene(
         world_path,
@@ -650,9 +680,8 @@ pub fn run_bake(world_path: &Path, out_dir: &Path) -> Result<BakeReport> {
         &settled,
         &mut warnings,
     )?;
-    static_doc.save().context("gravar o mundo estático")?;
+    report.static_files = static_doc.save().context("gravar o mundo estático")?;
     report.static_world_path = Some(static_doc.files[0].path.clone());
-    report.static_files = static_doc.files.len();
     report.warnings.extend(warnings);
 
     report.groups = groups.len();
@@ -799,7 +828,8 @@ fn build_bake_document(
         terrain: BakeTerrain {
             world_size: spec.world_size,
             max_height: spec.max_height,
-            heightmap: format!("bake/{BAKE_AHGT}"),
+            // Relativo à pasta de dados (é assim que o World Overview do editor o lê).
+            heightmap: BAKE_AHGT.to_string(),
             source_heightmap: spec.heightmap.clone(),
             layers: spec.layers.clone(),
             spec: BakeTerrainSpec {
@@ -994,14 +1024,8 @@ fn build_bake_document(
 }
 
 // ---------------------------------------------------------------------------
-// world.static.xml
+// O mundo estático (os mesmos ficheiros, convertidos no sítio)
 // ---------------------------------------------------------------------------
-
-/// Pasta (relativa ao mundo) do espelho modular dos includes do estático: o
-/// `world/village.xml` da fonte vira `static/world/village.xml`, e os `<Include>` do
-/// estático apontam para lá (`/static/…`). A pasta do mundo não muda — `config.yaml`,
-/// assets, scripts e o heightmap resolvem igual.
-pub const STATIC_DIR: &str = "static";
 
 /// Pose final de uma entidade com proveniência, lida da App headless depois do
 /// assentamento (`seat_statics_once`) e da colocação (`resolve_pending_place`).
@@ -1021,8 +1045,8 @@ type SettledPose = (
 ///    `water-level(s)` na água, `flatten="0"` nas estradas, `heightmap` carvado);
 /// 3. poses assentadas/colocadas escritas no XML (`translation`/`euler` canónicos, `place`
 ///    removido) — o runtime estático não assenta nada;
-/// 4. `<world static="true">` e os caminhos retargetados para `world.static.xml` +
-///    [`STATIC_DIR`].
+/// 4. `static="true"` na raiz de cada ficheiro convertido — gravados nos MESMOS caminhos
+///    (os já estáticos, partilhados com outro mundo, ficam intocados).
 ///
 /// O mapeamento runtime→XML é feito pela proveniência dos nós (`XmlNode::origin`), não por
 /// cursores: cada nó expandido sabe o ficheiro e o caminho de onde veio.
@@ -1038,6 +1062,13 @@ fn build_static_scene(
     use crate::scene::doc::{NodeRef, SceneDoc};
 
     let mut doc = SceneDoc::load(world_path)?;
+    let heightmap_rel = {
+        let ahgt = out_dir.join(BAKE_AHGT);
+        let ahgt = ahgt.canonicalize().unwrap_or(ahgt);
+        ahgt.strip_prefix(&doc.root_dir)
+            .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|_| ahgt.display().to_string())
+    };
     // Referencial mundo de cada nó com entidade (pós-assentamento).
     let globals: std::collections::HashMap<NodeRef, bevy::math::Affine3A> = settled
         .iter()
@@ -1187,7 +1218,7 @@ fn build_static_scene(
             }
             // A grelha já tem o leito carvado — ribbon decal-only segue o leito existente.
             "road" | "roadnetwork" => vec![("flatten", "0".into())],
-            "terrain" => vec![("heightmap", format!("bake/{BAKE_AHGT}"))],
+            "terrain" => vec![("heightmap", heightmap_rel.clone())],
             _ => continue,
         };
         feature_attrs.push((node_of(&doc, node, "feature")?, attrs));
@@ -1307,9 +1338,8 @@ fn build_static_scene(
         doc.reindex_includes(file);
     }
 
-    // 4. Marca de mundo estático + retarget dos caminhos (todos os ficheiros são escritos).
-    doc.files[0].doc.set_root_attr("static", "true");
-    retarget_static(&mut doc)?;
+    // 4. Marca de mundo estático em cada ficheiro convertido (no sítio).
+    promote_static(&mut doc, warnings);
     Ok(doc)
 }
 
@@ -1403,41 +1433,33 @@ fn collect_feature_nodes<'a>(nodes: &'a [XmlNode], out: &mut Vec<&'a XmlNode>) {
     }
 }
 
-/// Muda os caminhos do documento da fonte para os do estático: o mundo para
-/// `world.static.xml`, cada include para `static/<caminho relativo>`, e reescreve os
-/// `<Include src>` para os novos caminhos. Todos os ficheiros ficam marcados para gravar.
-fn retarget_static(doc: &mut crate::scene::doc::SceneDoc) -> Result<()> {
-    let rel: Vec<String> = (0..doc.files.len())
-        .map(|file| doc.relative_path(file))
-        .collect();
-    if let Some(outside) = rel
-        .iter()
-        .skip(1)
-        .find(|rel| rel.starts_with("..") || Path::new(rel).is_absolute())
-    {
-        anyhow::bail!(
-            "include fora da pasta do mundo ({outside}) — o estático só espelha a pasta do mundo"
-        );
-    }
+/// Marca os ficheiros do documento como estáticos para gravar no sítio: cada raiz
+/// `<world>`/`<scene>` ganha `static="true"`. Um ficheiro que JÁ era estático (fragmento
+/// partilhado com um mundo convertido antes — os mundos de QA incluem o mundo principal)
+/// nunca é reescrito: se o bake o alterou (ex.: assentou-o noutro terreno), as alterações
+/// são descartadas com um aviso.
+fn promote_static(doc: &mut crate::scene::doc::SceneDoc, warnings: &mut Vec<String>) {
     for file in 0..doc.files.len() {
-        let includes = doc.files[file].includes.clone();
-        for (path, target) in includes {
-            let node = crate::scene::doc::NodeRef::new(file, path);
-            doc.node_mut(&node)
-                .expect("include indexado")
-                .set_attr("src", format!("/{STATIC_DIR}/{}", rel[target]));
+        let rel = doc.relative_path(file);
+        let scene = &mut doc.files[file];
+        let original = crate::xml::parse_file(&scene.path).ok();
+        if original
+            .as_ref()
+            .is_some_and(|original| is_static_root(&original.root_attrs))
+        {
+            if scene.dirty {
+                warnings.push(format!(
+                    "{rel}: já é estático (partilhado) — as alterações do bake neste ficheiro foram descartadas"
+                ));
+            }
+            scene.dirty = false;
+            continue;
         }
+        if matches!(scene.doc.root_tag.as_str(), "world" | "scene") {
+            scene.doc.set_root_attr("static", "true");
+        }
+        scene.dirty = true;
     }
-    let root = doc.root_dir.clone();
-    for (file, rel) in rel.iter().enumerate() {
-        doc.files[file].path = if file == 0 {
-            root.join(STATIC_WORLD)
-        } else {
-            root.join(STATIC_DIR).join(rel)
-        };
-        doc.files[file].dirty = true;
-    }
-    Ok(())
 }
 
 /// A receita `<Scatter>` SINTÉTICA de um grupo da engine (pedras de margem de
@@ -1815,14 +1837,14 @@ mod tests {
     fn test_bake_minimal_world_end_to_end() {
         let dir = write_minimal_world();
         let world = dir.path().join("world.xml");
-        let out = dir.path().join("bake");
+        let out = dir.path().join("world.data");
         let report = run_bake(&world, &out).expect("bake corre");
 
         assert!(report.ahgt_path.exists(), "ahgt escrito");
         assert!(report.bake_json_path.exists(), "bake.json escrito");
         assert_eq!(
             report.static_world_path.as_deref(),
-            Some(dir.path().join(STATIC_WORLD).as_path())
+            Some(dir.path().join("world.xml").as_path())
         );
 
         let doc: BakeDocument =
@@ -1862,12 +1884,12 @@ mod tests {
 
         // O estático parseia limpo e o vegetation é fiel ao bake.
         let checked =
-            verify_static(&dir.path().join(STATIC_WORLD), &report.bake_json_path).expect("verify");
+            verify_static(&dir.path().join("world.xml"), &report.bake_json_path).expect("verify");
         assert!(checked > 0, "instâncias de vegetation verificadas");
 
         // O XML estático contém as instâncias explícitas e o heightmap novo.
-        let xml = std::fs::read_to_string(dir.path().join(STATIC_WORLD)).unwrap();
-        assert!(xml.contains("heightmap=\"bake/terrain.baked.ahgt\""));
+        let xml = std::fs::read_to_string(dir.path().join("world.xml")).unwrap();
+        assert!(xml.contains("heightmap=\"world.data/terrain.ahgt\""));
         assert!(xml.contains("inst-grp-0-0000"));
         assert!(!xml.contains("<StaticSpawner"));
         assert!(
@@ -1906,7 +1928,7 @@ mod tests {
 </world>"#,
         );
         std::fs::write(&world_xml, with_dynamic).unwrap();
-        let report = run_bake(&world_xml, &dir.path().join("bake")).expect("bake corre");
+        let report = run_bake(&world_xml, &dir.path().join("world.data")).expect("bake corre");
         // O estático mantém o <DynamicSpawner> e a vegetation; o verify cruza
         // SÓ vegetation (1 == 1) — sem o fix falhava com "2 grupos vs 1".
         let static_path = report.static_world_path.expect("estático escrito");
@@ -1917,8 +1939,9 @@ mod tests {
         assert!(checked > 0, "instâncias de vegetation verificadas");
     }
 
-    /// O estático é modular (includes espelhados em `static/`), marcado `static="true"`,
-    /// com o assentamento e o `place` escritos no XML — e o runtime estático não mexe.
+    /// O estático é modular (os MESMOS ficheiros, convertidos no sítio), marcado
+    /// `static="true"` em cada raiz, com o assentamento e o `place` escritos no XML — e o
+    /// runtime estático não mexe.
     #[test]
     fn test_bake_static_is_modular_and_settled() {
         let dir = write_minimal_world();
@@ -1940,23 +1963,30 @@ mod tests {
 </world>"#,
         )
         .unwrap();
-        let report =
-            run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
+        let report = run_bake(
+            &dir.path().join("world.xml"),
+            &dir.path().join("world.data"),
+        )
+        .expect("bake");
         assert_eq!(report.static_files, 2);
 
-        let entry = std::fs::read_to_string(dir.path().join(STATIC_WORLD)).unwrap();
+        let entry = std::fs::read_to_string(dir.path().join("world.xml")).unwrap();
         assert!(entry.contains("<world static=\"true\">"), "{entry}");
         assert!(
-            entry.contains("src=\"/static/world/props.xml\""),
-            "include retargetado"
+            entry.contains("src=\"/world/props.xml\""),
+            "include no mesmo caminho"
         );
-        // A fonte fica intacta (o procedural é o gerador).
-        let source = std::fs::read_to_string(dir.path().join("world.xml")).unwrap();
-        assert!(source.contains("<StaticSpawner") && !source.contains("static=\"true\""));
+        // O include foi convertido no sítio: marcado e sem geradores.
+        let props = std::fs::read_to_string(dir.path().join("world/props.xml")).unwrap();
+        assert!(props.contains("<world static=\"true\">"), "{props}");
+        assert!(!props.contains("<StaticSpawner"), "{props}");
+        assert!(!dir.path().join("static").exists(), "sem espelho static/");
+        // Converter outra vez é recusado (nada procedural para converter).
+        assert!(check_bake_target(&dir.path().join("world.xml")).is_err());
 
         let static_props =
-            crate::scene::doc::SceneDoc::load(&dir.path().join(STATIC_WORLD)).unwrap();
-        assert_eq!(static_props.relative_path(1), "static/world/props.xml");
+            crate::scene::doc::SceneDoc::load(&dir.path().join("world.xml")).unwrap();
+        assert_eq!(static_props.relative_path(1), "world/props.xml");
         let hut = static_props.resolve("name=hut").unwrap();
         let hut_pose = crate::scene::pose::read_pose(static_props.node(&hut).unwrap()).unwrap();
         assert!(
@@ -1975,11 +2005,11 @@ mod tests {
         );
 
         // Carregado, o estático não assenta nem coloca: a pose do XML é a final.
-        let loaded = crate::xml::include::load_world(&dir.path().join(STATIC_WORLD)).unwrap();
+        let loaded = crate::xml::include::load_world(&dir.path().join("world.xml")).unwrap();
         let parsed = crate::recipes::parse_world(&loaded.root_attrs, &loaded.nodes).unwrap();
         assert!(parsed.static_world);
         let config = crate::config::load(dir.path()).unwrap();
-        let mut app = headless_app(&dir.path().join(STATIC_WORLD), &config, parsed).unwrap();
+        let mut app = headless_app(&dir.path().join("world.xml"), &config, parsed).unwrap();
         app.add_systems(
             bevy::app::Startup,
             (
@@ -2048,9 +2078,9 @@ mod tests {
 
         // Vegetação pré-gerada: `instances` no nó + o binário com as instâncias do bake, e o
         // runtime estático carrega-as em vez de calcular.
-        let veg = static_props.find_by_attr("instances", "bake/veg/000.vinst");
+        let veg = static_props.find_by_attr("instances", "world.data/veg/000.vinst");
         assert_eq!(veg.len(), 1, "o <Vegetation> aponta para o binário");
-        let preplaced = crate::vinst::read(&dir.path().join("bake/veg/000.vinst")).unwrap();
+        let preplaced = crate::vinst::read(&dir.path().join("world.data/veg/000.vinst")).unwrap();
         let baked_veg = baked
             .spawn_groups
             .iter()
@@ -2069,13 +2099,86 @@ mod tests {
         );
     }
 
+    /// Mundo sem `<Terrain>` (primitivas/UI): a conversão é só a marca estática, sem dados.
+    #[test]
+    fn test_bake_world_without_terrain_only_promotes() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(crate::config::CONFIG_FILE),
+            crate::scaffold::CONFIG_YAML_TEMPLATE,
+        )
+        .unwrap();
+        let world = dir.path().join("hello.xml");
+        std::fs::write(
+            &world,
+            "<world>\n  <Cuboid name=\"box\" half-size=\"1 1 1\" />\n  <Composition name=\"mark\" translation=\"0 0 9\" place=\"at: 0 9\"><Cuboid size=\"1\" /></Composition>\n</world>",
+        )
+        .unwrap();
+        let report = run_bake(&world, &data_dir(&world)).expect("promove");
+        assert_eq!(report.static_files, 1);
+        assert!(report.ahgt_path.as_os_str().is_empty());
+        assert!(!data_dir(&world).exists(), "sem dados para gerar");
+        let xml = std::fs::read_to_string(&world).unwrap();
+        assert!(xml.contains("<world static=\"true\">"), "{xml}");
+        assert!(xml.contains("name=\"box\""));
+        assert!(!xml.contains("place="), "place sem terreno sai: {xml}");
+        let loaded = crate::xml::include::load_world(&world).unwrap();
+        crate::recipes::parse_world(&loaded.root_attrs, &loaded.nodes).expect("estático válido");
+    }
+
+    /// Um segundo mundo procedural que inclui um fragmento JÁ convertido (os mundos de QA
+    /// incluem o mundo principal): o fragmento estático nunca é reescrito.
+    #[test]
+    fn test_bake_never_rewrites_shared_static_fragment() {
+        let dir = write_minimal_world();
+        let world = MINIMAL_WORLD.replace(
+            "  <SpawnExclusion",
+            "  <Include src=\"/world/props.xml\" />\n  <SpawnExclusion",
+        );
+        std::fs::write(dir.path().join("world.xml"), &world).unwrap();
+        std::fs::create_dir_all(dir.path().join("world")).unwrap();
+        std::fs::write(
+            dir.path().join("world/props.xml"),
+            "<world>\n  <Group name=\"hut\"><Cuboid size=\"2\" translation=\"0 1 0\" /></Group>\n</world>",
+        )
+        .unwrap();
+        // Um mundo de QA com o mesmo conteúdo, a incluir o mesmo fragmento.
+        std::fs::write(dir.path().join("qa.xml"), &world).unwrap();
+        run_bake(
+            &dir.path().join("world.xml"),
+            &data_dir(&dir.path().join("world.xml")),
+        )
+        .expect("bake do principal");
+        let shared = std::fs::read_to_string(dir.path().join("world/props.xml")).unwrap();
+        assert!(shared.contains("static=\"true\""), "{shared}");
+
+        let qa = dir.path().join("qa.xml");
+        let report = run_bake(&qa, &data_dir(&qa)).expect("bake do QA");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("world/props.xml")).unwrap(),
+            shared,
+            "fragmento partilhado intacto"
+        );
+        assert!(dir.path().join("qa.data/terrain.ahgt").is_file());
+        let qa_xml = std::fs::read_to_string(&qa).unwrap();
+        assert!(
+            qa_xml.contains("heightmap=\"qa.data/terrain.ahgt\""),
+            "{qa_xml}"
+        );
+        assert_eq!(report.static_world_path.as_deref(), Some(qa.as_path()));
+    }
+
     /// Ferramenta `scatter` sobre o estático: a receita sobreviveu ao bake, regenerar dá as
     /// MESMAS colocações (determinismo), e as ops inversas repõem o documento.
     #[test]
     fn test_scatter_tool_regenerates_baked_output() {
         let dir = write_minimal_world();
-        run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
-        let static_world = dir.path().join(STATIC_WORLD);
+        run_bake(
+            &dir.path().join("world.xml"),
+            &dir.path().join("world.data"),
+        )
+        .expect("bake");
+        let static_world = dir.path().join("world.xml");
 
         let doc = crate::scene::doc::SceneDoc::load(&static_world).unwrap();
         let scatters = crate::scene::tools::list_scatters(&doc);
@@ -2155,16 +2258,20 @@ mod tests {
         std::fs::write(dir.path().join("world.xml"), world).unwrap();
         std::fs::create_dir_all(dir.path().join("assets/meshes/test")).unwrap();
         write_test_config(dir.path());
-        run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
-        let static_world = dir.path().join(STATIC_WORLD);
-        let vinst = dir.path().join("bake/veg/000.vinst");
+        run_bake(
+            &dir.path().join("world.xml"),
+            &dir.path().join("world.data"),
+        )
+        .expect("bake");
+        let static_world = dir.path().join("world.xml");
+        let vinst = dir.path().join("world.data/veg/000.vinst");
         let baked_bytes = std::fs::read(&vinst).unwrap();
         let baked = crate::vinst::read(&vinst).unwrap();
         assert!(!baked.is_empty(), "vegetation com instâncias");
         let xml_before = std::fs::read_to_string(&static_world).unwrap();
 
         let doc = crate::scene::doc::SceneDoc::load(&static_world).unwrap();
-        let veg = doc.find_by_attr("instances", "bake/veg/000.vinst")[0].clone();
+        let veg = doc.find_by_attr("instances", "world.data/veg/000.vinst")[0].clone();
         let selector = doc.selector(&veg);
 
         // dry-run: honesto — o .vinst fica COMO ESTAVA (o scatter grava, o dry-run repõe).
@@ -2215,12 +2322,15 @@ mod tests {
         std::fs::write(dir.path().join("world.xml"), world).unwrap();
         std::fs::create_dir_all(dir.path().join("assets/meshes/test")).unwrap();
         write_test_config(dir.path());
-        let report =
-            run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
+        let report = run_bake(
+            &dir.path().join("world.xml"),
+            &dir.path().join("world.data"),
+        )
+        .expect("bake");
 
         // O engine group (pedras) tem Scatter + grupo gerado; o count real vem das
         // instâncias que passaram os gates.
-        let static_world = dir.path().join(STATIC_WORLD);
+        let static_world = dir.path().join("world.xml");
         let xml = std::fs::read_to_string(&static_world).unwrap();
         assert!(
             xml.contains("<Scatter") && xml.contains(r#"id="engine-0""#),
@@ -2289,8 +2399,11 @@ mod tests {
         std::fs::write(dir.path().join("world.xml"), world).unwrap();
         std::fs::create_dir_all(dir.path().join("assets/meshes/test")).unwrap();
         write_test_config(dir.path());
-        let report =
-            run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
+        let report = run_bake(
+            &dir.path().join("world.xml"),
+            &dir.path().join("world.data"),
+        )
+        .expect("bake");
 
         let baked: BakeDocument =
             serde_json::from_str(&std::fs::read_to_string(&report.bake_json_path).unwrap())
@@ -2299,7 +2412,7 @@ mod tests {
             baked.spawn_groups.iter().all(|g| g.instances.is_empty()),
             "a região afogada não coloca nada"
         );
-        let xml = std::fs::read_to_string(dir.path().join(STATIC_WORLD)).unwrap();
+        let xml = std::fs::read_to_string(dir.path().join("world.xml")).unwrap();
         assert!(
             !xml.contains("<StaticSpawner"),
             "o spawner saiu do estático"
@@ -2308,7 +2421,7 @@ mod tests {
         assert!(!xml.contains("<Scatter"), "sem receita de grupo vazio");
         // O mundo estático continua a carregar limpo (parse sem tags estranhas).
         let loaded =
-            crate::xml::include::load_world(dir.path().join(STATIC_WORLD).as_path()).unwrap();
+            crate::xml::include::load_world(dir.path().join("world.xml").as_path()).unwrap();
         let parsed = crate::recipes::parse_world(&loaded.root_attrs, &loaded.nodes).unwrap();
         assert!(parsed.skipped_tags.is_empty());
     }
@@ -2320,9 +2433,13 @@ mod tests {
         use crate::scene::ops::{EditOp, History};
         use crate::scene::terrain::BrushMode;
         let dir = write_minimal_world();
-        run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
-        let static_world = dir.path().join(STATIC_WORLD);
-        let ahgt = dir.path().join("bake").join(BAKE_AHGT);
+        run_bake(
+            &dir.path().join("world.xml"),
+            &dir.path().join("world.data"),
+        )
+        .expect("bake");
+        let static_world = dir.path().join("world.xml");
+        let ahgt = dir.path().join("world.data").join(BAKE_AHGT);
         let original = std::fs::read(&ahgt).unwrap();
 
         let brush = |x: f32| EditOp::TerrainBrush {
@@ -2406,8 +2523,12 @@ mod tests {
     fn test_terrain_paint_syncs_window_to_live_runtime() {
         use crate::scene::ops::EditOp;
         let dir = write_minimal_world();
-        run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
-        let static_world = dir.path().join(STATIC_WORLD);
+        run_bake(
+            &dir.path().join("world.xml"),
+            &dir.path().join("world.data"),
+        )
+        .expect("bake");
+        let static_world = dir.path().join("world.xml");
         let config = crate::config::load(dir.path()).unwrap();
         let loaded = crate::xml::include::load_world(&static_world).unwrap();
         let parsed = crate::recipes::parse_world(&loaded.root_attrs, &loaded.nodes).unwrap();
@@ -2471,8 +2592,12 @@ mod tests {
         use crate::scene::ops::{EditOp, apply_batch};
         use crate::scene::terrain::BrushMode;
         let dir = write_minimal_world();
-        run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
-        let static_world = dir.path().join(STATIC_WORLD);
+        run_bake(
+            &dir.path().join("world.xml"),
+            &dir.path().join("world.data"),
+        )
+        .expect("bake");
+        let static_world = dir.path().join("world.xml");
         let mut doc = crate::scene::doc::SceneDoc::load(&static_world).unwrap();
         let group = doc
             .walk_find(|xml| xml.attr("generated-by").is_some())
@@ -2522,8 +2647,12 @@ mod tests {
     #[test]
     fn test_static_instances_are_canonical() {
         let dir = write_minimal_world();
-        run_bake(&dir.path().join("world.xml"), &dir.path().join("bake")).expect("bake");
-        let doc = crate::scene::doc::SceneDoc::load(&dir.path().join(STATIC_WORLD)).unwrap();
+        run_bake(
+            &dir.path().join("world.xml"),
+            &dir.path().join("world.data"),
+        )
+        .expect("bake");
+        let doc = crate::scene::doc::SceneDoc::load(&dir.path().join("world.xml")).unwrap();
         let group = doc
             .walk_find(|xml| xml.attr("generated-by").is_some())
             .unwrap();

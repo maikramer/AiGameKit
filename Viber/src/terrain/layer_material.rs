@@ -860,9 +860,12 @@ mod tests {
 
     fn spec(kind: EntityKind) -> EntitySpec {
         EntitySpec {
+            prototype_instance: None,
             name: None,
             tag: None,
             script: None,
+            props: Vec::new(),
+            links: Default::default(),
             destructible: None,
             transform: TransformSpec::default(),
             physics: PhysicsSpec::default(),

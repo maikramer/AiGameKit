@@ -32,13 +32,16 @@ pub mod components;
 pub mod ctx;
 pub mod entity;
 pub mod events;
+pub mod exports;
 pub mod fx;
 pub mod game;
 pub mod host;
 pub mod input;
 pub mod ownership;
+pub mod props;
 pub mod runtime;
 pub mod sfx;
+pub mod signals;
 pub mod terrain;
 pub mod timers;
 
@@ -47,7 +50,8 @@ mod tests;
 
 pub use commands::ScriptCommand;
 pub use components::{
-    DEFAULT_ACTIVATION_RADIUS, LuaScriptRef, ScriptActivation, ScriptInteraction, ScriptToast,
+    DEFAULT_ACTIVATION_RADIUS, Groups, LuaScriptRef, ScriptActivation, ScriptInteraction,
+    ScriptProps, ScriptToast, SignalConnections, link_components,
 };
 pub use ctx::{ScriptCtx, SurfaceCache, SurfaceRegistries};
 pub use events::{EVENT_QUEUE_CAP, ScriptEventQueue, ScriptGameEvent};

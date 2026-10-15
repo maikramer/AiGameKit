@@ -3,6 +3,8 @@
 //!
 //! * mudança só de pose (`translation`/`euler`/`rotation`/`scale`/aliases) → patch do
 //!   `Transform`, sem re-spawn;
+//! * mudança só de props de script (`prop-*`) → patch do `ScriptProps` no sítio — o
+//!   script continua a correr com o mesmo `viber.state()` (afinar o jogo vivo);
 //! * outros atributos → re-spawn da subárvore do nó;
 //! * inserção / remoção / move → spawn / despawn, e REALINHAMENTO das origens: um nó novo ou
 //!   removido desloca os caminhos dos irmãos seguintes, e os `SceneSource` das entidades
@@ -61,7 +63,9 @@ struct Plan {
     spawn: Vec<NodeRef>,
     respawn: Vec<NodeRef>,
     pose: Vec<NodeRef>,
+    props: Vec<NodeRef>,
     terrain: Vec<super::terrain::CellRect>,
+    biomes: bool,
     paint: Vec<super::terrain::CellRect>,
 }
 
@@ -77,14 +81,32 @@ pub fn sync_scene(world: &mut World) {
     for change in edits.iter().flat_map(|edit| &edit.changes) {
         match change {
             Change::Attrs { node, keys } => {
-                let pose_only = keys.iter().all(|key| POSE_KEYS.contains(&key.as_str()));
-                let list = if pose_only {
-                    &mut plan.pose
+                let is_pose = |key: &String| POSE_KEYS.contains(&key.as_str());
+                let is_prop = |key: &String| crate::luau::exports::prop_name(key).is_some();
+                // Num `<Use>` os props da entidade são o merge protótipo+instância: o nó
+                // sozinho não chega para os patchar — re-spawn.
+                let use_node = world
+                    .resource::<SceneDoc>()
+                    .node(node)
+                    .is_some_and(|xml| xml.tag.eq_ignore_ascii_case("use"));
+                let patchable = keys
+                    .iter()
+                    .all(|key| is_pose(key) || (is_prop(key) && !use_node));
+                let mut lists: Vec<&mut Vec<NodeRef>> = Vec::new();
+                if !patchable {
+                    lists.push(&mut plan.respawn);
                 } else {
-                    &mut plan.respawn
-                };
-                if !list.contains(node) {
-                    list.push(node.clone());
+                    if keys.iter().any(is_pose) {
+                        lists.push(&mut plan.pose);
+                    }
+                    if keys.iter().any(is_prop) {
+                        lists.push(&mut plan.props);
+                    }
+                }
+                for list in lists {
+                    if !list.contains(node) {
+                        list.push(node.clone());
+                    }
                 }
             }
             Change::Inserted { node } => {
@@ -92,10 +114,16 @@ pub fn sync_scene(world: &mut World) {
                 plan.spawn.push(node.clone());
             }
             Change::Terrain { rect } => plan.terrain.push(*rect),
+            Change::Biomes => plan.biomes = true,
             Change::Paint { rect } => plan.paint.push(*rect),
             Change::Removed { node } => {
                 despawn_subtree(world, node);
-                for list in [&mut plan.spawn, &mut plan.respawn, &mut plan.pose] {
+                for list in [
+                    &mut plan.spawn,
+                    &mut plan.respawn,
+                    &mut plan.pose,
+                    &mut plan.props,
+                ] {
                     list.retain(|pending| !is_within(pending, node));
                 }
                 shift(world, &mut plan, node, -1);
@@ -120,12 +148,18 @@ pub fn sync_scene(world: &mut World) {
     for rect in &plan.terrain {
         push_terrain(world, *rect);
     }
+    if plan.biomes {
+        push_biomes(world);
+    }
     for rect in &plan.paint {
         push_paint(world, *rect);
     }
     let mut posed = 0;
     for node in &plan.pose {
         posed += patch_pose(world, node);
+    }
+    for node in &plan.props {
+        patch_props(world, node);
     }
     info!(
         target: "viber::scene",
@@ -164,7 +198,12 @@ fn shift(world: &mut World, plan: &mut Plan, at: &NodeRef, delta: isize) {
                 path[depth] > index
             }
     };
-    for list in [&mut plan.spawn, &mut plan.respawn, &mut plan.pose] {
+    for list in [
+        &mut plan.spawn,
+        &mut plan.respawn,
+        &mut plan.pose,
+        &mut plan.props,
+    ] {
         for pending in list.iter_mut() {
             if affected(pending.file == at.file, &pending.path) {
                 pending.path[depth] = pending.path[depth].saturating_add_signed(delta);
@@ -221,6 +260,8 @@ fn spawn_node(world: &mut World, node: &NodeRef) -> Result<(), String> {
     };
     let mut xml = xml.clone();
     stamp_subtree(&mut xml, &doc.origin_of(node));
+    // Uma cena instanciada (`<Include>` novo, `extract`): o conteúdo vem do ficheiro.
+    let xml = expand_includes(doc, node, xml, 0);
     let parent_ref = node.parent().expect("um nó inserido nunca é raiz");
     let top_level = parent_ref.is_root();
     // Topo de um ficheiro INCLUÍDO: o pai natural é o Group do `<Include>` quando ele tem
@@ -277,6 +318,45 @@ fn spawn_node(world: &mut World, node: &NodeRef) -> Result<(), String> {
         .map_err(|e| format!("{selector}: {e}"))
 }
 
+/// Expande os `<Include>` de uma subárvore (já carimbada) com o conteúdo dos ficheiros
+/// do documento: cada include vira um `<Group>` com a sua pose (e `name`), com a
+/// proveniência do próprio include; os filhos levam a do ficheiro incluído — a mesma
+/// forma que o `load_world` produz para um include com pose.
+fn expand_includes(doc: &SceneDoc, at: &NodeRef, mut xml: XmlNode, depth: usize) -> XmlNode {
+    if depth > crate::xml::include::MAX_INCLUDE_DEPTH {
+        return xml;
+    }
+    if xml.tag.eq_ignore_ascii_case("include") {
+        let Some(target) = doc.include_target(at) else {
+            return xml;
+        };
+        let keys = crate::xml::include::INCLUDE_POSE_KEYS;
+        xml.tag = "Group".into();
+        xml.attrs
+            .retain(|(key, _)| keys.contains(&key.as_str()) || key == "name");
+        xml.children = doc.files[target]
+            .doc
+            .children
+            .iter()
+            .enumerate()
+            .map(|(index, child)| {
+                let child_ref = NodeRef::new(target, vec![index]);
+                let mut child = child.clone();
+                stamp_subtree(&mut child, &doc.origin_of(&child_ref));
+                expand_includes(doc, &child_ref, child, depth + 1)
+            })
+            .collect();
+        return xml;
+    }
+    let children = std::mem::take(&mut xml.children);
+    xml.children = children
+        .into_iter()
+        .enumerate()
+        .map(|(index, child)| expand_includes(doc, &at.child(index), child, depth))
+        .collect();
+    xml
+}
+
 /// Origens de uma subárvore copiada do documento, a partir da origem do seu raiz.
 fn stamp_subtree(node: &mut XmlNode, origin: &NodeOrigin) {
     node.origin = Some(Arc::new(origin.clone()));
@@ -306,6 +386,37 @@ fn push_terrain(world: &mut World, rect: super::terrain::CellRect) {
     if !deltas.set_cells(&grid, rect.i0, rect.j0, rect.cols, rect.rows, heights) {
         warn!("scene sync: retângulo de terreno inválido {rect:?}");
     }
+}
+
+/// Copia o campo de biomas do documento para o runtime e re-bakeia os splats
+/// do mundo inteiro (a mesma cadeia do `viber.debug.ground`, mas com biomas).
+fn push_biomes(world: &mut World) {
+    let Some(biomes) = world
+        .get_resource::<SceneDoc>()
+        .and_then(|doc| doc.terrain.as_ref())
+        .map(|terrain| terrain.meta.biomes.clone())
+    else {
+        return;
+    };
+    let tuning = world
+        .get_resource::<crate::terrain::runtime::TerrainRuntime>()
+        .map(|runtime| {
+            // clone-on-write via interior: spec é campo pub, escrevemos com get_mut
+            // depois da leitura do tuning
+            runtime.splat_tuning
+        });
+    let Some(tuning) = tuning else {
+        return;
+    };
+    world
+        .resource_mut::<crate::terrain::runtime::TerrainRuntime>()
+        .spec
+        .biomes = biomes;
+    let repainted = crate::terrain::runtime::rebake_chunk_splats(world, tuning);
+    info!(
+        target: "viber::scene",
+        "scene sync: biomas — {repainted} chunk(s) re-baked"
+    );
 }
 
 /// Copia a camada de pintura do documento para o runtime e repinta os chunks
@@ -374,6 +485,35 @@ fn patch_pose(world: &mut World, node: &NodeRef) -> usize {
         transform.scale = pose.scale;
         let local = *transform;
         teleport_body(world, entity, local);
+        count += 1;
+    }
+    count
+}
+
+/// Aplica os `prop-*` do XML ao [`crate::luau::ScriptProps`] das entidades com script do
+/// nó — sem re-spawn, o script mantém o estado; o próximo `viber.prop` lê o valor novo.
+fn patch_props(world: &mut World, node: &NodeRef) -> usize {
+    let Some(xml) = world.resource::<SceneDoc>().node(node).cloned() else {
+        return 0;
+    };
+    let props: Vec<(String, String)> = xml
+        .attrs
+        .iter()
+        .filter_map(|(key, value)| {
+            crate::luau::exports::prop_name(key).map(|name| (name.to_owned(), value.clone()))
+        })
+        .collect();
+    let mut count = 0;
+    for entity in entities_of(world, node) {
+        if world.get::<crate::luau::LuaScriptRef>(entity).is_none() {
+            continue;
+        }
+        let mut entity = world.entity_mut(entity);
+        if props.is_empty() {
+            entity.remove::<crate::luau::ScriptProps>();
+        } else {
+            entity.insert(crate::luau::ScriptProps(Arc::new(props.clone())));
+        }
         count += 1;
     }
     count
@@ -483,6 +623,52 @@ mod tests {
     }
 
     #[test]
+    fn extract_and_instance_keep_the_content_alive() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = app(tmp.path());
+        edit(
+            &mut app,
+            &[EditOp::Extract {
+                node: "name=hero".into(),
+                to: Some("scenes/hero.xml".into()),
+            }],
+        );
+        let hero = named(&mut app, "hero");
+        assert_eq!(
+            hero.len(),
+            1,
+            "o ramo extraído continua vivo (via o include)"
+        );
+        app.update();
+        let global = app.world().get::<GlobalTransform>(hero[0]).unwrap();
+        assert_eq!(global.translation(), Vec3::new(0.0, 1.0, 0.0));
+        let source = app.world().get::<SceneSource>(hero[0]).unwrap().0.clone();
+        assert!(source.file.ends_with("scenes/hero.xml"));
+        // Uma segunda instância da mesma cena (ainda por gravar) noutro sítio.
+        let op = crate::scene::catalog::scene_instance(
+            app.world().resource::<SceneDoc>(),
+            "#",
+            "scenes/hero.xml",
+            Some([10.0, 0.0, 0.0]),
+        )
+        .unwrap();
+        edit(&mut app, &[op]);
+        app.update();
+        let mut xs: Vec<f32> = named(&mut app, "hero")
+            .into_iter()
+            .map(|e| {
+                app.world()
+                    .get::<GlobalTransform>(e)
+                    .unwrap()
+                    .translation()
+                    .x
+            })
+            .collect();
+        xs.sort_by(f32::total_cmp);
+        assert_eq!(xs, [0.0, 10.0]);
+    }
+
+    #[test]
     fn pose_edit_patches_transform_without_respawn() {
         let tmp = tempfile::tempdir().unwrap();
         let mut app = app(tmp.path());
@@ -493,6 +679,79 @@ mod tests {
         assert_eq!(
             app.world().get::<Transform>(before).unwrap().translation,
             Vec3::new(9.0, 1.0, -3.0)
+        );
+    }
+
+    #[test]
+    fn prop_edit_patches_script_props_without_respawn() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = app(tmp.path());
+        edit(&mut app, &[set("name=well", "script", "well.lua")]);
+        let scripted = named(&mut app, "well")[0];
+        assert!(
+            app.world()
+                .get::<crate::luau::LuaScriptRef>(scripted)
+                .is_some()
+        );
+        edit(&mut app, &[set("name=well", "prop-speed", "2.5")]);
+        assert_eq!(named(&mut app, "well"), [scripted], "sem re-spawn");
+        let props = app
+            .world()
+            .get::<crate::luau::ScriptProps>(scripted)
+            .expect("props patchados");
+        assert_eq!(*props.0, vec![("speed".to_owned(), "2.5".to_owned())]);
+        // Pose + prop na mesma edição: continua sem re-spawn.
+        edit(
+            &mut app,
+            &[EditOp::Set {
+                node: "name=well".into(),
+                attrs: BTreeMap::from([
+                    ("translation".to_owned(), Some("1 2 3".to_owned())),
+                    ("prop-speed".to_owned(), None),
+                ]),
+            }],
+        );
+        assert_eq!(named(&mut app, "well"), [scripted]);
+        // O undo de um `set` é um `replace_attrs` com a lista inteira: só as chaves que
+        // mudaram contam — continua a ser patch, não re-spawn.
+        let mut attrs: Vec<(String, String)> = app
+            .world()
+            .resource::<SceneDoc>()
+            .node(
+                &app.world()
+                    .resource::<SceneDoc>()
+                    .resolve("name=well")
+                    .unwrap(),
+            )
+            .unwrap()
+            .attrs
+            .clone();
+        attrs.push(("prop-speed".to_owned(), "4".to_owned()));
+        edit(
+            &mut app,
+            &[EditOp::ReplaceAttrs {
+                node: "name=well".into(),
+                attrs,
+            }],
+        );
+        assert_eq!(
+            named(&mut app, "well"),
+            [scripted],
+            "replace_attrs sem re-spawn"
+        );
+        edit(
+            &mut app,
+            &[EditOp::Set {
+                node: "name=well".into(),
+                attrs: BTreeMap::from([("prop-speed".to_owned(), None)]),
+            }],
+        );
+        assert_eq!(named(&mut app, "well"), [scripted]);
+        assert!(
+            app.world()
+                .get::<crate::luau::ScriptProps>(scripted)
+                .is_none(),
+            "remover o último prop tira o componente"
         );
     }
 

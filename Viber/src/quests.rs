@@ -292,13 +292,10 @@ impl QuestLog {
     /// Aplica progresso de kill às quests ativas com esse alvo; devolve os
     /// ids que ficaram Ready agora. (collect é vault-driven.)
     pub fn report_progress(&mut self, target: &str, amount: u32) -> Vec<String> {
-        let wanted = normalize_target(target);
         let candidates: Vec<(String, u32)> = self
             .defs
             .iter()
-            .filter(|d| {
-                d.objective.kind == "kill" && normalize_target(&d.objective.target) == wanted
-            })
+            .filter(|d| d.objective.kind == "kill" && kill_matches(target, &d.objective.target))
             .filter(|d| self.states.contains_key(&d.id))
             .map(|d| (d.id.clone(), d.objective.count))
             .collect();
@@ -385,6 +382,19 @@ impl QuestLog {
     }
 }
 
+/// Um abate de `kind` conta para o alvo de missão `target`? Igual (normalizado)
+/// ou uma VARIANTE com o mesmo nome base — `bandit-archer` conta para
+/// `bandit` (o arqueiro é um bandido; a missão "limpa os bandidos" tem de o
+/// contar).
+pub fn kill_matches(kind: &str, target: &str) -> bool {
+    let wanted = normalize_target(target);
+    if normalize_target(kind) == wanted {
+        return true;
+    }
+    let base = kind.split(['-', '_']).next().unwrap_or(kind);
+    base != kind && normalize_target(base) == wanted
+}
+
 /// Normaliza tipos/nomes de alvo: minúsculas, sem `-`/`_`, prefixo `boss`
 /// removido — `boss_bogwarden` e `bog-warden` caem no mesmo alvo.
 pub fn normalize_target(raw: &str) -> String {
@@ -414,13 +424,27 @@ impl Plugin for QuestsPlugin {
                     quest_banner_drive,
                     quest_visit_system,
                     timed(Group::World, quest_tracker_system),
+                ),
+            )
+            // Atalhos de QA (F6/F7/… teleportes) só com `VIBER_DEBUG_KEYS=1`,
+            // como as teclas de vitais — num jogo a sério o jogador não
+            // tropeça num teleporte ao carregar numa tecla de função.
+            .add_systems(
+                Update,
+                (
                     quest_debug_teleport,
                     quest_debug_nearest,
                     quest_debug_hostile,
                     quest_debug_harvest,
-                ),
+                )
+                    .run_if(debug_keys_enabled),
             );
     }
+}
+
+/// `VIBER_DEBUG_KEYS=1` liga os atalhos de QA (teleportes por tecla).
+pub fn debug_keys_enabled() -> bool {
+    std::env::var_os("VIBER_DEBUG_KEYS").is_some_and(|v| v != "0")
 }
 
 /// Debug de QA (**F6**): teleporta o herói ao `<DialogueNPC>` de quest MAIS
@@ -1118,6 +1142,15 @@ pub(crate) fn example_quests_dir() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn kill_variants_count_for_their_base_target() {
+        assert!(kill_matches("bandit-archer", "bandit"));
+        assert!(kill_matches("bandit", "bandit"));
+        assert!(kill_matches("bog-warden", "boss_bogwarden"));
+        assert!(!kill_matches("bandit", "bandit-archer"));
+        assert!(!kill_matches("wolf", "bandit"));
+    }
     use super::*;
 
     fn log() -> QuestLog {

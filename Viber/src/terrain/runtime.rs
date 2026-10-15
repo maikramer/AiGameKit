@@ -701,6 +701,12 @@ pub fn bootstrap(world: &mut World) {
     // render-distance=950 do simple-rpg): encolhe o raio de streaming sem
     // editar o XML. O analyze nunca corre o bootstrap — lê o valor autorado.
     spec.apply_env_render_distance();
+    // Mundo ESTÁTICO (`<world static="true">`): o heightmap pré-gerado é final — nada o
+    // carva, afia ou substitui por relevo procedural. As features só resolvem os dados de
+    // runtime (água, estradas, pads) sobre uma cópia.
+    let static_world = world
+        .get_resource::<crate::recipes::spawn::StaticWorld>()
+        .is_some_and(|mode| mode.0);
     let mut heightmap_file: Option<PathBuf> = None;
     let map = match &spec.heightmap {
         Some(path) => match load_heightmap(pending.base_dir.as_deref(), &asset_roots, path) {
@@ -736,10 +742,20 @@ pub fn bootstrap(world: &mut World) {
                 loaded.map
             }
             Err(error) => {
+                if static_world {
+                    error!(
+                        "mundo estático: heightmap `{path}` indisponível ({error:#}) — sem terreno"
+                    );
+                    return;
+                }
                 warn!("heightmap `{path}` unavailable ({error:#}); using the procedural field");
                 HeightMapU16::procedural(&spec, spec.resolution.max(1) as usize)
             }
         },
+        None if static_world => {
+            error!("mundo estático: o <Terrain> não declara `heightmap` — sem terreno");
+            return;
+        }
         None => HeightMapU16::procedural(&spec, spec.resolution.max(1) as usize),
     };
     let mut grid = match BrushGrid::from_height_map(
@@ -755,8 +771,13 @@ pub fn bootstrap(world: &mut World) {
         }
     };
 
-    // 2. Features (pads → water → roads). Cliffs no longer carve.
-    let mut result = apply_features(&mut grid, &pending.features);
+    // 2. Features (pads → water → roads). Cliffs no longer carve. Num mundo estático a
+    // grelha já vem carvada: o carve corre numa CÓPIA só para resolver água/estradas/pads.
+    let mut result = if static_world {
+        apply_features(&mut grid.clone(), &pending.features)
+    } else {
+        apply_features(&mut grid, &pending.features)
+    };
 
     // 2.1 Cliff bands. Resolved against the CARVED grid, so a wall beside a
     // road or a lake adapts to the ground as built, and resolved BEFORE the
@@ -864,7 +885,9 @@ pub fn bootstrap(world: &mut World) {
     if !wall_bands.is_empty() {
         cliff_mask.add_authored_bands(&wall_bands);
     }
-    if spec.sharpen {
+    // O sharpen REESCREVE o relevo: num estático o bake já o aplicou — correr outra vez
+    // terraçava os terraços.
+    if spec.sharpen && !static_world {
         let changed =
             crate::terrain::cliffs::sharpen_terrain(&mut grid, &spec, &result.water, &cliff_mask);
         if changed > 0 {

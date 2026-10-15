@@ -38,13 +38,8 @@ fn shipped_hud_has_unique_ids_and_valid_bindings() {
     let mut scripted = HashSet::new();
     script_binds(&root.join("scripts"), &mut scripted);
     let mut ids = HashSet::new();
-    // O HUD enviado é o do MUNDO ESTÁTICO (fonte da verdade pós-bake); o
-    // world/hud.xml procedural é só a fonte de regeneração.
-    for file in [
-        "static/world/hud.xml",
-        "static/world/menu.xml",
-        "qa-hud.xml",
-    ] {
+    // O HUD enviado é o do mundo (estático — a fonte da verdade).
+    for file in ["world/hud.xml", "world/menu.xml", "qa-hud.xml"] {
         let doc = xml::parse_file(&root.join(file)).unwrap();
         let mut nodes = Vec::new();
         visit(&doc.children, &mut nodes);
@@ -52,7 +47,7 @@ fn shipped_hud_has_unique_ids_and_valid_bindings() {
             if let Some(id) = node.attr("id") {
                 assert!(ids.insert(id.to_owned()), "duplicate id {id}");
             }
-            if file == "static/world/hud.xml" {
+            if file == "world/hud.xml" {
                 if let Some(binding) = node.attr("bind") {
                     // Class-binds (`expr:classe`) resolvem só a parte do
                     // nome — a classe é aplicada, não lida do UiData.

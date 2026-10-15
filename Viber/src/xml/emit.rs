@@ -1,7 +1,7 @@
 //! Serialização XML — escreve a árvore owned de volta para texto.
 //!
 //! Contraparte do parser: [`emit_document`] produz XML bem-formado que o
-//! próprio `parse_file` relê sem warnings — a fundação do `world.static.xml`
+//! próprio `parse_file` relê sem warnings — a fundação do mundo estático
 //! do `viber bake` (ler world + includes, transformar, emitir).
 //!
 //! Contrato de fidelidade: a árvore só contém o que o parser preserva — tags

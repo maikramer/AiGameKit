@@ -294,6 +294,7 @@ pub fn format_scale(s: Vec3) -> String {
 }
 
 pub fn format_num(value: f32) -> String {
+    let value = if value == 0.0 { 0.0 } else { value };
     format_num_with(value, 4)
 }
 
