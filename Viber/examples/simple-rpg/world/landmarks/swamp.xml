@@ -171,5 +171,11 @@
     <Entity name="bog-moss-16" translation="-282 32.2844 54" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_collision.glb; mesh-anchor: base" script="bog-moss.lua" euler="180 -52 180" scale="1">
       <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
     </Entity>
+    <Entity name="barco-arca" translation="-181.00 26.270 -54.60" euler="0 40 0" script="chest.lua" prop-gold="55" prop-xp="40" prop-item="antidote" prop-item_count="3" prop-item_label="antídotos" prop-prompt="Abrir a arca do barco" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
+    </Entity>
+    <Entity name="altar-relicario" translation="-267.00 33.044 98.20" euler="0 300 0" script="chest.lua" prop-gold="90" prop-xp="60" prop-item="potion" prop-item_count="2" prop-item_label="poções" prop-prompt="Abrir o relicário do altar" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
+    </Entity>
   </Group>
 </world>

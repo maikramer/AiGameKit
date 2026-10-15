@@ -121,5 +121,8 @@
     </Entity>
     <SpawnExclusion at="-12 -290" radius="40" />
     <Entity name="ambient_water_ice_lake" translation="68 77.6414 -184" script="ambient-water.lua" />
+    <Entity name="mojao-esconderijo" translation="14.40 110.036 -241.60" euler="0 80 0" script="chest.lua" prop-gold="120" prop-xp="80" prop-item="potion" prop-item_count="3" prop-item_label="poções" prop-prompt="Abrir o esconderijo do mojão" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
+    </Entity>
   </Group>
 </world>

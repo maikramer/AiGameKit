@@ -64,8 +64,21 @@ barra própria no HUD, *poise* (só vacilam com dano acumulado), um especial a
 cada 3 golpes com anel de aviso colorido (a maldição da Bruxa cai onde o herói
 estava) e fúria abaixo de ~40 % de vida. Cada um tem dador de quest.
 
-As teclas de debug de vitais ([H] dano, [N] cura total, [K] +XP) só existem
-com `VIBER_DEBUG_KEYS=1`.
+**Atiradores e elites:** os bandidos do ermo oriental (`enemies/bandit-archer.lua`)
+mantêm 5–15 m e disparam o `enemy-arrow` (anel laranja = vai disparar; sai da
+linha). Qualquer criatura não-chefe tem 8 % de nascer **elite** — maior, 2,5× a
+vida, golpes ×1,4, aura dourada ao acordar — e paga a triplicar (`game/loot.lua`).
+
+**Guia de missões:** o NPC com missão tem "!" (por aceitar) ou "?" (por
+entregar) a flutuar e vira-se para o herói; a seta do HUD (`<WaypointArrow>`)
+aponta entregar → cumprir (marco por visitar / presa viva mais próxima) →
+missão nova. Minimapa e bússola só mostram NPC que valem a pena.
+
+**Exploração:** baús escondidos junto a seis marcos (caravana, barco, menires,
+altar, obelisco, mojão) com loot próprio (`prop-*`).
+
+As teclas de debug ([H] dano, [N] cura total, [K] +XP, F6/F7/F9/F10/F11
+teleportes e recursos) só existem com `VIBER_DEBUG_KEYS=1`.
 
 Assets: `/assets/…` resolve contra as asset roots do `config.yaml` deste
 jogo — a pasta do jogo SEMPRE primeiro (overrides), o pool partilhado

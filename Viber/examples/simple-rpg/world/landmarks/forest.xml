@@ -117,5 +117,8 @@
     </Entity>
     <Entity name="forage-mushroom-1" translation="-44 45.9428 124" script="mushroom.lua" />
     <Entity name="forage-mushroom-2" translation="52 42.8371 192" script="mushroom.lua" />
+    <Entity name="menires-oferenda" translation="106.60 49.554 239.00" euler="0 120 0" script="chest.lua" prop-gold="40" prop-xp="50" prop-item="potion" prop-item_count="2" prop-item_label="poções" prop-prompt="Abrir a oferenda dos menires" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
+    </Entity>
   </Group>
 </world>

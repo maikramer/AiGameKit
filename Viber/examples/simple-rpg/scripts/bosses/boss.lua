@@ -3,6 +3,7 @@
 -- lib/fsm.lua (viber.load). Chefe final: poise alto, SISMO a cada 3 golpes
 -- (zona larga à volta dele) e fúria abaixo de 40 % de vida.
 local fsm = viber.load("lib/fsm.lua").new{
+  intro = "guardiao-ogro", -- cena de despertar (world/cinematics.xml)
   wander = 1.2, chase = 3.4,
   aggro = 14, deaggro = 19,
   range = 2.5, damage = 22, cooldown = 1.5,

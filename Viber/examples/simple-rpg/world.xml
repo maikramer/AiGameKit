@@ -76,4 +76,5 @@
     <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0007" translation="-170.3065 25.8703 -27.9578" euler="0.1546 33.6939 1.9011" scale="0.948 1.0694 0.9704" />
     <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" name="inst-engine-53-0008" translation="-168.8329 25.8298 -25.0518" euler="-1.2875 51.3578 3.0664" scale="1.1303 1.3022 1.24" />
   </Group>
+  <Include src="/world/cinematics.xml" />
 </world>

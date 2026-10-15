@@ -2,6 +2,7 @@
 -- (viber.load). Especial: MALDIÇÃO — marca o chão onde o herói está; quem
 -- não sair da zona leva o golpe amplificado. Frágil (400 HP) e rápida.
 local fsm = viber.load("lib/fsm.lua").new{
+  intro = "guardiao-bruxa", -- cena de despertar (world/cinematics.xml)
   wander = 1.4, chase = 3.6,
   aggro = 13, deaggro = 18,
   range = 2.4, damage = 18, cooldown = 1.2,

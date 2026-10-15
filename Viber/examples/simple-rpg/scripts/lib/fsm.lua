@@ -50,6 +50,8 @@
 --     ranged = { range = 15, min = 5, cooldown = 2.4, windup = 0.7,
 --                projectile = "enemy-arrow" },
 --     elite_chance = 0.08,            -- opcional (default 0.08; chefes 0)
+--     intro = "guardiao-bruxa",       -- opcional: `<Cinematic>` da 1.ª perseguição
+--                                     -- (uma vez por save; âncora `self` = esta criatura)
 --   }
 --
 -- ELITES: cada criatura não-chefe tem `elite_chance` de nascer elite —
@@ -323,6 +325,13 @@ function M.new(cfg)
     end
     local has, px, _, pz = viber.player_position()
     if not has then return end
+    -- Cinemática a tocar: o mundo suspende a respiração — ninguém ataca nem
+    -- persegue; quem estava a armar um golpe larga-o e encara o herói.
+    if viber.cinematic_playing() then
+      st.phase = nil
+      viber.face_player()
+      return
+    end
     local x, _, z = viber.position()
     -- Herói caído (à espera do respawn): ninguém morde o cadáver — larga o
     -- golpe em curso e volta ao passeio.
@@ -381,6 +390,14 @@ function M.new(cfg)
 
     -- Hook na TRANSIÇÃO wander → chase (não repete por tick).
     if st.state == "chase" and st.pstate ~= "chase" then
+      if cfg.intro then
+        local g = viber.game()
+        local key = "cine_" .. cfg.intro
+        if not g[key] then
+          g[key] = true
+          viber.cinematic(cfg.intro, viber.self_id())
+        end
+      end
       if cfg.on_chase then cfg.on_chase() end
       if st.elite then
         -- Elite a acordar: aura dourada — o jogador sabe que este é diferente.

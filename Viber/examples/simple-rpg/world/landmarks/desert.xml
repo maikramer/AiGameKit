@@ -128,5 +128,11 @@
     </Entity>
     <SpawnExclusion at="260 16" radius="14" />
     <Entity name="ambient_water_oasis" translation="140 46.8761 92" script="ambient-water.lua" />
+    <Entity name="caravana-cofre" translation="219.20 44.417 -33.60" euler="0 200 0" script="chest.lua" prop-gold="70" prop-xp="45" prop-item="bomb" prop-item_count="2" prop-item_label="bombas" prop-prompt="Revistar o cofre da caravana" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
+    </Entity>
+    <Entity name="obelisco-tesouro" translation="243.40 50.735 78.20" euler="0 160 0" script="chest.lua" prop-gold="80" prop-xp="55" prop-item="bomb" prop-item_count="1" prop-item_label="bomba" prop-prompt="Abrir o tesouro do obelisco" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base">
+      <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
+    </Entity>
   </Group>
 </world>
