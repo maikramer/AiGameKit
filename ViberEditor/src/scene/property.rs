@@ -25,7 +25,7 @@ use viber::scene::pose::{self, Pose, PoseParts};
 use viber::xml::XmlNode;
 
 use super::{PendingEdits, Selection};
-use crate::ui::strings::{Lang, StrKey, t};
+use crate::ui::strings::{Bi, Lang, StrKey, attr_display, component_display, pick, t};
 use crate::ui::tooltip::Tooltip;
 
 // ── Registry ────────────────────────────────────────────────────────────────
@@ -52,11 +52,14 @@ pub enum FieldTarget {
     /// A largura de transição do campo de biomas (idem).
     TerrainBiomesBlend,
     /// A script-exported prop (`prop-<name>`, `--@export`): `default` shows when the
-    /// instance has no value; `int` rounds the number input.
+    /// instance has no value; `int` rounds the committed value; `range` clamps it
+    /// (a runtime REJEITA fora do range — o editor não pode escrever o que o
+    /// `parse_value`/`check_range` recusam).
     Prop {
         name: String,
         default: Option<String>,
         int: bool,
+        range: Option<(f32, f32)>,
     },
     /// A free-text attribute whose key is only known at runtime (`groups`,
     /// `connect-<signal>` of a script's `--@signal`).
@@ -92,7 +95,8 @@ pub enum FieldKind {
 pub struct FieldDef {
     pub target: FieldTarget,
     pub kind: FieldKind,
-    pub tip: &'static str,
+    /// The field's tooltip, bilingual (PT, EN).
+    pub tip: Bi,
 }
 
 /// The inspector's typed sections (order matters).
@@ -127,7 +131,7 @@ impl SectionId {
     }
 }
 
-const fn num(target: FieldTarget, step: f32, tip: &'static str) -> FieldDef {
+const fn num(target: FieldTarget, step: f32, tip: Bi) -> FieldDef {
     FieldDef {
         target,
         kind: FieldKind::Number { step },
@@ -135,7 +139,7 @@ const fn num(target: FieldTarget, step: f32, tip: &'static str) -> FieldDef {
     }
 }
 
-const fn bool_field(target: FieldTarget, tip: &'static str) -> FieldDef {
+const fn bool_field(target: FieldTarget, tip: Bi) -> FieldDef {
     FieldDef {
         target,
         kind: FieldKind::Bool,
@@ -143,7 +147,7 @@ const fn bool_field(target: FieldTarget, tip: &'static str) -> FieldDef {
     }
 }
 
-const fn text(target: FieldTarget, tip: &'static str) -> FieldDef {
+const fn text(target: FieldTarget, tip: Bi) -> FieldDef {
     FieldDef {
         target,
         kind: FieldKind::Text,
@@ -151,7 +155,7 @@ const fn text(target: FieldTarget, tip: &'static str) -> FieldDef {
     }
 }
 
-const fn color(target: FieldTarget, tip: &'static str) -> FieldDef {
+const fn color(target: FieldTarget, tip: Bi) -> FieldDef {
     FieldDef {
         target,
         kind: FieldKind::Color,
@@ -159,11 +163,7 @@ const fn color(target: FieldTarget, tip: &'static str) -> FieldDef {
     }
 }
 
-const fn enumeration(
-    target: FieldTarget,
-    options: &'static [&'static str],
-    tip: &'static str,
-) -> FieldDef {
+const fn enumeration(target: FieldTarget, options: &'static [&'static str], tip: Bi) -> FieldDef {
     FieldDef {
         target,
         kind: FieldKind::Enum { options },
@@ -220,7 +220,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         axis: 0,
                     },
                     0.1,
-                    "m",
+                    Bi("m", "m"),
                 ),
                 num(
                     FieldTarget::Pose {
@@ -228,7 +228,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         axis: 1,
                     },
                     0.1,
-                    "m",
+                    Bi("m", "m"),
                 ),
                 num(
                     FieldTarget::Pose {
@@ -236,7 +236,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         axis: 2,
                     },
                     0.1,
-                    "m",
+                    Bi("m", "m"),
                 ),
                 num(
                     FieldTarget::Pose {
@@ -244,7 +244,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         axis: 0,
                     },
                     5.0,
-                    "°",
+                    Bi("°", "°"),
                 ),
                 num(
                     FieldTarget::Pose {
@@ -252,7 +252,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         axis: 1,
                     },
                     5.0,
-                    "°",
+                    Bi("°", "°"),
                 ),
                 num(
                     FieldTarget::Pose {
@@ -260,7 +260,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         axis: 2,
                     },
                     5.0,
-                    "°",
+                    Bi("°", "°"),
                 ),
                 num(
                     FieldTarget::Pose {
@@ -268,7 +268,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         axis: 0,
                     },
                     0.1,
-                    "×",
+                    Bi("×", "×"),
                 ),
                 num(
                     FieldTarget::Pose {
@@ -276,7 +276,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         axis: 1,
                     },
                     0.1,
-                    "×",
+                    Bi("×", "×"),
                 ),
                 num(
                     FieldTarget::Pose {
@@ -284,7 +284,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         axis: 2,
                     },
                     0.1,
-                    "×",
+                    Bi("×", "×"),
                 ),
             ],
         ));
@@ -302,14 +302,17 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         key: "shape",
                     },
                     COLLIDER_SHAPES,
-                    "forma do collider",
+                    Bi("forma do collider", "collider shape"),
                 ),
                 text(
                     FieldTarget::Component {
                         attr: "collider",
                         key: "size",
                     },
-                    "tamanho total (m): 1 ou larg prof alt",
+                    Bi(
+                        "tamanho total (m): 1 ou larg prof alt",
+                        "total size (m): 1 value or w d h",
+                    ),
                 ),
                 num(
                     FieldTarget::Component {
@@ -317,7 +320,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         key: "radius",
                     },
                     0.1,
-                    "m",
+                    Bi("m", "m"),
                 ),
                 num(
                     FieldTarget::Component {
@@ -325,14 +328,14 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         key: "half-height",
                     },
                     0.1,
-                    "m",
+                    Bi("m", "m"),
                 ),
                 text(
                     FieldTarget::Component {
                         attr: "collider",
                         key: "mesh-url",
                     },
-                    "GLB do trimesh/convex",
+                    Bi("GLB do trimesh/convex", "trimesh/convex GLB"),
                 ),
                 enumeration(
                     FieldTarget::Component {
@@ -340,7 +343,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         key: "type",
                     },
                     BODY_KINDS,
-                    "tipo de corpo",
+                    Bi("tipo de corpo", "body type"),
                 ),
                 num(
                     FieldTarget::Component {
@@ -348,7 +351,7 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         key: "gravity-scale",
                     },
                     0.1,
-                    "× gravidade",
+                    Bi("× gravidade", "× gravity"),
                 ),
             ],
         ));
@@ -360,76 +363,84 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                 enumeration(
                     FieldTarget::Attr { key: "model" },
                     SKY_MODELS,
-                    "modelo atmosférico",
+                    Bi("modelo atmosférico", "atmospheric model"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "sun-elevation",
                     },
                     1.0,
-                    "° acima do horizonte",
+                    Bi("° acima do horizonte", "° above the horizon"),
                 ),
-                num(FieldTarget::Attr { key: "sun-azimuth" }, 5.0, "° (bússola)"),
+                num(
+                    FieldTarget::Attr { key: "sun-azimuth" },
+                    5.0,
+                    Bi("° (bússola)", "° (compass)"),
+                ),
                 num(
                     FieldTarget::Attr {
                         key: "sun-intensity",
                     },
                     0.1,
-                    "intensidade do sol",
+                    Bi("intensidade do sol", "sun intensity"),
                 ),
                 num(
                     FieldTarget::Attr { key: "rayleigh" },
                     0.1,
-                    "dispersão Rayleigh",
+                    Bi("dispersão Rayleigh", "Rayleigh scattering"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "mie-coefficient",
                     },
                     0.001,
-                    "dispersão Mie",
+                    Bi("dispersão Mie", "Mie scattering"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "mie-directional-g",
                     },
                     0.05,
-                    "-0.99..0.99",
+                    Bi("-0.99..0.99", "-0.99..0.99"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "cloud-coverage",
                     },
                     0.05,
-                    "0..1",
+                    Bi("0..1", "0..1"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "cloud-density",
                     },
                     0.05,
-                    "0..1",
+                    Bi("0..1", "0..1"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "cloud-elevation",
                     },
                     0.05,
-                    "0..1",
+                    Bi("0..1", "0..1"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "star-density",
                     },
                     0.1,
-                    "estrelas",
+                    Bi("estrelas", "stars"),
                 ),
-                num(FieldTarget::Attr { key: "aurora" }, 0.1, "0..2"),
-                num(FieldTarget::Attr { key: "nebula" }, 0.1, "0..1.5"),
+                num(FieldTarget::Attr { key: "aurora" }, 0.1, Bi("0..2", "0..2")),
+                num(
+                    FieldTarget::Attr { key: "nebula" },
+                    0.1,
+                    Bi("0..1.5", "0..1.5"),
+                ),
                 num(
                     FieldTarget::Attr { key: "nishita-mie" },
                     0.1,
-                    "mie do Nishita",
+                    Bi("mie do Nishita", "Nishita mie"),
                 ),
             ],
         )),
@@ -441,57 +452,65 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         key: "minute-of-day",
                     },
                     15.0,
-                    "0..1440",
+                    Bi("0..1440", "0..1440"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "minutes-per-real-second",
                     },
                     0.5,
-                    "min de jogo / s real",
+                    Bi("min de jogo / s real", "game minutes per real second"),
                 ),
-                num(FieldTarget::Attr { key: "dawn-minute" }, 15.0, "0..1440"),
-                num(FieldTarget::Attr { key: "dusk-minute" }, 15.0, "0..1440"),
+                num(
+                    FieldTarget::Attr { key: "dawn-minute" },
+                    15.0,
+                    Bi("0..1440", "0..1440"),
+                ),
+                num(
+                    FieldTarget::Attr { key: "dusk-minute" },
+                    15.0,
+                    Bi("0..1440", "0..1440"),
+                ),
                 num(
                     FieldTarget::Attr {
                         key: "ambient-day-intensity",
                     },
                     0.05,
-                    "luz ambiente de dia",
+                    Bi("luz ambiente de dia", "day ambient light"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "ambient-night-intensity",
                     },
                     0.05,
-                    "luz ambiente de noite",
+                    Bi("luz ambiente de noite", "night ambient light"),
                 ),
                 bool_field(
                     FieldTarget::Attr {
                         key: "drive-ambient",
                     },
-                    "ambient pela hora",
+                    Bi("ambient pela hora", "ambient driven by time of day"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "max-sun-elevation",
                     },
                     2.0,
-                    "° ao meio-dia",
+                    Bi("° ao meio-dia", "° at noon"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "min-sun-elevation",
                     },
                     2.0,
-                    "° à meia-noite",
+                    Bi("° à meia-noite", "° at midnight"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "sun-azimuth-base",
                     },
                     5.0,
-                    "° (bússola base)",
+                    Bi("° (bússola base)", "° (base compass)"),
                 ),
             ],
         )),
@@ -501,37 +520,59 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                 num(
                     FieldTarget::TerrainBiomesCore,
                     5.0,
-                    "raio do núcleo neutro (m)",
+                    Bi("raio do núcleo neutro (m)", "neutral core radius (m)"),
                 ),
                 num(
                     FieldTarget::TerrainBiomesBlend,
                     10.0,
-                    "transição núcleo→cunhas (m)",
+                    Bi("transição núcleo→cunhas (m)", "core→wedges blend (m)"),
                 ),
             ],
         )),
         "pointlight" => sections.push((
             SectionId::Light,
             vec![
-                color(FieldTarget::Attr { key: "color" }, "cor"),
-                num(FieldTarget::Attr { key: "intensity" }, 50.0, "lúmens"),
-                num(FieldTarget::Attr { key: "radius" }, 0.5, "m de alcance"),
-                bool_field(FieldTarget::Attr { key: "shadows" }, "sombras"),
+                color(FieldTarget::Attr { key: "color" }, Bi("cor", "color")),
+                num(
+                    FieldTarget::Attr { key: "intensity" },
+                    50.0,
+                    Bi("lúmens", "lumens"),
+                ),
+                num(
+                    FieldTarget::Attr { key: "radius" },
+                    0.5,
+                    Bi("m de alcance", "range (m)"),
+                ),
+                bool_field(
+                    FieldTarget::Attr { key: "shadows" },
+                    Bi("sombras", "shadows"),
+                ),
             ],
         )),
         "directionallight" => sections.push((
             SectionId::Light,
             vec![
-                color(FieldTarget::Attr { key: "color" }, "cor"),
-                num(FieldTarget::Attr { key: "illuminance" }, 500.0, "lux"),
-                bool_field(FieldTarget::Attr { key: "shadows" }, "sombras"),
+                color(FieldTarget::Attr { key: "color" }, Bi("cor", "color")),
+                num(
+                    FieldTarget::Attr { key: "illuminance" },
+                    500.0,
+                    Bi("lux", "lux"),
+                ),
+                bool_field(
+                    FieldTarget::Attr { key: "shadows" },
+                    Bi("sombras", "shadows"),
+                ),
             ],
         )),
         "ambientlight" => sections.push((
             SectionId::Light,
             vec![
-                color(FieldTarget::Attr { key: "color" }, "cor"),
-                num(FieldTarget::Attr { key: "brightness" }, 10.0, "brilho"),
+                color(FieldTarget::Attr { key: "color" }, Bi("cor", "color")),
+                num(
+                    FieldTarget::Attr { key: "brightness" },
+                    10.0,
+                    Bi("brilho", "brightness"),
+                ),
             ],
         )),
         _ => {}
@@ -546,22 +587,46 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                 num(
                     FieldTarget::Attr { key: "half-size" },
                     0.1,
-                    "half-extents (m)",
+                    Bi("half-extents (m)", "half-extents (m)"),
                 ),
-                num(FieldTarget::Attr { key: "radius" }, 0.1, "m"),
-                num(FieldTarget::Attr { key: "half-height" }, 0.1, "m"),
+                num(FieldTarget::Attr { key: "radius" }, 0.1, Bi("m", "m")),
+                num(FieldTarget::Attr { key: "half-height" }, 0.1, Bi("m", "m")),
             ],
         ));
         sections.push((
             SectionId::Material,
             vec![
-                color(FieldTarget::Attr { key: "base-color" }, "cor base"),
-                num(FieldTarget::Attr { key: "metallic" }, 0.05, "0..1"),
-                num(FieldTarget::Attr { key: "roughness" }, 0.05, "0..1"),
-                num(FieldTarget::Attr { key: "opacity" }, 0.05, "0..1"),
-                color(FieldTarget::Attr { key: "emissive" }, "cor emissiva"),
-                text(FieldTarget::Attr { key: "texture" }, "textura (path)"),
-                text(FieldTarget::Attr { key: "normal-map" }, "normal map (path)"),
+                color(
+                    FieldTarget::Attr { key: "base-color" },
+                    Bi("cor base", "base color"),
+                ),
+                num(
+                    FieldTarget::Attr { key: "metallic" },
+                    0.05,
+                    Bi("0..1", "0..1"),
+                ),
+                num(
+                    FieldTarget::Attr { key: "roughness" },
+                    0.05,
+                    Bi("0..1", "0..1"),
+                ),
+                num(
+                    FieldTarget::Attr { key: "opacity" },
+                    0.05,
+                    Bi("0..1", "0..1"),
+                ),
+                color(
+                    FieldTarget::Attr { key: "emissive" },
+                    Bi("cor emissiva", "emissive color"),
+                ),
+                text(
+                    FieldTarget::Attr { key: "texture" },
+                    Bi("textura (path)", "texture (path)"),
+                ),
+                text(
+                    FieldTarget::Attr { key: "normal-map" },
+                    Bi("normal map (path)", "normal map (path)"),
+                ),
             ],
         ));
     }
@@ -569,22 +634,31 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
         sections.push((
             SectionId::Gltf,
             vec![
-                text(FieldTarget::Attr { key: "url" }, "GLB principal"),
-                text(FieldTarget::Attr { key: "lod1-url" }, "GLB do LOD1"),
-                text(FieldTarget::Attr { key: "lod2-url" }, "GLB do LOD2"),
+                text(
+                    FieldTarget::Attr { key: "url" },
+                    Bi("GLB principal", "main GLB"),
+                ),
+                text(
+                    FieldTarget::Attr { key: "lod1-url" },
+                    Bi("GLB do LOD1", "LOD1 GLB"),
+                ),
+                text(
+                    FieldTarget::Attr { key: "lod2-url" },
+                    Bi("GLB do LOD2", "LOD2 GLB"),
+                ),
                 num(
                     FieldTarget::Attr {
                         key: "lod-threshold-near",
                     },
                     5.0,
-                    "m",
+                    Bi("m", "m"),
                 ),
                 num(
                     FieldTarget::Attr {
                         key: "lod-threshold-mid",
                     },
                     10.0,
-                    "m",
+                    Bi("m", "m"),
                 ),
             ],
         ));
@@ -594,7 +668,17 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
 
 /// The keys the typed sections own (hidden from the fallback list).
 pub fn covered_keys(tag: &str) -> Vec<&'static str> {
-    let mut keys: Vec<&'static str> = vec!["collider", "rigidbody", "name"];
+    let mut keys: Vec<&'static str> = vec!["name"];
+    // collider/rigidbody só são "cobertos" quando a secção Física existe —
+    // noutros nós (PlayerGLTF, Use, luzes) ficavam INVISÍVEIS: nem campo
+    // tipado nem linha no fallback
+    let has_physics = sections_for(tag)
+        .iter()
+        .any(|(section, _)| *section == SectionId::Physics);
+    if has_physics {
+        keys.push("collider");
+        keys.push("rigidbody");
+    }
     for (_section, fields) in sections_for(tag) {
         for field in fields {
             match &field.target {
@@ -752,6 +836,12 @@ impl Plugin for PropertyPlugin {
                     });
                 },
             )
+            // Os widgets do feathers NÃO se atualizam sozinhos: emitem
+            // `ValueChange` e esperam que alguém escreva o `Checked`. Os campos do
+            // documento (FieldControl) refletem-no ao reconstruir o painel; todos os
+            // outros toggles (disclosure das secções, checkboxes da Vista…) mudam
+            // aqui — sem isto as secções nunca colapsavam.
+            .add_observer(self_update_toggle)
             .add_observer(
                 |event: On<ValueChange<Color>>, mut events: ResMut<PropertyEvents>| {
                     events.0.push(PropertyEvent::Color {
@@ -768,6 +858,51 @@ impl Plugin for PropertyPlugin {
                     });
                 },
             );
+    }
+}
+
+/// Os widgets do feathers NÃO se atualizam sozinhos: emitem `ValueChange` e esperam que
+/// alguém escreva o `Checked`. Os campos do documento (FieldControl) refletem-no ao
+/// reconstruir o painel; todos os outros toggles (disclosure das secções, checkboxes da
+/// Vista…) mudam aqui. Uma secção abre/fecha JÁ neste observer: retirar o `Checked` não
+/// é um `Changed`, e o [`sync_section_toggles`] nunca via o fecho.
+fn self_update_toggle(
+    event: On<ValueChange<bool>>,
+    fields: Query<(), With<FieldControl>>,
+    parents: Query<&ChildOf>,
+    sections: Query<&SectionBody>,
+    mut nodes: Query<&mut Node>,
+    mut open: ResMut<SectionOpen>,
+    mut commands: Commands,
+) {
+    if fields.contains(event.source) {
+        return;
+    }
+    let Ok(mut entity) = commands.get_entity(event.source) else {
+        return;
+    };
+    if event.value {
+        entity.insert(bevy::ui::Checked);
+    } else {
+        entity.remove::<bevy::ui::Checked>();
+    }
+    let header = std::iter::once(event.source)
+        .chain(parents.iter_ancestors(event.source))
+        .find(|candidate| sections.contains(*candidate));
+    let Some(info) = header.and_then(|header| sections.get(header).ok()) else {
+        return;
+    };
+    if let Ok(mut body) = nodes.get_mut(info.body) {
+        body.display = if event.value {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    if event.value {
+        open.0.insert(info.section);
+    } else {
+        open.0.remove(&info.section);
     }
 }
 
@@ -788,7 +923,7 @@ pub fn render_sections(
         let text_field = FieldDef {
             target: FieldTarget::NodeText,
             kind: FieldKind::Text,
-            tip: "texto do nó",
+            tip: Bi("texto do nó", "node text"),
         };
         spawn_field(commands, parent, doc, node, &xml, &text_field, lang);
     }
@@ -797,7 +932,7 @@ pub fn render_sections(
         let rename = FieldDef {
             target: FieldTarget::Name,
             kind: FieldKind::Text,
-            tip: "nome do nó",
+            tip: Bi("nome do nó", "node name"),
         };
         spawn_field(commands, parent, doc, node, &xml, &rename, lang);
     }
@@ -897,7 +1032,7 @@ pub fn spawn_field(
     _node: &NodeRef,
     xml: &XmlNode,
     field: &FieldDef,
-    _lang: Lang,
+    lang: Lang,
 ) -> Entity {
     let row = commands
         .spawn((
@@ -908,11 +1043,11 @@ pub fn spawn_field(
                 padding: UiRect::vertical(px(1)),
                 ..default()
             },
-            Tooltip(field.tip),
+            Tooltip(field.tip.get(lang)),
             ChildOf(parent),
         ))
         .id();
-    let label = field_label(&field.target);
+    let label = field_label(lang, &field.target);
     commands
         .spawn_scene(bsn! {
             @caption(label)
@@ -927,7 +1062,6 @@ pub fn spawn_field(
             Pickable::IGNORE,
             ChildOf(row),
         ));
-    let _ = field.tip;
     match &field.kind {
         FieldKind::Number { step } => {
             let mut current = field_number(xml, &field.target).unwrap_or(0.0);
@@ -1065,7 +1199,10 @@ fn precision_for(target: &FieldTarget) -> i32 {
     }
 }
 
-fn field_label(target: &FieldTarget) -> String {
+/// The field's label, friendly and bilingual: pose parts and XML keys go through
+/// [`attr_display`], component members through [`component_display`]. The label
+/// width in [`spawn_field`] is tuned for ~20 characters.
+fn field_label(lang: Lang, target: &FieldTarget) -> String {
     let axis = match target {
         FieldTarget::Pose { axis, .. } => ["X", "Y", "Z"][(*axis).min(2)].to_owned(),
         _ => String::new(),
@@ -1074,21 +1211,25 @@ fn field_label(target: &FieldTarget) -> String {
         FieldTarget::Pose {
             part: PosePart::Translation,
             ..
-        } => "translation",
+        } => attr_display(lang, "translation"),
         FieldTarget::Pose {
             part: PosePart::Euler,
             ..
-        } => "euler°",
+        } => attr_display(lang, "euler"),
         FieldTarget::Pose {
             part: PosePart::Scale,
             ..
-        } => "scale",
-        FieldTarget::Attr { key } => return (*key).to_owned(),
-        FieldTarget::Component { attr, key } => return format!("{attr}:{key}"),
-        FieldTarget::Name => "name",
-        FieldTarget::NodeText => "text",
-        FieldTarget::TerrainBiomesCore => return "biomas:núcleo".to_owned(),
-        FieldTarget::TerrainBiomesBlend => return "biomas:transição".to_owned(),
+        } => attr_display(lang, "scale"),
+        FieldTarget::Attr { key } => return attr_display(lang, key).to_owned(),
+        FieldTarget::Component { attr, key } => return component_display(lang, attr, key),
+        FieldTarget::Name => return attr_display(lang, "name").to_owned(),
+        FieldTarget::NodeText => return attr_display(lang, "text").to_owned(),
+        FieldTarget::TerrainBiomesCore => {
+            return pick(lang, "Biomas: núcleo", "Biomes: core").to_owned();
+        }
+        FieldTarget::TerrainBiomesBlend => {
+            return pick(lang, "Biomas: transição", "Biomes: blend").to_owned();
+        }
         FieldTarget::Prop { name, .. } => return name.clone(),
         FieldTarget::Link { key } => {
             return match viber::luau::exports::connect_signal(key) {
@@ -1268,6 +1409,26 @@ fn apply_number(world: &mut World, target: &FieldTarget, value: f32, is_final: b
     let selector = world.resource::<SceneDoc>().selector(&node);
     let lang = *world.resource::<Lang>();
     let FieldTarget::Pose { part, axis } = target else {
+        // Non-pose attrs have no live preview: committing on every scrub tick
+        // would rebuild the panel mid-drag (killing the scrub) and would spam
+        // one undo step per tick. Commit only on the final event.
+        if !is_final {
+            return;
+        }
+        // Props `int`/range: a runtime REJEITA `7.5` num `int` e valores fora
+        // do range (`check_range`) — o editor arredonda e clampeia antes.
+        let value = if let FieldTarget::Prop { int, range, .. } = target {
+            let mut value = value;
+            if *int {
+                value = value.round();
+            }
+            if let Some((min, max)) = range {
+                value = value.clamp(*min, *max);
+            }
+            value
+        } else {
+            value
+        };
         apply_value(world, target, &pose::format_num(value));
         return;
     };
@@ -1321,6 +1482,7 @@ fn apply_number(world: &mut World, target: &FieldTarget, value: f32, is_final: b
 
 /// Writes a plain attr / component member / name as ONE op.
 fn apply_value(world: &mut World, target: &FieldTarget, value: &str) {
+    let lang = *world.resource::<Lang>();
     // BIOMAS: core/blend via `terrain_biomes` preservando as cunhas
     if matches!(
         target,
@@ -1356,7 +1518,7 @@ fn apply_value(world: &mut World, target: &FieldTarget, value: &str) {
         };
         world
             .resource_mut::<PendingEdits>()
-            .push("biomas".to_owned(), vec![op]);
+            .push(pick(lang, "biomas", "biomes"), vec![op]);
         return;
     }
     let Some(node) = world.resource::<Selection>().primary().cloned() else {
@@ -1386,7 +1548,7 @@ fn apply_value(world: &mut World, target: &FieldTarget, value: &str) {
         | FieldTarget::TerrainBiomesBlend => return,
         FieldTarget::NodeText => {
             world.resource_mut::<PendingEdits>().push(
-                "text".to_string(),
+                pick(lang, "texto", "text"),
                 vec![EditOp::SetText {
                     node: selector,
                     text: value.to_owned(),
@@ -1396,7 +1558,7 @@ fn apply_value(world: &mut World, target: &FieldTarget, value: &str) {
         }
     };
     world.resource_mut::<PendingEdits>().push(
-        format!("{key} = {value}"),
+        format!("{} = {value}", attr_display(lang, &key)),
         vec![EditOp::Set {
             node: selector,
             attrs: [(key, new_value)].into_iter().collect(),
@@ -1474,6 +1636,14 @@ pub fn commit_text_fields(world: &mut World) {
     let mut current = focused;
     let target = loop {
         if let Some(field) = world.get::<FieldText>(current) {
+            // Enter sem alteração: NÃO empurra um `Set` idêntico (era um
+            // passo de undo fantasma por Enter)
+            if value.trim() == field.initial.trim() {
+                if let Some(mut focus) = world.get_resource_mut::<bevy::input_focus::InputFocus>() {
+                    focus.clear();
+                }
+                return;
+            }
             break field.target.clone();
         }
         match world.get::<ChildOf>(current).map(|child| child.parent()) {

@@ -200,9 +200,59 @@ Done (Fases 2–5 + polish):
 7. ✅ Review pass: rect-scoped live paint sync, frame-correct GLB drop (world → parent),
    `settle` and `canonicalize` tools, Ctrl+R reload, dropped/added nodes get selected.
 
-Next: feature point handles for `<RoadNetwork>`, a Regenerate button for
-`<Vegetation instances>` in the Inspector (agents already regenerate via
-`viber tool scatter <sel>` — writes the `.vinst` atomically), a text editor in
-the Script mode (today read-only preview + open externally), and rendering the
-game UI to the `GameUiCamera` in UI mode (the letterbox stays empty —
-`KeepCameraActive` is set but the UI pass doesn't target that camera yet).
+8. ✅ UI overhaul (2026-10-15): one theme (`src/ui/theme.rs`), framed docks with draggable
+   splitters, tab bar with active underline / icon-only compact mode / Problems badge,
+   identity card + chevron sections in the Inspector, empty states everywhere.
+9. ✅ `<RoadNetwork>` handles: each `<Way xz>` is a draggable point (one `set` on the
+   `<Way>`), the `<Segment>`s (with their `via`) drawn between them.
+10. ✅ **Regenerate** in the Inspector also for `<Vegetation instances>` (rewrites the
+    `.vinst`; Ctrl+R shows the new placements).
+11. ✅ Script mode is an **editor** (mono, multi-line `EditableText`): Save (button or
+    Ctrl+S in Script mode) writes the `.lua` — the running game hot-reloads it; unsaved
+    buffers survive switching scripts.
+12. ✅ UI mode renders the game's UI into the viewport image (letterboxed 16:9) — the
+    canvas handles land on the real rects.
+
+Next: live re-spawn of `<Vegetation>` after Regenerate (today Ctrl+R), Lua syntax colors
+in the script editor.
+
+13. ✅ **Regenerate re-spawns `<Vegetation>` live** (2026-10-15): the same transaction
+    carries a canonical `set instances=<same value>` op, so the sync plans a respawn of
+    the node — the spawn re-reads the rewritten `.vinst` and the new placements appear
+    without Ctrl+R (one undo step, as before).
+14. ✅ **Luau syntax check in Script mode** (2026-10-15): opening or saving a script
+    compiles it with mlua (sandboxed, never executed) — a green "✓ sintaxe ok" line
+    under the toolbar or the red Luau error (with line). Per-token syntax colors stay
+    open: the feathers `TextInput` renders one span, so inline coloring needs a custom
+    widget.
+15. ✅ **Scene tabs — scenes are separate universes** (2026-10-15): a project
+    (`config.yaml` → `project:`) holds the main scene plus `scenes/**.xml`; each tab is
+    one scene and the active tab is the one loaded in the viewport. Switching saves the
+    current scene and swaps the world IN-PROCESS through the engine's scene loader
+    (`viber::scene_loader` — the same unload/load the game uses for `<ScenePortal>` /
+    `viber.change_scene`), with the editor camera remembered per tab. `+` creates
+    `scenes/cena-N.xml`; opening a scene in the Files dock opens a tab; an agent's
+    `viber scene --live change <id>` switches the editor too. ▶ Play runs the main scene,
+    **Jogar cena (F7)** runs the active tab (`viber run --scene`), Ctrl+R reloads the tab
+    in-process. The `simple-rpg` house interiors are 9 such scenes.
+16. ✅ **Search dock (Ctrl+F)** (2026-10-15): full-text search over the world's `.xml`
+    and `.lua` (binaries in `.data/` skipped, 200-hit cap). A hit jumps: `.lua` opens
+    in Script mode, an `.xml` line with `name=`/`id=` selects+reveals the node,
+    anything else opens the file externally. `--tab search` opens it at startup.
+
+17. ✅ **Clickable script findings** (2026-10-15): Problems rows of kind `script-*`
+    open the referenced `.lua` in Script mode (the path is extracted from the message;
+    the row highlights in blue and shows a pointer cursor).
+
+18. ✅ **Second review pass** (2026-10-15): Game dock/Profiler read the nested
+    `viber.lua` result (they always showed zeros before); multi-select Delete/Duplicate
+    no longer touch the wrong node (batch ops run in descending path order); the biome
+    preview sums the right splat slots per biome (desert painted black before); Play
+    can no longer get the editor's own bridge port; the UI canvas speaks game-px end to
+    end (HiDPI commits halved values before); terrain/stamp strokes only start inside
+    the viewport and tools are inert in UI/Script modes; slider commands have their own
+    bridge slot (a pending poll could drop the final value); props `int`/range round +
+    clamp to what the runtime accepts; rename commits on blur and writes `id` for UI
+    tags; Enter on an unchanged field no longer creates a ghost undo step; multi-file
+    drops land side by side as ONE undo; every `StrKey` is bilingual and covered by the
+    ALL test; `--screenshot --frames` clamps like the startup-error screen.

@@ -162,7 +162,7 @@ pub fn icon(code: char, size: f32, color: Color) -> impl Scene {
 }
 
 /// An icon next to a themed label, for button captions.
-pub fn icon_caption(code: char, label: &str, color: Color) -> impl Scene {
+pub fn icon_caption(code: char, label: impl Into<String>, color: Color) -> impl Scene {
     bsn! {
         Node {
             column_gap: px(6),
@@ -172,6 +172,23 @@ pub fn icon_caption(code: char, label: &str, color: Color) -> impl Scene {
             @icon(code, 13.0, color)
             --
             @caption(label)
+        ]
+    }
+}
+
+/// [`icon_caption`] for STATIC scenes: the label carries a `LangLabel`, so the language
+/// toggle rewrites it (a plain `icon_caption(t(...))` keeps the language it was spawned in).
+pub fn icon_caption_key(code: char, key: crate::ui::strings::StrKey, color: Color) -> impl Scene {
+    let label = crate::ui::strings::t(crate::ui::strings::Lang::default(), key);
+    bsn! {
+        Node {
+            column_gap: px(6),
+            align_items: AlignItems::Center,
+        }
+        Children [
+            @icon(code, 13.0, color)
+            --
+            @caption(label) crate::ui::strings::LangLabel(key)
         ]
     }
 }

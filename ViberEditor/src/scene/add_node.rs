@@ -70,26 +70,22 @@ fn render_add_node(
     doc: Res<SceneDoc>,
     selection: Res<Selection>,
     lang: Res<Lang>,
-    panels: Query<Entity, With<AddNodePanel>>,
+    mut panels: Query<&mut Node, With<AddNodePanel>>,
     bodies: Query<Entity, With<AddNodeBody>>,
 ) {
-    let Ok(panel) = panels.single() else {
+    // Só o `display` muda: o painel é o catcher absoluto + o cartão + o corpo
+    // (antes um `insert(Node)` apagava o layout e o `despawn_related` levava o
+    // cartão e o corpo — o diálogo nunca mais abria).
+    let Ok(mut panel) = panels.single_mut() else {
         return;
     };
+    let display = if open.0 { Display::Flex } else { Display::None };
+    if panel.display != display {
+        panel.display = display;
+    }
     if !open.0 {
-        commands
-            .entity(panel)
-            .insert(Node {
-                display: Display::None,
-                ..default()
-            })
-            .despawn_related::<Children>();
         return;
     }
-    commands.entity(panel).insert(Node {
-        display: Display::Flex,
-        ..default()
-    });
     if !open.is_changed() && !lang.is_changed() && !selection.is_changed() {
         return;
     }
@@ -108,7 +104,8 @@ fn render_add_node(
                     TextFont::from_font_size(11.0),
                     TextColor(icons::ICON_DIM),
                     Node {
-                        margin: UiRect::vertical(px(6)),
+                        margin: UiRect::new(px(4), px(0), px(8), px(2)),
+                        flex_shrink: 0.0,
                         ..default()
                     },
                     ChildOf(body),
@@ -127,6 +124,7 @@ fn render_add_node(
                         )
                     },
                 }
+                Node { justify_content: JustifyContent::FlexStart, flex_shrink: 0.0 }
             })
             .insert((TemplateButton(template.tag), ChildOf(body)))
             .observe(insert_template);
@@ -138,6 +136,7 @@ fn insert_template(
     buttons: Query<&TemplateButton>,
     selection: Res<Selection>,
     doc: Res<SceneDoc>,
+    lang: Res<crate::ui::strings::Lang>,
     mut open: ResMut<AddNodeOpen>,
     mut commands: Commands,
 ) {
@@ -151,7 +150,7 @@ fn insert_template(
         None => doc.selector(&viber::scene::doc::NodeRef::root(0)),
     };
     let op = catalog::add_node(&parent, tag, None);
-    let label = format!("+ {tag}");
+    let label = format!("+ {}", crate::ui::strings::tag_display(*lang, tag));
     open.0 = false;
     commands.queue(move |world: &mut World| {
         world

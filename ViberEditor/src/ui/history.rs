@@ -102,7 +102,7 @@ fn render_history(
                 @FeathersToolButton {
                     @variant: ButtonVariant::Plain,
                     @caption: bsn! {
-                        @icon_caption(fa::ROTATE_LEFT, {format!("  {label}").leak()}, icons::ICON_DIM)
+                        @icon_caption(fa::ROTATE_LEFT, {format!("  {label}")}, icons::ICON_DIM)
                     },
                 }
             })
@@ -127,7 +127,7 @@ fn render_history(
                     @FeathersToolButton {
                         @variant: ButtonVariant::Plain,
                         @caption: bsn! {
-                            @icon_caption(fa::ROTATE_RIGHT, {format!("  {label}").leak()}, icons::ICON_DIM)
+                            @icon_caption(fa::ROTATE_RIGHT, {format!("  {label}")}, icons::ICON_DIM)
                         },
                     }
                 })

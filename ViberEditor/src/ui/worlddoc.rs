@@ -9,14 +9,13 @@ use bevy::prelude::*;
 use std::path::Path;
 
 use super::strings::{
-    Lang, StrKey, t, wd_feature_kind, wd_heightmap_label, wd_instances, wd_segments, wd_source,
-    wd_spawn_groups, wd_spec_label, wd_warning, wd_world_line,
+    Lang, StrKey, pick, t, wd_feature_kind, wd_heightmap_label, wd_instances, wd_segments,
+    wd_source, wd_spawn_groups, wd_spec_label, wd_warning, wd_world_line,
 };
 use crate::app::EditorConfig;
 use crate::doc::bake::{BakeDir, Features};
 use crate::doc::minimap::{Minimap, minimap_to_bevy_image, render_minimap};
 use crate::ui::icons::{self, image_icon};
-use bevy::tasks::Task;
 
 /// Rendered minimap side, in pixels.
 const MINIMAP_SIDE: u32 = 512;
@@ -60,12 +59,6 @@ pub struct WorldDocState {
     minimap: Option<Handle<Image>>,
     /// The instance name currently marked on the minimap (selection sync).
     marker_name: Option<String>,
-    /// A `viber bake` subprocess in flight (re-bake or verify).
-    bake_task: Option<Task<(String, bool)>>,
-    /// Last bake/verify outcome shown as the panel's first line.
-    pub status: Option<String>,
-    /// Re-read the bake directory (set after a finished re-bake).
-    pub reload_requested: bool,
 }
 
 /// Loads the bake directory once at startup; missing bakes are an empty state, not an error.
@@ -100,6 +93,7 @@ pub fn render_world_doc(
     lang: Res<Lang>,
     lines_containers: Query<Entity, With<WorldDocLines>>,
     minimap_anchors: Query<Entity, With<WorldDocMinimap>>,
+    minimap_nodes: Query<Entity, With<MinimapImage>>,
     mut images: ResMut<Assets<Image>>,
 ) {
     // The minimap texture is attached once the panel node exists.
@@ -107,6 +101,11 @@ pub fn render_world_doc(
         && let Ok(anchor) = minimap_anchors.single()
     {
         state.minimap_spawned = true;
+        // re-anexar (pós re-bake): mata o nó anterior — senão cada reload
+        // empilha outro ImageNode (com a textura antiga em VRAM)
+        for old in &minimap_nodes {
+            commands.entity(old).despawn();
+        }
         if let Some(bake) = &state.bake {
             let image = minimap_to_bevy_image(&build_minimap(bake, MINIMAP_SIDE));
             let handle = images.add(image);
@@ -336,12 +335,14 @@ fn world_doc_lines(bake: Option<&BakeDir>, lang: Lang) -> Vec<DocLine> {
         for pad in &features.pads {
             lines.push(DocLine {
                 text: format!(
-                    "{} {} · at {} · {:.1}x{:.1} · h {}",
+                    "{} {} · {} {} · {:.1}x{:.1} · {} {}",
                     wd_feature_kind(lang, "pad"),
                     pad.id,
+                    pick(lang, "em", "at"),
                     fmt_at(&pad.at),
                     pad.size[0],
                     pad.size[1],
+                    pick(lang, "alt", "h"),
                     fmt_opt_f(pad.resolved_height),
                 ),
                 kind: LineKind::Item,
@@ -350,12 +351,15 @@ fn world_doc_lines(bake: Option<&BakeDir>, lang: Lang) -> Vec<DocLine> {
         for lake in &features.lakes {
             lines.push(DocLine {
                 text: format!(
-                    "{} {} · at {} · r {} · depth {} · water {}",
+                    "{} {} · {} {} · r {} · {} {} · {} {}",
                     wd_feature_kind(lang, "lake"),
                     lake.id,
+                    pick(lang, "em", "at"),
                     lake.at.map(|at| fmt_at(&at)).unwrap_or_else(|| "—".into()),
                     fmt_opt_f(lake.radius),
+                    pick(lang, "prof", "depth"),
                     fmt_opt_f(lake.depth),
+                    pick(lang, "água", "water"),
                     fmt_opt_f(lake.water_level),
                 ),
                 kind: LineKind::Item,
@@ -415,9 +419,10 @@ fn world_doc_lines(bake: Option<&BakeDir>, lang: Lang) -> Vec<DocLine> {
         for cliff in &features.cliffs {
             lines.push(DocLine {
                 text: format!(
-                    "{} {} · at {} · {}",
+                    "{} {} · {} {} · {}",
                     wd_feature_kind(lang, "cliff"),
                     cliff.id,
+                    pick(lang, "em", "at"),
                     fmt_at(&cliff.at),
                     cliff.profile.as_deref().unwrap_or("?"),
                 ),
@@ -427,9 +432,10 @@ fn world_doc_lines(bake: Option<&BakeDir>, lang: Lang) -> Vec<DocLine> {
         for arch in &features.arches {
             lines.push(DocLine {
                 text: format!(
-                    "{} {} · at {} · {}x{} · yaw {}",
+                    "{} {} · {} {} · {}x{} · yaw {}",
                     wd_feature_kind(lang, "arch"),
                     arch.id,
+                    pick(lang, "em", "at"),
                     fmt_at(&arch.at),
                     fmt_opt_f(arch.width),
                     fmt_opt_f(arch.height),
@@ -441,15 +447,17 @@ fn world_doc_lines(bake: Option<&BakeDir>, lang: Lang) -> Vec<DocLine> {
         for cave in &features.caves {
             lines.push(DocLine {
                 text: format!(
-                    "{} {} · at {} · r [{}] · depth {}",
+                    "{} {} · {} {} · r [{}] · {} {}",
                     wd_feature_kind(lang, "cave"),
                     cave.id,
+                    pick(lang, "em", "at"),
                     fmt_at(&cave.at),
                     cave.radius
                         .iter()
                         .map(|r| format!("{r:.1}"))
                         .collect::<Vec<_>>()
                         .join(", "),
+                    pick(lang, "prof", "depth"),
                     fmt_opt_f(cave.depth),
                 ),
                 kind: LineKind::Item,
@@ -458,9 +466,10 @@ fn world_doc_lines(bake: Option<&BakeDir>, lang: Lang) -> Vec<DocLine> {
         for exclusion in &features.exclusions {
             lines.push(DocLine {
                 text: format!(
-                    "{} {} · at {} · r {}",
+                    "{} {} · {} {} · r {}",
                     wd_feature_kind(lang, "exclusion"),
                     exclusion.id,
+                    pick(lang, "em", "at"),
                     fmt_at(&exclusion.at),
                     fmt_opt_f(exclusion.radius),
                 ),
@@ -496,8 +505,14 @@ fn world_doc_lines(bake: Option<&BakeDir>, lang: Lang) -> Vec<DocLine> {
         if let (Some(min), Some(max)) = (group.rules.region_min, group.rules.region_max) {
             lines.push(DocLine {
                 text: format!(
-                    "  region [{:.0}, {:.0}, {:.0}] .. [{:.0}, {:.0}, {:.0}]",
-                    min[0], min[1], min[2], max[0], max[1], max[2],
+                    "  {} [{:.0}, {:.0}, {:.0}] .. [{:.0}, {:.0}, {:.0}]",
+                    pick(lang, "região", "region"),
+                    min[0],
+                    min[1],
+                    min[2],
+                    max[0],
+                    max[1],
+                    max[2],
                 ),
                 kind: LineKind::Dim,
             });
@@ -679,47 +694,6 @@ pub fn default_bake_dir(world: &Path) -> Option<std::path::PathBuf> {
 
 /// Settles a finished bake/verify: status line and bake reload
 /// of the fresh document.
-pub fn poll_bake(lang: Res<Lang>, mut state: ResMut<WorldDocState>) {
-    let Some(task) = &mut state.bake_task else {
-        return;
-    };
-    let Some((summary, ok)) = bevy::tasks::block_on(bevy::tasks::poll_once(task)) else {
-        return;
-    };
-    state.bake_task = None;
-    let verdict = if ok { StrKey::WdOk } else { StrKey::WdFailed };
-    state.status = Some(format!("{}: {summary}", t(*lang, verdict)));
-    info!(
-        "world doc: bake settle — {}",
-        state.status.as_deref().unwrap_or("")
-    );
-    // A finished re-bake (not a verify) reloads the bake document.
-    if ok && !summary.contains("verify OK") && !summary.contains("instances match") {
-        state.reload_requested = true;
-    }
-}
-
-/// Re-reads the bake directory after a finished re-bake.
-pub fn reload_world_doc(config: Res<EditorConfig>, mut state: ResMut<WorldDocState>) {
-    if !state.reload_requested {
-        return;
-    }
-    state.reload_requested = false;
-    let Some(dir) = config.bake_dir.clone() else {
-        return;
-    };
-    match BakeDir::load(&dir) {
-        Ok(bake) => {
-            state.bake = Some(bake);
-            state.dirty = true;
-            state.minimap_spawned = false;
-            state.marker_name = None;
-            state.minimap = None;
-            info!("world doc: bake reloaded after re-bake");
-        }
-        Err(error) => warn!("world doc: reload failed: {error}"),
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -805,28 +779,26 @@ mod tests {
 
         assert!(text.contains(&"Elementos"));
         assert!(
-            text.iter()
-                .any(|t| t.starts_with("plataforma pad-0") && t.contains("h 46.3"))
+            text.iter().any(
+                |t| t.starts_with("plataforma pad-0 · em (0.0, 0.0)") && t.contains("alt 46.3")
+            )
         );
         assert!(
             text.iter()
-                .any(|t| t.starts_with("lago lake-0") && t.contains("r 160.0"))
+                .any(|t| t.starts_with("lago lake-0 · em") && t.contains("r 160.0"))
         );
+        assert!(text.iter().any(|t| t.starts_with("rio river-0 · 2 pts")));
         assert!(
             text.iter()
-                .any(|t| t.starts_with("rio river-0") && t.contains("2 pts"))
+                .any(|t| t.starts_with("exclusão excl-0 · em") && t.contains("r 520.0"))
         );
-        assert!(
-            text.iter()
-                .any(|t| t.starts_with("exclusão excl-0") && t.contains("r 520.0"))
-        );
-        assert!(text.iter().any(|t| t.starts_with("arco arch-0")));
+        assert!(text.iter().any(|t| t.starts_with("arco arch-0 · em")));
 
         assert!(text.contains(&"Grupos de objetos (1)"));
         assert!(text.contains(&"forest-pines · static · seed 12 · 2 instâncias"));
         assert!(
             text.iter()
-                .any(|t| t.starts_with("  region [-450, 0, -450] .. [450, 200, 450]"))
+                .any(|t| t.starts_with("  região [-450, 0, -450] .. [450, 200, 450]"))
         );
         // The heightmap parsed, so no heightmap warning is shown.
         assert!(!text.iter().any(|t| t.contains("aviso:")));

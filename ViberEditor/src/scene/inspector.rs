@@ -21,7 +21,7 @@ use super::doc::{NodeRef, SceneDoc};
 use super::{PendingEdits, Selection};
 use crate::ui::icons::{self, fa, icon_caption, image_icon};
 use crate::ui::strings::{
-    Lang, StrKey, attr_display, fact_display, scatter_failed, set_label, t, tag_display,
+    Lang, StrKey, attr_display, fact_display, pick, scatter_failed, set_label, t, tag_display,
 };
 use crate::ui::theme;
 use crate::ui::tooltip::Tooltip;
@@ -59,6 +59,7 @@ fn run_settle(activate: On<Activate>, buttons: Query<&SettleButton>, mut command
             let selector = doc.selector(&node);
             viber::scene::tools::settle(&mut doc, &selector, 0.0)
         });
+        let lang = *world.resource::<Lang>();
         match result {
             Ok(output) if output.ops.is_empty() => {
                 world.resource_mut::<super::EditStatus>().0 = format!("{}: ok", output.label);
@@ -67,7 +68,8 @@ fn run_settle(activate: On<Activate>, buttons: Query<&SettleButton>, mut command
                 .resource_mut::<PendingEdits>()
                 .push(output.label, output.ops),
             Err(error) => {
-                world.resource_mut::<super::EditStatus>().0 = format!("settle: {error:#}");
+                world.resource_mut::<super::EditStatus>().0 =
+                    format!("{}: {error:#}", pick(lang, "assentar", "settle"));
             }
         }
     });
@@ -180,9 +182,40 @@ fn run_scatter(activate: On<Activate>, buttons: Query<&ScatterButton>, mut comma
                 for warning in &output.warnings {
                     warn!("{warning}");
                 }
-                world
-                    .resource_mut::<PendingEdits>()
-                    .push(output.label, output.ops);
+                if output.ops.is_empty() {
+                    // <Vegetation>: o .vinst foi reescrito no disco (sem EditOp/undo).
+                    // RE-SPAWN VIVO: um `set instances=<mesmo valor>` na MESMA
+                    // transação faz o sync planear respawn do nó (chave não-patchable)
+                    // — o spawn re-lê o .vinst do disco e as novas colocações
+                    // aparecem sem Ctrl+R.
+                    let doc = world.resource::<SceneDoc>().clone();
+                    let mut ops = output.ops;
+                    if let Some(value) = doc
+                        .node(&node)
+                        .and_then(|xml| xml.attr("instances"))
+                        .map(str::to_owned)
+                    {
+                        ops.push(viber::scene::ops::EditOp::Set {
+                            node: selector,
+                            attrs: [("instances".to_owned(), Some(value))].into(),
+                        });
+                    }
+                    if ops.is_empty() {
+                        let lang = *world.resource::<Lang>();
+                        let hint = match lang {
+                            Lang::Pt => "Ctrl+R recarrega a vista",
+                            Lang::En => "Ctrl+R reloads the view",
+                        };
+                        world.resource_mut::<super::EditStatus>().0 =
+                            format!("{} — {hint}", output.label);
+                    } else {
+                        world.resource_mut::<PendingEdits>().push(output.label, ops);
+                    }
+                } else {
+                    world
+                        .resource_mut::<PendingEdits>()
+                        .push(output.label, output.ops);
+                }
             }
             Err(error) => {
                 let lang = *world.resource::<Lang>();
@@ -263,7 +296,11 @@ pub fn inspector_lines(doc: &SceneDoc, selection: &Selection, lang: Lang) -> Vec
         Line::Fact("selector".into(), doc.selector(node_ref)),
         Line::Fact("children".into(), node.children.len().to_string()),
     ];
-    if node.tag.eq_ignore_ascii_case("scatter") {
+    // Regenerar: um <Scatter> (o grupo gerado) ou uma <Vegetation instances> (o .vinst
+    // pré-gerado, reescrito atómico) — o mesmo `viber tool scatter <sel>` dos agentes.
+    if node.tag.eq_ignore_ascii_case("scatter")
+        || (node.tag.eq_ignore_ascii_case("vegetation") && node.attr("instances").is_some())
+    {
         lines.push(Line::Scatter);
     }
     if ["group", "entity", "gltfscene", "composition"]

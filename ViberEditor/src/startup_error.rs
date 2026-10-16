@@ -6,6 +6,7 @@
 //! `--screenshot`/`--frames` pair captures the screen for QA and exits.
 
 use crate::ui::icons::{fa, icon_caption};
+use crate::ui::strings::{Lang, pick};
 use bevy::feathers::controls::{ButtonVariant, FeathersToolButton};
 use bevy::feathers::dark_theme::create_dark_theme;
 use bevy::feathers::theme::UiTheme;
@@ -71,6 +72,7 @@ pub fn error_app(
     world: PathBuf,
     screenshot: Option<PathBuf>,
     frames: u32,
+    lang: Lang,
 ) -> App {
     let mut app = App::new();
     let capture = screenshot.is_some();
@@ -79,13 +81,16 @@ pub fn error_app(
     app.add_plugins((DefaultPlugins, bevy::feathers::FeathersPlugins))
         .insert_resource(UiTheme(create_dark_theme()))
         .insert_resource(StartupError { message, hint })
+        .insert_resource(lang)
         .insert_resource(FailedWorld(world))
         .insert_resource(ErrorQa {
             path: screenshot.unwrap_or_default(),
-            frames_left: frames,
+            // pedir a captura nos primeiros ~30 frames (superfície da janela
+            // ainda a configurar) fazia o processo rebentar (segfault) ao gravar
+            frames_left: frames.max(60),
             taken: !capture, // sem pedido = nunca captura
         })
-        .add_plugins(ErrorAppPlugin)
+        .add_plugins((ErrorAppPlugin, crate::ui::theme::ThemePlugin))
         .add_systems(Startup, error_ui);
     // Os botões usam ícones Font Awesome: a fonte embebida também aqui (como no app.rs).
     bevy::asset::embedded_asset!(app, "assets/fonts/fa-solid-900.ttf");
@@ -93,15 +98,21 @@ pub fn error_app(
 }
 
 /// Constrói TODA a tela no Startup (lê os resources diretamente).
-fn error_ui(mut commands: Commands, error: Res<StartupError>) {
+fn error_ui(mut commands: Commands, error: Res<StartupError>, lang: Res<Lang>) {
     let hint_text = match error.hint {
-        StartupHint::CreateConfig => {
-            "Este mundo precisa de um config.yaml válido ao lado do world.xml (contrato de paths de assets/scripts/save)."
-        }
-        StartupHint::NeedsBake => {
-            "Este mundo é procedural — converte-o com `viber bake <world.xml>` para o editar aqui."
-        }
+        StartupHint::CreateConfig => pick(
+            *lang,
+            "Este mundo precisa de um config.yaml válido ao lado do world.xml (contrato de paths de assets/scripts/save).",
+            "This world needs a valid config.yaml next to world.xml (the assets/scripts/save path contract).",
+        ),
+        StartupHint::NeedsBake => pick(
+            *lang,
+            "Este mundo é procedural — converte-o com `viber bake <world.xml>` para o editar aqui.",
+            "This world is procedural — convert it with `viber bake <world.xml>` to edit it here.",
+        ),
     };
+    // Sem câmara a UI não tem onde desenhar: a janela ficava preta.
+    commands.spawn(Camera2d);
     let root = commands
         .spawn((
             Node {
@@ -115,6 +126,8 @@ fn error_ui(mut commands: Commands, error: Res<StartupError>) {
                 ..default()
             },
             BackgroundColor(Color::srgb(0.09, 0.1, 0.12)),
+            // a raiz do editor: o ThemePlugin troca a fonte default (sem acentos)
+            crate::ui::EditorRoot,
         ))
         .id();
     let title = commands
@@ -138,7 +151,7 @@ fn error_ui(mut commands: Commands, error: Res<StartupError>) {
         ChildOf(title),
     ));
     commands.spawn((
-        Text::new("O mundo não abriu".to_owned()),
+        Text::new(pick(*lang, "O mundo não abriu", "The world did not open").to_owned()),
         TextFont::from_font_size(20.0),
         TextColor(Color::WHITE),
         ChildOf(title),
@@ -184,7 +197,7 @@ fn error_ui(mut commands: Commands, error: Res<StartupError>) {
                     @caption: bsn! {
                         @icon_caption(
                             fa::WAND_MAGIC_SPARKLES,
-                            "Criar config de exemplo",
+                            pick(*lang, "Criar config de exemplo", "Create sample config"),
                             Color::WHITE
                         )
                     },
@@ -199,7 +212,7 @@ fn error_ui(mut commands: Commands, error: Res<StartupError>) {
             @FeathersToolButton {
                 @variant: ButtonVariant::Plain,
                 @caption: bsn! {
-                    @icon_caption(fa::PLUS, "Novo mundo…", Color::WHITE)
+                    @icon_caption(fa::PLUS, pick(*lang, "Novo mundo…", "New world…"), Color::WHITE)
                 },
             }
             WizardCreateButton
@@ -211,7 +224,7 @@ fn error_ui(mut commands: Commands, error: Res<StartupError>) {
             @FeathersToolButton {
                 @variant: ButtonVariant::Plain,
                 @caption: bsn! {
-                    @icon_caption(fa::CIRCLE_XMARK, "Sair", Color::WHITE)
+                    @icon_caption(fa::CIRCLE_XMARK, pick(*lang, "Sair", "Exit"), Color::WHITE)
                 },
             }
             ExitButton
@@ -232,7 +245,7 @@ fn error_ui(mut commands: Commands, error: Res<StartupError>) {
         ))
         .id();
     commands.spawn((
-        Text::new("novo mundo em ./".to_owned()),
+        Text::new(pick(*lang, "novo mundo em ./", "new world in ./").to_owned()),
         TextFont::from_font_size(12.0),
         TextColor(Color::srgb(0.62, 0.66, 0.72)),
         ChildOf(wizard),
@@ -293,6 +306,7 @@ fn wizard_create_clicked(
     buttons: Query<(), With<WizardCreateButton>>,
     inputs: Query<&bevy::text::EditableText, With<WizardNameInput>>,
     failed: Res<FailedWorld>,
+    lang: Res<Lang>,
     mut exit: MessageWriter<bevy::app::AppExit>,
 ) {
     if !buttons.contains(event.event_target()) {
@@ -302,7 +316,7 @@ fn wizard_create_clicked(
         .iter()
         .map(|text| text.value().to_string().trim().to_owned())
         .find(|name| !name.is_empty())
-        .unwrap_or_else(|| "meu-jogo".to_owned());
+        .unwrap_or_else(|| pick(*lang, "meu-jogo", "my-game").to_owned());
     let base = failed.0.parent().map(PathBuf::from).unwrap_or_default();
     let target = base.join(&name);
     match scaffold::create_world_project(&target) {

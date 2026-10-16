@@ -11,7 +11,7 @@ use bevy::ui_widgets::{SliderValue, ValueChange};
 
 use super::gizmo::{GizmoTool, Mode};
 use super::terrain_tool::TerrainBrush;
-use crate::ui::strings::{Lang, StrKey, t};
+use crate::ui::strings::{Lang, LangLabel, StrKey, pick, t};
 use viber::scene::terrain::BrushMode;
 
 /// The panel root.
@@ -65,7 +65,13 @@ impl Plugin for BrushPanelPlugin {
                     if radius.contains(event.source) {
                         brush.radius = event.value.clamp(1.0, 96.0);
                     } else if strength.contains(event.source) {
-                        brush.amount = event.value.max(0.02);
+                        // o MESMO teto das teclas: em smooth/flatten força > 1
+                        // extrapola para além do alvo (picos/cavidades)
+                        let cap = match brush.mode {
+                            BrushMode::Smooth | BrushMode::Flatten => 1.0,
+                            _ => 16.0,
+                        };
+                        brush.amount = event.value.max(0.02).min(cap);
                     }
                 },
             )
@@ -132,7 +138,7 @@ pub fn brush_panel() -> impl Scene {
                 column_gap: px(6),
             }
             Children [
-                @caption(t(Lang::default(), StrKey::BrushMode)) Pickable::IGNORE
+                @caption(t(Lang::default(), StrKey::BrushMode)) LangLabel(StrKey::BrushMode) Pickable::IGNORE
                 --
                 BrushModeSelect
                 Children []
@@ -145,7 +151,9 @@ pub fn brush_panel() -> impl Scene {
                 column_gap: px(6),
             }
             Children [
-                @caption("raio") Pickable::IGNORE
+                @caption(t(Lang::default(), StrKey::BrushRadius))
+                LangLabel(StrKey::BrushRadius)
+                Pickable::IGNORE
                 --
                 @FeathersSlider {
                     @min: 1.0f32,
@@ -162,7 +170,9 @@ pub fn brush_panel() -> impl Scene {
                 column_gap: px(6),
             }
             Children [
-                @caption("força") Pickable::IGNORE
+                @caption(t(Lang::default(), StrKey::BrushStrength))
+                LangLabel(StrKey::BrushStrength)
+                Pickable::IGNORE
                 --
                 @FeathersSlider {
                     @min: 0.05f32,
@@ -187,7 +197,7 @@ pub fn brush_panel() -> impl Scene {
                 column_gap: px(6),
             }
             Children [
-                @caption(t(Lang::default(), StrKey::BrushTarget)) Pickable::IGNORE
+                @caption(t(Lang::default(), StrKey::BrushTarget)) LangLabel(StrKey::BrushTarget) Pickable::IGNORE
                 --
                 BrushTargetRow
                 Children []
@@ -245,6 +255,7 @@ fn show_brush_panel(tool: Res<GizmoTool>, mut panels: Query<&mut Node, With<Brus
 #[allow(clippy::too_many_arguments)]
 fn sync_brush_panel(
     brush: Res<TerrainBrush>,
+    lang: Res<Lang>,
     scatters: Res<BrushScatters>,
     mode_rows: Query<Entity, With<BrushModeSelect>>,
     target_rows: Query<Entity, With<BrushTargetRow>>,
@@ -254,21 +265,28 @@ fn sync_brush_panel(
     strength: Query<(), With<BrushStrengthSlider>>,
     rows: Query<Entity, With<BrushLayerRow>>,
 ) {
-    // MODO: reconstrói quando o modo do pincel muda (mostra o atual)
-    if brush.is_changed()
+    // MODO: reconstrói quando o modo do pincel (ou a língua) muda (mostra o atual)
+    if (brush.is_changed() || lang.is_changed())
         && let Ok(mode_row) = mode_rows.single()
     {
         commands.entity(mode_row).despawn_related::<Children>();
-        let options = ["subir", "descer", "suavizar", "nivelar", "cratera", "ruído"];
-        let current = match brush.mode {
-            BrushMode::Raise => 0,
-            BrushMode::Lower => 1,
-            BrushMode::Smooth => 2,
-            BrushMode::Flatten => 3,
-            BrushMode::Crater => 4,
-            BrushMode::Noise => 5,
-        };
-        let list = list_rows_from_strings(options, Some(current));
+        let modes = [
+            BrushMode::Raise,
+            BrushMode::Lower,
+            BrushMode::Smooth,
+            BrushMode::Flatten,
+            BrushMode::Crater,
+            BrushMode::Noise,
+        ];
+        let options: Vec<&str> = modes
+            .iter()
+            .map(|mode| super::terrain_tool::brush_mode_name(*lang, *mode))
+            .collect();
+        let current = modes
+            .iter()
+            .position(|mode| *mode == brush.mode)
+            .unwrap_or(0);
+        let list = list_rows_from_strings(options.iter().copied(), Some(current));
         commands
             .spawn_scene(bsn! {
                 @FeathersSelect {
@@ -314,7 +332,7 @@ fn sync_brush_panel(
     let Ok(row) = rows.single() else {
         return;
     };
-    if brush.is_changed() {
+    if brush.is_changed() || lang.is_changed() {
         commands.entity(row).despawn_related::<Children>();
         let layers = viber::terrain::splat::DEFAULT_LAYERS;
         let current = brush.paint;
@@ -324,7 +342,7 @@ fn sync_brush_panel(
             .unwrap_or("—");
         commands
             .spawn((
-                Text::new(format!("camada: {label}")),
+                Text::new(format!("{} {label}", pick(*lang, "camada:", "layer:"))),
                 TextFont::from_font_size(11.0),
                 TextColor(Color::srgb(0.62, 0.66, 0.72)),
                 Pickable::IGNORE,

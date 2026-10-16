@@ -112,6 +112,7 @@ fn render_context_menu(
     selection: Res<Selection>,
     clipboard: Option<Res<NodeClipboard>>,
     lang: Res<Lang>,
+    windows: Query<&Window>,
     mut commands: Commands,
     mut panels: Query<(&mut Node, &Children), With<ContextPanel>>,
     bodies: Query<Entity, With<ContextBody>>,
@@ -126,8 +127,15 @@ fn render_context_menu(
         Display::None
     };
     node.position_type = PositionType::Absolute;
-    node.left = Val::Px(menu.at.x);
-    node.top = Val::Px(menu.at.y);
+    // clamp à janela: right-click perto da borda abria o menu fora do ecrã
+    // (8 ações × ~28 px + padding é o pior caso)
+    if let Ok(window) = windows.single() {
+        node.left = Val::Px(menu.at.x.min((window.width() - 180.0).max(0.0)));
+        node.top = Val::Px(menu.at.y.min((window.height() - 250.0).max(0.0)));
+    } else {
+        node.left = Val::Px(menu.at.x);
+        node.top = Val::Px(menu.at.y);
+    }
     if !menu.open || !menu.is_changed() {
         return;
     }
@@ -181,6 +189,8 @@ fn render_context_menu(
                         @icon_caption(glyph, label, icons::ICON)
                     },
                 }
+                // itens de menu alinhados à esquerda (o botão centra por omissão)
+                Node { justify_content: JustifyContent::FlexStart }
             })
             .insert((ContextAction(action), ChildOf(body)))
             .observe(action_clicked);
@@ -233,7 +243,8 @@ fn run(world: &mut World, action: Action, node: Option<NodeRef>) {
             world.insert_resource(NodeClipboard(vec![emit_node(xml)]));
         }
         Action::Paste => {
-            let Some(clipboard) = world.remove_resource::<NodeClipboard>() else {
+            // lê SEM remover: a clipboard sobrevive para o próximo paste
+            let Some(clipboard) = world.get_resource::<NodeClipboard>() else {
                 return;
             };
             let Some(parent) = node.parent() else {
@@ -263,7 +274,9 @@ fn run(world: &mut World, action: Action, node: Option<NodeRef>) {
         Action::Rename => {
             // renomear inline: o modo fica na árvore (F2) — seleciona e foca
             world.resource_mut::<Selection>().set_one(node.clone());
-            world.resource_mut::<crate::scene::tree::RenameState>().0 = Some(node);
+            let mut rename = world.resource_mut::<crate::scene::tree::RenameState>();
+            rename.0 = Some(node);
+            rename.1 = false;
         }
         Action::Group => group_selection(world),
         Action::AddChild => {

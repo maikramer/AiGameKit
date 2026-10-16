@@ -43,6 +43,29 @@ impl Lang {
     }
 }
 
+/// A bilingual static string: (PT, EN). For one-off literals (tooltips, short
+/// fragments) that don't warrant a [`StrKey`]; canonical shared names still go
+/// through [`t`]/[`attr_display`] so they stay in one map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bi(pub &'static str, pub &'static str);
+
+impl Bi {
+    pub fn get(self, lang: Lang) -> &'static str {
+        match lang {
+            Lang::Pt => self.0,
+            Lang::En => self.1,
+        }
+    }
+}
+
+/// Picks between two static strings by language (the free-function form of [`Bi`]).
+pub fn pick(lang: Lang, pt: &'static str, en: &'static str) -> &'static str {
+    match lang {
+        Lang::Pt => pt,
+        Lang::En => en,
+    }
+}
+
 /// Every static label in the editor (dock titles, buttons, tooltips, hints).
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StrKey {
@@ -115,6 +138,9 @@ pub enum StrKey {
     GameSunPitch,
     GameSunLight,
     TabProblems,
+    TabSearch,
+    SearchHint,
+    SearchNoMatches,
     ProblemsClean,
     ProblemsRevalidate,
     ProblemsRevalidateTip,
@@ -123,6 +149,8 @@ pub enum StrKey {
     ScriptReloaded,
     BrushTarget,
     BrushMode,
+    BrushRadius,
+    BrushStrength,
     ViewTitle,
     ViewGrid,
     ViewColliders,
@@ -189,8 +217,6 @@ pub enum StrKey {
     WdTerrain,
     WdFeatures,
     WdFeaturesNone,
-    WdOk,
-    WdFailed,
     // Console.
     ConOk,
     ConFailed,
@@ -198,6 +224,15 @@ pub enum StrKey {
     VerbMove,
     VerbRotate,
     VerbScale,
+    // Scene tabs (projects with scenes).
+    SceneNewTip,
+    SceneCloseTip,
+    SceneTabTip,
+    SceneOpened,
+    SceneOpenFailed,
+    SceneNotProject,
+    PlayScene,
+    PlaySceneTip,
 }
 
 #[cfg(test)]
@@ -288,13 +323,76 @@ impl StrKey {
         StrKey::WdTerrain,
         StrKey::WdFeatures,
         StrKey::WdFeaturesNone,
-        StrKey::WdOk,
-        StrKey::WdFailed,
         StrKey::ConOk,
         StrKey::ConFailed,
         StrKey::VerbMove,
         StrKey::VerbRotate,
         StrKey::VerbScale,
+        StrKey::SceneNewTip,
+        StrKey::SceneCloseTip,
+        StrKey::SceneTabTip,
+        StrKey::SceneOpened,
+        StrKey::SceneOpenFailed,
+        StrKey::SceneNotProject,
+        StrKey::PlayScene,
+        StrKey::PlaySceneTip,
+        StrKey::SecTransform,
+        StrKey::SecPhysics,
+        StrKey::SecLight,
+        StrKey::SecMaterial,
+        StrKey::SecShape,
+        StrKey::SecGltf,
+        StrKey::SecSky,
+        StrKey::SecDayCycle,
+        StrKey::SecBiomes,
+        StrKey::TabGame,
+        StrKey::GameClock,
+        StrKey::GameWeather,
+        StrKey::GameRain,
+        StrKey::GameClouds,
+        StrKey::GameWind,
+        StrKey::GameRuntime,
+        StrKey::GameSun,
+        StrKey::GameSunYaw,
+        StrKey::GameSunPitch,
+        StrKey::GameSunLight,
+        StrKey::TabProblems,
+        StrKey::ProblemsClean,
+        StrKey::ProblemsRevalidate,
+        StrKey::ProblemsRevalidateTip,
+        StrKey::TabSearch,
+        StrKey::SearchHint,
+        StrKey::SearchNoMatches,
+        StrKey::ScriptReload,
+        StrKey::ScriptReloadTip,
+        StrKey::ScriptReloaded,
+        StrKey::BrushTarget,
+        StrKey::BrushMode,
+        StrKey::BrushRadius,
+        StrKey::BrushStrength,
+        StrKey::ViewTitle,
+        StrKey::ViewGrid,
+        StrKey::ViewColliders,
+        StrKey::ViewPersp,
+        StrKey::ViewFront,
+        StrKey::ViewTop,
+        StrKey::ViewRight,
+        StrKey::FilesStamp,
+        StrKey::FilesStampTip,
+        StrKey::HintStamp,
+        StrKey::EditTransform,
+        StrKey::EditPaste,
+        StrKey::MenuDuplicate,
+        StrKey::MenuDelete,
+        StrKey::MenuRename,
+        StrKey::MenuCopy,
+        StrKey::MenuPaste,
+        StrKey::MenuGroup,
+        StrKey::GroupSameParent,
+        StrKey::MenuMove,
+        StrKey::TabHistory,
+        StrKey::HistoryEmpty,
+        StrKey::HistoryRedo,
     ];
 }
 
@@ -441,9 +539,9 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
         StrKey::ModeScript => "Script",
         StrKey::ScriptTitle => {
             if en {
-                "Scripts of this world — click to preview"
+                "Click a script to edit it"
             } else {
-                "Scripts deste mundo — clica para pré-visualizar"
+                "Clica num script para o editar"
             }
         }
         StrKey::FilesInsertTip => {
@@ -627,7 +725,13 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
                 "refazer"
             }
         }
-        StrKey::SecSky => "Céu",
+        StrKey::SecSky => {
+            if en {
+                "Sky"
+            } else {
+                "Céu"
+            }
+        }
         StrKey::SecScript => "Script",
         StrKey::ScriptOpen => {
             if en {
@@ -826,7 +930,13 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
                 "Frente"
             }
         }
-        StrKey::ViewTop => "Topo",
+        StrKey::ViewTop => {
+            if en {
+                "Top"
+            } else {
+                "Topo"
+            }
+        }
         StrKey::ViewRight => {
             if en {
                 "Right"
@@ -841,7 +951,48 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
                 "modo"
             }
         }
-        StrKey::SecBiomes => "Biomas",
+        StrKey::BrushRadius => {
+            if en {
+                "radius"
+            } else {
+                "raio"
+            }
+        }
+        StrKey::BrushStrength => {
+            if en {
+                "strength"
+            } else {
+                "força"
+            }
+        }
+        StrKey::TabSearch => {
+            if en {
+                "Search"
+            } else {
+                "Buscar"
+            }
+        }
+        StrKey::SearchHint => {
+            if en {
+                "Find in world files (xml, lua) — Enter searches"
+            } else {
+                "Pesquisar nos ficheiros do mundo (xml, lua) — Enter busca"
+            }
+        }
+        StrKey::SearchNoMatches => {
+            if en {
+                "No matches (Enter searches .xml and .lua in the world folder)"
+            } else {
+                "Sem resultados (Enter pesquisa .xml e .lua na pasta do mundo)"
+            }
+        }
+        StrKey::SecBiomes => {
+            if en {
+                "Biomes"
+            } else {
+                "Biomas"
+            }
+        }
         StrKey::ScriptReload => {
             if en {
                 "Reload"
@@ -1158,14 +1309,6 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
                 "Elementos: nenhum"
             }
         }
-        StrKey::WdOk => "OK",
-        StrKey::WdFailed => {
-            if en {
-                "FAILED"
-            } else {
-                "FALHOU"
-            }
-        }
         StrKey::ConOk => "ok",
         StrKey::ConFailed => {
             if en {
@@ -1193,6 +1336,62 @@ pub fn t(lang: Lang, key: StrKey) -> &'static str {
                 "scale"
             } else {
                 "escalar"
+            }
+        }
+        StrKey::SceneNewTip => {
+            if en {
+                "Create an empty scene in scenes/ and open it in a tab"
+            } else {
+                "Cria uma cena vazia em scenes/ e abre-a numa aba"
+            }
+        }
+        StrKey::SceneCloseTip => {
+            if en {
+                "Close this scene tab (the file stays)"
+            } else {
+                "Fecha a aba desta cena (o ficheiro fica)"
+            }
+        }
+        StrKey::SceneTabTip => {
+            if en {
+                "Scene — click to open it here (saves the current one first)"
+            } else {
+                "Cena — clica para a abrir aqui (grava a atual antes)"
+            }
+        }
+        StrKey::SceneOpened => {
+            if en {
+                "Scene opened"
+            } else {
+                "Cena aberta"
+            }
+        }
+        StrKey::SceneOpenFailed => {
+            if en {
+                "Could not open the scene"
+            } else {
+                "Não foi possível abrir a cena"
+            }
+        }
+        StrKey::SceneNotProject => {
+            if en {
+                "Not a scene of this project (needs project: in config.yaml) — opened in a new window"
+            } else {
+                "Não é uma cena deste projeto (falta project: no config.yaml) — aberta numa janela nova"
+            }
+        }
+        StrKey::PlayScene => {
+            if en {
+                "Play scene"
+            } else {
+                "Jogar cena"
+            }
+        }
+        StrKey::PlaySceneTip => {
+            if en {
+                "Play the scene in this tab (F7) — the game starts here, with the project's autoloads"
+            } else {
+                "Joga a cena desta aba (F7) — o jogo arranca aqui, com os autoloads do projeto"
             }
         }
     }
@@ -1533,8 +1732,304 @@ pub fn attr_display(lang: Lang, key: &str) -> &str {
                 "Quantidade"
             }
         }
+        "model" => {
+            if en {
+                "Model"
+            } else {
+                "Modelo"
+            }
+        }
+        "sun-elevation" => {
+            if en {
+                "Sun height"
+            } else {
+                "Altura do sol"
+            }
+        }
+        "sun-azimuth" => {
+            if en {
+                "Sun azimuth"
+            } else {
+                "Azimute do sol"
+            }
+        }
+        "sun-intensity" => {
+            if en {
+                "Sun intensity"
+            } else {
+                "Intensidade do sol"
+            }
+        }
+        "rayleigh" => {
+            if en {
+                "Rayleigh scattering"
+            } else {
+                "Dispersão Rayleigh"
+            }
+        }
+        "mie-coefficient" => {
+            if en {
+                "Mie coefficient"
+            } else {
+                "Coeficiente Mie"
+            }
+        }
+        "mie-directional-g" => {
+            if en {
+                "Mie directional (g)"
+            } else {
+                "Mie direcional (g)"
+            }
+        }
+        "cloud-coverage" => {
+            if en {
+                "Cloud coverage"
+            } else {
+                "Cobertura de nuvens"
+            }
+        }
+        "cloud-density" => {
+            if en {
+                "Cloud density"
+            } else {
+                "Densidade das nuvens"
+            }
+        }
+        "cloud-elevation" => {
+            if en {
+                "Cloud height"
+            } else {
+                "Altura das nuvens"
+            }
+        }
+        "star-density" => {
+            if en {
+                "Stars"
+            } else {
+                "Estrelas"
+            }
+        }
+        "aurora" => "Aurora",
+        "nebula" => {
+            if en {
+                "Nebula"
+            } else {
+                "Nebulosa"
+            }
+        }
+        "nishita-mie" => {
+            if en {
+                "Nishita mie"
+            } else {
+                "Mie do Nishita"
+            }
+        }
+        "minute-of-day" => {
+            if en {
+                "Minute of day"
+            } else {
+                "Minuto do dia"
+            }
+        }
+        "minutes-per-real-second" => {
+            if en {
+                "min per real s"
+            } else {
+                "min por s real"
+            }
+        }
+        "dawn-minute" => {
+            if en {
+                "Dawn minute"
+            } else {
+                "Alvorada (min)"
+            }
+        }
+        "dusk-minute" => {
+            if en {
+                "Dusk minute"
+            } else {
+                "Crepúsculo (min)"
+            }
+        }
+        "ambient-day-intensity" => {
+            if en {
+                "Day ambient"
+            } else {
+                "Ambiente de dia"
+            }
+        }
+        "ambient-night-intensity" => {
+            if en {
+                "Night ambient"
+            } else {
+                "Ambiente de noite"
+            }
+        }
+        "drive-ambient" => {
+            if en {
+                "Ambient by time"
+            } else {
+                "Ambiente pela hora"
+            }
+        }
+        "max-sun-elevation" => {
+            if en {
+                "Noon sun height"
+            } else {
+                "Sol ao meio-dia"
+            }
+        }
+        "min-sun-elevation" => {
+            if en {
+                "Midnight sun"
+            } else {
+                "Sol à meia-noite"
+            }
+        }
+        "sun-azimuth-base" => {
+            if en {
+                "Base azimuth"
+            } else {
+                "Azimute base"
+            }
+        }
+        "shadows" => {
+            if en {
+                "Shadows"
+            } else {
+                "Sombras"
+            }
+        }
+        "illuminance" => {
+            if en {
+                "Illuminance"
+            } else {
+                "Iluminância"
+            }
+        }
+        "brightness" => {
+            if en {
+                "Brightness"
+            } else {
+                "Brilho"
+            }
+        }
+        "half-height" => {
+            if en {
+                "Half-height"
+            } else {
+                "Meia-altura"
+            }
+        }
+        "metallic" => {
+            if en {
+                "Metallic"
+            } else {
+                "Metálico"
+            }
+        }
+        "roughness" => {
+            if en {
+                "Roughness"
+            } else {
+                "Rugosidade"
+            }
+        }
+        "opacity" => {
+            if en {
+                "Opacity"
+            } else {
+                "Opacidade"
+            }
+        }
+        "emissive" => {
+            if en {
+                "Emissive color"
+            } else {
+                "Cor emissiva"
+            }
+        }
+        "texture" => {
+            if en {
+                "Texture"
+            } else {
+                "Textura"
+            }
+        }
+        "normal-map" => "Normal map",
+        "lod1-url" => "LOD1",
+        "lod2-url" => "LOD2",
+        "lod-threshold-near" => {
+            if en {
+                "LOD1 distance"
+            } else {
+                "Distância do LOD1"
+            }
+        }
+        "lod-threshold-mid" => {
+            if en {
+                "LOD2 distance"
+            } else {
+                "Distância do LOD2"
+            }
+        }
+        "shape" => {
+            if en {
+                "Shape"
+            } else {
+                "Forma"
+            }
+        }
+        "size" => {
+            if en {
+                "Size"
+            } else {
+                "Tamanho"
+            }
+        }
+        "type" => {
+            if en {
+                "Type"
+            } else {
+                "Tipo"
+            }
+        }
+        "gravity-scale" => {
+            if en {
+                "Gravity"
+            } else {
+                "Gravidade"
+            }
+        }
+        "mesh-url" => {
+            if en {
+                "Mesh (GLB)"
+            } else {
+                "Malha (GLB)"
+            }
+        }
+        "text" => {
+            if en {
+                "Text"
+            } else {
+                "Texto"
+            }
+        }
+        "seed" => "Seed",
         _ => key,
     }
+}
+
+/// Friendly label for a component-string member (`collider:size`, `rigidbody:type`):
+/// the short component name plus the member's friendly name.
+pub fn component_display(lang: Lang, attr: &str, key: &str) -> String {
+    let prefix = match attr {
+        "collider" => pick(lang, "Colisor", "Collider"),
+        "rigidbody" => pick(lang, "Corpo", "Body"),
+        _ => attr,
+    };
+    format!("{prefix} · {}", attr_display(lang, key))
 }
 
 /// A friendly name for an inspector fact row (`file`, `selector`, …).
@@ -1898,11 +2393,16 @@ pub fn sync_lang_labels(
 }
 
 /// The toolbar's language toggle: PT ⇄ EN.
+/// The language toggle BUTTON (the [`LangButton`] marker sits on its caption text).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct LangToggle;
+
 pub fn toggle_lang(
     activate: On<Activate>,
-    buttons: Query<(), With<LangButton>>,
+    buttons: Query<(), With<LangToggle>>,
     mut lang: ResMut<Lang>,
 ) {
+    // o marcador do texto (`LangButton`) nunca é o alvo do Activate: o botão é
     if !buttons.contains(activate.event_target()) {
         return;
     }
@@ -1923,7 +2423,6 @@ mod tests {
             (StrKey::DockInspector, "Inspetor", "Inspector"),
             (StrKey::TabWorldDoc, "Mundo", "World"),
             (StrKey::BtnSave, "Guardar", "Save"),
-            (StrKey::WdFailed, "FALHOU", "FAILED"),
             (StrKey::AddAttr, "novo (chave=valor)", "new (key=value)"),
         ] {
             assert_eq!(t(Lang::Pt, key), pt);
@@ -1996,6 +2495,40 @@ mod tests {
         assert_eq!(
             needs_reload(Lang::En, 3),
             " | 3 change(s) need a reload (Ctrl+R)"
+        );
+    }
+
+    #[test]
+    fn bi_and_pick_select_by_language() {
+        assert_eq!(Bi("raio", "radius").get(Lang::Pt), "raio");
+        assert_eq!(Bi("raio", "radius").get(Lang::En), "radius");
+        assert_eq!(pick(Lang::Pt, "em", "at"), "em");
+        assert_eq!(pick(Lang::En, "em", "at"), "at");
+    }
+
+    #[test]
+    fn typed_inspector_attrs_are_friendly() {
+        assert_eq!(
+            attr_display(Lang::Pt, "cloud-coverage"),
+            "Cobertura de nuvens"
+        );
+        assert_eq!(attr_display(Lang::En, "sun-elevation"), "Sun height");
+        assert_eq!(attr_display(Lang::Pt, "metallic"), "Metálico");
+        assert_eq!(
+            attr_display(Lang::Pt, "lod-threshold-near"),
+            "Distância do LOD1"
+        );
+    }
+
+    #[test]
+    fn component_members_show_component_and_member() {
+        assert_eq!(
+            component_display(Lang::Pt, "collider", "shape"),
+            "Colisor · Forma"
+        );
+        assert_eq!(
+            component_display(Lang::En, "rigidbody", "gravity-scale"),
+            "Body · Gravity"
         );
     }
 

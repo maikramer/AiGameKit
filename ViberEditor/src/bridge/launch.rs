@@ -8,9 +8,14 @@ use std::process::Child;
 /// How many ports above `start` are scanned, matching the engine's own bridge picker.
 const PORT_SPAN: u16 = 64;
 
-/// Returns the first port from `start` that can be bound on the loopback interface.
-pub fn free_bridge_port(start: u16) -> Option<u16> {
-    (start..start + PORT_SPAN).find(|port| TcpListener::bind(("127.0.0.1", *port)).is_ok())
+/// Idem, excluindo uma porta — a porta do bridge do PRÓPRIO editor (`--bridge`)
+/// tem de ficar fora da scan do Play: a scan corre antes de o editor abrir o
+/// bridge, e sem a exclusão o jogo podia receber a mesma porta e o editor
+/// ligava-se a si próprio (`viber.ping` respondia ao editor).
+pub fn free_bridge_port_excluding(start: u16, exclude: Option<u16>) -> Option<u16> {
+    (start..start + PORT_SPAN)
+        .filter(|port| Some(*port) != exclude)
+        .find(|port| TcpListener::bind(("127.0.0.1", *port)).is_ok())
 }
 
 /// Locates the `viber` executable, building it from the sibling checkout when needed.
@@ -106,7 +111,7 @@ mod tests {
         let busy = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let start = busy.local_addr().unwrap().port();
         // `start` itself may or may not be taken by our own listener; the scan must skip it.
-        let Some(port) = free_bridge_port(start) else {
+        let Some(port) = free_bridge_port_excluding(start, None) else {
             panic!("no free port found above {start}");
         };
         assert!((start..start + PORT_SPAN).contains(&port));

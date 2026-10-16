@@ -410,16 +410,26 @@ fn open_world(
     activate: On<Activate>,
     buttons: Query<&OpenWorld>,
     doc: Res<SceneDoc>,
+    current: Option<Res<viber::scene_loader::CurrentScene>>,
+    mut requests: ResMut<super::scene_tabs::OpenSceneRequest>,
     mut status: ResMut<crate::scene::EditStatus>,
     lang: Res<Lang>,
 ) {
     let Ok(button) = buttons.get(activate.event_target()) else {
         return;
     };
-    let Some(dir) = doc.world_path().parent() else {
+    // Os caminhos do dock são relativos à raiz do PROJETO (a pasta do config.yaml).
+    let path = doc.root_dir.join(&button.0);
+    // Uma cena deste projeto abre numa ABA (troca in-process); o resto, numa janela nova.
+    if current.as_deref().is_some_and(|c| {
+        c.switchable()
+            && viber::project::Project::at(&c.root)
+                .scene_id(&path)
+                .is_some()
+    }) {
+        requests.0 = Some(path);
         return;
-    };
-    let path = dir.join(&button.0);
+    }
     let opened = std::env::current_exe()
         .ok()
         .and_then(|exe| {

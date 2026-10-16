@@ -1,5 +1,6 @@
 //! Feature point handles (Fase 2B): the selected node's `at`/`path` points drawn on the
-//! terrain — the Lake/Pad centre and the River/Road polylines — DRAGGABLE in Select mode.
+//! terrain — the Lake/Pad centre, the River/Road polylines and a `<RoadNetwork>`'s `<Way>`
+//! points (its `<Segment>`s drawn between them) — DRAGGABLE in Select mode.
 //! The release writes ONE `set` op (undoable, canonical numbers), the same edit an agent
 //! makes with `viber scene set`.
 
@@ -29,6 +30,10 @@ pub struct FeaturePoints {
     points: Vec<Vec3>,
     /// How the outline draws — and whether index 0 also moves a `radius`/`size`.
     kind: FeatureKind,
+    /// RoadNetwork: each handle is a `<Way>` CHILD (its `xz` is what a drag rewrites).
+    ways: Vec<NodeRef>,
+    /// RoadNetwork: the `<Segment>` polylines (a → via… → b), for the outline.
+    segments: Vec<Vec<Vec3>>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -40,6 +45,8 @@ enum FeatureKind {
     Rect,
     /// Open `path` polyline (River, Road).
     Path,
+    /// `<RoadNetwork>`: `<Way xz>` children as handles, `<Segment>`s drawn between them.
+    Network,
 }
 
 /// The drag in progress: which handle, and the moving preview.
@@ -78,7 +85,7 @@ fn build_feature_points(
     runtime: Option<Res<viber::terrain::runtime::TerrainRuntime>>,
     mut features: ResMut<FeaturePoints>,
 ) {
-    if !selection.is_changed() && features.node.is_some() {
+    if !selection.is_changed() && !doc.is_changed() && features.node.is_some() {
         return;
     }
     *features = FeaturePoints::default();
@@ -99,6 +106,61 @@ fn build_feature_points(
         let [x, z] = viber::xml::values::parse_vec2(value, "feature").ok()?;
         Some(Vec3::new(x, ground(x, z), z))
     };
+    if tag == "roadnetwork" {
+        // os <Way id xz> são os pontos; os <Segment a b via> ligam-nos
+        let mut ways = Vec::new();
+        let mut points = Vec::new();
+        let mut by_id = std::collections::HashMap::new();
+        for (index, child) in xml.children.iter().enumerate() {
+            if !child.tag.eq_ignore_ascii_case("way") {
+                continue;
+            }
+            let Some(at) = child.attr("xz").and_then(point) else {
+                continue;
+            };
+            if let Some(id) = child.attr("id") {
+                by_id.insert(id.to_owned(), at);
+            }
+            ways.push(node.child(index));
+            points.push(at);
+        }
+        let segments = xml
+            .children
+            .iter()
+            .filter(|child| child.tag.eq_ignore_ascii_case("segment"))
+            .filter_map(|segment| {
+                let a = *by_id.get(segment.attr("a")?)?;
+                let b = *by_id.get(segment.attr("b")?)?;
+                let via: Vec<f32> = segment
+                    .attr("via")
+                    .unwrap_or_default()
+                    .split_whitespace()
+                    .filter_map(|token| token.parse().ok())
+                    .collect();
+                let mut line = vec![a];
+                line.extend(
+                    via.as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|pair| Vec3::new(pair[0], ground(pair[0], pair[1]), pair[1])),
+                );
+                line.push(b);
+                Some(line)
+            })
+            .collect();
+        if points.is_empty() {
+            return;
+        }
+        *features = FeaturePoints {
+            node: Some(node),
+            attr: "xz".to_owned(),
+            points,
+            kind: FeatureKind::Network,
+            ways,
+            segments,
+        };
+        return;
+    }
     let (attr, points, kind) = if let Some(at) = xml.attr("at") {
         let Some(center) = point(at) else {
             return;
@@ -131,6 +193,7 @@ fn build_feature_points(
         attr: attr.to_owned(),
         points,
         kind,
+        ..default()
     };
 }
 
@@ -170,6 +233,21 @@ fn draw_features(
                 })
         });
     let center = features.points.first().copied();
+    // PREVIEW do arrasto: o ponto agarrado segue o cursor (o contorno Path e
+    // o handle acompanham; sem isto o drag era às cegas até ao release)
+    let points = match (drag.grabbed, drag.moved, features.points.get(drag.index)) {
+        (true, Some(moved), Some(_)) => {
+            let mut preview = features.points.clone();
+            preview[drag.index] = Vec3::new(moved.x, ground(moved.x, moved.y), moved.y);
+            preview
+        }
+        _ => features.points.clone(),
+    };
+    let center = if drag.grabbed && drag.index == 0 {
+        points.first().copied()
+    } else {
+        center
+    };
     let outline: Vec<Vec3> = match (features.kind, extra, center) {
         (FeatureKind::Circle, Some((radius, true)), Some(center)) => (0..=48)
             .map(|i| {
@@ -195,13 +273,16 @@ fn draw_features(
                 })
                 .collect()
         }
-        (FeatureKind::Path, _, _) => features.points.clone(),
+        (FeatureKind::Path, _, _) => points.clone(),
         _ => Vec::new(),
     };
     if !outline.is_empty() {
         gizmos.linestrip(outline, color);
     }
-    for (index, point) in features.points.iter().enumerate() {
+    for segment in &features.segments {
+        gizmos.linestrip(segment.iter().map(|p| *p + Vec3::Y * 0.15), color);
+    }
+    for (index, point) in points.iter().enumerate() {
         let grabbed = drag.grabbed && drag.index == index;
         let handle_color = if grabbed { active } else { color };
         gizmos.circle(Isometry3d::from_translation(*point), HANDLE_R, handle_color);
@@ -221,9 +302,18 @@ fn feature_interaction(world: &mut World) {
     }
     let cursor = *world.resource::<ViewportCursor>();
     let buttons = world.resource::<ButtonInput<MouseButton>>().clone();
+    let keys = world.resource::<ButtonInput<KeyCode>>().clone();
     let hover = world.resource::<ViewportHover>().0;
     let mut drag: FeatureDrag = world.resource::<FeatureDrag>().clone();
 
+    // Esc cancela o arrasto: descarta o preview (o contrato do gizmo)
+    if drag.grabbed && keys.just_pressed(KeyCode::Escape) {
+        drag.grabbed = false;
+        drag.moved = None;
+        world.remove_resource::<FeatureGrab>();
+        *world.resource_mut::<FeatureDrag>() = drag;
+        return;
+    }
     if buttons.just_pressed(MouseButton::Left)
         && hover
         && let Some(index) = hovered_handle(world, &cursor)
@@ -297,6 +387,21 @@ fn commit(world: &mut World, index: usize, moved: Vec2, start: &[String]) {
     let Some(node) = features.node.clone() else {
         return;
     };
+    if features.kind == FeatureKind::Network {
+        let Some(way) = features.ways.get(index) else {
+            return;
+        };
+        let selector = world.resource::<SceneDoc>().selector(way);
+        let value = format!("{} {}", format_num(moved.x), format_num(moved.y));
+        world.resource_mut::<PendingEdits>().push(
+            "xz Way".to_owned(),
+            vec![viber::scene::ops::EditOp::Set {
+                node: selector,
+                attrs: [("xz".to_owned(), Some(value))].into(),
+            }],
+        );
+        return;
+    }
     let mut tokens = start.to_vec();
     let needed = (index + 1) * 2;
     while tokens.len() < needed {

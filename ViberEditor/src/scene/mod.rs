@@ -190,11 +190,19 @@ fn shortcuts(world: &mut World) {
         return;
     };
     let selector = world.resource::<SceneDoc>().selector(&primary);
-    let editable: Vec<NodeRef> = selected
+    // Lote em ordem DESCENDENTE (file, path): os ops usam seletores de caminho
+    // resolvidos no momento de cada op — remover/duplicar um irmão anterior
+    // desloca os índices dos seguintes (Delete [A,C] apagava A e D; Duplicate
+    // [A,C] duplicava A e B). Do fim para o princípio, nada se desloca —
+    // a mesma convenção do group_selection.
+    let mut editable: Vec<NodeRef> = selected
         .iter()
         .filter(|node| !node.is_root())
         .cloned()
         .collect();
+    editable.sort();
+    editable.dedup();
+    editable.reverse();
     if !editable.is_empty() {
         // OS TRÊS atalhos agem em LOTE: uma transação (um undo) com todos os nós.
         if duplicate {
@@ -216,10 +224,15 @@ fn shortcuts(world: &mut World) {
             });
         }
         if rename {
-            world.resource_mut::<tree::RenameState>().0 = Some(primary.clone());
+            let mut rename = world.resource_mut::<tree::RenameState>();
+            rename.0 = Some(primary.clone());
+            rename.1 = false;
         }
         if copy {
-            let xmls: Vec<String> = editable
+            // clipboard em ordem ASCENDENTE (a cola reproduz a ordem relativa)
+            let mut ascending = editable.clone();
+            ascending.reverse();
+            let xmls: Vec<String> = ascending
                 .iter()
                 .filter_map(|node| world.resource::<SceneDoc>().node(node))
                 .map(viber::xml::emit::emit_node)
@@ -242,10 +255,11 @@ fn shortcuts(world: &mut World) {
         }
     }
     if paste
-        && let Some(clipboard) = world.remove_resource::<NodeClipboard>()
+        && let Some(clipboard) = world.get_resource::<NodeClipboard>()
         && !clipboard.0.is_empty()
         && let Some(parent) = primary.parent()
     {
+        // lê SEM remover: a clipboard sobrevive para o próximo paste
         let parent_selector = world.resource::<SceneDoc>().selector(&parent);
         let mut index = primary.path.last().copied().unwrap_or(0) + 1;
         let ops: Vec<EditOp> = clipboard

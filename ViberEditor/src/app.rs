@@ -61,7 +61,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
     let world = std::path::absolute(&world)?;
     let port = cli
         .port
-        .or_else(|| launch::free_bridge_port(DEFAULT_BRIDGE_PORT))
+        .or_else(|| launch::free_bridge_port_excluding(DEFAULT_BRIDGE_PORT, cli.bridge))
         .unwrap_or(DEFAULT_BRIDGE_PORT);
     let bake_dir = cli.bake.or_else(|| default_bake_dir(&world));
     let startup_tab = cli.tab.clone();
@@ -118,6 +118,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             world,
             cli.screenshot.clone(),
             cli.frames,
+            lang,
         );
         app.run();
         return Ok(());
@@ -169,7 +170,9 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
     if let Some(path) = cli.screenshot {
         app.insert_resource(ScreenshotRequest {
             path,
-            frames_left: cli.frames,
+            // o mesmo clamp do startup_error: capturar nos primeiros ~30
+            // frames (superfície ainda a configurar) fazia segfault
+            frames_left: cli.frames.max(60),
             taken: false,
         })
         .add_systems(Update, screenshot_and_exit);
@@ -184,6 +187,20 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
 /// in-process would mean re-running the whole terrain bootstrap.
 pub fn reload_world(world: &mut World) {
     crate::scene::save_world(world);
+    // Cena de um projeto: recarrega IN-PROCESS pelo carregador de cenas da engine (o mesmo
+    // da troca de abas) — segundos em vez de relançar o editor. As constantes de shader do
+    // céu/água continuam a pedir um arranque novo (são do projeto, escritas no arranque).
+    if let Some(id) = world
+        .get_resource::<viber::scene_loader::CurrentScene>()
+        .filter(|scene| scene.switchable())
+        .and_then(|scene| scene.id.clone())
+    {
+        let request = viber::scene_loader::ChangeScene::new(id, viber::scene_loader::Arrival::Keep);
+        match viber::scene_loader::request_change(world, request) {
+            Ok(()) => return,
+            Err(error) => warn!("reload in-process falhou ({error:#}) — a relançar o editor"),
+        }
+    }
     let selection = world
         .resource::<crate::scene::Selection>()
         .primary()

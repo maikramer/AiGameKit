@@ -5,6 +5,8 @@
 //! One combined poll per second fills the readouts; slider drags push
 //! commands immediately and are not overwritten by the next poll.
 
+use crate::ui::icons::icon_caption_key;
+use crate::ui::strings::LangLabel;
 use bevy::feathers::controls::FeathersSlider;
 use bevy::feathers::display::caption;
 use bevy::prelude::*;
@@ -14,8 +16,8 @@ use serde_json::Value;
 
 use crate::bridge::{BrpClientError, EngineStatus, ViberBridge, methods};
 use crate::scene::Selection;
-use crate::ui::icons::{self, fa, icon_caption};
-use crate::ui::strings::{Lang, StrKey, t};
+use crate::ui::icons::{self, fa};
+use crate::ui::strings::{Lang, StrKey, pick, t};
 use crate::ui::theme;
 
 /// The dock body.
@@ -62,8 +64,15 @@ enum Dragging {
 
 #[derive(Resource, Debug, Default)]
 struct GameState {
-    /// Comandos pendentes dos sliders / leitura combinada.
+    /// Leitura combinada clock/weather (1 Hz) — o resultado atualiza o readout.
     task: Option<Task<Result<Value, BrpClientError>>>,
+    /// Comandos dos sliders (fire-and-forget) — slot SEPARADO da leitura: sem
+    /// isto, um poll em voo descartava o comando (o valor final de um arrasto
+    /// podia perder-se) e o resultado do comando era lido como leitura (zeros).
+    cmd_task: Option<Task<Result<Value, BrpClientError>>>,
+    /// Último comando pendente quando o slot ocupa (cada evento sobrescreve —
+    /// o valor final acaba sempre por chegar).
+    pending_cmd: Option<String>,
     /// Task do runtime info (mais pesada, corre em separado).
     info_task: Option<Task<Result<Value, BrpClientError>>>,
     readout: String,
@@ -72,6 +81,18 @@ struct GameState {
     timer: f32,
     /// O slider em arrasto neste instante (o poll não o sobrescreve).
     dragging: Option<Dragging>,
+}
+
+/// Extrai o `result` de uma resposta `viber.lua` — o valor devolvido pelo Luau
+/// vem ANINHADO (`{ok, result|error, applied, warnings}`), não no topo. Erros
+/// Luau (`ok:false`) são avisados em vez de mascarados como zeros.
+fn lua_result<'a>(value: &'a Value, context: &str) -> Option<&'a Value> {
+    if value.get("ok").and_then(Value::as_bool) != Some(true) {
+        let error = value.get("error").and_then(Value::as_str).unwrap_or("?");
+        warn!("{context}: luau falhou: {error}");
+        return None;
+    }
+    value.get("result")
 }
 
 pub struct GamePanelPlugin;
@@ -164,7 +185,7 @@ fn game_card() -> impl Scene {
 
 fn card_title(glyph: char, key: StrKey) -> impl Scene {
     bsn! {
-        @icon_caption(glyph, t(Lang::default(), key), icons::ICON_DIM)
+        @icon_caption_key(glyph, key, icons::ICON_DIM)
         Pickable::IGNORE
     }
 }
@@ -195,7 +216,7 @@ fn rain_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameRain)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameRain)) LangLabel(StrKey::GameRain) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
@@ -215,7 +236,7 @@ fn clouds_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameClouds)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameClouds)) LangLabel(StrKey::GameClouds) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
@@ -235,7 +256,7 @@ fn sun_yaw_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameSunYaw)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameSunYaw)) LangLabel(StrKey::GameSunYaw) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
@@ -255,7 +276,7 @@ fn sun_pitch_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameSunPitch)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameSunPitch)) LangLabel(StrKey::GameSunPitch) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
@@ -275,7 +296,7 @@ fn sun_light_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameSunLight)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameSunLight)) LangLabel(StrKey::GameSunLight) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
@@ -295,7 +316,7 @@ fn wind_slider() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            @caption(t(Lang::default(), StrKey::GameWind)) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::GameWind)) LangLabel(StrKey::GameWind) Node { width: px(76), flex_shrink: 0.0 } Pickable::IGNORE
             --
             @FeathersSlider {
                 @min: 0.0f32,
@@ -367,8 +388,11 @@ fn push_slider(
     };
     state.dragging = Some(dragging);
     state.timer = POLL; // dá um segundo de respiro ao arrasto
-    if state.task.is_none() {
-        state.task = Some(methods::lua_eval(&bridge.client, &code));
+    // slot de COMANDOS separado da leitura; ocupado → guarda o último pendente
+    if state.cmd_task.is_none() {
+        state.cmd_task = Some(methods::lua_eval(&bridge.client, &code));
+    } else {
+        state.pending_cmd = Some(code);
     }
 }
 
@@ -381,22 +405,56 @@ fn poll_game(world: &mut World) {
     ) {
         return;
     }
-    // 1. drena o task de comandos/leitura combinada
+    // 0. drena o slot de COMANDOS (resultado ignorado, só erros interessam)
+    let mut cmd = world.resource_mut::<GameState>().cmd_task.take();
+    if let Some(current) = cmd.as_mut() {
+        match block_on(poll_once(current)) {
+            Some(Ok(value)) => {
+                if value.get("ok").and_then(Value::as_bool) != Some(true) {
+                    let error = value.get("error").and_then(Value::as_str).unwrap_or("?");
+                    warn!("game panel: comando falhou: {error}");
+                }
+                cmd = None;
+            }
+            Some(Err(error)) => {
+                warn!("game panel: comando: {error}");
+                cmd = None;
+            }
+            None => {}
+        }
+    }
+    if cmd.is_none()
+        && let Some(code) = world.resource_mut::<GameState>().pending_cmd.take()
+    {
+        let bridge = world.resource::<ViberBridge>().client;
+        world.resource_mut::<GameState>().cmd_task = Some(methods::lua_eval(&bridge, &code));
+    }
+    if let Some(current) = cmd {
+        world.resource_mut::<GameState>().cmd_task = Some(current);
+    }
+    // 1. drena o task de leitura (clock/weather) — o resultado está em `result`
     let mut task = world.resource_mut::<GameState>().task.take();
     if let Some(current) = task.as_mut() {
         match block_on(poll_once(current)) {
             Some(Ok(value)) => {
-                let minute = value.get("minute").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                let rain = value.get("rain").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                let clouds = value.get("clouds").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                let wind = value.get("wind").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                let (h, m) = (
-                    (minute / 60.0).floor() as u32,
-                    minute.rem_euclid(60.0) as u32,
-                );
-                world.resource_mut::<GameState>().readout =
-                    format!("{h:02}:{m:02} · chuva {rain:#} · nuvens {clouds:#} · vento {wind:#}");
-                world.resource_mut::<GameState>().dirty = true;
+                if let Some(result) = lua_result(&value, "game panel") {
+                    let minute = result.get("minute").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let rain = result.get("rain").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let clouds = result.get("clouds").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let wind = result.get("wind").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let (h, m) = (
+                        (minute / 60.0).floor() as u32,
+                        minute.rem_euclid(60.0) as u32,
+                    );
+                    let lang = *world.resource::<Lang>();
+                    world.resource_mut::<GameState>().readout = format!(
+                        "{h:02}:{m:02} · {} {rain:#} · {} {clouds:#} · {} {wind:#}",
+                        pick(lang, "chuva", "rain"),
+                        pick(lang, "nuvens", "clouds"),
+                        pick(lang, "vento", "wind"),
+                    );
+                    world.resource_mut::<GameState>().dirty = true;
+                }
                 task = None;
             }
             Some(Err(error)) => {
@@ -409,13 +467,16 @@ fn poll_game(world: &mut World) {
     if let Some(current) = task {
         world.resource_mut::<GameState>().task = Some(current);
     }
-    // 2. drena o task do runtime info
+    // 2. drena o task do runtime info — idem, aninhado em `result`
     let mut info = world.resource_mut::<GameState>().info_task.take();
     if let Some(current) = info.as_mut() {
         match block_on(poll_once(current)) {
             Some(Ok(value)) => {
-                world.resource_mut::<GameState>().runtime = runtime_lines(&value);
-                world.resource_mut::<GameState>().dirty = true;
+                if let Some(result) = lua_result(&value, "game panel") {
+                    let lang = *world.resource::<Lang>();
+                    world.resource_mut::<GameState>().runtime = runtime_lines(result, lang);
+                    world.resource_mut::<GameState>().dirty = true;
+                }
                 info = None;
             }
             Some(Err(error)) => {
@@ -465,7 +526,7 @@ fn poll_game(world: &mut World) {
 }
 
 /// The runtime lines from an EntityInfo value.
-fn runtime_lines(value: &Value) -> Vec<String> {
+fn runtime_lines(value: &Value, lang: Lang) -> Vec<String> {
     let mut out = Vec::new();
     if let Some(name) = value.get("name").and_then(|v| v.as_str()) {
         out.push(format!("• {name}"));
@@ -474,16 +535,20 @@ fn runtime_lines(value: &Value) -> Vec<String> {
         value.get("hp").and_then(|v| v.as_f64()),
         value.get("max_hp").and_then(|v| v.as_f64()),
     ) {
-        out.push(format!("• vida {hp:.0}/{max:.0}"));
+        out.push(format!("• {} {hp:.0}/{max:.0}", pick(lang, "vida", "HP")));
     }
     if let Some(components) = value.get("components").and_then(|v| v.as_array()) {
-        out.push(format!("• {} componente(s)", components.len()));
+        out.push(format!(
+            "• {} {}",
+            components.len(),
+            pick(lang, "componente(s)", "component(s)")
+        ));
     }
     if let Some(ai) = value.get("ai")
         && !ai.is_null()
         && let Some(ai_state) = ai.get("state").and_then(|v| v.as_str())
     {
-        out.push(format!("• IA: {ai_state}"));
+        out.push(format!("• {}: {ai_state}", pick(lang, "IA", "AI")));
     }
     if let Some(script) = value.get("script").and_then(|v| v.as_str()) {
         out.push(format!("• script: {script}"));

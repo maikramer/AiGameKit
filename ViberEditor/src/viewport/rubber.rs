@@ -89,6 +89,14 @@ fn rubber_interaction(world: &mut World) {
 /// Positions (or hides) the marquee overlay from the current band.
 fn position_rect(world: &mut World) {
     let band = *world.resource::<RubberBand>();
+    // `band.start/now` são px FÍSICOS do viewport; `Val::Px` resolve como
+    // lógico — sem dividir pelo scale factor a marquee erra no HiDPI
+    let scale = world
+        .query::<&Window>()
+        .iter(world)
+        .next()
+        .map(Window::scale_factor)
+        .unwrap_or(1.0);
     let mut rects = world.query_filtered::<&mut Node, With<RubberRect>>();
     let Ok(mut node) = rects.single_mut(world) else {
         return;
@@ -99,8 +107,8 @@ fn position_rect(world: &mut World) {
         Display::None
     };
     if band.active {
-        let min = band.start.min(band.now);
-        let size = (band.now - band.start).abs();
+        let min = band.start.min(band.now) / scale;
+        let size = (band.now - band.start).abs() / scale;
         node.position_type = PositionType::Absolute;
         node.left = Val::Px(min.x);
         node.top = Val::Px(min.y);

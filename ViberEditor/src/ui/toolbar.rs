@@ -9,6 +9,7 @@
 //! Every button label and tooltip is bilingual: spawned with [`t`] plus a [`LangLabel`] /
 //! [`LangTooltip`] marker, rewritten in place when [`Lang`] changes.
 
+use crate::ui::icons::icon_caption_key;
 use bevy::feathers::containers::flex_spacer;
 use bevy::feathers::controls::{ButtonVariant, FeathersToolButton};
 use bevy::feathers::display::caption;
@@ -17,7 +18,7 @@ use bevy::tasks::{Task, block_on, poll_once};
 use bevy::ui_widgets::Activate;
 use serde_json::Value;
 
-use super::icons::{self, fa, icon, icon_caption};
+use super::icons::{self, fa, icon};
 use super::strings::{
     Lang, LangButton, LangTooltip, StrKey, game_running, game_starting, needs_reload,
     paused_suffix, t,
@@ -54,16 +55,16 @@ pub struct PauseIcon;
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct PlayHereButton;
 
-/// O botão "Vista" (popover com grid/colliders/projeção/vistas).
-#[derive(Component, Debug, Clone, Copy, Default)]
-pub struct ViewOptionsButton;
-
 /// O alvo pendente do play-from-here (consumido quando a bridge liga).
 #[derive(Resource, Debug, Default)]
 pub struct PendingPlayFrom(pub Option<[f32; 2]>);
 
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct StopButton;
+
+/// "Jogar cena" (F7): corre a cena da aba ativa (projetos com cenas) em vez da principal.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct PlaySceneButton;
 
 /// Whether the running game is frozen by the editor, and the in-flight freeze/resume call.
 #[derive(Resource, Debug, Default)]
@@ -98,7 +99,7 @@ pub fn toolbar() -> impl Scene {
             @FeathersToolButton {
                 @variant: ButtonVariant::Plain,
                 @caption: bsn! {
-                    @icon_caption(fa::FLOPPY_DISK, t(lang, StrKey::BtnSave), icons::ICON)
+                    @icon_caption_key(fa::FLOPPY_DISK, StrKey::BtnSave, icons::ICON)
                 },
             }
             SaveButton
@@ -123,7 +124,7 @@ pub fn toolbar() -> impl Scene {
                 @FeathersToolButton {
                     @variant: ButtonVariant::Primary,
                     @caption: bsn! {
-                        @icon_caption(fa::PLAY, t(lang, StrKey::BtnPlay), Color::WHITE)
+                        @icon_caption_key(fa::PLAY, StrKey::BtnPlay, Color::WHITE)
                     },
                 }
                 PlayButton
@@ -134,13 +135,24 @@ pub fn toolbar() -> impl Scene {
                 @FeathersToolButton {
                     @variant: ButtonVariant::Plain,
                     @caption: bsn! {
-                        @icon_caption(fa::LOCATION_DOT, t(lang, StrKey::BtnPlayHere), Color::srgb(0.55, 0.85, 0.6))
+                        @icon_caption_key(fa::LOCATION_DOT, StrKey::BtnPlayHere, Color::srgb(0.55, 0.85, 0.6))
                     },
                 }
                 PlayHereButton
                 Tooltip(t(lang, StrKey::TipPlayHere))
                 LangTooltip(StrKey::TipPlayHere)
                 on(play_here_clicked)
+                --
+                @FeathersToolButton {
+                    @variant: ButtonVariant::Plain,
+                    @caption: bsn! {
+                        @icon_caption_key(fa::CUBES, StrKey::PlayScene, Color::srgb(0.6, 0.78, 1.0))
+                    },
+                }
+                PlaySceneButton
+                Tooltip(t(lang, StrKey::PlaySceneTip))
+                LangTooltip(StrKey::PlaySceneTip)
+                on(play_scene_clicked)
                 --
                 @FeathersToolButton {
                     @variant: ButtonVariant::Plain,
@@ -166,10 +178,10 @@ pub fn toolbar() -> impl Scene {
             @FeathersToolButton {
                 @variant: ButtonVariant::Plain,
                 @caption: bsn! {
-                    @icon_caption(fa::COMPASS, t(lang, StrKey::ViewTitle), icons::ICON)
+                    @icon_caption_key(fa::COMPASS, StrKey::ViewTitle, icons::ICON)
                 },
             }
-            ViewOptionsButton
+            super::view_options::ViewOptionsButton
             Tooltip(t(lang, StrKey::ViewTitle))
             LangTooltip(StrKey::ViewTitle)
             on(super::view_options::view_options_clicked)
@@ -187,6 +199,7 @@ pub fn toolbar() -> impl Scene {
                     ]
                 },
             }
+            super::strings::LangToggle
             Tooltip(t(lang, StrKey::TipLang))
             LangTooltip(StrKey::TipLang)
             on(super::strings::toggle_lang)
@@ -209,6 +222,11 @@ fn toolbar_separator() -> impl Scene {
 
 /// Keeps the toolbar title on the open world: `name.xml`, `name.xml •` with unsaved edits.
 pub fn update_world_title(doc: Res<SceneDoc>, mut titles: Query<&mut Text, With<WorldTitle>>) {
+    // o título só depende do doc: sem guard, `dirty_paths()` (Vec<String>)
+    // corria todos os frames
+    if !doc.is_changed() {
+        return;
+    }
     let name = doc
         .world_path()
         .file_name()
@@ -280,6 +298,17 @@ pub fn update_status(
     mut labels: Query<&mut Text, With<StatusLabel>>,
     mut dots: Query<&mut BackgroundColor, With<StatusDot>>,
 ) {
+    // todas as fontes da linha: sem nada mudado, não há String nova a construir
+    if !(lang.is_changed()
+        || bridge.is_changed()
+        || doc.is_changed()
+        || pause.is_changed()
+        || tool.is_changed()
+        || edit.is_changed()
+        || sync.is_changed())
+    {
+        return;
+    }
     let world = doc
         .world_path()
         .file_name()
@@ -304,7 +333,16 @@ pub fn update_status(
         EngineStatus::Connected { version, .. } => {
             (game_running(*lang, version), Color::srgb(0.45, 0.8, 0.5))
         }
-        EngineStatus::Failed(_) => (String::new(), Color::srgb(0.9, 0.4, 0.4)),
+        // a razão era só de log — o utilizador via um ponto vermelho mudo
+        EngineStatus::Failed(reason) => {
+            let short = reason.split('\n').next().unwrap_or(reason);
+            let short = if short.len() > 60 {
+                format!("{}…", &short[..57])
+            } else {
+                short.to_string()
+            };
+            (short, Color::srgb(0.9, 0.4, 0.4))
+        }
     };
     let game = if pause.paused && matches!(bridge.status, EngineStatus::Connected { .. }) {
         format!("{game}{}", paused_suffix(*lang))
@@ -342,6 +380,9 @@ pub fn play_shortcuts(
 ) {
     if keys.just_pressed(KeyCode::F5) {
         commands.queue(play);
+    }
+    if keys.just_pressed(KeyCode::F7) {
+        commands.queue(play_scene);
     }
     if keys.just_pressed(KeyCode::F9) {
         commands.queue(play_from_here);
@@ -419,7 +460,8 @@ fn play_from_here(world: &mut World) {
         .get_resource::<viber::editor_camera::EditorCamState>()
         .map(|camera| [camera.target.x, camera.target.z]);
     world.resource_mut::<PendingPlayFrom>().0 = target;
-    play(world);
+    // O alvo é um ponto DESTA cena: o jogo arranca nela (não na principal).
+    play_scene(world);
 }
 
 /// Quando a bridge liga com um play-from-here pendente, teleporta o herói.
@@ -431,20 +473,20 @@ pub fn poll_play_from_here(
     let Some(at) = pending.0.take() else {
         return;
     };
-    if !matches!(bridge.status, EngineStatus::Connected { .. }) {
-        // ainda a arrancar: mantém o alvo até ligar — a menos que o processo
-        // tenha morrido/timeout: aí o pending não tem quem o consuma e
-        // sobreviveria até ao PRÓXIMO Play (mesmo F5), teleportando o herói
-        // para um alvo antigo.
-        if matches!(bridge.status, EngineStatus::Failed(_)) {
-            warn!("play-from-here: o jogo não arrancou — alvo pendente descartado");
-            return;
+    match bridge.status {
+        EngineStatus::Connected { .. } => {
+            let code = format!("viber.debug.tp({}, {})", at[0], at[1]);
+            state.task = Some(methods::lua_eval(&bridge.client, &code));
         }
-        pending.0 = Some(at);
-        return;
+        // ainda a arrancar: mantém o alvo até ligar — QUALQUER outro estado
+        // (falhou, ou o processo saiu com sucesso a meio do boot) descarta:
+        // o pending não tem quem o consuma e sobreviveria até ao PRÓXIMO
+        // Play (mesmo F5), teleportando o herói para um alvo antigo.
+        EngineStatus::WaitingForBridge => pending.0 = Some(at),
+        EngineStatus::Stopped | EngineStatus::Failed(_) => {
+            warn!("play-from-here: o jogo não arrancou — alvo pendente descartado");
+        }
     }
-    let code = format!("viber.debug.tp({}, {})", at[0], at[1]);
-    state.task = Some(methods::lua_eval(&bridge.client, &code));
 }
 
 /// Queues the freeze/resume call and flips the tracked state.
@@ -495,8 +537,30 @@ pub fn poll_pause(
     }
 }
 
-/// Saves (through the engine's editing API), then runs the world as a separate game process.
+fn play_scene_clicked(_activate: On<Activate>, mut commands: Commands) {
+    commands.queue(play_scene);
+}
+
+/// "Jogar cena": como o Play, mas arranca na cena da aba ativa.
+fn play_scene(world: &mut World) {
+    let path = world.resource::<SceneDoc>().world_path().to_path_buf();
+    play_path(world, path);
+}
+
+/// Saves (through the engine's editing API), then runs the GAME as a separate process —
+/// from the project's main scene (projects with scenes), whatever tab is open.
 fn play(world: &mut World) {
+    let path = world.resource::<SceneDoc>().world_path().to_path_buf();
+    let project = viber::project::Project::discover(&path);
+    let path = if project.declared {
+        project.main_scene_path()
+    } else {
+        path
+    };
+    play_path(world, path);
+}
+
+fn play_path(world: &mut World, path: std::path::PathBuf) {
     crate::scene::save_world(world);
     let explicit = world.resource::<EditorConfig>().viber_bin.clone();
     let binary = match launch::viber_binary(explicit.as_deref()) {
@@ -510,7 +574,6 @@ fn play(world: &mut World) {
             return;
         }
     };
-    let path = world.resource::<SceneDoc>().world_path().to_path_buf();
     let mut bridge = world.resource_mut::<ViberBridge>();
     match bridge.play(&binary, &path) {
         Ok(()) => info!("play: {} on bridge :{}", path.display(), bridge.port),

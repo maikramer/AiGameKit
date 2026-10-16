@@ -1,6 +1,8 @@
-//! OS drag-and-drop into the viewport (Fase 3): a `.glb` dropped anywhere over the
-//! window becomes an insert op — [`viber::scene::catalog::glb_drop`] — dropped on
+//! OS drag-and-drop into the viewport (Fase 3): `.glb` files dropped anywhere over
+//! the window become insert ops — [`viber::scene::catalog::glb_drop`] — dropped on
 //! the terrain under the last viewport cursor ray (world origin as fallback).
+//! Multiple files in one gesture land side by side (offset per index) as ONE
+//! undoable transaction.
 
 use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
@@ -19,6 +21,8 @@ impl Plugin for DropPlugin {
 }
 
 fn handle_drop(mut events: MessageReader<FileDragAndDrop>, mut commands: Commands) {
+    // os eventos de UM gesto chegam no mesmo frame: junta tudo num lote
+    let mut batch: Vec<String> = Vec::new();
     for event in events.read() {
         let FileDragAndDrop::DroppedFile { path_buf, .. } = event else {
             continue;
@@ -28,38 +32,64 @@ fn handle_drop(mut events: MessageReader<FileDragAndDrop>, mut commands: Command
             info!("drop: `{path}` não é .glb — ignorado");
             continue;
         }
-        commands.queue(move |world: &mut World| {
-            let at = drop_point(world).unwrap_or(Vec3::ZERO);
-            let parent = world
-                .resource::<viber::scene::doc::SceneDoc>()
-                .selector(&NodeRef::root(0));
-            let op = match viber::scene::catalog::glb_drop(
-                world.resource::<viber::scene::doc::SceneDoc>(),
-                &parent,
-                &path,
-                [at.x, at.y, at.z],
-            ) {
-                Ok(op) => op,
+        batch.push(path);
+    }
+    if batch.is_empty() {
+        return;
+    }
+    commands.queue(move |world: &mut World| {
+        let at = drop_point(world).unwrap_or(Vec3::ZERO);
+        let doc = world.resource::<viber::scene::doc::SceneDoc>().clone();
+        let parent = doc.selector(&NodeRef::root(0));
+        let lang = *world.resource::<crate::ui::strings::Lang>();
+        let mut ops = Vec::new();
+        let mut names = Vec::new();
+        for (index, path) in batch.iter().enumerate() {
+            // N ficheiros: offset lateral por índice — sem isto caíam todos
+            // exatamente sobrepostos
+            let at = at + Vec3::X * (1.5 * index as f32);
+            match viber::scene::catalog::glb_drop(&doc, &parent, path, [at.x, at.y, at.z]) {
+                Ok(op) => {
+                    names.push(
+                        std::path::Path::new(path)
+                            .file_stem()
+                            .and_then(|stem| stem.to_str())
+                            .unwrap_or("glb")
+                            .to_owned(),
+                    );
+                    ops.push(op);
+                }
                 Err(error) => {
                     warn!("drop {path}: {error:#}");
-                    return;
                 }
-            };
-            let name = std::path::Path::new(&path)
-                .file_stem()
-                .and_then(|stem| stem.to_str())
-                .unwrap_or("glb");
-            world
-                .resource_mut::<PendingEdits>()
-                .push_selecting_inserted(format!("drop {name}"), vec![op]);
-            let lang = *world.resource::<crate::ui::strings::Lang>();
-            let label = format!(
-                "{}: {name}",
-                crate::ui::strings::t(lang, crate::ui::strings::StrKey::DropGlb)
-            );
-            world.resource_mut::<crate::scene::EditStatus>().0 = label;
-        });
-    }
+            }
+        }
+        if ops.is_empty() {
+            return;
+        }
+        let label = if names.len() == 1 {
+            format!(
+                "{} {}",
+                crate::ui::strings::pick(lang, "soltar", "drop"),
+                names[0]
+            )
+        } else {
+            format!(
+                "{} {} {}",
+                crate::ui::strings::pick(lang, "soltar", "drop"),
+                names.len(),
+                crate::ui::strings::pick(lang, "ficheiros", "files")
+            )
+        };
+        world
+            .resource_mut::<PendingEdits>()
+            .push_selecting_inserted(label.clone(), ops);
+        world.resource_mut::<crate::scene::EditStatus>().0 = format!(
+            "{}: {}",
+            crate::ui::strings::t(lang, crate::ui::strings::StrKey::DropGlb),
+            label
+        );
+    });
 }
 
 /// The terrain point under the last viewport cursor ray.

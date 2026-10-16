@@ -133,8 +133,8 @@ pub fn pane_body() -> impl Scene {
     }
 }
 
-/// Plain `Text` spawned by the editor's own code without any `TextFont` keeps Bevy's
-/// default (1 rem ≈ 20 px, embedded mono font) — the World Doc summary, log lines… Those
+/// Plain `Text` spawned by the editor's own code without a font of its own keeps Bevy's
+/// default (embedded mono SUBSET, no accents; 1 rem ≈ 20 px when no size either) — the World Doc summary, log lines… Those
 /// under the editor root get the body font. The game's UI (also in this world) is left
 /// alone: only descendants of [`crate::ui::EditorRoot`] are touched.
 #[allow(clippy::type_complexity)]
@@ -146,8 +146,11 @@ pub fn repair_default_fonts(
     server: Res<AssetServer>,
 ) {
     for (entity, text_font) in &added {
+        // A fonte default embutida do Bevy é um SUBSET mono sem acentos (ã, é, —, …
+        // saíam como glifo em falta): todo o texto do editor sem fonte própria passa
+        // à Fira Sans; o tamanho pedido mantém-se (o default 1 rem vira o corpo).
         let default_font = matches!(&text_font.font, bevy::text::FontSource::Handle(handle) if *handle == Handle::default());
-        if !default_font || text_font.font_size != FontSize::Rem(1.0) {
+        if !default_font {
             continue;
         }
         let in_editor = parents
@@ -157,10 +160,15 @@ pub fn repair_default_fonts(
             continue;
         }
         let font: Handle<Font> = server.load(fonts::REGULAR);
+        let font_size = if text_font.font_size == FontSize::Rem(1.0) {
+            FontSize::Px(FONT_BODY)
+        } else {
+            text_font.font_size
+        };
         commands.entity(entity).try_insert((
             TextFont {
                 font: font.into(),
-                font_size: FontSize::Px(FONT_BODY),
+                font_size,
                 ..text_font.clone()
             },
             FontRepaired,

@@ -52,7 +52,10 @@ fn leave_stamp(world: &mut World) {
 /// Places stamps: press starts a stroke; dabs (time + spacing gated) insert
 /// one instance each, coalesced into ONE undo per stroke.
 fn stamp_place(world: &mut World) {
-    if world.resource::<GizmoTool>().mode != Mode::Stamp {
+    if world.resource::<GizmoTool>().mode != Mode::Stamp
+        || world.resource::<crate::ui::mode_strip::EditorModeState>().0
+            != crate::ui::mode_strip::EditorMode::ThreeD
+    {
         world.resource_mut::<StampStroke>().key = None;
         return;
     }
@@ -84,12 +87,17 @@ fn stamp_place(world: &mut World) {
     // stroke key + espaçamento
     let key = {
         let mut stroke = world.resource_mut::<StampStroke>();
-        if starting || stroke.key.is_none() {
+        if starting {
             stroke.next_key += 1;
             stroke.key = Some(stroke.next_key);
             stroke.since_dab = DAB_INTERVAL;
             stroke.last = None;
         }
+        // idem do terreno: o stroke só nasce num press COM hover — um drag
+        // iniciado fora do viewport não carimba ao atravessá-lo
+        let Some(key) = stroke.key else {
+            return;
+        };
         stroke.since_dab += delta;
         if stroke.since_dab < DAB_INTERVAL {
             return;
@@ -101,7 +109,7 @@ fn stamp_place(world: &mut World) {
         }
         stroke.since_dab = std::time::Duration::ZERO;
         stroke.last = Some(at);
-        stroke.key.expect("set above")
+        key
     };
     // yaw cicla por carimbo (variedade visual sem UI extra)
     let yaw = {
@@ -136,15 +144,8 @@ fn stamp_place(world: &mut World) {
             world.resource_mut::<crate::scene::EditStatus>().0 = format!("stamp: {error}");
         }
     }
-    if buttons.just_released(MouseButton::Left) {
-        leave_stroke(world);
-    }
-}
-
-fn leave_stroke(world: &mut World) {
-    let mut stroke = world.resource_mut::<StampStroke>();
-    stroke.key = None;
-    stroke.last = None;
+    // (o release limpa o stroke no guard `!buttons.pressed` lá em cima — o
+    // `just_released` aqui nunca era alcançável)
 }
 
 /// Anel de pré-visualização na pose do carimbo (como o do pincel de terreno).
@@ -186,11 +187,23 @@ const RING_RADIUS: f32 = 1.2;
 
 /// S entra no Stamp (com asset ativo); Esc sai.
 pub fn stamp_keys(world: &mut World) {
-    let (press_s, press_esc) = {
+    // Fora do modo 3D, nada (mesma razão do brush_keys).
+    if world.resource::<crate::ui::mode_strip::EditorModeState>().0
+        != crate::ui::mode_strip::EditorMode::ThreeD
+    {
+        return;
+    }
+    // os MESMOS guards do `tool_keys`: voar (RMB) e Ctrl+S (gravar) não podem
+    // comutar de ferramenta a meio
+    let (press_s, press_esc, ctrl, rmb, hover) = {
         let keys = world.resource::<ButtonInput<KeyCode>>();
+        let buttons = world.resource::<ButtonInput<MouseButton>>();
         (
             keys.just_pressed(KeyCode::KeyS),
             keys.just_pressed(KeyCode::Escape),
+            keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]),
+            buttons.pressed(MouseButton::Right),
+            world.resource::<ViewportHover>().0,
         )
     };
     let typing = world
@@ -200,7 +213,7 @@ pub fn stamp_keys(world: &mut World) {
     if typing {
         return;
     }
-    if press_s && world.resource::<ActiveStamp>().0.is_some() {
+    if press_s && !ctrl && !rmb && hover && world.resource::<ActiveStamp>().0.is_some() {
         world.resource_mut::<GizmoTool>().mode = Mode::Stamp;
     }
     if world.resource::<GizmoTool>().mode == Mode::Stamp && press_esc {

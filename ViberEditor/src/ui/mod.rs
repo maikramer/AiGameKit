@@ -15,6 +15,8 @@ mod logs;
 pub mod mode_strip;
 mod problems;
 mod profiler;
+pub mod scene_tabs;
+pub mod search;
 pub mod strings;
 pub mod theme;
 mod toolbar;
@@ -53,6 +55,8 @@ impl Plugin for EditorUiPlugin {
                 biomes::BiomesPlugin,
                 problems::ProblemsPlugin,
                 profiler::ProfilerPlugin,
+                scene_tabs::SceneTabsPlugin,
+                search::SearchPlugin,
             ))
             .add_systems(
                 Startup,
@@ -64,6 +68,7 @@ impl Plugin for EditorUiPlugin {
                     layout::apply_startup_tab,
                     layout::apply_active_tab.after(layout::apply_startup_tab),
                     layout::apply_dock_sizes,
+                    layout::compact_tabs,
                     layout::update_status_bar,
                     toolbar::update_world_title,
                     mode_strip::apply_startup_mode,
@@ -90,13 +95,7 @@ impl Plugin for EditorUiPlugin {
                     files::scan_files,
                     files::render_files,
                     files::render_file_header,
-                    (
-                        worlddoc::load_world_doc,
-                        worlddoc::reload_world_doc,
-                        worlddoc::poll_bake,
-                        worlddoc::render_world_doc,
-                    )
-                        .chain(),
+                    (worlddoc::load_world_doc, worlddoc::render_world_doc).chain(),
                 ),
             );
     }

@@ -24,7 +24,7 @@ use super::doc::{NodeRef, SceneDoc};
 use super::property::{FieldDef, FieldKind, FieldTarget, SectionId, SectionOpen};
 use super::{PendingEdits, Selection};
 use crate::ui::icons::{self, fa, icon_caption};
-use crate::ui::strings::{Lang, StrKey, t};
+use crate::ui::strings::{Bi, Lang, StrKey, pick, t};
 use crate::ui::tooltip::Tooltip;
 
 /// Revert / remove button of one attribute (`prop-<name>`, an unknown `connect-*`).
@@ -102,9 +102,25 @@ pub fn field_for(def: &ExportDef, lang: Lang) -> FieldDef {
             name: def.name.clone(),
             default,
             int: matches!(def.ty, PropType::Int { .. }),
+            // o range viaja no alvo: o commit clampa (a runtime rejeita
+            // valores fora do `check_range` declarado)
+            range: match &def.ty {
+                PropType::Number { min, max } => Some((
+                    min.map(|value| value as f32).unwrap_or(f32::MIN),
+                    max.map(|value| value as f32).unwrap_or(f32::MAX),
+                )),
+                PropType::Int { min, max } => Some((
+                    min.map(|value| value as f32).unwrap_or(f32::MIN),
+                    max.map(|value| value as f32).unwrap_or(f32::MAX),
+                )),
+                _ => None,
+            },
         },
         kind,
-        tip: intern(tip),
+        tip: {
+            let tip = intern(tip);
+            Bi(tip, tip)
+        },
     }
 }
 
@@ -248,7 +264,10 @@ pub fn render(
             key: "groups".into(),
         },
         kind: FieldKind::Text,
-        tip: "groups=\"a b\" — viber.group / viber.call_group / @grupo",
+        tip: Bi(
+            "groups=\"a b\" — viber.group / viber.call_group / @grupo",
+            "groups=\"a b\" — viber.group / viber.call_group / @group",
+        ),
     };
     super::property::spawn_field(commands, body, doc, node, xml, &groups, lang);
 }
@@ -270,7 +289,10 @@ pub fn signal_field(signal: &SignalDef, lang: Lang) -> FieldDef {
             key: connect_attr(&signal.name),
         },
         kind: FieldKind::Text,
-        tip: intern(tip),
+        tip: {
+            let tip = intern(tip);
+            Bi(tip, tip)
+        },
     }
 }
 
@@ -323,6 +345,7 @@ fn reset_prop(
     buttons: Query<&PropReset>,
     selection: Res<Selection>,
     doc: Res<SceneDoc>,
+    lang: Res<crate::ui::strings::Lang>,
     mut edits: ResMut<PendingEdits>,
 ) {
     let Ok(button) = buttons.get(click.event_target()) else {
@@ -333,7 +356,10 @@ fn reset_prop(
     };
     let attr = button.0.clone();
     edits.push(
-        format!("{attr}: repor default"),
+        format!(
+            "{attr}: {}",
+            pick(*lang, "repor default", "reset to default")
+        ),
         vec![EditOp::Set {
             node: doc.selector(node),
             attrs: [(attr, None)].into_iter().collect(),
@@ -386,7 +412,12 @@ mod tests {
             .map(|def| field_for(def, Lang::Pt))
             .collect();
         assert!(matches!(fields[0].kind, FieldKind::Number { .. }));
-        assert!(fields[0].tip.starts_with("m/s — prop-speed · number(0..4)"));
+        assert!(
+            fields[0]
+                .tip
+                .get(Lang::Pt)
+                .starts_with("m/s — prop-speed · number(0..4)")
+        );
         assert!(matches!(
             fields[1].target,
             FieldTarget::Prop { int: true, .. }
@@ -413,6 +444,7 @@ mod tests {
         assert!(
             field
                 .tip
+                .get(Lang::Pt)
                 .starts_with("abriu — opened(gold) · connect-opened")
         );
         assert_eq!(

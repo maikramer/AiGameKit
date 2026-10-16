@@ -215,6 +215,7 @@ fn tool_keys(
     focus: Option<Res<InputFocus>>,
     editable: Query<(), With<bevy::text::EditableText>>,
     hover: Res<ViewportHover>,
+    mode: Res<crate::ui::mode_strip::EditorModeState>,
     mut tool: ResMut<GizmoTool>,
     selected: Res<SelectedEntity>,
     globals: Query<&GlobalTransform>,
@@ -228,14 +229,18 @@ fn tool_keys(
     if typing || ctrl || buttons.pressed(MouseButton::Right) || !hover.0 {
         return;
     }
-    for (key, mode) in [
+    // Fora do modo 3D, Q/W/E/R/T/F não armam (mesmo motivo do brush_keys).
+    if mode.0 != crate::ui::mode_strip::EditorMode::ThreeD {
+        return;
+    }
+    for (key, next) in [
         (KeyCode::KeyQ, Mode::Select),
         (KeyCode::KeyW, Mode::Translate),
         (KeyCode::KeyE, Mode::Rotate),
         (KeyCode::KeyR, Mode::Scale),
     ] {
         if keys.just_pressed(key) {
-            tool.mode = mode;
+            tool.mode = next;
         }
     }
     if keys.just_pressed(KeyCode::KeyT) {
@@ -333,8 +338,30 @@ fn gizmo_interaction(world: &mut World) {
         .map(EditorCamState::eye)
         .unwrap_or(Vec3::ZERO);
 
-    if tool.mode == Mode::Terrain {
-        // The terrain brush owns the left button.
+    // Modo UI/Script: o viewport 3D não é o alvo (o painel Script é
+    // Pickable::IGNORE e o hover "atravessava"; cliques no canvas UI
+    // re-selecionavam nós 3D). Um drag em curso é cancelado com reposição.
+    if world.resource::<crate::ui::mode_strip::EditorModeState>().0
+        != crate::ui::mode_strip::EditorMode::ThreeD
+    {
+        if let Some(drag) = world.resource_mut::<GizmoInput>().drag.take() {
+            if let Some(mut transform) = world.get_mut::<Transform>(drag.entity) {
+                *transform = drag.start_local;
+            }
+            viber::scene::sync::teleport_body(world, drag.entity, drag.start_local);
+            for (_, entity, start) in &drag.group {
+                if let Some(mut transform) = world.get_mut::<Transform>(*entity) {
+                    *transform = *start;
+                }
+                viber::scene::sync::teleport_body(world, *entity, *start);
+            }
+        }
+        return;
+    }
+    if matches!(tool.mode, Mode::Terrain | Mode::Stamp) {
+        // O pincel de terreno e o stamp são os donos do botão esquerdo — sem
+        // isto o release fazia pick do nó sob o cursor (o stamp novo nunca
+        // ficava selecionado e o Inspector saltava a cada carimbo).
         return;
     }
     let frame = selected.and_then(|entity| gizmo_frame(world, entity, tool.local, eye));
@@ -352,7 +379,9 @@ fn gizmo_interaction(world: &mut World) {
     };
     world.resource_mut::<GizmoInput>().hover = hover;
 
-    // Esc cancels a drag: back to where it started.
+    // Esc cancels a drag: back to where it started — o primário E o grupo
+    // (só o `sync_scene` a correr reposporia os membros, e ele só reage a
+    // edições commitadas; sem isto o preview ficava baked na cena).
     if keys.just_pressed(KeyCode::Escape)
         && let Some(drag) = world.resource_mut::<GizmoInput>().drag.take()
     {
@@ -360,6 +389,12 @@ fn gizmo_interaction(world: &mut World) {
             *transform = drag.start_local;
         }
         viber::scene::sync::teleport_body(world, drag.entity, drag.start_local);
+        for (_, entity, start) in &drag.group {
+            if let Some(mut transform) = world.get_mut::<Transform>(*entity) {
+                *transform = *start;
+            }
+            viber::scene::sync::teleport_body(world, *entity, *start);
+        }
         return;
     }
 

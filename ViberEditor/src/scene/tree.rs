@@ -110,13 +110,29 @@ pub fn visible_rows(
     filter: &str,
 ) -> Vec<RowSpec> {
     let mut rows = Vec::new();
+    let mut walker = TreeWalker {
+        doc,
+        expansion,
+        lang,
+        rows: &mut rows,
+        filter_mode: false,
+    };
     if filter.trim().is_empty() {
-        push_children(doc, 0, &[], 0, expansion, lang, &mut rows);
+        walker.push_children(0, &[], 0);
     } else {
-        // com filtro: varre TUDO (a expansão não corta) e fica só o que casa
+        // com filtro: varre TUDO — inclusive ramos colapsados — e fica só o
+        // que casa; depth 0, porque o depth alimenta o indent do row e um
+        // sentinel gigante empurraria o conteúdo para fora do painel
         let needle = filter.trim().to_ascii_lowercase();
         let mut all = Vec::new();
-        push_children(doc, 0, &[], usize::MAX / 2, expansion, lang, &mut all);
+        let mut filtered = TreeWalker {
+            doc,
+            expansion,
+            lang,
+            rows: &mut all,
+            filter_mode: true,
+        };
+        filtered.push_children(0, &[], 0);
         rows = all
             .into_iter()
             .filter(|row| {
@@ -129,49 +145,55 @@ pub fn visible_rows(
     rows
 }
 
-fn push_children(
-    doc: &SceneDoc,
-    file: usize,
-    parent: &[usize],
-    depth: usize,
-    expansion: &TreeExpansion,
+/// The recursion state of a tree flatten (the walker keeps `push_children`
+/// at 3 arguments).
+struct TreeWalker<'a> {
+    doc: &'a SceneDoc,
+    expansion: &'a TreeExpansion,
     lang: Lang,
-    rows: &mut Vec<RowSpec>,
-) {
-    let children = if parent.is_empty() {
-        &doc.files[file].doc.children
-    } else {
-        match doc.node(&NodeRef {
-            file,
-            path: parent.to_vec(),
-        }) {
-            Some(node) => &node.children,
-            None => return,
-        }
-    };
-    for (index, child) in children.iter().enumerate() {
-        if rows.len() >= MAX_ROWS {
-            return;
-        }
-        let mut path = parent.to_vec();
-        path.push(index);
-        let node = NodeRef { file, path };
-        let include = doc.include_target(&node);
-        let expandable = !child.children.is_empty() || include.is_some();
-        let expanded = expandable && expansion.0.contains(&node);
-        rows.push(RowSpec {
-            node: node.clone(),
-            depth,
-            tag: child.tag.clone(),
-            label: friendly_node_label(lang, child),
-            expandable,
-            expanded,
-            included: file != 0,
-        });
-        if expanded {
-            match include {
-                Some(target) => push_children(doc, target, &[], depth + 1, expansion, lang, rows),
-                None => push_children(doc, file, &node.path, depth + 1, expansion, lang, rows),
+    rows: &'a mut Vec<RowSpec>,
+    /// Modo pesquisa: desce em TODOS os ramos, expandidos ou não.
+    filter_mode: bool,
+}
+
+impl TreeWalker<'_> {
+    fn push_children(&mut self, file: usize, parent: &[usize], depth: usize) {
+        let doc = self.doc;
+        let children = if parent.is_empty() {
+            &doc.files[file].doc.children
+        } else {
+            match doc.node(&NodeRef {
+                file,
+                path: parent.to_vec(),
+            }) {
+                Some(node) => &node.children,
+                None => return,
+            }
+        };
+        for (index, child) in children.iter().enumerate() {
+            if self.rows.len() >= MAX_ROWS {
+                return;
+            }
+            let mut path = parent.to_vec();
+            path.push(index);
+            let node = NodeRef { file, path };
+            let include = doc.include_target(&node);
+            let expandable = !child.children.is_empty() || include.is_some();
+            let expanded = expandable && self.expansion.0.contains(&node);
+            self.rows.push(RowSpec {
+                node: node.clone(),
+                depth,
+                tag: child.tag.clone(),
+                label: friendly_node_label(self.lang, child),
+                expandable,
+                expanded,
+                included: file != 0,
+            });
+            if self.filter_mode || expanded {
+                match include {
+                    Some(target) => self.push_children(target, &[], depth + 1),
+                    None => self.push_children(file, &node.path, depth + 1),
+                }
             }
         }
     }
@@ -182,9 +204,10 @@ fn push_children(
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct TreeRenameInput;
 
-/// O nó em renomeação inline (F2 / menu de contexto).
+/// O nó em renomeação inline (F2 / menu de contexto). `.1` = o foco já esteve
+/// no input (arma o commit-on-blur; evita commitar no frame de spawn).
 #[derive(Resource, Debug, Default, Clone)]
-pub struct RenameState(pub Option<NodeRef>);
+pub struct RenameState(pub Option<NodeRef>, pub bool);
 
 /// A caixa de pesquisa do dock Objects.
 #[derive(Component, Debug, Clone, Copy, Default)]
@@ -234,33 +257,54 @@ pub fn apply_tree_search(world: &mut World) {
     }
 }
 
-/// Enter no input de renomeação escreve o `name` (uma op `set`).
+/// Enter no input de renomeação escreve o `name` (uma op `set`); clicar fora
+/// COMMITA (estilo Godot) — o modo não encrava e o texto digitado não se perde.
 pub fn commit_rename(world: &mut World) {
-    let Some(focused) = world
-        .get_resource::<bevy::input_focus::InputFocus>()
-        .and_then(|focus| focus.get())
-    else {
+    let Some(node) = world.resource::<RenameState>().0.clone() else {
         return;
     };
-    if !world.get::<TreeRenameInput>(focused).is_some() {
-        return;
-    }
     let keys = world.resource::<ButtonInput<KeyCode>>();
     let enter = keys.just_pressed(KeyCode::Enter);
     let escape = keys.just_pressed(KeyCode::Escape);
-    if !enter && !escape {
+    let focused = world
+        .get_resource::<bevy::input_focus::InputFocus>()
+        .and_then(|focus| focus.get());
+    let on_input = focused.is_some_and(|entity| world.get::<TreeRenameInput>(entity).is_some());
+    let (was_focused, armed) = {
+        let rename = world.resource::<RenameState>();
+        (on_input, rename.1)
+    };
+    if on_input {
+        world.resource_mut::<RenameState>().1 = true;
+    }
+    // blur (o foco foi para outro lado): commita o que lá estiver — o 1.º
+    // frame com o foco NO input arma o blur-commit (evita commitar no frame
+    // de spawn, antes de o foco chegar)
+    let blur_commit = !was_focused && armed && !enter && !escape;
+    if !blur_commit && !enter && !escape {
         return;
     }
-    let node = world.resource::<RenameState>().0.clone();
-    let text = world.get::<Text>(focused).cloned();
-    world.resource_mut::<RenameState>().0 = None;
-    if let Some(mut focus) = world.get_resource_mut::<bevy::input_focus::InputFocus>() {
+    {
+        let mut rename = world.resource_mut::<RenameState>();
+        rename.0 = None;
+        rename.1 = false;
+    }
+    if !blur_commit
+        && let Some(mut focus) = world.get_resource_mut::<bevy::input_focus::InputFocus>()
+    {
         focus.clear();
     }
-    if !enter {
+    if !blur_commit && !enter {
         return;
     }
-    let (Some(node), Some(text)) = (node, text) else {
+    apply_rename(world, node);
+}
+
+/// Escreve o texto corrente do input como `name` (ou `id` em tags UI — a
+/// runtime de UI ignora `name`; era o F2 a criar atributos mortos).
+fn apply_rename(world: &mut World, node: NodeRef) {
+    let mut inputs = world.query_filtered::<&Text, With<TreeRenameInput>>();
+    let Some(text) = inputs.iter(world).next().cloned() else {
         return;
     };
     let doc = world.resource::<SceneDoc>().clone();
@@ -268,15 +312,24 @@ pub fn commit_rename(world: &mut World) {
         return;
     };
     let value = text.0.trim().to_owned();
-    if value.is_empty() || value == xml.attr("name").unwrap_or_default() {
+    let key = if viber::ui::is_ui_tag(&xml.tag) {
+        "id"
+    } else {
+        "name"
+    };
+    if value.is_empty() || value == xml.attr(key).unwrap_or_default() {
         return;
     }
     let selector = doc.selector(&node);
+    let lang = *world.resource::<crate::ui::strings::Lang>();
     world.resource_mut::<crate::scene::PendingEdits>().push(
-        format!("rename {selector}"),
+        format!(
+            "{} {selector}",
+            crate::ui::strings::pick(lang, "renomear", "rename")
+        ),
         vec![viber::scene::ops::EditOp::Set {
             node: selector,
-            attrs: [("name".to_owned(), Some(value))].into_iter().collect(),
+            attrs: [(key.to_owned(), Some(value))].into_iter().collect(),
         }],
     );
 }

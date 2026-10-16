@@ -7,6 +7,7 @@
 //! canonical `set` op — the same edit an agent makes with `viber scene set`.
 
 use super::theme;
+use crate::ui::strings::LangLabel;
 use crate::viewport::EditorViewport as EditorViewportAlias;
 use bevy::feathers::controls::{ButtonVariant, FeathersToolButton};
 use bevy::feathers::display::caption;
@@ -71,6 +72,9 @@ impl UiStatePreview {
 pub struct CanvasDrag {
     grabbed: bool,
     resize: bool,
+    /// The node grabbed at press time — the commit must write to THIS node,
+    /// not to whoever is selected at release (a click can change selection).
+    target: Option<NodeRef>,
     /// Rect at press time, game-UI logical px.
     start: Rect,
     /// Cursor at press / now, window physical px.
@@ -183,7 +187,7 @@ fn state_chip(state: UiStatePreview, key: StrKey) -> impl Scene {
     bsn! {
         @FeathersToolButton {
             @variant: ButtonVariant::Plain,
-            @caption: bsn! { @caption(t(Lang::default(), key)) },
+            @caption: bsn! { @caption(t(Lang::default(), key)) LangLabel(key) },
         }
         StateChip(state)
         on(state_chip_clicked)
@@ -202,15 +206,14 @@ fn state_chip_clicked(
 
 /// The selected node's UI rect in GAME-UI logical px (the units the XML's
 /// `left/top/width/height` speak), via `SceneSource` provenance.
+///
+/// A câmara de UI do jogo desenha num RenderTarget::Image (scale 1), logo
+/// `ComputedNode`/`UiGlobalTransform` dos nós de UI já estão em GAME-px —
+/// dividir pela scale factor da JANELA partia o rect ao meio no HiDPI (e o
+/// commit gravava metade dos valores).
 fn selected_ui_rect(world: &mut World) -> Option<Rect> {
     let node = world.resource::<Selection>().primary().cloned()?;
     let origin = world.resource::<SceneDoc>().origin_of(&node);
-    let scale = world
-        .query::<&Window>()
-        .iter(world)
-        .next()
-        .map(|window| window.scale_factor())
-        .unwrap_or(1.0);
     let mut query = world.query_filtered::<(
         &ComputedNode,
         &UiGlobalTransform,
@@ -221,11 +224,11 @@ fn selected_ui_rect(world: &mut World) -> Option<Rect> {
         if *source.0 != origin {
             continue;
         }
-        let size = node_size.size() / scale;
+        let size = node_size.size();
         if size.x < 1.0 || size.y < 1.0 {
             continue;
         }
-        let center = transform.translation / scale;
+        let center = transform.translation;
         let half = size / 2.0;
         let candidate = Rect::new(
             center.x - half.x,
@@ -280,16 +283,13 @@ fn canvas_to_window(world: &mut World, rect: Rect) -> Option<Rect> {
     let mut nodes =
         world.query_filtered::<(&ComputedNode, &UiGlobalTransform), With<EditorViewportAlias>>();
     let (node, transform) = nodes.single(world).ok()?;
-    // UI transforms/sizes are physical px; the game rect is logical px from the canvas'
-    // top-left (y down), so it only needs the canvas origin added.
+    // Tudo em px FÍSICOS primeiro (a imagem do viewport mostra 1:1, logo
+    // game-px == px físicos): origem do nó + letterbox + rect do jogo, e só
+    // DEPOIS uma única divisão pela scale factor da janela → lógico.
     let node_origin = transform.translation - node.size() * 0.5;
-    let origin = (node_origin + viewport.physical_position.as_vec2()) / scale;
-    Some(Rect::new(
-        origin.x + rect.min.x,
-        origin.y + rect.min.y,
-        origin.x + rect.max.x,
-        origin.y + rect.max.y,
-    ))
+    let origin = (node_origin + viewport.physical_position.as_vec2() + rect.min) / scale;
+    let max = (node_origin + viewport.physical_position.as_vec2() + rect.max) / scale;
+    Some(Rect { min: origin, max })
 }
 
 /// Shows/positions the overlay (with the live drag preview applied).
@@ -410,6 +410,7 @@ fn canvas_interaction(world: &mut World) {
         if near_corner || inside {
             drag.grabbed = true;
             drag.resize = near_corner;
+            drag.target = Some(node.clone());
             drag.cursor = cursor;
             drag.now = cursor;
             drag.start = game_rect;
@@ -420,8 +421,15 @@ fn canvas_interaction(world: &mut World) {
     }
     if drag.grabbed && buttons.just_released(MouseButton::Left) {
         drag.grabbed = false;
-        let delta = (drag.now - drag.cursor) / window.scale_factor();
-        commit(world, &node, drag.start, delta, drag.resize);
+        // clique sem arrasto: nada a commitar (um `Set` idêntico sujava o doc
+        // e criava uma entrada falsa no histórico)
+        // o delta é px FÍSICOS da janela == GAME-px (imagem 1:1): sem
+        // dividir pela scale — no HiDPI gravava metade do movimento
+        let delta = drag.now - drag.cursor;
+        let moved = delta.x.abs() >= 0.5 || delta.y.abs() >= 0.5;
+        if moved && let Some(target) = drag.target.take() {
+            commit(world, &target, drag.start, delta, drag.resize);
+        }
     }
     *world.resource_mut::<CanvasDrag>() = drag;
 }
@@ -458,8 +466,9 @@ fn commit(world: &mut World, node: &NodeRef, start: Rect, delta: Vec2, resize: b
         return;
     }
     let selector = world.resource::<SceneDoc>().selector(node);
+    let lang = *world.resource::<crate::ui::strings::Lang>();
     world.resource_mut::<PendingEdits>().push(
-        "ui canvas".to_string(),
+        crate::ui::strings::pick(lang, "canvas da interface", "UI canvas").to_string(),
         vec![EditOp::Set {
             node: selector,
             attrs: attrs.into_iter().collect(),
@@ -469,9 +478,18 @@ fn commit(world: &mut World, node: &NodeRef, start: Rect, delta: Vec2, resize: b
 
 /// Applies the chips' state preview to the node's UI entities (the engine's
 /// cascade honors `UiPreviewState`; a `Normal` chip removes it).
-fn canvas_state_preview(world: &mut World) {
+fn canvas_state_preview(mut had_preview: Local<Vec<Entity>>, world: &mut World) {
     let preview = world.resource::<CanvasPreview>().0;
-    for entity in selected_ui_entities(world) {
+    let selected = selected_ui_entities(world);
+    // limpa o preview das entidades que SAÍRAM da seleção: trocar de nó com
+    // um chip ativo deixava o Hover/Pressed preso no nó antigo
+    for entity in had_preview.iter() {
+        if !selected.contains(entity) && world.get::<UiPreviewState>(*entity).is_some() {
+            world.entity_mut(*entity).remove::<UiPreviewState>();
+        }
+    }
+    *had_preview = selected.clone();
+    for entity in selected {
         match preview.state() {
             Some(state) => {
                 if world

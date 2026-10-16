@@ -7,6 +7,7 @@
 //! pitch 89.9 — the orbit clamp is 85) and swap the camera `Projection`,
 //! scaling the ortho frustum by the orbit distance.
 
+use crate::ui::strings::LangLabel;
 use bevy::camera::{OrthographicProjection, Projection};
 use bevy::feathers::controls::{ButtonVariant, FeathersCheckbox, FeathersToolButton};
 use bevy::feathers::display::caption;
@@ -76,6 +77,7 @@ impl Plugin for ViewOptionsPlugin {
                 (
                     apply_startup_views,
                     render_view_panel,
+                    close_view_panel_outside,
                     apply_projection,
                     apply_grid,
                     ortho_view_keys,
@@ -88,20 +90,24 @@ impl Plugin for ViewOptionsPlugin {
 pub fn view_panel() -> impl Scene {
     bsn! {
         ViewPanel
+        GlobalZIndex(50)
         Node {
             position_type: PositionType::Absolute,
             display: Display::None,
+            // ancorado por baixo do botão Vista (canto superior direito)
+            right: px(70),
+            top: px(theme::TOOLBAR_PX + 4.0),
             flex_direction: FlexDirection::Column,
             row_gap: px(6),
             padding: px(10),
             border: UiRect::all(px(1)),
             border_radius: px(6),
-            width: px(190),
+            width: px(230),
         }
         BackgroundColor(theme::BG_POPOVER)
         BorderColor::all(theme::BORDER_STRONG)
         Children [
-            @caption(t(Lang::default(), StrKey::ViewTitle)) Pickable::IGNORE
+            @caption(t(Lang::default(), StrKey::ViewTitle)) LangLabel(StrKey::ViewTitle) Pickable::IGNORE
             --
             Node {
                 flex_direction: FlexDirection::Row,
@@ -111,8 +117,10 @@ pub fn view_panel() -> impl Scene {
             Children [
                 @FeathersCheckbox
                 GridToggle
+                --
+                @caption(t(Lang::default(), StrKey::ViewGrid)) LangLabel(StrKey::ViewGrid)
                 Node { min_width: px(0), flex_grow: 1.0 }
-                @caption(t(Lang::default(), StrKey::ViewGrid))
+                Pickable::IGNORE
             ]
             --
             Node {
@@ -123,8 +131,10 @@ pub fn view_panel() -> impl Scene {
             Children [
                 @FeathersCheckbox
                 CollidersToggle
+                --
+                @caption(t(Lang::default(), StrKey::ViewColliders)) LangLabel(StrKey::ViewColliders)
                 Node { min_width: px(0), flex_grow: 1.0 }
-                @caption(t(Lang::default(), StrKey::ViewColliders))
+                Pickable::IGNORE
             ]
             --
             Node {
@@ -150,7 +160,7 @@ macro_rules! view_button_fn {
             bsn! {
                 @FeathersToolButton {
                     @variant: ButtonVariant::Plain,
-                    @caption: bsn! { @caption(t(Lang::default(), StrKey::$key)) },
+                    @caption: bsn! { @caption(t(Lang::default(), StrKey::$key)) LangLabel(StrKey::$key) },
                 }
                 Node { flex_shrink: 0.0 }
                 $marker
@@ -166,11 +176,11 @@ view_button_fn!(right_button, RightButton, ViewRight);
 
 /// O observador que o botão da toolbar usa (o painel vive no editor root).
 pub fn view_options_clicked(
-    event: On<PointerClick>,
+    event: On<Activate>,
     buttons: Query<(), With<ViewOptionsButton>>,
     mut panels: Query<&mut Node, With<ViewPanel>>,
 ) {
-    if event.button != PointerButton::Primary || !buttons.contains(event.event_target()) {
+    if !buttons.contains(event.event_target()) {
         return;
     }
     if let Ok(mut panel) = panels.single_mut() {
@@ -182,14 +192,40 @@ pub fn view_options_clicked(
     }
 }
 
+/// A press outside the popover (and outside its toolbar button) closes it — like any menu.
+#[allow(clippy::type_complexity)]
+fn close_view_panel_outside(
+    buttons: Res<ButtonInput<MouseButton>>,
+    hover: Res<bevy::picking::hover::HoverMap>,
+    parents: Query<&ChildOf>,
+    keep: Query<(), Or<(With<ViewPanel>, With<ViewOptionsButton>)>>,
+    mut panels: Query<&mut Node, With<ViewPanel>>,
+) {
+    if !buttons.get_just_pressed().any(|_| true) {
+        return;
+    }
+    let Ok(mut panel) = panels.single_mut() else {
+        return;
+    };
+    if panel.display == Display::None {
+        return;
+    }
+    let inside = hover.values().flat_map(|hits| hits.keys()).any(|&entity| {
+        keep.contains(entity) || parents.iter_ancestors(entity).any(|a| keep.contains(a))
+    });
+    if !inside {
+        panel.display = Display::None;
+    }
+}
+
 /// Rebuilds the toggle rows from state (also syncs `Checked`).
 #[allow(clippy::type_complexity)]
 fn render_view_panel(
     mut commands: Commands,
     options: Res<ViewOptions>,
     panels: Query<Entity, With<ViewPanel>>,
-    grid: Query<(Entity, Has<Checked>), (With<GridToggle>, Changed<Checked>)>,
-    colliders: Query<(Entity, Has<Checked>), (With<CollidersToggle>, Changed<Checked>)>,
+    grid: Query<(Entity, Has<Checked>), With<GridToggle>>,
+    colliders: Query<(Entity, Has<Checked>), With<CollidersToggle>>,
 ) {
     let Ok(panel) = panels.single() else {
         return;
@@ -198,6 +234,9 @@ fn render_view_panel(
     if !options.is_changed() {
         return;
     }
+    // Sem `Changed<Checked>`: quando `ViewOptions` muda sem clique (ex.
+    // `--views grid,colliders` no arranque) as checkboxes tinham de ser
+    // empurradas na mesma — com o filtro em `Changed` nunca eram visitadas.
     for (entity, checked) in &grid {
         let is_on = options.grid;
         if checked != is_on {
@@ -222,15 +261,16 @@ fn render_view_panel(
 
 /// Toggle → estado; colliders também empurra o comando ao jogo a correr.
 fn on_view_toggle(
-    event: On<Activate>,
+    event: On<bevy::ui_widgets::ValueChange<bool>>,
     grid: Query<(), With<GridToggle>>,
     colliders: Query<(), With<CollidersToggle>>,
-    checked: Query<(), With<Checked>>,
     bridge: Res<ViberBridge>,
     mut options: ResMut<ViewOptions>,
 ) {
-    let target = event.event_target();
-    let is_on = checked.contains(target);
+    // a checkbox emite ValueChange (o `Checked` é escrito pelo self-update do
+    // PropertyPlugin); o valor novo vem no evento
+    let target = event.source;
+    let is_on = event.value;
     if grid.contains(target) {
         options.grid = is_on;
     } else if colliders.contains(target) {
@@ -371,33 +411,43 @@ fn ortho_view_keys(
 }
 
 /// Troca a projeção da câmara quando a vista muda; em orto a "distância" vira
-/// escala do frustum.
+/// escala do frustum — logo o zoom (que só mexe na distância) tem de
+/// reescalar o frustum em curso, não só na troca de vista.
 fn apply_projection(
     view: Res<CameraView>,
     options: Res<ViewOptions>,
     mut cameras: Query<&mut Projection, With<EditorCamera>>,
     cam: Res<EditorCamState>,
 ) {
-    if !view.is_changed() && !options.is_changed() {
+    if !view.is_changed() && !options.is_changed() && !cam.is_changed() {
         return;
     }
+    let view_or_options_changed = view.is_changed() || options.is_changed();
     for mut projection in &mut cameras {
-        if options.ortho && matches!(view.as_ref(), CameraView::Perspective) {
-            let mut ortho = OrthographicProjection::default_3d();
-            ortho.scale = (cam.distance / 30.0).max(0.2);
-            *projection = Projection::Orthographic(ortho);
-            continue;
-        }
-        match *view {
-            CameraView::Perspective => {
-                *projection = Projection::Perspective(Default::default());
-            }
-            _ => {
+        if view_or_options_changed {
+            if options.ortho && matches!(view.as_ref(), CameraView::Perspective) {
                 let mut ortho = OrthographicProjection::default_3d();
-                let scale = (cam.distance / 30.0).max(0.2);
-                ortho.scale = scale;
-                ortho.far *= 10.0;
+                ortho.scale = (cam.distance / 30.0).max(0.2);
                 *projection = Projection::Orthographic(ortho);
+                continue;
+            }
+            match *view {
+                CameraView::Perspective => {
+                    *projection = Projection::Perspective(Default::default());
+                }
+                _ => {
+                    let mut ortho = OrthographicProjection::default_3d();
+                    let scale = (cam.distance / 30.0).max(0.2);
+                    ortho.scale = scale;
+                    ortho.far *= 10.0;
+                    *projection = Projection::Orthographic(ortho);
+                }
+            }
+        } else if let Projection::Orthographic(ortho) = projection.as_mut() {
+            // só a distância mudou (zoom/orbita): reescala o frustum orto
+            let scale = (cam.distance / 30.0).max(0.2);
+            if (ortho.scale - scale).abs() > f32::EPSILON {
+                ortho.scale = scale;
             }
         }
     }

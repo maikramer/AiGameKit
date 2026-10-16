@@ -66,9 +66,12 @@ pub fn drag_drop(
     let Ok((node, transform)) = nodes.get(drop.event_target()) else {
         return;
     };
+    // `pointer.position` é lógico (winit); `ComputedNode`/`UiGlobalTransform`
+    // são FÍSICOS — sem o scale factor a zona antes/dentro/depois errava no HiDPI
+    let pointer = drop.pointer.position / node.inverse_scale_factor();
     let size = node.size();
     let top_left = transform.translation - size * 0.5;
-    let local_y = drop.pointer.position.y - top_left.y;
+    let local_y = pointer.y - top_left.y;
     let (parent, index) = if local_y < size.y / 3.0 {
         let Some(parent) = target.parent() else {
             return;

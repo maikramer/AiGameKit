@@ -16,6 +16,7 @@
 //! when the language changes.
 
 use crate::scene::tree::TreeSearchInput;
+use crate::ui::icons::icon_caption_key;
 use bevy::feathers::constants::fonts;
 use bevy::feathers::containers::flex_spacer;
 use bevy::feathers::controls::{
@@ -48,12 +49,12 @@ fn biomes_section() -> impl Scene {
 use super::biomes::BiomesBody;
 use super::game::game_body;
 use super::history::HistoryBody;
-use super::icons::{self, fa, icon, icon_caption};
+use super::icons::{self, fa, icon};
 use super::logs::LogsBody;
 use super::mode_strip::{mode_strip, script_panel};
 use super::problems::problems_body;
 use super::profiler::ProfilerBody;
-use super::strings::{Lang, LangLabel, LangTooltip, StrKey, t};
+use super::strings::{Lang, LangLabel, LangTooltip, StrKey, pick, t};
 use super::theme;
 use super::toolbar::toolbar;
 use super::tools::tool_strip;
@@ -111,6 +112,49 @@ pub struct Splitter(pub DockSide);
 #[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ActiveDockTab(pub TabKind);
 
+/// The bottom dock's tab bar (measured to switch tabs to icon-only when narrow).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TabBar;
+
+/// A tab's text label (hidden in the compact, icon-only tab bar).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TabLabel;
+
+/// Below this width (logical px) the tabs show only their icons — the labels of all eight
+/// tabs need ~640 px; the tooltip still names each tab.
+// 9 tabs × ~90 px de label ≈ 810: abaixo disso o bar clipa o último tab
+// (overflow clip_x) — modo ícone é a apresentação certa
+const TABS_COMPACT_BELOW: f32 = 880.0;
+
+/// Switches the tab bar to icon-only when the bottom dock is too narrow for the labels.
+pub fn compact_tabs(
+    bars: Query<&ComputedNode, (With<TabBar>, Changed<ComputedNode>)>,
+    mut labels: Query<&mut Node, With<TabLabel>>,
+) {
+    let Ok(bar) = bars.single() else {
+        return;
+    };
+    let width = bar.size().x * bar.inverse_scale_factor();
+    let display = if width < TABS_COMPACT_BELOW {
+        Display::None
+    } else {
+        Display::Flex
+    };
+    for mut node in &mut labels {
+        if node.display != display {
+            node.display = display;
+        }
+    }
+}
+
+/// A count pill on a tab (hidden at zero) — see `problems::update_badge`.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TabBadge(pub TabKind);
+
+/// The text inside a [`TabBadge`].
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TabBadgeText;
+
 /// The accent bar under a tab (visible on the active one).
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct TabUnderline(pub TabKind);
@@ -138,6 +182,7 @@ pub enum TabKind {
     History,
     Game,
     Problems,
+    Search,
 }
 
 pub(crate) fn camera() -> impl Scene {
@@ -334,6 +379,7 @@ pub fn apply_dock_sizes(sizes: Res<DockSizes>, mut nodes: Query<(&DockSized, &mu
 fn add_node_panel() -> impl Scene {
     bsn! {
         AddNodePanel
+        GlobalZIndex(60)
         Node {
             position_type: PositionType::Absolute,
             width: percent(100),
@@ -343,28 +389,56 @@ fn add_node_panel() -> impl Scene {
             display: Display::None,
         }
         BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.45))
-        Node {
-            width: px(340),
-            height: px(380),
-            flex_direction: FlexDirection::Column,
-            padding: px(10),
-            border: UiRect::all(px(1)),
-            border_radius: px(8),
-        }
-        BackgroundColor(theme::BG_POPOVER)
-        BorderColor::all(theme::BORDER_STRONG)
+        // clicar no fundo escurecido (fora do cartão) fecha o diálogo
+        on(close_add_node_on_backdrop)
         Children [
-            @caption(t(Lang::default(), StrKey::AddNodeTitle)) LangLabel(StrKey::AddNodeTitle)
-            --
             Node {
-                flex_grow: 1.0,
-                min_height: px(0),
-                overflow: Overflow::scroll_y(),
+                width: px(380),
+                height: px(460),
                 flex_direction: FlexDirection::Column,
+                row_gap: px(6),
+                padding: px(10),
+                border: UiRect::all(px(1)),
+                border_radius: px(8),
             }
-            AddNodeBody
-            Children []
+            BackgroundColor(theme::BG_POPOVER)
+            BorderColor::all(theme::BORDER_STRONG)
+            Children [
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: px(8),
+                    padding: UiRect::bottom(px(6)),
+                    border: UiRect::bottom(px(1)),
+                }
+                BorderColor::all(theme::BORDER)
+                Children [
+                    @icon(fa::PLUS, 12.0, icons::ICON)
+                    --
+                    @caption(t(Lang::default(), StrKey::AddNodeTitle)) LangLabel(StrKey::AddNodeTitle)
+                ]
+                --
+                Node {
+                    flex_grow: 1.0,
+                    min_height: px(0),
+                    overflow: Overflow::scroll_y(),
+                    flex_direction: FlexDirection::Column,
+                }
+                AddNodeBody
+                Children []
+            ]
         ]
+    }
+}
+
+fn close_add_node_on_backdrop(
+    click: On<bevy::picking::events::PointerClick>,
+    panels: Query<(), With<AddNodePanel>>,
+    mut open: ResMut<crate::scene::add_node::AddNodeOpen>,
+) {
+    // só o clique no PRÓPRIO fundo (os do cartão sobem até aqui por propagação)
+    if panels.contains(click.original_event_target()) && open.0 {
+        open.0 = false;
     }
 }
 
@@ -437,6 +511,9 @@ fn center_column() -> impl Scene {
             flex_direction: FlexDirection::Column,
         }
         Children [
+            // Scene tabs (Godot): the active one is the scene in the viewport.
+            @super::scene_tabs::scene_tab_bar()
+            --
             Node {
                 width: percent(100),
                 flex_grow: 1.0,
@@ -522,6 +599,7 @@ fn dock_tabs() -> impl Scene {
         Children [
             @dock_header()
             Node { column_gap: px(0), padding: UiRect::horizontal(px(2)), overflow: Overflow::clip_x() }
+            TabBar
             Children [
                 @editor_tab(TabKind::Console, fa::TERMINAL, StrKey::TabConsole)
                 --
@@ -538,6 +616,8 @@ fn dock_tabs() -> impl Scene {
                 @editor_tab(TabKind::Game, fa::GEARS, StrKey::TabGame)
                 --
                 @editor_tab(TabKind::Profiler, fa::GAUGE_HIGH, StrKey::TabProfiler)
+                --
+                @editor_tab(TabKind::Search, fa::MAGNIFYING_GLASS, StrKey::TabSearch)
             ]
             --
             @tab_body(TabKind::Console)
@@ -567,6 +647,9 @@ fn dock_tabs() -> impl Scene {
             --
             @tab_body(TabKind::Problems)
             Children [ @problems_body() ]
+            --
+            @tab_body(TabKind::Search)
+            Children [ @super::search::search_body() ]
         ]
     }
 }
@@ -690,6 +773,7 @@ pub struct StatusBarDirty;
 #[allow(clippy::type_complexity)]
 #[allow(clippy::too_many_arguments)]
 pub fn update_status_bar(
+    lang: Res<Lang>,
     cursor: Res<crate::viewport::gizmo::ViewportCursor>,
     runtime: Option<Res<viber::terrain::runtime::TerrainRuntime>>,
     selection: Res<crate::scene::Selection>,
@@ -705,8 +789,10 @@ pub fn update_status_bar(
             Without<StatusBarSelection>,
         ),
     >,
+    mut last_at: Local<Option<Vec3>>,
 ) {
-    // cursor XZ no mundo (o ray do viewport + o terreno)
+    // cursor XZ no mundo (o ray do viewport + o terreno) — só reformata quando
+    // o ponto muda (o rato parado não devia alocar)
     let at = cursor.ray.and_then(|ray| {
         runtime.as_deref().and_then(|runtime| {
             viber::scene::terrain::ray_ground(ray.origin, *ray.direction, 4000.0, |x, z| {
@@ -714,34 +800,47 @@ pub fn update_status_bar(
             })
         })
     });
-    let cursor_text = at.map_or_else(
-        || "—".to_owned(),
-        |at| format!("X {:.0}  Z {:.0}  Y {:.1}", at.x, at.z, at.y),
-    );
-    if let Ok(mut text) = cursor_label.single_mut()
-        && text.0 != cursor_text
-    {
-        text.0 = cursor_text;
+    if *last_at != at {
+        *last_at = at;
+        let cursor_text = at.map_or_else(
+            || "—".to_owned(),
+            |at| format!("X {:.0}  Z {:.0}  Y {:.1}", at.x, at.z, at.y),
+        );
+        if let Ok(mut text) = cursor_label.single_mut()
+            && text.0 != cursor_text
+        {
+            text.0 = cursor_text;
+        }
     }
     let count = selection.0.len();
     let selection_text = if count == 0 {
         "—".to_owned()
     } else {
-        format!("{count} node(s)")
+        format!("{count} {}", pick(*lang, "nó(s)", "node(s)"))
     };
     if let Ok(mut text) = selection_label.single_mut()
         && text.0 != selection_text
     {
         text.0 = selection_text;
     }
-    let dirty = doc.dirty_paths();
+    // `dirty_paths()` devolve um Vec<String> formatado — só o chama se há
+    // realmente ficheiros sujos (o caso comum é o contador de fps)
+    let dirty = if doc.is_dirty() {
+        doc.dirty_paths()
+    } else {
+        Vec::new()
+    };
     let dirty_text = if dirty.is_empty() {
         // média móvel (um delta de frame faz 100000 fps)
         let dt = time.delta_secs();
         let smoothed = 1.0 / dt.max(1e-4);
         format!("{:.0} fps", smoothed.clamp(0.0, 999.0))
     } else {
-        format!("{} file(s) dirty", dirty.len())
+        format!(
+            "{} {}",
+            dirty.len(),
+            pick(*lang, "ficheiro(s) por gravar", "file(s) dirty")
+        )
     };
     if let Ok(mut text) = dirty_label.single_mut()
         && text.0 != dirty_text
@@ -753,6 +852,7 @@ pub fn update_status_bar(
 fn context_panel() -> impl Scene {
     bsn! {
         ContextPanel
+        GlobalZIndex(50)
         Node {
             position_type: PositionType::Absolute,
             display: Display::None,
@@ -787,7 +887,7 @@ fn editor_tab(kind: TabKind, glyph: char, key: StrKey) -> impl Scene {
                 Children [
                     @icon(glyph, 11.0, icons::ICON_DIM)
                     --
-                    @caption(t(Lang::default(), key)) LangLabel(key)
+                    @caption(t(Lang::default(), key)) LangLabel(key) TabLabel
                 ]
             },
         }
@@ -802,6 +902,28 @@ fn editor_tab(kind: TabKind, glyph: char, key: StrKey) -> impl Scene {
         LangTooltip(key)
         on(select_dock_tab)
         Children [
+            // contagem (ex.: erros do lint na aba Problemas), escondida a zero
+            Node {
+                margin: UiRect::left(px(5)),
+                min_width: px(14),
+                height: px(14),
+                padding: UiRect::horizontal(px(3)),
+                border_radius: px(7),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                display: Display::None,
+            }
+            BackgroundColor(Color::srgb(0.85, 0.3, 0.28))
+            TabBadge(kind)
+            Pickable::IGNORE
+            Children [
+                Text("0")
+                TextFont { font_size: {FontSize::Px(9.0)} }
+                TextColor(Color::WHITE)
+                TabBadgeText
+                theme::FontRepaired
+            ]
+            --
             Node {
                 position_type: PositionType::Absolute,
                 left: px(6),
@@ -883,7 +1005,7 @@ fn logs_body() -> impl Scene {
                 @FeathersToolButton {
                     @variant: ButtonVariant::Plain,
                     @caption: bsn! {
-                        @icon_caption(fa::SITEMAP, t(Lang::default(), StrKey::BtnRemoteTree), icons::ICON_DIM)
+                        @icon_caption_key(fa::SITEMAP, StrKey::BtnRemoteTree, icons::ICON_DIM)
                     },
                 }
                 Node { align_self: AlignSelf::FlexStart }
@@ -973,6 +1095,7 @@ pub fn apply_startup_tab(
         "history" | "hist" => TabKind::History,
         "game" | "jogo" => TabKind::Game,
         "problems" | "problemas" => TabKind::Problems,
+        "search" | "busca" | "buscar" => TabKind::Search,
         _ => return,
     };
     active.0 = kind;

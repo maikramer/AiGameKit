@@ -4,6 +4,7 @@
 //! The panel is spawned as the LAST child of the editor root (see [`super::layout`]), so it
 //! draws above every panel on the editor's UI camera.
 
+use super::theme;
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -43,6 +44,8 @@ impl Plugin for TooltipPlugin {
 pub fn tooltip_root() -> impl Scene {
     bsn! {
         TooltipRoot
+        // acima de tudo (as faixas do viewport têm GlobalZIndex 10/11)
+        GlobalZIndex(100)
         Node {
             position_type: PositionType::Absolute,
             display: Display::None,
@@ -50,8 +53,8 @@ pub fn tooltip_root() -> impl Scene {
             border: UiRect::all(px(1)),
             border_radius: px(4),
         }
-        BackgroundColor(Color::srgba(0.07, 0.08, 0.1, 0.96))
-        BorderColor::all(Color::srgb(0.35, 0.38, 0.44))
+        BackgroundColor(theme::BG_POPOVER)
+        BorderColor::all(theme::BORDER_STRONG)
         // The panel must never catch the pointer (it would unhover what it explains).
         Pickable::IGNORE
         Children [
@@ -125,8 +128,10 @@ fn update_tooltip(
         text.0 = tooltip.0.to_string();
     }
     root.display = Display::Flex;
+    // clamp direita E fundo: perto da borda inferior (tabs do dock, status
+    // bar) o painel saía da janela e ficava invisível
     root.left = px((cursor.x + 14.0).min(window.width() - 240.0).max(0.0));
-    root.top = px(cursor.y + 18.0);
+    root.top = px((cursor.y + 18.0).min(window.height() - 40.0).max(0.0));
 }
 
 #[cfg(test)]

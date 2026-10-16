@@ -47,39 +47,46 @@ impl Default for TerrainBrush {
     }
 }
 
+/// The brush mode's friendly name in the editor's language (shared by the
+/// toolbar description and the brush panel's dropdown).
+pub fn brush_mode_name(lang: crate::ui::strings::Lang, mode: BrushMode) -> &'static str {
+    use crate::ui::strings::Lang::{En, Pt};
+    match mode {
+        BrushMode::Raise => match lang {
+            En => "raise",
+            Pt => "subir",
+        },
+        BrushMode::Lower => match lang {
+            En => "lower",
+            Pt => "descer",
+        },
+        BrushMode::Smooth => match lang {
+            En => "smooth",
+            Pt => "suavizar",
+        },
+        BrushMode::Flatten => match lang {
+            En => "flatten",
+            Pt => "nivelar",
+        },
+        BrushMode::Crater => match lang {
+            En => "crater",
+            Pt => "cratera",
+        },
+        BrushMode::Noise => match lang {
+            En => "noise",
+            Pt => "ruído",
+        },
+    }
+}
+
 impl TerrainBrush {
     /// A one-line description for the toolbar, in the editor's language.
     pub fn describe(&self, lang: crate::ui::strings::Lang) -> String {
-        use crate::ui::strings::Lang::{En, Pt};
-        let mode = match self.mode {
-            BrushMode::Raise => match lang {
-                En => "raise",
-                Pt => "subir",
-            },
-            BrushMode::Lower => match lang {
-                En => "lower",
-                Pt => "descer",
-            },
-            BrushMode::Smooth => match lang {
-                En => "smooth",
-                Pt => "suavizar",
-            },
-            BrushMode::Flatten => match lang {
-                En => "flatten",
-                Pt => "nivelar",
-            },
-            BrushMode::Crater => match lang {
-                En => "crater",
-                Pt => "cratera",
-            },
-            BrushMode::Noise => match lang {
-                En => "noise",
-                Pt => "ruído",
-            },
-        };
+        use crate::ui::strings::pick;
+        let mode = brush_mode_name(lang, self.mode);
         let prefix = match lang {
-            En => "B terrain",
-            Pt => "B terreno",
+            crate::ui::strings::Lang::En => "B terrain",
+            crate::ui::strings::Lang::Pt => "B terreno",
         };
         if let Some(slot) = self.paint {
             let layer = viber::terrain::splat::DEFAULT_LAYERS
@@ -87,8 +94,10 @@ impl TerrainBrush {
                 .copied()
                 .unwrap_or("?");
             return format!(
-                "{prefix} paint {layer} r={:.1} a={:.2}",
-                self.radius, self.amount
+                "{prefix} {} {layer} r={:.1} a={:.2}",
+                pick(lang, "pintar", "paint"),
+                self.radius,
+                self.amount
             );
         }
         format!("{prefix} {mode} r={:.1} a={:.2}", self.radius, self.amount)
@@ -123,12 +132,14 @@ impl Plugin for TerrainToolPlugin {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // Bevy system: um parâmetro por recurso/query.
 fn brush_keys(
     keys: Res<ButtonInput<KeyCode>>,
     buttons: Res<ButtonInput<MouseButton>>,
     focus: Option<Res<InputFocus>>,
     editable: Query<(), With<bevy::text::EditableText>>,
     hover: Res<ViewportHover>,
+    mode: Res<crate::ui::mode_strip::EditorModeState>,
     mut tool: ResMut<GizmoTool>,
     mut brush: ResMut<TerrainBrush>,
 ) {
@@ -136,6 +147,11 @@ fn brush_keys(
         .and_then(|f| f.get())
         .is_some_and(|entity| editable.contains(entity));
     if typing || buttons.pressed(MouseButton::Right) || !hover.0 {
+        return;
+    }
+    // Fora do modo 3D os atalhos de ferramenta não armam (o painel Script é
+    // Pickable::IGNORE — o hover "atravessava-o" e B/dígitos mudavam à toa).
+    if mode.0 != crate::ui::mode_strip::EditorMode::ThreeD {
         return;
     }
     if keys.just_pressed(KeyCode::KeyB) {
@@ -193,7 +209,10 @@ fn brush_keys(
 
 /// Dabs along a left-drag over the viewport; one coalesced transaction per stroke.
 fn paint(world: &mut World) {
-    if world.resource::<GizmoTool>().mode != Mode::Terrain {
+    if world.resource::<GizmoTool>().mode != Mode::Terrain
+        || world.resource::<crate::ui::mode_strip::EditorModeState>().0
+            != crate::ui::mode_strip::EditorMode::ThreeD
+    {
         world.resource_mut::<Stroke>().key = None;
         return;
     }
@@ -222,18 +241,23 @@ fn paint(world: &mut World) {
     }
     let key = {
         let mut stroke = world.resource_mut::<Stroke>();
-        if starting || stroke.key.is_none() {
+        if starting {
             stroke.next_key += 1;
             stroke.key = Some(stroke.next_key);
             stroke.since_dab = DAB_INTERVAL;
             stroke.flatten_height = Some(at.y);
         }
+        // stroke SÓ nasce num press com hover — sem isto, um drag iniciado
+        // num dock (árvore/ficheiros) que atravesse o viewport esculpia
+        let Some(key) = stroke.key else {
+            return;
+        };
         stroke.since_dab += delta;
         if stroke.since_dab < DAB_INTERVAL {
             return;
         }
         stroke.since_dab = Duration::ZERO;
-        stroke.key.expect("set above")
+        key
     };
     // PINCEL DE VEGETAÇÃO: um `<Scatter>` escolhido no painel → o dab coloca
     // instâncias na região do cursor (mesma colocação da ferramenta).

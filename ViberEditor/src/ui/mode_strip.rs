@@ -7,6 +7,8 @@
 //! * **Script** — a panel over the viewport with the world's `.lua` files: click to
 //!   preview, "Open externally" for the real editor.
 
+use crate::ui::icons::icon_caption_key;
+use crate::ui::strings::LangLabel;
 use bevy::feathers::controls::{ButtonVariant, FeathersToolButton};
 use bevy::feathers::display::caption;
 use bevy::prelude::*;
@@ -15,7 +17,7 @@ use viber::scene::doc::SceneDoc;
 use viber::scene::files::{FileEntry, FileKind};
 
 use super::files::FilesState;
-use super::icons::{self, fa, icon_caption};
+use super::icons::{self, fa};
 use super::strings::{Lang, StrKey, t};
 use super::theme;
 use super::tooltip::Tooltip;
@@ -56,6 +58,9 @@ pub struct ScriptRow(pub String);
 #[derive(Resource, Debug, Default)]
 pub struct ScriptState {
     pub selected: Option<String>,
+    /// Buffers por gravar de scripts que deixaram de estar abertos (trocar de script
+    /// não perde o que se escreveu; o Guardar ainda acende ao voltar).
+    pub buffers: std::collections::HashMap<String, String>,
 }
 
 pub struct ModeStripPlugin;
@@ -65,17 +70,49 @@ impl Plugin for ModeStripPlugin {
         app.init_resource::<EditorModeState>()
             .init_resource::<ScriptState>()
             .init_resource::<ScriptReloadTask>()
+            .init_resource::<ScriptSyntaxState>()
             .add_systems(
                 Update,
                 (
                     refresh_mode_strip,
                     apply_mode,
                     render_script_panel,
-                    open_script_clicked,
+                    // (o `open_script_clicked` é só do botão "Abrir fora": como
+                    // sistema abria o xdg-open em TODOS os frames com um script
+                    // selecionado)
                     poll_script_reload,
+                    prefill_script_editor,
+                    script_save_shortcut,
+                    mark_script_dirty,
+                    render_syntax_line,
                 ),
             );
     }
+}
+
+/// O resultado da compilação Luau do script aberto (`None` = sem erros).
+#[derive(Resource, Debug, Default, Clone)]
+pub struct ScriptSyntaxState(pub Option<String>);
+
+/// A linha de sintaxe sob a toolbar do modo Script (verde/vermelha).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct ScriptSyntaxLine;
+
+/// Compila o código Luau (mlua sandbox, NUNCA executa) — apanha erros de
+/// sintaxe no save/abertura antes de chegarem ao jogo a correr.
+pub fn syntax_check(path: &str, code: &str) -> Result<(), String> {
+    let lua = mlua::Lua::new();
+    lua.load(code)
+        .set_name(path)
+        .into_function()
+        .map(|_| ())
+        .map_err(|error| match error {
+            mlua::Error::SyntaxError {
+                message,
+                incomplete_input: _,
+            } => message,
+            other => other.to_string(),
+        })
 }
 
 /// The strip, as a scene (child of the viewport container, top-center).
@@ -118,7 +155,7 @@ fn mode_button(mode: EditorMode, glyph: char, key: StrKey) -> impl Scene {
     bsn! {
         @FeathersToolButton {
             @variant: ButtonVariant::Plain,
-            @caption: bsn! { @icon_caption(glyph, t(Lang::default(), key), icons::ICON) },
+            @caption: bsn! { @icon_caption_key(glyph, key, icons::ICON) },
         }
         ModeButton(mode)
         Tooltip(t(Lang::default(), key))
@@ -173,18 +210,24 @@ pub fn script_panel() -> impl Scene {
                     flex_wrap: FlexWrap::NoWrap,
                 }
                 Children [
-                    @caption(t(Lang::default(), StrKey::ScriptTitle))
+                    @caption(t(Lang::default(), StrKey::ScriptTitle)) LangLabel(StrKey::ScriptTitle)
                     Node { flex_grow: 1.0, flex_shrink: 1.0, min_width: px(0) }
                     ScriptTitle
                     --
                     @FeathersToolButton {
                         @variant: ButtonVariant::Plain,
                         @caption: bsn! {
-                            @icon_caption(
-                                fa::FILE_LINES,
-                                t(Lang::default(), StrKey::FilesOpenExternal),
-                                icons::ICON_DIM
-                            )
+                            @icon_caption_key(fa::FLOPPY_DISK, StrKey::BtnSave, icons::ICON)
+                        },
+                    }
+                    ScriptSaveButton
+                    Tooltip("Ctrl+S")
+                    on(script_save_button)
+                    --
+                    @FeathersToolButton {
+                        @variant: ButtonVariant::Plain,
+                        @caption: bsn! {
+                            @icon_caption_key(fa::FILE_LINES, StrKey::FilesOpenExternal, icons::ICON_DIM)
                         },
                     }
                     ScriptOpenPlaceholder
@@ -194,11 +237,7 @@ pub fn script_panel() -> impl Scene {
                     @FeathersToolButton {
                         @variant: ButtonVariant::Plain,
                         @caption: bsn! {
-                            @icon_caption(
-                                fa::ROTATE_RIGHT,
-                                t(Lang::default(), StrKey::ScriptReload),
-                                icons::ICON_DIM
-                            )
+                            @icon_caption_key(fa::ROTATE_RIGHT, StrKey::ScriptReload, icons::ICON_DIM)
                         },
                     }
                     ScriptReloadButton
@@ -206,12 +245,29 @@ pub fn script_panel() -> impl Scene {
                     on(script_reload_button)
                 ]
                 --
+                // sintaxe do script aberto (compila no save/abertura): verde
+                // ✓ sem erros, vermelho com a mensagem do Luau
+                Text::new("")
+                TextFont { font_size: {FontSize::Px(11.0)} }
+                TextColor(Color::srgb(0.55, 0.8, 0.55))
+                Node {
+                    display: Display::None,
+                    flex_shrink: 0.0,
+                }
+                Pickable::IGNORE
+                theme::FontRepaired
+                ScriptSyntaxLine
+                --
                 Node {
                     flex_grow: 1.0,
                     min_height: px(0),
-                    overflow: Overflow::scroll_y(),
+                    overflow: Overflow::clip(),
                     flex_direction: FlexDirection::Column,
+                    border: UiRect::all(px(1)),
+                    border_radius: px(6),
                 }
+                BorderColor::all(theme::BORDER)
+                BackgroundColor(theme::BG_PANEL)
                 ScriptPreview
                 Children []
             ]
@@ -411,14 +467,20 @@ fn letterbox(size: UVec2) -> bevy::camera::Viewport {
 }
 
 /// The world's `.lua` files (from the Files dock scan) + the selected preview.
+#[allow(clippy::type_complexity)]
 fn render_script_panel(
-    state: Res<ScriptState>,
+    mut state: ResMut<ScriptState>,
     files: Res<FilesState>,
     doc: Res<SceneDoc>,
     mut commands: Commands,
     lists: Query<Entity, With<ScriptList>>,
     previews: Query<Entity, With<ScriptPreview>>,
+    editors: Query<(&ScriptEditor, &bevy::text::EditableText)>,
 ) {
+    // colhe primeiro: este rebuild destrói o editor e lê do DISCO — sem a
+    // colheita, um re-scan de Ficheiros (`files.is_changed()`) apagava
+    // edições não gravadas em silêncio
+    harvest_script_buffers(&mut state, &editors);
     if !state.is_changed() && !files.is_changed() {
         return;
     }
@@ -465,24 +527,215 @@ fn render_script_panel(
             ));
         });
     }
-    // o preview do script selecionado
+    // o script selecionado num EDITOR (EditableText multi-linha, mono)
     if let (Ok(preview), Some(path)) = (previews.single(), state.selected.clone()) {
         commands.entity(preview).despawn_related::<Children>();
-        let dir = doc.world_path().parent().map(|dir| dir.join(&path));
-        let text = dir
+        let file = doc.world_path().parent().map(|dir| dir.join(&path));
+        let text = file
             .and_then(|path| std::fs::read_to_string(path).ok())
-            .map(|text| text.lines().take(120).collect::<Vec<_>>().join("\n"))
             .unwrap_or_default();
-        commands.spawn((
-            Text::new(text),
-            TextFont::from_font_size(12.0),
-            TextColor(Color::srgb(0.82, 0.86, 0.9)),
-            Node {
-                flex_grow: 1.0,
-                ..default()
-            },
-            ChildOf(preview),
-        ));
+        let buffer = state.buffers.get(&path).cloned();
+        commands
+            .spawn_scene(bsn! {
+                Node {
+                    flex_grow: 1.0,
+                    min_height: px(0),
+                    width: percent(100),
+                    padding: UiRect::all(px(8)),
+                }
+                bevy::ui_widgets::TextInput
+                bevy::text::EditableText {
+                    cursor_width: 0.3,
+                    allow_newlines: true,
+                }
+                bevy::text::TextLayout { linebreak: bevy::text::LineBreak::NoWrap }
+                bevy::input_focus::tab_navigation::TabIndex(0)
+                TextFont {
+                    font: bevy::text::FontSourceTemplate::Handle(bevy::feathers::constants::fonts::MONO),
+                    font_size: {bevy::text::FontSize::Px(12.0)},
+                }
+                TextColor(Color::srgb(0.85, 0.88, 0.92))
+                bevy::text::TextCursorStyle
+                bevy::picking::cursor::EntityCursor::System(bevy::window::SystemCursorIcon::Text)
+            })
+            .insert((
+                ScriptEditor {
+                    path: path.clone(),
+                    loaded: text,
+                    buffer,
+                    prefilled: false,
+                },
+                theme::FontRepaired,
+                ChildOf(preview),
+            ));
+    }
+}
+
+/// The script editor: what was loaded from disk (dirty = the buffer differs).
+#[derive(Component, Debug, Clone)]
+pub struct ScriptEditor {
+    pub path: String,
+    pub loaded: String,
+    /// Um buffer por gravar guardado ao trocar de script (abre no lugar do disco).
+    buffer: Option<String>,
+    prefilled: bool,
+}
+
+/// "Guardar" do modo Script (também Ctrl+S nesse modo).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct ScriptSaveButton;
+
+/// Fills a fresh editor with the file (the widget starts empty).
+fn prefill_script_editor(
+    mut editors: Query<(&mut ScriptEditor, &mut bevy::text::EditableText)>,
+    mut syntax: ResMut<ScriptSyntaxState>,
+) {
+    for (mut editor, mut text) in &mut editors {
+        if editor.prefilled {
+            continue;
+        }
+        editor.prefilled = true;
+        let initial = editor
+            .buffer
+            .take()
+            .unwrap_or_else(|| editor.loaded.clone());
+        // sintaxe do que abre (buffer por gravar incluído)
+        syntax.0 = syntax_check(&editor.path, &initial).err();
+        if !initial.is_empty() {
+            text.queue_edit(bevy::text::TextEdit::Insert(initial.as_str().into()));
+        }
+    }
+}
+
+fn script_save_button(
+    activate: On<Activate>,
+    buttons: Query<(), With<ScriptSaveButton>>,
+    mut commands: Commands,
+) {
+    if buttons.contains(activate.event_target()) {
+        commands.queue(save_script);
+    }
+}
+
+/// Ctrl+S no modo Script grava o script aberto (além do mundo, como sempre).
+fn script_save_shortcut(
+    keys: Res<ButtonInput<KeyCode>>,
+    mode: Res<EditorModeState>,
+    mut commands: Commands,
+) {
+    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+    if mode.0 == EditorMode::Script && ctrl && keys.just_pressed(KeyCode::KeyS) {
+        commands.queue(save_script);
+    }
+}
+
+/// O botão Guardar acende (Primary) quando o buffer difere do disco.
+fn mark_script_dirty(
+    editors: Query<(&ScriptEditor, &bevy::text::EditableText)>,
+    mut buttons: Query<&mut ButtonVariant, With<ScriptSaveButton>>,
+) {
+    let dirty = editors
+        .iter()
+        .any(|(editor, text)| editor.prefilled && text.value() != editor.loaded.as_str());
+    let wanted = if dirty {
+        ButtonVariant::Primary
+    } else {
+        ButtonVariant::Plain
+    };
+    for mut variant in &mut buttons {
+        if *variant != wanted {
+            *variant = wanted.clone();
+        }
+    }
+}
+
+/// Escreve o buffer no `.lua` (o hot-reload do jogo a correr apanha a mudança).
+/// Antes de gravar COMPILA o script (mlua, sem executar): grava na mesma — o
+/// jogo avisa quando falha — mas o erro de sintaxe fica visível na hora.
+fn save_script(world: &mut World) {
+    let mut editors = world.query::<(&mut ScriptEditor, &bevy::text::EditableText)>();
+    let Some((path, value)) = editors
+        .iter(world)
+        .next()
+        .map(|(editor, text)| (editor.path.clone(), text.value().to_string()))
+    else {
+        return;
+    };
+    let syntax_error = syntax_check(&path, &value).err();
+    world.resource_mut::<ScriptSyntaxState>().0 = syntax_error.clone();
+    let Some(file) = world
+        .resource::<SceneDoc>()
+        .world_path()
+        .parent()
+        .map(|dir| dir.join(&path))
+    else {
+        return;
+    };
+    let lang = *world.resource::<Lang>();
+    let status = match std::fs::write(&file, &value) {
+        Ok(()) => {
+            for (mut editor, _) in editors.iter_mut(world) {
+                editor.loaded.clone_from(&value);
+            }
+            world.resource_mut::<ScriptState>().buffers.remove(&path);
+            let saved = match lang {
+                Lang::Pt => format!("script guardado: {path}"),
+                Lang::En => format!("script saved: {path}"),
+            };
+            match syntax_error {
+                Some(error) => format!("{saved} — {error}"),
+                None => saved,
+            }
+        }
+        Err(error) => match lang {
+            Lang::Pt => format!("script não gravou: {error}"),
+            Lang::En => format!("script save failed: {error}"),
+        },
+    };
+    info!("{status}");
+    world.resource_mut::<EditStatus>().0 = status;
+}
+
+/// A linha de sintaxe sob a toolbar: verde "✓" sem erros, vermelha com a
+/// mensagem do Luau (com linha) quando o script aberto não compila.
+fn render_syntax_line(
+    state: Res<ScriptSyntaxState>,
+    lang: Res<Lang>,
+    editors: Query<(), With<ScriptEditor>>,
+    mut lines: Query<(&mut Text, &mut TextColor, &mut Node), With<ScriptSyntaxLine>>,
+) {
+    if !state.is_changed() && !lang.is_changed() {
+        return;
+    }
+    let Ok((mut text, mut color, mut node)) = lines.single_mut() else {
+        return;
+    };
+    // sem script aberto a linha esconde-se (o "✓" só faz sentido com um ficheiro)
+    let open = !editors.is_empty();
+    if !open {
+        if node.display != Display::None {
+            node.display = Display::None;
+        }
+        return;
+    }
+    let label = match (&state.0, *lang) {
+        (None, Lang::Pt) => "✓ sintaxe ok",
+        (None, Lang::En) => "✓ syntax ok",
+        (Some(error), _) => error.as_str(),
+    };
+    if text.0 != label {
+        text.0 = label.to_owned();
+    }
+    let wanted = if state.0.is_some() {
+        Color::srgb(0.95, 0.5, 0.42)
+    } else {
+        Color::srgb(0.55, 0.8, 0.55)
+    };
+    if color.0 != wanted {
+        color.0 = wanted;
+    }
+    if node.display != Display::Flex {
+        node.display = Display::Flex;
     }
 }
 
@@ -501,10 +754,50 @@ fn collect_scripts(entries: &[FileEntry], prefix: &str, out: &mut Vec<String>) {
     }
 }
 
-fn select_script(click: On<PointerClick>, rows: Query<&ScriptRow>, mut state: ResMut<ScriptState>) {
-    if let Ok(row) = rows.get(click.event_target()) {
-        state.selected = Some(row.0.clone());
+/// Colhe o texto vivo dos editores abertos para `state.buffers` (o mesmo que
+/// `select_script` faz ao trocar). Só escreve quando o valor difere — senão
+/// change detection disparava este sistema em todos os frames.
+fn harvest_script_buffers(
+    state: &mut ScriptState,
+    editors: &Query<(&ScriptEditor, &bevy::text::EditableText)>,
+) -> bool {
+    let mut changed = false;
+    for (editor, text) in editors.iter() {
+        if !editor.prefilled {
+            continue;
+        }
+        let value = text.value();
+        if value != editor.loaded.as_str() {
+            if state
+                .buffers
+                .get(&editor.path)
+                .is_none_or(|buffer| value != buffer.as_str())
+            {
+                state.buffers.insert(editor.path.clone(), value.to_string());
+                changed = true;
+            }
+        } else if state.buffers.remove(&editor.path).is_some() {
+            changed = true;
+        }
     }
+    changed
+}
+
+fn select_script(
+    click: On<PointerClick>,
+    rows: Query<&ScriptRow>,
+    editors: Query<(&ScriptEditor, &bevy::text::EditableText)>,
+    mut state: ResMut<ScriptState>,
+) {
+    let Ok(row) = rows.get(click.event_target()) else {
+        return;
+    };
+    if state.selected.as_deref() == Some(row.0.as_str()) {
+        return;
+    }
+    // o buffer do script que sai fica guardado se tiver alterações
+    harvest_script_buffers(&mut state, &editors);
+    state.selected = Some(row.0.clone());
 }
 
 fn open_script_button(
@@ -593,4 +886,25 @@ fn open_script_clicked(world: &mut World) {
     } else {
         t(lang, StrKey::FilesOpenFailed).to_string()
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn syntax_check_accepts_valid_lua() {
+        assert!(syntax_check("t.lua", "local x = 1\nreturn x\n").is_ok());
+    }
+
+    #[test]
+    fn syntax_check_reports_errors_with_line() {
+        let error = syntax_check("t.lua", "local x =\nprint(x\n").expect_err("should fail");
+        assert!(!error.is_empty());
+    }
+
+    #[test]
+    fn syntax_check_flags_unbalanced_end() {
+        assert!(syntax_check("t.lua", "if true then\nprint(1)\n").is_err());
+    }
 }

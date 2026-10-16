@@ -4,6 +4,7 @@
 //! --tab sistemas` serves). The panel is lean text: name, group, avg, p95,
 //! with the engine's hot threshold flagged.
 
+use crate::ui::strings::{Lang, pick};
 use bevy::prelude::*;
 use bevy::tasks::{Task, block_on, poll_once};
 use std::time::Duration;
@@ -42,7 +43,12 @@ impl Plugin for ProfilerPlugin {
 }
 
 /// Polls `viber.debug.prof()` while the game runs; formats the snapshot.
-fn poll_profiler(time: Res<Time>, bridge: Res<ViberBridge>, mut state: ResMut<ProfilerState>) {
+fn poll_profiler(
+    time: Res<Time>,
+    lang: Res<Lang>,
+    bridge: Res<ViberBridge>,
+    mut state: ResMut<ProfilerState>,
+) {
     if !matches!(bridge.status, EngineStatus::Connected { .. }) {
         return;
     }
@@ -52,8 +58,20 @@ fn poll_profiler(time: Res<Time>, bridge: Res<ViberBridge>, mut state: ResMut<Pr
         state.task = None;
         match result {
             Ok(value) => {
-                state.lines = format_snapshot(&value);
-                state.dirty = true;
+                // `viber.lua` aninha o valor devolvido em `result`
+                if let Some(snapshot) = value
+                    .get("result")
+                    .filter(|_| value.get("ok").and_then(serde_json::Value::as_bool) == Some(true))
+                {
+                    state.lines = format_snapshot(snapshot, *lang);
+                    state.dirty = true;
+                } else {
+                    let error = value
+                        .get("error")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("?");
+                    warn!("profiler: luau falhou: {error}");
+                }
             }
             Err(error) => warn!("profiler: viber.debug.prof failed: {error}"),
         }
@@ -68,7 +86,7 @@ fn poll_profiler(time: Res<Time>, bridge: Res<ViberBridge>, mut state: ResMut<Pr
 }
 
 /// The snapshot as text lines: header, groups summary, top systems.
-fn format_snapshot(value: &serde_json::Value) -> Vec<(String, bool)> {
+fn format_snapshot(value: &serde_json::Value, lang: Lang) -> Vec<(String, bool)> {
     let mut out = Vec::new();
     let fps = value.get("fps").and_then(|v| v.as_f64());
     let frame = value.get("frame_ms");
@@ -82,7 +100,7 @@ fn format_snapshot(value: &serde_json::Value) -> Vec<(String, bool)> {
             let p95_text = p95.map(|p| format!(", p95 {p:.1} ms")).unwrap_or_default();
             format!("{fps:.0} fps — frame {avg:.1} ms{p95_text}")
         }
-        _ => "sem amostras".to_string(),
+        _ => pick(lang, "sem amostras", "no samples yet").to_string(),
     };
     out.push((header, false));
     if let Some(systems) = value.get("systems").and_then(|v| v.as_array()) {
@@ -101,7 +119,13 @@ fn format_snapshot(value: &serde_json::Value) -> Vec<(String, bool)> {
             .collect();
         rows.sort_by(|a, b| b.1.total_cmp(&a.1));
         out.push((
-            format!("{} sistema(s) — {} mais lentos", systems.len(), TOP),
+            format!(
+                "{} {} — {} {}",
+                systems.len(),
+                pick(lang, "sistema(s)", "system(s)"),
+                TOP,
+                pick(lang, "mais lentos", "slowest")
+            ),
             false,
         ));
         for (name, avg, group) in rows.into_iter().take(TOP) {
@@ -116,7 +140,10 @@ fn format_snapshot(value: &serde_json::Value) -> Vec<(String, bool)> {
             .map(str::to_string)
             .collect();
         if !names.is_empty() {
-            out.push((format!("groups: {}", names.join(" · ")), false));
+            out.push((
+                format!("{}: {}", pick(lang, "grupos", "groups"), names.join(" · ")),
+                false,
+            ));
         }
     }
     out
@@ -184,7 +211,7 @@ mod tests {
                 { "name": "grass::update", "group": "Update", "avg_ms": 1.2, "p95_ms": 1.9 }
             ]
         });
-        let lines = format_snapshot(&value);
+        let lines = format_snapshot(&value, Lang::Pt);
         let text: Vec<&str> = lines.iter().map(|(line, _)| line.as_str()).collect();
         assert!(
             text[0].contains("60 fps") || text[0].contains("59 fps"),
@@ -214,7 +241,7 @@ mod tests {
 
     #[test]
     fn empty_snapshot_degrades_to_a_placeholder() {
-        let lines = format_snapshot(&json!({}));
+        let lines = format_snapshot(&json!({}), Lang::Pt);
         assert_eq!(lines.len(), 1);
         assert!(lines[0].0.contains("sem amostras"));
     }

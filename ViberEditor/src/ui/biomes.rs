@@ -12,13 +12,13 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::ui_widgets::{Activate, ValueChange};
 use viber::scene::doc::SceneDoc;
 use viber::scene::ops::EditOp;
-use viber::terrain::splat::{Biome, BiomeField};
+use viber::terrain::splat::{self, Biome, BiomeField};
 
 use super::icons::{self, fa, icon};
 use crate::scene::{PendingEdits, Selection};
 
 /// Cores de aproximação por bioma (o motor usa paletas de splat — aqui é só
-/// para o preview do editor). A ordem é a dos pesos `BiomeBlend::ground`.
+/// para o preview do editor).
 const BIOME_COLORS: [(&str, [u8; 3]); 5] = [
     ("vale", [106, 170, 84]),
     ("forest", [52, 110, 62]),
@@ -27,13 +27,35 @@ const BIOME_COLORS: [(&str, [u8; 3]); 5] = [
     ("peaks", [230, 234, 240]),
 ];
 
-fn biome_color(name: &str) -> [u8; 3] {
-    BIOME_COLORS
-        .iter()
-        .find(|(key, _)| key.eq_ignore_ascii_case(name))
-        .map(|(_, color)| *color)
-        .unwrap_or([120, 120, 120])
-}
+/// Que SLOTS de splat cada bioma pinta — `BiomeBlend::ground` é `[f32; 13]`
+/// indexado por SLOT, não por bioma (ver `Biome::palette` no engine). O
+/// preview soma estes slots por bioma antes de normalizar; sem isto, deserto
+/// puro (sand/desert_sand) caía fora e pintava preto, e picos liam o
+/// `vale_grass` residual como "forest".
+const BIOME_SLOTS: [&[usize]; 5] = [
+    // vale
+    &[splat::SLOT_GRASS, splat::SLOT_VALE_GRASS],
+    // forest
+    &[
+        splat::SLOT_FOREST_FLOOR,
+        splat::SLOT_GRASS,
+        splat::SLOT_VALE_GRASS,
+    ],
+    // desert
+    &[
+        splat::SLOT_DESERT_SAND,
+        splat::SLOT_SAND,
+        splat::SLOT_GRAVEL,
+    ],
+    // swamp
+    &[splat::SLOT_SWAMP_MUD, splat::SLOT_GRASS, splat::SLOT_DIRT],
+    // peaks
+    &[
+        splat::SLOT_GRAVEL,
+        splat::SLOT_MOUNTAIN_STONE,
+        splat::SLOT_VALE_GRASS,
+    ],
+];
 
 /// The panel body (rebuilt when the field changes).
 #[derive(Component, Debug, Clone, Copy, Default)]
@@ -85,9 +107,10 @@ fn apply_field(world: &mut World, field: &BiomeField) {
             .map(|w| (w.dir.x, w.dir.y, w.biome.name().to_owned()))
             .collect(),
     };
+    let lang = *world.resource::<crate::ui::strings::Lang>();
     world
         .resource_mut::<PendingEdits>()
-        .push("biomas".to_owned(), vec![op]);
+        .push(crate::ui::strings::pick(lang, "biomas", "biomes"), vec![op]);
 }
 
 fn set_biome(world: &mut World, index: usize, option: usize) {
@@ -169,7 +192,6 @@ fn rasterize(field: &BiomeField) -> Image {
     let size = PREVIEW_PX;
     let mut data = Vec::with_capacity((size * size * 4) as usize);
     let half = 200.0;
-    let names = ["vale", "forest", "desert", "swamp", "peaks"];
     for row in 0..size {
         let z = (row as f32 / size as f32) * 400.0 - half;
         for col in 0..size {
@@ -178,11 +200,18 @@ fn rasterize(field: &BiomeField) -> Image {
             let mut rgb = [0f32; 3];
             let total: f32 = blend.ground.iter().sum();
             if total > 1e-5 {
-                for (index, name) in names.iter().enumerate() {
-                    let weight = blend.ground[index] / total;
-                    let color = biome_color(name);
-                    for (channel, value) in color.iter().enumerate() {
-                        rgb[channel] += *value as f32 * weight;
+                // soma os slots certos por bioma (BIOME_SLOTS) e normaliza
+                let mut weights = [0f32; 5];
+                for (biome, slots) in BIOME_SLOTS.iter().enumerate() {
+                    weights[biome] = slots.iter().map(|slot| blend.ground[*slot]).sum();
+                }
+                let summed: f32 = weights.iter().sum();
+                if summed > 1e-5 {
+                    for (index, color) in BIOME_COLORS.iter().enumerate() {
+                        let weight = weights[index] / summed;
+                        for (channel, value) in color.1.iter().enumerate() {
+                            rgb[channel] += *value as f32 * weight;
+                        }
                     }
                 }
             }
