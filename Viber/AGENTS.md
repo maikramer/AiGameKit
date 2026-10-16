@@ -327,6 +327,22 @@ resolvido sai no arranque (`gameplay preset: …`). Vitrina:
 Luau (spawn por `<Prototype>` em runtime, HUD por `viber.ui.set_text`, estado
 em `viber.game`), `cargo run -- analyze worlds/lua-demo/world.xml` valida.
 
+### Preset de corrida (`gameplay: racing`, `src/racing/`)
+
+`gameplay: racing` troca o preset RPG por karts + diretor de corrida
+(`Viber/src/racing/`): `<Vehicle driver="player|ai" template model-url
+model-yaw>` + `<VehicleTemplate id top-speed accel brake engine-brake
+max-steer steer-speed grip drift-grip boost boost-recharge>` + `<Race laps
+countdown grid-s>`; pista = `<Road closed="1" y="…" widths="…"
+viaduct-clearance="6">` (canais autorados por nó; spans ≥ clearance ficam
+sem carve e ganham tabuleiro + pilares; queries de condução em
+`TerrainRuntime::road_surface`). Drift com mini/super-turbo, nitro, arranque
+foguete (hold W), paredes lógicas do traçado, 4 rivais AI pure-pursuit,
+som de motor com pitch, FOV por velocidade, HUD via `viber.race.*` /
+`viber.vehicle.*` (`docs/LUA_API.md` → "Corrida"). Exemplo completo bakado:
+**`examples/simple-racer/`** (Sunset Ridge, 39 nós, ~5,1 km — port do
+simple-racer do VibeGame). Lições e pipeline: `docs/findings/VIBER_SIMPLE_RACER_PORT.md`.
+
 ### CLI instalado (`viber`, via instalador unificado)
 
 ```bash

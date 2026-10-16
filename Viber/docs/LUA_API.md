@@ -354,6 +354,35 @@ Definições em JSON (27 quests do exemplo, embutidas em `src/quests.rs` via
 | `viber.item_count(id)` | quantidade atual (0 se desconhecido) |
 | `viber.alive_in_region(idx)` | hostis scriptados VIVOS na banda `idx` (0–4: centro/norte/sul/este/oeste; snapshot a 1 Hz — o gating do boss final usa isto) |
 
+## Corrida (`viber.race.*` / `viber.vehicle.*`)
+
+Preset `gameplay: racing` no config.yaml (karts + diretor de corrida +
+rivais AI — ver `examples/simple-racer`). Fora do preset, tudo devolve
+`nil`/`0`/`false`. Snapshot por frame: leitura barata, sem escrita (a
+corrida é conduzida pela engine; os scripts formatam HUD e reagem).
+
+| Função | Devolve |
+|--------|---------|
+| `viber.race.state()` | `"grid"` \| `"countdown"` \| `"racing"` \| `"finished"` |
+| `viber.race.lap()` | volta atual, total de voltas (ex.: `1, 3`) |
+| `viber.race.position()` | posição ao vivo, total de karts (ex.: `5, 5`) |
+| `viber.race.time()` | segundos desde o GO |
+| `viber.race.countdown()` | `3`/`2`/`1` durante o semáforo, `nil` fora dele |
+| `viber.race.best_lap()` | melhor volta do kart do jogador (s) ou `nil` |
+| `viber.race.last_lap()` | última volta completada (s) ou `nil` |
+| `viber.race.wrong_way()` | `true` após ~0,7 s em sentido errado |
+| `viber.race.message()` | cartaz atual do diretor (`"GO!"`, `"VOLTA FINAL"`, …) ou `nil` |
+| `viber.vehicle.speed()` | velocidade (m/s), teto (m/s) |
+| `viber.vehicle.nitro()` | tanque de nitro 0..1 |
+| `viber.vehicle.drifting()` | `true` em drift, carga atual (s; mini-turbo ≥ 1.0, super ≥ 2.1) |
+| `viber.vehicle.turbo()` | turbo ativo restante (s) |
+
+Autoria: `<Vehicle driver="player\|ai" template model-url model-yaw>`,
+`<VehicleTemplate id top-speed accel brake …>` e `<Race laps countdown
+grid-s>`; pista = `<Road closed="1" y="…" widths="…" viaduct-clearance="6">`
+(canais por nó — `Viber/src/terrain/roads.rs`). Teclas: WASD/setas, Space
+drift, Shift nitro, R respawn.
+
 ## Input genérico (`viber.input.*`)
 
 Input CRU de teclado e rato — qualquer tecla, não só as de interação. NÃO é
