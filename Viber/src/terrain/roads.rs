@@ -22,9 +22,17 @@
 //!   `via` points, width lerped from the way widths, junction flare
 //!   (`crossing-flare`, ×1.45) widening near ways with degree ≥ 3.
 //!
-//! Known deviations from VibeGame (documented, none affect simple-rpg):
-//! station spacing is 1 m (vs 0.35 m); berms and cross-slope banking are not
-//! implemented; bridge decks are flat ribbons (GLB decks arrive with glTF).
+//! Known deviations from VibeGame (documented): station spacing is 1 m
+//! (vs 0.35 m); berms and cross-slope banking are not implemented.
+//!
+//! **Racing extensions** (simple-racer port, 2026-10-15): `<Road>` accepts
+//! authored per-node channels — `y="…"` (driving-surface elevations) and
+//! `widths="…"` — that ride the same chaikin+resample as the geometry, plus
+//! `viaduct-clearance="6"`: spans floating ≥ clearance above the ground skip
+//! the carve (the valley stays) and render a suspended deck with pylons.
+//! Closed roads close their ring explicitly, so the start/finish seam is
+//! queryable ([`RoadPath::progress`]/[`RoadPath::surface_y_at`]) and meshed.
+//! `TerrainRuntime::road_surface` is the vehicle-facing query.
 
 use std::collections::HashMap;
 
@@ -32,7 +40,9 @@ use bevy::math::Vec2;
 
 use super::brush::{BrushGrid, BrushMode, BrushRequest, min_effective, smootherstep01};
 use super::mesh::ChunkMeshData;
-use super::paths::{chaikin_smooth, nearest_on_path, path_length, resample, station_lerp};
+use super::paths::{
+    PathHit, chaikin_smooth_channels, nearest_on_path, path_length, resample_channels, station_lerp,
+};
 use super::water::WaterBody;
 
 /// Road station spacing for the design profile (meters). VibeGame uses
@@ -139,6 +149,21 @@ pub struct RoadSpec {
     pub smoothing: u32,
     /// Loop road (`closed`).
     pub closed: bool,
+    /// Authored driving-surface elevation per path node (`y="…"`), meters.
+    /// `None` keeps the classic behaviour: survey the natural terrain
+    /// profile. Authored roads grade the terrain to the given profile
+    /// (grade-limited) instead of following the ground.
+    pub elevations: Option<Vec<f32>>,
+    /// Authored ribbon width per path node (`widths="…"`), meters. `None` =
+    /// `width` everywhere.
+    pub widths: Option<Vec<f32>>,
+    /// Viaduct threshold (m, VibeGame `viaduct-clearance`): spans where the
+    /// authored elevation floats ≥ this far above the natural ground stop the
+    /// corridor carve — the valley below stays — and the ribbon renders as a
+    /// suspended deck with pylons. `0.0` disables. One number drives both the
+    /// carve skip and the deck: set them apart and you get either a graded
+    /// scar under a bridge or a span with nothing holding it up.
+    pub viaduct_clearance: f32,
     /// Ribbon texture path (world asset).
     pub texture: Option<String>,
     /// Meters of road length per texture tile.
@@ -164,6 +189,9 @@ impl Default for RoadSpec {
             platform_sink: 0.12,
             smoothing: 2,
             closed: false,
+            elevations: None,
+            widths: None,
+            viaduct_clearance: 0.0,
             texture: None,
             texture_scale: 6.0,
             edge_feather: 1.0,
@@ -497,6 +525,11 @@ impl RoadNetworkSpec {
                     flatten_window: self.flatten_window,
                     flatten_max_grade: self.flatten_max_grade,
                     flatten_shoulder: 0.0,
+                    // Networks são 2D hoje (vias urbanas) — sem canais
+                    // autorados nem viadutos.
+                    elevations: None,
+                    widths: None,
+                    viaduct_clearance: 0.0,
                     platform_sink: if profile == RoadProfile::Plaza {
                         0.0
                     } else {
@@ -603,15 +636,39 @@ pub struct RoadJunction {
     pub texture_scale: f32,
 }
 
+/// Surface info for racing queries ([`TerrainRuntime::road_surface`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RoadSurface {
+    /// Driving surface Y at the query point: the deck height on suspended
+    /// spans, the (carved) terrain heightfield elsewhere.
+    pub y: f32,
+    /// The point sits on a suspended deck span (viaduct/bridge).
+    pub deck: bool,
+    /// Index into the roads registry.
+    pub road: usize,
+    /// Arc position as a fractional station index — lap/progress signal.
+    pub s: f32,
+    /// Half width of the road at the query point (logical wall distance).
+    pub half_width: f32,
+}
+
 /// Registry entry for one carved road (queries + ribbon generation).
 #[derive(Debug, Clone, PartialEq)]
 pub struct RoadPath {
     pub name: Option<String>,
-    /// Smoothed stations (world XZ).
+    /// Smoothed stations (world XZ). Closed roads end with an explicit copy
+    /// of the first station so the seam segment is queryable and meshed.
     pub stations: Vec<Vec2>,
     /// Half width per station (meters, flare applied).
     pub half_width: Vec<f32>,
     pub profile: RoadProfile,
+    /// Driving/deck surface elevation per station (meters): the authored,
+    /// grade-limited profile for authored roads; the carved design profile
+    /// otherwise; the flat deck for `bridge`.
+    pub surface: Vec<f32>,
+    /// Station sits on a suspended deck span (viaduct): no carve below, the
+    /// ribbon renders at [`RoadPath::surface`] and pylons reach the ground.
+    pub deck: Vec<bool>,
     /// Bridge roads: no carve, flat deck at `deck_y`.
     pub bridge: bool,
     pub deck_y: Option<f32>,
@@ -634,6 +691,53 @@ impl RoadPath {
     pub fn is_on_road(&self, p: Vec2) -> bool {
         self.distance_to_road(p) <= 0.0
     }
+
+    pub(crate) fn deck_weight(&self, hit: &PathHit) -> f32 {
+        if self.bridge {
+            return 1.0;
+        }
+        if self.deck.len() != self.stations.len() {
+            return 0.0;
+        }
+        // station_lerp sem alocar: flags 0/1 interpoladas no hit.
+        let n = self.deck.len();
+        let s = hit.station(n);
+        let i = (s.floor() as usize).min(n - 1);
+        let j = (i + 1).min(n - 1);
+        let frac = s - i as f32;
+        let a = if self.deck[i] { 1.0 } else { 0.0 };
+        let b = if self.deck[j] { 1.0 } else { 0.0 };
+        a + (b - a) * frac
+    }
+
+    /// The point sits on a suspended deck span (viaduct or bridge road).
+    pub fn is_deck_at(&self, p: Vec2) -> bool {
+        let Some(hit) = nearest_on_path(&self.stations, p) else {
+            return false;
+        };
+        self.distance_to_road(p) <= 0.0 && self.deck_weight(&hit) > 0.5
+    }
+
+    /// Driving surface elevation for a point **on the road**: deck spans
+    /// return their authored deck height; ground roads return `None` — the
+    /// caller samples the (carved) terrain heightfield instead.
+    pub fn surface_y_at(&self, p: Vec2) -> Option<f32> {
+        if self.distance_to_road(p) > 0.0 {
+            return None;
+        }
+        let hit = nearest_on_path(&self.stations, p)?;
+        if self.deck_weight(&hit) > 0.5 {
+            Some(station_lerp(&self.surface, &hit))
+        } else {
+            None
+        }
+    }
+
+    /// Arc position along the road as a fractional station index — the
+    /// progress signal lap counting and racing AI build on.
+    pub fn progress(&self, p: Vec2) -> Option<f32> {
+        nearest_on_path(&self.stations, p).map(|hit| hit.station(self.stations.len()))
+    }
 }
 
 /// Carves one road corridor and returns its registry path. Returns `None`
@@ -648,18 +752,55 @@ pub fn carve_road(
         return None;
     }
     let texel = grid.texel();
-    let smoothed = chaikin_smooth(&spec.path, spec.smoothing, spec.closed);
     // Spacing REAL das estações. `limit_grade` e a janela de suavização têm de
     // usar o MESMO passo: assumir 1 m com heightmaps grossos (texel > 2 m)
     // convertia flatten-max-grade em grade/16 e a janela de 56 m em ~900 m —
     // estradas sobre-planadas.
     let spacing = STATION_SPACING.max(texel * 0.5);
-    let stations = resample(&smoothed, spacing);
+
+    // Canais autorados (elevação/largura por nó) viajam COM a geometria pelo
+    // chaikin + resample — projectar os valores depois sobre a polilinha
+    // acabada saltaria entre os dois braços de um loop que se cruza a si
+    // próprio (a pista do racer passa POR BAIXO do próprio viaduto).
+    let mut elev_ch: Vec<f32> = spec.elevations.clone().unwrap_or_default();
+    let mut width_ch: Vec<f32> = spec.widths.clone().unwrap_or_default();
+    let mut smoothed = chaikin_smooth_channels(
+        &spec.path,
+        &mut [&mut elev_ch, &mut width_ch],
+        spec.smoothing,
+        spec.closed,
+    );
+    // Pistas fechadas: fechar o anel EXPLICITAMENTE (primeiro ponto no fim).
+    // O `resample`/`nearest_on_path` só andam para a frente — sem o fecho, a
+    // reta da meta não existia para queries nem para a mesh.
+    if spec.closed && !smoothed.is_empty() {
+        smoothed.push(smoothed[0]);
+        if elev_ch.len() == smoothed.len() - 1 {
+            elev_ch.push(elev_ch[0]);
+        }
+        if width_ch.len() == smoothed.len() - 1 {
+            width_ch.push(width_ch[0]);
+        }
+    }
+    let mut stations = resample_channels(&smoothed, &mut [&mut elev_ch, &mut width_ch], spacing);
+    // E fechar TAMBÉM as estações: o pin do fim é condicional (≤ 0,25·espaço
+    // do primeiro ponto) — sem isto a ribbon ficava com um vão até 25 cm na
+    // costura da meta.
+    if spec.closed && !stations.is_empty() {
+        stations.push(stations[0]);
+        if elev_ch.len() == stations.len() - 1 {
+            elev_ch.push(elev_ch[0]);
+        }
+        if width_ch.len() == stations.len() - 1 {
+            width_ch.push(width_ch[0]);
+        }
+    }
     if stations.len() < 2 {
         return None;
     }
-    let half_width = spec.width * 0.5;
-    let bed_half = min_effective(half_width + ROADBED_OVERHANG, texel);
+    let authored_elev =
+        (spec.elevations.is_some() && elev_ch.len() == stations.len()).then(|| elev_ch.clone());
+    let per_node_width = spec.widths.is_some() && width_ch.len() == stations.len();
 
     // Flare profile: widen near crossing ways (network junctions).
     let flare_at = |p: Vec2| -> f32 {
@@ -678,6 +819,20 @@ pub fn carve_road(
         }
     };
 
+    // Half width per station (authored widths ride the channel, uniform
+    // `width` otherwise), flare included — the bed is derived from it.
+    let half_widths: Vec<f32> = (0..stations.len())
+        .map(|i| {
+            let base = if per_node_width {
+                width_ch[i] * 0.5
+            } else {
+                spec.width * 0.5
+            };
+            base.max(0.05) * flare_at(stations[i])
+        })
+        .collect();
+    let bed_stations: Vec<f32> = half_widths.iter().map(|h| h + ROADBED_OVERHANG).collect();
+
     // Bridge: no carve; flat deck at the higher end (GLB decks come later).
     if spec.profile == RoadProfile::Bridge || !spec.flatten {
         let y0 = grid.sample(stations[0].x, stations[0].y);
@@ -685,27 +840,57 @@ pub fn carve_road(
             stations[stations.len() - 1].x,
             stations[stations.len() - 1].y,
         );
+        let deck_y = (spec.profile == RoadProfile::Bridge).then(|| y0.max(y1));
+        let surface: Vec<f32> = match (&authored_elev, deck_y) {
+            (Some(e), _) => e.clone(),
+            (None, Some(y)) => vec![y; stations.len()],
+            (None, None) => natural_profile(grid, &stations),
+        };
+        let deck = vec![spec.profile == RoadProfile::Bridge; stations.len()];
         return Some(RoadPath {
             name: spec.name.clone(),
-            half_width: (0..stations.len())
-                .map(|i| half_width * flare_at(stations[i]))
-                .collect(),
+            half_width: half_widths,
             stations,
             profile: spec.profile,
+            surface,
+            deck,
             bridge: spec.profile == RoadProfile::Bridge,
-            deck_y: (spec.profile == RoadProfile::Bridge).then(|| y0.max(y1)),
+            deck_y,
         });
     }
 
     let sink = spec.platform_sink;
+    let natural = natural_profile(grid, &stations);
 
-    // 1. Survey the natural profile, then smooth it (window, 3 box passes).
-    let mut design: Vec<f32> = stations.iter().map(|p| grid.sample(p.x, p.y)).collect();
-    let window = (spec.flatten_window / spacing).round();
-    let half_window = (window as usize).max(1);
-    for _ in 0..3 {
-        box_smooth(&mut design, half_window);
-    }
+    // Spans de viaduto: estações autoradas ≥ `viaduct-clearance` acima do
+    // solo natural. Sem carve aí — o vale fica intacto (a floresta cresce por
+    // baixo) — e a ribbon desenha o tabuleiro à cota autoriada com pilares.
+    // Um número só governa os dois lados (carve skip + deck), como no
+    // VibeGame: afasta-os e tens ou uma cicatriz gradada debaixo de ponte ou
+    // um vão sem nada a segurá-lo.
+    let deck: Vec<bool> = match (&authored_elev, spec.viaduct_clearance > 0.0) {
+        (Some(e), true) => e
+            .iter()
+            .zip(&natural)
+            .map(|(&d, &n)| d - n >= spec.viaduct_clearance)
+            .collect(),
+        _ => vec![false; stations.len()],
+    };
+
+    // 1. Design profile: authored (hand-tuned, no window smoothing — only the
+    //    grade limit) or the classic natural survey + 3 box passes.
+    let mut design: Vec<f32> = match &authored_elev {
+        Some(e) => e.clone(),
+        None => {
+            let mut d = natural.clone();
+            let window = (spec.flatten_window / spacing).round();
+            let half_window = (window as usize).max(1);
+            for _ in 0..3 {
+                box_smooth(&mut d, half_window);
+            }
+            d
+        }
+    };
     // 2. Pin the pad plazas, then limit the grade.
     //
     // The survey window is wide (`flatten_window`, smoothed three times), so a
@@ -753,11 +938,13 @@ pub fn carve_road(
     // fabricava um degrau/falésia ao lado do leito em cortes fundos. Mesmo
     // padrão do `feather_max` do carve de rios (water.rs).
     let falloff_max = falloff.iter().copied().fold(falloff_base, f32::max);
-    let extent = bed_half * CROSSING_FLARE + shoulder + falloff_max + texel * 2.0;
+    let bed_max = bed_stations.iter().copied().fold(0.0_f32, f32::max);
+    let extent = bed_max * CROSSING_FLARE + shoulder + falloff_max + texel * 2.0;
 
     let owner = format!("road:{index}");
     grid.begin_stroke(&owner);
     let stations_ref = &stations;
+    let deck_f: Vec<f32> = deck.iter().map(|&d| if d { 1.0 } else { 0.0 }).collect();
     let mut weight = |p: Vec2| {
         if guards.blocked(p) {
             return 0.0;
@@ -765,11 +952,15 @@ pub fn carve_road(
         let Some(hit) = nearest_on_path(stations_ref, p) else {
             return 0.0;
         };
+        // Vão suspenso: o carve não toca no vale (peso 0).
+        if station_lerp(&deck_f, &hit) > 0.5 {
+            return 0.0;
+        }
         let d = hit.point.distance(p);
         // Both the bed half-width and the falloff are evaluated at the
         // projected point / interpolated station: sampling them per segment
         // steps the corridor width and terraces its slope.
-        let hw = bed_half * flare_at(hit.point);
+        let hw = station_lerp(&bed_stations, &hit);
         let inner = hw + shoulder;
         let fall = station_lerp(&falloff, &hit);
         let outer = inner + fall;
@@ -813,14 +1004,19 @@ pub fn carve_road(
 
     Some(RoadPath {
         name: spec.name.clone(),
-        half_width: (0..stations.len())
-            .map(|i| half_width * flare_at(stations[i]))
-            .collect(),
+        half_width: half_widths,
         stations,
         profile: spec.profile,
+        surface: design,
+        deck,
         bridge: false,
         deck_y: None,
     })
+}
+
+/// Natural terrain height sampled at every station.
+fn natural_profile(grid: &BrushGrid, stations: &[Vec2]) -> Vec<f32> {
+    stations.iter().map(|p| grid.sample(p.x, p.y)).collect()
 }
 
 /// Forward+backward grade clamp: `|ys[i+1] − ys[i]| ≤ max_grade · ds`.
@@ -873,11 +1069,17 @@ fn organic_noise(seed: u32, t: f32) -> f32 {
 /// Refina o caminho para o toque orgânico do polish: subdivisão em passos
 /// curtos, suavização dos cantos (média dos vizinhos) e noise lateral de
 /// baixa frequência + wobble da largura — determinístico por estrada
-/// (seed derivado da primeira estação).
-fn refine_organic(path: &RoadPath) -> (Vec<Vec2>, Vec<f32>) {
+/// (seed derivado da primeira estação). Transporta os canais de superfície
+/// (cota do tabuleiro) e deck em lockstep com os pontos refinados; o noise
+/// só desloca XZ, a cota não mexe.
+fn refine_organic(path: &RoadPath) -> (Vec<Vec2>, Vec<f32>, Vec<f32>, Vec<bool>) {
+    let has_surface = path.surface.len() == path.stations.len();
+    let has_deck = path.deck.len() == path.stations.len();
     // 1) subdivisão em passos curtos
     let mut pts: Vec<Vec2> = Vec::new();
     let mut widths: Vec<f32> = Vec::new();
+    let mut surface: Vec<f32> = Vec::new();
+    let mut deck: Vec<bool> = Vec::new();
     for (i, st) in path.stations.iter().enumerate() {
         if i > 0 {
             let prev = path.stations[i - 1];
@@ -889,10 +1091,30 @@ fn refine_organic(path: &RoadPath) -> (Vec<Vec2>, Vec<f32>) {
                 widths.push(
                     path.half_width[i - 1] + (path.half_width[i] - path.half_width[i - 1]) * t,
                 );
+                if has_surface {
+                    surface.push(path.surface[i - 1] + (path.surface[i] - path.surface[i - 1]) * t);
+                }
+                if has_deck {
+                    let a = path.deck[i - 1];
+                    let b = path.deck[i];
+                    deck.push(if a == b {
+                        a
+                    } else {
+                        let fa = if a { 1.0 } else { 0.0 };
+                        let fb = if b { 1.0 } else { 0.0 };
+                        fa + (fb - fa) * t > 0.5
+                    });
+                }
             }
         } else {
             pts.push(*st);
             widths.push(path.half_width[0]);
+            if has_surface {
+                surface.push(path.surface[0]);
+            }
+            if has_deck {
+                deck.push(path.deck[0]);
+            }
         }
     }
     // 2) suavização dos cantos (2 passes de média dos vizinhos, endpoints fixos)
@@ -918,25 +1140,57 @@ fn refine_organic(path: &RoadPath) -> (Vec<Vec2>, Vec<f32>) {
         *p += perp * offset;
         widths[i] *= 1.0 + organic_noise(seed.wrapping_add(0x5111), arc_t * 0.25) * RIBBON_WOBBLE;
     }
-    (pts, widths)
+    if !has_surface {
+        surface.clear();
+    }
+    if !has_deck {
+        deck.clear();
+    }
+    (pts, widths, surface, deck)
 }
+
+/// Pilar de tabuleiro (viaduto): espaçamento ao longo do vão (m) — VibeGame
+/// `pylon-spacing` = 30 m.
+pub const DECK_PYLON_SPACING: f32 = 30.0;
+/// Meia secção do pilar (m) — quadrado de 1,6 m.
+pub const DECK_PYLON_HALF: f32 = 0.8;
+/// Vãos com menos folga que esta ficam sem pilar — um aterro lê-se melhor do
+/// que tocos de coluna.
+pub const DECK_PYLON_MIN_CLEARANCE: f32 = 2.0;
+/// Enterramento da base do pilar sob o solo (m).
+pub const DECK_PYLON_BURIAL: f32 = 1.0;
+/// Pilares não nascem a menos distância disto da borda de OUTRA estrada (m) —
+/// a passagem inferior da pista tem de ficar limpa.
+pub const DECK_PYLON_GUARD: f32 = 3.0;
+/// Recuo do topo do pilar sob o tabuleiro (m).
+pub const DECK_PYLON_TUCK: f32 = 0.35;
 
 /// Builds the road ribbon draped on the carved terrain (world-space
 /// positions, edge alpha feather, UVs em metros/scale — world-space, a
-/// textura fica fixa no mundo).
-/// Bridge roads render as a flat deck at `deck_y`.
+/// textura fica fixa no mundo). Spans de viaduto (`path.deck`) e pontes
+/// (`profile="bridge"`) desenham o tabuleiro à cota de [`RoadPath::surface`]
+/// com pilares até ao solo — `others` (as restantes estradas do mundo) só
+/// serve para os pilares não nascerem dentro do corredor de uma passagem
+/// inferior.
 /// Loop de polish (2026-09-01): caminho refinado orgânico (subdivisão +
 /// suavização de cantos + noise lateral/wobble determinísticos) e saias
 /// laterais que descem até o leito — a estrada funde com o terreno em vez
 /// de flutuar a 0.2 m fixo.
-pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> ChunkMeshData {
+pub fn road_ribbon_mesh(
+    grid: &BrushGrid,
+    path: &RoadPath,
+    spec: &RoadSpec,
+    others: &[RoadPath],
+    self_index: usize,
+) -> ChunkMeshData {
     let mut mesh = ChunkMeshData::default();
     let n = path.stations.len();
     if n < 2 {
         return mesh;
     }
-    let (stations, half_widths) = refine_organic(path);
+    let (stations, half_widths, surfaces, decks) = refine_organic(path);
     let n = stations.len();
+    let has_surface = !surfaces.is_empty();
     let feather = spec.edge_feather.max(0.0); // metros (VibeGame edgeFeather)
     let scale = if spec.texture_scale > 0.0 {
         spec.texture_scale
@@ -1007,9 +1261,17 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
         // vai `RIBBON_LIFT` acima do chão, ~6 cm dessa cortina ficava SEMPRE
         // acima da superfície: em ângulo raso desenhava um risco contínuo ao
         // longo da berma (bug reportado). No tabuleiro de ponte a saia nunca
-        // chegou a existir — o ramo `path.bridge` abaixo ignora `lift`, por
+        // chegou a existir — o ramo `deck aqui em baixo` ignora `lift`, por
         // isso os dois anéis coincidem em Y e o quad é degenerado.
         let alphas = [0.0, 0.0, 1.0, 1.0, 0.0, 0.0];
+        // Vão suspenso: a cota vem do perfil autoriado (tabuleiro), não do
+        // terreno lá em baixo.
+        let on_deck = path.bridge || (has_surface && decks.get(i).copied().unwrap_or(false));
+        let deck_y = if has_surface {
+            surfaces[i]
+        } else {
+            path.deck_y.unwrap_or(0.0)
+        };
         for (k, lat) in laterals.iter().enumerate() {
             let p = *st + perp * (*lat * miter);
             let lift = if k == 0 || k == 5 {
@@ -1017,13 +1279,13 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
             } else {
                 0.0
             };
-            let y = if path.bridge {
-                path.deck_y.unwrap_or(0.0) + RIBBON_LIFT
+            let y = if on_deck {
+                deck_y + RIBBON_LIFT
             } else {
                 grid.sample(p.x, p.y) + RIBBON_LIFT - lift
             };
             mesh.positions.push([p.x, y, p.y]);
-            mesh.normals.push(if path.bridge {
+            mesh.normals.push(if on_deck {
                 [0.0, 1.0, 0.0]
             } else {
                 grid.sample_normal(p.x, p.y, grid.texel()).to_array()
@@ -1053,7 +1315,81 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
         mesh.indices
             .extend_from_slice(&[a + 4, b + 4, b + 5, a + 4, b + 5, a + 5]);
     }
+
+    // Pilares dos vãos suspensos: colunas quadradas (4 lados, topo enfiado
+    // sob o tabuleiro, base enterrada) a cada `DECK_PYLON_SPACING` de arco.
+    // Determinístico — percorre as estações refinadas acumulando o arco.
+    if has_surface {
+        let mut since_pylon = f32::INFINITY;
+        for i in 0..n {
+            if i > 0 {
+                since_pylon += stations[i].distance(stations[i - 1]);
+            }
+            let on_deck = path.bridge || decks.get(i).copied().unwrap_or(false);
+            if !on_deck {
+                since_pylon = 0.0;
+                continue;
+            }
+            if since_pylon < DECK_PYLON_SPACING {
+                continue;
+            }
+            since_pylon = 0.0;
+            let center = stations[i];
+            let top_y = surfaces[i] - DECK_PYLON_TUCK;
+            let ground_y = grid.sample(center.x, center.y);
+            if top_y - ground_y < DECK_PYLON_MIN_CLEARANCE {
+                continue;
+            }
+            // Passagem inferior: não nascer dentro do corredor de outra estrada.
+            if others
+                .iter()
+                .enumerate()
+                .any(|(oi, o)| oi != self_index && o.distance_to_road(center) < DECK_PYLON_GUARD)
+            {
+                continue;
+            }
+            emit_deck_pylon(
+                &mut mesh,
+                center,
+                top_y,
+                ground_y - DECK_PYLON_BURIAL,
+                scale,
+            );
+        }
+    }
     mesh
+}
+
+/// Anexa uma coluna quadrada (4 lados, um quad por lado) ao mesh. Winding e
+/// normais para FORA: para o lado a→b, `(b_a − t_a) × (b_b − t_a)` dá a
+/// normal horizontal exterior qualquer que seja o lado — por isso um único
+/// padrão de índices serve os 4 lados.
+fn emit_deck_pylon(mesh: &mut ChunkMeshData, center: Vec2, top_y: f32, bottom_y: f32, scale: f32) {
+    let h = DECK_PYLON_HALF;
+    // Cantos em ordem (XZ): os 4 lados fecham o anel.
+    let corners = [
+        Vec2::new(center.x + h, center.y + h),
+        Vec2::new(center.x + h, center.y - h),
+        Vec2::new(center.x - h, center.y - h),
+        Vec2::new(center.x - h, center.y + h),
+    ];
+    for i in 0..4 {
+        let a = corners[i];
+        let b = corners[(i + 1) % 4];
+        // Exterior do lado a→b: perpendicular horizontal de (b−a).
+        let d = b - a;
+        let n = Vec2::new(-d.y, d.x).normalize_or_zero();
+        let base = mesh.positions.len() as u32;
+        for (p, y) in [(a, top_y), (a, bottom_y), (b, bottom_y), (b, top_y)] {
+            mesh.positions.push([p.x, y, p.y]);
+            mesh.normals.push([n.x, 0.0, n.y]);
+            mesh.uvs.push([p.x / scale, y / scale]);
+            mesh.colors.push([1.0, 1.0, 1.0, 1.0]);
+        }
+        let (t_a, b_a, b_b, t_b) = (base, base + 1, base + 2, base + 3);
+        mesh.indices
+            .extend_from_slice(&[t_a, b_a, b_b, t_a, b_b, t_b]);
+    }
 }
 
 /// Fusion-disc mesh for a junction.
@@ -1644,7 +1980,7 @@ mod tests {
             let mut g = grid.clone();
             carve_road(&mut g, &spec, 0, &RoadGuards::default()).expect("road")
         };
-        let mesh = road_ribbon_mesh(&grid, &path, &spec);
+        let mesh = road_ribbon_mesh(&grid, &path, &spec, &[], 0);
         // Stride 6: [skirtL, edgeL, coreL, coreR, edgeR, skirtR]. The feather
         // width on the left is |coreL - edgeL| in XZ.
         let widths: Vec<f32> = mesh
@@ -1681,7 +2017,7 @@ mod tests {
         bridge_path.bridge = true;
         bridge_path.deck_y = Some(6.0);
         for (label, p) in [("chão", &path), ("ponte", &bridge_path)] {
-            let mesh = road_ribbon_mesh(&grid, p, &spec);
+            let mesh = road_ribbon_mesh(&grid, p, &spec, &[], 0);
             for (i, c) in mesh.colors.chunks(6).enumerate() {
                 assert!(
                     c[0][3].abs() < 1e-6 && c[5][3].abs() < 1e-6,
@@ -2043,16 +2379,18 @@ mod tests {
             deck_y: None,
             stations: vec![Vec2::new(30.0, 64.0), Vec2::new(40.0, 64.0)],
             half_width: vec![2.0, 2.0],
+            surface: vec![6.0, 6.0],
+            deck: vec![false, false],
         };
         let spec = road_spec();
-        let mesh = road_ribbon_mesh(&grid, &path, &spec);
+        let mesh = road_ribbon_mesh(&grid, &path, &spec, &[], 0);
         // O 1º segmento escreve 18 índices de deck antes das saias.
         let v = |i: u32| bevy::math::Vec3::from_array(mesh.positions[i as usize]);
         let (a, b, c) = (v(mesh.indices[0]), v(mesh.indices[1]), v(mesh.indices[2]));
         let normal = (b - a).cross(c - a);
         assert!(normal.y > 0.0, "ribbon winding must face up: {normal}");
         // Determinismo: mesma entrada → mesma malha.
-        let again = road_ribbon_mesh(&grid, &path, &spec);
+        let again = road_ribbon_mesh(&grid, &path, &spec, &[], 0);
         assert_eq!(mesh.positions, again.positions, "noise determinístico");
         // Refine orgânico: 10 m com passo ≤ 2.5 m → ≥ 4 estações refinadas
         // (2 de entrada), 6 vértices cada (deck 4 + saias 2).
@@ -2079,9 +2417,11 @@ mod tests {
                 Vec2::new(64.0, 108.0),
             ],
             half_width: vec![2.0; 5],
+            surface: vec![6.0; 5],
+            deck: vec![false; 5],
         };
         let spec = road_spec();
-        let mesh = road_ribbon_mesh(&grid, &path, &spec);
+        let mesh = road_ribbon_mesh(&grid, &path, &spec, &[], 0);
         assert_eq!(mesh.positions.len() % 6, 0, "6 verts por estação");
         let stations = mesh.positions.len() / 6;
         assert!(stations >= 20, "subdivisão refiniu a L: {stations}");
@@ -2105,7 +2445,7 @@ mod tests {
         let spec = road_spec();
         let guards = RoadGuards::default();
         let path = carve_road(&mut grid, &spec, 0, &guards).expect("road");
-        let mesh = road_ribbon_mesh(&grid, &path, &spec);
+        let mesh = road_ribbon_mesh(&grid, &path, &spec, &[], 0);
         assert_eq!(mesh.positions.len() % 6, 0, "deck 4 + saias 2");
         // 18 índices de deck + 12 de saias por segmento.
         let refined = mesh.positions.len() / 6;
@@ -2166,5 +2506,247 @@ mod tests {
         // pass does not invent new height at the head).
         assert!((ys[0] - 0.0).abs() < 1e-4, "head kept: {:?}", ys);
         assert!(ys[3] < 5.0, "tail pulled down by the clamp: {:?}", ys);
+    }
+
+    /// Grelha plana a 6 m — cenário limpo para pistas autoradas.
+    fn flat_grid() -> BrushGrid {
+        let mut grid =
+            BrushGrid::new(vec![0; 128 * 128], 128, 128, 128.0, 50.0, 0.0).expect("grid");
+        grid.begin_stroke("base");
+        for z in 0..128 {
+            for x in 0..128 {
+                let p = grid.cell_center(x, z);
+                grid.set_cell_height(x, z, 6.0 + 0.05 * p.x);
+            }
+        }
+        grid.commit_stroke();
+        grid
+    }
+
+    /// Pista autorada com vão de viaduto: o terreno sob o deck fica INTACTO
+    /// (o vale não é gradado), as spans de solo são carvadas ao perfil, o
+    /// RoadPath marca deck/surface e as queries respondem em conformidade.
+    #[test]
+    fn test_authored_road_skips_carve_over_viaduct() {
+        let mut grid = flat_grid();
+        let spec = RoadSpec {
+            path: vec![
+                Vec2::new(10.0, 64.0),
+                Vec2::new(40.0, 64.0),
+                Vec2::new(64.0, 64.0),
+                Vec2::new(90.0, 64.0),
+                Vec2::new(118.0, 64.0),
+            ],
+            // solo 6 → tabuleiro 16 no meio: folga 10 ≥ clearance 6.
+            elevations: Some(vec![6.0, 6.0, 16.0, 16.0, 6.0]),
+            widths: Some(vec![8.0, 8.0, 10.0, 10.0, 8.0]),
+            viaduct_clearance: 6.0,
+            width: 8.0,
+            flatten_shoulder: 2.0,
+            // Perfil autoriado livre de clamp — o limite de gradiente tem
+            // teste próprio (`test_limit_grade_clamps_steep_profiles`).
+            flatten_max_grade: 1.5,
+            ..road_spec()
+        };
+        let path = carve_road(&mut grid, &spec, 0, &RoadGuards::default()).expect("carved");
+        assert!(path.deck.iter().any(|&d| d), "mid span flagged as deck");
+        assert!(!path.deck[0], "ground span not deck");
+        assert_eq!(path.deck.len(), path.stations.len());
+        assert_eq!(path.surface.len(), path.stations.len());
+
+        // Sob o tabuleiro (x=64): terreno intacto, sem carve.
+        let natural_center = 6.0 + 0.05 * 64.0;
+        let under_deck = grid.sample(64.0, 64.0);
+        assert!(
+            (under_deck - natural_center).abs() < 0.35,
+            "valley under the deck stays: {under_deck} vs {natural_center}"
+        );
+        // No span de solo (x=12): carve assentou no perfil autoriado.
+        let on_ground = grid.sample(12.0, 64.0);
+        assert!(
+            (on_ground - (6.0 - spec.platform_sink)).abs() < 0.3,
+            "ground span carved to authored profile: {on_ground}"
+        );
+
+        // Query de superfície: deck devolve a cota autoriada; span de solo
+        // devolve None (o chamador usa o heightfield).
+        let deck_hit = path.surface_y_at(Vec2::new(64.0, 64.0));
+        assert!(
+            matches!(deck_hit, Some(y) if (y - 16.0).abs() < 0.6),
+            "deck surface is authored: {deck_hit:?}"
+        );
+        assert!(
+            path.surface_y_at(Vec2::new(12.0, 64.0)).is_none(),
+            "ground span has no deck surface"
+        );
+        assert!(path.is_deck_at(Vec2::new(64.0, 64.0)));
+        assert!(!path.is_deck_at(Vec2::new(12.0, 64.0)));
+        // Progresso varia ao longo da pista.
+        let s0 = path.progress(Vec2::new(12.0, 64.0)).expect("progress");
+        let s1 = path.progress(Vec2::new(64.0, 64.0)).expect("progress");
+        assert!(s1 > s0 + 5.0, "progress advances: {s0} -> {s1}");
+    }
+
+    /// Larguras por nó: a half_width do RoadPath segue o canal `widths`.
+    #[test]
+    fn test_authored_widths_reach_the_road_path() {
+        let mut grid = flat_grid();
+        let spec = RoadSpec {
+            path: vec![Vec2::new(10.0, 64.0), Vec2::new(118.0, 64.0)],
+            elevations: Some(vec![6.0, 6.0]),
+            widths: Some(vec![6.0, 18.0]),
+            width: 6.0,
+            ..road_spec()
+        };
+        let path = carve_road(&mut grid, &spec, 0, &RoadGuards::default()).expect("carved");
+        let hw0 = path.half_width[0];
+        let hw1 = *path.half_width.last().expect("non-empty");
+        assert!(
+            (hw0 - 3.0).abs() < 0.2 && (hw1 - 9.0).abs() < 0.2,
+            "half widths follow the channel: {hw0} .. {hw1}"
+        );
+    }
+
+    /// Pista fechada: o anel fica explícito (primeira estação repetida no
+    /// fim) — a reta da meta é queryável e a ribbon fecha sem vão.
+    #[test]
+    fn test_closed_road_ring_is_explicit() {
+        let mut grid = flat_grid();
+        let spec = RoadSpec {
+            path: vec![
+                Vec2::new(44.0, 44.0),
+                Vec2::new(84.0, 44.0),
+                Vec2::new(84.0, 84.0),
+                Vec2::new(44.0, 84.0),
+            ],
+            closed: true,
+            width: 8.0,
+            ..road_spec()
+        };
+        let path = carve_road(&mut grid, &spec, 0, &RoadGuards::default()).expect("carved");
+        assert_eq!(path.stations.len(), path.half_width.len());
+        assert_eq!(path.stations.len(), path.surface.len());
+        assert_eq!(path.stations.len(), path.deck.len());
+        assert!(
+            path.stations.first() == path.stations.last(),
+            "ring closed with an explicit copy of the first station"
+        );
+        // Reta de meta (meio da aresta de topo): em pista e a superfície é a
+        // do terreno carvado (query devolve None — é span de solo).
+        assert!(path.is_on_road(Vec2::new(64.0, 44.0)));
+        assert!(path.surface_y_at(Vec2::new(64.0, 44.0)).is_none());
+        // O meio do vão de fechamento (costura) também é pista.
+        assert!(path.is_on_road(Vec2::new(44.0, 64.0)));
+    }
+
+    /// Ribbon em vão suspenso: vértices à cota autoriada (+RIBBON_LIFT),
+    /// normal +Y, e pilares anexados ao mesmo mesh.
+    #[test]
+    fn test_ribbon_deck_renders_at_authored_height_with_pylons() {
+        let grid = flat_grid();
+        let path = RoadPath {
+            name: None,
+            profile: RoadProfile::Artery,
+            bridge: false,
+            deck_y: None,
+            stations: vec![Vec2::new(30.0, 64.0), Vec2::new(90.0, 64.0)],
+            half_width: vec![4.0, 4.0],
+            surface: vec![16.0, 16.0],
+            deck: vec![true, true],
+        };
+        let spec = road_spec();
+        let mesh = road_ribbon_mesh(&grid, &path, &spec, &[], 0);
+        assert!(!mesh.positions.is_empty());
+        // Vértices de ribbon (a cota do deck, 16 + RIBBON_LIFT): o refine
+        // subdividiu 60 m em passos ≤ 2,5 m → ≥ 24 estações × 6 verts. Os
+        // pilares ficam a outras cotas (topo entalado a 16 − TUCK), por isso
+        // a contagem exata de vértices de ribbon é a contagem no deck.
+        let deck_verts = mesh
+            .positions
+            .iter()
+            .filter(|p| (p[1] - (16.0 + RIBBON_LIFT)).abs() < 1e-4)
+            .count();
+        assert!(
+            deck_verts >= 24 * 6 && deck_verts % 6 == 0,
+            "ribbon subdivided on the deck: {deck_verts}"
+        );
+        // Pilares: vértices fora da ribbon (a ribbon é múltiplo de 6; cada
+        // pilar anexa 16 vértices = 4 lados × 4). As bases descem bem abaixo
+        // do tabuleiro.
+        let pylon_verts = mesh.positions.len() - deck_verts;
+        assert!(
+            pylon_verts >= 16 && pylon_verts % 16 == 0,
+            "whole pylons on a 60 m span: {pylon_verts}"
+        );
+        let pylon_min_y = mesh.positions[deck_verts..]
+            .iter()
+            .map(|p| p[1])
+            .fold(f32::INFINITY, f32::min);
+        assert!(
+            pylon_min_y < 16.0 - DECK_PYLON_MIN_CLEARANCE,
+            "pylons descend well below the deck: {pylon_min_y}"
+        );
+        // Winding do deck continua a virar para cima.
+        let v = |i: u32| bevy::math::Vec3::from_array(mesh.positions[i as usize]);
+        let (a, b, c) = (v(mesh.indices[0]), v(mesh.indices[1]), v(mesh.indices[2]));
+        let normal = (b - a).cross(c - a);
+        assert!(normal.y > 0.0, "deck winding must face up: {normal}");
+    }
+
+    /// Pilares não nascem dentro do corredor de outra estrada (passagem
+    /// inferior da pista fica limpa).
+    #[test]
+    fn test_deck_pylons_skip_crossing_roads() {
+        let grid = flat_grid();
+        // Deck +X a 16 m, vão de 90 m → pilares a x=20, 50, 80, 110; a
+        // estrada de solo em X=60 (meia-largura 10) limpa o pilar de x=50
+        // (distância à borda = 0 < guarda).
+        let path = RoadPath {
+            name: None,
+            profile: RoadProfile::Artery,
+            bridge: false,
+            deck_y: None,
+            stations: vec![Vec2::new(20.0, 64.0), Vec2::new(110.0, 64.0)],
+            half_width: vec![4.0, 4.0],
+            surface: vec![16.0, 16.0],
+            deck: vec![true, true],
+        };
+        let under = RoadPath {
+            name: None,
+            profile: RoadProfile::Artery,
+            bridge: false,
+            deck_y: None,
+            stations: vec![Vec2::new(60.0, 24.0), Vec2::new(60.0, 104.0)],
+            half_width: vec![10.0, 10.0],
+            surface: vec![6.0, 6.0],
+            deck: vec![false, false],
+        };
+        let spec = road_spec();
+        // Contrato do runtime: `others` = TODAS as estradas do mundo,
+        // `self_index` = índice da estrada em mesh nesse conjunto.
+        let all = vec![path.clone(), under];
+        let with_guard = road_ribbon_mesh(&grid, &path, &spec, &all, 0);
+        let without = road_ribbon_mesh(&grid, &path, &spec, &[], 0);
+        // A ribbon é idêntica; a diferença são pilares (16 vértices cada,
+        // fora dos vértices de ribbon à cota do deck).
+        let deck_verts = |m: &ChunkMeshData| {
+            m.positions
+                .iter()
+                .filter(|p| (p[1] - (16.0 + RIBBON_LIFT)).abs() < 1e-4)
+                .count()
+        };
+        let pylons = |m: &ChunkMeshData| (m.positions.len() - deck_verts(m)) / 16;
+        assert!(
+            pylons(&without) >= 2,
+            "baseline: pylons exist on the 90 m span: {}",
+            pylons(&without)
+        );
+        assert_eq!(
+            pylons(&without) - pylons(&with_guard),
+            1,
+            "exactly the underpass pylon is removed ({} -> {})",
+            pylons(&without),
+            pylons(&with_guard)
+        );
     }
 }

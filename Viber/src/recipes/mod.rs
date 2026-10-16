@@ -4794,6 +4794,17 @@ fn finish_road(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
                     bail!("{kctx}: a road needs at least 2 points (x z pairs)");
                 }
             }
+            // Canais autorados por nó: cota de condução (`y`) e largura
+            // (`widths`) — contagens têm de bater certo com `path`.
+            "y" | "elevations" => {
+                spec.elevations = Some(values::parse_f32_list(&value, &kctx)?);
+            }
+            "widths" => {
+                spec.widths = Some(values::parse_f32_list(&value, &kctx)?);
+            }
+            "viaduct-clearance" => {
+                spec.viaduct_clearance = values::parse_f32(&value, &kctx)?.max(0.0);
+            }
             "width" => spec.width = values::parse_f32(&value, &kctx)?,
             "flatten-shoulder" => spec.flatten_shoulder = values::parse_f32(&value, &kctx)?,
             "platform-sink" => spec.platform_sink = values::parse_f32(&value, &kctx)?,
@@ -4819,6 +4830,27 @@ fn finish_road(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             "{ctx_tag}: width must be a positive number (got {})",
             spec.width
         );
+    }
+    if let Some(e) = &spec.elevations
+        && e.len() != spec.path.len()
+    {
+        bail!(
+            "{ctx_tag}: `y` needs one elevation per path node ({} nodes, got {})",
+            spec.path.len(),
+            e.len()
+        );
+    }
+    if let Some(w) = &spec.widths {
+        if w.len() != spec.path.len() {
+            bail!(
+                "{ctx_tag}: `widths` needs one width per path node ({} nodes, got {})",
+                spec.path.len(),
+                w.len()
+            );
+        }
+        if w.iter().any(|v| !v.is_finite() || *v <= 0.0) {
+            bail!("{ctx_tag}: every `widths` entry must be a positive number");
+        }
     }
     if let Some(p) = profile {
         spec.profile = p;

@@ -18,17 +18,36 @@ use bevy::math::Vec2;
 /// paths (`closed = true`) wrap around. Paths with fewer than 3 points or
 /// `iterations == 0` are returned unchanged.
 pub fn chaikin_smooth(points: &[Vec2], iterations: u32, closed: bool) -> Vec<Vec2> {
+    chaikin_smooth_channels(points, &mut [], iterations, closed)
+}
+
+/// [`chaikin_smooth`] carrying any number of per-point scalar channels
+/// (authored road elevations, widths) with the same 0.75/0.25 weights as the
+/// geometry, so each channel stays in lockstep with its points. Projecting a
+/// channel onto the finished polyline instead would jump across the two arms
+/// of a self-overlapping loop — the racer track passes under its own flyover.
+/// Channels whose length differs from `points` are returned untouched.
+pub fn chaikin_smooth_channels(
+    points: &[Vec2],
+    channels: &mut [&mut Vec<f32>],
+    iterations: u32,
+    closed: bool,
+) -> Vec<Vec2> {
     let mut out = points.to_vec();
     if points.len() < 3 || iterations == 0 {
         return out;
     }
     for _ in 0..iterations {
-        out = chaikin_once(&out, closed);
+        out = chaikin_once_channels(&out, channels, closed);
     }
     out
 }
 
-fn chaikin_once(points: &[Vec2], closed: bool) -> Vec<Vec2> {
+fn chaikin_once_channels(
+    points: &[Vec2],
+    channels: &mut [&mut Vec<f32>],
+    closed: bool,
+) -> Vec<Vec2> {
     let n = points.len();
     let mut out = Vec::with_capacity(n * 2);
     let segments = if closed { n } else { n - 1 };
@@ -43,6 +62,24 @@ fn chaikin_once(points: &[Vec2], closed: bool) -> Vec<Vec2> {
     }
     if !closed {
         out.push(points[n - 1]);
+    }
+    for ch in channels.iter_mut() {
+        if ch.len() != n {
+            continue;
+        }
+        let mut cv = Vec::with_capacity(n * 2);
+        if !closed {
+            cv.push(ch[0]);
+        }
+        for i in 0..segments {
+            let (va, vb) = (ch[i], ch[(i + 1) % n]);
+            cv.push(va * 0.75 + vb * 0.25);
+            cv.push(va * 0.25 + vb * 0.75);
+        }
+        if !closed {
+            cv.push(ch[n - 1]);
+        }
+        **ch = cv;
     }
     out
 }
@@ -61,22 +98,58 @@ pub fn path_length(points: &[Vec2]) -> f32 {
 /// The first and last authoring points are always stations, so endpoints stay
 /// exact (road approaches, river sources). `spacing <= 0` returns the input.
 pub fn resample(points: &[Vec2], spacing: f32) -> Vec<Vec2> {
+    resample_channels(points, &mut [], spacing)
+}
+
+/// [`resample`] carrying per-point scalar channels (authored elevations,
+/// widths): each channel is linearly interpolated along its segment at every
+/// emitted station, staying in lockstep with the stations. Channel lengths
+/// must match `points`; mismatched channels are returned untouched.
+pub fn resample_channels(
+    points: &[Vec2],
+    channels: &mut [&mut Vec<f32>],
+    spacing: f32,
+) -> Vec<Vec2> {
     if points.len() < 2 || spacing <= 0.0 || !spacing.is_finite() {
         return points.to_vec();
     }
+    // Validez pré-computada + snapshot dos valores ORIGINAIS: o emit lê os
+    // valores da polilinha de input (ch[i], ch[i+1]) enquanto o canal de
+    // trabalho é reconstruído 1:1 com as estações — sem o snapshot, truncar
+    // para 1 entrada partia as leituras de origem.
+    let valid: Vec<bool> = channels.iter().map(|c| c.len() == points.len()).collect();
+    let sources: Vec<Vec<f32>> = channels.iter().map(|c| (*c).clone()).collect();
+    for (ci, ch) in channels.iter_mut().enumerate() {
+        if valid[ci] {
+            ch.truncate(1);
+        }
+    }
     let mut out = vec![points[0]];
     let mut carried = 0.0_f32; // distance since the last emitted station
-    for window in points.windows(2) {
-        let (a, b) = (window[0], window[1]);
+    for i in 0..points.len() - 1 {
+        let (a, b) = (points[i], points[i + 1]);
         let mut seg = a.distance(b);
         if seg <= 1e-9 {
             continue;
         }
+        let seg_len = seg;
         let dir = (b - a) / seg;
+        // Distance of the last emitted station from `a` along this segment —
+        // negative while it still sits on the previous segment.
+        let mut from_a = -carried;
         while carried + seg >= spacing {
             let advance = spacing - carried;
+            from_a += advance;
+            let t = (from_a / seg_len).clamp(0.0, 1.0);
             let p = out.last().expect("resample always emitted the first point") + dir * advance;
             out.push(p);
+            for (ci, ch) in channels.iter_mut().enumerate() {
+                if !valid[ci] {
+                    continue;
+                }
+                let src = &sources[ci];
+                ch.push(src[i] + (src[i + 1] - src[i]) * t);
+            }
             seg -= advance;
             carried = 0.0;
         }
@@ -92,6 +165,12 @@ pub fn resample(points: &[Vec2], spacing: f32) -> Vec<Vec2> {
     };
     if pin {
         out.push(end);
+        for (ci, ch) in channels.iter_mut().enumerate() {
+            if valid[ci] && ch.len() + 1 == out.len() {
+                let last_v = sources[ci][sources[ci].len() - 1];
+                ch.push(last_v);
+            }
+        }
     }
     out
 }
@@ -369,5 +448,53 @@ mod tests {
             jump < 0.05,
             "discontinuity of {jump} at the segment boundary"
         );
+    }
+
+    #[test]
+    fn test_resample_channels_match_plain_resample() {
+        // No channels: identical to the plain resample.
+        let pts = vec![Vec2::ZERO, Vec2::new(10.0, 0.0), Vec2::new(10.0, 10.0)];
+        let mut empty: Vec<f32> = Vec::new();
+        let plain = resample(&pts, 3.0);
+        let via_channels = resample_channels(&pts, &mut [&mut empty], 3.0);
+        assert_eq!(plain, via_channels);
+        assert!(empty.is_empty(), "mismatched channel stays untouched");
+    }
+
+    #[test]
+    fn test_resample_channels_stay_in_lockstep() {
+        // A ramping channel must interpolate linearly along each segment and
+        // hit the exact endpoint values.
+        let pts = vec![Vec2::ZERO, Vec2::new(100.0, 0.0), Vec2::new(200.0, 0.0)];
+        let values = vec![0.0_f32, 10.0, 30.0];
+        let mut ch = values.clone();
+        let out = resample_channels(&pts, &mut [&mut ch], 25.0);
+        assert_eq!(ch.len(), out.len(), "channel follows stations 1:1");
+        // 200 m / 25 m = 8 stations + pinned end (already exact) = 9.
+        assert_eq!(out.len(), 9);
+        // Segment 0 stations: 0, 25, 50, 75, 100 → 0, 2.5, 5, 7.5, 10.
+        for (i, expected) in [0.0, 2.5, 5.0, 7.5, 10.0].iter().enumerate() {
+            assert!(
+                (ch[i] - expected).abs() < 1e-4,
+                "station {i}: {} != {expected}",
+                ch[i]
+            );
+        }
+        assert!((ch[ch.len() - 1] - 30.0).abs() < 1e-4, "endpoint pinned");
+    }
+
+    #[test]
+    fn test_chaikin_channels_follow_geometry_weights() {
+        let pts = vec![Vec2::ZERO, Vec2::new(10.0, 0.0), Vec2::new(10.0, 10.0)];
+        let values = vec![0.0_f32, 100.0, 200.0];
+        let mut ch = values.clone();
+        let out = chaikin_smooth_channels(&pts, &mut [&mut ch], 1, false);
+        assert_eq!(out.len(), ch.len());
+        // First emitted interior point = a*0.75 + b*0.25 → channel 0*0.75+100*0.25.
+        assert!((ch[1] - 25.0).abs() < 1e-4);
+        assert!((ch[2] - 75.0).abs() < 1e-4);
+        // Pinned endpoints keep their exact channel values.
+        assert_eq!(ch[0], 0.0);
+        assert_eq!(*ch.last().expect("non-empty"), 200.0);
     }
 }

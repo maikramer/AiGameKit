@@ -44,6 +44,8 @@ fn world_with_a_road() -> TerrainRuntime {
             stations,
             half_width,
             profile: RoadProfile::Artery,
+            surface: vec![0.0; (-30..=30).count()],
+            deck: vec![false; (-30..=30).count()],
             bridge: false,
             deck_y: None,
         }],

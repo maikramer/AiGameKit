@@ -184,6 +184,12 @@ pub const TEMPLATES: &[NodeTemplate] = &[
     },
     NodeTemplate {
         group: TemplateGroup::Feature,
+        tag: "road",
+        label: "RaceTrack (pista autorada: cota + larguras por nó, viaduto)",
+        snippet: r#"<Road name="circuit" closed="1" width="18" y="14 14 20 21 14" widths="22 20 16 16 20" viaduct-clearance="6" texture-url="/assets/textures/dirt_road/albedo.ktx2" path="0 0 200 -20 400 60 300 300 0 260" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Feature,
         tag: "roadnetwork",
         label: "RoadNetwork (rede de Ways + Segments)",
         snippet: r#"<RoadNetwork default-width="6"><Way id="plaza" xz="0 0" /><Way id="gate" xz="40 20" /><Segment a="plaza" b="gate" /></RoadNetwork>"#,

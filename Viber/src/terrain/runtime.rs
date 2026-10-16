@@ -31,7 +31,8 @@ use super::heightmap::HeightMapU16;
 use super::mesh::HeightField as _;
 
 use super::layer_material::{TerrainChunkConfig, TerrainChunkMaterial, TerrainChunkParams};
-use super::roads::RoadPath;
+use super::paths::{PathHit, nearest_on_path, station_lerp};
+use super::roads::{RoadPath, RoadSurface};
 use super::sampler::ResolvedPad;
 use super::spec::TerrainSpec;
 use super::splat::{
@@ -615,6 +616,46 @@ impl TerrainRuntime {
     /// Point is on a road ribbon (`isPointOnRoad`).
     pub fn on_road(&self, x: f32, z: f32) -> bool {
         self.roads.iter().any(|r| r.is_on_road(Vec2::new(x, z)))
+    }
+
+    /// Superfície de condução em (x, z) para a lógica de corrida: a estrada
+    /// mais próxima que contém o ponto, com a cota do tabuleiro quando o
+    /// ponto está num vão suspenso (viaduto/ponte) — em spans normais a cota
+    /// É o terreno carvado, e o chamador pode usar [`Self::sample`] como
+    /// sempre. É a query que o veículo arcade usa para assentar os karts e
+    /// para as paredes lógicas da pista.
+    pub fn road_surface(&self, x: f32, z: f32) -> Option<RoadSurface> {
+        let p = Vec2::new(x, z);
+        let mut best: Option<(f32, PathHit, usize)> = None;
+        for (ri, road) in self.roads.iter().enumerate() {
+            let Some(hit) = nearest_on_path(&road.stations, p) else {
+                continue;
+            };
+            let hw = station_lerp(&road.half_width, &hit);
+            let d = hit.point.distance(p) - hw;
+            if d > 0.0 {
+                continue;
+            }
+            if best.as_ref().is_none_or(|(bd, _, _)| d < *bd) {
+                best = Some((d, hit, ri));
+            }
+        }
+        let (_, hit, ri) = best?;
+        let road = &self.roads[ri];
+        let on_deck =
+            road.bridge || (road.deck.len() == road.stations.len() && road.deck_weight(&hit) > 0.5);
+        let y = if on_deck {
+            station_lerp(&road.surface, &hit)
+        } else {
+            self.sample(x, z)
+        };
+        Some(RoadSurface {
+            y,
+            deck: on_deck,
+            road: ri,
+            s: hit.station(road.stations.len()),
+            half_width: station_lerp(&road.half_width, &hit),
+        })
     }
 
     /// Height of the *rendered* surface at a world XZ position.
@@ -2051,7 +2092,7 @@ fn spawn_roads(
     watched: &mut Vec<WatchedTexture>,
 ) {
     for (i, (path, spec)) in result.roads.iter().zip(&result.road_specs).enumerate() {
-        let mesh = super::roads::road_ribbon_mesh(grid, path, spec);
+        let mesh = super::roads::road_ribbon_mesh(grid, path, spec, &result.roads, i);
         if mesh.indices.is_empty() {
             continue;
         }
