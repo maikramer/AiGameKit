@@ -154,6 +154,57 @@ de descobrir pelo log. Proveniência: cada `XmlNode` tem
 `origin` (ficheiro+caminho, carimbado no `load_world`), cada `EntitySpec` tem `source`, cada
 entidade spawnada tem `scene::SceneSource`.
 
+## Cenas: projeto, universos separados e troca in-process (2026-10-15)
+
+Estilo Unity/Godot: um jogo é um **projeto** (a pasta do `config.yaml`) com várias
+**cenas**, cada uma um universo próprio — entidades, terreno (ou nenhum), navmesh, física.
+Os interiores das casas do `simple-rpg` são cenas (`scenes/interiors/*.xml`), não uma
+bolsa remota do mesmo mundo.
+
+```yaml
+project:                     # config.yaml — sem este bloco o mundo é de uma só cena
+  main-scene: world.xml      # id `main`
+  scenes: scenes             # ids = caminho relativo sem .xml (`interiors/chapel`)
+  autoload:                  # spawnados UMA vez, sobrevivem às trocas (jogador, câmara, HUD)
+    - world/autoload/player.xml
+    - world/autoload/ui.xml
+```
+
+- **Contrato**: uma cena é `<world static="true" title="Capela" [clear-color]>`. Chegadas:
+  `<SceneEntry name="from-town" translation euler/>`. Portas: `<ScenePortal name target
+  entry prompt key radius auto-radius sound toast arrive-offset>` (com filhos; cada
+  portal é também entrada com o próprio nome; `entry="@back"` = volta à porta por onde se
+  entrou, à pose exata do herói). Sem Lua — o lint vê os portais.
+- **Persiste**: autoloads (`Persistent`), VM Lua + `viber.game()`, quests, cofre, relógio
+  do dia/tempo, mixer, biblioteca de cinemáticas (união). **Morre** no varrimento
+  (`src/scene_loader.rs::unload_scene`): toda a raiz com `Transform` marcada
+  `SceneEntity` (o `spawn::startup` e o bootstrap do terreno marcam as suas) ou nascida
+  depois de a cena carregar (projéteis, loot, FX); recursos por cena
+  (`reset_scene_resources`: terreno, nav, catálogos, configs, colliders…).
+- **Troca**: `SceneLoader` (fade → `unload_scene` → schedule `SceneLoad` = os mesmos
+  `spawn::startup`/`terrain::runtime::bootstrap`/nav do arranque → chegada → espera os
+  spawn groups → fade). Scripts `on_update` param durante Swap/Settle
+  (`scene_settled`). Os splats por chunk (o passo de ~50 s) ficam em
+  `TerrainLayerCache`: voltar à vila custa ~3,5 s, não 53 s.
+- **Shaders do céu/água/terreno são do projeto** (vêm sempre da cena principal — são
+  escritos antes de a App existir); a luz interior é por cena via `<InteriorScene at="0 0"
+  size="60 55">` a cobrir a sala.
+- **Superfícies (paridade)**: Lua `viber.change_scene(id, entrada)`/`scene_name()`/
+  `scene_entry()` + eventos `scene_loaded`/`scene_unloading`; bridge
+  `viber.scene.{scenes,current,change,new_scene}`; CLI `viber scene scenes|new-scene|
+  extract-scene` e `viber scene --live change|current`; `viber run <projeto|cena>
+  [--scene id] [--entry nome]`. `extract-scene --within FICHEIRO "x0 z0 x1 z1"
+  --recenter "x y z" --prepend '<SceneEntry …/>' --title …` move uma região para uma
+  cena nova (desfazível).
+- **Save v2**: `scene` + `came_from`; carregar um save de outra cena troca para ela; um
+  save v1 com a posição fora do terreno (a antiga bolsa) cai na primeira entrada.
+- **Lint de projeto**: `scene-portal-target`, `scene-portal-entry`, `scene-no-entry`,
+  `scene-parse`, `autoload-world-tag`, `scene-change-target` (literais
+  `viber.change_scene("…")` nos scripts); cinemáticas validadas contra a união.
+- **Editor**: abas de cena (a ativa é a do viewport; trocar grava e troca in-process,
+  com a câmara de cada aba guardada); `+` cria `scenes/cena-N.xml`; ▶ Play corre a
+  principal, **Jogar cena (F7)** a aba ativa; Ctrl+R recarrega in-process.
+
 ## Bevy 0.20 (WESL + forks vendored + OIT)
 
 * **WESL substituiu o naga_oil** — os shaders do motor são `.wesl`: `#import a::b::{x}` → `import a::b::{x};` (imports no topo, podem ser condicionais), `#ifdef X` → `@if(X)` (anexado a declarações/instruções; blocos `@if(BINDLESS) { … } @else { … }` embrulham regiões inteiras), `#{CONST}` → `constants::CONST` (defs numéricas), e os módulos do PBR ganharam o prefixo `bevy_pbr::render::` (`prepass_utils`→`bevy_pbr::prepass::utils`, `ssao_utils`→`bevy_pbr::ssao::utils`). Os ficheiros gerados em `<mundo>/shaders/` são `.wesl`; WGSL puro SEM diretivas continua válido (`AERIAL_WGSL`/`water_ssr` ficam `from_wgsl`). Harnesses: `tests/common/mod.rs` compila WESL com `wesl::compile` + stubs por módulo + o módulo especial `constants` — o padrão do `bevy_shader::shader_cache`.
@@ -173,7 +224,7 @@ entidade spawnada tem `scene::SceneSource`.
 | Auditoria de assets | `src/audit.rs` | corre no `analyze`: GLBs/texturas/heightmaps/BGM/scripts/estilos ausentes, Draco/Basis (não suportados; meshopt é expandido), magia inválida, glTF sem collider; estradas × lagos/rios/cliffs (lâmina/banda, pontes só nas pontas); `--strict` falha com ficheiros ausentes |
 | XML: parse, includes, valores | `src/xml/` | `include.rs` (expansão), `values.rs` (parsers tolerantes) |
 | IR de entidades + spawn Bevy | `src/recipes/` | `mod.rs` (IR + `KNOWN_TAGS`), `spawn.rs`, `transform.rs` (euler→quat) |
-| Interiores (bolsa fora do mapa) | `examples/simple-rpg/world/interiors.xml`, `scripts/building-portal.lua` | Uma `<InteriorScene>` põe 9 salas numa bolsa FORA da pegada do heightmap, onde não há terreno, bioma nem chuva. As salas são XML estático (editar com `viber scene`/editor — o antigo gerador `tools/gen_interiors.py` saiu, fica no histórico do git); os portais são data-driven (`viber.entity_name` + nomes das portas). NPCs de sala usam o MESMO `townsfolk.lua` de rua, afinado por props (`prop-radius="1.6" prop-speed="0.6"` dentro de casa, `prop-radius="0"` ao balcão, falas em `prop-banter`) |
+| Cenas (projeto) + troca in-process | `src/project.rs`, `src/scene_loader.rs` | Ver "Cenas" acima. Interiores = 9 cenas `examples/simple-rpg/scenes/interiors/*.xml` (cada uma `<InteriorScene at="0 0">` + `<SceneEntry from-town>` + `<ScenePortal exit @back>`); portas da vila = `<ScenePortal>` em `world/cities/discordia/portals.xml`. NPCs de sala usam o MESMO `townsfolk.lua` de rua, afinado por props (`prop-radius="1.6" prop-speed="0.6"` dentro de casa, `prop-radius="0"` ao balcão, falas em `prop-banter`) |
 | Camada de pintura do terreno | `src/terrain/paint.rs` | `PaintGrid` (sidecar `<ahgt>.paint`), blend + eleição forçada nos chunks (`splat.rs bake_chunk`), repaint in-place (`runtime::repaint_chunks`), op `terrain_paint`/`splat_patch` |
 | Terreno (specs, sampler, mesh, LOD) | `src/terrain/` | `spec.rs` (contrato), `sampler.rs`/`heightmap.rs` (altura), `mesh.rs` (chunks), `plugin.rs` (LOD runtime + rebuild por edições), `runtime.rs` (bootstrap + carve + applier das edições vivas), `cliffs.rs` (cliffs procedurais + sharpen + CliffMask), `delta.rs` (**terreno vivo**: overlay de edições, Fase 3) |
 | Preview de estado de UI (editor) | `src/ui/runtime.rs` | `UiPreviewState(StyleState)` sobrepõe a interação na cascata (`:hover`/`:active` sem ponteiro); entidades de UI carimbadas com `scene::SceneSource` |
@@ -438,6 +489,9 @@ viber debug prof --samples 10              # média/pior/melhor de N amostras �
                                            #   `fps` de UMA amostra é instantâneo
                                            #   e oscila (12 vs 60 no mesmo mundo)
 viber debug click 400 300 [--button right]
+viber debug drag 289 300 380 300 [--steps 8]   # press → cursor em passos → release
+                                           #   (splitters, sliders, gizmos, handles);
+                                           #   bridge: viber.input.click {state: press|release}
 viber debug move 400 300
 viber debug key w | space | esc | up | ctrl | f3 [--shift]
 viber debug text "hello"                   # typing sintético por char
@@ -708,7 +762,7 @@ Dentro da bolsa declarada por `<InteriorScene>` a câmara muda de regime
 | Chuva ignorada | `atmosphere_drive` | não chove dentro |
 | Sem SALTO | `player_movement` | câmara de cima; saltar só tirava o herói do soalho |
 | Soalho DURO a `INTERIOR_FLOOR_Y` | `player_movement` | as salas são ilhas sem terreno: um passo fora do soalho era queda infinita |
-| Sair encostando à porta | `building-portal.lua` (`AUTO_EXIT_R`) | o vão é aberto sobre o vazio: encostar tem de tirar dali, não pedir tecla. Só de DENTRO — a porta de rua continua a exigir [E] |
+| Sair encostando à porta | `<ScenePortal auto-radius="1.6">` (`scene_loader::scene_portal_system`) | o vão é aberto sobre o vazio: encostar tem de tirar dali, não pedir tecla. Só de DENTRO — a porta de rua continua a exigir [E] |
 
 Sem vigas de tecto nas salas: a câmara olha de cima e
 o esqueleto do telhado cortava a divisão em tiras.
@@ -1044,7 +1098,9 @@ monotone; 0 = bilinear — suaviza a GRID de input), `collision-resolution`
 CliffMask/splat; 90 desliga), `cliff-min-area` (120 m²), `cliff-min-drop` (4 m), `cliff-min-extent` (8 m) — filtro REGIONAL: um componente de declive só é cliff se passar os três (mata declives espúrios), `cliff-streaks` (0.5 — escorrimentos verticais na pele da parede), `cliff-moss` (0.35 — musgo procedural nos ombros/ledges), `sharpen` (false), `sharpen-angle` (35°), `sharpen-seed` (0 = deriva de `seed`), `texture`/`texture-url`, `texture-tile-size` (0 = auto), `seed` (0), tint (caminho LEGADO): `base-color`, `color-low`, `color-mid`, `color-high`, `color-rock`, `snow-height`, `slope-threshold`, `slope-softness`, `height-blend-strength`; blend de camadas: `layers` (lista de ≤13 aliases do pool — `grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road pebbles` — ou caminhos de textura; o slot do leito carrega `pebbles` mesmo que o mundo não o liste), `shore-width` (5 m — faixa de areia fora da linha de água) — **PRODUÇÃO**: 8 layers por chunk (material bindless — o crash NV foi resolvido), ligado por omissão; escape hatch para o tint legado: `VIBER_CHUNK_LAYERS=0`; pele das paredes (estratos/streaks/musgo) configurável ao vivo via `viber.debug.ground{...}` |
 | — | **Material de chunk (r8 — 8 layers + roughness, bindless)**: o bootstrap gera UM material por chunk (`generate_chunk_splats` em `splat.rs`): as 8 texturas do pool com MAIOR peso agregado no chunk + DOIS planos splat RGBA8 próprios (plano 0 = slots 0–3, plano 1 = slots 4–7; pesos renormalizados a somar 1 EM CONJUNTO; chunks de montanha carregam snow/stone, de pântano mud — áreas diferentes têm blends diferentes). `rock` (paredes), leito (seixo) e a AREIA DA MARGEM são FORÇADOS na eleição top-8 — sem o force da areia a praia quebrava em costuras retas nos chunks que a perdiam da paleta. Material próprio (`layer_material.rs`, NÃO ExtendedMaterial) `#[bindless]` com 8 layers × (albedo, normal, height, AO, **roughness**) + 2 splats — 42 pares textura/sampler, tabela de índices `range(0..85)`; params em storage array na binding 10: tiles/tints/flats/roughs + origem/tamanho + layer de rocha para paredes triplanares). **Roughness maps** (`roughness.ktx2`; `smoothness.ktx2` entra INVERTIDO — inventário estático `RoughMap` em `SLOT_STYLES`): flags em `roughs[i].y` (mix 0.85 com a constante afinada) e `.z` (inverter); slots sem mapa mantêm a constante (mix 0) — o look não muda um milímetro onde o pool não tem mapa. + day/night tint; shader `shaders/terrain_chunk.wesl` (template embutido reescrito no `run`). ⚠ **porquê bindless**: com bevy 0.19.1 + wgpu 29.0.4 + NV 595.84 (re-verificar no wgpu 30 do 0.20), QUALQUER material custom NÃO-bindless com `#[texture]` morria com SIGSEGV dentro de `libnvidia-gpucomp` ao criar o pipeline layout — teste-guarda `test_chunk_material_stays_bindless`; o `StandardMaterial` e materiais só-`#[storage]` (céu) funcionam; isolado por bissect de mundos M0–M23 (2026-09-04). Falha de textura reponta o slot para o fallback dele (leito → gravel; mapa opcional → plano/constante) |
 | `TerrainPad` | `at` (`"x z"`), `size` (`"w d"`), `falloff` (8), `corner-radius` (4), `height` (ausente = auto: amostra o centro e escreve de volta) |
-| `InteriorScene` | `at` (`"x z"`, CENTRO), `size` (`"w d"`) — declara um retângulo como **bolsa de interior**, FORA da pegada do heightmap (`|x|` ou `|z|` > `world_size/2`). Dentro dela a `WorldBorder` não trava, não há bioma (névoa/tinta/exposição neutras) e NÃO chove (o emissor de chuva segue o player e seguiria para dentro da sala). A distância (>2 km) desliga o resto por si — render, cull, IA, spawners — e **fora do campo o terreno não gera colunas nem colliders**. A zona de música `dungeon` deixou de ter caixa copiada à mão: segue esta declaração. Um só por mundo; ver `src/worldsys.rs::InteriorSceneConfig` e `examples/simple-rpg/world/interiors.xml` |
+| `InteriorScene` | `at` (`"x z"`, CENTRO), `size` (`"w d"`) — declara um retângulo como **bolsa de interior**, FORA da pegada do heightmap (`|x|` ou `|z|` > `world_size/2`). Dentro dela a `WorldBorder` não trava, não há bioma (névoa/tinta/exposição neutras) e NÃO chove (o emissor de chuva segue o player e seguiria para dentro da sala). A distância (>2 km) desliga o resto por si — render, cull, IA, spawners — e **fora do campo o terreno não gera colunas nem colliders**. A zona de música `dungeon` deixou de ter caixa copiada à mão: segue esta declaração. Um só por mundo/cena; ver `src/worldsys.rs::InteriorSceneConfig`. Num projeto com cenas cada interior é uma cena com `<InteriorScene at="0 0" size=…>` a cobrir a sala (ex.: `examples/simple-rpg/scenes/interiors/chapel.xml`) |
+| `SceneEntry` | `name` (obrigatório), pose — ponto de chegada de uma cena (`viber.change_scene(cena, nome)`, `entry=` dos portais). Ver "Cenas" |
+| `ScenePortal` | `name`, `target` (id da cena: `main`, `interiors/chapel`), `entry` (nome \| `@back` \| omisso = a primeira), `prompt` ("Entrar"), `key` (e), `radius` (2.8, escalado como as interações), `auto-radius` (atravessa sem tecla), `sound`, `toast`, `arrive-offset` — porta para outra cena; também é entrada com o próprio nome; aceita filhos (partículas) |
 | `Lake` | `at`, `radius` (6), `depth` (1.5), `water-offset` (0.5), `color` (#2f7a9a), `opacity` (0.62 — lido pelo shader como escala de extinção da coluna), `ripple` (0.6 — amplitude das ondas, especializado como `CFG_WAVE_AMP` no `water.wesl`; o maior dos lagos do mundo vence), `bank` (`soft` \| `beach` \| `cliff` \| `terraced` \| `gorge` \| `overhang` — `gorge`/`overhang` são VOXEL: anel de parede sólida na linha de água (`overhang` soca a base sob a lâmina; o carve preserva o banco natural), os restantes esculpem a rampa no heightfield), `rocks` (false — pedras de margem automáticas), `rocks-density` (0.12/m de linha de água), `rocks-scale-max` (1.4), filhos `<Island at="x z" radius height/>` (repetível — domo RAISE na bacia com praia; o espelho faz fade sobre ela). Carve: contorno orgânico com PERSONALIDADE por lago (`LakeShape` — alongamento dirigido `stretch·cos(2(θ−axis))` + harmónicos k=1,3,5,7 com amplitude e fase sorteadas por hash da posição; uns lagos saem quase redondos, outros ovais com baías e lóbulos, ±45 % no pico = `CONTOUR_PEAK` 1.45), **AUTORIA da forma**: `seed` (a fonte dos uniformes passa a SplitMix64 — mesma seed, mesma forma em qualquer posição), `stretch` (0–0.45), `axis` (graus), `lobes` (0–1.6, multiplicador das amplitudes; combinações agressivas são REESCALADAS para dentro do envelope `CONTOUR_PEAK`, nunca rejeitadas — sem autoria, o hash de posição fica bit-exact), rim = mínimo de 64 raios, taça `rim − depth·(1−t²)^1.5` até `radius·1.25`; espelho de água em `rim − water-offset` e termina EXATAMENTE na linha de água da taça |
 | `River` | `path` (`"x z x z …"`, ≥2 pontos), `width` (6), `depth` (1.5), `water-offset` (0.3), `bank-width` (2), `bank-height` (0.9), `color` (#2a6685), `opacity` (0.72), `bank`/`rocks`/`rocks-density`/`rocks-scale-max` (idem `<Lake>`; `gorge` = paredes verticais sólidas dos dois lados, `overhang` = socava), `pool-spacing` (0 — poços ×1.6/rápidos ×0.4 com largura ±20 %; a superfície fica lisa, o LEITO ondula e a profundidade lê-se no shader), `cascades` (true — queda >1.2 m entre estações vira cascata: face de água vertical no mesh, caldeirão ×1.6 a jusante, névoa `mist` na base), `waterfalls` (true — CACHOEIRAS automáticas: queda acumulada ≥ `waterfall-min-drop` (3 m) é o tier acima da cascata — cortina contínua do lip à base alargada ×1.4, caldeirão à escala da queda, névoa escalada, spray no lip, espuma no caldeirão, loop de áudio posicional `water_waterfall.ogg` com raio/ganho ∝ queda), `waterfall-min-drop` (3 — limiar do tier, clamp ≥ CASCADE_DROP), `waterfall-notch` (true — no cruzamento com um `<Cliff>`, fenda de spill no brow: cápsula subtractiva com largura ∝ canal; a parede fica sólida e a água despenca POR CIMA), `spring` (false — nascente na estação 0: ferradura de rocha voxel com a boca a jusante, poozinho fundo, névoa). **Rio × cliff = cachoeira automática**: o pre-pass de specs cruza os paths 2D (`river_cliff_crossings`), o carve segura a superfície a montante da crista e garante a queda a jusante (height do cliff ou 3 m), a deteção pós-bands anota a face brow→toe (`CascadeInfo.wall`); o audit reporta cada cruzamento como ℹ. Confluência: estações dentro do contorno de um lago sobem à cota do espelho. Chaikin ×2 + estações de 3 m; superfície = prefixo-mínimo descendente (água nunca sobe); a ribbon acaba na linha de água real e meia-largura varia por estação (pools) |
 

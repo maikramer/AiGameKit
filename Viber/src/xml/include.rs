@@ -50,12 +50,27 @@ pub fn resolve_include_path(src: &str, dir: &Path, root_dir: &Path) -> PathBuf {
     }
 }
 
-/// Load a world file and expand every `<Include>`.
+/// Load a world file and expand every `<Include>`. `/…` include paths resolve against the
+/// PROJECT root ([`crate::project::root_of`]) — the file's own folder for a world next to its
+/// `config.yaml`, the project folder for a scene under `scenes/`.
 pub fn load_world(path: &Path) -> Result<LoadedWorld> {
+    let canonical = path
+        .canonicalize()
+        .with_context(|| format!("world file not found: {}", path.display()))?;
+    let root_dir = crate::project::root_of(&canonical);
+    load_world_in(&canonical, &root_dir)
+}
+
+/// [`load_world`] with an explicit root for `/…` include paths.
+pub fn load_world_in(path: &Path, root_dir: &Path) -> Result<LoadedWorld> {
     let path = path
         .canonicalize()
         .with_context(|| format!("world file not found: {}", path.display()))?;
-    let root_dir = parent_dir(&path)?;
+    let root_dir = root_dir
+        .canonicalize()
+        .unwrap_or_else(|_| root_dir.to_path_buf());
+    // Relativos resolvem contra a pasta do PRÓPRIO ficheiro; `/…` contra a raiz.
+    let file_dir = parent_dir(&path)?;
     let mut doc = super::parse_file(&path)?;
     super::stamp_origins(&mut doc.children, &std::sync::Arc::from(path.as_path()));
     if doc.root_tag != "world" && doc.root_tag != "scene" {
@@ -66,7 +81,7 @@ pub fn load_world(path: &Path) -> Result<LoadedWorld> {
         );
     }
     let mut stack = vec![path];
-    let nodes = expand(doc.children, &root_dir, &root_dir, &mut stack)?;
+    let nodes = expand(doc.children, &file_dir, &root_dir, &mut stack)?;
     Ok(LoadedWorld {
         root_attrs: doc.root_attrs,
         nodes,

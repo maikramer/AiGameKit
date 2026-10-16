@@ -2,13 +2,14 @@
 //! bindless [`bevy::pbr::Material`] PRÓPRIO (não `ExtendedMaterial` — ver o
 //! aviso de crash abaixo) for the terrain chunks built by [`super::runtime`].
 //!
-//! Every chunk carries its OWN material: the eight pool textures with the
-//! highest aggregate weight in that chunk + TWO RGBA8 splat planes baked per
-//! chunk (plano 0 = slots 0–3, plano 1 = slots 4–7). The old single-material
-//! design (13 layers + 4 global splat planes, 34 bindings) crashed the
-//! NVIDIA driver's pipeline-layout path with a silent SIGSEGV; the bindless
-//! chunk material stays well clear of it, with the bonus that different
-//! areas of the world can render different layer sets.
+//! UM só material para o terreno inteiro (2026-10-16): as 13 camadas do pool
+//! (albedo, normal, height, AO, roughness) + os 4 planos do splat GLOBAL
+//! ([`super::splat::generate_splats`] — 13 pesos por texel, ~2 m). O fragment
+//! lê os 13 pesos, fica com os 4 mais fortes por PIXEL e amostra só esses.
+//! Substituiu o material por chunk (3969 materiais, top-8 por chunk, ~50 s
+//! de bake no arranque, costuras onde dois chunks elegiam paletas
+//! diferentes). O desenho antigo de material único (2026-09) crashava o
+//! driver NVIDIA por ser NÃO-bindless; este é bindless (ver abaixo).
 //!
 //! Same architecture as [`super::water_material`] / [`crate::sky`] for the
 //! world constants: `viber run` rewrites the CONFIG block of
@@ -72,158 +73,237 @@ const CONFIG_END: &str = "// === END WORLD CONFIG ===";
 /// senão volta o SIGSEGV, e ele não vem com mensagem nenhuma.
 #[derive(Debug, Clone, Asset, TypePath, AsBindGroup)]
 #[data(0, TerrainChunkParams, binding_array(10))]
-#[bindless(index_table(range(0..85)))]
+// `limit(128)` — DOIS tetos, e o menor é o que mata:
+// 1. **O slab tem de caber TODOS os descritores do material.** Cada par
+//    `#[texture]`/`#[sampler]` contribui uma entrada para as binding arrays
+//    do slab, e o LAYOUT declara essas arrays com este count. Este material
+//    tem 69 pares (13 camadas × 5 mapas + 4 splats) ≈ 58 descritores únicos
+//    depois do dedup de handles repetidos. Com `limit(8)` o layout declarava
+//    arrays de 8, o wgpu recusava o `create_bind_group` ("Binding count
+//    declared with at most 8 items, but 58 items were provided") e a app
+//    SAÍA no arranque (Validation RenderError — crash 2026-10-16).
+// 2. **`samplers × limit` tem de caber no cap do device.** `bindless_supported`
+//    exige `max_binding_array_sampler_elements_per_shader_stage ≥
+//    sampler_bindings × limit`; com o Auto (2048) o produto (69 × 2048 =
+//    141 312) passava o cap observado (~131 072) e o material caía SEM
+//    aviso para o layout não-bindless — terreno cinzento-azulado (e o
+//    SIGSEGV NVIDIA do aviso abaixo à espreita). `128` dá 69 × 128 = 8 832
+//    elementos, 14× abaixo do cap, e 128 ≥ 69 descritores com folga.
+// Há UM material no mundo inteiro: uma slab chega. Guarda de regressão:
+// `test_bindless_slab_limit_holds_the_whole_material` (abaixo).
+#[bindless(limit(128), index_table(range(0..139)))]
 pub struct TerrainChunkMaterial {
+    // Tabela de índices bindless (a ORDEM é a do WGSL, que a lê como
+    // `array<u32>`): albedo 1–26, normal 27–52, height 53–78, AO 79–104,
+    // rough 105–130 (camada `i` em `base + 2i`, sampler em `+1`), planos
+    // splat 131–138.
     #[texture(1)]
     #[sampler(2)]
-    pub layer0: Handle<Image>,
+    pub albedo0: Handle<Image>,
     #[texture(3)]
     #[sampler(4)]
-    pub layer1: Handle<Image>,
+    pub albedo1: Handle<Image>,
     #[texture(5)]
     #[sampler(6)]
-    pub layer2: Handle<Image>,
+    pub albedo2: Handle<Image>,
     #[texture(7)]
     #[sampler(8)]
-    pub layer3: Handle<Image>,
+    pub albedo3: Handle<Image>,
     #[texture(9)]
     #[sampler(10)]
-    pub layer4: Handle<Image>,
+    pub albedo4: Handle<Image>,
     #[texture(11)]
     #[sampler(12)]
-    pub layer5: Handle<Image>,
+    pub albedo5: Handle<Image>,
     #[texture(13)]
     #[sampler(14)]
-    pub layer6: Handle<Image>,
+    pub albedo6: Handle<Image>,
     #[texture(15)]
     #[sampler(16)]
-    pub layer7: Handle<Image>,
+    pub albedo7: Handle<Image>,
     #[texture(17)]
     #[sampler(18)]
-    pub splat: Handle<Image>,
+    pub albedo8: Handle<Image>,
     #[texture(19)]
     #[sampler(20)]
-    pub splat2: Handle<Image>,
-    /// Tangent-space normal maps do pool (`normal.ktx2`), um por layer —
-    /// o relevo real do chão para o PBR (T1). Slots sem normal carregam a
-    /// imagem plana partilhada (`flat_normal_image`) — o WGSL devolve a
-    /// normal geométrica e o blend fica intacto. A ORDEM dos campos é a da
-    /// tabela de índices bindless (21–36) e tem de bater certo com
-    /// `TerrainChunkBindings` no WGSL.
+    pub albedo9: Handle<Image>,
     #[texture(21)]
     #[sampler(22)]
-    pub layer0_normal: Handle<Image>,
+    pub albedo10: Handle<Image>,
     #[texture(23)]
     #[sampler(24)]
-    pub layer1_normal: Handle<Image>,
+    pub albedo11: Handle<Image>,
     #[texture(25)]
     #[sampler(26)]
-    pub layer2_normal: Handle<Image>,
+    pub albedo12: Handle<Image>,
     #[texture(27)]
     #[sampler(28)]
-    pub layer3_normal: Handle<Image>,
+    pub normal0: Handle<Image>,
     #[texture(29)]
     #[sampler(30)]
-    pub layer4_normal: Handle<Image>,
+    pub normal1: Handle<Image>,
     #[texture(31)]
     #[sampler(32)]
-    pub layer5_normal: Handle<Image>,
+    pub normal2: Handle<Image>,
     #[texture(33)]
     #[sampler(34)]
-    pub layer6_normal: Handle<Image>,
+    pub normal3: Handle<Image>,
     #[texture(35)]
     #[sampler(36)]
-    pub layer7_normal: Handle<Image>,
-    /// Height maps escalares do pool (`height.ktx2`), um por layer — o
-    /// height-blend entre as duas layers dominantes (a rocha sai por cima da
-    /// relva na fronteira). Slots sem o ficheiro carregam a plana partilhada
-    /// (`flat_height_image`, 0.5) e o blend devolve os pesos originais.
+    pub normal4: Handle<Image>,
     #[texture(37)]
     #[sampler(38)]
-    pub layer0_height: Handle<Image>,
+    pub normal5: Handle<Image>,
     #[texture(39)]
     #[sampler(40)]
-    pub layer1_height: Handle<Image>,
+    pub normal6: Handle<Image>,
     #[texture(41)]
     #[sampler(42)]
-    pub layer2_height: Handle<Image>,
+    pub normal7: Handle<Image>,
     #[texture(43)]
     #[sampler(44)]
-    pub layer3_height: Handle<Image>,
+    pub normal8: Handle<Image>,
     #[texture(45)]
     #[sampler(46)]
-    pub layer4_height: Handle<Image>,
+    pub normal9: Handle<Image>,
     #[texture(47)]
     #[sampler(48)]
-    pub layer5_height: Handle<Image>,
+    pub normal10: Handle<Image>,
     #[texture(49)]
     #[sampler(50)]
-    pub layer6_height: Handle<Image>,
+    pub normal11: Handle<Image>,
     #[texture(51)]
     #[sampler(52)]
-    pub layer7_height: Handle<Image>,
-    /// AO maps escalares do pool (`ao.ktx2`), um por layer — escurece o
-    /// albedo por texel (contacto entre pedras, juntas de cascalho). Slots
-    /// sem o ficheiro carregam a plana partilhada (`flat_ao_image`, 1.0) =
-    /// oclusão nenhuma.
+    pub normal12: Handle<Image>,
     #[texture(53)]
     #[sampler(54)]
-    pub layer0_ao: Handle<Image>,
+    pub height0: Handle<Image>,
     #[texture(55)]
     #[sampler(56)]
-    pub layer1_ao: Handle<Image>,
+    pub height1: Handle<Image>,
     #[texture(57)]
     #[sampler(58)]
-    pub layer2_ao: Handle<Image>,
+    pub height2: Handle<Image>,
     #[texture(59)]
     #[sampler(60)]
-    pub layer3_ao: Handle<Image>,
+    pub height3: Handle<Image>,
     #[texture(61)]
     #[sampler(62)]
-    pub layer4_ao: Handle<Image>,
+    pub height4: Handle<Image>,
     #[texture(63)]
     #[sampler(64)]
-    pub layer5_ao: Handle<Image>,
+    pub height5: Handle<Image>,
     #[texture(65)]
     #[sampler(66)]
-    pub layer6_ao: Handle<Image>,
+    pub height6: Handle<Image>,
     #[texture(67)]
     #[sampler(68)]
-    pub layer7_ao: Handle<Image>,
-    /// Roughness maps do pool (`roughness.ktx2`; `smoothness.ktx2` entra
-    /// INVERTIDO via `roughs[i].z`), um por layer — a micro-variação do
-    /// brilho especular por texel (juntas de cascalho brilham menos que as
-    /// pedras, lama molhada lê-se mate). Slots sem mapa carregam a plana
-    /// partilhada (`flat_rough_image`) com `roughs[i].y = 0` — o WGSL
-    /// devolve a constante do [`SLOT_STYLES`] e o resultado é idêntico ao
-    /// anterior. A ORDEM segue a tabela de índices bindless (69–84).
+    pub height7: Handle<Image>,
     #[texture(69)]
     #[sampler(70)]
-    pub layer0_rough: Handle<Image>,
+    pub height8: Handle<Image>,
     #[texture(71)]
     #[sampler(72)]
-    pub layer1_rough: Handle<Image>,
+    pub height9: Handle<Image>,
     #[texture(73)]
     #[sampler(74)]
-    pub layer2_rough: Handle<Image>,
+    pub height10: Handle<Image>,
     #[texture(75)]
     #[sampler(76)]
-    pub layer3_rough: Handle<Image>,
+    pub height11: Handle<Image>,
     #[texture(77)]
     #[sampler(78)]
-    pub layer4_rough: Handle<Image>,
+    pub height12: Handle<Image>,
     #[texture(79)]
     #[sampler(80)]
-    pub layer5_rough: Handle<Image>,
+    pub ao0: Handle<Image>,
     #[texture(81)]
     #[sampler(82)]
-    pub layer6_rough: Handle<Image>,
+    pub ao1: Handle<Image>,
     #[texture(83)]
     #[sampler(84)]
-    pub layer7_rough: Handle<Image>,
-    /// Tabela do chunk. Sem `#[uniform]`/`#[storage]` de campo: o
-    /// `#[data(...)]` da struct manda-a para a binding array partilhada dos
-    /// materiais bindless (índice 0 da tabela de índices).
+    pub ao2: Handle<Image>,
+    #[texture(85)]
+    #[sampler(86)]
+    pub ao3: Handle<Image>,
+    #[texture(87)]
+    #[sampler(88)]
+    pub ao4: Handle<Image>,
+    #[texture(89)]
+    #[sampler(90)]
+    pub ao5: Handle<Image>,
+    #[texture(91)]
+    #[sampler(92)]
+    pub ao6: Handle<Image>,
+    #[texture(93)]
+    #[sampler(94)]
+    pub ao7: Handle<Image>,
+    #[texture(95)]
+    #[sampler(96)]
+    pub ao8: Handle<Image>,
+    #[texture(97)]
+    #[sampler(98)]
+    pub ao9: Handle<Image>,
+    #[texture(99)]
+    #[sampler(100)]
+    pub ao10: Handle<Image>,
+    #[texture(101)]
+    #[sampler(102)]
+    pub ao11: Handle<Image>,
+    #[texture(103)]
+    #[sampler(104)]
+    pub ao12: Handle<Image>,
+    #[texture(105)]
+    #[sampler(106)]
+    pub rough0: Handle<Image>,
+    #[texture(107)]
+    #[sampler(108)]
+    pub rough1: Handle<Image>,
+    #[texture(109)]
+    #[sampler(110)]
+    pub rough2: Handle<Image>,
+    #[texture(111)]
+    #[sampler(112)]
+    pub rough3: Handle<Image>,
+    #[texture(113)]
+    #[sampler(114)]
+    pub rough4: Handle<Image>,
+    #[texture(115)]
+    #[sampler(116)]
+    pub rough5: Handle<Image>,
+    #[texture(117)]
+    #[sampler(118)]
+    pub rough6: Handle<Image>,
+    #[texture(119)]
+    #[sampler(120)]
+    pub rough7: Handle<Image>,
+    #[texture(121)]
+    #[sampler(122)]
+    pub rough8: Handle<Image>,
+    #[texture(123)]
+    #[sampler(124)]
+    pub rough9: Handle<Image>,
+    #[texture(125)]
+    #[sampler(126)]
+    pub rough10: Handle<Image>,
+    #[texture(127)]
+    #[sampler(128)]
+    pub rough11: Handle<Image>,
+    #[texture(129)]
+    #[sampler(130)]
+    pub rough12: Handle<Image>,
+    #[texture(131)]
+    #[sampler(132)]
+    pub splat0: Handle<Image>,
+    #[texture(133)]
+    #[sampler(134)]
+    pub splat1: Handle<Image>,
+    #[texture(135)]
+    #[sampler(136)]
+    pub splat2: Handle<Image>,
+    #[texture(137)]
+    #[sampler(138)]
+    pub splat3: Handle<Image>,
     pub params: TerrainChunkParams,
 }
 
@@ -237,78 +317,108 @@ impl AsBindGroupShaderType<TerrainChunkParams> for TerrainChunkMaterial {
 }
 
 impl TerrainChunkMaterial {
-    /// Mutable texture handle of layer `i` (0..8); the failed-slot
-    /// repointing walks this.
+    /// Albedo do slot `i` do pool (0..13) — o repoint de falhas percorre isto.
     pub fn texture_mut(&mut self, i: usize) -> &mut Handle<Image> {
         match i {
-            0 => &mut self.layer0,
-            1 => &mut self.layer1,
-            2 => &mut self.layer2,
-            3 => &mut self.layer3,
-            4 => &mut self.layer4,
-            5 => &mut self.layer5,
-            6 => &mut self.layer6,
-            _ => &mut self.layer7,
+            0 => &mut self.albedo0,
+            1 => &mut self.albedo1,
+            2 => &mut self.albedo2,
+            3 => &mut self.albedo3,
+            4 => &mut self.albedo4,
+            5 => &mut self.albedo5,
+            6 => &mut self.albedo6,
+            7 => &mut self.albedo7,
+            8 => &mut self.albedo8,
+            9 => &mut self.albedo9,
+            10 => &mut self.albedo10,
+            11 => &mut self.albedo11,
+            _ => &mut self.albedo12,
         }
     }
 
-    /// Mutable normal-map handle of layer `i` (0..8); the failed-normal
-    /// repointing walks this.
+    /// Normal map do slot `i` do pool (0..13) — o repoint de falhas percorre isto.
     pub fn normal_mut(&mut self, i: usize) -> &mut Handle<Image> {
         match i {
-            0 => &mut self.layer0_normal,
-            1 => &mut self.layer1_normal,
-            2 => &mut self.layer2_normal,
-            3 => &mut self.layer3_normal,
-            4 => &mut self.layer4_normal,
-            5 => &mut self.layer5_normal,
-            6 => &mut self.layer6_normal,
-            _ => &mut self.layer7_normal,
+            0 => &mut self.normal0,
+            1 => &mut self.normal1,
+            2 => &mut self.normal2,
+            3 => &mut self.normal3,
+            4 => &mut self.normal4,
+            5 => &mut self.normal5,
+            6 => &mut self.normal6,
+            7 => &mut self.normal7,
+            8 => &mut self.normal8,
+            9 => &mut self.normal9,
+            10 => &mut self.normal10,
+            11 => &mut self.normal11,
+            _ => &mut self.normal12,
         }
     }
 
-    /// Mutable height-map handle of layer `i` (0..8); the failed-height
-    /// repointing walks this.
+    /// Height map do slot `i` do pool (0..13) — o repoint de falhas percorre isto.
     pub fn height_mut(&mut self, i: usize) -> &mut Handle<Image> {
         match i {
-            0 => &mut self.layer0_height,
-            1 => &mut self.layer1_height,
-            2 => &mut self.layer2_height,
-            3 => &mut self.layer3_height,
-            4 => &mut self.layer4_height,
-            5 => &mut self.layer5_height,
-            6 => &mut self.layer6_height,
-            _ => &mut self.layer7_height,
+            0 => &mut self.height0,
+            1 => &mut self.height1,
+            2 => &mut self.height2,
+            3 => &mut self.height3,
+            4 => &mut self.height4,
+            5 => &mut self.height5,
+            6 => &mut self.height6,
+            7 => &mut self.height7,
+            8 => &mut self.height8,
+            9 => &mut self.height9,
+            10 => &mut self.height10,
+            11 => &mut self.height11,
+            _ => &mut self.height12,
         }
     }
 
-    /// Mutable AO-map handle of layer `i` (0..8); the failed-AO repointing
-    /// walks this.
+    /// AO map do slot `i` do pool (0..13) — o repoint de falhas percorre isto.
     pub fn ao_mut(&mut self, i: usize) -> &mut Handle<Image> {
         match i {
-            0 => &mut self.layer0_ao,
-            1 => &mut self.layer1_ao,
-            2 => &mut self.layer2_ao,
-            3 => &mut self.layer3_ao,
-            4 => &mut self.layer4_ao,
-            5 => &mut self.layer5_ao,
-            6 => &mut self.layer6_ao,
-            _ => &mut self.layer7_ao,
+            0 => &mut self.ao0,
+            1 => &mut self.ao1,
+            2 => &mut self.ao2,
+            3 => &mut self.ao3,
+            4 => &mut self.ao4,
+            5 => &mut self.ao5,
+            6 => &mut self.ao6,
+            7 => &mut self.ao7,
+            8 => &mut self.ao8,
+            9 => &mut self.ao9,
+            10 => &mut self.ao10,
+            11 => &mut self.ao11,
+            _ => &mut self.ao12,
         }
     }
 
-    /// Mutable roughness-map handle of layer `i` (0..8); the failed-rough
-    /// repointing walks this.
+    /// Roughness map do slot `i` do pool (0..13) — o repoint de falhas percorre isto.
     pub fn rough_mut(&mut self, i: usize) -> &mut Handle<Image> {
         match i {
-            0 => &mut self.layer0_rough,
-            1 => &mut self.layer1_rough,
-            2 => &mut self.layer2_rough,
-            3 => &mut self.layer3_rough,
-            4 => &mut self.layer4_rough,
-            5 => &mut self.layer5_rough,
-            6 => &mut self.layer6_rough,
-            _ => &mut self.layer7_rough,
+            0 => &mut self.rough0,
+            1 => &mut self.rough1,
+            2 => &mut self.rough2,
+            3 => &mut self.rough3,
+            4 => &mut self.rough4,
+            5 => &mut self.rough5,
+            6 => &mut self.rough6,
+            7 => &mut self.rough7,
+            8 => &mut self.rough8,
+            9 => &mut self.rough9,
+            10 => &mut self.rough10,
+            11 => &mut self.rough11,
+            _ => &mut self.rough12,
+        }
+    }
+
+    /// Plano splat `p` (0..4).
+    pub fn splat_mut(&mut self, p: usize) -> &mut Handle<Image> {
+        match p {
+            0 => &mut self.splat0,
+            1 => &mut self.splat1,
+            2 => &mut self.splat2,
+            _ => &mut self.splat3,
         }
     }
 }
@@ -335,34 +445,28 @@ impl bevy::pbr::Material for TerrainChunkMaterial {
     }
 }
 
-/// Per-chunk style + placement table (uniform binding 50). `tiles[i].x` is
-/// the tile size in meters of layer i, `tints/flats/roughs` its color
-/// correction, flat far color and perceptual roughness (`roughs[i].y` =
-/// mix do MAPA de roughness, `.z` = inverter — smoothness, `.w` livre);
-/// `chunk` places the splat planes (xy = origin XZ, z = edge size) and
-/// names the rock layer for the triplanar walls (w = 0..7, -1 = no rock
-/// layer in this chunk).
+/// Tabela de estilo do terreno (storage, binding 10). Indexada pelo SLOT DO
+/// POOL (0..13, [`super::splat::DEFAULT_LAYERS`]): `tiles[i].x` = metros por
+/// tile, `tints/flats/roughs` = correção de cor, cor plana ao longe e
+/// rugosidade (`roughs[i].y` = mix do MAPA, `.z` = inverter — smoothness).
+/// `world` coloca o splat global: xy = canto (-X,-Z), z = lado em metros,
+/// w = slot da rocha das paredes.
 #[derive(Debug, Clone, Copy, ShaderType)]
 pub struct TerrainChunkParams {
-    pub tiles: [Vec4; 8],
-    pub tints: [Vec4; 8],
-    pub flats: [Vec4; 8],
-    pub roughs: [Vec4; 8],
-    pub chunk: Vec4,
-    /// `rgb` = tint do HORIZONTE da atmosfera (aerial perspective r2;
-    /// publicado pelo `terrain_daynight_tint` a partir do `AtmosphereState`,
-    /// com `w = 1` — o default `w = 0` mantém o caminho desligado até ao
-    /// primeiro publish). Era o tint dia/noite do caminho fake de luz.
+    pub tiles: [Vec4; super::splat::LAYER_COUNT],
+    pub tints: [Vec4; super::splat::LAYER_COUNT],
+    pub flats: [Vec4; super::splat::LAYER_COUNT],
+    pub roughs: [Vec4; super::splat::LAYER_COUNT],
+    pub world: Vec4,
+    /// `rgb` = tint do HORIZONTE da atmosfera (aerial perspective;
+    /// publicado pelo `terrain_daynight_tint`, `w = 1` liga).
     pub day_tint: Vec4,
-    /// `xyz` = direção de VIAGEM da luz do sol (para onde viaja; o mesmo
-    /// sol que as sombras seguem, publicado no passo quantizado do day
-    /// tint), `w` = 1 quando o sistema já publicou um sol real.
+    /// `xyz` = direção de viagem do sol, `w` = 1 quando publicada.
     pub sun_dir: Vec4,
     /// Pele das paredes, AO VIVO (`viber.debug.ground{...}`): `x` =
-    /// tri_slope (gate de declive do triplanar), `y` = tri_soft, `z` =
-    /// strata_spacing, `w` = strata_strength.
+    /// tri_slope, `y` = tri_soft, `z` = strata_spacing, `w` = strata_strength.
     pub walls_a: Vec4,
-    /// `x` = rock_darken, `y` = streaks, `z` = moss, `w` = livre.
+    /// `x` = rock_darken, `y` = streaks, `z` = moss, `w` = chuva (0..1).
     pub walls_b: Vec4,
 }
 
@@ -386,40 +490,23 @@ pub enum RoughMap {
 pub const ROUGH_MAP_MIX: f32 = 0.85;
 
 impl TerrainChunkParams {
-    /// Builds the table from eight pool slots (`super::splat` indices) plus
-    /// the chunk placement, using [`SLOT_STYLES`] for the visual constants
-    /// and `cfg` for the initial wall skin (`walls_a`/`walls_b` — depois
-    /// `viber.debug.ground{...}` move-as ao vivo).
-    pub fn from_slots(
-        slots: [usize; 8],
-        origin: [f32; 2],
-        edge: f32,
-        cfg: &TerrainChunkConfig,
-    ) -> Self {
-        let pick = |key: fn(&LayerStyle) -> f32| {
-            let mut out = [Vec4::ZERO; 8];
-            for (i, &slot) in slots.iter().enumerate() {
-                out[i] = Vec4::splat(key(&SLOT_STYLES[slot]));
-            }
-            out
-        };
-        let rock = slots
-            .iter()
-            .position(|&slot| slot == super::splat::SLOT_MOUNTAIN_STONE)
-            .map(|i| i as f32)
-            .unwrap_or(-1.0);
+    /// A tabela das 13 camadas a partir de [`SLOT_STYLES`], o splat global
+    /// (`origin` = canto -X/-Z, `size` = lado em m) e a pele inicial das
+    /// paredes (`cfg` — depois `viber.debug.ground{...}` move-a ao vivo).
+    pub fn new(origin: [f32; 2], size: f32, cfg: &TerrainChunkConfig) -> Self {
+        let styles = &SLOT_STYLES;
         Self {
-            tiles: pick(|s| s.tile),
-            tints: slots.map(|slot| {
-                let t = SLOT_STYLES[slot].tint;
+            tiles: core::array::from_fn(|i| Vec4::splat(styles[i].tile)),
+            tints: core::array::from_fn(|i| {
+                let t = styles[i].tint;
                 Vec4::new(t[0], t[1], t[2], 0.0)
             }),
-            flats: slots.map(|slot| {
-                let f = SLOT_STYLES[slot].flat;
+            flats: core::array::from_fn(|i| {
+                let f = styles[i].flat;
                 Vec4::new(f[0], f[1], f[2], 0.0)
             }),
-            roughs: slots.map(|slot| {
-                let s = &SLOT_STYLES[slot];
+            roughs: core::array::from_fn(|i| {
+                let s = &styles[i];
                 let (mix, invert) = match s.rough_map {
                     RoughMap::Rough => (ROUGH_MAP_MIX, 0.0),
                     RoughMap::Smooth => (ROUGH_MAP_MIX, 1.0),
@@ -427,13 +514,14 @@ impl TerrainChunkParams {
                 };
                 Vec4::new(s.rough, mix, invert, 0.0)
             }),
-            chunk: Vec4::new(origin[0], origin[1], edge, rock),
-            // w = 0: a aerial perspective só liga quando o publicador da
-            // atmosfera escreve o tint do horizonte (mundos sem DayCycle
-            // ficam com o albedo puro, sem mix para branco).
+            world: Vec4::new(
+                origin[0],
+                origin[1],
+                size,
+                super::splat::SLOT_MOUNTAIN_STONE as f32,
+            ),
+            // w = 0: a aerial perspective só liga quando a atmosfera publica.
             day_tint: Vec4::new(1.0, 1.0, 1.0, 0.0),
-            // Default até o primeiro publish do `terrain_daynight_tint` —
-            // o mesmo vetor que o shader hardcoded usava antes do uniform.
             sun_dir: Vec4::new(0.35, -0.8, -0.45, 0.0),
             walls_a: Vec4::new(
                 cfg.tri_slope,
@@ -625,52 +713,6 @@ const CFG_MOSS: f32 = {};\n\
 /// terço dos bursts.
 const DAY_TINT_STEPS: f32 = 16.0;
 
-/// Quantos materiais de chunk aceitam UMA escrita por frame.
-///
-/// Cada `get_mut` num material bindless custa caro do lado do render: o Bevy
-/// liberta e re-aloca o slot, **destrói e recria o bind group** (com o array
-/// inteiro de texturas do slab) e re-uploada o data buffer + a tabela de
-/// índices — o upstream diz explicitamente que ainda não há fast path para
-/// "só mudou o conteúdo do buffer" (`bevy_pbr/src/material.rs`, junto ao
-/// `bind_group_allocator.free`). Com 63×63 = 3969 materiais no `simple-rpg`,
-/// um passo do tint escrevia os 3969 num único frame: é a assinatura dos
-/// soluços medidos (±850 MiB de VRAM e fps 37→20 em bursts).
-///
-/// O valor escrito é IDÊNTICO para todos e muda devagar (16 passos por dia de
-/// jogo, ou uma rampa de chuva de segundos), portanto espalhar a passagem por
-/// ~1 s não muda um pixel — só deixa de existir o frame que paga a conta toda.
-const CHUNK_MATERIAL_WRITE_BUDGET: usize = 64;
-
-/// Fatia `[início, fim)` da passagem orçamentada por frame.
-///
-/// Pura de propósito: é a peça que garante que uma passagem ACABA. Pôr a
-/// conta inline nos dois sistemas deixava a convergência sem teste, e um
-/// cursor que nunca chega ao fim é o falhanço silencioso que este orçamento
-/// pode introduzir — o mundo ficava com metade dos materiais no valor antigo,
-/// para sempre (ver `test_sweep_slice_covers_every_material_once`).
-pub(crate) fn sweep_slice(total: usize, cursor: usize, budget: usize) -> (usize, usize) {
-    let start = cursor.min(total);
-    (start, start.saturating_add(budget).min(total))
-}
-
-/// Orçamento em vigor ([`CHUNK_MATERIAL_WRITE_BUDGET`], sobreponível por
-/// `VIBER_CHUNK_TINT_BUDGET`).
-///
-/// `VIBER_CHUNK_TINT_BUDGET=0` = SEM orçamento (escreve tudo no mesmo frame,
-/// o comportamento anterior). É o braço de controlo do A/B: as duas metades
-/// correm no MESMO binário e o profiler mostra `avg_ms`/`max_ms` do próprio
-/// sistema, o que é imune à contenda de GPU de engines de agentes paralelos.
-fn chunk_material_write_budget() -> usize {
-    match std::env::var("VIBER_CHUNK_TINT_BUDGET")
-        .ok()
-        .and_then(|raw| raw.parse::<usize>().ok())
-    {
-        Some(0) => usize::MAX,
-        Some(value) => value,
-        None => CHUNK_MATERIAL_WRITE_BUDGET,
-    }
-}
-
 /// Tolerância do "já está publicado" (ver [`terrain_rain_wetness`]).
 const WETNESS_PUBLISH_EPS: f32 = 1e-3;
 
@@ -702,7 +744,6 @@ pub fn terrain_daynight_tint(
     mut chunk_materials: ResMut<Assets<TerrainChunkMaterial>>,
     mut standards: ResMut<Assets<StandardMaterial>>,
     mut last_step: Local<Option<f32>>,
-    mut cursor: Local<usize>,
     mut sweep: Local<Option<(Vec4, Vec4)>>,
 ) {
     let day = clock
@@ -726,11 +767,8 @@ pub fn terrain_daynight_tint(
 
     let Some(chunks) = chunks else { return };
     if let Some(layers) = &chunks.layer {
-        // Tocar no material marca-o Modified e re-escreve a sua entrada na
-        // binding array, com bind group novo por material. A 60 Hz × 3969
-        // chunks isso é uma inundação da fila do render world; o passo
-        // quantizado tira a frequência e o orçamento tira o PICO (ver
-        // `CHUNK_MATERIAL_WRITE_BUDGET`).
+        // Tocar no material recria o seu bind group: o passo quantizado
+        // (16 por dia de jogo) tira a frequência.
         let step = (day * DAY_TINT_STEPS).round() / DAY_TINT_STEPS;
         if last_step.is_none_or(|prev| (step - prev).abs() > 1e-4) {
             *last_step = Some(step);
@@ -752,32 +790,20 @@ pub fn terrain_daynight_tint(
             } else {
                 Vec4::ZERO
             };
-            // Sem atmosfera não há o que publicar (o default do `from_slots`
-            // mantém o caminho desligado) — não vale a pena abrir sweep.
-            // NÃO se reinicia o cursor: um passo novo a meio de uma passagem
-            // continua a passagem com o valor novo (os materiais ainda não
-            // visitados apanham-no já) em vez de a recomeçar — com um mundo de
-            // dia muito curto, reiniciar deixava os últimos da lista por
-            // escrever para sempre.
+            // Sem atmosfera não há o que publicar (o default de
+            // `TerrainChunkParams::new` mantém o caminho desligado).
             if let Some(sky4) = sky4 {
                 *sweep = Some((sky4, sun4));
             }
         }
-        if let Some((sky4, sun4)) = *sweep {
-            let total = layers.materials.len();
-            let (start, end) = sweep_slice(total, *cursor, chunk_material_write_budget());
-            for handle in layers.materials.values().skip(start).take(end - start) {
-                if let Some(mut material) = chunk_materials.get_mut(handle) {
-                    material.params.day_tint = sky4;
-                    if sun4.w > 0.0 {
-                        material.params.sun_dir = sun4;
-                    }
-                }
-            }
-            *cursor = end;
-            if *cursor >= total {
-                *sweep = None;
-                *cursor = 0;
+        if let Some((sky4, sun4)) = sweep.take()
+            && let Some(mut material) = chunk_materials.get_mut(&layers.material)
+        {
+            // Um só material: uma escrita por passo do dia (era uma passagem
+            // orçamentada por milhares de materiais de chunk).
+            material.params.day_tint = sky4;
+            if sun4.w > 0.0 {
+                material.params.sun_dir = sun4;
             }
         }
     }
@@ -794,10 +820,8 @@ pub fn terrain_daynight_tint(
 /// + roughness de poça). Sistema próprio (throttle 0.5 s) porque o passo do
 ///   day-tint quantiza por FASE do dia e a chuva muda dentro da fase.
 ///
-/// Como o day tint, a passagem é ORÇAMENTADA por frame
-/// ([`CHUNK_MATERIAL_WRITE_BUDGET`]). O `published` é o valor que já chegou a
-/// TODOS os materiais: sem ele, um tick a meio de uma passagem reiniciava o
-/// cursor e os últimos materiais da lista nunca seriam escritos.
+/// O `published` é o valor que já está no material (só se escreve quando
+/// muda mais do que [`WETNESS_PUBLISH_EPS`]).
 #[allow(clippy::too_many_arguments)] // sistema Bevy com queries/params explícitos
 pub fn terrain_rain_wetness(
     time: Res<Time>,
@@ -807,7 +831,6 @@ pub fn terrain_rain_wetness(
     mut throttle: Local<f32>,
     mut current: Local<f32>,
     mut published: Local<Option<f32>>,
-    mut cursor: Local<usize>,
     mut sweep: Local<Option<f32>>,
 ) {
     *throttle -= time.delta_secs();
@@ -829,25 +852,12 @@ pub fn terrain_rain_wetness(
     // publicado a 0 e não paga uma passagem só para escrever zeros.
     if sweep.is_none() && (published.unwrap_or(0.0) - *current).abs() > WETNESS_PUBLISH_EPS {
         *sweep = Some(*current);
-        *cursor = 0;
     }
-    if let Some(value) = *sweep {
-        let total = layers.materials.len();
-        let (start, end) = sweep_slice(total, *cursor, chunk_material_write_budget());
-        for handle in layers.materials.values().skip(start).take(end - start) {
-            if let Some(mut material) = chunk_materials.get_mut(handle) {
-                material.params.walls_b.w = value;
-            }
+    if let Some(value) = sweep.take() {
+        if let Some(mut material) = chunk_materials.get_mut(&layers.material) {
+            material.params.walls_b.w = value;
         }
-        *cursor = end;
-        if *cursor >= total {
-            // Publica também o valor final convergido — o early-out antigo
-            // saía antes de escrever o último `current` e o chão ficava
-            // 0.001 mais seco do que o estado interno dizia.
-            *published = Some(value);
-            *sweep = None;
-            *cursor = 0;
-        }
+        *published = Some(value);
     }
 }
 
@@ -911,12 +921,12 @@ mod tests {
     fn test_chunk_material_stays_bindless() {
         let source = include_str!("layer_material.rs");
         assert!(
-            source.contains("#[bindless(index_table(range(0..85)))]"),
-            "TerrainChunkMaterial tem de continuar bindless (85 entradas: data + 42 pares)"
+            source.contains("#[bindless(limit(128), index_table(range(0..139)))]"),
+            "TerrainChunkMaterial tem de continuar bindless (139 entradas: data + 69 pares)"
         );
         assert!(
             source.contains("#[data(0, TerrainChunkParams, binding_array(10))]"),
-            "a tabela por chunk vai na binding array dos materiais bindless"
+            "a tabela de estilo vai na binding array dos materiais bindless"
         );
         // Nenhuma binding de campo `#[uniform]`/`#[storage]` no material: o
         // `#[data]` da struct é o único caminho para a tabela.
@@ -945,6 +955,69 @@ mod tests {
         assert!(
             wgsl.contains("var<storage> material_indices"),
             "a tabela de índices bindless está no binding 0"
+        );
+        // A tabela do WGSL tem de bater certo com o número de pares do material.
+        assert!(
+            wgsl.contains("e: array<u32, 138>"),
+            "138 entradas texture/sampler"
+        );
+        // Agulha em duas metades (escrita inteira casaria com este teste).
+        let pairs = source.matches(&format!("    #[{}(", "sampler")).count();
+        assert_eq!(pairs, 69, "13 camadas × 5 mapas + 4 planos splat");
+    }
+
+    /// REGRESSÃO do crash de arranque (2026-10-16): `limit(8)` declarava as
+    /// binding arrays do slab com 8 elementos, mas o bind group do material
+    /// leva ~58 descritores únicos — o wgpu recusava o `create_bind_group`
+    /// ("Binding count declared with at most 8 items, but 58 items were
+    /// provided") e a engine SAÍA (Validation RenderError) antes do loading
+    /// screen. O limite tem de (a) caber todos os descritores do material e
+    /// (b) manter `samplers × limit` abaixo do cap de elementos de sampler por
+    /// stage — acima dele a Bevy desliga o bindless EM SILÊNCIO e o material
+    /// cai no layout não-bindless que segfaulta o driver NVIDIA.
+    #[test]
+    fn test_bindless_slab_limit_holds_the_whole_material() {
+        use bevy::render::render_resource::{BindlessResourceType, BindlessSlabResourceLimit};
+
+        let slot_count = TerrainChunkMaterial::bindless_slot_count()
+            .expect("TerrainChunkMaterial tem de declarar #[bindless]");
+        let BindlessSlabResourceLimit::Custom(limit) = slot_count else {
+            panic!(
+                "o limite tem de ser explícito — o Auto (2048) excede o cap de samplers \
+                 do device e desliga o bindless em silêncio"
+            );
+        };
+
+        let descriptor = TerrainChunkMaterial::bindless_descriptor()
+            .expect("material #[bindless] traz descriptor");
+        let textures = descriptor
+            .resources
+            .iter()
+            .filter(|t| matches!(t, BindlessResourceType::Texture2d))
+            .count() as u32;
+        let samplers = descriptor
+            .resources
+            .iter()
+            .filter(|t| matches!(t, BindlessResourceType::SamplerFiltering))
+            .count() as u32;
+        assert!(
+            textures > 0 && samplers > 0,
+            "descriptor sem pares textura/sampler"
+        );
+        assert!(
+            limit >= textures && limit >= samplers,
+            "o slab ({limit}) tem de caber TODOS os descritores do material \
+             ({textures} texturas / {samplers} samplers) — abaixo disso o wgpu rejeita \
+             o bind group ('declared with at most {limit} items') e a app sai no arranque"
+        );
+        // Teto do device onde o Auto (2048 → 69 × 2048 = 141 312) já caiu para
+        // não-bindless: cap observado ≈ 2^17. Manter o produto bem abaixo.
+        const SAMPLER_ELEMENT_CAP: u32 = 131_072;
+        assert!(
+            samplers * limit <= SAMPLER_ELEMENT_CAP,
+            "samplers × limit = {} excede o cap do device (~{SAMPLER_ELEMENT_CAP}) — \
+             o material cai para não-bindless em silêncio (SIGSEGV NVIDIA)",
+            samplers * limit
         );
     }
 
@@ -1019,12 +1092,14 @@ mod tests {
         assert!(bare.is_none(), "no layers → no config");
     }
 
-    /// A tabela de params embute os estilos dos 8 slots, o índice da layer
-    /// de rocha (mountain_stone) para as paredes triplanares e a pele das
-    /// paredes do config.
+    /// A tabela de estilo cobre as 13 camadas do pool pela ORDEM dos slots,
+    /// coloca o splat global e aponta a rocha das paredes à mountain_stone.
     #[test]
-    fn test_chunk_params_pick_rock_layer() {
-        use super::super::splat::{SLOT_DIRT, SLOT_GRASS, SLOT_MOUNTAIN_STONE, SLOT_SNOW_PEAK};
+    fn test_terrain_params_cover_the_pool() {
+        use super::super::splat::{
+            SLOT_DIRT, SLOT_DIRT_TRAIL, SLOT_GRASS, SLOT_MOUNTAIN_STONE, SLOT_SNOW_PEAK,
+            SLOT_VALE_GRASS,
+        };
         let cfg = TerrainChunkConfig {
             tri_slope: 0.36,
             tri_soft: 0.12,
@@ -1034,67 +1109,36 @@ mod tests {
             streaks: 0.5,
             moss: 0.35,
         };
-        let params = TerrainChunkParams::from_slots(
-            [
-                SLOT_GRASS,
-                SLOT_MOUNTAIN_STONE,
-                SLOT_DIRT,
-                SLOT_SNOW_PEAK,
-                4,
-                5,
-                7,
-                12,
-            ],
-            [-32.0, 96.0],
-            64.0,
-            &cfg,
+        let params = TerrainChunkParams::new([-2000.0, -2000.0], 4000.0, &cfg);
+        assert_eq!(
+            params.world.w, SLOT_MOUNTAIN_STONE as f32,
+            "rocha das paredes"
         );
-        assert_eq!(params.chunk.w, 1.0, "mountain_stone é a layer 1 do chunk");
-        assert_eq!(params.tiles[2].x, SLOT_STYLES[SLOT_DIRT].tile);
-        assert_eq!(params.tints[3].xyz().x, SLOT_STYLES[SLOT_SNOW_PEAK].tint[0]);
-        assert_eq!(params.chunk.z, 64.0);
+        assert_eq!(params.world.z, 4000.0);
+        assert_eq!(params.world.x, -2000.0);
+        assert_eq!(params.tiles[SLOT_DIRT].x, SLOT_STYLES[SLOT_DIRT].tile);
+        assert_eq!(
+            params.tints[SLOT_SNOW_PEAK].x,
+            SLOT_STYLES[SLOT_SNOW_PEAK].tint[0]
+        );
         assert_eq!(params.walls_a.x, 0.36, "tri_slope vem do config");
         assert_eq!(params.walls_b.z, 0.35, "moss vem do config");
-
-        let no_rock = TerrainChunkParams::from_slots(
-            [SLOT_GRASS, SLOT_DIRT, SLOT_SNOW_PEAK, 4, 5, 7, 8, 12],
-            [0.0, 0.0],
-            64.0,
-            &cfg,
+        // Roughness: `roughness.ktx2` → mix sem inverter; `smoothness.ktx2` →
+        // mix + INVERT; sem mapa → só a constante.
+        assert!((params.roughs[SLOT_GRASS].y - ROUGH_MAP_MIX).abs() < 1e-6);
+        assert_eq!(params.roughs[SLOT_GRASS].z, 0.0);
+        assert_eq!(
+            params.roughs[SLOT_VALE_GRASS].z, 1.0,
+            "smoothness entra invertido"
         );
-        assert_eq!(no_rock.chunk.w, -1.0, "sem mountain_stone → sem triplanar");
-    }
-
-    /// As flags de roughness por slot saem da tabela estática:
-    /// `roughness.ktx2` → mix [`ROUGH_MAP_MIX`], `smoothness.ktx2` → mix +
-    /// INVERT, sem mapa → mix 0 (o WGSL devolve a constante `.x`).
-    #[test]
-    fn test_chunk_params_rough_flags_follow_the_pool_inventory() {
-        use super::super::splat::{SLOT_DIRT_TRAIL, SLOT_GRASS, SLOT_VALE_GRASS};
-        let cfg = TerrainChunkConfig {
-            tri_slope: 0.36,
-            tri_soft: 0.12,
-            strata_spacing: 4.0,
-            strata_strength: 0.25,
-            rock_darken: 0.45,
-            streaks: 0.5,
-            moss: 0.35,
-        };
-        let params = TerrainChunkParams::from_slots(
-            [SLOT_GRASS, SLOT_VALE_GRASS, SLOT_DIRT_TRAIL, 3, 4, 5, 7, 12],
-            [0.0, 0.0],
-            64.0,
-            &cfg,
+        assert_eq!(
+            params.roughs[SLOT_DIRT_TRAIL].y, 0.0,
+            "sem mapa → só a constante"
         );
-        // grass tem roughness.ktx2: mix on, sem inverter.
-        assert_eq!(params.roughs[0].x, SLOT_STYLES[SLOT_GRASS].rough);
-        assert!((params.roughs[0].y - ROUGH_MAP_MIX).abs() < 1e-6);
-        assert_eq!(params.roughs[0].z, 0.0);
-        // vale_grass só tem smoothness.ktx2: mix on + INVERT.
-        assert_eq!(params.roughs[1].z, 1.0, "smoothness entra invertido");
-        // dirt_trail não tem mapa nenhum: mix 0 → constante.
-        assert_eq!(params.roughs[2].y, 0.0, "sem mapa → só a constante");
-        assert_eq!(params.roughs[2].x, SLOT_STYLES[SLOT_DIRT_TRAIL].rough);
+        assert_eq!(
+            params.roughs[SLOT_DIRT_TRAIL].x,
+            SLOT_STYLES[SLOT_DIRT_TRAIL].rough
+        );
     }
 
     impl EntitySpec {
@@ -1102,38 +1146,5 @@ mod tests {
             self.children.push(terrain);
             self
         }
-    }
-
-    /// A passagem orçamentada tem de COBRIR TODOS os materiais exatamente uma
-    /// vez. É o único falhanço silencioso que o orçamento podia introduzir:
-    /// metade do mundo ficava com o tint/chuva antigos e nada no ecrã o
-    /// denunciava (o valor muda devagar).
-    #[test]
-    fn test_sweep_slice_covers_every_material_once() {
-        let total = 3969usize; // 63×63, a grelha do simple-rpg
-        let budget = 64usize;
-        let mut cursor = 0usize;
-        let mut frames = 0usize;
-        let mut visited = 0usize;
-        while cursor < total {
-            let (start, end) = sweep_slice(total, cursor, budget);
-            assert_eq!(start, cursor, "a fatia começa onde o cursor está");
-            assert!(end > start, "um cursor preso seria um ciclo infinito");
-            assert!(end - start <= budget, "o orçamento é um TETO");
-            visited += end - start;
-            cursor = end;
-            frames += 1;
-            assert!(frames < 1000, "passagem a divergir");
-        }
-        assert_eq!(visited, total, "cada material visitado exatamente uma vez");
-        assert_eq!(frames, total.div_ceil(budget));
-
-        // `VIBER_CHUNK_TINT_BUDGET=0` → `usize::MAX`: tudo num só frame, o
-        // comportamento anterior (o braço de controlo do A/B).
-        assert_eq!(sweep_slice(total, 0, usize::MAX), (0, total));
-        // Orçamento maior que a lista não rebenta nem anda para trás.
-        assert_eq!(sweep_slice(4, 0, 10_000), (0, 4));
-        // Cursor já no fim devolve fatia vazia (o laço pára).
-        assert_eq!(sweep_slice(total, total, budget).0, total);
     }
 }

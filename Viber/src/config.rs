@@ -54,6 +54,10 @@ pub struct GameConfig {
     pub assets: AssetsConfig,
     pub game: GameDirs,
     pub save: SaveConfig,
+    /// Cenas (`project:` — cena principal, diretório de cenas, autoloads); ver
+    /// [`crate::project`]. Ausente = mundo de uma só cena.
+    #[serde(default)]
+    pub project: Option<crate::project::ProjectConfig>,
 }
 
 impl GameConfig {
@@ -261,8 +265,9 @@ pub fn load(world_dir: &Path) -> Result<GameConfig> {
 /// um campo futuro não deve rebentar numa engine antiga (igual aos attrs XML).
 fn warn_unknown_keys(path: &Path, value: &serde_yaml::Value) {
     const TOP: &[&str] = &[
-        "title", "gameplay", "graphics", "dlss", "assets", "game", "save",
+        "title", "gameplay", "graphics", "dlss", "assets", "game", "save", "project",
     ];
+    const PROJECT: &[&str] = &["main-scene", "scenes", "autoload"];
     const ASSETS: &[&str] = &["roots", "bgm_dir", "sfx_dir", "terrain_textures_dir"];
     const GAME: &[&str] = &["scripts_dir", "quests_dir"];
     const SAVE: &[&str] = &["dir"];
@@ -284,6 +289,7 @@ fn warn_unknown_keys(path: &Path, value: &serde_yaml::Value) {
             "assets" => ASSETS,
             "game" => GAME,
             "save" => SAVE,
+            "project" => PROJECT,
             _ => continue,
         };
         if let Some(inner) = group.as_mapping() {
@@ -340,6 +346,7 @@ pub(crate) fn fixture() -> GameConfig {
         save: SaveConfig {
             dir: PathBuf::from("/tmp"),
         },
+        project: None,
     }
 }
 

@@ -175,6 +175,25 @@ Sequências de câmara declaradas no XML (`<Cinematic id>` com `<Shot>`, `<Line>
 - "Só uma vez": guarda uma chave primitiva em `viber.game()` (persiste no save) — ver
   `scripts/cinematic-trigger.lua` do `simple-rpg`.
 
+## Cenas (`viber.change_scene`)
+
+Num projeto com cenas (`project:` no `config.yaml`, ver `crate::project`) cada cena é
+um universo próprio: trocar descarrega as entidades, o terreno, a navmesh e a física da
+atual e carrega a outra, com fade. O herói, a câmara, o HUD (autoloads), o `viber.game()`,
+quests e cofre persistem. Portas declarativas: `<ScenePortal target entry prompt>` — não
+precisam de Lua.
+
+| Função | Devolve | Notas |
+|---|---|---|
+| `viber.change_scene(id[, entrada])` | `true` \| `false, erro` | `id` = `main` ou o caminho em `scenes/` sem `.xml` (`interiors/chapel`); `entrada` = `<SceneEntry name>` ou nome de portal; `"@back"` = o portal por onde se entrou; omisso = a primeira entrada |
+| `viber.scene_name()` | id \| `nil` | a cena carregada (`nil` fora de um projeto com cenas) |
+| `viber.scene_entry()` | nome \| `nil` | a entrada por onde se chegou |
+
+- Eventos em `viber.events()`: `{type="scene_unloading", scene}` (último frame da cena) e
+  `{type="scene_loaded", scene, entry}`.
+- Ids de entidade guardados em `viber.game()` não sobrevivem à troca (as entidades da cena
+  morrem) — guarda NOMES e volta a procurá-los no `scene_loaded`.
+
 ## Geral
 
 | Função | Devolve | Notas |
@@ -371,6 +390,8 @@ end
 | `quest_done` | `id` | quest entregue |
 | `level_up` | `level` | subida de nível |
 | `ui_action` | `name`, `arg` | ação da UI declarativa (`viber.ui.action`) — os handlers nativos correm à mesma, SALVO as ações reclamadas por `viber.own_action` |
+| `scene_unloading` | `scene` | a cena vai ser descarregada (`viber.change_scene`/portal) |
+| `scene_loaded` | `scene`, `entry` | a cena nova acabou de carregar |
 
 ## Timers (`viber.after` / `viber.every`)
 

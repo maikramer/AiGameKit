@@ -378,3 +378,116 @@ pub fn suggest_url(glb_path: &str) -> String {
         None => path,
     }
 }
+
+/// "Mover para nova cena" (projetos com cenas, [`crate::project`]): os nós passam para uma
+/// cena NOVA `scenes/<id>.xml` — um universo próprio, não um `<Include>` — e saem do mundo.
+/// `recenter` é subtraído à translação de cada nó (a sala passa a viver na origem da cena);
+/// `prepend` é XML acrescentado antes dos nós (a `<SceneEntry>`, o `<InteriorScene>`…).
+/// Um só lote: `create_file` + `remove`s — o `inverse` desfaz tudo (o ficheiro e os nós).
+pub fn extract_scene_ops(
+    doc: &super::doc::SceneDoc,
+    selectors: &[String],
+    id: &str,
+    recenter: [f32; 3],
+    prepend: Option<&str>,
+    title: Option<&str>,
+) -> anyhow::Result<Vec<EditOp>> {
+    let id = id.trim().trim_matches('/');
+    if id.is_empty() || id == crate::project::MAIN_SCENE || id.contains("..") {
+        anyhow::bail!("extract-scene: id de cena inválido `{id}`");
+    }
+    if selectors.is_empty() {
+        anyhow::bail!("extract-scene: nenhum nó selecionado");
+    }
+    let project = crate::project::Project::at(&doc.root_dir);
+    let scenes_rel = project.config.scenes_dir();
+    let rel = format!(
+        "{}/{id}.xml",
+        scenes_rel.to_string_lossy().trim_end_matches('/')
+    );
+    let mut nodes = Vec::new();
+    for selector in selectors {
+        let node = doc.resolve(selector)?;
+        if node.is_root() {
+            anyhow::bail!("extract-scene: `{selector}` é a raiz de um ficheiro");
+        }
+        if !nodes.contains(&node) {
+            nodes.push(node);
+        }
+    }
+    // Pela ordem do documento (a ordem dos nós na cena nova).
+    nodes.sort_by(|a, b| (a.file, &a.path).cmp(&(b.file, &b.path)));
+    let mut moved = Vec::new();
+    for node in &nodes {
+        let mut xml = doc.node(node).expect("resolvido").clone();
+        if recenter != [0.0; 3] {
+            for key in ["translation", "pos"] {
+                if let Some((_, value)) = xml.attrs.iter_mut().find(|(k, _)| k == key) {
+                    // Em f64: `2603.4 - 2600` em f32 dava `3.3999`.
+                    crate::xml::values::parse_vec3(value, key)?;
+                    let parts: Vec<f64> = value
+                        .split_whitespace()
+                        .filter_map(|p| p.parse::<f64>().ok())
+                        .collect();
+                    *value = parts
+                        .iter()
+                        .zip(recenter)
+                        .map(|(v, r)| {
+                            let x = ((v - f64::from(r)) * 1000.0).round() / 1000.0;
+                            let x = if x == 0.0 { 0.0 } else { x };
+                            format!("{x}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                }
+            }
+        }
+        moved.push(xml);
+    }
+    let mut xml = String::new();
+    if let Some(prepend) = prepend.map(str::trim).filter(|p| !p.is_empty()) {
+        xml.push_str(prepend);
+        xml.push('\n');
+    }
+    xml.push_str(&super::ops::fragment_xml(&moved));
+    let mut ops = vec![EditOp::CreateFile {
+        path: rel,
+        xml,
+        title: title.map(str::to_owned),
+    }];
+    // Remoções do fim para o início: os índices dos irmãos anteriores não mudam.
+    for node in nodes.iter().rev() {
+        ops.push(EditOp::Remove {
+            node: doc.selector(node),
+        });
+    }
+    Ok(ops)
+}
+
+/// Os nós de topo de `file` cuja translação XZ cai no retângulo `[x0, z0, x1, z1]` — a
+/// seleção por região do `extract-scene --within`.
+pub fn nodes_within(
+    doc: &super::doc::SceneDoc,
+    file: &str,
+    rect: [f32; 4],
+) -> anyhow::Result<Vec<String>> {
+    let file_id = doc
+        .file_by_path(file)
+        .ok_or_else(|| anyhow::anyhow!("--within: `{file}` não faz parte do mundo"))?;
+    let (x0, x1) = (rect[0].min(rect[2]), rect[0].max(rect[2]));
+    let (z0, z1) = (rect[1].min(rect[3]), rect[1].max(rect[3]));
+    let mut out = Vec::new();
+    for (index, node) in doc.files[file_id].doc.children.iter().enumerate() {
+        let Some(t) = node
+            .attr("translation")
+            .or_else(|| node.attr("pos"))
+            .and_then(|v| crate::xml::values::parse_vec3(v, "translation").ok())
+        else {
+            continue;
+        };
+        if t[0] >= x0 && t[0] <= x1 && t[2] >= z0 && t[2] <= z1 {
+            out.push(doc.selector(&super::doc::NodeRef::new(file_id, vec![index])));
+        }
+    }
+    Ok(out)
+}

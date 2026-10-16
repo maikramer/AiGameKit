@@ -131,8 +131,13 @@ herói equipa picareta/machado; `fall` = árvore tomba e fica toco; loot → vau
 - `GroundDecal` — `at`, `radius`/`size`/`half-size`, `feather` (2.5), `noise`,
   `texture-url`, `texture-scale` (9), `base-color`, `lift`. Puramente visual
 - `InteriorScene` — `at` (CENTRO), `size`, `room-size`+`room-origin`,
-  `camera-distance`/`camera-pitch`/`camera-yaw`. Bolsa FORA da pegada do
-  heightmap; um só por mundo. Ex.: `examples/simple-rpg/world/interiors.xml`
+  `camera-distance`/`camera-pitch`/`camera-yaw`. Luz/câmara de interior no retângulo;
+  um só por mundo/cena. Num projeto com cenas: `at="0 0"` a cobrir a sala. Ex.:
+  `examples/simple-rpg/scenes/interiors/chapel.xml`
+- `SceneEntry` — `name` + pose: chegada de uma cena (`viber.change_scene(id, nome)`)
+- `ScenePortal` — `name target [entry|@back] [prompt key radius auto-radius sound toast
+  arrive-offset]`: porta para outra cena do projeto (`config.yaml` → `project:`); também
+  é entrada com o próprio nome. Ver `Viber/AGENTS.md` → "Cenas"
 
 **Ordem de carve:** Pads → Lakes → Rivers → Roads (pontes por último) → decals.
 Cliffs/Caves/Archs/Bridges são sólidos voxel construídos depois do carve.

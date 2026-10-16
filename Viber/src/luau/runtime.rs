@@ -71,6 +71,9 @@ pub fn luau_on_add(
 /// o `luau_update` chegou ao limite de 16 parâmetros do Bevy.
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct LuauRuntimeLocals<'w, 's> {
+    /// Cena carregada e índice de cenas (`viber.scene_name`, `viber.change_scene`).
+    pub scene: Option<bevy::ecs::system::Res<'w, crate::scene_loader::CurrentScene>>,
+    pub scene_index: Option<bevy::ecs::system::Res<'w, crate::scene_loader::SceneIndex>>,
     /// Warn 1× por entidade sem rig/clip de gesto.
     pub gesture_warned: bevy::ecs::system::Local<'s, std::collections::HashSet<Entity>>,
     /// Warn 1× por kind de status desconhecido (`viber.apply_status`) — o
@@ -330,13 +333,23 @@ pub fn luau_update(
         // Handle de leitura do terreno para `viber.ground_below` — dois
         // clones de Arc por frame; o terreno é imutável pós-bootstrap.
         ctx.terrain = terrain.as_deref().map(|rt| rt.reader());
-        if locals.surfaces.is_none()
-            && let Some(rt) = terrain.as_deref()
+        // Imutável DENTRO de uma cena; uma troca de cena insere um terreno novo (ou nenhum).
+        match terrain.as_ref() {
+            Some(rt) if locals.surfaces.is_none() || rt.is_added() => {
+                *locals.surfaces = Some(std::sync::Arc::new(SurfaceRegistries {
+                    roads: rt.roads.clone(),
+                    water: rt.water.clone(),
+                }));
+            }
+            Some(_) => {}
+            None => *locals.surfaces = None,
+        }
+        ctx.scene = locals.scene.as_deref().and_then(|s| s.id.clone());
+        ctx.scene_entry = locals.scene.as_deref().and_then(|s| s.entry.clone());
+        if let Some(index) = locals.scene_index.as_ref()
+            && (index.is_changed() || ctx.scene_ids.is_empty())
         {
-            *locals.surfaces = Some(std::sync::Arc::new(SurfaceRegistries {
-                roads: rt.roads.clone(),
-                water: rt.water.clone(),
-            }));
+            ctx.scene_ids = std::sync::Arc::new(index.ids.clone());
         }
         ctx.surfaces = locals.surfaces.clone();
         // Snapshots de nomes e HP para `viber.find`/`entity_hp` — início de
@@ -741,6 +754,22 @@ pub fn luau_update(
                             .try_insert((crate::ai::AiLocomotion::default(), profile));
                     }
                 }
+            }
+            ScriptCommand::ChangeScene { scene, entry, via } => {
+                let request = crate::scene_loader::ChangeScene {
+                    scene,
+                    arrival: crate::scene_loader::Arrival::from_entry(entry.as_deref()),
+                    via_portal: via,
+                    toast: None,
+                    sound: None,
+                    came_from: None,
+                    return_pose: None,
+                };
+                commands.queue(move |world: &mut World| {
+                    if let Err(error) = crate::scene_loader::request_change(world, request) {
+                        warn!(target: "viber::luau", "viber.change_scene: {error:#}");
+                    }
+                });
             }
             ScriptCommand::TeleportPlayer(pos) => {
                 if let Some((entity, Some(transform), _, _)) = player_components.as_mut() {

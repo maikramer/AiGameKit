@@ -1275,7 +1275,11 @@ fn mount_ambient_fx(
     pool: &mut BurstPool,
 ) {
     let resolved = resolve(spec);
-    let capacity = emitter_capacity(&resolved);
+    // Arredondada ao escadote do pool (como os bursts): o pool devolve QUALQUER malha do
+    // degrau e o `write_billboards` exige a capacidade exata — com 31 pedido e uma malha de
+    // 32 reciclada, a asserção rebentava (repro: troca de cena, que monta dezenas de
+    // emissores de uma vez com malhas recicladas).
+    let capacity = mesh_bucket(emitter_capacity(&resolved));
     let mesh = match pool.take_mesh(capacity) {
         Some(handle) => handle,
         None => meshes.add(particle_mesh(capacity)),

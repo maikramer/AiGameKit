@@ -77,7 +77,13 @@ pub enum EditOp {
     },
     /// Cria um ficheiro de cena (`<world static="true">` + `xml`), gravado no `save`.
     /// Recusa ficheiros que já existem. Base do `extract` (e a sua inversa é `drop_file`).
-    CreateFile { path: String, xml: String },
+    CreateFile {
+        path: String,
+        xml: String,
+        /// `<world title>` da cena nova (projetos com cenas).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+    },
     /// Esquece um ficheiro criado nesta sessão (o `save` apaga-o do disco).
     DropFile { path: String },
     /// Pincel no heightmap do mundo (`at` = XZ mundo, `radius` m). `amount`: metros para
@@ -385,14 +391,19 @@ pub fn apply(doc: &mut SceneDoc, op: &EditOp) -> Result<Applied> {
             let node = doc.resolve(node)?;
             extract(doc, &node, to.as_deref())
         }
-        EditOp::CreateFile { path, xml } => {
+        EditOp::CreateFile { path, xml, title } => {
             let children = parse_fragment(xml)?;
             let rel = path.trim().trim_start_matches('/').to_owned();
-            doc.create_file(&rel, scene_document(children))?;
+            let mut document = scene_document(children);
+            if let Some(title) = title.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+                document.root_attrs.push(("title".into(), title.to_owned()));
+            }
+            doc.create_file(&rel, document)?;
             Ok(Applied {
                 forward: EditOp::CreateFile {
                     path: rel.clone(),
                     xml: xml.clone(),
+                    title: title.clone(),
                 },
                 inverse: vec![EditOp::DropFile { path: rel }],
                 changes: Vec::new(),
@@ -406,6 +417,11 @@ pub fn apply(doc: &mut SceneDoc, op: &EditOp) -> Result<Applied> {
                 inverse: vec![EditOp::CreateFile {
                     path: rel,
                     xml: fragment_xml(&content.children),
+                    title: content
+                        .root_attrs
+                        .iter()
+                        .find(|(k, _)| k == "title")
+                        .map(|(_, v)| v.clone()),
                 }],
                 changes: Vec::new(),
             })
@@ -870,6 +886,7 @@ fn extract(doc: &mut SceneDoc, node: &NodeRef, to: Option<&str>) -> Result<Appli
         &EditOp::CreateFile {
             path: rel.clone(),
             xml: branch_xml,
+            title: None,
         },
     )?;
     let removed = remove_node(doc, node);

@@ -567,8 +567,8 @@ pub fn node_frame(
 /// corre a ferramenta, aplica o lote ao documento e grava (salvo `dry_run`).
 pub fn run_offline(world_path: &Path, selector: &str, dry_run: bool) -> Result<Value> {
     let world_path = std::path::absolute(world_path)?;
-    let world_dir = world_path.parent().unwrap_or(Path::new("."));
-    let config = crate::config::load(world_dir)?;
+    let world_dir = crate::project::root_of(&world_path);
+    let config = crate::config::load(&world_dir)?;
     let loaded = crate::xml::include::load_world(&world_path)?;
     let parsed = crate::recipes::parse_world(&loaded.root_attrs, &loaded.nodes)?;
     let mut app = crate::bake::headless_app(&world_path, &config, parsed)?;

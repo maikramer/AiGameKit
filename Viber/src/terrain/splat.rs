@@ -362,12 +362,14 @@ impl BiomeField {
             patchiness: 0.0,
             aridity: 0.0,
         };
-        let mut weights: Vec<f32> = Vec::with_capacity(self.wedges.len());
+        // Sem alocação: o campo corre por texel (milhões de vezes no bake).
+        let mut weights = [0.0f32; 16];
         let mut total = 0.0;
-        for wedge in &self.wedges {
-            let w = dir.dot(wedge.dir).max(0.0).powf(Self::WEDGE_SHARPNESS);
+        for (wedge, slot) in self.wedges.iter().zip(weights.iter_mut()) {
+            let d = dir.dot(wedge.dir).max(0.0);
+            let w = d.powi(Self::WEDGE_SHARPNESS as i32);
             total += w;
-            weights.push(w);
+            *slot = w;
         }
         let outer = 1.0 - core;
         if total <= 1e-6 {
@@ -471,17 +473,32 @@ impl Default for SplatParams {
 }
 
 /// Baked splat map: four RGBA8 planes of `size²` texels covering the whole
-/// world (`texel` meters per texel, origin at the -X/-Z corner).
-///
-/// Retired from production by the per-chunk planes ([`generate_chunk_splats`])
-/// but kept as the test oracle for the weight field.
-#[allow(dead_code)]
+/// world (`texel` meters per texel, origin at the -X/-Z corner). The 13
+/// weights of every texel are packed by [`SLOT_PACKING`]; the shader reads all
+/// four planes (bilinear + mips — no chunk seams) and samples the strongest
+/// four layers per pixel.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SplatMap {
     pub size: u32,
     pub texel: f32,
     /// Plane bytes, RGBA8 row-major, alpha = channel 3.
     pub planes: [Vec<u8>; 4],
+}
+
+impl SplatMap {
+    /// World-space corner (-X,-Z) of texel (0,0) for a world of `world` meters.
+    pub fn origin(&self) -> Vec2 {
+        Vec2::splat(-(self.size as f32 * self.texel) * 0.5)
+    }
+
+    /// The 13 weights stored at texel `(tx, tz)` (0..1, as quantized).
+    pub fn weights_at_texel(&self, tx: u32, tz: u32) -> [f32; LAYER_COUNT] {
+        let i = ((tz as usize * self.size as usize) + tx as usize) * 4;
+        core::array::from_fn(|slot| {
+            let (plane, channel) = SLOT_PACKING[slot];
+            self.planes[plane][i + channel] as f32 / 251.0
+        })
+    }
 }
 
 /// AABB of a water body / road, expanded by `margin` — texels outside every
@@ -536,78 +553,216 @@ fn road_bounds(road: &RoadPath, margin: f32) -> Bounds {
     }
 }
 
-/// Bakes the splat map for a carved world.
-///
-/// Retired from production by [`generate_chunk_splats`] (kept as the test
-/// oracle for the weight field).
-#[allow(dead_code)]
-pub fn generate_splats(
-    grid: &BrushGrid,
-    water: &[WaterBody],
-    roads: &[RoadPath],
-    params: &SplatParams,
-) -> SplatMap {
-    let world = grid.world_size();
-    let texel = if params.texel > 0.0 {
-        params.texel
-    } else {
-        (world / 2048.0).max(1.0)
-    };
-    let size = ((world / texel).round() as u32).clamp(16, 4096);
+/// Everything the weight field reads: the carved grid, the water and road
+/// registries, the cliff mask and the authored paint layer.
+#[derive(Clone, Copy)]
+pub struct SplatInputs<'a> {
+    pub grid: &'a BrushGrid,
+    pub water: &'a [WaterBody],
+    pub roads: &'a [RoadPath],
+    pub params: &'a SplatParams,
+    pub cliff: Option<&'a crate::terrain::cliffs::CliffMask>,
+    pub paint: Option<&'a crate::terrain::paint::PaintGrid>,
+}
 
-    let shore = params
-        .tuning
-        .shore_width
-        .unwrap_or(params.shore_width)
-        .max(0.5);
-    let water_boxes: Vec<(Bounds, &WaterBody)> = water
+impl SplatInputs<'_> {
+    /// Texel size (m): `params.texel`, or auto = `world/2048` (floor 1 m) —
+    /// ~2 m on a 4 km world.
+    pub fn texel(&self) -> f32 {
+        if self.params.texel > 0.0 {
+            self.params.texel
+        } else {
+            (self.grid.world_size() / 2048.0).max(1.0)
+        }
+    }
+
+    pub fn size(&self) -> u32 {
+        ((self.grid.world_size() / self.texel()).round() as u32).clamp(16, 4096)
+    }
+
+    fn shore(&self) -> f32 {
+        self.params
+            .tuning
+            .shore_width
+            .unwrap_or(self.params.shore_width)
+            .max(0.5)
+    }
+}
+
+/// Bakes the world splat: the procedural field ([`weights_at`]) plus the
+/// painted layer, row bands in parallel (one band per core). Same result as a
+/// sequential bake, byte for byte (every texel is a pure function of its
+/// position).
+pub fn generate_splats(inputs: SplatInputs) -> SplatMap {
+    let size = inputs.size();
+    let texel = inputs.texel();
+    let mut map = SplatMap {
+        size,
+        texel,
+        planes: core::array::from_fn(|_| vec![0u8; (size as usize) * (size as usize) * 4]),
+    };
+    bake_rows(&mut map, inputs, 0, size, 0, size);
+    map
+}
+
+/// Re-bakes the texels whose centers fall in the world rectangle
+/// `[min, max]` (live paint / ground tuning) and returns the touched texel
+/// rectangle `(x0, z0, x1, z1)` (exclusive end), or `None` if it misses.
+pub fn bake_rect(
+    map: &mut SplatMap,
+    inputs: SplatInputs,
+    min: Vec2,
+    max: Vec2,
+) -> Option<(u32, u32, u32, u32)> {
+    let origin = map.origin();
+    let to_texel = |w: f32, o: f32| ((w - o) / map.texel).floor();
+    let x0 = to_texel(min.x, origin.x).max(0.0) as u32;
+    let z0 = to_texel(min.y, origin.y).max(0.0) as u32;
+    let x1 = (to_texel(max.x, origin.x) + 1.0).clamp(0.0, map.size as f32) as u32;
+    let z1 = (to_texel(max.y, origin.y) + 1.0).clamp(0.0, map.size as f32) as u32;
+    if x0 >= x1 || z0 >= z1 {
+        return None;
+    }
+    bake_rows(map, inputs, x0, x1, z0, z1);
+    Some((x0, z0, x1, z1))
+}
+
+/// Bakes texel columns `x0..x1` of rows `z0..z1`, splitting the rows across
+/// the available cores.
+fn bake_rows(map: &mut SplatMap, inputs: SplatInputs, x0: u32, x1: u32, z0: u32, z1: u32) {
+    let size = map.size as usize;
+    let texel = map.texel;
+    let origin = map.origin();
+    let shore = inputs.shore();
+    let water_boxes: Vec<(Bounds, &WaterBody)> = inputs
+        .water
         .iter()
         .filter(|b| b.radius > 0.0 || !b.stations.is_empty())
         .map(|b| (water_bounds(b, shore), b))
         .collect();
-    let road_boxes: Vec<(Bounds, &RoadPath)> = roads
+    let road_boxes: Vec<(Bounds, &RoadPath)> = inputs
+        .roads
         .iter()
         .filter(|r| !r.bridge)
         .map(|r| (road_bounds(r, 4.0), r))
         .collect();
-
-    let mut planes: [Vec<u8>; 4] = [
-        vec![0u8; (size as usize) * (size as usize) * 4],
-        vec![0u8; (size as usize) * (size as usize) * 4],
-        vec![0u8; (size as usize) * (size as usize) * 4],
-        vec![0u8; (size as usize) * (size as usize) * 4],
-    ];
-    let epsilon = grid.texel();
-    let mut ctx = TexelCtx {
-        params,
-        shore,
-        water_boxes: &water_boxes,
-        road_boxes: &road_boxes,
-        cliff: None,
+    let rows = (z1 - z0) as usize;
+    let width = (x1 - x0) as usize;
+    // Each worker bakes a band of rows into its own buffer of 13 bytes per
+    // texel; the planes are written back afterwards (no shared &mut).
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .clamp(1, 32)
+        .min(rows.max(1));
+    let band = rows.div_ceil(threads);
+    let bake_band = |band_z0: usize, band_rows: usize| -> Vec<[u8; LAYER_COUNT]> {
+        let mut ctx = TexelCtx {
+            params: inputs.params,
+            shore,
+            water_boxes: &water_boxes,
+            road_boxes: &road_boxes,
+            cliff: inputs.cliff,
+        };
+        let grid = inputs.grid;
+        let epsilon = grid.texel();
+        let mut out = Vec::with_capacity(band_rows * width);
+        for tz in band_z0..band_z0 + band_rows {
+            let z = origin.y + (tz as f32 + 0.5) * texel;
+            for tx in x0 as usize..x1 as usize {
+                let x = origin.x + (tx as f32 + 0.5) * texel;
+                let y = grid.sample(x, z);
+                let normal = grid.sample_normal(x, z, epsilon);
+                let mut w = weights_at(x, z, y, normal.y, grid.max_height(), &mut ctx);
+                if let Some((slot, weight)) = inputs.paint.and_then(|paint| paint.sample(x, z)) {
+                    for value in w.iter_mut() {
+                        *value *= 1.0 - weight;
+                    }
+                    w[slot] += weight;
+                }
+                // 251 keeps every channel (and the shader's renormalized sum)
+                // inside u8 with rounding headroom.
+                out.push(w.map(|v| (v * 251.0).round().clamp(0.0, 251.0) as u8));
+            }
+        }
+        out
     };
-
-    for tz in 0..size {
-        let world_z = (tz as f32 + 0.5) * texel - world * 0.5;
-        for tx in 0..size {
-            let world_x = (tx as f32 + 0.5) * texel - world * 0.5;
-            let y = grid.sample(world_x, world_z);
-            let normal = grid.sample_normal(world_x, world_z, epsilon);
-            let weights = weights_at(world_x, world_z, y, normal.y, grid.max_height(), &mut ctx);
-            let i = ((tz as usize * size as usize) + tx as usize) * 4;
-            for slot in 0..LAYER_COUNT {
+    let bands: Vec<(usize, Vec<[u8; LAYER_COUNT]>)> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..threads)
+            .filter_map(|i| {
+                let start = z0 as usize + i * band;
+                let end = (start + band).min(z1 as usize);
+                (start < end).then(|| (start, scope.spawn(move || bake_band(start, end - start))))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|(start, handle)| (start, handle.join().expect("splat worker panicked")))
+            .collect()
+    });
+    for (start, texels) in bands {
+        for (k, bytes) in texels.into_iter().enumerate() {
+            let tz = start + k / width;
+            let tx = x0 as usize + k % width;
+            let i = (tz * size + tx) * 4;
+            for (slot, &byte) in bytes.iter().enumerate() {
                 let (plane, channel) = SLOT_PACKING[slot];
-                // 251 keeps the u8 sum (with the grass remainder) ≤ 255.
-                let v = (weights[slot] * 251.0).round().clamp(0.0, 251.0) as u8;
-                planes[plane][i + channel] = v;
+                map.planes[plane][i + channel] = byte;
             }
         }
     }
+}
 
-    SplatMap {
+// ── cache em disco ─────────────────────────────────────────────────────────
+//
+// O bake é determinístico: com as mesmas entradas o resultado é o mesmo, byte a
+// byte. Guardá-lo ao lado do heightmap poupa-o por inteiro no arranque seguinte
+// e no regresso a uma cena.
+
+const CACHE_MAGIC: &[u8; 8] = b"VSPLAT02";
+
+/// Lê a cache se a `key` coincidir (`None` = ausente, corrompida ou velha).
+pub fn load_cache(path: &std::path::Path, key: u64) -> Option<SplatMap> {
+    let bytes = std::fs::read(path).ok()?;
+    let header = 8 + 8 + 4 + 4;
+    if bytes.len() < header || &bytes[..8] != CACHE_MAGIC {
+        return None;
+    }
+    let stored = u64::from_le_bytes(bytes[8..16].try_into().ok()?);
+    if stored != key {
+        return None;
+    }
+    let size = u32::from_le_bytes(bytes[16..20].try_into().ok()?);
+    let texel = f32::from_le_bytes(bytes[20..24].try_into().ok()?);
+    let plane = (size as usize) * (size as usize) * 4;
+    if bytes.len() != header + plane * 4 {
+        return None;
+    }
+    let planes =
+        core::array::from_fn(|i| bytes[header + i * plane..header + (i + 1) * plane].to_vec());
+    Some(SplatMap {
         size,
         texel,
         planes,
+    })
+}
+
+/// Escreve a cache (atómica: tmp + rename). Falhas só avisam no chamador.
+pub fn save_cache(path: &std::path::Path, key: u64, map: &SplatMap) -> std::io::Result<()> {
+    let mut bytes = Vec::with_capacity(24 + map.planes.iter().map(Vec::len).sum::<usize>());
+    bytes.extend_from_slice(CACHE_MAGIC);
+    bytes.extend_from_slice(&key.to_le_bytes());
+    bytes.extend_from_slice(&map.size.to_le_bytes());
+    bytes.extend_from_slice(&map.texel.to_le_bytes());
+    for plane in &map.planes {
+        bytes.extend_from_slice(plane);
     }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension("splat.tmp");
+    std::fs::write(&tmp, &bytes)?;
+    std::fs::rename(tmp, path)
 }
 
 /// Per-texel query inputs (world-space position + sampled surface).
@@ -934,14 +1089,15 @@ fn value_noise(x: f32, z: f32, seed: u64, salt: u64) -> f32 {
 
 /// 0..1 hash of one lattice corner (SplitMix64-style finalizer).
 fn lattice_hash(ix: f32, iz: f32, seed: u64, salt: u64) -> f32 {
-    let xi = (ix as i64).to_le_bytes();
-    let zi = (iz as i64).to_le_bytes();
-    let mut h = seed ^ (salt << 17).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    for byte in xi.iter().chain(zi.iter()) {
-        h ^= u64::from(*byte);
-        h = h.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-        h ^= h >> 29;
-    }
+    // Um só mix de 64 bits (SplitMix64 sobre as coordenadas já espalhadas):
+    // o antigo fazia 16 voltas byte a byte e era o maior custo do bake.
+    let mut h = seed
+        ^ (salt << 17).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (ix as i64 as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93)
+        ^ (iz as i64 as u64).wrapping_mul(0xA076_1D64_78BD_642F);
+    h = (h ^ (h >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h = (h ^ (h >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    h ^= h >> 31;
     (h >> 11) as f32 / (1u64 << 53) as f32
 }
 
@@ -1050,7 +1206,6 @@ pub fn flat_rough_image() -> Image {
 /// Converts the baked planes into four Bevy images (RGBA8 data channels,
 /// mip chain + anisotropy via the shared texture patcher). Splat UVs live in
 /// 0..1 world coverage, so ClampToEdge is correct here.
-#[allow(dead_code)]
 pub fn splat_images(map: &SplatMap) -> [Image; 4] {
     let size = map.size;
     let mut images = map.planes.clone().map(|data| {
@@ -1072,332 +1227,6 @@ pub fn splat_images(map: &SplatMap) -> [Image; 4] {
         patch_image(image, false);
     }
     images
-}
-
-// ─────────────────────────────────────────────── per-chunk splat (r6)
-//
-// O material por chunk pede um plano splat POR CHUNK: 4 pesos RGBA (as 4
-// texturas do chunk, renormalizadas para somar 1) em vez dos 4 planos
-// globais de 13 pesos. O campo de pesos continua a ser o MESMO
-// ([`weights_at`]) — muda o empacotamento: por chunk escolhem-se as 4
-// camadas de maior peso agregado e renormaliza-se texel a texel.
-
-/// Splat texels per chunk edge (32² → 2 m/texel com o chunk default de 64 m,
-/// a densidade do plano global 2048² de um mundo de 4 km).
-/// Splat texels por borda de chunk (64² = 1 m/texel num chunk de 64 m — o
-/// MESMO passo do LOD0 do terreno; 32² esbatia margens de lago/estradas a
-/// 2 m). O bake corre para TODO o mundo no bootstrap: ×4 texels por chunk é
-/// o custo do detalhe (4 k texels × ~4 k chunks), aceite em troca de
-/// fronteiras de material nítidas.
-pub const CHUNK_SPLAT_TEXELS: u32 = 64;
-
-/// Baked splat of ONE chunk: the eight pool slots it renders with plus the
-/// TWO RGBA8 weight planes (`size²` texels each, row-major; plane 0 =
-/// slots 0–3 nos canais RGBA, plane 1 = slots 4–7, weights renormalized to
-/// sum 1 across BOTH planes).
-#[derive(Debug, Clone, PartialEq)]
-pub struct ChunkSplat {
-    pub slots: [usize; 8],
-    pub size: u32,
-    pub rgba: Vec<u8>,
-    pub rgba2: Vec<u8>,
-}
-
-/// Bakes one chunk splat from a full weights grid (per-texel [`LAYER_COUNT`]
-/// weights) plus the per-slot aggregate — the two passes of
-/// [`generate_chunk_splats`] split so tests can drive a single chunk.
-///
-/// `force_rock`/`force_bed`/`force_shore` garantem que parede, leito e a
-/// PRAIA DA MARGEM sobrevivem à eleição top-8: um texel a 100% seixo num
-/// chunk de relva lê-se relva depois da renormalização — os overrides
-/// existem porque essas camadas são as que o olho apanha (sob água
-/// transparente, na parede a triplanar, na linha de areia da praia).
-fn pack_chunk_splat(
-    weights: &[[f32; LAYER_COUNT]],
-    size: u32,
-    extra_forced: &[usize],
-) -> ChunkSplat {
-    let mut sums = [0.0f32; LAYER_COUNT];
-    for w in weights {
-        for (slot, &weight) in w.iter().enumerate() {
-            sums[slot] += weight;
-        }
-    }
-    // Top-8 by aggregate weight; order is descending so the dominant layer
-    // rides channel R of plane 0 (and the repointing falls back to it).
-    let mut slots: [usize; LAYER_COUNT] = core::array::from_fn(|i| i);
-    slots.sort_by(|&a, &b| sums[b].total_cmp(&sums[a]));
-    let mut selected: Vec<usize> = slots[..8].to_vec();
-    // Overrides entram do FIM da tabela (os picks de menor peso) — num chunk
-    // de gorge com lago ao pé rock/bed/sand coexistem em vez de um apagar o
-    // outro. Evict só picks NATURAIS: um slot forçado por um override
-    // anterior nunca é despejado por um seguinte (`extra_forced` traz as
-    // flags de parede/leito/praia e os slots FORTEMENTE pintados).
-    let forced = [SLOT_MOUNTAIN_STONE, SLOT_RIVERBED, SLOT_SAND];
-    for &slot in extra_forced {
-        if slot >= LAYER_COUNT || selected.contains(&slot) {
-            continue;
-        }
-        if selected.len() >= 8 {
-            let pos = selected
-                .iter()
-                .rposition(|&s| !forced.contains(&s) && !extra_forced.contains(&s))
-                .unwrap_or(selected.len() - 1);
-            selected.remove(pos);
-        }
-        selected.push(slot);
-    }
-    let top: [usize; 8] = selected.try_into().expect("8 slots");
-
-    let mut rgba = vec![0u8; (size * size * 4) as usize];
-    let mut rgba2 = vec![0u8; (size * size * 4) as usize];
-    for (i, w) in weights.iter().enumerate() {
-        let mut picked = [0.0f32; 8];
-        for (k, &slot) in top.iter().enumerate() {
-            picked[k] = w[slot];
-        }
-        let total: f32 = picked.iter().sum();
-        // Full fallback (a chunk outside every field): all weight on the
-        // dominant slot of plane 0 — the ground never renders unblended
-        // white. A normalização é CONJUNTA aos 8 pesos: renormalizar cada
-        // plano por separado multiplicava texels de fronteira.
-        let packed = if total < 1e-5 {
-            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        } else {
-            picked.map(|weight| weight / total)
-        };
-        for (channel, &weight) in packed.iter().enumerate() {
-            // 251 keeps the u8 sum (with rounding) ≤ 255.
-            let byte = (weight * 251.0).round().clamp(0.0, 251.0) as u8;
-            if channel < 4 {
-                rgba[i * 4 + channel] = byte;
-            } else {
-                rgba2[i * 4 + channel - 4] = byte;
-            }
-        }
-    }
-    ChunkSplat {
-        slots: top,
-        size,
-        rgba,
-        rgba2,
-    }
-}
-
-/// Bakes the per-chunk splat planes of a whole carved world: one entry per
-/// `rows × rows` chunk of `chunk_edge` meters, row-major from (-X,-Z).
-///
-/// Same weight field as the retired global planes ([`generate_splats`]) —
-/// see [`weights_at`]; chunks whose aggregate picks differ render different
-/// layer sets, which is the point of per-chunk materials.
-#[allow(clippy::too_many_arguments)]
-pub fn generate_chunk_splats(
-    grid: &BrushGrid,
-    water: &[WaterBody],
-    roads: &[RoadPath],
-    params: &SplatParams,
-    chunk_edge: f32,
-    rows: u32,
-    cliff: Option<&crate::terrain::cliffs::CliffMask>,
-    paint: Option<&crate::terrain::paint::PaintGrid>,
-) -> Vec<ChunkSplat> {
-    let world = grid.world_size();
-    let shore = params
-        .tuning
-        .shore_width
-        .unwrap_or(params.shore_width)
-        .max(0.5);
-    let water_boxes: Vec<(Bounds, &WaterBody)> = water
-        .iter()
-        .filter(|b| b.radius > 0.0 || !b.stations.is_empty())
-        .map(|b| (water_bounds(b, shore), b))
-        .collect();
-    let road_boxes: Vec<(Bounds, &RoadPath)> = roads
-        .iter()
-        .filter(|r| !r.bridge)
-        .map(|r| (road_bounds(r, 4.0), r))
-        .collect();
-    let half = world * 0.5;
-    let mut ctx = TexelCtx {
-        params,
-        shore,
-        water_boxes: &water_boxes,
-        road_boxes: &road_boxes,
-        cliff,
-    };
-
-    let mut out = Vec::with_capacity((rows * rows) as usize);
-    for cz in 0..rows {
-        for cx in 0..rows {
-            let origin = Vec2::new(
-                -half + cx as f32 * chunk_edge,
-                -half + cz as f32 * chunk_edge,
-            );
-            out.push(bake_chunk_with_ctx(
-                grid, chunk_edge, paint, origin, &mut ctx,
-            ));
-        }
-    }
-    out
-}
-
-/// Coze UM chunk ([`bake_chunk`] e o loop de [`generate_chunk_splats`] chegam
-/// aqui): pesos procedurais + pintura, slots forçados e empacotamento.
-fn bake_chunk_with_ctx(
-    grid: &BrushGrid,
-    chunk_edge: f32,
-    paint: Option<&crate::terrain::paint::PaintGrid>,
-    origin: Vec2,
-    ctx: &mut TexelCtx,
-) -> ChunkSplat {
-    let size = CHUNK_SPLAT_TEXELS;
-    let texel = chunk_edge / size as f32;
-    let epsilon = grid.texel();
-    let cliff = ctx.cliff;
-    {
-        let mut weights = vec![[0.0f32; LAYER_COUNT]; (size * size) as usize];
-        // Pico de peso PINTADO por slot neste chunk: um slot pintado a
-        // ≥50% num só texel entra na eleição à força (como o leito e a
-        // praia) — senão uma mancha pequosa perdia a top-8 do chunk.
-        let mut painted_peak = [0.0f32; LAYER_COUNT];
-        for tz in 0..size {
-            let z = origin.y + (tz as f32 + 0.5) * texel;
-            for tx in 0..size {
-                let x = origin.x + (tx as f32 + 0.5) * texel;
-                let y = grid.sample(x, z);
-                let normal = grid.sample_normal(x, z, epsilon);
-                let mut w = weights_at(x, z, y, normal.y, grid.max_height(), ctx);
-                if let Some((slot, weight)) = paint.and_then(|paint| paint.sample(x, z)) {
-                    painted_peak[slot] = painted_peak[slot].max(weight);
-                    for value in w.iter_mut() {
-                        *value *= 1.0 - weight;
-                    }
-                    w[slot] += weight;
-                }
-                weights[(tz * size + tx) as usize] = w;
-            }
-        }
-        let mut forced: Vec<usize> = Vec::new();
-        for (slot, &peak) in painted_peak.iter().enumerate() {
-            if peak >= 0.5 {
-                forced.push(slot);
-            }
-        }
-        // Chunks com paredes na máscara GARANTEM a mountain_stone entre
-        // os 4 slots — sem ela o índice rock do material ficaria -1 e o
-        // gate triplanar não tinha textura nenhuma para projetar.
-        // Grelha 4×4 sobre o chunk INTEIRO (±10% para lá da borda, para
-        // a pedra atravessar a emenda): as 4 sondas antigas duplicavam-se
-        // e concentravam-se na metade min — paredes no terço max nunca
-        // eram apanhadas e liam-se plastilina em faixas alinhadas à
-        // grelha de chunks. Primeiro hit sai (chunks de relva não pagam
-        // as 16 sondas).
-        let has_core = cliff.is_some_and(|m| {
-            for ix in 0..4 {
-                for iz in 0..4 {
-                    let fx = -0.1 + 0.4 * ix as f32;
-                    let fz = -0.1 + 0.4 * iz as f32;
-                    if m.is_core_at(Vec2::new(
-                        origin.x + chunk_edge * fx,
-                        origin.y + chunk_edge * fz,
-                    )) {
-                        return true;
-                    }
-                }
-            }
-            false
-        });
-        // Um texel a ≥25% seixo lê-se leito: o chunk tem de carregar a
-        // textura mesmo que o agregado do leito perca a eleição top-8.
-        let has_bed = weights.iter().any(|w| w[SLOT_RIVERBED] >= 0.25);
-        // Idem para a PRAIA: a areia da margem perdia a eleição em
-        // chunks de relva e a praia quebrava em costuras retas de chunk.
-        let has_shore = weights.iter().any(|w| w[SLOT_SAND] >= 0.25);
-        if has_core {
-            forced.push(SLOT_MOUNTAIN_STONE);
-        }
-        if has_bed {
-            forced.push(SLOT_RIVERBED);
-        }
-        if has_shore {
-            forced.push(SLOT_SAND);
-        }
-        pack_chunk_splat(&weights, size, &forced)
-    }
-}
-
-/// Coze um único chunk a partir das features cruas (constrói as caixas de
-/// água/estrada localmente — o caminho da REPINTURA ao vivo, que cobre poucos
-/// chunks por pincelada). `origin` é o canto (-X,-Z) do chunk em mundo.
-#[allow(clippy::too_many_arguments)]
-pub fn bake_chunk(
-    grid: &BrushGrid,
-    water: &[WaterBody],
-    roads: &[RoadPath],
-    params: &SplatParams,
-    chunk_edge: f32,
-    cliff: Option<&crate::terrain::cliffs::CliffMask>,
-    paint: Option<&crate::terrain::paint::PaintGrid>,
-    origin: Vec2,
-) -> ChunkSplat {
-    let shore = params
-        .tuning
-        .shore_width
-        .unwrap_or(params.shore_width)
-        .max(0.5);
-    let water_boxes: Vec<(Bounds, &WaterBody)> = water
-        .iter()
-        .filter(|b| b.radius > 0.0 || !b.stations.is_empty())
-        .map(|b| (water_bounds(b, shore), b))
-        .collect();
-    let road_boxes: Vec<(Bounds, &RoadPath)> = roads
-        .iter()
-        .filter(|r| !r.bridge)
-        .map(|r| (road_bounds(r, 4.0), r))
-        .collect();
-    let mut ctx = TexelCtx {
-        params,
-        shore,
-        water_boxes: &water_boxes,
-        road_boxes: &road_boxes,
-        cliff,
-    };
-    bake_chunk_with_ctx(grid, chunk_edge, paint, origin, &mut ctx)
-}
-
-/// One chunk's splat plane as a Bevy image (mip chain + linear/aniso via the
-/// shared patcher; ClampToEdge — UVs are 0..1 over the chunk). `plane` 0/1:
-/// os canais RGBA do plano cobrem os slots 0–3 / 4–7 do [`ChunkSplat`].
-pub fn chunk_splat_plane_image(splat: &ChunkSplat, plane: usize) -> Image {
-    let rgba = if plane == 0 {
-        &splat.rgba
-    } else {
-        &splat.rgba2
-    };
-    let mut image = Image::new(
-        Extent3d {
-            width: splat.size,
-            height: splat.size,
-            depth_or_array_layers: 1,
-        },
-        bevy::render::render_resource::TextureDimension::D2,
-        rgba.clone(),
-        bevy::render::render_resource::TextureFormat::Rgba8Unorm,
-        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-    );
-    image.data = Some(rgba.clone());
-    patch_image(&mut image, false);
-    image
-}
-
-/// Plane 0 do splat de chunk (slots 0–3).
-pub fn chunk_splat_image(splat: &ChunkSplat) -> Image {
-    chunk_splat_plane_image(splat, 0)
-}
-
-/// Plane 1 do splat de chunk (slots 4–7).
-pub fn chunk_splat2_image(splat: &ChunkSplat) -> Image {
-    chunk_splat_plane_image(splat, 1)
 }
 
 #[cfg(test)]
@@ -1746,7 +1575,7 @@ mod tests {
     #[test]
     fn test_generate_splats_packs_planes_and_images() {
         let world = flat_world();
-        let map = generate_splats(&world.grid, &world.water, &world.roads, &params());
+        let map = generate_splats(inputs(&world, &params(), None));
         assert_eq!(map.size, 64, "1 m texel over a 64 m world");
         for plane in &map.planes {
             assert_eq!(plane.len(), 64 * 64 * 4);
@@ -1783,120 +1612,107 @@ mod tests {
         assert_eq!(DEFAULT_LAYERS.len(), LAYER_COUNT);
     }
 
-    /// O plano por chunk escolhe as 4 camadas dominantes e renormaliza os
-    /// pesos a somar ~1 por texel; chunks diferentes podem escolher slots
-    /// diferentes (o ponto do material por chunk).
+    fn inputs<'a>(
+        world: &'a World,
+        params: &'a SplatParams,
+        paint: Option<&'a crate::terrain::paint::PaintGrid>,
+    ) -> SplatInputs<'a> {
+        SplatInputs {
+            grid: &world.grid,
+            water: &world.water,
+            roads: &world.roads,
+            params,
+            cliff: None,
+            paint,
+        }
+    }
+
+    /// A pintura sobrepõe-se ao campo procedural: o texel sob uma mancha
+    /// forte de `desert_sand` fica quase todo nesse slot; longe dela, nada muda.
     #[test]
-    fn paint_overrides_weights_and_wins_the_election() {
+    fn paint_overrides_weights() {
         let world = flat_world();
-        // Uma mancha FORTE de desert_sand no centro do chunk (0,1) — sem
-        // pintura esse slot não ganha a top-8 de um mundo de relva.
         let mut paint = crate::terrain::paint::PaintGrid::new(64.0, 65);
-        // (5,5) mundo: dentro do chunk (1,1) — origem do chunk (0,0), longe
-        // da borda; cell_center(37,37) = (-32+37, -32+37) = (5,5).
+        // cell_center(37,37) = (-32+37, -32+37) = (5,5) mundo.
         let painted = paint.cell_center(37, 37);
         assert!((painted.x - 5.0).abs() < 1e-6);
         paint
             .paint_circle(painted, 10.0, 8, 1.0)
             .expect("dentro do mapa");
-        let splats = generate_chunk_splats(
-            &world.grid,
-            &world.water,
-            &world.roads,
-            &params(),
-            32.0,
-            2,
-            None,
-            Some(&paint),
-        );
-        // chunk (1,1) contém o ponto pintado (row-major: cz*rows+cx)
-        let chunk = &splats[1 * 2 + 1];
-        assert!(
-            chunk.slots.contains(&8),
-            "slot pintado tem de entrar na eleição: {:?}",
-            chunk.slots
-        );
-        // o texel sob o centro pintado fica quase todo no slot pintado
-        // (coordenadas LOCAIS ao chunk: origem do chunk (1,1) é (0,0))
-        let texel = 32.0 / CHUNK_SPLAT_TEXELS as f32;
-        let local = ((painted.x - 0.0) / texel) as usize % CHUNK_SPLAT_TEXELS as usize;
-        let local_z = ((painted.y - 0.0) / texel) as usize % CHUNK_SPLAT_TEXELS as usize;
-        let index = local_z * CHUNK_SPLAT_TEXELS as usize + local;
-        let channel = chunk.slots.iter().position(|&slot| slot == 8).unwrap();
-        let byte = if channel < 4 {
-            chunk.rgba[index * 4 + channel]
-        } else {
-            chunk.rgba2[index * 4 + channel - 4]
-        };
-        assert!(byte > 200, "texel pintado ~100% no slot (veio {byte})");
-        // um chunk longe da pintura não muda: desert_sand não é eleito lá
-        let far = &splats[0];
-        assert!(!far.slots.contains(&8));
+        let params = params();
+        let map = generate_splats(inputs(&world, &params, Some(&paint)));
+        let clean = generate_splats(inputs(&world, &params, None));
+        // texel de (5,5): ((5+32)/1, (5+32)/1) = (37, 37)
+        assert!(map.weights_at_texel(37, 37)[SLOT_DESERT_SAND] > 0.8);
+        assert!(clean.weights_at_texel(37, 37)[SLOT_DESERT_SAND] < 0.2);
+        // longe da pintura (canto -X/-Z) o splat é o mesmo
+        assert_eq!(map.weights_at_texel(2, 60), clean.weights_at_texel(2, 60));
     }
 
+    /// O bake em bandas paralelas dá EXATAMENTE os mesmos bytes que cozer o
+    /// mapa aos bocados (cada texel é função pura da posição) — e `bake_rect`
+    /// só toca no retângulo pedido.
     #[test]
-    fn test_generate_chunk_splats_renormalizes_and_picks_top8() {
+    fn parallel_bake_matches_pieces_and_rect_is_local() {
         let world = flat_world();
-        let chunk_edge = 32.0; // flat_world é um mundo 64 m → 2×2 chunks
-        let rows = 2;
-        let splats = generate_chunk_splats(
-            &world.grid,
-            &world.water,
-            &world.roads,
-            &params(),
-            chunk_edge,
-            rows,
-            None,
-            None,
-        );
-        assert_eq!(splats.len(), (rows * rows) as usize);
-        for splat in &splats {
-            assert_eq!(splat.size, CHUNK_SPLAT_TEXELS);
-            assert_eq!(
-                splat.rgba.len(),
-                (CHUNK_SPLAT_TEXELS * CHUNK_SPLAT_TEXELS * 4) as usize
-            );
-            assert_eq!(splat.rgba2.len(), splat.rgba.len());
-            assert_eq!(splat.slots.len(), 8);
-            assert!(splat.slots.iter().all(|&s| s < LAYER_COUNT));
-            assert!(splat.rgba.iter().all(|&v| v <= 251));
-            assert!(splat.rgba2.iter().all(|&v| v <= 251));
-            // Cada texel: os 8 pesos renormalizados (planos 0+1 SOMADOS)
-            // fecham ~1 — o clamp de 251 por canal deixa a soma u8 abaixo
-            // de 255. (Um plano sozinho pode ficar a 0: o peso do texel
-            // vive inteiro nos slots 4–7.)
-            for i in 0..(splat.size * splat.size) as usize {
-                let sum: u16 = (0..4)
-                    .map(|c| splat.rgba[i * 4 + c] as u16 + splat.rgba2[i * 4 + c] as u16)
-                    .sum();
-                assert!(sum >= 245, "texel {i} soma {sum} — pesos têm de fechar ~1");
-            }
+        let params = params();
+        let whole = generate_splats(inputs(&world, &params, None));
+        let mut pieces = SplatMap {
+            size: whole.size,
+            texel: whole.texel,
+            planes: core::array::from_fn(|_| vec![0u8; whole.planes[0].len()]),
+        };
+        for (min, max) in [
+            (Vec2::new(-32.0, -32.0), Vec2::new(-0.01, -0.01)),
+            (Vec2::new(0.0, -32.0), Vec2::new(32.0, -0.01)),
+            (Vec2::new(-32.0, 0.0), Vec2::new(-0.01, 32.0)),
+            (Vec2::new(0.0, 0.0), Vec2::new(32.0, 32.0)),
+        ] {
+            bake_rect(&mut pieces, inputs(&world, &params, None), min, max).expect("dentro");
         }
-        // O chunk (0,0) contém o lago (-20,-10); o (1,1) é relva — a AREIA
-        // da margem é contrato forçado (costura de praia não pode quebrar
-        // entre chunks) e o leito também; o chunk seco fica nas relvas.
-        let water_chunk = &splats[0]; // cz=0,cx=0 → canto -X/-Z
-        let far_chunk = &splats[3]; // cz=1,cx=1 → canto +X/+Z
-        assert!(
-            water_chunk.slots.contains(&SLOT_SAND),
-            "chunk do lago deve carregar areia da margem: {:?}",
-            water_chunk.slots
-        );
-        assert!(
-            water_chunk.slots.contains(&SLOT_SAND) || water_chunk.slots.contains(&SLOT_RIVERBED),
-            "chunk do lago deve carregar areia/leito: {:?}",
-            water_chunk.slots
-        );
-        assert!(
-            far_chunk.slots.contains(&SLOT_GRASS) || far_chunk.slots.contains(&SLOT_VALE_GRASS),
-            "chunk de relva: {:?}",
-            far_chunk.slots
-        );
+        assert_eq!(pieces, whole);
 
-        let image = chunk_splat_image(&splats[0]);
-        assert_eq!(image.width(), CHUNK_SPLAT_TEXELS);
-        assert!(image.texture_descriptor.mip_level_count > 1, "mips baked");
-        let image2 = chunk_splat2_image(&splats[0]);
-        assert_eq!(image2.width(), CHUNK_SPLAT_TEXELS);
+        let mut local = SplatMap {
+            size: whole.size,
+            texel: whole.texel,
+            planes: core::array::from_fn(|_| vec![0u8; whole.planes[0].len()]),
+        };
+        let rect = bake_rect(
+            &mut local,
+            inputs(&world, &params, None),
+            Vec2::new(4.0, 4.0),
+            Vec2::new(8.0, 8.0),
+        )
+        .expect("dentro");
+        assert_eq!(rect, (36, 36, 41, 41));
+        assert_eq!(
+            local.weights_at_texel(38, 38),
+            whole.weights_at_texel(38, 38)
+        );
+        assert_eq!(local.weights_at_texel(10, 10), [0.0; LAYER_COUNT]);
+        assert!(
+            bake_rect(
+                &mut local,
+                inputs(&world, &params, None),
+                Vec2::splat(500.0),
+                Vec2::splat(600.0)
+            )
+            .is_none()
+        );
+    }
+
+    /// Cache em disco: ida e volta com a mesma chave; chave diferente = falha.
+    #[test]
+    fn cache_round_trip_and_key_mismatch() {
+        let world = flat_world();
+        let params = params();
+        let map = generate_splats(inputs(&world, &params, None));
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("terrain.ahgt.splat");
+        save_cache(&path, 42, &map).unwrap();
+        assert_eq!(load_cache(&path, 42).as_ref(), Some(&map));
+        assert!(load_cache(&path, 43).is_none(), "outra chave = cache velha");
+        std::fs::write(&path, b"lixo").unwrap();
+        assert!(load_cache(&path, 42).is_none(), "corrompida = ignorada");
     }
 }

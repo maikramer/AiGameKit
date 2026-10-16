@@ -115,6 +115,12 @@ pub struct ScriptCtx {
     /// carvado não muda depois do bootstrap) e depois custa um clone de
     /// ponteiro por frame.
     pub surfaces: Option<std::sync::Arc<SurfaceRegistries>>,
+    /// Cena carregada (`viber.scene_name`) — `None` fora de um projeto com cenas.
+    pub scene: Option<String>,
+    /// Entrada por onde se chegou (`viber.scene_entry`).
+    pub scene_entry: Option<String>,
+    /// Ids das cenas do projeto (validação de `viber.change_scene`).
+    pub scene_ids: std::sync::Arc<Vec<String>>,
 }
 
 /// Definição de quest achatada para Lua (`viber.quest_def`).

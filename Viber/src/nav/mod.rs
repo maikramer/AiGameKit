@@ -222,7 +222,14 @@ impl Plugin for NavPlugin {
                     .in_schedule(bevy::app::PostUpdate),
             ))
             .set_navmesh_backend(backend::nav_backend)
-            .add_systems(Startup, spawn_archipelago)
+            // Troca de cena: a cena nova volta a ler a `<NavMesh>` e a criar o arquipélago
+            // (o anterior foi apagado em `reset_for_scene`).
+            .add_systems(
+                crate::scene_loader::SceneLoad,
+                (apply_navmesh_tag, spawn_archipelago)
+                    .chain()
+                    .after(crate::recipes::spawn::startup),
+            )
             .add_observer(on_navmesh_ready)
             // Ready BEFORE retile: the retile probe reads "not in flight and
             // still `generating`" as a failed bake, so success has to have
@@ -250,6 +257,24 @@ impl Plugin for NavPlugin {
                 agent::pull_nav_velocities.in_set(NavSystems::Pull),
             ),
         );
+    }
+}
+
+/// Troca de cena: apaga o arquipélago e a ilha da cena anterior, repõe o tile e a config
+/// (a `<NavMesh>` da cena nova é reaplicada no [`crate::scene_loader::SceneLoad`]).
+pub fn reset_for_scene(world: &mut World) {
+    if let Some(nav) = world.remove_resource::<NavArchipelago>() {
+        for entity in [nav.island, nav.archipelago] {
+            if let Ok(entity) = world.get_entity_mut(entity) {
+                entity.despawn();
+            }
+        }
+    }
+    if world.contains_resource::<NavTile>() {
+        world.insert_resource(NavTile::default());
+    }
+    if world.contains_resource::<NavConfig>() {
+        world.insert_resource(NavConfig::from_env());
     }
 }
 

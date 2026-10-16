@@ -237,6 +237,10 @@ impl Plugin for BridgePlugin {
                     .with_method_main(scene::METHOD_INSTANCE, scene::instance_method)
                     .with_method_main(scene::METHOD_DROP, scene::drop_method)
                     .with_method_main(scene::METHOD_FILES, scene::files_method)
+                    .with_method_main(scene::METHOD_SCENES, scene::scenes_method)
+                    .with_method_main(scene::METHOD_NEW_SCENE, scene::new_scene_method)
+                    .with_method_main(scene::METHOD_CHANGE, scene::change_method)
+                    .with_method_main(scene::METHOD_CURRENT, scene::current_method)
                     .with_method_main(scene::METHOD_TOOL_LIST, scene::tool_list_method)
                     .with_method_main(scene::METHOD_TOOL_SCATTER, scene::tool_scatter_method)
                     .with_method_main(scene::METHOD_TOOL_SETTLE, scene::tool_settle_method)
@@ -347,6 +351,7 @@ fn deferred_mouse_release(
     mut windows: Query<(Entity, &mut Window), With<PrimaryWindow>>,
     messages: Option<MessageWriter<MouseButtonInput>>,
     cursor_moved: Option<MessageWriter<CursorMoved>>,
+    mut window_events: Option<MessageWriter<bevy::window::WindowEvent>>,
 ) {
     // 1) PRESS injectado AQUI: corre antes do ui_focus_system (PreUpdate) e
     //    depois dos sistemas de input — o focus vê o just_pressed NESTE frame.
@@ -359,6 +364,25 @@ fn deferred_mouse_release(
         return;
     };
     if let Some((x, y, button)) = pending.press.take() {
+        // RELEASE atrasado do clique ANTERIOR sai PRIMEIRO (e no mesmo frame):
+        // o press tinha prioridade e um único slot de release — cliques rápidos
+        // em sequência deixavam o botão antigo "preso" (o release nunca corria)
+        if let Some(previous) = pending.release.take() {
+            let entity = windows
+                .single()
+                .map(|(e, _)| e)
+                .unwrap_or(Entity::PLACEHOLDER);
+            let released = MouseButtonInput {
+                button: previous,
+                state: ButtonState::Released,
+                window: entity,
+            };
+            if let Some(events) = window_events.as_mut() {
+                events.write(bevy::window::WindowEvent::MouseButtonInput(released));
+            }
+            messages.write(released);
+            input.release(previous);
+        }
         let entity = windows
             .single_mut()
             .map(|(entity, mut window)| {
@@ -366,18 +390,25 @@ fn deferred_mouse_release(
                 entity
             })
             .unwrap_or(Entity::PLACEHOLDER);
-        if let Some(mut cursor_moved) = cursor_moved {
-            cursor_moved.write(CursorMoved {
-                window: entity,
-                position: Vec2::new(x, y),
-                delta: None,
-            });
-        }
-        messages.write(MouseButtonInput {
+        let moved = CursorMoved {
+            window: entity,
+            position: Vec2::new(x, y),
+            delta: None,
+        };
+        let pressed = MouseButtonInput {
             button,
             state: ButtonState::Pressed,
             window: entity,
-        });
+        };
+        // O picking lê `WindowEvent` (ver `send_cursor`).
+        if let Some(events) = window_events.as_mut() {
+            events.write(bevy::window::WindowEvent::CursorMoved(moved.clone()));
+            events.write(bevy::window::WindowEvent::MouseButtonInput(pressed));
+        }
+        if let Some(mut cursor_moved) = cursor_moved {
+            cursor_moved.write(moved);
+        }
+        messages.write(pressed);
         input.press(button);
         if std::mem::take(&mut pending.hold) {
             // arrasto: o botão fica em baixo até ao `release` explícito
@@ -393,11 +424,15 @@ fn deferred_mouse_release(
             .single()
             .map(|(e, _)| e)
             .unwrap_or(Entity::PLACEHOLDER);
-        messages.write(MouseButtonInput {
+        let released = MouseButtonInput {
             button,
             state: ButtonState::Released,
             window: entity,
-        });
+        };
+        if let Some(events) = window_events.as_mut() {
+            events.write(bevy::window::WindowEvent::MouseButtonInput(released));
+        }
+        messages.write(released);
         input.release(button);
     }
 }
@@ -1098,12 +1133,18 @@ fn send_key(world: &mut World, key_code: KeyCode, state: ButtonState, text: Opti
 
 fn send_cursor(world: &mut World, position: Vec2) {
     let window = primary_window(world).unwrap_or(Entity::PLACEHOLDER);
+    let moved = CursorMoved {
+        window,
+        position,
+        delta: None,
+    };
+    // O `bevy_picking` (botões feathers, linhas da árvore, splitters…) lê
+    // `WindowEvent`, não `CursorMoved` — o winit escreve os dois.
+    if let Some(mut messages) = world.get_resource_mut::<Messages<bevy::window::WindowEvent>>() {
+        messages.write(bevy::window::WindowEvent::CursorMoved(moved.clone()));
+    }
     if let Some(mut messages) = world.get_resource_mut::<Messages<CursorMoved>>() {
-        messages.write(CursorMoved {
-            window,
-            position,
-            delta: None,
-        });
+        messages.write(moved);
     }
     // O hover/clique da bevy_ui lê a posição do cursor NA WINDOW (winit),
     // não a fila de `CursorMoved` — sem escrever aqui, um clique sintético
@@ -1198,32 +1239,23 @@ fn input_click(params: In<Option<Value>>, world: &mut World) -> BrpResult {
     let params: Params = parse_params(params.0)?;
     let button = params.button.unwrap_or(MouseButton::Left);
     let state = params.state.as_deref().unwrap_or("click");
-    let mut pending = world.resource_mut::<PendingMouseClick>();
     match state {
         // O clique INTEIRO é injectado no PreUpdate do frame seguinte (ver
         // `deferred_mouse_release`) — no meio do frame, focus/input já correram.
-        "click" => {
+        // `press` = arrasto: sem release automático (`viber debug drag`).
+        "click" | "press" => {
+            let mut pending = world.resource_mut::<PendingMouseClick>();
             pending.press = Some((params.x, params.y, button));
-            pending.hold = false;
-        }
-        // Arrasto: press sem release automático (`viber debug drag`).
-        "press" => {
-            pending.press = Some((params.x, params.y, button));
-            pending.hold = true;
+            pending.hold = state == "press";
         }
         "release" => {
-            drop(pending);
             send_cursor(world, Vec2::new(params.x, params.y));
             world.resource_mut::<PendingMouseClick>().release = Some(button);
         }
         other => {
-            return Err(BrpError {
-                code: bevy::remote::error_codes::INVALID_PARAMS,
-                message: format!(
-                    "invalid params: state `{other}` — esperado click | press | release"
-                ),
-                data: None,
-            });
+            return Err(invalid(format!(
+                "invalid params: state `{other}` — esperado click | press | release"
+            )));
         }
     }
     Ok(json!({ "x": params.x, "y": params.y, "button": format!("{button:?}"), "state": state }))

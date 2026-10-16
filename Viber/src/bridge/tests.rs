@@ -132,6 +132,49 @@ fn test_bridge_end_to_end_headless() {
     app.update();
     app.update();
 
+    // arrasto (`viber debug drag`): `press` deixa o botão em baixo frames a fio,
+    // `release` solta-o. (Com janela, sai também como `WindowEvent` — é o que o
+    // picking lê; esta app headless não tem essas mensagens e o writer é opcional.)
+    settle(
+        &mut app,
+        call_async(
+            METHOD_CLICK,
+            serde_json::json!({ "x": 5.0, "y": 5.0, "state": "press" }),
+        ),
+    );
+    for _ in 0..3 {
+        app.update();
+    }
+    assert!(
+        app.world()
+            .resource::<ButtonInput<MouseButton>>()
+            .pressed(MouseButton::Left),
+        "press mantém o botão em baixo"
+    );
+    settle(
+        &mut app,
+        call_async(
+            METHOD_CLICK,
+            serde_json::json!({ "x": 9.0, "y": 9.0, "state": "release" }),
+        ),
+    );
+    app.update();
+    app.update();
+    assert!(
+        !app.world()
+            .resource::<ButtonInput<MouseButton>>()
+            .pressed(MouseButton::Left),
+        "release solta o botão"
+    );
+    let bad = settle_err(
+        &mut app,
+        call_async(
+            METHOD_CLICK,
+            serde_json::json!({ "x": 1.0, "y": 1.0, "state": "hold" }),
+        ),
+    );
+    assert!(bad.contains("state"), "state inválido explica-se: {bad}");
+
     // screenshot: pedido em fila fica pending sem render
     let shot = settle(
         &mut app,

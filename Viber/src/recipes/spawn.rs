@@ -448,6 +448,19 @@ impl EditorGroups {
         }
     }
 
+    /// Todos os grupos numa só entidade (a raiz dos autoloads).
+    fn single(root: Entity) -> Self {
+        Self {
+            environment: root,
+            terrain: root,
+            vegetation: root,
+            props: root,
+            interiors: root,
+            gameplay: root,
+            world: root,
+        }
+    }
+
     /// O grupo de topo para uma entidade sem pai no world.xml, pela tag XML
     /// de origem (`EntitySpec::tag`).
     pub fn for_tag(&self, tag: Option<&str>) -> Entity {
@@ -460,6 +473,7 @@ impl EditorGroups {
             | Some("DirectionalLight")
             | Some("AmbientLight") => self.environment,
             Some("InteriorScene") => self.interiors,
+            Some("ScenePortal") | Some("SceneEntry") => self.gameplay,
             Some("PlayerGltf")
             | Some("ThirdPersonCamera")
             | Some("DialogueNpc")
@@ -471,9 +485,63 @@ impl EditorGroups {
 }
 
 pub fn startup(world: &mut World) {
+    // Autoloads do projeto (jogador, câmara, HUD): uma vez, ANTES da primeira cena, e
+    // marcados `Persistent` — sobrevivem às trocas de cena (`crate::scene_loader`).
+    if let Some(autoload) = world.remove_resource::<crate::scene_loader::PendingAutoload>() {
+        for parsed in autoload.0 {
+            let before = root_entities(world);
+            spawn_parsed(
+                world,
+                PendingWorld {
+                    world: parsed,
+                    base_dir: None,
+                },
+                true,
+            );
+            mark_new_roots(world, &before, crate::scene_loader::Persistent);
+        }
+    }
     let Some(pending) = world.remove_resource::<PendingWorld>() else {
         return;
     };
+    let before = root_entities(world);
+    spawn_parsed(world, pending, false);
+    // Tudo o que esta cena pôs na raiz morre no próximo descarregamento.
+    mark_new_roots(world, &before, crate::scene_loader::SceneEntity);
+}
+
+/// Raízes (sem pai) existentes agora.
+fn root_entities(world: &mut World) -> std::collections::HashSet<Entity> {
+    world
+        .query_filtered::<Entity, Without<ChildOf>>()
+        .iter(world)
+        .collect()
+}
+
+/// Marca as raízes que não existiam em `before` (com `Transform` ou nós de UI).
+fn mark_new_roots<C: Component + Copy>(
+    world: &mut World,
+    before: &std::collections::HashSet<Entity>,
+    marker: C,
+) {
+    let fresh: Vec<Entity> = world
+        .query_filtered::<Entity, Without<ChildOf>>()
+        .iter(world)
+        .filter(|entity| !before.contains(entity))
+        .collect();
+    for entity in fresh {
+        world.entity_mut(entity).insert(marker);
+    }
+}
+
+/// Monta um mundo parseado. `persistent` = fragmento autoload: sem terreno, sem grupos de
+/// editor (fica tudo debaixo de uma raiz "Autoload"), sem recursos de mundo.
+fn spawn_parsed(world: &mut World, pending: PendingWorld, persistent: bool) {
+    // 1.ª cena (ou mundo sem projeto): comportamento de sempre. Trocas de cena seguintes não
+    // repõem o que é do jogo (relógio, tempo, mixer restaurado do save).
+    let first_load = world
+        .get_resource::<crate::scene_loader::SceneEpoch>()
+        .is_none_or(|epoch| epoch.0 == 0);
     let parsed = pending.world;
     let world_dir = pending.base_dir.clone();
     // Ground features are collected (not spawned) for the terrain runtime.
@@ -482,7 +550,9 @@ pub fn startup(world: &mut World) {
         ..PendingTerrain::default()
     };
     collect_terrain(&parsed.entities, &mut pending_terrain);
-    world.insert_resource(pending_terrain);
+    if !persistent {
+        world.insert_resource(pending_terrain);
+    }
     // Catálogos RPG declaráveis (Fases B2/B3): os plugins já inicializaram os
     // recursos com o fallback hardcoded; só SUBSTITUÍMOS quando o mundo
     // declara <Landmark>/<SpawnPoint> — política aditiva (o simple-rpg fica
@@ -498,8 +568,10 @@ pub fn startup(world: &mut World) {
 
     // Prototypes para spawn em runtime (viber.spawn_prototype) — o WorldIR
     // morre aqui; a biblioteca sobrevive.
-    world.insert_resource(PrototypeLibrary(parsed.prototypes.clone()));
-    world.insert_resource(StaticWorld(parsed.static_world));
+    if !persistent {
+        world.insert_resource(PrototypeLibrary(parsed.prototypes.clone()));
+        world.insert_resource(StaticWorld(parsed.static_world));
+    }
     if let Some([r, g, b]) = parsed.clear_color {
         world.insert_resource(ClearColor(Color::srgb(r, g, b)));
     }
@@ -523,8 +595,22 @@ pub fn startup(world: &mut World) {
     // `<StaticSpawner>` groups: collect specs and start their template loads;
     // `spawner::instantiate_spawn_groups` places instances once the terrain
     // runtime and the assets are ready.
-    let editor_groups = EditorGroups::spawn_groups(world);
-    world.insert_resource(editor_groups);
+    let editor_groups = if persistent {
+        // Autoload: uma só raiz; os grupos de editor são da cena.
+        let root = world
+            .spawn((
+                EditorGroup,
+                Name::new("Autoload"),
+                Visibility::Inherited,
+                Transform::default(),
+            ))
+            .id();
+        EditorGroups::single(root)
+    } else {
+        let groups = EditorGroups::spawn_groups(world);
+        world.insert_resource(groups);
+        groups
+    };
     let mut spawn_groups = Vec::new();
     let mut exclusions = Vec::new();
     collect_spawn_groups(
@@ -557,13 +643,15 @@ pub fn startup(world: &mut World) {
     // Os discos ficam em DOIS sítios de propósito: no `PendingSpawnGroups`
     // (consumidos e removidos no fim da colocação) e num recurso próprio, que
     // sobrevive — a relva procedural lê-os mais tarde (`src/grass.rs`).
-    world.insert_resource(crate::spawner::SpawnExclusions(exclusions.clone()));
-    world.insert_resource(crate::spawner::PendingSpawnGroups {
-        groups: spawn_groups,
-        exclusions,
-        occupancy: crate::spawner::SpawnOccupancy::new(),
-        age: 0.0,
-    });
+    if !persistent {
+        world.insert_resource(crate::spawner::SpawnExclusions(exclusions.clone()));
+        world.insert_resource(crate::spawner::PendingSpawnGroups {
+            groups: spawn_groups,
+            exclusions,
+            occupancy: crate::spawner::SpawnOccupancy::new(),
+            age: 0.0,
+        });
+    }
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
     let (
@@ -643,19 +731,47 @@ pub fn startup(world: &mut World) {
     for (tag, attrs) in &hud_elements {
         crate::hud::spawn_hud(world, tag, attrs);
     }
-    build_declarative_ui(
-        world,
-        &ui_styles,
-        &ui_trees,
-        &ui_tree_sheets,
-        world_dir.as_deref(),
-        &asset_server,
-    );
-    if let Some(day) = pending_worldsys.day_cycle {
-        world.insert_resource(day);
+    // A UI declarativa é reconstruída do zero (apaga todos os `UiTag`): uma cena sem UI
+    // não pode levar a UI dos autoloads com ela.
+    let ui_alive = world
+        .query_filtered::<(), With<crate::ui::runtime::UiTag>>()
+        .iter(world)
+        .next()
+        .is_some();
+    if !ui_trees.is_empty() || !ui_styles.is_empty() || (first_load && !ui_alive) {
+        let ui_dir = world_dir.clone().or_else(|| {
+            world
+                .get_resource::<crate::scene_loader::CurrentScene>()
+                .map(|scene| scene.root.clone())
+        });
+        build_declarative_ui(
+            world,
+            &ui_styles,
+            &ui_trees,
+            &ui_tree_sheets,
+            ui_dir.as_deref(),
+            &asset_server,
+        );
     }
-    if let Some(weather) = pending_worldsys.weather {
-        world.insert_resource(weather);
+    if persistent {
+        if let Some(mixer) = mixer_settings {
+            world.insert_resource(mixer);
+        }
+        world.insert_resource(meshes);
+        world.insert_resource(materials);
+        world.insert_resource(sky_mats);
+        world.insert_resource(asset_server);
+        world.insert_resource(tiled);
+        return;
+    }
+    // O relógio do dia e o tempo são do JOGO: só a primeira cena os declara.
+    if first_load {
+        if let Some(day) = pending_worldsys.day_cycle {
+            world.insert_resource(day);
+        }
+        if let Some(weather) = pending_worldsys.weather {
+            world.insert_resource(weather);
+        }
     }
     if let Some(border) = pending_worldsys.border {
         world.insert_resource(border);
@@ -671,14 +787,27 @@ pub fn startup(world: &mut World) {
     world.insert_resource(crate::worldsys::EngineConfigs {
         list: pending_worldsys.configs,
     });
-    // Always present, `<AudioMixer>` or not — systems take it as `ResMut`.
-    world.insert_resource(mixer_settings.unwrap_or_default());
+    // Always present, `<AudioMixer>` or not — systems take it as `ResMut`. Numa troca de
+    // cena só um `<AudioMixer>` declarado substitui o que o jogo já tem.
+    match mixer_settings {
+        Some(mixer) => world.insert_resource(mixer),
+        None if first_load || !world.contains_resource::<crate::music::AudioMixerSettings>() => {
+            world.insert_resource(crate::music::AudioMixerSettings::default())
+        }
+        None => {}
+    }
     world.insert_resource(meshes);
     world.insert_resource(materials);
     world.insert_resource(sky_mats);
     world.insert_resource(asset_server);
     world.insert_resource(tiled);
-    if !stats.has_camera {
+    // Câmara de recurso só quando NÃO há nenhuma (os autoloads trazem a de jogo).
+    let any_camera = world
+        .query_filtered::<(), With<Camera3d>>()
+        .iter(world)
+        .next()
+        .is_some();
+    if !stats.has_camera && !any_camera {
         world.spawn((
             Camera3d::default(),
             Transform::default(),
@@ -1942,6 +2071,32 @@ fn spawn_entity(
         // Catálogos B2/B3: consumidos a MONTANTE (is_ground_feature →
         // collect_catalogs, no arranque) — nunca chegam aqui.
         EntityKind::Landmark { .. } | EntityKind::SpawnPoint { .. } => {}
+        EntityKind::SceneEntry => {
+            entity.insert(crate::scene_loader::SceneEntryPoint {
+                name: spec.name.clone().unwrap_or_default(),
+                offset: Vec3::ZERO,
+            });
+        }
+        EntityKind::ScenePortal { spec: portal } => {
+            let mut interaction = None;
+            if let Some(key) = crate::luau::input::key_code_from_str(&portal.key) {
+                interaction = Some(crate::luau::ScriptInteraction {
+                    label: portal.prompt.clone(),
+                    key,
+                    range: crate::interact::scaled_range(portal.radius),
+                });
+            }
+            entity.insert((
+                crate::scene_loader::SceneEntryPoint {
+                    name: spec.name.clone().unwrap_or_default(),
+                    offset: Vec3::from_array(portal.arrive_offset),
+                },
+                crate::scene_loader::ScenePortal(portal.clone()),
+            ));
+            if let Some(interaction) = interaction {
+                entity.insert(interaction);
+            }
+        }
     }
     stats.entities += 1;
     let id = entity.id();

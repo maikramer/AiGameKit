@@ -13,7 +13,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use bevy::app::{App, PluginGroup};
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::ecs::system::{Res, ResMut};
@@ -53,6 +53,9 @@ pub struct AppOptions {
     pub camera_free: bool,
     /// Título da janela; omisso → `config.yaml` `title` → "Viber — <mundo>".
     pub window_title: Option<String>,
+    /// Entrada de chegada na cena de arranque (`viber run --entry`); numa cena que não é
+    /// a principal, omisso = a primeira entrada.
+    pub start_entry: Option<String>,
 }
 
 /// Run condition: scripts Luau correm (tudo menos o modo Edit; sem o
@@ -112,10 +115,22 @@ pub fn load_world(path: &Path) -> Result<ParsedWorld> {
     recipes::parse_world(&loaded.root_attrs, &loaded.nodes)
 }
 
+/// A pasta base do jogo (config, scripts, assets, `/…` dos includes): a raiz do PROJETO
+/// ([`crate::project::root_of`]). Para um mundo ao lado do seu `config.yaml` é a pasta dele,
+/// exatamente como sempre foi (devolvida na forma em que veio no caminho); uma cena em
+/// `scenes/` sobe à pasta do projeto.
 pub fn world_base_dir(path: &Path) -> Option<PathBuf> {
-    path.parent()
+    let parent = path
+        .parent()
         .map(|p| p.to_path_buf())
-        .filter(|p| !p.as_os_str().is_empty())
+        .filter(|p| !p.as_os_str().is_empty());
+    let root = crate::project::root_of(path);
+    let same = |dir: &Path| dir.canonicalize().is_ok_and(|dir| dir == root);
+    match parent {
+        Some(parent) if same(&parent) => Some(parent),
+        None if same(Path::new(".")) => None,
+        _ => Some(root),
+    }
 }
 
 /// world_dir (scripts/estilos relativos) + asset roots por ordem de
@@ -138,6 +153,7 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
         bridge_port,
         camera_free,
         window_title,
+        start_entry,
     } = opts;
     // Modo Edit: o editor in-process é dono da navegação, do input e da janela — câmara
     // de editor, simulação congelada. O bridge só existe se o editor o pedir
@@ -190,9 +206,29 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
     // ESTÁTICAS que lêem `shaders/{sky,water,terrain_chunk}.wgsl` contra as
     // roots — a escrita e a leitura têm de casar (contrato de conteúdo,
     // docs/ASSETS.md).
-    let sky_config = sky::SkyConfig::from_world(&world.entities).with_env_override();
-    let water_config = terrain::water_material::WaterSurfaceConfig::from_world(&world.entities);
-    let layers_config = terrain::layer_material::TerrainChunkConfig::from_world(&world.entities);
+    // Projeto com cenas: as constantes dos shaders são do PROJETO (os materiais não
+    // re-especializam numa troca de cena) — vêm sempre da cena principal, mesmo quando se
+    // arranca noutra (`viber run --scene`).
+    let project = crate::project::Project::discover(path);
+    let main_world = if project.declared
+        && project.scene_id(path).as_deref() != Some(crate::project::MAIN_SCENE)
+    {
+        match load_world(&project.main_scene_path()) {
+            Ok(main) => Some(main),
+            Err(error) => {
+                bevy::log::warn!(
+                    "cena principal do projeto não carrega ({error:#}) — shaders da cena de arranque"
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let shader_entities = &main_world.as_ref().unwrap_or(&world).entities;
+    let sky_config = sky::SkyConfig::from_world(shader_entities).with_env_override();
+    let water_config = terrain::water_material::WaterSurfaceConfig::from_world(shader_entities);
+    let layers_config = terrain::layer_material::TerrainChunkConfig::from_world(shader_entities);
     let shaders_dir = asset_root.join("shaders");
     let _ = std::fs::create_dir_all(&shaders_dir);
     for (name, contents) in [
@@ -386,7 +422,35 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
         crate::scene::sync::SceneSyncPlugin,
     ));
     app.insert_resource(crate::scene::doc::SceneDoc::load(path)?);
-    app.insert_resource(save::WorldSaveKey(save::world_save_key(path)));
+    // O save é do JOGO (projeto), não da cena: a chave é sempre a da cena principal.
+    let save_key_path = if project.declared {
+        project.main_scene_path()
+    } else {
+        path.to_path_buf()
+    };
+    app.insert_resource(save::WorldSaveKey(save::world_save_key(&save_key_path)));
+    let scene_title = world.title.clone();
+    // Autoloads do projeto: parseados aqui, spawnados uma vez antes da primeira cena.
+    if project.declared {
+        let mut autoload = Vec::new();
+        for file in project.autoload_paths() {
+            let loaded = crate::xml::include::load_world_in(&file, &project.root)
+                .with_context(|| format!("autoload {}", file.display()))?;
+            let parsed = recipes::parse_world(&loaded.root_attrs, &loaded.nodes)
+                .with_context(|| format!("autoload {}", file.display()))?;
+            autoload.push(parsed);
+        }
+        if !autoload.is_empty() {
+            app.insert_resource(crate::scene_loader::PendingAutoload(autoload));
+        }
+    }
+    app.insert_resource(crate::scene_loader::CurrentScene::for_path(
+        path,
+        scene_title,
+    ));
+    if let Some(entry) = start_entry {
+        app.insert_resource(crate::scene_loader::StartEntry(Some(entry)));
+    }
     app.insert_resource(PendingWorld {
         world,
         base_dir: world_base_dir(path),
@@ -625,6 +689,9 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
         (ui::UiSet::Collect, ui::UiSet::Build, ui::UiSet::Bind).before(luau::luau_update),
     );
     app.add_systems(bevy::app::Startup, spawn::startup);
+    // Trocas de cena (`crate::scene_loader`): o mesmo spawn, num schedule re-executável.
+    app.add_systems(crate::scene_loader::SceneLoad, spawn::startup);
+    app.add_plugins(crate::scene_loader::SceneLoaderPlugin);
     // Câmara livre de editor (`--camera free`, src/editor_camera.rs): a
     // navegação orbit/pan/zoom do ViberEditor via bridge (`viber.camera.*`).
     // ADITIVO — sem a flag o plugin não regista nada e o comportamento é

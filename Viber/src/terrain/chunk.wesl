@@ -1,21 +1,21 @@
-// Viber terrain chunk material — 8 simultaneous ground layers per chunk.
+// Viber terrain material — UM material para o terreno inteiro.
 //
-// Each terrain chunk carries its OWN material: the eight pool textures with
-// the highest aggregate weight in that chunk + TWO RGBA8 splat planes baked
-// per chunk (plane 0 = slots 0–3, plane 1 = slots 4–7; weights renormalized
-// to sum 1 across both). Areas of the world can render completely different
-// layer sets.
+// O splat é GLOBAL: 4 planos RGBA8 com os 13 pesos do pool por texel (~2 m),
+// cozidos no CPU (`splat::generate_splats`) e lidos aqui com filtragem
+// bilinear + mips — sem costuras de chunk. Por PIXEL ficam as 4 camadas de
+// maior peso (renormalizadas); só essas são amostradas. A albedo leva uma
+// 2.ª amostra rodada a outra escala, misturada por ruído de baixa
+// frequência (anti-repetição), e o terreno todo uma variação macro de tom.
 //
 // WORLD SPECIALIZATION: `viber run` rewrites the CONFIG block below from the
 // `<Terrain>` spec before the renderer loads this file.
 //
-// BINDINGS — the material is **bindless** (`TerrainChunkMaterial`), and it
-// has to be: a non-bindless custom material with a single texture binding
-// segfaults the NVIDIA driver inside `vkCreatePipelineLayout`. So the
-// textures live in the shared arrays of `bevy_render::bindless` and this
-// shader only carries INDICES into them, read from the index table at
-// binding 0. The `#else` branch is the portable non-bindless layout (used
-// on any device where bevy turns bindless off).
+// BINDINGS — o material é **bindless** (`TerrainChunkMaterial`), e tem de ser:
+// um material custom NÃO-bindless com uma única textura faz SIGSEGV no driver
+// NVIDIA dentro de `vkCreatePipelineLayout`. As texturas vivem nos arrays
+// partilhados de `bevy_render::bindless`; a tabela de índices (binding 0) é
+// lida como `array<u32>` — camada `i` do mapa M em `M_BASE + 2i` (sampler no
+// índice seguinte). Sem bindless o terreno desenha a cor plana das camadas.
 
 import bevy_pbr::render::forward_io::{VertexOutput, FragmentOutput};
 import bevy_pbr::render::mesh_view_bindings::view;
@@ -56,214 +56,43 @@ const CFG_STREAK: f32 = 0.5;
 const CFG_MOSS: f32 = 0.35;
 // === END WORLD CONFIG ===
 
-// Per-chunk layer table. `tiles[i].x` is the tile size in meters of layer i,
-// `tints/flats/roughs` its color correction, flat far color and perceptual
-// roughness; `chunk` places the planes: xy = origin XZ, z = edge size,
-// w = index (0..7) of the rock layer for the triplanar walls, -1 = off.
-// `day_tint.rgb` multiplies the final albedo (day/night cycle);
-// `sun_dir.xyz` is the sun TRAVEL direction (where the light goes — the
-// same sun the shadows follow, published with the day-tint steps).
+const LAYERS: u32 = 13u;
+// Bindings da tabela (ver `TerrainChunkMaterial`): camada `i` em `BASE + 2i`.
+const B_ALBEDO: u32 = 1u;
+const B_NORMAL: u32 = 27u;
+const B_HEIGHT: u32 = 53u;
+const B_AO: u32 = 79u;
+const B_ROUGH: u32 = 105u;
+const B_SPLAT: u32 = 131u;
+
+// Tabela de estilo, indexada pelo SLOT DO POOL (0..13). `world`: xy = canto
+// (-X,-Z) do splat, z = lado em metros, w = slot da rocha das paredes.
 struct TerrainChunkParams {
-    tiles: array<vec4<f32>, 8>,
-    tints: array<vec4<f32>, 8>,
-    flats: array<vec4<f32>, 8>,
-    roughs: array<vec4<f32>, 8>,
-    chunk: vec4<f32>,
+    tiles: array<vec4<f32>, 13>,
+    tints: array<vec4<f32>, 13>,
+    flats: array<vec4<f32>, 13>,
+    roughs: array<vec4<f32>, 13>,
+    world: vec4<f32>,
     day_tint: vec4<f32>,
     sun_dir: vec4<f32>,
-    // Pele das paredes ao vivo (viber.debug.ground{...}):
     // walls_a = tri_slope, tri_soft, strata_spacing, strata_strength;
-    // walls_b = rock_darken, streaks, moss, livre.
+    // walls_b = rock_darken, streaks, moss, chuva.
     walls_a: vec4<f32>,
     walls_b: vec4<f32>,
 };
 
 @if(BINDLESS) {
-
-// Bindless index table — one entry per material slot; the field order is the
-// bindless-index order declared by `TerrainChunkMaterial`
-// (`#[data(0, …)]` then the forty-two texture/sampler pairs at 1..84: eight
-// albedos, two splat planes, eight normal maps, eight height maps, eight AO
-// maps, eight roughness maps).
+// Uma entrada por material: o índice dos dados e as 138 entradas texture/
+// sampler na ORDEM das bindings 1..138.
 struct TerrainChunkBindings {
-    material: u32,         // 0
-    layer0_texture: u32,   // 1
-    layer0_sampler: u32,   // 2
-    layer1_texture: u32,   // 3
-    layer1_sampler: u32,   // 4
-    layer2_texture: u32,   // 5
-    layer2_sampler: u32,   // 6
-    layer3_texture: u32,   // 7
-    layer3_sampler: u32,   // 8
-    layer4_texture: u32,   // 9
-    layer4_sampler: u32,   // 10
-    layer5_texture: u32,   // 11
-    layer5_sampler: u32,   // 12
-    layer6_texture: u32,   // 13
-    layer6_sampler: u32,   // 14
-    layer7_texture: u32,   // 15
-    layer7_sampler: u32,   // 16
-    splat_texture: u32,    // 17
-    splat_sampler: u32,    // 18
-    splat2_texture: u32,   // 19
-    splat2_sampler: u32,   // 20
-    layer0_normal_texture: u32, // 21
-    layer0_normal_sampler: u32, // 22
-    layer1_normal_texture: u32, // 23
-    layer1_normal_sampler: u32, // 24
-    layer2_normal_texture: u32, // 25
-    layer2_normal_sampler: u32, // 26
-    layer3_normal_texture: u32, // 27
-    layer3_normal_sampler: u32, // 28
-    layer4_normal_texture: u32, // 29
-    layer4_normal_sampler: u32, // 30
-    layer5_normal_texture: u32, // 31
-    layer5_normal_sampler: u32, // 32
-    layer6_normal_texture: u32, // 33
-    layer6_normal_sampler: u32, // 34
-    layer7_normal_texture: u32, // 35
-    layer7_normal_sampler: u32, // 36
-    layer0_height_texture: u32, // 37
-    layer0_height_sampler: u32, // 38
-    layer1_height_texture: u32, // 39
-    layer1_height_sampler: u32, // 40
-    layer2_height_texture: u32, // 41
-    layer2_height_sampler: u32, // 42
-    layer3_height_texture: u32, // 43
-    layer3_height_sampler: u32, // 44
-    layer4_height_texture: u32, // 45
-    layer4_height_sampler: u32, // 46
-    layer5_height_texture: u32, // 47
-    layer5_height_sampler: u32, // 48
-    layer6_height_texture: u32, // 49
-    layer6_height_sampler: u32, // 50
-    layer7_height_texture: u32, // 51
-    layer7_height_sampler: u32, // 52
-    layer0_ao_texture: u32, // 53
-    layer0_ao_sampler: u32, // 54
-    layer1_ao_texture: u32, // 55
-    layer1_ao_sampler: u32, // 56
-    layer2_ao_texture: u32, // 57
-    layer2_ao_sampler: u32, // 58
-    layer3_ao_texture: u32, // 59
-    layer3_ao_sampler: u32, // 60
-    layer4_ao_texture: u32, // 61
-    layer4_ao_sampler: u32, // 62
-    layer5_ao_texture: u32, // 63
-    layer5_ao_sampler: u32, // 64
-    layer6_ao_texture: u32, // 65
-    layer6_ao_sampler: u32, // 66
-    layer7_ao_texture: u32, // 67
-    layer7_ao_sampler: u32, // 68
-    layer0_rough_texture: u32, // 69
-    layer0_rough_sampler: u32, // 70
-    layer1_rough_texture: u32, // 71
-    layer1_rough_sampler: u32, // 72
-    layer2_rough_texture: u32, // 73
-    layer2_rough_sampler: u32, // 74
-    layer3_rough_texture: u32, // 75
-    layer3_rough_sampler: u32, // 76
-    layer4_rough_texture: u32, // 77
-    layer4_rough_sampler: u32, // 78
-    layer5_rough_texture: u32, // 79
-    layer5_rough_sampler: u32, // 80
-    layer6_rough_texture: u32, // 81
-    layer6_rough_sampler: u32, // 82
-    layer7_rough_texture: u32, // 83
-    layer7_rough_sampler: u32, // 84
+    material: u32,
+    e: array<u32, 138>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(0) var<storage> material_indices: array<TerrainChunkBindings>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(10) var<storage> params_array: array<TerrainChunkParams>;
-
 } @else {
-
 @group(constants::MATERIAL_BIND_GROUP) @binding(0) var<uniform> params_direct: TerrainChunkParams;
-@group(constants::MATERIAL_BIND_GROUP) @binding(1) var layer0: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(2) var layer0_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(3) var layer1: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(4) var layer1_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(5) var layer2: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(6) var layer2_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(7) var layer3: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(8) var layer3_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(9) var layer4: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(10) var layer4_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(11) var layer5: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(12) var layer5_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(13) var layer6: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(14) var layer6_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(15) var layer7: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(16) var layer7_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(17) var splat: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(18) var splat_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(19) var splat2: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(20) var splat2_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(21) var layer0_normal: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(22) var layer0_normal_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(23) var layer1_normal: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(24) var layer1_normal_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(25) var layer2_normal: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(26) var layer2_normal_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(27) var layer3_normal: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(28) var layer3_normal_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(29) var layer4_normal: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(30) var layer4_normal_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(31) var layer5_normal: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(32) var layer5_normal_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(33) var layer6_normal: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(34) var layer6_normal_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(35) var layer7_normal: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(36) var layer7_normal_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(37) var layer0_height: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(38) var layer0_height_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(39) var layer1_height: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(40) var layer1_height_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(41) var layer2_height: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(42) var layer2_height_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(43) var layer3_height: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(44) var layer3_height_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(45) var layer4_height: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(46) var layer4_height_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(47) var layer5_height: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(48) var layer5_height_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(49) var layer6_height: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(50) var layer6_height_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(51) var layer7_height: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(52) var layer7_height_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(53) var layer0_ao: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(54) var layer0_ao_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(55) var layer1_ao: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(56) var layer1_ao_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(57) var layer2_ao: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(58) var layer2_ao_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(59) var layer3_ao: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(60) var layer3_ao_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(61) var layer4_ao: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(62) var layer4_ao_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(63) var layer5_ao: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(64) var layer5_ao_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(65) var layer6_ao: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(66) var layer6_ao_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(67) var layer7_ao: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(68) var layer7_ao_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(69) var layer0_rough: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(70) var layer0_rough_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(71) var layer1_rough: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(72) var layer1_rough_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(73) var layer2_rough: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(74) var layer2_rough_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(75) var layer3_rough: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(76) var layer3_rough_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(77) var layer4_rough: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(78) var layer4_rough_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(79) var layer5_rough: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(80) var layer5_rough_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(81) var layer6_rough: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(82) var layer6_rough_sampler: sampler;
-@group(constants::MATERIAL_BIND_GROUP) @binding(83) var layer7_rough: texture_2d<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(84) var layer7_rough_sampler: sampler;
-
 }
 
 // Achatamento por distância: perto vê-se o material, longe vê-se cor. FLAT_MIN
@@ -301,331 +130,34 @@ const HEIGHT_BIAS_MIN: f32 = 0.35;
 // Força do AO do pool sobre o albedo (1 = total; 0.6 mantém o chão vivo).
 const AO_STRENGTH: f32 = 0.6;
 
-/// The chunk's table. `slot` is the material's index in the bindless slab
-/// (always 0 without bindless).
-fn chunk_params(slot: u32) -> TerrainChunkParams {
+
+fn terrain_params(slot: u32) -> TerrainChunkParams {
     @if(BINDLESS)
     return params_array[material_indices[slot].material];
     @else
     return params_direct;
 }
 
-/// Layer `i` (0..7) of this chunk. Bindings cannot be indexed without
-/// bindless, so the non-bindless path picks by explicit branches; the
-/// gradients are always explicit, which is what makes the call legal from
-/// the non-uniform per-weight branches below.
-fn layer_sample(i: i32, slot: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec3<f32> {
-    @if(BINDLESS) {
-    let idx = material_indices[slot];
-    var tex = idx.layer0_texture;
-    var samp = idx.layer0_sampler;
-    if (i == 1) {
-        tex = idx.layer1_texture;
-        samp = idx.layer1_sampler;
-    } else if (i == 2) {
-        tex = idx.layer2_texture;
-        samp = idx.layer2_sampler;
-    } else if (i == 3) {
-        tex = idx.layer3_texture;
-        samp = idx.layer3_sampler;
-    } else if (i == 4) {
-        tex = idx.layer4_texture;
-        samp = idx.layer4_sampler;
-    } else if (i == 5) {
-        tex = idx.layer5_texture;
-        samp = idx.layer5_sampler;
-    } else if (i == 6) {
-        tex = idx.layer6_texture;
-        samp = idx.layer6_sampler;
-    } else if (i == 7) {
-        tex = idx.layer7_texture;
-        samp = idx.layer7_sampler;
-    }
-    return textureSampleGrad(
-        bindless_textures_2d[tex],
-        bindless_samplers_filtering[samp],
-        uv,
-        dx,
-        dy,
-    ).rgb;
-    } @else {
-    if (i == 0) {
-        return textureSampleGrad(layer0, layer0_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 1) {
-        return textureSampleGrad(layer1, layer1_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 2) {
-        return textureSampleGrad(layer2, layer2_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 3) {
-        return textureSampleGrad(layer3, layer3_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 4) {
-        return textureSampleGrad(layer4, layer4_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 5) {
-        return textureSampleGrad(layer5, layer5_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 6) {
-        return textureSampleGrad(layer6, layer6_sampler, uv, dx, dy).rgb;
-    }
-    return textureSampleGrad(layer7, layer7_sampler, uv, dx, dy).rgb;
-    }
-}
-
-/// Tangent-space normal map of layer `i` (0..7) — same selection/gradient
-/// discipline as `layer_sample`. Devolve o RGB cru (0..1); o decode `*2−1`
-/// é feito no chamador. Slots sem normal do pool carregam a imagem plana
-/// (0.5, 0.5, 1) e contribuem com a normal geométrica.
-fn layer_normal_sample(i: i32, slot: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec3<f32> {
-    @if(BINDLESS) {
-    let idx = material_indices[slot];
-    var tex = idx.layer0_normal_texture;
-    var samp = idx.layer0_normal_sampler;
-    if (i == 1) {
-        tex = idx.layer1_normal_texture;
-        samp = idx.layer1_normal_sampler;
-    } else if (i == 2) {
-        tex = idx.layer2_normal_texture;
-        samp = idx.layer2_normal_sampler;
-    } else if (i == 3) {
-        tex = idx.layer3_normal_texture;
-        samp = idx.layer3_normal_sampler;
-    } else if (i == 4) {
-        tex = idx.layer4_normal_texture;
-        samp = idx.layer4_normal_sampler;
-    } else if (i == 5) {
-        tex = idx.layer5_normal_texture;
-        samp = idx.layer5_normal_sampler;
-    } else if (i == 6) {
-        tex = idx.layer6_normal_texture;
-        samp = idx.layer6_normal_sampler;
-    } else if (i == 7) {
-        tex = idx.layer7_normal_texture;
-        samp = idx.layer7_normal_sampler;
-    }
-    return textureSampleGrad(
-        bindless_textures_2d[tex],
-        bindless_samplers_filtering[samp],
-        uv,
-        dx,
-        dy,
-    ).rgb;
-    } @else {
-    if (i == 0) {
-        return textureSampleGrad(layer0_normal, layer0_normal_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 1) {
-        return textureSampleGrad(layer1_normal, layer1_normal_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 2) {
-        return textureSampleGrad(layer2_normal, layer2_normal_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 3) {
-        return textureSampleGrad(layer3_normal, layer3_normal_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 4) {
-        return textureSampleGrad(layer4_normal, layer4_normal_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 5) {
-        return textureSampleGrad(layer5_normal, layer5_normal_sampler, uv, dx, dy).rgb;
-    }
-    if (i == 6) {
-        return textureSampleGrad(layer6_normal, layer6_normal_sampler, uv, dx, dy).rgb;
-    }
-    return textureSampleGrad(layer7_normal, layer7_normal_sampler, uv, dx, dy).rgb;
-    }
-}
-
-/// Scalar map (height or AO) of layer `i` (0..7) — one selection chain for
-/// both families (`height` = true → `height.ktx2`, false → `ao.ktx2`),
-/// same gradient discipline as `layer_sample`. Planos (0.5 / 1.0) quando o
-/// slot não tem o ficheiro: o height-blend devolve os pesos originais e o
-/// AO devolve 1.0.
-fn layer_scalar_sample(i: i32, slot: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>, height: bool) -> f32 {
-    let h = height;
-    @if(BINDLESS) {
-    let idx = material_indices[slot];
-    var tex = select(idx.layer0_height_texture, idx.layer0_ao_texture, !h);
-    var samp = select(idx.layer0_height_sampler, idx.layer0_ao_sampler, !h);
-    if (i == 1) {
-        tex = select(idx.layer1_height_texture, idx.layer1_ao_texture, !h);
-        samp = select(idx.layer1_height_sampler, idx.layer1_ao_sampler, !h);
-    } else if (i == 2) {
-        tex = select(idx.layer2_height_texture, idx.layer2_ao_texture, !h);
-        samp = select(idx.layer2_height_sampler, idx.layer2_ao_sampler, !h);
-    } else if (i == 3) {
-        tex = select(idx.layer3_height_texture, idx.layer3_ao_texture, !h);
-        samp = select(idx.layer3_height_sampler, idx.layer3_ao_sampler, !h);
-    } else if (i == 4) {
-        tex = select(idx.layer4_height_texture, idx.layer4_ao_texture, !h);
-        samp = select(idx.layer4_height_sampler, idx.layer4_ao_sampler, !h);
-    } else if (i == 5) {
-        tex = select(idx.layer5_height_texture, idx.layer5_ao_texture, !h);
-        samp = select(idx.layer5_height_sampler, idx.layer5_ao_sampler, !h);
-    } else if (i == 6) {
-        tex = select(idx.layer6_height_texture, idx.layer6_ao_texture, !h);
-        samp = select(idx.layer6_height_sampler, idx.layer6_ao_sampler, !h);
-    } else if (i == 7) {
-        tex = select(idx.layer7_height_texture, idx.layer7_ao_texture, !h);
-        samp = select(idx.layer7_height_sampler, idx.layer7_ao_sampler, !h);
-    }
-    return textureSampleGrad(
-        bindless_textures_2d[tex],
-        bindless_samplers_filtering[samp],
-        uv,
-        dx,
-        dy,
-    ).r;
-    } @else {
-    // Cada ramo devolve DIRECTAMENTE: o naga exige que o argumento de
-    // textura do textureSampleGrad seja um GLOBAL (uma local `var tex`
-    // selecionada por if/else é rejeitada na validação).
-    if (i == 0) {
-        if (h) {
-            return textureSampleGrad(layer0_height, layer0_height_sampler, uv, dx, dy).r;
-        }
-        return textureSampleGrad(layer0_ao, layer0_ao_sampler, uv, dx, dy).r;
-    }
-    if (i == 1) {
-        if (h) {
-            return textureSampleGrad(layer1_height, layer1_height_sampler, uv, dx, dy).r;
-        }
-        return textureSampleGrad(layer1_ao, layer1_ao_sampler, uv, dx, dy).r;
-    }
-    if (i == 2) {
-        if (h) {
-            return textureSampleGrad(layer2_height, layer2_height_sampler, uv, dx, dy).r;
-        }
-        return textureSampleGrad(layer2_ao, layer2_ao_sampler, uv, dx, dy).r;
-    }
-    if (i == 3) {
-        if (h) {
-            return textureSampleGrad(layer3_height, layer3_height_sampler, uv, dx, dy).r;
-        }
-        return textureSampleGrad(layer3_ao, layer3_ao_sampler, uv, dx, dy).r;
-    }
-    if (i == 4) {
-        if (h) {
-            return textureSampleGrad(layer4_height, layer4_height_sampler, uv, dx, dy).r;
-        }
-        return textureSampleGrad(layer4_ao, layer4_ao_sampler, uv, dx, dy).r;
-    }
-    if (i == 5) {
-        if (h) {
-            return textureSampleGrad(layer5_height, layer5_height_sampler, uv, dx, dy).r;
-        }
-        return textureSampleGrad(layer5_ao, layer5_ao_sampler, uv, dx, dy).r;
-    }
-    if (i == 6) {
-        if (h) {
-            return textureSampleGrad(layer6_height, layer6_height_sampler, uv, dx, dy).r;
-        }
-        return textureSampleGrad(layer6_ao, layer6_ao_sampler, uv, dx, dy).r;
-    }
-    if (h) {
-        return textureSampleGrad(layer7_height, layer7_height_sampler, uv, dx, dy).r;
-    }
-    return textureSampleGrad(layer7_ao, layer7_ao_sampler, uv, dx, dy).r;
-    }
-}
-
-/// Roughness map do slot `i` (0..7) — o mesmo padrão do
-/// `layer_scalar_sample`: cada ramo devolve DIRECTAMENTE (o naga rejeita
-/// `var tex` local selecionada por if/else como argumento de
-/// textureSampleGrad). Quem não tem mapa tem `roughs[i].y = 0` e o valor
-/// aqui é ignorado pelo mix.
-fn layer_rough_sample(i: i32, slot: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> f32 {
-    @if(BINDLESS) {
-    let idx = material_indices[slot];
-    var tex = idx.layer0_rough_texture;
-    var samp = idx.layer0_rough_sampler;
-    if (i == 1) {
-        tex = idx.layer1_rough_texture;
-        samp = idx.layer1_rough_sampler;
-    } else if (i == 2) {
-        tex = idx.layer2_rough_texture;
-        samp = idx.layer2_rough_sampler;
-    } else if (i == 3) {
-        tex = idx.layer3_rough_texture;
-        samp = idx.layer3_rough_sampler;
-    } else if (i == 4) {
-        tex = idx.layer4_rough_texture;
-        samp = idx.layer4_rough_sampler;
-    } else if (i == 5) {
-        tex = idx.layer5_rough_texture;
-        samp = idx.layer5_rough_sampler;
-    } else if (i == 6) {
-        tex = idx.layer6_rough_texture;
-        samp = idx.layer6_rough_sampler;
-    } else if (i == 7) {
-        tex = idx.layer7_rough_texture;
-        samp = idx.layer7_rough_sampler;
-    }
-    return textureSampleGrad(
-        bindless_textures_2d[tex],
-        bindless_samplers_filtering[samp],
-        uv,
-        dx,
-        dy,
-    ).r;
-    } @else {
-    if (i == 0) {
-        return textureSampleGrad(layer0_rough, layer0_rough_sampler, uv, dx, dy).r;
-    }
-    if (i == 1) {
-        return textureSampleGrad(layer1_rough, layer1_rough_sampler, uv, dx, dy).r;
-    }
-    if (i == 2) {
-        return textureSampleGrad(layer2_rough, layer2_rough_sampler, uv, dx, dy).r;
-    }
-    if (i == 3) {
-        return textureSampleGrad(layer3_rough, layer3_rough_sampler, uv, dx, dy).r;
-    }
-    if (i == 4) {
-        return textureSampleGrad(layer4_rough, layer4_rough_sampler, uv, dx, dy).r;
-    }
-    if (i == 5) {
-        return textureSampleGrad(layer5_rough, layer5_rough_sampler, uv, dx, dy).r;
-    }
-    if (i == 6) {
-        return textureSampleGrad(layer6_rough, layer6_rough_sampler, uv, dx, dy).r;
-    }
-    return textureSampleGrad(layer7_rough, layer7_rough_sampler, uv, dx, dy).r;
-    }
-}
-
-/// The chunk's splat planes (local 0..1 UVs over the chunk); plane 1 weights
-/// slots 4–7.
-fn splat_sample(slot: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec4<f32> {
+/// Uma textura da tabela (binding `b` = textura, `b + 1` = sampler) com
+/// gradientes explícitos (legal no fluxo não-uniforme por camada).
+fn map_sample(slot: u32, b: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec4<f32> {
     @if(BINDLESS) {
     let idx = material_indices[slot];
     return textureSampleGrad(
-        bindless_textures_2d[idx.splat_texture],
-        bindless_samplers_filtering[idx.splat_sampler],
+        bindless_textures_2d[idx.e[b - 1u]],
+        bindless_samplers_filtering[idx.e[b]],
         uv,
         dx,
         dy,
     );
     } @else {
-    return textureSampleGrad(splat, splat_sampler, uv, dx, dy);
+    // Sem bindless não há texturas: neutro (o albedo cai na cor plana).
+    return vec4<f32>(0.5, 0.5, 1.0, 1.0);
     }
 }
 
-fn splat2_sample(slot: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec4<f32> {
-    @if(BINDLESS) {
-    let idx = material_indices[slot];
-    return textureSampleGrad(
-        bindless_textures_2d[idx.splat2_texture],
-        bindless_samplers_filtering[idx.splat2_sampler],
-        uv,
-        dx,
-        dy,
-    );
-    } @else {
-    return textureSampleGrad(splat2, splat2_sampler, uv, dx, dy);
-    }
+fn layer_albedo(slot: u32, li: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec3<f32> {
+    return map_sample(slot, B_ALBEDO + 2u * li, uv, dx, dy).rgb;
 }
 
 // ── Wall skin (deterministic hash noise — the rock detail needs no extra
@@ -643,6 +175,25 @@ fn vnoise(p: vec2<f32>) -> f32 {
     return mix(a, b, u.y);
 }
 
+// Anti-repetição: a 2.ª amostra roda ~34° e muda de escala (×0,37), e a
+// mistura entre as duas segue um ruído de ~40 m — o padrão do azulejo deixa
+// de alinhar ao longe.
+const ANTI_TILE_SCALE: f32 = 0.37;
+const ANTI_TILE_COS: f32 = 0.829;
+const ANTI_TILE_SIN: f32 = 0.559;
+const ANTI_TILE_MIX: f32 = 0.55;
+// Variação macro de tom (campos de ~170 m e ~55 m): quebra a uniformidade das
+// grandes áreas da mesma camada, perto e longe.
+const MACRO_LOW: f32 = 0.88;
+const MACRO_HIGH: f32 = 1.10;
+
+fn anti_tile(v: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(
+        ANTI_TILE_COS * v.x - ANTI_TILE_SIN * v.y,
+        ANTI_TILE_SIN * v.x + ANTI_TILE_COS * v.y,
+    ) * ANTI_TILE_SCALE;
+}
+
 @fragment
 fn fragment(
     in: VertexOutput,
@@ -652,20 +203,44 @@ fn fragment(
     let slot = mesh[in.instance_index].material_and_lightmap_bind_group_slot & 0xffffu;
     @else
     let slot = 0u;
-    let params = chunk_params(slot);
+    var params = terrain_params(slot);
 
     let world = in.world_position.xyz;
     let normal = select(-in.world_normal, in.world_normal, is_front);
 
-    // Splat coverage of THIS chunk: local 0..1 UVs over the chunk plane. The
-    // gradients are taken ONCE here; inside the per-layer branches below every
-    // fetch uses textureSampleGrad (explicit gradients are legal in
-    // non-uniform control flow).
-    let local = (world.xz - params.chunk.xy) / params.chunk.z;
-    let ldx = dpdx(local);
-    let ldy = dpdy(local);
-    let s = splat_sample(slot, local, ldx, ldy);
-    let s2 = splat2_sample(slot, local, ldx, ldy);
+    // Splat GLOBAL: uv 0..1 sobre o mundo; gradientes tirados UMA vez aqui.
+    let suv = (world.xz - params.world.xy) / params.world.z;
+    let sdx = dpdx(suv);
+    let sdy = dpdy(suv);
+    let p0 = map_sample(slot, B_SPLAT, suv, sdx, sdy);
+    let p1 = map_sample(slot, B_SPLAT + 2u, suv, sdx, sdy);
+    let p2 = map_sample(slot, B_SPLAT + 4u, suv, sdx, sdy);
+    let p3 = map_sample(slot, B_SPLAT + 6u, suv, sdx, sdy);
+    // Empacotamento = `splat::SLOT_PACKING` (plano, canal) por slot.
+    var w = array<f32, 13>(
+        p0.r, p0.g, p0.b, p0.a,
+        p1.r, p1.g, p1.b, p1.a,
+        p2.r, p2.g, p2.b, p2.a,
+        p3.r,
+    );
+    // As 4 camadas mais fortes deste pixel (inserção ordenada).
+    var ids = array<u32, 4>(0u, 0u, 0u, 0u);
+    var ws = array<f32, 4>(0.0, 0.0, 0.0, 0.0);
+    for (var i = 0u; i < LAYERS; i++) {
+        var v = w[i];
+        var id = i;
+        for (var k = 0u; k < 4u; k++) {
+            if (v > ws[k]) {
+                let tv = ws[k];
+                let ti = ids[k];
+                ws[k] = v;
+                ids[k] = id;
+                v = tv;
+                id = ti;
+            }
+        }
+    }
+    let wtop = max(ws[0] + ws[1] + ws[2] + ws[3], 1e-4);
 
     // World-space derivative shared by every layer (uv = world / tile).
     let wdx = dpdx(world.xz);
@@ -674,238 +249,71 @@ fn fragment(
     // Achatamento por distância: perto vê-se o material, longe vê-se cor.
     let view_dist = distance(world, view.world_position.xyz);
     let flat_mix = mix(FLAT_MIN, 1.0, smoothstep(FLAT_NEAR, FLAT_FAR, view_dist));
+    let tile_mix = smoothstep(0.30, 0.70, vnoise(world.xz / 40.0)) * ANTI_TILE_MIX;
 
     var albedo = vec3<f32>(0.0);
     var rough = 0.0;
     var ao = 0.0;
-
-    // Σ dos pesos APÓS o height-bias (renormaliza no fim).
     var wsum = 0.0;
-    // ── Frame tangente derivado da normal geométrica (sem atributos de
-    // tangente): T = ⊥ à normal no plano horizontal, B fecha a base ortonormal.
-    // A projeção top-down (uv = world.xz/tile) torna este frame o espaço
-    // tangente correto para os normal maps do pool; em encostas inclina com
-    // a superfície, que é o comportamento pretendido.
+    // Frame tangente derivado da normal geométrica (projeção top-down).
     let ng = normalize(normal);
     let cross_up = cross(vec3<f32>(0.0, 1.0, 0.0), ng);
     let t_axis = select(vec3<f32>(1.0, 0.0, 0.0), normalize(cross_up), dot(cross_up, cross_up) > 1e-8);
     let b_axis = cross(ng, t_axis);
-    // Soma ponderada de normais em espaço-mundo (Σw = 1, cada contribuição
-    // ~unitária → normalizar no fim é seguro).
     var n_world = vec3<f32>(0.0);
 
-    if (s.r > WEIGHT_EPSILON) {
-        let t = params.tiles[0].x;
+    for (var k = 0u; k < 4u; k++) {
+        let wk = ws[k] / wtop;
+        if (wk <= WEIGHT_EPSILON) {
+            continue;
+        }
+        let li = ids[k];
+        let t = params.tiles[li].x;
         let uv_t = world.xz / t;
-        var tex = params.flats[0].rgb;
+        let gx = wdx / t;
+        let gy = wdy / t;
+        var tex = params.flats[li].rgb;
         if (flat_mix < FLAT_SKIP) {
-            tex = layer_sample(0, slot, uv_t, wdx / t, wdy / t) * params.tints[0].rgb;
+            var c = layer_albedo(slot, li, uv_t, gx, gy);
+            if (tile_mix > 0.01) {
+                // Desvio por camada: duas camadas nunca alinham o 2.º padrão.
+                let shift = vec2<f32>(f32(li) * 0.173, f32(li) * 0.311);
+                let c2 = layer_albedo(slot, li, anti_tile(uv_t) + shift, anti_tile(gx), anti_tile(gy));
+                c = mix(c, c2, tile_mix);
+            }
+            tex = c * params.tints[li].rgb;
         }
-        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
+        // Height-bias CONTÍNUO: multiplicador com piso — a camada alta ganha
         // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
-        let h = layer_scalar_sample(0, slot, uv_t, wdx / t, wdy / t, true);
-        let wb0 = s.r * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
-        albedo += wb0 * mix(tex, params.flats[0].rgb, flat_mix);
-        let rmap0 = layer_rough_sample(0, slot, uv_t, wdx / t, wdy / t);
-        let rinv0 = select(rmap0, 1.0 - rmap0, params.roughs[0].z > 0.5);
-        rough += wb0 * mix(params.roughs[0].x, rinv0, params.roughs[0].y);
-        ao += wb0 * layer_scalar_sample(0, slot, uv_t, wdx / t, wdy / t, false);
-        wsum += wb0;
-        let k = 1.0 - flat_mix;
-        if (k >= 1.0 - FLAT_SKIP) {
-            let nm = layer_normal_sample(0, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
-            n_world += wb0 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
+        let h = map_sample(slot, B_HEIGHT + 2u * li, uv_t, gx, gy).r;
+        let wb = wk * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
+        albedo += wb * mix(tex, params.flats[li].rgb, flat_mix);
+        if (params.roughs[li].y > 0.0) {
+            let rmap = map_sample(slot, B_ROUGH + 2u * li, uv_t, gx, gy).r;
+            let rinv = select(rmap, 1.0 - rmap, params.roughs[li].z > 0.5);
+            rough += wb * mix(params.roughs[li].x, rinv, params.roughs[li].y);
         } else {
-            n_world += wb0 * ng;
+            rough += wb * params.roughs[li].x;
         }
-    }
-    if (s.g > WEIGHT_EPSILON) {
-        let t = params.tiles[1].x;
-        let uv_t = world.xz / t;
-        var tex = params.flats[1].rgb;
-        if (flat_mix < FLAT_SKIP) {
-            tex = layer_sample(1, slot, uv_t, wdx / t, wdy / t) * params.tints[1].rgb;
-        }
-        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
-        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
-        let h = layer_scalar_sample(1, slot, uv_t, wdx / t, wdy / t, true);
-        let wb1 = s.g * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
-        albedo += wb1 * mix(tex, params.flats[1].rgb, flat_mix);
-        let rmap1 = layer_rough_sample(1, slot, uv_t, wdx / t, wdy / t);
-        let rinv1 = select(rmap1, 1.0 - rmap1, params.roughs[1].z > 0.5);
-        rough += wb1 * mix(params.roughs[1].x, rinv1, params.roughs[1].y);
-        ao += wb1 * layer_scalar_sample(1, slot, uv_t, wdx / t, wdy / t, false);
-        wsum += wb1;
-        let k = 1.0 - flat_mix;
-        if (k >= 1.0 - FLAT_SKIP) {
-            let nm = layer_normal_sample(1, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
-            n_world += wb1 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
+        ao += wb * map_sample(slot, B_AO + 2u * li, uv_t, gx, gy).r;
+        wsum += wb;
+        let kd = 1.0 - flat_mix;
+        if (kd >= 1.0 - FLAT_SKIP) {
+            let nm = map_sample(slot, B_NORMAL + 2u * li, uv_t, gx, gy).rgb * 2.0 - 1.0;
+            n_world += wb * (t_axis * (nm.x * kd) + b_axis * (nm.y * kd) + ng * (nm.z * kd + (1.0 - kd)));
         } else {
-            n_world += wb1 * ng;
-        }
-    }
-    if (s.b > WEIGHT_EPSILON) {
-        let t = params.tiles[2].x;
-        let uv_t = world.xz / t;
-        var tex = params.flats[2].rgb;
-        if (flat_mix < FLAT_SKIP) {
-            tex = layer_sample(2, slot, uv_t, wdx / t, wdy / t) * params.tints[2].rgb;
-        }
-        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
-        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
-        let h = layer_scalar_sample(2, slot, uv_t, wdx / t, wdy / t, true);
-        let wb2 = s.b * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
-        albedo += wb2 * mix(tex, params.flats[2].rgb, flat_mix);
-        let rmap2 = layer_rough_sample(2, slot, uv_t, wdx / t, wdy / t);
-        let rinv2 = select(rmap2, 1.0 - rmap2, params.roughs[2].z > 0.5);
-        rough += wb2 * mix(params.roughs[2].x, rinv2, params.roughs[2].y);
-        ao += wb2 * layer_scalar_sample(2, slot, uv_t, wdx / t, wdy / t, false);
-        wsum += wb2;
-        let k = 1.0 - flat_mix;
-        if (k >= 1.0 - FLAT_SKIP) {
-            let nm = layer_normal_sample(2, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
-            n_world += wb2 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
-        } else {
-            n_world += wb2 * ng;
-        }
-    }
-    if (s.a > WEIGHT_EPSILON) {
-        let t = params.tiles[3].x;
-        let uv_t = world.xz / t;
-        var tex = params.flats[3].rgb;
-        if (flat_mix < FLAT_SKIP) {
-            tex = layer_sample(3, slot, uv_t, wdx / t, wdy / t) * params.tints[3].rgb;
-        }
-        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
-        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
-        let h = layer_scalar_sample(3, slot, uv_t, wdx / t, wdy / t, true);
-        let wb3 = s.a * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
-        albedo += wb3 * mix(tex, params.flats[3].rgb, flat_mix);
-        let rmap3 = layer_rough_sample(3, slot, uv_t, wdx / t, wdy / t);
-        let rinv3 = select(rmap3, 1.0 - rmap3, params.roughs[3].z > 0.5);
-        rough += wb3 * mix(params.roughs[3].x, rinv3, params.roughs[3].y);
-        ao += wb3 * layer_scalar_sample(3, slot, uv_t, wdx / t, wdy / t, false);
-        wsum += wb3;
-        let k = 1.0 - flat_mix;
-        if (k >= 1.0 - FLAT_SKIP) {
-            let nm = layer_normal_sample(3, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
-            n_world += wb3 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
-        } else {
-            n_world += wb3 * ng;
-        }
-    }
-    if (s2.r > WEIGHT_EPSILON) {
-        let t = params.tiles[4].x;
-        let uv_t = world.xz / t;
-        var tex = params.flats[4].rgb;
-        if (flat_mix < FLAT_SKIP) {
-            tex = layer_sample(4, slot, uv_t, wdx / t, wdy / t) * params.tints[4].rgb;
-        }
-        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
-        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
-        let h = layer_scalar_sample(4, slot, uv_t, wdx / t, wdy / t, true);
-        let wb4 = s2.r * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
-        albedo += wb4 * mix(tex, params.flats[4].rgb, flat_mix);
-        let rmap4 = layer_rough_sample(4, slot, uv_t, wdx / t, wdy / t);
-        let rinv4 = select(rmap4, 1.0 - rmap4, params.roughs[4].z > 0.5);
-        rough += wb4 * mix(params.roughs[4].x, rinv4, params.roughs[4].y);
-        ao += wb4 * layer_scalar_sample(4, slot, uv_t, wdx / t, wdy / t, false);
-        wsum += wb4;
-        let k = 1.0 - flat_mix;
-        if (k >= 1.0 - FLAT_SKIP) {
-            let nm = layer_normal_sample(4, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
-            n_world += wb4 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
-        } else {
-            n_world += wb4 * ng;
-        }
-    }
-    if (s2.g > WEIGHT_EPSILON) {
-        let t = params.tiles[5].x;
-        let uv_t = world.xz / t;
-        var tex = params.flats[5].rgb;
-        if (flat_mix < FLAT_SKIP) {
-            tex = layer_sample(5, slot, uv_t, wdx / t, wdy / t) * params.tints[5].rgb;
-        }
-        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
-        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
-        let h = layer_scalar_sample(5, slot, uv_t, wdx / t, wdy / t, true);
-        let wb5 = s2.g * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
-        albedo += wb5 * mix(tex, params.flats[5].rgb, flat_mix);
-        let rmap5 = layer_rough_sample(5, slot, uv_t, wdx / t, wdy / t);
-        let rinv5 = select(rmap5, 1.0 - rmap5, params.roughs[5].z > 0.5);
-        rough += wb5 * mix(params.roughs[5].x, rinv5, params.roughs[5].y);
-        ao += wb5 * layer_scalar_sample(5, slot, uv_t, wdx / t, wdy / t, false);
-        wsum += wb5;
-        let k = 1.0 - flat_mix;
-        if (k >= 1.0 - FLAT_SKIP) {
-            let nm = layer_normal_sample(5, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
-            n_world += wb5 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
-        } else {
-            n_world += wb5 * ng;
-        }
-    }
-    if (s2.b > WEIGHT_EPSILON) {
-        let t = params.tiles[6].x;
-        let uv_t = world.xz / t;
-        var tex = params.flats[6].rgb;
-        if (flat_mix < FLAT_SKIP) {
-            tex = layer_sample(6, slot, uv_t, wdx / t, wdy / t) * params.tints[6].rgb;
-        }
-        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
-        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
-        let h = layer_scalar_sample(6, slot, uv_t, wdx / t, wdy / t, true);
-        let wb6 = s2.b * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
-        albedo += wb6 * mix(tex, params.flats[6].rgb, flat_mix);
-        let rmap6 = layer_rough_sample(6, slot, uv_t, wdx / t, wdy / t);
-        let rinv6 = select(rmap6, 1.0 - rmap6, params.roughs[6].z > 0.5);
-        rough += wb6 * mix(params.roughs[6].x, rinv6, params.roughs[6].y);
-        ao += wb6 * layer_scalar_sample(6, slot, uv_t, wdx / t, wdy / t, false);
-        wsum += wb6;
-        let k = 1.0 - flat_mix;
-        if (k >= 1.0 - FLAT_SKIP) {
-            let nm = layer_normal_sample(6, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
-            n_world += wb6 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
-        } else {
-            n_world += wb6 * ng;
-        }
-    }
-    if (s2.a > WEIGHT_EPSILON) {
-        let t = params.tiles[7].x;
-        let uv_t = world.xz / t;
-        var tex = params.flats[7].rgb;
-        if (flat_mix < FLAT_SKIP) {
-            tex = layer_sample(7, slot, uv_t, wdx / t, wdy / t) * params.tints[7].rgb;
-        }
-        // Height-bias CONTÍNUO: multiplicador com piso — a layer alta ganha
-        // peso na fronteira, a baixa perde um pouco, NINGUÉM colapsa.
-        let h = layer_scalar_sample(7, slot, uv_t, wdx / t, wdy / t, true);
-        let wb7 = s2.a * max(1.0 + HEIGHT_BIAS * (h - 0.5), HEIGHT_BIAS_MIN);
-        albedo += wb7 * mix(tex, params.flats[7].rgb, flat_mix);
-        let rmap7 = layer_rough_sample(7, slot, uv_t, wdx / t, wdy / t);
-        let rinv7 = select(rmap7, 1.0 - rmap7, params.roughs[7].z > 0.5);
-        rough += wb7 * mix(params.roughs[7].x, rinv7, params.roughs[7].y);
-        ao += wb7 * layer_scalar_sample(7, slot, uv_t, wdx / t, wdy / t, false);
-        wsum += wb7;
-        let k = 1.0 - flat_mix;
-        if (k >= 1.0 - FLAT_SKIP) {
-            let nm = layer_normal_sample(7, slot, uv_t, wdx / t, wdy / t) * 2.0 - 1.0;
-            n_world += wb7 * (t_axis * (nm.x * k) + b_axis * (nm.y * k) + ng * (nm.z * k + (1.0 - k)));
-        } else {
-            n_world += wb7 * ng;
+            n_world += wb * ng;
         }
     }
 
-    // The CPU bakes the eight weights to sum 1; clamp anyway so a fallback
-    // plane must not push the sum past 1.
     let total = max(wsum, 1e-4);
     albedo /= total;
     rough = clamp(rough / total, 0.05, 1.0);
-    // AO por texel do pool: soma ponderada pelos MESMOS pesos do albedo
-    // (plana = 1.0 quando o mundo não tem `ao.ktx2`).
     albedo *= mix(1.0, ao / total, AO_STRENGTH);
-    // O `n_world` acumulou pesos crus (soma ≥ 1 pelo clamp do CPU); a
-    // normalização dispensa dividir pelo total antes.
-    let n_detail = normalize(n_world);
+    // Variação macro de tom (perto e longe).
+    let macro_n = vnoise(world.xz / 170.0) * 0.6 + vnoise(world.xz / 55.0) * 0.4;
+    albedo *= mix(MACRO_LOW, MACRO_HIGH, macro_n);
+    let n_detail = normalize(select(ng, n_world, dot(n_world, n_world) > 1e-8));
 
     // ── Cliff walls: triplanar 2-fetch + estratos ─────────────────────────
     //
@@ -945,8 +353,8 @@ fn fragment(
         }
         let tri = smoothstep(params.walls_a.x, params.walls_a.x + params.walls_a.y, slope) * region;
         if (tri > 0.001) {
-            let rock = i32(params.chunk.w);
-            if (rock >= 0) {
+            let rock = u32(params.world.w);
+            if (rock < LAYERS) {
                 // Só mistura a normal de parede quando o chunk TEM rock —
                 // sem ela o bump ficava (0,1,0) e a parede lia iluminada
                 // como chão plano (flat/estourada).
@@ -962,7 +370,7 @@ fn fragment(
                 let sd = select(dzy_x, dxy_x, use_xy);
                 let sy = select(dzy_y, dxy_y, use_xy);
                 let t = params.tiles[rock].x;
-                let rock_tex = layer_sample(rock, slot, side / t, sd / t, sy / t);
+                let rock_tex = layer_albedo(slot, rock, side / t, sd / t, sy / t);
                 // Detail normal do LUMINANCE (fallback sem bindings novas):
                 // 2 fetches extra na MESMA textura — o gradiente de
                 // luminância é o relevo da rocha. Some ao brilho à
@@ -972,8 +380,8 @@ fn fragment(
                 if (bump > 0.01) {
                     let e = 0.35 / t;
                     let c0 = dot(rock_tex, luma);
-                    let cu = dot(layer_sample(rock, slot, side / t + vec2<f32>(e, 0.0), sd / t, sy / t), luma);
-                    let cv = dot(layer_sample(rock, slot, side / t + vec2<f32>(0.0, e), sd / t, sy / t), luma);
+                    let cu = dot(layer_albedo(slot, rock, side / t + vec2<f32>(e, 0.0), sd / t, sy / t), luma);
+                    let cv = dot(layer_albedo(slot, rock, side / t + vec2<f32>(0.0, e), sd / t, sy / t), luma);
                     let u_axis = select(vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 0.0, 0.0), use_xy);
                     wall_n = normalize(geom_n
                         - (u_axis * (cu - c0) + vec3<f32>(0.0, 1.0, 0.0) * (cv - c0)) * bump);

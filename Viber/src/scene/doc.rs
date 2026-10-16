@@ -112,7 +112,7 @@ impl SceneDoc {
         let world = world
             .canonicalize()
             .with_context(|| format!("world file not found: {}", world.display()))?;
-        let root_dir = world.parent().map(Path::to_path_buf).unwrap_or_default();
+        let root_dir = crate::project::root_of(&world);
         let mut doc = SceneDoc {
             files: Vec::new(),
             root_dir,

@@ -115,10 +115,7 @@ pub fn run_cli(world: &Path, strict: bool) -> Result<serde_json::Value> {
 /// Lint completo: sintaxe/referências de scripts, quests, nomes duplicados.
 pub fn lint_world(world_xml: &Path) -> Result<LintReport> {
     let world_xml = std::path::absolute(world_xml)?;
-    let world_dir = world_xml
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let world_dir = crate::project::root_of(&world_xml);
     let loaded = crate::xml::include::load_world(&world_xml)?;
     let world = crate::recipes::parse_world(&loaded.root_attrs, &loaded.nodes)
         .with_context(|| format!("a parsear {}", world_xml.display()))?;
@@ -152,14 +149,210 @@ pub fn lint_world(world_xml: &Path) -> Result<LintReport> {
         &config.scripts_dir_on(&world_dir),
         &world.entities,
     ));
+    // Num projeto com cenas a biblioteca de cinemáticas é a UNIÃO (principal, autoloads,
+    // cenas): um script de uma cena pode tocar uma cinemática declarada noutra.
+    let mut cinematic_nodes = loaded.nodes.clone();
+    cinematic_nodes.extend(project_cinematics(&world_xml));
     findings.extend(check_cinematics(
-        &loaded.nodes,
+        &cinematic_nodes,
         &config.scripts_dir_on(&world_dir),
         &world.entities,
     ));
     findings.extend(check_quests(&world_dir, &config));
     findings.extend(check_duplicate_names(duplicates));
+    findings.extend(check_project(
+        &world_xml,
+        &config.scripts_dir_on(&world_dir),
+    ));
     Ok(LintReport { findings })
+}
+
+/// Os `<Cinematic>` das OUTRAS cenas e dos autoloads do projeto de `world_xml` (vazio fora
+/// de um projeto declarado).
+fn project_cinematics(world_xml: &Path) -> Vec<crate::xml::XmlNode> {
+    let project = crate::project::Project::discover(world_xml);
+    if !project.declared {
+        return Vec::new();
+    }
+    let this = world_xml
+        .canonicalize()
+        .unwrap_or_else(|_| world_xml.to_path_buf());
+    fn rec(nodes: Vec<crate::xml::XmlNode>, out: &mut Vec<crate::xml::XmlNode>) {
+        for node in nodes {
+            if node.tag.eq_ignore_ascii_case("cinematic") {
+                out.push(node);
+            } else {
+                rec(node.children, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for file in project
+        .scene_files()
+        .into_iter()
+        .chain(project.autoload_paths())
+    {
+        if file.canonicalize().unwrap_or_else(|_| file.clone()) == this {
+            continue;
+        }
+        if let Ok(loaded) = crate::xml::include::load_world_in(&file, &project.root) {
+            rec(loaded.nodes, &mut out);
+        }
+    }
+    out
+}
+
+/// Projeto com cenas (`project:` no config): portais com alvo e entrada que existem, cenas
+/// com entrada, autoloads sem recursos de mundo, e os `viber.change_scene("…")` literais dos
+/// scripts a apontar para cenas que existem. Corre sobre o PROJETO inteiro, seja qual for a
+/// cena que se pediu.
+fn check_project(world_xml: &Path, scripts_dir: &Path) -> Vec<Finding> {
+    let project = crate::project::Project::discover(world_xml);
+    if !project.declared {
+        return Vec::new();
+    }
+    let mut findings = Vec::new();
+    let scenes = project.list_scenes();
+    let by_id: HashMap<&str, &crate::project::SceneInfo> =
+        scenes.iter().map(|s| (s.id.as_str(), s)).collect();
+    for scene in &scenes {
+        if let Some(error) = &scene.error {
+            findings.push(Finding::error(
+                "scene-parse",
+                format!("cena `{}` ({}) não carrega: {error}", scene.id, scene.path),
+            ));
+            continue;
+        }
+        if !scene.main && scene.entries.is_empty() {
+            findings.push(Finding::warning(
+                "scene-no-entry",
+                format!(
+                    "cena `{}` sem `<SceneEntry>` nem `<ScenePortal>` — quem lá chegar fica onde estava",
+                    scene.id
+                ),
+            ));
+        }
+        for portal in &scene.portals {
+            let label = if portal.name.is_empty() {
+                "<ScenePortal> sem nome".to_string()
+            } else {
+                format!("`{}`", portal.name)
+            };
+            let Some(target) = by_id.get(portal.target.as_str()) else {
+                findings.push(Finding::error(
+                    "scene-portal-target",
+                    format!(
+                        "cena `{}`: portal {label} aponta para a cena `{}`, que não existe (cenas: {})",
+                        scene.id,
+                        portal.target,
+                        scenes.iter().map(|s| s.id.as_str()).collect::<Vec<_>>().join(", ")
+                    ),
+                ));
+                continue;
+            };
+            if let Some(entry) = portal.entry.as_deref().filter(|e| *e != "@back")
+                && !target.entries.iter().any(|known| known.name == entry)
+            {
+                findings.push(Finding::error(
+                    "scene-portal-entry",
+                    format!(
+                        "cena `{}`: portal {label} chega à entrada `{entry}` da cena `{}`, que não existe (entradas: {})",
+                        scene.id,
+                        target.id,
+                        target.entries.iter().map(|e| e.name.as_str()).collect::<Vec<_>>().join(", ")
+                    ),
+                ));
+            }
+        }
+    }
+    const WORLD_TAGS: &[&str] = &[
+        "terrain",
+        "sky",
+        "navmesh",
+        "daycycle",
+        "weather",
+        "worldborder",
+        "interiorscene",
+        "biomeregion",
+        "spawngate",
+    ];
+    for file in project.autoload_paths() {
+        match crate::xml::include::load_world_in(&file, &project.root) {
+            Ok(loaded) => {
+                let mut tags = Vec::new();
+                fn scan(nodes: &[crate::xml::XmlNode], out: &mut Vec<String>) {
+                    for node in nodes {
+                        let lower = node.tag.to_ascii_lowercase();
+                        if WORLD_TAGS.contains(&lower.as_str()) {
+                            out.push(node.tag.clone());
+                        }
+                        scan(&node.children, out);
+                    }
+                }
+                scan(&loaded.nodes, &mut tags);
+                for tag in tags {
+                    findings.push(Finding::warning(
+                        "autoload-world-tag",
+                        format!(
+                            "autoload {}: `<{tag}>` é de uma cena (a cena carregada substitui-o) — move-o para a cena",
+                            file.display()
+                        ),
+                    ));
+                }
+            }
+            Err(error) => findings.push(Finding::error(
+                "autoload-parse",
+                format!("autoload {} não carrega: {error:#}", file.display()),
+            )),
+        }
+    }
+    // `viber.change_scene("id"…)` literais.
+    let mut stack = vec![scripts_dir.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(read) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in read.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().and_then(|e| e.to_str()) != Some("lua") {
+                continue;
+            }
+            let Ok(source) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            for (line_no, line) in source.lines().enumerate() {
+                let mut rest = line;
+                while let Some(at) = rest.find("change_scene(") {
+                    rest = &rest[at + "change_scene(".len()..];
+                    let trimmed = rest.trim_start();
+                    let Some(quote) = trimmed.chars().next().filter(|c| *c == '"' || *c == '\'')
+                    else {
+                        continue;
+                    };
+                    let body = &trimmed[1..];
+                    let Some(end) = body.find(quote) else {
+                        continue;
+                    };
+                    let id = &body[..end];
+                    if !by_id.contains_key(id) {
+                        findings.push(Finding::error(
+                            "scene-change-target",
+                            format!(
+                                "{}:{}: viber.change_scene(\"{id}\") — cena desconhecida",
+                                path.display(),
+                                line_no + 1
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    findings
 }
 
 fn walk<'a>(specs: &'a [EntitySpec], f: &mut impl FnMut(&'a EntitySpec)) {
@@ -1089,5 +1282,58 @@ mod tests {
         // com erro + --strict: relatório impresso e Err (o CLI faz exit 1)
         let out = run_cli(&dir.path().join("world.xml"), true);
         assert!(out.is_err());
+    }
+}
+
+#[cfg(test)]
+mod project_tests {
+    use super::*;
+
+    #[test]
+    fn project_lint_catches_broken_portals_and_scene_literals() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(
+            root.join("config.yaml"),
+            "assets:\n  roots: []\n  bgm_dir: b\n  sfx_dir: s\n  terrain_textures_dir: t\n\
+             game:\n  scripts_dir: scripts\nsave:\n  dir: /tmp\nproject:\n  scenes: scenes\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("scenes")).unwrap();
+        std::fs::create_dir_all(root.join("scripts")).unwrap();
+        std::fs::write(
+            root.join("world.xml"),
+            r#"<world static="true">
+  <ScenePortal name="a" target="house" entry="from-town"/>
+  <ScenePortal name="b" target="house" entry="nope"/>
+  <ScenePortal name="c" target="ghost"/>
+</world>"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("scenes/house.xml"),
+            r#"<world static="true"><SceneEntry name="from-town"/><ScenePortal name="exit" target="main" entry="@back"/></world>"#,
+        )
+        .unwrap();
+        std::fs::write(root.join("scenes/empty.xml"), r#"<world static="true"/>"#).unwrap();
+        std::fs::write(
+            root.join("scripts/door.lua"),
+            "viber.change_scene(\"house\")\nviber.change_scene('cellar', 'x')\n",
+        )
+        .unwrap();
+        let findings = check_project(&root.join("world.xml"), &root.join("scripts"));
+        let kinds: Vec<(&str, &str)> = findings
+            .iter()
+            .map(|f| (f.kind, f.message.as_str()))
+            .collect();
+        let has =
+            |kind: &str, needle: &str| kinds.iter().any(|(k, m)| *k == kind && m.contains(needle));
+        assert!(has("scene-portal-entry", "`nope`"), "{kinds:?}");
+        assert!(has("scene-portal-target", "`ghost`"), "{kinds:?}");
+        assert!(has("scene-no-entry", "`empty`"), "{kinds:?}");
+        assert!(has("scene-change-target", "cellar"), "{kinds:?}");
+        assert!(!has("scene-change-target", "\"house\""), "{kinds:?}");
+        assert!(!has("scene-portal-entry", "`from-town`"), "{kinds:?}");
+        assert_eq!(findings.len(), 4, "{kinds:?}");
     }
 }

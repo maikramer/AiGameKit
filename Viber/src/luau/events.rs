@@ -43,6 +43,11 @@ pub enum ScriptGameEvent {
     UiAction { name: String, arg: String },
     /// Uma cinemática acabou (`skipped` = o jogador saltou-a).
     CinematicEnd { id: String, skipped: bool },
+    /// A cena acabou de carregar (`viber.change_scene` / portal); `entry` = a entrada de
+    /// chegada (vazio = nenhuma).
+    SceneLoaded { scene: String, entry: String },
+    /// A cena `scene` vai ser descarregada (último aviso antes de as entidades morrerem).
+    SceneUnloading { scene: String },
 }
 
 impl ScriptGameEvent {
@@ -57,6 +62,8 @@ impl ScriptGameEvent {
             Self::LevelUp { .. } => "level_up",
             Self::UiAction { .. } => "ui_action",
             Self::CinematicEnd { .. } => "cinematic_end",
+            Self::SceneLoaded { .. } => "scene_loaded",
+            Self::SceneUnloading { .. } => "scene_unloading",
         }
     }
 
@@ -93,6 +100,13 @@ impl ScriptGameEvent {
             Self::CinematicEnd { id, skipped } => {
                 t.raw_set("id", id.clone())?;
                 t.raw_set("skipped", *skipped)?;
+            }
+            Self::SceneLoaded { scene, entry } => {
+                t.raw_set("scene", scene.clone())?;
+                t.raw_set("entry", entry.clone())?;
+            }
+            Self::SceneUnloading { scene } => {
+                t.raw_set("scene", scene.clone())?;
             }
         }
         Ok(t)

@@ -136,8 +136,13 @@ impl bevy::app::Plugin for LuauScriptPlugin {
             Update,
             (
                 luau_on_add,
-                timed(Group::Scripts, luau_update),
-                timed(Group::Scripts, aggro_alert_system),
+                // Troca de cena: os `on_update` param até a cena nova assentar (os
+                // spawners ainda não repovoaram — `alive_in_region` diria 0).
+                timed(Group::Scripts, luau_update).run_if(crate::scene_loader::scene_settled),
+                timed(Group::Scripts, aggro_alert_system)
+                    .run_if(crate::scene_loader::scene_settled),
+                // As remoções correm SEMPRE: o descarregamento despawna as instâncias e o
+                // `RemovedComponents` não espera por ninguém.
                 luau_on_remove,
             )
                 .chain()

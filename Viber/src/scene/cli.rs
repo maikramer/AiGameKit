@@ -202,6 +202,48 @@ pub enum SceneCommand {
         #[arg(long, default_value_t = 6)]
         depth: usize,
     },
+    /// As cenas do projeto (principal + `scenes/**.xml`): id, título, entradas e portais
+    Scenes,
+    /// Cria uma cena nova em `scenes/<id>.xml` (`--interior "L P"` = sala com câmara fixa,
+    /// luz, entrada e porta de saída para a principal)
+    NewScene {
+        id: String,
+        /// Sala interior "largura profundidade" em metros
+        #[arg(long)]
+        interior: Option<String>,
+    },
+    /// Troca a cena a correr (só `--live`): fade, descarrega a atual, carrega a outra e põe o
+    /// jogador na entrada (`--entry`, omisso = a primeira)
+    Change {
+        scene: String,
+        #[arg(long)]
+        entry: Option<String>,
+    },
+    /// A cena a correr e o estado do carregador (só `--live`)
+    Current,
+    /// "Mover para nova cena": nós (seletores e/ou `--within`) passam para `scenes/<id>.xml`
+    /// — uma cena própria, não um include — e saem do mundo (desfazível pelo `inverse`)
+    ExtractScene {
+        /// Seletores dos nós (`name=…`, `ficheiro#i`)
+        selectors: Vec<String>,
+        /// Id da cena nova (`interiors/chapel` → `scenes/interiors/chapel.xml`)
+        #[arg(long)]
+        to: String,
+        /// Também os nós de topo de FICHEIRO com translação XZ no retângulo "x0 z0 x1 z1"
+        #[arg(long, num_args = 2, value_names = ["FICHEIRO", "RECT"], allow_hyphen_values = true)]
+        within: Option<Vec<String>>,
+        /// Subtraído à translação de cada nó: "x y z" (a sala passa para a origem)
+        #[arg(long, allow_hyphen_values = true)]
+        recenter: Option<String>,
+        /// XML acrescentado no início da cena (`<SceneEntry …/>`, `<InteriorScene …/>`)
+        #[arg(long)]
+        prepend: Option<String>,
+        /// `<world title>` da cena
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 /// O que um subcomando pede: uma consulta ou um lote de operações.
@@ -374,7 +416,12 @@ fn request(command: SceneCommand) -> Result<Request> {
         },
         // `run` trata o lint ANTES de carregar o documento; `live_request`
         // encaminha para a bridge. Nunca chega aqui.
-        SceneCommand::Lint { .. } => bail!("lint não passa pelo documento de edição"),
+        SceneCommand::Lint { .. }
+        | SceneCommand::Scenes
+        | SceneCommand::NewScene { .. }
+        | SceneCommand::Change { .. }
+        | SceneCommand::ExtractScene { .. }
+        | SceneCommand::Current => bail!("este subcomando não passa pelo documento de edição"),
         SceneCommand::Add {
             tag,
             parent,
@@ -401,9 +448,96 @@ fn request(command: SceneCommand) -> Result<Request> {
 
 /// Corre um subcomando contra os ficheiros de `world` (offline) e devolve o JSON a imprimir.
 pub fn run(world: &Path, command: SceneCommand) -> Result<Value> {
-    if let SceneCommand::Lint { strict } = command {
-        return crate::lint::run_cli(world, strict);
+    match command {
+        SceneCommand::Lint { strict } => crate::lint::run_cli(world, strict),
+        SceneCommand::Scenes => Ok(scenes_json(&crate::project::Project::discover(world))),
+        SceneCommand::NewScene { id, interior } => {
+            let project = crate::project::Project::discover(world);
+            let path = project.new_scene(&id, scene_template(interior.as_deref())?)?;
+            let info = project.scene_info(&path);
+            Ok(json!({ "created": info }))
+        }
+        SceneCommand::Change { .. } | SceneCommand::Current => {
+            bail!("change/current precisam da engine viva — usa --live")
+        }
+        SceneCommand::ExtractScene {
+            mut selectors,
+            to,
+            within,
+            recenter,
+            prepend,
+            title,
+            dry_run,
+        } => {
+            let mut doc = SceneDoc::load(world)?;
+            if let Some(within) = within {
+                let [file, rect] = &within[..] else {
+                    bail!("--within FICHEIRO \"x0 z0 x1 z1\"");
+                };
+                let nums: Vec<f32> = rect
+                    .split_whitespace()
+                    .map(str::parse)
+                    .collect::<Result<_, _>>()
+                    .map_err(|_| anyhow::anyhow!("--within: `{rect}` não é \"x0 z0 x1 z1\""))?;
+                let [x0, z0, x1, z1] = nums[..] else {
+                    bail!("--within: `{rect}` não é \"x0 z0 x1 z1\"");
+                };
+                selectors.extend(super::catalog::nodes_within(&doc, file, [x0, z0, x1, z1])?);
+            }
+            let recenter = recenter
+                .map(|r| crate::xml::values::parse_vec3(&r, "--recenter"))
+                .transpose()?
+                .unwrap_or([0.0; 3]);
+            let ops = super::catalog::extract_scene_ops(
+                &doc,
+                &selectors,
+                &to,
+                recenter,
+                prepend.as_deref(),
+                title.as_deref(),
+            )?;
+            let tx = apply_batch(&mut doc, "cli", &ops)?;
+            let dirty: Vec<String> = doc.dirty_paths();
+            if !dry_run {
+                doc.save()?;
+            }
+            Ok(transaction_json(&doc, &tx, &dirty, !dry_run))
+        }
+        command => run_doc(world, command),
     }
+}
+
+/// O JSON de `viber scene scenes` / `viber.scene.scenes`.
+pub fn scenes_json(project: &crate::project::Project) -> Value {
+    json!({
+        "root": project.root,
+        "declared": project.declared,
+        "main": project.main_scene_path(),
+        "autoload": project.autoload_paths(),
+        "scenes": project.list_scenes(),
+    })
+}
+
+/// `--interior "L P"` → modelo de cena.
+pub fn scene_template(interior: Option<&str>) -> Result<crate::project::SceneTemplate> {
+    let Some(text) = interior else {
+        return Ok(crate::project::SceneTemplate::Empty);
+    };
+    let nums: Vec<f32> = text
+        .split_whitespace()
+        .map(str::parse)
+        .collect::<Result<_, _>>()
+        .map_err(|_| anyhow::anyhow!("--interior: `{text}` não é \"largura profundidade\""))?;
+    let [width, depth] = nums[..] else {
+        bail!("--interior: `{text}` não é \"largura profundidade\"");
+    };
+    if width <= 0.0 || depth <= 0.0 {
+        bail!("--interior: dimensões têm de ser positivas");
+    }
+    Ok(crate::project::SceneTemplate::Interior { width, depth })
+}
+
+fn run_doc(world: &Path, command: SceneCommand) -> Result<Value> {
     let mut doc = SceneDoc::load(world)?;
     let (ops, dry_run) = match request(command)? {
         Request::Ls { selector, depth } => {
@@ -421,8 +555,8 @@ pub fn run(world: &Path, command: SceneCommand) -> Result<Value> {
             return Ok(super::find(&doc, tag.as_deref(), attr, limit));
         }
         Request::Files { depth } => {
-            let dir = world.parent().unwrap_or(Path::new("."));
-            return Ok(super::files::to_json(&super::files::scan(dir, depth)));
+            let dir = crate::project::root_of(world);
+            return Ok(super::files::to_json(&super::files::scan(&dir, depth)));
         }
         Request::Undo | Request::Redo => {
             bail!(
@@ -490,8 +624,31 @@ pub fn run(world: &Path, command: SceneCommand) -> Result<Value> {
 pub fn live_request(command: SceneCommand) -> Result<(&'static str, Value)> {
     // O lint não passa pelo documento — contra a engine, o método lê os
     // MESMOS ficheiros do disco (a engine tem o root_dir do mundo).
-    if let SceneCommand::Lint { strict } = command {
-        return Ok(("viber.scene.lint", json!({ "strict": strict })));
+    match command {
+        SceneCommand::Lint { strict } => {
+            return Ok(("viber.scene.lint", json!({ "strict": strict })));
+        }
+        SceneCommand::Scenes => return Ok(("viber.scene.scenes", json!({}))),
+        SceneCommand::NewScene { id, interior } => {
+            scene_template(interior.as_deref())?;
+            return Ok((
+                "viber.scene.new_scene",
+                json!({ "id": id, "interior": interior }),
+            ));
+        }
+        SceneCommand::Change { scene, entry } => {
+            return Ok((
+                "viber.scene.change",
+                json!({ "scene": scene, "entry": entry }),
+            ));
+        }
+        SceneCommand::Current => return Ok(("viber.scene.current", json!({}))),
+        SceneCommand::ExtractScene { .. } => {
+            bail!(
+                "extract-scene corre offline (reorganiza ficheiros): sem --live — depois recarrega a engine"
+            )
+        }
+        _ => {}
     }
     Ok(match request(command)? {
         Request::Ls { selector, depth } => (

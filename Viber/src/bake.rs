@@ -455,10 +455,7 @@ pub fn check_bake_target(world_path: &Path) -> Result<()> {
 /// dentro de `<Prototype>` expandido — ver limite no doc do módulo).
 pub fn run_bake(world_path: &Path, out_dir: &Path) -> Result<BakeReport> {
     let world_path = &std::path::absolute(world_path)?;
-    let world_dir = world_path
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
+    let world_dir = crate::project::root_of(world_path);
     let config = crate::config::load(&world_dir)?;
     let loaded = crate::xml::include::load_world(world_path)?;
     let parsed = crate::recipes::parse_world(&loaded.root_attrs, &loaded.nodes)?;

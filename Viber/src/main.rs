@@ -38,8 +38,15 @@ enum Command {
     },
     /// Run a world XML file in a Bevy window
     Run {
-        /// Path to the world XML file (default: world.xml or worlds/*.xml in the current directory)
+        /// Path to the world XML file, or a project folder (its main scene) (default:
+        /// world.xml or worlds/*.xml in the current directory)
         path: Option<PathBuf>,
+        /// Arrancar noutra cena do projeto (`interiors/chapel`; ver `viber scene scenes`)
+        #[arg(long)]
+        scene: Option<String>,
+        /// Entrada de chegada na cena de arranque (`<SceneEntry name>` / portal)
+        #[arg(long)]
+        entry: Option<String>,
         /// Expose the debug bridge (BRP over HTTP). Sem valor, escolhe a
         /// primeira porta LIVRE a partir de 15702 — duas engines de mundos
         /// diferentes (ex.: agentes com worlds/qa-*.xml) deixam de disputar
@@ -768,6 +775,7 @@ fn delegate_run_to_cargo(
     bridge: Option<u16>,
     dlss: bool,
     camera_free: bool,
+    entry: Option<&str>,
 ) -> Result<Option<i32>> {
     if std::env::var_os(CARGO_DELEGATE_GUARD).is_some() {
         return Ok(None);
@@ -798,6 +806,9 @@ fn delegate_run_to_cargo(
     }
     if camera_free {
         command.arg("--camera").arg("free");
+    }
+    if let Some(entry) = entry {
+        command.arg("--entry").arg(entry);
     }
     command.arg("--no-cargo");
     command.env(CARGO_DELEGATE_GUARD, "1");
@@ -1194,7 +1205,12 @@ fn analyze(path: &Path, strict: bool, json: bool) -> Result<()> {
     Ok(())
 }
 
-fn run(path: &Path, bridge_port: Option<u16>, camera_free: bool) -> Result<()> {
+fn run(
+    path: &Path,
+    bridge_port: Option<u16>,
+    camera_free: bool,
+    entry: Option<String>,
+) -> Result<()> {
     viber::app::build_app(
         path,
         viber::app::AppOptions {
@@ -1202,6 +1218,7 @@ fn run(path: &Path, bridge_port: Option<u16>, camera_free: bool) -> Result<()> {
             bridge_port,
             camera_free,
             window_title: None,
+            start_entry: entry,
         },
     )?
     .run();
@@ -1285,6 +1302,8 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
         }
         Command::Run {
             path,
+            scene,
+            entry,
             bridge,
             debug,
             release: _,
@@ -1294,6 +1313,8 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
         } => {
             run_target_housekeeping(debug, no_cargo);
             let world = resolve_world_path(path)?;
+            // Pasta de projeto → cena principal; `--scene` → outra cena do projeto.
+            let world = viber::scene_loader::resolve_run_path(&world, scene.as_deref())?;
             // `--bridge` sem valor escolhe porta livre ANTES da delegação —
             // a porta impressa no arranque tem de ser a que a engine usa de
             // facto (e a que o agente exporta/usa nos comandos debug).
@@ -1304,11 +1325,18 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
             };
             let camera_free = matches!(camera, Some(CameraMode::Free));
             if !no_cargo
-                && let Some(code) = delegate_run_to_cargo(&world, debug, bridge, dlss, camera_free)?
+                && let Some(code) = delegate_run_to_cargo(
+                    &world,
+                    debug,
+                    bridge,
+                    dlss,
+                    camera_free,
+                    entry.as_deref(),
+                )?
             {
                 return Ok(std::process::ExitCode::from(code as u8));
             }
-            run(&world, bridge, camera_free)
+            run(&world, bridge, camera_free, entry)
                 .map(|_| std::process::ExitCode::SUCCESS)
                 .with_context(|| format!("running {}", world.display()))
         }

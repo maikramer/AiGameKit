@@ -51,6 +51,10 @@ pub const METHOD_GROUPS: &str = "viber.scene.groups";
 pub const METHOD_INSTANCE: &str = "viber.scene.instance";
 pub const METHOD_DROP: &str = "viber.scene.drop";
 pub const METHOD_FILES: &str = "viber.scene.files";
+pub const METHOD_SCENES: &str = "viber.scene.scenes";
+pub const METHOD_NEW_SCENE: &str = "viber.scene.new_scene";
+pub const METHOD_CHANGE: &str = "viber.scene.change";
+pub const METHOD_CURRENT: &str = "viber.scene.current";
 pub const METHOD_TOOL_LIST: &str = "viber.tool.list";
 pub const METHOD_TOOL_SCATTER: &str = "viber.tool.scatter";
 pub const METHOD_TOOL_SETTLE: &str = "viber.tool.settle";
@@ -282,6 +286,85 @@ pub fn files_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
         &dir,
         p.depth.unwrap_or(6),
     )))
+}
+
+fn current_scene(
+    world: &World,
+) -> Result<crate::scene_loader::CurrentScene, bevy::remote::BrpError> {
+    world
+        .get_resource::<crate::scene_loader::CurrentScene>()
+        .cloned()
+        .ok_or_else(|| invalid("viber.scene: a engine não tem cena carregada".into()))
+}
+
+/// As cenas do projeto (o mesmo JSON de `viber scene scenes`).
+pub fn scenes_method(_input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    let current = current_scene(world)?;
+    let project = crate::project::Project::at(&current.root);
+    let mut out = crate::scene::cli::scenes_json(&project);
+    out["current"] = json!(current.id);
+    Ok(out)
+}
+
+/// Cria uma cena nova no projeto (`viber scene new-scene`).
+pub fn new_scene_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        id: String,
+        interior: Option<String>,
+    }
+    let p: Params = params(METHOD_NEW_SCENE, input.0)?;
+    let current = current_scene(world)?;
+    let project = crate::project::Project::at(&current.root);
+    let template = crate::scene::cli::scene_template(p.interior.as_deref())
+        .map_err(|e| invalid(format!("{e:#}")))?;
+    let path = project
+        .new_scene(&p.id, template)
+        .map_err(|e| invalid(format!("{e:#}")))?;
+    let index = crate::scene_loader::SceneIndex::of(&current);
+    world.insert_resource(index);
+    Ok(json!({ "created": project.scene_info(&path) }))
+}
+
+/// Troca a cena a correr (fade → descarrega → carrega → entrada).
+pub fn change_method(input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    #[derive(Deserialize)]
+    struct Params {
+        scene: String,
+        entry: Option<String>,
+    }
+    let p: Params = params(METHOD_CHANGE, input.0)?;
+    let request = crate::scene_loader::ChangeScene::new(
+        p.scene.clone(),
+        crate::scene_loader::Arrival::from_entry(p.entry.as_deref()),
+    );
+    crate::scene_loader::request_change(world, request).map_err(|e| invalid(format!("{e:#}")))?;
+    Ok(json!({ "requested": p.scene, "entry": p.entry }))
+}
+
+/// A cena carregada + o estado do carregador e o último varrimento.
+pub fn current_method(_input: In<Option<Value>>, world: &mut World) -> BrpResult {
+    let current = current_scene(world)?;
+    let epoch = world
+        .get_resource::<crate::scene_loader::SceneEpoch>()
+        .map(|e| e.0)
+        .unwrap_or(0);
+    let entities = world.entities().count_spawned();
+    let loader = world.get_resource::<crate::scene_loader::SceneLoader>();
+    Ok(json!({
+        "scene": current.id,
+        "title": current.title,
+        "path": current.path,
+        "entry": current.entry,
+        "came_from": current.came_from,
+        "switchable": current.switchable(),
+        "epoch": epoch,
+        "entities": entities,
+        "phase": loader.map(|l| l.phase),
+        "last_error": loader.and_then(|l| l.last_error.clone()),
+        "last_swap_ms": loader.map(|l| l.last_swap_ms),
+        "last_sweep": loader.map(|l| l.last_sweep.clone()),
+    }))
 }
 
 pub fn tool_list_method(_input: In<Option<Value>>, world: &mut World) -> BrpResult {

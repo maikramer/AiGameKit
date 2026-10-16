@@ -37,6 +37,13 @@ pub enum ScriptCommand {
         turn_rate: Option<f32>,
     },
     TeleportPlayer(Vec3),
+    /// `viber.change_scene(id, entry)` — troca de cena (fade, descarrega, carrega).
+    /// `via` = nome da entidade que pediu (o `@back` do regresso aponta-a).
+    ChangeScene {
+        scene: String,
+        entry: Option<String>,
+        via: Option<String>,
+    },
     /// Empurrão do herói (dash/salto lateral) pelo character controller —
     /// colide com paredes, ao contrário do teleporte. `iframes` > 0 dá
     /// invulnerabilidade durante o movimento.

@@ -91,6 +91,8 @@ pub const KNOWN_TAGS: &[&str] = &[
     // Catálogos RPG declaráveis (Fases B2/B3).
     "landmark",
     "spawnpoint",
+    "sceneentry",
+    "sceneportal",
     "cinematic",
     "projectiletemplate",
     "questtracker",
@@ -115,6 +117,8 @@ pub const KNOWN_TAGS: &[&str] = &[
 /// A parsed world: clear color, entity tree and non-fatal warnings.
 #[derive(Debug, Clone, Default)]
 pub struct ParsedWorld {
+    /// `<world title>` — nome da cena (projetos com cenas, `crate::project`).
+    pub title: Option<String>,
     pub clear_color: Option<[f32; 3]>,
     /// `<world static="true">`: mundo pré-gerado (`viber bake`). O runtime não assenta nem
     /// coloca nada (`SeatOnTerrain`/`place`) — as poses do XML são finais.
@@ -600,6 +604,14 @@ pub enum EntityKind {
         /// Rótulo do toast de retorno; vazio → heurística de direção.
         label: String,
     },
+    /// `<SceneEntry name>` — ponto de chegada de uma cena (`viber.change_scene(cena,
+    /// entrada)`); a pose é a do nó. Ver [`crate::scene_loader`].
+    SceneEntry,
+    /// `<ScenePortal target entry …>` — porta para outra cena (também é entrada com o
+    /// próprio nome). Ver [`crate::scene_loader::ScenePortalSpec`].
+    ScenePortal {
+        spec: crate::scene_loader::ScenePortalSpec,
+    },
 }
 
 impl EntityKind {
@@ -1061,8 +1073,11 @@ pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result
     let mut ctx = ParseCtx::default();
     let mut clear_color = None;
     let mut static_world = false;
+    let mut title = None;
     for (key, value) in root_attrs {
         match key.as_str() {
+            // Nome da cena (separador do editor, zona do HUD).
+            "title" => title = Some(value.trim().to_string()).filter(|t| !t.is_empty()),
             "clear-color" => {
                 clear_color = Some(values::parse_color(value, "<world clear-color>")?);
             }
@@ -1123,6 +1138,7 @@ pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result
         procedural_world_info(&entities, &mut infos);
     }
     Ok(ParsedWorld {
+        title,
         clear_color,
         static_world,
         entities,
@@ -1505,6 +1521,8 @@ fn parse_entity_kind(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<Entity
             Ok(None)
         }
         "spawnpoint" => finish_spawn_point(node, ctx).map(Some),
+        "sceneentry" => finish_scene_entry(node, ctx).map(Some),
+        "sceneportal" => finish_scene_portal(node, ctx).map(Some),
         "daycycle" => finish_daycycle(node, ctx).map(Some),
         "weather" => finish_weather(node, ctx).map(Some),
         "biomeregion" => finish_biome_region(node, ctx).map(Some),
@@ -3297,6 +3315,71 @@ fn finish_landmark(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         destructible: None,
         kind: EntityKind::Landmark { spec },
         children: Vec::new(),
+        source: None,
+    })
+}
+
+/// `<SceneEntry name="from-town" translation euler/>` — ponto de chegada de uma cena.
+fn finish_scene_entry(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
+    warn_ignored(node, rest, ctx);
+    if common.name.is_none() {
+        bail!("<{}>: `name` é obrigatório (é o id da entrada)", node.tag);
+    }
+    Ok(EntitySpec {
+        prototype_instance: None,
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        props: common.props,
+        links: common.links,
+        transform: common.transform,
+        physics: common.physics,
+        destructible: common.destructible,
+        kind: EntityKind::SceneEntry,
+        children: parse_entities(&node.children, ctx)?,
+        source: None,
+    })
+}
+
+/// `<ScenePortal name target entry prompt key radius auto-radius sound toast arrive-offset>`
+/// — porta para outra cena; os filhos (partículas, luz) nascem debaixo dela.
+fn finish_scene_portal(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut spec = crate::scene_loader::ScenePortalSpec::default();
+    let mut target = None;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "target" => target = Some(value.trim().to_string()).filter(|t| !t.is_empty()),
+            "entry" => spec.entry = Some(value.trim().to_string()).filter(|t| !t.is_empty()),
+            "prompt" => spec.prompt = value,
+            "key" => spec.key = value.trim().to_ascii_lowercase(),
+            "radius" => spec.radius = values::parse_f32(&value, &kctx)?.max(0.1),
+            "auto-radius" => spec.auto_radius = Some(values::parse_f32(&value, &kctx)?.max(0.0)),
+            "sound" => spec.sound = Some(value.trim().to_string()).filter(|t| !t.is_empty()),
+            "toast" => spec.toast = Some(value).filter(|t| !t.trim().is_empty()),
+            "arrive-offset" => spec.arrive_offset = values::parse_vec3(&value, &kctx)?,
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    spec.target =
+        target.ok_or_else(|| anyhow!("{ctx_tag}: `target` (id da cena) é obrigatório"))?;
+    Ok(EntitySpec {
+        prototype_instance: None,
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        props: common.props,
+        links: common.links,
+        transform: common.transform,
+        physics: common.physics,
+        destructible: common.destructible,
+        kind: EntityKind::ScenePortal { spec },
+        children: parse_entities(&node.children, ctx)?,
         source: None,
     })
 }
@@ -5141,7 +5224,9 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 | EntityKind::InteriorScene { .. }
                 | EntityKind::EngineConfig { .. }
                 | EntityKind::Landmark { .. }
-                | EntityKind::SpawnPoint { .. } => out.world_systems += 1,
+                | EntityKind::SpawnPoint { .. }
+                | EntityKind::SceneEntry
+                | EntityKind::ScenePortal { .. } => out.world_systems += 1,
             }
             walk(&spec.children, next_in_composition, out);
         }

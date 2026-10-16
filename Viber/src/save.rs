@@ -157,12 +157,19 @@ pub struct SaveGame {
     /// que vive em Lua — sem ele, scripts não conseguiam guardar nada.
     #[serde(default)]
     pub world_kv: std::collections::BTreeMap<String, serde_json::Value>,
+    /// Cena onde o herói estava (projetos com cenas, `crate::project`); `position` é
+    /// relativa a ELA. Ausente (saves v1) = a cena principal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+    /// `(cena, portal)` por onde se entrou na cena gravada — o `@back` da porta de saída.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub came_from: Option<(String, String)>,
 }
 
 /// Versão do schema [`SaveGame`] que ESTA engine escreve. Incrementar ao
 /// acrescentar campos cuja ausência muda a leitura (hoje tudo tem default —
 /// o 1 existe para o save mais novo que a engine avisar no load).
-pub const SAVE_VERSION: u32 = 1;
+pub const SAVE_VERSION: u32 = 2;
 
 /// Captura o estado do jogo (puro sobre os recursos; xp/posição vêm de fora).
 /// Os recursos RPG entram como `Option`: num mundo
@@ -207,6 +214,8 @@ pub fn capture(
         level,
         volumes: Some(volumes),
         world_kv: std::collections::BTreeMap::new(),
+        scene: None,
+        came_from: None,
     }
 }
 
@@ -381,6 +390,9 @@ fn options_system(
         // permite renomear/remover `<Landmark>`; o save continua a nomear) —
         // na tupla para não estourar o teto de slots do sistema.
         Option<Res<crate::travel::LandmarkCatalog>>,
+        // Cena carregada: o save grava-a; o load troca para a do save.
+        Option<Res<crate::scene_loader::CurrentScene>>,
+        Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     ),
     mut heroes: Query<
         (
@@ -491,6 +503,14 @@ fn options_system(
             if let Some(host) = host.as_mut() {
                 game.world_kv = crate::luau::game::game_to_json(&host.lua);
             }
+            if let Some(scene) = world_save_host_request
+                .6
+                .as_deref()
+                .filter(|scene| scene.switchable())
+            {
+                game.scene = scene.id.clone();
+                game.came_from = scene.came_from.clone();
+            }
             if let Err(e) = save_to_disk(&save_path_for(world_key, save_dir), &game) {
                 toasts.write(ScriptToast(format!("Falha ao gravar: {e}")));
                 sfx.write(crate::ambient::SfxEvent {
@@ -577,9 +597,59 @@ fn options_system(
                     // Posição não finita (save editado com `1e40`, etc.) não
                     // entra na transform — virava NaN em cascata no Rapier;
                     // o herói fica onde está.
-                    if let Some(position) =
-                        game.position.filter(|p| p.iter().all(|v| v.is_finite()))
+                    let position = game.position.filter(|p| p.iter().all(|v| v.is_finite()));
+                    let current = world_save_host_request
+                        .6
+                        .as_deref()
+                        .filter(|scene| scene.switchable())
+                        .cloned();
+                    let scene_of_save = game
+                        .scene
+                        .clone()
+                        .unwrap_or_else(|| crate::project::MAIN_SCENE.to_string());
+                    if let Some(current) = &current
+                        && current.id.as_deref() != Some(scene_of_save.as_str())
                     {
+                        // Save de OUTRA cena: troca para ela e chega à posição gravada.
+                        let mut request = crate::scene_loader::ChangeScene::new(
+                            scene_of_save,
+                            match position {
+                                Some(p) => crate::scene_loader::Arrival::Position(p.into()),
+                                None => crate::scene_loader::Arrival::Entry(None),
+                            },
+                        );
+                        request.came_from = game.came_from.clone();
+                        world_save_host_request.4.queue(move |world: &mut World| {
+                            if let Err(error) = crate::scene_loader::request_change(world, request)
+                            {
+                                bevy::log::warn!(
+                                    "load: troca para a cena do save falhou: {error:#}"
+                                );
+                            }
+                        });
+                    } else if let Some(position) = position {
+                        // Save v1 de um projeto com cenas: a posição da "bolsa" de interior de
+                        // antes (fora do terreno da principal) já não existe — vai para a
+                        // primeira entrada da cena.
+                        let stale = game.scene.is_none()
+                            && current.is_some()
+                            && world_save_host_request
+                                .7
+                                .as_deref()
+                                .is_some_and(|t| !t.in_field(position[0], position[2]));
+                        if stale {
+                            world_save_host_request.4.queue(|world: &mut World| {
+                                if let Some((_, pose)) =
+                                    crate::scene_loader::find_entry(world, None)
+                                {
+                                    crate::scene_loader::place_player(
+                                        world,
+                                        pose.translation,
+                                        Some(pose.rotation),
+                                    );
+                                }
+                            });
+                        }
                         transform.translation = position.into();
                         // Chegada limpa (sem inércia/knockback da sessão, com
                         // a tutela enquanto a coluna do save assa o collider).

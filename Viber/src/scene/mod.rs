@@ -90,11 +90,7 @@ pub fn describe(doc: &SceneDoc, node: &NodeRef) -> Value {
 /// Pasta de scripts do mundo do documento (`config.yaml` → `game.scripts_dir`; sem
 /// config, `<mundo>/scripts`).
 pub fn scripts_dir(doc: &SceneDoc) -> std::path::PathBuf {
-    let world_dir = doc.files[0]
-        .path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
+    let world_dir = doc.root_dir.clone();
     match crate::config::load(&world_dir) {
         Ok(config) => config.scripts_dir_on(&world_dir),
         Err(_) => world_dir.join("scripts"),

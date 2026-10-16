@@ -1229,6 +1229,61 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(())
         })?,
     )?;
+    // viber.change_scene(id[, entrada]) -> true | false, erro — troca de cena (fade,
+    // descarrega a atual, carrega a outra; `entrada` = `<SceneEntry name>`, "@back" = o
+    // portal por onde se entrou). Só em projetos com cenas (`project:` no config.yaml).
+    api.set(
+        "change_scene",
+        lua.create_function(|lua, (scene, entry): (String, Option<String>)| {
+            let mut ctx = lua
+                .app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+            if ctx.scene.is_none() {
+                return Ok((
+                    false,
+                    Some(
+                        "este mundo não é uma cena de um projeto (project: no config.yaml)"
+                            .to_string(),
+                    ),
+                ));
+            }
+            let id = scene.trim().to_string();
+            if !ctx.scene_ids.contains(&id) {
+                return Ok((
+                    false,
+                    Some(format!(
+                        "cena desconhecida '{id}' (cenas: {})",
+                        ctx.scene_ids.join(", ")
+                    )),
+                ));
+            }
+            let via = ctx.self_name.clone();
+            ctx.commands.push(ScriptCommand::ChangeScene {
+                scene: id,
+                entry,
+                via,
+            });
+            Ok((true, None))
+        })?,
+    )?;
+    // viber.scene_name() -> id da cena carregada (nil fora de um projeto com cenas).
+    api.set(
+        "scene_name",
+        lua.create_function(|lua, ()| {
+            Ok(lua
+                .app_data_ref::<ScriptCtx>()
+                .and_then(|ctx| ctx.scene.clone()))
+        })?,
+    )?;
+    // viber.scene_entry() -> nome da entrada por onde se chegou (nil = nenhuma).
+    api.set(
+        "scene_entry",
+        lua.create_function(|lua, ()| {
+            Ok(lua
+                .app_data_ref::<ScriptCtx>()
+                .and_then(|ctx| ctx.scene_entry.clone()))
+        })?,
+    )?;
     api.set(
         "teleport_player",
         lua.create_function(|lua, (x, y, z): (f32, f32, f32)| {

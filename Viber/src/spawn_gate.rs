@@ -245,6 +245,10 @@ impl Plugin for SpawnGatePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, collect_gates.after(crate::recipes::spawn::startup))
             .add_systems(
+                crate::scene_loader::SceneLoad,
+                collect_gates.after(crate::recipes::spawn::startup),
+            )
+            .add_systems(
                 Update,
                 (resolve_gates, hold_gated)
                     .chain()

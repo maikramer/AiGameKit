@@ -152,8 +152,7 @@ fn prop_daynight_tint(
     let mut sweep = std::mem::take(&mut state.sweep);
     let mut finished_tint: Option<[f32; 3]> = None;
     if let Some((ids, tint, cursor)) = &mut sweep {
-        let (start, end) =
-            crate::terrain::layer_material::sweep_slice(ids.len(), *cursor, PROP_TINT_BUDGET);
+        let (start, end) = sweep_slice(ids.len(), *cursor, PROP_TINT_BUDGET);
         for id in ids[start..end].iter() {
             let Some(mut material) = materials.get_mut(*id) else {
                 continue;
@@ -236,6 +235,13 @@ fn prop_daynight_tint(
         })
         .collect();
     state.sweep = Some((eligible, tint, 0));
+}
+
+/// Fatia `[início, fim)` de uma passagem orçamentada por frame — pura, para a
+/// convergência (cada id visitado uma vez) ser testável.
+fn sweep_slice(total: usize, cursor: usize, budget: usize) -> (usize, usize) {
+    let start = cursor.min(total);
+    (start, start.saturating_add(budget).min(total))
 }
 
 #[cfg(test)]

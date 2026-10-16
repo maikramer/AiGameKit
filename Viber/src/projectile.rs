@@ -511,6 +511,10 @@ impl Plugin for ProjectilePlugin {
                 Startup,
                 install_templates.after(crate::recipes::spawn::startup),
             )
+            .add_systems(
+                crate::scene_loader::SceneLoad,
+                install_templates.after(crate::recipes::spawn::startup),
+            )
             .add_systems(Update, (spawn_projectiles, step_projectiles).chain());
     }
 }
