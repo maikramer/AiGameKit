@@ -30,7 +30,7 @@ use bevy::prelude::*;
 use bevy::remote::http::RemoteHttpPlugin;
 use bevy::remote::{BrpError, BrpResult, RemotePlugin};
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
-use bevy::window::{CursorMoved, PrimaryWindow};
+use bevy::window::{CursorGrabMode, CursorMoved, CursorOptions, PrimaryWindow};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -348,7 +348,7 @@ struct PendingMouseClick {
 fn deferred_mouse_release(
     mut pending: ResMut<PendingMouseClick>,
     input: Option<ResMut<ButtonInput<MouseButton>>>,
-    mut windows: Query<(Entity, &mut Window), With<PrimaryWindow>>,
+    mut windows: Query<(Entity, &mut Window, Option<&CursorOptions>), With<PrimaryWindow>>,
     messages: Option<MessageWriter<MouseButtonInput>>,
     cursor_moved: Option<MessageWriter<CursorMoved>>,
     mut window_events: Option<MessageWriter<bevy::window::WindowEvent>>,
@@ -370,7 +370,7 @@ fn deferred_mouse_release(
         if let Some(previous) = pending.release.take() {
             let entity = windows
                 .single()
-                .map(|(e, _)| e)
+                .map(|(e, _, _)| e)
                 .unwrap_or(Entity::PLACEHOLDER);
             let released = MouseButtonInput {
                 button: previous,
@@ -385,8 +385,16 @@ fn deferred_mouse_release(
         }
         let entity = windows
             .single_mut()
-            .map(|(entity, mut window)| {
-                window.set_cursor_position(Some(Vec2::new(x, y)));
+            .map(|(entity, mut window, cursor)| {
+                // O warp físico só é possível com o ponteiro CAPTURADO — o
+                // Wayland recusa o resto com um ERROR do winit por clique
+                // sintético (`cursor position can be set only for locked
+                // cursor`). O hover da bevy_ui lê a posição da fila
+                // `CursorMoved` (escrita abaixo), por isso o clique sintético
+                // continua a funcionar sem o warp.
+                if cursor.is_some_and(|c| c.grab_mode == CursorGrabMode::Locked) {
+                    window.set_cursor_position(Some(Vec2::new(x, y)));
+                }
                 entity
             })
             .unwrap_or(Entity::PLACEHOLDER);
@@ -422,7 +430,7 @@ fn deferred_mouse_release(
     if let Some(button) = pending.release.take() {
         let entity = windows
             .single()
-            .map(|(e, _)| e)
+            .map(|(e, _, _)| e)
             .unwrap_or(Entity::PLACEHOLDER);
         let released = MouseButtonInput {
             button,
@@ -501,7 +509,10 @@ fn process_capture_requests(world: &mut World) {
         finished
     };
     for entity in finished {
-        world.despawn(entity);
+        // O bevy_render já despawnou a entidade `Screenshot` ao consumi-la
+        // (1×/captura) — `try_despawn` sem o WARN "Could not despawn entity"
+        // a cada `viber debug screenshot` (o QA inteiro rui o log).
+        let _ = world.try_despawn(entity);
     }
 }
 
@@ -1149,7 +1160,13 @@ fn send_cursor(world: &mut World, position: Vec2) {
     // O hover/clique da bevy_ui lê a posição do cursor NA WINDOW (winit),
     // não a fila de `CursorMoved` — sem escrever aqui, um clique sintético
     // nunca "estava" sobre o nó em causa e os botões da UI não reagiam.
-    if let Some(mut window) = world.get_mut::<Window>(window) {
+    // Warp físico exige o ponteiro capturado (Wayland: ERROR do winit
+    // caso contrário — ver o outro sítio em `input_move`); o hover da UI
+    // continua a funcionar pelas mensagens acima.
+    let locked = world
+        .get::<CursorOptions>(window)
+        .is_some_and(|c| c.grab_mode == CursorGrabMode::Locked);
+    if locked && let Some(mut window) = world.get_mut::<Window>(window) {
         window.set_cursor_position(Some(position));
     }
 }
