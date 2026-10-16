@@ -356,7 +356,9 @@ pub fn player_movement(
             Option<&crate::feedback::Dying>,
             Option<&crate::physics_fx::Knockback>,
         ),
-        Without<Camera>,
+        // Karts de corrida (`racing::Vehicle`): o controller a pé nunca os
+        // toca — o `vehicle_movement` escreve o Transform deles.
+        (Without<crate::racing::vehicle::Vehicle>, Without<Camera>),
     >,
 ) {
     let Some(runtime) = runtime else {

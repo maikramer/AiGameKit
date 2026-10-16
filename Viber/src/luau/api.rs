@@ -1414,6 +1414,145 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     props::install(lua, &api)?;
     super::signals::install(lua, &api)?;
 
+    // ── Corrida (`gameplay: racing`): viber.race.* / viber.vehicle.* ────
+    // Leitura do snapshot por-frame (`racing::publish_lua_state`). Fora do
+    // preset de corrida tudo devolve nil/false.
+    {
+        let race = lua.create_table()?;
+        race.set(
+            "state",
+            lua.create_function(|lua, ()| {
+                Ok(lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .map(|r| r.state.clone()))
+            })?,
+        )?;
+        race.set(
+            "lap",
+            lua.create_function(|lua, ()| {
+                let (lap, laps) = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .map(|r| (r.lap, r.laps))
+                    .unwrap_or((0, 0));
+                Ok((lap, laps))
+            })?,
+        )?;
+        race.set(
+            "position",
+            lua.create_function(|lua, ()| {
+                let (pos, total) = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .map(|r| (r.position, r.total_positions))
+                    .unwrap_or((0, 0));
+                Ok((pos, total))
+            })?,
+        )?;
+        race.set(
+            "time",
+            lua.create_function(|lua, ()| {
+                Ok(lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .map(|r| r.race_time)
+                    .unwrap_or(0.0))
+            })?,
+        )?;
+        race.set(
+            "countdown",
+            lua.create_function(|lua, ()| {
+                Ok(lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .and_then(|r| r.countdown))
+            })?,
+        )?;
+        race.set(
+            "best_lap",
+            lua.create_function(|lua, ()| {
+                Ok(lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .and_then(|r| r.best_lap))
+            })?,
+        )?;
+        race.set(
+            "last_lap",
+            lua.create_function(|lua, ()| {
+                Ok(lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .and_then(|r| r.last_lap))
+            })?,
+        )?;
+        race.set(
+            "wrong_way",
+            lua.create_function(|lua, ()| {
+                Ok(lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .map(|r| r.wrong_way)
+                    .unwrap_or(false))
+            })?,
+        )?;
+        race.set(
+            "message",
+            lua.create_function(|lua, ()| {
+                Ok(lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .and_then(|r| r.message.clone()))
+            })?,
+        )?;
+        api.set("race", race)?;
+
+        let vehicle = lua.create_table()?;
+        vehicle.set(
+            "speed",
+            lua.create_function(|lua, ()| {
+                let (speed, top) = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .map(|r| (r.speed, r.top_speed))
+                    .unwrap_or((0.0, 1.0));
+                Ok((speed, top))
+            })?,
+        )?;
+        vehicle.set(
+            "nitro",
+            lua.create_function(|lua, ()| {
+                Ok(lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .map(|r| r.nitro)
+                    .unwrap_or(0.0))
+            })?,
+        )?;
+        vehicle.set(
+            "drifting",
+            lua.create_function(|lua, ()| {
+                Ok(lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .map(|r| (r.drifting, r.drift_charge))
+                    .unwrap_or((false, 0.0)))
+            })?,
+        )?;
+        vehicle.set(
+            "turbo",
+            lua.create_function(|lua, ()| {
+                Ok(lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|c| c.race.clone())
+                    .map(|r| r.turbo)
+                    .unwrap_or(0.0))
+            })?,
+        )?;
+        api.set("vehicle", vehicle)?;
+    }
+
     lua.globals().set("viber", api)?;
     let states = lua.create_table()?;
     lua.set_named_registry_value("viber_states", states)?;

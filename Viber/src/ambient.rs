@@ -206,6 +206,12 @@ pub enum SfxClip {
     Jump,
     /// Dash do herói (rajada de ar).
     Dash,
+    /// Kart: batida/parede (corrida).
+    Crash,
+    /// Kart: nitro a entrar.
+    Nitro,
+    /// Kart: derrapagem (loop curto disparado por aresta).
+    Skid,
 }
 
 /// Todos os clips, pela ordem do enum — alimenta o preload dos handles, o
@@ -248,6 +254,9 @@ pub const SFX_CLIPS_ALL: &[SfxClip] = &[
     SfxClip::BombDrop,
     SfxClip::Jump,
     SfxClip::Dash,
+    SfxClip::Crash,
+    SfxClip::Nitro,
+    SfxClip::Skid,
 ];
 
 /// Loops ambientes carregados por path fixo (`setup_water_ambience`),
@@ -298,6 +307,9 @@ impl SfxClip {
             SfxClip::DoorOpen => "world/door_open.ogg",
             SfxClip::DoorClose => "world/door_close.ogg",
             SfxClip::BombDrop => "world/bomb_drop.ogg",
+            SfxClip::Crash => "vehicles/crash.ogg",
+            SfxClip::Nitro => "vehicles/nitro.ogg",
+            SfxClip::Skid => "vehicles/skid.ogg",
             SfxClip::Jump => "player/jump.ogg",
             SfxClip::Dash => "player/dash.ogg",
         }

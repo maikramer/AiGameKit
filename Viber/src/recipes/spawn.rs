@@ -1944,6 +1944,70 @@ fn spawn_entity(
                 crate::player::hero_controller(),
             ));
         }
+        EntityKind::Vehicle { spec } => {
+            // Kart de corrida: componente Vehicle + input + progresso de
+            // corrida. O driver player leva o marker Player (câmara terceira
+            // pessoa, minimapa, save seguem o herói) — mas SEM character
+            // controller: o movimento é do vehicle controller.
+            let stats = entity
+                .get_resource::<crate::racing::vehicle::VehicleTemplates>()
+                .map(|t| t.get(&spec.template))
+                .unwrap_or_default();
+            let heading = entity
+                .get::<bevy::transform::components::Transform>()
+                .map(|t| t.rotation.to_euler(bevy::math::EulerRot::YXZ).0)
+                .unwrap_or(0.0);
+            entity.insert((
+                crate::racing::vehicle::Vehicle {
+                    driver: spec.driver,
+                    template: spec.template.clone(),
+                    stats,
+                    speed: 0.0,
+                    slip: 0.0,
+                    heading,
+                    steer: 0.0,
+                    nitro: 0.5,
+                    nitro_active: false,
+                    turbo: 0.0,
+                    turbo_super: false,
+                    drift_charge: 0.0,
+                    racing: false,
+                    airborne: false,
+                    air_vy: 0.0,
+                    prev_climb: 0.0,
+                    spin: 0.0,
+                    rev: 0.0,
+                    wheelspin: 0.0,
+                    stuck: 0.0,
+                    smoke_cd: 0.0,
+                },
+                crate::racing::vehicle::VehicleInput::default(),
+                crate::racing::race::RaceProgress::default(),
+            ));
+            if let Some(url) = &spec.model_url {
+                let path = url.trim_start_matches('/');
+                let handle: Handle<Gltf> =
+                    crate::meshopt::load_gltf(ctx.asset_server, path.to_owned());
+                // Modelo filho com o yaw autoral (os GLBs de kart nascem ao
+                // longo de X): o heading do pai fica limpo para o controller.
+                entity.with_children(|parent| {
+                    parent.spawn((
+                        bevy::transform::components::Transform::from_rotation(
+                            bevy::math::Quat::from_rotation_y(spec.model_yaw),
+                        )
+                        .with_scale(bevy::math::Vec3::splat(spec.model_scale.max(0.01))),
+                        Visibility::Inherited,
+                        GltfScenePending::single(handle),
+                    ));
+                });
+            }
+            if spec.driver == crate::racing::vehicle::Driver::Player {
+                entity.insert((
+                    crate::player::Player::default(),
+                    crate::racing::vehicle::PlayerKart,
+                ));
+            }
+        }
         // Ground features + `<Terrain>` + spawner groups return before the
         // spawn above; this arm only satisfies exhaustiveness.
         EntityKind::Terrain { .. }

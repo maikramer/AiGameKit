@@ -121,6 +121,9 @@ pub struct ScriptCtx {
     pub scene_entry: Option<String>,
     /// Ids das cenas do projeto (validação de `viber.change_scene`).
     pub scene_ids: std::sync::Arc<Vec<String>>,
+    /// Estado da corrida (`viber.race.*`/`viber.vehicle.*`) — `None` fora do
+    /// preset `gameplay: racing`.
+    pub race: Option<crate::racing::RaceSnapshot>,
 }
 
 /// Definição de quest achatada para Lua (`viber.quest_def`).

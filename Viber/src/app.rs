@@ -548,16 +548,28 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
     // Combat/skills/vitals/feedback/economia/travel/save/quests/colheita
     // são DOMÍNIO de RPG: com `gameplay: none` não entram no App e um jogo
     // novo vive só de XML + Luau (worlds/lua-demo). `gameplay_rpg()` cobre
-    // o default.
+    // o default; `gameplay: racing` troca o preset por karts + corrida.
     let rpg = config.gameplay_rpg();
+    let racing = config.gameplay_racing();
     // Diagnóstico do preset (o gate decide quais plugins entram): visível no
     // arranque e no analyze — `gameplay: none` sem efeito era invisível.
     info!(
         target: "viber",
         "gameplay preset: {} (config `gameplay: {}`)",
-        if rpg { "rpg" } else { "none (só engine)" },
+        if racing {
+            "racing"
+        } else if rpg {
+            "rpg"
+        } else {
+            "none (só engine)"
+        },
         config.gameplay.as_deref().unwrap_or("<ausente → default rpg>")
     );
+    // Karts + diretor de corrida + rivais AI + som de motor (`gameplay:
+    // racing`). O preset RPG fica OFF (gameplay_rpg() false com racing).
+    if racing {
+        app.add_plugins(crate::racing::RacingPlugin);
+    }
     // Serviços de ENGINE que os plugins RPG costumavam registar e que o resto
     // do runtime lê: o semáforo de input tem de existir mesmo sem RPG
     // (player_movement/profiler leem-no) e os toasts de script são UX de

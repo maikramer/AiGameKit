@@ -61,12 +61,22 @@ pub struct GameConfig {
 }
 
 impl GameConfig {
-    /// `true` (default) = preset RPG completo; `gameplay: none` = só engine.
+    /// `true` (default) = preset RPG completo; `gameplay: none` = só engine;
+    /// `gameplay: racing` = preset de corrida (rpg OFF + [`crate::racing`]).
     pub fn gameplay_rpg(&self) -> bool {
         !self
             .gameplay
             .as_deref()
-            .map(|g| g.eq_ignore_ascii_case("none"))
+            .map(|g| g.eq_ignore_ascii_case("none") || g.eq_ignore_ascii_case("racing"))
+            .unwrap_or(false)
+    }
+
+    /// `true` com `gameplay: racing` — karts (`crate::racing::vehicle`),
+    /// diretor de corrida (`race`), rivais AI (`ai`) e som de motor.
+    pub fn gameplay_racing(&self) -> bool {
+        self.gameplay
+            .as_deref()
+            .map(|g| g.eq_ignore_ascii_case("racing"))
             .unwrap_or(false)
     }
 }

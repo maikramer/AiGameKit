@@ -75,6 +75,8 @@ pub const KNOWN_TAGS: &[&str] = &[
     "dynamicspawner",
     "vegetation",
     "playergltf",
+    "vehicle",
+    "race",
     "thirdpersoncamera",
     "dialoguenpc",
     "resourcechip",
@@ -95,6 +97,7 @@ pub const KNOWN_TAGS: &[&str] = &[
     "sceneportal",
     "cinematic",
     "projectiletemplate",
+    "vehicletemplate",
     "questtracker",
     "waypointarrow",
     "postfxdebugtoggle",
@@ -477,6 +480,11 @@ pub enum EntityKind {
     /// [`crate::player::Player`] movement component.
     PlayerGltf {
         url: String,
+    },
+    /// `<Vehicle driver template model-url …>` — kart da corrida (preset
+    /// `gameplay: racing`): [`crate::racing::vehicle::VehicleSpec`].
+    Vehicle {
+        spec: crate::racing::vehicle::VehicleSpec,
     },
     /// `<DialogueNPC>` — marks the parent NPC as a dialogue target
     /// (`dialogue-id`), with a floating marker at `marker-height`.
@@ -1513,11 +1521,14 @@ fn parse_entity_kind(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<Entity
                 Ok(None)
             }
         },
+        "vehicle" => finish_vehicle(node, ctx).map(Some),
         "thirdpersoncamera" => finish_orbit_camera(node, ctx, true).map(Some),
         "audiomixer" => finish_audio_mixer(node, ctx).map(Some),
         "sky" => finish_sky(node, ctx).map(Some),
         "navmesh" | "spawngate" | "projectiletemplate" | "postfxdebugtoggle"
-        | "adaptivequality" => finish_engine_config(node, ctx).map(Some),
+        | "adaptivequality" | "vehicletemplate" | "race" => {
+            finish_engine_config(node, ctx).map(Some)
+        }
         "landmark" => finish_landmark(node, ctx).map(Some),
         // Timeline de câmara/legendas (`crate::cinematic`): os filhos são
         // planos e falas, não entidades.
@@ -2756,6 +2767,36 @@ fn finish_player_gltf(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result
         transform: common.transform,
         physics: common.physics,
         kind: EntityKind::PlayerGltf { url },
+        children: Vec::new(),
+        source: None,
+    })
+}
+
+/// `<Vehicle driver="player|ai" template="kart" model-url model-yaw …>` —
+/// kart de corrida do preset `gameplay: racing`.
+fn finish_vehicle(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    warn_children(node, ctx);
+    // attrs crus para o VehicleSpec::parse (jogo com as keys extra).
+    let attrs: Vec<(String, String)> = node
+        .attrs
+        .iter()
+        .map(|(k, v)| (k.to_ascii_lowercase(), v.clone()))
+        .collect();
+    let _ = rest;
+    let spec = crate::racing::vehicle::VehicleSpec::parse(&attrs, &ctx_tag)?;
+    Ok(EntitySpec {
+        prototype_instance: None,
+        name: common.name.or_else(|| Some("kart".to_string())),
+        tag: common.tag,
+        script: common.script,
+        props: common.props,
+        links: common.links,
+        destructible: common.destructible,
+        transform: common.transform,
+        physics: common.physics,
+        kind: EntityKind::Vehicle { spec },
         children: Vec::new(),
         source: None,
     })
@@ -5106,6 +5147,8 @@ pub struct WorldSummary {
     pub spawn_exclusions: usize,
     /// `<PlayerGLTF>` heroes (controllable).
     pub players: usize,
+    /// `<Vehicle>` karts (corrida, `gameplay: racing`).
+    pub vehicles: usize,
     /// `<DialogueNPC>` dialogue targets.
     pub dialogue_npcs: usize,
     /// `<UiStyle>` stylesheets.
@@ -5254,6 +5297,7 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::SpawnExclusion { .. } => out.spawn_exclusions += 1,
                 EntityKind::Vegetation { .. } => out.vegetation += 1,
                 EntityKind::PlayerGltf { .. } => out.players += 1,
+                EntityKind::Vehicle { .. } => out.vehicles += 1,
                 EntityKind::DialogueNpc { .. } => out.dialogue_npcs += 1,
                 EntityKind::ResourceChip { .. } => out.resource_chips += 1,
                 EntityKind::HudElement { .. } => out.hud_elements += 1,
@@ -6468,6 +6512,7 @@ mod tests {
                 vegetation: 1,
                 spawn_exclusions: 1,
                 players: 1,
+                vehicles: 0,
                 dialogue_npcs: 1,
                 resource_chips: 1,
                 hud_elements: 1,
