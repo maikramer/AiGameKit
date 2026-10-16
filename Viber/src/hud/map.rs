@@ -21,13 +21,25 @@
 //!   mesmo gating do minimapa/bússola, assinados a ouro via [`travel::NotaLog`]),
 //!   faróis de missão ([`quest_guide::QuestGuide`] — tracking que já existe),
 //!   a praça da vila ([`feedback::RespawnCatalog`]) e o herói.
-//! - **Interação mínima**: cursor sobre o pin → rótulo; [M]/Esc/[L] fecham.
+//! - **Vista com zoom**: o mundo inteiro a escala fixa colapsava todos os
+//!   pins num blob de ~45 px — o hover não separava o que o olho não vê. A
+//!   vista default é o NÚCLEO (~±400 m) centrado no herói, clampado aos
+//!   limites do mundo: os pins nascem espalhados e o hover distingue cada
+//!   um. Roda do rato / [+] / [-] passam pelos níveis núcleo → bioma →
+//!   mundo ([`ZOOM_HALF_M`]); a névoa e os pins acompanham a vista (a
+//!   textura cozida é a janela ampliada, o clip da moldura corta o resto).
+//! - **Orientação**: cursor sobre o pin → rótulo; CLIQUE num pin define o
+//!   waypoint do HUD ([`travel::Waypoint`] — a mesma linha rumo+distância
+//!   da Nota): o mapa responde "para onde vou", não só "o que há lá fora".
+//!   [M]/Esc/[L] fecham.
 //! - **Persistência**: ZERO estado novo — a revelação é derivada de
-//!   [`travel::RevealedBiomes`], que já viaja no save.
+//!   [`travel::RevealedBiomes`], que já viaja no save; a vista é de sessão
+//!   (re-centrada no herói a cada abertura).
 
 use std::collections::HashSet;
 
 use bevy::asset::RenderAssetUsages;
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::window::PrimaryWindow;
@@ -192,32 +204,150 @@ pub fn fogged_pixel(rgb: [u8; 3]) -> [u8; 3] {
     ]
 }
 
-// ── pura: mapeamento mundo↔painel e apanha de pins ─────────────────────
+// ── pura: vista (zoom em passos + clamp) e apanha de pins ───────────────
 
-/// Mundo (x, z) → px RELATIVOS AO CENTRO do painel (o referencial das
-/// âncoras 50%/50% dos pins). Norte é -Z (para cima no ecrã), este é +x
-/// (direita).
-pub fn world_to_panel(x: f32, z: f32, half: f32, panel: f32) -> (f32, f32) {
-    let scale = panel / (half * 2.0);
-    (
-        (x + half) * scale - panel * 0.5,
-        (z + half) * scale - panel * 0.5,
-    )
+/// Níveis de zoom FECHADOS (metade da visão em metros), do mais fechado ao
+/// mais aberto. O último nível é sempre o MUNDO INTEIRO (a vista fixa das
+/// rondas 1–2); os anteriores saturam em mundos menores ([`zoom_half_m`]).
+/// Núcleo ~±400 m = a zona habitada/ativa: a escala em que os pins do
+/// aglomerado da vila se separam em marcadores utilizáveis.
+pub const ZOOM_HALF_M: [f32; 2] = [400.0, 1000.0];
+
+/// Nome de exposição de um nível (rodapé do mapa).
+pub fn zoom_label(level: usize) -> &'static str {
+    match level {
+        0 => "núcleo",
+        1 => "bioma",
+        _ => "mundo",
+    }
+}
+
+/// Metade da visão (m) de um nível dado o meio-mundo. O último nível é o
+/// mundo inteiro; os anteriores nunca pedem mais do que o mundo tem.
+pub fn zoom_half_m(level: usize, world_half: f32) -> f32 {
+    match ZOOM_HALF_M.get(level) {
+        Some(&half) => half.min(world_half),
+        None => world_half,
+    }
+}
+
+/// Vista do mapa: centro (coords de MUNDO, XZ) projetado no centro do
+/// painel + nível de zoom (índice em [`ZOOM_HALF_M`]; último = mundo).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MapView {
+    pub center: Vec2,
+    pub level: usize,
+}
+
+impl Default for MapView {
+    fn default() -> Self {
+        Self {
+            center: Vec2::ZERO,
+            level: 0,
+        }
+    }
+}
+
+/// Vista default (abertura do [M]): NÚCLEO centrado no herói — a zona
+/// ativa nasce espalhada e o hover distingue os pins; o centro é clampado
+/// aos limites do mundo.
+pub fn default_view(player: Vec2, world_half: f32) -> MapView {
+    let mut view = MapView {
+        center: player,
+        level: 0,
+    };
+    view.clamp_to_world(world_half);
+    view
+}
+
+/// Limita o centro para a janela de visão nunca sair do mundo. Com a visão
+/// ≥ mundo (nível MUNDO, ou mundos minúsculos) o centro cai na origem.
+pub fn clamp_view_center(center: Vec2, view_half: f32, world_half: f32) -> Vec2 {
+    let lim = (world_half - view_half).max(0.0);
+    center.clamp(Vec2::splat(-lim), Vec2::splat(lim))
+}
+
+impl MapView {
+    /// Metade da visão deste nível (m).
+    pub fn half_m(&self, world_half: f32) -> f32 {
+        zoom_half_m(self.level, world_half)
+    }
+
+    /// Escala do painel (px por metro) neste nível.
+    pub fn scale(&self, world_half: f32) -> f32 {
+        MAP_PANEL_PX / (self.half_m(world_half) * 2.0)
+    }
+
+    /// Mundo (x, z) → px RELATIVOS AO CENTRO do painel (o referencial das
+    /// âncoras 50%/50% dos pins). Norte é -Z (para cima no ecrã), este é +x
+    /// (direita).
+    pub fn to_panel(&self, x: f32, z: f32, world_half: f32) -> (f32, f32) {
+        let s = self.scale(world_half);
+        ((x - self.center.x) * s, (z - self.center.y) * s)
+    }
+
+    /// px do painel (referencial do centro) → mundo. O inverso exato de
+    /// [`MapView::to_panel`] — é o que transforma um clique em waypoint.
+    pub fn to_world(&self, px: f32, py: f32, world_half: f32) -> (f32, f32) {
+        let s = self.scale(world_half);
+        (self.center.x + px / s, self.center.y + py / s)
+    }
+
+    /// Re-clampa o centro ao nível ATUAL (chamar depois de mudar o nível —
+    /// abrir a vista pode empurrar o centro para dentro dos limites).
+    pub fn clamp_to_world(&mut self, world_half: f32) {
+        self.center = clamp_view_center(self.center, self.half_m(world_half), world_half);
+    }
+
+    /// Um passo de zoom: dir +1 abre (núcleo→mundo), −1 fecha. Preserva o
+    /// centro e re-clampa ao novo nível. Devolve true se o nível mudou.
+    pub fn zoom_step(&mut self, dir: i32, world_half: f32) -> bool {
+        let levels = ZOOM_HALF_M.len() as i32 + 1;
+        let next = (self.level as i32 + dir).clamp(0, levels - 1) as usize;
+        if next == self.level {
+            return false;
+        }
+        self.level = next;
+        self.clamp_to_world(world_half);
+        true
+    }
+}
+
+/// Um pin do frame: px do painel (referencial do centro, para o hover), a
+/// posição de MUNDO (para o waypoint do clique) e o rótulo.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MapSpot {
+    pub px: f32,
+    pub py: f32,
+    pub world: Vec3,
+    pub label: String,
+}
+
+impl MapSpot {
+    pub fn new(view: &MapView, world_half: f32, world: Vec3, label: impl Into<String>) -> Self {
+        let (px, py) = view.to_panel(world.x, world.z, world_half);
+        Self {
+            px,
+            py,
+            world,
+            label: label.into(),
+        }
+    }
 }
 
 /// O pin mais próximo do cursor dentro do raio (o mais perto ganha).
-pub fn pick_pin(spots: &[(f32, f32, String)], cx: f32, cy: f32) -> Option<(f32, f32, String)> {
-    let mut best: Option<(f32, (f32, f32, String))> = None;
-    for &(x, y, ref label) in spots {
-        let d2 = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+pub fn pick_pin(spots: &[MapSpot], cx: f32, cy: f32) -> Option<MapSpot> {
+    let mut best: Option<(f32, &MapSpot)> = None;
+    for spot in spots {
+        let d2 = (spot.px - cx) * (spot.px - cx) + (spot.py - cy) * (spot.py - cy);
         if d2 > PIN_PICK_RADIUS_PX * PIN_PICK_RADIUS_PX {
             continue;
         }
-        if best.as_ref().is_none_or(|(bd, _)| d2 < *bd) {
-            best = Some((d2, (x, y, label.clone())));
+        if best.is_none_or(|(bd, _)| d2 < bd) {
+            best = Some((d2, spot));
         }
     }
-    best.map(|(_, spot)| spot)
+    best.map(|(_, spot)| spot.clone())
 }
 
 // ── ECS: estado e componentes ───────────────────────────────────────────
@@ -228,6 +358,12 @@ pub fn pick_pin(spots: &[(f32, f32, String)], cx: f32, cy: f32) -> Option<(f32, 
 pub struct RegionalMapState {
     pub open: bool,
 }
+
+/// Vista corrente do mapa ([`MapView`] — nível de zoom + centro). Estado de
+/// SESSÃO: cada abertura do [M] volta ao núcleo centrado no herói
+/// ([`map_key_system`]); nada disto viaja no save.
+#[derive(Resource, Default)]
+struct MapViewRes(MapView);
 
 /// Cozinha cartográfica em fatias — alturas primeiro, cor depois; a imagem
 /// só entra na Assets quando a passagem completa (UM upload por bake).
@@ -320,10 +456,10 @@ struct MapPinTower;
 #[derive(Component)]
 struct MapPinQuest;
 
-/// Spots do frame (px do painel + rótulo) para o hover — reconstruído
-/// enquanto o mapa está aberto.
+/// Spots do frame (px do painel + mundo + rótulo) para o hover e o clique
+/// — reconstruídos enquanto o mapa está aberto.
 #[derive(Resource, Default)]
-struct MapSpots(Vec<(f32, f32, String)>);
+struct MapSpots(Vec<MapSpot>);
 
 pub struct RegionalMapPlugin;
 
@@ -343,6 +479,7 @@ struct MapPinData<'w> {
 impl Plugin for RegionalMapPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RegionalMapState>()
+            .init_resource::<MapViewRes>()
             .init_resource::<MapSpots>()
             .init_resource::<crate::worldsys::BiomeRegions>()
             .add_message::<MapOpened>()
@@ -351,10 +488,13 @@ impl Plugin for RegionalMapPlugin {
                 Update,
                 (
                     timed(Group::Hud, map_key_system),
+                    timed(Group::Hud, map_view_system),
                     timed(Group::Hud, map_bake_system),
                     timed(Group::Hud, map_pins_system),
                     timed(Group::Hud, map_hover_system),
-                ),
+                    timed(Group::Hud, map_click_system),
+                )
+                    .chain(),
             );
     }
 }
@@ -466,7 +606,11 @@ fn spawn_regional_map(mut commands: Commands) {
                         ..Default::default()
                     },
                     BackgroundColor(Color::srgba(0.03, 0.03, 0.04, 0.82)),
-                    map_text("VAEL - MAPA REGIONAL   ([M] / Esc / [L] fecha)", 15.0, gold),
+                    map_text(
+                        "VAEL - MAPA REGIONAL   ([M]/Esc/[L] fecha · roda/+-: zoom · clique: waypoint)",
+                        13.0,
+                        gold,
+                    ),
                     MapHeader,
                 ));
                 frame.spawn((
@@ -593,10 +737,16 @@ struct MapLabelText;
 
 /// [M] abre (com nenhum outro menu ativo) e fecha; Esc/[L] fecham. O
 /// espelho em `MenusOpen.map` é o que rouba o input ao herói — o mapa é um
-/// menu, não um modo.
+/// menu, não um modo. ABRIR recentra a vista no núcleo do herói
+/// ([`default_view`]) — cada abertura responde "onde estou e para onde vou",
+/// não "onde estava o mapa da última vez".
+#[allow(clippy::too_many_arguments)]
 fn map_key_system(
     keys: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<RegionalMapState>,
+    mut view: ResMut<MapViewRes>,
+    players: Query<&GlobalTransform, With<Player>>,
+    bake: Option<Res<MapBake>>,
     mut menus: ResMut<crate::menus::MenusOpen>,
     mut root: Query<&mut Visibility, With<RegionalMapRoot>>,
     mut opened: MessageWriter<MapOpened>,
@@ -605,6 +755,10 @@ fn map_key_system(
         state.open = !state.open;
         if state.open {
             opened.write(MapOpened);
+            if let (Some(t), Some(bake)) = (players.iter().next(), bake.as_deref()) {
+                let p = t.translation();
+                view.0 = default_view(Vec2::new(p.x, p.z), bake.half);
+            }
         }
     }
     if state.open && (keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyL)) {
@@ -625,6 +779,78 @@ fn map_key_system(
     }
 }
 
+// ── vista: zoom em passos + a imagem como janela ────────────────────────
+
+/// Layout da imagem cozida sob a vista: o lado em px (o mundo INTEIRO à
+/// escala do nível) e a translação do canto NO da textura (âncora 50%/50%).
+/// Usado pelo spawn do bake e pelo sistema da vista.
+fn image_layout(view: &MapView, half: f32) -> (Val, Val, UiTransform) {
+    let side = half * 2.0 * view.scale(half);
+    let (px, py) = view.to_panel(-half, -half, half);
+    (
+        Val::Px(side),
+        Val::Px(side),
+        UiTransform::from_translation(Val2::new(Val::Px(px), Val::Px(py))),
+    )
+}
+
+/// Zoom em passos (roda do rato / [+] / [-]) e a IMAGEM como janela da
+/// vista: a textura cozida cobre o mundo inteiro; com a vista fechada ela
+/// é ampliada e o clip da moldura corta o resto — a névoa por bioma e a
+/// topografia escalam com a vista de graça (são píxeis da mesma textura).
+/// Corre só com o mapa aberto.
+#[allow(clippy::type_complexity)]
+fn map_view_system(
+    state: Res<RegionalMapState>,
+    bake: Option<Res<MapBake>>,
+    mut view: ResMut<MapViewRes>,
+    mut wheel: MessageReader<MouseWheel>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut image: Query<(&mut Node, &mut UiTransform), (With<MapImageNode>, Without<MapFrame>)>,
+) {
+    // Os eventos acumulam com o mapa fechado (roda do rato no jogo) — ler
+    // e descartar SEMPRE evita um salto de zoom no frame da abertura.
+    let scroll: f32 = wheel.read().map(|e| e.y).sum();
+    if !state.open {
+        return;
+    }
+    let Some(bake) = bake.as_deref() else {
+        return;
+    };
+    let half = bake.half;
+    let mut moved = false;
+    // Roda para cima = fechar o zoom (mais perto); para baixo = abrir.
+    if scroll > 0.0 {
+        moved |= view.0.zoom_step(-1, half);
+    } else if scroll < 0.0 {
+        moved |= view.0.zoom_step(1, half);
+    }
+    if keys.just_pressed(KeyCode::Equal) || keys.just_pressed(KeyCode::NumpadAdd) {
+        moved |= view.0.zoom_step(-1, half);
+    }
+    if keys.just_pressed(KeyCode::Minus) || keys.just_pressed(KeyCode::NumpadSubtract) {
+        moved |= view.0.zoom_step(1, half);
+    }
+    if moved {
+        info!(
+            target: "viber::map",
+            "mapa: nível {} ({}, ±{:.0} m)", view.0.level, zoom_label(view.0.level), view.0.half_m(half)
+        );
+    }
+    let (width, height, transform) = image_layout(&view.0, half);
+    for (mut node, mut ui_transform) in image.iter_mut() {
+        if node.width != width {
+            node.width = width;
+        }
+        if node.height != height {
+            node.height = height;
+        }
+        if *ui_transform != transform {
+            *ui_transform = transform;
+        }
+    }
+}
+
 // ── cozinha cartográfica em fatias ──────────────────────────────────────
 
 /// Nestas linhas corre a cozinha por frame (alturas OU cor). A passagem de
@@ -640,6 +866,7 @@ fn map_bake_system(
     catalog: Option<Res<crate::travel::LandmarkCatalog>>,
     respawn: Option<Res<crate::feedback::RespawnCatalog>>,
     mut bake: Option<ResMut<MapBake>>,
+    view: Res<MapViewRes>,
     frame: Query<Entity, With<MapFrame>>,
     image_node: Query<Entity, (With<MapImageNode>, Without<MapFrame>)>,
     mut placeholder: Query<&mut Visibility, With<MapPlaceholder>>,
@@ -794,20 +1021,25 @@ fn map_bake_system(
                         );
                         let handle = images.add(image);
                         if let Ok(frame) = frame.single() {
+                            // A imagem nasce JÁ na janela da vista corrente
+                            // (sem ela, o 1.º frame mostrava o mundo inteiro
+                            // antes do sistema da vista reposicionar).
+                            let (width, height, transform) = image_layout(&view.0, bake.half);
                             commands.entity(frame).with_children(|map| {
                                 map.spawn((
                                     Node {
                                         position_type: PositionType::Absolute,
-                                        left: Val::Px(0.0),
-                                        top: Val::Px(0.0),
-                                        width: Val::Percent(100.0),
-                                        height: Val::Percent(100.0),
+                                        left: Val::Percent(50.0),
+                                        top: Val::Percent(50.0),
+                                        width,
+                                        height,
                                         ..Default::default()
                                     },
                                     ImageNode {
                                         image: handle.clone(),
                                         ..Default::default()
                                     },
+                                    transform,
                                     // Por baixo dos pins (o clip não
                                     // reordena — o with_children apenda).
                                     ZIndex(-1),
@@ -841,6 +1073,7 @@ fn map_bake_system(
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn map_pins_system(
     state: Res<RegionalMapState>,
+    view: Res<MapViewRes>,
     data: MapPinData,
     players: Query<&GlobalTransform, With<Player>>,
     bake: Option<Res<MapBake>>,
@@ -894,38 +1127,37 @@ fn map_pins_system(
     let Some(bake) = bake.as_deref() else {
         return;
     };
-    let (half, panel) = (bake.half, MAP_PANEL_PX);
+    let half = bake.half;
+    let view = view.0;
     spots.0.clear();
-    let push = |x: f32, z: f32, label: String, spots: &mut MapSpots| {
-        let (px, py) = world_to_panel(x, z, half, panel);
-        spots.0.push((px, py, label));
+    let push = |world: Vec3, label: &str, spots: &mut MapSpots| {
+        spots.0.push(MapSpot::new(&view, half, world, label));
     };
 
     // Vila (praça) — sempre pin, fora do pool.
     if let Some(first) = data.respawn.as_deref().and_then(|r| r.0.first()) {
-        let (px, py) = world_to_panel(first.0.x, first.0.y, half, panel);
+        let world = Vec3::new(first.0.x, 0.0, first.0.y);
+        let (px, py) = view.to_panel(world.x, world.z, half);
         if let Ok((mut transform, mut visibility)) = village.single_mut() {
             set_pin(&mut transform, &mut visibility, px, py);
         }
-        spots
-            .0
-            .push((px, py, format!("Praça da vila ({})", first.1)));
+        push(world, &format!("Praça da vila ({})", first.1), &mut spots);
     }
     // Herói.
     if let Some(player) = players.iter().next() {
         let p = player.translation();
-        let (px, py) = world_to_panel(p.x, p.z, half, panel);
+        let (px, py) = view.to_panel(p.x, p.z, half);
         if let Ok((mut transform, mut visibility)) = player_pin.single_mut() {
             set_pin(&mut transform, &mut visibility, px, py);
         }
-        spots.0.push((px, py, "Tu".to_string()));
+        push(p, "Tu", &mut spots);
     }
     // Atalaias + marcos disponíveis (o mesmo snapshot do minimapa).
     if let Some(blips) = data.blips.as_deref() {
         let mut tower_iter = towers.iter_mut();
         let mut landmark_iter = landmarks.iter_mut();
         for blip in &blips.0 {
-            let (px, py) = world_to_panel(blip.position.x, blip.position.z, half, panel);
+            let (px, py) = view.to_panel(blip.position.x, blip.position.z, half);
             let signed = data
                 .nota
                 .as_deref()
@@ -962,9 +1194,8 @@ fn map_pins_system(
             }
             let state_word = if signed { "assinado" } else { "por assinar" };
             push(
-                blip.position.x,
-                blip.position.z,
-                format!("{} ({state_word})", blip.label),
+                blip.position,
+                &format!("{} ({state_word})", blip.label),
                 &mut spots,
             );
         }
@@ -986,14 +1217,9 @@ fn map_pins_system(
             let Some((mut transform, mut visibility)) = quest_iter.next() else {
                 break;
             };
-            let (px, py) = world_to_panel(beacon.x, beacon.z, half, panel);
+            let (px, py) = view.to_panel(beacon.x, beacon.z, half);
             set_pin(&mut transform, &mut visibility, px, py);
-            push(
-                beacon.x,
-                beacon.z,
-                "Missão por aqui".to_string(),
-                &mut spots,
-            );
+            push(*beacon, "Missão por aqui", &mut spots);
         }
         for (_, mut visibility) in quest_iter {
             if *visibility != Visibility::Hidden {
@@ -1058,7 +1284,11 @@ fn map_pins_system(
         ));
     }
     if let Ok(mut text) = footer.single_mut() {
-        let mut wanted = format!("Marcos assinados {signed_count}/{total}");
+        let mut wanted = format!(
+            "[vista {} ±{:.0} m]  Marcos assinados {signed_count}/{total}",
+            zoom_label(view.level),
+            view.half_m(half)
+        );
         if !keyed.is_empty() {
             wanted.push_str(&format!(
                 "  |  Biomas revelados {revealed_count}/{}  |  {}",
@@ -1085,8 +1315,47 @@ fn set_pin(transform: &mut UiTransform, visibility: &mut Visibility, px: f32, py
     }
 }
 
-/// Hover: cursor sobre o pin → rótulo com o nome. Sem zoom/pan (fora do
-/// âmbito); fechar é [M]/Esc/[L] no sistema de teclas.
+/// Clique num pin → waypoint do HUD ([`travel::Waypoint`] — a MESMA linha
+/// rumo+distância que um marco assinado alimenta). É isto que transforma o
+/// mapa de "o que há lá fora" em "para onde devo ir": apontar um pin dá ao
+/// jogador um rumo navegável sem sair do mapa. Um marco assinado continua a
+/// sobrescrever o waypoint pelo [F] no mundo (a fonte antiga manda quando
+/// está à mão); viagem rápida [G] não muda.
+fn map_click_system(
+    state: Res<RegionalMapState>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    spots: Res<MapSpots>,
+    mut waypoint: ResMut<crate::travel::Waypoint>,
+    mut toasts: MessageWriter<crate::luau::ScriptToast>,
+) {
+    if !state.open || !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Some(cursor) = window.cursor_position() else {
+        return;
+    };
+    // A moldura está centrada no ecrã: cursor → px relativos ao CENTRO do
+    // painel (o mesmo referencial dos spots).
+    let local = (
+        cursor.x - window.width() * 0.5,
+        cursor.y - window.height() * 0.5,
+    );
+    let Some(hit) = pick_pin(&spots.0, local.0, local.1) else {
+        return;
+    };
+    waypoint.label = Some(hit.label.clone());
+    waypoint.position = Some(hit.world);
+    toasts.write(crate::luau::ScriptToast(format!("Waypoint: {}", hit.label)));
+    info!(target: "viber::map", "mapa: waypoint '{}' em ({:.0}, {:.0})", hit.label, hit.world.x, hit.world.z);
+}
+
+/// Hover: cursor sobre o pin → rótulo com o nome. Os spots já saem da
+/// [`MapView`] corrente (px do painel), pelo que o hover acompanha o zoom
+/// de graça; fechar é [M]/Esc/[L] no sistema de teclas.
 #[allow(clippy::type_complexity)]
 fn map_hover_system(
     state: Res<RegionalMapState>,
@@ -1105,7 +1374,7 @@ fn map_hover_system(
         return;
     };
     // A moldura está centrada no ecrã: cursor → px relativos ao CENTRO do
-    // painel (o mesmo referencial dos pins, [`world_to_panel`]).
+    // painel (o mesmo referencial dos pins, [`MapView::to_panel`]).
     let local = (
         cursor.x - window.width() * 0.5,
         cursor.y - window.height() * 0.5,
@@ -1113,10 +1382,12 @@ fn map_hover_system(
     let hit = pick_pin(&spots.0, local.0, local.1);
     for (mut transform, mut visibility) in label.iter_mut() {
         match &hit {
-            Some((px, py, _)) => {
+            Some(spot) => {
                 // Rótulo deslocado ao lado do pin, preso ao interior.
-                let tx = (px + 12.0).clamp(-(MAP_PANEL_PX * 0.5 - 90.0), MAP_PANEL_PX * 0.5 - 12.0);
-                let ty = (py - 16.0).clamp(-(MAP_PANEL_PX * 0.5 - 10.0), MAP_PANEL_PX * 0.5 - 10.0);
+                let tx =
+                    (spot.px + 12.0).clamp(-(MAP_PANEL_PX * 0.5 - 90.0), MAP_PANEL_PX * 0.5 - 12.0);
+                let ty =
+                    (spot.py - 16.0).clamp(-(MAP_PANEL_PX * 0.5 - 10.0), MAP_PANEL_PX * 0.5 - 10.0);
                 let wanted = UiTransform::from_translation(Val2::new(Val::Px(tx), Val::Px(ty)));
                 if *transform != wanted {
                     *transform = wanted;
@@ -1132,11 +1403,11 @@ fn map_hover_system(
             }
         }
     }
-    if let Some((_, _, label_text)) = hit
+    if let Some(spot) = hit
         && let Ok(mut t) = text.single_mut()
-        && t.0 != label_text
+        && t.0 != spot.label
     {
-        t.0 = label_text;
+        t.0 = spot.label;
     }
 }
 
@@ -1211,30 +1482,284 @@ mod tests {
     }
 
     #[test]
-    fn test_world_to_panel_north_up() {
-        let half = 2048.0;
-        let panel = 600.0;
-        // Centro do mundo → centro do painel (o referencial é o CENTRO:
-        // pins ancorados a 50%/50% com translation = delta).
-        let (x, y) = world_to_panel(0.0, 0.0, half, panel);
+    fn test_view_projection_north_up() {
+        let world_half = 2000.0;
+        // Centro do mundo no centro do painel (vista MUNDO): o referencial
+        // é o CENTRO (pins ancorados a 50%/50% com translation = delta).
+        let view = MapView {
+            center: Vec2::ZERO,
+            level: 2,
+        };
+        let (x, y) = view.to_panel(0.0, 0.0, world_half);
         assert!(x.abs() < 1e-3 && y.abs() < 1e-3);
         // Este (+x) → direita; norte (−z) → cima (y negativo).
-        let (ex, _) = world_to_panel(1024.0, 0.0, half, panel);
+        let (ex, _) = view.to_panel(1024.0, 0.0, world_half);
         assert!(ex > 0.0);
-        let (_, ny) = world_to_panel(0.0, -1024.0, half, panel);
+        let (_, ny) = view.to_panel(0.0, -1024.0, world_half);
         assert!(ny < 0.0);
+        // A escala do mundo inteiro é a antiga: painel / lado do mundo.
+        assert!((view.scale(world_half) - MAP_PANEL_PX / (world_half * 2.0)).abs() < 1e-6);
     }
 
     #[test]
-    fn test_pick_pin_nearest_within_radius() {
-        let spots = vec![
-            (10.0, 10.0, "a".to_string()),
-            (12.0, 10.0, "b".to_string()),
-            (500.0, 500.0, "longe".to_string()),
+    fn test_view_roundtrip_at_every_level() {
+        // to_panel ∘ to_world é identidade em TODOS os níveis — é o contrato
+        // que faz um clique no px do pin voltar à posição de mundo dele.
+        let world_half = 2000.0;
+        let points = [
+            (0.0, 0.0),
+            (500.0, -330.0),
+            (-1200.0, 890.0),
+            (1990.0, 1990.0),
         ];
-        let hit = pick_pin(&spots, 11.5, 10.0).expect("pin à apanha");
-        assert_eq!(hit.2, "b", "o mais perto ganha");
-        assert!(pick_pin(&spots, 200.0, 200.0).is_none());
+        for level in 0..=ZOOM_HALF_M.len() {
+            let view = MapView {
+                center: Vec2::new(120.0, -340.0),
+                level,
+            };
+            for (x, z) in points {
+                let (px, py) = view.to_panel(x, z, world_half);
+                let (wx, wz) = view.to_world(px, py, world_half);
+                assert!(
+                    (wx - x).abs() < 1e-3 && (wz - z).abs() < 1e-3,
+                    "nível {level}: ({x},{z}) → ({px},{py}) → ({wx},{wz})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_zoom_levels_nucleo_bioma_mundo() {
+        let world_half = 2000.0;
+        // Níveis fechados → abertos; o último é o mundo inteiro.
+        assert_eq!(zoom_half_m(0, world_half), 400.0);
+        assert_eq!(zoom_half_m(1, world_half), 1000.0);
+        assert_eq!(zoom_half_m(2, world_half), world_half);
+        // Nível fora da tabela = mundo (saturação, não pânico).
+        assert_eq!(zoom_half_m(9, world_half), world_half);
+        // Mundo pequeno: o núcleo nunca pede mais do que o mundo tem.
+        assert_eq!(zoom_half_m(0, 250.0), 250.0);
+        // Rótulos de exposição.
+        assert_eq!(zoom_label(0), "núcleo");
+        assert_eq!(zoom_label(1), "bioma");
+        assert_eq!(zoom_label(2), "mundo");
+        // A escala do núcleo é 5× a do mundo — é ela que separa os pins.
+        let world = MapView {
+            center: Vec2::ZERO,
+            level: 2,
+        };
+        let core = MapView {
+            center: Vec2::ZERO,
+            level: 0,
+        };
+        assert!((core.scale(world_half) / world.scale(world_half) - 5.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_clamp_view_center_at_world_bounds() {
+        let world_half = 2000.0;
+        // Centro pedido além do mundo → cai no limite da janela.
+        assert_eq!(
+            clamp_view_center(Vec2::splat(5000.0), 400.0, world_half),
+            Vec2::splat(1600.0)
+        );
+        assert_eq!(
+            clamp_view_center(Vec2::new(-3000.0, 10.0), 1000.0, world_half),
+            Vec2::new(-1000.0, 10.0)
+        );
+        // Visão ≥ mundo (nível MUNDO): centro forçado à origem.
+        assert_eq!(
+            clamp_view_center(Vec2::splat(700.0), world_half, world_half),
+            Vec2::ZERO
+        );
+        assert_eq!(
+            clamp_view_center(Vec2::splat(50.0), 4000.0, world_half),
+            Vec2::ZERO
+        );
+    }
+
+    #[test]
+    fn test_zoom_step_preserves_center_and_reclamps() {
+        let world_half = 2000.0;
+        // Abrir do núcleo encostado ao limite: o centro re-clampa ao nível.
+        let mut view = default_view(Vec2::splat(5000.0), world_half);
+        assert_eq!(view.level, 0);
+        assert_eq!(view.center, Vec2::splat(1600.0));
+        assert!(view.zoom_step(1, world_half), "núcleo→bioma muda");
+        assert_eq!(view.level, 1);
+        assert_eq!(
+            view.center,
+            Vec2::splat(1000.0),
+            "bioma empurra para dentro"
+        );
+        // Fechar de novo preserva o centro (já é válido no nível — o zoom
+        // nunca RECENTRA por si; só o clamp empurra).
+        assert!(view.zoom_step(-1, world_half));
+        assert_eq!(view.level, 0);
+        assert_eq!(view.center, Vec2::splat(1000.0));
+        // Chegar ao mundo: centro na origem; mais passos não passam do fim.
+        assert!(view.zoom_step(1, world_half) && view.zoom_step(1, world_half));
+        assert_eq!(view.level, 2);
+        assert_eq!(view.center, Vec2::ZERO);
+        assert!(!view.zoom_step(1, world_half), "mundo é o último nível");
+        // Fechar em passar grande satura no núcleo.
+        assert!(view.zoom_step(-5, world_half));
+        assert_eq!(view.level, 0);
+        assert!(!view.zoom_step(-1, world_half), "núcleo é o 1.º nível");
+    }
+
+    #[test]
+    fn test_default_view_centers_on_player_clamped() {
+        let world_half = 2000.0;
+        // Herói na vila: núcleo centrado nele, dentro dos limites.
+        let view = default_view(Vec2::new(56.0, 2.0), world_half);
+        assert_eq!(view.level, 0);
+        assert_eq!(view.center, Vec2::new(56.0, 2.0));
+        // Herói fora do mundo (cena interior distante): clampado.
+        let view = default_view(Vec2::splat(-9000.0), world_half);
+        assert_eq!(view.center, Vec2::splat(-1600.0));
+    }
+
+    /// A geografia do simple-rpg (praça + as 5 atalaisas + herói à porta
+    /// leste) — o cenário EXATO do GAP da ronda 2 ("o hover resolveu
+    /// 'Atalaia do Ermo' de dentro do aglomerado da vila").
+    fn village_spots(view: &MapView, world_half: f32) -> Vec<MapSpot> {
+        let places: [(f32, f32, &str); 7] = [
+            (0.0, 0.0, "Praça da vila (praça)"),
+            (56.0, 2.0, "Tu"),
+            (90.0, -10.0, "Atalaia do Vale (por assinar)"),
+            (30.0, 138.0, "Atalaia do Bosque (por assinar)"),
+            (130.0, 60.0, "Atalaia do Ermo (por assinar)"),
+            (-130.0, 10.0, "Atalaia do Pântano (por assinar)"),
+            (-40.0, -140.0, "Atalaia dos Picos (por assinar)"),
+        ];
+        places
+            .iter()
+            .map(|(x, z, label)| {
+                MapSpot::new(
+                    view,
+                    world_half,
+                    Vec3::new(*x, 0.0, *z),
+                    (*label).to_string(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_core_view_spreads_village_cluster() {
+        // A PROVA do GAP: no nível NÚCLEO os pins do aglomerado da vila
+        // nascem separados. Os pins de LUGARES distintos (praça + as 5
+        // atalaisas) ficam a mais de DOBRO do raio de apanha — há sempre
+        // espaço vazio entre dois, e cada pin sob o próprio cursor resolve
+        // a SI (rótulo certo). O marcador do herói fica onde o herói está
+        // (27 px da atalaia do vale, à porta leste): fora do raio de
+        // apanha de vizinhos e resolvido pelo mais-perto-ganha.
+        let world_half = 2000.0;
+        let view = default_view(Vec2::new(56.0, 2.0), world_half);
+        let spots = village_spots(&view, world_half);
+        let dist =
+            |i: usize, j: usize| (spots[i].px - spots[j].px).hypot(spots[i].py - spots[j].py);
+        // Pins de lugares (índice 1 é o herói).
+        let place_idxs = [0_usize, 2, 3, 4, 5, 6];
+        for (a, i) in place_idxs.iter().enumerate() {
+            for j in &place_idxs[a + 1..] {
+                let d = dist(*i, *j);
+                assert!(
+                    d > PIN_PICK_RADIUS_PX * 2.0,
+                    "pins de lugares colapsam no núcleo: '{}' ↔ '{}' a {d:.1} px",
+                    spots[*i].label,
+                    spots[*j].label
+                );
+            }
+        }
+        // Nem o herói encosta a um vizinho (raio de apanha não partilhado).
+        for i in 0..spots.len() {
+            for j in i + 1..spots.len() {
+                assert!(dist(i, j) > PIN_PICK_RADIUS_PX);
+            }
+        }
+        // E cada pin, sob o próprio cursor, resolve o PRÓPRIO rótulo.
+        for spot in &spots {
+            let hit = pick_pin(&spots, spot.px, spot.py).expect("pin à apanha");
+            assert_eq!(hit.label, spot.label, "hover devolveu o pin errado");
+        }
+        // No nível MUNDO (a vista fixa antiga) o mesmo aglomerado colapsa —
+        // o bug do GAP, agora confinado ao nível mais aberto (e lá o zoom
+        // fecha de novo). Documentado, não escondido:
+        let world = MapView {
+            center: Vec2::ZERO,
+            level: 2,
+        };
+        let world_spots = village_spots(&world, world_half);
+        let collapsed = (0..world_spots.len()).any(|i| {
+            (i + 1..world_spots.len()).any(|j| {
+                (world_spots[i].px - world_spots[j].px).hypot(world_spots[i].py - world_spots[j].py)
+                    < PIN_PICK_RADIUS_PX
+            })
+        });
+        assert!(collapsed, "o mundo inteiro era SUPOSTO colapsar os pins");
+    }
+
+    #[test]
+    fn test_hover_resolves_right_pin_at_every_level() {
+        // Em TODOS os níveis, o cursor em cima de um pin resolve ESSE pin
+        // (o mais perto ganha e a distância 0 é dele) — o zoom nunca
+        // desalinha a apanha.
+        let world_half = 2000.0;
+        for level in 0..=ZOOM_HALF_M.len() {
+            let view = MapView {
+                center: Vec2::new(56.0, 2.0),
+                level,
+            };
+            let spots = village_spots(&view, world_half);
+            for spot in &spots {
+                let hit = pick_pin(&spots, spot.px, spot.py)
+                    .unwrap_or_else(|| panic!("nível {level}: pin '{}' perdido", spot.label));
+                assert_eq!(hit.label, spot.label, "nível {level}: pin errado");
+                // O clique no px do pin volta à posição de mundo dele.
+                let (wx, wz) = view.to_world(hit.px, hit.py, world_half);
+                assert!((wx - spot.world.x).abs() < 1e-3);
+                assert!((wz - spot.world.z).abs() < 1e-3);
+            }
+        }
+    }
+
+    #[test]
+    fn test_image_layout_windows_the_baked_texture() {
+        // A imagem cozida cobre o mundo INTEIRO à escala do nível; no nível
+        // MUNDO ela calha exactamente no painel (a vista das rondas 1–2).
+        let world_half = 2000.0;
+        let (w, h, _) = image_layout(
+            &MapView {
+                center: Vec2::ZERO,
+                level: 2,
+            },
+            world_half,
+        );
+        let Val::Px(w) = w else { panic!() };
+        let Val::Px(h) = h else { panic!() };
+        assert!((w - MAP_PANEL_PX).abs() < 1e-3 && (h - MAP_PANEL_PX).abs() < 1e-3);
+        // No núcleo ela é 5× maior (ampliada) e o canto NO sai do painel —
+        // o clip da moldura mostra só a janela.
+        let (w, _, t) = image_layout(
+            &MapView {
+                center: Vec2::new(56.0, 2.0),
+                level: 0,
+            },
+            world_half,
+        );
+        let Val::Px(w) = w else { panic!() };
+        assert!((w - MAP_PANEL_PX * 5.0).abs() < 1e-3);
+        let (Val::Px(tx), Val::Px(ty)) = (t.translation.x, t.translation.y) else {
+            panic!()
+        };
+        let (ex, ey) = MapView {
+            center: Vec2::new(56.0, 2.0),
+            level: 0,
+        }
+        .to_panel(-world_half, -world_half, world_half);
+        assert!((tx - ex).abs() < 1e-3 && (ty - ey).abs() < 1e-3);
     }
 
     #[test]

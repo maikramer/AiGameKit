@@ -35,8 +35,8 @@ pub use interact::{
     hud_balloon_update, hud_prompt_update, hud_toggle,
 };
 pub use map::{
-    MAP_PANEL_PX, PIN_PICK_RADIUS_PX, RegionalMapPlugin, RegionalMapState, VILLAGE_CLEAR_M,
-    pick_pin, region_hidden, reveal_key, world_to_panel,
+    MAP_PANEL_PX, MapSpot, MapView, PIN_PICK_RADIUS_PX, RegionalMapPlugin, RegionalMapState,
+    VILLAGE_CLEAR_M, pick_pin, region_hidden, reveal_key, zoom_half_m, zoom_label,
 };
 pub use minimap::{
     MinimapAnchor, MinimapArrow, MinimapDot, MinimapLandmark, MinimapRange, MinimapTower,
