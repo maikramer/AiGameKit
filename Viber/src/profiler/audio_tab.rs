@@ -22,6 +22,11 @@ pub struct BusSnapshot {
 pub struct LayerSnapshot {
     pub layer: String,
     pub base_volume: f32,
+    /// Volume linear CORRENTE da layer (o crossfade do `music_driver`) —
+    /// é o que prova a troca por zona (vila → `village`, Picos →
+    /// `mountain`…): a layer activa lê perto do `base_volume`, as outras a
+    /// caminhar para 0.
+    pub volume: f32,
     pub paused: bool,
     pub muted: bool,
 }
@@ -95,6 +100,7 @@ pub fn snapshot(world: &mut World) -> AudioSnapshot {
             layers.push(LayerSnapshot {
                 layer: layer.layer.clone(),
                 base_volume: layer.base_volume,
+                volume: vol,
                 paused: is_paused,
                 muted: is_muted,
             });
@@ -152,9 +158,10 @@ pub fn window_lines(snap: &AudioSnapshot) -> Vec<String> {
         lines.push("música:".into());
         for layer in &snap.layers {
             lines.push(format!(
-                "  {} base {:.2}{}{}",
+                "  {} base {:.2} → agora {:.2}{}{}",
                 layer.layer,
                 layer.base_volume,
+                layer.volume,
                 if layer.paused { " [pausa]" } else { "" },
                 if layer.muted { " [mute]" } else { "" },
             ));
@@ -217,8 +224,21 @@ mod tests {
         let lines = window_lines(&snap);
         assert!(lines.iter().any(|l| l.contains("2 total")), "{lines:?}");
         assert!(lines.iter().any(|l| l.contains("explore")), "{lines:?}");
+        // O crossfade lê-se: o volume CORRENTE da layer aparece ao lado do
+        // base (gauntlet p1 r2 — "dumps BGM bit-idênticos sem demonstrar
+        // crossfade").
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("explore") && l.contains("→ agora 0.18")),
+            "{lines:?}"
+        );
+        assert_eq!(snap.layers[0].volume, 0.18);
         let json = json(&snap);
         assert_eq!(json["total"], 2, "{json}");
         assert_eq!(json["layers"][0]["layer"], "explore", "{json}");
+        // 0.18 f32 não é exacto em JSON — comparar com tolerância.
+        let json_volume = json["layers"][0]["volume"].as_f64().unwrap_or(0.0);
+        assert!((json_volume - 0.18).abs() < 1e-3, "{json}");
     }
 }
