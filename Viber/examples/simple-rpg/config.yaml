@@ -20,3 +20,12 @@ game:
 
 save:
   dir: ~/.local/share/viber              # {dir}/{mundo}.save.json (~ ok)
+
+# Cenas (Unity/Godot): world.xml é a cena principal; scenes/**.xml são cenas próprias
+# (universos separados — os interiores das casas). Autoloads = o que atravessa as cenas.
+project:
+  main-scene: world.xml
+  scenes: scenes
+  autoload:
+    - world/autoload/player.xml
+    - world/autoload/ui.xml

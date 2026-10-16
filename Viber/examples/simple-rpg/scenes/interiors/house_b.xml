@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true" clear-color="#15110d" title="Casa da vila">
+  <InteriorScene at="0 0" size="60 55" camera-distance="16" camera-pitch="58" camera-yaw="0" />
+  <SceneEntry name="from-town" translation="0 0.6 -3" />
+  <Composition name="interior.house_b.shell" translation="0 0 0" body="fixed" collider="auto">
+    <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="3.0" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="0.00 0.06 0.00" half-size="10.60 0.06 8.60" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="0.00 1.20 8.00" half-size="10.00 1.20 0.14" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="-5.65 1.20 -8.00" half-size="4.35 1.20 0.14" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="0.00 2.25 -8.00" half-size="1.30 0.15 0.14" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="5.65 1.20 -8.00" half-size="4.35 1.20 0.14" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="10.00 1.20 -5.80" half-size="0.14 1.20 2.20" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="10.00 0.45 -2.80" half-size="0.14 0.45 0.80" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="10.00 2.15 -2.80" half-size="0.14 0.25 0.80" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="10.00 1.20 0.00" half-size="0.14 1.20 2.00" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="10.00 0.45 2.80" half-size="0.14 0.45 0.80" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="10.00 2.15 2.80" half-size="0.14 0.25 0.80" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="10.00 1.20 5.80" half-size="0.14 1.20 2.20" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="-10.00 1.20 -5.80" half-size="0.14 1.20 2.20" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="-10.00 0.45 -2.80" half-size="0.14 0.45 0.80" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="-10.00 2.15 -2.80" half-size="0.14 0.25 0.80" />
+    <Box texture="/assets/textures/wall_plaster/albedo.ktx2" texture-tile-size="3.4" normal-map="/assets/textures/wall_plaster/normal.ktx2" translation="-10.00 1.20 3.00" half-size="0.14 1.20 5.00" />
+    <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="-9.82 1.20 -7.82" half-size="0.18 1.20 0.18" />
+    <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="-9.82 1.20 7.82" half-size="0.18 1.20 0.18" />
+    <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="9.82 1.20 -7.82" half-size="0.18 1.20 0.18" />
+    <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="9.82 1.20 7.82" half-size="0.18 1.20 0.18" />
+    <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="-1.46 1.05 -8.00" half-size="0.16 1.05 0.18" />
+    <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="1.46 1.05 -8.00" half-size="0.16 1.05 0.18" />
+    <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="0.00 2.19 -8.00" half-size="1.60 0.09 0.20" />
+    <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="-9.84 0.14 0.00" half-size="0.05 0.14 7.40" />
+    <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="9.84 0.14 0.00" half-size="0.05 0.14 7.40" />
+    <Box texture="/assets/textures/wood_planks/albedo.ktx2" texture-tile-size="1.6" normal-map="/assets/textures/wood_planks/normal.ktx2" translation="0.00 0.14 7.84" half-size="9.40 0.14 0.05" />
+  </Composition>
+  <Entity name="interior.house_b.fireplace.hearth" translation="0 0 6.2" transform="rotation: 0 180 0; scale: 1.0 1.0 1.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/fireplace_hearth_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/interiors/fireplace_hearth_lod0.glb" />
+    <PointLight translation="0 1.40 0" color="0xffb070" intensity="8000" shadows="false" />
+  </Entity>
+  <Entity translation="0 0 6.2">
+    <ParticleSystem preset="fire" transform="pos: 0 0.75 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.22; start-life-min: 0.4; start-life-max: 1.1; start-speed-min: 1.0; start-speed-max: 2.2; start-size-min: 0.2; start-size-max: 0.46; looping: 1; world-space: 1" />
+  </Entity>
+  <Entity name="interior.house_b.bookshelf" translation="-7.4 0 3.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bookshelf_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/interiors/bookshelf_lod0.glb" />
+  </Entity>
+  <Entity name="interior.house_b.bookshelf-2" translation="-7.4 0 4.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bookshelf_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/interiors/bookshelf_lod0.glb" />
+  </Entity>
+  <Entity name="interior.house_b.bookshelf-3" translation="7.4 0 3.4" transform="rotation: 0 180 0; scale: 1.0 1.0 1.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bookshelf_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/interiors/bookshelf_lod0.glb" />
+  </Entity>
+  <Entity name="interior.house_b.bookshelf-4" translation="7.4 0 4.6" transform="rotation: 0 180 0; scale: 1.0 1.0 1.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bookshelf_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/interiors/bookshelf_lod0.glb" />
+  </Entity>
+  <Entity name="interior.house_b.dining.table" translation="-1 0 -0.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/dining_table_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/interiors/dining_table_lod0.glb" />
+  </Entity>
+  <Entity name="interior.house_b.wooden.chair" translation="-1 0 -2.6" transform="rotation: 0 180 0; scale: 1.0 1.0 1.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/interiors/wooden_chair_lod0.glb" />
+  </Entity>
+  <Entity name="interior.house_b.wooden.chair-2" translation="3.2 0 -0.6" transform="rotation: 0 90 0; scale: 1.0 1.0 1.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/interiors/wooden_chair_lod0.glb" />
+  </Entity>
+  <Entity name="interior.house_b.candelabra.tall" translation="1.6 0 -0.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/candelabra_tall_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/interiors/candelabra_tall_lod0.glb" />
+    <PointLight translation="0 2.20 0" color="0xffd9a0" intensity="7000" shadows="false" />
+  </Entity>
+  <Entity name="interior.house_b.bookshelf-5" translation="7.6 0 -4.6" transform="rotation: 0 180 0; scale: 1.0 1.0 1.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bookshelf_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/interiors/bookshelf_lod0.glb" />
+  </Entity>
+  <Entity name="interior.house_b.rug.woven" translation="-1 0 -0.6" transform="rotation: 0 0 0; scale: 0.9 0.9 0.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.6 0.06 1.6">
+    <GltfScene url="/assets/meshes/interiors/rug_woven_lod0.glb" />
+  </Entity>
+  <Entity name="interior.house_b.wooden.crate" translation="-8 0 -4.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
+  </Entity>
+  <Entity name="interior.house_b.scholar" translation="-1 0 0.6" script="townsfolk.lua" prop-banter="“Os mapas antigos falam de uma cidadela a oeste.”|“Silêncio, por favor. Estou a ler.”|“Os cristais do leste brilham à noite. Curioso.”" prop-gestures="talk|yes|no|wave" prop-interact_range="3" prop-radius="0" prop-talk_range="6">
+    <GltfScene url="/assets/meshes/characters/npc_scholar_lod0.glb" />
+  </Entity>
+  <Group translation="0 0 -1" body="none" collider="none">
+    <PointLight translation="0 2.30 0" color="0xffd0a0" intensity="6000" />
+  </Group>
+  <ScenePortal name="exit" translation="0 0 -9" target="main" entry="@back" prompt="Sair" auto-radius="1.6" sound="door_close" toast="A porta devolve-te à vila." />
+</world>

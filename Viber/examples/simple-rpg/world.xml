@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<world clear-color="#8fc2ef" static="true">
+<world clear-color="#8fc2ef" static="true" title="Vael">
   <ProjectileTemplate id="enemy-arrow" speed="16" damage="8" max-life="2.5" sensor-radius="0.3" faction="enemy" />
   <Include src="/world/environment.xml" />
-  <PlayerGLTF name="player" pos="0 150 0" model-url="/assets/meshes/characters/hero_lod0.glb" />
   <SpawnGate target-entity="player" y-fallback="150" />
+  <PostFxDebugToggle />
   <Group name="world-base" translation="0 38.7304 0">
     <Terrain render-distance="950" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" heightmap="world.data/terrain.ahgt" base-color="#c9c5ba" layers="grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road" shore-width="6" snow-height="0.92" cliff-angle="50" sharpen="true" sharpen-angle="35" sharpen-seed="7" cliff-streaks="0.55" cliff-moss="0.4" />
     <NavMesh />
@@ -29,7 +29,6 @@
   <Include src="/world/landmarks/wilds.xml" />
   <Include src="/world/landmarks/village.xml" />
   <Include src="/world/landmarks.xml" />
-  <Include src="/world/interiors.xml" />
   <Include src="/world/frontier/ridges.xml" />
   <Include src="/world/frontier/cliffs.xml" />
   <Include src="/world/frontier/horizon.xml" />
@@ -47,18 +46,6 @@
   <Include src="/world/creatures/enemies.xml" />
   <Include src="/world/creatures/bosses.xml" />
   <Include src="/world/ai/npcs.xml" />
-  <OrbitCamera distance="3.3" height="1.55" pitch="18.3" fov="64" follow-lag="0.18" turn-lag="0.38" min-terrain-distance="1.0" />
-  <Group name="ui" translation="0 38.7304 0">
-    <PostFxDebugToggle />
-    <Include src="/world/hud.xml" />
-    <Include src="/world/menu.xml" />
-    <Include src="/world/profiler.xml" />
-    <HudScreenLayer />
-    <Minimap range="60" />
-    <Compass />
-    <WaypointArrow margin="64" />
-    <DialogueBalloon />
-  </Group>
   <Scatter id="engine-53" profile="shore-rocks" count="9" seed="13943144449614675968" region-min="-210.0 0 -38.7" region-max="-168.5 0 9.6" avoid-water="0" avoid-road="1" avoid-cliff="1" align-to-terrain="1" random-yaw="1" avoid-overlaps="1" footprint-radius="0.8" max-slope-deg="55" max-slope-attempts="4" scale-min="0.55" scale-max="1.4" scale-axis-min="0.85" scale-axis-max="1.15" base-y-offset="-0.12">
     <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" lod1-url="/assets/meshes/props/rock_boulder_lod1.glb" lod2-url="/assets/meshes/props/rock_boulder_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
     <GltfScene url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />

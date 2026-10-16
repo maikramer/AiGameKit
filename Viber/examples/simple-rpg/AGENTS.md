@@ -51,11 +51,16 @@ Contrato completo (ops, ferramentas, paridade editor/CLI): `Viber/AGENTS.md`, se
 - **Pinceladas de terreno/pintura gravam em `world.data/`**: `terrain.ahgt`
   + `terrain.ahgt.paint` são PARTE DO ESTADO DO MUNDO — commita-os como o
   resto (não estão no .gitignore de propósito).
-- **Portais das casas são data-driven**: `scripts/building-portal.lua` deriva
-  o registo dos NOMES das entidades (`portal.<sala>[.<sufixo>]` fora,
-  `portal.exit_<sala>` dentro da bolsa) — mover/acrecentar portas no editor
-  FUNCIONA sem tocar no script. Salas novas: duplicar uma sala em
-  `world/interiors.xml` (`viber scene dup`) + um par de portas com os nomes acima.
+- **Interiores são CENAS** (`config.yaml` → `project:`): cada sala é
+  `scenes/interiors/<sala>.xml` (universo próprio, sem terreno), com
+  `<SceneEntry name="from-town">` e `<ScenePortal name="exit" target="main"
+  entry="@back" auto-radius="1.6">`. As portas da vila são `<ScenePortal
+  target="interiors/<sala>" entry="from-town">` em `world/cities/discordia/portals.xml`
+  (as 3 bancas do mercado apontam para a mesma sala; `@back` devolve à banca usada).
+  Jogador, câmara e HUD são autoloads (`world/autoload/*.xml`). Sala nova:
+  `viber scene new-scene interiors/<nome> --interior "20 16"` + um `<ScenePortal>` na
+  vila; `viber scene lint` valida alvos e entradas. Editar uma sala: abrir a aba no
+  editor (dock Ficheiros) ou `viber scene --world scenes/interiors/<sala>.xml …`.
 - Depois de qualquer edição: `viber analyze` (exit 1 em erro; warnings listam
   attrs desconhecidos; `<StaticSpawner>`/`place` num estático = erro).
 - **Gotcha self-closing:** acrescentar filhos a `<Entity … />` cria um

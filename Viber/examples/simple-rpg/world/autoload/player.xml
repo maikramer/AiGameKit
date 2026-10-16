@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Autoload (config.yaml project.autoload): spawnado UMA vez, sobrevive às trocas de cena. -->
+<world>
+  <PlayerGLTF name="player" pos="0 150 0" model-url="/assets/meshes/characters/hero_lod0.glb" />
+  <OrbitCamera distance="3.3" height="1.55" pitch="18.3" fov="64" follow-lag="0.18" turn-lag="0.38" min-terrain-distance="1.0" />
+</world>
