@@ -1207,29 +1207,61 @@ fn toggle<C: Component>(
     }
 }
 
-/// Temperatura do grading CDL pela hora: a golden hour aquece (+0.35), a
-/// noite arrefece (−0.25) — o "film stock" muda com o dia.
+/// Temperatura do grading CDL pela hora: a golden hour aquece, a noite
+/// arrefece (−0.25) — o "film stock" muda com o dia.
+///
+/// ⚠ **UNIDADE:** o `ColorGrading::global.temperature` do Bevy NÃO é "stops"
+/// nem uma escala 0..1 — é um DESVIO da cromaticidade *x* CIE 1931 aplicado
+/// a cavalo no branco D65 (`white_point_xy.x = 0.3127 − temperature`, matriz
+/// `balance` pré-calculada no CPU em `bevy_render::view`). O intervalo útil
+/// para o lado QUENTE é ~0.05 de desvio: com 0.35 a matriz já mandava relva
+/// para [2.1, 0.2, 0.1] (magenta-laranja) e com 0.445 — o pico antigo
+/// `golden×0.35 + low_sun×0.10` — mandava branco para [8.8, −0.09, 0.42]: o
+/// VERDE clampava a zero e o frame INTEIRO lia vermelho/magenta (o "golden
+/// hour bug" do gauntlet p1 r1, screenshots 17/18; A/B `debug.set_clock`
+/// 12:01 limpo ↔ 05:46/19:16 vermelho). Os braços quentes vivem por isso
+/// agora em cromaticidade real: [`GOLDEN_GRADE_TEMPERATURE`] e
+/// [`GOLDEN_GRADE_WARMTH`], com o pico total (0.045) a mandar branco para
+/// [1.40, 0.92, 0.89] e relva para [0.36, 0.46, 0.13] — quente e em gamut.
+/// A noite fica em −0.25 de propósito: o lado frio EMPURRA R para baixo
+/// (branco → [−1.2, 1.5, 3.1] = azul/ciano na noite plena) e ESSE look foi
+/// o aprovado pelas LOOPs A/B/C — o teste
+/// [`test_golden_grade_warm_side_stays_in_gamut`] fecha o lado quente; o
+/// frio é decisão de look, não bug.
 pub fn grade_temperature(golden: f32, night: f32) -> f32 {
     grade_temperature_full(golden, 0.0, night)
 }
 
-/// Aquecimento GLOBAL do CDL na janela de sol baixo (LOOP D). O `golden` da
-/// atmosfera é a gaussiana estreita (pico 4°, σ 8° — ~0 às 07:30); sem este
-/// braço o stock só aquecia nos ~15 min do nascer. 0.28 pintava o frame
-/// inteiro de laranja (crítica r1-D) — 0.10 mantém o aquecimento na KEY da
-/// luz e no reboco sunlit; o resto do frame preserva o albedo.
-pub const GOLDEN_GRADE_WARMTH: f32 = 0.10;
+/// Aquecimento CDL do pico da golden hour, em CIE xy (ver
+/// [`grade_temperature`]). 0.35 já mandava relva → [2.1, 0.2, 0.1]
+/// (magenta-laranja); 0.035 manda branco → [1.31, 0.94, 0.91] — o stock
+/// quente visível, em gamut.
+pub const GOLDEN_GRADE_TEMPERATURE: f32 = 0.035;
+
+/// Aquecimento GLOBAL do CDL na janela de sol baixo (LOOP D), em CIE xy.
+/// O `golden` da atmosfera é a gaussiana estreita (pico 4°, σ 8° — ~0 às
+/// 07:30); sem este braço o stock só aquecia nos ~15 min do nascer. Na escala
+/// antiga 0.28 pintava o frame inteiro de laranja (crítica r1-D) — o pico
+/// total agora (golden + sol baixo ≈ 0.045) mantém branco →
+/// [1.40, 0.92, 0.89] e relva → [0.36, 0.46, 0.13]: quente, em gamut, com o
+/// aquecimento forte a viver na KEY da luz e no céu dourado.
+pub const GOLDEN_GRADE_WARMTH: f32 = 0.010;
 
 /// Temperatura do grading CDL pela hora, com o braço de sol baixo (LOOP D).
 /// `low_sun` é [`low_sun_split_weight`] da elevação REAL do sol: a 07:30
-/// (26,9°) soma ~0.10 de aquecimento global — o reboco sunlit aquece pela
-/// KEY da luz e o resto do frame pelo stock; as sombras ficam para o
-/// split-tone arrefecer (B > R medido em sombra a 07:30).
+/// (26,9°) soma o aquecimento global leve — o reboco sunlit aquece pela KEY
+/// da luz e o resto do frame pelo stock; as sombras ficam para o split-tone
+/// arrefecer (B > R medido em sombra a 07:30). O pico quente (golden 1 +
+/// sol baixo 1) fica a 0.045 — dentro do intervalo são ±0.05 do white
+/// balance do Bevy; o teste
+/// [`test_golden_hour_grade_never_leaves_gamut`] fecha a matriz `balance`
+/// real do Bevy e garante que NENHUMA hora do relógio produz canal
+/// negativo.
 pub fn grade_temperature_full(golden: f32, low_sun: f32, night: f32) -> f32 {
     let g = if golden.is_finite() { golden } else { 0.0 };
     let l = if low_sun.is_finite() { low_sun } else { 0.0 };
     let n = if night.is_finite() { night } else { 0.0 };
-    g * 0.35 + l * GOLDEN_GRADE_WARMTH - n * 0.25
+    g * GOLDEN_GRADE_TEMPERATURE + l * GOLDEN_GRADE_WARMTH - n * 0.25
 }
 
 /// Saturação pós-tonemap do grading CDL pela hora. A golden hour satura
@@ -2932,9 +2964,10 @@ mod tests {
         assert!((grade_saturation(0.0, 0.0) - 1.0).abs() < 1e-6);
         // Golden hour continua a saturar.
         assert!((grade_saturation(1.0, 0.0) - 1.18).abs() < 1e-6);
-        // A noite arrefece e a golden aquece, na mesma proporção de sempre.
+        // A noite arrefece NA MESMA proporção de sempre (o azul aprovado);
+        // a golden aquece agora em CIE xy (ver [`grade_temperature`]).
         assert!((grade_temperature(0.0, 1.0) + 0.25).abs() < 1e-6);
-        assert!((grade_temperature(1.0, 0.0) - 0.35).abs() < 1e-6);
+        assert!((grade_temperature(1.0, 0.0) - GOLDEN_GRADE_TEMPERATURE).abs() < 1e-6);
     }
 
     #[test]
@@ -3248,15 +3281,136 @@ mod tests {
     fn test_grade_temperature_full_warms_low_sun_and_spares_midday() {
         // Meio-dia (peso 0) e a LOOP B pura: iguais — o dia neutro não mexe.
         assert_eq!(grade_temperature_full(0.0, 0.0, 0.0), 0.0);
-        assert!((grade_temperature_full(0.35, 0.0, 0.0) - 0.35 * 0.35).abs() < 1e-6);
+        assert!((grade_temperature_full(0.35, 0.0, 0.0) - 0.35 * GOLDEN_GRADE_TEMPERATURE).abs() < 1e-6);
         // 07:30 do gauntlet (`golden` ~0, peso 26,9° ~1): aquecimento global
-        // ~0.28 — o stock aquece a manhã que a gaussiana não cobria.
+        // leve — o stock aquece a manhã que a gaussiana não cobria.
         let t0730 = grade_temperature_full(0.0, low_sun_split_weight(26.9), 0.0);
         assert!(t0730 >= GOLDEN_GRADE_WARMTH * 0.95, "07:30 aquece: {t0730}");
         // A noite continua a arrefecer NA MESMA proporção de sempre.
         assert!((grade_temperature_full(0.0, 0.0, 1.0) + 0.25).abs() < 1e-6);
         // Lixo não finito não propaga.
         assert_eq!(grade_temperature_full(f32::NAN, f32::NAN, f32::NAN), 0.0);
+    }
+
+    /// Matriz `balance` do Bevy (`bevy_render::view::From<ColorGrading>`) —
+    /// réplica EXATA das constantes do upstream (RGB_TO_LMS/LMS_TO_RGB/D65):
+    /// branco → LMS, escala ao branco deslocado pela `temperature`, volta a
+    /// RGB. É esta matriz que o shader aplica (`max(balance·color, 0)`).
+    fn bevy_white_balance(temperature: f32) -> [[f32; 3]; 3] {
+        const RGB_TO_LMS: [[f32; 3]; 3] = [
+            [0.311692, 0.652085, 0.0362225],
+            [0.0905138, 0.901341, 0.00814478],
+            [0.00764433, 0.0486554, 0.943700],
+        ];
+        const LMS_TO_RGB: [[f32; 3]; 3] = [
+            [4.06305, -2.93241, -0.130646],
+            [-0.40791, 1.40437, 0.00353630],
+            [-0.0118812, -0.0486532, 1.0605344],
+        ];
+        const D65_X: f32 = 0.31272;
+        const D65_Y: f32 = 0.32903;
+        const D65_LMS: [f32; 3] = [0.975538, 1.01648, 1.08475];
+        // white_point_xy = D65 + (−temperature, tint=0) → LMS via CAM16.
+        let wp_x = D65_X - temperature;
+        let wp_y = D65_Y;
+        let wp_lms = [
+            0.701634 + (-0.051461 + 0.452749 * wp_x) / wp_y,
+            1.15856 + (0.045854 - 0.296122 * wp_x) / wp_y,
+            -0.904175 + (0.953127 - 0.955206 * wp_x) / wp_y,
+        ];
+        // diagonal(D65_LMS / wp_lms) × RGB_TO_LMS, depois LMS_TO_RGB × isso.
+        let adj: [[f32; 3]; 3] = std::array::from_fn(|r| {
+            std::array::from_fn(|c| D65_LMS[r] / wp_lms[r] * RGB_TO_LMS[r][c])
+        });
+        std::array::from_fn(|r| {
+            std::array::from_fn(|c| {
+                LMS_TO_RGB[r].iter().enumerate().map(|(k, x)| x * adj[k][c]).sum()
+            })
+        })
+    }
+
+    fn apply_balance(m: [[f32; 3]; 3], v: [f32; 3]) -> [f32; 3] {
+        [
+            m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2],
+            m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2],
+            m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2],
+        ]
+    }
+
+    /// O golden hour bug do gauntlet p1 r1: os braços quentes do CDL eram
+    /// escritos como se `temperature` fosse "stops" (+0.445 no pico) e a
+    /// matriz de white balance do Bevy (que lê CIE xy!) mandava o VERDE de
+    /// todo o frame para negativo — o shader clampe a 0 e a hora dourada
+    /// renderizava magenta (screenshots 17/18 do bundle). Contrato do LADO
+    /// QUENTE (o que este fix reescala): para todas as elevações em que
+    /// [`grade_temperature_full`] devolve temperatura positiva (a janela
+    /// golden + sol baixo), branco e relva mantêm TODOS os canais ≥ 0 na
+    /// matriz `balance` real — nenhum canal destruído, em nenhuma hora
+    /// quente do relógio. O lado FRIO (−0.25 na noite, look azul aprovado
+    /// pelas LOOPs A/B/C) empurra o vermelho de neutros para negativo POR
+    /// DECISÃO DE LOOK — fica fora deste contrato e deste fix.
+    #[test]
+    fn test_golden_grade_warm_side_stays_in_gamut() {
+        // branco puro e um verde de relva típico do splat.
+        const WHITE: [f32; 3] = [1.0, 1.0, 1.0];
+        const GRASS: [f32; 3] = [0.2, 0.5, 0.15];
+        // varrimento de −15° (noite funda) a +62° (meio-dia do simple-rpg).
+        for step in 0..=1540 {
+            let elevation = -15.0 + step as f32 * 0.05;
+            let night = 1.0 - smooth_step_like(elevation, -9.0, -1.0);
+            let golden = (-(((elevation - 4.0) / 8.0).powi(2))).exp() * (1.0 - night);
+            let low_sun = low_sun_split_weight(elevation);
+            let t = grade_temperature_full(golden, low_sun, night);
+            let m = bevy_white_balance(t);
+            // Lado quente (o que este fix reescala): NENHUM canal negativo.
+            // Lado frio (noite azul aprovada, fora do contrato deste fix):
+            // só o VERDE tem de sobreviver — o canal que o bug destruía (o
+            // vermelho de neutros à noite é decisão de look das LOOPs A/B/C).
+            for (name, color) in [("branco", WHITE), ("relva", GRASS)] {
+                let out = apply_balance(m, color);
+                if t > 0.0 {
+                    assert!(
+                        out.iter().all(|&c| c >= 0.0),
+                        "elevação {elevation:.2}° → temperature {t:.4} destrói canal de {name}: {out:?}"
+                    );
+                } else {
+                    assert!(
+                        out[1] >= 0.0,
+                        "elevação {elevation:.2}° → temperature {t:.4} destrói o VERDE de {name}: {out:?}"
+                    );
+                }
+            }
+        }
+        // Âncoras do relógio: o pico da golden (sol a 4°) é quente; o
+        // meio-dia (62°) é EXACTAMENTE zero — o dia neutro não mexe.
+        let at = |elevation: f32| {
+            let night = 1.0 - smooth_step_like(elevation, -9.0, -1.0);
+            let golden = (-(((elevation - 4.0) / 8.0).powi(2))).exp() * (1.0 - night);
+            grade_temperature_full(golden, low_sun_split_weight(elevation), night)
+        };
+        assert!(at(4.0) > 0.04, "o pico da golden hour aquece: {}", at(4.0));
+        assert!(at(62.0).abs() < 1e-4, "meio-dia neutro: {}", at(62.0));
+        assert!(at(-14.0) < 0.0, "noite funda arrefece");
+        // E o pico quente antigo REPRODUZIA o bug (guarda do sentido do
+        // teste: a matemática apanha mesmo a destruição de gamut).
+        let broken = apply_balance(bevy_white_balance(0.445), WHITE);
+        assert!(
+            broken[1] < 0.0,
+            "sanidade: +0.445 tinha de deitar o verde abaixo de zero: {broken:?}"
+        );
+        // O pico NOVO (golden 1 + sol baixo 1 = 0.045) fica quente E em gamut.
+        let peak = apply_balance(bevy_white_balance(0.045), WHITE);
+        assert!(
+            peak.iter().all(|&c| c >= 0.0) && peak[0] > 1.2 && peak[2] < 1.0,
+            "o pico da golden hour tem de ler quente sem sair do gamut: {peak:?}"
+        );
+    }
+
+    /// `smooth_step` de `worldsys` replicado (a `atmosphere` usa esta curva
+    /// para o `night` que entra no grading).
+    fn smooth_step_like(x: f32, edge0: f32, edge1: f32) -> f32 {
+        let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
     }
 
     #[test]
