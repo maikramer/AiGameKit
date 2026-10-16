@@ -1057,7 +1057,16 @@ pub fn luau_update(
                     // item) chega a `viber.events()` — quests em Lua sem
                     // tocar no Rust.
                     if let Some(events) = locals.events.as_deref_mut() {
-                        events.push(ScriptGameEvent::Collect { item: kind, amount });
+                        events.push(ScriptGameEvent::Collect { item: kind.clone(), amount });
+                    }
+                    // Snapshot fresco (mesma razão do ItemAdd acima).
+                    if let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
+                        let key = if known {
+                            kind.to_ascii_lowercase()
+                        } else {
+                            crate::economy::normalize_item(&kind)
+                        };
+                        *ctx.vault.entry(key).or_insert(0) += amount;
                     }
                 }
             }
@@ -1065,7 +1074,17 @@ pub fn luau_update(
                 if let Some(vault) = vault.as_deref_mut() {
                     vault.item_add(&id, amount);
                     if let Some(events) = locals.events.as_deref_mut() {
-                        events.push(ScriptGameEvent::Collect { item: id, amount });
+                        events.push(ScriptGameEvent::Collect { item: id.clone(), amount });
+                    }
+                    // Snapshot do vault atualizado AQUI: a mutação feita por
+                    // ESTE sistema não é vista pelo `is_changed()` do frame
+                    // seguinte (o tick da mudança coincide com o last_run do
+                    // sistema — armadilha clássica de change detection), e o
+                    // `viber.vault_get` dos scripts ficava preso no valor do
+                    // arranque (correções reutilizáveis → engine).
+                    if let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
+                        let key = crate::economy::normalize_item(&id);
+                        *ctx.vault.entry(key).or_insert(0) += amount;
                     }
                 }
             }
@@ -1183,12 +1202,21 @@ pub fn luau_update(
                 }
             }
             ScriptCommand::VaultTake { kind, amount } => {
-                if let Some(vault) = vault.as_deref_mut()
-                    && !vault.take(&kind, amount)
-                    && locals.once_warned.insert(format!("vault_take:{kind}"))
-                {
-                    warn!(target: "viber::luau",
-                            "viber.vault_take: sem '{kind}' ×{amount} suficiente — nada consumido");
+                if let Some(vault) = vault.as_deref_mut() {
+                    let took = vault.take(&kind, amount);
+                    if !took && locals.once_warned.insert(format!("vault_take:{kind}")) {
+                        warn!(target: "viber::luau",
+                                "viber.vault_take: sem '{kind}' ×{amount} suficiente — nada consumido");
+                    }
+                    // Snapshot fresco (mesma razão do ItemAdd acima).
+                    if took
+                        && let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>()
+                    {
+                        let key = crate::economy::normalize_item(&kind);
+                        if let Some(left) = ctx.vault.get_mut(&key) {
+                            *left = left.saturating_sub(amount);
+                        }
+                    }
                 }
             }
             ScriptCommand::OwnUiAction(name) => {
