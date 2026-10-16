@@ -459,6 +459,12 @@ pub fn resolve_pending_colliders(
     scene_bounds: Query<(&GlobalTransform, Option<&bevy::camera::primitives::Aabb>)>,
     hierarchy: Query<&Children>,
     mut debug_colliders: Local<u32>,
+    // (próximo instante em que um warn de fallback cabe, suprimidos desde o
+    // último) — um teleporte atravessando o mundo põe MILHARES de props a
+    // carregar em simultâneo e cada um estourava o warn de fallback AABB
+    // (2521 linhas num walkthrough do simple-rpg: o ruído escondia os erros
+    // verdadeiros que o QA lê).
+    mut fallback_warn: Local<(f64, u32)>,
 ) {
     for (entity, mut request, entity_global) in pending.iter_mut() {
         request.age += time.delta_secs();
@@ -505,10 +511,27 @@ pub fn resolve_pending_colliders(
                         Some(bevy::asset::LoadState::Loading)
                     )
                 {
-                    bevy::log::warn!(
-                        "physics: glTF de colisão atrasado (>{} s) — fallback AABB (entity {entity:?})",
-                        PENDING_TIMEOUT
-                    );
+                    // Throttle: o 1.º do rajoso warna com a contagem dos
+                    // suprimidos; os restantes contam silenciosos. Um warn
+                    // por prop (2521 num walkthrough) escondia o resto do log.
+                    let (next_ok, suppressed) = &mut *fallback_warn;
+                    let now = time.elapsed_secs_f64();
+                    if now >= *next_ok {
+                        if *suppressed > 0 {
+                            bevy::log::warn!(
+                                "physics: +{} colliders caíram no fallback AABB desde o último aviso",
+                                *suppressed
+                            );
+                        }
+                        bevy::log::warn!(
+                            "physics: glTF de colisão atrasado (>{} s) — fallback AABB (entity {entity:?})",
+                            PENDING_TIMEOUT
+                        );
+                        *next_ok = now + 30.0;
+                        *suppressed = 0;
+                    } else {
+                        *suppressed += 1;
+                    }
                     if let Some((center, half)) = bounds() {
                         bounds_cuboid(&mut commands, entity, center, half);
                     }
