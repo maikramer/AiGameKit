@@ -1,6 +1,8 @@
 # P2 — Exploração (loop BotW): como verificar
 
-Ronda 1 · mundo `Viber/examples/simple-rpg/` · engine `Viber/src`.
+Rondas 1–2 · mundo `Viber/examples/simple-rpg/` · engine `Viber/src`.
+**Ronda 2 acrescenta:** mapa regional **[M]** com revelação por bioma
+(`src/hud/map.rs`) e coluna de fumo korok ×3 (legível a ≥90 m).
 
 ## 0. Estado e arranque
 
@@ -196,7 +198,125 @@ streaming/compositor) — por isso o A/B de um processo só é o que vale.
 
 ```bash
 cd Viber
-cargo test -p viber                      # 1671 passed, 0 failed
-cargo clippy -p viber -- -D warnings     # limpo
+cargo test -p viber                      # 1685 passed, 0 failed (r2)
+cargo clippy -p viber -- -D warnings     # limpo nos ficheiros da peça
+                                         # (na sessão r2, WIP paralelo de
+                                         # outro agente em src/racing/* +
+                                         # src/recipes/spawn.rs deixava
+                                         # warnings alheios no tree)
 cargo run -p viber -- analyze examples/simple-rpg/world.xml   # OK
+cargo run -p viber -- analyze examples/simple-rpg/qa-map.xml  # OK (mundo QA r2)
 ```
+
+---
+
+# Ronda 2 — Mapa regional [M] + fumo korok ×3
+
+## 7. Mapa regional [M] (`src/hud/map.rs`, preset RPG) — RESULTADOS DA SESSÃO
+
+Mundo QA dedicado (save próprio, não toca no save do `world.xml`):
+
+```bash
+cd Viber
+viber session up --world examples/simple-rpg/qa-map.xml   # binário INSTALADO!
+viber session claim --owner p2-r2
+./target/release/viber debug probe       # descobre a porta pela sessão
+```
+
+> ⚠ `session up` corre o binário INSTALADO com `--no-cargo` — depois de
+> editar a engine: `cargo build -p viber --release && cp target/release/viber
+> ~/.local/bin/viber` ANTES do `session up` (sintoma de binário velho:
+> `viber.reveal_biome` nil na REPL).
+
+Resultados verificados ao vivo (screenshots em `screenshots/`):
+
+| Passo | Resultado | Evidência |
+|-------|-----------|-----------|
+| Save fresco → [M] | vale aceso, 4 biomas sob névoa, pins de 5 atalaisas + praça + herói, rodapé `0/17 · 0/4 · … [??]` | `r2-mapa-01-vila-so.png` |
+| `viber.reveal_biome("dark_forest")` (o MESMO `ScriptCommand` da torre) | cunha sul acende EM VIVO (~0.5 s), marcos do bioma entram como pins, rodapé 1/4 `[OK]` | `r2-mapa-02-bosque-revelado.png` |
+| Restantes 3 biomas | mapa-múndi inteiro: topografia + água + estradas + neve | `r2-mapa-03-todos-revelados.png` |
+| Cursor sobre pin | rótulo "Atalaia do Ermo (por assinar)" | `r2-mapa-04-hover-pin.png` |
+| `viber.save()` → `viber.load_save()` → [M] | 4/4 `[OK]` mantidos (estado no `revealed_biomes` do save; zero estado novo no mapa) | `r2-mapa-05-persistencia.png` (ver artefacto cosmético nas notas) |
+| [M]/Esc/[L] | fecham (Esc verificado via BRP: `Visibility: Hidden`) | — |
+| Perf da abertura | frame 16.67 ms (fechado) → **16.66 ms** (aberto) — Δ0.01 ms, gate ≤50 ms com folga | `viber debug prof --samples 4` |
+
+Fechar: **[M]/Esc/[L]** (`./target/release/viber debug key m` outra vez).
+
+### 7.2 Revelação por bioma (o GAP da ronda 1)
+
+Revelar com o fluxo REAL da torre ([E] no teodolito da atalaia do bosque) ou
+pela mesma rota de runtime via REPL (`viber.reveal_biome` é o mesmo
+`ScriptCommand::RevealBiome` que o script da torre enfileira):
+
+```bash
+# via torre (topo do bosque; ver §1.2/1.3) ou:
+./target/release/viber debug lua 'viber.reveal_biome("dark_forest") return true'
+./target/release/viber debug key m
+./target/release/viber debug screenshot -o screenshots/r2-mapa-02-bosque-revelado.png
+```
+
+### 7.3 Pins e hover
+
+- **Marcos assinados** → pin a OURO cheio; por assinar → contorno teal
+  (assinável via [F] no mundo para ver a troca).
+- **Faróis de missão** ([`QuestGuide`] — NPC por aceitar/entregar) → pontos
+  vermelhos.
+- **Hover**: mover o cursor sobre um pin (`viber debug move X Y`) → rótulo
+  com o nome ("Atalaia do Bosque", "Poço da Encruzilhada (por assinar)").
+- **Guard back-compat**: num mundo SEM atalaias (ex. `qa-cenarios.xml`) o
+  mapa não gera névoa nenhuma — tudo visível (testes
+  `test_region_hidden_gating` + `test_world_without_towers_never_locks`).
+
+### 7.4 Persistência (reusa `RevealedBiomes` — zero estado novo)
+
+```bash
+./target/release/viber debug lua 'viber.reveal_biome("desert") return true'
+./target/release/viber debug lua 'viber.save() return true'      # grava
+./target/release/viber debug lua 'viber.load_save() return true' # carrega
+./target/release/viber debug key m
+# → deserto continua revelado no mapa (o estado vive no save, campo
+#   revealed_biomes — ronda 1; o mapa só o deriva)
+```
+
+### 7.5 Perf da abertura (gate: hitch ≤ 50 ms)
+
+A cozinha cartográfica (1024², 2 passagens de 8 frames) corre EM FUNDO desde
+o arranque — abrir [M] é um flip de `Visibility` + posicionamento de ~25 nós.
+Medido ao vivo (release, `viber debug prof --samples 4`):
+
+```
+fechado:  frame média 16.67 ms
+aberto:   frame média 16.66 ms     ← primeiro frame pós-[M]
+```
+
+## 8. Fumo korok ×3 (legível a ≥90 m) — MEDIDO
+
+Presets em `world/koroks.xml` (24 emissores idênticos):
+
+| Campo | r1 | r2 (×3 na coluna) |
+|-------|----|----|
+| emission-rate | 3 | **9** |
+| start-size | 0.28–0.62 | **0.84–1.86** |
+| start-life | 2.6–4.4 | **5.5–8.0** (¹) |
+| start-speed | 0.25–0.55 | 0.2–0.45 |
+
+(¹) vida NÃO foi ×3: o preset `smoke` tem flutuabilidade +0.6 m/s² e a
+coluna cresce `v0·t + 0,3·t²` — vida ×3 dava um pilar de ~50 m. 5.5–8.0 s
+mantém a coluna a **10–23 m** com puffs que crescem ×2.4 até ~4.5 m no topo.
+
+Verificação à distância (korok `korok-ermo-pedra-1` em (128, 84)):
+
+```bash
+./target/release/viber debug --world qa-map lua 'viber.debug.tp(215,55) viber.debug.face(128,84) return true'
+./target/release/viber debug --world qa-map lua 'local x,y,z=viber.debug.pos(4294965849) local p=viber.debug.player() return math.sqrt((x-p.x)^2+(z-p.z)^2)'
+# → 91.7 m
+./target/release/viber debug --world qa-map screenshot -o screenshots/r2-fumo-92m.png
+```
+
+- **91.7 m**: coluna nítida contra a encosta — `r2-fumo-92m.png` (+ zoom
+  `r2-fumo-92m-zoom.png`). **O barro "≥90 m na prática": cumprido.**
+- **~147 m**: ainda distinguishável (fio branco, `r2-fumo-147m.png`) —
+  o limite honesto de leitura fica acima do pedido.
+- Nota de terreno: a 94 m do lado norte a coluna é ocultada por uma crista
+  (oclusão de mundo, não do emissor) — o tiro válido é com linha de visão
+  (lado este do Ermo).

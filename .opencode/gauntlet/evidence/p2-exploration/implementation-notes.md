@@ -1,5 +1,70 @@
 # P2 — Notas de implementação
 
+## Ronda 2 — mapa regional [M] + fumo ×3 (o GAP do crítico)
+
+### Engine — `src/hud/map.rs` (novo, ~1 100 linhas com testes)
+
+| Peça | Decisão |
+|------|---------|
+| **Base cartográfica** | Cozida do [`TerrainRuntime`] — o MESMO caminho do minimapa (heightmap `.ahgt` + carve de lagos/rios/estradas), a 1024² (4 m/texel) com tinta hipsométrica (vale→relva→alto→pedra→neve), sombra de encosta (diferença com o vizinho norte, clamp ±0.32), água ardósia e estrada ocre. Duas passagens (alturas, cor) em fatias de **128 linhas/frame** (8 frames cada) — a cozinha corre EM FUNDO desde o arranque, nunca na tecla. |
+| **Gating de névoa** | Píxel escondido ⇔ dentro de um `<BiomeRegion>` cujo bioma tem atalaia (`RevealedBiomes::keyed_biomes`) e não está revelado. Ponte de vocabulário: `reveal_key()` normaliza os ids com HÍFEN das regiões (`dark-forest`) para as chaves com UNDERSCORE da Nota (`dark_forest`) — sem isto o mapa nunca casava. Mundos sem atalaias não geram névoa (back-compat r1). Raio da praça (`VILLAGE_CLEAR_M` = 70 m) fica sempre aceso. Arestas dos polígonos alargadas 12 m no teste (`FOG_EDGE_EXPAND_M`) — píxeis EM CIMA da aresta caem fora do ray-cast e ficavam acesos (linhas diagonais nas fronteiras dos wedges). |
+| **Re-revelação ao vivo** | A passagem de COR re-corre quando `RevealedBiomes`/`BiomeRegions` mudam (8 frames, máscaras de água/estrada em cache). **Lição de engine**: mutar `image.data` in-place NÃO chega ao widget de UI (a textura 1.ª ficava no ecrã) — a correção é trocar por uma textura NOVA + `images.remove(old)` (handle novo = import fresco). Verificado ao vivo: a névoa levanta ~0.5 s após `reveal_biome`. |
+| **Pins** | Pools fixos (18 marcos, 6 atalaisas, 6 missões, vila, herói). Fontes (zero tracking novo): `travel::LandmarkBlips` (gating já feito), `NotaLog` (assinado = ouro cheio vs contorno teal), `QuestGuide::beacons` (faróis de missão), `feedback::RespawnCatalog` (praça da vila), `Player`. Hover: cursor→px do painel (moldura centrada — math determinístico, sem ler layout Taffy) + `pick_pin` (mais perto dentro de 14 px). |
+| **Stacking de UI** | A raiz do mapa usa `GlobalZIndex(200)` — a seta do guia de missão usa `GlobalZIndex(40)` e o `ZIndex` local não a batia. |
+| **Fechadura de input** | Campo novo `MenusOpen::map` espelhado no `map_key_system` — o herói não anda com o mapa aberto e o [L] que fecha não dispara a guarda. `any()` inclui `map`. |
+| **Persistência** | ZERO estado novo — a revelação do mapa é derivada de `travel::RevealedBiomes`, que já viaja no save (r1). Verificado: save→load mantém 4/4 e o mapa acende. |
+| **Perf** | Abrir [M] = flip de `Visibility` + ~25 nós: frame 16.67 → 16.66 ms no boot medido (gate do crítico: sem hitch >50 ms — Δ0.01 ms). A cozinha em fundo custa ≤~2 ms/frame durante 16 frames após o arranque/realojamento. |
+| **Tecla** | [M] livre na engine (só tabelas de mapeamento a usavam). Fecha com [M]/Esc/[L]. Plugin no preset RPG (junto ao TravelPlugin). |
+
+Testes novos (10 em `hud::map`): ponte de vocabulário, gating/névoa, raio da vila, rampa de tinta monotónica, clamp da sombra/névoa, mapeamento mundo↔painel north-up, apanha de pin, constantes de fatia, vocabulário dos biomas com chave, polígono expandido.
+
+### Conteúdo — fumo korok ×3 (`world/koroks.xml`, 24 emissores)
+
+| Campo | r1 | r2 |
+|-------|----|----|
+| emission-rate | 3 | **9** (×3) |
+| start-size | 0.28–0.62 | **0.84–1.86** (×3) |
+| start-life | 2.6–4.4 | **5.5–8.0** (≈×2.2, ver abaixo) |
+| start-speed | 0.25–0.55 | 0.2–0.45 |
+
+**A vida NÃO foi ×3 de cega**: o preset `smoke` tem flutuabilidade +0.6 m/s²
+(`gravity`) e a coluna cresce `v0·t + 0,3·t²` — vida ×3 (13.2 s) dava um
+PILAR de ~50 m. 5.5–8.0 s mantém a coluna a 10–23 m, com puffs que crescem
+×2.4 até ~4.5 m no topo. Capacidade: `capacity_quads(9, 8.0)` = 88 ≤ 512 ✓.
+
+**Leitura medida ao vivo** (korok `korok-ermo-pedra-1`, mundo QA `qa-map.xml`):
+- 91.7 m (medido `distance`): coluna nítida contra a encosta
+  (`r2-fumo-92m.png` + zoom) — **o barro do crítico era "≥90 m na prática": cumprido**;
+- ~147 m (`r2-fumo-147m.png`): ainda distinguishável (fio branco) — o limite
+  honesto de leitura fica acima dos 90 m pedidos;
+- ~15 m: coluna densa a subir do rochedo (`fumo-perto` da sessão; a versão
+  bundle é o zoom de 92 m).
+
+### Mundo QA novo — `examples/simple-rpg/qa-map.xml`
+
+Esqueleto do `qa-fantasia` (MESMO `world.data/terrain.ahgt`) + `landmarks.xml`
++ `towers.xml` + `koroks.xml` + `hud.xml`. Save próprio
+(`simple-rpg-qa-map.save.json`) — **não toca no save do `world.xml`**, o que
+permitiu fotografar o estado "vila só" (0/4) sem tocar em estado alheio.
+
+### Artefacto conhecido (cosmético, r2)
+
+Após `save→load`, o re-bake do mapa pode sair com a paleta mais pálida (as
+máscaras de água/estrada do re-bake pós-troca de cena podem nascer antes de
+`WaterBody`/`RoadPath` repovoarem). Estado/revelação/pins ficam certos
+(4/4 [OK] no shot `r2-mapa-05-persistencia.png`); só o tom difere até à
+próxima re-revelação. Ficou documentado para a ronda seguinte (gatear o bake
+pela prontidão dos recursos de água/estrada).
+
+### Notas de sessão (r2)
+
+O binário instalado `~/.local/bin/viber` estava STALE face às rondas 1–2 —
+o `viber session up` corre-o com `--no-cargo`; qualquer QA de engine nova
+exige `cargo build --release && cp target/release/viber ~/.local/bin/viber`
+antes do `session up`. (Sintoma: `viber.reveal_biome` nil na REPL.)
+
+## Ronda 1 — revelação por atalaia (histórico)
+
 ## Engine (`Viber/src`) vs conteúdo (`Viber/examples/simple-rpg`)
 
 ### Engine — revelação de bioma por atalaia (núcleo da peça)
