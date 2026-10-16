@@ -29,6 +29,8 @@
   <Include src="/world/landmarks/wilds.xml" />
   <Include src="/world/landmarks/village.xml" />
   <Include src="/world/landmarks.xml" />
+  <Include src="/world/towers.xml" />
+  <Include src="/world/koroks.xml" />
   <Include src="/world/frontier/ridges.xml" />
   <Include src="/world/frontier/cliffs.xml" />
   <Include src="/world/frontier/horizon.xml" />

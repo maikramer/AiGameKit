@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <world static="true">
+  <!-- Atalaias de agrimensura (exploração BotW): biome "tower" — sempre
+       visíveis/assináveis; tower-reveals diz QUE bioma a torre revela ao ser
+       sondada no topo (os marcos desse bioma passam a bússola/minimapa/[F]/[G]). -->
+  <Landmark name="atalaia-do-vale" biome="tower" label="Atalaia do Vale" />
+  <Landmark name="atalaia-do-bosque" biome="tower" label="Atalaia do Bosque" tower-reveals="dark_forest" />
+  <Landmark name="atalaia-do-ermo" biome="tower" label="Atalaia do Ermo" tower-reveals="desert" />
+  <Landmark name="atalaia-do-pantano" biome="tower" label="Atalaia do Pântano" tower-reveals="swamp" />
+  <Landmark name="atalaia-dos-picos" biome="tower" label="Atalaia dos Picos" tower-reveals="frozen_peaks" />
   <Landmark name="forest-outpost-tower" biome="dark_forest" label="Torre do Posto Avançado" survey-quest="forest_survey" mark-radius="10" />
   <Landmark name="forest-crossroads-well" biome="dark_forest" label="Poço da Encruzilhada" survey-quest="forest_survey" mark-radius="10" />
   <Landmark name="forest-stone-circle" biome="dark_forest" label="Círculo de Menires" survey-quest="forest_survey" mark-radius="10" />

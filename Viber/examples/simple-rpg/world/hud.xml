@@ -53,6 +53,12 @@
           <UiSpacer />
           <UiText bind="stone">0</UiText>
         </UiRow>
+        <UiRow class="resource" tooltip="Sementes de canção — a cada 5, um ponto de talento">
+          <UiIcon class="resource-icon" src="/assets/icons/crystal_blue.png" />
+          <UiText class="resource-label">SEMENTES</UiText>
+          <UiSpacer />
+          <UiText bind="korok-seed">0</UiText>
+        </UiRow>
       </UiPanel>
     </UiColumn>
     <UiColumn class="anchor-journal">
