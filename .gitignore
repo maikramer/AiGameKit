@@ -111,6 +111,11 @@ Text3D/testdata/baseline_meshes_raw/*
 # Agent tool artifacts
 .sisyphus/
 .playwright-mcp/
+# OpenCode — estado local dos loops/harnesses (o plugin em .opencode/plugin/ é fonte)
+.opencode/gauntlet/
+.opencode/opencode-loop/
+# Scratch do loop gauntlet na raiz do monorepo
+progress.md
 
 # Backup de .git antes de reescrita de histórico (BFG / filter-repo)
 .git.bak-pre-bfg*/
