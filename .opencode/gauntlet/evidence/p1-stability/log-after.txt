@@ -1,0 +1,806 @@
+[INFO ] log: SystemInfo { os: "Linux (Ubuntu 26.04)", kernel: "7.0.0-38-generic", cpu: "12th Gen Intel(R) Core(TM) i7-12650H", core_count: "10", memory: "61.5 GiB" }
+[INFO ] log: Skipping installing `Ctrl+C` handler as one was already installed. Please call `TerminalCtrlCHandlerPlugin::gracefully_exit` in your own `Ctrl+C` handler if you want Bevy to gracefully exit on `Ctrl+C`.
+[INFO ] bevy_render::renderer: AdapterInfo { name: "NVIDIA GeForce RTX 4050 Laptop GPU", vendor: 4318, device: 10401, device_type: DiscreteGpu, device_pci_bus_id: "0000:01:00.0", driver: "NVIDIA", driver_info: "615.71.09", backend: Vulkan, subgroup_min_size: 32, subgroup_max_size: 32, transient_saves_memory: Some(false), limit_bucket: None }
+[INFO ] viber::app: sky: modelo analytic (attr <Sky model> / VIBER_SKY_MODEL)
+[INFO ] viber: gameplay preset: rpg (config `gameplay: <ausente → default rpg>`)
+[INFO ] bevy_pbr::cluster: GPU clustering is supported on this device.
+[INFO ] bevy_render::batching::gpu_preprocessing: GPU preprocessing is fully supported on this device.
+[INFO ] bevy_winit::system: Creating new window Simple RPG (74v0)
+[WARN ] log: Ignoring unknown button type: 
+[INFO ] viber::nav: nav: <NavMesh> aplicada — raio 0.50 m, tile 256 m, custo fora-de-estrada 2.50×
+[INFO ] viber::postfx_toggle: postfx-toggle: 6 tecla(s) — ctrl+1:bloom, ctrl+2:ca, ctrl+3:vignette, ctrl+4:ssao, ctrl+5:dof, ctrl+6:volumetrics
+[INFO ] viber::projectile: projectile: 1 template(s) — enemy-arrow
+[INFO ] viber::adaptive_quality: adaptive-quality: alvo 60 fps, modo Auto, tier inicial max
+[INFO ] viber::terrain::runtime: terrain splat: cache /home/maikeu/.cache/viber/splat/427eb091fe973783.splat (2048² texels)
+[INFO ] viber::terrain::runtime: terrain: rock field `vael-escarpment` seeded 6 arch(es) + 2 cave(s) + 1 span(s) of 152 site(s) — rejected: water 0, roads 14, cliffs 12, pads 1, features 3, relief 41, slope 30, rise 0, path 0
+[WARN ] viber::terrain::runtime: terrain: rock field `vael-escarpment` seeded 9 of 10 features — the region has few sites that pass the guards (see the seed line above)
+[INFO ] viber::terrain::runtime: terrain: 1 rock field(s) seeded 6 arch(es) + 2 cave(s) + 1 span(s)
+[INFO ] viber::terrain::runtime: terrain: 14 cliff(s) + 4 cave(s) + 9 arch(es) + 1 bridge(s) + 0 bank wall(s) + 0 cut/plateau wall(s) -> 1083 voxel mods
+[INFO ] viber::terrain::runtime: terrain: 689 colunas voxel (944 caixas) — 100% volumétrico
+[INFO ] viber::spawn_gate: spawn-gate: 'player' em espera a y=150.0 até haver chão de colisão
+[INFO ] viber::nav::tile: nav: tile #1 pedido em (0, 0) — 256 m de lado, 310 obstáculos
+[INFO ] viber::spawn_gate: spawn-gate: solto a y=38.78 após 0.00 s
+[INFO ] viber::probes: viber: 8 probes regionais nos pads (tint de bioma, parallax AABB)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/goblin_lod0.glb': 6 placed / 17 attempts (rejected 11 — slope 0, ring-slope 0, ledge 0, cliff 8, roof 0, water 0, road 3, occupancy 0, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/bandit_lod0.glb': 5 placed / 17 attempts (rejected 12 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 0, occupancy 12, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/shade_lod0.glb': 6 placed / 52 attempts (rejected 46 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 0, occupancy 0, distance 46)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/wolf_lod0.glb': 5 placed / 6 attempts (rejected 1 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 1, occupancy 0, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/shade_lod0.glb': 7 placed / 136 attempts (rejected 129 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 0, occupancy 129, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/shade_lod0.glb': 8 placed / 65 attempts (rejected 57 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 0, occupancy 57, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/wolf_lod0.glb': 20 placed / 45 attempts (rejected 25 — slope 4, ring-slope 5, ledge 0, cliff 1, roof 0, water 2, road 1, occupancy 12, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/shade_lod0.glb': 14 placed / 45 attempts (rejected 31 — slope 4, ring-slope 6, ledge 0, cliff 2, roof 0, water 6, road 1, occupancy 12, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/scorpion_lod0.glb': 20 placed / 28 attempts (rejected 8 — slope 0, ring-slope 1, ledge 0, cliff 1, roof 0, water 1, road 0, occupancy 5, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/bandit_lod0.glb': 18 placed / 24 attempts (rejected 6 — slope 0, ring-slope 0, ledge 0, cliff 1, roof 0, water 3, road 1, occupancy 1, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/bandit_lod0.glb': 12 placed / 15 attempts (rejected 3 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 0, occupancy 3, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/bogling_lod0.glb': 22 placed / 32 attempts (rejected 10 — slope 1, ring-slope 0, ledge 0, cliff 6, roof 0, water 1, road 0, occupancy 2, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/wolf_lod0.glb': 10 placed / 30 attempts (rejected 20 — slope 1, ring-slope 1, ledge 0, cliff 8, roof 0, water 4, road 1, occupancy 5, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/goblin_lod0.glb': 18 placed / 61 attempts (rejected 43 — slope 5, ring-slope 4, ledge 2, cliff 10, roof 0, water 1, road 2, occupancy 19, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/slime_lod0.glb': 12 placed / 18 attempts (rejected 6 — slope 0, ring-slope 1, ledge 0, cliff 2, roof 0, water 0, road 0, occupancy 3, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/wolf_lod0.glb': 14 placed / 47 attempts (rejected 33 — slope 5, ring-slope 3, ledge 0, cliff 11, roof 0, water 1, road 1, occupancy 12, distance 0)
+[WARN ] bevy_pbr::prepass: The default normal prepass expects the mesh to have vertex normal attributes.
+[INFO ] viber::cinematic: ▶ prologo (29.0 s)
+[INFO ] viber::nav: nav: tile #1 pronto
+[INFO ] viber::nav::tile: nav: tile #2 pedido em (0, 0) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::nav: nav: tile #2 pronto
+[INFO ] viber::cinematic: prologo t=0.00: espera 7.02 s (teto) → fade
+[WARN ] viber::luau: viber.gesture('no'): entidade sem CharacterAnimator — cena glTF ainda a carregar ou rig sem clips
+[INFO ] viber::cinematic: prologo t=8.00: corte longo → negro
+[INFO ] viber::cinematic: prologo t=8.00: espera 3.52 s (teto) → fade
+[INFO ] viber::cinematic: prologo t=15.00: corte longo → negro
+[INFO ] viber::cinematic: prologo t=15.00: espera 3.51 s (teto) → fade
+[INFO ] viber::cinematic: prologo t=21.50: corte longo → negro
+[INFO ] viber::cinematic: prologo t=21.50: espera 3.50 s (teto) → fade
+[INFO ] viber::cinematic: ■ prologo
+[INFO ] viber::luau: [toast] Fala com o Ancião Edmar, no salão comunal.
+[INFO ] viber::toast: Fala com o Ancião Edmar, no salão comunal.
+[INFO ] viber::adaptive_quality: adaptive-quality: tier → high (EMA 28.3 ms, alvo 16.7 ms)
+[INFO ] viber::adaptive_quality: adaptive-quality: tier → medium (EMA 27.3 ms, alvo 16.7 ms)
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-1.png
+[INFO ] viber::adaptive_quality: adaptive-quality: tier → low (EMA 25.6 ms, alvo 16.7 ms)
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-2.png
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-3.png
+[INFO ] viber::nav::tile: nav: tile #3 pedido em (-12, -272) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::toast: Entraste em: frozen-peaks
+[INFO ] viber::nav: nav: tile #3 pronto
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-4.png
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-5.png
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-6.png
+[INFO ] viber::feedback: herói caiu — respawn em 2s
+[INFO ] viber::toast: Caiu em combate…
+[INFO ] viber::feedback: respawn na portão sul (Vec2(0.0, -50.0)) — HP cheio + 2s de i-frames
+[INFO ] viber::toast: Renasceste: portão sul — levanta e luta!
+[INFO ] viber::nav::tile: nav: tile #4 pedido em (0, -50) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::luau: [18508v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [18507v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [18504v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [18512v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [18511v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [18513v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [18510v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::toast: De volta ao vale.
+[INFO ] viber::nav: nav: tile #4 pronto
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-7.png
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-8.png
+[INFO ] viber::nav::tile: nav: tile #5 pedido em (-12, -272) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::toast: Entraste em: frozen-peaks
+[INFO ] viber::nav: nav: tile #5 pronto
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-9.png
+[INFO ] viber::nav::tile: nav: tile #6 pedido em (320, 320) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::toast: Entraste em: desert
+[INFO ] viber::nav: nav: tile #6 pronto
+[INFO ] viber::feedback: herói caiu — respawn em 2s
+[INFO ] viber::toast: Caiu em combate…
+[INFO ] viber::feedback: respawn na portão leste (Vec2(50.0, 0.0)) — HP cheio + 2s de i-frames
+[INFO ] viber::toast: Renasceste: portão leste — levanta e luta!
+[INFO ] viber::nav::tile: nav: tile #7 pedido em (50, 0) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::toast: De volta ao vale.
+[INFO ] viber::nav: nav: tile #7 pronto
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-10.png
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-11.png
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-12.png
+[WARN ] viber::luau: viber.gesture('talk'): entidade sem CharacterAnimator — cena glTF ainda a carregar ou rig sem clips
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    2.0,
+    40.33091,
+    -6.8,
+)
+[INFO ] viber::feedback: número projetado em Vec2(636.1913, 431.8954)
+[INFO ] viber::feedback: número projetado em Vec2(636.14874, 424.95966)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    2.0,
+    40.33091,
+    -6.8,
+)
+[INFO ] viber::feedback: número projetado em Vec2(636.0988, 432.0179)
+[INFO ] viber::feedback: número projetado em Vec2(636.1057, 425.4627)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    2.0,
+    40.33091,
+    -6.8,
+)
+[INFO ] viber::feedback: número projetado em Vec2(636.2344, 431.3944)
+[INFO ] viber::feedback: número projetado em Vec2(636.2054, 424.7695)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    2.0,
+    40.33091,
+    -6.8,
+)
+[INFO ] viber::feedback: número projetado em Vec2(635.9519, 431.48984)
+[INFO ] viber::feedback: número projetado em Vec2(635.9011, 424.78107)
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-13.png
+[INFO ] viber::nav::tile: nav: tile #8 pedido em (0, -120) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::luau: [18503v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [18506v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [18509v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [18505v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [18502v0] slime ativo: FSM wander/chase rodando
+[INFO ] viber::nav: nav: tile #8 pronto
+[ERROR] landmass_rerecast: Failed to validate rerecast mesh when converting to landmass: The triangle at index 1525 in the height mesh is clockwise instead of counter-clockwise
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    0.00013844631,
+    59.824127,
+    -118.791885,
+)
+[INFO ] viber::feedback: número projetado em Vec2(637.2475, 434.62305)
+[INFO ] viber::feedback: número projetado em Vec2(637.1669, 428.25024)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    0.00013844631,
+    59.824127,
+    -118.791885,
+)
+[INFO ] viber::feedback: número projetado em Vec2(636.42664, 434.58533)
+[INFO ] viber::feedback: número projetado em Vec2(636.37524, 428.3188)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    0.00013844631,
+    59.824127,
+    -118.791885,
+)
+[INFO ] viber::feedback: número projetado em Vec2(635.91315, 433.8577)
+[INFO ] viber::feedback: número projetado em Vec2(635.91583, 427.5902)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    0.00013844631,
+    59.824127,
+    -118.791885,
+)
+[INFO ] viber::feedback: número projetado em Vec2(637.19946, 433.5599)
+[INFO ] viber::feedback: número projetado em Vec2(637.26715, 427.0393)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    0.00013844631,
+    59.824127,
+    -118.791885,
+)
+[INFO ] viber::feedback: número projetado em Vec2(638.1449, 433.01862)
+[INFO ] viber::feedback: número projetado em Vec2(638.17725, 426.7895)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    0.00013844631,
+    59.824127,
+    -118.791885,
+)
+[INFO ] viber::feedback: número projetado em Vec2(638.91895, 432.231)
+[INFO ] viber::feedback: número projetado em Vec2(638.91736, 426.2281)
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-14.png
+[INFO ] viber::feedback: número '-6' ativado em Vec3(
+    -19.2,
+    40.650467,
+    -59.99977,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.9833, 286.83862)
+[INFO ] viber::feedback: número '-6' ativado em Vec3(
+    -18.845957,
+    40.656628,
+    -60.420998,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.97, 286.90256)
+[INFO ] viber::feedback: número '-6' ativado em Vec3(
+    -18.49142,
+    40.664566,
+    -60.842827,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.95654, 286.06082)
+[INFO ] viber::feedback: número '-6' ativado em Vec3(
+    -18.137913,
+    40.70401,
+    -61.259296,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.94324, 286.66364)
+[INFO ] viber::feedback: número '-6' ativado em Vec3(
+    -17.783669,
+    40.764996,
+    -61.67388,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.9071, 286.7196)
+[INFO ] viber::feedback: número '-6' ativado em Vec3(
+    -17.429327,
+    40.830044,
+    -62.08773,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.94714, 286.6926)
+[INFO ] viber::feedback: número '-6' ativado em Vec3(
+    -17.075888,
+    40.906174,
+    -62.49836,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.96954, 286.68408)
+[INFO ] viber::feedback: número '-6' ativado em Vec3(
+    -16.724157,
+    40.988403,
+    -62.90401,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.9381, 286.6757)
+[INFO ] viber::combat: hit 18508v0
+[INFO ] viber::feedback: número '-25' ativado em Vec3(
+    -17.396627,
+    40.713703,
+    -62.117542,
+)
+[INFO ] viber::feedback: número projetado em Vec2(377.02216, 434.51755)
+[INFO ] viber::combat: hit 18508v0
+[INFO ] viber::feedback: número '-29' ativado em Vec3(
+    -17.59079,
+    40.674294,
+    -61.891743,
+)
+[INFO ] viber::feedback: número projetado em Vec2(380.71548, 437.0118)
+[INFO ] viber::combat: hit 18508v0
+[INFO ] viber::feedback: número '-44' ativado em Vec3(
+    -17.833244,
+    40.62619,
+    -61.61186,
+)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    -17.565105,
+    40.67188,
+    -61.920856,
+)
+[INFO ] viber::feedback: número projetado em Vec2(344.0146, 453.76834)
+[INFO ] viber::feedback: número projetado em Vec2(441.14313, 408.8465)
+[INFO ] viber::toast: Inimigo derrotado (+15 XP)
+[INFO ] viber::feedback: número '-90 CRIT!' ativado em Vec3(
+    -17.82528,
+    40.627598,
+    -61.62081,
+)
+[INFO ] viber::feedback: número 'EXECUTADO!' ativado em Vec3(
+    -17.82528,
+    41.2276,
+    -61.62081,
+)
+[INFO ] viber::feedback: número '+15 XP' ativado em Vec3(
+    -17.82528,
+    39.2276,
+    -61.62081,
+)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    -17.76432,
+    40.62586,
+    -61.69054,
+)
+[INFO ] viber::feedback: número '+2 ouro' ativado em Vec3(
+    -16.974518,
+    40.62586,
+    -62.593987,
+)
+[INFO ] viber::feedback: número projetado em Vec2(418.66687, 416.05585)
+[INFO ] viber::feedback: número projetado em Vec2(397.285, 272.12698)
+[INFO ] viber::feedback: número projetado em Vec2(456.90414, 673.44946)
+[INFO ] viber::feedback: número projetado em Vec2(439.1144, 409.4522)
+[INFO ] viber::feedback: número projetado em Vec2(630.6982, 343.81067)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    -17.76432,
+    40.62586,
+    -61.69054,
+)
+[INFO ] viber::feedback: número projetado em Vec2(453.69666, 400.2588)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    -17.76432,
+    40.62586,
+    -61.69054,
+)
+[INFO ] viber::feedback: número projetado em Vec2(453.11584, 400.41522)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    -17.76432,
+    40.62586,
+    -61.69054,
+)
+[INFO ] viber::feedback: número projetado em Vec2(452.5433, 400.05835)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    -17.76432,
+    40.62586,
+    -61.69054,
+)
+[INFO ] viber::feedback: número projetado em Vec2(451.56134, 399.5149)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    -17.76432,
+    40.62586,
+    -61.69054,
+)
+[INFO ] viber::feedback: número projetado em Vec2(451.951, 398.97156)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    -17.76432,
+    40.62586,
+    -61.69054,
+)
+[INFO ] viber::feedback: número projetado em Vec2(451.4521, 399.93063)
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-15.png
+[INFO ] viber::nav::tile: nav: tile #9 pedido em (4, -14) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::nav: nav: tile #9 pronto
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(848.58954, 339.82632)
+[INFO ] viber::feedback: número projetado em Vec2(849.12036, 335.36542)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(847.83496, 339.5489)
+[INFO ] viber::feedback: número projetado em Vec2(848.34753, 335.2463)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(848.05426, 339.89673)
+[INFO ] viber::feedback: número projetado em Vec2(848.6509, 335.5754)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(849.1752, 340.01035)
+[INFO ] viber::feedback: número projetado em Vec2(849.7199, 335.61407)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(849.17737, 339.76913)
+[INFO ] viber::feedback: número projetado em Vec2(849.7358, 335.5112)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(849.9969, 340.23737)
+[INFO ] viber::feedback: número projetado em Vec2(850.55457, 335.90884)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(850.16327, 340.05988)
+[INFO ] viber::feedback: número projetado em Vec2(850.7283, 335.67105)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(850.1338, 339.99896)
+[INFO ] viber::feedback: número projetado em Vec2(850.6713, 335.6628)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(850.21967, 339.95447)
+[INFO ] viber::feedback: número projetado em Vec2(850.7767, 335.6677)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(850.193, 339.96286)
+[INFO ] viber::feedback: número projetado em Vec2(850.7281, 335.65707)
+[INFO ] viber::toast: QA: nenhum colhível por perto
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(849.5959, 339.99515)
+[INFO ] viber::feedback: número projetado em Vec2(850.1511, 335.72455)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(849.8069, 340.1201)
+[INFO ] viber::feedback: número projetado em Vec2(850.3417, 335.98032)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(849.34827, 340.03397)
+[INFO ] viber::feedback: número projetado em Vec2(849.84534, 335.68967)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(848.1793, 340.24258)
+[INFO ] viber::feedback: número projetado em Vec2(848.6976, 335.92596)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(848.5755, 339.88544)
+[INFO ] viber::feedback: número projetado em Vec2(849.1979, 335.5178)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(849.35645, 340.25125)
+[INFO ] viber::feedback: número projetado em Vec2(849.91144, 336.03857)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(849.71466, 339.94608)
+[INFO ] viber::feedback: número projetado em Vec2(850.2896, 335.51892)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    5.2,
+    40.33045,
+    -14.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(849.8052, 339.85428)
+[INFO ] viber::feedback: número projetado em Vec2(850.3075, 335.6588)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    22.400002,
+    40.350445,
+    -48.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(849.46716, 339.45618)
+[INFO ] viber::feedback: número projetado em Vec2(850.0445, 334.99997)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    22.400002,
+    40.350445,
+    -48.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(849.86536, 339.37033)
+[INFO ] viber::feedback: número projetado em Vec2(850.49426, 334.79034)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    22.400002,
+    40.350445,
+    -48.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(850.3913, 339.67453)
+[INFO ] viber::feedback: número projetado em Vec2(850.9988, 335.02432)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    22.400002,
+    40.350445,
+    -48.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(850.3425, 340.12863)
+[INFO ] viber::feedback: número projetado em Vec2(850.88367, 335.60614)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    22.400002,
+    40.350445,
+    -48.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(850.1532, 340.0132)
+[INFO ] viber::feedback: número projetado em Vec2(850.7521, 335.4094)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    22.400002,
+    40.350445,
+    -48.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(850.18066, 339.7182)
+[INFO ] viber::feedback: número projetado em Vec2(850.72437, 335.0848)
+[INFO ] viber::nav::tile: nav: tile #10 pedido em (46, 74) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::toast: Entraste em: dark-forest
+[INFO ] viber::nav: nav: tile #10 pronto
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    47.50064,
+    46.042694,
+    74.127075,
+)
+[INFO ] viber::feedback: número projetado em Vec2(853.8818, 380.4706)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    47.50064,
+    46.042694,
+    74.127075,
+)
+[INFO ] viber::feedback: número projetado em Vec2(853.4729, 379.35327)
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-16.png
+[INFO ] viber::feedback: número '-10' ativado em Vec3(
+    46.495506,
+    46.342697,
+    73.47156,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.91223, 286.78818)
+[INFO ] viber::feedback: número '-10' ativado em Vec3(
+    46.438705,
+    46.037613,
+    72.911255,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.90173, 255.3788)
+[INFO ] viber::feedback: número '-10' ativado em Vec3(
+    46.38332,
+    45.72936,
+    72.36485,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.8626, 255.86043)
+[INFO ] viber::feedback: número '-10' ativado em Vec3(
+    46.327747,
+    45.4186,
+    71.816635,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.82764, 254.79239)
+[INFO ] viber::feedback: número '-10' ativado em Vec3(
+    47.8957,
+    46.87729,
+    74.276955,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.9515, 283.61224)
+[INFO ] viber::feedback: herói caiu — respawn em 2s
+[INFO ] viber::toast: Caiu em combate…
+[INFO ] viber::feedback: número '-10' ativado em Vec3(
+    47.847454,
+    46.89859,
+    74.329315,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.8914, 287.1883)
+[INFO ] viber::feedback: número 'Wood' ativado em Vec3(
+    48.8326,
+    46.5915,
+    75.0849,
+)
+[INFO ] viber::feedback: número projetado em Vec2(858.03595, 389.7015)
+[INFO ] viber::feedback: respawn na portão norte (Vec2(0.0, 50.0)) — HP cheio + 2s de i-frames
+[INFO ] viber::toast: Renasceste: portão norte — levanta e luta!
+[INFO ] viber::toast: De volta ao vale.
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-17.png
+[INFO ] viber::nav::tile: nav: tile #11 pedido em (15, -14) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::nav: nav: tile #11 pronto
+[INFO ] viber::player: interaction: nothing nearby
+[WARN ] viber::luau: viber.gesture('talk'): entidade sem CharacterAnimator — cena glTF ainda a carregar ou rig sem clips
+[INFO ] viber::luau: [toast] “Ferro bom não se negocia barato, forasteiro.”
+[INFO ] viber::toast: “Ferro bom não se negocia barato, forasteiro.”
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-18.png
+[ERROR] bevy_winit::system: could not set cursor position: os error at /home/maikeu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.13/src/platform_impl/linux/wayland/window/state.rs:951: cursor position can be set only for locked cursor.
+[INFO ] viber::luau: [toast] Comprado poção.
+[INFO ] viber::toast: Comprado poção.
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-19.png
+[INFO ] viber::toast: NÍVEL 4
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-20.png
+[ERROR] bevy_winit::system: could not set cursor position: os error at /home/maikeu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.13/src/platform_impl/linux/wayland/window/state.rs:951: cursor position can be set only for locked cursor.
+[INFO ] viber::toast: Aprendeste: Vitalidade I (+20 HP).
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-21.png
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-22.png
+[INFO ] viber::toast: QA: teleport ao marco peaks-cairn-1
+[INFO ] viber::nav::tile: nav: tile #12 pedido em (10, -154) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::nav: nav: tile #12 pronto
+[ERROR] landmass_rerecast: Failed to validate rerecast mesh when converting to landmass: The polygon at index 2670 is concave or has edges in clockwise order.
+[INFO ] viber::nota: marco 'peaks-cairn-1' assinado
+[INFO ] viber::toast: Medido e assinado: Primeiro Mojão (faltam 2 em Picos Gelados)
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-23.png
+[INFO ] viber::nav::tile: nav: tile #13 pedido em (2, -8) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::nav: nav: tile #13 pronto
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-24.png
+[INFO ] viber::nav::tile: nav: tile #14 pedido em (320, 320) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::toast: Entraste em: desert
+[INFO ] viber::nav: nav: tile #14 pronto
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-25.png
+[INFO ] viber::nav::tile: nav: tile #15 pedido em (-320, 320) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::toast: Entraste em: dark-forest
+[INFO ] viber::toast: Entraste em: swamp
+[INFO ] viber::nav: nav: tile #15 pronto
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-26.png
+[INFO ] viber::nav::tile: nav: tile #16 pedido em (-320, -320) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::toast: Entraste em: frozen-peaks
+[INFO ] viber::toast: Entraste em: swamp
+[INFO ] viber::nav: nav: tile #16 pronto
+[ERROR] landmass_rerecast: Failed to validate rerecast mesh when converting to landmass: The polygon at index 1433 is concave or has edges in clockwise order.
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-27.png
+[INFO ] viber::nav::tile: nav: tile #17 pedido em (0, -300) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::toast: Entraste em: frozen-peaks
+[INFO ] viber::nav: nav: tile #17 pronto
+[ERROR] landmass_rerecast: Failed to validate rerecast mesh when converting to landmass: The triangle at index 3783 in the height mesh is clockwise instead of counter-clockwise
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-28.png
+[INFO ] viber::nav::tile: nav: tile #18 pedido em (7, 21) — 256 m de lado, 3075 obstáculos
+[INFO ] viber::toast: De volta ao vale.
+[INFO ] viber::nav: nav: tile #18 pronto
+[INFO ] viber::player: interaction: nothing nearby
+[INFO ] viber::projectile: projectile: 1 template(s) — enemy-arrow
+[INFO ] viber::toast: Entras na capela.
+[INFO ] viber::adaptive_quality: adaptive-quality: tier → medium (EMA 7.5 ms, alvo 16.7 ms)
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-29.png
+[INFO ] viber::adaptive_quality: adaptive-quality: tier → high (EMA 7.0 ms, alvo 16.7 ms)
+[INFO ] viber::adaptive_quality: adaptive-quality: tier → max (EMA 7.0 ms, alvo 16.7 ms)
+[INFO ] viber::terrain::runtime: terrain splat: cache /home/maikeu/.cache/viber/splat/427eb091fe973783.splat (2048² texels)
+[INFO ] viber::terrain::runtime: terrain: rock field `vael-escarpment` seeded 6 arch(es) + 2 cave(s) + 1 span(s) of 152 site(s) — rejected: water 0, roads 14, cliffs 12, pads 1, features 3, relief 41, slope 30, rise 0, path 0
+[WARN ] viber::terrain::runtime: terrain: rock field `vael-escarpment` seeded 9 of 10 features — the region has few sites that pass the guards (see the seed line above)
+[INFO ] viber::terrain::runtime: terrain: 1 rock field(s) seeded 6 arch(es) + 2 cave(s) + 1 span(s)
+[INFO ] viber::terrain::runtime: terrain: 14 cliff(s) + 4 cave(s) + 9 arch(es) + 1 bridge(s) + 0 bank wall(s) + 0 cut/plateau wall(s) -> 1083 voxel mods
+[INFO ] viber::terrain::runtime: terrain: 691 colunas voxel (945 caixas) — 100% volumétrico
+[WARN ] viber::projectile: projectile 'enemy-arrow' declarado 2× — fica o último
+[INFO ] viber::nav: nav: <NavMesh> aplicada — raio 0.50 m, tile 256 m, custo fora-de-estrada 2.50×
+[INFO ] viber::projectile: projectile: 1 template(s) — enemy-arrow
+[INFO ] viber::toast: A porta devolve-te à vila.
+[INFO ] viber::nav::tile: nav: tile #1 pedido em (0, -8) — 256 m de lado, 310 obstáculos
+[INFO ] viber::spawn_gate: spawn-gate: 'player' em espera a y=150.0 até haver chão de colisão
+[INFO ] viber::spawn_gate: spawn-gate: solto a y=38.78 após 0.01 s
+[INFO ] viber::nav: nav: tile #1 pronto
+[INFO ] viber::nav::tile: nav: tile #2 pedido em (7, 20) — 256 m de lado, 470 obstáculos
+[INFO ] viber::nav: nav: tile #2 pronto
+[INFO ] viber::nav::tile: nav: tile #3 pedido em (7, 20) — 256 m de lado, 471 obstáculos
+[INFO ] viber::adaptive_quality: adaptive-quality: tier → high (EMA 56.3 ms, alvo 16.7 ms)
+[INFO ] viber::nav: nav: tile #3 pronto
+[INFO ] viber::nav::tile: nav: tile #4 pedido em (7, 20) — 256 m de lado, 588 obstáculos
+[INFO ] viber::nav: nav: tile #4 pronto
+[INFO ] viber::nav::tile: nav: tile #5 pedido em (7, 20) — 256 m de lado, 610 obstáculos
+[WARN ] viber::physics: physics: glTF de colisão atrasado (>4 s) — fallback AABB (entity 30716v62)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/goblin_lod0.glb': 6 placed / 17 attempts (rejected 11 — slope 0, ring-slope 0, ledge 0, cliff 8, roof 0, water 0, road 3, occupancy 0, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/bandit_lod0.glb': 5 placed / 17 attempts (rejected 12 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 0, occupancy 12, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/shade_lod0.glb': 6 placed / 52 attempts (rejected 46 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 0, occupancy 0, distance 46)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/wolf_lod0.glb': 5 placed / 6 attempts (rejected 1 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 1, occupancy 0, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/shade_lod0.glb': 7 placed / 136 attempts (rejected 129 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 0, occupancy 129, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/shade_lod0.glb': 8 placed / 65 attempts (rejected 57 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 0, occupancy 57, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/wolf_lod0.glb': 20 placed / 45 attempts (rejected 25 — slope 4, ring-slope 5, ledge 0, cliff 1, roof 0, water 2, road 1, occupancy 12, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/shade_lod0.glb': 14 placed / 45 attempts (rejected 31 — slope 4, ring-slope 6, ledge 0, cliff 2, roof 0, water 6, road 1, occupancy 12, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/scorpion_lod0.glb': 20 placed / 28 attempts (rejected 8 — slope 0, ring-slope 1, ledge 0, cliff 1, roof 0, water 1, road 0, occupancy 5, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/bandit_lod0.glb': 18 placed / 24 attempts (rejected 6 — slope 0, ring-slope 0, ledge 0, cliff 1, roof 0, water 3, road 1, occupancy 1, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/bandit_lod0.glb': 12 placed / 15 attempts (rejected 3 — slope 0, ring-slope 0, ledge 0, cliff 0, roof 0, water 0, road 0, occupancy 3, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/bogling_lod0.glb': 22 placed / 32 attempts (rejected 10 — slope 1, ring-slope 0, ledge 0, cliff 6, roof 0, water 1, road 0, occupancy 2, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/wolf_lod0.glb': 10 placed / 30 attempts (rejected 20 — slope 1, ring-slope 1, ledge 0, cliff 8, roof 0, water 4, road 1, occupancy 5, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/goblin_lod0.glb': 18 placed / 61 attempts (rejected 43 — slope 5, ring-slope 4, ledge 2, cliff 10, roof 0, water 1, road 2, occupancy 19, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/slime_lod0.glb': 12 placed / 18 attempts (rejected 6 — slope 0, ring-slope 1, ledge 0, cliff 2, roof 0, water 0, road 0, occupancy 3, distance 0)
+[INFO ] viber::spawner: spawn '/assets/meshes/characters/wolf_lod0.glb': 14 placed / 47 attempts (rejected 33 — slope 5, ring-slope 3, ledge 0, cliff 11, roof 0, water 1, road 1, occupancy 12, distance 0)
+[INFO ] viber::nav: nav: tile #5 pronto
+[INFO ] viber::nav::tile: nav: tile #6 pedido em (7, 20) — 256 m de lado, 611 obstáculos
+[INFO ] viber::nav: nav: tile #6 pronto
+[INFO ] viber::adaptive_quality: adaptive-quality: tier → medium (EMA 44.3 ms, alvo 16.7 ms)
+[INFO ] viber::adaptive_quality: adaptive-quality: tier → low (EMA 35.9 ms, alvo 16.7 ms)
+[INFO ] viber::luau: [60177v1] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [toast] Sem bombas — compra ao mercador.
+[INFO ] viber::toast: Sem bombas — compra ao mercador.
+[WARN ] viber::luau: viber.gesture('wave'): entidade sem CharacterAnimator — cena glTF ainda a carregar ou rig sem clips
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-30.png
+[INFO ] viber::toast: QA: teleport ao NPC mais próximo
+[INFO ] viber::luau: [60178v1] slime ativo: FSM wander/chase rodando
+[INFO ] viber::toast: QA: teleport para npc #0
+[INFO ] viber::toast: QA: teleport à criatura mais próxima
+[INFO ] viber::nav::tile: nav: tile #7 pedido em (-22, -52) — 256 m de lado, 611 obstáculos
+[INFO ] viber::luau: [14364v1] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [60265v1] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [60362v1] slime ativo: FSM wander/chase rodando
+[INFO ] viber::luau: [14365v1] slime ativo: FSM wander/chase rodando
+[INFO ] viber::nav: nav: tile #7 pronto
+[INFO ] viber::toast: QA: nenhum colhível por perto
+[INFO ] viber::feedback: número '-6' ativado em Vec3(
+    -22.35694,
+    40.650444,
+    -52.267124,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.95337, 287.42947)
+[INFO ] viber::feedback: número projetado em Vec2(639.97974, 282.39255)
+[INFO ] viber::toast: QA: teleport ao marco peaks-cairn-2
+[INFO ] viber::nav::tile: nav: tile #8 pedido em (-4, -198) — 256 m de lado, 611 obstáculos
+[INFO ] viber::nav: nav: tile #8 pronto
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-31.png
+[INFO ] viber::toast: Jogo gravado.
+[INFO ] bevy_render::view::window::screenshot: Screenshot saved to /tmp/viber-bridge-1240752/shot-32.png
+[INFO ] viber::feedback: número '-14' ativado em Vec3(
+    -46.20002,
+    67.99157,
+    -171.99992,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.9499, 289.7073)
+[INFO ] viber::feedback: número projetado em Vec2(639.9027, 285.9696)
+[INFO ] viber::feedback: número 'ESQUIVA' ativado em Vec3(
+    -46.554688,
+    68.341225,
+    -172.31497,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.95105, 270.19113)
+[INFO ] viber::feedback: número projetado em Vec2(639.9599, 266.51404)
+[INFO ] viber::feedback: número 'ESQUIVA' ativado em Vec3(
+    -46.554688,
+    68.341225,
+    -172.31497,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.99866, 270.70682)
+[INFO ] viber::feedback: número projetado em Vec2(639.99866, 266.74966)
+[INFO ] viber::combat: hit 60218v1
+[INFO ] viber::feedback: número '-25' ativado em Vec3(
+    -45.723846,
+    65.909904,
+    -170.95004,
+)
+[INFO ] viber::feedback: número projetado em Vec2(791.23474, 819.8051)
+[INFO ] viber::feedback: número projetado em Vec2(773.1256, 773.56976)
+[INFO ] viber::feedback: número projetado em Vec2(773.0561, 773.2966)
+[INFO ] viber::feedback: número projetado em Vec2(773.3538, 770.5602)
+[INFO ] viber::combat: hit 60218v1
+[INFO ] viber::feedback: número '-29' ativado em Vec3(
+    -45.757618,
+    66.07926,
+    -171.00543,
+)
+[INFO ] viber::feedback: número projetado em Vec2(755.3718, 690.01636)
+[INFO ] viber::feedback: número projetado em Vec2(745.9984, 662.09174)
+[INFO ] viber::feedback: número projetado em Vec2(746.3803, 661.7739)
+[INFO ] viber::feedback: número projetado em Vec2(746.76025, 659.1791)
+[INFO ] viber::feedback: número 'GOLPE FINAL!' ativado em Vec3(
+    -46.68305,
+    67.61651,
+    -170.82271,
+)
+[INFO ] viber::feedback: número projetado em Vec2(551.51117, 429.43127)
+[INFO ] viber::feedback: número projetado em Vec2(551.2482, 424.5489)
+[INFO ] viber::feedback: número '-14' ativado em Vec3(
+    -46.347824,
+    67.916504,
+    -171.97493,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.8966, 289.17444)
+[INFO ] viber::feedback: número projetado em Vec2(639.8606, 285.5908)
+[INFO ] viber::feedback: número '-14' ativado em Vec3(
+    -46.758945,
+    68.14143,
+    -172.27588,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.75684, 288.3405)
+[INFO ] viber::feedback: número projetado em Vec2(639.8019, 284.3794)
+[INFO ] viber::feedback: número '-14' ativado em Vec3(
+    -47.19947,
+    68.348145,
+    -172.49883,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.8839, 288.54453)
+[INFO ] viber::feedback: número projetado em Vec2(639.9135, 284.33453)
+[INFO ] viber::feedback: número '-14' ativado em Vec3(
+    -47.686565,
+    68.50721,
+    -172.7329,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.7886, 288.95963)
+[INFO ] viber::feedback: número projetado em Vec2(639.9417, 284.18948)
+[INFO ] viber::feedback: número '-14' ativado em Vec3(
+    -48.181587,
+    68.6428,
+    -172.99606,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.84827, 288.27316)
+[INFO ] viber::feedback: número projetado em Vec2(639.95966, 283.56256)
+[INFO ] viber::feedback: número '-14' ativado em Vec3(
+    -48.663177,
+    68.83476,
+    -173.18266,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.93555, 287.6125)
+[INFO ] viber::feedback: número projetado em Vec2(639.8892, 282.8563)
+[INFO ] viber::feedback: número '-14' ativado em Vec3(
+    -49.171307,
+    69.000885,
+    -173.36453,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.91205, 287.1914)
+[INFO ] viber::feedback: número projetado em Vec2(639.9566, 282.50607)
+[INFO ] viber::feedback: herói caiu — respawn em 2s
+[INFO ] viber::toast: Caiu em combate…
+[INFO ] viber::feedback: número '-14' ativado em Vec3(
+    -49.70304,
+    69.14078,
+    -173.53412,
+)
+[INFO ] viber::feedback: número projetado em Vec2(639.9012, 287.73035)
+[INFO ] viber::feedback: número projetado em Vec2(639.89044, 282.96896)
+[INFO ] viber::feedback: respawn na portão sul (Vec2(0.0, -50.0)) — HP cheio + 2s de i-frames
+[INFO ] viber::toast: Renasceste: portão sul — levanta e luta!
+[INFO ] viber::nav::tile: nav: tile #9 pedido em (0, -50) — 256 m de lado, 611 obstáculos
+[INFO ] viber::luau: [60245v1] slime ativo: FSM wander/chase rodando
+[INFO ] viber::feedback: número 'ESQUIVA' ativado em Vec3(
+    4.028881e-9,
+    40.750446,
+    -50.0,
+)
+[INFO ] viber::feedback: número projetado em Vec2(763.1805, 840.6326)
+[INFO ] viber::nav: nav: tile #9 pronto

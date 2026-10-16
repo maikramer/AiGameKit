@@ -1,0 +1,149 @@
+{
+  "buses": {
+    "master": 1.0,
+    "music": 0.699999988079071,
+    "sfx": 0.800000011920929
+  },
+  "layers": [
+    {
+      "base_volume": 0.18000000715255737,
+      "layer": "explore",
+      "muted": false,
+      "paused": false,
+      "volume": 0.0
+    },
+    {
+      "base_volume": 0.2199999988079071,
+      "layer": "battle",
+      "muted": false,
+      "paused": false,
+      "volume": 0.0
+    },
+    {
+      "base_volume": 0.23999999463558197,
+      "layer": "boss",
+      "muted": false,
+      "paused": false,
+      "volume": 0.0
+    },
+    {
+      "base_volume": 0.20000000298023224,
+      "layer": "dungeon",
+      "muted": false,
+      "paused": false,
+      "volume": 0.0
+    },
+    {
+      "base_volume": 0.20000000298023224,
+      "layer": "mountain",
+      "muted": false,
+      "paused": false,
+      "volume": 0.20000000298023224
+    },
+    {
+      "base_volume": 0.18000000715255737,
+      "layer": "village",
+      "muted": false,
+      "paused": false,
+      "volume": 0.0
+    }
+  ],
+  "looping": 9,
+  "muted": 0,
+  "paused": 0,
+  "playing": 9,
+  "sinks": [
+    {
+      "entity": 60129512931,
+      "layer": "dungeon",
+      "looping": true,
+      "muted": false,
+      "name": "#29212",
+      "paused": false,
+      "spatial": false,
+      "volume": 0.0
+    },
+    {
+      "entity": 60129506017,
+      "layer": "battle",
+      "looping": true,
+      "muted": false,
+      "name": "#36126",
+      "paused": false,
+      "spatial": false,
+      "volume": 0.0
+    },
+    {
+      "entity": 519691006296,
+      "layer": "boss",
+      "looping": true,
+      "muted": false,
+      "name": "#36519",
+      "paused": false,
+      "spatial": false,
+      "volume": 0.0
+    },
+    {
+      "entity": 12884892217,
+      "layer": "explore",
+      "looping": true,
+      "muted": false,
+      "name": "#9670",
+      "paused": false,
+      "spatial": false,
+      "volume": 0.0
+    },
+    {
+      "entity": 12884892215,
+      "layer": "village",
+      "looping": true,
+      "muted": false,
+      "name": "#9672",
+      "paused": false,
+      "spatial": false,
+      "volume": 0.0
+    },
+    {
+      "entity": 12884892214,
+      "layer": "mountain",
+      "looping": true,
+      "muted": false,
+      "name": "#9673",
+      "paused": false,
+      "spatial": false,
+      "volume": 0.20000000298023224
+    },
+    {
+      "entity": 4294957431,
+      "layer": null,
+      "looping": true,
+      "muted": false,
+      "name": "#9864",
+      "paused": false,
+      "spatial": false,
+      "volume": 0.0
+    },
+    {
+      "entity": 4294957430,
+      "layer": null,
+      "looping": true,
+      "muted": false,
+      "name": "#9865",
+      "paused": false,
+      "spatial": false,
+      "volume": 0.0
+    },
+    {
+      "entity": 4294957429,
+      "layer": null,
+      "looping": true,
+      "muted": false,
+      "name": "#9866",
+      "paused": false,
+      "spatial": false,
+      "volume": 0.2381136268377304
+    }
+  ],
+  "spatial": 0,
+  "total": 9
+}

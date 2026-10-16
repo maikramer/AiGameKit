@@ -1,0 +1,113 @@
+Viber world: /media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/Viber/examples/simple-rpg/world.xml
+  entities: 6616 (groups 1079, compositions 48, primitives 389, point lights 168, directional lights 1, cameras 0, gltf scenes 4750)
+  compositions: 48 root(s), 357 part(s) com colisor composto por primitiva
+  prototypes: 8 definido(s), 44 instância(s) — banca-feira×2, canteiro×4, carreta×1, cerca×23, estandarte×2, leira-cultivo×11, varal-roupa×1
+  ambient light: world-defined
+  terrain: heightfield 1, ground features 92 (pads 15, lakes 8, rivers 1, cuts 0, plateaus 0, cliffs 14, caves 2, arches 3, bridges 0, rock fields 1, roads 26 + networks 1, decals 21)
+  spawn groups: 0 static, 22 dynamic, 9 vegetation (42 exclusion zones)
+  assets: 8005 referência(s) auditada(s), 0 problema(s)
+    ℹ 36 modelo(s) glTF sem collider (passam através): /assets/meshes/characters/bog_warden_boss_lod0.glb, /assets/meshes/characters/boss_ogre_lod0.glb, /assets/meshes/characters/npc_blacksmith_lod0.glb, /assets/meshes/characters/npc_cook_lod0.glb, /assets/meshes/characters/npc_elder_lod0.glb, /assets/meshes/characters/npc_guard_lod0.glb, /assets/meshes/characters/npc_healer_lod0.glb, /assets/meshes/characters/npc_scholar_lod0.glb, …
+warning: <RoadNetwork>: ignored attribute `normal-map-url`
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> edge-noise: accepted, no native effect yet
+warning: <Road> end-feather-start: accepted, no native effect yet
+warning: <Road> end-feather-end: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+warning: <Road> normal-map-url: accepted, no native effect yet
+OK
+exit=0
