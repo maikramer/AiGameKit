@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world static="true">
+  <Group name="environment">
+    <DayCycle minute-of-day="1020" minutes-per-real-second="1.2" dawn-minute="330" dusk-minute="1170" sun-azimuth-base="205" max-sun-elevation="62" drive-ambient="1" ambient-day-intensity="0.26" ambient-night-intensity="0.075" />
+    <Sky sun-elevation="17" sun-azimuth="205" turbidity="2.4" rayleigh="2.8" mie-coefficient="0.0035" mie-directional-g="0.80" cloud-coverage="0.60" cloud-density="0.55" cloud-elevation="0.55" environment-intensity="0.38" sun-intensity="2.6" drive-light="1" />
+    <Entity>
+      <DirectionalLight euler="-45 35.2644 15" />
+      <AmbientLight color="0xc8d8e8" brightness="110" />
+    </Entity>
+    <AdaptiveQuality target-fps="60" min-pixel-ratio="0.55" max-pixel-ratio="1.5" />
+    <WorldBorder radius="900" warn-seconds="5" margin="60" />
+    <AudioMixer master="1" music="0.7" sfx="0.85" />
+    <MusicLayer layer="race" base-volume="0.22" />
+    <Weather wind="0.7 0.25" wind-strength="1.5" clouds="0.25" rain="0" cycle="1" />
+  </Group>
+</world>

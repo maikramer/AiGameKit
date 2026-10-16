@@ -34,6 +34,8 @@ pub const SUPER_TURBO_TIME: f32 = 1.6;
 pub const OFFROAD_GRIP: f32 = 0.42;
 /// Escapatória lógica fora da pista (m, VibeGame `shoulder` 3.5).
 pub const TRACK_SHOULDER: f32 = 3.5;
+/// Faixa ativa das paredes além do shoulder (m).
+pub const WALL_RANGE: f32 = 30.0;
 /// Raio de contacto kart-vs-kart (m).
 pub const KART_RADIUS: f32 = 1.4;
 /// Rev mínimo para o arranque foguete (`vehicle-control.ts` 0.72).
@@ -281,6 +283,7 @@ pub fn vehicle_movement(
     menus: Res<crate::menus::MenusOpen>,
     runtime: Option<Res<TerrainRuntime>>,
     director: Option<Res<crate::racing::race::RaceDirector>>,
+    track: Option<Res<crate::racing::race::TrackInfo>>,
     mut sfx: MessageWriter<crate::ambient::SfxEvent>,
     mut commands: Commands,
     mut q: Query<(Entity, &mut Transform, &mut Vehicle, &mut VehicleInput)>,
@@ -532,9 +535,13 @@ pub fn vehicle_movement(
         // ── integração da posição ──────────────────────────────────────
         let move_dir = forward_of(vehicle.heading - vehicle.slip);
         let mut next = pos + move_dir * new_speed * dt;
-        // Paredes lógicas: |dist ao centro| ≤ half_width + shoulder.
-        if let Some(surf) = &surface {
-            let road = &runtime.roads[surf.road];
+        // Paredes lógicas: |dist ao centro| ≤ half_width + shoulder — no
+        // traçado SEMPRE (o projection funciona fora da ribbon; sem isto uma
+        // saída grande ficava livre para atravessar o campo até voltar).
+        if let Some(track) = track.as_ref()
+            && let Some(road_idx) = track.road
+            && let Some(road) = runtime.roads.get(road_idx)
+        {
             if let Some(hit) = crate::terrain::paths::nearest_on_path(
                 &road.stations,
                 bevy::math::Vec2::new(next.x, next.z),
@@ -543,7 +550,10 @@ pub fn vehicle_movement(
                 let limit = hw + TRACK_SHOULDER;
                 let to_p = bevy::math::Vec2::new(next.x, next.z) - hit.point;
                 let dist = to_p.length();
-                if dist > limit && dist > 1e-4 {
+                // Só paredes na faixa junto ao corredor: uma saída grande
+                // desliza ao longo da barreira em vez de ficar perdida no
+                // campo, mas longe da pista o mundo é explorável.
+                if dist > limit && dist < limit + WALL_RANGE && dist > 1e-4 {
                     let normal = to_p / dist;
                     let clamped = hit.point + normal * limit;
                     next.x = clamped.x;

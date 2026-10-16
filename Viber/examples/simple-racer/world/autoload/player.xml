@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Autoload (config.yaml project.autoload): spawnado UMA vez, sobrevive às
+     trocas de cena. O kart do jogador + a chase cam (distância/altura do
+     VibeGame; o FOV sobe com a velocidade — racing FOV). -->
+<world>
+  <OrbitCamera distance="7.6" height="3.1" pitch="14" fov="74"
+               follow-lag="0.1" turn-lag="0.15" min-terrain-distance="1.2" />
+</world>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Autoload (config.yaml project.autoload): spawnado UMA vez, sobrevive às
+     trocas de cena. HUD de corrida (Phase 4) + HUD nativo da engine. -->
+<world>
+  <Group name="ui">
+    <HudScreenLayer />
+    <Minimap range="140" />
+  </Group>
+</world>

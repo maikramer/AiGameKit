@@ -180,7 +180,7 @@ pub fn collect_vehicle_templates(
 /// scripts veem o frame atual sem tocar no teto de 16 parâmetros do
 /// `luau_update`.
 pub fn publish_lua_state(
-    mut host: ResMut<crate::luau::LuaScriptHost>,
+    host: ResMut<crate::luau::LuaScriptHost>,
     director: Option<Res<race::RaceDirector>>,
     karts: Query<(&vehicle::Vehicle, &race::RaceProgress), With<vehicle::PlayerKart>>,
 ) {
