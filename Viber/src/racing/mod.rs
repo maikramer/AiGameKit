@@ -183,6 +183,7 @@ pub fn publish_lua_state(
     host: ResMut<crate::luau::LuaScriptHost>,
     director: Option<Res<race::RaceDirector>>,
     karts: Query<(&vehicle::Vehicle, &race::RaceProgress), With<vehicle::PlayerKart>>,
+    all_karts: Query<&race::RaceProgress>,
 ) {
     let Some(mut ctx) = host.lua.app_data_mut::<crate::luau::ScriptCtx>() else {
         return;
@@ -192,7 +193,7 @@ pub fn publish_lua_state(
         return;
     };
     let kart = karts.iter().next();
-    let total_positions = karts.iter().count() as u32;
+    let total_positions = all_karts.iter().count() as u32;
     ctx.race = Some(RaceSnapshot {
         state: match director.state {
             race::RaceState::Grid => "grid",

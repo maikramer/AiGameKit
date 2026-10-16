@@ -3,6 +3,7 @@
      trocas de cena. HUD de corrida (Phase 4) + HUD nativo da engine. -->
 <world>
   <Group name="ui">
+    <Include src="/world/hud.xml" />
     <HudScreenLayer />
     <Minimap range="140" />
   </Group>
