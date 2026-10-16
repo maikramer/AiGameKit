@@ -1,5 +1,5 @@
 //! Feedback de combate (loop 2 do port simple-rpg) — o análogo nativo do
-//! `CombatFeedbackSystem`/`RespawnSystem`/hurt-vignette do VibeGame:
+//! `CombatFeedbackSystem`/`RespawnSystem`/hurt-vignette originais:
 //!
 //! - **Dano flutuante**: pool de textos UI world-anchored (projecção da
 //!   câmara) que sobem e desvanecem — `-25` no alvo, dourado para XP — com
@@ -27,9 +27,9 @@ use crate::player::Player;
 use crate::skills::{GUARD_REDUCTION, Guarding};
 use crate::vitals::{Health, apply_damage};
 
-/// Janela de invulnerabilidade após cada golpe sofrido (s) — VibeGame 0,35.
+/// Janela de invulnerabilidade após cada golpe sofrido (s) — 0,35.
 pub const IFRAME_SECS: f32 = 0.35;
-/// Espera entre a morte e o respawn (s) — VibeGame RespawnSystem.
+/// Espera entre a morte e o respawn (s) — igual ao RespawnSystem.
 pub const RESPAWN_DELAY: f32 = 2.0;
 /// Segundos sem combate até o alvo da TargetBar se perder.
 pub const TARGET_TTL: f32 = 8.0;
@@ -101,7 +101,7 @@ pub struct StatusEffects {
     pub venom_tick: f32,
 }
 
-/// Alvo de combate actual do herói (soft-lock do VibeGame: fixa ao acertar).
+/// Alvo de combate actual do herói (soft-lock: fixa ao acertar).
 #[derive(Debug, Clone, Resource)]
 pub struct CombatTarget {
     pub entity: Option<Entity>,
@@ -210,7 +210,7 @@ pub fn damage_number_scale(age: f32) -> f32 {
 
 // ── lógica pura (testada) ───────────────────────────────────────────────
 
-/// Pontos de respawn: praça + 4 portões cardeais (LOOKOUT_GATES do VibeGame).
+/// Pontos de respawn: praça + 4 portões cardeais (LOOKOUT_GATES).
 pub const RESPAWN_POINTS: [Vec2; 5] = [
     Vec2::ZERO,
     Vec2::new(0.0, -50.0),
@@ -621,7 +621,7 @@ fn player_hurt_system(
     }
 }
 
-/// Dano recebido abana a câmara (peso `min(0.45, 0.22 + dmg/90)` — VibeGame
+/// Dano recebido abana a câmara (peso `min(0.45, 0.22 + dmg/90)` —
 /// `CombatFeedbackSystem`). Ticks de status não abanam.
 pub fn shake_on_player_hurt(
     mut hurts: MessageReader<PlayerHurt>,

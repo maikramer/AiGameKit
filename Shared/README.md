@@ -249,7 +249,6 @@ Shell scripts at the monorepo root also work without pip install:
 | `GAMEASSETS_BIN` | Path to `gameassets` |
 | `AIGAMEKITLAB_BIN` | Path to `aigamekit-lab` |
 | `MATERIALIZE_BIN` | Path to `materialize` |
-| `VIBEGAME_BIN` | Path to `vibegame` |
 | `HF_TOKEN` / `HUGGINGFACEHUB_API_TOKEN` | Hugging Face authentication token |
 | `HF_HOME` | Hugging Face cache directory |
 | `PYTORCH_CUDA_ALLOC_CONF` | CUDA allocator config (auto-set if empty) |

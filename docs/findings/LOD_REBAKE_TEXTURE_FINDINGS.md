@@ -76,5 +76,5 @@ Regenerar a village:
 cd Viber/examples/shared-assets
 # apagar *_lod{0,1,2}.glb força a stage de LOD (resume salta ladders "ok")
 gameassets resume --profile game.yaml --manifest manifests/village
-# os exemplos leem o pool diretamente (plugin vibegame({ sharedAssets })) — sem passo de cópia
+# os exemplos leem o pool diretamente — sem passo de cópia
 ```

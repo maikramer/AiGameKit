@@ -62,7 +62,7 @@ pub struct NoShadowSubtree;
 ///
 /// The `simple-rpg` worlds already author `lod1-url` / `lod2-url` and the
 /// `lod-threshold-near` / `lod-threshold-mid` cuts on every `<GLTFLoader>`
-/// template — VibeGame honored them, Viber dropped them as no-ops and drew
+/// template — the old engine honored them, Viber dropped them as no-ops and drew
 /// the hero mesh of every pine at 200 m. This component restores the ladder:
 /// swapping `WorldAssetRoot` despawns the old scene subtree and spawns the
 /// new one (`world_instance_spawner` reacts to `Changed<WorldAssetRoot>`),

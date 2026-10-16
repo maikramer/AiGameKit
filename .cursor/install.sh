@@ -3,9 +3,8 @@
 #
 # Self-contained, idempotent, non-interactive bootstrap of the GPU-free
 # development experience that CI validates (see .github/workflows/ci.yml):
-#   - System libs + Python 3.13 (deadsnakes) + uv + Bun + a modern Rust stable
+#   - System libs + Python 3.13 (deadsnakes) + uv + a modern Rust stable
 #   - Python 3.13 per-package venvs (Shared + the CI-tested packages) via uv/pip
-#   - VibeGame (Bun) deps + engine build + hello-world example link
 #   - Rust toolchain prefetch for Materialize + Viber (edition 2024)
 #
 # Every base-tool step is guarded by an existence check, so on a snapshot that
@@ -18,7 +17,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
 export DEBIAN_FRONTEND=noninteractive
 
@@ -56,12 +55,6 @@ fi
 if ! command -v uv >/dev/null 2>&1; then
   log "uv"
   curl -fsSL https://astral.sh/uv/install.sh | sh
-fi
-
-# Bun (VibeGame runtime + test/build).
-if ! command -v bun >/dev/null 2>&1; then
-  log "Bun"
-  curl -fsSL https://bun.sh/install | bash
 fi
 
 # Rust >= 1.87 for edition 2024 (Materialize + Viber). The base image ships an
@@ -114,26 +107,6 @@ log "Shared (foundation)"
 for pkg in "${CI_PACKAGES[@]}"; do
   setup_py_pkg "$pkg"
 done
-
-# --- VibeGame (Bun) --------------------------------------------------------
-if command -v bun >/dev/null 2>&1; then
-  log "VibeGame (Bun) dependencies"
-  ( cd "$ROOT/VibeGame" && bun install --frozen-lockfile )
-
-  # Build the engine (dist/) so examples can resolve `aigamekit-vibegame`, and
-  # link it into the hello-world example. The example imports the engine by
-  # package name; the symlink + built dist make the documented
-  # `bun install && bun run dev` work out of the box.
-  log "VibeGame engine build + hello-world example link"
-  ( cd "$ROOT/VibeGame" && bun run build )
-  ( cd "$ROOT/VibeGame/examples/hello-world" \
-      && bun install \
-      && mkdir -p node_modules \
-      && rm -rf node_modules/aigamekit-vibegame \
-      && ln -s ../../.. node_modules/aigamekit-vibegame )
-else
-  echo "bun missing on PATH — skipping VibeGame"
-fi
 
 # --- Rust (Materialize + Viber) -------------------------------------------
 if command -v cargo >/dev/null 2>&1; then

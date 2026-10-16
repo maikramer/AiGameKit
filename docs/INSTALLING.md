@@ -21,7 +21,7 @@ curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh |
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/maikramer/clified/main/install.ps1))) --get materialize
 ```
 
-List catalog entries: `clified-install --catalog` (after the engine is installed). Keys match [`tools.yaml`](../tools.yaml) (`text2d`, `text3d`, `materialize`, `vibegame`, …).
+List catalog entries: `clified-install --catalog` (after the engine is installed). Keys match [`tools.yaml`](../tools.yaml) (`text2d`, `text3d`, `materialize`, …).
 
 ### Managing installed tools (Clified ≥ 0.8)
 
@@ -55,15 +55,15 @@ At the **repository root** (folder containing `Shared/`, `install.sh`, `.git`):
 
 | Profile | Tools | Purpose |
 |---------|-------|---------|
-| `./install.sh` (no args) | 10: `vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab vibegame` | **Default** — minimum zero-to-game (animated-GLB DAG → browser) |
-| `./install.sh core` | same 10 as above | Same as no-args, explicit |
-| `./install.sh examples` | 16: core + `texture2d skymap2d text2sound terrain3d rocks3d viber` | Everything the example games use (incl. dream sky/terrain/audio) |
-| `./install.sh --all` | 19: examples + `part3d motion3d intrinsic` | Full catalog (opt-in extras) |
+| `./install.sh` (no args) | 9: `vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab` | **Default** — minimum zero-to-game (animated-GLB DAG) |
+| `./install.sh core` | same 9 as above | Same as no-args, explicit |
+| `./install.sh examples` | 15: core + `texture2d skymap2d text2sound terrain3d rocks3d viber` | Everything the example games use (incl. dream sky/terrain/audio) |
+| `./install.sh --all` | 18: examples + `part3d motion3d intrinsic` | Full catalog (opt-in extras) |
 
 Before installing, a **pre-flight** (`scripts/preflight.py`) checks the external prerequisites
-the installer cannot auto-install (Node ≥ 20.12, Bun, cargo, GPU, disk). When something
+the installer cannot auto-install (Node ≥ 20.12, cargo, GPU, disk). When something
 mandatory is missing it stops **once** with every command ready to copy (`apt`/nodesource/
-rustup/bun on Linux, `winget` on Windows); bypass for agents/CI with `AIGAMEKIT_PREFLIGHT=0`.
+rustup on Linux, `winget` on Windows); bypass for agents/CI with `AIGAMEKIT_PREFLIGHT=0`.
 Profile installs **continue past failures** and print an `OK/FAILED` summary with retry
 commands; on success they run `gameassets doctor` and print next steps. `./install.sh --list`
 shows profiles and tools.
@@ -105,7 +105,6 @@ Useful variable: `PYTHON_CMD` — interpreter to use (default `python3`, or `pyt
 | `motion3d` | Motion3D | Python | 3.13 | Text-to-motion T2M-GPT; PyTorch + `bpy`; links Animator3D (`cross_deps`) |
 | `paint3d` | Paint3D | Python | 3.13 | Hunyuan3D-Paint + nvdiffrast |
 | `materialize` | Materialize | Rust | — | Needs `cargo`; binary in `~/.local/bin` |
-| `vibegame` | VibeGame | Bun | — | Needs **Bun**; CLI `vibegame` → `~/.local/bin` |
 | `viber` | Viber | Rust | — | Needs `cargo`; Bevy engine (worlds XML) |
 | `intrinsic` | Intrinsic | Python | 3.13 | Intrinsic decomposition (**academic license**) |
 
@@ -118,7 +117,7 @@ pytest-cov, ruff) to the tool's own venv, because that is where the suite runs
 (`make test-<tool>`). A Python entry in `tools.yaml` without `post_install` or
 `custom_install` is a bug — `Shared/tests/test_dev_extras.py` fails on it.
 
-**From batch assets to a browser game (folder layout, GLB handoff, VibeGame):** [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md).
+**From batch assets to a game folder (layout, GLB handoff):** [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md).
 
 ---
 
@@ -126,18 +125,17 @@ pytest-cov, ruff) to the tool's own venv, because that is where the suite runs
 
 Everything below is **detected or installed automatically** unless marked *manual*. On a
 fresh machine the real prerequisites are Python with pip, Node.js (KTX2/meshopt
-compression), and — per tool — Rust (`materialize`) or Bun (`vibegame`).
+compression), and — per tool — Rust (`materialize`, `viber`).
 
 | Dependency | Used for | Linux / macOS | Windows | Auto? |
 |------------|----------|---------------|---------|-------|
 | Python 3.10+ with pip | installer engine (`clified`); GPU tools need 3.13 | Debian/Ubuntu: `sudo apt install python3-full python3-venv`; macOS: `brew install python@3.13` | python.org installer or Anaconda (tick *Add to PATH*) | detected; install manually |
 | `uv` | fast venv creation for every Python tool | — | — | ✅ `install.sh` / `install.ps1` installs it (pip) when missing; `CLIFIED_SKIP_UV=1` opts out |
 | `clified` | installer engine | — | — | ✅ bootstrap scripts in `scripts/` (vendored from Clified) install it via pip on first run |
-| Node.js (`npx`) | KTX2/UASTC + meshopt fallback (`@gltf-transform/cli`) | Debian/Ubuntu: `curl -fsSL https://deb.nodesource.com/setup_22.x \| sudo -E bash - && sudo apt install -y nodejs` (apt 24.04 traz 18.x — precisa de ≥ 20.12 para o rolldown do VibeGame); macOS: `brew install node` | `winget install OpenJS.NodeJS.LTS` | manual |
+| Node.js (`npx`) | KTX2/UASTC + meshopt fallback (`@gltf-transform/cli`) | Debian/Ubuntu: `curl -fsSL https://deb.nodesource.com/setup_22.x \| sudo -E bash - && sudo apt install -y nodejs` (apt 24.04 traz 18.x — o pre-flight exige ≥ 20.12); macOS: `brew install node` | `winget install OpenJS.NodeJS.LTS` | manual |
 | KTX-Software `ktx` | UASTC → KTX2 (required for KTX2 GLBs) | ✅ `./install.sh text3d` downloads the tarball → `~/.local/bin/ktx` | ✅ `./install.sh text3d` extracts `ktx.exe` from the NSIS installer via 7-Zip (no admin); without 7-Zip, install `KTX-Software-4.4.2-Windows-x64.exe` manually | Linux ✅ / Windows ✅ with 7-Zip |
 | meshopt (`libmeshoptimizer`) | native GLB mesh compression (bpy 5.2) | Debian/Ubuntu: `sudo apt install libmeshoptimizer-dev`; macOS: `brew install meshoptimizer` | not available natively → automatic fallback to `@gltf-transform/cli` (needs Node.js) | fallback automatic |
-| Rust / cargo | `materialize` (PBR maps) | `sudo apt install build-essential` (C toolchain) + `curl -sSf https://sh.rustup.rs \| sh` | rustup-init.exe from rustup.rs (includes MSVC toolchain) | manual |
-| Bun | `vibegame` (browser 3D engine) | `sudo apt install unzip` + `curl -fsSL https://bun.sh/install \| bash` | `powershell -c "irm bun.sh/install.ps1 \| iex"` | manual |
+| Rust / cargo | `materialize`, `viber` | `sudo apt install build-essential` (C toolchain) + `curl -sSf https://sh.rustup.rs \| sh` | rustup-init.exe from rustup.rs (includes MSVC toolchain) | manual |
 | NVIDIA driver + CUDA | all GPU tools (text2d/text3d/paint3d/…) | `nvidia-smi` must list a GPU | NVIDIA App / driver install | manual |
 
 **Check what your machine is missing:** `gameassets doctor` (single first-use check:
@@ -155,13 +153,12 @@ gameassets dream "A dark fantasy RPG with skeletons and treasure chests" --dry-r
 ```
 
 If the pre-flight stops, it prints **one block** with every missing prerequisite and the
-exact commands to copy (Node ≥ 20.12 via nodesource, rustup, Bun, …). Install them and
+exact commands to copy (Node ≥ 20.12 via nodesource, rustup, …). Install them and
 re-run `./install.sh`. Want sky/terrain/audio in `dream` too? `./install.sh examples`.
 
 > `python3-pip` is required for the bootstrap (it validates `python3 -m pip --version`).
 > Node must be **≥ 20.12**: the `nodejs` package on Ubuntu 24.04 is 18.x, too old
-> for the rolldown build used by VibeGame (`node:util` `styleText`). Pre-flight
-> catches this before anything is installed.
+> for the compression tooling. Pre-flight catches this before anything is installed.
 
 ### Fresh machine — Windows quickstart
 
@@ -186,7 +183,7 @@ tool → CLI smoke tests → compression deps check (`text3d doctor`) → **real
 inference**: every tool generates an actual object (image, audio, GLB, PBR
 maps, terrain heightmap) and the 3D chain runs end to end
 (`text3d` mesh → `paint3d` texture → `rigging3d` skeleton → `animator3d` clips).
-It takes ~1–2 h (CPU torch/cargo/bun installs + GPU inference).
+It takes ~1–2 h (CPU torch/cargo installs + GPU inference).
 
 ```bash
 scripts/docker/ubuntu-clean-test.sh                  # 2 groups, everything
@@ -197,7 +194,7 @@ SKIP_INFERENCE=1 scripts/docker/ubuntu-clean-test.sh # installs + smokes only
 - Runs in **2 groups** (disk-layout limit: the repo may live on a separate
   drive): A = light tools (`vramd rocks3d texture2d text2sound
   skymap2d aigamekitlab materialize`), B = GPU/3D chain (`vramd text2d
-  text3d paint3d rigging3d animator3d terrain3d vibegame gameassets`).
+  text3d paint3d rigging3d animator3d terrain3d gameassets`).
 - **Host caches are mounted** to avoid massive downloads: `~/.cache/huggingface`
   (models) and `~/.cache/uv` (wheels). GPU is passed through with `--gpus all`
   when the host has `nvidia-smi` (falls back to CPU only on container startup
@@ -259,4 +256,4 @@ VRAM path: vramd + hw-auto (no public `--low-vram`); see
 
 - **Adding a new tool to the monorepo** — register it in [`tools.yaml`](../tools.yaml) (Clified registry) + hooks in [`Shared/src/aigamekit_shared/installer/clified_hooks.py`](../Shared/src/aigamekit_shared/installer/clified_hooks.py); see "Registered tools" above and [`AGENTS.md`](../AGENTS.md).
 - [Shared/README.md](../Shared/README.md) — `aigamekit-shared`, `aigamekit-install`
-- [Text2D/README.md](../Text2D/README.md), [Text3D/README.md](../Text3D/README.md), [GameAssets/README.md](../GameAssets/README.md), [Texture2D/README.md](../Texture2D/README.md), [Skymap2D/README.md](../Skymap2D/README.md), [Text2Sound/README.md](../Text2Sound/README.md), [Rigging3D/README.md](../Rigging3D/README.md), [Animator3D/README.md](../Animator3D/README.md), [Paint3D/README.md](../Paint3D/README.md), [Materialize/README.md](../Materialize/README.md), [VibeGame/README.md](../VibeGame/README.md), [AiGameKitLab/README.md](../AiGameKitLab/README.md), [Terrain3D/README.md](../Terrain3D/README.md), [Rocks3D/README.md](../Rocks3D/README.md)
+- [Text2D/README.md](../Text2D/README.md), [Text3D/README.md](../Text3D/README.md), [GameAssets/README.md](../GameAssets/README.md), [Texture2D/README.md](../Texture2D/README.md), [Skymap2D/README.md](../Skymap2D/README.md), [Text2Sound/README.md](../Text2Sound/README.md), [Rigging3D/README.md](../Rigging3D/README.md), [Animator3D/README.md](../Animator3D/README.md), [Paint3D/README.md](../Paint3D/README.md), [Materialize/README.md](../Materialize/README.md), [AiGameKitLab/README.md](../AiGameKitLab/README.md), [Terrain3D/README.md](../Terrain3D/README.md), [Rocks3D/README.md](../Rocks3D/README.md)

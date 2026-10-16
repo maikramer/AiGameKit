@@ -27,6 +27,7 @@ pub mod hot_reload;
 pub mod hud;
 pub mod ibl;
 pub mod impact;
+pub mod input_latch;
 pub mod interact;
 pub mod lint;
 pub mod luau;

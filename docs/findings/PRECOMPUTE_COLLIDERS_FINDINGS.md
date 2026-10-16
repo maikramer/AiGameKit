@@ -1,6 +1,6 @@
-# Precompute de colisores (cápsula/cilindro) — GameAssets → VibeGame
+# Precompute de colisores (cápsula/cilindro) — GameAssets → runtime
 
-Data: 2026-08-01 · Status: live (master pipeline Round 3 + `PrecomputePlugin`)
+Data: 2026-08-01 · Status: live (master pipeline Round 3)
 
 ## Problema
 
@@ -36,18 +36,13 @@ harvestable ficavam na ordem das dezenas (ver o antigo comentário de custo em
    engine). Sem `aigamekit-lab` no PATH ou falha → skip soft, sem falhar o
    batch; o handoff omite o bloco e a engine degrada.
 
-3. **Engine (`PrecomputePlugin`)**:
-   - `collider="shape: precompute; mesh-url: <url do GLB visual>"` →
-     `PrecomputeColliderSystem` (bucket `fixed`, `before:
-     PhysicsInitializationSystem`) resolve do manifest para cápsula/cilindro.
+3. **Runtime**:
+   - o runtime resolve do manifest para cápsula/cilindro.
    - **Sem fetch de `*_collision.glb`** — o mesh-collider só busca para
      TriMesh/ConvexHull.
-   - `seedGltfPrecomputedBounds` → `ground-align="aabb"` / lift do spawner
-     usam o AABB pré-calculado (sem `Box3.setFromObject`).
-   - NavMesh: `isFixedObstacle` aceita Capsule/Cylinder; o carve é um
-     **prisma de 8 lados** procedural (`appendPrism`) — o bake não espera
-     downloads (`prefetchNavmeshObstacles`/`navmeshObstaclesLoaded` só
-     rastreiam trimesh/hull).
+   - o AABB pré-calculado serve ao ground-align / lift do spawner.
+   - NavMesh: o carve de cápsula/cilindro é um **prisma de 8 lados**
+     procedural — o bake não espera downloads.
 
 ## Gotchas (lições)
 
@@ -108,8 +103,5 @@ harvestable ficavam na ordem das dezenas (ver o antigo comentário de custo em
   devolve agora `world_bounds_min/max`); CLI `aigamekit-lab precompute`.
 - `GameAssets/src/gameassets/pipeline.py` (`_emit_precompute`),
   `paths.py` (`_precompute_path`), `handoff_export.py` (inline na row).
-- `VibeGame/src/plugins/asset-precompute/` (manifest + sistema),
-  `physics/` (shape `Cylinder`/`Precompute`), `navmesh/geometry.ts`
-  (`appendPrism`), `gltf-xml/gltf-bounds-cache.ts` (`seedGltfPrecomputedBounds`).
-- Exemplo: `VibeGame/examples/simple-rpg/public/world/**` (spawners com
-  `collider="shape: precompute"`) + `public/assets/gameassets_handoff.json`.
+- Exemplo: os spawners do exemplo simple-rpg
+  (`collider="shape: precompute"`) + `public/assets/gameassets_handoff.json`.

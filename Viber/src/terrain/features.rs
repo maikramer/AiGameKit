@@ -1,7 +1,7 @@
 //! Feature pipeline — applies every declarative ground feature to a
-//! [`BrushGrid`] in the VibeGame order and produces the query registries.
+//! [`BrushGrid`] in the original order and produces the query registries.
 //!
-//! # Order (VibeGame system chain)
+//! # Order (original system chain)
 //!
 //! 1. **Pads** — flatten first, so water carves the pad rim and roads see
 //!    the final plaza plane.
@@ -114,7 +114,7 @@ pub struct FeatureResult {
     pub road_specs: Vec<RoadSpec>,
     /// Pads with the auto height resolved (placement anchors).
     pub pads: Vec<ResolvedPad>,
-    /// Fusion discs for multi-arm junctions (VibeGame junctions.ts).
+    /// Fusion discs for multi-arm junctions (junctions.ts).
     pub road_junctions: Vec<super::roads::RoadJunction>,
     /// Ground decals to render, in declaration order.
     pub decals: Vec<GroundDecalSpec>,

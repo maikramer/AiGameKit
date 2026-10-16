@@ -5,7 +5,7 @@
 # Corre DENTRO do container (scripts/docker/Dockerfile.ubuntu-clean) e simula
 # o fluxo de uma pessoa real, seguindo o quickstart de docs/INSTALLING.md:
 #   1. apt: python3/nodejs/build-essential/unzip        (no Dockerfile)
-#   2. rustup (materialize) + bun (vibegame)             (quickstart)
+#   2. rustup (materialize)                              (quickstart)
 #   3. ./install.sh <tool>                               (fluxo oficial)
 #   4. INFERÊNCIA REAL: cada tool gera um objeto de verdade (ficheiros em
 #      /artifacts/inference/), cadeia text3d → paint3d → rigging3d → animator3d
@@ -16,14 +16,14 @@
 # Variáveis:
 #   TEST_TOOLS        lista de tools (default: TODAS as tools do tools.yaml)
 #   TEST_INFERENCE    0 desliga a fase de inferência
-#   SKIP_PRE          1 pula rustup+bun (debug rápido)
+#   SKIP_PRE          1 pula rustup (debug rápido)
 # =============================================================================
 set -u
 
 export REPO=/workspace/AiGameKit
 export HOME=/root
 export DEBIAN_FRONTEND=noninteractive
-export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # --- Artefactos (volume /artifacts; senão /tmp) -----------------------------
 ART="$HOME/test-artifacts"
@@ -96,7 +96,7 @@ echo "Python: $(python3 --version) | Node: $(node --version) | npm: $(npm --vers
 echo "Artefactos: $ART"
 
 # =============================================================================
-# Fase 0 — pré-requisitos do quickstart (rustup + bun)
+# Fase 0 — pré-requisitos do quickstart (rustup)
 # =============================================================================
 if [ "${SKIP_PRE:-0}" != "1" ]; then
   say "PRE: rustup (materialize precisa de cargo)"
@@ -107,17 +107,8 @@ if [ "${SKIP_PRE:-0}" != "1" ]; then
     tail -25 "$ART/step-rustup.log" | sed 's/^/    /'
   fi
   command -v cargo >/dev/null 2>&1 && cargo --version | sed 's/^/  /'
-
-  say "PRE: bun (vibegame precisa de Bun)"
-  if curl -fsSL https://bun.sh/install | bash >"$ART/step-bun.log" 2>&1; then
-    ok "bun"
-  else
-    fail "bun"
-    tail -25 "$ART/step-bun.log" | sed 's/^/    /'
-  fi
-  bun --version 2>/dev/null | sed 's/^/  /'
 else
-  say "PRE: SKIP_PRE=1 — a saltar rustup/bun"
+  say "PRE: SKIP_PRE=1 — a saltar rustup"
 fi
 
 # =============================================================================
@@ -143,7 +134,7 @@ if [ "${TEST_TOOLS:-}" != "" ]; then
   TOOLS="$TEST_TOOLS"
   echo "Modo TEST_TOOLS — só: $TOOLS"
 else
-  TOOLS="vramd text2d text3d gameassets aigamekitlab text2sound texture2d skymap2d terrain3d rocks3d rigging3d animator3d paint3d materialize vibegame"
+  TOOLS="vramd text2d text3d gameassets aigamekitlab text2sound texture2d skymap2d terrain3d rocks3d rigging3d animator3d paint3d materialize"
   echo "Modo completo — todas as tools do tools.yaml (instalação + inferência)."
 fi
 echo "Tools a instalar: $TOOLS"
@@ -154,7 +145,6 @@ vramd|vramd|
 gameassets|gameassets|
 rocks3d|rocks3d|
 materialize|materialize|
-vibegame|vibegame|
 text3d|text3d|
 text2d|text2d|
 aigamekitlab|aigamekit-lab|

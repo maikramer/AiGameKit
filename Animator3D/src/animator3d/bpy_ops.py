@@ -2408,7 +2408,7 @@ def death_keyframes(
     dobram progressivamente (traseiras antes das dianteiras); (0.60-0.80)
     bounce amortecido; (0.80-1.00) repouso com micro-respiração em decaimento.
     A última frame iguala a anterior — o runtime segura a pose final
-    (Viber: play_death_animation terminal; VibeGame: loop=false).
+    (Viber: play_death_animation terminal; outros consumidores: loop=false).
 
     Substitui o alias histórico (Death = chop_keyframes — um GOLPE como morte).
     """

@@ -653,7 +653,9 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
             let ctx = lua
                 .app_data_ref::<ScriptCtx>()
                 .expect("ScriptCtx app data seeded in LuaScriptHost::new");
-            Ok(ctx.revealed.contains(biome.trim().to_ascii_lowercase().as_str()))
+            Ok(ctx
+                .revealed
+                .contains(biome.trim().to_ascii_lowercase().as_str()))
         })?,
     )?;
     // viber.add_skill_points(n) — pontos de talento (recompensa incremental
@@ -1587,6 +1589,24 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                     .unwrap_or(0.0))
             })?,
         )?;
+        // viber.vehicle.give(nitro, turbo) — power-ups de script (item boxes):
+        // enfileira no registry drenado pelo racing plugin (apply_lua_boosts).
+        vehicle.set(
+            "give",
+            lua.create_function(|lua, (nitro, turbo): (f32, f32)| {
+                if !nitro.is_finite() || !turbo.is_finite() {
+                    return Err(mlua::Error::runtime(
+                        "viber.vehicle.give: valores não finitos",
+                    ));
+                }
+                let queue: Table = lua.named_registry_value("viber_race_boosts")?;
+                let entry = lua.create_table()?;
+                entry.raw_set("nitro", nitro.clamp(0.0, 1.0))?;
+                entry.raw_set("turbo", turbo.clamp(0.0, 10.0))?;
+                queue.push(entry)?;
+                Ok(true)
+            })?,
+        )?;
         api.set("vehicle", vehicle)?;
     }
 
@@ -1606,6 +1626,9 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     // Estado de JOGO world-scoped (`viber.game()`) e cache de módulos
     // (`viber.load`) — ambos sobrevivem ao hot-reload.
     lua.set_named_registry_value("viber_game", lua.create_table()?)?;
+    // Fila de power-ups de corrida (`viber.vehicle.give`) — drenada pela
+    // engine (racing::apply_lua_boosts) a cada frame.
+    lua.set_named_registry_value("viber_race_boosts", lua.create_table()?)?;
     lua.set_named_registry_value("viber_modules", lua.create_table()?)?;
     Ok(())
 }

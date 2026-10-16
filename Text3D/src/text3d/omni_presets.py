@@ -38,7 +38,7 @@ POSE_PRESETS: dict[str, str] = {
 
 # [L, H, W] = aspect Omni → após export Y-up WebGL/Three.js mapeia para [X, Y, Z].
 #   L -> X  (esquerda/direita na vista de frente, -Z)
-#   H -> Y  (cima; Y+ up no exhibit / VibeGame)
+#   H -> Y  (cima; Y+ up no exhibit / WebGL)
 #   W -> Z  (profundidade, afastamento da câmara)
 # Eixo maior = 1.0 (docs Omni 0-1). Cantos ±0.5; grid MC ±1.01 → margem.
 # NÃO escalar a 2.0 (enche e clipa). NÃO chamar L de “profundidade”.

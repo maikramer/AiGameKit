@@ -1,7 +1,7 @@
 //! `<ParticleSystem>` runtime: CPU particle emitters drawn as camera-facing
 //! quads in one dynamic mesh per emitter.
 //!
-//! Presets mirror the VibeGame particle library (fire, smoke, fireflies, …);
+//! Presets mirror the original particle library (fire, smoke, fireflies, …);
 //! the `particle-emitter="…"` component-string in a world overrides the
 //! preset fields. Particles live in emitter-local space (the emitters in this
 //! world are static, so local and world space are equivalent).
@@ -47,7 +47,7 @@ pub struct ResolvedEmitter {
     pub max_alpha: f32,
 }
 
-/// Preset library — mirrors `VibeGame/src/plugins/particles/presets.ts` for
+/// Preset library — mirrors the original `presets.ts` for
 /// the presets this world uses (values from the TS factories where present).
 /// Presets autorais do emissor — fonte única da cobertura de testes e da
 /// validação de `viber.burst` (preset desconhecido vira erro de script).
@@ -176,7 +176,7 @@ pub fn preset(name: &str) -> ResolvedEmitter {
                 true,
                 0.1,
             ),
-            // Combate (presets do VibeGame `presets.ts`): slash do golpe,
+            // Combate (presets do `presets.ts`): slash do golpe,
             // sparks do impacto, shockwave do finisher — todos em burst.
             "slash" => (
                 0.0,

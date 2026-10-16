@@ -3,7 +3,7 @@
 # seamless exacto (crossfade equal-power, edge trim adaptativo, loop final =
 # duration pedido, alinhado a compassos @120 BPM).
 # Canónico em examples/shared-assets/ (manifests + binários em public/assets).
-# Exemplos consomem via plugin vibegame({ sharedAssets }) — sem cópias nem symlinks.
+# Exemplos consomem o pool diretamente por URL — sem cópias nem symlinks.
 # Regenerar: cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/audio-bgm
 # (BGM curado com gate de costura: regen_audio.py re-rola seeds até cauda ≥70%.)
 output_dir: ../public/assets

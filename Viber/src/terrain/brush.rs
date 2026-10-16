@@ -1,22 +1,22 @@
 //! Height brush engine — the single mutation path for the terrain grid.
 //!
-//! Ported from the VibeGame terrain plugin's `height-brush.ts` +
+//! Ported from the original terrain plugin's `height-brush.ts` +
 //! `flatten.ts`. Every ground mutation (pads, lakes, rivers, roads, and later
 //! Luau-authored brushes) goes through [`BrushGrid::apply`]:
 //!
 //! * **One grid authority** — [`BrushGrid`] owns the raw `u16` height grid and
-//!   bumps [`BrushGrid::revision`] whenever a stroke writes (VibeGame
-//!   `getGroundRevision`); caches (chunks, colliders, spawner heights) key off
+//!   bumps [`BrushGrid::revision`] whenever a stroke writes (`getGroundRevision`);
+//!   caches (chunks, colliders, spawner heights) key off
 //!   it.
 //! * **Owner journal** — strokes are recorded per `owner` (`"pad:0"`,
 //!   `"road:3"`, …) and [`BrushGrid::revert_last_stroke`] undoes the owner's
 //!   last stroke before it re-carves, so re-applying the same brush never
-//!   accumulates depth (VibeGame `revertHeightBrush` idempotency rule).
+//!   accumulates depth (`revertHeightBrush` idempotency rule).
 //! * **Modes** — [`BrushMode::Blend`] mixes toward the design surface,
 //!   [`BrushMode::Lower`]/[`BrushMode::Raise`] only ever cut/fill. Water is
 //!   always lower-only, so overlapping bodies and pre-existing valleys stay
 //!   safe.
-//! * **No guard clamp.** The VibeGame port carried a `guardAt` pass that, after
+//! * **No guard clamp.** An earlier port carried a `guardAt` pass that, after
 //!   a stroke, pulled every texel adjacent to the brush down onto the design
 //!   surface. It only ever ran on texels the falloff had left at weight 0, so
 //!   it could not remove a discontinuity — it moved it one texel outward, and
@@ -99,8 +99,8 @@ fn height_to_raw(h: f32, max_height: f32) -> u16 {
     (norm * u16::MAX as f32).round() as u16
 }
 
-/// Clamps a brush width/falloff to at least 1.5 grid texels (VibeGame
-/// `minEffectiveWidth` / `minEffectiveFalloff`): smaller values cannot reach a
+/// Clamps a brush width/falloff to at least 1.5 grid texels (`minEffectiveWidth`
+/// / `minEffectiveFalloff`): smaller values cannot reach a
 /// texel center and would silently do nothing.
 pub fn min_effective(value: f32, texel: f32) -> f32 {
     value.max(1.5 * texel)
@@ -522,7 +522,7 @@ impl BrushGrid {
     /// Weights are 1/1/1/1/**6**/1/1/1/1 (the spawn point dominates) and the
     /// probes sit one texel apart: probes closer than the heightfield cell can
     /// all land in the same cells and read a steep ravine wall as a gentle
-    /// ramp (VibeGame `sampleTerrainSurfaceMatrix`). The average also steadies
+    /// ramp (`sampleTerrainSurfaceMatrix`). The average also steadies
     /// prop tilt on bumpy ground, where a single central difference follows
     /// every texel-scale bump.
     pub fn sample_normal_matrix(&self, x: f32, z: f32, epsilon: f32) -> Vec3 {
@@ -1117,7 +1117,7 @@ mod tests {
         // cima da transição lê uma parede quase horizontal; a matriz (centro
         // 6×, anel já em plano plano/plateau) mantém a normal maioritariamente
         // de pé — o caso que deixava tapetes de vegetação pintar paredes de
-        // corte (VibeGame `sampleTerrainSurfaceMatrix`).
+        // corte (`sampleTerrainSurfaceMatrix`).
         let mut grid = BrushGrid::new(vec![0; 16 * 16], 16, 16, 16.0, 50.0, 0.0).expect("grid");
         grid.begin_stroke("step");
         for z in 0..16 {

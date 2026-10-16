@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 # Bump quando o schema/prompt mudar semanticamente — invalida o cache de planos.
-DREAM_PROMPT_VERSION = "2"
+DREAM_PROMPT_VERSION = "3"
 
 DREAM_PLAN_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -95,7 +95,7 @@ DREAM_PLAN_SCHEMA: dict[str, Any] = {
     },
 }
 
-VIBEGAME_RECIPES = [
+SCENE_RECIPES = [
     "GameObject",
     "MeshRenderer",
     "static-part",
@@ -176,7 +176,7 @@ def build_system_prompt(
     return f"""\
 You are an expert game designer and asset planner. Given a game concept described in \
 natural language, produce a JSON object that defines the game's assets, visual style, \
-and scene layout for a 3D browser game powered by VibeGame (ECS + Three.js).
+and scene layout for a 3D game (declarative scene XML).
 
 ## Available style presets
 {presets_str}
@@ -195,8 +195,8 @@ and scene layout for a 3D browser game powered by VibeGame (ECS + Three.js).
 - The JSON must be valid and parseable. Do NOT wrap it in markdown code fences.
 - Respond ONLY with the JSON object — no explanation, no extra text.
 
-## VibeGame recipes (for reference — used later to build the scene XML)
-{", ".join(VIBEGAME_RECIPES)}
+## Scene recipes (for reference — used later to build the scene XML)
+{", ".join(SCENE_RECIPES)}
 """
 
 
@@ -235,8 +235,8 @@ def build_refine_prompt(
     )
 
     return f"""\
-You are an expert game designer editing an existing asset/scene plan for a 3D browser \
-game powered by VibeGame (ECS + Three.js).
+You are an expert game designer editing an existing asset/scene plan for a 3D game \
+(declarative scene XML).
 
 ## Available style presets
 {presets_str}

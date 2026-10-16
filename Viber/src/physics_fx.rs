@@ -1,7 +1,7 @@
 //! Física Fase 3 (loop 10 do port simple-rpg) — efeitos físicos sobre a
 //! arquitetura transform-driven da engine (as criaturas movem-se por
 //! comandos de script e o herói por cinemática própria — o equivalente do
-//! Character Controller do VibeGame; não há rigidbodies dinâmicos para
+//! Character Controller original; não há rigidbodies dinâmicos para
 //! receber impulsos Rapier):
 //!
 //! - **Knockback**: [`Knockback`] — velocidade horizontal com decaimento

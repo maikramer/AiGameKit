@@ -83,8 +83,8 @@ clip_map:
   # Sem swing lateral de machado no pack free — o chop do pipeline continua
   # no perfil quaternius-hero (Sword_Attack, swing horizontal).
   # --- Mina (uma mão; chão/parede, L/R) ---
-  # mine: swing de picareta contra o chão — é o clip que o VibeGame procura
-  # por keyword ('mine') no contexto de minerar pedra; no modo all do
+  # mine: swing de picareta contra o chão — é o clip que os consumidores
+  # procuram por keyword ('mine') no contexto de minerar pedra; no modo all do
   # game-pack sobrevive à cadeia (nenhum perfil Quaternius define 'mine').
   mine: "Work/Mining/HumanM@MiningOneHand01_R - Ground"
   mineground: "Work/Mining/HumanM@MiningOneHand01_R - Ground"

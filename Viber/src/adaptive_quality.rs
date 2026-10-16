@@ -1,10 +1,10 @@
 //! `<AdaptiveQuality target-fps="60" mode="auto">` — escalonador de qualidade
-//! por frame-time (port do plugin `adaptive-quality` do VibeGame).
+//! por frame-time (port do plugin `adaptive-quality`).
 //!
 //! Mede o frame REAL (`Time<Real>`, imune ao hit-stop) numa EMA; frames
 //! seguidos acima do orçamento descem um tier, folga sustentada sobe um. As
-//! constantes (EMA, streaks, histerese, cooldown) são as do VibeGame — lá
-//! foram afinadas contra o flapping na banda do limiar.
+//! constantes (EMA, streaks, histerese, cooldown) são as da referência —
+//! lá foram afinadas contra o flapping na banda do limiar.
 //!
 //! Tiers: 0 = Max (a lente toda), 1 = High, 2 = Medium, 3 = Low. As alavancas
 //! são as caras do Viber — qualidade do SSAO, passos do volumétrico, orçamento
@@ -12,8 +12,8 @@
 //! entram pela fonte "qualidade" dos gates de pós-processo
 //! ([`crate::postfx::set_quality_gates`]), separada da do bridge/QA.
 //!
-//! `min-pixel-ratio`/`max-pixel-ratio` são aceites por paridade com o
-//! VibeGame mas não têm alavanca: o Bevy não tem render-scale interno sem
+//! `min-pixel-ratio`/`max-pixel-ratio` são aceites por paridade, mas não têm
+//! alavanca: o Bevy não tem render-scale interno sem
 //! mexer na escala da UI.
 //!
 //! Env: `VIBER_QUALITY=auto|low|medium|high|max` sobrepõe o `mode` do mundo;
@@ -51,7 +51,7 @@ pub const PROBE_FAIL_WINDOW_S: f32 = 20.0;
 pub const MAX_UPSCALE_BACKOFF: f32 = 8.0;
 /// Tier mais baixo (Low).
 pub const LOWEST_TIER: u8 = 3;
-/// `target-fps` por omissão (o do VibeGame).
+/// `target-fps` por omissão.
 pub const DEFAULT_TARGET_FPS: f32 = 55.0;
 
 /// `auto` escalona; os outros prendem um tier.

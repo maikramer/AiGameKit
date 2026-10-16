@@ -6,7 +6,7 @@ English: [`TESTING.md`](TESTING.md).
 
 ## Objectivos
 
-1. **Todas as ferramentas do instalador + acessórios têm ≥100 testes automatizados** (casos pytest, Bun `it`/`test`, ou Rust `#[test]`).
+1. **Todas as ferramentas do instalador + acessórios têm ≥100 testes automatizados** (casos pytest ou Rust `#[test]`).
 2. **Suites de cobertura são CPU-first** — sem download de pesos HF, sem CUDA no happy path unitário.
 3. **Agent-first:** um agente frio corre `make test-<pkg>` (ou `.venv` do pacote) e verde = contratos de helpers puros / superfície CLI ainda válidos.
 
@@ -32,11 +32,10 @@ Testes GPU / bpy / integração continuam úteis; têm de fazer **skip** limpo s
 | Rigging3D | ferramenta | `make test-rigging3d` | `test_rigging3d_coverage_suite.py`, `*_100b.py` |
 | Animator3D | ferramenta | `make test-animator3d` | `test_animator3d_coverage_100.py` |
 | Materialize | ferramenta (Rust) | `make test-materialize` | `#[cfg(test)]` em `src/{preset,analyze,io,error,cli}.rs` |
-| VibeGame | ferramenta (Bun) | `make test-vibegame` | `tests/coverage-100.test.ts` + unit/integration |
 
 Fallback: `<Pkg>/.venv/bin/pytest tests/ -q`.
 
-CI Python+Rust: `make check` / `make test`. VibeGame à parte: `make test-vibegame`.
+CI Python+Rust: `make check` / `make test`.
 
 ## Convenção das suites de cobertura
 
@@ -44,7 +43,6 @@ CI Python+Rust: `make check` / `make test`. VibeGame à parte: `make test-vibega
 |--------|-----|
 | `tests/test_<pkg>_coverage_100.py` | Suite grande (≥100 casos recolhidos) |
 | `tests/test_<pkg>_coverage_suite.py` + `*_100b.py` | Split quando um ficheiro cresceu demais |
-| `VibeGame/tests/coverage-100.test.ts` | Piso Bun de helpers puros |
 | Materialize `#[cfg(test)] mod tests` em `src/*.rs` | Crate só-binário — unit tests junto do código |
 
 **Nome:** manter `coverage` no ficheiro para achar rápido (`rg coverage tests/`).
@@ -68,7 +66,7 @@ CI Python+Rust: `make check` / `make test`. VibeGame à parte: `make test-vibega
 - **Hacks binários de GLB** como “teste de animação” — regenerar asset; testar math de retarget.
 - **Mexer em código vendored** só para testabilidade — testar wrappers/adapters.
 - **Importar wheels nativos in-process no CI** quando o wheel pode SIGILL (mata o processo pytest) — probe em subprocesso primeiro (Text2Sound abaixo).
-- **Mutar estado partilhado de módulo** entre casos Bun/pytest (`INPUT_CONFIG`, defaults SoA bitecs) sem restaurar — flakes que passam local e falham por ordem no CI.
+- **Mutar estado partilhado de módulo** entre casos de teste sem restaurar — flakes que passam local e falham por ordem no CI.
 
 ## GitHub Actions CI (`.github/workflows/ci.yml`)
 
@@ -79,9 +77,8 @@ Jobs em push/PR a `main`:
 | `lint` | `ruff check` + `ruff format --check` + `pre-commit run --all-files` (inclui **mypy** no Shared) |
 | `test-python` | matrix: Shared, GameAssets, Texture2D, Skymap2D, Rigging3D, Text2Sound, AiGameKitLab, Rocks3D, Animator3D — cada um `pip install -e Shared/.[dev]` depois pacote `.[dev]` + pytest |
 | `test-rust` | Materialize fmt/clippy/test (`continue-on-error`) |
-| `vibegame` | Bun install + `check` + `lint` + `format:check` + `test` + `build` |
 
-**Fora da matrix** (stacks GPU pesados): Text2D, Text3D, Paint3D, Part3D, Terrain3D, ModelServer — local / com GPU. O workflow raiz **inclui** VibeGame (não contar só com `VibeGame/.github/`).
+**Fora da matrix** (stacks GPU pesados): Text2D, Text3D, Paint3D, Part3D, Terrain3D, ModelServer — local / com GPU.
 
 ### Armadilhas aprendidas (CI verde 2026-07)
 
@@ -94,18 +91,14 @@ Jobs em push/PR a `main`:
 | Texture2D dtype | `device="cuda"` cai em CPU → float32 | Skip asserts de dtype CUDA sem CUDA real |
 | Animator3D mocks bpy | Só `sys.modules` não substitui `animator3d.bpy_ops` já importado | `patch("animator3d.bpy_ops", …, create=True)` (+ stub) |
 | GameAssets `to_paint` | Assumir último `run_cmd` == simplify | Pipeline faz simplify **e depois** re-`topology-fix` — assert simplify em `call_args_list` |
-| VibeGame tsc | `Transform.dirty` em `Transform \| WorldTransform` | Guard `'dirty' in transform` antes de escrever |
-| VibeGame tsconfig | Imports subpath (`vibegame/terrain`, …) falham no `tsc` | Manter `paths` em `VibeGame/tsconfig.json` alinhados com exports |
-| VibeGame flakes | `INPUT_CONFIG` partilhado / defaults SoA NavMeshAgent / profiler | Restaurar config; refill SoA em `beforeAll`; permitir `ms >= 0` em timings custom |
 
-Paridade local: `make check` (Python+Rust) e `make check-vibegame` / `make test-vibegame`. Preferir `gh run list` / `gh run view --log-failed` a adivinhar.
+Paridade local: `make check` (Python+Rust). Preferir `gh run list` / `gh run view --log-failed` a adivinhar.
 
 ## Venvs por pacote
 
 ```bash
 Text2D/.venv/bin/pytest Text2D/tests/test_text2d_coverage_suite.py -q
 Materialize: cargo test --bin materialize-cli
-VibeGame: bun test tests/coverage-100.test.ts
 ```
 
 `AIGAMEKIT_FILE_LOG=1` pode ser preciso sob pytest (ver [`LOGGING_PT.md`](LOGGING_PT.md)).

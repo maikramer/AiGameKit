@@ -1,4 +1,4 @@
-//! HUD screen elements styled after the original VibeGame simple-rpg DOM
+//! HUD screen elements styled after the original simple-rpg DOM
 //! interface — with the AAA presentation layer: a display font (Cinzel),
 //! gradient panels with drop shadows, authored vector icons (heart, coin,
 //! log, stone, action glyphs), a real minimap arrow with numbered quest
@@ -17,6 +17,7 @@ pub mod assets;
 pub mod compass;
 pub mod elements;
 pub mod interact;
+pub mod map;
 pub mod menu;
 pub mod minimap;
 pub mod vitals;
@@ -32,6 +33,10 @@ pub use elements::{spawn_hud, spawn_resource_chip};
 pub use interact::{
     BALLOON_DURATION, BALLOON_RANGE_M, HudBalloon, HudPrompt, HudToggle, balloon_tick,
     hud_balloon_update, hud_prompt_update, hud_toggle,
+};
+pub use map::{
+    MAP_PANEL_PX, PIN_PICK_RADIUS_PX, RegionalMapPlugin, RegionalMapState, VILLAGE_CLEAR_M,
+    pick_pin, region_hidden, reveal_key, world_to_panel,
 };
 pub use minimap::{
     MinimapAnchor, MinimapArrow, MinimapDot, MinimapLandmark, MinimapRange, MinimapTower,

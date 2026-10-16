@@ -1,4 +1,4 @@
-"""Converte DreamPlan em ficheiros prontos para batch + scaffold VibeGame."""
+"""Converte DreamPlan em ficheiros prontos para batch (game.yaml, manifest.yaml) + world.xml."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ def emit_manifest_yaml(plan: DreamPlan) -> str:
 
 
 # ---------------------------------------------------------------------------
-# world XML (scene for VibeGame <Scene>)
+# world XML (esboço declarativo da cena)
 # ---------------------------------------------------------------------------
 
 
@@ -103,13 +103,13 @@ def _xml_escape(s: str) -> str:
 
 
 def emit_world_xml(plan: DreamPlan) -> str:
-    """Gera bloco <Scene> para inserir no index.html do VibeGame."""
+    """Gera o esboço declarativo da cena (world.xml): ground/terreno, player e placements dos assets 3D."""
     has_sky_image = bool(plan.sky_prompt)
     sky_attr = ""
     if plan.scene.sky_color and not has_sky_image:
         sky_attr = f' sky="{_xml_escape(plan.scene.sky_color)}"'
 
-    lines = [f'<Scene canvas="#game-canvas"{sky_attr}>']
+    lines = [f"<Scene{sky_attr}>"]
 
     if has_sky_image:
         lines.append('  <Skybox url="/assets/sky/sky.png"></Skybox>')
@@ -170,64 +170,6 @@ def _ground_color_for_genre(genre: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# main.ts
-# ---------------------------------------------------------------------------
-
-
-def emit_main_ts(plan: DreamPlan, *, with_sky: bool = True) -> str:
-    imports = ["configure", "run", "loadSceneManifest"]
-
-    lines = [
-        f"import {{ {', '.join(imports)} }} from 'vibegame';",
-        "",
-        "async function bootstrap(): Promise<void> {",
-        "  configure({ canvas: '#game-canvas' });",
-        "  const runtime = await run();",
-        "  const state = runtime.getState();",
-        "  try {",
-        "    await loadSceneManifest(state);",
-        "  } catch {",
-        "    console.warn('[dream] Scene manifest not loaded (optional).');",
-        "  }",
-        "}",
-        "",
-        "void bootstrap();",
-        "",
-    ]
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# index.html
-# ---------------------------------------------------------------------------
-
-
-def emit_index_html(plan: DreamPlan, world_xml: str) -> str:
-    title = _xml_escape(plan.title)
-    indented_world = "\n".join("    " + line if line.strip() else "" for line in world_xml.splitlines())
-    return f"""\
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{title}</title>
-    <style>
-      * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-      html, body {{ width: 100%; height: 100%; overflow: hidden; background: #111; }}
-      #game-canvas {{ display: block; width: 100%; height: 100%; }}
-    </style>
-  </head>
-  <body>
-{indented_world}
-    <canvas id="game-canvas"></canvas>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-"""
-
-
-# ---------------------------------------------------------------------------
 # Emitir tudo para disco
 # ---------------------------------------------------------------------------
 
@@ -239,7 +181,15 @@ def emit_all(
     with_sky: bool = True,
     with_audio: bool = True,
 ) -> dict[str, Path]:
-    """Escreve todos os ficheiros gerados e devolve mapa nome→caminho."""
+    """Escreve os ficheiros gerados (game.yaml, manifest.yaml, world.xml) e devolve mapa nome→caminho.
+
+    Args:
+        plan: Plano validado do dream.
+        output_dir: Pasta onde escrever (normalmente ``_batch/`` do projeto).
+        with_sky: Mantido por compatibilidade com a CLI; já não altera os ficheiros
+            emitidos (o sky depende só de ``plan.sky_prompt``).
+        with_audio: Quando ``False``, o game.yaml não inclui o bloco ``text2sound``.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     paths: dict[str, Path] = {}
@@ -256,13 +206,5 @@ def emit_all(
     world_xml_path = output_dir / "world.xml"
     world_xml_path.write_text(world_xml_str, encoding="utf-8")
     paths["world_xml"] = world_xml_path
-
-    main_ts = output_dir / "main.ts"
-    main_ts.write_text(emit_main_ts(plan, with_sky=with_sky), encoding="utf-8")
-    paths["main_ts"] = main_ts
-
-    index_html = output_dir / "index.html"
-    index_html.write_text(emit_index_html(plan, world_xml_str), encoding="utf-8")
-    paths["index_html"] = index_html
 
     return paths

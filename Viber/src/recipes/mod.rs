@@ -39,7 +39,7 @@ pub const KNOWN_TAGS: &[&str] = &[
     "scatter",
     "group",
     "cuboid",
-    // VibeGame spelling — inside `<Composition>` (and anywhere else) a
+    // Composition spelling — inside `<Composition>` (and anywhere else) a
     // `<Box>` is a cuboid.
     "box",
     "sphere",
@@ -98,6 +98,8 @@ pub const KNOWN_TAGS: &[&str] = &[
     "cinematic",
     "projectiletemplate",
     "vehicletemplate",
+    "trackramp",
+    "boostpad",
     "questtracker",
     "waypointarrow",
     "postfxdebugtoggle",
@@ -208,14 +210,13 @@ pub struct MaterialSpec {
     pub roughness: Option<f32>,
     /// `opacity` (0..1) — abaixo de 1 a parte fica translúcida
     /// (`AlphaMode::Blend`, `depthWrite` off no renderer); 0 = invisível,
-    /// útil para paredes de colisor puro (o truque `opacity="0"` do
-    /// VibeGame).
+    /// útil para paredes de colisor puro (o truque `opacity="0"`).
     pub opacity: Option<f32>,
     /// `emissive` (#hex) — brilho próprio da parte (vidro de lanterna,
     /// brasa); independente da luz da cena.
     pub emissive: Option<[f32; 3]>,
     /// `texture="/assets/…"`` (ou `texture-url`) — base color map. Os
-    /// fragmentos migrados do VibeGame tinham `texture-url` nas decal
+    /// fragmentos migrados tinham `texture-url` nas decal
     /// planes (praça de cobblestone) e o migrador deixou cair o atributo;
     /// suportar aqui devolve o visual sem tocar no conteúdo.
     pub texture: Option<String>,
@@ -271,7 +272,7 @@ fn parse_place(value: &str, ctx_tag: &str, ctx: &mut ParseCtx) -> Option<PlaceSp
                     values::parse_f32(&val, &format!("{ctx_tag} place base-y-offset"))
                         .unwrap_or(0.0);
             }
-            // surface-epsilon / max-slope-deg do VibeGame: aceites sem
+            // surface-epsilon / max-slope-deg: aceites sem
             // efeito (a amostragem Viber já resolve o solo pelo span).
             "surface-epsilon" | "max-slope-deg" => {}
             other => ctx
@@ -680,7 +681,7 @@ pub struct ParticleSpec {
 }
 
 /// Estilo de quebra de um prop destrutível (`break-style` no component-string
-/// `destructible`) — port do enum da referência VibeGame (`destructible`).
+/// `destructible`) — port do enum da referência (`destructible`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BreakStyleSpec {
     /// Só o burst de partículas (default).
@@ -692,7 +693,7 @@ pub enum BreakStyleSpec {
     Shatter,
 }
 
-/// `destructible="…"` (attr universal, component-string do VibeGame) — os
+/// `destructible="…"` (attr universal, em component-string) — os
 /// valores crus do XML; a resolução para o componente runtime
 /// [`crate::harvest::Destructible`] aplica os defaults da referência.
 ///
@@ -1526,7 +1527,7 @@ fn parse_entity_kind(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<Entity
         "audiomixer" => finish_audio_mixer(node, ctx).map(Some),
         "sky" => finish_sky(node, ctx).map(Some),
         "navmesh" | "spawngate" | "projectiletemplate" | "postfxdebugtoggle"
-        | "adaptivequality" | "vehicletemplate" | "race" => {
+        | "adaptivequality" | "vehicletemplate" | "race" | "trackramp" | "boostpad" => {
             finish_engine_config(node, ctx).map(Some)
         }
         "landmark" => finish_landmark(node, ctx).map(Some),
@@ -1618,7 +1619,7 @@ struct Common {
 
 /// Parseia o attr `rotation`: 4 componentes = quaternion cru `x y z w`
 /// (comportamento histórico); 3 componentes = euler em RADIANOS — a
-/// convenção das partes de `<Composition>` do VibeGame, aceite em qualquer
+/// convenção das partes de `<Composition>`, aceite em qualquer
 /// entidade para os mundos migrarem sem reescrever rotações.
 pub fn parse_rotation_attr(value: &str, ctx: &str) -> Result<[f32; 4]> {
     if value.split_whitespace().count() == 3 {
@@ -1660,7 +1661,7 @@ fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(Stri
                 common.props.push((name.to_owned(), value.clone()));
             }
             key if common.links.apply_attr(key, value) => {}
-            // Component-string do plugin `destructible` do VibeGame — o
+            // Component-string do plugin `destructible` — o
             // prop nasce colhível (árvores/rochas dos spawners).
             "destructible" => common.destructible = Some(DestructibleSpec::parse(value)),
             // `<ResourceNode kind yield>` em forma de attr — é assim que o
@@ -1697,7 +1698,7 @@ fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(Stri
                     Some(values::parse_vec3(value, &format!("{ctx_tag} euler"))?);
             }
             "rotation" => {
-                // 3 valores = euler radianos (compat VibeGame); 4 = quat xyzw.
+                // 3 valores = euler radianos (convenção herdada); 4 = quat xyzw.
                 common.transform.rotation_quat =
                     Some(parse_rotation_attr(value, &format!("{ctx_tag} rotation"))?);
             }
@@ -1740,7 +1741,7 @@ fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(Stri
     Ok((common, rest))
 }
 
-/// Parse a VibeGame component string (`"pos: 0 1 0; preset: fire"`) into
+/// Parse a component string (`"pos: 0 1 0; preset: fire"`) into
 /// key/value pairs; keys are lowercased and trimmed.
 pub fn parse_component_string(value: &str) -> Vec<(String, String)> {
     value
@@ -1821,7 +1822,7 @@ fn finish_composition(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
                     unknown.push((key, value));
                 }
             }
-            // VibeGame: tolerância de análise do CLI, sem efeito em runtime.
+            // Tolerância de análise do CLI antigo, sem efeito em runtime.
             "overlap-max" => {}
             _ => unknown.push((key, value)),
         }
@@ -2201,7 +2202,7 @@ fn finish_orbit_camera(
 /// native `GltfScene` both accepted), in document order.
 /// Ladder de LOD autorada num `<GLTFLoader>` do template.
 ///
-/// Os mundos migrados do VibeGame já trazem `lod1-url` / `lod2-url` e os
+/// Os mundos migrados já trazem `lod1-url` / `lod2-url` e os
 /// cortes `lod-threshold-near` / `lod-threshold-mid` — o Viber ignorava-os e
 /// desenhava a malha *hero* de cada árvore a 200 m. Ver
 /// [`crate::render_lod::MeshLod`].
@@ -2343,7 +2344,7 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
         in_water: false,
         near_water: false,
         near_water_radius: DEFAULT_NEAR_WATER_RADIUS,
-        // Default ON (perfis do VibeGame): árvores/pedras/props nunca nascem
+        // Default ON (perfis da referência): árvores/pedras/props nunca nascem
         // no leito das estradas — `avoid-road="0"` devolve o comportamento
         // antigo a quem o quiser.
         avoid_road: true,
@@ -2667,7 +2668,7 @@ fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         scale_axis_max: 1.1,
         max_slope_deg: 26.0,
         avoid_water: true,
-        // VibeGame vegetation is randomly oriented and non-overlapping by
+        // Vegetation is randomly oriented and non-overlapping by
         // default; a stand of clones all facing the same way is the tell.
         avoid_overlaps: true,
         // Erva fora das fitas de estrada por omissão — tapetes a atravessar
@@ -2713,7 +2714,7 @@ fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             "cull-distance" => spec.cull_distance = values::parse_f32(&value, &kctx)?.max(0.0),
             "cast-shadows" => spec.cast_shadows = values::parse_bool(&value, &kctx)?,
             "instances" => spec.instances = Some(value.trim().to_owned()).filter(|v| !v.is_empty()),
-            // accepted no-ops: VibeGame instancing/appearance details
+            // accepted no-ops: legacy instancing/appearance details
             "smart"
             | "wind"
             | "flower-near-radius"
@@ -6146,7 +6147,7 @@ mod tests {
         assert!(spec.template_urls.is_empty());
         assert!(w.iter().any(|m| m.contains("no template glTF url")));
         // Default ON: árvores/pedras/props fora do leito das estradas
-        // (VibeGame perfis tree/foliage/creature); `avoid-road="0"` liga.
+        // (perfis tree/foliage/creature); `avoid-road="0"` liga.
         assert!(spec.avoid_road, "avoid-road defaults ON");
     }
 
@@ -6607,7 +6608,7 @@ mod tests {
 
     #[test]
     fn test_terrain_pad_at_is_parent_local() {
-        // `at` is local to the parent (VibeGame semantics); the group
+        // `at` is local to the parent (local-to-parent semantics); the group
         // translation is accumulated by the spawn collector.
         let mut group = node("Group", &[("translation", "859 0 281")]);
         group.children = vec![node(
@@ -6974,7 +6975,7 @@ mod tests {
 }
 
 /// Composição e protótipos: `<Composition>`, `<Prototype>`, `<Use>`,
-/// colisores por parte, `place` e os aliases de compat VibeGame.
+/// colisores por parte, `place` e os aliases de compat.
 #[cfg(test)]
 mod composition_tests {
     use super::*;
@@ -7040,7 +7041,7 @@ mod composition_tests {
         let EntityKind::Composition { body, collider, .. } = spec.kind else {
             panic!("expected composition");
         };
-        assert_eq!(body, BodyKind::None, "none é honrado (bug do VibeGame)");
+        assert_eq!(body, BodyKind::None, "none é honrado (bug da referência)");
         assert!(!collider);
         // Sem colisores, a parte não é marcada.
         assert_eq!(spec.children[0].physics.collider, ColliderShape::None);
@@ -7117,7 +7118,7 @@ mod composition_tests {
 
     #[test]
     fn test_rotation_three_values_is_euler_radians() {
-        // VibeGame composition convention: rotation="x y z" em RADIANOS.
+        // Composition convention: rotation="x y z" em RADIANOS.
         let (spec, _) = parse_one(&node("Entity", &[("rotation", "0 0 1.5707964")])).unwrap();
         let q = spec.transform.rotation_quat.expect("quat parsed");
         let out = transform::quat_apply(q, [1.0, 0.0, 0.0]);
@@ -7151,7 +7152,7 @@ mod composition_tests {
             panic!();
         };
         assert_eq!(material.emissive, Some([1.0, 0.4, 0.13333334]));
-        // Alias do VibeGame / grafia alternativa.
+        // Alias / grafia alternativa.
         let (spec, w) = parse_one(&node("Sphere", &[("emissive-color", "red")])).unwrap();
         assert!(w.is_empty(), "{w:?}");
         let EntityKind::Primitive { material, .. } = spec.kind else {

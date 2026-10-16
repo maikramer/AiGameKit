@@ -7,8 +7,8 @@
 //! 1. **Adopt** — one-shot scan of the terrain root for the `chunk {cz}-{cx}`
 //!    meshes spawned by the bootstrap, tagging them with [`TerrainChunk`].
 //! 2. **Select** — LOD per chunk from the camera distance: the flat
-//!    `2^lod`-step scheme of `bevy_mesh_terrain`, corrected with the VibeGame
-//!    hysteresis + camera-move reselect gate so crossing a boundary never
+//!    `2^lod`-step scheme of `bevy_mesh_terrain`, corrected with the
+//!    original hysteresis + camera-move reselect gate so crossing a boundary never
 //!    thrashes rebuilds.
 //! 3. **Rebuild** — meshes rebuild inline with a per-frame budget
 //!    ([`super::spec::DEFAULT_MAX_MESH_BUILDS_PER_FRAME`]). Deliberately *no*
@@ -18,7 +18,7 @@
 //!    bug class.
 //! 4. **Cull** — chunks beyond `render_distance` (measured to the chunk's XZ
 //!    AABB, not its center) are despawned and respawned — at the LOD their
-//!    distance implies — when the camera approaches, matching VibeGame
+//!    distance implies — when the camera approaches, matching the original
 //!    behavior.
 //!
 //! Works headless: only `Assets<Mesh>` and the camera transform are needed;

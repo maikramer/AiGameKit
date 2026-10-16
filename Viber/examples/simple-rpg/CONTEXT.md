@@ -1,7 +1,7 @@
 # CONTEXT.md — examples/simple-rpg
 
-O mundo que valida a engine de ponta a ponta: port do exemplo
-`VibeGame/examples/simple-rpg` (convertido por `Viber/scripts/migrate_from_vibegame.py`).
+O mundo que valida a engine de ponta a ponta: port do exemplo original
+(motor TS), convertido uma única vez por um script de migração (já removido).
 
 ## Estado
 

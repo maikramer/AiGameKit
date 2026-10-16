@@ -14,7 +14,6 @@ vramd, budgets). **Não** substitui READMEs por tool — aponta e consolida.
 | [`Shared/README.md`](../Shared/README.md) (sec. GPU/NVML) | `query_gpu_free_mib`, snapshots, apps; dep `nvidia-ml-py` |
 | [`findings/PAINT_PART_FINDINGS.md`](findings/PAINT_PART_FINDINGS.md) | Paint bake/SDNQ; `restrict_inpaint` + `_clean`; Part3D **faces**/p3sam/fine-parts/`label_fuse` |
 | [`findings/IMAGE_SKY_SOUND_FINDINGS.md`](findings/IMAGE_SKY_SOUND_FINDINGS.md) | Text2D 1024; Skymap shift/PMREM; audio trim; kernel flags |
-| [`findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md`](findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md) | Cull espacial; profiler Audio; SFX longos; melee impact **0.35** |
 | [`findings/MESH_PIPELINE_FINDINGS.md`](findings/MESH_PIPELINE_FINDINGS.md) | Master DAG **Round 3**; promote/resume; **N/T sobreviver** + V/Tri; Decimate stepwise; árvores cut-only; compressão |
 | [`GLB_FINISH_COMPRESSION.md`](GLB_FINISH_COMPRESSION.md) | Happy path KTX2+meshopt: `text3d finish`, deps `ktx`+npx, GameAssets rollback |
 | [`findings/ANIMATOR_RETARGET_FINDINGS.md`](findings/ANIMATOR_RETARGET_FINDINGS.md) | Quaternius retarget; root/pelvis; **humanoid p/ bípedes** (não creature procedural) |
@@ -29,7 +28,6 @@ vramd, budgets). **Não** substitui READMEs por tool — aponta e consolida.
 | [`bench_omni/README.md`](bench_omni/README.md) | Pose Quaternius T-pose + smoke |
 | [`Vramd/README.md`](../Vramd/README.md) | vramd: fila, admit, agents, `respawn`, CLI |
 | [`LOGGING.md`](LOGGING.md) · [PT](LOGGING_PT.md) | Ficheiros `~/.cache/aigamekit/logs/` (tools + vramd) |
-| Review vivo simple-rpg | `VibeGame/examples/simple-rpg/sample-gameassets/logs/omni_shape_inconsistencies.md` |
 | [`Shared/.../vram_budget.py`](../Shared/src/aigamekit_shared/vram_budget.py) | Runtime budget (chunks/views) pós-load |
 | [`Shared/.../paint_budget.py`](../Shared/src/aigamekit_shared/paint_budget.py) | Faces alvo pré-paint |
 | [`Shared/.../lowvram.py`](../Shared/src/aigamekit_shared/lowvram.py) | `FOOTPRINTS` canónicos |

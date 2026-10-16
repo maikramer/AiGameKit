@@ -1,5 +1,5 @@
 //! Economia & inventário (loop 4 do port simple-rpg) — o análogo nativo do
-//! RpgVault + hotbar de consumíveis do VibeGame:
+//! RpgVault + hotbar de consumíveis originais:
 //!
 //! - **[`Vault`]**: ouro/madeira/pedra + itens com stack (`potion`, `antidote`,
 //!   `bomb`, materiais de quest). Alimentado por colheita (`tree.lua`/
@@ -24,7 +24,7 @@ use crate::player::Player;
 use crate::profiler::{Group, timed};
 use crate::vitals::Health;
 
-/// Cura da poção (HP) — VibeGame potion 50.
+/// Cura da poção (HP) — poção 50.
 pub const POTION_HEAL: f32 = 50.0;
 /// Cooldown entre usos da hotbar (s).
 pub const HOTBAR_COOLDOWN: f32 = 1.0;
@@ -296,7 +296,7 @@ fn hotbar_use_system(
 }
 
 /// Debug de QA (**F10**): dá recursos/itens (análogo do debug action
-/// `give`/`gold` do VibeGame) — 10 ouro, 6 madeira, 6 pedra, poção e antídoto.
+/// `give`/`gold` antigos) — 10 ouro, 6 madeira, 6 pedra, poção e antídoto.
 fn debug_give_system(
     keys: Res<ButtonInput<KeyCode>>,
     mut vault: ResMut<Vault>,

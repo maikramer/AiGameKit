@@ -1,6 +1,6 @@
 # Pack audio-sfx-combat — impactos/armas/colheita (Stable Audio 3 Small SFX).
-# Canónico em examples/shared-assets/; exemplos consomem via plugin
-# vibegame({ sharedAssets }). Regenerar:
+# Canónico em examples/shared-assets/; exemplos consomem o pool por URL.
+# Regenerar:
 #   cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/audio-sfx-combat
 output_dir: ../public/assets
 meshes_subdir: meshes/audio

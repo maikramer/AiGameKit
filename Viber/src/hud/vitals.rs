@@ -1,5 +1,5 @@
 //! Health and XP bar dynamics: fill nodes mirror the player's [`Health`] /
-//! [`Xp`] every frame (VibeGame `healthbar`/`xpbar` parity).
+//! [`Xp`] every frame (`healthbar`/`xpbar` parity).
 
 use bevy::prelude::*;
 

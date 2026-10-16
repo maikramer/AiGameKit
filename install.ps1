@@ -26,7 +26,7 @@ $env:UV_LINK_MODE = if ($env:UV_LINK_MODE) { $env:UV_LINK_MODE } else { "copy" }
 . (Join-Path $ScriptDir "scripts\install-bootstrap.ps1")
 
 # Perfis de instalação (docs/findings/TOOLKIT_CORE_PROFILE_STUDY.md)
-$CoreTools = @("vramd", "text2d", "text3d", "paint3d", "rigging3d", "animator3d", "gameassets", "materialize", "aigamekitlab", "vibegame")
+$CoreTools = @("vramd", "text2d", "text3d", "paint3d", "rigging3d", "animator3d", "gameassets", "materialize", "aigamekitlab")
 $ExamplesExtraTools = @("texture2d", "skymap2d", "text2sound", "terrain3d", "rocks3d", "viber")
 
 # Resolve um Python sem fazer exit (o bootstrap faz a validação completa depois).

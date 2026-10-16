@@ -1,10 +1,10 @@
 """Ladder rigada: só os níveis próximos levam esqueleto.
 
-Um LOD que carrega o seu próprio rig custa no runtime mesmo escondido — o
-VibeGame percorre e recompõe todos os nós da cena por frame. No ``simple-rpg``
-eram ~11k ossos, 12.3k de 15.4k nós da cena, quase todos em níveis de LOD que
-ninguém vê animar. A ladder passa ``--rig-max-level`` ao ``text3d lod`` e o
-gate/validação deixa de exigir ``skins[]`` nos níveis acima do limite.
+Um LOD que carrega o seu próprio rig custa no runtime mesmo escondido — o motor
+percorre e recompõe todos os nós da cena por frame, e quase todos esses nós
+estavam em níveis de LOD que ninguém vê animar. A ladder passa
+``--rig-max-level`` ao ``text3d lod`` e o gate/validação deixa de exigir
+``skins[]`` nos níveis acima do limite.
 """
 
 from __future__ import annotations

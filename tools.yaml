@@ -201,14 +201,6 @@ tools:
     needs_pytorch: true
     post_install: aigamekit_shared.installer.clified_hooks:pip_check_post_install
 
-  vibegame:
-    name: "VibeGame"
-    kind: bun
-    folder: VibeGame
-    cli_name: vibegame
-    description: "Motor 3D (TypeScript/Bun); CLI vibegame create + build da biblioteca"
-    bun_cli_script: scripts/vibegame-cli.mjs
-
   viber:
     name: "Viber"
     kind: rust

@@ -49,7 +49,7 @@ pub struct OrbitCamera {
     pub mouse_sensitivity: f32,
     pub min_distance: f32,
     pub max_distance: f32,
-    // --- third-person smoothing config (VibeGame ThirdPersonCamera) ---
+    // --- third-person smoothing config (ThirdPersonCamera) ---
     /// Position follow time constant in seconds (larger = more lag on
     /// sprints).
     pub follow_lag: f32,
@@ -216,7 +216,7 @@ pub fn collect_terrain(specs: &[EntitySpec], out: &mut PendingTerrain) {
 /// Walks the entity tree accumulating group translations (groups are
 /// transform-only containers). `offset` is the accumulated **ancestor** XZ
 /// translation; feature coordinates (`at`, paths) are local to the parent, so
-/// the world position is `offset + coordinate` (VibeGame `at` semantics).
+/// the world position is `offset + coordinate` (`at` semantics).
 fn collect_walk(specs: &[EntitySpec], offset: Vec2, out: &mut PendingTerrain) {
     for spec in specs {
         let child_offset =
@@ -1980,6 +1980,7 @@ fn spawn_entity(
                     wheelspin: 0.0,
                     stuck: 0.0,
                     smoke_cd: 0.0,
+                    boost_cd: 0.0,
                 },
                 crate::racing::vehicle::VehicleInput::default(),
                 crate::racing::race::RaceProgress::default(),
@@ -2238,8 +2239,8 @@ fn build_material(
         material.perceptual_roughness = v.clamp(0.0, 1.0);
     }
     if let Some(v) = spec.opacity {
-        // `opacity="0"` = invisível (parede de colisor puro, o truque das
-        // interiors do VibeGame); 0..1 = translúcido (Blend, sem depth write
+        // `opacity="0"` = invisível (parede de colisor puro, o truque dos
+        // interiors); 0..1 = translúcido (Blend, sem depth write
         // — o renderer do Bevy trata isso no AlphaMode).
         let alpha = v.clamp(0.0, 1.0);
         material.base_color.set_alpha(alpha);
@@ -2342,7 +2343,7 @@ pub fn orbit_camera_follow(
             0.0,
         );
         cam.translation = target_pos + offset;
-        // Never sink below the terrain surface (VibeGame minTerrainDistance).
+        // Never sink below the terrain surface (minTerrainDistance).
         // Piso SOB a câmara (Y conhecido): o enquadramento da intro sob um
         // overhang não é empurrado para cima da rocha.
         if let Some(runtime) = runtime.as_deref() {

@@ -130,75 +130,17 @@ experiments/
 *.scheduled_tasks.lock
 **/.claude/scheduled_tasks.lock
 
-# VibeGame simple-rpg — assets binários distribuídos via GitHub Release
-# (scripts/fetch-assets.mjs + assets.lock.json). Não versionar para manter
-# o histórico leve; restaurar localmente com: node scripts/fetch-assets.mjs
-VibeGame/examples/simple-rpg/public/assets/meshes/**
-VibeGame/examples/simple-rpg/public/assets/images/
-VibeGame/examples/simple-rpg/public/assets/textures/
-VibeGame/examples/simple-rpg/public/assets/icons/
-VibeGame/examples/simple-rpg/public/assets/audio/
-VibeGame/examples/simple-rpg/public/assets/sky/
-VibeGame/examples/simple-rpg/public/assets/terrain/
-VibeGame/examples/simple-rpg/public/assets/particles/
-# Carpet bpy (scripts/generate_vegetation_glb.py) — pequeno, versionado
-!VibeGame/examples/simple-rpg/public/assets/meshes/vegetation/
-!VibeGame/examples/simple-rpg/public/assets/meshes/vegetation/**
-# Manter a estrutura de pastas (.gitkeep) mesmo sem assets
-!VibeGame/examples/simple-rpg/public/assets/**/.gitkeep
-# Marker written by scripts/fetch-assets.mjs (prebuilt asset bundle version)
-VibeGame/examples/simple-rpg/public/assets/.assets-version
-
-# VibeGame shared-assets — pool binário canónico Crystal Vale (regen com
-# gameassets resume a partir de examples/shared-assets; sync.sh distribui).
-# Não versionar: mesmo modelo do simple-rpg, histórico leve.
 Viber/examples/shared-assets/public/assets/meshes/
 Viber/examples/shared-assets/public/assets/images/
 Viber/examples/shared-assets/public/assets/sky/
-
-# Screenshots de teste no exemplo
-VibeGame/examples/simple-rpg/screenshot*.png
-VibeGame/examples/simple-rpg/sky-01.png
-VibeGame/examples/simple-rpg/sample-gameassets/.FULL_REGEN_LOCK
-VibeGame/examples/simple-rpg/sample-gameassets/**/.gameassets_work/
-VibeGame/examples/simple-rpg/sample-gameassets/resume-*.stdout
-VibeGame/examples/simple-rpg/sample-gameassets/resume-*.jsonl
-
-# VibeGame simple-racer — intermediários de pipeline e estado local de batch
-VibeGame/examples/simple-racer/public/assets/meshes/**/_intermediate/
-VibeGame/examples/simple-racer/sample-gameassets/**/.gameassets_work/
-VibeGame/examples/simple-racer/sample-gameassets/resume-*.jsonl
-VibeGame/examples/simple-racer/sample-gameassets/resume-*.stdout
-VibeGame/examples/simple-racer/node_modules/
 
 # Backups locais (.bak)
 *.bak.*
 *.bak
 
-# Libs de terceiros copiadas para public (basis transcoder, etc.)
-VibeGame/examples/simple-rpg/public/libs/
-
 # AiGameKitLab — outputs de benchmark (GLBs/PNGs de profiling, nunca versionar)
 docs/bench_kernel_opts/*.glb
 docs/bench_kernel_opts/*.png
-
-# Screenshots de teste na raiz do VibeGame
-VibeGame/*test*.png
-VibeGame/screenshot*.png
-VibeGame/simple-racer-*.png
-VibeGame/simple-racer-*.yml
-VibeGame/smoke-*.yml
-VibeGame/menu*.yml
-VibeGame/*-menu.yml
-VibeGame/dusk-*.yml
-VibeGame/dusk-*.png
-VibeGame/veg-*.yml
-VibeGame/nowind.yml
-VibeGame/own-server.yml
-VibeGame/racer-*.png
-VibeGame/terrain-*.png
-VibeGame/light-*.yml
-VibeGame/terrain*-menu.yml
 
 # OpenCode agent workspace (local state, plans, evidence, notepads)
 .omo/
@@ -228,10 +170,6 @@ docs/bench_omni/
 docs/.debug_axis/
 docs/.paint_mesh_audit_queue.json
 write-test.txt
-
-# Playwright output
-VibeGame/test-results/
-VibeGame/examples/*/test-results/
 
 # Work dir do `gameassets resume` (cache de geração junto aos manifests)
 **/.gameassets_work/

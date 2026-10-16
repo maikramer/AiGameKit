@@ -853,7 +853,7 @@ impl AssetReader for MeshoptAssetReader {
 /// Tries several file readers in order — the first root that has the asset
 /// wins.
 ///
-/// This is the native port of VibeGame's `sharedAssets` plugin: the world's
+/// This is the native port of the original `sharedAssets` plugin: the world's
 /// own tree serves first (per-game overrides), the shared pool fills in the
 /// rest, and no example keeps a copy of pool content on disk.
 struct MultiRootFileReader {

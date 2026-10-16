@@ -1,9 +1,9 @@
 //! Declarative terrain for Viber — Bevy 0.19 port of the ideas from
 //! [`bevy_mesh_terrain`](https://github.com/ethereumdegen/bevy_mesh_terrain)
-//! (MIT) corrected and merged with the feature contracts of the VibeGame
-//! terrain plugin (`VibeGame/src/plugins/terrain/`).
+//! (MIT) corrected and merged with the feature contracts of the original
+//! terrain plugin.
 //!
-//! # Design contracts (ported from VibeGame)
+//! # Design contracts (ported from the original plugin)
 //!
 //! * **Sampler CPU único** — [`sampler::HeightSampler`] is the only shape
 //!   authority; mesh, colliders, pads and gameplay queries read the same grid.

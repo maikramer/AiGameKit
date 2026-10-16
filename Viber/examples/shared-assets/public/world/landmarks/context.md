@@ -23,4 +23,4 @@ referência XML nenhuma antes de 2026-07-29) + 2 `forage-mushroom` (`mushroom.ts
 **Não migrar** (efeito, não prop de catálogo): luzes puras
 (`body="none"; collider="none"` + `PointLight`/`ParticleSystem`).
 
-Depois de editar: `vibegame analyze examples/simple-rpg/index.html` → `errors=0`.
+Depois de editar: `viber analyze` → `errors=0`.

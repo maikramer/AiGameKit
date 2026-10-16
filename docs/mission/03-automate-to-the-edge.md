@@ -19,7 +19,7 @@ Conceptual order (see `GameAssets` `run_master_pipeline` + vramd waves):
 5. **Animate** — `animator3d game-pack` **×1** on the rigged GLB
 6. **LOD / finish** — `text3d lod` on animated/rigged → lod0/1/2 (+ KTX2/meshopt); **no** `transfer-weights` in the DAG
 7. **Collision / validate** — as profile requires
-8. **Handoff** — into `public/` / VibeGame consumption
+8. **Handoff** — into the game's `public/` folder
 
 **Statics:** lod ladder from painted. **Abolished:** `_rigged_hi`, bake-master-before-rig as default LOD0, transfer-weights×LOD.
 

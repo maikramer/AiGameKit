@@ -38,4 +38,4 @@ Dono: `vegetation/forest.xml`.
 | Pedregulhos musgosos (visual) | `moss_rock` / `rock_mossy`                                                         | 160               | ×2                                   |
 | Penedos com colisão           | `rock_mossy` (escala 3×)                                                           | 24                | NavMesh bake                         |
 
-Depois de editar: `vibegame analyze examples/simple-rpg/index.html`.
+Depois de editar: `viber analyze`.

@@ -51,8 +51,8 @@ bone_map:
 
 # Mapeamento de clips: nome limpo de saída -> nome da action/track no pack source.
 # Catálogo completo do UAL1 Standard (43 tracks; A_TPose é o bind pose de
-# referência e fica de fora). Os nomes limpos são keywords que o jogo procura
-# por substring (findClip/findClipFuzzy no VibeGame) — matches exatos ganham.
+# referência e fica de fora). Os nomes limpos são keywords que os consumidores
+# procuram por substring (findClip/findClipFuzzy no runtime) — matches exatos ganham.
 clip_map:
   # --- Locomoção ---
   idle: Idle_Loop
@@ -68,7 +68,7 @@ clip_map:
   jump: Jump_Start
   jumpland: Jump_Land
   # Jump_Loop é o pose airborne em ciclo — serve de "fall" para jogos
-  # (o VibeGame procura 'fall' para o estado de queda).
+  # (os consumidores procuram 'fall' para o estado de queda).
   fall: Jump_Loop
   roll: Roll
   # --- Combate ---

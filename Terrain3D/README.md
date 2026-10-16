@@ -1,7 +1,7 @@
 # Terrain3D — AI Terrain Generation
 
 > Diffusion-based terrain heightmap generation using [terrain-diffusion](https://github.com/millennium-nova/terrain-diffusion) (MIT).
-> Produces grayscale heightmap PNG + terrain JSON compatible with [VibeGame](../VibeGame/) and [GameAssets](../GameAssets/).
+> Produces grayscale heightmap PNG + terrain JSON compatible with the game pipeline ([Viber](../Viber/), [GameAssets](../GameAssets/)).
 
 Uses a diffusion model trained on real-world elevation data (WorldClim + ETOPO) to produce realistic terrain with mountains, valleys, and ridges — no manual editing needed.
 
@@ -10,7 +10,7 @@ Uses a diffusion model trained on real-world elevation data (WorldClim + ETOPO) 
 - **AI terrain** — diffusion-based heightmap generation (~30 m resolution)
 - **Seed reproducibility** — same seed → same terrain
 - **Heightmap PNG** — 8-bit grayscale, normalized 0–1
-- **JSON metadata** — version 2.0, compatible with VibeGame/GameAssets pipeline
+- **JSON metadata** — version 2.0, compatible with the Viber/GameAssets pipeline
 - **WorldClim conditioning** — synthetic bioclim maps for realistic elevation distributions
 - **Auto-download** — WorldClim bioclim rasters fetched on first run
 - **Quality presets** — five tiers (`fast` / `low` / `medium` / `high` / `highest`) via QualityEngine
@@ -167,7 +167,7 @@ terrain3d generate --quality high --seed 42
 
 [GameAssets](../GameAssets/) can call `terrain3d` during batch generation or via `gameassets dream`. Set `TERRAIN3D_BIN` if the command is not on `PATH`.
 
-Output heightmaps feed into VibeGame's [`<Terrain>`](../VibeGame/) recipe via the `url` attribute:
+Output heightmaps feed the engine (Viber, `world.data/terrain.ahgt` / heightmap input of the declarative `<Terrain>`):
 
 ```html
 <Terrain url="/assets/terrain/heightmap.png" world-size="512" max-height="50"></Terrain>

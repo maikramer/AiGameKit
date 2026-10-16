@@ -1,9 +1,9 @@
 """Rig por nível da ladder: LOD distante entrega mesh estático.
 
 Um LOD que carrega o seu próprio esqueleto custa no runtime mesmo quando está
-escondido — o VibeGame percorre e recompõe todos os nós da cena por frame, e no
-``simple-rpg`` isso eram ~11k ossos (12.3k de 15.4k nós da cena) em níveis de
-LOD que ninguém vê animar. ``rig_max_level`` corta os níveis acima do limite.
+escondido — o motor percorre e recompõe todos os nós da cena por frame, e quase
+todos esses nós estavam em níveis de LOD que ninguém vê animar.
+``rig_max_level`` corta os níveis acima do limite.
 """
 
 from __future__ import annotations

@@ -100,8 +100,8 @@ Ficheiros-chave: `Text2Sound/src/text2sound/audio_processor.py`
   degrada para geração em CPU (SA3 small 0.6B é viável) em vez de crashar.
 - **Metadata do worker vramd** agora inclui `model_id` (paridade com o
   caminho in-process; sidecars `.ogg.json` completos).
-- Nota: `dist/` dos exemplos fica com áudio antigo até um rebuild
-  (`vibegame build`); a fonte de verdade é `public/assets/audio/`.
+- Nota: os artefactos buildados dos exemplos ficam com áudio antigo até um
+  rebuild; a fonte de verdade é `public/assets/audio/`.
 
 ## Apêndice 2 — SFX "metálicos" (2026-08-25, pós-pool)
 

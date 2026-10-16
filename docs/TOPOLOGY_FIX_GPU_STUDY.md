@@ -208,7 +208,7 @@ Text3D/.venv/bin/python /tmp/topo_gpu_bench.py  # → /tmp/topo_gpu_bench.json
 Text3D/.venv/bin/python /tmp/morph_probe.py
 ```
 
-Datasets: `VibeGame/examples/simple-rpg/public/assets/meshes/_intermediate/village_longhouse_shape.glb`
+Datasets: `village_longhouse_shape.glb` do exemplo simple-rpg
 (7.03M verts / 2.35M tris), arrays em `/tmp/longhouse_arrays.npz`.
 
 ---

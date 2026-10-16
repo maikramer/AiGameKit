@@ -19,7 +19,7 @@ As ferramentas formam um pipeline de geração modular — usa-as individualment
        │                                        │                                  │
        ▼                                        ▼                                  ▼
   Texture2D (seamless)                   Materialize (PBR)                      GameAssets (batch)
-       │                                                                               ──→ VibeGame (browser)
+       │                                                                               ──→ handoff (pasta do jogo)
   Skymap2D (céu)
   Text2Sound (áudio)
   Terrain3D (terreno)
@@ -35,27 +35,19 @@ gameassets dream "A dark fantasy RPG with skeletons and treasure chests" --dry-r
 gameassets dream "A dark fantasy RPG with skeletons and treasure chests"              # run completo
 ```
 
-O que o `dream` faz: planeia assets com um LLM (`--llm-provider openai|huggingface|ollama|stdin`), gera `game.yaml` / `manifest.yaml` / `world.xml`, corre o pipeline completo (batch → rig → animate → sky → terrain → ícones), faz o handoff dos assets para o `public/` do Vite e faz scaffold de um projeto jogável. As stages são auto-detetadas; opt-outs por funcionalidade: `--no-audio`, `--no-sky`, `--no-terrain` (as flags `--no-3d`/`--no-rig`/`--no-animate` são do `gameassets batch`). Itera com `gameassets dream refine plan.json "add a dragon"`.
+O que o `dream` faz: planeia assets com um LLM (`--llm-provider openai|huggingface|ollama|stdin`), gera `game.yaml` / `manifest.yaml` / `world.xml`, corre o pipeline completo (batch → rig → animate → sky → terrain → ícones) e faz o handoff dos assets para a pasta `public/` do jogo (consumidos pelo motor nativo, Viber). As stages são auto-detetadas; opt-outs por funcionalidade: `--no-audio`, `--no-sky`, `--no-terrain` (as flags `--no-3d`/`--no-rig`/`--no-animate` são do `gameassets batch`). Itera com `gameassets dream refine plan.json "add a dragon"`.
 
 Código: [`GameAssets/src/gameassets/dream/`](GameAssets/src/gameassets/dream/).
 
-### Integração VibeGame
+### Handoff para a pasta do jogo
 
-Os assets gerados entram no motor browser VibeGame via handoff e cenas XML declarativas:
+Os assets gerados entram na pasta de assets do jogo via handoff:
 
 ```bash
 gameassets handoff --public-dir public/    # copia GLBs (prefere animados) + manifest.json
 ```
 
-Descrição da cena em `world.xml` com as recipes VibeGame:
-
-```html
-<PlayerGLTF pos="0 0 0" model-url="/assets/models/hero.glb"></PlayerGLTF>
-<GLTFLoader pos="5 0 0" model-url="/assets/models/skeleton.glb"></GLTFLoader>
-<Terrain heightmap-url="/assets/heightmap.png" resolution="128"></Terrain>
-```
-
-APIs-chave: [`gltf-bridge.ts`](VibeGame/src/extras/gltf-bridge.ts) (`loadGltfToScene`, `loadGltfAnimated`), [`gltf-animator.ts`](VibeGame/src/extras/gltf-animator.ts) (`GltfAnimator`), [`sky-env.ts`](VibeGame/src/extras/sky-env.ts) (`applyEquirectSkyEnvironment`). Ver [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md) e [`VibeGame/README.md`](VibeGame/README.md).
+O `world.xml` / manifest emitidos descrevem a cena para o runtime (ex. o motor nativo Viber). Ver [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md).
 
 ## Projetos
 
@@ -66,7 +58,7 @@ APIs-chave: [`gltf-bridge.ts`](VibeGame/src/extras/gltf-bridge.ts) (`loadGltfToS
 | [**Text3D**](Text3D/) | Pipeline **text-to-3D**: imagem 2D (via Text2D) → mesh GLB com Hunyuan3D-Omni (SDNQ INT4; controlos bbox/pose/point/voxel). Textura via Paint3D (opcional). |
 | [**Paint3D**](Paint3D/) | **Texturização 3D**: Hunyuan3D-Paint 2.1 (PBR multivista) + Materialize PBR + Upscale IA (Real-ESRGAN). Standalone ou via Text3D. |
 | [**Part3D**](Part3D/) | **Decomposição semântica de partes**: Hunyuan3D-Part (P3-SAM + X-Part). SDNQ + CPU offload para ~6 GB VRAM. |
-| [**GameAssets**](GameAssets/) | **Batch de prompts/assets**: `game.yaml` + manifesto YAML → `text2d` ou `texture2d` + opcional `text3d`, rig, **Animator3D** (auto-detetado), **`gameassets dream`** (ideia → scaffold Vite). |
+| [**GameAssets**](GameAssets/) | **Batch de prompts/assets**: `game.yaml` + manifesto YAML → `text2d` ou `texture2d` + opcional `text3d`, rig, **Animator3D** (auto-detetado), **`gameassets dream`** (ideia → plano de jogo + assets). |
 | [**Texture2D**](Texture2D/) | **Texturas 2D seamless** (tileable) via pattern-diffusion (GPU local) + PBR via Materialize. |
 | [**Skymap2D**](Skymap2D/) | **Skymaps equirectangular 360°** — FLUX.1-dev + LoRA local na GPU (CUDA), skyboxes para game dev. |
 | [**Text2Sound**](Text2Sound/) | CLI **text-to-audio** com Stable Audio 3 Small (música/SFX separados): áudio estéreo 44.1 kHz, presets para game dev. |
@@ -75,7 +67,6 @@ APIs-chave: [`gltf-bridge.ts`](VibeGame/src/extras/gltf-bridge.ts) (`loadGltfToS
 | [**Materialize**](Materialize/) | CLI **PBR maps** (Rust/wgpu): gera normal, AO, metallic, smoothness a partir de textura difusa. |
 | [**AiGameKitLab**](AiGameKitLab/) | **Lab CLI**: debug 3D, bancos de quantização, profiling, otimização de pipeline. |
 | [**Terrain3D**](Terrain3D/) | **terrain3d** — Geração de terreno por IA via modelos de difusão (terrain-diffusion; CUDA GPU). |
-| [**VibeGame**](VibeGame/) | **vibegame** — motor 3D em TypeScript (ECS, Three.js, XML declarativo); **Bun** + **Vite**. Ver [VibeGame/README.md](VibeGame/README.md). |
 
 Cada projeto tem o seu próprio `README`, `setup`, requisitos e licença.
 
@@ -110,13 +101,11 @@ AiGameKit/
   AiGameKitLab/        ← aigamekit-lab (pip) — depende de Shared; debug 3D, benches, profiling
   Terrain3D/        ← terrain3d (pip) — depende de Shared; geração de terreno por IA via difusão
   Materialize/       ← materialize-cli (cargo) — instalador Python usa Shared
-  VibeGame/          ← vibegame (npm/Bun + Vite) — motor 3D no browser; standalone, não é pip
 ```
 
 ## Requisitos gerais
 
 - **Python**: todas as ferramentas pedem **3.13** (cada `pyproject.toml` fixa `>=3.13,<3.14`); `bpy>=5.2.0` (LTS) para ferramentas de mesh. Ver README de cada pasta.
-- **VibeGame** usa **Bun** e ferramentas compatíveis com **Node** (ver `VibeGame/package.json`); na raiz do repositório, `make test-vibegame` após instalar o Bun.
 - **GPU** opcional no Text2D; no Text3D/Paint3D/Rigging3D, CUDA com VRAM suficiente é recomendado para tempos aceitáveis. **Texture2D** corre localmente em GPU CUDA (pattern-diffusion). **Skymap2D** corre localmente em GPU CUDA (FLUX.1-dev + LoRA). **GameAssets** só exige GPU se o perfil/linha invocar ferramentas locais (ex. text2d, text3d). **Multi-GPU:** a maioria das ferramentas com GPU aceita `--gpu-ids 0,1` para dividir pesos do modelo entre várias GPUs NVIDIA via accelerate; detecção de GPUs / VRAM livre via **NVML** (`aigamekit_shared.gpu`, dep `nvidia-ml-py`).
 - Os **pesos dos modelos** (Hugging Face, etc.) têm licenças próprias — consulta os model cards antes de distribuir ou usar em produção.
 
@@ -125,14 +114,14 @@ AiGameKit/
 Num clone do repo, três comandos (o pre-flight avisa **uma vez** com tudo o que falta antes de instalar):
 
 ```bash
-./install.sh               # pre-flight → perfil core (10 tools, zero-a-jogo) → doctor + próximos passos
+./install.sh               # pre-flight → perfil core (9 tools, zero-a-jogo) → doctor + próximos passos
 gameassets doctor          # confirma GPU, compressão GLB e LLM do dream
 gameassets dream "A dark fantasy RPG with skeletons and treasure chests" --dry-run
 ```
 
 Guia completo em português: **[docs/INSTALLING_PT.md](docs/INSTALLING_PT.md)**. Versão em inglês: [docs/INSTALLING.md](docs/INSTALLING.md).
 
-**Pipeline jogo (GameAssets → Vite / VibeGame, pastas, handoff GLB):** [docs/MONOREPO_GAME_PIPELINE.md](docs/MONOREPO_GAME_PIPELINE.md) (documento em inglês).
+**Pipeline jogo (handoff GameAssets, pastas, contratos GLB):** [docs/MONOREPO_GAME_PIPELINE.md](docs/MONOREPO_GAME_PIPELINE.md) (documento em inglês).
 
 **Lições Hunyuan shape / repair / Part3D (faces vs X-Part, pés de elefante, finos soldados):** [docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md](docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
 
@@ -147,8 +136,6 @@ Guia completo em português: **[docs/INSTALLING_PT.md](docs/INSTALLING_PT.md)**.
 **Logging em ficheiro** (todas as tools Python + vramd → `~/.cache/aigamekit/logs/`): [docs/LOGGING_PT.md](docs/LOGGING_PT.md) · [English](docs/LOGGING.md).
 
 **Testes** (piso ≥100/ferramenta, nomes das suites, regras CPU-first): [docs/TESTING_PT.md](docs/TESTING_PT.md) · [English](docs/TESTING.md).
-
-**Do zero ao jogo com IA (modelos + orquestração + agentes):** [docs/ZERO_TO_GAME_AI_PT.md](docs/ZERO_TO_GAME_AI_PT.md) · [English](docs/ZERO_TO_GAME_AI.md).
 
 ### Formas de instalação
 
@@ -179,7 +166,7 @@ curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh |
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/maikramer/clified/main/install.ps1))) --get materialize
 ```
 
-Chaves do catálogo = entradas em `tools.yaml` (`text2d`, `text3d`, `materialize`, `vibegame`, …). Lista: `clified-install --catalog`.
+Chaves do catálogo = entradas em `tools.yaml` (`text2d`, `text3d`, `materialize`, …). Lista: `clified-install --catalog`.
 
 ### Instalador unificado (a partir de clone)
 
@@ -187,8 +174,8 @@ A instalação é orientada pelo [`tools.yaml`](tools.yaml) e pelo [Clified](htt
 
 ```bash
 # Linux/macOS — a partir de um clone
-./install.sh               # pre-flight → perfil core (10 tools, zero-a-jogo) → doctor + próximos passos
-./install.sh examples      # core + céu/áudio/texturas/terreno/rochas + Viber (16) — dream completo
+./install.sh               # pre-flight → perfil core (9 tools, zero-a-jogo) → doctor + próximos passos
+./install.sh examples      # core + céu/áudio/texturas/terreno/rochas + Viber (15) — dream completo
 ./install.sh --all         # catálogo completo (acrescenta part3d, motion3d, intrinsic)
 ./install.sh <tool>        # ferramenta individual (chaves de tools.yaml: text2d, paint3d, gameassets, …)
 ./install.sh --list        # listar perfis e ferramentas
@@ -199,7 +186,7 @@ A instalação é orientada pelo [`tools.yaml`](tools.yaml) e pelo [Clified](htt
 ```
 
 O **pre-flight** (`scripts/preflight.py`) verifica primeiro os pré-requisitos externos
-(Node ≥ 20.12, Bun, cargo, GPU, disco) e, quando falta algo obrigatório, pára **uma única
+(Node ≥ 20.12, cargo, GPU, disco) e, quando falta algo obrigatório, pára **uma única
 vez** com todos os comandos prontos a copiar (Linux e Windows). Os perfis continuam depois
 de falhas e imprimem um resumo OK/FALHOU; em sucesso correm `gameassets doctor` e imprimem
 os próximos passos. Bypass para agentes/CI: `AIGAMEKIT_PREFLIGHT=0`. Detalhe:
@@ -394,7 +381,7 @@ O monorepo usa ferramentas centralizadas para lint, formatação, testes e type-
 | [**Pytest**](https://pytest.org/) + **pytest-cov** | Testes + cobertura | `pyproject.toml` por pacote |
 | [**Cargo Clippy**](https://doc.rust-lang.org/clippy/) | Lint (Rust) | via Makefile |
 | [**Pre-commit**](https://pre-commit.com/) | Hooks de pré-commit | `.pre-commit-config.yaml` |
-| [**GitHub Actions**](https://github.com/features/actions) | CI (lint + mypy + pytest matrix + Materialize + VibeGame Bun) | `.github/workflows/ci.yml` — armadilhas: [`docs/TESTING_PT.md`](docs/TESTING_PT.md) |
+| [**GitHub Actions**](https://github.com/features/actions) | CI (lint + mypy + pytest matrix + Materialize) | `.github/workflows/ci.yml` — armadilhas: [`docs/TESTING_PT.md`](docs/TESTING_PT.md) |
 
 ### Makefile (GNU Make)
 
@@ -444,7 +431,6 @@ Os ficheiros `setup.py` existentes permanecem para compatibilidade com instalado
 Alguns componentes seguem o desenho de projectos externos:
 
 - **[Materialize](Materialize/)** (CLI Rust): inspirado no [Materialize](https://github.com/BoundingBoxSoftware/Materialize) original da Bounding Box Software (Unity/Windows). Ver [`Materialize/README.md`](Materialize/README.md).
-- **[VibeGame](VibeGame/)** (motor TypeScript): motor próprio, pacote `aigamekit-vibegame`. Ver [`VibeGame/README.md`](VibeGame/README.md).
 
 ## Contribuir
 

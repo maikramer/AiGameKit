@@ -576,6 +576,13 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
     // engine — o MenusPlugin fica FORA do gate (o seu lado RPG — catálogo da
     // loja — é inerte sem vault, e `own_action` de Lua manda quando existe).
     app.init_resource::<menus::MenusOpen>();
+    // Latch de input (remote desktop / taps): renova "held" para
+    // player_movement/vehicle_movement — ver `input_latch.rs`.
+    app.init_resource::<crate::input_latch::KeyLatches>();
+    app.add_systems(
+        bevy::app::Update,
+        crate::input_latch::key_latch_system.before(player::player_movement),
+    );
     app.add_plugins(menus::MenusPlugin);
     // Save/load & opções: serviço de ENGINE (grava `world_kv`/posição/vitais
     // em qualquer preset; os campos RPG só entram quando os recursos existem).
@@ -608,6 +615,9 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
         // Travel/Nota/wayfinding (loop 6): marcos, viagem rápida, waypoint,
         // registry de hostis por região.
         app.add_plugins(travel::TravelPlugin);
+        // Mapa regional [M]: a revelação das atalaias acende o mapa-múndi
+        // (topografia + marcos + névoa por bioma; `src/hud/map.rs`).
+        app.add_plugins(hud::map::RegionalMapPlugin);
         // Skills/abilities/bombas (loop 8): dash/cura/golpe forte, passivas,
         // guard/parry, profundidade do melee.
         app.add_plugins(skills::SkillsPlugin);

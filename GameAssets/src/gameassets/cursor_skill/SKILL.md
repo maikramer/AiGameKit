@@ -48,7 +48,7 @@ game.yaml + manifest.yaml + presets [+ presets-local.yaml]
 | `gameassets prompts [--profile …] [--manifest …]` | Pré-visualiza prompts (sem GPU); `-o ficheiro.jsonl` grava JSONL |
 | `gameassets batch [--profile …] [--manifest …]` | Gera imagens; 3D/rig/animate auto-detectados do manifest + perfil; `--no-rig`/`--no-animate` para opt-out; `--dry-run --dry-run-json plan.json` grava plano |
 | `gameassets handoff --public-dir …/public` | Copia/symlink GLB/áudio do `output_dir` para `public/assets` e grava `assets/gameassets_handoff.json` |
-| `gameassets dream "descrição" [--dry-run]` | Da ideia ao jogo: LLM planeia assets+cena, batch gera, scaffold projecto Vite. `--dry-run` emite ficheiros sem GPU. Providers: `--llm-provider openai\|huggingface\|stdin` |
+| `gameassets dream "descrição" [--dry-run]` | Da ideia ao jogo: LLM planeia assets+cena, batch gera, emite game.yaml/manifest/world.xml. `--dry-run` emite ficheiros sem GPU. Providers: `--llm-provider openai\|huggingface\|stdin` |
 | `gameassets skill install` | Instala esta skill em `.cursor/skills/gameassets/` do projeto alvo |
 
 **Flags úteis em `batch`:** `--dry-run`, `--fail-fast`, `--skip-audio`, `--no-3d`, `--no-rig`, `--no-animate`, `--log run.jsonl` (**`timings_sec`**).

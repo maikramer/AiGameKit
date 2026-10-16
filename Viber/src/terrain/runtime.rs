@@ -3,12 +3,12 @@
 //! Owns the one-shot startup pipeline (exclusive systems, so no archetype
 //! churn in the frame loop):
 //!
-//! 1. **Grid** — heightmap file (PNG 8/16-bit grayscale, or the VibeGame
+//! 1. **Grid** — heightmap file (PNG 8/16-bit grayscale, or the
 //!    packed `.ahgt` format, decoded natively by `HeightMapU16::from_ahgt`;
 //!    blocking read is fine at startup) or the deterministic procedural field.
 //!    A heightmap that fails to load falls back to procedural with a warning.
 //! 2. **Features** — [`apply_features`] runs pads → water → roads on the
-//!    [`BrushGrid`] (the VibeGame order), producing the query registries.
+//!    [`BrushGrid`] (the original order), producing the query registries.
 //! 3. **Entities** — chunk meshes (LOD 0, integer grid step; dynamic LOD
 //!    selection arrives with the core plugin), water mirrors/ribbons and road
 //!    ribbons; registries land as resources for gameplay queries
@@ -649,12 +649,18 @@ impl TerrainRuntime {
         } else {
             self.sample(x, z)
         };
+        // Desvio lateral ASSINADO à linha (positivo = à esquerda da tangente).
+        let j = (hit.segment + 1).min(road.stations.len() - 1);
+        let tangent = (road.stations[j] - road.stations[hit.segment]).normalize_or_zero();
+        let perp = Vec2::new(-tangent.y, tangent.x);
+        let lateral = (Vec2::new(x, z) - hit.point).dot(perp);
         Some(RoadSurface {
             y,
             deck: on_deck,
             road: ri,
             s: hit.station(road.stations.len()),
             half_width: station_lerp(&road.half_width, &hit),
+            lateral,
         })
     }
 
@@ -2130,7 +2136,7 @@ fn spawn_roads(
             .insert((Mesh3d(mesh_handle), MeshMaterial3d(handle)));
     }
 
-    // Fusion discs (VibeGame junctions.ts): círculo opaco nas junções multi-braço
+    // Fusion discs (junctions.ts): círculo opaco nas junções multi-braço
     // cobrindo as costuras das ribbons.
     for (i, junction) in result.road_junctions.iter().enumerate() {
         let mesh = super::roads::junction_disc_mesh(grid, junction);
@@ -2237,7 +2243,7 @@ pub(crate) fn to_bevy_mesh(data: &super::mesh::ChunkMeshData) -> Mesh {
 }
 
 /// Loads a PNG heightmap (8-bit grayscale is upscaled to the full 16-bit
-/// range like the VibeGame loader). Relative paths resolve against the world
+/// range like the original loader). Relative paths resolve against the world
 /// XML directory first, then the process CWD.
 /// Loaded heightmap plus the world size / max height its own metadata
 /// declares. These only fill the spec when the world XML did not state them

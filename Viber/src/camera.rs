@@ -1,4 +1,4 @@
-//! Third-person camera ported from the VibeGame `player-controller` plugin
+//! Third-person camera ported from the original `player-controller` plugin
 //! (`ThirdPersonCameraSystem`): a decoupled follow point chases the character
 //! through a frame-rate-independent low-pass, the orbit yaw trails the steered
 //! heading through a second low-pass, and the desired position is pulled in
@@ -6,7 +6,7 @@
 //! absorbs collision pops so the intentional lag stays the only lag.
 //!
 //! There is no mouse: the camera is steered by A/D in [`crate::player`]
-//! (gamepad-style automatic camera, like the VibeGame simple-rpg).
+//! (gamepad-style automatic camera, like the original simple-rpg).
 
 use bevy::math::Vec3;
 use bevy::prelude::*;
@@ -15,25 +15,25 @@ use crate::player::Player;
 use crate::recipes::spawn::OrbitCamera;
 use crate::terrain::runtime::TerrainRuntime;
 
-/// The camera looks at the follow point plus this height (VibeGame
-/// `lookTargetY = targetY + 1.5` — slightly above the feet).
+/// The camera looks at the follow point plus this height
+/// (`lookTargetY = targetY + 1.5` — slightly above the feet).
 pub const LOOK_PIVOT_HEIGHT: f32 = 1.5;
 /// Eye height above the follow point where the collision rays start
-/// (VibeGame `eyeY = targetY + 2.0`).
+/// (`eyeY = targetY + 2.0`).
 pub const COLLISION_EYE_HEIGHT: f32 = 2.0;
 /// Time constant of the final position low-pass that absorbs collision pops
-/// (VibeGame `1 - exp(-dt / 0.05)`).
+/// (`1 - exp(-dt / 0.05)`).
 pub const POP_SMOOTH_TAU: f32 = 0.05;
 /// Ray-march resolution for the terrain probe (heightfield samples are
 /// cheap, so every ray is marched every frame).
 const RAY_STEPS: usize = 16;
 
-/// Default follow-point time constant (VibeGame plugin default 0.18 s; the
+/// Default follow-point time constant (plugin default 0.18 s; the
 /// simple-rpg world overrides with 0.18).
 pub const DEFAULT_FOLLOW_LAG: f32 = 0.18;
 /// Default yaw-trail time constant (simple-rpg world: 0.38 s).
 pub const DEFAULT_TURN_LAG: f32 = 0.38;
-/// Default terrain clearance (VibeGame plugin default `minTerrainDistance`).
+/// Default terrain clearance (plugin default `minTerrainDistance`).
 pub const DEFAULT_MIN_TERRAIN_DISTANCE: f32 = 1.0;
 
 // --- true automatic camera (auto-follow behind the movement heading) ---
@@ -59,7 +59,7 @@ pub const AUTO_FOLLOW_ALIGN_MIN: f32 = 0.0;
 pub const AUTO_SETTLE_TAU: f32 = 0.9;
 pub const AUTO_SETTLE_MAX_RATE: f32 = 60.0;
 
-/// Camera-to-target offset for a third-person rig, VibeGame formula: the
+/// Camera-to-target offset for a third-person rig. Formula: the
 /// pitch ring sits `height` ABOVE the follow point (`desiredY = followY +
 /// height + sin(pitch)·dist`) — the authored `height` is additive framing,
 /// not the pivot. Pitch 0 keeps the ring horizontal; +90° is straight above.
@@ -104,7 +104,7 @@ pub fn interior_camera_pose(
 }
 
 /// Frame-rate-independent low-pass blend factor for a time constant `tau`:
-/// `1 - exp(-dt / tau)` (VibeGame `followLag`/`turnLag`, floored at 1e-4).
+/// `1 - exp(-dt / tau)` (`followLag`/`turnLag`, floored at 1e-4).
 pub fn low_pass_factor(dt: f32, tau: f32) -> f32 {
     1.0 - (-dt / tau.max(1e-4)).exp()
 }
@@ -125,7 +125,7 @@ pub fn shortest_angle_delta_deg(from: f32, to: f32) -> f32 {
 /// Distance along the view ray where the terrain first violates the
 /// `min_dist` clearance — `None` when the whole ray is clear.
 ///
-/// Ports the VibeGame three-ray probe (center + two side rays offset by
+/// Ports the original three-ray probe (center + two side rays offset by
 /// `radius`) against the heightfield: a ray marches from `eye` and returns
 /// the first sample whose height comes within `min_dist` of the probe. The
 /// side rays fan out to `full_dist + radius` so geometry just off-axis still
@@ -266,7 +266,7 @@ pub fn noise_pm1(t: f32, seed: u32) -> f32 {
     hash01(i) * (1.0 - u) + hash01(i1) * u
 }
 
-// ── camera shake (modelo de trauma do VibeGame `player-controller/fx.ts`) ──
+// ── camera shake (modelo de trauma de `player-controller/fx.ts`) ─────────
 
 /// Decaimento do trauma por segundo (tempo REAL — treme durante o hit-stop).
 pub const SHAKE_DECAY: f32 = 1.4;
@@ -451,7 +451,7 @@ pub fn third_person_camera(
     let dt = time.delta_secs();
     let now = time.elapsed_secs();
     // Shake decora em tempo REAL (não-escalado): durante o hit-stop a câmara
-    // continua a tremer — é o slow-motion pushback do VibeGame.
+    // continua a tremer — é o slow-motion pushback da referência.
     shake.trauma = (shake.trauma - SHAKE_DECAY * real.delta_secs()).max(0.0);
     let (shake_off, shake_roll) = shake_offset_roll(shake.trauma, real.elapsed_secs());
     // Solavanco direcional: mola subamortecida em dt virtual (no hit-stop
@@ -532,7 +532,7 @@ pub fn third_person_camera(
         // Decoupled follow: the follow point chases the character with a time
         // constant, so it lags on a sprint then catches up, and per-frame
         // character jitter can't reach the view. Vertical is damped harder to
-        // swallow step/bob bounce (VibeGame uses ×1.8).
+        // swallow step/bob bounce (the reference uses ×1.8).
         let axz = low_pass_factor(dt, cam.follow_lag);
         let ay = low_pass_factor(dt, cam.follow_lag * 1.8);
         cam.follow_point.x += (target_pos.x - cam.follow_point.x) * axz;
@@ -671,7 +671,7 @@ mod tests {
 
     #[test]
     fn test_camera_offset_adds_height_above_pitch_ring() {
-        // VibeGame formula: y = height + sin(pitch)·dist — the authored
+        // Reference formula: y = height + sin(pitch)·dist — the authored
         // height stacks on top of the pitch ring.
         let o = camera_offset(0.0, 0.0, 3.3, 1.55);
         assert!(approx(o.z, 3.3) && approx(o.y, 1.55) && approx(o.x, 0.0));

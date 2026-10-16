@@ -32,8 +32,8 @@ Demo executável: `worlds/composition.xml` (`viber analyze` / `viber run`).
 
 | Attr | Default | Notas |
 |------|---------|-------|
-| `translation`/`pos`, `euler`, `rotation`, `scale` | — | attrs universais (`euler` em **graus**; `rotation` com 3 valores = **radianos**, compat VibeGame; com 4 = quat) |
-| `body` | `fixed` | `fixed`/`static`, `dynamic`, `kinematic`, `none` (sem corpo) — `none` é honrado (bug do VibeGame corrigido) |
+| `translation`/`pos`, `euler`, `rotation`, `scale` | — | attrs universais (`euler` em **graus**; `rotation` com 3 valores = **radianos**, convenção herdada; com 4 = quat) |
+| `body` | `fixed` | `fixed`/`static`, `dynamic`, `kinematic`, `none` (sem corpo) — `none` é honrado (bug da referência corrigido) |
 | `collider` | `auto` | `auto` = colisor exato por parte; `none` = só visual. Component-strings não se aplicam ao objeto inteiro |
 | `place` | — | `place="at: x z; align-to-terrain: 0\|1; base-y-offset: y"` — colocação explícita: reescreve o XZ do objeto para `at` e amostra o solo (sobe **e** desce); `align-to-terrain` orienta o +Y à normal preservando o yaw |
 | `seat` | `auto` | `seat="none"` = objeto flutuante (mantém a cota autoral; sem `SeatOnTerrain`) |
@@ -99,9 +99,9 @@ translation do mundo nas UVs, por isso esse caminho mantém mesh dedicada
 (o material continua partilhado, o que mantém o padrão alinhado com as
 ribbons das estradas).
 
-## Diferenças para o plugin `<Composition>` do VibeGame
+## Diferenças para o plugin `<Composition>` original
 
-| Tema | VibeGame | Viber |
+| Tema | Motor TS | Viber |
 |------|----------|-------|
 | Protótipos/instanciação | não existe | `<Prototype>`/`<Use>` em parse-time |
 | Colisores por parte | compound Rapier por primitiva ✓ | igual, mas derivado da forma **exata** (incl. cylinder/capsule) e com scale |
@@ -112,5 +112,5 @@ ribbons das estradas).
 | Colocação | `place` no spawner | `place` (explícito) ou `seat` (bloco, como grupos) |
 | LOD/draw calls | 1 draw call por parte | dedup de assets; sem LOD por parte (roadmap) |
 
-`overlap-max` (attr de análise do VibeGame) é aceite e ignorado, para os
+`overlap-max` (attr de análise legada) é aceite e ignorado, para os
 mundos migrarem sem warnings.

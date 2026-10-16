@@ -87,7 +87,6 @@ Installers, retries, and long jobs must not block on license prompts or Y/N conf
 ## Pointers in this repo
 
 - Agent guide: [`AGENTS.md`](../../AGENTS.md)
-- Zero-to-game: [`docs/ZERO_TO_GAME_AI.md`](../ZERO_TO_GAME_AI.md)
 - Testing / coverage floor + CI pitfalls: [`docs/TESTING.md`](../TESTING.md) · [`docs/TESTING_PT.md`](../TESTING_PT.md)
 - vramd agent checklist: [`Vramd/README.md`](../../Vramd/README.md) (Agents / anti-patterns)
 - CLI-for-agents design notes: [`Materialize/docs/plans/2026-03-15-cli-for-ai-agents-design.md`](../../Materialize/docs/plans/2026-03-15-cli-for-ai-agents-design.md)

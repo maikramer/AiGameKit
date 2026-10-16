@@ -1,11 +1,11 @@
-//! Snapshot "Física" do profiler — o equivalente do `physics-debug.ts` do
-//! VibeGame adaptado ao bevy_rapier3d 0.36: corpos por tipo e sono, colisores
+//! Snapshot "Física" do profiler — o equivalente do `physics-debug.ts`
+//! original, adaptado ao bevy_rapier3d 0.36: corpos por tipo e sono, colisores
 //! por forma, sensores, CCTs, pendentes de mesh, gravidade/timestep do
 //! contexto Rapier e a duração do `PhysicsSet::StepSimulation` (medida pelas
 //! âncoras em [`crate::profiler::timed::physics_anchors`]).
 //!
 //! As contagens ECS estão sempre disponíveis (mesmo sem contexto Rapier);
-//! `available` distingue os dois casos, como no VibeGame.
+//! `available` distingue os dois casos, como no original.
 
 use std::collections::BTreeMap;
 
@@ -57,7 +57,7 @@ pub struct PhysicsSnapshot {
     pub colliders: Colliders,
     /// Character controllers (Rapier `KinematicCharacterController`); o player
     /// Viber usa o seu próprio controlador, pelo que em prática é 0 — mantido
-    /// para paridade com o VibeGame.
+    /// para paridade com a referência.
     pub cct: usize,
     pub pending_colliders: usize,
     pub gravity: [f32; 3],

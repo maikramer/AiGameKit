@@ -4,7 +4,7 @@
 //! by a SplitMix64 RNG — the same seed produces the same forest. The live
 //! sampler wraps [`TerrainRuntime`]; tests pass closures.
 //!
-//! Features ported from the VibeGame spawner: terrain alignment via a
+//! Features ported from the original spawner: terrain alignment via a
 //! weighted 3×3 sample matrix with a clamped partial tilt, a cell-bucketed
 //! occupancy registry shared by every spawner group (rocks never spawn inside
 //! trees, nothing spawns inside a `<SpawnExclusion>`), conservative
@@ -74,7 +74,7 @@ pub struct PlacedInstance {
 /// escala-metro, e células de 4 m mantêm cada consulta num vizinhança 3×3.
 const OCCUPANCY_CELL: f32 = 4.0;
 /// Folga (metros) entre footprints registados: props nunca nascem "colados"
-/// uns aos outros nem às zonas excluídas (VibeGame `SPAWN_CLEARANCE`).
+/// uns aos outros nem às zonas excluídas (`SPAWN_CLEARANCE`).
 const SPAWN_CLEARANCE: f32 = 0.6;
 /// Limite de espera (segundos) por assets de template presos em Loading até
 /// o grupo ser desistido — o gate de todos-os-grupos não pode pendurar o
@@ -107,7 +107,7 @@ struct OccupancyRegister<'a> {
 }
 
 /// Registo de ocupação XZ partilhado por TODOS os spawners do mundo (port do
-/// `occupancy.ts` do VibeGame): cada instância colocada (e cada
+/// `occupancy.ts` original): cada instância colocada (e cada
 /// `<SpawnExclusion>`) registra um disco; candidatos cujo disco encosta um
 /// disco registado — com folga — são rejeitados. Rochas não nascem dentro de
 /// árvores, nada nasce dentro de uma exclusão, e árvores não nascem dentro da
@@ -262,7 +262,7 @@ impl SpawnOccupancy {
 }
 
 /// Inclinação mínima (rad) abaixo da qual o solo conta como plano — só yaw
-/// (VibeGame `partialAlignEuler`, ~5°).
+/// (`partialAlignEuler`, ~5°).
 const ALIGN_MIN_SLOPE: f32 = 0.087;
 /// Tilt máximo (rad) — troncos seguem o declive mas nunca deitam em falésias
 /// (π/3 = 60°; o gate de `max-slope-deg` já filtra posições absurdas).
@@ -290,8 +290,8 @@ pub fn terrain_align_rotation(normal: Vec3, yaw_rad: f32, slope_rad: f32) -> Qua
 
 /// Contagem efetiva do grupo: `count` directo, ou o modo densidade —
 /// `density-per-km2 × área km² da região XZ`, com teto `max-instances`
-/// (`0` = sem teto). O modo densidade só liga quando `count` é zero, como no
-/// VibeGame.
+/// (`0` = sem teto). O modo densidade só liga quando `count` é zero, como na
+/// referência.
 fn resolved_count(spec: &StaticSpawnerSpec) -> u32 {
     if spec.density_per_km2 > 0.0 && spec.count == 0 {
         let dx = (spec.region_max[0] - spec.region_min[0]).abs();
@@ -454,7 +454,7 @@ pub fn compute_placements(
     // O grupo registra os próprios discos só com `avoid-overlaps`; contra o
     // que já está registrado (exclusões, outros grupos) TODO candidato é
     // testado. O raio de teste é conservador — footprint × maior escala
-    // possível, antes de saber a escala real da instância (VibeGame).
+    // possível, antes de saber a escala real da instância.
     let footprint = if spec.avoid_overlaps {
         spec.footprint_radius.max(0.0)
     } else {
@@ -603,7 +603,7 @@ pub fn compute_placements(
                 occupancy.register(pos.x, pos.y, footprint * scale_u * axis.x.max(axis.z));
             }
             // Y de assentamento: plantas aquáticas À SUPERFÍCIE da água
-            // (VibeGame "in-water: só superfície do lago, Y = waterY"), nunca
+            // ("in-water: só superfície do lago, Y = waterY"), nunca
             // no fundo da escavação; em seco, o terreno renderizado (ou a
             // base da região com align-to-terrain = 0).
             let y = if spec.in_water {
@@ -640,7 +640,7 @@ pub fn compute_placements(
     (out, stats)
 }
 
-/// Criaturas ficam verticais (VibeGame, perfil `creature`): movem-se depois
+/// Criaturas ficam verticais (perfil `creature`): movem-se depois
 /// do spawn — um tilt de nascimento ficava colado ao corpo. Só a ROTAÇÃO
 /// perde o alinhamento: o Y continua a vir do `align-to-terrain` (desligá-lo
 /// punha as criaturas na base da região, enterradas no relevo até andarem).
@@ -720,7 +720,7 @@ pub struct PendingSpawnGroups {
 }
 
 /// Meia-largura XZ do AABB do template glTF — o footprint automático quando o
-/// mundo não autora `footprint-radius` (VibeGame: auto = meia-largura do GLB,
+/// mundo não autora `footprint-radius` (auto = meia-largura do GLB,
 /// fallback 0.8 para templates sem malha resolvida).
 fn template_footprint_radius(
     gltfs: &Assets<Gltf>,
@@ -947,7 +947,7 @@ pub fn instantiate_spawn_groups(
         }
         // Footprint automático: `footprint-radius` ausente (0) usa a
         // meia-largura XZ do AABB do GLB — o teste contra a ocupação fica
-        // honesto sem o mundo autorar raios à mão. Fallback 0.8 m (VibeGame).
+        // honesto sem o mundo autorar raios à mão. Fallback 0.8 m.
         if group.spec.avoid_overlaps && group.spec.footprint_radius <= 0.0 {
             let auto = group
                 .handles

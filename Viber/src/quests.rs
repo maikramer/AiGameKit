@@ -1,5 +1,5 @@
 //! Quests & diálogo (loop 3 do port simple-rpg) — o análogo nativo do
-//! plugin Quests do VibeGame:
+//! plugin Quests original:
 //!
 //! - **Dados**: os JSONs de quests do MUNDO (`quests/*.json` ao lado do
 //!   `world.xml`, remapeável via `game.quests_dir` do config.yaml) — mesmo
@@ -39,7 +39,7 @@ pub const VISIT_RADIUS_M: f32 = 25.0;
 /// Linhas máximas do QuestTracker.
 pub const TRACKER_ROWS: usize = 4;
 
-// ── dados (mesmo schema do VibeGame) ────────────────────────────────────
+// ── dados (mesmo schema da referência) ──────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct QuestDef {
@@ -575,7 +575,7 @@ fn quest_debug_harvest(
 }
 
 /// Debug de QA (**F7**): teleporta o herói ao próximo `<DialogueNPC>` em
-/// ciclo (análogo do debug action `tp` do VibeGame). Para validar o flow de
+/// ciclo (análogo do debug action `tp`). Para validar o flow de
 /// quests pela bridge sem andar quilômetros. **Shift+F7**: criatura hostil
 /// (scriptada) mais próxima — para validar kills de quest.
 #[allow(clippy::type_complexity)]

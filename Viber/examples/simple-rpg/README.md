@@ -1,7 +1,8 @@
 # simple-rpg (migrado para Viber)
 
-Porta do exemplo `VibeGame/examples/simple-rpg` para a engine nativa Viber.
-O mundo foi convertido por `Viber/scripts/migrate_from_vibegame.py`. O jogo
+Porta do exemplo original (motor TS) para a engine nativa Viber.
+O mundo foi convertido uma única vez por um script de migração (já removido).
+O jogo
 corre de ponta a ponta: as Fases 0–3 da engine estão feitas e as tags do
 mundo original já têm runtime, incluindo as tags `EngineConfig`
 (`NavMesh`, `SpawnGate`, `ProjectileTemplate`, `AdaptiveQuality`,
@@ -111,8 +112,8 @@ espelho nem cópia local do pool** (guarda anti-regressão:
 ## Editar
 
 Por operações — `viber scene` / `viber tool` / `viber terrain` (offline ou
-`--live`) ou o ViberEditor. A re-migração a partir do VibeGame
-(`Viber/scripts/migrate_from_vibegame.py`) deixou de ser o fluxo: produz um
+`--live`) ou o ViberEditor. Re-gerar a partir do exemplo original do motor TS
+deixou de ser o fluxo: produz um
 mundo procedural que teria de ser convertido (`viber bake`) e substituiria o
 estático editado. Depois de mudanças nos assets (GLBs novos): os partilhados
 vão para o POOL (`Viber/examples/shared-assets/`), os por-jogo para

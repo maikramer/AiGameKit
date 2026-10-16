@@ -19,9 +19,6 @@ case "$file" in
   *.rs)
     rustfmt "$file" >/dev/null 2>&1
     ;;
-  "$repo_root"/VibeGame/*.ts|"$repo_root"/VibeGame/*.tsx|"$repo_root"/VibeGame/*.js|"$repo_root"/VibeGame/*.mjs|"$repo_root"/VibeGame/*.json|"$repo_root"/VibeGame/*.css|"$repo_root"/VibeGame/*.md)
-    "$repo_root/VibeGame/node_modules/.bin/prettier" --write "$file" >/dev/null 2>&1
-    ;;
 esac
 
 exit 0

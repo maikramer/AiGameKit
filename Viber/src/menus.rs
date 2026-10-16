@@ -1,5 +1,5 @@
 //! UI & menus (loop 5 do port simple-rpg) — o análogo nativo do
-//! TabbedModal + loja do mercador + toasts + loading screen do VibeGame:
+//! TabbedModal + loja do mercador + toasts + loading screen originais:
 //!
 //! - **Toasts visuais**: uma fila única em baixo ao centro (3 máx.), com
 //!   fade de entrada e de saída, sem sobreposição — continuam a ir para o log
@@ -102,6 +102,10 @@ pub struct MenusOpen {
     /// aberto o player andava (W/S navegavam E moviam) e o [J] que confirma
     /// a viagem disparava o melee.
     pub travel: bool,
+    /// Mapa regional [M] (`hud::map::RegionalMapState.open` — o espelho
+    /// vive no `map_key_system`). O mapa é um menu: com ele aberto o herói
+    /// não anda e o [L] que o fecha não dispara a guarda.
+    pub map: bool,
     /// Uma cinemática está a tocar (`crate::cinematic`): o herói não anda,
     /// não ataca e a hotbar cala-se.
     pub cinematic: bool,
@@ -109,7 +113,7 @@ pub struct MenusOpen {
 
 impl MenusOpen {
     pub fn any(&self) -> bool {
-        self.modal || self.shop || self.travel || self.cinematic
+        self.modal || self.shop || self.travel || self.map || self.cinematic
     }
 }
 
@@ -826,6 +830,11 @@ mod tests {
         menus.travel = true;
         assert!(menus.any(), "painel de viagem rouba o input");
         menus.travel = false;
+        // O mapa regional [M] também rouba input (é um menu): o [L] que o
+        // fecha não pode disparar a guarda nem o WASD andar.
+        menus.map = true;
+        assert!(menus.any(), "mapa regional rouba o input");
+        menus.map = false;
         menus.modal = true;
         assert!(menus.any());
         menus.modal = false;

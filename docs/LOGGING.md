@@ -72,7 +72,7 @@ CLI wiring: `setup_rich_click_module(..., tool="text2d")` calls
 
 ## Not covered
 
-- **Materialize** (Rust) and **VibeGame** (TypeScript) use their own loggers.
+- **Rust crates** (Materialize, Viber) use their own loggers.
 - Profiler JSONL (`AIGAMEKIT_PROFILE_LOG`) is separate from this text log.
 
 ## Related

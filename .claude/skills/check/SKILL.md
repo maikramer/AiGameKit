@@ -1,6 +1,6 @@
 ---
 name: check
-description: Run the full repo CI gate (lint + format check + typecheck + tests across Python, Rust, and VibeGame) via the root Makefile. Use before pushing or when the user says "run check", "/check", "verify everything", or wants the pre-push gate.
+description: Run the full repo CI gate (lint + format check + typecheck + tests across Python and Rust) via the root Makefile. Use before pushing or when the user says "run check", "/check", "verify everything", or wants the pre-push gate.
 disable-model-invocation: true
 ---
 
@@ -16,7 +16,7 @@ make check
 ```
 
 `check: lint fmt-check typecheck test` — ruff + cargo clippy, format checks,
-mypy on Shared, then pytest per Python project + cargo test + VibeGame.
+mypy on Shared, then pytest per Python project + cargo test.
 
 ## Scoped runs
 
@@ -25,7 +25,6 @@ instead of the full gate (faster):
 
 - Python project: `make test-<project>` (e.g. `make test-text3d`)
 - Rust: `make test-materialize`
-- VibeGame: `make check-vibegame && make test-vibegame`
 - Lint only: `make lint`  · Format check only: `make fmt-check`
 
 ## Reporting

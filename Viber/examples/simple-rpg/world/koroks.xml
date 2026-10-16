@@ -3,35 +3,39 @@
   <!-- SEMENTES DE CANÇÃO (colecionáveis estilo Korok, 22 no mundo) + BAÚS
        ESCONDIDOS (11 fora do caminho principal). Fumo subindo = "há segredo
        aqui" (tese BotW: korok smoke plume); pedras/fundos/lapos escondem os
-       demais. Recompensa própria: item korok-seed; a cada 5 → +1 talento. -->
+       demais. Recompensa própria: item korok-seed; a cada 5 → +1 talento.
+       Coluna ×3 (r2: legível a ≥90 m): rate 3→9, size 0.28/0.62→0.84/1.86,
+       vida 2.6/4.4→5.5/8.0 — a vida NÃO foi ×3 (daria um pilar de ~50 m:
+       o preset smoke tem flutuabilidade +0.6 m/s² e altura = v0·t+0.3·t²);
+       5.5–8.0 s mantém a coluna a 10–23 m com puffs que crescem ×2.4. -->
 
   <!-- ── Floresta Sombria (6 sementes) ── -->
     <Entity name="korok-bosque-pedra-1" translation="-34 50.0 282" euler="0 0 0" scale="0.8" script="poi/song-seed.lua" prop-mode="rock" prop-group="" prop-index="1" prop-prompt="Erguer a pedra junto à choupana" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/moss_rock_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
     </Entity>
     <Entity name="korok-bosque-anel-a-1" translation="-72.5 40.36 198.5" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="ring" prop-group="anel-bosque" prop-index="1" prop-prompt="Tocar a nota" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-bosque-anel-a-2" translation="-67.5 40.36 198.0" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="ring" prop-group="anel-bosque" prop-index="2" prop-prompt="Tocar a nota" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-bosque-anel-a-3" translation="-70.0 40.36 203.0" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="ring" prop-group="anel-bosque" prop-index="3" prop-prompt="Tocar a nota" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-bosque-odd-1" translation="118 46.54 228" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="odd" prop-group="" prop-index="1" prop-prompt="Tocar a pedra que canta" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-bosque-hide-1" translation="-110 45.92 150" euler="0 0 0" scale="0.8" script="poi/song-seed.lua" prop-mode="hide" prop-group="" prop-index="1" prop-prompt="Apanhar a semente" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/moss_rock_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
     </Entity>
     <Entity name="korok-bosque-pedra-2" translation="44 42.44 210" euler="0 0 0" scale="0.9" script="poi/song-seed.lua" prop-mode="rock" prop-group="" prop-index="1" prop-prompt="Erguer a pedra" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/farm/flint_rock_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" />
     </Entity>
     <Entity name="korok-bosque-hide-2" translation="140 58.76 260" euler="0 0 0" scale="0.9" script="poi/song-seed.lua" prop-mode="hide" prop-group="" prop-index="1" prop-prompt="Apanhar a semente" prop-range="3.0" >
@@ -40,19 +44,19 @@
 
   <!-- ── Ermo Rubro (5 sementes) ── -->
     <Entity name="korok-ermo-pedra-1" translation="128 49.18 84" euler="0 0 0" scale="0.9" script="poi/song-seed.lua" prop-mode="rock" prop-group="" prop-index="1" prop-prompt="Erguer a pedra do oásis" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/rock_boulder_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" />
     </Entity>
     <Entity name="korok-ermo-odd-1" translation="296 47.35 118" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="odd" prop-group="" prop-index="1" prop-prompt="Tocar a pedra que canta" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-ermo-hide-1" translation="232 47.16 -20" euler="0 0 0" scale="0.8" script="poi/song-seed.lua" prop-mode="hide" prop-group="" prop-index="1" prop-prompt="Apanhar a semente" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/moss_rock_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
     </Entity>
     <Entity name="korok-ermo-pedra-2" translation="250 52.45 30" euler="0 0 0" scale="0.9" script="poi/song-seed.lua" prop-mode="rock" prop-group="" prop-index="1" prop-prompt="Erguer a pedra" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/farm/flint_rock_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/farm/flint_rock_lod0.glb" />
     </Entity>
     <Entity name="korok-ermo-hide-2" translation="166 49.84 -108" euler="0 0 0" scale="0.8" script="poi/song-seed.lua" prop-mode="hide" prop-group="" prop-index="1" prop-prompt="Apanhar a semente" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/moss_rock_collision.glb; mesh-anchor: base" >
@@ -61,52 +65,52 @@
 
   <!-- ── Pântano da Bruma (5 sementes) ── -->
     <Entity name="korok-pantano-pedra-1" translation="-150 26.26 -30" euler="0 0 0" scale="0.8" script="poi/song-seed.lua" prop-mode="rock" prop-group="" prop-index="1" prop-prompt="Erguer a pedra da margem" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/moss_rock_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
     </Entity>
     <Entity name="korok-pantano-odd-1" translation="-244 27.03 24" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="odd" prop-group="" prop-index="1" prop-prompt="Tocar a pedra que canta" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-pantano-hide-1" translation="-272 31.68 -34" euler="0 0 0" scale="0.8" script="poi/song-seed.lua" prop-mode="hide" prop-group="" prop-index="1" prop-prompt="Apanhar a semente" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/moss_rock_collision.glb; mesh-anchor: base" >
       <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
     </Entity>
     <Entity name="korok-pantano-anel-b-1" translation="-252.5 30.58 80.5" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="ring" prop-group="anel-pantano" prop-index="1" prop-prompt="Tocar a nota" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-pantano-anel-b-2" translation="-247.5 30.58 80.0" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="ring" prop-group="anel-pantano" prop-index="2" prop-prompt="Tocar a nota" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-pantano-anel-b-3" translation="-250.0 30.58 85.0" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="ring" prop-group="anel-pantano" prop-index="3" prop-prompt="Tocar a nota" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-pantano-hide-2" translation="-210 26.37 -40" euler="0 0 0" scale="0.8" script="poi/song-seed.lua" prop-mode="hide" prop-group="" prop-index="1" prop-prompt="Apanhar a semente" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/moss_rock_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
     </Entity>
 
   <!-- ── Picos Gelados (4 sementes) ── -->
     <Entity name="korok-picos-pedra-1" translation="-30 53.64 -148" euler="0 0 0" scale="0.9" script="poi/song-seed.lua" prop-mode="rock" prop-group="" prop-index="1" prop-prompt="Erguer a pedra gelada" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/rock_boulder_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/rock_boulder_lod0.glb" />
     </Entity>
     <Entity name="korok-picos-odd-1" translation="-56 74.73 -184" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="odd" prop-group="" prop-index="1" prop-prompt="Tocar a pedra que canta" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-picos-anel-c-1" translation="-72.5 88.32 -204.5" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="ring" prop-group="anel-picos" prop-index="1" prop-prompt="Tocar a nota" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-picos-anel-c-2" translation="-67.5 88.32 -205.0" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="ring" prop-group="anel-picos" prop-index="2" prop-prompt="Tocar a nota" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-picos-anel-c-3" translation="-70.0 88.32 -210.0" euler="0 0 0" scale="0.55" script="poi/song-seed.lua" prop-mode="ring" prop-group="anel-picos" prop-index="3" prop-prompt="Tocar a nota" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity name="korok-picos-hide-1" translation="84 78.88 -196" euler="0 0 0" scale="0.8" script="poi/song-seed.lua" prop-mode="hide" prop-group="" prop-index="1" prop-prompt="Apanhar a semente" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/moss_rock_collision.glb; mesh-anchor: base" >
@@ -115,11 +119,11 @@
 
   <!-- ── O Vale (2 sementes) ── -->
     <Entity name="korok-vale-hide-1" translation="100 40.18 -24" euler="0 0 0" scale="0.8" script="poi/song-seed.lua" prop-mode="hide" prop-group="" prop-index="1" prop-prompt="Apanhar a semente" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/moss_rock_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
     </Entity>
     <Entity name="korok-vale-pedra-1" translation="18 45.0 78" euler="0 0 0" scale="0.8" script="poi/song-seed.lua" prop-mode="rock" prop-group="" prop-index="1" prop-prompt="Erguer a pedra" prop-range="3.0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/moss_rock_collision.glb; mesh-anchor: base" >
-      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 3; start-life-min: 2.6; start-life-max: 4.4; start-speed-min: 0.25; start-speed-max: 0.55; start-size-min: 0.28; start-size-max: 0.62; start-color: #cfe8de; looping: 1; world-space: 1" />
+      <ParticleSystem preset="smoke" transform="pos: 0 0.7 0" particle-emitter="preset: smoke; emission-rate: 9; start-life-min: 5.5; start-life-max: 8.0; start-speed-min: 0.2; start-speed-max: 0.45; start-size-min: 0.84; start-size-max: 1.86; start-color: #cfe8de; looping: 1; world-space: 1" />
       <GltfScene url="/assets/meshes/swamp/moss_rock_lod0.glb" />
     </Entity>
 

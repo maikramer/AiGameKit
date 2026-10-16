@@ -57,14 +57,11 @@ errada mesmo com bbox/pose OK. Melhorar `idea`/prompt 2D antes de re-roll 3D.
 - Cold compile ~6 min — **não** usar em one-shot.
 - `--channels-last` ≈0 ganho nestes benches.
 
-### Three.js / VibeGame
+### Consumo equirect
 
 - Convenção equirect: centro = horizonte, topo = zénite, fundo = nadir.
-- `PMREMGenerator` **ignora** `texture.offset` / `repeat` no shader interno →
-  corrigir bitmap (canvas) antes de `fromEquirectangular()`.
-- Retrato (H>W) ou eixos trocados → artefactos tipo “pilares”; normalizar
-  landscape 2:1 antes do PMREM.
-- Helper: `applyEquirectSkyEnvironment` (`vibegame` extras).
+- Retrato (H>W) ou eixos trocados → artefactos tipo “pilares” no céu;
+  normalizar para panorama 2:1 em paisagem antes de usar como ambiente.
 
 ### Testes CLI
 
@@ -81,12 +78,10 @@ Com vramd a correr, `CliRunner` + `generate` sem isolamento → job real +
 - **Trim silêncio inicial** na geração ou import — senão latência perceptível
   no jogo (passos, hits).
 - **Duração curta** (~0.5–1.2 s) para one-shots. Saídas ~20–30 s (cauda) fazem
-  um único `playSound('swing')` soar a combate infinito — ver
-  [`VIBEGAME_AUDIO_COMBAT_FINDINGS.md`](VIBEGAME_AUDIO_COMBAT_FINDINGS.md).
-- Preferir integração engine: `AudioListener` + câmera; gesto user para
-  AudioContext; **não** `preloadSounds`/Howl no boot (enfileira até gesto —
-  ver [`VIBEGAME_AUDIO_COMBAT_FINDINGS.md`](VIBEGAME_AUDIO_COMBAT_FINDINGS.md));
-  bank `playSound` / `playSoundAt` com `originEid`.
+  um one-shot soar a combate infinito.
+- Preferir integração via sistema da engine (listener + câmera principal);
+  desbloquear o AudioContext com gesto do utilizador; pré-carregar áudio
+  sem gesto enfileira e atrasa o arranque.
 - CLI: `--compile` / `--channels-last` no DiT/VAE; benches short SFX sem ganho
   hot (compile só aumenta cold).
 - `text2sound.utils.safe_filename` / `generate_output_path` → re-export /
@@ -104,8 +99,8 @@ Com vramd a correr, `CliRunner` + `generate` sem isolamento → job real +
 
 | Data | Nota |
 |------|------|
-| 2026-07-24 | Link preload diferido / gesto Howler (VibeGame audio findings) |
-| 2026-07-24 | SFX long-tail pitfall + link VibeGame audio/combat findings |
+| 2026-07-24 | Preload de áudio diferido até gesto do utilizador |
+| 2026-07-24 | Pitfall de cauda longa em SFX |
 | 2026-07-24 | Pedalboard SIGILL probe; Texture2D skip dtype sem CUDA |
 | 2026-07-24 | `apply_quantized_matmul` Shared; Skymap testes `--no-vramd`; Text2Sound path_utils; kernel flags vramd/batch |
 | 2026-07-19 | Skymap shift/resize; Text2D 1024; audio trim; PMREM offset |

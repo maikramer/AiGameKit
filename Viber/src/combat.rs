@@ -1,5 +1,5 @@
-//! Combate corpo-a-corpo — port do pipeline de melee do VibeGame
-//! (`examples/simple-rpg/src/game/melee.ts` + `combat-mechanics.ts`).
+//! Combate corpo-a-corpo — port do pipeline de melee da referência
+//! (`melee.ts` + `combat-mechanics.ts`).
 //!
 //! O press de ataque ([J]/clique esquerdo) NÃO acerta nada: agenda um
 //! [`PendingSwing`] com o impacto a ~35 % do clip de ataque (a 1.4×), com
@@ -11,7 +11,7 @@
 //! (<15 % HP cai na hora), com knockback, hit-stop, camera shake, partículas
 //! e números de dano.
 //!
-//! Duas contagens distintas (igual ao VibeGame):
+//! Duas contagens distintas (igual à referência):
 //! - **Chain** ([`AttackChain`]): avança POR PRESS, janela curta
 //!   ([`CHAIN_WINDOW`]); o passo 2 é o finisher.
 //! - **Combo counter** ([`crate::skills::ComboState`]): conta HITS ACERTADOS
@@ -35,16 +35,16 @@ use crate::player::Player;
 use crate::profiler::{Group, timed};
 use crate::vitals::{Health, Xp, apply_damage};
 
-/// Alcance do golpe corpo-a-corpo (m) — VibeGame `MELEE_RANGE` 3.0.
+/// Alcance do golpe corpo-a-corpo (m) — `MELEE_RANGE` 3.0.
 pub const MELEE_RANGE: f32 = 3.0;
 /// Alcance do finisher (m) — +0.5 de cleave.
 pub const FINISHER_RANGE: f32 = 3.5;
 /// Círculo de soft-lock no press (m) — `LOCK_RANGE` = range + 0.6.
 pub const LOCK_RANGE: f32 = 3.6;
-/// Dano base do golpe do herói — VibeGame `BASE_MELEE_DAMAGE` 16 sobre HPs de
+/// Dano base do golpe do herói — `BASE_MELEE_DAMAGE` 16 sobre HPs de
 /// Viber (25 de histórico do port); mantém o TTK do mundo.
 pub const MELEE_DAMAGE: f32 = 25.0;
-/// Cadência de swings (s) — VibeGame `SWING_COOLDOWN` 0.36.
+/// Cadência de swings (s) — `SWING_COOLDOWN` 0.36.
 pub const MELEE_COOLDOWN: f32 = 0.36;
 /// Diferença de altura aceitável (m) — `MELEE_VERTICAL` (sem hits através de
 /// pisos).
@@ -80,7 +80,7 @@ pub const STRIKE_DISTANCE: f32 = 1.9;
 pub const MAX_LUNGE: f32 = 1.6;
 /// Cap de velocidade do lunge (m/s).
 pub const LUNGE_SPEED_CAP: f32 = 9.0;
-/// Viragem para o alvo durante o windup (rad/s — VibeGame VISUAL_TURN_RATE).
+/// Viragem para o alvo durante o windup (rad/s — VISUAL_TURN_RATE).
 /// 14: o herói aponta ao alvo num quarto de segundo em vez de meio —
 /// "apontar para ele" tem de ler no frame do press.
 pub const FACE_TURN_RATE: f32 = 14.0;
@@ -95,9 +95,9 @@ pub const CHAIN_MULTS: [f32; 3] = [1.0, 1.15, 1.7];
 pub const COMBO_BONUS_PER_HIT: f32 = 0.02;
 /// Cap do bónus de combo (+30 %).
 pub const COMBO_BONUS_CAP: f32 = 0.3;
-/// Janela do combo counter (s) — VibeGame 2.5.
+/// Janela do combo counter (s) — 2.5.
 pub const COMBO_WINDOW_SECS: f32 = 2.5;
-/// Chance base de crítico (VibeGame 0.15) + passivas de precisão.
+/// Chance base de crítico (0.15) + passivas de precisão.
 pub const CRIT_CHANCE: f32 = 0.15;
 /// Multiplicador de crítico.
 pub const CRIT_MULTIPLIER: f32 = 2.0;
@@ -156,7 +156,7 @@ pub const FINISHER_RING_RADIUS: f32 = 3.2;
 
 /// Pool de clips de ataque por arma (índice em [`WEAPON_TABLE`]) — o herói
 /// tem os clips do pack Quaternius; espada e machado partilham o pool de
-/// 4 cortes (igual ao VibeGame `ATTACK_POOLS`), a lança tem o seu.
+/// 4 cortes (igual ao `ATTACK_POOLS`), a lança tem o seu.
 pub const ATTACK_POOLS: [&[&str]; 3] = [
     &["sword", "sworda", "swordb", "swordc"],
     &["sword", "sworda", "swordb", "swordc"],
@@ -299,8 +299,8 @@ pub fn combo_bonus(hits: u32) -> f32 {
     1.0 + (hits as f32 * COMBO_BONUS_PER_HIT).min(COMBO_BONUS_CAP)
 }
 
-/// Escolhe o clip do pool evitando repetir o último (modo `random` do
-/// VibeGame: uniforme sem repetição imediata). `roll` ∈ [0,1).
+/// Escolhe o clip do pool evitando repetir o último (modo `random`:
+/// uniforme sem repetição imediata). `roll` ∈ [0,1).
 pub fn pick_combo_clip(pool: &[&str], last: Option<usize>, roll: f32) -> usize {
     if pool.is_empty() {
         return 0;
@@ -524,8 +524,8 @@ pub struct MeleeFx<'w, 's> {
 
 /// ESTÁDIO 1 do melee (por press): agenda o swing. NADA de detecção de acerto
 /// aqui — o impacto aterra a [`SWING_IMPACT_FRACTION`] do clip (a 1.4×), com
-/// re-aim/lunge por frame em [`swing_track_system`] (o `pendingMelee` do
-/// VibeGame). O soft-lock procura o inimigo vivo mais próximo num CÍRCULO
+/// re-aim/lunge por frame em [`swing_track_system`] (o `pendingMelee`
+/// original). O soft-lock procura o inimigo vivo mais próximo num CÍRCULO
 /// completo de [`LOCK_RANGE`] — o windup vira o herói para ele, por isso o
 /// press não precisa de mirar.
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
@@ -877,7 +877,7 @@ pub fn swing_track_system(
         let target_forward = hero_forward(transform);
         let backstab = target_forward.dot(-flat / dist) < -0.1;
         let crit = crate::skills::is_crit(CRIT_CHANCE + fx.stats.0.crit_bonus, pseudo_roll(&time));
-        // Stack de dano do VibeGame: base × chain × combo × backstab × crit.
+        // Stack de dano: base × chain × combo × backstab × crit.
         let mut damage =
             (MELEE_DAMAGE + fx.stats.0.bonus_damage) * chain_multiplier(chain_step) * combo_mult;
         if backstab {
@@ -1319,12 +1319,12 @@ pub fn corpse_fade_tick(
     }
 }
 
-// ── Arma na mão (grips copiados do VibeGame `data/held-items.json`) ────
+// ── Arma na mão (grips copiados de `data/held-items.json`) ────────────
 // Bone: `hand_r` (rig Mixamo do herói; candidates do held-item.ts).
 // Ordem de busca espelha HAND_BONE_CANDIDATES + fuzzy "righthand".
 
 // ── Troca de armas ([V]: espada → machado → lança) ─────────────────────
-// Grips copiados do VibeGame `dist/data/held-items.json`.
+// Grips copiados de `dist/data/held-items.json`.
 
 #[derive(Debug, Clone, Resource, Default)]
 pub struct HeldWeapon {
@@ -1719,7 +1719,7 @@ mod tests {
     }
 
     #[test]
-    fn test_chain_multiplier_matches_vibegame() {
+    fn test_chain_multiplier_matches_reference() {
         // mults [1, 1.15, 1.7]; passo clampeado (4.º+ press segue finisher).
         assert!((chain_multiplier(0) - 1.0).abs() < 1e-5);
         assert!((chain_multiplier(1) - 1.15).abs() < 1e-5);
@@ -1832,7 +1832,7 @@ mod tests {
     }
 
     #[test]
-    fn test_execute_fraction_matches_vibegame() {
+    fn test_execute_fraction_matches_reference() {
         // EXECUTE_HP_FRAC 0.15: 14/100 executa, 16/100 não.
         let hp = Health {
             current: 14.0,

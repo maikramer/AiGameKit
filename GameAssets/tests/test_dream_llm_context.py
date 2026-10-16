@@ -6,8 +6,8 @@ import pytest
 
 from gameassets.dream.llm_context import (
     DREAM_PLAN_SCHEMA,
+    SCENE_RECIPES,
     SCENE_RULES,
-    VIBEGAME_RECIPES,
     build_system_prompt,
 )
 
@@ -48,11 +48,11 @@ class TestSystemPromptAnchors:
         prompt = _default_prompt(preset_names=[])
         assert "lowpoly" in prompt
 
-    def test_includes_vibegame_recipes(self) -> None:
+    def test_includes_scene_recipes(self) -> None:
         prompt = _default_prompt()
         for recipe in ("PlayerGLTF", "GLTFLoader", "Terrain", "OrbitCamera"):
             assert recipe in prompt
-        assert "PlayerGLTF" in VIBEGAME_RECIPES
+        assert "PlayerGLTF" in SCENE_RECIPES
 
 
 class TestAudioSkyToggles:

@@ -104,7 +104,7 @@ pub const TEMPLATES: &[NodeTemplate] = &[
     NodeTemplate {
         group: TemplateGroup::Shape,
         tag: "box",
-        label: "Box (alias Cuboid, spelling VibeGame)",
+        label: "Box (alias Cuboid)",
         snippet: r#"<Box half-size="0.5 0.5 0.5" translation="0 0.5 0" />"#,
     },
     NodeTemplate {

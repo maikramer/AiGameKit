@@ -52,7 +52,7 @@ impl GraphicsPreset {
     }
 
     /// Aceita os nomes em português e os equivalentes em inglês — um mundo
-    /// portado do VibeGame escreve `performance`, não `desempenho`.
+    /// migrado escreve `performance`, não `desempenho`.
     pub fn parse(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "alto" | "high" | "ultra" => Some(Self::Alto),

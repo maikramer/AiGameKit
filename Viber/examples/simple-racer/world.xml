@@ -9,6 +9,7 @@
   </Group>
   <Include src="/world/circuit/track.xml" />
   <Include src="/world/circuit/grid.xml" />
+  <Include src="/world/circuit/fx.xml" />
   <Include src="/world/city/downtown.xml" />
   <Include src="/world/nature/forest.xml" />
 </world>

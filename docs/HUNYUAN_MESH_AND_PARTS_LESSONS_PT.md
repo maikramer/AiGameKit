@@ -32,7 +32,7 @@ EN (resumo): [`HUNYUAN_MESH_AND_PARTS_LESSONS.md`](HUNYUAN_MESH_AND_PARTS_LESSON
 
 ### Artefactos de referência
 
-- Imagens: `VibeGame/examples/simple-rpg/public/assets/images/<id>.png`.
+- Imagens: pasta `images/` do exemplo simple-rpg (`<id>.png`; checkout antigo).
 - Capela: regenerar PNG com framing 3/4 ligeiramente de cima **antes** de shape→clean→paint.
 - Paint: mesma imagem do i2m; GameAssets usa `ensure_clean_for_paint` (pinta `_clean`, não `_shape`).
 
@@ -168,7 +168,6 @@ paint3d texture _intermediate/id_clean.glb \
 | Inpaint restrito | `Paint3D/src/paint3d/paint_prep.py` |
 | Defaults Part3D | `Part3D/src/part3d/defaults.py` |
 | Face-split / fuse | `Part3D/.../face_split.py`, `label_fuse.py`, `label_transfer.py` |
-| Experimento local | `VibeGame/examples/simple-rpg/_part3d_watchtower/` (gitignored) |
 
 ## 7. O que não fazer
 

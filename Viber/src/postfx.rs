@@ -3281,7 +3281,9 @@ mod tests {
     fn test_grade_temperature_full_warms_low_sun_and_spares_midday() {
         // Meio-dia (peso 0) e a LOOP B pura: iguais — o dia neutro não mexe.
         assert_eq!(grade_temperature_full(0.0, 0.0, 0.0), 0.0);
-        assert!((grade_temperature_full(0.35, 0.0, 0.0) - 0.35 * GOLDEN_GRADE_TEMPERATURE).abs() < 1e-6);
+        assert!(
+            (grade_temperature_full(0.35, 0.0, 0.0) - 0.35 * GOLDEN_GRADE_TEMPERATURE).abs() < 1e-6
+        );
         // 07:30 do gauntlet (`golden` ~0, peso 26,9° ~1): aquecimento global
         // leve — o stock aquece a manhã que a gaussiana não cobria.
         let t0730 = grade_temperature_full(0.0, low_sun_split_weight(26.9), 0.0);
@@ -3324,7 +3326,11 @@ mod tests {
         });
         std::array::from_fn(|r| {
             std::array::from_fn(|c| {
-                LMS_TO_RGB[r].iter().enumerate().map(|(k, x)| x * adj[k][c]).sum()
+                LMS_TO_RGB[r]
+                    .iter()
+                    .enumerate()
+                    .map(|(k, x)| x * adj[k][c])
+                    .sum()
             })
         })
     }

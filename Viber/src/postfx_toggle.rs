@@ -1,5 +1,5 @@
 //! `<PostFxDebugToggle bindings="…">` — teclas que ligam/desligam efeitos de
-//! pós-processo AO VIVO (port do plugin `postfx-toggle` do VibeGame).
+//! pós-processo AO VIVO (port do plugin `postfx-toggle`).
 //!
 //! ```xml
 //! <PostFxDebugToggle />                                  <!-- defaults Ctrl+1..6 -->
@@ -15,7 +15,7 @@ use bevy::prelude::*;
 
 use crate::worldsys::EngineConfigs;
 
-/// Bindings por omissão — a ordem do VibeGame (bloom, CA, vinheta…), com os
+/// Bindings por omissão — a ordem da referência (bloom, CA, vinheta…), com os
 /// dois efeitos que o Viber não comuta ao vivo (AA, tonemapping) trocados por
 /// SSAO/DoF, e Ctrl para não roubar a hotbar.
 pub const DEFAULT_BINDINGS: &str =
@@ -74,8 +74,8 @@ pub fn fx_key_for_alias(alias: &str) -> Result<&'static str, String> {
     })
 }
 
-/// `"ctrl+shift+Digit1"` → tecla + modificadores. Aceita os códigos do
-/// VibeGame (`Digit1`, `KeyB`) e os nomes do `viber.key_pressed` (`1`, `b`,
+/// `"ctrl+shift+Digit1"` → tecla + modificadores. Aceita os códigos de
+/// browser (`Digit1`, `KeyB`) e os nomes do `viber.key_pressed` (`1`, `b`,
 /// `f4`, `numpad3`…).
 pub fn parse_key_spec(spec: &str) -> Option<(KeyCode, bool, bool, bool)> {
     let mut parts: Vec<&str> = spec.split('+').map(str::trim).collect();
@@ -226,7 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn test_vibegame_codes_are_accepted() {
+    fn test_browser_codes_are_accepted() {
         let (bindings, warnings) = parse_bindings("Digit1:bloom,KeyB:ssao,Numpad3:lens");
         assert!(warnings.is_empty(), "{warnings:?}");
         let keys: Vec<_> = bindings.iter().map(|b| b.key).collect();

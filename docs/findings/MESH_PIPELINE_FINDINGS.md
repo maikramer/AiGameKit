@@ -317,8 +317,8 @@ corrigir pipeline (já no código). Manifest/`game.yaml` com `rig`+`animate`
 - **Bípedes “creature” no manifesto** (shade, bandit, goblin…): usar
   `animate.preset: humanoid` + `force_preset: true` + clips
   `idle,walk,run,jump,attack,hit,death`. `preset: creature` + `procedural: true`
-  gera ossos estranhos + clips `Animator3D_*` que **não** batem com scripts
-  VibeGame (`idle`/`walk`/…). Detalhe: findings de animate.
+  gera ossos estranhos + clips `Animator3D_*` que **não** batem com os clips
+  `idle`/`walk`/… esperados pelos scripts. Detalhe: findings de animate.
 - **Pivô animado:** `root` estático nos pés; **não** retargetar rotação do root
   Quaternius (±90° → origem salta para a cintura ao play). Location só em `pelvis`.
 - Transfer weights: `rigging3d transfer-weights` (não Text3D; fora do DAG Round 3).
@@ -375,7 +375,7 @@ gameassets resume … --redo-split   # ou AIGAMEKIT_REDO_SPLIT=1
 Apaga: `*_stump_painted` / `*_top_painted`, dirs `*_stump_lod`/`*_top_lod`,
 lods compostos, `*_stump_collision` / `*_top_collision` / `*_collision`.
 
-### Runtime (VibeGame)
+### Runtime
 
 - Visual: `*_lod0.glb` com meshes `Stump` + `Top`.
 - Collider fall: `*_stump_collision.glb` (não o hull da árvore inteira).
@@ -482,7 +482,7 @@ mesh estático. `0` = só o lod0 anima (props); `2` = comportamento antigo.
   validação não muda.
 
 Do lado do motor o complemento é destacar do grafo os níveis inactivos
-(`VibeGame/src/extras/gltf-lod-parking.ts`): cena 15 086 → 5 674 nós, grupo
+(lod parking; medido no motor browser): cena 15 086 → 5 674 nós, grupo
 `render` 7,26 → 4,93 ms.
 
 ---

@@ -32,7 +32,7 @@ function on_update(dt)
 
   -- ── volta / posição / cronómetros ──────────────────────────────────
   local lap, laps = viber.race.lap()
-  viber.ui.set_text("race-lap", string.format("%d/%d", lap, laps))
+  viber.ui.set_text("race-lap", string.format("%d/%d", math.max(lap, 1), laps))
   local pos, total = viber.race.position()
   viber.ui.set_text("race-pos", string.format("%d/%d", pos, total))
   viber.ui.set_text("race-time", fmt_time(viber.race.time()))

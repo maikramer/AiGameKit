@@ -308,7 +308,7 @@ fn env_render_distance() -> Option<f32> {
         .filter(|distance| distance.is_finite() && *distance > 0.0)
 }
 
-/// Height/slope color tinting, ported from the VibeGame terrain shader
+/// Height/slope color tinting, ported from the original terrain shader
 /// (`colorLow/Mid/High/Rock`, `snowHeight`, `slopeThreshold`) but evaluated
 /// CPU-side into vertex colors — no custom WGSL needed.
 #[derive(Debug, Clone, PartialEq)]

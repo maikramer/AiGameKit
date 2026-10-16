@@ -1,11 +1,11 @@
 //! CPU height sampling — the single source of truth for terrain shape.
 //!
-//! Ported from the VibeGame `HeightSampler` (`height-sampler.ts`): mesh,
+//! Ported from the original `HeightSampler` (`height-sampler.ts`): mesh,
 //! colliders, pads and gameplay queries all read the same grid, and any
 //! mutation bumps [`HeightSampler::revision`] so caches can invalidate
-//! cheaply (VibeGame `getGroundRevision`).
+//! cheaply (`getGroundRevision`).
 //!
-//! Interpolation modes (VibeGame `height-smoothing`):
+//! Interpolation modes (`height-smoothing`):
 //! * `0.0` — bilinear taps. C0 but not C1: the derivative jumps at every
 //!   texel boundary, so slopes read as a grid of flat facets.
 //! * `1.0` — **monotone** Catmull-Rom (`monotone()` in `height-sampler.ts`):
@@ -20,10 +20,10 @@ use bevy::math::Vec3;
 use super::mesh::HeightField;
 use super::spec::TerrainPadSpec;
 
-/// Bilinear-stencil reach in texel steps (VibeGame `TEXEL_INFLUENCE_REACH`
+/// Bilinear-stencil reach in texel steps (`TEXEL_INFLUENCE_REACH`
 /// = `SQRT2`): the full diagonal of the 2x2 reconstruction stencil.
 const TEXEL_INFLUENCE_REACH: f32 = core::f32::consts::SQRT_2;
-/// Minimum effective falloff in texel steps (VibeGame `minEffectiveFalloff`
+/// Minimum effective falloff in texel steps (`minEffectiveFalloff`
 /// default `minTexels = 1.5`) — a brush narrower than the texel aliases away.
 const MIN_FALLOFF_TEXELS: f32 = 1.5;
 
@@ -134,14 +134,14 @@ impl HeightSampler {
     }
 
     /// Applies pads in order and returns the resolved pads (auto heights
-    /// filled in). The flattening algorithm is ported from VibeGame
+    /// filled in). The flattening algorithm is ported from
     /// `flatten.ts`: rounded-rect SDF core kept exactly flat, smoothstep
     /// falloff ring, and a first-falloff-texel guard that clamps the bilinear
     /// stencil back to the pad plane (prevents the stencil "lip").
     ///
     /// Auto pads (`height == None`) sample the terrain at the pad center
     /// **before** that pad stamps, so structures anchored to the pad agree
-    /// with the ground (VibeGame `TerrainPadApplySystem`).
+    /// with the ground (`TerrainPadApplySystem`).
     ///
     /// Bumps [`Self::revision`] once per pad that changed any texel.
     pub fn apply_pads(&mut self, pads: &[TerrainPadSpec]) -> Vec<ResolvedPad> {
@@ -167,7 +167,7 @@ impl HeightSampler {
     }
 
     /// Levels a rounded-rect pad into the grid in place. Returns `true` when
-    /// at least one texel changed (VibeGame `flattenRect`).
+    /// at least one texel changed (`flattenRect`).
     ///
     /// Distance metric is the signed distance to the rounded-rect core
     /// (flatten.ts formulation): `d = length(max(|p - center| - core_half, 0))
@@ -196,12 +196,12 @@ impl HeightSampler {
         let core_x = (half_x - cr).max(0.01);
         let core_z = (half_z - cr).max(0.01);
         // Falloff clamped to the sampler resolution: a pad whose falloff is
-        // narrower than the texel step would alias into a hard stamp (VibeGame
-        // `minEffectiveFalloff`).
+        // narrower than the texel step would alias into a hard stamp
+        // (`minEffectiveFalloff`).
         let fall = falloff.max(0.01).max(texel_step * MIN_FALLOFF_TEXELS);
         // Quanto o stencil bilinear de um texel invade em direção ao core.
         let influence_reach = texel_step * TEXEL_INFLUENCE_REACH;
-        // Blend target clamped to the valid height range first (the VibeGame
+        // Blend target clamped to the valid height range first (the reference
         // brush normalizes targetY/maxHeight into [0,1] before blending).
         let target = if target_y.is_finite() {
             target_y.clamp(0.0, self.max_height)
@@ -211,7 +211,7 @@ impl HeightSampler {
 
         // Inclusive texel index range of the pad AABB expanded by falloff and
         // by 1 texel so corners never fall outside by floor/ceil rounding
-        // (VibeGame `texelIndexRange`).
+        // (`texelIndexRange`).
         let to_index = |world: f32, step: f32| ((world + half_world) / step).floor() as i64;
         let reach_x = half_x + fall;
         let reach_z = half_z + fall;
@@ -249,8 +249,8 @@ impl HeightSampler {
                 // `natural + (plane - natural) * w`, and their bilinear stencil
                 // reaches into the core — a one-texel lip at the pad edge.
                 // Clamp them exactly to the pad plane: cuts can't leave a lip
-                // above it and fills can't leave a dip below it (VibeGame
-                // `guardAt`, applied in both directions).
+                // above it and fills can't leave a dip below it (`guardAt`,
+                // applied in both directions).
                 if d > 0.0 && d < influence_reach {
                     if target < cur {
                         next = next.min(target);
@@ -320,7 +320,7 @@ impl HeightSampler {
     }
 
     /// Separable monotone Catmull-Rom over the clamped 4x4 neighbourhood
-    /// (VibeGame `sampleCatmullRom`): edge texels degrade to a one-sided fit
+    /// (`sampleCatmullRom`): edge texels degrade to a one-sided fit
     /// instead of wrapping onto the far side of the map.
     fn catmull(&self, x0: usize, z0: usize, fx: f32, fz: f32) -> f32 {
         let xm = x0.saturating_sub(1).min(self.width - 1);
@@ -370,7 +370,7 @@ fn cubic(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
 /// every road cut, pad edge and lake carve stamps one deliberately. Inside
 /// smooth terrain the cubic already lands between p1 and p2, so the clamp
 /// costs nothing there and only bites where the data is a cliff (ported from
-/// VibeGame `height-sampler.ts::monotone`).
+/// `height-sampler.ts::monotone`).
 fn monotone(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
     let v = cubic(p0, p1, p2, p3, t);
     let lo = p1.min(p2);

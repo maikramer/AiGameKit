@@ -18,7 +18,7 @@
            O kit Quaternius (/assets/meshes/vegetation/*.glb) está ausente do
            disco (ver ASSETS_REGISTRY.md — "GLBs em falta"); a tag <Vegetation>
            foi removida daqui para não referenciar URLs partidos
-           (`vibegame analyze` reportava 9 ERROR "missing asset" nesta zona).
+           (o `analyze` reportava 9 ERROR "missing asset" nesta zona).
            O tapete verde do anel vem da textura `vale_grass` do terreno; a
            árvore/rocha colhível (ResourceNode) abaixo já usa GLBs válidos. -->
         <!-- Laguinho NW da muralha mas ESTE do rio (antes -50,42 sobrepunha

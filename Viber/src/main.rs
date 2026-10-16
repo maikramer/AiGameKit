@@ -747,7 +747,7 @@ fn editor(path: Option<PathBuf>, extra: Vec<String>) -> anyhow::Result<()> {
 }
 
 /// Procura um checkout do Viber (Cargo.toml do pacote `viber`) subindo a partir
-/// de `from` — o análogo do `findEngineRoot` do vibegame-cli.
+/// de `from` — o análogo do `findEngineRoot` do CLI antigo do motor TS.
 fn viber_checkout_root(from: &Path) -> Option<PathBuf> {
     let mut dir = Some(from.to_path_buf());
     for _ in 0..24 {
@@ -766,8 +766,8 @@ fn viber_checkout_root(from: &Path) -> Option<PathBuf> {
 }
 
 /// Dentro de um checkout, delega em `cargo run [--release] -- run <world>`
-/// para correr o motor a partir do código-fonte (como `vibegame run` reconstrói
-/// a engine). Devolve `Ok(None)` quando não há delegação (sem checkout, cargo
+/// para correr o motor a partir do código-fonte (à semelhança do CLI antigo
+/// do motor TS, que também reconstruía a engine). Devolve `Ok(None)` quando não há delegação (sem checkout, cargo
 /// ausente ou guard activo) — o chamador corre in-process.
 fn delegate_run_to_cargo(
     world: &Path,

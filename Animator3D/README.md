@@ -528,13 +528,13 @@ animator3d list-clips animated.glb
 Animator3D is the **final animation stage** in the AiGameKit asset pipeline:
 
 ```text
-Text3D (mesh) → Paint3D (texture) → Rigging3D (armature) → Animator3D (clips) → VibeGame (browser)
+Text3D (mesh) → Paint3D (texture) → Rigging3D (armature) → Animator3D (clips) → engine (Viber)
 ```
 
 1. **Rigging3D** produces a rigged GLB with armature and bones.
 2. **Animator3D** takes the rigged GLB and generates procedural animation clips.
-3. The **animated GLB** is the preferred output for VibeGame handoff via `loadGltfAnimated`
-   or `loadGltfToSceneWithAnimator`.
+3. The **animated GLB** is the preferred deliverable: it becomes LOD0 and is what
+   the engine handoff (`gameassets handoff`) picks first.
 
 ### GameAssets batch integration
 

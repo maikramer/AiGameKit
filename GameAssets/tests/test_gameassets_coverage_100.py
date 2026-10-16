@@ -13,13 +13,12 @@ import yaml
 from gameassets.dream.emitter import (
     _ground_color_for_genre,
     _xml_escape,
+    emit_all,
     emit_game_yaml,
-    emit_index_html,
-    emit_main_ts,
     emit_manifest_yaml,
     emit_world_xml,
 )
-from gameassets.dream.planner import AssetEntry, DreamPlan, SceneLayout, TerrainPlan
+from gameassets.dream.planner import AssetEntry, DreamPlan, Placement, SceneLayout, TerrainPlan
 from gameassets.handoff_export import _safe_public_id, resolve_handoff_mesh
 from gameassets.helpers import (
     _append_gpu_kill_flag,
@@ -405,13 +404,20 @@ def test_emit_world_xml_terrain() -> None:
     assert "Terrain" in emit_world_xml(plan)
 
 
-def test_emit_main_ts_imports() -> None:
-    assert "vibegame" in emit_main_ts(_plan())
+def test_emit_all_emits_only_batch_files(tmp_path: Path) -> None:
+    # O dream já não faz scaffold de projeto browser: só game.yaml/manifest.yaml/world.xml.
+    paths = emit_all(_plan(), tmp_path)
+    assert set(paths) == {"game_yaml", "manifest_yaml", "world_xml"}
+    assert not (tmp_path / "main.ts").exists()
+    assert not (tmp_path / "index.html").exists()
 
 
-def test_emit_index_html_title() -> None:
-    html = emit_index_html(_plan(title="My Game"), "<Scene></Scene>")
-    assert "My Game" in html
+def test_emit_world_xml_player_gltf_for_rigged() -> None:
+    plan = _plan(assets=[AssetEntry(id="h", idea="hero", generate_3d=True, generate_rig=True)])
+    plan.scene.placements.append(Placement(asset_id="h", pos="0 1 0"))
+    xml = emit_world_xml(plan)
+    assert "PlayerGLTF" in xml
+    assert "/assets/models/h_lod0.glb" in xml
 
 
 @pytest.mark.parametrize("with_audio", [True, False])

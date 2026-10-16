@@ -112,4 +112,3 @@ Lacunas identificadas no pipeline de game development e plano de acção prioriz
 | AiGameKitLab | 0.1.0 | ✅ debug 3D, benches, profiling |
 | Materialize | — | ✅ PBR maps (Rust/wgpu) |
 | GameAssets | 0.2.2 | ✅ batch, handoff (OGG), dream, validate, manifest YAML |
-| VibeGame | — | ✅ browser 3D engine (Three.js + bitecs) |

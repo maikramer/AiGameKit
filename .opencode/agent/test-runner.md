@@ -1,5 +1,5 @@
 ---
-description: Runs the right test/lint targets for changed code in this monorepo and reports failures tersely. Maps changed paths to root Makefile targets (test-<project>, test-vibegame, check-vibegame, test-materialize).
+description: Runs the right test/lint targets for changed code in this monorepo and reports failures tersely. Maps changed paths to root Makefile targets (test-<project>, test-materialize).
 mode: subagent
 tools:
   write: false
@@ -28,7 +28,6 @@ files to the narrowest correct Make target, run it, report results terse.
 | `Terrain3D/`        | `make test-terrain3d` |
 | `Rocks3D/`          | `make test-rocks3d` |
 | `Materialize/`      | `make test-materialize` |
-| `VibeGame/` (src/tests) | `make check-vibegame && make test-vibegame` |
 
 ## Rules
 

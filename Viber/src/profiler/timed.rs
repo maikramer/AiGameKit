@@ -1,12 +1,12 @@
 //! Instrumentação de sistemas — o equivalente nativo do `recordSystemTiming`
-//! do profiler do VibeGame. O Bevy 0.19 não expõe tempos por sistema (removidos
+//! do profiler original. O Bevy 0.19 não expõe tempos por sistema (removidos
 //! a montante), por isso [`timed`] embrulha qualquer `System` e mede o
 //! `run_unsafe` dele: mesma assinatura, mesmo acesso, +2 leituras de relógio.
 //!
 //! Os registos vivem em globais porque sistemas correm em paralelo e o wrapper
 //! não tem acesso ao `World`; é um `Mutex` por *frame* por sistema (~20 ns).
 //! O congelamento ([`set_frozen`]) pára a aquisição mas preserva o anel —
-//! igual ao *Pause* do VibeGame. Escopos dinâmicos (por script Luau) usam
+//! igual ao *Pause* original. Escopos dinâmicos (por script Luau) usam
 //! [`record_script`]; sistemas estáticos usam [`record_system`].
 
 use std::collections::BTreeMap;
@@ -19,14 +19,14 @@ use serde::Serialize;
 use bevy::ecs::system::{IntoSystem, System, SystemIn, SystemStateFlags};
 use bevy::prelude::*;
 
-/// Janela deslizante por sistema — ~2 s a 60 fps (o VibeGame usa 120).
+/// Janela deslizante por sistema — ~2 s a 60 fps (120 amostras).
 pub const RING_SIZE: usize = 120;
 
 /// Amostras ≥ este valor marcam a linha como quente (`!` na tabela), como o
-/// `HOT_MS = 1.0` do VibeGame.
+/// `HOT_MS = 1.0` original.
 pub const HOT_MS: f32 = 1.0;
 
-/// Grupos do profiler — o agrupamento do VibeGame é por fase de scheduler;
+/// Grupos do profiler — o agrupamento original é por fase de scheduler;
 /// aqui é por subsistema (mais útil numa engine where owners são módulos).
 /// `physics` mede o `PhysicsSet::StepSimulation` inteiro via âncoras (ver
 /// [`physics_anchors`]), não um sistema embrulhado.
@@ -91,7 +91,7 @@ impl Group {
 }
 
 /// Estatísticas de um sistema/escopo — mesmo shape do `ProfilerTimingStats`
-/// do VibeGame (avg/min/max/p95/last/pct/amostras).
+/// original (avg/min/max/p95/last/pct/amostras).
 #[derive(Debug, Clone, Serialize)]
 pub struct TimingStats {
     pub name: String,
@@ -148,7 +148,7 @@ impl Ring {
     }
 
     /// (avg, min, max, p95) sobre a janela preenchida. p95 = percentil 95
-    /// discreto, como o `ringStats` do VibeGame.
+    /// discreto, como o `ringStats` original.
     fn stats(&self) -> (f32, f32, f32, f32) {
         if self.filled == 0 {
             return (0.0, 0.0, 0.0, 0.0);
@@ -163,7 +163,7 @@ impl Ring {
         }
         let mut sorted = self.samples[..self.filled].to_vec();
         sorted.sort_by(|a, b| a.total_cmp(b));
-        // p95 discreto do VibeGame: ceil(n·0.95)-1.
+        // p95 discreto: ceil(n·0.95)-1.
         let p95_idx = (self.filled * 95).div_ceil(100) - 1;
         (sum / self.filled as f32, min, max, sorted[p95_idx])
     }
@@ -198,7 +198,7 @@ pub fn record_system(group: Group, key: &'static str, ms: f32) {
 }
 
 /// Registra um escopo dinâmico `script/<caminho>` — a secção "Entity scripts
-/// (per file)" do VibeGame. Zero alloc quando o caminho já é conhecido.
+/// (per file)" do profiler. Zero alloc quando o caminho já é conhecido.
 pub fn record_script(path: &str, ms: f32) {
     if is_frozen() || !ms.is_finite() {
         return;
@@ -266,7 +266,7 @@ pub fn scripts_snapshot(frame_avg_ms: f32) -> Vec<TimingStats> {
     rows
 }
 
-/// Totais por grupo na janela — as "Groups bars" do VibeGame.
+/// Totais por grupo na janela — as "Groups bars" da referência.
 pub fn groups_snapshot(frame_avg_ms: f32) -> Vec<(Group, TimingStats)> {
     let Ok(map) = SYSTEM_RINGS.lock() else {
         return Vec::new();
@@ -305,7 +305,7 @@ pub fn groups_snapshot(frame_avg_ms: f32) -> Vec<(Group, TimingStats)> {
         .collect()
 }
 
-/// Limpa anéis/contadores (mantém congelação) — o botão *Reset* do VibeGame.
+/// Limpa anéis/contadores (mantém congelação) — o botão *Reset* original.
 pub fn reset_timings() {
     if let Ok(mut map) = SYSTEM_RINGS.lock() {
         map.clear();

@@ -1,5 +1,5 @@
 //! Vehicle — kart arcade cinemático (port do `vehicle-control.ts` do plugin
-//! racing do VibeGame, modelo deliberadamente SEM rigidbody).
+//! racing, modelo deliberadamente SEM rigidbody).
 //!
 //! O estado autoritativo é `heading` + `speed` + slip lateral; a pose mundial
 //! integra no Update e assenta na superfície de condução
@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use crate::terrain::runtime::TerrainRuntime;
 
-/// Gravidade arcade do VibeGame (`vehicle-control.ts`).
+/// Gravidade arcade (`vehicle-control.ts`).
 pub const GRAVITY: f32 = 22.0;
 /// Resistência quadrática (`DRAG`).
 pub const DRAG: f32 = 0.0016;
@@ -24,15 +24,15 @@ pub const ROLLING: f32 = 1.6;
 pub const STEER_FALLOFF: f32 = 26.0;
 /// Velocidade mínima para o handbrake travar drift (m/s).
 pub const DRIFT_MIN_SPEED: f32 = 12.0;
-/// Carga (s) para mini-turbo / super-turbo (VibeGame 1.0 / 2.1).
+/// Carga (s) para mini-turbo / super-turbo (1.0 / 2.1).
 pub const MINI_TURBO_CHARGE: f32 = 1.0;
 pub const SUPER_TURBO_CHARGE: f32 = 2.1;
 /// Duração dos turbos de drift (s).
 pub const MINI_TURBO_TIME: f32 = 0.85;
 pub const SUPER_TURBO_TIME: f32 = 1.6;
-/// Grip relativo fora do asfalto (relva, VibeGame surface 0.42).
+/// Grip relativo fora do asfalto (relva, surface 0.42).
 pub const OFFROAD_GRIP: f32 = 0.42;
-/// Escapatória lógica fora da pista (m, VibeGame `shoulder` 3.5).
+/// Escapatória lógica fora da pista (m, `shoulder` 3.5).
 pub const TRACK_SHOULDER: f32 = 3.5;
 /// Faixa ativa das paredes além do shoulder (m).
 pub const WALL_RANGE: f32 = 30.0;
@@ -62,9 +62,9 @@ pub struct VehicleStats {
     pub steer_speed: f32,
     /// Aderência (mata o slip fora de drift).
     pub grip: f32,
-    /// Fração de grip durante drift (VibeGame `drift-grip` 0.3).
+    /// Fração de grip durante drift (`drift-grip` 0.3).
     pub drift_grip: f32,
-    /// Multiplicador de aceleração com nitro (VibeGame `boost` 2.6).
+    /// Multiplicador de aceleração com nitro (`boost` 2.6).
     pub boost: f32,
     /// Recarga de nitro por segundo.
     pub boost_recharge: f32,
@@ -72,7 +72,7 @@ pub struct VehicleStats {
 
 impl Default for VehicleStats {
     fn default() -> Self {
-        // Stats do kart do jogador no grid.xml do VibeGame.
+        // Stats do kart do jogador no grid.xml de referência.
         Self {
             top_speed: 52.0,
             accel: 27.0,
@@ -193,7 +193,7 @@ pub struct Vehicle {
     pub airborne: bool,
     pub air_vy: f32,
     /// Razão de subida do terreno no frame anterior (m/s) — o pop do salto
-    /// de rampa usa-a (VibeGame: `slope × speed` no lábio).
+    /// de rampa usa-a (`slope × speed` no lábio).
     pub prev_climb: f32,
     /// Spin-out restante (s) — contacto forte pela traseira.
     pub spin: f32,
@@ -205,6 +205,8 @@ pub struct Vehicle {
     pub stuck: f32,
     /// FX: acumulador do fumo de drift.
     pub smoke_cd: f32,
+    /// Cooldown do boost pad (s) — a zona não re-dispara em série.
+    pub boost_cd: f32,
 }
 
 impl Vehicle {
@@ -282,6 +284,7 @@ pub fn vehicle_movement(
     time: Res<Time>,
     keys: Res<ButtonInput<bevy::input::keyboard::KeyCode>>,
     menus: Res<crate::menus::MenusOpen>,
+    latches: Res<crate::input_latch::KeyLatches>,
     runtime: Option<Res<TerrainRuntime>>,
     director: Option<Res<crate::racing::race::RaceDirector>>,
     track: Option<Res<crate::racing::race::TrackInfo>>,
@@ -297,20 +300,21 @@ pub fn vehicle_movement(
     let racing_allowed = director.as_ref().map(|d| d.racing_active()).unwrap_or(true);
     let in_launch = director.as_ref().map(|d| d.in_launch()).unwrap_or(false);
     let menus_open = menus.any();
+    // Latch de input (input_latch.rs): presses curtos de remote desktop
+    // movem a sério; held normal renova o piso a cada frame.
     let (w, s_key, a, d) = (
-        keys.pressed(bevy::input::keyboard::KeyCode::KeyW)
-            || keys.pressed(bevy::input::keyboard::KeyCode::ArrowUp),
-        keys.pressed(bevy::input::keyboard::KeyCode::KeyS)
-            || keys.pressed(bevy::input::keyboard::KeyCode::ArrowDown),
-        keys.pressed(bevy::input::keyboard::KeyCode::KeyA)
-            || keys.pressed(bevy::input::keyboard::KeyCode::ArrowLeft),
-        keys.pressed(bevy::input::keyboard::KeyCode::KeyD)
-            || keys.pressed(bevy::input::keyboard::KeyCode::ArrowRight),
+        latches.down(&keys, bevy::input::keyboard::KeyCode::KeyW)
+            || latches.down(&keys, bevy::input::keyboard::KeyCode::ArrowUp),
+        latches.down(&keys, bevy::input::keyboard::KeyCode::KeyS)
+            || latches.down(&keys, bevy::input::keyboard::KeyCode::ArrowDown),
+        latches.down(&keys, bevy::input::keyboard::KeyCode::KeyA)
+            || latches.down(&keys, bevy::input::keyboard::KeyCode::ArrowLeft),
+        latches.down(&keys, bevy::input::keyboard::KeyCode::KeyD)
+            || latches.down(&keys, bevy::input::keyboard::KeyCode::ArrowRight),
     );
-    let shift = keys.pressed(bevy::input::keyboard::KeyCode::ShiftLeft)
-        || keys.pressed(bevy::input::keyboard::KeyCode::ShiftRight);
-    let space = keys.pressed(bevy::input::keyboard::KeyCode::Space);
-    let respawn = keys.just_pressed(bevy::input::keyboard::KeyCode::KeyR);
+    let shift = latches.down(&keys, bevy::input::keyboard::KeyCode::ShiftLeft)
+        || latches.down(&keys, bevy::input::keyboard::KeyCode::ShiftRight);
+    let space = latches.down(&keys, bevy::input::keyboard::KeyCode::Space);
 
     // Contactos kart-vs-kart: snapshot → push circular + penalidade à
     // traseira forte (aplicado por entidade no loop abaixo).
@@ -350,17 +354,19 @@ pub fn vehicle_movement(
 
     for (entity, mut transform, mut vehicle, mut input) in &mut q {
         // ── input do jogador (a IA já escreveu o `VehicleInput` dela) ────
+        // VIVO desde o grid: W no countdown alimenta o rev do arranque
+        // foguete (o MOVIMENTO é que fica preso à largada, não o input).
         if vehicle.is_player() && !menus_open {
-            let racing = racing_allowed && vehicle.spin <= 0.0;
-            input.throttle = if racing && w { 1.0 } else { 0.0 };
-            input.brake = if racing && s_key { 1.0 } else { 0.0 };
-            input.steer = if racing {
+            let alive = vehicle.spin <= 0.0;
+            input.throttle = if alive && w { 1.0 } else { 0.0 };
+            input.brake = if alive && s_key { 1.0 } else { 0.0 };
+            input.steer = if alive {
                 ((d as i32 - a as i32) as f32).clamp(-1.0, 1.0)
             } else {
                 0.0
             };
-            input.handbrake = racing && space;
-            input.nitro = racing && shift;
+            input.handbrake = alive && space;
+            input.nitro = alive && shift;
         } else if menus_open && vehicle.is_player() {
             *input = VehicleInput::default();
         }
@@ -387,37 +393,8 @@ pub fn vehicle_movement(
         let stats = vehicle.stats.clone();
         let heading_vec = forward_of(vehicle.heading);
         let mut pos = transform.translation;
-
-        // ── respawn (R): reposito na estação de pista mais próxima ─────
-        if respawn && vehicle.is_player() && racing_allowed {
-            let face = pos + heading_vec * 6.0;
-            let target = runtime
-                .road_surface(face.x, face.z)
-                .or_else(|| runtime.road_surface(pos.x, pos.z));
-            if let Some(surf) = target {
-                let road = &runtime.roads[surf.road];
-                if let Some(hit) = crate::terrain::paths::nearest_on_path(
-                    &road.stations,
-                    bevy::math::Vec2::new(pos.x, pos.z),
-                ) {
-                    let ahead = (hit.station(road.stations.len()) as usize + 3)
-                        .min(road.stations.len() - 1);
-                    let at = road.stations[ahead];
-                    let next_i = (ahead + 1) % road.stations.len();
-                    let tangent = (road.stations[next_i] - at).normalize_or_zero();
-                    pos = Vec3::new(at.x, surf.y + 0.3, at.y);
-                    vehicle.heading = tangent.y.atan2(tangent.x);
-                    vehicle.speed = 0.0;
-                    vehicle.slip = 0.0;
-                    vehicle.airborne = false;
-                    vehicle.air_vy = 0.0;
-                    vehicle.drift_charge = 0.0;
-                    transform.translation = pos;
-                    transform.rotation = bevy::math::Quat::from_rotation_y(vehicle.heading);
-                    continue;
-                }
-            }
-        }
+        let (mut ramp_dy_here, mut ramp_dy_next) = (0.0_f32, 0.0_f32);
+        let mut surf_lateral = 0.0_f32;
 
         // ── superfície de condução ─────────────────────────────────────
         let surface = runtime.road_surface(pos.x, pos.z);
@@ -425,6 +402,26 @@ pub fn vehicle_movement(
             .map(|s| s.y)
             .unwrap_or_else(|| runtime.sample(pos.x, pos.z));
         let on_track = surface.is_some();
+        surf_lateral = surface.as_ref().map(|surf| surf.lateral).unwrap_or(0.0);
+        // Boost pad sob o kart (cooldown por kart). `surf.s` é estação
+        // fracionária — converter para arco em metros com o espaçamento.
+        vehicle.boost_cd = (vehicle.boost_cd - dt).max(0.0);
+        if let Some(track) = track.as_ref().filter(|t| t.road.is_some())
+            && let Some(surf) = &surface
+        {
+            let spacing = track.lap_length / track.stations.len().max(1) as f32;
+            let here = surf.s * spacing;
+            if track.boost_pad_at(here, surf.lateral) && vehicle.boost_cd <= 0.0 {
+                vehicle.boost_cd = 2.0;
+                vehicle.turbo = vehicle.turbo.max(1.3);
+                vehicle.turbo_super = false;
+                vehicle.nitro = (vehicle.nitro + 0.35).min(1.0);
+                sfx.write(crate::ambient::SfxEvent {
+                    clip: crate::ambient::SfxClip::Nitro,
+                    position: Some(pos),
+                });
+            }
+        }
         let grip_mult = if on_track { 1.0 } else { OFFROAD_GRIP };
 
         // ── aceleração / travão ────────────────────────────────────────
@@ -448,20 +445,26 @@ pub fn vehicle_movement(
         let speed = vehicle.speed;
         let headroom = (1.0 - speed / top).max(0.0);
         let resist = DRAG * speed * speed + ROLLING;
+        // Karts segurados na grelha até o GO (o rev do arranque é só som/FEEL).
+        let launch_hold = in_launch && !racing_allowed;
         // Compensação das resistências com o acelerador: a velocidade estabiliza
-        // EXATAMENTE no teto (VibeGame vehicle-control.ts 603-620).
+        // EXATAMENTE no teto (vehicle-control.ts 603-620). Fator 0.55:
+        // resposta viva (0.34 arrastava o arranque).
         let mut drive =
-            accel * headroom * input.throttle * grip_mult * 0.34 + resist * input.throttle;
+            accel * headroom * input.throttle * grip_mult * 0.55 + resist * input.throttle;
         if input.brake > 0.0 {
             if speed > 0.5 {
-                drive -= stats.brake * input.brake * 0.34;
+                drive -= stats.brake * input.brake * 0.55;
             } else {
                 // ré
-                drive = -16.0 * input.brake * grip_mult * 0.34 - resist * input.brake * 0.5;
+                drive = -20.0 * input.brake * grip_mult * 0.55 - resist * input.brake * 0.5;
             }
         }
         if input.throttle <= 0.0 && input.brake <= 0.0 && speed.abs() > 0.1 {
             drive -= speed.signum() * stats.engine_brake * 0.34;
+        }
+        if launch_hold {
+            drive = 0.0;
         }
         // Declive: a gravidade projeta na tangente da pista (amostragem
         // à frente/atrás ao longo do heading).
@@ -581,11 +584,33 @@ pub fn vehicle_movement(
             }
         }
 
+        // ── rampas: lomba sintética somada à superfície (here e next) ──
+        if let Some(track) = track.as_ref().filter(|t| t.road.is_some())
+            && let Some(road_idx) = track.road
+            && let Some(road) = runtime.roads.get(road_idx)
+        {
+            let spacing = track.lap_length / track.stations.len().max(1) as f32;
+            let proj = |p: Vec3| {
+                crate::terrain::paths::nearest_on_path(
+                    &road.stations,
+                    bevy::math::Vec2::new(p.x, p.z),
+                )
+                .map(|h| h.station(road.stations.len()) as f32 * spacing)
+                .unwrap_or(0.0)
+            };
+            let next_lateral = surface.as_ref().map(|surf| surf.lateral).unwrap_or(0.0);
+            (ramp_dy_here, _) = track.ramp_offset(proj(pos), surf_lateral);
+            (ramp_dy_next, _) = track.ramp_offset(proj(next), next_lateral);
+        }
+
         // ── vertical: assenta / lança no ar ────────────────────────────
-        let next_ground = runtime
+        let mut next_ground = runtime
             .road_surface(next.x, next.z)
             .map(|s| s.y)
             .unwrap_or_else(|| runtime.sample(next.x, next.z));
+        // A lomba soma à superfície — a subida alimenta `prev_climb` e o
+        // lábio (queda seca no fim da rampa) lança o kart.
+        next_ground += ramp_dy_next;
         if vehicle.airborne {
             vehicle.air_vy -= GRAVITY * dt;
             let mut y = pos.y + vehicle.air_vy * dt;
@@ -599,10 +624,10 @@ pub fn vehicle_movement(
             }
             next.y = y;
         } else {
-            let climb = (next_ground - ground_y) / dt.max(1e-4);
+            let climb = (next_ground - (ground_y + ramp_dy_here)) / dt.max(1e-4);
             if climb < -3.5 && new_speed > 8.0 {
                 // O chão caiu rápido — crista de rampa: lança com a subida
-                // anterior (VibeGame `vertical = slope × speed`).
+                // anterior (`vertical = slope × speed`).
                 vehicle.airborne = true;
                 vehicle.air_vy = vehicle.prev_climb.clamp(0.0, 14.0);
                 next.y = pos.y;
@@ -663,7 +688,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn stats_default_match_vibegame_grid() {
+    fn stats_default_match_reference_grid() {
         let s = VehicleStats::default();
         assert_eq!(s.top_speed, 52.0);
         assert_eq!(s.accel, 27.0);

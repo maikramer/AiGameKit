@@ -11,7 +11,6 @@ pipeline escolher octree/faces, só override quando o lab visual exigir.
 | [`findings/OCTREE_FACES_FINDINGS.md`](findings/OCTREE_FACES_FINDINGS.md) | Relação empírica octree × faces (simple-rpg, n=67) |
 | [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md) | `gameassets batch` / waves vramd |
 | [`findings/MESH_PIPELINE_FINDINGS.md`](findings/MESH_PIPELINE_FINDINGS.md) | DAG Round 3, LOD0, split árvores |
-| Exemplo vivo | `VibeGame/examples/simple-rpg/sample-gameassets/manifests/characters.yaml` |
 
 Código: `GameAssets/src/gameassets/manifest.py`, `omni_ctrl.py`;
 tune: `Text3D/src/text3d/bbox_tune.py`.
@@ -117,7 +116,7 @@ O manifesto **por asset** ganha quando há conflito explícito.
 
 ## 3. Eixos `size_m` (não confundir)
 
-Após export WebGL / VibeGame (**Y+ up**):
+Após export glTF (**Y+ up**):
 
 | Índice | Omni | Eixo | Vista de frente |
 |--------|------|------|-----------------|
@@ -346,7 +345,7 @@ gameassets batch --manifest manifest.yaml   # ou resume
 |-------|--------|
 | `game.yaml` → `octree_resolution` global | Bloqueia tune para o batch inteiro |
 | Payload vramd com octree “porque 256” | Idem; deixar quality + tune |
-| Runtime VibeGame / `index.html` | Nunca referenciar `_intermediate/` |
+| Runtime / pasta do jogo | Nunca referenciar `_intermediate/` |
 | Compensar octree baixo com weld/morph agressivo | Corrige sintoma; sobe detalhe na fonte |
 
 ---

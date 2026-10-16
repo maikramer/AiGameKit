@@ -382,7 +382,7 @@ def prompts_cmd(
     "public_dir",
     type=click.Path(file_okay=False, path_type=Path),
     required=True,
-    help="Pasta public/ do projecto Vite (cria assets/models, audio, …)",
+    help="Pasta public/ do jogo (cria assets/models, audio, …)",
 )
 @click.option(
     "--copy/--symlink",
@@ -871,7 +871,7 @@ class _DreamGroup(click.Group):
     cls=_DreamGroup,
     invoke_without_command=True,
     context_settings={"ignore_unknown_options": True},
-    short_help="Da ideia ao jogo: plano LLM → assets → projecto ViteGame.",
+    short_help="Da ideia ao jogo: plano LLM → assets → world.xml.",
 )
 @click.pass_context
 def dream_group(ctx: click.Context) -> None:
@@ -935,7 +935,7 @@ def dream_create_cmd(
     dry_run: bool,
     plan_json: Path | None,
 ) -> None:
-    """Da ideia ao jogo: gera assets, cena e projecto Vite com IA.
+    """Da ideia ao jogo: gera assets, cena (world.xml) e ficheiros do batch com IA.
 
     DESCRIPTION é a descrição do jogo em linguagem natural.
     """
@@ -1045,7 +1045,7 @@ def dream_create_cmd(
 @click.option(
     "--emit/--no-emit",
     default=True,
-    help="Regenerar game.yaml/manifest/world.xml/main.ts/index.html do plano refinado (default: on).",
+    help="Regenerar game.yaml/manifest/world.xml do plano refinado (default: on).",
 )
 @click.option("--max-assets", default=8, type=int, help="Número máximo de assets.")
 @click.option("--with-audio/--no-audio", default=True, help="Contexto: plano pode incluir áudio.")

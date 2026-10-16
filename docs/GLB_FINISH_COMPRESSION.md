@@ -80,10 +80,6 @@ text3d lod painted.glb -o ./out --basename prop --painted-mesh painted.glb \
 
 Validação: `aigamekit-lab check glb … --category lod0` exige `texture_format: ktx2` + `compression: meshopt`.
 
-## Runtime (VibeGame)
-
-`extras/gltf-bridge` liga `MeshoptDecoder` + `KTX2Loader` (basis transcoder). Sem isso, GLBs comprimidos falham no browser.
-
 ## Probe rápido
 
 ```bash

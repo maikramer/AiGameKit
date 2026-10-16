@@ -107,7 +107,7 @@ a leitura partia o render; por isso NÃO há `shaders_dir` no schema).
 
 ## História (para não repetir)
 
-- **2026-08-25** — VibeGame elimina o distribuidor por exemplo: plugin vite
+- **2026-08-25** — o motor TS elimina o distribuidor por exemplo: plugin vite
   `sharedAssets` (`0ff912e6`, `e642c7cb`) — "um pool, sem symlinks nem
   cópias". O `public/` do exemplo responde primeiro, o pool serve o resto.
 - **2026-09-01** — O Viber reintroduz cópias **por design**: o Bevy 0.19 não

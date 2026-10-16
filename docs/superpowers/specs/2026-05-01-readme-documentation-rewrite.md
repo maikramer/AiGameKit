@@ -117,7 +117,7 @@ License info.
 - **Common flags:** --draco, --append, --clip-name
 - **game-pack presets:** humanoid, creature, flying
 - **Python requirement:** Python 3.13 + bpy 5.1.0
-- **Pipeline:** Final stage after Rigging3D; produces animated GLB for VibeGame
+- **Pipeline:** Final stage after Rigging3D; produces the animated GLB deliverable
 
 ### 4.9 AiGameKitLab (`AiGameKitLab/README.md`) — ~280-350 lines
 
@@ -157,7 +157,7 @@ License info.
    - `prompts` — preview prompts (no GPU)
    - `batch` — full pipeline execution (20+ flags)
    - `resume` — smart state detection (_ROW_NEED_* states)
-   - `dream` — idea-to-game (LLM providers, Vite scaffold)
+   - `dream` — idea-to-game (LLM providers, plan + handoff)
    - `handoff` — mesh priority, audio format conversion
    - `validate` — asset validation thresholds
    - `mesh reorigin-feet` — GLB repositioning
@@ -179,25 +179,14 @@ License info.
 11. **Pipeline Integration:** How GameAssets orchestrates all sub-tools
 12. **Development & License**
 
-### 4.13 VibeGame (`VibeGame/README.md`) — ~400-500 lines
-
-- **CLI:** run, create, --version
-- **Core Concepts:** ECS (bitecs), World XML, Recipes, Plugins
-- **Declarative Scene:** XML format, available elements (GLTFLoader, PlayerGLTF, Skybox, Terrain, Player, OrbitCamera, etc.)
-- **GLTF Bridge:** loadGltfToScene, loadGltfAnimated, GltfAnimator, applyEquirectSkyEnvironment
-- **Plugin Reference:** Full table of available plugins
-- **Audio System:** AudioListener + camera, SFX/BGM
-- **Examples:** hello-world, simple-rpg
-- **Development:** Bun install, test, lint, format, build commands
-
-### 4.14 Root README (`README.md`) — ~350-400 lines
+### 4.13 Root README (`README.md`) — ~350-400 lines
 
 - **Overview:** Monorepo description, pipeline diagram
 - **Package Overview:** Table of all 14 packages with language, description, status
 - **Quick Start:** Install shared, install a tool, run a command
 - **Pipeline:** Full ASCII flow diagram (idea → image → 3D → texture → rig → animate → game)
 - **GameAssets Dream:** One-command idea-to-game
-- **VibeGame Integration:** GLB handoff, declarative scene
+- **Handoff:** GLB handoff to the game folder
 - **Build & CI:** make check, make test, per-package commands
 - **Code Style:** Python (ruff), Rust (cargo), TypeScript (prettier/eslint)
 - **License & References**
@@ -219,8 +208,7 @@ The READMEs will be written in dependency order (shared first, then consumers):
 11. **Animator3D** — depends on Rigging3D
 12. **AiGameKitLab** — debug tool, depends on all
 13. **GameAssets** — orchestrator, depends on all
-14. **VibeGame** — consumer, depends on GameAssets handoff
-15. **Root README** — references all packages
+14. **Root README** — references all packages
 
 Each README will be written as a complete file, replacing the existing one.
 
@@ -251,6 +239,5 @@ Each README will be written as a complete file, replacing the existing one.
 | Materialize | ~160 |
 | Terrain3D | ~140 |
 | GameAssets | ~750 |
-| VibeGame | ~450 |
 | Root | ~380 |
-| **Total** | **~4,130** |
+| **Total** | **~3,680** |

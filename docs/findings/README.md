@@ -12,15 +12,12 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [IMAGE_SKY_SOUND_FINDINGS.md](IMAGE_SKY_SOUND_FINDINGS.md) | Text2D, Skymap, audio trim, kernels |
 | [TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md](TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md) | Seamless 2.0: métrica continuidade (a antiga media igualdade), VAE tiling quebra costura, late-circular + roll, hires refine, heal |
 | [TEXT2SOUND_SA3_LOOP_FINDINGS.md](TEXT2SOUND_SA3_LOOP_FINDINGS.md) | BGM seamless SA3: equal-power, comprimento exacto, mastering dobrado |
-| [VIBEGAME_AUDIO_COMBAT_FINDINGS.md](VIBEGAME_AUDIO_COMBAT_FINDINGS.md) | Cull espacial, profiler Audio, SFX longos, melee impact 0.35 |
-| [VIBEGAME_COMBAT_FEEL_FINDINGS.md](VIBEGAME_COMBAT_FEEL_FINDINGS.md) | Hit-stop, camera shake, knockback CCT, stagger, telegraph, i-frames; PauseSystem vs timeScale |
-| [VIBEGAME_SPAWN_GROUND_FINDINGS.md](VIBEGAME_SPAWN_GROUND_FINDINGS.md) | Chão: estáticos AABB; creatures CCT; anti-settle / anti-fudge Y |
 | [KERNEL_OPTS_FINDINGS.md](KERNEL_OPTS_FINDINGS.md) | compile / channels-last / flashvdm defaults |
 | [ANIMATOR_RETARGET_FINDINGS.md](ANIMATOR_RETARGET_FINDINGS.md) | Quaternius retarget: loc_conv, `_bone_rest_dir`, QA; bipeds → `humanoid` (não `creature`); tabela HML22 |
 | [ANIMATOR_IK_LIMITS_FINDINGS.md](ANIMATOR_IK_LIMITS_FINDINGS.md) | IK 2-ossos + limites de juntas: pole por eixo de flexão, identidade `W=Wp·Rp⁻¹·R·B`, subframe, maioria-voto; `ik-limits` CLI |
 | [ANIMATOR_QUADRUPED_CLIPS_FINDINGS.md](ANIMATOR_QUADRUPED_CLIPS_FINDINGS.md) | Quadrúpedes: galope transverso (fases por pata, spine flex, voo), front/hind anatómico, death colapso terminal, hit flinch, attack com patas+lunge; Death≠chop / Hit≠mine |
 | [MOTION3D_FINDINGS.md](MOTION3D_FINDINGS.md) | Text-to-motion → SkinTokens: `apply-rigged`, aim/rest/folhas, neutro A-pose vs pés do alvo, in-place, venv |
-| [PRECOMPUTE_COLLIDERS_FINDINGS.md](PRECOMPUTE_COLLIDERS_FINDINGS.md) | Colisores cápsula/cilindro pré-calculados (tronco); `aigamekit-lab precompute` → `gameassets_handoff.json` → `PrecomputePlugin`; carve procedural |
+| [PRECOMPUTE_COLLIDERS_FINDINGS.md](PRECOMPUTE_COLLIDERS_FINDINGS.md) | Colisores cápsula/cilindro pré-calculados (tronco); `aigamekit-lab precompute` → `gameassets_handoff.json` (consumo no runtime); carve procedural |
 | [MODEL_CONSOLIDATION_STUDY.md](MODEL_CONSOLIDATION_STUDY.md) | Inventário de modelos/variantes (~166 GB HF) + cortes por tier (~44 GB: órfãos Sana/t5-base/T2MGPT, SA Open legado, Disty0 klein, HY-Motion full) e unificações de vendor (Real-ESRGAN, bg-remover, aliases) |
 | [TOOLKIT_CORE_PROFILE_STUDY.md](TOOLKIT_CORE_PROFILE_STUDY.md) | Uso real das 20 tools nos exemplos: Part3D/Motion3D/Intrinsic não usados (~42 GB); perfis install.sh `core|examples|all`; doc-bug "parts auto-detect" |
 
@@ -36,4 +33,4 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [`../mission/`](../mission/README.md) | Missão / premissas do monorepo |
 | [`../HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`](../HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md) | Lições forma / Part3D |
 | [`../GLB_FINISH_COMPRESSION.md`](../GLB_FINISH_COMPRESSION.md) | Happy path `text3d finish` / KTX2+meshopt (deps `ktx` + npx) |
-| [`../TESTING.md`](../TESTING.md) · [`../TESTING_PT.md`](../TESTING_PT.md) | Piso de cobertura (≥100/tool), suites `*coverage*`, anti-padrões, **armadilhas CI** (SIGILL, softfill sem Text3D, flakes Bun) |
+| [`../TESTING.md`](../TESTING.md) · [`../TESTING_PT.md`](../TESTING_PT.md) | Piso de cobertura (≥100/tool), suites `*coverage*`, anti-padrões, **armadilhas CI** (SIGILL, softfill sem Text3D) |

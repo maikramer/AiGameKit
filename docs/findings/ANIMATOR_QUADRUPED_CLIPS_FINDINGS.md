@@ -46,7 +46,7 @@ desliza às velocidades de jogo) mas com papel por pata: traseiras ganham drive
   para `side`, patas dobram progressivamente — traseiras antes das dianteiras)
   → bounce amortecido → repouso com micro-respiração em decaimento. A pose
   terminal é estável (últimos frames convergem) — o Viber segura-a
-  (`play_death_animation` terminal) e o VibeGame toca `loop: false`.
+  (`play_death_animation` terminal); noutros runtimes, tocar com `loop: false`.
 - **`hit_keyframes`** (one-shot, 16 frames): flinch — recoil no impacto (~t0.25),
   recuperação com overshoot amortecido, pernas cedem (crouch reflexo).
 - **`attack_keyframes` v2**: patas passam a participar — traseiras enrolam no
@@ -63,9 +63,8 @@ sobre os clips no game-pack procedural (já existente) e **os geradores são
 limits-clean por construção** — o teste `test_generated_clips_are_ik_clean`
 corre `enforce_joint_limits` sobre os 6 clips e exige 0 correções.
 
-Nomes mantêm `Animator3D_*`: ambos os runtimes resolvem por normalização
-(Viber `normalize_clip_name` → `death`/`hit`; VibeGame aliases em
-`resolveClipName`). **Zero mudanças nos engines.**
+Nomes mantêm `Animator3D_*`: os runtimes resolvem por normalização
+(Viber `normalize_clip_name` → `death`/`hit`). **Zero mudanças nos engines.**
 
 ## Validação
 

@@ -2,7 +2,7 @@
 
 Escopo: debug bridge — BRP sobre HTTP (`bevy_remote`) com métodos `viber.*`:
 screenshots, input sintético, árvore de entidades, logs, profiler e REPL
-Luau. É o equivalente nativo do tooling Chrome DevTools MCP do VibeGame.
+Luau. É o equivalente nativo do tooling Chrome DevTools MCP do motor TS.
 
 ## Ficheiros
 

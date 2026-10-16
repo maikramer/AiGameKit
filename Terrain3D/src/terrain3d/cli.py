@@ -81,7 +81,7 @@ def cli() -> None:
     type=click.Choice(["png", "ahgt"]),
     default="png",
     show_default=True,
-    help="Heightmap encoding: png (8-bit legacy) ou ahgt (uint16, sem terracing — VibeGame lê nativamente)",
+    help="Heightmap encoding: png (8-bit legacy) ou ahgt (uint16, sem terracing — o motor nativo lê diretamente)",
 )
 @click.option(
     "--quality",

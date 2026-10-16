@@ -345,4 +345,4 @@ terrain`/`rock`) — mais o AABB mundo e o hint de coletável
 1. Substituir `<Composition>` por `<GameObject>` + `<GLTFLoader>` + `mesh-url: …_collision.glb` onde o GLB existe.
 2. Ligar `merchant` a `npc_merchant_lod0.glb`; avaliar `shade_lod0` vs bogling.
 3. Trocar arco/obelisco/deserto por `sandstone_arch` / `desert_obelisk` GLBs.
-4. Correr `vibegame analyze examples/simple-rpg/index.html` após cada região.
+4. Correr `viber analyze` após cada região.

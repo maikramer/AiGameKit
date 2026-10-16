@@ -23,7 +23,7 @@ mesh code itself.
 | Asset categories | `categories.py` | Target faces + hints + `lod_ref_m` |
 | Orçamento LOD/atlas | `aigamekit_shared.lod_budget`, `paint_budget` | **Silhueta** `sqrt(d1·d2)`, não volume — ver anti-patterns |
 | GLB validation rules | `data/rules/*.yaml` | lod0, lod1, lod2, rigged, animated, collision |
-| Handoff to VibeGame | `handoff_export.py` | Prefers animated GLB |
+| Handoff para a engine | `handoff_export.py` | Prefers animated GLB |
 | TUI dashboard | `dashboard.py` | All stages (not paint-only) |
 
 ## MASTER PIPELINE (Round 3)
@@ -77,8 +77,9 @@ gameassets skill install
 ```
 
 `batch` runs the master pipeline by default. `resume` picks up from last checkpoint.
-`dream` goes from text description to playable project (`dream "<desc>"` ≡
-`dream create "<desc>"`; `dream refine plan.json "instrução"` itera o plano com
+`dream` goes from text description to generated assets + plano (`dream "<desc>"` ≡
+`dream create "<desc>"`; emite `game.yaml`/`manifest.yaml`/`world.xml`, sem scaffold
+de projeto; `dream refine plan.json "instrução"` itera o plano com
 backup `.bak`; `dream explain plan.json --json` audita com exit 1 em erros).
 Flags: `--no-vramd`, `--vramd-stream`, `--no-rig`, `--no-animate`,
 `--redo-split`, `--seed N`, `--replan`, `--llm-provider ollama`, …

@@ -91,11 +91,11 @@ fi
 # Grupo A (leve)  — vramd rocks3d texture2d text2sound
 #                   skymap2d aigamekitlab materialize
 # Grupo B (GPU)   — cadeia 3D + integração: vramd text2d text3d paint3d
-#                   rigging3d animator3d terrain3d vibegame gameassets
+#                   rigging3d animator3d terrain3d gameassets
 # (vramd em AMBOS: o UMS gere a VRAM 6 GB com sdnq-int4 — sem ele, o
 # ensure_vram legacy recusa fp16 e a cadeia 3D não arranca.)
 GROUP_A="vramd rocks3d texture2d text2sound skymap2d aigamekitlab materialize"
-GROUP_B="vramd text2d text3d paint3d rigging3d animator3d terrain3d vibegame gameassets"
+GROUP_B="vramd text2d text3d paint3d rigging3d animator3d terrain3d gameassets"
 
 clean_artifacts() {
   # Apaga TUDO (incl. venvs persistidos) e recria o dir de venvs — o uv

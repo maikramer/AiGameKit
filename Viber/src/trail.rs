@@ -1,5 +1,5 @@
-//! Sword trace — ribbon da lâmina durante o golpe (port melhorado de
-//! `VibeGame/src/extras/weapon-trail.ts`).
+//! Sword trace — ribbon da lâmina durante o golpe (port melhorado do
+//! original `weapon-trail.ts`).
 //!
 //! Cada frame com o swing ativo amostra dois pontos world-space da lâmina
 //! (hilt e tip, derivados do AABB da arma) num ring buffer; a geometria é um
@@ -336,7 +336,7 @@ pub fn weapon_trail_system(
 }
 
 /// AABB local da arma agregado dos descendentes com mesh → endpoints da
-/// lâmina (mesma estratégia do `bladeEndpoints` do VibeGame). `None` enquanto
+/// lâmina (mesma estratégia do `bladeEndpoints`). `None` enquanto
 /// o GLB não chegou.
 fn compute_blade(
     root: Entity,

@@ -3,7 +3,7 @@
 //! assets partilhados.
 //!
 //! A duplicação já foi corrigida e reintroduzida antes: o plugin
-//! `sharedAssets` do VibeGame (2026-08-25, "um pool, sem symlinks nem cópias
+//! `sharedAssets` (2026-08-25, "um pool, sem symlinks nem cópias
 //! por exemplo") eliminou o distribuidor por exemplo; o Viber reintroduziu
 //! um espelho por mundo (`sync_assets.py`) enquanto o Bevy não lia meshopt —
 //! e entretanto assets vivos chegaram a ser commitados DENTRO do espelho

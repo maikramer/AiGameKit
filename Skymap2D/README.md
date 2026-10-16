@@ -208,16 +208,14 @@ The HF model ([Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFo
 1. **Resizes** to the correct 2:1 equirectangular ratio.
 2. Applies a **50% vertical shift** to move poles from center to edges.
 
-### Three.js / VibeGame integration
+### Three.js integration
 
 The Three.js PMREM convention maps equirectangular textures as:
 
 - `u = atan(dir.z, dir.x)` — horizontal azimuth
 - `v = asin(dir.y)` — vertical elevation
 
-Center of the image = horizon, top = zenith, bottom = nadir. Portrait images or images with swapped axes may produce "pillar" artifacts. Normalize to 2:1 landscape before PMREM.
-
-For VibeGame integration, use `applyEquirectSkyEnvironment()` from `vibegame` (`VibeGame/src/extras/sky-env.ts`), which handles PMREM generation from equirectangular sources.
+Center of the image = horizon, top = zenith, bottom = nadir. Portrait images or images with swapped axes may produce "pillar" artifacts. Normalize to 2:1 landscape before PMREM (any Three.js-based viewer needs this; use `PMREMGenerator.fromEquirectangular`).
 
 ### EXR format
 
@@ -249,7 +247,7 @@ The JSON sidecar contains: seed, prompt (final with equirectangular suffix), gui
 
 ## Pipeline Integration
 
-Skymap2D generates equirectangular sky images for use as environment maps in 3D engines. In the GameAssets pipeline, it is triggered by `gameassets dream` (with `--with-sky`) and produces HDR/LDR sky images that feed into VibeGame's `applyEquirectSkyEnvironment()`.
+Skymap2D generates equirectangular sky images for use as environment maps in 3D engines. In the GameAssets pipeline, it is triggered by `gameassets dream` (with `--with-sky`) and produces HDR/LDR sky images that the engine consumes as environment/skybox sources.
 
 ```bash
 # Via GameAssets pipeline
@@ -260,7 +258,7 @@ gameassets handoff --public-dir public/   # copies sky images to the game projec
 
 | Engine | How to use |
 |--------|-----------|
-| **VibeGame** | `applyEquirectSkyEnvironment()` from `vibegame` — handles PMREM |
+| **Three.js** | `PMREMGenerator.fromEquirectangular()` — handles PMREM |
 | **Godot** | Environment → Sky → PanoramaSky → assign panorama texture |
 | **Unity** | Skybox material with Panoramic shader → assign texture |
 | **Unreal Engine** | Sky Sphere → equirectangular texture map |

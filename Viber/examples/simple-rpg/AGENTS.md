@@ -1,6 +1,6 @@
 # AGENTS.md — examples/simple-rpg
 
-Mundo de referência jogável (port do `VibeGame/examples/simple-rpg`).
+Mundo de referência jogável (port do exemplo original, motor TS).
 Panorama e estado: [`README.md`](README.md). Aqui ficam as regras para editar.
 
 ## Só estático (LER PRIMEIRO)

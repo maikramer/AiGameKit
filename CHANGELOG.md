@@ -85,17 +85,10 @@ entrada a bater certo com a CLI e release por tag.
   --no-terrain` — as `--no-3d/--no-rig/--no-animate` são do `batch`), providers com
   `ollama`, `manifest.yaml` (não `.csv`), `modelserver`→`vramd`, pool de assets dos
   exemplos no caminho certo (`Viber/examples/shared-assets`), README_PT completa
-  (pipeline/dream/VibeGame/quality, env vars, manual, Makefile).
+  (pipeline/dream/quality, env vars, manual, Makefile).
 - `installer/unified.py` ressincronizado com a API do clified 0.9 (o
   `text2d_venv_only` rebentava com TypeError); wrappers `scripts/installer.py`
   consolidados num template único; dead code removido (`tool_script.py`, ramo
   `requirements_file`).
 - CI verde: ruff/mypy/clippy pré-existentes limpos (Viber tools, Shared,
   Materialize `approx_constant`); código vendored excluído do ruff.
-
-## [v0.5.0] — 2026-08-30
-
-Tag de bump do VibeGame (0.5.0) criada pelo workflow Release; a publicação npm
-falhou por falta de `NPM_TOKEN` (o pacote `aigamekit-vibegame` nunca chegou ao
-npm). Sem GitHub Release anexada — a partir da v0.6.0 as tags criam a release
-automaticamente.

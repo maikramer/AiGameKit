@@ -1,7 +1,7 @@
 # Texturas — layout, fontes e licenças
 
-Biblioteca de materiais tileable do pool partilhado, servida a web e engine
-nativa pelo plugin `vibegame({ sharedAssets })` (URLs `/assets/textures/…`).
+Biblioteca de materiais tileable do pool partilhado, servida por URL
+(`/assets/textures/…`) à web e à engine nativa.
 
 ## Layout — uma pasta por material
 
@@ -21,8 +21,8 @@ nativamente (browsers + Bevy com a feature `webp`).
 
 ## Materiais
 
-### AI — vramd texture2d + Materialize (regeneráveis por
-`VibeGame/examples/simple-rpg/regen_textures.py`)
+### AI — vramd texture2d + Materialize (regeneráveis; metadados de geração
+em `gen.json`)
 
 `asphalt`¹, `cobblestone_road`, `desert_sand`, `forest_floor`,
 `mountain_stone`, `roof_tiles`, `snow_peak`, `swamp_mud`, `vale_grass`,

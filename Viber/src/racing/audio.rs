@@ -1,6 +1,6 @@
 //! Áudio de corrida — loop de motor com pitch por velocidade (só o kart do
-//! jogador tem voz, como no VibeGame) + loop de skid em drift. O VibeGame
-//! sintetiza o motor com osciladores; aqui o `engine_rev.ogg` do pool dá a
+//! jogador tem voz, como na referência) + loop de skid em drift. Lá o motor
+//! é sintetizado com osciladores; aqui o `engine_rev.ogg` do pool dá a
 //! voz, com playback-rate kira a mapear o rpm.
 
 use bevy::asset::{AssetServer, Handle};

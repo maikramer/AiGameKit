@@ -60,11 +60,11 @@ duras (git=`main`, vramd, LOD0). Tribal knowledge longa vive nos docs abaixo —
 | Compressão GLB | [`docs/GLB_FINISH_COMPRESSION.md`](docs/GLB_FINISH_COMPRESSION.md) |
 | Testes / cobertura | [`docs/TESTING.md`](docs/TESTING.md) |
 | Índice findings | [`docs/findings/README.md`](docs/findings/README.md) |
-| Pacote concreto | `<Package>/AGENTS.md` (ex. `GameAssets/`, `Text3D/`, `VibeGame/`) |
+| Pacote concreto | `<Package>/AGENTS.md` (ex. `GameAssets/`, `Text3D/`) |
 
 ## Repository Overview
 
-Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textures, skymaps, PBR map generation, rigging, animation, asset batching, a browser 3D engine, and a native Bevy engine. Primarily Python with two Rust crates (Materialize, Viber) and one TypeScript package (VibeGame).
+Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textures, skymaps, PBR map generation, rigging, animation, asset batching, and a native Bevy engine. Primarily Python with two Rust crates (Materialize, Viber).
 
 **Key directories:**
 
@@ -89,9 +89,8 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Terrain3D/` | Python | `terrain3d` | examples | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
 | `Rocks3D/` | Python | `rocks3d` | examples | Procedural 3D rock generation (no PyTorch) |
 | `Vramd/` | Python | `modelserver` (CLI `vramd`/`vramd`) | core | Unified Model Server (vramd) — single-process GPU/VRAM supervisor |
-| `VibeGame/` | TypeScript | `aigamekit-vibegame` (npm) | core | 3D game engine (bitecs, Three.js, Vite build; Bun tests); `gltf-anim` plugin; `PlayerGLTF` recipe |
 
-All Python packages depend on `aigamekit-shared` (install Shared first). VibeGame is standalone (Bun + Vite); it does not use `aigamekit-shared`.
+All Python packages depend on `aigamekit-shared` (install Shared first).
 
 **Upstream references:** [Materialize](https://github.com/BoundingBoxSoftware/Materialize) (Bounding Box Software) — see `Materialize/README.md`. Root `README.md` / `README_PT.md` have a **References** section.
 
@@ -103,7 +102,7 @@ All Python packages depend on `aigamekit-shared` (install Shared first). VibeGam
 make check
 ```
 
-This runs: lint + format check + typecheck + all **Python** tests and the Rust crates **Materialize + Viber** (`cargo test`). It does **not** run VibeGame (Bun/TypeScript); use `make test-vibegame` and related targets in `VibeGame/`.
+This runs: lint + format check + typecheck + all **Python** tests and the Rust crates **Materialize + Viber** (`cargo test`).
 
 ### Lint
 
@@ -155,7 +154,6 @@ make test-materialize  # cargo test in Materialize/
 make test-viber        # cargo test in Viber/
 make test-terrain3d    # pytest Terrain3D only
 make test-rocks3d      # pytest Rocks3D only
-make test-vibegame     # bun install (frozen) + bun test in VibeGame/
 ```
 
 Coverage floor (≥100 cases/tool), suite naming, and CPU-first rules:
@@ -171,40 +169,11 @@ animator3d jump
 animator3d fall
 ```
 
-### VibeGame (TypeScript / Bun)
+### GLB handoff & idea-to-game
 
-From repo root (requires [Bun](https://bun.sh/) on `PATH`):
+**GLB handoff (Text3D / Paint3D / GameAssets):** `gameassets handoff --public-dir <game>/public` packs GLBs (+ audio/sky/icons) from the profile `output_dir` into a game's asset folder (`public/assets/…` + `gameassets_handoff.json`; prefers animated GLB when present). Layout: [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md). Animator3D: [`docs/ANIMATOR3D_AFTER_RIG.md`](docs/ANIMATOR3D_AFTER_RIG.md).
 
-```bash
-cd VibeGame && bun install --frozen-lockfile   # install deps
-make test-vibegame    # tests (runs install first)
-make check-vibegame   # tsc --noEmit
-make lint-vibegame    # eslint
-make fmt-vibegame     # prettier --write
-make fmt-check-vibegame  # prettier --check
-make build-vibegame   # vite build
-```
-
-Formatting: Prettier (`make fmt-vibegame` / `make fmt-check-vibegame`, or `bun run format` / `bun run format:check` in `VibeGame/`).
-
-**Unified installer (CLI on PATH):** from monorepo root, with **Bun** and **Node** available:
-
-```bash
-./install.sh vibegame
-# or: python3 -m aigamekit_shared.installer.unified vibegame
-```
-
-This runs `bun install --frozen-lockfile` and `bun run build` in `VibeGame/`, then installs `vibegame` into `~/.local/bin` (wrapper → `scripts/vibegame-cli.mjs`). Subcommands: `vibegame create <name>`, `vibegame --version`.
-
-**GLB handoff (Text3D / Paint3D / GameAssets → browser):** `loadGltfToScene`, `loadGltfAnimated`, or `loadGltfToSceneWithAnimator` from `vibegame` (`VibeGame/src/extras/gltf-bridge.ts`); declarative `<GLTFLoader url="…">` or `<PlayerGLTF model-url="…">` (`VibeGame/src/plugins/gltf-xml/`, player recipe). Clips: `GltfAnimator` (`VibeGame/src/extras/gltf-animator.ts`); ECS plugin `gltf-anim` optional. Equirect sky → PMREM: `applyEquirectSkyEnvironment` (`VibeGame/src/extras/sky-env.ts`). Pack: `gameassets handoff --public-dir …` (prefers animated GLB when present). Layout: [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md). Examples: [`VibeGame/examples/hello-world/`](VibeGame/examples/hello-world/) (minimal), [`VibeGame/examples/simple-rpg/`](VibeGame/examples/simple-rpg/) (full pipeline). Animator3D: [`docs/ANIMATOR3D_AFTER_RIG.md`](docs/ANIMATOR3D_AFTER_RIG.md). AI: [`docs/ZERO_TO_GAME_AI.md`](docs/ZERO_TO_GAME_AI.md).
-
-Declarative GLB player in world XML:
-
-```html
-<PlayerGLTF pos="0 0 0" model-url="/assets/models/hero.glb"></PlayerGLTF>
-```
-
-**Idea-to-game (`gameassets dream`):** `gameassets dream "description" --dry-run` calls an LLM to plan assets+scene, emits `game.yaml`/`manifest.yaml`/`world.xml`/`main.ts`/`index.html`, runs batch+terrain+sky+icons+handoff, and scaffolds a playable Vite project. Pipeline stages (3D, rig, animate) are auto-detected from manifest columns and `game.yaml` profile blocks. Opt out per feature with `--no-audio`, `--no-sky`, or `--no-terrain` (the per-stage `--no-3d`/`--no-rig`/`--no-animate` flags belong to `gameassets batch`). Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context, planlint). Providers: `--llm-provider openai|huggingface|ollama|stdin` (ollama = local, zero-key). `--dry-run` generates files without GPU. Plans are linted + auto-repaired (`planlint`), cached by description+flags (`--replan` to force; env `AIGAMEKIT_DREAM_CACHE`), and carry provenance (`source`/`seed`/`repairs`). `--seed N` pins deterministic generation. Iterate: `gameassets dream refine plan.json "add a dragon"` (LLM edits the plan, `.bak` backup, seeds preserved, regenerates batch files); audit: `gameassets dream explain plan.json [--json]` (exit 1 on lint errors — CI-ready).
+**Idea-to-game (`gameassets dream`):** `gameassets dream "description" --dry-run` calls an LLM to plan assets+scene, emits `game.yaml`/`manifest.yaml`/`world.xml`, and runs batch+terrain+sky+icons+handoff; the emitted files are consumed by the native engine (Viber). Pipeline stages (3D, rig, animate) are auto-detected from manifest columns and `game.yaml` profile blocks. Opt out per feature with `--no-audio`, `--no-sky`, or `--no-terrain` (the per-stage `--no-3d`/`--no-rig`/`--no-animate` flags belong to `gameassets batch`). Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context, planlint). Providers: `--llm-provider openai|huggingface|ollama|stdin` (ollama = local, zero-key). `--dry-run` generates files without GPU. Plans are linted + auto-repaired (`planlint`), cached by description+flags (`--replan` to force; env `AIGAMEKIT_DREAM_CACHE`), and carry provenance (`source`/`seed`/`repairs`). `--seed N` pins deterministic generation. Iterate: `gameassets dream refine plan.json "add a dragon"` (LLM edits the plan, `.bak` backup, seeds preserved, regenerates batch files); audit: `gameassets dream explain plan.json [--json]` (exit 1 on lint errors — CI-ready).
 
 ### Tests — single test file or test class
 
@@ -225,10 +194,10 @@ cargo test --manifest-path Materialize/Cargo.toml test_preset_roundtrip  # Singl
 ### Instalação por perfil (install.sh)
 
 ```bash
-./install.sh              # SEM ARGUMENTOS = perfil core (10): vramd text2d text3d paint3d rigging3d
-                         #   animator3d gameassets materialize aigamekitlab vibegame
+./install.sh              # SEM ARGUMENTOS = perfil core (9): vramd text2d text3d paint3d rigging3d
+                         #   animator3d gameassets materialize aigamekitlab
 ./install.sh core         # o mesmo, explícito
-./install.sh examples     # tudo que os jogos de exemplo usam (16): core + texture2d skymap2d
+./install.sh examples     # tudo que os jogos de exemplo usam (15): core + texture2d skymap2d
                          #   text2sound terrain3d rocks3d viber
 ./install.sh --all        # catálogo completo (acrescenta part3d, motion3d, intrinsic)
 ./install.sh <tool>       # tool individual (sempre disponível)
@@ -236,7 +205,7 @@ cargo test --manifest-path Materialize/Cargo.toml test_preset_roundtrip  # Singl
 ```
 
 Pre-flight (`scripts/preflight.py`) antes de qualquer install: valida pré-requisitos
-externos (Node ≥ 20.12, Bun, cargo, GPU, disco) e pára **uma vez** com os comandos para
+externos (Node ≥ 20.12, cargo, GPU, disco) e pára **uma vez** com os comandos para
 copiar quando falta algo obrigatório (bypass agentes/CI: `AIGAMEKIT_PREFLIGHT=0`). Perfis
 continuam depois de falhas com resumo OK/FALHOU; em sucesso correm `gameassets doctor`
 (check único de primeiro uso) e imprimem os próximos passos.
@@ -332,14 +301,14 @@ def resolve_binary(env_name: str, default_name: str) -> str:
 
 ### Testing conventions
 
-- Framework: **pytest** with `pytest-cov` (Python); **cargo test** (Materialize); **bun test** (VibeGame).
+- Framework: **pytest** with `pytest-cov` (Python); **cargo test** (Materialize).
 - Test file location: `<Package>/tests/test_<module>.py`.
 - Test class organization: group by tested feature in classes (`class TestFeatureName:`).
 - Use `capsys` fixture for stdout/stderr assertions.
 - Use `unittest.mock.patch` and `patch.dict(os.environ, ...)` for env isolation.
 - GPU-dependent tests should auto-skip without CUDA (use `pytest.importorskip` or guards).
 - Config in each `pyproject.toml`: `pythonpath = ["src"]`, `testpaths = ["tests"]`.
-- **Coverage floor:** every installer tool + accessory keeps **≥100** collected automated cases. Prefer CPU-first suites named `test_*_coverage_*.py` (VibeGame: `tests/coverage-100.test.ts`; Materialize: `#[cfg(test)]` in `src/`). Full guide: [`docs/TESTING.md`](docs/TESTING.md).
+- **Coverage floor:** every installer tool + accessory keeps **≥100** collected automated cases. Prefer CPU-first suites named `test_*_coverage_*.py` (Materialize: `#[cfg(test)]` in `src/`). Full guide: [`docs/TESTING.md`](docs/TESTING.md).
 - Lazy-import heavy deps (`torch`, `diffusers`) **inside** tests so pytest collection stays cheap.
 - Do not add fluff “pad” tests that only assert source trees are non-empty.
 
@@ -426,7 +395,7 @@ See `AiGameKitLab/README.md` for full documentation.
 
 ## Viber (Bevy engine)
 
-The monorepo also includes **Viber** (`viber`), a native game engine crate in Bevy 0.20 (0.20.0-rc.2 via a git-tag `[patch.crates-io]` until the registry publishes it) that runs declarative world XML — the native counterpart to VibeGame. Commands (from repo root, requires `cargo`):
+The monorepo also includes **Viber** (`viber`), a native game engine crate in Bevy 0.20 (0.20.0-rc.2 via a git-tag `[patch.crates-io]` until the registry publishes it) that runs declarative world XML. Commands (from repo root, requires `cargo`):
 
 ```bash
 cd Viber && cargo run -- analyze world.xml   # headless XML validation (CI-ready)
@@ -446,17 +415,17 @@ make test-viber                              # cargo test in Viber/
 # or: python3 -m aigamekit_shared.installer.unified viber
 ```
 
-This runs `cargo build --release` in `Viber/` and installs the binary as `viber` into `~/.local/bin`. Subcommands: `viber create <name>` (static world scaffold, flat editable terrain), `viber analyze [world.xml]` (headless, CI-ready; sem caminho procura `world.xml` → `worlds/*.xml`), `viber run [world.xml]` (Bevy window; `--bridge`, `--release`/`--no-cargo`), `viber bake <world.xml> [--verify]`, `viber scene (ls/get/find/set/insert/rm/mv/dup/apply/undo/redo/save/pick/entities/catalog/add/drop/files) [--live]`, `viber terrain (sample/brush/paint)`, `viber tool (list/scatter/settle/canonicalize)`, `viber debug …` (client do debug bridge), `viber session …` (QA lease), `viber --version`/`help`. `viber run` inside a Viber checkout delegates to `cargo run -- run` (engine rebuilt from source, like `vibegame run`); `analyze` never delegates.
+This runs `cargo build --release` in `Viber/` and installs the binary as `viber` into `~/.local/bin`. Subcommands: `viber create <name>` (static world scaffold, flat editable terrain), `viber analyze [world.xml]` (headless, CI-ready; sem caminho procura `world.xml` → `worlds/*.xml`), `viber run [world.xml]` (Bevy window; `--bridge`, `--release`/`--no-cargo`), `viber bake <world.xml> [--verify]`, `viber scene (ls/get/find/set/insert/rm/mv/dup/apply/undo/redo/save/pick/entities/catalog/add/drop/files) [--live]`, `viber terrain (sample/brush/paint)`, `viber tool (list/scatter/settle/canonicalize)`, `viber debug …` (client do debug bridge), `viber session …` (QA lease), `viber --version`/`help`. `viber run` inside a Viber checkout delegates to `cargo run -- run` (engine rebuilt from source); `analyze` never delegates.
 
-**Debug bridge:** `viber run world.xml --bridge` expõe BRP sobre HTTP na porta 15702 (`--bridge PORT`, env `VIBER_BRIDGE_PORT`) — screenshot (request+poll), input sintético (key/text/click/move), árvore de entidades, ring-buffer de logs, edição viva `viber.scene.*`/`viber.tool.*`, mais os métodos BRP builtin (`world.query`, `world.insert_components`, …) para inspecção/mutação live do ECS. Cliente: `viber debug probe|screenshot|tree|logs|click|move|key|text`. É o equivalente nativo do tooling Chrome DevTools MCP do VibeGame — detalhes em `Viber/AGENTS.md` e `Viber/docs/BRIDGE.md`.
+**Debug bridge:** `viber run world.xml --bridge` expõe BRP sobre HTTP na porta 15702 (`--bridge PORT`, env `VIBER_BRIDGE_PORT`) — screenshot (request+poll), input sintético (key/text/click/move), árvore de entidades, ring-buffer de logs, edição viva `viber.scene.*`/`viber.tool.*`, mais os métodos BRP builtin (`world.query`, `world.insert_components`, …) para inspecção/mutação live do ECS. Cliente: `viber debug probe|screenshot|tree|logs|click|move|key|text` (o equivalente nativo do tooling Chrome DevTools MCP) — detalhes em `Viber/AGENTS.md` e `Viber/docs/BRIDGE.md`.
 
 The world XML follows **Bevy naming** (`translation`, `euler`, `half-size`, `base-color`) — no Unity/three.js vocabulary. Short tag contract: `Entity`, `Group`, shapes `Cuboid`/`Sphere`/`Cylinder`/`Plane`/`Capsule`, lights `PointLight`/`DirectionalLight`/`AmbientLight`, `OrbitCamera`, and `<Include src="…">` for composition (depth ≤ 8; an `<Include>` may carry `translation`/`euler`/`scale` — it wraps the file's content in a group, so moving the include moves everything it declares).
 
-**Terrain (Phase 1 ✅):** declarative **volumetric** terrain ported from the VibeGame terrain/water/road plugins — `<Terrain>` takes a PNG/`.ahgt`/procedural heightmap as INPUT (the base term of an SDF `VoxelField`), carved by features (`<TerrainPad>`, `<Lake>`, `<River>`, `<Road>`, `<RoadNetwork>`, plus voxel solids `<Cliff>`/`<Cave>`/`<Arch>`/`<Bridge>`); columns are meshed by **transvoxel** (marching cubes with LOD transition cells) with a per-column LOD ladder and trimesh colliders (`Viber/src/terrain/voxel/`). Carve order is Pads → Lakes → Rivers → Roads (bridges last); every mutation goes through the brush engine (`Viber/src/terrain/brush.rs`) with owner-journal reverts. Gameplay queries land as resources: `TerrainRuntime::sample/in_water/on_road`, `WaterBody`, `RoadPath` (spawner `avoid-water`/`near-water`/`isPointOnRoad` parity). Demo world: `Viber/worlds/terrain.xml`. Unknown tags are skipped as no-ops with an `analyze` report (`--strict` fails) — so worlds written for VibeGame parse natively and unimplemented tags degrade gracefully.
+**Terrain (Phase 1 ✅):** declarative **volumetric** terrain — `<Terrain>` takes a PNG/`.ahgt`/procedural heightmap as INPUT (the base term of an SDF `VoxelField`), carved by features (`<TerrainPad>`, `<Lake>`, `<River>`, `<Road>`, `<RoadNetwork>`, plus voxel solids `<Cliff>`/`<Cave>`/`<Arch>`/`<Bridge>`); columns are meshed by **transvoxel** (marching cubes with LOD transition cells) with a per-column LOD ladder and trimesh colliders (`Viber/src/terrain/voxel/`). Carve order is Pads → Lakes → Rivers → Roads (bridges last); every mutation goes through the brush engine (`Viber/src/terrain/brush.rs`) with owner-journal reverts. Gameplay queries land as resources: `TerrainRuntime::sample/in_water/on_road`, `WaterBody`, `RoadPath` (spawner `avoid-water`/`near-water`/`isPointOnRoad` parity). Demo world: `Viber/worlds/terrain.xml`. Unknown tags are skipped as no-ops with an `analyze` report (`--strict` fails) — unimplemented tags degrade gracefully.
 
 **Scripts + UI (Phases 2 ✅):** `script="caminho.lua"` (universal attr) binds an entity to a sandboxed Luau chunk in `<world>/scripts/` (`Viber/src/luau/`) — scripts declare per-instance typed props Godot-`@export`-style (`--@export speed: number(0..4) = 1.1`, value in the node's `prop-speed`, read with `viber.prop`; schema `viber scene schema`, lint `script-prop-*`) and Godot-style **signals + groups** (`--@signal opened(gold)` + `viber.emit`; listeners are data on the emitter: `connect-opened="@group:method; name:method"`; `groups="a b"`, `viber.call_group`; `viber scene groups`, lint `connect-*`) — hooks `on_update(dt)` (+ optional `on_player_attack(px, pz)` for aggro chains); the `viber.*` API (perception, terrain-snapped movement, wander/chase AI, combat, quests, vault, interaction) and `viber.ui.*` (declarative `<UiRoot>`/`<UiStyle>` UI) are documented in **`Viber/docs/LUA_API.md`**, with hot-reload on save (`Viber/src/hot_reload.rs`). Scripts outside a spawner's `activation-radius` (default 45 m) don't run at all — the AI LOD.
 
-Roadmap: Phases 0–3 ✅ — XML + spawn; volumetric terrain (+ features); Luau scripting (mlua sandboxed, `viber.*`/`viber.ui.*` API in `Viber/docs/LUA_API.md`); physics via **Rapier** (`bevy_rapier3d`, declarative `collider`/`rigidbody`) + `simple-rpg` ported (combat, quests, economy, menus, travel, save, skills, living world — 10 loops done, see `docs/findings/VIBER_SIMPLE_RPG_PORT.md`); static worlds + agent/editor parity via `viber bake`/`viber scene`. The `EngineConfig` tags (`NavMesh`, `SpawnGate`, `ProjectileTemplate` + `viber.fire_projectile`, `AdaptiveQuality`, `PostFxDebugToggle`) have runtime consumers. Open items: GPU vegetation instancing. **VibeGame (TS/browser) remains the browser engine** — Viber is the native track; both share the GLB/KTX2/meshopt assets produced by the `gameassets` pipeline.
+Roadmap: Phases 0–3 ✅ — XML + spawn; volumetric terrain (+ features); Luau scripting (mlua sandboxed, `viber.*`/`viber.ui.*` API in `Viber/docs/LUA_API.md`); physics via **Rapier** (`bevy_rapier3d`, declarative `collider`/`rigidbody`) + `simple-rpg` ported (combat, quests, economy, menus, travel, save, skills, living world — 10 loops done, see `docs/findings/VIBER_SIMPLE_RPG_PORT.md`); static worlds + agent/editor parity via `viber bake`/`viber scene`. The `EngineConfig` tags (`NavMesh`, `SpawnGate`, `ProjectileTemplate` + `viber.fire_projectile`, `AdaptiveQuality`, `PostFxDebugToggle`) have runtime consumers. Open items: GPU vegetation instancing. Viber consumes the GLB/KTX2/meshopt assets produced by the `gameassets` pipeline.
 
 ## ViberEditor (Bevy editor for Viber)
 
@@ -611,15 +580,13 @@ CI runs on push/PR to `main` (`.github/workflows/ci.yml`):
 1. **lint:** ruff check + ruff format --check + pre-commit (includes **mypy** on Shared — ruff green ≠ lint green)
 2. **test-python:** pytest matrix on Python 3.13 (Shared, GameAssets, Texture2D, Skymap2D, Rigging3D, Text2Sound, AiGameKitLab, Rocks3D, Animator3D) — each job installs `Shared/.[dev]` first
 3. **test-rust:** cargo fmt --check + cargo clippy + cargo test (Materialize; continue-on-error)
-4. **vibegame:** Bun check + eslint + prettier + test + vite build (root workflow; not only `VibeGame/.github/`)
 
 Excluded from the Python matrix (heavy PyTorch / diffusers / GPU stacks): Text2D, Text3D, Paint3D, Part3D, Terrain3D, ModelServer.
 
-CI pitfalls (softfill sem Text3D, pedalboard SIGILL, Shared `[dev]` mesh deps, VibeGame flakes): [`docs/TESTING.md`](docs/TESTING.md) · [`docs/TESTING_PT.md`](docs/TESTING_PT.md).
+CI pitfalls (softfill sem Text3D, pedalboard SIGILL, Shared `[dev]` mesh deps): [`docs/TESTING.md`](docs/TESTING.md) · [`docs/TESTING_PT.md`](docs/TESTING_PT.md).
 
 ## Important Notes
 
-- Pre-commit (ruff + mypy) does **not** run VibeGame ESLint/Prettier; use `make lint-vibegame` / `make fmt-check-vibegame` locally or rely on the root **vibegame** CI job.
 - Shared `[dev]` must keep `numpy` / `scipy` / `trimesh` so `mesh_repair*` tests collect on CI (`pip install -e Shared/.[dev]`).
 - Do NOT modify vendored code in `Paint3D/src/paint3d/hy3dpaint/`, `Paint3D/src/paint3d/hunyuan3d-2.1/`, or `Rigging3D/src/rigging3d/skintokens/` — these are excluded from lint.
 - Shared must be installed before any other package: `cd Shared && pip install -e .`
@@ -641,39 +608,24 @@ CI pitfalls (softfill sem Text3D, pedalboard SIGILL, Shared `[dev]` mesh deps, V
 
 - Prefere explicações e pedidos de funcionalidade em português ao trabalhar neste repositório.
 - **Git: NÃO criar branches — trabalhar sempre no `main`.** O utilizador quer commits diretos sobre `main`; gere merges/integração de trabalhos paralelos manualmente. O agente nunca deve abrir feature-branches (`git checkout -b`, etc.) a menos que o utilizador peça explicitamente.
-- Para `vibegame run`: instalação no **app** deve poder ser opcional quando `node_modules` já está completo; na **engine**, o CLI pode correr `bun install` automaticamente se faltarem dependências declaradas no `package.json` (evita falhas de build por módulos em falta); usar `--skip-engine-install` ou `--skip-install` para pular esse passo quando o ambiente já está sincronizado.
-- Spawner e conteúdo declarativo no VibeGame: manter o mesmo estilo de recipes/parsers/XML em `index.html` já usado no projeto.
 - Spawner: diferenciar objetos estáticos (árvores, props) de dinâmicos (caixas empurráveis, inimigos em movimento, etc.) e usar perfis que definam defaults automáticos por tipo de objeto.
 - Ajustes de spawn e terreno: priorizar soluções que não degradem muito a performance do mapa.
-- Lógica por objeto no VibeGame: scripts ao nível da **entidade** (estilo MonoBehaviour no modelo); expor via atributo `script` no recipe que cria a entidade (ex. `GLTFLoader`) ou filho `<MonoBehaviour>` com merge, em linha com o plugin `MonoBehaviour`.
-- VibeGame: correções reutilizáveis devem ir para a **engine**; no **jogo/exemplo** (ex. `simple-rpg`) ficam só ajustes específicos desse jogo — incluindo alinhar `index.html`/manifests aos assets em `public/` (não referenciar `_intermediate` no runtime); estabilizar **LOD0** antes de introduzir um sistema de LOD dinâmico completo.
-- Exemplos como `simple-rpg`: pós-processamento e partículas com intensidade moderada para jogabilidade, mesmo quando os efeitos permanecem ativos para teste; para regressões visuais/jogo, preferir que o agente **itere no browser** (MCP Chrome/DevTools ou Playwright) em vez de só listar passos manuais.
-- Áudio 3D e SFX de movimento: preferir integração via sistema da engine (XML/recipes, `AudioListener` + câmera principal) e alinhar o som à ação; evitar silêncio inicial longo **e caudas ~20–30 s** nos WAV (trim na geração / `regen_sounds.py`); whoosh/hit de melee no **pico do clip (~35%)**, não no key-edge; QA com `?profiler=audio` / `__VIBEGAME__.audio`. Detalhe: [`docs/findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md`](docs/findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md), [`VibeGame/docs/AUDIO.md`](VibeGame/docs/AUDIO.md).
+- Áudio gerado (SFX/música): evitar silêncio inicial longo e caudas ~20–30 s nos WAV — fazer trim na geração.
 - Instalações e retries de ferramentas devem ser **não-interativos**: `install.sh`, instaladores por pacote e loops de correção não devem bloquear à espera de input (ex. prompts de licença, confirmações); quando a automação falha, reportar e seguir em vez de ficar preso num retry interativo. Em `install.sh --all` priorizar reuso de cache (pip/uv) e alinhamento de versões entre pacotes irmãos para reduzir downloads/builds redundantes.
 - Pipeline de game assets deve tratar o **LOD0 como o asset final entregável** com autodeteção do estágio terminal: se o asset tem animação, o GLB animado vira LOD0; se tem rig sem animação, o rigged vira LOD0; se só chega ao paint, o LOD0 é decimado do painted para 1.2x `target_faces` da categoria (com tangents+KTX2+meshopt via `--finish-lod0`). LOD0 sem rig/animação quando o asset os tem é regressão.
 - CLIs de progresso e dashboards do `gameassets batch` devem refletir **todas as stages** do pipeline (LOD, rig, animate, validate) e não parar visualmente no paint quando há mais trabalho pela frente.
 
 ## Learned Workspace Facts
 
-- Terreno em exemplos VibeGame pode parecer voxel/escadinha; amostragem de altura/normal com um único ponto tende a falhar — estratégias multi-amostra ou suavização costumam ser necessárias para alinhar props ao chão. Árvores/erva a flutuar: (1) pivô GLB no centro em vez da base (pipeline Text3D/GameAssets → origem nos pés por omissão); (2) mesh leaf densificado vs spawn grosso — `meshSurfaceResolutionForPoint` tem de usar `maxBoostOverAabb` do deepest leaf (igual ao chunk), não só `boostAt(ponto)` (floats esparsos em dunas/pad skirt); ver `terrain`/`spawner` `context.md`. No recipe `<Terrain>`, campos kebab-case; `collision-resolution` (32/64/128) no `TerrainLOD` sem ser sobrescrito pela `resolution` do chunk.
-- **VibeGame chão:** estáticos (`tree`/`foliage`/`place`) = AABB + `TerrainSpawned` + resync após pad/road/river. Dinâmicos (`creature` / `role=enemy|npc`) = spawn seed Y + **CCT** no heightfield; perfil `groundAlign: none`, `baseYOffset: 0`. Scripts = AI/anim só — sem lift/snap/BVH/`settle`. `goblin_collision.glb` unused. Docs: [`docs/findings/VIBEGAME_SPAWN_GROUND_FINDINGS.md`](docs/findings/VIBEGAME_SPAWN_GROUND_FINDINGS.md), `VibeGame/src/plugins/spawner/context.md`.
-- **VibeGame rigidbodies: só TOP-LEVEL com `place`.** O `TerrainPlaceSystem` escreve o mundo em Transform E Rigidbody; entidades parentadas (`<Group pos≠0>` + filhos com `pos` local) NUNCA espelham o mundo no body Rapier (rb fica 0,0,0 → herói cai através do objeto). Para salas/estruturas: `<TerrainPad>` achata o terreno (altura = terreno no centro) + entidades top-level com `place="at: X Z"` — tudo cai no plano do pad. Dentro do core plano do pad, o placement ancora no plano analítico (`sampleTerrainSurfaceMatrix` → `padPlane: true` → `TerrainPlaceSystem` usa `s.worldY`); sem isso a amostragem do mesh lattice (LOD grosso à distância) mistura a borda do pad com o terreno e afunda/flutua props até ~1 m. Regressão coberta por `tests/unit/spawner/pad-plane-anchor.test.ts`. Exemplo: `examples/simple-rpg/public/world/interiors.xml` (3 salas em zona remota, portais de saída `building-portal.ts`).
 - O comando `gameassets mesh reorigin-feet` repõe a origem de GLBs estáticos nos pés/base; modelos rigged com animação podem precisar de correção de orientação de root (ex. rotação) antes de centrar o pivô — não aplicar só `reorigin-feet` sem validar o resultado.
 - O **rigged GLB** tem de herdar a origem/pivô e a orientação do LOD0 (mesh centrada em X/Z, y=0 na sola dos pés, em pé na vertical correta) e o esqueleto tem de estar alinhado e dentro da malha — não rotacionado, não deslocado em Y para fora do mesh. Helpers de debug (ex. icosphere em 0,0,0, eixos visuais) NÃO devem ficar no GLB final exportado pela stage de rig.
 - Text3D / Hunyuan3D (marching cubes): paredes duplas, rachas, edifícios tipo casca-plástico. Reparo: `aigamekit_shared.mesh_repair` perfis `topology_clean` / `pre_decimate_uv` / `part_decode` / `post_voxel`. `topology_clean` actual: weld → slivers/debris → fill → watertight **seletivo** (diâmetro de loop) → shade-smooth; **sem** `force_close_base`/flare/Taubin (removidos — destruíam capela). **Base oca por baixo é OK** — QA `_shape` foca cortes/forma graves, não fechar chão. Refs Text2D eye-level 3/4 (`categories.building` + `prompt_builder`). Paint: `ensure_clean_for_paint` + `paint_prep.restrict_inpaint`. Lições: `docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`.
 - **topology-fix rápido (engine arrays)**: `text3d topology-fix --engine arrays|auto|bpy` (default `arrays`; `auto`≡arrays). GameAssets batch/resume passa `--engine arrays`. Filtros `topology_clean` vetorizados em `aigamekit_shared.mesh_repair_arrays` (numpy/scipy) quando o mesh não tem UVs/weights/shape-keys/armature; fill/caps/`make_watertight` ficam em bmesh. Morph-close no engine arrays corre **depois** do weld. Estudo: `docs/TOPOLOGY_FIX_GPU_STUDY.md`.
 - **Octree / faces / manifesto:** happy path = `category` + `size_m` (sem `octree_resolution`). `char_m=(L·H·W)^(1/3)` → `bbox_tune` → octree; faces ≈ `8×10⁴·char_m²` ≈ `κ·octree²`. Props: tecto faces (128–160). Terrain/rock: **piso físico** `√(8e4·char²/κ)×1.125` (cobre antigos +32 manuais anti-buracos). Hero dedos = único override típico (`octree`+`mc_level: 0`). Manual: [`docs/MANIFEST_AUTHORING.md`](docs/MANIFEST_AUTHORING.md). Dados: [`docs/findings/OCTREE_FACES_FINDINGS.md`](docs/findings/OCTREE_FACES_FINDINGS.md).
 - **vramd ops (residual / singleton / idle):** detalhe em [`docs/findings/UMS_VRAM_FINDINGS.md`](docs/findings/UMS_VRAM_FINDINGS.md) e checklist na secção Model Server acima. Nunca `kill`/pkill GPU com vramd busy; `vramd respawn <backend>` após editar código de tool.
-- O comando `vibegame run` foi concebido para rebuild/atualização da engine face a exemplos que usam `file:vibegame`; em Windows podem ocorrer falhas de cópia/cache (`ENOENT` no pacote `vibegame`) e é preciso alvo/cwd coerente com a raiz da engine ou exemplo com `dev` ligado à engine.
-- Skymap2D e equirect/PMREM: o modelo HF Flux-LoRA-Equirectangular-v3 devolve imagens em resolução errada (1024×768 em vez do pedido 2048×1024) e com os polos ao centro vertical em vez das bordas; Skymap2D `generator.py` faz auto-resize e shift vertical de 50% para corrigir. O `PMREMGenerator` do Three.js ignora `texture.offset`/`repeat` no shader interno — para ajustar UV de texturas equirect antes de `fromEquirectangular()` é necessário manipular o bitmap a nível de píxeis (canvas). Convenção equirect Three.js: `u = atan(dir.z, dir.x)`, `v = asin(dir.y)` — centro da imagem = horizonte, topo = zénite, fundo = nadir. Texturas equirect em **retrato** (altura > largura) ou com eixos trocados podem mapear o azimute ao eixo vertical do bitmap e produzir artefactos tipo «pilares» no céu; convém normalizar para panorama 2:1 em paisagem antes do PMREM quando isso ocorrer.
-- Dependências de screen-space / pós-processamento (ex. `screen-space-reflections`) podem importar símbolos removidos ou renomeados no Three.js (ex. `WebGLMultipleRenderTargets`), falhando no Vite com «No matching export» até alinhar versões do Three ou substituir o efeito. Em áudio Web, `AudioContext` bloqueado ou `listener.positionX` indisponível costuma ligar-se a autoplay sem gesto do utilizador e/ou à ausência de cadeia válida `AudioListener` + câmera principal.
-- **VibeGame áudio/combate:** bank com cull espacial (`maxDistance` default 40); caches 2D≠spatial; **`preloadSounds` no browser enfileira até gesto** (`allowSoundPreload` via `<Scene resume-audio-on-user-gesture>` / `resumeAudioContextOnFirstUserGesture`) — Howl no boot = warning autoplay; profiler tab Audio (`?profiler=audio`, `__VIBEGAME__.audio`); SFX one-shot curtos (caudas ~20–30 s = “combate infinito”); impacto melee/harvest em **`ATTACK_IMPACT_FRACTION = 0.35`** (pico Quaternius ~27%, não 0.7). Docs: [`VibeGame/docs/AUDIO.md`](VibeGame/docs/AUDIO.md), [`docs/findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md`](docs/findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md).
-- **VibeGame DevTools noise:** Typr (troika FloatingText) → `unsupported GPOS/GSUB` silenciado por `silenceTyprOpentypeNoise` no plugin `vibegame()`; yoga/`@pmndrs/uikit` WASM no prebundle Vite → Firefox `URL constructor` / `sourceMappingURL: null` — excluir `yoga-layout` + `@pmndrs/uikit` de `optimizeDeps` (plugin faz merge; limpar `node_modules/.vite`). WebGL `DEPTH_ATTACHMENT: Attachment has no width or height` no boot → EffectComposer/shadow a 0×0 durante warmup — `syncComposerSize` + guard no warmup + `shadowMapSize` clamp. Ver [`VibeGame/src/vite/context.md`](VibeGame/src/vite/context.md), [`rendering/context.md`](VibeGame/src/plugins/rendering/context.md).
-- **VibeGame world modular:** `<Include src="/world/…">` expande antes do parse (`expandIncludes`, depth≤8, ciclos fail-fast) — browser `fetch`, headless/analyze disco. Plugin `city-layout` (`CityGrid` + Street/Wall/Building; coords célula com **espaço**). Offline: `vibegame analyze index.html` (includes quebrados, assets em falta, overlaps sólidos). Docs: `VibeGame/src/core/xml/context.md`, `city-layout/context.md`, `cli/context.md`; exemplo `simple-rpg/public/world/`.
-- O conteúdo sob `<Scene>` no VibeGame é injetado como HTML (`innerHTML`); a tag nativa **`<script>`** não serve para marcar módulos TS do motor — usar atributo `script` nos recipes ou um nome de elemento que não colida com HTML.
-- Sem URL de heightmap no terreno, `TerrainLOD` / `@interverse/three-terrain-lod` pode gerar um heightmap procedural internamente; os ficheiros exportados pelo Terrain3D (`terrain.json`, `heightmap.png`, etc.) só têm efeito se o recipe/plugin apontar para eles — atributos XML não suportados podem ser ignorados em silêncio. A geração de heightmaps com **Terrain3D** (difusão) pode exceder a VRAM confortável em GPUs da ordem de **~6 GB**; nesse caso o fluxo típico é gerar noutra máquina com mais VRAM e copiar os artefactos para `public/` do exemplo.
+- Skymap2D e equirect: o modelo HF Flux-LoRA-Equirectangular-v3 devolve imagens em resolução errada (1024×768 em vez do pedido 2048×1024) e com os polos ao centro vertical em vez das bordas; Skymap2D `generator.py` faz auto-resize e shift vertical de 50% para corrigir. Texturas equirect em **retrato** (altura > largura) ou com eixos trocados produzem artefactos quando usadas como panorama; convém normalizar para panorama 2:1 em paisagem.
+- A geração de heightmaps com **Terrain3D** (difusão) pode exceder a VRAM confortável em GPUs da ordem de **~6 GB**; nesse caso o fluxo típico é gerar noutra máquina com mais VRAM e copiar os artefactos para a pasta do jogo.
 - OpenCode (`opencode.json` no repositório): entradas MCP locais devem declarar `type: "local"` e `command` como array de strings com executável e argumentos (não o par `command` + `args` usado noutras ferramentas).
-- VibeGame: corpos dinâmicos GLTF podem ter colisor desalinhado do mesh se o centro do AABB não coincidir com a origem da entidade — definir `Collider.posOffset*` a partir do delta AABB→Transform em espaço local. No plugin de partículas (`three.quarks`), usar o emissor interno `ParticleSystem.emitter`; um wrapper `ParticleEmitter` à parte faz o batch descartar o sistema no update e as partículas deixam de aparecer.
 - No PyPI, `bpy>=5.2.0` (LTS) exige Python 3.13. Rigging3D e Animator3D usam stack **3.13 + `bpy>=5.2.0`** — não assumir outro Python/`bpy` para estes pacotes. Meshopt nativo no exporter GLTF (`export_meshopt_compression_enable`); em Linux precisa de `libmeshoptimizer.so` (`libmeshoptimizer-dev`). KTX2/UASTC: `@gltf-transform/cli` **+** binário `ktx` (KTX-Software) — só npx não chega; ver [`docs/GLB_FINISH_COMPRESSION.md`](docs/GLB_FINISH_COMPRESSION.md).
 - **QualityEngine** (`aigamekit_shared.quality.QualityEngine`): sistema unificado de presets de qualidade cross-tool. 5 tiers (`fast|low|medium|high|highest`) em `Shared/src/aigamekit_shared/data/quality-profiles.yaml`, 14 categorias de assets + 11 audio_kinds em `asset-categories.yaml`. Todas as tools Python expõem `--quality` (e opcionalmente `--category`): Text2D, Texture2D, Skymap2D, Text3D, Paint3D, Part3D, Text2Sound, Rigging3D, Terrain3D, Motion3D. O QualityEngine faz resolução soft — preenche defaults só quando o utilizador não explicitou o parâmetro (via `ParameterSource`). O GameAssets usa `generation:` no `game.yaml` (mapeia para `--quality`) e passa `--quality`/`--category` às sub-tools. Spec: `docs/superpowers/specs/2026-04-30-quality-presets-design.md`.
 

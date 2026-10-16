@@ -1,4 +1,5 @@
-//! Profiler da engine — o análogo nativo do `?profiler=1` do VibeGame, com
+//! Profiler da engine — o análogo nativo do profiler do motor TS
+//! (`?profiler=1`), com
 //! os mesmos tabs: **Sistemas** (timings por sistema + grupos + contadores),
 //! **Mundo** (player/câmara/entidades próximas), **Física** (Rapier),
 //! **Áudio** (buses/sinks) e **Extras** (toggles de debug da engine).
@@ -13,7 +14,7 @@
 //!   `viber.profiler.export` (JSON para ficheiro) — cliente `viber debug
 //!   prof --tab/--export`;
 //! * teclas com a janela aberta: **F5** muda de aba, **F12/Pause** congela
-//!   (aneis estáveis — o *Pause* do VibeGame), **Backquote** exporta,
+//!   (aneis estáveis — o *Pause* original), **Backquote** exporta,
 //!   **PageUp/PageDown** muda o raio de "próximas".
 //!
 //! Timings por sistema: o Bevy 0.19 não expõe tempos por sistema, por isso
@@ -104,7 +105,7 @@ impl Default for ProfilerState {
     }
 }
 
-/// Contador global de frames (o `frameCount` do snapshot do VibeGame).
+/// Contador global de frames (o `frameCount` do snapshot).
 #[derive(Resource, Default)]
 pub struct FrameCounter(pub u64);
 
@@ -144,14 +145,14 @@ impl FrameStats {
         })
     }
 
-    /// P95 discreto sobre a janela (o `frameP95Ms` do VibeGame).
+    /// P95 discreto sobre a janela (o `frameP95Ms` da referência).
     fn p95_ms(&self) -> Option<f32> {
         if self.samples.is_empty() {
             return None;
         }
         let mut sorted: Vec<f32> = self.samples.iter().copied().collect();
         sorted.sort_by(f32::total_cmp);
-        // p95 discreto do VibeGame: ceil(n·0.95)-1.
+        // p95 discreto: ceil(n·0.95)-1.
         let idx = (sorted.len() * 95).div_ceil(100) - 1;
         Some(sorted[idx])
     }
@@ -545,7 +546,7 @@ pub fn full_snapshot(world: &mut World) -> serde_json::Value {
     value
 }
 
-/// Copia o [`full_snapshot`] para o clipboard (o "Copy JSON" do VibeGame).
+/// Copia o [`full_snapshot`] para o clipboard (o "Copy JSON" original).
 /// Devolve o número de bytes colocados ou o motivo da falha (sem display,
 /// Wayland/X11 indisponível, …).
 pub fn copy_snapshot_to_clipboard(world: &mut World) -> Result<usize, String> {
@@ -593,7 +594,7 @@ pub fn export_to_file(world: &mut World, path: Option<PathBuf>) -> std::io::Resu
 // ---------------------------------------------------------------- extras
 
 /// Um toggle de debug da engine listado no tab **Extras** — o mecanismo dos
-/// `registerProfilerExtra` do VibeGame (aqui são função ponteiro `&World`).
+/// `registerProfilerExtra` da referência (aqui são função ponteiro `&World`).
 #[derive(Clone)]
 pub struct ProfilerExtra {
     pub id: &'static str,

@@ -122,7 +122,7 @@ impl HeightMapU16 {
     /// Decodes a Bevy `Image` into a height grid.
     ///
     /// Accepts 16-bit grayscale (`R16Uint` / `R16Unorm` / `R16Float`),
-    /// 8-bit grayscale (`R8Unorm`) and RGBA8 (red channel, VibeGame
+    /// 8-bit grayscale (`R8Unorm`) and RGBA8 (red channel; the
     /// "R=high/G=low" packing also works because red == high byte).
     /// 8-bit values are expanded to the full 16-bit range (`v * 257`).
     /// `R16Float` samples are IEEE 754 half-floats converted manually;
@@ -339,7 +339,7 @@ impl HeightMapU16 {
             }),
             // 8-bit gray expands to the full 16-bit range (255 -> 65535).
             TextureFormat::R8Unorm => (1, &|b: &[u8]| b[0] as u16 * 257),
-            // RGBA8: red channel only (VibeGame "R=high/G=low" packing reads
+            // RGBA8: red channel only (the "R=high/G=low" packing reads
             // back correctly because red == the high byte there).
             TextureFormat::Rgba8Unorm | TextureFormat::Rgba8UnormSrgb => {
                 (4, &|b: &[u8]| b[0] as u16 * 257)

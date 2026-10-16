@@ -141,7 +141,7 @@ Scripts manuseiam via `viber.ui.*` (eventos, `create/destroy`, `query/rect`,
 - Vetores `"x y z"` com broadcast de 1 valor; **2 valores = erro**.
 - `<Include src>` depth ≤ 8, ciclos fail-fast; `world`/`scene` aninhados = erro.
 - Tags desconhecidas = skip no-op com relatório no `analyze` (`--strict` = erro) —
-  mundos escritos para o VibeGame parseiam e degradam com garcia.
+  mundos escritos para o motor TS antigo parseiam e degradam com garcia.
 - Atributos desconhecidos = warning (não conta o `texture=` num `<Entity>` puro).
 - O `analyze` audita assets (GLB/texturas/heightmaps/BGM/scripts ausentes, Draco/
   Basis não suportados — meshopt É expandido), quests e conflitos estrada × água/

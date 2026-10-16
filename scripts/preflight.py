@@ -43,7 +43,6 @@ CORE_TOOLS = (
     "gameassets",
     "materialize",
     "aigamekitlab",
-    "vibegame",
 )
 EXAMPLES_EXTRA_TOOLS = ("texture2d", "skymap2d", "text2sound", "terrain3d", "rocks3d", "viber")
 ALL_EXTRA_TOOLS = ("part3d", "motion3d", "intrinsic")
@@ -54,7 +53,7 @@ PROFILES: dict[str, tuple[str, ...]] = {
     "all": CORE_TOOLS + EXAMPLES_EXTRA_TOOLS + ALL_EXTRA_TOOLS,
 }
 PROFILE_DESCRIPTIONS = {
-    "core": "zero-a-jogo mínimo (DAG GLB animado → browser)",
+    "core": "zero-a-jogo mínimo (DAG GLB animado)",
     "examples": "tudo que os jogos de exemplo usam (core + céu/áudio/texturas/terreno/rochas + Viber)",
     "all": "catálogo completo (examples + part3d, motion3d, intrinsic)",
 }
@@ -79,7 +78,7 @@ GPU_TOOLS = frozenset(
 # --- Limites -----------------------------------------------------------------
 
 MIN_PYTHON = (3, 10)  # engine clified; o 3.13 das tools é provisionado pelo uv
-MIN_NODE = (20, 12)  # rolldown do VibeGame (apt do Ubuntu 24.04 traz 18.x)
+MIN_NODE = (20, 12)  # compressão KTX2/meshopt via npx (apt do Ubuntu 24.04 traz 18.x)
 MIN_DISK_GB = 25  # venvs do perfil core ≈ 21 GB (sem contar pesos HF em ~/.cache)
 
 NODE_FIX = (
@@ -88,11 +87,8 @@ NODE_FIX = (
     else "brew install node"
 )
 NODE_FIX_WINDOWS = "winget install OpenJS.NodeJS.LTS"
-BUN_FIX = "curl -fsSL https://bun.sh/install | bash"
-BUN_FIX_WINDOWS = 'powershell -c "irm bun.sh/install.ps1 | iex"'
 CARGO_FIX = "curl -sSf https://sh.rustup.rs | sh"
 CARGO_FIX_WINDOWS = "winget install Rustlang.Rustup"
-UNZIP_FIX = "sudo apt install unzip"
 
 
 @dataclass
@@ -166,19 +162,15 @@ def check_python() -> Check:
 
 
 def check_node(tool_set: frozenset[str]) -> Check:
-    if "vibegame" not in tool_set and not ({"text3d", "gameassets"} & tool_set):
+    if not ({"text3d", "gameassets"} & tool_set):
         return Check(name="Node.js", status="ok", detail="não necessário para este conjunto", needed_for="—")
+    needed = "compressão KTX2/meshopt (npx)"
     version = _run(["node", "--version"])
-    needed = "vibegame (build) e compressão KTX2/meshopt (npx)"
     if version is None:
-        status = "fail" if "vibegame" in tool_set else "warn"
-        missing_detail = (
-            "não encontrado" if "vibegame" in tool_set else "não encontrado — KTX2/meshopt via npx ficam offline"
-        )
         return Check(
             name=f"Node.js ≥ {MIN_NODE[0]}.{MIN_NODE[1]}",
-            status=status,
-            detail=missing_detail,
+            status="warn",
+            detail="não encontrado — KTX2/meshopt via npx ficam offline",
             needed_for=needed,
             fix_linux=NODE_FIX,
             fix_windows=NODE_FIX_WINDOWS,
@@ -186,8 +178,8 @@ def check_node(tool_set: frozenset[str]) -> Check:
     if _version_tuple(version) < MIN_NODE:
         return Check(
             name=f"Node.js ≥ {MIN_NODE[0]}.{MIN_NODE[1]}",
-            status="fail" if "vibegame" in tool_set else "warn",
-            detail=f"encontrado {version} — demasiado velho para o rolldown do VibeGame",
+            status="warn",
+            detail=f"encontrado {version} — demasiado velho para as ferramentas npx",
             needed_for=needed,
             fix_linux=NODE_FIX,
             fix_windows=NODE_FIX_WINDOWS,
@@ -198,37 +190,6 @@ def check_node(tool_set: frozenset[str]) -> Check:
         detail=version,
         needed_for=needed,
     )
-
-
-def check_bun(tool_set: frozenset[str]) -> Check:
-    if "vibegame" not in tool_set:
-        return Check(name="Bun", status="ok", detail="não necessário para este conjunto", needed_for="—")
-    version = _run(["bun", "--version"])
-    if version is None:
-        fixes: dict[str, str] = {"fix_linux": BUN_FIX, "fix_windows": BUN_FIX_WINDOWS}
-        return Check(
-            name="Bun",
-            status="fail",
-            detail="não encontrado (necessário para vibegame)",
-            needed_for="vibegame",
-            **fixes,
-        )
-    return Check(name="Bun", status="ok", detail=version, needed_for="vibegame")
-
-
-def check_unzip(tool_set: frozenset[str]) -> Check:
-    """O instalador oficial do Bun (Linux) precisa de unzip — só checar se o Bun falta."""
-    if IS_WINDOWS or IS_MACOS or "vibegame" not in tool_set or _which("bun") is not None:
-        return Check(name="unzip", status="ok", detail="não necessário", needed_for="—")
-    if _which("unzip") is None:
-        return Check(
-            name="unzip",
-            status="fail",
-            detail="não encontrado — o instalador do Bun precisa dele",
-            needed_for="instalar Bun (vibegame)",
-            fix_linux=UNZIP_FIX,
-        )
-    return Check(name="unzip", status="ok", detail="presente", needed_for="instalar Bun (vibegame)")
 
 
 def check_cargo(tool_set: frozenset[str]) -> Check:
@@ -311,8 +272,6 @@ def run_checks(tool_set: frozenset[str]) -> list[Check]:
     return [
         check_python(),
         check_node(tool_set),
-        check_bun(tool_set),
-        check_unzip(tool_set),
         check_cargo(tool_set),
         check_gpu(tool_set),
         check_7zip(tool_set),

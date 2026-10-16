@@ -128,8 +128,8 @@ Os clips procedurais (`creature`/`flying`) articulam ossos e **não** tocam no y
 do corpo — por isso “como receberam animação” nunca foi a causa do lobo a andar
 de lado. A causa é o **mesh**: o Hunyuan3D gerou `wolf`/`scorpion` com o focinho
 ao longo de **+X**, e nem o rig SkinTokens nem o `game-pack` creature
-canonicalizam a frente para **+Z** (a convenção de facing do VibeGame
-(`planarYawRadians`) e do Viber (`facing_rotation` → `rotation * Vec3::Z`)).
+canonicalizam a frente para **+Z** (a convenção de facing do Viber
+(`facing_rotation` → `rotation * Vec3::Z`)).
 Bípedes escaparam porque o retarget humanoide impõe um rest canónico.
 
 **Sintoma:** quadrúpede desloca-se com o corpo de perfil (eixo comprido do mesh

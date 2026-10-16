@@ -212,7 +212,7 @@ silhueta é conteúdo de 450–840 m.
 
 ### 3. A ladder de LOD estava no XML e era ignorada
 
-Os mundos migrados do VibeGame trazem `lod1-url`, `lod2-url`,
+Os mundos migrados trazem `lod1-url`, `lod2-url`,
 `lod-threshold-near` e `lod-threshold-mid` em 131 `<GLTFLoader>` — o Viber
 listava-os como *dropped attrs* e desenhava a malha **hero** de cada pinheiro
 a 200 m (`pine_dark_lod0` 1.4 MB vs `lod2` 0.32 MB).

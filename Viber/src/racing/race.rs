@@ -1,11 +1,12 @@
 //! Race director — grid, countdown, voltas por progresso acumulado,
-//! posições ao vivo e resultados (port do `race-director.ts` do VibeGame).
+//! posições ao vivo e resultados (port do `race-director.ts`).
 //!
 //! As voltas contam por **progresso acumulado ao longo da pista** (delta-s
 //! wrap-aware), não por cruzamentos de linha: impossível enganar com
 //! reversão ou projeção no braço errado — a pista cruza-se a si própria por
 //! baixo do viaduto.
 
+use bevy::input::keyboard::KeyCode;
 use bevy::math::{Quat, Vec2, Vec3};
 use bevy::prelude::*;
 
@@ -13,7 +14,7 @@ use super::vehicle::Vehicle;
 use crate::terrain::paths::{nearest_on_path, path_length};
 use crate::terrain::runtime::TerrainRuntime;
 
-/// Estados do diretor (VibeGame `idle→grid→countdown→racing→finished`).
+/// Estados do diretor (`idle→grid→countdown→racing→finished`).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum RaceState {
     /// Karts na grelha, esperando todos os veículos.
@@ -25,7 +26,7 @@ pub enum RaceState {
     Finished,
 }
 
-/// Config `<Race laps countdown grid-s>` (engine config, defaults VibeGame).
+/// Config `<Race laps countdown grid-s>` (engine config, defaults da referência).
 #[derive(Debug, Clone, Resource)]
 pub struct RaceConfig {
     pub laps: u32,
@@ -42,7 +43,8 @@ impl Default for RaceConfig {
         Self {
             laps: 3,
             countdown: 3.0,
-            grid_s: 35.0,
+            // Grelha 30 m ANTES da linha: o GO larga cruzando a meta.
+            grid_s: -30.0,
             grid_row: 7.0,
             grid_col: 2.6,
         }
@@ -150,6 +152,64 @@ impl RaceProgress {
     }
 }
 
+/// Rampa sobre o traçado (`<TrackRamp s length height [width lateral]>`):
+/// lomba que sobe `height` em `length` metros de arco e termina em lábio —
+/// a queda do perfil lança o kart (o controller já carrega o `prev_climb`).
+#[derive(Debug, Clone)]
+pub struct TrackRamp {
+    /// Início da rampa (arco da pista, m).
+    pub s: f32,
+    /// Comprimento da subida (m).
+    pub length: f32,
+    /// Altura no lábio (m).
+    pub height: f32,
+    /// Meia-largura efetiva (m) — fora dela a rampa não empurra.
+    pub half_width: f32,
+    /// Deslocamento lateral do centro da pista (m).
+    pub lateral: f32,
+}
+
+/// Zona de boost (`<BoostPad s [length width lateral]>`): passar por cima
+/// dá turbo + nitro (cooldown por kart no controller).
+#[derive(Debug, Clone)]
+pub struct BoostPad {
+    /// Início da zona (arco da pista, m).
+    pub s: f32,
+    /// Comprimento da zona ao longo do arco (m).
+    pub length: f32,
+    /// Meia-largura efetiva (m).
+    pub half_width: f32,
+    /// Deslocamento lateral do centro da pista (m).
+    pub lateral: f32,
+}
+
+impl TrackRamp {
+    fn from_engine(cfg: &crate::worldsys::EngineConfigData) -> Option<Self> {
+        let num = |k: &str, d: f32| cfg.f32_attr(k).unwrap_or(d);
+        let s = cfg.f32_attr("s")?;
+        Some(Self {
+            s,
+            length: num("length", 22.0).max(4.0),
+            height: num("height", 2.2).max(0.5),
+            half_width: num("width", 8.0).max(2.0) * 0.5,
+            lateral: num("lateral", 0.0),
+        })
+    }
+}
+
+impl BoostPad {
+    fn from_engine(cfg: &crate::worldsys::EngineConfigData) -> Option<Self> {
+        let num = |k: &str, d: f32| cfg.f32_attr(k).unwrap_or(d);
+        let s = cfg.f32_attr("s")?;
+        Some(Self {
+            s,
+            length: num("length", 8.0).max(2.0),
+            half_width: num("width", 8.0).max(2.0) * 0.5,
+            lateral: num("lateral", 0.0),
+        })
+    }
+}
+
 /// Traçado da pista de corrida (a estrada fechada mais longa do mundo), com
 /// derivadas para a IA e a grelha.
 #[derive(Debug, Clone, Resource, Default)]
@@ -164,6 +224,39 @@ pub struct TrackInfo {
     pub tangents: Vec<Vec2>,
     /// Curvatura (1/m) por estação.
     pub curvature: Vec<f32>,
+    /// Lombas declaráveis (`<TrackRamp>`).
+    pub ramps: Vec<TrackRamp>,
+    /// Zonas de boost (`<BoostPad>`).
+    pub pads: Vec<BoostPad>,
+}
+
+impl TrackInfo {
+    /// Offset vertical (m) e rampa ativa num arco `s` — a lomba soma à
+    /// superfície de condução e termina em lábio (a queda lança o kart).
+    /// `lateral` é o desvio lateral do ponto à linha (m).
+    pub fn ramp_offset(&self, s: f32, lateral: f32) -> (f32, Option<&TrackRamp>) {
+        for ramp in &self.ramps {
+            let t = s - ramp.s;
+            let t = if t < -4.0 { t + self.lap_length } else { t };
+            if (0.0..=ramp.length).contains(&t) && (lateral - ramp.lateral).abs() <= ramp.half_width
+            {
+                // smoothstep: sobe suave e corta no lábio (queda seca a seguir).
+                let k = (t / ramp.length).clamp(0.0, 1.0);
+                let k = k * k * (3.0 - 2.0 * k);
+                return (ramp.height * k, Some(ramp));
+            }
+        }
+        (0.0, None)
+    }
+
+    /// A zona de boost sob (s, lateral), se houver.
+    pub fn boost_pad_at(&self, s: f32, lateral: f32) -> bool {
+        self.pads.iter().any(|pad| {
+            let t = s - pad.s;
+            let t = if t < -4.0 { t + self.lap_length } else { t };
+            (0.0..=pad.length).contains(&t) && (lateral - pad.lateral).abs() <= pad.half_width
+        })
+    }
 }
 
 impl TrackInfo {
@@ -224,6 +317,8 @@ impl TrackInfo {
             stations: road.stations.clone(),
             tangents,
             curvature,
+            ramps: Vec::new(),
+            pads: Vec::new(),
         }
     }
 
@@ -280,9 +375,11 @@ pub fn build_track_info(
     }
 }
 
-/// Alinha a grelha UMA vez e faz correr a máquina de estados.
+/// Alinha a grelha UMA vez e faz correr a máquina de estados. [R] reinicia
+/// a corrida INTEIRA (grelha + countdown + cronómetros).
 pub fn race_director_system(
     time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
     config: Res<RaceConfig>,
     mut director: ResMut<RaceDirector>,
     info: Option<Res<TrackInfo>>,
@@ -294,6 +391,14 @@ pub fn race_director_system(
         if *ttl <= 0.0 {
             director.message = None;
         }
+    }
+    // [R] = reinício total (volta ao grid; re-conta countdown e voltas).
+    if keys.just_pressed(KeyCode::KeyR) && director.state != RaceState::Grid {
+        director.state = RaceState::Grid;
+        director.race_time = 0.0;
+        director.player_result = None;
+        director.session_best = None;
+        director.message = Some(("REINÍCIO".to_string(), 1.4));
     }
     match director.state {
         RaceState::Grid => {
@@ -332,15 +437,18 @@ pub fn race_director_system(
                     .road_surface(at.x, at.y)
                     .map(|surf| surf.y)
                     .unwrap_or_else(|| runtime.sample(at.x, at.y));
-                let heading = tangent.y.atan2(tangent.x);
+                // Convenção da engine: forward = (sin h, cos h) → h = atan2(tx, tz).
+                let heading = tangent.x.atan2(tangent.y);
                 if let Ok((_, mut transform, mut vehicle, mut progress)) = karts.get_mut(*entity) {
                     transform.translation = Vec3::new(at.x, y, at.y);
                     transform.rotation = Quat::from_rotation_y(heading);
                     vehicle.heading = heading;
                     vehicle.speed = 0.0;
                     vehicle.racing = false;
-                    progress.lap = 1;
-                    progress.total = 0.0;
+                    // A grelha está ANTES da linha: o progresso começa
+                    // negativo e o lap 1 abre ao cruzar a meta no GO.
+                    progress.lap = 0;
+                    progress.total = config.grid_s.min(0.0);
                     progress.last_s = None;
                     progress.lap_start = 0.0;
                     placed += 1;
@@ -528,6 +636,8 @@ mod tests {
             stations,
             tangents,
             curvature,
+            ramps: Vec::new(),
+            pads: Vec::new(),
         }
     }
 
@@ -580,5 +690,222 @@ mod tests {
         assert_eq!(cfg.laps, 5);
         assert_eq!(cfg.countdown, 2.0);
         assert_eq!(cfg.grid_s, 35.0, "defaults intactos");
+    }
+}
+
+/// Coleta `<TrackRamp s length height width lateral>` e `<BoostPad s length
+/// width lateral>` do mundo para o [`TrackInfo`] (uma vez).
+pub fn collect_track_fx(
+    mut done: Local<bool>,
+    configs: Option<Res<crate::worldsys::EngineConfigs>>,
+    mut info: ResMut<TrackInfo>,
+) {
+    if *done || info.road.is_none() {
+        return;
+    }
+    let Some(configs) = configs else {
+        return;
+    };
+    for cfg in configs.all("trackramp") {
+        if let Some(ramp) = TrackRamp::from_engine(cfg) {
+            info!(target: "viber::racing", "track ramp: s={:.0} len={:.0} h={:.1}", ramp.s, ramp.length, ramp.height);
+            info.ramps.push(ramp);
+        }
+    }
+    for cfg in configs.all("boostpad") {
+        if let Some(pad) = BoostPad::from_engine(cfg) {
+            info!(target: "viber::racing", "boost pad: s={:.0} len={:.0}", pad.s, pad.length);
+            info.pads.push(pad);
+        }
+    }
+    *done = true;
+}
+
+/// Visuais das rampas (cunha) e pads (placa luminosa) — spawnados UMA vez
+/// com o traçado pronto, filhos do mundo, poses derivadas do arco.
+pub fn spawn_track_props(
+    mut commands: Commands,
+    mut done: Local<bool>,
+    info: Option<Res<TrackInfo>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if *done {
+        return;
+    }
+    let Some(info) = info else {
+        return;
+    };
+    if info.road.is_none() || (info.ramps.is_empty() && info.pads.is_empty()) {
+        return;
+    }
+    *done = true;
+    for ramp in &info.ramps {
+        let Some((station, tangent)) = info.at(ramp.s) else {
+            continue;
+        };
+        let perp = Vec2::new(-tangent.y, tangent.x);
+        let center = station + perp * ramp.lateral;
+        let yaw = tangent.y.atan2(tangent.x);
+        // Cunha: comprimento `length` no sentido da pista, largura 2·half,
+        // subindo `height` até o lábio. Malha própria (prisma triangular).
+        let (l, w, h) = (ramp.length, ramp.half_width * 2.0, ramp.height);
+        let mut positions = Vec::with_capacity(18);
+        // 0..3: triângulo lateral esquerdo (x=-w/2), 3..6: direito, 6..11:
+        // rampa inclinada (2 tris + topo), 11..16: traseira + base.
+        let (x0, x1) = (-w / 2.0, w / 2.0);
+        let (z0, z1) = (-l / 2.0, l / 2.0); // z = ao longo da pista
+        let apex = |x| [x, h, z1];
+        let base = |x| [x, 0.0, z0];
+        // lateral esquerdo
+        positions.push([x0, 0.0, z0]);
+        positions.push(apex(x0));
+        positions.push(base(x0));
+        // lateral direito
+        positions.push(base(x1));
+        positions.push(apex(x1));
+        positions.push([x1, 0.0, z0]);
+        // rampa (superfície inclinada): 2 tris
+        positions.push(base(x0));
+        positions.push(apex(x0));
+        positions.push(apex(x1));
+        positions.push(base(x0));
+        positions.push(apex(x1));
+        positions.push(base(x1));
+        // traseira vertical (no lábio)
+        positions.push(apex(x0));
+        positions.push([x0, 0.0, z1]);
+        positions.push([x1, 0.0, z1]);
+        positions.push(apex(x0));
+        positions.push([x1, 0.0, z1]);
+        positions.push(apex(x1));
+        let normals: Vec<[f32; 3]> = (0..18).map(|_| [0.0, 1.0, 0.0]).collect();
+        let uvs: Vec<[f32; 2]> = (0..18).map(|_| [0.0, 0.0]).collect();
+        let colors: Vec<[f32; 4]> = (0..18).map(|_| [1.0; 4]).collect();
+        let indices: bevy::mesh::Indices = bevy::mesh::Indices::U32((0..18u32).collect());
+        let mesh = bevy::mesh::Mesh::new(
+            bevy::mesh::PrimitiveTopology::TriangleList,
+            bevy::asset::RenderAssetUsages::MAIN_WORLD,
+        )
+        .with_inserted_attribute(bevy::mesh::Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_attribute(bevy::mesh::Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_attribute(bevy::mesh::Mesh::ATTRIBUTE_UV_0, uvs)
+        .with_inserted_attribute(bevy::mesh::Mesh::ATTRIBUTE_COLOR, colors)
+        .with_inserted_indices(indices);
+        let mesh_handle = meshes.add(mesh);
+        let material = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.85, 0.45, 0.15),
+            perceptual_roughness: 0.6,
+            double_sided: true,
+            ..StandardMaterial::default()
+        });
+        commands.spawn((
+            Name::new(format!("ramp-s{}", ramp.s as i32)),
+            Mesh3d(mesh_handle),
+            MeshMaterial3d(material),
+            Transform::from_xyz(center.x, 0.2, center.y).with_rotation(Quat::from_rotation_y(yaw)),
+            Visibility::Inherited,
+        ));
+    }
+    for pad in &info.pads {
+        let Some((station, tangent)) = info.at(pad.s + pad.length * 0.5) else {
+            continue;
+        };
+        let perp = Vec2::new(-tangent.y, tangent.x);
+        let center = station + perp * pad.lateral;
+        let yaw = tangent.y.atan2(tangent.x);
+        let mesh_handle = meshes.add(Mesh::from(Plane3d {
+            half_size: Vec2::new(pad.half_width * 2.0, pad.length),
+            ..Plane3d::default()
+        }));
+        let material = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.15, 0.85, 1.0),
+            emissive: LinearRgba::rgb(0.35, 1.4, 2.2),
+            perceptual_roughness: 0.4,
+            ..StandardMaterial::default()
+        });
+        commands.spawn((
+            Name::new(format!("boostpad-s{}", pad.s as i32)),
+            Mesh3d(mesh_handle),
+            MeshMaterial3d(material),
+            // Plane3d nasce no plano XY a olhar +Z: deita (-90° X) e vira
+            // para o rumo da pista; o z local do plano percorre o comprimento.
+            Transform::from_xyz(center.x, 0.35, center.y).with_rotation(
+                Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+            ),
+            Visibility::Inherited,
+        ));
+    }
+}
+
+#[cfg(test)]
+mod probe_tests {
+    use super::*;
+    use crate::terrain::paths::chaikin_smooth_channels;
+
+    #[test]
+    fn probe_arc_length_of_racer_track() {
+        let raw: Vec<Vec2> = vec![
+            (-470., -470.),
+            (-280., -460.),
+            (-100., -445.),
+            (60., -428.),
+            (230., -390.),
+            (360., -320.),
+            (440., -200.),
+            (470., -110.),
+            (480., -20.),
+            (430., 70.),
+            (330., 140.),
+            (200., 165.),
+            (60., 140.),
+            (-60., 90.),
+            (-190., 40.),
+            (-290., 60.),
+            (-430., 120.),
+            (-520., 260.),
+            (-460., 400.),
+            (-300., 490.),
+            (-120., 520.),
+            (40., 540.),
+            (180., 570.),
+            (320., 560.),
+            (450., 520.),
+            (540., 430.),
+            (520., 300.),
+            (470., 190.),
+            (400., 110.),
+            (330., 30.),
+            (300., -60.),
+            (250., -160.),
+            (120., -230.),
+            (-60., -280.),
+            (-250., -300.),
+            (-420., -300.),
+            (-560., -330.),
+            (-640., -390.),
+            (-600., -450.),
+        ]
+        .into_iter()
+        .map(|(x, z)| Vec2::new(x, z))
+        .collect();
+        let mut e = vec![0.0; raw.len()];
+        let mut w = vec![18.0; raw.len()];
+        let mut smoothed = chaikin_smooth_channels(&raw, &mut [&mut e, &mut w], 2, true);
+        let before = path_length(&smoothed);
+        smoothed.push(smoothed[0]);
+        let after = path_length(&smoothed);
+        let stations =
+            crate::terrain::paths::resample_channels(&smoothed, &mut [&mut e, &mut w], 2.734);
+        let lap = path_length(&stations);
+        // O circuito bakado mede ~5,1 km (o log de arranque diz "volta de
+        // 5123 m") — o traçado autorado tem de bater com isso.
+        assert!(
+            (5300.0..=5360.0).contains(&after),
+            "arco chaikin do traçado: {after}"
+        );
+        assert!((5100.0..=5200.0).contains(&lap), "volta resampled: {lap}");
+        assert!(stations.len() > 1900, "estações: {}", stations.len());
+        let _ = before;
     }
 }

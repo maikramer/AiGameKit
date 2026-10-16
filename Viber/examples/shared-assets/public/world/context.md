@@ -176,8 +176,7 @@ Subir contagens de colhíveis/inimigos custa; subir scenery quase não custa.
   nenhuma partícula se via. Envolver em `<GameObject place="at: x z">`.
 - `snow`/`rain` em ciclo precisam de `emission-rate` explícito (~10/s); o
   default de 50/s tapa a paisagem.
-- Depois de editar layout/clutter: `vibegame analyze examples/simple-rpg/index.html`
-  → `errors=0`.
+- Depois de editar layout/clutter: `viber analyze` → `errors=0`.
 
 ## Assets em falta (bundle `simple-rpg-assets-v3`)
 
@@ -255,7 +254,7 @@ r=24; tochas nas cabeças + acampamento de pescador na margem norte em
 `trails.xml` (sem carve; docks nos `via=`; o ramo dos menires sai do pad
 `n_resume`, a trilha da margem do pântano contorna a lagoa por NE).
 Gaps rio: `s_bank`↛`s_resume`, `w_bank`↛`w_resume`.
-Ver [`VibeGame/src/plugins/road/context.md`](../../../src/plugins/road/context.md).
+Ver `Viber/src/terrain/roads.rs` (contrato de estradas na engine nativa).
 
 ## POIs com recompensa (`src/scripts/poi/`)
 
@@ -282,7 +281,7 @@ Cell coords are **space-separated** (`"2 1"`). Prefabs: `house`, `market-stall`,
 **Before merging city layout edits**, run:
 
 ```bash
-vibegame analyze examples/simple-rpg/index.html
+viber analyze
 ```
 
 Catches Include/asset misses and solid footprint overlaps (buildings/walls through each other).
@@ -315,4 +314,4 @@ do vale, lagoa leste, oásis, lago gelado.
 Quest/dialogue **data** stays in `src/data/quests/` and `public/data/ai/*.yaml` — not in these Scene XMLs. City-watch bounties live in `city_quests.json` (`npc: notice_board`, taken via `notice-board.ts`); the blacksmith job is `city_stone` on `npc_blacksmith` in `forge.xml`. Chapel healer is `healer.ts` (gold for a full heal), not a quest. Plaza campfire (`campfire.ts`, [G]) and well (`well.ts`, [F]) are free heals with cooldown; forge anvil (`anvil.ts`, [K]) crafts a bomb; watchtower guard (`watch-guard.ts`, [F]) pins the four gates on the compass.
 
 District detail: [`cities/discordia/context.md`](cities/discordia/context.md).
-Engine: vegetation / spawner / terrain (`TerrainPad`) under `VibeGame/src/plugins/*/context.md`.
+Engine: vegetation / spawner / terrain (`TerrainPad`) em `Viber/src/` (`spawner.rs`, `terrain/`).

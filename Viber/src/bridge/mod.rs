@@ -1,6 +1,6 @@
 //! Debug bridge — BRP sobre HTTP (`bevy_remote`) com métodos `viber.*`:
 //! screenshots, input sintético, árvore de entidades e ring-buffer de logs.
-//! É o equivalente nativo do tooling Chrome DevTools MCP usado no VibeGame.
+//! É o equivalente nativo do tooling Chrome DevTools MCP do motor TS.
 //!
 //! Activar com `viber run --bridge` (porta por omissão: 15702, a porta BRP).
 //! Cliente: `viber debug screenshot|click|key|text|move|tree|logs|probe`.

@@ -4,12 +4,12 @@ Data: 2026-08-31 · Estado: live (fila de trabalho do port "tudo para Luau/subsi
 
 Objetivo: **portar TODOS os sistemas que os XMLs do simple-rpg usam** — todos os
 scripts (TS → Luau), todos os subsistemas de gameplay, menus e UI — do exemplo
-browser (`VibeGame/examples/simple-rpg/`) para a engine nativa (`Viber/`).
+browser original (simple-rpg) para a engine nativa (`Viber/`).
 
 Este ficheiro é a FILA: a cada loop pega-se UM sistema da lista, implementa,
-valida (testes + bridge in-game) e marca. Inventário-fonte completo:
-`VibeGame/examples/simple-rpg/` (main.ts 1.6k linhas, `src/game/` 21 módulos,
-`src/scripts/` 45 entity scripts, UI DOM/CSS).
+valida (testes + bridge in-game) e marca. Inventário-fonte completo: o exemplo
+browser original (main.ts 1.6k linhas, 21 módulos de jogo,
+45 entity scripts, UI DOM/CSS).
 
 ## ✅ Já portado (não refazer)
 
@@ -69,7 +69,7 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
 
 ### Loop 3 — Quests & diálogo real — ✅ DONE (2026-09-01)
 - [x] `src/quests.rs` (novo): as 21 quests dos JSONs embutidas
-      (`examples/simple-rpg/quests/*.json`, mesmo schema do VibeGame);
+      (`examples/simple-rpg/quests/*.json`, mesmo schema do exemplo original);
       `QuestLog` NotTaken→Active→Ready→Done com bounties do quadro
       repetíveis; objetivos **kill** (por tipo de criatura, com alias
       `boss_*` normalizado), **collect** (via `viber.report_collect`) e
@@ -107,7 +107,7 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
       `report_collect` agora deposita no vault; `chest.lua` dá loot real
       (+25 ouro, +1 poção); turn-in de quest credita ouro/itens no vault.
 - [x] QA: **F9** teleporta ao colhível/interação mais próximo, **F10** dá
-      recursos+itens (análogo do `give`/`gold` do VibeGame).
+      recursos+itens (análogo do `give`/`gold` do exemplo original).
 - [x] Evidência in-game: F10 → chips gold 10 / wood 6 / stone 6 (screenshot,
       valores reais), hotbar "[1] Poção x1 / [2] Antídoto x1", poção usada
       com toast "Poção usada (+50 HP)" e consumo do stock, 0 panics. 404
@@ -222,7 +222,7 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
       quando atacado (`PlayerHurt.from` = origem do script atacante).
       Decisão de arquitetura: as criaturas são transform-driven (scripts +
       move_towards), pelo que o knockback segue o modelo cinemático do CCT
-      do VibeGame em vez de impulsos Rapier em rigidbodies dinâmicos.
+      do exemplo original em vez de impulsos Rapier em rigidbodies dinâmicos.
 - [x] **Destrutíveis com queda** (`break-style: fall`): `viber.topple()` nos
       scripts de colheita → `Falling` (tombamento ease-in de 88° em 0,9 s
       na direção herói→entidade) + despawn; tree.lua/rock.lua migrados.

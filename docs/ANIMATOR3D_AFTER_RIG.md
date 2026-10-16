@@ -31,8 +31,8 @@ GameAssets batch/resume runs this **once** on `_intermediate/{id}_rigged.glb`
 | **Villager** (`--anim-pack villager`) | Trabalhos/crafting (arado, pesca, mining, martelo — Kevin Iglesias, FBX por clip, EULA free) | `plow`, `fish`, `gather`, `hammer`, `mineground`, `minewall`, … |
 | **Procedural** (`creature` / `flying` / `--procedural`) | Non-humanoid / multi-limb | `Animator3D_BreatheIdle`, `Animator3D_Walk`, `Animator3D_Run` (galope), `Animator3D_Attack/Hit/Death`, … |
 
-VibeGame enemy scripts (`creature.ts`, `enemies/*.ts`) expect the **clean**
-Quaternius names for bipeds. Procedural names need matching TS.
+Consumers of the animated GLBs expect the **clean**
+Quaternius names for bipeds; procedural `Animator3D_*` names are the convention for non-humanoids.
 
 ---
 
@@ -82,6 +82,5 @@ Detalhe e lições: findings doc.
 
 | Doc | Role |
 |-----|------|
-| [`MONOREPO_GAME_PIPELINE.md`](MONOREPO_GAME_PIPELINE.md) | Folders, handoff, PlayerGLTF |
+| [`MONOREPO_GAME_PIPELINE.md`](MONOREPO_GAME_PIPELINE.md) | Folders, handoff, GLB contracts |
 | [`findings/MESH_PIPELINE_FINDINGS.md`](findings/MESH_PIPELINE_FINDINGS.md) | Round 3 promote/resume |
-| [`ZERO_TO_GAME_AI.md`](ZERO_TO_GAME_AI.md) | Agent onboarding |

@@ -72,3 +72,33 @@
   #race-hud .speed-num { font-size: 34 }
   #race-hud .banner-text { font-size: 30 }
 }
+
+/* ── toast de power-up (centro-baixo) ───────────────────────────────── */
+#race-hud .anchor-toast {
+  position: absolute;
+  bottom: 120;
+  left: 0;
+  right: 0;
+  align: center;
+}
+#race-hud .toast {
+  padding: 8 20;
+  background: #0f2a33d9;
+  border: 1 #38d1ff90;
+  radius: 8;
+}
+#race-hud .toast-text { color: #7fe4ff; font-size: 18 }
+
+/* ── hint de controlos (fundo-esquerda) ─────────────────────────────── */
+#race-hud .anchor-hint {
+  position: absolute;
+  bottom: 18;
+  left: 18;
+  width: 380;
+}
+#race-hud .hint {
+  padding: 6 10;
+  background: #10161ab0;
+  radius: 6;
+}
+#race-hud .hint-text { color: #93a3ad; font-size: 12 }

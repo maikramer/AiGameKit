@@ -1,10 +1,9 @@
-"""Orquestra batch + skymap2d + handoff + scaffold do projeto VibeGame."""
+"""Orquestra batch + terrain + skymap2d + icons + handoff a partir do plano do dream."""
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -79,38 +78,6 @@ def _print_plan_summary(plan: DreamPlan, *, max_assets: int = 8) -> dict[str, An
     return lint_report
 
 
-# ---------------------------------------------------------------------------
-# Scaffold: package.json + vite.config.ts para projecto Vite standalone
-# ---------------------------------------------------------------------------
-
-_PACKAGE_JSON_TEMPLATE = """\
-{{
-  "name": "{name}",
-  "private": true,
-  "type": "module",
-  "scripts": {{
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  }},
-  "dependencies": {{
-    "vibegame": "latest"
-  }},
-  "devDependencies": {{
-    "vite": "^5.0.0"
-  }}
-}}
-"""
-
-_VITE_CONFIG = """\
-import {{ defineConfig }} from 'vite';
-
-export default defineConfig({{
-  server: {{ open: process.env.BROWSER !== 'none' }},
-}});
-"""
-
-
 def _safe_name(title: str) -> str:
     return title.lower().replace(" ", "-").replace("_", "-")[:40] or "dream-game"
 
@@ -136,7 +103,6 @@ def run_dream(
 
     batch_dir = project_dir / "_batch"
     public_dir = project_dir / "public"
-    src_dir = project_dir / "src"
 
     report: dict[str, Any] = {
         "project_dir": str(project_dir),
@@ -179,13 +145,10 @@ def run_dream(
     _step("save dream_plan.json")
 
     if dry_run:
-        # Scaffold mínimo para dry-run (sem bun install, sem batch)
-        _scaffold_project(plan, project_dir, batch_dir, src_dir, public_dir, with_sky=with_sky)
-        _step("scaffold project (dry-run)", detail=str(project_dir))
         report["plan_path"] = str(plan_path)
         console.print(
             Panel(
-                f"[cyan]dry-run[/cyan] — ficheiros em [bold]{project_dir}[/bold]\n"
+                f"[cyan]dry-run[/cyan] — ficheiros em [bold]{batch_dir}[/bold]\n"
                 "Para gerar assets, corre:\n"
                 f"  cd {batch_dir}\n"
                 f"  gameassets batch --profile game.yaml --manifest manifest.yaml\n"
@@ -345,54 +308,16 @@ def run_dream(
     rc_ho = subprocess.call(handoff_argv, cwd=str(batch_dir))
     _step("gameassets handoff", ok=rc_ho == 0, detail=f"exit {rc_ho}")
 
-    # --- 6. Scaffold projecto Vite ---
-    _scaffold_project(plan, project_dir, batch_dir, src_dir, public_dir, with_sky=with_sky)
-    _step("scaffold project", detail=str(project_dir))
+    # --- 6. Resumo final (assets prontos, sem scaffold de projeto) ---
+    _step("assets prontos", detail=str(project_dir))
 
     console.print(
         Panel(
-            f"[green]Projecto gerado em[/green] [bold]{project_dir}[/bold]\n\n"
-            f"  cd {project_dir}\n"
-            "  bun install   # ou npm install\n"
-            "  bun run dev",
+            f"[green]Assets gerados em[/green] [bold]{project_dir}[/bold]\n\n"
+            f"  batch:   {batch_dir}  (game.yaml, manifest.yaml, world.xml)\n"
+            f"  public:  {public_dir}  (modelos, sky, terreno, ícones)",
             border_style="green",
             title="Dream",
         )
     )
     return report
-
-
-def _scaffold_project(
-    plan: DreamPlan,
-    project_dir: Path,
-    batch_dir: Path,
-    src_dir: Path,
-    public_dir: Path,
-    *,
-    with_sky: bool,
-) -> None:
-    """Cria package.json, vite.config.ts, src/main.ts, index.html."""
-    project_dir.mkdir(parents=True, exist_ok=True)
-    src_dir.mkdir(parents=True, exist_ok=True)
-    public_dir.mkdir(parents=True, exist_ok=True)
-
-    pkg = project_dir / "package.json"
-    if not pkg.exists():
-        pkg.write_text(
-            _PACKAGE_JSON_TEMPLATE.format(name=_safe_name(plan.title)),
-            encoding="utf-8",
-        )
-
-    vite_cfg = project_dir / "vite.config.ts"
-    if not vite_cfg.exists():
-        vite_cfg.write_text(_VITE_CONFIG, encoding="utf-8")
-
-    main_src = batch_dir / "main.ts"
-    main_dst = src_dir / "main.ts"
-    if main_src.is_file():
-        shutil.copy2(main_src, main_dst)
-
-    index_src = batch_dir / "index.html"
-    index_dst = project_dir / "index.html"
-    if index_src.is_file():
-        shutil.copy2(index_src, index_dst)

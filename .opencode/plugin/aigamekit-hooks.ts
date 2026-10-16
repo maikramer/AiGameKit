@@ -77,9 +77,6 @@ function formatEditedFile(tool: string, directory: string, args: ToolArgs | unde
     run("ruff", ["check", "--fix", fp]);
   } else if (fp.endsWith(".rs")) {
     run("rustfmt", [fp]);
-  } else if (fp.includes("/VibeGame/") && /\.(ts|tsx|js|mjs|json|css|md)$/.test(fp)) {
-    const prettier = `${directory}/VibeGame/node_modules/.bin/prettier`;
-    if (existsSync(prettier)) run(prettier, ["--write", fp]);
   }
 }
 

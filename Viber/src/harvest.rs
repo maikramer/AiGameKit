@@ -1,5 +1,5 @@
-//! Colheita NATIVA — port do plugin `destructible` do VibeGame
-//! (`src/plugins/destructible/{systems,fx}.ts`).
+//! Colheita NATIVA — port do plugin `destructible`
+//! original (`{systems,fx}.ts`).
 //!
 //! Props marcados com `destructible="…"` (árvores/rochas dos spawners) são
 //! colhíveis: o press de ataque ([J]/clique esquerdo) com um prop em alcance
@@ -71,7 +71,7 @@ use crate::terrain::runtime::TerrainRuntime;
 use crate::ui::collect::UiPrompt;
 use crate::vitals::{Xp, gain_xp};
 
-// ── constantes (valores da referência VibeGame) ─────────────────────────
+// ── constantes (valores da referência) ──────────────────────────────────
 
 /// Cadência dos golpes de colheita (s) — `SWING_COOLDOWN_SEC` 0.4.
 pub const SWING_COOLDOWN: f32 = 0.4;

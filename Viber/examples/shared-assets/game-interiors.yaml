@@ -24,8 +24,8 @@ generation: low
 # Packs canónicos (audio-bgm/audio-sfx-*/characters/desert/farm/forest/infra/
 # interiors/props-rpg/props/swamp/terrain/vehicles/village). O happy path de
 # regen é `cd examples/shared-assets` — o batch escreve em public/assets
-# **daqui** (fonte canónica dos binários); os exemplos leem o pool via plugin
-# vibegame({ sharedAssets }). Não há passo de sync nem symlinks.
+# **daqui** (fonte canónica dos binários); os exemplos leem o pool por URL.
+# Não há passo de sync nem symlinks.
 master_validate: true
 master_bake_normals: false
 negative_keywords:

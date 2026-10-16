@@ -97,7 +97,6 @@ make test-shared      # Shared library
 make test-text2d     # Text2D
 make test-text3d     # Text3D
 make test-paint3d    # Paint3D
-make test-vibegame   # VibeGame (Bun) — see VibeGame/docs/TESTING.md
 ```
 
 ### Run with Coverage
@@ -286,7 +285,6 @@ AiGameKit/
 ├── Terrain3D/        # AI terrain generation (diffusion)
 ├── Rocks3D/          # Procedural rock generation
 ├── AiGameKitLab/     # Debug 3D, benches, profiling
-├── VibeGame/         # TypeScript browser 3D engine (Bun + Vite)
 └── Materialize/      # Rust crate for PBR map generation
 ```
 

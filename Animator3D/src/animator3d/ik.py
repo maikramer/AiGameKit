@@ -4,7 +4,7 @@ impõe o curso anatómico (``curso das juntas``) a clips já gerados.
 Porque existe: o retarget (:mod:`animator3d.retarget`) adopta quaternions
 absolutos do pack source sem verificação de limites — mocap/packs trazem poses
 anatomicamente impossíveis (joelho a dobrar para a frente, pointe, cotovelo
-invertido) que chegam intactas ao engine (nem VibeGame nem Viber fazem IK em
+invertido) que chegam intactas ao engine (nem Viber nem outros runtimes fazem IK em
 runtime). O Motion3D clampe dobradiças a montante, mas só no esqueleto HML22 de
 22 juntas e por ângulo interior — não sabe de *direção*.
 

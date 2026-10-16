@@ -775,7 +775,7 @@ pub struct PendingPlace {
 /// One-shot: resolve todos os [`PendingPlace`] quando o terreno existe.
 ///
 /// O XZ do objeto é REESCRITO para `at` (a composição vai PARA onde o autor
-/// pediu — semântica do `place` do VibeGame) e a cota do solo é MUNDO: a pose
+/// pediu — semântica do `place`) e a cota do solo é MUNDO: a pose
 /// pretendida é convertida para o referencial do pai. Aninhado num grupo que
 /// o [`seat_statics_once`] acabou de levantar (corre antes, no mesmo frame —
 /// daí o [`TransformHelper`] em vez do `GlobalTransform` ainda velho), o Y
@@ -1013,7 +1013,7 @@ pub fn daycycle_drive(
         clock.ambient_reference = ambient.brightness.max(1.0);
     }
     let day = daylight_factor(clock.minute_of_day, clock.dawn_minute, clock.dusk_minute);
-    // `ambient-day-intensity` / `ambient-night-intensity` are VibeGame's
+    // `ambient-day-intensity` / `ambient-night-intensity` are the legacy
     // three.js ambient *intensities* — a 0..1 scale. Bevy's
     // `AmbientLight::brightness` is in lux and the same worlds author it in the
     // hundreds (`simple-rpg`: `brightness="110"`). Writing 0.26 straight into

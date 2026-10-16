@@ -2,7 +2,7 @@
 
 **Idioma:** [English (`README.md`)](README.md) · Português
 
-Geração de terreno por IA via [terrain-diffusion](https://github.com/millennium-nova/terrain-diffusion) (MIT). Gera heightmap PNG + terrain JSON compatível com [VibeGame](../VibeGame/) e [GameAssets](../GameAssets/).
+Geração de terreno por IA via [terrain-diffusion](https://github.com/millennium-nova/terrain-diffusion) (MIT). Gera heightmap PNG + terrain JSON compatível com [Viber](../Viber/) e [GameAssets](../GameAssets/).
 
 Usa um modelo de difusão treinado em dados de elevação reais (WorldClim + ETOPO) para produzir terreno realista com montanhas, vales e cristas — sem edição manual.
 
@@ -11,7 +11,7 @@ Usa um modelo de difusão treinado em dados de elevação reais (WorldClim + ETO
 - **Terreno por IA** — heightmap via difusão (~30 m de resolução)
 - **Reprodutibilidade por seed** — mesma seed → mesmo terreno
 - **Heightmap PNG** — grayscale 8-bit, normalizado 0–1
-- **JSON de metadados** — versão 2.0, compatível com a pipeline VibeGame/GameAssets
+- **JSON de metadados** — versão 2.0, compatível com a pipeline Viber/GameAssets
 - **Condicionamento WorldClim** — mapas bioclimáticos sintéticos para elevação realista
 - **Download automático** — rasters bioclimáticos baixados na primeira execução
 

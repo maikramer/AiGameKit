@@ -1,5 +1,5 @@
-//! 2D path utilities for rivers and roads — ported from the VibeGame
-//! `path-utils.ts` / `road/geometry.ts` pair.
+//! 2D path utilities for rivers and roads — ported from the
+//! original `path-utils.ts` / `road/geometry.ts` pair.
 //!
 //! Authoring paths (`path="x z x z …"`, `<Segment via>`) are raw polylines;
 //! carvers and water meshes expect a smoothed, evenly spaced station list:
@@ -13,7 +13,7 @@
 
 use bevy::math::Vec2;
 
-/// Rounds polyline corners with two Chaikin cuts (VibeGame default
+/// Rounds polyline corners with two Chaikin cuts (default
 /// `smoothing = 2`). Keeps the first and last points of open paths; closed
 /// paths (`closed = true`) wrap around. Paths with fewer than 3 points or
 /// `iterations == 0` are returned unchanged.

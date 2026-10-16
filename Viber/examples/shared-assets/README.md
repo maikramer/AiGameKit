@@ -1,9 +1,8 @@
 # Shared asset pool
 
 **Uma** pasta com todos os assets gerados do repo — manifests canónicos e os
-binários finais (GLB/PNG/JSON). Nenhum exemplo guarda cópias nem symlinks: o
-plugin `vibegame({ sharedAssets })` serve `public/assets/` daqui a todos eles
-no browser, e a engine nativa Viber consome-o como root extra declarado no
+binários finais (GLB/PNG/JSON). Nenhum exemplo guarda cópias nem symlinks: os exemplos servem `public/assets/`
+daqui por URL, e a engine nativa Viber consome-o como root extra declarado no
 `config.yaml` de cada jogo (`Viber/docs/ASSETS.md`).
 
 ## Packs
@@ -61,12 +60,8 @@ só gera o que falta — com os binários já presentes, o batch valida e faz sk
 
 ## Como os exemplos consomem isto
 
-Cada `vite.config.ts` passa o pool ao plugin da engine:
-
-```ts
-const sharedAssets = path.join(vibegameRoot, 'examples/shared-assets/public/assets');
-export default defineConfig({ plugins: [vibegame({ sharedAssets })] });
-```
+Nos exemplos antigos de browser (motor TS), cada `vite.config.ts` passava o
+pool ao plugin da engine; a semântica era:
 
 - **dev**: o `public/` do próprio exemplo responde primeiro; o que faltar vem do
   pool. Um jogo pode portanto sobrepor um asset largando um ficheiro com o mesmo

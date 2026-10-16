@@ -2,7 +2,7 @@
 
 O debug bridge é o caminho de um AGENTE DE IA para VER, MEXER, PROVAR e
 DESCOBRIR a engine viva — o equivalente nativo do tooling Chrome DevTools do
-VibeGame. Este doc é a referência completa; o AGENTS.md (raiz) tem as
+motor TS. Este doc é a referência completa; o AGENTS.md (raiz) tem as
 receitas rápidas.
 
 Módulo: `src/bridge/` (`mod.rs` servidor BRP, `lua.rs` a REPL, `events.rs`

@@ -10,7 +10,7 @@ source sem verificação anatómica — mocap/packs trazem poses impossíveis
 chegam intactas ao engine. O Motion3D clampe dobradiças a montante
 (`_clamp_hinges_yup`, joelho/ankle/elbow por ângulo interior) mas só no
 esqueleto HML22 de 22 juntas **antes** do retarget e sem noção de *direção*.
-Nem VibeGame nem Viber fazem IK em runtime — o que se corrigir na geração é o
+Nenhum runtime faz IK em runtime — o que se corrigir na geração é o
 que chega ao ecrã.
 
 ## Desenho

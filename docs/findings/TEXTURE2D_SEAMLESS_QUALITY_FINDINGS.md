@@ -123,7 +123,7 @@ scheduler.
 
 ## Métrica antiga vs pool (baseline histórica)
 
-Texturas do pool VibeGame (código antigo, métrica antiga = igualdade):
+Texturas do pool antigo (código antigo, métrica antiga = igualdade):
 asphalt 0.63, cobblestone_road/desert_sand/dirt 0.0 — a métrica antiga não
 distinguía "costura real" de "alta frequência do material". Com a métrica de
 continuidade estas passam a pontuar conforme a costura real.

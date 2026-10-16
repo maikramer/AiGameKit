@@ -17,7 +17,7 @@
 //!
 //! Seguro para materiais partilhados: a chave é o `AssetId` do material
 //! (por ficheiro GLB — todas as instâncias da mesma copa partilham o tint,
-//! como no VibeGame).
+//! como na referência).
 
 use std::collections::HashMap;
 

@@ -180,7 +180,7 @@ Contrato XML completo: `AGENTS.md` da raiz.
   omissão; o `cull_mode = None` do material continua como rede (folhas
   remanescentes com culling leem-se como buracos).
 
-## Desvios conhecidos vs VibeGame (documentados, não afetam o simple-rpg)
+## Desvios conhecidos vs a referência (documentados, não afetam o simple-rpg)
 
 Estações de road a 1 m (vs 0.35); sem berms/cross-slope; decks de
 `<Road profile="bridge">` continuam ribbons planas sem collider (GLB chega

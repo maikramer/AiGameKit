@@ -26,7 +26,6 @@ TERRAIN3D_BIN = "TERRAIN3D_BIN"
 ROCKS3D_BIN = "ROCKS3D_BIN"
 PART3D_BIN = "PART3D_BIN"
 MOTION3D_BIN = "MOTION3D_BIN"
-VIBEGAME_BIN = "VIBEGAME_BIN"
 VRAMD_BIN = "VRAMD_BIN"
 HF_HOME = "HF_HOME"
 PYTORCH_CUDA_ALLOC_CONF = "PYTORCH_CUDA_ALLOC_CONF"
@@ -49,13 +48,12 @@ TOOL_BINS = {
     "part3d": PART3D_BIN,
     "motion3d": MOTION3D_BIN,
     "materialize": MATERIALIZE_BIN,
-    "vibegame": VIBEGAME_BIN,
     "vramd": VRAMD_BIN,
 }
 """Mapeamento tool_name → nome da variável de ambiente do binário.
 
-Inclui ferramentas Python, ``materialize`` (Rust) e ``vibegame`` (Bun/Node); o valor é o nome da env var
-(``MATERIALIZE_BIN``, ``VIBEGAME_BIN``, etc.), não o caminho do binário.
+Inclui ferramentas Python e ``materialize`` (Rust); o valor é o nome da env var
+(``MATERIALIZE_BIN``, etc.), não o caminho do binário.
 """
 
 ENV_TO_TOOL = {env_name: tool for tool, env_name in TOOL_BINS.items()}
@@ -68,7 +66,7 @@ class ToolLayout:
 
     folder: str
     cli_name: str
-    kind: str = "python"  # python | rust | bun
+    kind: str = "python"  # python | rust
 
 
 TOOL_LAYOUT: dict[str, ToolLayout] = {
@@ -88,7 +86,6 @@ TOOL_LAYOUT: dict[str, ToolLayout] = {
     "motion3d": ToolLayout("Motion3D", "motion3d"),
     "vramd": ToolLayout("Vramd", "vramd"),
     "materialize": ToolLayout("Materialize", "materialize", kind="rust"),
-    "vibegame": ToolLayout("VibeGame", "vibegame", kind="bun"),
 }
 """tool_name → pasta / CLI no monorepo (alinhado a ``tools.yaml``)."""
 
@@ -171,12 +168,6 @@ def discover_monorepo_tool_bin(
         ):
             if _is_executable(cand):
                 return str(cand.resolve())
-        return None
-
-    if layout.kind == "bun":
-        script = folder / "scripts" / "vibegame-cli.mjs"
-        if script.is_file():
-            return str(script.resolve())
         return None
 
     return None

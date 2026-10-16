@@ -34,7 +34,7 @@ A cold agent (or new human) should be able to:
 1. Install via the documented path (`install.sh` / package installers) without interactive traps.
 2. Run a documented generate or `gameassets` flow and obtain artifacts in the expected layout.
 3. Use `vramd status` / `vramd queue` when the GPU is busy — never invent kill rituals.
-4. Point a VibeGame example (or handoff) at the produced assets without referencing `_intermediate` as runtime.
+4. Hand the produced assets off to a game folder (`gameassets handoff`) without referencing `_intermediate` as runtime.
 
 Passing `make check` is necessary but not sufficient. The north star is about **operability of the product**, not only green CI.
 
@@ -57,6 +57,5 @@ Passing `make check` is necessary but not sufficient. The north star is about **
 ## Pointers in this repo
 
 - Entry for agents: [`AGENTS.md`](../../AGENTS.md)
-- Idea → playable scaffold: [`docs/ZERO_TO_GAME_AI.md`](../ZERO_TO_GAME_AI.md)
 - Pipeline layout: [`docs/MONOREPO_GAME_PIPELINE.md`](../MONOREPO_GAME_PIPELINE.md)
 - vramd / anti-patterns: [`Vramd/README.md`](../../Vramd/README.md)

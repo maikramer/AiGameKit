@@ -1319,8 +1319,8 @@ def cmd_list_animations(pack: str, profile_name: str | None, as_json: bool) -> N
 
     Leitura leve: só os YAML de retarget — sem bpy, sem GPU, sem download.
     Os nomes limpos são o que se passa a ``game-pack --clips`` /
-    ``retarget-batch --clips`` e o que o VibeGame procura nos clips do GLB
-    (findClip/findClipFuzzy). Para clips DENTRO de um GLB já gerado, usa
+    ``retarget-batch --clips`` e o que os consumidores procuram nos clips do
+    GLB (findClip/findClipFuzzy). Para clips DENTRO de um GLB já gerado, usa
     ``list-clips``.
     """
     from . import retarget as rt

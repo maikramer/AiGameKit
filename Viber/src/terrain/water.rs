@@ -1,7 +1,7 @@
 //! Water features — lakes and rivers: lower-only terrain carve plus water
 //! surface geometry and the [`WaterBody`] query registry.
 //!
-//! Ported from the VibeGame water plugin (`water/carve.ts`, `river-channel.ts`,
+//! Ported from the original water plugin (`water/carve.ts`, `river-channel.ts`,
 //! `lake-bowl.ts`). Contracts kept from the original:
 //!
 //! * **Lower-only carve** — water never raises terrain, so overlapping bodies
@@ -33,7 +33,7 @@ use super::paths::{
 };
 use super::roads::ADAPTIVE_FALLOFF_FACTOR;
 
-/// Lake contour: number of rim rays sampled (VibeGame `rimY` ring). 64
+/// Lake contour: number of rim rays sampled (`rimY` ring). 64
 /// porque o 7.º harmónico do contorno oscila 8× por volta — 32 raios
 /// perdiam o mínimo do rim (e o nível de água subia um fiapo).
 const RIM_RAYS: usize = 64;
@@ -63,9 +63,9 @@ pub const CONTOUR_PEAK: f32 = 1.0
     + LAKE_HARMONIC_MAX[1]
     + LAKE_HARMONIC_MAX[2]
     + LAKE_HARMONIC_MAX[3];
-/// Lake carve margin over the design radius (VibeGame `carveMargin`).
+/// Lake carve margin over the design radius (`carveMargin`).
 pub const CARVE_MARGIN: f32 = 1.25;
-/// River station spacing (meters, VibeGame `STATION_SPACING`).
+/// River station spacing (meters, `STATION_SPACING`).
 pub const RIVER_STATION_SPACING: f32 = 3.0;
 /// River: **minimum** falloff band outside the banks (meters). The band grows
 /// with the local cut depth (see [`ADAPTIVE_FALLOFF_FACTOR`]) — a fixed band
@@ -78,7 +78,7 @@ pub const MAX_BANK_RAISE: f32 = 2.0;
 const MIN_CHANNEL_DEPTH: f32 = 0.2;
 /// Water surface alpha fades to 0 over the outer fraction of the width.
 const WATER_EDGE_FADE: f32 = 0.25;
-/// Lake fan segments around the contour (VibeGame 72-segment mirror).
+/// Lake fan segments around the contour (72-segment mirror).
 const LAKE_FAN_SEGMENTS: usize = 72;
 /// Queda (m) entre estações vizinhas que marca uma cascata — abaixo disto
 /// a ribbon lê-se como corredeira; acima, o [`river_water_mesh`] constrói
@@ -1908,7 +1908,7 @@ mod tests {
     }
 
     #[test]
-    fn test_defaults_match_vibegame() {
+    fn test_defaults_match_reference() {
         let lake = LakeSpec::default();
         assert_eq!(lake.radius, 6.0);
         assert_eq!(lake.depth, 1.5);

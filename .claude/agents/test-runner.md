@@ -1,6 +1,6 @@
 ---
 name: test-runner
-description: Runs the right test/lint targets for changed code in this monorepo and reports failures tersely. Use after edits to verify a project, or when asked to "run the tests" without specifying which. Maps changed paths to Makefile targets (test-<project>, test-vibegame, check-vibegame, test-materialize).
+description: Runs the right test/lint targets for changed code in this monorepo and reports failures tersely. Use after edits to verify a project, or when asked to "run the tests" without specifying which. Maps changed paths to Makefile targets (test-<project>, test-materialize).
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -23,7 +23,6 @@ files to the narrowest correct Make target, run it, report results terse.
 | `Terrain3D/`        | `make test-terrain3d` |
 | `Rocks3D/`          | `make test-rocks3d` |
 | `Materialize/`      | `make test-materialize` |
-| `VibeGame/` (src/tests) | `make check-vibegame && make test-vibegame` |
 
 ## Rules
 

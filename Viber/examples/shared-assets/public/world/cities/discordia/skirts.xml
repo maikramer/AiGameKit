@@ -9,7 +9,7 @@
   sombra nas diagonais (onde nenhuma via passa) e caixotaria encostada à
   muralha. Tudo GLB já no bundle — nada de assets novos.
 
-  Regras de colocação (verificadas com `vibegame analyze` + teste de distância
+  Regras de colocação (verificadas com `viber analyze` + teste de distância
   às polilinhas das vias):
     - fora dos corredores de 4.8 m das artérias praça→portão (|x| ou |z| ≤ 2.4)
     - fora do anel ±25 (largura 4 → folga ≥ 2 m ao eixo)

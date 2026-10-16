@@ -1,6 +1,6 @@
 """Testes das correções de qualidade do Terrain3D (2026-07):
 
-- export_ahgt: formato binário uint16+deflate compatível com o parseAhgt do VibeGame;
+- export_ahgt: formato binário uint16+deflate lido nativamente pelo motor Viber;
 - vramd_payload: payload vramd transporta TODOS os params de geração/pós-processamento;
 - worker adapter: overrides por request aplicados mesmo com worker quente;
 - CLI: delegação vramd não descarta flags; coarse_window deriva size; --format ahgt;
@@ -28,7 +28,7 @@ from terrain3d.vramd_payload import build_generate_request
 
 
 def _parse_ahgt(path: Path) -> dict:
-    """Parser mínimo do .ahgt (espelha ahgt-format.ts do VibeGame)."""
+    """Parser mínimo do .ahgt (espelha o leitor do motor)."""
     blob = Path(path).read_bytes()
     magic, version, width, height, _flags, _reserved = struct.unpack_from("<IHHHHI", blob, 0)
     assert magic == AHGT_MAGIC

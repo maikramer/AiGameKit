@@ -26,14 +26,14 @@ def _import_glb(path: Path) -> object:
 
 
 class TestEnsureFeetRootBone:
-    def test_bandit_gains_root_parenting_pelvis(self) -> None:
+    def test_hero_gains_root_parenting_pelvis(self) -> None:
         # Rig SkinTokens cru (pelvis-as-root) — não o lod público já animado.
-        glb = Path(
-            "/home/maikeu/GitClones/AiGameKit/VibeGame/examples/simple-rpg/"
-            "public/assets/meshes/_intermediate/bandit_lod0_rigged.glb"
+        glb = (
+            Path(__file__).resolve().parents[2]
+            / "Viber/examples/shared-assets/public/assets/meshes/characters/_intermediate/hero_rigged.glb"
         )
         if not glb.is_file():
-            pytest.skip("bandit_lod0_rigged.glb ausente")
+            pytest.skip("hero_rigged.glb ausente")
         arm = _import_glb(glb)
         assert "root" not in arm.data.bones
         assert arm.data.bones["pelvis"].parent is None

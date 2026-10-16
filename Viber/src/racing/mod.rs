@@ -1,5 +1,5 @@
-//! Racing — suporte de jogo de corrida no Viber (port do plugin `racing` do
-//! VibeGame, Fase 1: core de corrida).
+//! Racing — suporte de jogo de corrida no Viber (port do plugin `racing`,
+//! Fase 1: core de corrida).
 //!
 //! Ativa-se com `gameplay: racing` no config.yaml. As peças:
 //!
@@ -65,6 +65,16 @@ impl bevy::app::Plugin for RacingPlugin {
             bevy::app::Update,
             (race::race_config_system, collect_vehicle_templates).chain(),
         );
+        // Rampas/pads declaráveis → TrackInfo + visuais (cunha/placa).
+        app.add_systems(
+            bevy::app::Update,
+            (
+                race::collect_track_fx
+                    .after(race::build_track_info)
+                    .before(ai::ai_driver),
+                race::spawn_track_props.after(race::collect_track_fx),
+            ),
+        );
         // Ordem por frame: traçado → diretor (estado) → IA (inputs) →
         // movimento → progresso/posições → som → snapshot Lua. Tudo ANTES do
         // `player_movement`/câmara (o kart do jogador é lido por elas no
@@ -80,6 +90,7 @@ impl bevy::app::Plugin for RacingPlugin {
                 race::race_rank_system,
                 audio::engine_audio_system,
                 publish_lua_state,
+                apply_lua_boosts,
                 speed_fov_system,
             )
                 .chain()
@@ -93,10 +104,16 @@ impl bevy::app::Plugin for RacingPlugin {
             speed_fov_apply.after(crate::camera::fov_kick_system),
         );
         app.add_systems(bevy::app::Startup, audio::load_engine_audio);
+        // O latch corre antes do movimento dos karts (o gate global no
+        // app.rs só cobre o player_movement).
+        app.add_systems(
+            bevy::app::Update,
+            crate::input_latch::key_latch_system.before(vehicle::vehicle_movement),
+        );
     }
 }
 
-/// Bónus de FOV alvo por velocidade (graus) — chase cam do VibeGame
+/// Bónus de FOV alvo por velocidade (graus) — chase cam
 /// (`fov 74`, `fov-boost 13`): +8° ao teto, +5° extra em turbo/nitro.
 const FOV_BONUS_MAX: f32 = 8.0;
 const FOV_BONUS_TURBO: f32 = 5.0;
@@ -220,4 +237,50 @@ pub fn publish_lua_state(
         drift_charge: kart.map(|(v, _)| v.drift_charge).unwrap_or(0.0),
         turbo: kart.map(|(v, _)| v.turbo).unwrap_or(0.0),
     });
+}
+
+/// Drena o registry `viber_race_boosts` (escrito por `viber.vehicle.give`
+/// dos scripts — ex.: item boxes) e aplica ao kart do jogador. O drain vive
+/// AQUI e não no `luau_update` (teto de 16 parâmetros).
+pub fn apply_lua_boosts(
+    mut host: ResMut<crate::luau::LuaScriptHost>,
+    mut kart: Query<&mut vehicle::Vehicle, With<vehicle::PlayerKart>>,
+) {
+    let Ok(queue) = host
+        .lua
+        .named_registry_value::<mlua::Table>("viber_race_boosts")
+    else {
+        return;
+    };
+    let Ok(len) = queue.len() else {
+        return;
+    };
+    if len == 0 {
+        return;
+    }
+    let Ok(fresh) = host.lua.create_table() else {
+        return;
+    };
+    if host
+        .lua
+        .set_named_registry_value("viber_race_boosts", fresh)
+        .is_err()
+    {
+        return;
+    }
+    let Ok(mut vehicle) = kart.single_mut() else {
+        return;
+    };
+    for pair in queue.sequence_values::<mlua::Table>() {
+        let Ok(pair) = pair else { continue };
+        let nitro = pair.get::<f32>("nitro").unwrap_or(0.0);
+        let turbo = pair.get::<f32>("turbo").unwrap_or(0.0);
+        if nitro > 0.0 {
+            vehicle.nitro = (vehicle.nitro + nitro).min(1.0);
+        }
+        if turbo > vehicle.turbo {
+            vehicle.turbo = turbo;
+            vehicle.turbo_super = false;
+        }
+    }
 }

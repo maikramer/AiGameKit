@@ -1,8 +1,0 @@
-[test]
-preload = ["./tests/test-preload.ts"]
-# `bun test` scans from this root, which keeps it to the bun:test suites.
-# Playwright specs live in `playwright/` (outside it) because they call
-# `test.use()` from @playwright/test and blow up when bun tries to load them —
-# a bare `bun test` used to report 15 phantom failures because of it. Run those
-# with `bun run test:playwright`.
-root = "tests"

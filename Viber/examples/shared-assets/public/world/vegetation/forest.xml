@@ -7,7 +7,7 @@
   *_collision.glb e com carve de NavMesh procedural (prisma de 8 lados).
   O render continua instanciado (1 draw call por URL) mesmo com collider +
   script + ResourceNode por instância.
-  Ver VibeGame/src/plugins/asset-precompute/context.md.
+  Ver `Viber/src/recipes/` (precompute) e o `gameassets_handoff.json`.
 -->
 <Group name="biome.forest.vegetation" pos="0 0 0">
   <!-- Tapete erva/planta/flor (kit bpy em /assets/meshes/vegetation/).

@@ -4,7 +4,7 @@
 
 Orchestrator for the entire AiGameKit pipeline. Coordinates **Text2D**, **Texture2D**, **Skymap2D**, **Text2Sound**, **Text3D**, **Paint3D**, **Rigging3D**, **Animator3D**, **Materialize**, and **Terrain3D** to generate complete game assets from a YAML manifest and profile.
 
-Reads `game.yaml` (style + tool configuration) and `manifest.yaml` (asset list), then runs each sub-tool in the correct order, tracking progress, managing VRAM, and producing a structured output directory ready for handoff to Vite / VibeGame.
+Reads `game.yaml` (style + tool configuration) and `manifest.yaml` (asset list), then runs each sub-tool in the correct order, tracking progress, managing VRAM, and producing a structured output directory ready for engine handoff.
 
 ## First-use check
 
@@ -28,7 +28,7 @@ GameAssets is the central hub of the [AiGameKit monorepo](../). It does **not** 
 - **Terrain:** Terrain3D (AI terrain generation via diffusion, from `dream` command)
 - **LOD / collision:** Text3D `lod` / `collision` sub-commands
 - **Quality presets:** QualityEngine integration (`fast` | `low` | `medium` | `high` | `highest`)
-- **Idea-to-game:** `dream` command — LLM plans assets + scene, batch generates everything, scaffolds a playable Vite project
+- **Idea-to-game:** `dream` command — LLM plans assets + scene, batch generates everything, emits `game.yaml`/`manifest.yaml`/`world.xml`
 
 ## Pipeline Flow
 
@@ -255,7 +255,7 @@ gameassets dream refine PLAN.json "instruction" # iterate on a plan
 gameassets dream explain PLAN.json [--json]     # audit a plan (CI-ready)
 ```
 
-Idea-to-game: an LLM plans assets + scene from a natural language description, generates everything via batch + skymap, and scaffolds a playable Vite project with `world.xml`, `main.ts`, `index.html`. Every plan goes through deterministic lint + auto-repair (`planlint`) before any GPU time is spent.
+Idea-to-game: an LLM plans assets + scene from a natural language description, generates everything via batch + skymap, and emits `game.yaml`, `manifest.yaml` and `world.xml` (declarative scene sketch). Every plan goes through deterministic lint + auto-repair (`planlint`) before any GPU time is spent.
 
 | Flag | Description |
 |------|-------------|
@@ -329,9 +329,7 @@ error-severity issues — CI-ready.
 output_dir/
 ├── game.yaml            # Generated profile
 ├── manifest.yaml        # Generated asset manifest
-├── world.xml            # VibeGame scene definition
-├── main.ts              # Vite entry point
-├── index.html           # HTML shell
+├── world.xml            # Declarative scene sketch (placements, ground/terrain)
 ├── dream_plan.json      # LLM plan (if --plan-json)
 ├── images/              # Generated 2D images
 ├── meshes/              # Generated GLBs
@@ -911,7 +909,7 @@ gameassets resume --profile game.yaml --manifest manifest.yaml
 # 6. Validate outputs
 gameassets validate --profile game.yaml --manifest manifest.yaml
 
-# 7. Handoff to Vite/VibeGame
+# 7. Handoff to the game engine
 gameassets handoff --profile game.yaml --manifest manifest.yaml \
   --public-dir ../my-game/public
 ```
@@ -933,18 +931,11 @@ gameassets dream "open world RPG with forests and mountains" \
   --terrain --terrain-size 2048 --terrain-world-size 512
 ```
 
-### VibeGame Integration
+### Engine Integration
 
-After handoff, GLBs are available at `/assets/models/` in the Vite project. Use the VibeGame APIs to load them:
+After handoff, GLBs are available at `/assets/models/` in the target game's asset directory. The native engine (Viber) loads them directly from `world.xml` / the `public/` layout produced by handoff (`gameassets_handoff.json` lists every copied file).
 
-- `loadGltfToScene` — Basic GLB loading
-- `loadGltfAnimated` — GLB with animation support
-- `loadGltfToSceneWithAnimator` — GLB with full animator control
-- Declarative: `<PlayerGLTF pos="0 0 0" model-url="/assets/models/hero_lod0.glb"></PlayerGLTF>` in `world.xml`
-
-For PBR sky environments: `applyEquirectSkyEnvironment` from `vibegame` (`VibeGame/src/extras/sky-env.ts`).
-
-See [`docs/MONOREPO_GAME_PIPELINE.md`](../docs/MONOREPO_GAME_PIPELINE.md) for the full pipeline layout and [`VibeGame/examples/`](../VibeGame/examples/) for working examples.
+See the Viber example worlds (e.g. [`Viber/examples/`](../Viber/examples/)) for working engine integration.
 
 ## Development
 
@@ -1012,8 +1003,8 @@ GameAssets/
 │   ├── validator.py            # Asset validation
 │   ├── dream/                  # Idea-to-game subsystem
 │   │   ├── planner.py          # LLM-based game planning
-│   │   ├── runner.py           # Dream execution (batch + sky + scaffold)
-│   │   ├── emitter.py          # world.xml / main.ts / index.html generation
+│   │   ├── runner.py           # Dream execution (batch + sky + terrain + handoff)
+│   │   ├── emitter.py          # game.yaml / manifest.yaml / world.xml generation
 │   │   └── llm_context.py      # LLM prompt context
 │   └── data/
 │       └── presets.yaml        # Bundled style presets

@@ -16,7 +16,7 @@ pub fn euler_deg_to_quat(euler_deg: [f32; 3]) -> [f32; 4] {
 /// Euler angles in RADIANS (XYZ intrinsic order) to a quaternion `[x, y, z, w]`.
 ///
 /// The `rotation` attribute carries radians when it has 3 components (the
-/// VibeGame composition convention) and a raw quaternion with 4 —
+/// composition convention) and a raw quaternion with 4 —
 /// `parse_common` routes between this and [`euler_deg_to_quat`].
 pub fn euler_rad_to_quat(euler_rad: [f32; 3]) -> [f32; 4] {
     let q = Quat::from_euler(EulerRot::XYZ, euler_rad[0], euler_rad[1], euler_rad[2]);

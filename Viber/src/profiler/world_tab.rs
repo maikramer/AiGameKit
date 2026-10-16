@@ -1,5 +1,5 @@
-//! Snapshot "Mundo" do profiler — o equivalente do `world-debug.ts` do
-//! VibeGame: pose do player, câmara e entidades num raio, cada uma com
+//! Snapshot "Mundo" do profiler — o equivalente do `world-debug.ts`
+//! original: pose do player, câmara e entidades num raio, cada uma com
 //! rótulo resolvido (nome → script → forma de colisor → eid) e tags de
 //! componentes. O texto da janela fica compacto; o JSON (bridge/export)
 //! leva o detalhe rico por entidade.
@@ -19,13 +19,13 @@ use crate::player::Player;
 use crate::terrain::plugin::TerrainChunk;
 use crate::vitals::Health;
 
-/// Raio por omissão das entidades próximas (o `DEFAULT_NEARBY_RADIUS` do
-/// VibeGame); PageUp/PageDown ajusta.
+/// Raio por omissão das entidades próximas (`DEFAULT_NEARBY_RADIUS`);
+/// PageUp/PageDown ajusta.
 pub const DEFAULT_NEARBY_RADIUS: f32 = 30.0;
 /// Teto de entidades listadas (as mais próximas primeiro).
 pub const DEFAULT_NEARBY_LIMIT: usize = 24;
 
-/// Vetor serializável — o `WorldDebugVec3` do VibeGame.
+/// Vetor serializável — o `WorldDebugVec3`.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Vec3Snap {
     pub x: f32,
@@ -48,7 +48,7 @@ pub struct PlayerInfo {
     pub entity: u64,
     pub name: String,
     pub pos: Vec3Snap,
-    /// Yaw em graus (o `eulerYDeg` do VibeGame).
+    /// Yaw em graus (o `eulerYDeg`).
     pub yaw_deg: f32,
     pub grounded: bool,
     pub speed: f32,
@@ -71,7 +71,7 @@ pub struct NearbyEntity {
     #[serde(skip)]
     pub handle: Entity,
     pub name: String,
-    /// De onde veio o rótulo — o `labelSource` do VibeGame.
+    /// De onde veio o rótulo — o `labelSource`.
     pub label_source: &'static str,
     pub pos: Vec3Snap,
     pub dist: f32,
@@ -94,7 +94,7 @@ pub struct WorldSnapshot {
     pub entity_count: usize,
 }
 
-/// Nome do corpo de um `RigidBody` — os mesmos rótulos do VibeGame.
+/// Nome do corpo de um `RigidBody` — os mesmos rótulos da referência.
 fn body_type_name(body: &RigidBody) -> &'static str {
     match body {
         RigidBody::Fixed => "fixed",
@@ -110,7 +110,7 @@ fn collider_shape_name(collider: &Collider) -> String {
 }
 
 /// Rótulo de uma entidade: `Name` → script → colisor → rigidbody → `#eid`
-/// (a mesma cascata do `resolveEntityLabel` do VibeGame).
+/// (a mesma cascata do `resolveEntityLabel`).
 fn resolve_label(
     name: Option<&Name>,
     script: Option<&LuaScriptRef>,

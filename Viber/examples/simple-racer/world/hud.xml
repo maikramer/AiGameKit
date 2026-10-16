@@ -28,6 +28,20 @@
       </UiPanel>
     </UiColumn>
 
+    <!-- Toast de power-up (item boxes escrevem aqui). -->
+    <UiColumn class="anchor-toast">
+      <UiPanel id="item-toast-panel" class="toast">
+        <UiText id="item-toast" class="toast-text"></UiText>
+      </UiPanel>
+    </UiColumn>
+
+    <!-- Fundo-esquerda: hint de controlos (sempre visível). -->
+    <UiColumn class="anchor-hint">
+      <UiPanel class="hint">
+        <UiText class="hint-text">W/S acelera · A/D vira · SPACE drift · SHIFT nitro · R reinicia</UiText>
+      </UiPanel>
+    </UiColumn>
+
     <!-- Fundo-direita: speedómetro + nitro. -->
     <UiColumn class="anchor-speedo">
       <UiPanel class="hud-card speedo">

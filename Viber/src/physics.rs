@@ -1,12 +1,12 @@
 //! Physics — Rapier colliders and rigid bodies from the declarative world XML.
 //!
-//! VibeGame drives its browser runtime with Rapier (compiled to WASM); Viber
+//! The original engine drove its browser runtime with Rapier (WASM); Viber
 //! uses the same engine natively through `bevy_rapier3d`, so tuning carries
 //! over instead of being re-derived against a second solver.
 //!
 //! # XML contract
 //!
-//! Two attributes, both VibeGame component strings, on any entity:
+//! Two attributes, both as component strings, on any entity:
 //!
 //! ```xml
 //! <Entity collider="shape: box; size: 0.8 0.8 0.8" rigidbody="type: fixed" />
@@ -428,7 +428,7 @@ pub fn collider_for_shape(shape: &crate::recipes::Shape, scale: Vec3) -> Collide
             (half_height * scale.y).max(1e-3),
             (radius * scale.x.max(scale.z)).max(1e-3),
         ),
-        // Planos XZ: lâmina fina (a mesma convenção do Pad/Plane do VibeGame).
+        // Planos XZ: lâmina fina (a mesma convenção do Pad/Plane).
         crate::recipes::Shape::Plane { half_size } => Collider::cuboid(
             (half_size[0] * scale.x).max(1e-3),
             0.02,

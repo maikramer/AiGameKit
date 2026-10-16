@@ -9,9 +9,6 @@ do batch `simple-rpg` (2026-07). Complementa a tabela de flags em
 
 **Hub VRAM / kernels / vramd (todos os modelos):** [`MODEL_FINDINGS.md`](MODEL_FINDINGS.md).
 
-**Review por asset (vivo):**  
-`VibeGame/examples/simple-rpg/sample-gameassets/logs/omni_shape_inconsistencies.md`
-
 **Código canónico:**
 
 | Área | Path |
@@ -36,7 +33,7 @@ do batch `simple-rpg` (2026-07). Complementa a tabela de flags em
 ```
 Hunyuan raw:        +Z up (marching cubes / Omni forward)
 
-Export Text3D:      X+90° → WebGL / glTF / Three.js / VibeGame exhibit
+Export Text3D:      X+90° → glTF / WebGL (Y+ up)
                     Y+ up  (confirmado no exhibit e em sword_hero_shape)
 
 Omni bbox / size_m: aspect ou metros [L, H, W]

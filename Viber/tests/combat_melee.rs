@@ -178,7 +178,7 @@ fn test_melee_chain_finisher_execute_and_kill() {
 #[test]
 fn test_melee_softlock_hits_enemy_behind_the_model() {
     // O press não precisa de mirar: o soft-lock apanha o inimigo num círculo
-    // COMPLETO (VibeGame LOCK_RANGE) e o windup vira o herói para ele.
+    // COMPLETO (LOCK_RANGE) e o windup vira o herói para ele.
     let mut app = combat_app();
     let (hero, wolf) = spawn_hero_and_wolf(&mut app);
     // Lobo ATRÁS do herói (a −Z do forward +Z): o melee antigo nunca acertava.

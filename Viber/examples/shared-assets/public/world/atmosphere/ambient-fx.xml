@@ -5,12 +5,12 @@
   deste mapa está aos ~23–63 m — a versão anterior punha tudo a y=0.25–1.5, ou
   seja ~35 m enterrado, e nenhuma destas partículas se via. Usar sempre
   <GameObject place="at: x z"> (amostra o terreno) com o emissor como filho a
-  uma altura LOCAL. Ver VibeGame/src/plugins/spawner/context.md.
+  uma altura LOCAL. Ver `Viber/src/spawner.rs`.
 
   Sem luzes novas aqui (o budget de PointLight vive nos landmarks).
   Presets: sparkle(s), sand-dust, fire, rain, snow, smoke, dust, explosion,
   sparks, magic, fireflies, splash, woodchips, rockshards, leaves, ground-dust
-  — ver VibeGame/src/plugins/particles/presets.ts.
+  — ver `Viber/src/particles.rs` (presets).
 -->
 <Group name="atmosphere.ambient" pos="0 0 0">
   <!-- ============================================================

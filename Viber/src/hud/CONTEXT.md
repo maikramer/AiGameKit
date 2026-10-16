@@ -1,6 +1,6 @@
 # CONTEXT.md — src/hud
 
-Camada de apresentação HUD herdada do simple-rpg do VibeGame (portado com
+Camada de apresentação HUD herdada do simple-rpg original (portado com
 presentation "AAA": font Cinzel, painéis com gradiente e sombra, ícones
 vetoriais autorais, seta real de minimapa com dots de quest numerados,
 compasso tickado com distâncias por setor).

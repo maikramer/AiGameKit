@@ -1,6 +1,6 @@
 # Grupo terrain — formações rochosas genéricas do Crystal Vale (partilhado).
 # Canónico em examples/shared-assets/ (manifests + binários em public/assets).
-# Exemplos consomem via plugin vibegame({ sharedAssets }) — sem cópias nem symlinks.
+# Exemplos consomem o pool diretamente por URL — sem cópias nem symlinks.
 # Regenerar: cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/terrain
 output_dir: ../public/assets
 meshes_subdir: meshes/terrain

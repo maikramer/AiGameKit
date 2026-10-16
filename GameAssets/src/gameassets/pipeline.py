@@ -104,9 +104,9 @@ log = logging.getLogger(__name__)
 
 # Último nível da ladder que ainda leva rig; acima disso o entregável é mesh
 # estático (``text3d lod --rig-max-level``). Um esqueleto por nível custa no
-# runtime mesmo quando o nível está escondido — o VibeGame percorre e recompõe
-# todos os nós da cena por frame, e no simple-rpg isso eram ~11k ossos, 12.3k de
-# 15.4k nós, quase todos em níveis de LOD que ninguém vê animar.
+# runtime mesmo quando o nível está escondido — o motor percorre e recompõe
+# todos os nós da cena por frame, e quase todos esses nós estavam em níveis de
+# LOD que ninguém vê animar.
 RIG_MAX_LEVEL = 1
 
 

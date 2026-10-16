@@ -155,7 +155,7 @@ nenhum — o pool não tem pasta `icons/`. Cosmético (HUD usa texto).
    nuvens/FBM), sem `<Sky>`→azul chapado, só-terreno→sem checker.
    **Estado pós-fix (mundo completo):** vila inteira renderiza (muralha,
    portão, casas, mercado, fogueira, bancos), terreno verde, sombras, HUD,
-   céu limpo — screenshot `final-shot-2/3.png`. Falta vs referência VibeGame:
+   céu limpo — screenshot `final-shot-2/3.png`. Falta vs a referência do exemplo original:
    praça/estradas com textura cobblestone (hoje base-color branco — road
    texture não aplica, escopo Terrain) e minimapa sem blips.
 
@@ -176,7 +176,7 @@ nenhum — o pool não tem pasta `icons/`. Cosmético (HUD usa texto).
    minificação da textura em ângulo raso (precisa anisotropic filtering —
    follow-up Bevy, não bloqueia).
 3. Pool movido pelo utilizador para `Viber/examples/shared-assets/public`
-   (o de `VibeGame/examples/` foi removido); default do `sync_assets.py`
+   (o pool do exemplo browser foi removido); default do `sync_assets.py`
    atualizado (com fallback para o caminho antigo). Ícones do HUD
    (`hud_health/gold/wood/stone.png`) agora existem no pool e foram
    espelhados — os avisos "sem fonte no pool" acabaram.
@@ -189,9 +189,8 @@ nenhum — o pool não tem pasta `icons/`. Cosmético (HUD usa texto).
    pipeline + espaço no pool; benefício: colisão trimesh fiel onde ela é
    realmente usada.
 2. **Ignorar** — estes colisores eram do esquema precompute; a física do
-   jogo usa primitives (cápsula/cilindro/AABB via `fitColliderFromAabb` e
-   `PrecomputePlugin`), e o mesh-collider só faz fetch para
-   TriMesh/ConvexHull. Migrar as entidades para `shape: precompute` ou
+   jogo usa primitives (cápsula/cilindro/AABB), e o mesh-collider só faz
+   fetch para TriMesh/ConvexHull. Migrar as entidades para `shape: precompute` ou
    primitives equivaleria, na prática, a não precisar dos GLB.
 
 Referência do desenho precompute:
@@ -274,7 +273,7 @@ para a cidade); nada tinha animação; combate não existia.
    Spawn dinâmico insere `Health` nas criaturas. `ensure_player_vitals`
    garante Health/Xp no herói (o `damage_player` dos scripts dependia disso).
 
-Follow-ups de combate (referência VibeGame main.ts): weapon trail, skills,
+Follow-ups de combate (referência main.ts do exemplo original): weapon trail, skills,
 arco/projecteis, números de dano, partículas de hit, loot.
 
 ## Arma na mão + tecla J (2026-08-31, noite — round 3)
@@ -282,12 +281,12 @@ arco/projecteis, números de dano, partículas de hit, loot.
 - **Ataque**: agora em **J** (além de clique esquerdo e R) em `combat.rs`.
 - **Arma na mão**: `combat::attach_hero_weapon` anexa
   `props/sword_hero_lod0.glb` ao osso da mão do herói — grips copiados do
-  VibeGame (`dist/data/held-items.json`): sword pos `[0.12, 0.04, 0.04]`, rot
+  exemplo original (`dist/data/held-items.json`): sword pos `[0.12, 0.04, 0.04]`, rot
   `[-1.33, 12.71, 0.96]` rad XYZ, scale 1; bone candidates
   `hand_r`/`RightHand`/… (herói atual usa `hand_r`). Attach via
   `GltfScenePending` como FILHO do osso (cena segue a animação do braço).
   Verificado visualmente pela bridge. Axe/spear/bomb: mesmos grips no JSON
-  quando a troca de armas chegar. Grips editor: `VibeGame src/game/grip-editor.ts`.
+  quando a troca de armas chegar.
 - **Clip de ataque do herói**: `hero_lod0.glb` tem clip `attack`; tocado por
   NOME no swing (sem mexer em `animator.state`, que o driver de movimento
   re-afirma quando difere); `reset_hero_attack_clip` devolve o controle após
@@ -358,7 +357,7 @@ compila e 430 testes passavam antes do edit deles.
 
 ## Portão/muros atravessáveis — causa raiz (2026-09-01→02)
 
-O VibeGame usa **malhas de colisão dedicadas** (`*_collision.glb`) nos
+O exemplo original usava **malhas de colisão dedicadas** (`*_collision.glb`) nos
 trimesh; a migração apontou os **311** trimesh do mundo para o **visual**
 (`_lod0.glb`) — o arco do portão no visual fecha o vão em cima. Fix: os 311
 trimesh agora apontam para `_collision.glb` (todos existiam no espelho; paths

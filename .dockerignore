@@ -18,11 +18,9 @@
 .installer-venv
 **/build
 
-# Node / Bun
+# Node
 **/node_modules
 **/dist
-VibeGame/examples
-VibeGame/create-vibegame/template/node_modules
 
 # Rust
 **/target

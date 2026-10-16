@@ -1,6 +1,6 @@
 //! `<SpawnGate target-entity="player" y-fallback="150" skin-distance="0.05">`
 //! — segura uma entidade no ar até haver chão de colisão por baixo dela
-//! (port do plugin `spawn-gate` do VibeGame).
+//! (port do plugin `spawn-gate`).
 //!
 //! O terreno voxel assa os colliders em streaming à volta do herói: no
 //! arranque (e numa entidade dinâmica autorada longe dele) o corpo existe
@@ -21,7 +21,7 @@ use bevy_rapier3d::prelude::{KinematicCharacterController, RigidBodyDisabled, Ve
 use crate::player::Player;
 use crate::worldsys::EngineConfigs;
 
-/// Folga por omissão acima da superfície (m) — a do VibeGame.
+/// Folga por omissão acima da superfície (m) — a da referência.
 pub const DEFAULT_SKIN: f32 = 0.05;
 /// Tempo máximo de espera (s) antes de soltar sobre o chão analítico.
 pub const GATE_TIMEOUT_S: f32 = 20.0;

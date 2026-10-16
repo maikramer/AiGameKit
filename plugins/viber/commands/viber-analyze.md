@@ -31,7 +31,7 @@ Interpretar e reportar por severidade (skill **viber-worlds**, references/xml-co
 - **⚠ quests** (`audit_quests`): dador sem `<DialogueNPC dialogue-id=…>`, marco
   `visit` inexistente, alvo `kill` sem script de criatura que o produza. Um
   `biome` em falta derruba o FICHEIRO inteiro.
-- **ℹ / no-ops**: tags desconhecidas (mundos VibeGame degradam com garcia —
+- **ℹ / no-ops**: tags desconhecidas (mundos legados degradam com garcia —
   decidir se é intenção), glTF sem collider, estrada × cut.
 - **Erros de mundo estático**: `<StaticSpawner>`/`place`/`<Vegetation>` sem
   `instances` num `<world static="true">` falham o parse (usar `viber tool

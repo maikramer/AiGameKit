@@ -7,7 +7,7 @@
 ## Contexto
 
 A pipeline atual produz GLBs incoerentes entre estágios. Análise empírica dos
-assets em `VibeGame/examples/simple-rpg/public/assets/meshes/`:
+assets do exemplo simple-rpg (pasta `meshes/`):
 
 | Asset | Estágio | Tamanho | Verts | Tris | V/Tri |
 |---|---|---:|---:|---:|---:|

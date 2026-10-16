@@ -9,8 +9,6 @@ import yaml
 from gameassets.dream.emitter import (
     emit_all,
     emit_game_yaml,
-    emit_index_html,
-    emit_main_ts,
     emit_world_xml,
 )
 from gameassets.dream.planner import AssetEntry, DreamPlan, Placement, SceneLayout
@@ -164,55 +162,12 @@ class TestEmitWorldXml:
         assert 'color="#c2a860"' in xml
 
 
-class TestEmitMainTs:
-    def test_imports_vibegame(self) -> None:
-        ts = emit_main_ts(_sample_plan(), with_sky=True)
-        assert "from 'vibegame'" in ts
-
-    def test_calls_load_scene_manifest(self) -> None:
-        ts = emit_main_ts(_sample_plan(), with_sky=True)
-        assert "loadSceneManifest" in ts
-        assert "await loadSceneManifest(state)" in ts
-
-    def test_no_gltf_animator_in_main_ts(self) -> None:
-        ts = emit_main_ts(_sample_plan(), with_sky=True)
-        assert "GltfAnimator" not in ts
-        assert "GLTFLoader" not in ts
-
-    def test_no_gltf_animator_without_rig(self) -> None:
-        plan = _sample_plan()
-        plan.assets = [a for a in plan.assets if a.id != "hero"] + [
-            AssetEntry(id="hero", idea="chibi", kind="character", generate_3d=True, generate_rig=False),
-        ]
-        ts = emit_main_ts(plan, with_sky=True)
-        assert "GltfAnimator" not in ts
-
-    def test_no_sky_env_when_disabled(self) -> None:
-        ts = emit_main_ts(_sample_plan(), with_sky=False)
-        assert "applyEquirectSkyEnvironment" not in ts
-
-
-class TestEmitIndexHtml:
-    def test_has_canvas(self) -> None:
-        world = emit_world_xml(_sample_plan())
-        html = emit_index_html(_sample_plan(), world)
-        assert 'id="game-canvas"' in html
-        assert "<Scene" in html
-
-    def test_title(self) -> None:
-        world = emit_world_xml(_sample_plan())
-        html = emit_index_html(_sample_plan(), world)
-        assert "Crystal Clouds" in html
-
-
 class TestEmitAll:
     def test_creates_files(self, tmp_path: Path) -> None:
         paths = emit_all(_sample_plan(), tmp_path)
         assert paths["game_yaml"].is_file()
         assert paths["manifest_yaml"].is_file()
         assert paths["world_xml"].is_file()
-        assert paths["main_ts"].is_file()
-        assert paths["index_html"].is_file()
 
     def test_game_yaml_parseable(self, tmp_path: Path) -> None:
         paths = emit_all(_sample_plan(), tmp_path)

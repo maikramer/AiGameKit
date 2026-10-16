@@ -40,7 +40,7 @@ Knobs are a privilege earned after the happy path works.
 | Idea → scaffold | `gameassets dream` | Hand-writing every manifest column first |
 | Single mesh | `text3d generate …` (with topology-fix on by default) | Raw stage-1 only unless opted out |
 | Textured mesh | paint in pipeline / paint CLI with sane defaults | DIY UV + external painter as default |
-| Into the browser | `gameassets handoff` + VibeGame loaders | Copying `_intermediate` into `public/` |
+| Assets into a game folder | `gameassets handoff` | Copying `_intermediate` into `public/` |
 
 ## Anti-patterns
 

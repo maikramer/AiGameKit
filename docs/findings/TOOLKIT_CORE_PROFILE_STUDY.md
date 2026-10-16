@@ -6,7 +6,7 @@ Complementa [`MODEL_CONSOLIDATION_STUDY.md`](MODEL_CONSOLIDATION_STUDY.md) (mode
 Objetivo: reduzir o toolkit ao que os jogos de exemplo realmente exercitam —
 facilitar instalação/uso, poupar disco (modelos HF, pós-dedupe de venvs) e
 reorganizar a apresentação (AGENTS/README). Método: varrimento de evidências nos
-exemplos (`VibeGame/examples/*`, `Viber/examples/*`, manifests `game.yaml`,
+exemplos (`Viber/examples/*`, manifests `game.yaml`,
 scripts de regen, pool `shared-assets`) + mapa de wiring interno do GameAssets
 (que sub-tool cada stage invoca) + `tools.yaml`/install.sh.
 
@@ -24,15 +24,15 @@ scripts de regen, pool `shared-assets`) + mapa de wiring interno do GameAssets
 | Skymap2D | SIM | `README.md:153`; `public/assets/sky/` |
 | Text2Sound | SIM | `regen_sounds.py`, `gen-sfx.sh`, manifest `audio.yaml` (SA3) |
 | AiGameKitLab | SIM | validate do batch (`pipeline.py:1533` — falha dura sem ele) + `precompute` sidecars |
-| Terrain3D | SIM (VibeGame) | `index.html:71` "heightmap 100% Terrain3D" → `terrain.ahgt` (Viber nativo usa script próprio) |
+| Terrain3D | SIM (exemplo browser) | heightmap do exemplo → `terrain.ahgt` (Viber nativo usa script próprio) |
 | Rocks3D | SIM (parcial) | formações `form_*` do pool (`world/context.md:195`; stage 0 categoria rock) |
-| VibeGame, Viber | SIM (engines) | os próprios exemplos + porta nativa |
+| Viber | SIM (engine) | os próprios exemplos + porta nativa |
 | **Part3D** | **NÃO** | zero stages `parts` nos manifests; **nenhum wiring no GameAssets** (só `.gitignore` scratch) |
 | **Motion3D** | **NÃO** | 0 refs nos exemplos; wave `run_motion3d_wave_or_fallback` existe **sem callers** |
 | **Intrinsic** | **NÃO** | 0 refs; opção `materialize_intrinsic: False` (profile.py:133); pesos nem em disco |
 
 Clips dos exemplos = **Animator3D (Quaternius/UAL)**, não Motion3D. Docs canónicos
-(`MONOREPO_GAME_PIPELINE.md`, `ZERO_TO_GAME_AI.md`, README) listam exatamente as
+(`MONOREPO_GAME_PIPELINE.md`, README) listam exatamente as
 tools usadas — Part3D/Motion3D/Intrinsic só aparecem no catálogo de pacotes.
 
 ## 2. Perfis de instalação propostos
@@ -43,7 +43,7 @@ expande o perfil em nomes de tools antes do bootstrap:
 
 | Perfil | Tools | Para quê |
 |--------|-------|----------|
-| `core` (zero-a-jogo mínimo) | `vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab vibegame` | DAG completo GLB animado → browser (docs `ZERO_TO_GAME_AI`) |
+| `core` (zero-a-jogo mínimo) | `vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab` | DAG completo GLB animado |
 | `examples` (default sugerido) | core + `texture2d skymap2d text2sound terrain3d rocks3d viber` | tudo que os jogos de exemplo usam (céu, áudio, texturas, heightmap, rochas, track nativa) |
 | `all` (actual) | + `part3d motion3d intrinsic` | catálogo completo |
 
@@ -96,7 +96,7 @@ Aprovado na totalidade, incluindo o corte do Motion3D do disco.
   e installs individuais mantêm-se. Testado com bootstrap stubbed.
 - **Docs**: AGENTS.md com coluna **Perfil** na tabela de pacotes (20/20) + secção
   "Instalação por perfil"; README/README_PT/INSTALLING com a tabela de perfis;
-  doc-bug "parts auto-detect" corrigido em AGENTS.md e ZERO_TO_GAME_AI.md.
+  doc-bug "parts auto-detect" corrigido em AGENTS.md.
 - **GameAssets**: wave `run_motion3d_wave_or_fallback` + `motion3d_specs_from_items`
   removidas (sem callers) e testes ajustados — 781 ✓.
 - **Disco** (~34 GB medidos): venvs `Part3D/Motion3D/Intrinsic` apagadas (14 venvs

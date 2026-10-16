@@ -1,62 +1,16 @@
-# Release workflow — GitHub Release por tag + bump opcional + npm opt-in.
+# Release workflow — GitHub Release por tag.
 #
 # Fluxo normal: `git tag -a v<N> && git push origin v<N>` → o job
 # `github-release` cria a GitHub Release com as notes geradas + a entrada do
-# CHANGELOG.md. O `workflow_dispatch` mantém o bump de versão do VibeGame +
-# tag (para releases planeadas), e o npm publish é OPT-IN (input
-# `publish_npm`, default false) até o secret NPM_TOKEN existir — a v0.5.0
-# falhou com ENEEDAUTH por esse motivo.
+# CHANGELOG.md.
 
 name: Release
 
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version (e.g. 1.0.0, 0.4.1)'
-        required: true
-      prerelease:
-        description: 'Prerelease? (skip npm publish)'
-        type: boolean
-        default: false
-      publish_npm:
-        description: 'Publish aigamekit-vibegame to npm (needs NPM_TOKEN secret)'
-        type: boolean
-        default: false
-
-# O job version-bump faz commit + tag + push do bump — precisa de write em
-# contents; sem este bloco o GITHUB_TOKEN fica com o default read-only e o
-# push do bump morre com 403.
-permissions:
-  contents: write
 
 jobs:
-  # Só no workflow_dispatch: cria a tag (o push dela re-dispara este workflow
-  # no ramo de tags e corre o github-release).
-  version-bump:
-    name: Bump version (manual only)
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '20'
-      - name: Bump VibeGame version
-        run: |
-          cd VibeGame
-          npm version ${{ github.event.inputs.version }} --no-git-tag-version
-      - name: Commit and tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "release: v${{ github.event.inputs.version }}"
-          git tag "v${{ github.event.inputs.version }}"
-          git push origin main --tags
-
   github-release:
     name: GitHub Release (tag push)
     if: startsWith(github.ref, 'refs/tags/v')
@@ -84,35 +38,3 @@ jobs:
           body_path: body.md
           generate_release_notes: true
           draft: false
-          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
-
-  publish-vibegame:
-    name: Publish VibeGame to npm (opt-in)
-    needs: version-bump
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      github.event.inputs.prerelease == 'false' &&
-      github.event.inputs.publish_npm == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: VibeGame
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: main
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.2.21"
-      - name: Install and build
-        run: |
-          bun install --frozen-lockfile
-          bun run build
-      - name: Publish
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

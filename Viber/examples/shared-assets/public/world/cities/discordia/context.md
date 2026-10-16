@@ -69,5 +69,5 @@ edifício↔polilinha das vias, não só com o analyze):
 
 `skirts.xml` sits **outside** the wall but still on/near the pad — natural clutter so the city does not read as a flat desert plateau. Valley resources stay in `../../spawn/ring.xml` (±58), not inside the exclusion disc.
 
-City-layout recipes: engine `VibeGame/src/plugins/city-layout/context.md`.
+City-layout recipes: ver `Viber/src/recipes/` e `Viber/docs/COMPOSITION.md`.
 Radii overview: [`../../context.md`](../../context.md).

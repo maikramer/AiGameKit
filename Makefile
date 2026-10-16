@@ -1,11 +1,11 @@
-# AiGameKit monorepo — common tasks for Python packages (ruff, pytest, mypy), Rust (Materialize), and VibeGame (Bun).
+# AiGameKit monorepo — common tasks for Python packages (ruff, pytest, mypy) and Rust (Materialize, Viber).
 # Requires GNU Make; on Windows, use Git Bash / MSYS2 / WSL so shell recipes and `find` work as expected.
 
 PYTHON_PROJECTS := Shared Text2D Text3D Paint3D Part3D GameAssets Texture2D Skymap2D Text2Sound Rigging3D Animator3D Motion3D AiGameKitLab Terrain3D Rocks3D
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-viber test-vibereditor test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean dedupe-venvs typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-viber test-vibereditor clean dedupe-venvs typecheck check install-hooks
 
 # Each package is tested from its own venv (installed by ./install.sh <tool>, which
 # adds the [dev] extra). CI has no per-package venv, so the system interpreter stays
@@ -21,8 +21,7 @@ endef
 help: ## List all targets (default)
 	@echo "AiGameKit monorepo targets:"
 	@echo ""
-	@echo "Full Python/Rust CI (Materialize + Viber, no VibeGame): make check"
-	@echo "VibeGame (Bun): make test-vibegame | make check-vibegame | make lint-vibegame | make build-vibegame"
+	@echo "Full Python/Rust CI (Materialize + Viber): make check"
 	@echo ""
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-22s %s\n", $$1, $$2}'
 
@@ -118,25 +117,6 @@ test-viber: ## cargo test in Viber/
 
 test-vibereditor: ## cargo test in ViberEditor/
 	cd ViberEditor && cargo test
-
-# VibeGame: requires Bun (https://bun.sh/) on PATH. Not part of `make test` / `make check`.
-test-vibegame: ## bun install (frozen) + bun test in VibeGame/
-	cd VibeGame && bun install --frozen-lockfile && bun test tests/unit tests/integration tests/e2e
-
-check-vibegame: ## tsc --noEmit in VibeGame/
-	cd VibeGame && bun install --frozen-lockfile && bun run check
-
-lint-vibegame: ## eslint in VibeGame/
-	cd VibeGame && bun install --frozen-lockfile && bun run lint
-
-fmt-vibegame: ## prettier --write in VibeGame/
-	cd VibeGame && bun install --frozen-lockfile && bun run format
-
-fmt-check-vibegame: ## prettier --check in VibeGame/
-	cd VibeGame && bun install --frozen-lockfile && bun run format:check
-
-build-vibegame: ## vite build in VibeGame/
-	cd VibeGame && bun install --frozen-lockfile && bun run build
 
 clean: ## Remove __pycache__, caches, build/, dist/, *.egg-info under the repo
 	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true

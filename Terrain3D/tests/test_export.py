@@ -153,9 +153,9 @@ class TestNativeResolution:
 class TestExportAhgtCompression:
     """O payload do `.ahgt` tem de ser deflate RAW.
 
-    O leitor é o `inflateSync` do fflate (VibeGame
-    `src/plugins/terrain/ahgt-format.ts`), que não aceita o wrapper RFC1950.
-    Escrever com `zlib.compress` produzia ficheiros que o browser rejeitava com
+    O leitor é o `inflateSync` do fflate (motor nativo, `world.data/terrain.ahgt`),
+    que não aceita o wrapper RFC1950.
+    Escrever com `zlib.compress` produzia ficheiros que o leitor rejeitava com
     "invalid block type" — o terreno não carregava e o mundo ficava sem chão.
     """
 

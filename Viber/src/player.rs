@@ -1,5 +1,5 @@
 //! `<PlayerGLTF>` runtime: third-person character controller ported from the
-//! VibeGame `player` plugin — gamepad-style, no mouse. A/D steer the camera
+//! original `player` plugin — gamepad-style, no mouse. A/D steer the camera
 //! yaw (`CAMERA_TURN_SPEED`) while nudging the character sideways
 //! (`SIDE_MOVE_FACTOR`), W/S walk/sprint along the camera axis, Space jumps
 //! with a 100 ms input buffer, 100 ms coyote time and a 0.2 s cooldown. The
@@ -14,11 +14,11 @@ use crate::camera::low_pass_factor;
 use crate::recipes::spawn::{DialogueNpc, OrbitCamera};
 use crate::terrain::runtime::TerrainRuntime;
 
-/// Gravity magnitude (m/s²) — `DEFAULT_GRAVITY = -60` in the VibeGame
+/// Gravity magnitude (m/s²) — `DEFAULT_GRAVITY = -60` in the original
 /// physics utils; the jump velocity derives from it.
 pub const GRAVITY: f32 = 60.0;
 /// A/D move at this fraction of the walk speed while steering the camera
-/// (VibeGame `SIDE_MOVE_FACTOR`), so turning carves an arc instead of
+/// (`SIDE_MOVE_FACTOR`), so turning carves an arc instead of
 /// pivoting in place.
 pub const SIDE_MOVE_FACTOR: f32 = 0.6;
 /// Probe acima dos pés do herói ao perguntar `surface_below` pelo chão.
@@ -26,8 +26,7 @@ pub const SIDE_MOVE_FACTOR: f32 = 0.6;
 /// Tem de exceder a skin do character controller (0.02): um herói em repouso
 /// assenta a skin acima do collider, e a sonda tem de começar em AR.
 pub const GROUND_PROBE: f32 = 0.05;
-/// Camera yaw turn rate while steering with A/D (rad/s, VibeGame
-/// `CAMERA_TURN_SPEED`). `OrbitCamera::yaw_deg` is in degrees — convert
+/// Camera yaw turn rate while steering with A/D (rad/s, `CAMERA_TURN_SPEED`). `OrbitCamera::yaw_deg` is in degrees — convert
 /// before integrating.
 pub const CAMERA_TURN_SPEED: f32 = 2.5;
 
@@ -132,9 +131,9 @@ pub fn fell_out_of_world(player_y: f32, top: f32) -> bool {
 
 pub const JUMP_BUFFER: f32 = 0.1;
 /// Coyote time: jumps still land within this window after leaving the ground
-/// (VibeGame `INPUT_CONFIG.gracePeriods.coyoteTime` = 100 ms).
+/// (`INPUT_CONFIG.gracePeriods.coyoteTime` = 100 ms).
 pub const COYOTE_TIME: f32 = 0.1;
-/// Cooldown between jumps (VibeGame `JUMP_CONSTANTS.cooldown` = 0.2 s).
+/// Cooldown between jumps (`JUMP_CONSTANTS.cooldown` = 0.2 s).
 pub const JUMP_COOLDOWN: f32 = 0.2;
 /// Time constant to REACH the input velocity (acceleration feel). Larger =
 /// heavier, more inertia ramping up.
@@ -205,16 +204,16 @@ pub fn gravity_applies(grounded: bool, vel_y: f32) -> bool {
     !grounded || vel_y > 0.0
 }
 
-/// The controllable hero (VibeGame `PlayerController` subset).
+/// The controllable hero (`PlayerController` subset).
 #[derive(Debug, Component)]
 pub struct Player {
-    /// Walk speed in m/s (VibeGame default 4).
+    /// Walk speed in m/s (default 4).
     pub speed: f32,
-    /// Sprint multiplier when Shift is held (VibeGame default 1.5).
+    /// Sprint multiplier when Shift is held (default 1.5).
     pub sprint_multiplier: f32,
-    /// Jump apex height in meters (VibeGame default 2.3).
+    /// Jump apex height in meters (default 2.3).
     pub jump_height: f32,
-    /// Facing turn rate in rad/s (VibeGame default 10).
+    /// Facing turn rate in rad/s (default 10).
     pub rotation_speed: f32,
     /// Vertical velocity (jump / gravity integration).
     pub vel_y: f32,
@@ -224,10 +223,10 @@ pub struct Player {
     pub vel_z: f32,
     /// True while standing on the terrain surface.
     pub grounded: bool,
-    /// Jump allowed again once the cooldown elapses (VibeGame `canJump`).
+    /// Jump allowed again once the cooldown elapses (`canJump`).
     pub can_jump: bool,
-    /// True between the jump impulse and the next landing (VibeGame
-    /// `isJumping`; gates landing momentum reset).
+    /// True between the jump impulse and the next landing (`isJumping`;
+    /// gates landing momentum reset).
     pub is_jumping: bool,
     /// Seconds left before [`Self::can_jump`] is restored.
     pub jump_cooldown: f32,
@@ -270,12 +269,12 @@ impl Default for Player {
 }
 
 /// Jump velocity that reaches `jump_height` under [`GRAVITY`]:
-/// `sqrt(2 · g · h)` (VibeGame `calculateJumpVelocity`).
+/// `sqrt(2 · g · h)` (`calculateJumpVelocity`).
 pub fn jump_velocity(jump_height: f32) -> f32 {
     (2.0 * GRAVITY * jump_height.max(0.0)).sqrt()
 }
 
-/// VibeGame `canPerformJump`: the press is inside the buffer window, the
+/// `canPerformJump` rules: the press is inside the buffer window, the
 /// cooldown is done, and we are grounded — or left the ground within coyote
 /// time.
 pub fn can_perform_jump(
@@ -290,7 +289,7 @@ pub fn can_perform_jump(
         && (grounded || now - last_grounded_time <= COYOTE_TIME)
 }
 
-/// Horizontal input direction (world space) — VibeGame `processInput`:
+/// Horizontal input direction (world space) — `processInput`:
 /// `(strafe, 0, -forward)` rotated by the camera yaw. Normalized; the input
 /// magnitude is applied separately by the caller.
 pub fn process_input(forward: f32, strafe: f32, yaw_deg: f32) -> Vec3 {
@@ -307,7 +306,7 @@ pub fn process_input(forward: f32, strafe: f32, yaw_deg: f32) -> Vec3 {
     }
 }
 
-/// Input magnitude — VibeGame re-applies `min(1, hypot(forward, strafe))`
+/// Input magnitude — the reference re-applies `min(1, hypot(forward, strafe))`
 /// after normalizing, so A/D alone (strafe 0.6) nudges at 60 % speed.
 pub fn input_magnitude(forward: f32, strafe: f32) -> f32 {
     (forward * forward + strafe * strafe).sqrt().min(1.0)
@@ -319,7 +318,7 @@ pub fn facing_rotation(dir: Vec3) -> Quat {
 }
 
 /// Slerp factor for facing: `rotation_speed · dt` converted to a 0..1 t,
-/// mirroring the VibeGame `calculateSlerpFactor` clamp.
+/// mirroring the `calculateSlerpFactor` clamp.
 pub fn facing_slerp_factor(current: Quat, target: Quat, rotation_speed: f32, dt: f32) -> f32 {
     let max_radians = rotation_speed * dt;
     let angle = current.angle_between(target);
@@ -339,6 +338,7 @@ pub fn facing_slerp_factor(current: Quat, target: Quat, rotation_speed: f32, dt:
 pub fn player_movement(
     keys: Res<ButtonInput<KeyCode>>,
     menus: Res<crate::menus::MenusOpen>,
+    latches: Res<crate::input_latch::KeyLatches>,
     time: Res<Time>,
     runtime: Option<Res<TerrainRuntime>>,
     collision: Option<Res<crate::physics::TerrainCollisionStatus>>,
@@ -382,16 +382,20 @@ pub fn player_movement(
     let now = time.elapsed_secs();
     // Há chão de collider carregado sob o herói? (streaming de colunas)
     let terrain_ready = collision.is_some_and(|status| status.ready);
+    // Latch de input: teclas de remote desktop/virtuais chegam como
+    // down+up instantâneos — o piso de hold torna-as utilizáveis
+    // (`input_latch.rs`; mesmo recurso que o vehicle_movement usa).
     let (w, s, a, d) = (
-        keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp),
-        keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown),
-        keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft),
-        keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight),
+        latches.down(&keys, KeyCode::KeyW) || latches.down(&keys, KeyCode::ArrowUp),
+        latches.down(&keys, KeyCode::KeyS) || latches.down(&keys, KeyCode::ArrowDown),
+        latches.down(&keys, KeyCode::KeyA) || latches.down(&keys, KeyCode::ArrowLeft),
+        latches.down(&keys, KeyCode::KeyD) || latches.down(&keys, KeyCode::ArrowRight),
     );
     let move_x = (d as i32 - a as i32) as f32;
     let move_forward = (w as i32 - s as i32) as f32;
-    let sprint = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-    let jump_held = keys.pressed(KeyCode::Space);
+    let sprint =
+        latches.down(&keys, KeyCode::ShiftLeft) || latches.down(&keys, KeyCode::ShiftRight);
+    let jump_held = latches.down(&keys, KeyCode::Space);
 
     for (mut transform, mut player, mut controller, output, mut settle, dying, knockback) in
         &mut players
@@ -413,7 +417,7 @@ pub fn player_movement(
             }
             _ => false,
         };
-        // Grounded state update first (VibeGame PlayerGroundedSystem runs
+        // Grounded state update first (the PlayerGroundedSystem runs
         // before movement): refresh the coyote clock and clear the jumping
         // flag on landing.
         if player.grounded {
@@ -494,7 +498,7 @@ pub fn player_movement(
         }
 
         // Facing: slerp toward the move heading at `rotation_speed` rad/s,
-        // only while moving (VibeGame rotation mode 1 — idle keeps facing).
+        // only while moving (rotation mode 1 — idle keeps facing).
         if dir.length_squared() > 0.0 {
             let target = facing_rotation(dir);
             let factor = facing_slerp_factor(transform.rotation, target, player.rotation_speed, dt);
@@ -744,7 +748,7 @@ pub fn hero_collider() -> bevy_rapier3d::prelude::Collider {
     )])
 }
 
-/// Rapier character controller tuned to the VibeGame hero.
+/// Rapier character controller tuned to the hero controller.
 pub fn hero_controller() -> bevy_rapier3d::prelude::KinematicCharacterController {
     use bevy_rapier3d::prelude::*;
     KinematicCharacterController {
@@ -901,7 +905,7 @@ mod tests {
     }
 
     #[test]
-    fn test_input_magnitude_matches_vibegame() {
+    fn test_input_magnitude_matches_reference() {
         // W full, W+D saturates at 1, A/D alone nudges at the side factor.
         assert!(approx(input_magnitude(1.0, 0.0), 1.0));
         assert!(approx(input_magnitude(1.0, 0.6), 1.0));
@@ -917,7 +921,7 @@ mod tests {
     }
 
     #[test]
-    fn test_jump_velocity_matches_vibegame() {
+    fn test_jump_velocity_matches_reference() {
         // √(2 · 60 · 2.3) ≈ 16.61 m/s reaches a 2.3 m apex.
         let v = jump_velocity(2.3);
         assert!(approx(v, 16.6132), "{v}");
@@ -1023,7 +1027,7 @@ mod tests {
     }
 
     #[test]
-    fn test_player_defaults_mirror_vibegame() {
+    fn test_player_defaults_match_reference() {
         let p = Player::default();
         assert_eq!(p.speed, 4.0);
         assert_eq!(p.sprint_multiplier, 1.5);

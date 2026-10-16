@@ -1,5 +1,5 @@
 //! Save/load & opções (loop 7 do port simple-rpg) — o análogo nativo do
-//! `SaveLoadPlugin` (localStorage + msgpackr) do VibeGame:
+//! `SaveLoadPlugin` original (localStorage + msgpackr):
 //!
 //! - **[`SaveGame`]**: XP, posição, vault (recursos + itens), estados das
 //!   quests e marcos da Nota — serializado em JSON.
@@ -10,7 +10,7 @@
 //!   e [L] carrega.
 //!
 //! Os `defs` das quests são estáticos (embutidos) — só os ESTADOS viajam no
-//! ficheiro, como os serializers por módulo do VibeGame.
+//! ficheiro, como os serializers por módulo da referência.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -604,10 +604,14 @@ fn options_system(
                     // Passivas do save aplicadas ao herói (HP máx + speed)
                     // antes de o estado guardado sobrepor tudo. Sem vitais
                     // (preset `none`) só há posição a repor.
-                    if let (Some(hp), Some(saved_stats)) =
-                        (hp.as_deref_mut(), rpg.stats.as_deref())
+                    if let (Some(hp), Some(saved_stats)) = (hp.as_deref_mut(), rpg.stats.as_deref())
                     {
-                        crate::skills::apply_passive_delta(hp, &mut player, &previous, &saved_stats.0);
+                        crate::skills::apply_passive_delta(
+                            hp,
+                            &mut player,
+                            &previous,
+                            &saved_stats.0,
+                        );
                     }
                     if let (Some(hp), Some((current, max))) = (hp.as_deref_mut(), game.health) {
                         hp.max = max.max(1.0);

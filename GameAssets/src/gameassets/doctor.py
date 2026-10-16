@@ -44,7 +44,6 @@ CORE_TOOLS = (
     "gameassets",
     "materialize",
     "aigamekitlab",
-    "vibegame",
 )
 EXAMPLES_EXTRA_TOOLS = ("texture2d", "skymap2d", "text2sound", "terrain3d", "rocks3d", "viber")
 
@@ -59,7 +58,6 @@ TOOL_CLIS = {
     "gameassets": "gameassets",
     "materialize": "materialize",
     "aigamekitlab": "aigamekit-lab",
-    "vibegame": "vibegame",
     "texture2d": "texture2d",
     "skymap2d": "skymap2d",
     "text2sound": "text2sound",
@@ -223,7 +221,7 @@ def check_node_bun() -> list[DoctorCheck]:
         DoctorCheck(
             name="Bun",
             status="ok" if bun else "warn",
-            detail=bun or "não encontrado — projetos do dream não arranjam (bun install/dev)",
+            detail=bun or "não encontrado (sem usos obrigatórios no toolkit atual)",
             fix=bun_install_hint(),
         )
     )

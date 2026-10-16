@@ -1,5 +1,5 @@
 //! Snapshot "Áudio" do profiler — o equivalente compacto do `AudioDebug`
-//! do VibeGame: buses do mixer (`AudioMixerSettings`), layers de BGM
+//! original: buses do mixer (`AudioMixerSettings`), layers de BGM
 //! ([`crate::music::MusicLayerTag`]) e loops activos
 //! ([`crate::music::LoopInstance`] + [`crate::music::LoopVolume`]), com
 //! estado das instâncias kira e volume linear corrente.

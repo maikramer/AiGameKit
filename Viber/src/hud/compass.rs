@@ -166,11 +166,7 @@ pub const COMPASS_LANDMARK_SLOTS: usize = 4;
 /// Ângulo (graus, ±180) do rumo `bearing` face ao `heading`.
 fn bearing_delta(heading: f32, bearing: f32) -> f32 {
     let delta = (bearing - heading).rem_euclid(360.0);
-    if delta > 180.0 {
-        delta - 360.0
-    } else {
-        delta
-    }
+    if delta > 180.0 { delta - 360.0 } else { delta }
 }
 
 /// Marcas de marcos disponíveis no compasso: os 4 rumos MAIS alinhados com

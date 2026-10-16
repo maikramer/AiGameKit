@@ -531,7 +531,7 @@ pub fn luau_update(
             ctx.self_props = locals.script_props.get(entity).ok().map(|p| p.0.clone());
         }
         // Secção "scripts" do profiler: um escopo por ficheiro (igual ao
-        // `script/<file>` do VibeGame). record_script auto-gateia em freeze.
+        // `script/<file>` antigo). record_script auto-gateia em freeze.
         let script_t0 = std::time::Instant::now();
         if let Err(e) = host.run_update(entity, &lref.path, dt, origin, player_pos, elapsed) {
             host.warn_once(&lref.path, &e);
@@ -1057,7 +1057,10 @@ pub fn luau_update(
                     // item) chega a `viber.events()` — quests em Lua sem
                     // tocar no Rust.
                     if let Some(events) = locals.events.as_deref_mut() {
-                        events.push(ScriptGameEvent::Collect { item: kind.clone(), amount });
+                        events.push(ScriptGameEvent::Collect {
+                            item: kind.clone(),
+                            amount,
+                        });
                     }
                     // Snapshot fresco (mesma razão do ItemAdd acima).
                     if let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
@@ -1074,7 +1077,10 @@ pub fn luau_update(
                 if let Some(vault) = vault.as_deref_mut() {
                     vault.item_add(&id, amount);
                     if let Some(events) = locals.events.as_deref_mut() {
-                        events.push(ScriptGameEvent::Collect { item: id.clone(), amount });
+                        events.push(ScriptGameEvent::Collect {
+                            item: id.clone(),
+                            amount,
+                        });
                     }
                     // Snapshot do vault atualizado AQUI: a mutação feita por
                     // ESTE sistema não é vista pelo `is_changed()` do frame
@@ -1209,9 +1215,7 @@ pub fn luau_update(
                                 "viber.vault_take: sem '{kind}' ×{amount} suficiente — nada consumido");
                     }
                     // Snapshot fresco (mesma razão do ItemAdd acima).
-                    if took
-                        && let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>()
-                    {
+                    if took && let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
                         let key = crate::economy::normalize_item(&kind);
                         if let Some(left) = ctx.vault.get_mut(&key) {
                             *left = left.saturating_sub(amount);
@@ -1395,7 +1399,8 @@ pub fn luau_update(
                     let fresh = !revealed.0.contains(&biome);
                     let revealed_biome = biome.clone();
                     commands.queue(move |world: &mut World| {
-                        if let Some(mut revealed) = world.get_resource_mut::<crate::travel::RevealedBiomes>()
+                        if let Some(mut revealed) =
+                            world.get_resource_mut::<crate::travel::RevealedBiomes>()
                         {
                             revealed.0.insert(revealed_biome);
                         }
@@ -1411,8 +1416,7 @@ pub fn luau_update(
                 commands.queue(move |world: &mut World| {
                     // `LevelState` é COMPONENTE do herói (não resource): um
                     // query curto percorre-o; a árvore é resource.
-                    let mut query =
-                        world.query::<&mut crate::skills::LevelState>();
+                    let mut query = world.query::<&mut crate::skills::LevelState>();
                     for mut level in query.iter_mut(world) {
                         level.points += amount;
                     }

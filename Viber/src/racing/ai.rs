@@ -1,5 +1,5 @@
 //! AI driver — pure-pursuit sobre a linha de corrida (port do
-//! `ai-driver.ts` do VibeGame). A IA escreve SO os inputs do mesmo
+//! `ai-driver.ts` original). A IA escreve SO os inputs do mesmo
 //! [`VehicleInput`] do jogador: conduz o modelo físico idêntico.
 
 use bevy::math::Vec2;
@@ -116,7 +116,8 @@ pub fn ai_driver(
         let perp = Vec2::new(-tangent.y, tangent.x);
         let target = station + perp * line_offset;
         let to_target = target - pos;
-        let desired = to_target.y.atan2(to_target.x);
+        // Convenção da engine: h = atan2(vx, vz) (forward = (sin h, cos h)).
+        let desired = to_target.x.atan2(to_target.y);
         let mut err = desired - vehicle.heading;
         while err > std::f32::consts::PI {
             err -= std::f32::consts::TAU;
@@ -243,6 +244,7 @@ mod tests {
             wheelspin: 0.0,
             stuck: 0.0,
             smoke_cd: 0.0,
+            boost_cd: 0.0,
         }
     }
 }

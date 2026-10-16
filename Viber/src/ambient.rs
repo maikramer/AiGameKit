@@ -1,5 +1,5 @@
 //! Mundo vivo (loop 9 do port simple-rpg) — o análogo nativo dos sistemas
-//! de ambiente do VibeGame:
+//! de ambiente originais:
 //!
 //! - **Perspetiva aérea**: a câmara tem SEMPRE [`DistanceFog`], com a cor da
 //!   hora ([`crate::worldsys::AtmosphereState`]) e inscattering do sol; a

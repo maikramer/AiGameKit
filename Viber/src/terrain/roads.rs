@@ -1,7 +1,7 @@
 //! Roads — corridor carving, `<RoadNetwork>` expansion (Way/Segment), road
 //! ribbons and the gameplay query registry.
 //!
-//! Ported from the VibeGame road plugin (`road/carve.ts`, `road/network.ts`,
+//! Ported from the original road plugin (`road/carve.ts`, `road/network.ts`,
 //! `road/profiles.ts`). Contracts kept from the original:
 //!
 //! * **Profile first** — the design profile is surveyed from the **post-pad,
@@ -22,7 +22,7 @@
 //!   `via` points, width lerped from the way widths, junction flare
 //!   (`crossing-flare`, ×1.45) widening near ways with degree ≥ 3.
 //!
-//! Known deviations from VibeGame (documented): station spacing is 1 m
+//! Known deviations from the reference (documented): station spacing is 1 m
 //! (vs 0.35 m); berms and cross-slope banking are not implemented.
 //!
 //! **Racing extensions** (simple-racer port, 2026-10-15): `<Road>` accepts
@@ -45,19 +45,19 @@ use super::paths::{
 };
 use super::water::WaterBody;
 
-/// Road station spacing for the design profile (meters). VibeGame uses
+/// Road station spacing for the design profile (meters). The original uses
 /// 0.35 m; 1 m keeps native carving cheap with identical visual results at
 /// terrain texel sizes ≥ 1 m.
 pub const STATION_SPACING: f32 = 1.0;
 /// Alternations of "pin pad plazas / re-limit the grade" while resolving a
 /// road's design profile (see `carve_road`); converges well inside this.
 const PAD_PIN_ITERATIONS: usize = 4;
-/// Extra bed overhang beyond the ribbon (meters, VibeGame `ROADBED_OVERHANG`).
+/// Extra bed overhang beyond the ribbon (meters, `ROADBED_OVERHANG`).
 pub const ROADBED_OVERHANG: f32 = 2.0;
 /// Adaptive falloff slope: `falloff = max(falloff, 1.875 · cutDepth)` gives a
-/// ~45° cut slope (VibeGame `DEFAULT_CORRIDOR_MAX_CUT_SLOPE = 1.0`).
+/// ~45° cut slope (`DEFAULT_CORRIDOR_MAX_CUT_SLOPE = 1.0`).
 pub const ADAPTIVE_FALLOFF_FACTOR: f32 = 1.875;
-/// Junction flare multiplier (VibeGame crossing flare ×1.45).
+/// Junction flare multiplier (crossing flare ×1.45).
 pub const CROSSING_FLARE: f32 = 1.45;
 /// Lift of the road ribbon above the carved bed (meters) — avoids z-fighting.
 /// Altura da ribbon sobre o terreno esculpido. 6 cm era sub-pixel a médias
@@ -91,12 +91,12 @@ pub const RIBBON_NOISE_AMP: f32 = 0.28;
 /// Wobble da largura (fração da meia-largura).
 pub const RIBBON_WOBBLE: f32 = 0.08;
 
-/// Cap on the miter scale at a corner (VibeGame `ROAD_MITER_LIMIT`). Sem o
+/// Cap on the miter scale at a corner (`ROAD_MITER_LIMIT`). Sem o
 /// limite um hairpin atirava a borda externa ao infinito; 3 mantém junções
 /// de 90° quase quadradas.
 pub const ROAD_MITER_LIMIT: f32 = 3.0;
 
-/// Road profiles (VibeGame `road/profiles.ts`).
+/// Road profiles (`road/profiles.ts`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RoadProfile {
     /// Main streets: full flattening.
@@ -157,7 +157,7 @@ pub struct RoadSpec {
     /// Authored ribbon width per path node (`widths="…"`), meters. `None` =
     /// `width` everywhere.
     pub widths: Option<Vec<f32>>,
-    /// Viaduct threshold (m, VibeGame `viaduct-clearance`): spans where the
+    /// Viaduct threshold (m, `viaduct-clearance`): spans where the
     /// authored elevation floats ≥ this far above the natural ground stop the
     /// corridor carve — the valley below stays — and the ribbon renders as a
     /// suspended deck with pylons. `0.0` disables. One number drives both the
@@ -495,7 +495,7 @@ impl RoadNetworkSpec {
                 }
             }
 
-            // VibeGame extendPathEnds: uma ribbon que parava exactamente na
+            // extendPathEnds: uma ribbon que parava exactamente na
             // centreline da vizinha deixava uma cunha de chão nu no canto
             // externo da junção. Estende as pontas em ways partilhados
             // (grau ≥ 2) — as ribbons sobrepõem-se e o alpha feather funde.
@@ -595,8 +595,7 @@ fn way_at_checked(ways: &[WaySpec], id: &str) -> Option<Vec2> {
 }
 
 /// Push one extrapolated point past the first (`at_end = false`) or last
-/// (`at_end = true`) path point along the end tangent (VibeGame
-/// `extendPathEnds`).
+/// (`at_end = true`) path point along the end tangent (`extendPathEnds`).
 fn extend_path_end(points: &mut Vec<Vec2>, amount: f32, at_end: bool) {
     let n = points.len();
     if points.len() < 2 || amount <= 0.0 {
@@ -620,7 +619,7 @@ fn extend_path_end(points: &mut Vec<Vec2>, amount: f32, at_end: bool) {
     }
 }
 
-/// Fusion disc at a multi-arm junction (VibeGame `junctions.ts`): um círculo
+/// Fusion disc at a multi-arm junction (`junctions.ts`): um círculo
 /// opaco de cobble centrado na junção cobre as emendas das ribbons que se
 /// cruzam — sem ele, pontas com alpha feather sobrepostas deixam costuras
 /// escuras e cunhas no cruzamento.
@@ -650,6 +649,9 @@ pub struct RoadSurface {
     pub s: f32,
     /// Half width of the road at the query point (logical wall distance).
     pub half_width: f32,
+    /// Signed lateral offset from the centerline (m, positivo à esquerda
+    /// da tangente) — rampas/pads de corrida assentam por aqui.
+    pub lateral: f32,
 }
 
 /// Registry entry for one carved road (queries + ribbon generation).
@@ -676,7 +678,7 @@ pub struct RoadPath {
 
 impl RoadPath {
     /// Signed "distance onto the road": ≤ 0 when on the ribbon, else meters
-    /// to the nearest edge (VibeGame `distanceToRoadAt`).
+    /// to the nearest edge (`distanceToRoadAt`).
     pub fn distance_to_road(&self, p: Vec2) -> f32 {
         let Some(hit) = nearest_on_path(&self.stations, p) else {
             return f32::INFINITY;
@@ -687,7 +689,7 @@ impl RoadPath {
         hit.point.distance(p) - hw
     }
 
-    /// Point is on the road ribbon (VibeGame `isPointOnRoad`).
+    /// Point is on the road ribbon (`isPointOnRoad`).
     pub fn is_on_road(&self, p: Vec2) -> bool {
         self.distance_to_road(p) <= 0.0
     }
@@ -866,7 +868,7 @@ pub fn carve_road(
     // solo natural. Sem carve aí — o vale fica intacto (a floresta cresce por
     // baixo) — e a ribbon desenha o tabuleiro à cota autoriada com pilares.
     // Um número só governa os dois lados (carve skip + deck), como no
-    // VibeGame: afasta-os e tens ou uma cicatriz gradada debaixo de ponte ou
+    // original: afasta-os e tens ou uma cicatriz gradada debaixo de ponte ou
     // um vão sem nada a segurá-lo.
     let deck: Vec<bool> = match (&authored_elev, spec.viaduct_clearance > 0.0) {
         (Some(e), true) => e
@@ -1149,7 +1151,7 @@ fn refine_organic(path: &RoadPath) -> (Vec<Vec2>, Vec<f32>, Vec<f32>, Vec<bool>)
     (pts, widths, surface, deck)
 }
 
-/// Pilar de tabuleiro (viaduto): espaçamento ao longo do vão (m) — VibeGame
+/// Pilar de tabuleiro (viaduto): espaçamento ao longo do vão (m) —
 /// `pylon-spacing` = 30 m.
 pub const DECK_PYLON_SPACING: f32 = 30.0;
 /// Meia secção do pilar (m) — quadrado de 1,6 m.
@@ -1191,7 +1193,7 @@ pub fn road_ribbon_mesh(
     let (stations, half_widths, surfaces, decks) = refine_organic(path);
     let n = stations.len();
     let has_surface = !surfaces.is_empty();
-    let feather = spec.edge_feather.max(0.0); // metros (VibeGame edgeFeather)
+    let feather = spec.edge_feather.max(0.0); // metros (edgeFeather)
     let scale = if spec.texture_scale > 0.0 {
         spec.texture_scale
     } else {
@@ -1206,7 +1208,7 @@ pub fn road_ribbon_mesh(
     let feather_seed =
         (stations[0].x.to_bits() ^ stations[0].y.to_bits()).wrapping_add(0x2f13) & 0xFFFF;
     // Seis vértices por estação: [skirtL, edgeL, coreL, coreR, edgeR,
-    // skirtR]. O deck (edge/core) mantém o feather do VibeGame; as saias
+    // skirtR]. O deck (edge/core) mantém o feather da referência; as saias
     // descem RIBBON_SKIRT_DEPTH a partir das bordas e ficam a alpha 0 (ver
     // `alphas` abaixo) — o que desenha é só o deck.
     for (i, st) in stations.iter().enumerate() {
@@ -1459,7 +1461,7 @@ mod tests {
     }
 
     #[test]
-    fn test_road_defaults_match_vibegame() {
+    fn test_road_defaults_match_reference() {
         let road = RoadSpec::default();
         assert_eq!(road.width, 2.0);
         assert_eq!(road.flatten_falloff, 8.0);
@@ -1795,8 +1797,8 @@ mod tests {
 
     #[test]
     fn test_network_extends_ends_at_shared_junction() {
-        // T: B tem grau 3 — cada ribbon estende para lá do B (VibeGame
-        // extendPathEnds) para não deixar cunha de chão nu no canto externo.
+        // T: B tem grau 3 — cada ribbon estende para lá do B (extendPathEnds)
+        // para não deixar cunha de chão nu no canto externo.
         let net = RoadNetworkSpec {
             default_width: 4.0,
             ways: vec![

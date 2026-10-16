@@ -7,7 +7,7 @@ trabalho e mapa detalhado de ficheiros: [`AGENTS.md`](AGENTS.md).
 
 Engine de jogo **nativa** em Rust/Bevy 0.20 (0.20.0-rc.2 via git tag `[patch.crates-io]`)
 que corre mundos declarativos XML do AiGameKit — sem browser, sem three.js. É o
-equivalente nativo do VibeGame (TypeScript/three.js): mesmos mundos, mesmos
+equivalente nativo do motor TS anterior (TypeScript/three.js): mesmos mundos, mesmos
 contratos de terreno, render wgpu. Nomenclatura segue **Bevy**
 (`translation`, `euler`, `half-size`, `base-color`), não Unity/three.js.
 
@@ -78,7 +78,7 @@ QA headless:
   meshopt/KTX2-comprimidos e a engine **descomprime à leitura**
   (`src/meshopt.rs`) com fallback multi-root (`config.yaml`) — não há
   espelho nem cópias por exemplo (guarda: `tests/asset_pool_dedup.rs`).
-- Contratos de terreno portados de `VibeGame/src/plugins/terrain/`; desvios
+- Contratos de terreno portados do plugin de terreno original; desvios
   conhecidos documentados no `AGENTS.md` (raiz).
 - O `analyze` imprime o relatório de cobertura de tags — é o roteiro do que
   falta à engine.

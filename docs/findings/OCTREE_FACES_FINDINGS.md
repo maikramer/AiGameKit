@@ -1,6 +1,6 @@
 # Octree × faces — findings (simple-rpg shapes)
 
-**Data:** 2026-07-28 · `VibeGame/examples/simple-rpg/public/assets/meshes/_intermediate/`  
+**Data:** 2026-07-28 · exemplo simple-rpg (meshes `_intermediate`)  
 **n:** 67 × `*_shape.glb` + `*.omni.json` + `sample-gameassets/manifest.yaml`  
 **Manual operativo:** [`../MANIFEST_AUTHORING.md`](../MANIFEST_AUTHORING.md) §5  
 **Tune code:** `Text3D/src/text3d/bbox_tune.py`

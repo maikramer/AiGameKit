@@ -711,10 +711,10 @@ def strip_rig_in_scene(mesh_obj, arm_objs: list) -> list:
     """Congela o mesh na pose actual e remove armature + skin data.
 
     Um LOD distante que carrega o seu próprio esqueleto custa no runtime muito
-    mais do que a geometria que desenha: no VibeGame o browser percorre e
-    recompõe todos os nós da cena por frame, visíveis ou não, e um prop rigado
-    traz ~47 ossos **por nível** (simple-rpg: ~11k ossos, 12.3k de 15.4k nós da
-    cena, quase todos em níveis de LOD que ninguém vê animar).
+    mais do que a geometria que desenha: o motor percorre e recompõe todos os
+    nós da cena por frame, visíveis ou não, e um prop rigado
+    traz dezenas de ossos **por nível** — quase todos em níveis de LOD que
+    ninguém vê animar.
 
     Devolve a lista de armatures que sobrou (vazia) para o chamador exportar.
     """

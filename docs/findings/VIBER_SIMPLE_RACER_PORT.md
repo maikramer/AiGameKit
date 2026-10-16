@@ -1,6 +1,6 @@
-# Viber simple-racer — port do VibeGame (2026-10-15/16)
+# Viber simple-racer — port do exemplo browser (2026-10-15/16)
 
-Port do `VibeGame/examples/simple-racer` (Sunset Ridge, kart racer) para a
+Port do exemplo browser simple-racer (Sunset Ridge, kart racer) para a
 engine Viber, no modelo do simple-rpg (projeto multi-cena, autoloads, mundo
 estático bakado). Commits: roads 3D `50b2bd57`, racing `907d0527`, exemplo
 `fc7a0985`, HUD `d22637b4`.
@@ -17,7 +17,7 @@ estático bakado). Commits: roads 3D `50b2bd57`, racing `907d0527`, exemplo
   drift com carga (mini-turbo 1,0 s / super 2,1 s), nitro, arranque foguete
   (hold W, rev ≥ 0,72; overrev a 100% = wheelspin), paredes lógicas do
   traçado, contactos kart-vs-kart, lançamento em cristas, respawn [R].
-  Sem rigidbody — o modelo do VibeGame ("deliberately no rigidbody") mantido.
+  Sem rigidbody — o modelo do exemplo original ("deliberately no rigidbody") mantido.
 - **Diretor de corrida** (`race.rs`): grelha 2×N, countdown 3 s, voltas por
   progresso ACUMULADO wrap-aware (anti-cheat; a pista cruza-se a si própria
   sob o viaduto), posições ao vivo, cronómetros, wrong-way, resultados.

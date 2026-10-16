@@ -1,7 +1,7 @@
 """Pré-cálculo de colisores primitivos (cápsula/cilindro) a partir do GLB.
 
 Parser header-only (sem bpy, sem trimesh) — alimenta o ``{id}_precompute.json``
-que a engine VibeGame consome para montar colisores baratos e cortar o
+que a engine (Viber) consome para montar colisores baratos e cortar o
 navmesh sem esperar downloads de ``*_collision.glb``.
 
 Decisão de forma por asset:

@@ -1,5 +1,5 @@
 //! Travel, A Nota & wayfinding (loop 6 do port simple-rpg) — o análogo
-//! nativo de `nota.ts` + `travel.ts` + wayfinding do VibeGame:
+//! nativo de `nota.ts` + `travel.ts` + wayfinding originais:
 //!
 //! - **A Nota**: 12 marcos de traçado (3 por bioma, por `name=` de entidade).
 //!   [F] perto de um marco não assinado → "Medido e assinado"; os 3 de um
@@ -816,7 +816,9 @@ fn travel_menu_system(
         .iter()
         // Só marcos ASSINADOS e DISPONÍVEIS: um save antigo com marcas de um
         // bioma que passou a ter atalaia não lista destinos no escuro.
-        .filter(|l| nota.marked.contains(&l.name) && landmark_available(&catalog, &revealed, &l.name))
+        .filter(|l| {
+            nota.marked.contains(&l.name) && landmark_available(&catalog, &revealed, &l.name)
+        })
         .collect();
 
     if !state.open {
@@ -1355,9 +1357,17 @@ mod tests {
         // Atalaia: SEMPRE disponível (é a chave, não a porta).
         assert!(landmark_available(&catalog, &revealed, "atalaia-do-bosque"));
         // Marco do bioma trancaado: indisponível até revelar.
-        assert!(!landmark_available(&catalog, &revealed, "forest-outpost-tower"));
+        assert!(!landmark_available(
+            &catalog,
+            &revealed,
+            "forest-outpost-tower"
+        ));
         revealed.0.insert("dark_forest".into());
-        assert!(landmark_available(&catalog, &revealed, "forest-outpost-tower"));
+        assert!(landmark_available(
+            &catalog,
+            &revealed,
+            "forest-outpost-tower"
+        ));
         // Nome fora do catálogo: nunca disponível.
         assert!(!landmark_available(&catalog, &revealed, "nada"));
     }
@@ -1379,7 +1389,10 @@ mod tests {
         let catalog = tower_catalog();
         let revealed = RevealedBiomes::default();
         let named = vec![
-            ("atalaia-do-bosque".to_string(), Vec3::new(30.0, 50.0, 138.0)),
+            (
+                "atalaia-do-bosque".to_string(),
+                Vec3::new(30.0, 50.0, 138.0),
+            ),
             (
                 "forest-outpost-tower".to_string(),
                 Vec3::new(-92.0, 44.0, 176.0),

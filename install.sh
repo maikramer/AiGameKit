@@ -24,7 +24,7 @@ source "$SCRIPT_DIR/scripts/install-bootstrap.sh"
 #   ./install.sh core      — zero-a-jogo mínimo: DAG GLB animado → browser
 #   ./install.sh examples  — tudo que os jogos de exemplo usam (core + céu/áudio/
 #                            texturas/terreno/rochas + track nativa Viber)
-CORE_TOOLS=(vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab vibegame)
+CORE_TOOLS=(vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab)
 EXAMPLES_EXTRA_TOOLS=(texture2d skymap2d text2sound terrain3d rocks3d viber)
 
 run_preflight() {

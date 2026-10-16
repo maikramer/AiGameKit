@@ -10,7 +10,8 @@ from PIL import Image
 
 from .generator import TerrainResult
 
-# Layout binário do .ahgt (espelha VibeGame/src/plugins/terrain/ahgt-format.ts):
+# Layout binário do .ahgt (formato lido nativamente pelo motor Viber em
+# world.data/terrain.ahgt):
 #   offset 0  u32  magic "AHGT" (0x54474841 little-endian)
 #   offset 4  u16  version (1)
 #   offset 6  u16  grid width
@@ -31,8 +32,8 @@ def export_ahgt(
     """Export a heightmap as a binary ``.ahgt`` heightfield (uint16 + deflate).
 
     Precision is ``max_height / 65535`` (~3 mm over 200 m) versus ~0.78 m for
-    the legacy 8-bit PNG path — removes terracing on gentle slopes.  The
-    VibeGame terrain plugin parses this format natively (``parseAhgt``).
+    the legacy 8-bit PNG path — removes terracing on gentle slopes.  The native
+    engine (Viber) parses this format natively (``world.data/terrain.ahgt``).
 
     Args:
         heightmap: 2D float64 array of terrain elevations (0-1).
@@ -48,8 +49,8 @@ def export_ahgt(
         raise ValueError(f"AHGT grid exceeds 65535x65535: {w}x{h}")
 
     quantized = np.rint(np.clip(heightmap, 0.0, 1.0) * 65535.0).astype("<u2")
-    # Deflate RAW (wbits=-15), sem cabeçalho zlib: o leitor do VibeGame é o
-    # `inflateSync` do fflate, que não aceita o wrapper RFC1950 e falha com
+    # Deflate RAW (wbits=-15), sem cabeçalho zlib: o leitor do motor (fflate
+    # `inflateSync`) não aceita o wrapper RFC1950 e falha com
     # "invalid block type". `zlib.compress` escreveria esse wrapper.
     deflater = zlib.compressobj(6, zlib.DEFLATED, -zlib.MAX_WBITS)
     compressed = deflater.compress(quantized.tobytes(order="C")) + deflater.flush()
@@ -105,7 +106,7 @@ def export_metadata(
     result: TerrainResult,
     output_path: str | Path,
 ) -> Path:
-    """Export terrain metadata as a JSON file compatible with the VibeGame pipeline.
+    """Export terrain metadata as a JSON file compatible with the game pipeline.
 
     The schema matches the pipeline output (version 2.0) but with empty
     rivers/lakes arrays and ``generator: "terrain3d"``.
