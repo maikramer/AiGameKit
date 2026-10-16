@@ -420,6 +420,64 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                         Visibility::Hidden,
                         MinimapAnchor,
                     ));
+                    // Marcos da Nota disponíveis: losangos de tinta-teal
+                    // (rotação fixa 45°) — "cartografia aqui", o vocabulário
+                    // que as atalaias REVELOAM. Menores que o pin assinado.
+                    for _ in 0..super::minimap::LANDMARK_BLIPS {
+                        map.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Percent(50.0),
+                                top: Val::Percent(50.0),
+                                margin: UiRect::px(-4.0, 0.0, -4.0, 0.0),
+                                width: Val::Px(8.0),
+                                height: Val::Px(8.0),
+                                border_radius: BorderRadius::all(Val::Px(1.5)),
+                                ..Default::default()
+                            },
+                            BackgroundColor(Color::srgba(0.35, 0.8, 0.78, 0.95)),
+                            Outline::new(
+                                Val::Px(1.0),
+                                Val::ZERO,
+                                Color::srgba(0.05, 0.12, 0.12, 0.8),
+                            ),
+                            UiTransform {
+                                rotation: Rot2::radians(std::f32::consts::FRAC_PI_4),
+                                ..Default::default()
+                            },
+                            Visibility::Hidden,
+                            super::minimap::MinimapLandmark,
+                        ));
+                    }
+                    // Atalaias: losango maior, com o núcleo claro — é a
+                    // estrutura que organiza a exploração; tem de se ler
+                    // primeiro.
+                    for _ in 0..super::minimap::TOWER_BLIPS {
+                        map.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Percent(50.0),
+                                top: Val::Percent(50.0),
+                                margin: UiRect::px(-5.5, 0.0, -5.5, 0.0),
+                                width: Val::Px(11.0),
+                                height: Val::Px(11.0),
+                                border_radius: BorderRadius::all(Val::Px(2.0)),
+                                ..Default::default()
+                            },
+                            BackgroundColor(Color::srgb(0.42, 0.92, 0.9)),
+                            Outline::new(
+                                Val::Px(1.5),
+                                Val::ZERO,
+                                Color::srgba(0.05, 0.15, 0.15, 0.9),
+                            ),
+                            UiTransform {
+                                rotation: Rot2::radians(std::f32::consts::FRAC_PI_4),
+                                ..Default::default()
+                            },
+                            Visibility::Hidden,
+                            super::minimap::MinimapTower,
+                        ));
+                    }
                     // Player arrow: puck escuro com o triângulo por cima —
                     // desenhado POR ÚLTIMO, portanto sempre por cima dos
                     // blips. Fica sempre no centro; é o mapa que desliza.
@@ -570,6 +628,35 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                                 CompassTick {
                                     bearing_deg: bearing,
                                 },
+                            ));
+                        }
+                        // Marcos da Nota disponíveis (atalaias + biomas
+                        // revelados): losango teal na faixa — "vale a pena
+                        // ver para aí". O slot atribui o rumo por frame
+                        // (`hud_compass_landmarks_update`).
+                        for slot in 0..super::compass::COMPASS_LANDMARK_SLOTS {
+                            strip.spawn((
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    left: Val::Px(-100.0),
+                                    top: Val::Px(25.0),
+                                    width: Val::Px(7.0),
+                                    height: Val::Px(7.0),
+                                    border_radius: BorderRadius::all(Val::Px(1.5)),
+                                    ..Default::default()
+                                },
+                                BackgroundColor(Color::srgba(0.35, 0.8, 0.78, 0.95)),
+                                Outline::new(
+                                    Val::Px(1.0),
+                                    Val::ZERO,
+                                    Color::srgba(0.05, 0.12, 0.12, 0.8),
+                                ),
+                                UiTransform {
+                                    rotation: Rot2::radians(std::f32::consts::FRAC_PI_4),
+                                    ..Default::default()
+                                },
+                                Visibility::Hidden,
+                                super::compass::CompassLandmark { slot },
                             ));
                         }
                     });

@@ -3321,6 +3321,7 @@ fn finish_landmark(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let mut label: Option<String> = None;
     let mut survey_quest: Option<String> = None;
     let mut mark_radius: Option<f32> = None;
+    let mut tower_reveals: Option<String> = None;
     for (key, value) in rest {
         let kctx = format!("{ctx_tag} {key}");
         match key.as_str() {
@@ -3328,6 +3329,9 @@ fn finish_landmark(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             "label" => label = Some(value),
             "survey-quest" => survey_quest = Some(value),
             "mark-radius" => mark_radius = Some(values::parse_f32(&value, &kctx)?),
+            // Atalaia de agrimensura: o bioma que esta torre REVELA ao ser
+            // ativada (`viber.reveal_biome` no script dela).
+            "tower-reveals" => tower_reveals = Some(value.trim().to_ascii_lowercase()),
             other => ctx
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
@@ -3341,7 +3345,7 @@ fn finish_landmark(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let biome = crate::travel::Biome::from_id(&biome_id);
     if biome.is_none() {
         ctx.warnings.push(format!(
-            "{ctx_tag}: bioma `{biome_id}` desconhecido (esperado dark_forest/desert/swamp/frozen_peaks) — defaults do arco de raio aplicados"
+            "{ctx_tag}: bioma `{biome_id}` desconhecido (esperado dark_forest/desert/swamp/frozen_peaks/tower) — defaults do arco de raio aplicados"
         ));
     }
     let spec = crate::travel::NotaLandmarkOwned {
@@ -3358,6 +3362,7 @@ fn finish_landmark(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
                 .map(|b| b.mark_radius())
                 .unwrap_or(crate::travel::NOTA_RANGE_DEFAULT_M)
         }),
+        tower_reveals,
     };
     Ok(EntitySpec {
         prototype_instance: None,

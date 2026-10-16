@@ -183,6 +183,9 @@ pub struct LuauRuntimeLocals<'w, 's> {
         Option<bevy::ecs::system::ResMut<'w, crate::terrain::delta::TerrainEditQueue>>,
     /// Pedidos de `viber.fire_projectile` (consumidos pelo `ProjectilePlugin`).
     pub projectiles: Option<bevy::ecs::system::ResMut<'w, crate::projectile::ProjectileQueue>>,
+    /// Biomas revelados por atalaias (`viber.biome_revealed` / RevealBiome).
+    /// `Option` pelas apps mínimas, como o resto.
+    pub revealed: Option<bevy::ecs::system::Res<'w, crate::travel::RevealedBiomes>>,
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -294,6 +297,17 @@ pub fn luau_update(
         if let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
             ctx.vault = snapshot;
         }
+    }
+    // Snapshot dos biomas revelados por atalaias (`viber.biome_revealed`).
+    let revealed_dirty = locals
+        .revealed
+        .as_ref()
+        .is_some_and(|r| !seeded || r.is_changed());
+    if revealed_dirty
+        && let Some(revealed) = locals.revealed.as_deref()
+        && let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>()
+    {
+        ctx.revealed = revealed.0.clone();
     }
 
     // Semeia as teclas ANTES de correr os on_update: `viber.interacted`
@@ -1340,6 +1354,44 @@ pub fn luau_update(
                         caller_path,
                     });
                 }
+            }
+            ScriptCommand::RevealBiome(biome) => {
+                let biome = biome.trim().to_ascii_lowercase();
+                if biome.is_empty() {
+                    warn!(target: "viber::luau",
+                        "viber.reveal_biome: id de bioma vazio — nada revelado");
+                } else if let Some(revealed) = locals.revealed.as_deref() {
+                    // Escrita via Commands (o Res aqui é só leitura): a
+                    // mudança acende os blips do HUD no mesmo frame
+                    // (is_changed no snapshot + landmark_blip_system).
+                    let fresh = !revealed.0.contains(&biome);
+                    let revealed_biome = biome.clone();
+                    commands.queue(move |world: &mut World| {
+                        if let Some(mut revealed) = world.get_resource_mut::<crate::travel::RevealedBiomes>()
+                        {
+                            revealed.0.insert(revealed_biome);
+                        }
+                    });
+                    // O TOAST é do script da atalaia (a apresentação é dela);
+                    // aqui fica só o rasto no log.
+                    if fresh {
+                        info!(target: "viber::nota", "bioma '{biome}' revelado por atalaia");
+                    }
+                }
+            }
+            ScriptCommand::AddSkillPoints(amount) => {
+                commands.queue(move |world: &mut World| {
+                    // `LevelState` é COMPONENTE do herói (não resource): um
+                    // query curto percorre-o; a árvore é resource.
+                    let mut query =
+                        world.query::<&mut crate::skills::LevelState>();
+                    for mut level in query.iter_mut(world) {
+                        level.points += amount;
+                    }
+                    if let Some(mut tree) = world.get_resource_mut::<crate::skills::SkillTree>() {
+                        tree.points += amount;
+                    }
+                });
             }
         }
     }

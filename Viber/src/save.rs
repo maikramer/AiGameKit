@@ -141,6 +141,10 @@ pub struct SaveGame {
     /// Marcos da Nota assinados.
     #[serde(default)]
     pub nota_marked: Vec<String>,
+    /// Biomas revelados por atalaias de agrimensura (travel::RevealedBiomes)
+    /// — sem isto, carregar voltava a esconder os marcos já cartografados.
+    #[serde(default)]
+    pub revealed_biomes: Vec<String>,
     /// Skills aprendidas (ids) + pontos disponíveis + nível — sem isto,
     /// carregar apagava a árvore comprada.
     #[serde(default)]
@@ -181,6 +185,7 @@ pub fn capture(
     vault: Option<&Vault>,
     quests: Option<&QuestLog>,
     nota: Option<&NotaLog>,
+    revealed: Option<&crate::travel::RevealedBiomes>,
     tree: Option<&SkillTree>,
     level: u32,
     xp: (u32, u32),
@@ -208,6 +213,9 @@ pub fn capture(
         quest_done: quests.map(|q| q.done.clone()).unwrap_or_default(),
         nota_marked: nota
             .map(|n| n.marked.iter().cloned().collect())
+            .unwrap_or_default(),
+        revealed_biomes: revealed
+            .map(|r| r.0.iter().cloned().collect())
             .unwrap_or_default(),
         skill_learned: tree.map(|t| t.learned.clone()).unwrap_or_default(),
         skill_points: tree.map(|t| t.points).unwrap_or(0),
@@ -285,11 +293,13 @@ pub const OPTIONS_ROWS: usize = 5;
 /// Aplica um save carregado aos recursos (puro; usado pelo sistema e testes).
 /// Skills e bónus vivos viajam no save: sem a parte do `tree`/`stats`, as
 /// passivas compradas desapareciam ao carregar.
+#[allow(clippy::too_many_arguments)]
 pub fn apply_save(
     game: &SaveGame,
     vault: Option<&mut Vault>,
     quests: Option<&mut QuestLog>,
     nota: Option<&mut NotaLog>,
+    revealed: Option<&mut crate::travel::RevealedBiomes>,
     mixer: &mut AudioMixerSettings,
     tree: Option<&mut SkillTree>,
     stats: Option<&mut PlayerStatsResource>,
@@ -329,6 +339,9 @@ pub fn apply_save(
     if let Some(nota) = nota {
         nota.marked = game.nota_marked.iter().cloned().collect();
     }
+    if let Some(revealed) = revealed {
+        revealed.0 = game.revealed_biomes.iter().cloned().collect();
+    }
     if let (Some(tree), Some(stats)) = (tree, stats) {
         tree.learned = game.skill_learned.clone();
         tree.points = game.skill_points;
@@ -354,6 +367,18 @@ pub fn saved_xp_level(game: &SaveGame) -> Option<crate::vitals::XpLevel> {
     })
 }
 
+/// Estado RPG que o save/load captura — agrupado num `SystemParam` (o Bevy
+/// limita sistemas a 16 parâmetros e o `options_system` estava no teto).
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct RpgSaveState<'w> {
+    pub vault: Option<ResMut<'w, Vault>>,
+    pub quests: Option<ResMut<'w, QuestLog>>,
+    pub nota: Option<ResMut<'w, NotaLog>>,
+    pub revealed: Option<ResMut<'w, crate::travel::RevealedBiomes>>,
+    pub tree: Option<ResMut<'w, SkillTree>>,
+    pub stats: Option<ResMut<'w, PlayerStatsResource>>,
+}
+
 /// Opções e gravação: linhas ↑↓, volumes ←→, [J] grava, [L] carrega — e os
 /// mesmos dois efeitos disparados pelos botões do menu declarativo
 /// (`viber.ui.action("save"|"load", "")`).
@@ -368,13 +393,7 @@ fn options_system(
     mut ui_actions: MessageReader<crate::ui::actions::UiAction>,
     mut rows: ResMut<OptionsRows>,
     mut mixer: ResMut<AudioMixerSettings>,
-    // Recursos RPG como `Option`: num mundo `gameplay: none` não existem e o
-    // save/load continua a funcionar (world_kv + posição + vitais).
-    mut vault: Option<ResMut<Vault>>,
-    mut quests: Option<ResMut<QuestLog>>,
-    mut nota: Option<ResMut<NotaLog>>,
-    mut tree: Option<ResMut<SkillTree>>,
-    mut stats: Option<ResMut<PlayerStatsResource>>,
+    mut rpg: RpgSaveState,
     mut progress: ResMut<LevelProgress>,
     // Um único param (tuplo) — o sistema já usa os 16 slots do Bevy; o
     // estado de jogo Lua (`viber.game()`, sincronizado no save/load), o
@@ -489,10 +508,11 @@ fn options_system(
                 });
         if let Some((health, xp, position, level)) = hero_state {
             let mut game = capture(
-                vault.as_deref(),
-                quests.as_deref(),
-                nota.as_deref(),
-                tree.as_deref(),
+                rpg.vault.as_deref(),
+                rpg.quests.as_deref(),
+                rpg.nota.as_deref(),
+                rpg.revealed.as_deref(),
+                rpg.tree.as_deref(),
                 level,
                 xp,
                 health,
@@ -548,17 +568,18 @@ fn options_system(
                 }
                 // Stats PRÉVIO capturado ANTES de apply_save o substituir —
                 // o delta tem de ser sessão→save; capturar depois (quando
-                // stats.0 já é o do save) multiplicava a speed de novo a
+                // rpg.stats.0 já é o do save) multiplicava a speed de novo a
                 // cada load.
-                let previous = stats.as_deref().map(|s| s.0).unwrap_or_default();
+                let previous = rpg.stats.as_deref().map(|s| s.0).unwrap_or_default();
                 apply_save(
                     &game,
-                    vault.as_deref_mut(),
-                    quests.as_deref_mut(),
-                    nota.as_deref_mut(),
+                    rpg.vault.as_deref_mut(),
+                    rpg.quests.as_deref_mut(),
+                    rpg.nota.as_deref_mut(),
+                    rpg.revealed.as_deref_mut(),
                     &mut mixer,
-                    tree.as_deref_mut(),
-                    stats.as_deref_mut(),
+                    rpg.tree.as_deref_mut(),
+                    rpg.stats.as_deref_mut(),
                 );
                 // Marcos renomeados/removidos no editor deixam marcas órfãs no
                 // save (a quest `visit` fica incompletável em silêncio) —
@@ -583,8 +604,10 @@ fn options_system(
                     // Passivas do save aplicadas ao herói (HP máx + speed)
                     // antes de o estado guardado sobrepor tudo. Sem vitais
                     // (preset `none`) só há posição a repor.
-                    if let (Some(hp), Some(stats)) = (hp.as_deref_mut(), stats.as_deref()) {
-                        crate::skills::apply_passive_delta(hp, &mut player, &previous, &stats.0);
+                    if let (Some(hp), Some(saved_stats)) =
+                        (hp.as_deref_mut(), rpg.stats.as_deref())
+                    {
+                        crate::skills::apply_passive_delta(hp, &mut player, &previous, &saved_stats.0);
                     }
                     if let (Some(hp), Some((current, max))) = (hp.as_deref_mut(), game.health) {
                         hp.max = max.max(1.0);
@@ -720,6 +743,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             1,
             (0, 10),
             (10.0, 10.0),
@@ -772,6 +796,8 @@ mod tests {
         quests.report_kill("wolf");
         let mut nota = NotaLog::default();
         nota.marked.insert("peaks-cairn-1".into());
+        let mut revealed = crate::travel::RevealedBiomes::default();
+        revealed.0.insert("dark_forest".into());
         let mut tree = SkillTree::default();
         tree.points = 3;
         tree.learned.push("vitality1".into());
@@ -779,6 +805,7 @@ mod tests {
             Some(&vault),
             Some(&quests),
             Some(&nota),
+            Some(&revealed),
             Some(&tree),
             2,
             (30, 150),
@@ -800,11 +827,13 @@ mod tests {
         let mut mixer = AudioMixerSettings::default();
         let mut tree2 = SkillTree::default();
         let mut stats2 = PlayerStatsResource::default();
+        let mut revealed2 = crate::travel::RevealedBiomes::default();
         apply_save(
             &loaded,
             Some(&mut vault2),
             Some(&mut quests2),
             Some(&mut nota2),
+            Some(&mut revealed2),
             &mut mixer,
             Some(&mut tree2),
             Some(&mut stats2),
@@ -817,6 +846,8 @@ mod tests {
             crate::quests::QuestStatus::Active
         );
         assert_eq!(nota2.marked.len(), 1);
+        // Atalaias ativadas sobrevivem ao save→load (o mapa continua revelado).
+        assert!(revealed2.0.contains("dark_forest"));
         assert!((mixer.master - 0.8).abs() < 1e-6);
         // Skills restauradas + bónus vivos recalculados.
         assert_eq!(tree2.points, 3);
@@ -844,7 +875,7 @@ mod tests {
             music: 0.4,
             sfx: 0.8,
         };
-        apply_save(&loaded, None, None, None, &mut mixer, None, None);
+        apply_save(&loaded, None, None, None, None, &mut mixer, None, None);
         assert_eq!((mixer.master, mixer.music, mixer.sfx), (0.6, 0.4, 0.8));
     }
 
@@ -971,6 +1002,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             0,
             (0, 100),
             (100.0, 100.0),
@@ -986,7 +1018,7 @@ mod tests {
         let json = serde_json::to_string(&game).unwrap();
         let loaded: SaveGame = serde_json::from_str(&json).unwrap();
         let mut mixer = AudioMixerSettings::default();
-        apply_save(&loaded, None, None, None, &mut mixer, None, None);
+        apply_save(&loaded, None, None, None, None, &mut mixer, None, None);
         assert_eq!(loaded.world_kv.get("score"), Some(&serde_json::json!(4)));
         assert_eq!(loaded.position, Some([3.0, 1.5, -2.0]));
         assert!((mixer.master - 1.0).abs() < 1e-6);
@@ -1005,7 +1037,7 @@ mod tests {
             "world_kv": {"score": 9} }"#;
         let loaded: SaveGame = serde_json::from_str(json).unwrap();
         let mut mixer = AudioMixerSettings::default();
-        apply_save(&loaded, None, None, None, &mut mixer, None, None);
+        apply_save(&loaded, None, None, None, None, &mut mixer, None, None);
         assert_eq!(loaded.gold, 250);
         assert_eq!(loaded.world_kv.get("score"), Some(&serde_json::json!(9)));
         assert!((mixer.master - 0.5).abs() < 1e-6);

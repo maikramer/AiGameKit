@@ -41,6 +41,10 @@ pub enum Biome {
     Desert,
     Swamp,
     FrozenPeaks,
+    /// Bioma-sintético das atalaias de agrimensura (`tower`): os marcos com
+    /// este id são TORRES — sempre assináveis/viáveis, nunca trancadas (são
+    /// a chave, não a porta; ver [`RevealedBiomes`]).
+    Tower,
 }
 
 impl Biome {
@@ -50,6 +54,7 @@ impl Biome {
             Biome::Desert => "Deserto",
             Biome::Swamp => "Pântano",
             Biome::FrozenPeaks => "Picos Gelados",
+            Biome::Tower => "Atalaias",
         }
     }
 
@@ -61,29 +66,33 @@ impl Biome {
             Biome::Desert => "desert",
             Biome::Swamp => "swamp",
             Biome::FrozenPeaks => "frozen_peaks",
+            Biome::Tower => "tower",
         }
     }
 
     /// Resolve um id declarado em XML (`dark_forest`, `desert`, `swamp`,
-    /// `frozen_peaks`); desconhecido → `None` (o marco fica no catálogo com
-    /// o id cru, ver [`NotaLandmarkOwned::biome_label`]).
+    /// `frozen_peaks`, `tower`); desconhecido → `None` (o marco fica no
+    /// catálogo com o id cru, ver [`NotaLandmarkOwned::biome_label`]).
     pub fn from_id(id: &str) -> Option<Biome> {
         match id {
             "dark_forest" => Some(Biome::DarkForest),
             "desert" => Some(Biome::Desert),
             "swamp" => Some(Biome::Swamp),
             "frozen_peaks" => Some(Biome::FrozenPeaks),
+            "tower" => Some(Biome::Tower),
             _ => None,
         }
     }
 
-    /// Quest de traçado do bioma (id no JSON).
+    /// Quest de traçado do bioma (id no JSON). As atalaias não têm quest de
+    /// traçado — a recompensa delas é a REVELAÇÃO do bioma.
     pub fn survey_quest(self) -> &'static str {
         match self {
             Biome::DarkForest => "forest_survey",
             Biome::Desert => "desert_survey",
             Biome::Swamp => "swamp_survey",
             Biome::FrozenPeaks => "peaks_survey",
+            Biome::Tower => "",
         }
     }
 
@@ -93,6 +102,7 @@ impl Biome {
             Biome::Desert => 12.0,
             Biome::Swamp => 11.0,
             Biome::FrozenPeaks => 9.0,
+            Biome::Tower => 8.0,
         }
     }
 }
@@ -123,6 +133,11 @@ pub struct NotaLandmarkOwned {
     pub survey_quest: String,
     /// Alcance de marcação [F] (m).
     pub mark_radius: f32,
+    /// `Some(bioma)` numa ATALAIA de agrimensura: ativar a torre revela este
+    /// bioma (os marcos dele entram na bússola/minimapa/travel rápido e
+    /// passam a ser assináveis). `None` num marco comum — disponível desde
+    /// que o bioma não esteja trancado por uma atalaia.
+    pub tower_reveals: Option<String>,
 }
 
 impl NotaLandmarkOwned {
@@ -232,6 +247,7 @@ impl LandmarkCatalog {
                     label: l.label.to_string(),
                     survey_quest: l.biome.survey_quest().to_string(),
                     mark_radius: l.biome.mark_radius(),
+                    tower_reveals: None,
                 })
                 .collect(),
         )
@@ -258,6 +274,88 @@ pub fn remaining_in_biome(
         .iter()
         .filter(|l| l.biome_id == biome_id && !marked.contains(&l.name))
         .count()
+}
+
+// ── atalaias de agrimensura (reveal BotW) ───────────────────────────────
+
+/// Biomas revelados por atalaias ativadas (`viber.reveal_biome` nos scripts
+/// das torres). Persistido no save (`revealed_biomes`); os marcos de um
+/// bioma NÃO revelado não se assinam [F], não viajam [G] nem aparecem na
+/// bússola/minimapa — o mundo fica escuro até alguém subir à torre.
+#[derive(Debug, Clone, Resource, Default)]
+pub struct RevealedBiomes(pub HashSet<String>);
+
+impl RevealedBiomes {
+    /// Biomas que TÊM atalaia no catálogo (a chave existe para estes).
+    pub fn keyed_biomes(catalog: &LandmarkCatalog) -> HashSet<&str> {
+        catalog
+            .0
+            .iter()
+            .filter_map(|l| l.tower_reveals.as_deref())
+            .collect()
+    }
+}
+
+/// Um marco está disponível (assinável/viável/visível)? Atalaias são sempre
+/// disponíveis; um marco comum precisa do bioma revelado — MAS mundos sem
+/// NENHUMA atalaia nunca trancam (back-compat: o simple-rpg sem torres
+/// comporta-se como antes, e biomas sem chave ficam livres).
+pub fn landmark_available(
+    catalog: &LandmarkCatalog,
+    revealed: &RevealedBiomes,
+    name: &str,
+) -> bool {
+    let Some(landmark) = landmark_by_name(catalog, name) else {
+        return false;
+    };
+    if landmark.tower_reveals.is_some() {
+        return true;
+    }
+    let keyed = RevealedBiomes::keyed_biomes(catalog);
+    !keyed.contains(landmark.biome_id.as_str()) || revealed.0.contains(&landmark.biome_id)
+}
+
+/// Blip de marcodisponível para o HUD (bússola/minimapa) — snapshot a 2 Hz
+/// ([`landmark_blip_system`]); as atalaias levam `tower: true` para o HUD
+/// as desenhar com silhueta própria.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LandmarkBlip {
+    pub name: String,
+    pub label: String,
+    pub tower: bool,
+    pub position: Vec3,
+}
+
+/// Snapshot dos marcos DISPONÍVEIS com posição de mundo (atalaias + biomas
+/// revelados). Consumido pelo minimapa/compasso; recalculado a 2 Hz —
+/// varrer ~79k nomes por FRAME era o bug de perf que o menu de viagem já
+/// pagou uma vez.
+#[derive(Debug, Clone, Resource, Default)]
+pub struct LandmarkBlips(pub Vec<LandmarkBlip>);
+
+/// Passo puro do snapshot de blips (testável sem mundo): filtra o catálogo
+/// pelos disponíveis e casa posições pelos nomes de entidade.
+pub fn collect_landmark_blips(
+    catalog: &LandmarkCatalog,
+    revealed: &RevealedBiomes,
+    named: &[(String, Vec3)],
+) -> Vec<LandmarkBlip> {
+    catalog
+        .0
+        .iter()
+        .filter(|l| landmark_available(catalog, revealed, &l.name))
+        .filter_map(|l| {
+            named
+                .iter()
+                .find(|(name, _)| name == &l.name)
+                .map(|(_, pos)| LandmarkBlip {
+                    name: l.name.clone(),
+                    label: l.label.clone(),
+                    tower: l.tower_reveals.is_some(),
+                    position: *pos,
+                })
+        })
+        .collect()
 }
 
 /// Bandas do mundo para o registry de hostis (índice = `alive_in_region`).
@@ -322,6 +420,8 @@ impl Plugin for TravelPlugin {
             .init_resource::<NotaLog>()
             .init_resource::<Waypoint>()
             .init_resource::<EnemyRegistry>()
+            .init_resource::<RevealedBiomes>()
+            .init_resource::<LandmarkBlips>()
             .init_resource::<TravelMenuState>()
             .init_resource::<TravelFade>()
             // O painel de viagem espelha-se em `MenusOpen.travel` (R2-G2);
@@ -345,6 +445,7 @@ impl Plugin for TravelPlugin {
                     timed(Group::World, nota_measure_system),
                     timed(Group::World, travel_menu_system),
                     travel_fade_system,
+                    timed(Group::Hud, landmark_blip_system),
                     timed(Group::Hud, waypoint_hud_system),
                     enemy_registry_system,
                     quest_debug_landmark.run_if(crate::quests::debug_keys_enabled),
@@ -434,6 +535,7 @@ fn nota_measure_system(
     players: Query<&GlobalTransform, With<Player>>,
     named: Query<(&Name, &GlobalTransform)>,
     catalog: Res<LandmarkCatalog>,
+    revealed: Res<RevealedBiomes>,
     mut nota: ResMut<NotaLog>,
     mut waypoint: ResMut<Waypoint>,
     mut toasts: MessageWriter<ScriptToast>,
@@ -455,9 +557,25 @@ fn nota_measure_system(
     let Some((name, _)) = named.iter().find(|(name, t)| {
         landmark_by_name(&catalog, name)
             .filter(|l| !nota.marked.contains(&l.name))
+            // Atalaia de agrimensura: marcos de bioma não revelado ficam
+            // "escuros" — o [F] só assina com o bioma revelado pela torre.
+            .filter(|l| landmark_available(&catalog, &revealed, &l.name))
             .filter(|l| t.translation().xz().distance(player_pos.xz()) <= l.mark_radius)
             .is_some()
     }) else {
+        // Em alcance de um marco trancado? Diz ao jogador O QUE falta —
+        // o silêncio lia-se como tecla avariada.
+        if let Some(locked) = named.iter().find_map(|(name, t)| {
+            landmark_by_name(&catalog, name)
+                .filter(|l| !nota.marked.contains(&l.name))
+                .filter(|l| !landmark_available(&catalog, &revealed, &l.name))
+                .filter(|l| t.translation().xz().distance(player_pos.xz()) <= l.mark_radius)
+        }) {
+            toasts.write(ScriptToast(format!(
+                "A terra aqui ainda não foi cartografada — procura a atalaia de {}.",
+                locked.biome_label()
+            )));
+        }
         return;
     };
     let name = name.to_string();
@@ -496,6 +614,59 @@ fn nearest_named(named: &Query<(&Name, &GlobalTransform)>, name: &str, from: Vec
             a.distance_squared(from)
                 .total_cmp(&b.distance_squared(from))
         })
+}
+
+// ── blips de marcos para o HUD (bússola/minimapa) ───────────────────────
+
+/// Cadência do snapshot de blips (s) — varrer todas as entidades nomeadas
+/// custa ~1 ms; a 2 Hz o custo amortizado é irrelevante e os blips ainda
+/// acompanham a revelação no frame seguinte a subir a torre.
+pub const LANDMARK_BLIP_PERIOD: f32 = 0.5;
+
+/// Snapshot a 2 Hz dos marcos disponíveis (atalaias + biomas revelados) com
+/// a posição de mundo — o minimapa/compasso leem daqui e NUNCA varrem o
+/// mundo eles próprios. SEM coletar os ~79k nomes num Vec: uma passagem com
+/// lookup num mapa do catálogo — o vício de alloc que o menu de viagem
+/// pagou em 2026-09-09 não volta aqui.
+#[allow(clippy::type_complexity)]
+fn landmark_blip_system(
+    mut throttle: Local<f32>,
+    time: Res<Time>,
+    named: Query<(&Name, &GlobalTransform)>,
+    catalog: Res<LandmarkCatalog>,
+    revealed: Res<RevealedBiomes>,
+    mut blips: ResMut<LandmarkBlips>,
+) {
+    // Recalcular quando a revelação MUDA (ativar a torre tem de acender os
+    // blips já, não só daqui a meio segundo) ou no batimento do throttle.
+    let due = *throttle <= 0.0 || revealed.is_changed() || catalog.is_changed();
+    if !due {
+        *throttle -= time.delta_secs();
+        return;
+    }
+    *throttle = LANDMARK_BLIP_PERIOD;
+    let index: std::collections::HashMap<&str, usize> = catalog
+        .0
+        .iter()
+        .enumerate()
+        .map(|(i, l)| (l.name.as_str(), i))
+        .collect();
+    let mut found = Vec::new();
+    for (name, transform) in &named {
+        let Some(&i) = index.get(name.as_str()) else {
+            continue;
+        };
+        let landmark = &catalog.0[i];
+        if landmark_available(&catalog, &revealed, &landmark.name) {
+            found.push(LandmarkBlip {
+                name: landmark.name.clone(),
+                label: landmark.label.clone(),
+                tower: landmark.tower_reveals.is_some(),
+                position: transform.translation(),
+            });
+        }
+    }
+    blips.0 = found;
 }
 
 // ── viagem rápida [G] na fogueira ───────────────────────────────────────
@@ -579,6 +750,7 @@ fn travel_menu_system(
     players: Query<&GlobalTransform, With<Player>>,
     named: Query<(&Name, &GlobalTransform)>,
     catalog: Res<LandmarkCatalog>,
+    revealed: Res<RevealedBiomes>,
     nota: Res<NotaLog>,
     mut state: ResMut<TravelMenuState>,
     // Espelho "painel aberto rouba input": sem isto, com o painel de viagem
@@ -642,7 +814,9 @@ fn travel_menu_system(
     let marked: Vec<&NotaLandmarkOwned> = catalog
         .0
         .iter()
-        .filter(|l| nota.marked.contains(&l.name))
+        // Só marcos ASSINADOS e DISPONÍVEIS: um save antigo com marcas de um
+        // bioma que passou a ter atalaia não lista destinos no escuro.
+        .filter(|l| nota.marked.contains(&l.name) && landmark_available(&catalog, &revealed, &l.name))
         .collect();
 
     if !state.open {
@@ -901,6 +1075,7 @@ fn quest_debug_landmark(
     mut players: Query<(Entity, &GlobalTransform, &mut Transform, &mut Player), With<Player>>,
     named: Query<(&Name, &GlobalTransform)>,
     catalog: Res<LandmarkCatalog>,
+    revealed: Res<RevealedBiomes>,
     nota: Res<NotaLog>,
     terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     mut toasts: MessageWriter<ScriptToast>,
@@ -918,6 +1093,9 @@ fn quest_debug_landmark(
         .filter(|(name, _)| {
             landmark_by_name(&catalog, name)
                 .filter(|l| !nota.marked.contains(&l.name))
+                // QA segue o JOGO: marcos trancados não são alvo (senão o
+                // F11 teleportava para um marco que o [F] recusa assinar).
+                .filter(|l| landmark_available(&catalog, &revealed, &l.name))
                 .is_some()
         })
         .min_by(|(_, a_t), (_, b_t)| {
@@ -1133,9 +1311,94 @@ mod tests {
             label: "Aguja Misteriosa".into(),
             survey_quest: String::new(),
             mark_radius: 8.0,
+            tower_reveals: None,
         };
         assert_eq!(l.biome(), None);
         assert_eq!(l.biome_label(), "vale");
+    }
+
+    #[test]
+    fn test_tower_biome_roundtrip_and_label() {
+        assert_eq!(Biome::from_id("tower"), Some(Biome::Tower));
+        assert_eq!(Biome::Tower.id(), "tower");
+        assert_eq!(Biome::Tower.label(), "Atalaias");
+        // Atalaias não têm quest de traçado — a recompensa é a revelação.
+        assert_eq!(Biome::Tower.survey_quest(), "");
+        assert!((Biome::Tower.mark_radius() - 8.0).abs() < 1e-4);
+    }
+
+    fn tower_catalog() -> LandmarkCatalog {
+        LandmarkCatalog(vec![
+            NotaLandmarkOwned {
+                name: "atalaia-do-bosque".into(),
+                biome_id: "tower".into(),
+                label: "Atalaia do Bosque".into(),
+                survey_quest: String::new(),
+                mark_radius: 8.0,
+                tower_reveals: Some("dark_forest".into()),
+            },
+            NotaLandmarkOwned {
+                name: "forest-outpost-tower".into(),
+                biome_id: "dark_forest".into(),
+                label: "Torre do Posto Avançado".into(),
+                survey_quest: "forest_survey".into(),
+                mark_radius: 10.0,
+                tower_reveals: None,
+            },
+        ])
+    }
+
+    #[test]
+    fn test_landmark_available_gates_by_tower_reveal() {
+        let catalog = tower_catalog();
+        let mut revealed = RevealedBiomes::default();
+        // Atalaia: SEMPRE disponível (é a chave, não a porta).
+        assert!(landmark_available(&catalog, &revealed, "atalaia-do-bosque"));
+        // Marco do bioma trancaado: indisponível até revelar.
+        assert!(!landmark_available(&catalog, &revealed, "forest-outpost-tower"));
+        revealed.0.insert("dark_forest".into());
+        assert!(landmark_available(&catalog, &revealed, "forest-outpost-tower"));
+        // Nome fora do catálogo: nunca disponível.
+        assert!(!landmark_available(&catalog, &revealed, "nada"));
+    }
+
+    #[test]
+    fn test_world_without_towers_never_locks() {
+        // Back-compat: o fallback (mundo sem atalaias) não tranca NENHUM
+        // bioma — o comportamento de antes fica intacto.
+        let catalog = LandmarkCatalog::default();
+        let revealed = RevealedBiomes::default();
+        assert!(RevealedBiomes::keyed_biomes(&catalog).is_empty());
+        for landmark in &catalog.0 {
+            assert!(landmark_available(&catalog, &revealed, &landmark.name));
+        }
+    }
+
+    #[test]
+    fn test_collect_landmark_blips_marks_towers_and_filters_locked() {
+        let catalog = tower_catalog();
+        let revealed = RevealedBiomes::default();
+        let named = vec![
+            ("atalaia-do-bosque".to_string(), Vec3::new(30.0, 50.0, 138.0)),
+            (
+                "forest-outpost-tower".to_string(),
+                Vec3::new(-92.0, 44.0, 176.0),
+            ),
+        ];
+        let blips = collect_landmark_blips(&catalog, &revealed, &named);
+        assert_eq!(blips.len(), 1, "marco trancado não vira blip");
+        assert!(blips[0].tower);
+        assert_eq!(blips[0].name, "atalaia-do-bosque");
+        // Marco sem entidade no mundo: sem blip (o nome é que tem posição).
+        let ghost = LandmarkCatalog(vec![NotaLandmarkOwned {
+            name: "fantasma".into(),
+            biome_id: "tower".into(),
+            label: "Fantasma".into(),
+            survey_quest: String::new(),
+            mark_radius: 8.0,
+            tower_reveals: None,
+        }]);
+        assert!(collect_landmark_blips(&ghost, &revealed, &named).is_empty());
     }
 
     #[test]

@@ -86,6 +86,8 @@ pub struct UiData {
     pub potions: u32,
     pub antidotes: u32,
     pub bombs: u32,
+    /// Sementes de canção coletadas (colecionáveis) — `korok-seed`.
+    pub korok_seeds: u32,
     /// Combo counter do melee: hits acertados na janela (0 = escondido).
     pub combo_hits: u32,
     /// Veneno activo no herói (`status.venom`) — segundos restantes > 0.
@@ -172,6 +174,8 @@ impl UiData {
             "potion" => BoundValue::number(self.potions as f32),
             "antidote" => BoundValue::number(self.antidotes as f32),
             "bomb" => BoundValue::number(self.bombs as f32),
+            // Contador de coleção (sementes de canção) na bolsa.
+            "korok-seed" => BoundValue::number(self.korok_seeds as f32),
             // Esgotado — acende a classe `empty` (slot cinzento) por class-bind.
             "potion.empty" => BoundValue::flag(self.potions < 1),
             "antidote.empty" => BoundValue::flag(self.antidotes < 1),
@@ -652,6 +656,7 @@ mod tests {
             "potion",
             "antidote",
             "bomb",
+            "korok-seed",
             "toast",
             "toast.active",
             "combo",

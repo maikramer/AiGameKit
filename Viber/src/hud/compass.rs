@@ -151,6 +151,92 @@ pub fn hud_compass_update(
     }
 }
 
+/// Marca de marcodisponível na faixa do compasso: losango teal que desliza
+/// como as letras — a promessa "há algo para ver nessa direcção". Atalaias
+/// e marcos comuns partilham o pool; o desenho distingue-os.
+#[derive(Component)]
+pub struct CompassLandmark {
+    /// Slot fixo (ordem de desenho); o rumo é reatribuído por frame.
+    pub slot: usize,
+}
+
+/// Quantas marcas de marcos a faixa mostra.
+pub const COMPASS_LANDMARK_SLOTS: usize = 4;
+
+/// Ângulo (graus, ±180) do rumo `bearing` face ao `heading`.
+fn bearing_delta(heading: f32, bearing: f32) -> f32 {
+    let delta = (bearing - heading).rem_euclid(360.0);
+    if delta > 180.0 {
+        delta - 360.0
+    } else {
+        delta
+    }
+}
+
+/// Marcas de marcos disponíveis no compasso: os 4 rumos MAIS alinhados com
+/// o olhar (atalaias primeiro em empate) ganham slot; fora do span escondem.
+/// Lê o snapshot `travel::LandmarkBlips` — nunca varre o mundo.
+#[allow(clippy::type_complexity)]
+pub fn hud_compass_landmarks_update(
+    cameras: Query<&OrbitCamera>,
+    players: Query<&GlobalTransform, With<Player>>,
+    blips: Option<Res<crate::travel::LandmarkBlips>>,
+    mut markers: Query<(&mut Node, &mut Visibility, &CompassLandmark)>,
+) {
+    let Some(cam) = cameras.iter().next() else {
+        return;
+    };
+    let heading = heading_bearing_deg(cam.yaw_deg);
+    let Some(player) = players.iter().next() else {
+        return;
+    };
+    let origin = player.translation();
+    let mut ranked: Vec<(f32, f32, bool)> = blips
+        .as_deref()
+        .map(|b| b.0.as_slice())
+        .unwrap_or(&[])
+        .iter()
+        .map(|b| {
+            let (dx, dz) = (b.position.x - origin.x, b.position.z - origin.z);
+            (
+                bearing_delta(heading, world_bearing_deg(dx, dz)).abs(),
+                origin.distance(b.position),
+                b.tower,
+            )
+        })
+        .filter(|(delta, _, _)| *delta < 55.0)
+        .collect();
+    // Mais alinhado com o olhar primeiro; atalaias ganham empates (é a
+    // estrutura da exploração — a torre manda sobre o mojão atrás dela).
+    ranked.sort_by(|a, b| {
+        a.0.total_cmp(&b.0)
+            .then_with(|| b.2.cmp(&a.2))
+            .then_with(|| a.1.total_cmp(&b.1))
+    });
+    for (mut node, mut visibility, marker) in &mut markers {
+        match ranked.get(marker.slot) {
+            Some((delta, _, _)) => {
+                let wanted = compass_offset_px(*delta, 230.0, 55.0);
+                if let Some(offset) = wanted {
+                    if node.left != Val::Px(230.0 + offset) {
+                        node.left = Val::Px(230.0 + offset);
+                    }
+                    if *visibility != Visibility::Inherited {
+                        *visibility = Visibility::Inherited;
+                    }
+                } else if *visibility != Visibility::Hidden {
+                    *visibility = Visibility::Hidden;
+                }
+            }
+            None => {
+                if *visibility != Visibility::Hidden {
+                    *visibility = Visibility::Hidden;
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,5 +284,14 @@ mod tests {
         assert!(approx(half, 115.0));
         assert_eq!(compass_offset_px(55.0, 230.0, 55.0), None);
         assert_eq!(compass_offset_px(-80.0, 230.0, 55.0), None);
+    }
+
+    #[test]
+    fn test_bearing_delta_wraps() {
+        // 350° face a 0° são 10° à esquerda, não 350.
+        assert!(approx(bearing_delta(0.0, 350.0), -10.0));
+        assert!(approx(bearing_delta(350.0, 10.0), 20.0));
+        assert!(approx(bearing_delta(0.0, 180.0), 180.0));
+        assert!(approx(bearing_delta(45.0, 45.0), 0.0));
     }
 }

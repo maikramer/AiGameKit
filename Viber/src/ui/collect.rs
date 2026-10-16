@@ -216,6 +216,9 @@ pub fn collect_ui_data(
         data.potions = stack("potion");
         data.antidotes = stack("antidote");
         data.bombs = stack("bomb");
+        // Sementes de canção (colecionáveis estilo Korok) — o contador de
+        // coleção vive na bolsa como qualquer recurso.
+        data.korok_seeds = stack("korok-seed");
     }
     // Combo counter (hits na janela) para o binding `combo.text`.
     if let Some(combo) = combo.as_deref() {

@@ -240,4 +240,12 @@ pub enum ScriptCommand {
         on_spawned: Option<Function>,
         caller_path: Option<String>,
     },
+    /// Revela um bioma (`viber.reveal_biome`) — a atalaia de agrimensura
+    /// ativada acende os marcos do bioma na bússola/minimapa e abre o [F]/[G]
+    /// deles. Persistido no save (`revealed_biomes`).
+    RevealBiome(String),
+    /// Pontos de talento (`viber.add_skill_points`) — a recompensa
+    /// incremental dos colecionáveis; aplica em `SkillTree.points` +
+    /// `LevelState.points` quando os recursos existem (preset rpg).
+    AddSkillPoints(u32),
 }

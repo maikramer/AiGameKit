@@ -31,6 +31,22 @@ pub struct MinimapTerrain;
 #[derive(Component)]
 pub struct MinimapThreat;
 
+/// Marco da Nota disponível (atalaia ou bioma revelado) no minimapa —
+/// losango de tinta-teal, vocabulário distinto do pin dourado (waypoint
+/// assinado) e do "!" (quest). Pool fixo, alimentado por
+/// `travel::LandmarkBlips`.
+#[derive(Component)]
+pub struct MinimapLandmark;
+
+/// Atalaia de agrimensura no minimapa — maior e mais brilhante que o marco
+/// comum: é o "vai aí" que estrutura a exploração.
+#[derive(Component)]
+pub struct MinimapTower;
+
+/// Quantos blips de marcos/atalaias o painel desenha (mais perto 1.º).
+pub const LANDMARK_BLIPS: usize = 6;
+pub const TOWER_BLIPS: usize = 2;
+
 /// Largura e altura do painel do mapa (px, referência 720p).
 ///
 /// Rectângulo de cantos redondos, não disco: o clip do bevy_ui 0.19 é um
@@ -424,6 +440,102 @@ pub fn hud_minimap_update(
                 clamp_to_panel(x, z)
             });
         set_blip(&mut transform, &mut visibility, wanted);
+    }
+}
+
+/// Igual a [`set_blip`] mas PRESERVA a rotação do nó (os losangos de marcos
+/// nascem rodados 45°; `from_translation` punha-los direitos outra vez).
+fn set_diamond_blip(
+    transform: &mut UiTransform,
+    visibility: &mut Visibility,
+    wanted: Option<(f32, f32)>,
+) {
+    let rotation = transform.rotation;
+    match wanted {
+        Some((tx, tz)) => {
+            let wanted = UiTransform {
+                translation: Val2::new(Val::Px(tx), Val::Px(tz)),
+                rotation,
+                scale: Vec2::ONE,
+            };
+            if *transform != wanted {
+                *transform = wanted;
+            }
+            if *visibility != Visibility::Inherited {
+                *visibility = Visibility::Inherited;
+            }
+        }
+        None => {
+            if *visibility != Visibility::Hidden {
+                *visibility = Visibility::Hidden;
+            }
+        }
+    }
+}
+
+/// Blips de marcos da Nota (atalaias + biomas revelados) sobre o minimapa.
+///
+/// Sistema SEPARADO do [`hud_minimap_update`] de propósito: as queries de
+/// `&mut UiTransform` com filtros disjuntos por `Without` dentro de um
+/// sistema só são crescentes — num sistema novo basta o `Without` entre os
+/// DOIS pools novos, sem tocar nas queries existentes.
+#[allow(clippy::type_complexity)]
+pub fn hud_minimap_landmarks_update(
+    players: Query<&GlobalTransform, With<Player>>,
+    blips: Option<Res<crate::travel::LandmarkBlips>>,
+    mut landmarks: Query<
+        (&mut UiTransform, &mut Visibility),
+        (With<MinimapLandmark>, Without<MinimapTower>),
+    >,
+    mut towers: Query<
+        (&mut UiTransform, &mut Visibility),
+        (With<MinimapTower>, Without<MinimapLandmark>),
+    >,
+) {
+    let Some(mapper) = players.iter().next() else {
+        return;
+    };
+    let Some(blips) = blips.as_deref() else {
+        return;
+    };
+    let player_pos = mapper.translation();
+    let scale = minimap_scale();
+    let offset = |x: f32, z: f32| ((x - player_pos.x) * scale, (z - player_pos.z) * scale);
+    let mut ordinary: Vec<(f32, f32)> = blips
+        .0
+        .iter()
+        .filter(|b| !b.tower)
+        .map(|b| offset(b.position.x, b.position.z))
+        .collect();
+    ordinary.sort_by(|a, b| {
+        (a.0 * a.0 + a.1 * a.1)
+            .partial_cmp(&(b.0 * b.0 + b.1 * b.1))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    for (index, (mut transform, mut visibility)) in landmarks.iter_mut().enumerate() {
+        set_diamond_blip(
+            &mut transform,
+            &mut visibility,
+            ordinary.get(index).map(|&(x, z)| clamp_to_panel(x, z)),
+        );
+    }
+    let mut spires: Vec<(f32, f32)> = blips
+        .0
+        .iter()
+        .filter(|b| b.tower)
+        .map(|b| offset(b.position.x, b.position.z))
+        .collect();
+    spires.sort_by(|a, b| {
+        (a.0 * a.0 + a.1 * a.1)
+            .partial_cmp(&(b.0 * b.0 + b.1 * b.1))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    for (index, (mut transform, mut visibility)) in towers.iter_mut().enumerate() {
+        set_diamond_blip(
+            &mut transform,
+            &mut visibility,
+            spires.get(index).map(|&(x, z)| clamp_to_panel(x, z)),
+        );
     }
 }
 

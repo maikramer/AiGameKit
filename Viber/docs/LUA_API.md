@@ -352,6 +352,9 @@ Definições em JSON (27 quests do exemplo, embutidas em `src/quests.rs` via
 | `viber.vault_get(kind)` | quantidade atual (0 se desconhecido) |
 | `viber.item_add(id, amount)` | item de inventário (`potion`, `antidote`, `bomb`, …) |
 | `viber.item_count(id)` | quantidade atual (0 se desconhecido) |
+| `viber.add_skill_points(n)` | soma `n` pontos de talento (`SkillTree` + badge de nível); no-op suave em mundos sem preset rpg |
+| `viber.reveal_biome(bioma)` | a atalaia ativada revela o bioma: os marcos dele acendem na bússola/minimapa e abrem ao [F]/[G]. Persistido no save (`revealed_biomes`) |
+| `viber.biome_revealed(bioma)` | `true` se o bioma já foi revelado (snapshot do frame) — o script da atalaia usa para não re-recompensar |
 | `viber.alive_in_region(idx)` | hostis scriptados VIVOS na banda `idx` (0–4: centro/norte/sul/este/oeste; snapshot a 1 Hz — o gating do boss final usa isto) |
 
 ## Corrida (`viber.race.*` / `viber.vehicle.*`)

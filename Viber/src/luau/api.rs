@@ -631,6 +631,43 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(())
         })?,
     )?;
+    // ── Atalaias de agrimensura (reveal estilo BotW) ────────────────
+    // viber.reveal_biome(bioma) — a torre ativada acende os marcos do bioma
+    // na bússola/minimapa e abre o [F]/[G] deles. Persistido no save.
+    api.set(
+        "reveal_biome",
+        lua.create_function(|lua, biome: String| {
+            lua.app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                .commands
+                .push(ScriptCommand::RevealBiome(biome));
+            Ok(())
+        })?,
+    )?;
+    // viber.biome_revealed(bioma) -> bool — snapshot do frame; o script da
+    // atalaia usa para não re-recompensar (o estado vive na ENGINE, não em
+    // viber.game, e por isso sobrevive a save→load sem duplicação).
+    api.set(
+        "biome_revealed",
+        lua.create_function(|lua, biome: String| {
+            let ctx = lua
+                .app_data_ref::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+            Ok(ctx.revealed.contains(biome.trim().to_ascii_lowercase().as_str()))
+        })?,
+    )?;
+    // viber.add_skill_points(n) — pontos de talento (recompensa incremental
+    // de colecionáveis); no-op suave em mundos sem preset rpg.
+    api.set(
+        "add_skill_points",
+        lua.create_function(|lua, amount: u32| {
+            lua.app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                .commands
+                .push(ScriptCommand::AddSkillPoints(amount));
+            Ok(())
+        })?,
+    )?;
     // ── Combate & FX (primitivas de jogo) ─────────────────────────
     // viber.entity_position(id?) -> x, y, z | nil — snapshot do frame.
     api.set(

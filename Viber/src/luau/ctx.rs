@@ -95,6 +95,9 @@ pub struct ScriptCtx {
     /// Hostis vivos por banda do mundo (travel::REGIONS) —
     /// `viber.alive_in_region(idx)`.
     pub alive_regions: [u32; 5],
+    /// Biomas já revelados por atalaias (travel::RevealedBiomes) —
+    /// `viber.biome_revealed(bioma)`; snapshot do frame.
+    pub revealed: std::collections::HashSet<String>,
     /// Range de interação da entidade actual (`viber.set_interaction`) —
     /// `viber.interacted` respeita-o em vez de hardcodar 3,5 m.
     pub interaction_range: Option<f32>,
