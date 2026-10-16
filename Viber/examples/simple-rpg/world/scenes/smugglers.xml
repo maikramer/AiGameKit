@@ -55,7 +55,11 @@
     <Entity translation="-80 0 246" transform="rotation: 0 -70 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/weapon_rack_lod0.glb" />
     </Entity>
-    <DynamicSpawner avoid-water="1" avoid-road="1" count="6" seed="6171" region-min="-118 0 218" region-max="-62 0 262" random-yaw="true" avoid-overlaps="false" max-slope-deg="30" max-distance="300">
+    <!-- Guarnição do covil: `honor-exclusion="0"` — a exclusão r34 do
+         acampamento existe para os spawners SELVAGENS (lobos da floresta);
+         sem a exceção ela engolia a própria região de spawn e os guardas
+         nunca nasciam (0 placed / 192 attempts, covil vazio). -->
+    <DynamicSpawner avoid-water="1" avoid-road="1" honor-exclusion="0" count="6" seed="6171" region-min="-118 0 218" region-max="-62 0 262" random-yaw="true" avoid-overlaps="false" max-slope-deg="30" max-distance="300">
       <Creature role="enemy" script="enemies/bandit.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/bandit_lod0.glb" lod1-url="/assets/meshes/characters/bandit_lod1.glb" lod2-url="/assets/meshes/characters/bandit_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>

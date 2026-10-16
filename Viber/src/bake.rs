@@ -545,7 +545,7 @@ pub fn run_bake(world_path: &Path, out_dir: &Path) -> Result<BakeReport> {
 
     let mut occupancy = SpawnOccupancy::new();
     for exclusion in &pending.exclusions {
-        occupancy.register(exclusion.center.x, exclusion.center.y, exclusion.radius);
+        occupancy.register_exclusion(exclusion.center.x, exclusion.center.y, exclusion.radius);
     }
 
     let mut total_instances = 0usize;
@@ -1665,7 +1665,7 @@ pub fn verify_static(static_path: &Path, bake_path: &Path) -> Result<usize> {
 
     let mut occupancy = SpawnOccupancy::new();
     for exclusion in &pending.exclusions {
-        occupancy.register(exclusion.center.x, exclusion.center.y, exclusion.radius);
+        occupancy.register_exclusion(exclusion.center.x, exclusion.center.y, exclusion.radius);
     }
 
     let baked_veg: Vec<&BakeSpawnGroup> = baked

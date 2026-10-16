@@ -98,6 +98,14 @@ const SPAWN_LEDGE_DROP: f32 = 2.0;
 /// idêntico ao das células — só o índice muda.
 const LARGE_DISK_RADIUS: f32 = 256.0;
 
+/// Alvo de um [`SpawnOccupancy::register_into`] — o par de contentores de um
+/// dos dois registos (instâncias colocadas OU exclusões). Struct em vez de
+/// tupla para o tipo não explodir o `clippy::type_complexity`.
+struct OccupancyRegister<'a> {
+    cells: &'a mut HashMap<i64, Vec<(f32, f32, f32)>>,
+    large: &'a mut Vec<(f32, f32, f32)>,
+}
+
 /// Registo de ocupação XZ partilhado por TODOS os spawners do mundo (port do
 /// `occupancy.ts` do VibeGame): cada instância colocada (e cada
 /// `<SpawnExclusion>`) registra um disco; candidatos cujo disco encosta um
@@ -108,9 +116,16 @@ const LARGE_DISK_RADIUS: f32 = 256.0;
 /// Buckets por célula XZ mantêm cada consulta nos poucos discos que a podem
 /// tocar — uma lista plana tornava a geração quadrática no nº de props.
 pub struct SpawnOccupancy {
+    /// Discos de instâncias COLOCADAS (footprints de outros grupos).
     cells: HashMap<i64, Vec<(f32, f32, f32)>>,
     /// Discos gigantes (exclusões "mundiais"), testados sem células.
     large: Vec<(f32, f32, f32)>,
+    /// Discos das `<SpawnExclusion>` — registrados à parte para um spawner
+    /// poder optar por fora (`honor-exclusion="0"`, ex.: a guarnição do
+    /// próprio acampamento que a exclusão protege). O `is_free` default testa
+    /// OS DOIS registos.
+    exclusion_cells: HashMap<i64, Vec<(f32, f32, f32)>>,
+    exclusion_large: Vec<(f32, f32, f32)>,
 }
 
 impl Default for SpawnOccupancy {
@@ -124,6 +139,8 @@ impl SpawnOccupancy {
         Self {
             cells: HashMap::new(),
             large: Vec::new(),
+            exclusion_cells: HashMap::new(),
+            exclusion_large: Vec::new(),
         }
     }
 
@@ -133,14 +150,43 @@ impl SpawnOccupancy {
         ((cx as i64) << 32) | (cz as i64 & 0xFFFF_FFFF)
     }
 
-    /// Registra um disco XZ. O disco entra em TODAS as células que toca, para
-    /// uma consulta que caia em qualquer delas o encontrar.
+    /// Registra um disco XZ de instância colocada. O disco entra em TODAS as
+    /// células que toca, para uma consulta que caia em qualquer delas o
+    /// encontrar.
     pub fn register(&mut self, x: f32, z: f32, radius: f32) {
+        Self::register_into(
+            OccupancyRegister {
+                cells: &mut self.cells,
+                large: &mut self.large,
+            },
+            x,
+            z,
+            radius,
+        );
+    }
+
+    /// Registra um disco de `<SpawnExclusion>`. Vai ao registo PRÓPRIO de
+    /// exclusões — `is_free` o testa por omissão, e `honor-exclusion="0"`
+    /// num spawner permite-lhe ignorar exatamente este registo (a guarnição
+    /// do acampamento que a exclusão protege).
+    pub fn register_exclusion(&mut self, x: f32, z: f32, radius: f32) {
+        Self::register_into(
+            OccupancyRegister {
+                cells: &mut self.exclusion_cells,
+                large: &mut self.exclusion_large,
+            },
+            x,
+            z,
+            radius,
+        );
+    }
+
+    fn register_into(target: OccupancyRegister<'_>, x: f32, z: f32, radius: f32) {
         if radius <= 0.0 || radius.is_nan() {
             return;
         }
         if radius > LARGE_DISK_RADIUS {
-            self.large.push((x, z, radius));
+            target.large.push((x, z, radius));
             return;
         }
         let x0 = ((x - radius) / OCCUPANCY_CELL).floor() as i32;
@@ -149,7 +195,8 @@ impl SpawnOccupancy {
         let z1 = ((z + radius) / OCCUPANCY_CELL).floor() as i32;
         for cz in z0..=z1 {
             for cx in x0..=x1 {
-                self.cells
+                target
+                    .cells
                     .entry(Self::cell_key(cx, cz))
                     .or_default()
                     .push((x, z, radius));
@@ -162,38 +209,53 @@ impl SpawnOccupancy {
     /// dois discos se sobrepõem, um ponto do menor fica dentro do maior, e as
     /// AABBs dos dois cobrem a célula desse ponto — partilham sempre um
     /// bucket, mesmo que o disco registado seja muito maior.
-    pub fn is_free(&self, x: f32, z: f32, radius: f32) -> bool {
-        if self.cells.is_empty() && self.large.is_empty() {
-            return true;
-        }
-        // Discos gigantes: o mesmo teste geométrico dos buckets, sem célula.
-        for &(fx, fz, fr) in &self.large {
-            let dx = fx - x;
-            let dz = fz - z;
-            let min_dist = fr + radius + SPAWN_CLEARANCE;
-            if dx * dx + dz * dz < min_dist * min_dist {
-                return false;
+    ///
+    /// `honor_exclusions = false` salta o registo das `<SpawnExclusion>`
+    /// (spawner autorizado DENTRO da exclusão que protege o sítio — ex.: a
+    /// guarnição do covil dos contrabandistas). Os footprints de outros
+    /// grupos continuam mandando.
+    pub fn is_free(&self, x: f32, z: f32, radius: f32, honor_exclusions: bool) -> bool {
+        let hit = |cells: &HashMap<i64, Vec<(f32, f32, f32)>>,
+                   large: &[(f32, f32, f32)],
+                   x: f32,
+                   z: f32,
+                   radius: f32|
+         -> bool {
+            for &(fx, fz, fr) in large {
+                let dx = fx - x;
+                let dz = fz - z;
+                let min_dist = fr + radius + SPAWN_CLEARANCE;
+                if dx * dx + dz * dz < min_dist * min_dist {
+                    return true;
+                }
             }
-        }
-        let reach = radius + SPAWN_CLEARANCE;
-        let x0 = ((x - reach) / OCCUPANCY_CELL).floor() as i32;
-        let x1 = ((x + reach) / OCCUPANCY_CELL).floor() as i32;
-        let z0 = ((z - reach) / OCCUPANCY_CELL).floor() as i32;
-        let z1 = ((z + reach) / OCCUPANCY_CELL).floor() as i32;
-        for cz in z0..=z1 {
-            for cx in x0..=x1 {
-                let Some(bucket) = self.cells.get(&Self::cell_key(cx, cz)) else {
-                    continue;
-                };
-                for &(fx, fz, fr) in bucket {
-                    let dx = fx - x;
-                    let dz = fz - z;
-                    let min_dist = fr + radius + SPAWN_CLEARANCE;
-                    if dx * dx + dz * dz < min_dist * min_dist {
-                        return false;
+            let reach = radius + SPAWN_CLEARANCE;
+            let x0 = ((x - reach) / OCCUPANCY_CELL).floor() as i32;
+            let x1 = ((x + reach) / OCCUPANCY_CELL).floor() as i32;
+            let z0 = ((z - reach) / OCCUPANCY_CELL).floor() as i32;
+            let z1 = ((z + reach) / OCCUPANCY_CELL).floor() as i32;
+            for cz in z0..=z1 {
+                for cx in x0..=x1 {
+                    let Some(bucket) = cells.get(&Self::cell_key(cx, cz)) else {
+                        continue;
+                    };
+                    for &(fx, fz, fr) in bucket {
+                        let dx = fx - x;
+                        let dz = fz - z;
+                        let min_dist = fr + radius + SPAWN_CLEARANCE;
+                        if dx * dx + dz * dz < min_dist * min_dist {
+                            return true;
+                        }
                     }
                 }
             }
+            false
+        };
+        if hit(&self.cells, &self.large, x, z, radius) {
+            return false;
+        }
+        if honor_exclusions && hit(&self.exclusion_cells, &self.exclusion_large, x, z, radius) {
+            return false;
         }
         true
     }
@@ -425,7 +487,7 @@ pub fn compute_placements(
                 stats.rejected_max_distance += 1;
                 continue;
             }
-            if !occupancy.is_free(pos.x, pos.y, test_radius) {
+            if !occupancy.is_free(pos.x, pos.y, test_radius, spec.honor_exclusions) {
                 stats.rejected_occupancy += 1;
                 continue;
             }
@@ -860,9 +922,10 @@ pub fn instantiate_spawn_groups(
     }
 
     // Passe 2 — colocações: exclusões primeiro (sempre honradas, mesmo com
-    // `avoid-overlaps="0"`), depois os grupos pela ordem do XML.
+    // `avoid-overlaps="0"`; um spawner só as ignora com
+    // `honor-exclusion="0"`), depois os grupos pela ordem do XML.
     for exclusion in exclusions.iter() {
-        occupancy.register(exclusion.center.x, exclusion.center.y, exclusion.radius);
+        occupancy.register_exclusion(exclusion.center.x, exclusion.center.y, exclusion.radius);
     }
     for group in groups.iter_mut() {
         if group.done {
@@ -1138,6 +1201,7 @@ mod tests {
             near_water_radius: 4.0,
             avoid_road: false,
             avoid_cliff: true,
+            honor_exclusions: true,
             cliff_margin: 2.0,
             align_to_terrain: true,
             scale_min: 1.0,
@@ -1450,25 +1514,28 @@ mod tests {
     #[test]
     fn test_occupancy_disc_clearance_and_cells() {
         assert!(
-            SpawnOccupancy::new().is_free(0.0, 0.0, 10.0),
+            SpawnOccupancy::new().is_free(0.0, 0.0, 10.0, true),
             "empty is free"
         );
         let mut occ = SpawnOccupancy::new();
         occ.register(0.0, 0.0, 2.0);
-        assert!(!occ.is_free(0.0, 0.0, 0.0), "inside the disc");
+        assert!(!occ.is_free(0.0, 0.0, 0.0, true), "inside the disc");
         // A 2.5 m ainda encosta (2 + 0.6 de folga); além disso, livre.
-        assert!(!occ.is_free(2.5, 0.0, 0.0), "clearance band is enforced");
-        assert!(occ.is_free(2.7, 0.0, 0.0));
+        assert!(
+            !occ.is_free(2.5, 0.0, 0.0, true),
+            "clearance band is enforced"
+        );
+        assert!(occ.is_free(2.7, 0.0, 0.0, true));
         // O raio do candidato soma ao teste.
-        assert!(occ.is_free(4.5, 0.0, 0.5));
-        assert!(!occ.is_free(3.0, 0.0, 0.5));
+        assert!(occ.is_free(4.5, 0.0, 0.5, true));
+        assert!(!occ.is_free(3.0, 0.0, 0.5, true));
         // Disco registado grande atravessa células: a busca pelo alcance do
         // PRÓPRIO raio + folga tem de o encontrar na mesma.
         let mut big = SpawnOccupancy::new();
         big.register(0.0, 0.0, 50.0);
-        assert!(!big.is_free(10.0, 0.0, 0.0));
-        assert!(!big.is_free(-48.0, 0.0, 0.0));
-        assert!(big.is_free(51.5, 0.0, 0.0));
+        assert!(!big.is_free(10.0, 0.0, 0.0, true));
+        assert!(!big.is_free(-48.0, 0.0, 0.0, true));
+        assert!(big.is_free(51.5, 0.0, 0.0, true));
     }
 
     #[test]
@@ -1477,13 +1544,74 @@ mod tests {
         // milhões de células) e o teste geométrico é idêntico ao das células.
         let mut occ = SpawnOccupancy::new();
         occ.register(0.0, 0.0, 100_000.0);
-        assert!(!occ.is_free(0.0, 0.0, 0.0), "inside the giant exclusion");
         assert!(
-            !occ.is_free(50_000.0, 0.0, 1.0),
+            !occ.is_free(0.0, 0.0, 0.0, true),
+            "inside the giant exclusion"
+        );
+        assert!(
+            !occ.is_free(50_000.0, 0.0, 1.0, true),
             "50 km out is still inside"
         );
         // Raio + folga do disco: além disso (100000 + 1 + 0.6), livre.
-        assert!(occ.is_free(100_002.0, 0.0, 1.0));
+        assert!(occ.is_free(100_002.0, 0.0, 1.0, true));
+    }
+
+    /// REGRESSÃO do covil dos contrabandistas (simple-rpg): a
+    /// `<SpawnExclusion>` que protege o acampamento cobria a própria região
+    /// de spawn da guarnição — 0 placed / 192 attempts, camp vazio. O disco
+    /// de exclusão vive num registo PRÓPRIO; `honor-exclusion="0"` no spawner
+    /// autoriza a guarnição dentro dele sem abrir o acampamento aos spawners
+    /// selvagens.
+    #[test]
+    fn test_spawn_exclusion_blocks_and_honor_exclusion_opts_out() {
+        let mut s = spec();
+        s.count = 6;
+        s.max_slope_attempts = 32;
+        // Região do covil: 56×44 m toda dentro da exclusão r34 do acampamento.
+        s.region_min = [-118.0, 0.0, 218.0];
+        s.region_max = [-62.0, 0.0, 262.0];
+
+        let mut occupancy = SpawnOccupancy::new();
+        occupancy.register_exclusion(-90.0, 240.0, 34.0);
+
+        let (out, stats) = compute_placements(&s, &mut occupancy, &mut flat);
+        assert!(
+            out.is_empty(),
+            "exclusion cobre a região → nada colocado (default)"
+        );
+        assert_eq!(
+            stats.attempts, stats.rejected_occupancy,
+            "todas as tentativas morrem no gate de ocupação"
+        );
+
+        // A guarnição entra: footprints de OUTROS grupos continuam a valer —
+        // registar um disco colocado aí em cima volta a bloquear.
+        let mut occupancy = SpawnOccupancy::new();
+        occupancy.register_exclusion(-90.0, 240.0, 34.0);
+        s.honor_exclusions = false;
+        let (out, stats) = compute_placements(&s, &mut occupancy, &mut flat);
+        assert_eq!(
+            out.len(),
+            6,
+            "guarnição colocada dentro da própria exclusão"
+        );
+        assert_eq!(stats.rejected_occupancy, 0);
+        for instance in &out {
+            let d = (instance.position - Vec3::new(-90.0, 3.0, 240.0)).length();
+            assert!(d < 34.6, "fora da exclusão do acampamento: {d}");
+        }
+
+        let mut occupancy = SpawnOccupancy::new();
+        occupancy.register_exclusion(-90.0, 240.0, 34.0);
+        occupancy.register(-75.0, 240.0, 2.0);
+        let (out, _) = compute_placements(&s, &mut occupancy, &mut flat);
+        for instance in &out {
+            let d = (instance.position - Vec3::new(-75.0, 3.0, 240.0)).length();
+            assert!(
+                d >= 2.6,
+                "footprint de outro grupo continua a bloquear: {d}"
+            );
+        }
     }
 
     /// `footprint-radius` × escala: o teste usa a escala máxima (conservador)

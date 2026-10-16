@@ -1117,6 +1117,7 @@ fn push_shore_rock_group(
         // Rochas de margem nunca em parede de cliff — candidatos são fixos
         // (sem re-roll), pelo que os rejeitados são simplesmente omitidos.
         avoid_cliff: true,
+        honor_exclusions: true,
         cliff_margin: crate::recipes::DEFAULT_CLIFF_MARGIN,
         align_to_terrain: true,
         random_yaw: true,

@@ -824,6 +824,13 @@ pub struct StaticSpawnerSpec {
     /// gates against the [`crate::terrain::cliffs::CliffMask`] dilated layer.
     /// `avoid-cliff`, default ON (`"0"` restaura).
     pub avoid_cliff: bool,
+    /// `honor-exclusion` — quando `false`, o grupo IGNORA os discos das
+    /// `<SpawnExclusion>` (mantém os footprints dos outros grupos). Para a
+    /// guarnição de um acampamento colocar-se DENTRO da exclusão que protege
+    /// o acampamento dos spawners selvagens (covil dos contrabandistas:
+    /// a exclusão r34 engolia a própria região de spawn e os 6 guardas não
+    /// nasciam). Default `true` — exclusões continuam globais.
+    pub honor_exclusions: bool,
     /// Extra clearance beyond the cliff mask, in meters — `cliff-margin`.
     pub cliff_margin: f32,
     pub align_to_terrain: bool,
@@ -960,6 +967,7 @@ impl VegetationSpec {
             near_water_radius: DEFAULT_NEAR_WATER_RADIUS,
             avoid_road: self.avoid_road,
             avoid_cliff: self.avoid_cliff,
+            honor_exclusions: true,
             cliff_margin: self.cliff_margin,
             align_to_terrain: true,
             scale_min: self.scale_min,
@@ -2331,6 +2339,9 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
         // Default ON: nada nasce em parede de cliff nem na sua vergem —
         // `avoid-cliff="0"` restaura o comportamento antigo.
         avoid_cliff: true,
+        // Exclusões continuam globais por omissão — `honor-exclusion="0"`
+        // autoriza um spawner (a guarnição de um acampamento) dentro delas.
+        honor_exclusions: true,
         cliff_margin: DEFAULT_CLIFF_MARGIN,
         align_to_terrain: true,
         scale_min: 1.0,
@@ -2436,6 +2447,10 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
             "near-water-radius" => spec.near_water_radius = values::parse_f32(&value, &kctx)?,
             "avoid-road" => spec.avoid_road = values::parse_bool(&value, &kctx)?,
             "avoid-cliff" => spec.avoid_cliff = values::parse_bool(&value, &kctx)?,
+            // `honor-exclusion="0"`: o grupo ignora as <SpawnExclusion> — a
+            // guarnição do acampamento que a exclusão protege (covil dos
+            // contrabandistas). Footprints de outros grupos continuam a valer.
+            "honor-exclusion" => spec.honor_exclusions = values::parse_bool(&value, &kctx)?,
             "cliff-margin" => spec.cliff_margin = values::parse_f32(&value, &kctx)?.max(0.0),
             "align-to-terrain" => spec.align_to_terrain = values::parse_bool(&value, &kctx)?,
             "scale-min" => spec.scale_min = values::parse_f32(&value, &kctx)?,

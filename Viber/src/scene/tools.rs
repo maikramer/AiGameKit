@@ -354,7 +354,7 @@ fn doc_occupancy(
     let mut occupancy = SpawnOccupancy::new();
     if let Some(exclusions) = world.get_resource::<SpawnExclusions>() {
         for exclusion in &exclusions.0 {
-            occupancy.register(exclusion.center.x, exclusion.center.y, exclusion.radius);
+            occupancy.register_exclusion(exclusion.center.x, exclusion.center.y, exclusion.radius);
         }
     }
     let doc = world.resource::<SceneDoc>();
