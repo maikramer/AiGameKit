@@ -35,7 +35,9 @@ def _parse_ahgt(path: Path) -> dict:
     assert version == AHGT_VERSION
     (meta_len,) = struct.unpack_from("<I", blob, 16)
     meta = json.loads(blob[20 : 20 + meta_len].decode("utf-8"))
-    raw = zlib.decompress(blob[20 + meta_len :])
+    # O writer emite deflate RAW (wbits=-15, ver export.py) — espelha serializeAhgt;
+    # o leitor TS aceita ambos, mas o formato canónico é raw (3a0c5079).
+    raw = zlib.decompress(blob[20 + meta_len :], -zlib.MAX_WBITS)
     grid = np.frombuffer(raw, dtype="<u2").reshape(height, width)
     return {"width": width, "height": height, "meta": meta, "grid": grid}
 
