@@ -1253,7 +1253,7 @@ pub fn tick_corpses(
             for handle in fade.materials.iter() {
                 materials.remove(handle);
             }
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }
@@ -1402,7 +1402,7 @@ pub fn cycle_weapon(
         held.idx = (held.idx + 1) % WEAPON_TABLE.len();
     }
     if let Some(old) = held.current.take() {
-        commands.entity(old).despawn();
+        commands.entity(old).try_despawn();
     }
     let (url, pos, rot, scale, _label) = WEAPON_TABLE[held.idx];
     let handle = crate::meshopt::load_gltf(&asset_server, url.to_owned());
@@ -1594,7 +1594,7 @@ fn fireball_step(
     for (entity, mut transform, mut ball) in &mut balls {
         ball.life -= dt;
         if ball.life <= 0.0 {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
         let previous = transform.translation;
@@ -1700,7 +1700,7 @@ fn fireball_step(
                     &mut fireball_events,
                 );
             }
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }

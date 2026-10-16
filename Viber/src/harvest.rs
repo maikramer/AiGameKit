@@ -585,7 +585,7 @@ pub fn harvest_tool_system(
         return;
     };
     if let Some(old) = held.current.take() {
-        commands.entity(old).despawn();
+        commands.entity(old).try_despawn();
     }
     let (url, pos, rot) = match wanted {
         Some(HarvestKind::Chop) => FELLING_AXE,
@@ -837,7 +837,7 @@ fn break_prop(
         BreakStyle::Fall => {
             if !start_tree_fall(fx, entity, dir, ground_y) {
                 // Sem `Top` (GLB não pré-dividido): cai para o burst simples.
-                fx.commands.entity(entity).despawn();
+                fx.commands.entity(entity).try_despawn();
                 true
             } else {
                 false
@@ -845,11 +845,11 @@ fn break_prop(
         }
         BreakStyle::Shatter => {
             start_rock_shatter(fx, entity, prop_pos, data, ground_y);
-            fx.commands.entity(entity).despawn();
+            fx.commands.entity(entity).try_despawn();
             true
         }
         BreakStyle::Burst => {
-            fx.commands.entity(entity).despawn();
+            fx.commands.entity(entity).try_despawn();
             true
         }
     };
@@ -1067,7 +1067,7 @@ pub fn tree_fall_system(
         if t > fade_start {
             let k = (t - fade_start) / FALL_FADE;
             if k >= 1.0 {
-                commands.entity(entity).despawn();
+                commands.entity(entity).try_despawn();
                 continue;
             }
             set_materials_alpha(
@@ -1197,7 +1197,7 @@ pub fn debris_chunk_system(
         if piece.elapsed > SHATTER_HOLD {
             let k = (piece.elapsed - SHATTER_HOLD) / SHATTER_FADE;
             if k >= 1.0 {
-                commands.entity(entity).despawn();
+                commands.entity(entity).try_despawn();
                 continue;
             }
             set_materials_alpha(

@@ -163,7 +163,7 @@ fn falling_system(
     for (entity, mut transform, mut fall) in &mut falling {
         fall.timer += dt;
         if fall.timer >= FALL_DURATION {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
         let angle = fall_angle(fall.timer, FALL_DURATION);

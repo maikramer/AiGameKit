@@ -861,7 +861,7 @@ fn target_ring_system(
     // Sincroniza: anel cujo alvo já não é o atual → despawn.
     for (entity, ring, ..) in &mut rings {
         if Some(ring.target) != wanted {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
     let Some(assets) = assets else {

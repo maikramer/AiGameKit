@@ -985,7 +985,7 @@ fn bomb_step_system(
                     });
             }
         }
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 }
 

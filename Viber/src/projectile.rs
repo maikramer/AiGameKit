@@ -394,7 +394,7 @@ fn step_projectiles(
     for (entity, mut transform, mut shot) in &mut projectiles {
         shot.life -= dt;
         if shot.life <= 0.0 {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
         let prev = transform.translation;
@@ -417,7 +417,7 @@ fn step_projectiles(
                             from: Some(prev - shot.vel.normalize_or_zero() * 2.0),
                         });
                         impact_burst(&mut commands, prev.lerp(pos, along));
-                        commands.entity(entity).despawn();
+                        commands.entity(entity).try_despawn();
                         continue;
                     }
                 }
@@ -472,7 +472,7 @@ fn step_projectiles(
                         }
                     }
                     impact_burst(&mut commands, pos);
-                    commands.entity(entity).despawn();
+                    commands.entity(entity).try_despawn();
                     continue;
                 }
             }
@@ -488,7 +488,7 @@ fn step_projectiles(
                 .is_some_and(|ground| pos.y <= ground)
         {
             impact_burst(&mut commands, pos);
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }

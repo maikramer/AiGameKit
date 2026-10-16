@@ -341,7 +341,7 @@ fn toast_fade_system(
         pill.timer -= dt;
         if pill.timer <= 0.0 {
             // despawn recursivo leva o Text filho embora.
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
         let alpha = toast_alpha(pill.timer);

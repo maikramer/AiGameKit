@@ -1444,7 +1444,7 @@ fn burst_despawn_system(
                 positions.fill([0.0; 3]);
             }
             pool.park_mesh(emitter.capacity, mesh.0.clone());
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }

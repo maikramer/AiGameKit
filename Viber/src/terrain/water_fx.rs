@@ -422,7 +422,7 @@ fn ripple_system(
             // O material volta ao pool: o próximo anel herda-o (o alpha é
             // reescrito a partir da idade, o estado anterior não importa).
             assets.materials.push(material.0.clone());
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
         let radius = ripple_radius(
