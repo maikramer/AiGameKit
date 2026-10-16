@@ -402,7 +402,7 @@ pub fn race_progress_system(
         let Some(hit) = nearest_on_path(&road.stations, p) else {
             continue;
         };
-        let s = hit.station(road.stations.len()) as f32;
+        let s = hit.station(road.stations.len());
         if let Some(last) = progress.last_s {
             let mut ds = s - last;
             let half = lap_len * 0.5;

@@ -277,6 +277,7 @@ struct KartSnap {
 /// Movimento arcade por frame. Corre ANTES do `player_movement` (a câmara lê
 /// o resultado no mesmo frame) e escreve o Transform na superfície de
 /// condução.
+#[allow(clippy::too_many_arguments)] // sistema Bevy: queries/params explícitos do domínio
 pub fn vehicle_movement(
     time: Res<Time>,
     keys: Res<ButtonInput<bevy::input::keyboard::KeyCode>>,
@@ -541,34 +542,33 @@ pub fn vehicle_movement(
         if let Some(track) = track.as_ref()
             && let Some(road_idx) = track.road
             && let Some(road) = runtime.roads.get(road_idx)
-        {
-            if let Some(hit) = crate::terrain::paths::nearest_on_path(
+            && let Some(hit) = crate::terrain::paths::nearest_on_path(
                 &road.stations,
                 bevy::math::Vec2::new(next.x, next.z),
-            ) {
-                let hw = crate::terrain::paths::station_lerp(&road.half_width, &hit);
-                let limit = hw + TRACK_SHOULDER;
-                let to_p = bevy::math::Vec2::new(next.x, next.z) - hit.point;
-                let dist = to_p.length();
-                // Só paredes na faixa junto ao corredor: uma saída grande
-                // desliza ao longo da barreira em vez de ficar perdida no
-                // campo, mas longe da pista o mundo é explorável.
-                if dist > limit && dist < limit + WALL_RANGE && dist > 1e-4 {
-                    let normal = to_p / dist;
-                    let clamped = hit.point + normal * limit;
-                    next.x = clamped.x;
-                    next.z = clamped.y;
-                    let vel = move_dir * new_speed;
-                    let frontal = (-vel.dot(Vec3::new(normal.x, 0.0, normal.y))).max(0.0);
-                    if frontal > 6.0 {
-                        new_speed *= 0.55;
-                        sfx.write(crate::ambient::SfxEvent {
-                            clip: crate::ambient::SfxClip::Crash,
-                            position: Some(next),
-                        });
-                    } else {
-                        new_speed *= 0.995;
-                    }
+            )
+        {
+            let hw = crate::terrain::paths::station_lerp(&road.half_width, &hit);
+            let limit = hw + TRACK_SHOULDER;
+            let to_p = bevy::math::Vec2::new(next.x, next.z) - hit.point;
+            let dist = to_p.length();
+            // Só paredes na faixa junto ao corredor: uma saída grande
+            // desliza ao longo da barreira em vez de ficar perdida no
+            // campo, mas longe da pista o mundo é explorável.
+            if dist > limit && dist < limit + WALL_RANGE && dist > 1e-4 {
+                let normal = to_p / dist;
+                let clamped = hit.point + normal * limit;
+                next.x = clamped.x;
+                next.z = clamped.y;
+                let vel = move_dir * new_speed;
+                let frontal = (-vel.dot(Vec3::new(normal.x, 0.0, normal.y))).max(0.0);
+                if frontal > 6.0 {
+                    new_speed *= 0.55;
+                    sfx.write(crate::ambient::SfxEvent {
+                        clip: crate::ambient::SfxClip::Crash,
+                        position: Some(next),
+                    });
+                } else {
+                    new_speed *= 0.995;
                 }
             }
         }
