@@ -717,6 +717,16 @@ fn respawn_system(
                         entity,
                         player.as_deref_mut(),
                     );
+                    // STREAMING em prioridade: o ponto de respawn pode estar
+                    // fora da janela de colunas construídas (morte numa banda
+                    // distante, saída de interior) — sem o boost o herói
+                    // acordava num vazio de névoa (gauntlet p1 r1,
+                    // `15-respawn.png`). O `tick_cinematic` desce o timer e
+                    // funde-o no `StreamingBoost` que terreno/render LOD/
+                    // relva já multiplicam.
+                    commands.insert_resource(crate::cinematic::RespawnStreaming(
+                        crate::cinematic::RESPAWN_STREAM_BOOST_SECS,
+                    ));
                     health.current = health.max;
                     // Morte limpa status: renascer envenenado punha o herói a
                     // perder o HP cheio no ponto de respawn sem inimigo algum.
@@ -1643,5 +1653,32 @@ mod tests {
         assert_eq!(world.get::<Health>(hero).unwrap().current, 100.0);
         let t = world.get::<Transform>(hero).unwrap().translation;
         assert_eq!((t.x, t.z), (50.0, 0.0), "portão leste (o mais próximo)");
+        // O salto de respawn pede o destino construído JÁ: a janela de boost
+        // de streaming tem de ficar armada (o herói renascia num vazio de
+        // névoa — gauntlet p1 r1, `15-respawn.png`).
+        let boost = world
+            .get_resource::<crate::cinematic::RespawnStreaming>()
+            .expect("respawn arma o boost de streaming");
+        assert!((boost.0 - crate::cinematic::RESPAWN_STREAM_BOOST_SECS).abs() < 1e-5);
+    }
+
+    /// O timer do boost pós-respawn vale enquanto vive e morre a zero — pura
+    /// (a mesma matemática que o `tick_cinematic` usa para fundir no
+    /// `StreamingBoost`).
+    #[test]
+    fn test_respawn_streaming_boost_window() {
+        let mut timer = crate::cinematic::RESPAWN_STREAM_BOOST_SECS;
+        assert!(crate::cinematic::respawn_boost_tick(&mut timer, 1.0));
+        assert!((timer - (crate::cinematic::RESPAWN_STREAM_BOOST_SECS - 1.0)).abs() < 1e-5);
+        // Última janela: frame em que o resto é 0 ainda conta (o boost cobre
+        // o frame do salto e desliga sozinho depois).
+        let mut timer = 0.5;
+        assert!(crate::cinematic::respawn_boost_tick(&mut timer, 0.5));
+        assert_eq!(timer, 0.0);
+        assert!(!crate::cinematic::respawn_boost_tick(&mut timer, 0.5));
+        // dt maior que o resto clamp a zero (sem negativo).
+        let mut timer = 0.1;
+        assert!(crate::cinematic::respawn_boost_tick(&mut timer, 5.0));
+        assert_eq!(timer, 0.0);
     }
 }

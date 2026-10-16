@@ -508,9 +508,57 @@ const HOLD_FADE: f32 = 0.7;
 const PRE_CUT_RAMP: f32 = 0.3;
 
 /// Orçamentos de streaming (terreno, LOD de malhas) multiplicados — vale
-/// enquanto uma cinemática espera em negro por um destino distante.
+/// enquanto uma cinemática espera em negro por um destino distante OU na
+/// janela pós-respawn ([`RespawnStreaming`]).
 #[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct StreamingBoost(pub bool);
+
+/// Janela de boost pós-respawn (segundos restantes). O respawn teleporta o
+/// herói para o ponto mais próximo — que pode estar fora da janela de
+/// colunas já construídas (morte numa banda distante, saída de um interior,
+/// QA) — e sem isto o herói acordava num VAZIO de névoa: terreno/céu/props
+/// ainda por construir ao orçamento normal de 4 caixas/frame (o gauntlet p1
+/// r1 apanhou `14-boss-sul`/`15-respawn` assim). Escrito por
+/// `feedback::respawn_system` no salto; [`tick_cinematic`] desce o timer e
+/// funde-o no [`StreamingBoost`] que o terreno/render LOD/relva já leem.
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq)]
+pub struct RespawnStreaming(pub f32);
+
+/// Duração do boost de streaming após o respawn (s). Com o orçamento de
+/// terreno ×10 ([`crate::terrain::plugin`] `STREAMING_BOOST`), 2,5 s ≈ 100
+/// frames × 40 caixas — a janela LOD0 da colisão (3×3 colunas) nasce nos
+/// primeiros frames e o resto da vista preenche por baixo.
+pub const RESPAWN_STREAM_BOOST_SECS: f32 = 2.5;
+
+/// Dá o boost para o frame corrente e avança o timer — pura para teste.
+/// `true` enquanto houver janela (o frame do próprio `0` inicial ainda
+/// conta, como o hold de cinemática).
+pub(crate) fn respawn_boost_tick(timer: &mut f32, dt: f32) -> bool {
+    if *timer <= 0.0 {
+        return false;
+    }
+    *timer = (*timer - dt).max(0.0);
+    true
+}
+
+/// Par de recursos do boost agrupado — o `tick_cinematic` já vive no teto
+/// de 16 system params do Bevy, e o [`RespawnStreaming`] soma um.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct StreamingBoostParams<'w> {
+    pub boost: ResMut<'w, StreamingBoost>,
+    pub respawn: Option<ResMut<'w, RespawnStreaming>>,
+}
+
+impl<'w> StreamingBoostParams<'w> {
+    /// Desce a janela pós-respawn e funde-a com a espera da cinemática.
+    fn merged(&mut self, waiting: bool, dt: f32) -> StreamingBoost {
+        let respawn_boost = self
+            .respawn
+            .as_deref_mut()
+            .is_some_and(|r| respawn_boost_tick(&mut r.0, dt));
+        StreamingBoost(waiting || respawn_boost)
+    }
+}
 
 impl Active {
     /// Escuridão total do véu (fades autorais, esperas e rampas de corte).
@@ -587,6 +635,7 @@ impl Plugin for CinematicPlugin {
         app.init_resource::<CinematicLibrary>()
             .init_resource::<CinematicPlayback>()
             .init_resource::<StreamingBoost>()
+            .init_resource::<RespawnStreaming>()
             .add_message::<PlayCinematic>()
             .add_message::<StopCinematic>()
             .add_message::<CinematicEnded>()
@@ -744,7 +793,7 @@ fn tick_cinematic(
     keys: Option<Res<ButtonInput<KeyCode>>>,
     mut stops: MessageReader<StopCinematic>,
     mut playback: ResMut<CinematicPlayback>,
-    mut boost: ResMut<StreamingBoost>,
+    mut fx: StreamingBoostParams,
     terrain: Option<Res<crate::terrain::plugin::ChunkLodState>>,
     mesh_lod: Option<Res<crate::render_lod::MeshLodStats>>,
     grass: Option<Res<crate::grass::GrassField>>,
@@ -764,11 +813,14 @@ fn tick_cinematic(
     {
         menus.cinematic = playing;
     }
+    // Janela pós-respawn: desce SEMPRE (mesmo sem cinemática nenhuma) e
+    // funde no boost — o respawn não passa pela espera em negro.
+    let dt = real.delta_secs();
     let Some(active) = playback.active.as_mut() else {
-        boost.set_if_neq(StreamingBoost(false));
+        let boost = fx.merged(false, dt);
+        fx.boost.set_if_neq(boost);
         return;
     };
-    let dt = real.delta_secs();
     // Herói intocável enquanto a câmara não é dele.
     for player in &players {
         commands
@@ -830,7 +882,8 @@ fn tick_cinematic(
         }
     }
     let waiting = active.hold.is_some_and(|h| h.fading.is_none());
-    boost.set_if_neq(StreamingBoost(waiting));
+    let boost = fx.merged(waiting, dt);
+    fx.boost.set_if_neq(boost);
 
     // 2. O relógio só anda fora da espera (o que está em negro não conta).
     if !waiting && !active.outro {
@@ -876,7 +929,8 @@ fn tick_cinematic(
         return;
     }
     let done = playback.active.take().expect("ativa acima");
-    boost.set_if_neq(StreamingBoost(false));
+    let boost = fx.merged(false, dt);
+    fx.boost.set_if_neq(boost);
     restore_hud(&mut ui_nodes, &done.hidden);
     if let Some(menus) = menus.as_deref_mut() {
         menus.cinematic = false;
