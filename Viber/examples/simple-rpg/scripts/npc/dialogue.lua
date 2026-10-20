@@ -43,11 +43,9 @@ function on_update(_dt)
   if state == "not_taken" then
     rules.quest_accept(id)
     say(def and def.lines_intro, "Aceite.", remaining)
-    viber.sound("quest_accept")
   elseif state == "ready" then
     rules.quest_turn_in(id)
     say(def and def.lines_complete, "Entregue.", 0)
-    viber.sound("quest_complete")
   elseif state == "active" then
     say(def and def.lines_progress, "Ainda não.", remaining)
   else
