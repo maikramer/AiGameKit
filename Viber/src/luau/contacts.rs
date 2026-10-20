@@ -10,11 +10,12 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{
-    CollisionEvent, CollisionEventFlags, KinematicCharacterControllerOutput, Sensor,
+    CollisionEvent, KinematicCharacterControllerOutput, Sensor,
 };
+use bevy_rapier3d::rapier::geometry::CollisionEventFlags;
 
+use super::components::LuaScriptRef;
 use super::host::{ContactHook, LuaScriptHost};
-use super::runtime::LuaScriptRef;
 
 /// Par (dono do script, outra entidade) ainda em contacto.
 #[derive(Resource, Default)]
@@ -35,6 +36,7 @@ impl LivePair {
     }
 }
 
+#[derive(Clone, Copy)]
 enum Source {
     Event,
     Controller,

@@ -29,6 +29,7 @@
 pub mod api;
 pub mod commands;
 pub mod components;
+pub mod contacts;
 pub mod ctx;
 pub mod entity;
 pub mod events;
@@ -114,6 +115,7 @@ impl bevy::app::Plugin for LuauScriptPlugin {
         // acumulam aqui (bounded pelos pedidos do jogo).
         app.init_resource::<crate::recipes::spawn::PendingScriptSpawns>();
         app.insert_resource(host);
+        app.init_resource::<contacts::ContactBook>();
         // Hot-reload de scripts (VIBER_HOT_RELOAD=0 desliga): watcher sobre
         // <world>/scripts/; a recarga corre antes do chain de scripts para o
         // frame seguinte já usar o chunk novo. Watcher a falhar = warn e a
@@ -148,6 +150,14 @@ impl bevy::app::Plugin for LuauScriptPlugin {
                 .chain()
                 // Modo Edit (ViberEditor): a cena está congelada — nenhum
                 // `on_update` corre enquanto se edita.
+                .run_if(crate::app::scripts_enabled),
+        );
+        // Depois do step do Rapier (PostUpdate): os eventos deste frame e os
+        // hits do character controller chegam aos hooks no mesmo frame.
+        app.add_systems(
+            bevy::app::PostUpdate,
+            contacts::dispatch_contacts
+                .after(bevy_rapier3d::prelude::PhysicsSet::Writeback)
                 .run_if(crate::app::scripts_enabled),
         );
     }

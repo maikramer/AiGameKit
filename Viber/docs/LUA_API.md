@@ -515,6 +515,7 @@ que só dependem de componentes/mensagens sempre registados.
 | `viber.entity_position(id?)` | `ok, x, y, z` do snapshot do frame (`ok == false` sem entrada; sem `id` = a própria) |
 | `viber.entity_name(id?)` | nome de MUNDO da entidade (`nil` se não nomeada — spawns de spawner podem não ter; sem `id` = a própria). É o que deixa um script partilhado por várias entidades descobrir QUEM é (ex.: `portal.<room>[.sufixo]`) |
 | `viber.nearby(raio [, limite])` | lista `{id, name, x, y, z, distance}` de entidades NOMEADAS à volta da própria, mais perto 1.º (cap 64; default 16) |
+| `viber.destructibles([raio])` | props `destructible` a ≤ `raio` (default 4) do herói: `id`, `hits_left`, `kind`, `amount`, `x/y/z`, `range`, `style` (`burst`/`fall`/`shatter`), `popup`, `distance`. A engine não minera. `viber.topple([id])` tomba o prop (sem id, a própria entidade) |
 | `viber.hostiles([raio])` | lista `{id, kind, x, y, z, hp, max, distance}` de criaturas vivas (`enemies/`/`bosses/`) à volta do herói (cap 128; default 2.4 m). Os spawners não lhes dão nome — `find_all("wolf")` não as vê |
 | `viber.player_forward()` | `dx, dz` — forward do herói no plano (modelo olha +Z), para dash/mira |
 

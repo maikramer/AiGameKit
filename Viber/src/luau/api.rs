@@ -711,12 +711,15 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
     api.set(
         "topple",
-        lua.create_function(|lua, ()| {
+        lua.create_function(|lua, id: Option<i64>| {
             let mut ctx = lua
                 .app_data_mut::<ScriptCtx>()
                 .expect("ScriptCtx app data seeded in LuaScriptHost::new");
-            let Some(entity) = ctx.entity else {
-                return Err(mlua::Error::runtime("viber.topple fora de on_update"));
+            let entity = match id {
+                Some(bits) => super::entity::entity_from_id(bits)?,
+                None => ctx
+                    .entity
+                    .ok_or_else(|| mlua::Error::runtime("viber.topple fora de on_update"))?,
             };
             ctx.commands.push(ScriptCommand::Topple { entity });
             Ok(())
@@ -949,6 +952,52 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                 row.raw_set("max", h.max)?;
                 row.raw_set("distance", h.pos.distance(player))?;
                 out.raw_set(i + 1, row)?;
+            }
+            Ok(out)
+        })?,
+    )?;
+    // viber.destructibles([raio]) -> props colhíveis perto do herói.
+    api.set(
+        "destructibles",
+        lua.create_function(|lua, radius: Option<f32>| {
+            let radius = radius.unwrap_or(4.0);
+            if !radius.is_finite() || radius <= 0.0 {
+                return Err(mlua::Error::runtime(
+                    "viber.destructibles: raio tem de ser finito e > 0",
+                ));
+            }
+            let out = lua.create_table()?;
+            let ctx = lua.app_data_ref::<ScriptCtx>();
+            let Some(ctx) = ctx.as_ref() else {
+                return Ok(out);
+            };
+            let Some(hero) = ctx.player else {
+                return Ok(out);
+            };
+            let mut rows: Vec<_> = ctx
+                .destructibles
+                .iter()
+                .filter(|row| row.pos.distance(hero) <= radius)
+                .collect();
+            rows.sort_by(|a, b| {
+                a.pos
+                    .distance(hero)
+                    .total_cmp(&b.pos.distance(hero))
+            });
+            for (i, row) in rows.into_iter().take(16).enumerate() {
+                let t = lua.create_table()?;
+                t.raw_set("id", row.id)?;
+                t.raw_set("hits_left", row.hits_left)?;
+                t.raw_set("kind", row.kind.clone())?;
+                t.raw_set("amount", row.amount)?;
+                t.raw_set("x", row.pos.x)?;
+                t.raw_set("y", row.pos.y)?;
+                t.raw_set("z", row.pos.z)?;
+                t.raw_set("range", row.range)?;
+                t.raw_set("style", row.style.clone())?;
+                t.raw_set("popup", row.popup.clone())?;
+                t.raw_set("distance", row.pos.distance(hero))?;
+                out.raw_set(i + 1, t)?;
             }
             Ok(out)
         })?,

@@ -27,10 +27,10 @@ use crate::profiler::{Group, timed};
 use crate::recipes::ParsedWorld;
 use crate::recipes::spawn::{self, PendingWorld};
 use crate::{
-    ai, ambient, animation, camera, combat, economy, editor_camera, grass, harvest, hud, impact,
-    luau, menus, meshopt, music, nav, particles, physics, physics_fx, player, postfx, profiler,
-    prop_tint, quests, recipes, render_lod, save, skills, sky, spawner, terrain, textures, trail,
-    ui, vitals, worldsys, xml,
+    ai, ambient, animation, camera, combat, editor_camera, grass, hud, impact, luau, menus, meshopt,
+    music, nav, particles, physics, physics_fx, player, postfx, profiler, prop_tint, quests,
+    recipes, render_lod, save, skills, sky, spawner, terrain, textures, trail, ui, vitals,
+    worldsys, xml,
 };
 
 /// Para quê a App é montada.
@@ -613,11 +613,7 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
     app.add_plugins(prop_tint::PropTintPlugin);
     // Física Fase 3 (loop 10): knockback cinemático + destrutíveis com queda.
     app.add_plugins(physics_fx::PhysicsFxPlugin);
-    // Colheita ainda corre na engine: o scan dos `destructible` não está
-    // exposto ao Lua. O loot/XP de quest passa por `rules.report_collect`
-    // quando um script chama; o plugin nativo continua a partir a árvore.
-    app.init_resource::<economy::Vault>();
-    app.add_plugins(harvest::HarvestPlugin);
+    // Colheita é `scripts/game/harvest.lua` (`viber.destructibles`).
     // Sword trace (ribbon da lâmina) + bursts one-shot de partícula.
     app.add_plugins(trail::TrailPlugin);
     app.add_plugins(particles::BurstPlugin);
