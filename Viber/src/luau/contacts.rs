@@ -363,3 +363,169 @@ fn describe(
             .unwrap_or(Vec3::ZERO),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::physics::stamp_collider_role;
+    use bevy::time::{TimePlugin, TimeUpdateStrategy};
+    use bevy_rapier3d::prelude::*;
+    use std::time::Duration;
+
+    fn physics_app(code: &str) -> App {
+        let mut host = LuaScriptHost::new(std::path::PathBuf::from("scripts")).expect("host");
+        host.load_script("zone.lua", code).expect("script");
+        let mut app = App::new();
+        app.add_plugins((
+            TransformPlugin,
+            TimePlugin,
+            RapierPhysicsPlugin::<NoUserData>::default(),
+        ));
+        app.insert_resource(TimestepMode::Fixed {
+            dt: 1.0 / 60.0,
+            substeps: 1,
+        });
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+            1.0 / 60.0,
+        )));
+        app.insert_resource(host);
+        app.init_resource::<ContactBook>();
+        app.add_systems(PostUpdate, dispatch_contacts.after(PhysicsSet::Writeback));
+        app
+    }
+
+    fn lua_count(app: &App, key: &str) -> i64 {
+        let host = app.world().resource::<LuaScriptHost>();
+        match host.script_global("zone.lua", key).expect("global") {
+            mlua::Value::Integer(n) => n,
+            mlua::Value::Number(n) => n as i64,
+            mlua::Value::Nil => 0,
+            other => panic!("{key} = {other:?}"),
+        }
+    }
+
+    fn lua_string(app: &App, key: &str) -> String {
+        let host = app.world().resource::<LuaScriptHost>();
+        match host.script_global("zone.lua", key).expect("global") {
+            mlua::Value::String(text) => text.to_str().unwrap_or("").to_string(),
+            mlua::Value::Nil => String::new(),
+            other => panic!("{key} = {other:?}"),
+        }
+    }
+
+    #[test]
+    fn trigger_enter_and_exit_reach_the_script() {
+        let mut app = physics_app(
+            "entered = 0\n\
+             exited = 0\n\
+             last = ''\n\
+             function on_trigger_enter(other)\n\
+               entered = entered + 1\n\
+               last = other.name or ''\n\
+             end\n\
+             function on_trigger_exit(other)\n\
+               exited = exited + 1\n\
+             end\n",
+        );
+        let zone = app
+            .world_mut()
+            .spawn((
+                Transform::default(),
+                RigidBody::Fixed,
+                Collider::cuboid(1.0, 1.0, 1.0),
+                LuaScriptRef {
+                    path: "zone.lua".into(),
+                },
+                Name::new("zone"),
+            ))
+            .id();
+        {
+            let mut entity = app.world_mut().entity_mut(zone);
+            stamp_collider_role(&mut entity, true, true);
+        }
+        assert!(app.world().get::<Sensor>(zone).is_some());
+        let hero = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(6.0, 0.0, 0.0),
+                RigidBody::KinematicPositionBased,
+                Collider::ball(0.4),
+                Name::new("hero"),
+            ))
+            .id();
+        for _ in 0..5 {
+            app.update();
+        }
+        assert_eq!(lua_count(&app, "entered"), 0, "ainda longe");
+        app.world_mut()
+            .get_mut::<Transform>(hero)
+            .unwrap()
+            .translation = Vec3::ZERO;
+        for _ in 0..12 {
+            app.update();
+        }
+        assert_eq!(lua_count(&app, "entered"), 1, "um enter");
+        assert_eq!(lua_string(&app, "last"), "hero");
+        app.world_mut()
+            .get_mut::<Transform>(hero)
+            .unwrap()
+            .translation = Vec3::new(6.0, 0.0, 0.0);
+        for _ in 0..12 {
+            app.update();
+        }
+        assert_eq!(lua_count(&app, "exited"), 1, "um exit");
+    }
+
+    #[test]
+    fn character_controller_hit_is_one_collision_enter() {
+        let mut app = physics_app(
+            "entered = 0\n\
+             function on_collision_enter(other)\n\
+               entered = entered + 1\n\
+               last = other.name or ''\n\
+             end\n",
+        );
+        let wall = app
+            .world_mut()
+            .spawn((
+                Transform::default(),
+                RigidBody::Fixed,
+                Collider::cuboid(0.5, 1.0, 1.0),
+                LuaScriptRef {
+                    path: "zone.lua".into(),
+                },
+            ))
+            .id();
+        {
+            let mut entity = app.world_mut().entity_mut(wall);
+            stamp_collider_role(&mut entity, false, true);
+        }
+        assert!(app.world().get::<Sensor>(wall).is_none());
+        app.world_mut().spawn((
+            Transform::from_xyz(2.0, 0.0, 0.0),
+            RigidBody::KinematicPositionBased,
+            Collider::ball(0.35),
+            KinematicCharacterController {
+                translation: Some(Vec3::new(-0.5, 0.0, 0.0)),
+                ..default()
+            },
+            Name::new("hero"),
+        ));
+        app.add_systems(Update, shove_hero);
+        for _ in 0..20 {
+            app.update();
+        }
+        assert_eq!(
+            lua_count(&app, "entered"),
+            1,
+            "controller e evento não duplicam o enter"
+        );
+        assert_eq!(lua_string(&app, "last"), "hero");
+    }
+
+    fn shove_hero(mut controllers: Query<&mut KinematicCharacterController>) {
+        for mut controller in &mut controllers {
+            controller.translation = Some(Vec3::new(-0.5, 0.0, 0.0));
+        }
+    }
+}
