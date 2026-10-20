@@ -1,9 +1,9 @@
 -- merchant.lua: Bram, o mercador. [E] gira o player, fala com gesto e som;
 -- fora de alcance a banter recomeça.
 --
--- A LOJA vive em game/shop.lua (catálogo, preços e negociação em Lua) —
--- carregada como módulo e actualizada daqui: negociação acontece perto do
--- mercador, que é onde o seu script está vivo (LOD de IA).
+-- A LOJA vive em game/shop.lua (catálogo, preços e negociação em Lua).
+-- Este script tem de correr SEMPRE (`tag="always-active"`): o LOD de 45 m
+-- engolia os cliques buy/sell e despejava-os todos ao regressar à banca.
 local shop = viber.load("game/shop.lua")
 
 --@export prompt: string = "Falar com Bram"     -- texto do prompt de interação

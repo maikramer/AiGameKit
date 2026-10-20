@@ -1,3 +1,4 @@
+local rules = viber.load("lib/rules.lua")
 -- game/shop.lua: a LOJA é do JOGO — catálogo, preços e negociação em Lua.
 --
 -- A engine só publica a ação: os botões da tab Loja fazem
@@ -8,7 +9,11 @@
 -- a loja nativa da engine continua a funcionar (compat).
 --
 -- Uso (ver merchant.lua): `local shop = viber.load("game/shop.lua")` no
--- top-level e `shop.update(dt)` dentro do `on_update`.
+-- top-level e `shop.update(dt)` dentro do `on_update`. O mercador leva
+-- `tag="always-active"`: sem isso o LOD de 45 m congelava o script, os
+-- cliques buy/sell acumulavam na fila e descarregavam todos ao voltar
+-- (compras em rajada) — e a lista ficava no ouro do frame em que a loja
+-- abriu, porque `refresh` lia o snapshot ANTES dos comandos da compra.
 
 -- Catálogo do mercador: buy = preço de compra (nil = não se vende ao herói),
 -- sell = preço de venda (nil = não se compra para si). Preços em ouro.
@@ -34,10 +39,10 @@ local M = {}
 
 local function rows()
   local out = {}
-  local gold = viber.vault_get("gold")
+  local gold = rules.vault_get("gold")
   for id, entry in pairs(CATALOG) do
     local selling = entry.sell ~= nil
-    local stock = viber.vault_get(id)
+    local stock = rules.vault_get(id)
     -- status alimenta a classe CSS da linha ({status} no template).
     local status = "ready"
     if selling then
@@ -45,9 +50,13 @@ local function rows()
     elseif gold < entry.buy then
       status = "locked"
     end
+    local label = entry.label
+    if selling then
+      label = label .. " ×" .. tostring(stock or 0)
+    end
     out[#out + 1] = {
       id = id,
-      label = entry.label,
+      label = label,
       qty = "1",
       price = selling and ("+" .. entry.sell) or tostring(entry.buy),
       status = status,
@@ -57,8 +66,27 @@ local function rows()
   return out
 end
 
+-- A lista só é reescrita quando o conteúdo muda: `viber.ui.list` sobe a
+-- versão do repetidor e reconstrói as linhas (perde o scroll) se for
+-- chamada todos os frames com a mesma tabela.
+local last_sig = ""
+
+local function signature(list)
+  local parts = {}
+  for i, row in ipairs(list) do
+    parts[i] = row.id .. "\0" .. row.status .. "\0" .. row.price .. "\0" .. row.label
+  end
+  return table.concat(parts, "\1")
+end
+
 local function refresh()
-  viber.ui.list("shop", rows())
+  local list = rows()
+  local sig = signature(list)
+  if sig == last_sig then
+    return
+  end
+  last_sig = sig
+  viber.ui.list("shop", list)
 end
 
 -- top-level do módulo (corre 1× por mundo): reclama lista + ações.
@@ -76,24 +104,35 @@ local function trade(action, id)
       viber.sound("error")
       return
     end
-    if viber.vault_get("gold") < price then
+    if rules.vault_get("gold") < price then
       viber.toast(entry.label .. " custa " .. price .. " de ouro — não chega.")
       viber.sound("error")
       return
     end
-    viber.vault_take("gold", price)
-    viber.item_add(id, 1)
+    if rules.vault_get(id) >= 99 then
+      viber.toast("Já tens o máximo disso (99).")
+      viber.sound("error")
+      return
+    end
+    rules.vault_take("gold", price)
+    local got = rules.item_add(id, 1)
+    if not got or got < 1 then
+      rules.vault_add("gold", price)
+      viber.toast("Não coube na mochila.")
+      viber.sound("error")
+      return
+    end
     viber.sound("buy")
     viber.toast("Comprado " .. entry.label:gsub("^Comprar ", "") .. ".")
   elseif action == "sell" then
     local price = entry.sell
-    if price == nil or viber.vault_get(id) == 0 then
+    if price == nil or rules.vault_get(id) == 0 then
       viber.toast("Sem isso para vender.")
       viber.sound("error")
       return
     end
-    viber.vault_take(id, 1)
-    viber.vault_add("gold", price)
+    rules.vault_take(id, 1)
+    rules.vault_add("gold", price)
     viber.sound("coin")
     viber.toast("Vendido por " .. price .. " de ouro.")
   end
@@ -101,10 +140,14 @@ local function trade(action, id)
 end
 
 function M.update(dt)
-  -- Os CLIQUES das linhas continuam a ser roteados pelo ui/menu.lua
-  -- (`shop-{id}` → `viber.ui.action`) — assim a loja funciona até longe do
-  -- mercador (sem dono, o handler nativo da engine responde; perto dele,
-  -- este módulo é que negocia). Só as AÇÕES são nossas:
+  -- Snapshot deste frame (já inclui as compras do frame anterior). Sem
+  -- isto a linha ficava "pronta" depois de o ouro acabar, até ao clique
+  -- seguinte — e o ouro de um abate nunca destrancava uma compra.
+  refresh()
+  -- Os CLIQUES das linhas são roteados pelo ui/menu.lua
+  -- (`shop-{id}` → `viber.ui.action`). Várias entidades `merchant.lua` na
+  -- mesma cena partilham ESTA fila (uma por path): a primeira drena, a
+  -- segunda vê-a vazia — uma compra não cobra duas vezes.
   for _, ev in ipairs(viber.events()) do
     if ev.type == "ui_action" and (ev.name == "buy" or ev.name == "sell") then
       trade(ev.name, ev.arg)

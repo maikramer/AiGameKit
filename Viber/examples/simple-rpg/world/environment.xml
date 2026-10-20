@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <world static="true">
   <Group name="environment" translation="0 38.7304 0">
-    <DayCycle minute-of-day="480" minutes-per-real-second="1.2" dawn-minute="330" dusk-minute="1170" sun-azimuth-base="205" max-sun-elevation="62" drive-ambient="1" ambient-day-intensity="0.26" ambient-night-intensity="0.075" />
+    <DayCycle minute-of-day="480" minutes-per-real-second="1.2" dawn-minute="330" dusk-minute="1170" sun-azimuth-base="205" max-sun-elevation="62" drive-ambient="1" ambient-day-intensity="0.26" ambient-night-intensity="0.16" />
     <Sky sun-elevation="17" sun-azimuth="205" turbidity="2.4" rayleigh="2.8" mie-coefficient="0.0035" mie-directional-g="0.80" cloud-coverage="0.60" cloud-density="0.55" cloud-elevation="0.55" environment-intensity="0.38" sun-intensity="2.6" drive-light="1" />
     <Entity>
       <DirectionalLight euler="-45 35.2644 15" />

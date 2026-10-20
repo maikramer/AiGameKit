@@ -1,3 +1,4 @@
+local rules = viber.load("lib/rules.lua")
 -- HUD v3: os toggles de estado (danger, ready, empty, venom, xp-pop,
 -- weather) são TODOS class-binds engine-driven no hud.xml — este script
 -- só trata do clique do diário, do soco visual do combo e do ciclo de
@@ -15,8 +16,8 @@ local OTHERS_PERIOD = 0.5
 local function refresh_other_quests()
   local shown = viber.ui.get("quest.title")
   local rows = {}
-  for _, def in ipairs(viber.quest_defs()) do
-    local state = viber.quest_state(def.id)
+  for _, def in ipairs(rules.quest_defs()) do
+    local state = rules.quest_state(def.id)
     if (state == "active" or state == "ready") and def.title ~= shown then
       rows[#rows + 1] = { title = def.title, ready = state == "ready" }
     end

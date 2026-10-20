@@ -1,3 +1,4 @@
+local rules = viber.load("lib/rules.lua")
 -- notice-board.lua: quadro de avisos da praça — bounties repetíveis da
 -- guarda (quest npc == "notice_board" nos JSONs). Cada leitura mostra a
 -- próxima bounty disponível: aceita (intro) ou entrega (completa) via
@@ -15,21 +16,30 @@ function on_update(dt)
     return
   end
 
-  -- procura a próxima bounty em ciclo que possa aceitar ou entregar
+  -- Entregar ganha a aceitar: com um cartaz pronto e outro por aceitar, o
+  -- quadro pagava a nova e deixava o ouro da concluída à espera de outra volta.
   local total = #BOUNTIES
-  for step = 1, total do
-    local i = ((st.index or 0) + step - 1) % total + 1
-    local id = BOUNTIES[i]
-    local status = viber.quest_state(id)
-    if status == "not_taken" then
-      viber.quest_accept(id)
-      st.index = i
-      return -- quest_accept já emite o toast "Quest aceita"
-    elseif status == "ready" then
-      viber.quest_turn_in(id)
-      st.index = i
-      return -- quest_turn_in já emite o toast de recompensa
+  local function find(status)
+    for step = 1, total do
+      local i = ((st.index or 0) + step - 1) % total + 1
+      local id = BOUNTIES[i]
+      if rules.quest_state(id) == status then
+        return i, id
+      end
     end
+    return nil, nil
+  end
+  local i, id = find("ready")
+  if id then
+    rules.quest_turn_in(id)
+    st.index = i
+    return
+  end
+  i, id = find("not_taken")
+  if id then
+    rules.quest_accept(id)
+    st.index = i
+    return
   end
 
   viber.toast("Nenhuma bounty nova — termine as que aceitou.")

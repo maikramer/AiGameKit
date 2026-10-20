@@ -1,3 +1,4 @@
+local rules = viber.load("lib/rules.lua")
 -- poi/survey-tower.lua — Atalaia de agrimensura (a "torre sheikah" de Vael).
 --
 -- Ao chegar ao topo e SONDAR a terra [E], a atalaia revela o bioma associado
@@ -20,7 +21,7 @@ function on_update(dt)
   local st = viber.state() -- POR ENTIDADE (o top-level é partilhado)
   if not st.ready then
     st.ready = true
-    st.done = viber.biome_revealed(viber.prop("biome"))
+    st.done = rules.biome_revealed(viber.prop("biome"))
     viber.set_interaction(viber.prop("prompt"), "e", viber.prop("range"))
   end
   if st.done then
@@ -37,9 +38,9 @@ function on_update(dt)
   if viber.interacted("e") then
     st.done = true
     local p = viber.props()
-    viber.reveal_biome(p.biome)
+    rules.reveal_biome(p.biome)
     if p.xp > 0 then
-      viber.add_xp(p.xp)
+      rules.add_xp(p.xp)
     end
     local _, x, y, z = viber.entity_position()
     viber.burst("magic", x, y + 1.4, z, 24)

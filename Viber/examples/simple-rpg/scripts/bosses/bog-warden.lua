@@ -1,3 +1,4 @@
+local rules = viber.load("lib/rules.lua")
 -- bosses/bog-warden.lua: guardião do pântano. Toda a máquina vive em
 -- lib/fsm.lua (viber.load). Especial: GOLPE DE LODO — pancada no chão que
 -- envenena quem ficar na zona (o antídoto [2] ganha uso).
@@ -13,7 +14,7 @@ local fsm = viber.load("lib/fsm.lua").new{
   special = {
     every = 3, windup = 1.1, radius = 4.8, mult = 1.3,
     at = "self", clip = "swordheavy,attack", color = "#6fdc5a",
-    on_hit = function() viber.apply_status("venom", 6) end,
+    on_hit = function() rules.apply_status("venom", 6) end,
   },
   enrage = { at = 0.4, speed = 1.2, cooldown = 0.75,
              toast = "O Guardião ruge — o lodo sobe-lhe pelos braços!" },

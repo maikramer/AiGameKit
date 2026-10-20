@@ -64,7 +64,7 @@
         <GLTFLoader role="visual" url="/assets/meshes/characters/bandit_lod0.glb" lod1-url="/assets/meshes/characters/bandit_lod1.glb" lod2-url="/assets/meshes/characters/bandit_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
-    <Entity name="npc_ranger_mira" translation="-72 0 222" transform="rotation: 0 210 0">
+    <Entity name="npc_ranger_mira" translation="-72 0 222" transform="rotation: 0 210 0" script="npc/dialogue.lua" prop-dialogue_id="smugglers_cache">
       <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="smugglers_cache" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>

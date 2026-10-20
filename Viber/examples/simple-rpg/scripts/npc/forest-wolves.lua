@@ -1,10 +1,11 @@
+local rules = viber.load("lib/rules.lua")
 -- npc/forest-wolves.lua: diálogo 100% Lua de Hald, o do Gado (dador da
 -- quest `forest_wolves`). Prova do desacoplamento:
 --   * `viber.own_system("dialogue")` — a engine CEDE o [E] deste NPC (o
 --     fluxo nativo de quests cala; o prompt/ação continuam arbitrados pelo
 --     mesmo InteractionFocus);
 --   * `viber.say(...)` escreve no BALÃO nativo do HUD;
---   * `viber.quest_def(id)` lê o MESMO JSON autoral (`quests/*.json`) — o
+--   * `rules.quest_def(id)` lê o MESMO JSON autoral (`quests/*.json`) — o
 --     script não duplica títulos nem linhas;
 --   * aceitar/entregar usa os comandos `quest_accept`/`quest_turn_in`
 --     (estado, recompensas e tracker continuam da engine).
@@ -33,24 +34,24 @@ function on_update(dt)
     viber.set_interaction("Falar com Hald", "e", 3.5)
   end
   if def == nil then
-    def = viber.quest_def(QUEST)
+    def = rules.quest_def(QUEST)
   end
   if not viber.interacted("e") then
     return
   end
   viber.face_player()
   viber.gesture("talk")
-  local state = viber.quest_state(QUEST)
+  local state = rules.quest_state(QUEST)
   if state == "not_taken" then
     viber.sound("quest_accept")
     say_lines(def and def.lines_intro, "“Lobos ao norte. Paga-se bem por presas.”")
-    viber.quest_accept(QUEST)
+    rules.quest_accept(QUEST)
   elseif state == "active" then
     say_lines(def and def.lines_progress, "“Os lobos ainda andam por aí, forasteiro.”")
   elseif state == "ready" then
     viber.sound("quest_done")
     say_lines(def and def.lines_complete, "“Bom trabalho. O gado respira.”")
-    viber.quest_turn_in(QUEST)
+    rules.quest_turn_in(QUEST)
   else
     say_lines(def and def.lines_complete, "“Já cumpriste. O rebanho agradece.”")
   end

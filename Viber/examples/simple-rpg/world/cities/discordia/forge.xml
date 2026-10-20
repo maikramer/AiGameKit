@@ -32,7 +32,7 @@
     <Entity translation="-25.4 0 -30.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
-    <Entity name="npc_blacksmith" translation="-31.8 0 -26.2" transform="rotation: 0 8 0">
+    <Entity name="npc_blacksmith" translation="-31.8 0 -26.2" transform="rotation: 0 8 0" script="npc/dialogue.lua" prop-dialogue_id="city_stone">
       <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
       <DialogueNPC dialogue-id="city_stone" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>

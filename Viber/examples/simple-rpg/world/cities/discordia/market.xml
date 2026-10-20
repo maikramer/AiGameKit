@@ -23,7 +23,7 @@
     <Entity transform="rotation: 0 25 0" translation="35.3 0 -21" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
-    <Entity name="merchant" translation="16.3 0 -14.4" script="merchant.lua">
+    <Entity name="merchant" translation="16.3 0 -14.4" tag="always-active" script="merchant.lua">
       <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
     </Entity>
   </Group>

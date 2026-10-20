@@ -1,3 +1,4 @@
+local rules = viber.load("lib/rules.lua")
 -- game/loot.lua: DESPOJOS dos abates — o jogo decide, em Lua, o que cai.
 --
 -- A engine já dá XP, cadáver e o progresso de quest no abate; o ouro vinha
@@ -54,25 +55,25 @@ local function pay(kind, id)
     x, y, z = px, py, pz
   end
   local gold = math.random(entry[1], entry[2])
-  viber.vault_add("gold", gold)
+  rules.vault_add("gold", gold)
   viber.damage_number("+" .. gold .. " ouro", { color = GOLD_COLOR, x = x, y = y + 1.6, z = z })
   viber.burst("sparkle", x, y + 0.8, z, 10)
   viber.sound("coin")
   local potions, antidotes = roll_count(entry[3]), roll_count(entry[4])
   if potions > 0 then
-    viber.item_add("potion", potions)
+    rules.item_add("potion", potions)
     viber.damage_number("+" .. potions .. " poção", { color = ITEM_COLOR, x = x, y = y + 2.2, z = z })
   end
   if elite then
     viber.toast("Elite derrotado!")
     viber.burst("sparkle", x, y + 1.0, z, 24)
     if math.random() < 0.35 then
-      viber.item_add("bomb", 1)
+      rules.item_add("bomb", 1)
       viber.damage_number("+1 bomba", { color = ITEM_COLOR, x = x, y = y + 3.0, z = z })
     end
   end
   if antidotes > 0 then
-    viber.item_add("antidote", antidotes)
+    rules.item_add("antidote", antidotes)
     viber.damage_number("+" .. antidotes .. " antídoto", { color = ITEM_COLOR, x = x, y = y + 2.6, z = z })
   end
 end

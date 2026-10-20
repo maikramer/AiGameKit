@@ -9,7 +9,7 @@
   <BiomeRegion id="qa-vale" display-name="Vale do QA" polygon="[-160,-160;160,-160;160,160;-160,160]" fog-density="0.0020" />
   <PlayerGLTF model-url="/assets/meshes/characters/hero_lod0.glb" pos="0 3 0" />
   <ThirdPersonCamera target="player" distance="7" pitch="22" />
-  <Entity name="npc_qa" translation="4 0.727 -6">
+  <Entity name="npc_qa" translation="4 0.727 -6" script="npc/dialogue.lua" prop-dialogue_id="forest_wolves">
     <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
     <DialogueNPC dialogue-id="forest_wolves" marker-height="2.5" />
   </Entity>

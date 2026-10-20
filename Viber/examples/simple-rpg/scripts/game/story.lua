@@ -1,3 +1,4 @@
+local rules = viber.load("lib/rules.lua")
 -- game/story.lua: o fio do Capítulo I — O Silêncio de Vael (ver STORY.md).
 --
 --   * PRÓLOGO na primeira entrada no mundo (marca `story_prologo` no save);
@@ -40,7 +41,7 @@ function on_update(dt)
   for _, ev in ipairs(viber.events()) do
     if ev.type == "kill" and GUARDIANS[ev.name] and not g["nota_" .. ev.name] then
       g["nota_" .. ev.name] = true
-      viber.item_add("nota", 1)
+      rules.item_add("nota", 1)
       local n = notes_found(g)
       local _, x, y, z = viber.player_position()
       viber.burst("sparkle", x, y + 1.2, z, 40)

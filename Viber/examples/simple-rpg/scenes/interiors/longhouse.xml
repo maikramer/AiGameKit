@@ -105,7 +105,7 @@
   <Entity name="interior.longhouse.bard" translation="2.6 0 -3.6" transform="rotation: 0 30 0" script="townsfolk.lua" prop-banter="“Cantam-se feitos de heróis aqui — faz o teu.”|“Ouvi dizer que há um verme nas areias.”" prop-interact_range="3" prop-radius="1.6" prop-speed="0.6" prop-talk_range="3">
     <GltfScene url="/assets/meshes/characters/npc_bard_lod0.glb" />
   </Entity>
-  <Entity name="interior.longhouse.merchant" translation="11 0 3.6" transform="rotation: 0 90 0" script="merchant.lua" prop-prompt="Falar com o mercador">
+  <Entity name="interior.longhouse.merchant" translation="11 0 3.6" transform="rotation: 0 90 0" tag="always-active" script="merchant.lua" prop-prompt="Falar com o mercador">
     <GltfScene url="/assets/meshes/characters/npc_merchant_lod0.glb" />
   </Entity>
   <Group translation="0 0 -1" body="none" collider="none">

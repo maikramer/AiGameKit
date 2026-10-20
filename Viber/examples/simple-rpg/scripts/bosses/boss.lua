@@ -1,3 +1,4 @@
+local rules = viber.load("lib/rules.lua")
 -- bosses/boss.lua: ogro dos Picos Gelados com gating (loop 6): dorme
 -- enquanto houver OUTROS hostis vivos na banda sul. Toda a máquina vive em
 -- lib/fsm.lua (viber.load). Chefe final: poise alto, SISMO a cada 3 golpes
@@ -20,7 +21,7 @@ local fsm = viber.load("lib/fsm.lua").new{
              toast = "O Ogro entra em FÚRIA!" },
   gate = function()
     -- `> 1`: ele próprio é hostil e conta-se — com `> 0` nunca despertava.
-    return viber.alive_in_region(2) <= 1
+    return rules.alive_in_region(2) <= 1
   end,
   awake_toast = "Um rugido ecoa dos Picos Gelados — o ogro despertou!",
 }

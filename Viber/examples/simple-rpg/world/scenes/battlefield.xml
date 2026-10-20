@@ -66,7 +66,7 @@
         <GLTFLoader role="visual" url="/assets/meshes/characters/shade_lod0.glb" lod1-url="/assets/meshes/characters/shade_lod1.glb" lod2-url="/assets/meshes/characters/shade_lod2.glb" lod-threshold-near="20" lod-threshold-mid="60" />
       </Creature>
     </DynamicSpawner>
-    <Entity name="npc_battle_survivor" translation="-766 0 -260" transform="rotation: 0 60 0">
+    <Entity name="npc_battle_survivor" translation="-766 0 -260" transform="rotation: 0 60 0" script="npc/dialogue.lua" prop-dialogue_id="citadel_shades">
       <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
       <DialogueNPC dialogue-id="citadel_shades" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>

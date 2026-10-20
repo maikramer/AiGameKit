@@ -54,7 +54,7 @@
     <Entity translation="812 0 724" transform="rotation: 0 210 0; scale: 1.1 1.1 1.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/terrain/form_stack_6_lod0.glb">
       <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
     </Entity>
-    <Entity name="npc_outpost_foreman" translation="798 0 727" transform="rotation: 0 15 0">
+    <Entity name="npc_outpost_foreman" translation="798 0 727" transform="rotation: 0 15 0" script="npc/dialogue.lua" prop-dialogue_id="outpost_veins">
       <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
       <DialogueNPC dialogue-id="outpost_veins" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>

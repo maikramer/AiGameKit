@@ -1,3 +1,4 @@
+local rules = viber.load("lib/rules.lua")
 -- bosses/witch.lua: bruxa do bosque. Toda a máquina vive em lib/fsm.lua
 -- (viber.load). Especial: MALDIÇÃO — marca o chão onde o herói está; quem
 -- não sair da zona leva o golpe amplificado. Frágil (400 HP) e rápida.
@@ -13,7 +14,7 @@ local fsm = viber.load("lib/fsm.lua").new{
   special = {
     every = 3, windup = 1.1, radius = 3.2, mult = 1.5,
     at = "player", clip = "attack", color = "#b04cff",
-    on_hit = function() viber.apply_status("venom", 5) end,
+    on_hit = function() rules.apply_status("venom", 5) end,
   },
   enrage = { at = 0.4, speed = 1.15, cooldown = 0.75,
              toast = "A Bruxa grita — o bosque inteiro escurece!" },

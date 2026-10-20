@@ -1,8 +1,9 @@
+local rules = viber.load("lib/rules.lua")
 -- poi/song-seed.lua — Semente de Canção (o "Korok" de Vael).
 --
 -- Colecionável escondido com MICRO-PUZZLE, recompensa própria (item
 -- "korok-seed", nunca ouro) e contador de coleção: a cada 5 sementes,
--- +1 ponto de talento (viber.add_skill_points). Persistência: o estado de
+-- +1 ponto de talento (rules.add_skill_points). Persistência: o estado de
 -- coleta vive em `viber.game()` (world_kv) → sobrevive a save→load; a
 -- entidade despawnata-se ao ser coletada e volta a auto-despintar-se na
 -- próxima sessão se a semente já foi contada.
@@ -29,6 +30,18 @@
 
 function on_update(dt)
   local st = viber.state()
+
+  local function reward_key()
+    if st.mode == "ring" then
+      return "korok-reward-" .. viber.prop("group")
+    end
+    return st.key
+  end
+
+  local function already_rewarded(game)
+    return (game[reward_key()] or 0) > 0
+  end
+
   if not st.ready then
     st.ready = true
     st.mode = viber.prop("mode")
@@ -38,7 +51,7 @@ function on_update(dt)
     st.taken = (game[st.key] or 0) > 0
     if st.mode == "ring" then
       st.ring_key = "korokring-" .. viber.prop("group")
-      st.ring_done = (game[st.ring_key] or 0) >= 3
+      st.ring_done = (game[st.ring_key] or 0) >= 3 or already_rewarded(game)
     end
     if st.taken or (st.mode == "ring" and st.ring_done) then
       -- Já coletada (sessão anterior): sai de cena sem prompt.
@@ -50,15 +63,23 @@ function on_update(dt)
 
   local function collect(phrase)
     local game = viber.game()
+    -- O anel marca a recompensa no GRUPO, não no cristal que fechou.
+    -- Sem isto os outros dois cristais (ainda no mundo neste frame)
+    -- também chamavam collect e davam semente extra + talento.
+    if already_rewarded(game) then
+      viber.despawn_self()
+      return
+    end
+    game[reward_key()] = 1
     game[st.key] = 1
     local _, x, y, z = viber.entity_position()
     viber.despawn_self()
     viber.burst("sparkle", x, y + 0.6, z, 16)
     viber.sound("loot")
-    local count = viber.vault_get("korok-seed") + 1
-    viber.item_add("korok-seed", 1)
+    local count = rules.vault_get("korok-seed") + 1
+    rules.item_add("korok-seed", 1)
     if count % 5 == 0 then
-      viber.add_skill_points(1)
+      rules.add_skill_points(1)
       viber.toast(phrase .. " — semente " .. count .. "/20: +1 PONTO DE TALENTO!")
     else
       viber.toast(phrase .. " (" .. count .. " na bolsa)")
@@ -66,11 +87,19 @@ function on_update(dt)
   end
 
   if st.mode == "ring" then
-    if st.ring_done then
+    local game = viber.game()
+    -- Relê o contador todos os frames: `st.ring_done` era só no arranque,
+    -- por isso os cristais que sobravam continuavam a pagar semente.
+    if st.ring_done or (game[st.ring_key] or 0) >= 3 or already_rewarded(game) then
+      viber.despawn_self()
       return
     end
     if viber.interacted("e") then
-      local game = viber.game()
+      if (game[st.key] or 0) > 0 then
+        viber.despawn_self()
+        return
+      end
+      game[st.key] = 1
       local n = (game[st.ring_key] or 0) + 1
       game[st.ring_key] = n
       local x, y, z = viber.position()

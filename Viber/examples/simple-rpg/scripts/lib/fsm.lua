@@ -1,3 +1,4 @@
+local rules = viber.load("lib/rules.lua")
 -- lib/fsm.lua: máquina wander↔chase partilhada dos inimigos/bosses.
 -- Fatorada dos ~11 scripts que tinham o MESMO bloco copiado (steering,
 -- anti-stuck, aggro-window, cadência de ataque) — a engine provê os blocos
@@ -7,8 +8,9 @@
 -- COMBATE v2 (ataques LEGÍVEIS): o golpe deixou de ser dano instantâneo no
 -- fim do cooldown. Agora é uma sequência com leitura e resposta:
 --
---   1. WINDUP   — a criatura trava, vira-se, toca o clip `attack` e pulsa um
---                 anel de aviso no chão durante `windup` s;
+--   1. WINDUP   — a criatura trava, vira-se, toca o clip `attack` e marca
+--                 a zona com um anel fino (um por golpe; o especial longo
+--                 repete devagar para a zona não sumir antes do impacto);
 --   2. IMPACTO  — o dano só entra se o herói AINDA estiver ao alcance
 --                 (`range + reach`, e |Δy| curto). Recuar, dar dash [C] ou
 --                 aparar [L] no instante certo resolvem o golpe;
@@ -33,7 +35,7 @@
 --     steering = true,                -- opcional: alvos alinhados com o rumo
 --     anti_stuck = true,              -- opcional (default true): repick após 6 s preso
 --     on_chase = function() viber.sound("growl") end,  -- opcional: transição
---     on_attack = function() viber.apply_status("venom", 4) end, -- golpe que ACERTA
+--     on_attack = function() rules.apply_status("venom", 4) end, -- golpe que ACERTA
 --     on_first = function() viber.log("ativo") end,    -- 1.ª vez por entidade
 --     gate = function() return true end,  -- opcional: false = dorme (boss gating)
 --     awake_toast = "…",              -- opcional: toast à 1.ª passagem do gate
@@ -71,9 +73,9 @@ local REACH_SLACK = 0.7
 -- Diferença de altura máxima para o golpe (m) — sem mordidas através de
 -- pisos, pontes ou encostas a pique.
 local REACH_VERTICAL = 2.2
--- Cadência do anel de aviso (s): o anel expande em ~0.42 s, pulsar a 0.3 s
--- lê como "zona a encher".
-local TELEGRAPH_PULSE = 0.3
+-- Cadência do anel de aviso do especial (s). Golpes curtos disparam um
+-- anel no primeiro frame e não repetem (o windup acaba antes disto).
+local TELEGRAPH_PULSE = 0.9
 -- Cor do aviso dos golpes normais (âmbar) — o especial dos chefes é vermelho.
 local TELEGRAPH_COLOR = "#ffb347"
 -- Stagger (s) de um flinch normal / com windup cancelado / de chefe.
@@ -180,10 +182,10 @@ function M.new(cfg)
     st.enraged = true
     viber.play_clip("roar")
     viber.sound("roar")
-    viber.shake(0.35)
+    viber.shake(0.18)
     local x, y, z = viber.position()
-    viber.burst("fire", x, y + 1.2, z, 24)
-    viber.ring(x, z, 6, "#ff3b1f")
+    viber.burst("fire", x, y + 1.2, z, 8)
+    viber.ring(x, z, 3.2, "#ff3b1f")
     if e.toast then viber.toast(e.toast) end
   end
 
@@ -246,19 +248,18 @@ function M.new(cfg)
     if st.kind == "special" then
       local sp = cfg.special
       local r = sp.radius or 4.5
-      viber.ring(st.ax, st.az, r, sp.color or "#ff4a2a")
-      viber.burst("ground-dust", st.ax, y + 0.2, st.az, 26)
-      viber.shake(0.4)
+      viber.burst("ground-dust", st.ax, y + 0.2, st.az, 6)
+      viber.shake(0.16)
       viber.sound("hit")
       if dist2(px, pz, st.ax, st.az) <= r and math.abs(py - y) <= REACH_VERTICAL + 1.0 then
-        viber.damage_player(dmg(st) * (sp.mult or 1.6))
+        rules.damage_player(dmg(st) * (sp.mult or 1.6))
         if sp.on_hit then sp.on_hit() end
       else
         viber.damage_number("ESQUIVA", { color = "#9fd8ff", x = px, y = py + 2.0, z = pz })
       end
     else
       if dist2(px, pz, x, z) <= cfg.range + REACH_SLACK and math.abs(py - y) <= REACH_VERTICAL then
-        viber.damage_player(dmg(st))
+        rules.damage_player(dmg(st))
         if cfg.on_attack then cfg.on_attack() end
       else
         viber.sound("whoosh")
@@ -343,6 +344,10 @@ function M.new(cfg)
 
     local ok, hp, max = viber.entity_hp()
     -- Elite: rolado UMA vez por entidade, quando acorda.
+    -- `entity_set_max_hp`/`entity_heal` são comandos: `hp` deste frame ainda
+    -- é o valor antigo. Tratar a diferença como dano fazia o elite nascer
+    -- em flinch (clip `hit` + stagger) e repor `st.hp` no HP pré-boost.
+    local promoted = false
     if ok and st.elite == nil then
       st.elite = cfg.elite_chance > 0 and math.random() < cfg.elite_chance
       if st.elite then
@@ -353,13 +358,16 @@ function M.new(cfg)
         local g = viber.game()
         g.elites = g.elites or {}
         if id then g.elites[id] = true end
-        st.hp = max * ELITE_HP -- a cura não é "dano negativo"
+        st.hp = max * ELITE_HP
+        promoted = true
       end
     end
     if ok then
       if hp <= 0 then return end
-      react_to_damage(st, hp, max)
-      check_enrage(st, hp, max)
+      if not promoted then
+        react_to_damage(st, hp, max)
+        check_enrage(st, hp, max)
+      end
     end
 
     -- Nominais + taxa de viragem do rig (1.ª vez só; desliga auto-calibração).
@@ -403,7 +411,7 @@ function M.new(cfg)
         -- Elite a acordar: aura dourada — o jogador sabe que este é diferente.
         local _, y = viber.position()
         viber.ring(x, z, 2.2, ELITE_COLOR)
-        viber.burst("sparkle", x, y + 1.2, z, 16)
+        viber.burst("sparkle", x, y + 1.2, z, 6)
       end
     end
     st.pstate = st.state
@@ -446,6 +454,10 @@ function M.new(cfg)
       end
     else
       if st.target == nil then pick_target(st) end
+      -- Steering pode falhar as 6 amostras (todas a < 0,5 m): `best` fica
+      -- nil e indexar `st.target[1]` derrubava o script (lobo/escorpião
+      -- congelados com warn-once).
+      if st.target == nil then return end
       local td = dist2(st.target[1], st.target[2], x, z)
       if td < 0.8 then
         st.target = nil

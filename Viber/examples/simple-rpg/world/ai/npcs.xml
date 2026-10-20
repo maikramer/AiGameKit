@@ -5,71 +5,71 @@
       <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
       <DialogueNPC dialogue-id="forest_wolves" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_forest_shades" translation="16 41.0499 68">
+    <Entity name="npc_forest_shades" translation="16 41.0499 68" script="npc/dialogue.lua" prop-dialogue_id="forest_shades">
       <GltfScene url="/assets/meshes/characters/npc_healer_lod0.glb" />
       <DialogueNPC dialogue-id="forest_shades" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_forest_darkwood" translation="0 45.1835 100">
+    <Entity name="npc_forest_darkwood" translation="0 45.1835 100" script="npc/dialogue.lua" prop-dialogue_id="forest_darkwood">
       <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
       <DialogueNPC dialogue-id="forest_darkwood" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_desert_scorpions" translation="60 38.7717 -16">
+    <Entity name="npc_desert_scorpions" translation="60 38.7717 -16" script="npc/dialogue.lua" prop-dialogue_id="desert_scorpions">
       <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
       <DialogueNPC dialogue-id="desert_scorpions" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_desert_bandits" translation="68 40.2888 16">
+    <Entity name="npc_desert_bandits" translation="68 40.2888 16" script="npc/dialogue.lua" prop-dialogue_id="desert_bandits">
       <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
       <DialogueNPC dialogue-id="desert_bandits" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_desert_ruins" translation="284 50.1209 104">
+    <Entity name="npc_desert_ruins" translation="284 50.1209 104" script="npc/dialogue.lua" prop-dialogue_id="desert_ruins">
       <GltfScene url="/assets/meshes/characters/npc_elder_lod0.glb" />
       <DialogueNPC dialogue-id="desert_ruins" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_swamp_boglings" translation="-60 38.4852 -16">
+    <Entity name="npc_swamp_boglings" translation="-60 38.4852 -16" script="npc/dialogue.lua" prop-dialogue_id="swamp_boglings">
       <GltfScene url="/assets/meshes/characters/npc_healer_lod0.glb" />
       <DialogueNPC dialogue-id="swamp_boglings" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_swamp_bogwarden" translation="-68 36.0271 16">
+    <Entity name="npc_swamp_bogwarden" translation="-68 36.0271 16" script="npc/dialogue.lua" prop-dialogue_id="swamp_bogwarden">
       <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
       <DialogueNPC dialogue-id="swamp_bogwarden" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_swamp_bogmoss" translation="-100 30.7032 0">
+    <Entity name="npc_swamp_bogmoss" translation="-100 30.7032 0" script="npc/dialogue.lua" prop-dialogue_id="swamp_bogmoss">
       <GltfScene url="/assets/meshes/characters/npc_elder_lod0.glb" />
       <DialogueNPC dialogue-id="swamp_bogmoss" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_peaks_goblins" translation="-16 38.7304 -60">
+    <Entity name="npc_peaks_goblins" translation="-16 38.7304 -60" script="npc/dialogue.lua" prop-dialogue_id="peaks_goblins">
       <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
       <DialogueNPC dialogue-id="peaks_goblins" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_peaks_frost" translation="16 41.1543 -68">
+    <Entity name="npc_peaks_frost" translation="16 41.1543 -68" script="npc/dialogue.lua" prop-dialogue_id="peaks_frost">
       <GltfScene url="/assets/meshes/characters/npc_healer_lod0.glb" />
       <DialogueNPC dialogue-id="peaks_frost" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_peaks_ogre" translation="0 52.9699 -100">
+    <Entity name="npc_peaks_ogre" translation="0 52.9699 -100" script="npc/dialogue.lua" prop-dialogue_id="peaks_ogre">
       <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
       <DialogueNPC dialogue-id="peaks_ogre" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_forest_survey" translation="32 46.1898 80">
+    <Entity name="npc_forest_survey" translation="32 46.1898 80" script="npc/dialogue.lua" prop-dialogue_id="forest_survey">
       <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="forest_survey" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_desert_survey" translation="80 40.2029 -32">
+    <Entity name="npc_desert_survey" translation="80 40.2029 -32" script="npc/dialogue.lua" prop-dialogue_id="desert_survey">
       <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="desert_survey" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_swamp_survey" translation="-80 32.6489 32">
+    <Entity name="npc_swamp_survey" translation="-80 32.6489 32" script="npc/dialogue.lua" prop-dialogue_id="swamp_survey">
       <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="swamp_survey" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_peaks_survey" translation="-32 38.6761 -80">
+    <Entity name="npc_peaks_survey" translation="-32 38.6761 -80" script="npc/dialogue.lua" prop-dialogue_id="peaks_survey">
       <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="peaks_survey" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_forest_witch" translation="-24 43.5072 82">
+    <Entity name="npc_forest_witch" translation="-24 43.5072 82" script="npc/dialogue.lua" prop-dialogue_id="forest_witch">
       <GltfScene url="/assets/meshes/characters/npc_scholar_lod0.glb" />
       <DialogueNPC dialogue-id="forest_witch" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
-    <Entity name="npc_desert_worm" translation="96 41.1808 10">
+    <Entity name="npc_desert_worm" translation="96 41.1808 10" script="npc/dialogue.lua" prop-dialogue_id="desert_worm">
       <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="desert_worm" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>

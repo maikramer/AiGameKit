@@ -1,3 +1,4 @@
+local rules = viber.load("lib/rules.lua")
 -- enemies/scorpion.lua: steering + pivô rápido + veneno no golpe (dá uso ao
 -- antídoto [2]). Toda a máquina vive em lib/fsm.lua (viber.load).
 local fsm = viber.load("lib/fsm.lua").new{
@@ -9,7 +10,7 @@ local fsm = viber.load("lib/fsm.lua").new{
   turn_rate = 9.0, -- sem deslize lateral nas viragens (gait de 4 patas)
   steering = true,
   anti_stuck = false,
-  on_attack = function() viber.apply_status("venom", 4) end, -- veneno 4 s
+  on_attack = function() rules.apply_status("venom", 4) end, -- veneno 4 s
 }
 
 function on_update(dt)

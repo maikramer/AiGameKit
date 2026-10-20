@@ -73,7 +73,7 @@
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
       <PointLight translation="0 0.9 0" color="0x8fd0ff" intensity="2600" radius="0.8" shadows="false" />
     </Entity>
-    <Entity name="npc_pilgrim_master" translation="482 0 -66" transform="rotation: 0 20 0">
+    <Entity name="npc_pilgrim_master" translation="482 0 -66" transform="rotation: 0 20 0" script="npc/dialogue.lua" prop-dialogue_id="pilgrimage_vael">
       <GltfScene url="/assets/meshes/characters/npc_elder_lod0.glb" />
       <DialogueNPC dialogue-id="pilgrimage_vael" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
