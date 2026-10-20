@@ -129,19 +129,6 @@ pub struct LuauRuntimeLocals<'w, 's> {
         ),
         Without<Player>,
     >,
-    /// Hostis com script (`viber.hostiles`). Sem nome no spawner, o melee
-    /// não pode procurá-los por `find_all`.
-    pub hostile_scripts: Query<
-        'w,
-        's,
-        (
-            Entity,
-            &'static crate::luau::LuaScriptRef,
-            &'static GlobalTransform,
-            &'static crate::vitals::Health,
-        ),
-        Without<Player>,
-    >,
     /// Nomes + posição para os snapshots `viber.find`/`entity_position`/
     /// `nearby` (herói excluído).
     pub names: Query<'w, 's, (Entity, &'static Name, &'static GlobalTransform), Without<Player>>,
@@ -506,16 +493,21 @@ pub fn luau_update(
                 }
             }
             ctx.hostiles.clear();
-            for (e, script, global, health) in locals.hostile_scripts.iter() {
-                if health.current <= 0.0 || !crate::combat::is_hostile_script(&script.path) {
+            for (e, script, _, global, _, _) in scripts.iter() {
+                if !crate::combat::is_hostile_script(&script.path) {
+                    continue;
+                }
+                let Some(global) = global else { continue };
+                let Some((cur, max)) = ctx.hp_snapshot.get(&(e.to_bits() as i64)) else { continue };
+                if cur <= 0.0 {
                     continue;
                 }
                 ctx.hostiles.push(super::ctx::HostileSnap {
                     id: e.to_bits() as i64,
                     kind: crate::combat::script_kind(&script.path),
                     pos: global.translation(),
-                    hp: health.current,
-                    max: health.max,
+                    hp: cur,
+                    max,
                 });
             }
             if let Some(lib) = locals.prototypes.as_deref() {
