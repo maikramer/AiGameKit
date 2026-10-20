@@ -498,7 +498,7 @@ pub fn luau_update(
                     continue;
                 }
                 let Some(global) = global else { continue };
-                let Some((cur, max)) = ctx.hp_snapshot.get(&(e.to_bits() as i64)) else { continue };
+                let Some(&(cur, max)) = ctx.hp_snapshot.get(&(e.to_bits() as i64)) else { continue };
                 if cur <= 0.0 {
                     continue;
                 }

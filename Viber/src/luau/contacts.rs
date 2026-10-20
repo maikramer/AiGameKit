@@ -407,7 +407,7 @@ mod tests {
     fn lua_string(app: &App, key: &str) -> String {
         let host = app.world().resource::<LuaScriptHost>();
         match host.script_global("zone.lua", key).expect("global") {
-            mlua::Value::String(text) => text.to_str().unwrap_or("").to_string(),
+            mlua::Value::String(text) => text.to_str().map(|s| s.to_string()).unwrap_or_default(),
             mlua::Value::Nil => String::new(),
             other => panic!("{key} = {other:?}"),
         }

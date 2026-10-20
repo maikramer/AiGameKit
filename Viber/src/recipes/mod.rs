@@ -1439,7 +1439,7 @@ fn apply_use_overrides(
             ctx.warnings.push(warning);
         }
     }
-    bind_node_mesh(spec, ctx, ctx_tag);
+    bind_node_mesh(spec, ctx, &ctx_tag);
 }
 
 /// Ambient lights are applied as a world resource, so more than one is

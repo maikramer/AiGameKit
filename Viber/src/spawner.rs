@@ -806,7 +806,8 @@ fn apply_template_collider(
                     }
                 } else {
                     let parent = entity.id();
-                    let mut child = entity.commands().spawn((
+                    let mut commands = entity.commands();
+                    let mut child = commands.spawn((
                         Name::new("collider"),
                         collider,
                         offset,

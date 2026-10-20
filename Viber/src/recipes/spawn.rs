@@ -1107,6 +1107,7 @@ fn push_shore_rock_group(
         fixed_candidates: candidates,
         template_urls,
         template_lods,
+        template_trigger: false,
         // Rochas de margem: coladas à água é o ponto — gates de água
         // desligados; estradas e ocupação partilhada continuam a valer.
         avoid_water: false,
