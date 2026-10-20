@@ -1,8 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <world static="true">
-  <Vehicle name="player" driver="player" template="kart" model-url="/assets/meshes/vehicles/kart_hero_lod0.glb" model-yaw="90" model-scale="1.7" translation="-470 15 -470" />
-  <Vehicle name="vega" driver="ai" template="rival-vega" model-url="/assets/meshes/vehicles/kart_rival_lod0.glb" model-yaw="90" model-scale="1.7" translation="-474 15 -468" />
-  <Vehicle name="koda" driver="ai" template="rival-koda" model-url="/assets/meshes/vehicles/kart_rival_lod0.glb" model-yaw="90" model-scale="1.7" translation="-466 15 -468" />
-  <Vehicle name="mira" driver="ai" template="rival-mira" model-url="/assets/meshes/vehicles/kart_rival_lod0.glb" model-yaw="90" model-scale="1.7" translation="-474 15 -465" />
-  <Vehicle name="rook" driver="ai" template="rival-rook" model-url="/assets/meshes/vehicles/kart_rival_lod0.glb" model-yaw="90" model-scale="1.7" translation="-466 15 -465" />
+  <Entity name="race-director" tag="always-active" script="game/race.lua" prop-laps="3" prop-countdown="3" prop-grid-s="35" />
+  <Entity name="player" tag="player" groups="kart" translation="-470 15 -470">
+    <GltfScene url="/assets/meshes/vehicles/kart_hero_body_lod0.glb" euler="0 -90 0" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="0.5225 0.34375 -1.0" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="-0.47125 0.34375 -0.975" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="0.5225 0.34375 1.125" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="-0.47125 0.34375 1.125" scale="1.25" />
+  </Entity>
+  <Entity name="vega" groups="kart" translation="-474 15 -468">
+    <GltfScene url="/assets/meshes/vehicles/kart_rival_body_lod0.glb" euler="0 -90 0" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="0.525 0.34375 -1.1375" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="-0.525 0.34375 -1.175" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="0.525 0.34375 1.15" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="-0.525 0.34375 1.175" scale="1.25" />
+  </Entity>
+  <Entity name="koda" groups="kart" translation="-466 15 -468">
+    <GltfScene url="/assets/meshes/vehicles/kart_rival_body_lod0.glb" euler="0 -90 0" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="0.525 0.34375 -1.1375" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="-0.525 0.34375 -1.175" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="0.525 0.34375 1.15" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="-0.525 0.34375 1.175" scale="1.25" />
+  </Entity>
+  <Entity name="mira" groups="kart" translation="-474 15 -465">
+    <GltfScene url="/assets/meshes/vehicles/kart_rival_body_lod0.glb" euler="0 -90 0" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="0.525 0.34375 -1.1375" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="-0.525 0.34375 -1.175" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="0.525 0.34375 1.15" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="-0.525 0.34375 1.175" scale="1.25" />
+  </Entity>
+  <Entity name="rook" groups="kart" translation="-466 15 -465">
+    <GltfScene url="/assets/meshes/vehicles/kart_rival_body_lod0.glb" euler="0 -90 0" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="0.525 0.34375 -1.1375" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="-0.525 0.34375 -1.175" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="0.525 0.34375 1.15" scale="1.25" />
+    <GltfScene url="/assets/meshes/vehicles/kart_wheel_lod0.glb" translation="-0.525 0.34375 1.175" scale="1.25" />
+  </Entity>
 </world>

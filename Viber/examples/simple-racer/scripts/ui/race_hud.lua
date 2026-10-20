@@ -1,11 +1,7 @@
--- HUD de corrida: tudo o que aparece vem do snapshot `viber.race.*` /
--- `viber.vehicle.*` (escrito pela engine a cada frame). O script só formata
--- e decide visibilidades — nenhuma lógica de corrida vive aqui.
+-- HUD de corrida. O diretor escreve viber.game().player; este script formata.
 
-local st = viber.state()
-if not st.ready then
-  st.ready = true
-end
+local banner_ttl = 0
+local banner_text = ""
 
 local function fmt_time(t)
   if not t or t <= 0 then
@@ -16,44 +12,34 @@ local function fmt_time(t)
   return string.format("%d:%04.1f", m, s)
 end
 
-local banner_ttl = 0
-local banner_text = ""
-
 function on_update(dt)
-  local state = viber.race.state()
-  if not state then
+  local player = viber.game().player
+  if not player then
     return
   end
 
-  -- ── speedómetro + nitro ────────────────────────────────────────────
-  local speed = viber.vehicle.speed()
-  viber.ui.set_text("speed-kmh", string.format("%d", math.floor(speed * 3.6 + 0.5)))
-  viber.ui.set_value("nitro-bar", viber.vehicle.nitro())
+  viber.ui.set_text("speed-kmh", string.format("%d", math.floor(player.speed * 3.6 + 0.5)))
+  viber.ui.set_value("nitro-bar", player.nitro or 0)
 
-  -- ── volta / posição / cronómetros ──────────────────────────────────
-  local lap, laps = viber.race.lap()
-  viber.ui.set_text("race-lap", string.format("%d/%d", math.max(lap, 1), laps))
-  local pos, total = viber.race.position()
-  viber.ui.set_text("race-pos", string.format("%d/%d", pos, total))
-  viber.ui.set_text("race-time", fmt_time(viber.race.time()))
-  viber.ui.set_text("race-best", fmt_time(viber.race.best_lap()))
+  viber.ui.set_text("race-lap", string.format("%d/%d", player.lap or 1, player.laps or 1))
+  viber.ui.set_text("race-pos", string.format("%d/%d", player.position or 1, player.total or 1))
+  viber.ui.set_text("race-time", fmt_time(player.time))
+  viber.ui.set_text("race-best", fmt_time(player.best_lap))
 
-  -- ── banner central ─────────────────────────────────────────────────
   local text, warn = nil, false
-  local cd = viber.race.countdown()
-  if cd then
-    text = tostring(cd)
-  elseif state == "countdown" then
+  if player.countdown then
+    text = tostring(player.countdown)
+  elseif player.state == "countdown" then
     text = "PREPARADOS"
-  elseif state == "finished" then
-    text = viber.race.message() or "META"
+  elseif player.state == "finished" then
+    text = player.message or "META"
   else
-    local msg = viber.race.message()
+    local msg = player.message
     if msg then
       text = msg
       banner_ttl = 1.0
       banner_text = msg
-    elseif viber.race.wrong_way() then
+    elseif player.wrong_way then
       text, warn = "SENTIDO ERRADO", true
     elseif banner_ttl > 0 then
       banner_ttl = banner_ttl - dt

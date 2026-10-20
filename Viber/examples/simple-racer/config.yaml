@@ -4,8 +4,8 @@ title: Simple Racer
 # Preset da lente (docs/PERFORMANCE.md): alto | equilibrado | desempenho.
 graphics: equilibrado
 
-# Preset de gameplay: `racing` = karts (`<Vehicle>`), diretor de corrida,
-# rivais AI e som de motor. O preset RPG fica OFF.
+# Sem plugins de domínio. A corrida vive em scripts/game/race.lua.
+# `racing` só evita o default `rpg` (que também já não liga plugins).
 gameplay: racing
 
 assets:
