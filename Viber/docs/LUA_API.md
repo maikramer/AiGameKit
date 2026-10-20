@@ -21,6 +21,13 @@ caminhos relativos a `scripts/` aceitam subpastas). Ver exemplos vivos em
   - `function on_player_attack(px, pz)` — **opcional**; aggro-chain: quando o
     herói acerta uma criatura, todos os scripts num raio de **15 m do alvo
     atingido** recebem a posição do atacante (matilhas passam a perseguir).
+  - `function on_trigger_enter(other)` / `on_trigger_stay(other, dt)` /
+    `on_trigger_exit(other)` — **opcionais**; o collider da entidade tem
+    `trigger: true` (sensor: não bloqueia). `other` é `{id, name?, x, y, z}`.
+  - `function on_collision_enter(other)` / `on_collision_stay(other, dt)` /
+    `on_collision_exit(other)` — **opcionais**; o mesmo collider sem a flag
+    (sólido). O herói chega por aqui mesmo sem overlap (o character controller
+    pára antes da parede). Stay só corre se a função existir.
 - **LOD de IA:** além do raio de ativação (attr de spawner
   `activation-radius`, default **45 m**) o `on_update` **nem corre** —
   inimigo distante custa zero lógica.
@@ -30,6 +37,7 @@ caminhos relativos a `scripts/` aceitam subpastas). Ver exemplos vivos em
   `require`/`package` (liam qualquer ficheiro do disco): módulos passam pelo
   `viber.load`, preso a `scripts/`.
 - **Orçamento:** cada entrada na VM (`on_update`, `on_player_attack`,
+  `on_trigger_*`, `on_collision_*`,
   top-level, timer, `on_spawned`) tem **500 ms** — um loop infinito vira erro
   Lua (`orçamento de CPU excedido`) em vez de congelar a engine. A heap da VM
   tem teto de **512 MiB**.
@@ -49,6 +57,23 @@ caminhos relativos a `scripts/` aceitam subpastas). Ver exemplos vivos em
   chunk antigo continua. Os timers do chunk antigo saem (o top-level novo
   re-regista os seus). Editar um módulo do `viber.load` tira-o do cache e
   re-corre o top-level de todos os scripts.
+
+Volume (formas `box`, `cylinder`, `sphere`, `capsule`, `mesh` — `trigger` é a flag; sem ela o volume é sólido):
+
+```xml
+<Entity name="portao" translation="10 1 20"
+        collider="shape: box; size: 4 2 4; trigger: true"
+        script="portao.lua" />
+```
+
+```lua
+-- scripts/portao.lua
+function on_trigger_enter(other)
+  viber.log(other.name)
+end
+function on_trigger_exit(other) end
+function on_collision_enter(other) end
+```
 
 Esqueleto típico:
 

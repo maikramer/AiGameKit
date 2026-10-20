@@ -1,11 +1,12 @@
 //! View options (Fase F): a "Vista" popover on the toolbar — grid on/off,
-//! colliders wireframe on/off (pushed to the RUNNING game via
-//! `viber.profiler.extra_toggle {"id":"colliders"}`; the Play launcher sets
-//! `VIBER_PHYSICS_DEBUG=1` so the debug render plugin exists), perspective /
-//! orthographic projection and the ortho views (front/top/right; Numpad
-//! 1/3/7, 5 = persp). Ortho views write `EditorCamState` directly (top uses
-//! pitch 89.9 — the orbit clamp is 85) and swap the camera `Projection`,
-//! scaling the ortho frustum by the orbit distance.
+//! colliders wireframe on/off (viewport de edição via `ColliderDebugToggle`,
+//! e o jogo em Play via `viber.profiler.extra_toggle {"id":"colliders"}`; the
+//! Play launcher sets `VIBER_PHYSICS_DEBUG=1` so the debug render plugin
+//! exists), perspective / orthographic projection and the ortho views
+//! (front/top/right; Numpad 1/3/7, 5 = persp). Ortho views write
+//! `EditorCamState` directly (top uses pitch 89.9 — the orbit clamp is 85)
+//! and swap the camera `Projection`, scaling the ortho frustum by the orbit
+//! distance.
 
 use crate::ui::strings::LangLabel;
 use bevy::camera::{OrthographicProjection, Projection};

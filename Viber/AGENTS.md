@@ -1084,7 +1084,11 @@ Atributos universais: `name`, `tag`, `script` (Luau — ver **Scripts Luau**),
 `scale`, `collider` (`none`/`auto`/box/sphere/cylinder/capsule/mesh/precompute —
 `auto` numa PRIMITIVA dá colisor exato derivado da forma, com a escala
 aplicada UMA vez pelo Rapier; num GLTF é a caixa das bounds renderizadas da
-cena INTEIRA — toda a subárvore, no referencial local da entidade) e
+cena INTEIRA — toda a subárvore, no referencial local da entidade;
+`trigger: true` ou `sensor: true` torna o volume um sensor — mesmas formas,
+não bloqueia, hooks `on_trigger_*`; sem a flag é collider sólido e
+`on_collision_*`; `shape: mesh` sem `mesh-url` usa o GLB do próprio
+`GltfScene`) e
 `rigidbody`/`body` (kinematic/dynamic/…) — física declarativa via
 `src/physics.rs`. Primitivas idênticas partilham mesh/material (dedup por
 bits no spawn).
