@@ -101,7 +101,7 @@ function M.quest_progress(id)
   if def and def.objective and def.objective.count then
     need = def.objective.count
   end
-  return progress_of(id), need
+  return num("q." .. id .. ".n", 0), need
 end
 
 function M.quest_state(id)
@@ -396,7 +396,7 @@ function M.vault_take(kind, amount)
 end
 
 function M.item_add(id, amount)
-  M.vault_add(id, amount or 1)
+  return M.vault_add(id, amount or 1)
 end
 
 function M.item_count(id)
