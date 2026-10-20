@@ -51,6 +51,8 @@ pub struct ScriptCtx {
     /// Hostis vivos (`enemies/`/`bosses/`) para `viber.hostiles`. As criaturas
     /// de `<DynamicSpawner>` não têm nome — `find_all("wolf")` não as acha.
     pub hostiles: Vec<HostileSnap>,
+    /// Props `destructible` a ≤ 40 m do herói (`viber.destructibles`).
+    pub destructibles: Vec<DestructibleSnap>,
     /// Posição de MUNDO das entidades nomeadas (`viber.entity_position`,
     /// `viber.nearby`) — o mesmo snapshot de nomes, com o GlobalTransform.
     pub pos_snapshot: std::collections::HashMap<i64, (String, Vec3)>,
@@ -142,6 +144,20 @@ pub struct HostileSnap {
     pub pos: Vec3,
     pub hp: f32,
     pub max: f32,
+}
+
+/// Prop colhível perto do herói (`viber.destructibles`).
+#[derive(Debug, Clone)]
+pub struct DestructibleSnap {
+    pub id: i64,
+    pub hits_left: u32,
+    pub kind: String,
+    pub amount: u32,
+    pub pos: Vec3,
+    pub range: f32,
+    /// `burst` | `fall` | `shatter`.
+    pub style: String,
+    pub popup: String,
 }
 
 /// Definição de quest achatada para Lua (`viber.quest_def`).

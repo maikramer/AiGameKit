@@ -118,6 +118,17 @@ pub struct LuauRuntimeLocals<'w, 's> {
         ),
         Without<Player>,
     >,
+    /// Props com `destructible` (`viber.destructibles`), filtrados à volta do herói.
+    pub destructibles: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::harvest::Destructible,
+            &'static GlobalTransform,
+        ),
+        Without<Player>,
+    >,
     /// Hostis com script (`viber.hostiles`). Sem nome no spawner, o melee
     /// não pode procurá-los por `find_all`.
     pub hostile_scripts: Query<
@@ -466,6 +477,34 @@ pub fn luau_update(
                 hp.insert(e.to_bits() as i64, (h.current, h.max));
             }
             ctx.hp_snapshot = hp;
+            ctx.destructibles.clear();
+            if let Some(hero) = player_pos {
+                for (e, prop, global) in locals.destructibles.iter() {
+                    let pos = global.translation();
+                    if pos.distance(hero) > 40.0 {
+                        continue;
+                    }
+                    let (kind, amount) = prop
+                        .resource
+                        .clone()
+                        .unwrap_or_else(|| (String::new(), 0));
+                    ctx.destructibles.push(super::ctx::DestructibleSnap {
+                        id: e.to_bits() as i64,
+                        hits_left: prop.hits.saturating_sub(prop.hits_taken),
+                        kind,
+                        amount,
+                        pos,
+                        range: prop.range,
+                        style: match prop.break_style {
+                            crate::harvest::BreakStyle::Fall => "fall",
+                            crate::harvest::BreakStyle::Shatter => "shatter",
+                            crate::harvest::BreakStyle::Burst => "burst",
+                        }
+                        .to_string(),
+                        popup: prop.popup.clone().unwrap_or_default(),
+                    });
+                }
+            }
             ctx.hostiles.clear();
             for (e, script, global, health) in locals.hostile_scripts.iter() {
                 if health.current <= 0.0 || !crate::combat::is_hostile_script(&script.path) {
