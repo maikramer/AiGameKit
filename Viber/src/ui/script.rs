@@ -1810,18 +1810,17 @@ mod tests {
         let (lua, state) = host();
         {
             let mut data = state.view.data.lock().unwrap();
-            data.health = 30.0;
-            data.health_max = 100.0;
+            data.day_fraction = 0.3;
             data.clock = "12:00".into();
         }
         state.view.clicks.lock().unwrap().push("btn-save".into());
         let clock: String = lua.load(r#"return viber.ui.get("clock")"#).eval().unwrap();
         assert_eq!(clock, "12:00");
-        let health: f32 = lua
-            .load(r#"return viber.ui.number("health")"#)
+        let day: f32 = lua
+            .load(r#"return viber.ui.number("day")"#)
             .eval()
             .unwrap();
-        assert!((health - 0.3).abs() < 1e-6);
+        assert!((day - 0.3).abs() < 1e-6);
         let clicked: bool = lua
             .load(r#"return viber.ui.clicked("btn-save")"#)
             .eval()

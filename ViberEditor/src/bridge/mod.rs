@@ -185,6 +185,10 @@ fn poll_engine(mut bridge: ResMut<ViberBridge>, time: Res<Time>) {
     bridge.waited += time.delta();
     if bridge.waited >= BRIDGE_TIMEOUT {
         bridge.ping = None;
+        if let Some(mut child) = bridge.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
         bridge.status = EngineStatus::Failed("game bridge did not come up within 180s".into());
         return;
     }

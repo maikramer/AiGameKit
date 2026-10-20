@@ -11,8 +11,9 @@
 //! (o mesmo contrato do antigo resolvedor textual de `#import`).
 
 use std::borrow::Cow;
+use wesl::error::ResolveError;
 use wesl::syntax::{ModulePath, PathOrigin};
-use wesl::{CompileOptions, Feature, ResolveError, Resolver};
+use wesl::{CompileOptions, Feature, ManglerKind, Resolver};
 
 const ROOT_PACKAGE: &str = "viber_shader";
 
@@ -71,6 +72,11 @@ pub fn compile_wesl(
     let mut options = CompileOptions {
         imports: true,
         condcomp: true,
+        // Os stubs são "packages" falsos (bevy_pbr/bevy_render) com itens sem
+        // `public` — o passe de Visibility do WESL (novo no 0.6) rejeitava o
+        // import cross-package. O contrato do harness é a consistência interna
+        // do shader, não a higiene de packages (ver IMPORTANT acima).
+        visibility: false,
         ..Default::default()
     };
     for def in defines {
@@ -79,6 +85,9 @@ pub fn compile_wesl(
             .flags
             .insert(def.to_string(), Feature::Enable);
     }
+    // O mangler ESCAPE é o padrão do `bevy_shader::shader_cache` (e o default
+    // do wesl 0.6 — explícito para o contrato não depender do default).
+    options.mangler = ManglerKind::Escape;
     // O valor REAL que o bevy substitui no runtime (o grupo do material) —
     // manter a sincronizar com `bevy::pbr::MATERIAL_BIND_GROUP_INDEX`.
     let constants = format!(
@@ -94,7 +103,7 @@ pub fn compile_wesl(
         origin: PathOrigin::Package(ROOT_PACKAGE.to_string()),
         components: Vec::new(),
     };
-    let compiled = wesl::compile(&root, &resolver, &wesl::EscapeMangler, &options)
+    let compiled = wesl::compile(&root, &options, &resolver)
         .unwrap_or_else(|error| panic!("WESL compile falhou:\n{error}"));
     compiled.syntax.to_string()
 }

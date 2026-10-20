@@ -118,6 +118,19 @@ pub struct LuauRuntimeLocals<'w, 's> {
         ),
         Without<Player>,
     >,
+    /// Hostis com script (`viber.hostiles`). Sem nome no spawner, o melee
+    /// não pode procurá-los por `find_all`.
+    pub hostile_scripts: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::luau::LuaScriptRef,
+            &'static GlobalTransform,
+            &'static crate::vitals::Health,
+        ),
+        Without<Player>,
+    >,
     /// Nomes + posição para os snapshots `viber.find`/`entity_position`/
     /// `nearby` (herói excluído).
     pub names: Query<'w, 's, (Entity, &'static Name, &'static GlobalTransform), Without<Player>>,
@@ -132,6 +145,8 @@ pub struct LuauRuntimeLocals<'w, 's> {
     pub connections: Query<'w, 's, &'static crate::luau::SignalConnections>,
     /// Cinemática a tocar (`viber.cinematic_playing`).
     pub cinematic: Option<bevy::ecs::system::Res<'w, crate::cinematic::CinematicPlayback>>,
+    /// Menus que roubam input (`viber.menu_open`). `Option`: apps mínimas.
+    pub menus: Option<bevy::ecs::system::Res<'w, crate::menus::MenusOpen>>,
     /// Snapshot de nomes semeado (a partir daí só deltas).
     pub names_seeded: bevy::ecs::system::Local<'s, bool>,
     /// Entidades nomeadas cujo nome ou pose mudou desde o último frame.
@@ -186,6 +201,13 @@ pub struct LuauRuntimeLocals<'w, 's> {
     /// Biomas revelados por atalaias (`viber.biome_revealed` / RevealBiome).
     /// `Option` pelas apps mínimas, como o resto.
     pub revealed: Option<bevy::ecs::system::Res<'w, crate::travel::RevealedBiomes>>,
+    /// Pose local de entidades SEM script e SEM `Player` (`viber.set_pose`
+    /// em rodas/karts rivais). Disjunta das queries `scripts` e `players`.
+    pub poses: Query<'w, 's, &'static mut Transform, (Without<LuaScriptRef>, Without<Player>)>,
+    /// Loops de SFX pedidos por script (`viber.sound_loop`).
+    pub sound_loops: Option<bevy::ecs::system::ResMut<'w, crate::music::ScriptSoundLoops>>,
+    /// Layer de BGM forçada (`viber.music.layer`).
+    pub music_layer: Option<bevy::ecs::system::ResMut<'w, crate::music::MusicLayerOverride>>,
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -338,12 +360,16 @@ pub fn luau_update(
         ctx.player_hp = player_components
             .as_ref()
             .and_then(|(_, _, health, _)| health.as_deref().map(|h| (h.current, h.max)));
+        ctx.player_bits = player_components
+            .as_ref()
+            .map(|(entity, _, _, _)| entity.to_bits() as i64);
         // Forward do herói (modelo olha +Z) para `viber.player_forward`.
         ctx.player_forward = player_forward;
         ctx.cinematic = locals
             .cinematic
             .as_deref()
             .and_then(|c| c.playing().map(str::to_owned));
+        ctx.menu_open = locals.menus.as_deref().is_some_and(|menus| menus.any());
         // Handle de leitura do terreno para `viber.ground_below` — dois
         // clones de Arc por frame; o terreno é imutável pós-bootstrap.
         ctx.terrain = terrain.as_deref().map(|rt| rt.reader());
@@ -440,6 +466,19 @@ pub fn luau_update(
                 hp.insert(e.to_bits() as i64, (h.current, h.max));
             }
             ctx.hp_snapshot = hp;
+            ctx.hostiles.clear();
+            for (e, script, global, health) in locals.hostile_scripts.iter() {
+                if health.current <= 0.0 || !crate::combat::is_hostile_script(&script.path) {
+                    continue;
+                }
+                ctx.hostiles.push(super::ctx::HostileSnap {
+                    id: e.to_bits() as i64,
+                    kind: crate::combat::script_kind(&script.path),
+                    pos: global.translation(),
+                    hp: health.current,
+                    max: health.max,
+                });
+            }
             if let Some(lib) = locals.prototypes.as_deref() {
                 ctx.prototype_names = lib.0.keys().cloned().collect();
             }
@@ -1181,6 +1220,15 @@ pub fn luau_update(
                     let before = health.current;
                     crate::vitals::apply_damage(&mut health, amount);
                     kill_if_dead!(before, health.current);
+                } else if player_components
+                    .as_ref()
+                    .is_some_and(|(id, _, health, _)| *id == entity && health.is_some())
+                {
+                    if let Some((_, _, Some(health), _)) = player_components.as_mut() {
+                        let before = health.current;
+                        crate::vitals::apply_damage(health, amount);
+                        kill_if_dead!(before, health.current);
+                    }
                 } else if let Some((cur, max)) = locals.fresh_health.get_mut(&entity) {
                     let before = *cur;
                     let next = (*cur - amount).max(0.0);
@@ -1198,6 +1246,13 @@ pub fn luau_update(
             ScriptCommand::EntityHeal { entity, amount } => {
                 if let Ok((_, mut health, _)) = locals.healths.get_mut(entity) {
                     health.current = (health.current + amount).min(health.max);
+                } else if player_components
+                    .as_ref()
+                    .is_some_and(|(id, _, health, _)| *id == entity && health.is_some())
+                {
+                    if let Some((_, _, Some(health), _)) = player_components.as_mut() {
+                        health.current = (health.current + amount).min(health.max);
+                    }
                 } else if let Some((cur, max)) = locals.fresh_health.get_mut(&entity) {
                     let next = (*cur + amount).min(*max);
                     *cur = next;
@@ -1267,35 +1322,12 @@ pub fn luau_update(
                         kills.push((entity, name, pos));
                     }
                 }
-                for (entity, name, pos) in kills {
-                    commands
-                        .entity(entity)
-                        .try_remove::<LuaScriptRef>()
-                        .try_insert(crate::combat::Corpse {
-                            timer: crate::combat::CORPSE_LIFETIME,
-                        });
+                for (entity, name, _pos) in kills {
                     if let Some(events) = locals.events.as_deref_mut() {
                         events.push(ScriptGameEvent::Kill {
-                            name: name.clone(),
+                            name,
                             entity: entity.to_bits() as i64,
                         });
-                    }
-                    if let Some((_, _, _, Some(xp))) = player_components.as_mut() {
-                        crate::vitals::gain_xp(xp, crate::combat::kill_xp(&name));
-                    }
-                    sfx.write(crate::ambient::SfxEvent {
-                        clip: crate::ambient::SfxClip::EnemyDeath,
-                        position: Some(pos),
-                    });
-                    if let Some(quests) = quests.as_deref_mut() {
-                        for ready in quests.report_kill(&name) {
-                            if let Some(def) = quests.def(&ready) {
-                                toasts.write(ScriptToast(format!(
-                                    "Objetivo completo: {} — volta ao NPC",
-                                    def.title
-                                )));
-                            }
-                        }
                     }
                 }
             }
@@ -1410,6 +1442,59 @@ pub fn luau_update(
                     if fresh {
                         info!(target: "viber::nota", "bioma '{biome}' revelado por atalaia");
                     }
+                }
+            }
+            ScriptCommand::SetPose { entity, pos, yaw } => {
+                let apply = |transform: &mut Transform| {
+                    let scale = transform.scale;
+                    transform.translation = pos;
+                    transform.rotation = Quat::from_rotation_y(yaw);
+                    transform.scale = scale;
+                };
+                // `players` já está emprestado em `player_components` desde o
+                // início do frame — um segundo `get_mut` não compila.
+                let mut applied = false;
+                if let Some((p_entity, Some(transform), _, _)) = player_components.as_mut()
+                    && *p_entity == entity
+                {
+                    apply(transform);
+                    applied = true;
+                }
+                if !applied {
+                    if let Ok((_, _, Some(mut transform), _, _, _)) = scripts.get_mut(entity) {
+                        apply(&mut transform);
+                    } else if let Ok(mut transform) = locals.poses.get_mut(entity) {
+                        apply(&mut transform);
+                    }
+                }
+            }
+            ScriptCommand::SoundLoop {
+                id,
+                clip,
+                pitch,
+                volume,
+                position,
+            } => {
+                if let Some(loops) = locals.sound_loops.as_deref_mut() {
+                    loops.wanted.insert(
+                        id,
+                        crate::music::ScriptLoopParams {
+                            clip,
+                            pitch,
+                            volume,
+                            position,
+                        },
+                    );
+                }
+            }
+            ScriptCommand::SoundStop(id) => {
+                if let Some(loops) = locals.sound_loops.as_deref_mut() {
+                    loops.wanted.remove(&id);
+                }
+            }
+            ScriptCommand::MusicLayer(layer) => {
+                if let Some(over) = locals.music_layer.as_deref_mut() {
+                    over.0 = layer.filter(|name| !name.is_empty());
                 }
             }
             ScriptCommand::AddSkillPoints(amount) => {

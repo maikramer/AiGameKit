@@ -86,6 +86,18 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
         })?,
     )?;
 
+    // viber.menu_open() -> bool — menu [Q], profiler, mapa [M], viagem [G]
+    // ou cinemática estão a roubar o input (o mesmo `MenusOpen::any()` que
+    // o movimento e o melee nativos consultam).
+    api.set(
+        "menu_open",
+        lua.create_function(|lua, ()| {
+            Ok(lua
+                .app_data_ref::<ScriptCtx>()
+                .is_some_and(|ctx| ctx.menu_open))
+        })?,
+    )?;
+
     // viber.self_id() -> bits da entidade que corre o script | nil
     api.set(
         "self_id",

@@ -530,10 +530,7 @@ fn render_script_panel(
     // o script selecionado num EDITOR (EditableText multi-linha, mono)
     if let (Ok(preview), Some(path)) = (previews.single(), state.selected.clone()) {
         commands.entity(preview).despawn_related::<Children>();
-        let file = doc.world_path().parent().map(|dir| dir.join(&path));
-        let text = file
-            .and_then(|path| std::fs::read_to_string(path).ok())
-            .unwrap_or_default();
+        let text = std::fs::read_to_string(doc.root_dir.join(&path)).unwrap_or_default();
         let buffer = state.buffers.get(&path).cloned();
         commands
             .spawn_scene(bsn! {
@@ -739,6 +736,13 @@ fn render_syntax_line(
     }
 }
 
+/// O dock lista `scripts/merchant.lua` (relativo à pasta do projeto). A engine
+/// compara com o atributo XML e lê `<scripts_dir>/<path>` — o prefixo `scripts/`
+/// pedia `scripts/scripts/merchant.lua` e o reload falhava.
+pub fn script_bridge_path(path: &str) -> &str {
+    path.strip_prefix("scripts/").unwrap_or(path)
+}
+
 fn collect_scripts(entries: &[FileEntry], prefix: &str, out: &mut Vec<String>) {
     for entry in entries {
         let path = if prefix.is_empty() {
@@ -837,7 +841,7 @@ fn script_reload_button(
     let _ = lang;
     task.0 = Some(crate::bridge::methods::scripts_reload(
         &bridge.client,
-        &path,
+        script_bridge_path(&path),
     ));
 }
 
@@ -891,6 +895,16 @@ fn open_script_clicked(world: &mut World) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reload_path_is_relative_to_the_scripts_dir() {
+        assert_eq!(script_bridge_path("scripts/merchant.lua"), "merchant.lua");
+        assert_eq!(
+            script_bridge_path("scripts/poi/song-seed.lua"),
+            "poi/song-seed.lua"
+        );
+        assert_eq!(script_bridge_path("merchant.lua"), "merchant.lua");
+    }
 
     #[test]
     fn syntax_check_accepts_valid_lua() {

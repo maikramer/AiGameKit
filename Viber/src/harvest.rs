@@ -419,6 +419,12 @@ pub fn grant_loot(
 
 pub struct HarvestPlugin;
 
+/// Nomes dos props já colhidos. O runtime volta a spawnar o XML no load e
+/// na troca de cena; sem este conjunto a floresta e a pedra renasciam com
+/// o loot ainda no cofre.
+#[derive(Resource, Default, Debug)]
+pub struct HarvestedNodes(pub std::collections::HashSet<String>);
+
 /// Conjunto dos sistemas de colheita — permite ordenar OUTROS sistemas contra
 /// eles (ex.: o melee) sem re-adicionar `harvest_context_system` (adicionar
 /// duas vezes o mesmo fn cria duas instâncias no schedule e o pânico
@@ -433,6 +439,7 @@ impl bevy::app::Plugin for HarvestPlugin {
         app.init_resource::<HarvestContext>()
             .init_resource::<PendingHarvest>()
             .init_resource::<HarvestTool>()
+            .init_resource::<HarvestedNodes>()
             .init_resource::<UiPrompt>()
             .add_message::<SfxEvent>()
             .add_message::<DamageNumberEvent>()
@@ -455,7 +462,8 @@ impl bevy::app::Plugin for HarvestPlugin {
             .add_systems(
                 bevy::app::Update,
                 (hit_shake_system, debris_chunk_system, tree_fall_system).in_set(HarvestSet),
-            );
+            )
+            .add_systems(bevy::app::Update, reap_harvested.after(HarvestSet));
     }
 }
 
@@ -694,6 +702,37 @@ pub fn harvest_attack_system(
     };
 }
 
+/// Apaga props colhidos que o XML voltou a spawnar (load ou troca de cena).
+///
+/// No frame do corte o conjunto muda mas o `Destructible` ainda está na
+/// entidade (os comandos da queda aplicam no fim do stage) — esperar um
+/// frame deixa a animação correr. Troca de cena spawna o prop fresco: aí
+/// o corte é imediato.
+fn reap_harvested(
+    harvested: Res<HarvestedNodes>,
+    epoch: Option<Res<crate::scene_loader::SceneEpoch>>,
+    mut delay: Local<bool>,
+    mut seen_epoch: Local<u64>,
+    mut commands: Commands,
+    named: Query<(Entity, &Name), With<Destructible>>,
+) {
+    let epoch_now = epoch.as_deref().map(|marker| marker.0).unwrap_or(0);
+    let scene_changed = epoch_now != *seen_epoch;
+    *seen_epoch = epoch_now;
+    if scene_changed || *delay {
+        *delay = false;
+        for (entity, name) in &named {
+            if harvested.0.contains(name.as_str()) {
+                commands.entity(entity).try_despawn();
+            }
+        }
+        return;
+    }
+    if harvested.is_changed() {
+        *delay = true;
+    }
+}
+
 // ── 4. impacto ──────────────────────────────────────────────────────────
 
 /// Conduz [`PendingHarvest`]: no impacto, golpe não-final → burst de hit +
@@ -710,6 +749,8 @@ pub fn harvest_impact_system(
     darkens: Query<&Darken>,
     mut vault: Option<ResMut<Vault>>,
     mut events: Option<ResMut<crate::luau::ScriptEventQueue>>,
+    names: Query<&Name>,
+    mut harvested: ResMut<HarvestedNodes>,
     mut fx: HarvestFx,
 ) {
     if !pending.active {
@@ -746,6 +787,12 @@ pub fn harvest_impact_system(
     let breaking = destructible.hits_taken + 1 >= destructible.hits;
     let data = destructible.clone();
     if breaking {
+        // O nome entra JÁ (o despawn/toco é comando, visível no frame
+        // seguinte). O `reap_harvested` espera um frame para não cortar a
+        // queda; no load e na troca de cena apaga o prop renascido do XML.
+        if let Ok(name) = names.get(entity) {
+            harvested.0.insert(name.as_str().to_string());
+        }
         // FX de quebra por estilo — no Fall a entidade MANTÉM-SE como toco
         // (devolve false); burst/shatter despawnam (true).
         let _despawned = break_prop(

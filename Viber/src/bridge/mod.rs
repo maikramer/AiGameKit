@@ -269,7 +269,7 @@ impl Plugin for BridgePlugin {
             .add_systems(bevy::app::PostUpdate, events::collect_bridge_events)
             .add_systems(bevy::app::PostUpdate, frame_stepper_system)
             // Depois dos sistemas de input (processam mensagens) e ANTES do
-            // ui_focus_system (que lê just_pressed e a posição do cursor).
+            // interaction_from_picking (que lê just_pressed e a cadeia de picking).
             .add_systems(
                 PreUpdate,
                 deferred_mouse_release
@@ -341,7 +341,7 @@ struct PendingMouseClick {
 /// Faz o RELEASE de um clique sintético no frame SEGUINTE ao press.
 ///
 /// press + release no MESMO frame eram invisíveis para a UI: o
-/// `ui_focus_system` (PreUpdate) marca `Pressed` e, vendo `just_released`,
+/// `interaction_from_picking` (PreUpdate) marca `Pressed` e, vendo `just_released`,
 /// agenda o reset — quando `collect_ui_clicks` (Update) corre, o clique já
 /// desapareceu. Com o release um frame depois, `Pressed` sobrevive um Update
 /// e o script vê `viber.ui.clicked(id)`.
@@ -353,7 +353,7 @@ fn deferred_mouse_release(
     cursor_moved: Option<MessageWriter<CursorMoved>>,
     mut window_events: Option<MessageWriter<bevy::window::WindowEvent>>,
 ) {
-    // 1) PRESS injectado AQUI: corre antes do ui_focus_system (PreUpdate) e
+    // 1) PRESS injectado AQUI: corre antes do interaction_from_picking (PreUpdate) e
     //    depois dos sistemas de input — o focus vê o just_pressed NESTE frame.
     //    Sem janela (headless) as mensagens saem na mesma; só a posição
     //    física do cursor é que não tem onde escrever. Apps sem input/mensagens

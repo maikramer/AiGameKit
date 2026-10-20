@@ -8,12 +8,13 @@
 //! (`swing_track_system`) o golpe CLEAVE tudo num arco à frente (hemisfério
 //! frontal; finisher alarga para ~140°), aplica chain (×1/×1.15/×1.7 no 3.º),
 //! bónus de combo (+2 %/hit, cap 30 %), backstab ×2, crítico ×2 e execute
-//! (<15 % HP cai na hora), com knockback, hit-stop, camera shake, partículas
-//! e números de dano.
+//! (<15 % HP cai na hora), com um recuo curto, hit-stop breve e um número
+//! de dano. O 3.º golpe pesa no dano — não num letreiro nem num anel no chão.
 //!
-//! Duas contagens distintas (igual à referência):
-//! - **Chain** ([`AttackChain`]): avança POR PRESS, janela curta
-//!   ([`CHAIN_WINDOW`]); o passo 2 é o finisher.
+//! Duas contagens distintas:
+//! - **Chain** ([`AttackChain`]): três cortes fixos (sworda → swordb →
+//!   swordc). O seguinte só começa quando o clip anterior acaba; um press
+//!   a meio entra na fila, não interrompe. O passo 2 é o finisher.
 //! - **Combo counter** ([`crate::skills::ComboState`]): conta HITS ACERTADOS
 //!   (janela [`COMBO_WINDOW_SECS`]) e dá bónus de dano; reseta quando o herói
 //!   leva dano.
@@ -27,8 +28,7 @@ use bevy::prelude::*;
 use bevy::time::{Real, Virtual};
 
 use crate::animation::{
-    ACTION_BLEND, ACTION_INTERRUPT_BLEND, CharacterAnimator, PlayerQuery, play_action,
-    play_action_scaled,
+    ACTION_BLEND, CharacterAnimator, PlayerQuery, play_action, play_action_scaled,
 };
 use crate::luau::{LuaScriptRef, ScriptInteraction, ScriptToast};
 use crate::player::Player;
@@ -44,7 +44,8 @@ pub const LOCK_RANGE: f32 = 3.6;
 /// Dano base do golpe do herói — `BASE_MELEE_DAMAGE` 16 sobre HPs de
 /// Viber (25 de histórico do port); mantém o TTK do mundo.
 pub const MELEE_DAMAGE: f32 = 25.0;
-/// Cadência de swings (s) — `SWING_COOLDOWN` 0.36.
+/// Piso da ocupação do rig quando o clip não tem duração (s). Com clip,
+/// a cadência é o comprimento do clip — não este valor.
 pub const MELEE_COOLDOWN: f32 = 0.36;
 /// Diferença de altura aceitável (m) — `MELEE_VERTICAL` (sem hits através de
 /// pisos).
@@ -70,7 +71,8 @@ pub const IMPACT_FRACTIONS: [(&str, f32); 5] = [
 pub const FALLBACK_IMPACT_DELAY: f32 = 0.22;
 /// Whoosh toca isto antes do impacto (s).
 pub const WHOOSH_LEAD: f32 = 0.12;
-/// Velocidade de playback do clip de ataque (±jitter 8 %).
+/// Velocidade de playback do clip de ataque. Fixa: jitter fazia o mesmo
+/// corte durar tempos diferentes conforme o frame do press.
 pub const ATTACK_TIME_SCALE: f32 = 1.4;
 /// Lunge: distância de paragem em relação ao alvo (m).
 pub const LUNGE_STANDOFF: f32 = 1.2;
@@ -84,12 +86,14 @@ pub const LUNGE_SPEED_CAP: f32 = 9.0;
 /// 14: o herói aponta ao alvo num quarto de segundo em vez de meio —
 /// "apontar para ele" tem de ler no frame do press.
 pub const FACE_TURN_RATE: f32 = 14.0;
-/// Buffer de press durante o cooldown (s): mash [J] dispara o golpe em
-/// atraso assim que a cadência deixa, em vez de engolir o press.
-pub const ATTACK_BUFFER: f32 = 0.25;
+/// Folga depois do fim do clip em que o próximo golpe ainda sobe na chain (s).
+/// A chain em si dura o clip inteiro mais esta folga — mash não a encolhe.
+pub const CHAIN_LINK: f32 = 0.45;
+/// Piso da janela da chain (s), desde o início do corte. Um clip curto não
+/// faz a sequência cair antes do jogador carregar o golpe seguinte.
+pub const CHAIN_WINDOW_FLOOR: f32 = 1.1;
 
-/// Chain de golpes por press — `CHAIN_WINDOW` 1.1 s, mults [1, 1.15, 1.7].
-pub const CHAIN_WINDOW: f32 = 1.1;
+/// Chain de golpes — mults [1, 1.15, 1.7] nos passos 0, 1 e 2.
 pub const CHAIN_MULTS: [f32; 3] = [1.0, 1.15, 1.7];
 /// Multiplicador do combo counter por hit — 2 %/hit.
 pub const COMBO_BONUS_PER_HIT: f32 = 0.02;
@@ -107,59 +111,55 @@ pub const EXECUTE_HP_FRAC: f32 = 0.15;
 pub const KILL_XP: u32 = 15;
 /// Segundos que o cadáver dura (animação de morte) antes de sumir.
 pub const CORPSE_LIFETIME: f32 = 1.4;
-/// Hit-stop por classe de golpe (s @ escala [`HIT_STOP_SCALE`]) — amplificado
-/// (0.07/0.11/0.12 não lia): a pausa É a sensação de impacto.
-pub const HIT_STOP_NORMAL: f32 = 0.09;
-pub const HIT_STOP_HEAVY: f32 = 0.13;
-pub const HIT_STOP_KILL: f32 = 0.16;
-/// Escala do mundo durante o hit-stop — 4 %: congelado a olhar.
-pub const HIT_STOP_SCALE: f32 = 0.04;
+/// Hit-stop por classe de golpe (s @ escala [`HIT_STOP_SCALE`]). Um soluço,
+/// não um freeze-frame: o peso vem do timing do clip e do número, não de
+/// parar o mundo.
+pub const HIT_STOP_NORMAL: f32 = 0.05;
+pub const HIT_STOP_HEAVY: f32 = 0.07;
+pub const HIT_STOP_KILL: f32 = 0.09;
+/// Escala do mundo durante o hit-stop. 0.04 deixava o frame congelado.
+pub const HIT_STOP_SCALE: f32 = 0.45;
 /// Pesos de camera shake (trauma 0..1): golpe / finisher / crítico / abate.
-/// Amplificados (os antigos 0.22–0.5 tremiam pouco: amplitude = trauma²).
-pub const SHAKE_HIT: f32 = 0.30;
-pub const SHAKE_FINISHER: f32 = 0.48;
-pub const SHAKE_CRIT: f32 = 0.52;
-pub const SHAKE_KILL: f32 = 0.68;
-/// Escala de shake pelo COMBO: +trauma por hit na janela (cap) — o combo
-/// acende. Soma a [`SHAKE_HIT`] etc.
-pub const COMBO_SHAKE_PER_HIT: f32 = 0.02;
-pub const COMBO_SHAKE_CAP: f32 = 0.08;
-/// Knockback base em metros de deslocamento (crit 1.5, finisher 1.3) — um
-/// pouco acima do antigo 0.8/1.3/1.1: "recua levemente" tem de se ver.
-pub const KNOCKBACK_METERS: f32 = 1.0;
-pub const KNOCKBACK_CRIT_METERS: f32 = 1.5;
-pub const KNOCKBACK_FINISHER_METERS: f32 = 1.3;
+/// A amplitude visível é trauma² × o offset máximo da câmara — estes valores
+/// abanam pouco. O exagero antigo vinha de os somar a anéis e letreiros.
+pub const SHAKE_HIT: f32 = 0.18;
+pub const SHAKE_FINISHER: f32 = 0.26;
+pub const SHAKE_CRIT: f32 = 0.28;
+pub const SHAKE_KILL: f32 = 0.36;
+/// Escala de shake pelo combo: +trauma por hit na janela (cap).
+pub const COMBO_SHAKE_PER_HIT: f32 = 0.01;
+pub const COMBO_SHAKE_CAP: f32 = 0.04;
+/// Knockback em metros de deslocamento. Um passo atrás, não um lançamento.
+pub const KNOCKBACK_METERS: f32 = 0.45;
+pub const KNOCKBACK_CRIT_METERS: f32 = 0.65;
+pub const KNOCKBACK_FINISHER_METERS: f32 = 0.55;
 
 // ── solavanco direcional + punch de pós-processo por classe de golpe ──
 /// Impulso do kick de câmara na direção da mira (m/s; mola em `camera.rs`).
-pub const KICK_HIT: f32 = 1.2;
-pub const KICK_CRIT: f32 = 2.0;
-pub const KICK_KILL: f32 = 2.6;
-pub const KICK_FINISHER: f32 = 2.2;
-/// Componente vertical do kick (a imagem "salta" com o golpe).
-pub const KICK_UP: f32 = 0.3;
+pub const KICK_HIT: f32 = 0.4;
+pub const KICK_CRIT: f32 = 0.7;
+pub const KICK_KILL: f32 = 0.9;
+pub const KICK_FINISHER: f32 = 0.6;
+/// Componente vertical do kick.
+pub const KICK_UP: f32 = 0.08;
 /// Punch de pós-processo (stops de clareza + bloom): hit normal.
-pub const PUNCH_HIT_STOPS: f32 = 0.25;
-pub const PUNCH_HIT_BLOOM: f32 = 0.10;
+pub const PUNCH_HIT_STOPS: f32 = 0.06;
+pub const PUNCH_HIT_BLOOM: f32 = 0.02;
 /// Punch do crítico/finisher.
-pub const PUNCH_HEAVY_STOPS: f32 = 0.5;
-pub const PUNCH_HEAVY_BLOOM: f32 = 0.2;
-/// Punch do abate — o frame do KO clareia e floresce.
-pub const PUNCH_KILL_STOPS: f32 = 0.7;
-pub const PUNCH_KILL_BLOOM: f32 = 0.28;
-/// FOV kick do finisher/abate (graus; o hit normal não precisa).
-pub const FOV_KICK_HEAVY: f32 = 3.0;
-/// Raio do anel de choque no ABATE (m) — o KO marca o lugar no chão.
-pub const KILL_RING_RADIUS: f32 = 2.2;
-/// Raio do anel de choque do finisher aterra (m) — o slam da chain.
-pub const FINISHER_RING_RADIUS: f32 = 3.2;
+pub const PUNCH_HEAVY_STOPS: f32 = 0.12;
+pub const PUNCH_HEAVY_BLOOM: f32 = 0.05;
+/// Punch do abate.
+pub const PUNCH_KILL_STOPS: f32 = 0.16;
+pub const PUNCH_KILL_BLOOM: f32 = 0.06;
+/// FOV kick do finisher/crítico/abate (graus). O hit normal não mexe no FOV.
+pub const FOV_KICK_HEAVY: f32 = 1.2;
 
 /// Pool de clips de ataque por arma (índice em [`WEAPON_TABLE`]) — o herói
 /// tem os clips do pack Quaternius; espada e machado partilham o pool de
 /// 4 cortes (igual ao `ATTACK_POOLS`), a lança tem o seu.
 pub const ATTACK_POOLS: [&[&str]; 3] = [
-    &["sword", "sworda", "swordb", "swordc"],
-    &["sword", "sworda", "swordb", "swordc"],
+    &["sworda", "swordb", "swordc"],
+    &["sworda", "swordb", "swordc"],
     &["spear"],
 ];
 
@@ -203,17 +203,16 @@ pub fn corpse_sink_offset(progress: f32) -> f32 {
 #[derive(Debug, Default, Resource)]
 pub struct SwingClock(pub Option<f64>);
 
-/// Chain de ataque por press: passo 0..2 com janela [`CHAIN_WINDOW`].
+/// Chain de ataque: passo 0..2. O timer conta o clip em curso mais a folga
+/// [`CHAIN_LINK`]; esgotado, o passo seguinte volta ao primeiro corte.
 #[derive(Debug, Clone, Resource, Default)]
 pub struct AttackChain {
     pub step: u32,
     pub timer: f32,
-    /// Índice do último clip tocado no pool (para não repetir).
-    pub last_clip: Option<usize>,
-    /// Timestamp do último swing (elapsed da engine, s) — a cadência.
+    /// Timestamp do último swing (elapsed da engine, s).
     pub last_swing: f64,
-    /// Até quando o clip de ataque atual "possui" o rig (elapsed, s) — um
-    /// press dentro disto interrompe um swing e pede blend mais longo.
+    /// Até quando o clip de ataque possui o rig (elapsed, s). Um press
+    /// antes disto entra na fila; o golpe seguinte espera este instante.
     pub anim_until: f64,
 }
 
@@ -238,10 +237,11 @@ pub struct PendingSwing {
     pub finisher: bool,
 }
 
-/// Press guardado durante o cooldown ([`ATTACK_BUFFER`]) — mash fluido.
+/// Um golpe em fila. No máximo um: presses extra enquanto o clip corre
+/// não acumulam nem aceleram a chain.
 #[derive(Debug, Clone, Resource, Default)]
 pub struct AttackBuffer {
-    pub timer: f32,
+    pub queued: bool,
 }
 
 /// Hit-stop em curso (tempo REAL; o resto do mundo corre a
@@ -299,18 +299,21 @@ pub fn combo_bonus(hits: u32) -> f32 {
     1.0 + (hits as f32 * COMBO_BONUS_PER_HIT).min(COMBO_BONUS_CAP)
 }
 
-/// Escolhe o clip do pool evitando repetir o último (modo `random`:
-/// uniforme sem repetição imediata). `roll` ∈ [0,1).
-pub fn pick_combo_clip(pool: &[&str], last: Option<usize>, roll: f32) -> usize {
-    if pool.is_empty() {
-        return 0;
+/// Índice do clip da chain: passo 0, 1, 2 → primeiro, segundo, terceiro
+/// corte do pool. Pool vazio devolve 0. A lança (pool de 1) fica sempre
+/// no mesmo clip.
+pub fn combo_clip_index(step: u32, pool_len: usize) -> usize {
+    if pool_len == 0 {
+        0
+    } else {
+        step as usize % pool_len
     }
-    let roll = roll.clamp(0.0, 0.999_999);
-    let mut idx = (roll * pool.len() as f32) as usize % pool.len();
-    if Some(idx) == last {
-        idx = (idx + 1) % pool.len();
-    }
-    idx
+}
+
+/// O rig está ocupado por um swing: impacto ainda por aterrar, ou o clip
+/// ainda não acabou. O press seguinte espera.
+pub fn swing_busy(now: f64, anim_until: f64, pending: bool) -> bool {
+    pending || now < anim_until
 }
 
 /// Caminho para a frente do herói — CONVENÇÃO DA PIPELINE: o modelo olha
@@ -550,9 +553,6 @@ pub fn player_melee_attack(
     >,
 ) {
     // Janelas correm SEMPRE (mesmo com menu aberto, o combo morre à mesma).
-    if buffer.timer > 0.0 {
-        buffer.timer = (buffer.timer - time.delta_secs()).max(0.0);
-    }
     fx.combo.window -= time.delta_secs();
     if fx.combo.window <= 0.0 && fx.combo.hits > 0 {
         fx.combo.hits = 0;
@@ -570,8 +570,9 @@ pub fn player_melee_attack(
         *last_hp = Some(health.current);
     }
     // Menu aberto consome [J]: confirmava compra/teleporte E desencadeava
-    // o melee por trás.
+    // o melee por trás. A fila também morre — não dispara ao fechar o menu.
     if menus.any() {
+        buffer.queued = false;
         return;
     }
     // Herói a 0 HP (a cair em combate, até ao respawn) não ataca.
@@ -579,21 +580,19 @@ pub fn player_melee_attack(
         .single()
         .is_ok_and(|(_, _, _, health)| health.is_some_and(|h| h.current <= 0.0))
     {
+        buffer.queued = false;
         return;
     }
     let j_pressed = keys.just_pressed(KeyCode::KeyJ);
-    // [R] é o golpe forte radial (skills.rs) — o básico fica em [J] + clique
-    // esquerdo. Um press guardado no buffer durante o cooldown também conta
-    // como triggered — sem isto o mash [J] morria no buffer sem nunca
-    // disparar (o timer expirava e o input perdia-se).
-    let triggered = mouse.just_pressed(MouseButton::Left) || j_pressed || buffer.timer > 0.0;
-    if !triggered {
-        return;
-    }
+    let clicked = mouse.just_pressed(MouseButton::Left);
+    let pressed = j_pressed || clicked;
     // Supressão colheita-mele: com alvo de colheita NATIVO (harvest.rs) o
-    // press inteiro (J/clique) pertence à colheita — antes de qualquer
-    // buffer/chain, o melee nunca co-dispara com a picareta/machadinha.
+    // press inteiro (J/clique) pertence à colheita — a fila de golpes não
+    // guarda esse press.
     if harvest.target.is_some() {
+        if pressed {
+            buffer.queued = false;
+        }
         return;
     }
     // J contextual: se há alvo de colheita (ScriptInteraction com tecla J) no
@@ -609,14 +608,18 @@ pub fn player_melee_attack(
         }
     }
     let elapsed = time.elapsed_secs_f64();
-    let can_fire =
-        fx.chain.last_swing <= 0.0 || elapsed - fx.chain.last_swing >= MELEE_COOLDOWN as f64;
-    if !can_fire {
-        // Mash: guarda o press — dispara sozinho quando a cadência deixa.
-        buffer.timer = ATTACK_BUFFER;
+    // O clip anterior tem de acabar. Um press a meio fica na fila (um só);
+    // mash não encurta o corte nem troca o clip a meio.
+    if swing_busy(elapsed, fx.chain.anim_until, fx.pending.active) {
+        if pressed {
+            buffer.queued = true;
+        }
         return;
     }
-    buffer.timer = 0.0;
+    if !pressed && !buffer.queued {
+        return;
+    }
+    buffer.queued = false;
     fx.chain.last_swing = elapsed;
     let Ok((_, player, _, _)) = players.single() else {
         return;
@@ -651,23 +654,14 @@ pub fn player_melee_attack(
     } else {
         0
     };
-    fx.chain.timer = CHAIN_WINDOW;
     let finisher = fx.chain.step >= 2;
 
-    // ── clip do pool (random sem repetir) + playback a 1.4× ±8 % ──
+    // Corte fixo do passo: 0 sworda, 1 swordb, 2 swordc. Velocidade fixa.
     fx.swing_clock.0 = Some(elapsed);
     let pool = ATTACK_POOLS[held.idx.min(ATTACK_POOLS.len() - 1)];
-    let clip_idx = pick_combo_clip(pool, fx.chain.last_clip, pseudo_roll(&time));
-    fx.chain.last_clip = Some(clip_idx);
+    let clip_idx = combo_clip_index(fx.chain.step, pool.len());
     let clip_name = pool.get(clip_idx).copied().unwrap_or("attack");
-    let attack_speed = ATTACK_TIME_SCALE * (0.92 + 0.16 * pseudo_roll(&time));
-    // Mash: um press DENTRO do clip anterior interrompe o swing — crossfade
-    // mais longo para os dois cortes interpolarem (leitura fluida).
-    let blend = if elapsed < fx.chain.anim_until {
-        ACTION_INTERRUPT_BLEND
-    } else {
-        ACTION_BLEND
-    };
+    let attack_speed = ATTACK_TIME_SCALE;
     let mut clip_duration = 0.0_f32;
     if let Ok(mut animator) = hero_animator.single_mut() {
         let node = animator
@@ -679,13 +673,22 @@ pub fn player_melee_attack(
                 &mut animator,
                 &mut animation_players,
                 node,
-                blend,
+                ACTION_BLEND,
                 false,
                 attack_speed,
             );
         }
     }
-    fx.chain.anim_until = elapsed + clip_duration as f64 / attack_speed as f64;
+    // O rig fica ocupado até o clip acabar (piso curto se o clip não mediu).
+    // A chain sobrevive a esse tempo mais a folga, para o golpe em fila
+    // continuar a sequência em vez de recomeçar.
+    let occupy = if clip_duration > 1e-3 {
+        clip_duration / attack_speed
+    } else {
+        MELEE_COOLDOWN
+    };
+    fx.chain.anim_until = elapsed + occupy as f64;
+    fx.chain.timer = (occupy + CHAIN_LINK).max(CHAIN_WINDOW_FLOOR);
     let delay = if clip_duration > 1e-3 {
         (clip_duration * impact_fraction_for(clip_name) / attack_speed).clamp(0.12, 0.45)
     } else {
@@ -710,7 +713,7 @@ pub fn player_melee_attack(
         finisher,
     };
     fx.trail_window.left = delay + 0.35;
-    fx.trail_window.boost = if finisher { 1.3 } else { 1.0 };
+    fx.trail_window.boost = if finisher { 1.12 } else { 1.0 };
 }
 
 /// ESTÁDIO 2 do melee: conduz o swing pendente frame a frame — re-aponta a
@@ -749,8 +752,6 @@ pub fn swing_track_system(
         ),
         (Without<Player>, Hostile),
     >,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     if !fx.pending.active {
         return;
@@ -887,7 +888,7 @@ pub fn swing_track_system(
             damage *= CRIT_MULTIPLIER;
             crit_any = true;
             // Crítico intensifica o rasto do swing em curso.
-            fx.trail_window.boost = fx.trail_window.boost.max(1.3);
+            fx.trail_window.boost = fx.trail_window.boost.max(1.12);
         }
         // Execute: alvo abaixo de 15 % cai na hora (Viber: execute = morte).
         let was_execute = health.current < health.max * EXECUTE_HP_FRAC;
@@ -903,25 +904,13 @@ pub fn swing_track_system(
         let target_pos = transform.translation();
         fx.numbers.write(crate::feedback::DamageNumberEvent {
             position: target_pos + Vec3::Y * 1.8,
-            text: format!(
-                "-{}{}{}",
-                damage as i32,
-                if crit { " CRIT!" } else { "" },
-                if backstab { " x2" } else { "" }
-            ),
-            color: if crit {
-                Color::srgb(1.0, 0.3, 0.1)
+            text: format!("-{}", damage as i32),
+            color: if crit || was_execute {
+                Color::srgb(1.0, 0.55, 0.28)
             } else {
-                Color::srgb(1.0, 0.96, 0.85)
+                Color::srgb(0.96, 0.94, 0.88)
             },
         });
-        if was_execute {
-            fx.numbers.write(crate::feedback::DamageNumberEvent {
-                position: target_pos + Vec3::Y * 2.4,
-                text: "EXECUTADO!".into(),
-                color: Color::srgb(1.0, 0.29, 0.29),
-            });
-        }
         // Hit-flash: o inimigo acende em branco-quente 0,18 s (a leitura de
         // impacto mais legível — o asset é clonado, não o partilhado).
         fx.commands
@@ -951,26 +940,20 @@ pub fn swing_track_system(
                 position: Some(target_pos),
             });
         }
-        // Partículas: pop branco + sparks radiais (crítico dobra, o COMBO
-        // soma +2/hit) + streaks de slash. No ponto do toque, peito/cabeça.
-        let combo_sparks = (fx.combo.hits.min(4) * 2) as usize;
-        crate::particles::spawn_burst(
-            &mut fx.commands,
-            &hit_flash_spec(),
-            target_pos + Vec3::Y * 1.25,
-            if crit { 24 } else { 12 },
-        );
+        // Faíscas no ponto de contacto. O crítico acrescenta um pouco;
+        // o combo não multiplica o frame.
+        let combo_sparks = fx.combo.hits.min(3) as usize;
         crate::particles::spawn_burst(
             &mut fx.commands,
             &hit_sparks_spec(),
-            target_pos + Vec3::Y * 1.0,
-            if crit { 40 } else { 22 } + combo_sparks,
+            target_pos + Vec3::Y * 1.1,
+            (if crit { 8 } else { 5 }) + combo_sparks,
         );
         crate::particles::spawn_burst(
             &mut fx.commands,
-            &impact_spec("slash", (0.6, 1.1), (0.14, 0.26), (0.4, 1.2), None),
-            target_pos + Vec3::Y * 1.2,
-            if crit { 6 } else { 4 },
+            &impact_spec("slash", (0.18, 0.36), (0.08, 0.14), (0.25, 0.7), None),
+            target_pos + Vec3::Y * 1.15,
+            if crit { 2 } else { 1 },
         );
         // Knockback na direção do golpe; bosses têm poise (não empurra).
         let is_boss = script
@@ -994,29 +977,6 @@ pub fn swing_track_system(
                 ));
         }
         if killed {
-            // Explosão de morte: fogo + fumo escuro (contraste contra o céu)
-            // — o abate tem de fechar com um ponto fulgurante, não sumir-se.
-            crate::particles::spawn_burst(
-                &mut fx.commands,
-                &impact_spec("explosion", (0.55, 1.2), (0.3, 0.6), (3.0, 7.0), None),
-                target_pos + Vec3::Y * 1.0,
-                20,
-            );
-            crate::particles::spawn_burst(
-                &mut fx.commands,
-                &impact_spec("smoke", (0.6, 1.3), (0.8, 1.6), (0.8, 1.8), None),
-                target_pos + Vec3::Y * 1.3,
-                9,
-            );
-            // Onda de choque no chão do abate — o KO marca o lugar.
-            crate::impact::spawn_impact_ring(
-                &mut fx.commands,
-                &mut meshes,
-                &mut materials,
-                target_pos.with_y(target_pos.y + 0.08),
-                KILL_RING_RADIUS,
-                Color::srgb(1.0, 0.8, 0.55),
-            );
             kills.push((entity, script, target_pos));
         } else {
             info!(target: "viber::combat", "hit {entity:?}");
@@ -1065,9 +1025,9 @@ pub fn swing_track_system(
                 PUNCH_HIT_BLOOM
             },
         );
-        // FOV kick do impacto (land/kill): punch de +5° que decai em 0,3 s;
-        // finisher/abate somam o peso extra pesado.
-        crate::camera::fov_kick(&mut camera_fx, crate::camera::FOV_KICK_IMPACT + fov);
+        if fov > 0.0 {
+            crate::camera::fov_kick(&mut camera_fx, fov);
+        }
         // Aggro-chain: aliados a 15 m do alvo batido acordam.
         if let Some(position) = first_hit_pos {
             fx.alerts.write(crate::feedback::AttackAlert { position });
@@ -1090,38 +1050,6 @@ pub fn swing_track_system(
                 &mut fx.events,
             );
         }
-    }
-    if finisher {
-        // Shockwave do finisher + floating text (sempre que o finisher aterra,
-        // acerte ou não — é o "GOLPE FINAL!" do combat-mechanics). Explosão
-        // grande + poeira levantada do chão para peso + anel de choque a
-        // ondular o chão.
-        let position = origin + aim * 1.2 + Vec3::Y * 0.3;
-        crate::particles::spawn_burst(
-            &mut fx.commands,
-            &impact_spec("explosion", (0.55, 1.15), (0.35, 0.65), (3.5, 8.0), None),
-            position,
-            20,
-        );
-        crate::particles::spawn_burst(
-            &mut fx.commands,
-            &impact_spec("ground-dust", (0.5, 1.0), (0.6, 1.2), (1.0, 2.4), None),
-            position.with_y(origin.y + 0.1),
-            8,
-        );
-        crate::impact::spawn_impact_ring(
-            &mut fx.commands,
-            &mut meshes,
-            &mut materials,
-            origin.with_y(origin.y + 0.08),
-            FINISHER_RING_RADIUS,
-            Color::srgb(1.0, 0.78, 0.45),
-        );
-        fx.numbers.write(crate::feedback::DamageNumberEvent {
-            position: position + Vec3::Y * 1.3,
-            text: "GOLPE FINAL!".into(),
-            color: Color::srgb(1.0, 0.54, 0.16),
-        });
     }
 }
 
@@ -1174,21 +1102,9 @@ pub fn impact_spec(
     }
 }
 
-/// Núcleo branco-quente do impacto (o "pop" que lê a distância) — R2: o
-/// pop domina o enquadramento fechado, partículas grandes e densas.
-pub fn hit_flash_spec() -> crate::recipes::ParticleSpec {
-    impact_spec(
-        "sparkle",
-        (0.45, 0.95),
-        (0.14, 0.26),
-        (0.4, 1.4),
-        Some([1.0, 0.97, 0.85]),
-    )
-}
-
-/// Sparks do impacto: densos e vivos (primeiro plano do frame).
+/// Sparks do impacto: poucas, pequenas, curtas.
 pub fn hit_sparks_spec() -> crate::recipes::ParticleSpec {
-    impact_spec("sparks", (0.12, 0.28), (0.3, 0.6), (3.0, 7.0), None)
+    impact_spec("sparks", (0.04, 0.1), (0.16, 0.32), (1.4, 3.2), None)
 }
 
 /// Vira o MODELO para `dir` (XZ) de uma vez (slerp com fator fixo) — snap de
@@ -1626,21 +1542,15 @@ fn fireball_step(
             // o projétil somia sem um único pixel de fogo).
             crate::particles::spawn_burst(
                 &mut commands,
-                &impact_spec("explosion", (0.5, 1.1), (0.3, 0.65), (3.0, 7.5), None),
+                &impact_spec("explosion", (0.22, 0.45), (0.16, 0.32), (1.4, 3.2), None),
                 center + Vec3::Y * 1.0,
-                16,
+                6,
             );
             crate::particles::spawn_burst(
                 &mut commands,
                 &hit_sparks_spec(),
                 center + Vec3::Y * 1.0,
-                12,
-            );
-            crate::particles::spawn_burst(
-                &mut commands,
-                &hit_flash_spec(),
-                center + Vec3::Y * 1.2,
-                8,
+                5,
             );
             // Peso de impacto global (classe hit normal).
             request_hit_stop(&mut fx.hit_stop, HIT_STOP_NORMAL);
@@ -1737,18 +1647,26 @@ mod tests {
     }
 
     #[test]
-    fn test_pick_combo_clip_never_repeats_last() {
-        let pool = ["sword", "sworda", "swordb", "swordc"];
-        // Sem histórico: devolve o sorteio puro.
-        assert_eq!(pick_combo_clip(&pool, None, 0.0), 0);
-        assert_eq!(pick_combo_clip(&pool, None, 0.9), 3);
-        // Repetição imediata é empurrada para o próximo slot.
-        assert_eq!(pick_combo_clip(&pool, Some(2), 0.5), 3);
-        // Wrap-around: último → primeiro.
-        assert_eq!(pick_combo_clip(&pool, Some(3), 0.9), 0);
-        // Pool de 1 (lança) nunca varia nem pânica.
-        assert_eq!(pick_combo_clip(&["spear"], Some(0), 0.3), 0);
-        assert_eq!(pick_combo_clip(&[], None, 0.3), 0);
+    fn test_combo_clip_follows_the_chain_step() {
+        // Espada: passo 0, 1, 2 são os três cortes, por esta ordem.
+        assert_eq!(combo_clip_index(0, 3), 0);
+        assert_eq!(combo_clip_index(1, 3), 1);
+        assert_eq!(combo_clip_index(2, 3), 2);
+        // Lança: um clip só, qualquer passo.
+        assert_eq!(combo_clip_index(0, 1), 0);
+        assert_eq!(combo_clip_index(2, 1), 0);
+        assert_eq!(combo_clip_index(0, 0), 0);
+    }
+
+    #[test]
+    fn test_swing_busy_until_the_clip_ends() {
+        assert!(!swing_busy(1.0, 0.0, false), "sem swing");
+        assert!(swing_busy(1.0, 1.5, false), "clip ainda a correr");
+        assert!(
+            !swing_busy(1.5, 1.5, false),
+            "no instante em que acaba, livre"
+        );
+        assert!(swing_busy(2.0, 1.0, true), "impacto ainda pendente");
     }
 
     #[test]

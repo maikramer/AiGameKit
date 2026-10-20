@@ -30,9 +30,18 @@ pub struct BrushStrengthSlider;
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct BrushLayerSelect;
 
+/// A row that hosts the mode dropdown (the select widget is [`BrushModeSelect`]).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct BrushModeRow;
+
 /// O dropdown do MODO (subir/descer/…/ruído) — alternativa às teclas 1-7.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct BrushModeSelect;
+
+/// O dropdown do alvo (material | scatter). Distinto da row: o mesmo marcador
+/// nos dois fazia `single()` falhar e o select deixava de ser reconstruído.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct BrushTargetSelect;
 
 /// O ALVO do pincel: material do terreno ou um `<Scatter>` (vegetação).
 /// `None` = material; `Some(selector)` = pincel de vegetação do scatter.
@@ -83,7 +92,13 @@ impl Plugin for BrushPanelPlugin {
                     if modes.get(event.source).is_err() {
                         return;
                     }
-                    let mode = match rows.get(event.value).map(|index| index.0).unwrap_or(0) {
+                    let index = rows.get(event.value).map(|row| row.0).unwrap_or(0);
+                    // 6 = pintar material (a tecla 6). Os outros limpam a pintura.
+                    if index >= 6 {
+                        brush.paint = Some(brush.paint.unwrap_or(0));
+                        return;
+                    }
+                    brush.mode = match index {
                         0 => BrushMode::Raise,
                         1 => BrushMode::Lower,
                         2 => BrushMode::Smooth,
@@ -91,8 +106,22 @@ impl Plugin for BrushPanelPlugin {
                         4 => BrushMode::Crater,
                         _ => BrushMode::Noise,
                     };
-                    brush.mode = mode;
                     brush.paint = None;
+                },
+            )
+            .add_observer(
+                |event: On<ValueChange<Entity>>,
+                 selects: Query<(), With<BrushTargetSelect>>,
+                 rows: Query<&OptionIndex>,
+                 scatters: Res<BrushScatters>,
+                 mut target: ResMut<BrushTarget>| {
+                    if selects.get(event.source).is_err() {
+                        return;
+                    }
+                    let index = rows.get(event.value).map(|index| index.0).unwrap_or(0);
+                    target.0 = index
+                        .checked_sub(1)
+                        .and_then(|index| scatters.0.get(index).cloned());
                 },
             )
             .add_observer(
@@ -140,7 +169,7 @@ pub fn brush_panel() -> impl Scene {
             Children [
                 @caption(t(Lang::default(), StrKey::BrushMode)) LangLabel(StrKey::BrushMode) Pickable::IGNORE
                 --
-                BrushModeSelect
+                BrushModeRow
                 Children []
             ]
             --
@@ -257,7 +286,8 @@ fn sync_brush_panel(
     brush: Res<TerrainBrush>,
     lang: Res<Lang>,
     scatters: Res<BrushScatters>,
-    mode_rows: Query<Entity, With<BrushModeSelect>>,
+    mode_rows: Query<Entity, With<BrushModeRow>>,
+    target: Res<BrushTarget>,
     target_rows: Query<Entity, With<BrushTargetRow>>,
     mut commands: Commands,
     sliders: Query<(Entity, &SliderValue)>,
@@ -278,14 +308,19 @@ fn sync_brush_panel(
             BrushMode::Crater,
             BrushMode::Noise,
         ];
-        let options: Vec<&str> = modes
+        let mut options: Vec<&str> = modes
             .iter()
             .map(|mode| super::terrain_tool::brush_mode_name(*lang, *mode))
             .collect();
-        let current = modes
-            .iter()
-            .position(|mode| *mode == brush.mode)
-            .unwrap_or(0);
+        options.push(pick(*lang, "pintar", "paint"));
+        let current = if brush.paint.is_some() {
+            options.len() - 1
+        } else {
+            modes
+                .iter()
+                .position(|mode| *mode == brush.mode)
+                .unwrap_or(0)
+        };
         let list = list_rows_from_strings(options.iter().copied(), Some(current));
         commands
             .spawn_scene(bsn! {
@@ -306,7 +341,14 @@ fn sync_brush_panel(
         for selector in &scatters.0 {
             options.push(selector.trim_start_matches("id=").to_owned());
         }
-        let list = list_rows_from_strings(options.iter().map(|o| o.as_str()), None);
+        let current = target.0.as_ref().and_then(|selected| {
+            scatters
+                .0
+                .iter()
+                .position(|selector| selector == selected)
+                .map(|index| index + 1)
+        });
+        let list = list_rows_from_strings(options.iter().map(|o| o.as_str()), current);
         commands
             .spawn_scene(bsn! {
                 @FeathersSelect {
@@ -315,7 +357,7 @@ fn sync_brush_panel(
                 }
                 Node { width: px(150) }
             })
-            .insert((BrushTargetRow, ChildOf(target_row)));
+            .insert((BrushTargetSelect, ChildOf(target_row)));
     }
     for (entity, value) in sliders {
         let wanted = if radius.contains(entity) {

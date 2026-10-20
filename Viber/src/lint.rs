@@ -920,15 +920,16 @@ fn viber_load_targets(source: &str) -> Vec<String> {
     targets
 }
 
-/// A MESMA sandbox do runtime (`luau/host.rs`): sem `PACKAGE` (um `require`
-/// num script do jogo é sintaxe válida Luau, mas não corre aqui — compilamos,
-/// não executamos).
+/// A MESMA sandbox do runtime (`luau/host.rs`): ALL_SAFE no Luau = todas as
+/// libs do Luau (mlua 0.12), sem o `require` novo — um `require` num script
+/// do jogo é sintaxe válida, mas não corre aqui (compilamos, não executamos).
 pub fn lua_sandbox() -> mlua::Lua {
-    mlua::Lua::new_with(
-        mlua::StdLib::ALL_SAFE ^ mlua::StdLib::PACKAGE,
-        mlua::LuaOptions::default(),
-    )
-    .expect("a sandbox Luau compila")
+    let lua = mlua::Lua::new_with(mlua::StdLib::ALL_SAFE, mlua::LuaOptions::default())
+        .expect("a sandbox Luau compila");
+    lua.globals()
+        .set("require", mlua::Value::Nil)
+        .expect("globals da sandbox escrevem");
+    lua
 }
 
 /// Compila um chunk sem o executar. `Err` = erro de SINTAXE (o que interessa

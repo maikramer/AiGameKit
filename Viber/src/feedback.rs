@@ -39,13 +39,11 @@ pub const VENOM_DPS: f32 = 4.0;
 const NUMBER_LIFETIME: f32 = 0.9;
 /// Tamanho do pool de números de dano (slots reutilizados).
 const NUMBER_POOL: usize = 14;
-/// Vida do flash branco-quente no inimigo atingido (s) — o "hit flash" que
-/// faz o impacto LER a distância. R8: 0.45 s — o BOTW mantém o flash ~0.3-0.5;
-/// curto demais e o momento perde-se em slow-mo/capturas.
-pub const HIT_FLASH_SECS: f32 = 0.45;
-/// Pico do emissive do flash — R4: 4.5 (8/14 queimavam a criatura pequena a
-/// silhueta chapada no tonemap do anoitecer); quente, com forma sempre visível.
-const HIT_FLASH_EMISSIVE: f32 = 4.5;
+/// Vida do flash no inimigo atingido (s). Um glint no frame do toque.
+pub const HIT_FLASH_SECS: f32 = 0.16;
+/// Pico do emissive do flash. Alto o bastante para ler, baixo o bastante
+/// para a criatura não virar uma silhueta branca.
+const HIT_FLASH_EMISSIVE: f32 = 1.6;
 /// Teto de materiais clonados por flash (GLBs de personagem têm < 20).
 /// `pub(crate)`: o fade de corpses (`combat.rs`) partilha o mesmo cap.
 pub(crate) const MAX_FLASH_MATS: usize = 24;
@@ -161,16 +159,15 @@ pub fn hit_flash_intensity(timer: f32) -> f32 {
     t * t
 }
 
-/// Tamanho da fonte de um número de dano — críticos e remates dominam (o
-/// `-50 CRIT!` do BOTW é o dobro do hit normal). R2: escala de CINEMA — o
-/// número é parte da composição, não uma anotação.
+/// Tamanho da fonte de um número de dano. O crítico é um pouco maior; o
+/// texto em si fica o número, sem letreiro.
 pub fn number_font_size(text: &str) -> f32 {
     if text.contains("CRIT") {
-        46.0
+        32.0
     } else if text.contains('!') || text.contains("x2") {
-        38.0
+        28.0
     } else {
-        30.0
+        24.0
     }
 }
 
@@ -793,16 +790,17 @@ fn target_expiry_system(
 
 // ── anel de alvo ────────────────────────────────────────────────────────
 
-/// Raios do anel (torus flat no plano XZ): interior/exterior.
-const RING_INNER: f32 = 0.78;
-const RING_OUTER: f32 = 0.94;
+/// Raios do anel (torus no plano XZ): interior/exterior. Tubo fino —
+/// `Torus::new` recebe o buraco e o diâmetro exterior, não o tubo.
+const RING_INNER: f32 = 0.72;
+const RING_OUTER: f32 = 0.78;
 /// Hz do pulso de escala/alpha do anel.
-pub const RING_PULSE_HZ: f32 = 1.6;
-/// Amplitude do pulso de escala (±8 %).
-pub const RING_SCALE_AMPLITUDE: f32 = 0.08;
+pub const RING_PULSE_HZ: f32 = 0.7;
+/// Amplitude do pulso de escala.
+pub const RING_SCALE_AMPLITUDE: f32 = 0.035;
 /// Alpha do anel: mínimo e máximo do pulso.
-const RING_ALPHA_MIN: f32 = 0.40;
-const RING_ALPHA_MAX: f32 = 0.75;
+const RING_ALPHA_MIN: f32 = 0.22;
+const RING_ALPHA_MAX: f32 = 0.42;
 /// Altura do anel acima dos pés do alvo (evita z-fight com o chão).
 const RING_Y_OFFSET: f32 = 0.06;
 
@@ -839,8 +837,8 @@ fn spawn_target_ring_assets(
 ) {
     let mesh = meshes.add(Torus::new(RING_INNER, RING_OUTER));
     let material = materials.add(StandardMaterial {
-        base_color: Color::srgba(1.0, 0.16, 0.12, 0.7),
-        emissive: LinearRgba::rgb(1.1, 0.06, 0.04),
+        base_color: Color::srgba(0.85, 0.22, 0.16, 0.4),
+        emissive: LinearRgba::rgb(0.25, 0.04, 0.03),
         unlit: true,
         alpha_mode: AlphaMode::Blend,
         ..StandardMaterial::default()
@@ -849,9 +847,8 @@ fn spawn_target_ring_assets(
 }
 
 /// Anel de alvo: sempre que [`CombatTarget`] aponta para uma entidade viva,
-/// existe UM torus flat unlit vermelho nos pés dela — pulsa escala (±8 %) e
-/// alpha, segue a posição por frame e despawna quando o alvo se perde
-/// (TTL/morte/alvo outro). Sem texturas: mesh + material emissivo.
+/// existe um anel fino nos pés dela. Pulsa pouco, segue a posição e
+/// despawna quando o alvo se perde (TTL, morte ou outro alvo).
 #[allow(clippy::type_complexity)]
 fn target_ring_system(
     mut commands: Commands,
@@ -1341,11 +1338,11 @@ mod tests {
 
     #[test]
     fn test_number_font_size_ranks_impact() {
-        assert_eq!(number_font_size("-25"), 30.0);
-        assert_eq!(number_font_size("-50 x2"), 38.0, "backstab");
-        assert_eq!(number_font_size("EXECUTADO!"), 38.0);
-        assert_eq!(number_font_size("GOLPE FINAL!"), 38.0);
-        assert_eq!(number_font_size("-63 CRIT!"), 46.0, "crítico domina");
+        assert_eq!(number_font_size("-25"), 24.0);
+        assert_eq!(number_font_size("-50 x2"), 28.0, "backstab");
+        assert_eq!(number_font_size("EXECUTADO!"), 28.0);
+        assert_eq!(number_font_size("GOLPE FINAL!"), 28.0);
+        assert_eq!(number_font_size("-63 CRIT!"), 32.0, "crítico domina");
     }
 
     #[test]
@@ -1439,16 +1436,15 @@ mod tests {
             let (scale, alpha) = target_ring_pulse(i as f32 / 60.0);
             assert!(
                 (1.0 - RING_SCALE_AMPLITUDE..=1.0 + RING_SCALE_AMPLITUDE).contains(&scale),
-                "escala fora de ±8 %: {scale}"
+                "escala fora do pulso: {scale}"
             );
             min_scale = min_scale.min(scale);
             max_scale = max_scale.max(scale);
             min_alpha = min_alpha.min(alpha);
             max_alpha = max_alpha.max(alpha);
         }
-        // O pulso realmente oscila (não é constante).
-        assert!(max_scale - min_scale > 0.1);
-        assert!(max_alpha - min_alpha > 0.2);
+        assert!(max_scale - min_scale > 0.04);
+        assert!(max_alpha - min_alpha > 0.12);
         assert!((RING_ALPHA_MIN..=RING_ALPHA_MAX).contains(&min_alpha));
         assert!((RING_ALPHA_MIN..=RING_ALPHA_MAX).contains(&max_alpha));
     }

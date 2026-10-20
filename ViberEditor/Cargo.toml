@@ -14,7 +14,7 @@ flate2 = "1"
 # Mesma versão/features do engine (reutiliza o luau vendored do target):
 # o editor compila scripts Luau (SEM executar) para apanhar erros de
 # sintaxe no save/abertura.
-mlua = { version = "0.10", features = ["luau", "vendored", "send"] }
+mlua = { version = "0.12", features = ["luau", "vendored", "send"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The engine as a library: the editor renders and edits the world in-process

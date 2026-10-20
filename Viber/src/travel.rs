@@ -359,6 +359,9 @@ pub fn collect_landmark_blips(
 }
 
 /// Bandas do mundo para o registry de hostis (índice = `alive_in_region`).
+/// Os retângulos de norte/sul e este/oeste SOBREPÕEM-SE nos cantos; a
+/// classificação usa o eixo dominante (ver [`region_of`]), não o primeiro
+/// retângulo que contém o ponto.
 pub const REGIONS: [(&str, f32, f32, f32, f32); 5] = [
     // (rótulo, min_x, min_z, max_x, max_z)
     ("centro", -120.0, -120.0, 120.0, 120.0),
@@ -369,11 +372,23 @@ pub const REGIONS: [(&str, f32, f32, f32, f32); 5] = [
 ];
 
 /// Índice da região que contém o ponto.
+///
+/// Fora do quadrado `centro`, o eixo com maior módulo ganha. O primeiro
+/// retângulo de [`REGIONS`] punha um escorpião do deserto (`x=200, z=-140`)
+/// em SUL — o ogro dos picos (`alive_in_region(2) <= 1`) ficava à espera
+/// de bichos do ermo.
 pub fn region_of(x: f32, z: f32) -> usize {
-    REGIONS
-        .iter()
-        .position(|(_, x0, z0, x1, z1)| x >= *x0 && x <= *x1 && z >= *z0 && z <= *z1)
-        .unwrap_or(0)
+    let half = REGIONS[0].3;
+    if x.abs() <= half && z.abs() <= half {
+        return 0;
+    }
+    if x.abs() >= z.abs() {
+        if x >= 0.0 { 3 } else { 4 }
+    } else if z >= 0.0 {
+        1
+    } else {
+        2
+    }
 }
 
 // ── estado ──────────────────────────────────────────────────────────────
@@ -1202,6 +1217,12 @@ mod tests {
         assert_eq!(region_of(0.0, -300.0), 2); // sul
         assert_eq!(region_of(500.0, 0.0), 3); // este
         assert_eq!(region_of(-500.0, 0.0), 4); // oeste
+        // Cantos: o eixo dominante ganha. Deserto sul-este não é "sul"
+        // (senão trava o gate do ogro). Picos (|z| > |x|) continuam sul.
+        assert_eq!(region_of(200.0, -150.0), 3); // ermo, não picos
+        assert_eq!(region_of(-200.0, 150.0), 4); // poente, não floresta
+        assert_eq!(region_of(40.0, -220.0), 2); // trilha dos picos
+        assert_eq!(region_of(-40.0, 220.0), 1);
     }
 
     #[test]

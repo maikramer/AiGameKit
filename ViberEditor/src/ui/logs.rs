@@ -28,6 +28,9 @@ pub struct BridgeLogs {
     next_poll: Timer,
     /// O dump da árvore remota (`viber.tree`) pedido pelo botão do dock.
     tree_task: Option<Task<Result<serde_json::Value, BrpClientError>>>,
+    /// Linhas do dump, à parte do ring: o poll de `viber.logs` substitui
+    /// `entries` e apagava a árvore no ciclo seguinte.
+    tree_lines: Vec<methods::LogEntry>,
 }
 
 impl Default for BridgeLogs {
@@ -38,6 +41,7 @@ impl Default for BridgeLogs {
             task: None,
             next_poll: Timer::new(POLL_INTERVAL, TimerMode::Repeating),
             tree_task: None,
+            tree_lines: Vec::new(),
         }
     }
 }
@@ -81,16 +85,15 @@ pub fn poll_logs(time: Res<Time>, bridge: Res<ViberBridge>, mut logs: ResMut<Bri
             Ok(value) => {
                 let text = serde_json::to_string_pretty(&value).unwrap_or_default();
                 let start = text.len().saturating_sub(6000);
-                for line in text[start..].lines() {
-                    logs.entries.push(methods::LogEntry {
+                logs.tree_lines = text[start..]
+                    .lines()
+                    .map(|line| methods::LogEntry {
                         time: 0.0,
                         level: "info".into(),
                         target: "viber.tree".into(),
                         message: line.to_owned(),
-                    });
-                }
-                let excess = logs.entries.len().saturating_sub(KEPT_ENTRIES * 2);
-                logs.entries.drain(..excess);
+                    })
+                    .collect();
                 logs.dirty = true;
             }
             Err(error) => warn!("viber.tree call failed: {error}"),
@@ -125,12 +128,12 @@ pub fn render_logs(
     logs.dirty = false;
     *built = true;
     commands.despawn_all::<With<LogLine>>();
-    if logs.entries.is_empty() {
+    if logs.entries.is_empty() && logs.tree_lines.is_empty() {
         let text = crate::ui::strings::t(*lang, crate::ui::strings::StrKey::LogsEmpty);
         commands.spawn((LogLine, crate::ui::theme::hint(text), ChildOf(body)));
         return;
     }
-    for entry in &logs.entries {
+    for entry in logs.entries.iter().chain(logs.tree_lines.iter()) {
         commands.spawn((
             LogLine,
             Text::new(format_line(entry)),

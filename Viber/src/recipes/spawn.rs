@@ -10,7 +10,6 @@ use bevy::shape::{Capsule3d, Cuboid, Cylinder, Plane3d, Sphere};
 use bevy::world_serialization::WorldAssetRoot;
 
 use super::{EntityKind, EntitySpec, MaterialSpec, ParsedWorld, Shape, TransformSpec};
-use crate::terrain::TerrainSpec;
 use crate::terrain::cliffs::CliffSpec;
 use crate::terrain::cut::CutSpec;
 use crate::terrain::decal::GroundDecalSpec;
@@ -18,12 +17,13 @@ use crate::terrain::features::TerrainFeatures;
 use crate::terrain::plateau::PlateauSpec;
 use crate::terrain::roads::{RoadNetworkSpec, RoadSpec, SegmentSpec, WaySpec};
 use crate::terrain::spec::TerrainPadSpec;
+use crate::terrain::voxel::cave::{CaveChamberSpec, CaveShaftSpec};
 use crate::terrain::voxel::ArchSpec;
 use crate::terrain::voxel::BridgeSpec;
 use crate::terrain::voxel::CaveSpec;
 use crate::terrain::voxel::RockFeaturesSpec;
-use crate::terrain::voxel::cave::{CaveChamberSpec, CaveShaftSpec};
 use crate::terrain::water::{LakeSpec, RiverSpec};
+use crate::terrain::TerrainSpec;
 
 /// Marker for `<OrbitCamera>`: keeps its offset from a named target.
 ///
@@ -1155,6 +1155,7 @@ fn push_shore_rock_group(
     };
     out.push(crate::spawner::SpawnGroupState {
         template_collider: spec.template_collider.clone(),
+        template_trigger: spec.template_trigger,
         spec,
         handles,
         lod_handles,
@@ -1300,6 +1301,7 @@ fn collect_spawn_groups(
                     template_script: group.template_script.clone(),
                     activation_radius: group.activation_radius,
                     template_collider: group.template_collider.clone(),
+                    template_trigger: group.template_trigger,
                     template_destructible: group.template_destructible.clone(),
                     collider_handle: group.template_collider.as_ref().and_then(|shape| {
                         // Só Mesh/Precompute consomem o glTF de colisão;
@@ -1347,6 +1349,7 @@ fn collect_spawn_groups(
                     template_script: spawner_spec.template_script.clone(),
                     activation_radius: spawner_spec.activation_radius,
                     template_collider: spawner_spec.template_collider.clone(),
+                    template_trigger: spawner_spec.template_trigger,
                     template_destructible: spawner_spec.template_destructible.clone(),
                     // Como nos spawners: só Mesh/Precompute têm glTF de
                     // colisão — as outras formas pediam o load de um path vazio.
@@ -1389,12 +1392,14 @@ fn collect_spawn_groups(
 /// [`crate::physics::resolve_pending_colliders`] to finish. The collision glTF
 /// is requested now so the load is already in flight.
 fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &EntitySpec) {
-    use crate::physics::{ColliderShape, PendingCollider, body_bundle, immediate_collider};
+    use crate::physics::{body_bundle, immediate_collider, ColliderShape, PendingCollider};
 
     let physics = &spec.physics;
     if physics.is_empty() {
         return;
     }
+    let trigger = physics.trigger;
+    let scripted = spec.script.is_some();
     if let Some((body, gravity)) = body_bundle(physics.body, physics.gravity_scale) {
         entity.insert((body, gravity));
     }
@@ -1402,17 +1407,7 @@ fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &Entity
         ColliderShape::None => {}
         ColliderShape::Box { .. } => {
             if let Some((collider, transform)) = immediate_collider(&physics.collider) {
-                if transform.translation == Vec3::ZERO {
-                    entity.insert(collider);
-                } else {
-                    // Rapier positions a collider by its own entity transform,
-                    // so `pos-offset-y` becomes a child holding the shape; the
-                    // render mesh keeps the entity's placement untouched.
-                    let parent = entity.id();
-                    entity.world_scope(|world| {
-                        world.spawn((Name::new("collider"), collider, transform, ChildOf(parent)));
-                    });
-                }
+                place_immediate(entity, collider, transform, trigger, scripted);
             }
         }
         ColliderShape::Auto => {
@@ -1424,15 +1419,24 @@ fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &Entity
             // a escala do spec aqui dava escala² ao colisor.
             if let EntityKind::Primitive { shape, .. } = &spec.kind {
                 entity.insert(crate::physics::collider_for_shape(shape, Vec3::ONE));
+                crate::physics::stamp_collider_role(entity, trigger, scripted);
             } else {
                 entity.insert(PendingCollider {
                     shape: ColliderShape::Auto,
                     gltf: None,
                     age: 0.0,
+                    trigger,
+                    scripted,
                 });
             }
         }
         ColliderShape::Mesh { url, .. } | ColliderShape::Precompute { url } => {
+            if url.is_empty() {
+                bevy::log::warn!(
+                    "physics: collider mesh sem mesh-url e sem GLB no nó — sem collider"
+                );
+                return;
+            }
             // Root-absolute asset paths are unapproved in bevy; strip the '/'.
             let handle = ctx
                 .asset_server
@@ -1441,6 +1445,8 @@ fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &Entity
                 shape: physics.collider.clone(),
                 gltf: Some(handle),
                 age: 0.0,
+                trigger,
+                scripted,
             });
         }
         // Sphere/cylinder/capsule explícitos são imediatos, como a caixa.
@@ -1448,17 +1454,34 @@ fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &Entity
         | ColliderShape::Cylinder { .. }
         | ColliderShape::Capsule { .. } => {
             if let Some((collider, transform)) = immediate_collider(&physics.collider) {
-                if transform.translation == Vec3::ZERO {
-                    entity.insert(collider);
-                } else {
-                    let parent = entity.id();
-                    entity.world_scope(|world| {
-                        world.spawn((Name::new("collider"), collider, transform, ChildOf(parent)));
-                    });
-                }
+                place_immediate(entity, collider, transform, trigger, scripted);
             }
         }
     }
+}
+
+/// Colisor imediato na entidade, ou num filho quando há offset. O sensor e os
+/// eventos ficam na entidade que segura o collider.
+fn place_immediate(
+    entity: &mut EntityWorldMut,
+    collider: bevy_rapier3d::prelude::Collider,
+    transform: Transform,
+    trigger: bool,
+    scripted: bool,
+) {
+    if transform.translation == Vec3::ZERO {
+        entity.insert(collider);
+        crate::physics::stamp_collider_role(entity, trigger, scripted);
+        return;
+    }
+    // Rapier positions a collider by its own entity transform, so
+    // `pos-offset-y` becomes a child holding the shape; the render mesh
+    // keeps the entity's placement untouched.
+    let parent = entity.id();
+    entity.world_scope(|world| {
+        let mut child = world.spawn((Name::new("collider"), collider, transform, ChildOf(parent)));
+        crate::physics::stamp_collider_role(&mut child, trigger, scripted);
+    });
 }
 
 fn spawn_entity(
@@ -1482,6 +1505,12 @@ fn spawn_entity(
     }
     if let Some(name) = &spec.name {
         entity.insert(Name::new(name.clone()));
+    }
+    // `tag="player"` marca o corpo que a câmara, o save e o minimapa seguem,
+    // sem character controller — o script escreve a pose (`set_pose`) depois
+    // de `own_system("locomotion")`. O herói a pé continua a ser `<PlayerGLTF>`.
+    if spec.tag.as_deref() == Some("player") {
+        entity.insert(crate::player::Player::default());
     }
     // Proveniência: o nó XML que declarou a entidade (editor/agentes editam por aí).
     if let Some(source) = &spec.source {
@@ -1943,71 +1972,6 @@ fn spawn_entity(
                 crate::player::hero_collider(),
                 crate::player::hero_controller(),
             ));
-        }
-        EntityKind::Vehicle { spec } => {
-            // Kart de corrida: componente Vehicle + input + progresso de
-            // corrida. O driver player leva o marker Player (câmara terceira
-            // pessoa, minimapa, save seguem o herói) — mas SEM character
-            // controller: o movimento é do vehicle controller.
-            let stats = entity
-                .get_resource::<crate::racing::vehicle::VehicleTemplates>()
-                .map(|t| t.get(&spec.template))
-                .unwrap_or_default();
-            let heading = entity
-                .get::<bevy::transform::components::Transform>()
-                .map(|t| t.rotation.to_euler(bevy::math::EulerRot::YXZ).0)
-                .unwrap_or(0.0);
-            entity.insert((
-                crate::racing::vehicle::Vehicle {
-                    driver: spec.driver,
-                    template: spec.template.clone(),
-                    stats,
-                    speed: 0.0,
-                    slip: 0.0,
-                    heading,
-                    steer: 0.0,
-                    nitro: 0.5,
-                    nitro_active: false,
-                    turbo: 0.0,
-                    turbo_super: false,
-                    drift_charge: 0.0,
-                    racing: false,
-                    airborne: false,
-                    air_vy: 0.0,
-                    prev_climb: 0.0,
-                    spin: 0.0,
-                    rev: 0.0,
-                    wheelspin: 0.0,
-                    stuck: 0.0,
-                    smoke_cd: 0.0,
-                    boost_cd: 0.0,
-                },
-                crate::racing::vehicle::VehicleInput::default(),
-                crate::racing::race::RaceProgress::default(),
-            ));
-            if let Some(url) = &spec.model_url {
-                let path = url.trim_start_matches('/');
-                let handle: Handle<Gltf> =
-                    crate::meshopt::load_gltf(ctx.asset_server, path.to_owned());
-                // Modelo filho com o yaw autoral (os GLBs de kart nascem ao
-                // longo de X): o heading do pai fica limpo para o controller.
-                entity.with_children(|parent| {
-                    parent.spawn((
-                        bevy::transform::components::Transform::from_rotation(
-                            bevy::math::Quat::from_rotation_y(spec.model_yaw),
-                        )
-                        .with_scale(bevy::math::Vec3::splat(spec.model_scale.max(0.01))),
-                        Visibility::Inherited,
-                        GltfScenePending::single(handle),
-                    ));
-                });
-            }
-            if spec.driver == crate::racing::vehicle::Driver::Player {
-                entity.insert((
-                    crate::player::Player::default(),
-                    crate::racing::vehicle::PlayerKart,
-                ));
-            }
         }
         // Ground features + `<Terrain>` + spawner groups return before the
         // spawn above; this arm only satisfies exhaustiveness.

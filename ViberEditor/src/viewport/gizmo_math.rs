@@ -1,7 +1,24 @@
 //! Pure math for the transform gizmo: screen-space hit tests, the drag parameter along an axis,
 //! the angle around a ring, and snapping. No ECS — unit-tested on its own.
 
-use bevy::math::{Vec2, Vec3};
+use bevy::math::{Affine3A, Vec2, Vec3};
+
+/// Local translation of a grouped node after the primary moved by `delta_local`
+/// in its own parent space.
+///
+/// The same world displacement is applied to every member: convert the primary's
+/// parent-space delta to world, then into the member's parent. Same parent
+/// (even rotated or scaled) cancels and the local delta is copied. A root uses
+/// [`Affine3A::IDENTITY`].
+pub fn translate_with_parents(
+    start: Vec3,
+    primary_parent: Affine3A,
+    delta_local: Vec3,
+    member_parent: Affine3A,
+) -> Vec3 {
+    let delta_world = primary_parent.transform_vector3(delta_local);
+    start + member_parent.inverse().transform_vector3(delta_world)
+}
 
 /// Distance from `p` to the segment `a`–`b` (screen pixels).
 pub fn distance_to_segment(p: Vec2, a: Vec2, b: Vec2) -> f32 {
@@ -128,6 +145,27 @@ mod tests {
         assert!(
             closest_on_axis(Vec3::ZERO, Vec3::X, Vec3::Y, Vec3::X).is_none(),
             "parallel"
+        );
+    }
+
+    #[test]
+    fn grouped_translation_matches_in_a_rotated_parent_and_crosses_parents() {
+        let quarter = Affine3A::from_quat(bevy::math::Quat::from_rotation_y(
+            std::f32::consts::FRAC_PI_2,
+        ));
+        let start = Vec3::new(2.0, 1.0, 0.0);
+        let delta = Vec3::X;
+        let same = translate_with_parents(start, quarter, delta, quarter);
+        assert!(
+            (same - (start + delta)).length() < 1e-5,
+            "mesmo pai rodado: o delta local copia-se, {same}"
+        );
+        // Pai da primária = identidade, pai do outro = Ry(90°): o X do mundo
+        // vira +Z no espaço local do outro.
+        let crossed = translate_with_parents(start, Affine3A::IDENTITY, delta, quarter);
+        assert!(
+            (crossed - (start + Vec3::Z)).length() < 1e-4,
+            "pais diferentes: deslocamento de mundo, {crossed}"
         );
     }
 

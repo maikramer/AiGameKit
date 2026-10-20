@@ -68,7 +68,9 @@ impl Plugin for FeatureHandlesPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FeaturePoints>()
             .init_resource::<FeatureDrag>()
-            .init_resource::<FeatureGrab>()
+            // `FeatureGrab` só existe DURANTE um arrasto. Iniciá-lo sempre
+            // deixava o recurso presente e o pick do viewport morto enquanto
+            // um lago/estrada estava selecionado.
             .add_systems(
                 Update,
                 (build_feature_points, draw_features, feature_interaction)

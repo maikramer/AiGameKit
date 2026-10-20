@@ -19,6 +19,8 @@ pub struct ScriptCtx {
     pub origin: Vec3,
     /// Player position snapshot, when a [`crate::player::Player`] exists.
     pub player: Option<Vec3>,
+    /// Bits da entidade do herói (`viber.player_id`).
+    pub player_bits: Option<i64>,
     /// Seconds since engine startup.
     pub elapsed: f64,
     /// Delta time passed to `on_update`.
@@ -46,6 +48,9 @@ pub struct ScriptCtx {
     /// Snapshot `(current, max)` do HP de cada entidade COM `Health` (sem o
     /// player — esse já vive em `player_hp`) para `viber.entity_hp(id)`.
     pub hp_snapshot: std::collections::HashMap<i64, (f32, f32)>,
+    /// Hostis vivos (`enemies/`/`bosses/`) para `viber.hostiles`. As criaturas
+    /// de `<DynamicSpawner>` não têm nome — `find_all("wolf")` não as acha.
+    pub hostiles: Vec<HostileSnap>,
     /// Posição de MUNDO das entidades nomeadas (`viber.entity_position`,
     /// `viber.nearby`) — o mesmo snapshot de nomes, com o GlobalTransform.
     pub pos_snapshot: std::collections::HashMap<i64, (String, Vec3)>,
@@ -70,6 +75,9 @@ pub struct ScriptCtx {
     pub groups: std::collections::HashMap<String, Vec<i64>>,
     /// Id da cinemática a tocar (`viber.cinematic_playing()`), snapshot do frame.
     pub cinematic: Option<String>,
+    /// `MenusOpen::any()` neste frame (`viber.menu_open`): menu, mapa,
+    /// viagem rápida ou cinemática estão a roubar o input.
+    pub menu_open: bool,
     /// Emissor do sinal/`call_group` em entrega (`viber.sender()`); `None` fora
     /// de um handler.
     pub sender: Option<i64>,
@@ -124,9 +132,16 @@ pub struct ScriptCtx {
     pub scene_entry: Option<String>,
     /// Ids das cenas do projeto (validação de `viber.change_scene`).
     pub scene_ids: std::sync::Arc<Vec<String>>,
-    /// Estado da corrida (`viber.race.*`/`viber.vehicle.*`) — `None` fora do
-    /// preset `gameplay: racing`.
-    pub race: Option<crate::racing::RaceSnapshot>,
+}
+
+/// Criatura hostil viva neste frame (`viber.hostiles`).
+#[derive(Debug, Clone)]
+pub struct HostileSnap {
+    pub id: i64,
+    pub kind: String,
+    pub pos: Vec3,
+    pub hp: f32,
+    pub max: f32,
 }
 
 /// Definição de quest achatada para Lua (`viber.quest_def`).
@@ -161,6 +176,25 @@ impl SurfaceRegistries {
     pub fn on_road(&self, x: f32, z: f32) -> bool {
         let p = Vec2::new(x, z);
         self.roads.iter().any(|road| road.is_on_road(p))
+    }
+
+    /// Estrada mais próxima do ponto, mesmo fora da fita (`viber.road`).
+    /// `None` quando o mundo não tem estradas.
+    pub fn nearest_road(&self, x: f32, z: f32) -> Option<crate::terrain::roads::RoadSample> {
+        let p = Vec2::new(x, z);
+        self.roads
+            .iter()
+            .filter_map(|road| road.sample_at(p))
+            .min_by(|a, b| a.center_dist.total_cmp(&b.center_dist))
+    }
+
+    /// Ponto na estrada mais longa a `s` metros de arco (`viber.road_at`).
+    pub fn road_at(&self, s: f32) -> Option<crate::terrain::roads::RoadSample> {
+        let road = self.roads.iter().max_by(|a, b| {
+            crate::terrain::paths::path_length(&a.stations)
+                .total_cmp(&crate::terrain::paths::path_length(&b.stations))
+        })?;
+        road.point_at_arc(s)
     }
 
     /// Ponto dentro de uma zona de carve de água.

@@ -3,9 +3,9 @@ use bevy_app::prelude::*;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{prelude::*, system::SystemId};
 // Bevy 0.20: `bounding` saiu do `bevy_math` para o crate `bevy_shape`.
-use bevy_shape::Aabb3d;
 use bevy_platform::collections::HashSet;
 use bevy_reflect::prelude::*;
+use bevy_shape::Aabb3d;
 use glam::Vec3;
 use rerecast::{BuildContoursFlags, ConfigBuilder, ConvexVolume, TriMesh};
 use serde::{Deserialize, Serialize};

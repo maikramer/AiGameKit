@@ -58,7 +58,7 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
             let env = lua.create_table()?;
             let mt = lua.create_table()?;
             mt.set("__index", lua.globals())?;
-            env.set_metatable(Some(mt));
+            env.set_metatable(Some(mt))?;
             let chunk = lua
                 .load(&code)
                 .set_name(format!("={path}"))
@@ -76,7 +76,73 @@ pub(crate) fn install(lua: &Lua, api: &Table) -> mlua::Result<()> {
             Ok(value)
         })?,
     )?;
+
+    // viber.load_json(caminho) -> valor. Caminho relativo à pasta do mundo
+    // (pai de scripts/). Sem `..`. Objectos/arrays/números/strings/bool/null.
+    api.set(
+        "load_json",
+        lua.create_function(|lua, path: String| {
+            let relative = std::path::Path::new(&path);
+            let inside = relative.components().all(|c| {
+                matches!(
+                    c,
+                    std::path::Component::Normal(_) | std::path::Component::CurDir
+                )
+            });
+            if path.is_empty() || !inside {
+                return Err(mlua::Error::runtime(format!(
+                    "viber.load_json('{path}'): só caminhos relativos à pasta do mundo (sem '..')"
+                )));
+            }
+            let scripts = lua
+                .app_data_ref::<ScriptCtx>()
+                .and_then(|ctx| ctx.scripts_dir.clone())
+                .ok_or_else(|| mlua::Error::runtime("viber.load_json sem scripts_dir"))?;
+            let world = scripts.parent().ok_or_else(|| {
+                mlua::Error::runtime("viber.load_json: scripts/ sem pasta de mundo")
+            })?;
+            let full = world.join(&path);
+            let text = std::fs::read_to_string(&full)
+                .map_err(|e| mlua::Error::runtime(format!("viber.load_json('{path}'): {e}")))?;
+            let value: serde_json::Value = serde_json::from_str(&text)
+                .map_err(|e| mlua::Error::runtime(format!("viber.load_json('{path}'): {e}")))?;
+            json_to_lua(lua, &value)
+        })?,
+    )?;
     Ok(())
+}
+
+/// `serde_json::Value` → valor Luau. Números inteiros que cabem em i64
+/// entram como inteiros; o resto como float. `null` → nil.
+pub(crate) fn json_to_lua(lua: &Lua, value: &serde_json::Value) -> mlua::Result<mlua::Value> {
+    Ok(match value {
+        serde_json::Value::Null => mlua::Value::Nil,
+        serde_json::Value::Bool(flag) => mlua::Value::Boolean(*flag),
+        serde_json::Value::Number(number) => {
+            if let Some(int) = number.as_i64() {
+                mlua::Value::Integer(int)
+            } else if let Some(float) = number.as_f64() {
+                mlua::Value::Number(float)
+            } else {
+                mlua::Value::Nil
+            }
+        }
+        serde_json::Value::String(text) => mlua::Value::String(lua.create_string(text)?),
+        serde_json::Value::Array(items) => {
+            let table = lua.create_table()?;
+            for (index, item) in items.iter().enumerate() {
+                table.raw_set(index + 1, json_to_lua(lua, item)?)?;
+            }
+            mlua::Value::Table(table)
+        }
+        serde_json::Value::Object(map) => {
+            let table = lua.create_table()?;
+            for (key, item) in map {
+                table.raw_set(key.as_str(), json_to_lua(lua, item)?)?;
+            }
+            mlua::Value::Table(table)
+        }
+    })
 }
 
 /// Tira `path` do cache do `viber.load` (hot-reload de um módulo). Devolve

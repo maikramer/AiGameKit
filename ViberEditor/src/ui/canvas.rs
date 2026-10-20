@@ -71,7 +71,8 @@ impl UiStatePreview {
 #[derive(Resource, Debug, Default, Clone)]
 pub struct CanvasDrag {
     grabbed: bool,
-    resize: bool,
+    /// `Some(corner)` resizes (`0` top-left, clockwise). `None` moves.
+    corner: Option<usize>,
     /// The node grabbed at press time — the commit must write to THIS node,
     /// not to whoever is selected at release (a click can change selection).
     target: Option<NodeRef>,
@@ -80,6 +81,43 @@ pub struct CanvasDrag {
     /// Cursor at press / now, window physical px.
     cursor: Vec2,
     now: Vec2,
+}
+
+/// Move (`corner = None`) or resize from one corner. Width/height stay ≥ `min_px`
+/// and the rect never flips: the edge opposite the grabbed corner stays put.
+pub fn apply_canvas_delta(start: Rect, delta: Vec2, corner: Option<usize>, min_px: f32) -> Rect {
+    let mut rect = start;
+    match corner {
+        None => {
+            rect.min += delta;
+            rect.max += delta;
+        }
+        Some(0) => rect.min += delta,
+        Some(1) => {
+            rect.min.y += delta.y;
+            rect.max.x += delta.x;
+        }
+        Some(3) => {
+            rect.min.x += delta.x;
+            rect.max.y += delta.y;
+        }
+        _ => rect.max += delta,
+    }
+    if rect.width() < min_px {
+        if matches!(corner, Some(0) | Some(3)) {
+            rect.min.x = rect.max.x - min_px;
+        } else {
+            rect.max.x = rect.min.x + min_px;
+        }
+    }
+    if rect.height() < min_px {
+        if matches!(corner, Some(0) | Some(1)) {
+            rect.min.y = rect.max.y - min_px;
+        } else {
+            rect.max.y = rect.min.y + min_px;
+        }
+    }
+    rect
 }
 
 /// The forced state preview (chips); reverts with the chip back to Normal.
@@ -327,12 +365,7 @@ fn canvas_overlay(world: &mut World) {
         .unwrap_or(1.0);
     if drag.grabbed {
         let delta = (drag.now - drag.cursor) / scale;
-        if drag.resize {
-            window_rect.max += delta;
-        } else {
-            window_rect.min += delta;
-            window_rect.max += delta;
-        }
+        window_rect = apply_canvas_delta(window_rect, delta, drag.corner, 4.0);
     }
     let size = (window_rect.max - window_rect.min).max(Vec2::splat(4.0));
     let corners = [
@@ -376,7 +409,9 @@ fn canvas_overlay(world: &mut World) {
 /// ONE `set` op (px, canonical). Nodes without explicit attrs stay read-only.
 fn canvas_interaction(world: &mut World) {
     if world.resource::<EditorModeState>().0 != EditorMode::Ui {
-        world.resource_mut::<CanvasDrag>().grabbed = false;
+        let mut drag = world.resource_mut::<CanvasDrag>();
+        drag.grabbed = false;
+        drag.corner = None;
         return;
     }
     let Some(node) = world.resource::<Selection>().primary().cloned() else {
@@ -402,14 +437,14 @@ fn canvas_interaction(world: &mut World) {
     let max = window_rect.max * window.scale_factor();
     if buttons.just_pressed(MouseButton::Left) {
         let corners = [min, Vec2::new(max.x, min.y), max, Vec2::new(min.x, max.y)];
-        let near_corner = corners
-            .iter()
-            .any(|corner| corner.distance(cursor) < GRAB_PX);
         let inside =
             cursor.x >= min.x && cursor.x <= max.x && cursor.y >= min.y && cursor.y <= max.y;
-        if near_corner || inside {
+        let corner = corners
+            .iter()
+            .position(|corner| corner.distance(cursor) < GRAB_PX);
+        if corner.is_some() || inside {
             drag.grabbed = true;
-            drag.resize = near_corner;
+            drag.corner = corner;
             drag.target = Some(node.clone());
             drag.cursor = cursor;
             drag.now = cursor;
@@ -428,37 +463,40 @@ fn canvas_interaction(world: &mut World) {
         let delta = drag.now - drag.cursor;
         let moved = delta.x.abs() >= 0.5 || delta.y.abs() >= 0.5;
         if moved && let Some(target) = drag.target.take() {
-            commit(world, &target, drag.start, delta, drag.resize);
+            commit(world, &target, drag.start, delta, drag.corner);
         }
     }
     *world.resource_mut::<CanvasDrag>() = drag;
 }
 
 /// Writes the moved/resized geometry back as ONE `set` op (game-UI px).
-fn commit(world: &mut World, node: &NodeRef, start: Rect, delta: Vec2, resize: bool) {
+fn commit(world: &mut World, node: &NodeRef, start: Rect, delta: Vec2, corner: Option<usize>) {
     let Some(xml) = world.resource::<SceneDoc>().node(node).cloned() else {
         return;
     };
+    let rect = apply_canvas_delta(start, delta, corner, 4.0);
     let mut attrs: Vec<(String, Option<String>)> = Vec::new();
-    if resize {
+    let moves_left = matches!(corner, Some(0) | Some(3));
+    let moves_top = matches!(corner, Some(0) | Some(1));
+    if corner.is_some() {
+        if moves_left && xml.attr("left").is_some() {
+            attrs.push(("left".into(), Some(format_num(rect.min.x))));
+        }
+        if moves_top && xml.attr("top").is_some() {
+            attrs.push(("top".into(), Some(format_num(rect.min.y))));
+        }
         if xml.attr("width").is_some() {
-            attrs.push((
-                "width".into(),
-                Some(format_num((start.width() + delta.x).max(4.0))),
-            ));
+            attrs.push(("width".into(), Some(format_num(rect.width()))));
         }
         if xml.attr("height").is_some() {
-            attrs.push((
-                "height".into(),
-                Some(format_num((start.height() + delta.y).max(4.0))),
-            ));
+            attrs.push(("height".into(), Some(format_num(rect.height()))));
         }
     } else {
         if xml.attr("left").is_some() {
-            attrs.push(("left".into(), Some(format_num(start.min.x + delta.x))));
+            attrs.push(("left".into(), Some(format_num(rect.min.x))));
         }
         if xml.attr("top").is_some() {
-            attrs.push(("top".into(), Some(format_num(start.min.y + delta.y))));
+            attrs.push(("top".into(), Some(format_num(rect.min.y))));
         }
     }
     if attrs.is_empty() {
@@ -606,4 +644,48 @@ fn list_source(xml: &viber::xml::XmlNode) -> Option<String> {
         stack.extend(node.children.clone());
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rect() -> Rect {
+        Rect {
+            min: Vec2::new(10.0, 20.0),
+            max: Vec2::new(110.0, 70.0),
+        }
+    }
+
+    #[test]
+    fn top_left_corner_moves_origin_and_grows_size() {
+        let next = apply_canvas_delta(rect(), Vec2::new(-8.0, -5.0), Some(0), 4.0);
+        assert_eq!(next.min, Vec2::new(2.0, 15.0));
+        assert_eq!(next.max, Vec2::new(110.0, 70.0));
+    }
+
+    #[test]
+    fn bottom_right_corner_only_grows_max() {
+        let next = apply_canvas_delta(rect(), Vec2::new(4.0, 6.0), Some(2), 4.0);
+        assert_eq!(next.min, Vec2::new(10.0, 20.0));
+        assert_eq!(next.max, Vec2::new(114.0, 76.0));
+    }
+
+    #[test]
+    fn top_right_and_bottom_left_move_one_edge_each() {
+        let tr = apply_canvas_delta(rect(), Vec2::new(3.0, -4.0), Some(1), 4.0);
+        assert_eq!(tr.min, Vec2::new(10.0, 16.0));
+        assert_eq!(tr.max, Vec2::new(113.0, 70.0));
+        let bl = apply_canvas_delta(rect(), Vec2::new(-6.0, 2.0), Some(3), 4.0);
+        assert_eq!(bl.min, Vec2::new(4.0, 20.0));
+        assert_eq!(bl.max, Vec2::new(110.0, 72.0));
+    }
+
+    #[test]
+    fn resize_does_not_flip_below_the_minimum() {
+        let next = apply_canvas_delta(rect(), Vec2::new(10_000.0, 10_000.0), Some(0), 4.0);
+        assert!((next.width() - 4.0).abs() < 1e-4);
+        assert!((next.height() - 4.0).abs() < 1e-4);
+        assert_eq!(next.max, rect().max);
+    }
 }

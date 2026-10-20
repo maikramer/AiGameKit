@@ -27,10 +27,10 @@ use crate::profiler::{Group, timed};
 use crate::recipes::ParsedWorld;
 use crate::recipes::spawn::{self, PendingWorld};
 use crate::{
-    ai, ambient, animation, camera, combat, economy, editor_camera, feedback, grass, harvest, hud,
-    impact, luau, menus, meshopt, music, nav, particles, physics, physics_fx, player, postfx,
-    profiler, prop_tint, quests, recipes, render_lod, save, skills, sky, spawner, terrain,
-    textures, trail, travel, ui, vitals, worldsys, xml,
+    ai, ambient, animation, camera, combat, economy, editor_camera, grass, harvest, hud, impact,
+    luau, menus, meshopt, music, nav, particles, physics, physics_fx, player, postfx, profiler,
+    prop_tint, quests, recipes, render_lod, save, skills, sky, spawner, terrain, textures, trail,
+    ui, vitals, worldsys, xml,
 };
 
 /// Para quê a App é montada.
@@ -345,6 +345,17 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
         });
     }
     app.add_plugins(plugins);
+    // Picking (DefaultPickingPlugins): o backend de UI alimenta a
+    // `Interaction` da UI declarativa (src/ui/interaction.rs). O MESH picking
+    // não tem consumidor nenhum na engine e, com `require_markers` false
+    // (default), raycastava TODAS as malhas visíveis em TODAS as câmaras por
+    // frame — com markers, só entidades com `Pickable` (nenhuma) são
+    // raycastadas. Se um dia se quiser clique em malhas, criar a entidade com
+    // `Pickable` e desfazer esta linha.
+    app.insert_resource(bevy::picking::mesh_picking::MeshPickingSettings {
+        require_markers: true,
+        ..Default::default()
+    });
     if gpu_profiling_enabled() {
         app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin);
         info!(
@@ -550,32 +561,23 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
     // novo vive só de XML + Luau (worlds/lua-demo). `gameplay_rpg()` cobre
     // o default; `gameplay: racing` troca o preset por karts + corrida.
     let rpg = config.gameplay_rpg();
-    let racing = config.gameplay_racing();
     // Diagnóstico do preset (o gate decide quais plugins entram): visível no
     // arranque e no analyze — `gameplay: none` sem efeito era invisível.
+    // Corrida e RPG de regras vivem nos scripts do exemplo, não num preset.
     info!(
         target: "viber",
         "gameplay preset: {} (config `gameplay: {}`)",
-        if racing {
-            "racing"
-        } else if rpg {
-            "rpg"
-        } else {
-            "none (só engine)"
-        },
+        if rpg { "rpg" } else { "none (só engine)" },
         config.gameplay.as_deref().unwrap_or("<ausente → default rpg>")
     );
-    // Karts + diretor de corrida + rivais AI + som de motor (`gameplay:
-    // racing`). O preset RPG fica OFF (gameplay_rpg() false com racing).
-    if racing {
-        app.add_plugins(crate::racing::RacingPlugin);
-    }
     // Serviços de ENGINE que os plugins RPG costumavam registar e que o resto
     // do runtime lê: o semáforo de input tem de existir mesmo sem RPG
     // (player_movement/profiler leem-no) e os toasts de script são UX de
     // engine — o MenusPlugin fica FORA do gate (o seu lado RPG — catálogo da
     // loja — é inerte sem vault, e `own_action` de Lua manda quando existe).
     app.init_resource::<menus::MenusOpen>();
+    app.init_resource::<music::MusicLayerOverride>();
+    app.init_resource::<music::ScriptSoundLoops>();
     // Latch de input (remote desktop / taps): renova "held" para
     // player_movement/vehicle_movement — ver `input_latch.rs`.
     app.init_resource::<crate::input_latch::KeyLatches>();
@@ -592,36 +594,15 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
     // (e o shake/kick/punch que vivem em recursos incondicionais) ficariam
     // inertes. Registo CONDICIONAL — registar o mesmo sistema 2× duplica a
     // instância no schedule e panica ao inicializar.
-    if !rpg {
-        app.init_resource::<camera::CameraFx>();
-        app.add_systems(bevy::app::Update, camera::fov_kick_system);
-        app.init_resource::<combat::HitStop>();
-        app.init_resource::<combat::BaseTimeScale>();
-        app.add_systems(bevy::app::Update, combat::hit_stop_system);
-    }
-    if rpg {
-        app.add_plugins(combat::CombatPlugin);
-        // Vitals juice (passe de juice r1): deteção robusta de level-up
-        // (qualquer fonte de XP) + fanfarra.
-        app.add_plugins(vitals::VitalsPlugin);
-        // Feedback de combate (loop 2): dano flutuante, vignette/i-frames,
-        // TargetBar/BossBar reais, respawn, status effects.
-        app.add_plugins(feedback::FeedbackPlugin);
-        // Economia (loop 4): vault ouro/madeira/pedra, chips vivos, hotbar
-        // [1]/[2]. (O RECURSO Vault é criado à pressa pelo primeiro
-        // `viber.vault_*`? NÃO — scripts recebem Option; um jogo sem RPG
-        // que queira economia constrói a sua em Lua.)
-        app.add_plugins(economy::EconomyPlugin);
-        // Travel/Nota/wayfinding (loop 6): marcos, viagem rápida, waypoint,
-        // registry de hostis por região.
-        app.add_plugins(travel::TravelPlugin);
-        // Mapa regional [M]: a revelação das atalaias acende o mapa-múndi
-        // (topografia + marcos + névoa por bioma; `src/hud/map.rs`).
-        app.add_plugins(hud::map::RegionalMapPlugin);
-        // Skills/abilities/bombas (loop 8): dash/cura/golpe forte, passivas,
-        // guard/parry, profundidade do melee.
-        app.add_plugins(skills::SkillsPlugin);
-    } // fim do preset RPG
+    // Hit-stop e FOV kick são FX da engine (`viber.hit_stop` / `fov_kick`).
+    // Combate, vitals, economia, viagem, skills e quests são regras do
+    // exemplo — vivem em Lua, não entram no App.
+    app.init_resource::<camera::CameraFx>();
+    app.add_systems(bevy::app::Update, camera::fov_kick_system);
+    app.init_resource::<combat::HitStop>();
+    app.init_resource::<combat::BaseTimeScale>();
+    app.add_systems(bevy::app::Update, combat::hit_stop_system);
+    let _ = rpg;
 
     // Mundo vivo (loop 9): fog/tint por BiomeRegion, orçamento de luzes,
     // gestos idle de NPC, SFX.
@@ -632,16 +613,16 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
     app.add_plugins(prop_tint::PropTintPlugin);
     // Física Fase 3 (loop 10): knockback cinemático + destrutíveis com queda.
     app.add_plugins(physics_fx::PhysicsFxPlugin);
-    // Colheita nativa (port do plugin `destructible`): árvores/rochas
-    // destrutíveis — ferramenta na mão, quedas, estilhaços, loot no vault.
-    if rpg {
-        app.add_plugins(harvest::HarvestPlugin);
-    }
+    // Colheita ainda corre na engine: o scan dos `destructible` não está
+    // exposto ao Lua. O loot/XP de quest passa por `rules.report_collect`
+    // quando um script chama; o plugin nativo continua a partir a árvore.
+    app.init_resource::<economy::Vault>();
+    app.add_plugins(harvest::HarvestPlugin);
     // Sword trace (ribbon da lâmina) + bursts one-shot de partícula.
     app.add_plugins(trail::TrailPlugin);
     app.add_plugins(particles::BurstPlugin);
     // FX de impacto de combate: recoil (squash-and-stretch) do inimigo
-    // atingido + anéis de onda de choque (finisher/slam/bomba/abate).
+    // atingido + anel fino no chão (slam/bomba e avisos de golpe).
     app.add_plugins(impact::ImpactFxPlugin);
     // FX de água: splash na entrada/saída e esteira de ondas de quem
     // caminha dentro do lago/rio (a lâmina é estática — o rasto tem de
@@ -651,15 +632,7 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
     app.init_resource::<camera::CameraShake>();
     // Solavanco direcional da câmara no impacto (mola; o combate soma impulsos).
     app.init_resource::<camera::CameraKick>();
-    // Quests & diálogo (loop 3): 21 quests JSON, flow [E] nos DialogueNPC,
-    // QuestTracker, hooks viber.quest_* p/ Luau.
-    if rpg {
-        app.add_plugins((
-            quests::QuestsPlugin,
-            crate::quest_marker::QuestMarkerPlugin,
-            crate::quest_guide::QuestGuidePlugin,
-        ));
-    }
+    // Quests, marcadores e o guia são do exemplo (`scripts/lib/rules.lua`).
     app.add_plugins(crate::cinematic::CinematicPlugin);
     // IA (FSM Rust + respawn): criaturas de <DynamicSpawner> SEM script caem
     // aqui — sem este plugin nasciam estátuas eternas e a RespawnQueue
@@ -772,6 +745,7 @@ pub fn build_app(path: &Path, opts: AppOptions) -> Result<App> {
             timed(Group::World, music::audio_loop_starter),
             timed(Group::World, music::mixer_sync),
             timed(Group::World, music::music_driver),
+            timed(Group::World, music::script_sound_loops),
             // A bandeira de interior é lida pelo `daycycle_drive` e pelo
             // tint dos props — decidida ANTES deles, no mesmo frame.
             timed(Group::World, worldsys::interior_lighting_drive).before(worldsys::daycycle_drive),

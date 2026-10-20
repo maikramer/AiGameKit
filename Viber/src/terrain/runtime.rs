@@ -95,12 +95,34 @@ pub enum WatchedTexture {
     },
 }
 
+/// Albedos que o ecrã de loading espera. Vazio = nada para esperar (mundo
+/// sem `layers`). O chão não desenha enquanto um destes ainda carrega; os
+/// mapas de detalhe ficam de fora deste gate de propósito.
+#[derive(Resource, Default)]
+pub struct TerrainTextureGate {
+    pub albedo: Vec<Handle<Image>>,
+}
+
+impl TerrainTextureGate {
+    /// `true` quando nenhum albedo está ainda em carga. Handle criado com
+    /// `Assets::add` (fallback 1×1) não passa pelo `AssetServer` — `None`
+    /// conta como pronto.
+    pub fn ready(&self, server: &AssetServer) -> bool {
+        self.albedo.iter().all(|handle| {
+            matches!(
+                server.get_load_state(handle),
+                None | Some(bevy::asset::LoadState::Loaded | bevy::asset::LoadState::Failed(_))
+            )
+        })
+    }
+}
+
 /// Textures whose materials are still waiting on their images, so a texture
 /// that never arrives can be dropped instead of blanking what it was painting.
 ///
 /// Bevy will not prepare a material until every texture it references is
 /// resident, and a mesh with an unprepared material is simply not drawn. A
-/// single missing texture therefore makes the whole terrain disappear —
+/// single missing **albedo** therefore makes the whole terrain disappear —
 /// which is exactly what `simple-rpg` hit when it asked for `vale_grass.png`
 /// before the texture pool existed.
 #[derive(Resource, Default)]
@@ -217,7 +239,16 @@ pub fn drop_failed_terrain_textures(
                 }
                 false
             }
-            Some(bevy::asset::LoadState::Loaded) => false,
+            Some(bevy::asset::LoadState::Loaded) => {
+                if let Some(chunk_materials) = chunk_materials.as_mut()
+                    && let Some(mut layer) = chunk_materials.get_mut(material)
+                {
+                    *layer.normal_mut(*slot) = texture.clone();
+                    false
+                } else {
+                    true
+                }
+            }
             _ => true,
         },
         WatchedTexture::LayerHeight {
@@ -242,7 +273,16 @@ pub fn drop_failed_terrain_textures(
                 }
                 false
             }
-            Some(bevy::asset::LoadState::Loaded) => false,
+            Some(bevy::asset::LoadState::Loaded) => {
+                if let Some(chunk_materials) = chunk_materials.as_mut()
+                    && let Some(mut layer) = chunk_materials.get_mut(material)
+                {
+                    *layer.height_mut(*slot) = texture.clone();
+                    false
+                } else {
+                    true
+                }
+            }
             _ => true,
         },
         WatchedTexture::LayerAo {
@@ -267,7 +307,16 @@ pub fn drop_failed_terrain_textures(
                 }
                 false
             }
-            Some(bevy::asset::LoadState::Loaded) => false,
+            Some(bevy::asset::LoadState::Loaded) => {
+                if let Some(chunk_materials) = chunk_materials.as_mut()
+                    && let Some(mut layer) = chunk_materials.get_mut(material)
+                {
+                    *layer.ao_mut(*slot) = texture.clone();
+                    false
+                } else {
+                    true
+                }
+            }
             _ => true,
         },
         WatchedTexture::LayerRough {
@@ -293,7 +342,17 @@ pub fn drop_failed_terrain_textures(
                 }
                 false
             }
-            Some(bevy::asset::LoadState::Loaded) => false,
+            Some(bevy::asset::LoadState::Loaded) => {
+                if let Some(chunk_materials) = chunk_materials.as_mut()
+                    && let Some(mut layer) = chunk_materials.get_mut(material)
+                {
+                    *layer.rough_mut(*slot) = texture.clone();
+                    layer.params.roughs[*slot].y = super::layer_material::ROUGH_MAP_MIX;
+                    false
+                } else {
+                    true
+                }
+            }
             _ => true,
         },
     });
@@ -513,6 +572,14 @@ impl TerrainReader {
             deltas: &self.deltas,
         }
     }
+
+    /// Cota da superfície mais alta, a mesma de [`TerrainRuntime::sample`].
+    pub fn sample(&self, x: f32, z: f32) -> f32 {
+        if self.voxel.is_flat() {
+            return self.base().sample(x, z);
+        }
+        self.voxel.surface_top(&self.base(), x, z)
+    }
 }
 
 /// A standing surface thinner than this with hollow ground below is a slab
@@ -698,6 +765,15 @@ impl bevy::app::Plugin for TerrainFeaturesPlugin {
             // Idempotente com `textures::TexturesPlugin`: o bootstrap regista
             // texturas world-tiled mesmo em apps headless de teste.
             .init_resource::<crate::textures::WorldTiledTextures>()
+            // As texturas do chão entram na fila do `IoTaskPool` (4 threads)
+            // ANTES de o spawn enfileirar os GLBs. Sem isto o material — que
+            // não desenha enquanto faltar um albedo — espera atrás de todo
+            // o pool de props.
+            .add_systems(bevy::app::PreStartup, preload_terrain_textures)
+            .add_systems(
+                crate::scene_loader::SceneLoad,
+                preload_terrain_textures.before(crate::recipes::spawn::startup),
+            )
             .add_systems(
                 bevy::app::Startup,
                 (
@@ -1462,6 +1538,180 @@ fn asset_present(asset_roots: &[std::path::PathBuf], asset_path: &str) -> bool {
         .any(|root| root.join(asset_path).is_file())
 }
 
+/// Caminhos das texturas de camada, na ordem em que devem entrar na fila do
+/// asset server: **albedos primeiro** (é o que o material espera para desenhar),
+/// depois normal / height / AO / roughness. Mapas opcionais ausentes no disco
+/// não entram — o bootstrap também não os pede.
+struct LayerTexturePaths {
+    albedos: Vec<(usize, String)>,
+    normals: Vec<(usize, String)>,
+    heights: Vec<(usize, String)>,
+    aos: Vec<(usize, String)>,
+    roughs: Vec<(usize, String)>,
+}
+
+impl LayerTexturePaths {
+    /// Ordem de `AssetServer::load`: albedos, depois o resto.
+    fn queue(&self) -> impl Iterator<Item = &str> {
+        self.albedos
+            .iter()
+            .map(|(_, path)| path.as_str())
+            .chain(self.normals.iter().map(|(_, path)| path.as_str()))
+            .chain(self.heights.iter().map(|(_, path)| path.as_str()))
+            .chain(self.aos.iter().map(|(_, path)| path.as_str()))
+            .chain(self.roughs.iter().map(|(_, path)| path.as_str()))
+    }
+}
+
+fn layer_texture_paths(
+    spec: &TerrainSpec,
+    game_config: &crate::config::GameConfig,
+    asset_roots: &[std::path::PathBuf],
+) -> LayerTexturePaths {
+    let mut albedos = Vec::new();
+    let mut filled = [false; super::splat::LAYER_COUNT];
+    for (slot, entry) in spec
+        .layers
+        .iter()
+        .enumerate()
+        .take(super::splat::LAYER_COUNT)
+    {
+        if entry.is_empty() {
+            continue;
+        }
+        let path = game_config
+            .terrain_albedo(entry)
+            .unwrap_or_else(|| entry.clone());
+        albedos.push((slot, path));
+        filled[slot] = true;
+    }
+    // O leito é pintado mesmo quando o mundo não lista `pebbles`.
+    if !filled[SLOT_RIVERBED] {
+        let path = game_config
+            .terrain_albedo("pebbles")
+            .expect("pebbles is a DEFAULT_LAYERS alias");
+        albedos.push((SLOT_RIVERBED, path));
+    }
+
+    let mut normals = Vec::new();
+    let mut heights = Vec::new();
+    let mut aos = Vec::new();
+    let mut roughs = Vec::new();
+    for (slot, entry) in spec
+        .layers
+        .iter()
+        .enumerate()
+        .take(super::splat::LAYER_COUNT)
+    {
+        if entry.is_empty() {
+            continue;
+        }
+        if let Some(path) = game_config.terrain_normal(entry)
+            && asset_present(asset_roots, &path)
+        {
+            normals.push((slot, path));
+        }
+        if let Some(path) = game_config.terrain_height(entry)
+            && asset_present(asset_roots, &path)
+        {
+            heights.push((slot, path));
+        }
+        if let Some(path) = game_config.terrain_ao(entry)
+            && asset_present(asset_roots, &path)
+        {
+            aos.push((slot, path));
+        }
+        let path = match crate::terrain::layer_material::SLOT_STYLES[slot].rough_map {
+            crate::terrain::layer_material::RoughMap::Rough => game_config.terrain_roughness(entry),
+            crate::terrain::layer_material::RoughMap::Smooth => {
+                game_config.terrain_smoothness(entry)
+            }
+            crate::terrain::layer_material::RoughMap::None => None,
+        };
+        if let Some(path) = path
+            && asset_present(asset_roots, &path)
+        {
+            roughs.push((slot, path));
+        }
+    }
+    LayerTexturePaths {
+        albedos,
+        normals,
+        heights,
+        aos,
+        roughs,
+    }
+}
+
+/// Enfileira as texturas do terreno no `IoTaskPool` antes de qualquer GLB.
+///
+/// O `load` do Bevy dispara a task na hora. O spawn do simple-rpg mete ~1000
+/// GLBs na mesma fila de 4 threads; se os albedos forem atrás, o chão (um
+/// material que não desenha enquanto faltar um albedo) fica cinzento até o
+/// pool de props acabar. Detalhe (normal/height/AO/rough) vai na mesma fila,
+/// a seguir aos albedos, mas o material só o liga quando a imagem já chegou.
+fn preload_terrain_textures(world: &mut World) {
+    let Some(server) = world.get_resource::<AssetServer>().cloned() else {
+        return;
+    };
+    let (spec, base) = {
+        let Some(pending) = world.get_resource::<crate::recipes::spawn::PendingWorld>() else {
+            return;
+        };
+        // O `<Terrain>` vive nas entidades, não num campo de `ParsedWorld`.
+        // `PendingTerrain` só nasce dentro do spawn — tarde demais: os GLBs
+        // já teriam ocupado a fila de IO.
+        let mut collected = crate::recipes::spawn::PendingTerrain {
+            base_dir: pending.base_dir.clone(),
+            ..Default::default()
+        };
+        crate::recipes::spawn::collect_terrain(&pending.world.entities, &mut collected);
+        let Some(spec) = collected.terrain else {
+            return;
+        };
+        (spec, collected.base_dir)
+    };
+    if spec.layers.iter().all(|entry| entry.is_empty()) && spec.texture.is_none() {
+        return;
+    }
+    let Some(config) = world.get_resource::<crate::config::GameConfig>().cloned() else {
+        return;
+    };
+    let legacy = spec.texture.clone();
+    let asset_roots = config.asset_roots(base.as_deref().unwrap_or(Path::new(".")));
+    let paths = layer_texture_paths(&spec, &config, &asset_roots);
+    let albedo_n = paths.albedos.len();
+    let detail_n = paths.normals.len() + paths.heights.len() + paths.aos.len() + paths.roughs.len();
+    let queued: Vec<String> = paths.queue().map(str::to_owned).collect();
+    if albedo_n + detail_n > 0 {
+        info!(
+            "terrain textures: {albedo_n} albedos + {detail_n} mapas de detalhe na frente dos GLBs"
+        );
+    }
+    for path in queued {
+        load_world_texture(&server, world, &path);
+    }
+    if let Some(texture) = legacy.as_deref() {
+        load_world_texture(&server, world, texture);
+    }
+}
+
+/// Handle de detalhe já residente, ou o fallback plano. Um mapa ainda em
+/// carga NÃO entra no material — senão o chão inteiro espera por ele.
+fn bind_detail(
+    server: &AssetServer,
+    loaded: &Handle<Image>,
+    flat: &Handle<Image>,
+) -> Handle<Image> {
+    if loaded.id() == flat.id() {
+        return flat.clone();
+    }
+    match server.get_load_state(loaded) {
+        Some(bevy::asset::LoadState::Loaded) => loaded.clone(),
+        _ => flat.clone(),
+    }
+}
+
 /// O material de camadas do terreno: as 13 camadas do pool (cada alias resolve
 /// para `/assets/textures/<alias>/…`; slots fora da lista autoral reusam a 1.ª
 /// camada — EXCETO o leito ([`SLOT_RIVERBED`]), que carrega sempre `pebbles`)
@@ -1489,145 +1739,62 @@ fn spawn_terrain_material(
     // texturas trocadas. As texturas do pool resolvem contra o
     // `terrain_textures_dir` do config.yaml do jogo (docs/ASSETS.md).
     let game_config = world.resource::<crate::config::GameConfig>().clone();
+    let tex_paths = layer_texture_paths(spec, &game_config, asset_roots);
     let mut loaded: Vec<(usize, Handle<Image>)> = Vec::new();
-    let mut first = None::<Handle<Image>>;
-    for (slot, entry) in spec
-        .layers
-        .iter()
-        .enumerate()
-        .take(super::splat::LAYER_COUNT)
-    {
-        if entry.is_empty() {
-            continue;
-        }
-        let path = game_config
-            .terrain_albedo(entry)
-            .unwrap_or_else(|| entry.clone());
-        let handle = load_world_texture(server, world, &path);
-        first.get_or_insert_with(|| handle.clone());
-        loaded.push((slot, handle));
+    for (slot, path) in &tex_paths.albedos {
+        loaded.push((*slot, load_world_texture(server, world, path)));
     }
-    // Slots sem textura autoral leem a primeira layer (slot 0): um mundo de
-    // 8 layers renderiza bem com os quatro picks mais pesados.
-    let fallback = first.unwrap_or_else(|| images.add(solid_white_image()));
+    // Slots sem textura autoral leem a primeira layer: um mundo de 8 layers
+    // renderiza bem com os quatro picks mais pesados. O leito (`pebbles`) já
+    // vem em `tex_paths.albedos` quando o slot estava vazio.
+    let fallback = loaded
+        .first()
+        .map(|(_, handle)| handle.clone())
+        .unwrap_or_else(|| images.add(solid_white_image()));
     let mut layer_textures = vec![fallback.clone(); super::splat::LAYER_COUNT];
     for (slot, handle) in loaded {
         layer_textures[slot] = handle;
     }
-    // O leito é pintado pelo splat independentemente da lista autoral —
-    // um mundo que não lista `pebbles` continua com fundo de seixo.
-    if layer_textures[SLOT_RIVERBED] == fallback {
-        let path = game_config
-            .terrain_albedo("pebbles")
-            .expect("pebbles is a DEFAULT_LAYERS alias");
-        layer_textures[SLOT_RIVERBED] = load_world_texture(server, world, &path);
-    }
 
-    // Normal maps do pool, por SLOT (um handle partilhado por todos os
-    // chunks). Alias sem ficheiro no asset root → a carga falha e o watch
-    // reponta para a normal plana (o material só desenha com TODAS as
-    // texturas residentes, portanto a falha não pode ficar pendente);
-    // alias vazio/fora do pool → normal plana logo, sem watch.
+    // Mapas de detalhe: o pedido parte já (a fila foi aberta no preload), mas
+    // o material só os referencia quando a imagem está Loaded. Enquanto
+    // carregam, o slot fica no fallback plano — o chão desenha com o albedo.
     let flat_normal = images.add(flat_normal_image());
     let mut layer_normals = vec![flat_normal.clone(); super::splat::LAYER_COUNT];
-    for (slot, entry) in spec
-        .layers
-        .iter()
-        .enumerate()
-        .take(super::splat::LAYER_COUNT)
-    {
-        if entry.is_empty() {
-            continue;
-        }
-        let Some(path) = game_config.terrain_normal(entry) else {
-            continue;
-        };
-        // Mapa opcional: sem ficheiro no pool fica o fallback (plana/neutra)
-        // e nem se chega a pedir a carga.
-        if !asset_present(asset_roots, &path) {
-            continue;
-        }
-        layer_normals[slot] = load_world_texture(server, world, &path);
+    for (slot, path) in &tex_paths.normals {
+        layer_normals[*slot] = load_world_texture(server, world, path);
     }
-
-    // Height + AO do pool, por SLOT — a MESMA disciplina das normais: alias
-    // sem ficheiro no asset root → o watch reponta para a plana/neutra;
-    // alias vazio/fora do pool → plana logo. A plana (0.5) faz o
-    // height-blend devolver os pesos originais e o AO neutro (1.0) não
-    // escurece nada: mundos sem os mapas degradam sem costura.
     let flat_height = images.add(flat_height_image());
     let mut layer_heights = vec![flat_height.clone(); super::splat::LAYER_COUNT];
-    for (slot, entry) in spec
-        .layers
-        .iter()
-        .enumerate()
-        .take(super::splat::LAYER_COUNT)
-    {
-        if entry.is_empty() {
-            continue;
-        }
-        let Some(path) = game_config.terrain_height(entry) else {
-            continue;
-        };
-        // Mapa opcional: sem ficheiro no pool fica o fallback (plana/neutra)
-        // e nem se chega a pedir a carga.
-        if !asset_present(asset_roots, &path) {
-            continue;
-        }
-        layer_heights[slot] = load_world_texture(server, world, &path);
+    for (slot, path) in &tex_paths.heights {
+        layer_heights[*slot] = load_world_texture(server, world, path);
     }
     let flat_ao = images.add(flat_ao_image());
     let mut layer_aos = vec![flat_ao.clone(); super::splat::LAYER_COUNT];
-    for (slot, entry) in spec
-        .layers
-        .iter()
-        .enumerate()
-        .take(super::splat::LAYER_COUNT)
-    {
-        if entry.is_empty() {
-            continue;
-        }
-        let Some(path) = game_config.terrain_ao(entry) else {
-            continue;
-        };
-        // Mapa opcional: sem ficheiro no pool fica o fallback (plana/neutra)
-        // e nem se chega a pedir a carga.
-        if !asset_present(asset_roots, &path) {
-            continue;
-        }
-        layer_aos[slot] = load_world_texture(server, world, &path);
+    for (slot, path) in &tex_paths.aos {
+        layer_aos[*slot] = load_world_texture(server, world, path);
     }
-
-    // Roughness do pool, por SLOT — a fonte vem da tabela estática
-    // ([`RoughMap`]): `roughness.ktx2` direto, `smoothness.ktx2` invertido
-    // no shader (`roughs[i].z = 1`), e quem não tem nenhum fica com a plana
-    // + mix 0 (o WGSL devolve a constante — idêntico ao caminho antigo).
     let flat_rough = images.add(flat_rough_image());
     let mut layer_roughs = vec![flat_rough.clone(); super::splat::LAYER_COUNT];
-    for (slot, entry) in spec
-        .layers
-        .iter()
-        .enumerate()
-        .take(super::splat::LAYER_COUNT)
-    {
-        if entry.is_empty() {
-            continue;
-        }
-        let path = match crate::terrain::layer_material::SLOT_STYLES[slot].rough_map {
-            crate::terrain::layer_material::RoughMap::Rough => game_config.terrain_roughness(entry),
-            crate::terrain::layer_material::RoughMap::Smooth => {
-                game_config.terrain_smoothness(entry)
-            }
-            crate::terrain::layer_material::RoughMap::None => continue,
-        };
-        let Some(path) = path else {
-            continue;
-        };
-        if !asset_present(asset_roots, &path) {
-            continue;
-        }
-        layer_roughs[slot] = load_world_texture(server, world, &path);
+    for (slot, path) in &tex_paths.roughs {
+        layer_roughs[*slot] = load_world_texture(server, world, path);
     }
+    let bound_normals: Vec<Handle<Image>> = layer_normals
+        .iter()
+        .map(|handle| bind_detail(server, handle, &flat_normal))
+        .collect();
+    let bound_heights: Vec<Handle<Image>> = layer_heights
+        .iter()
+        .map(|handle| bind_detail(server, handle, &flat_height))
+        .collect();
+    let bound_aos: Vec<Handle<Image>> = layer_aos
+        .iter()
+        .map(|handle| bind_detail(server, handle, &flat_ao))
+        .collect();
+    let bound_roughs: Vec<Handle<Image>> = layer_roughs
+        .iter()
+        .map(|handle| bind_detail(server, handle, &flat_rough))
+        .collect();
 
     let params = SplatParams {
         shore_width: spec.shore_width,
@@ -1653,6 +1820,14 @@ fn spawn_terrain_material(
     let origin = map.origin();
     let side = map.size as f32 * map.texel;
     let pick = |list: &[Handle<Image>], i: usize| list[i].clone();
+    let mut chunk_params = TerrainChunkParams::new([origin.x, origin.y], side, config);
+    // Mapa de roughness ainda em carga: mix 0 (a constante). O watch
+    // repõe `ROUGH_MAP_MIX` quando a imagem entra no material.
+    for slot in 0..super::splat::LAYER_COUNT {
+        if layer_roughs[slot] != flat_rough && bound_roughs[slot] == flat_rough {
+            chunk_params.roughs[slot].y = 0.0;
+        }
+    }
     let material = chunk_materials.add(TerrainChunkMaterial {
         albedo0: pick(&layer_textures, 0),
         albedo1: pick(&layer_textures, 1),
@@ -1667,67 +1842,68 @@ fn spawn_terrain_material(
         albedo10: pick(&layer_textures, 10),
         albedo11: pick(&layer_textures, 11),
         albedo12: pick(&layer_textures, 12),
-        normal0: pick(&layer_normals, 0),
-        normal1: pick(&layer_normals, 1),
-        normal2: pick(&layer_normals, 2),
-        normal3: pick(&layer_normals, 3),
-        normal4: pick(&layer_normals, 4),
-        normal5: pick(&layer_normals, 5),
-        normal6: pick(&layer_normals, 6),
-        normal7: pick(&layer_normals, 7),
-        normal8: pick(&layer_normals, 8),
-        normal9: pick(&layer_normals, 9),
-        normal10: pick(&layer_normals, 10),
-        normal11: pick(&layer_normals, 11),
-        normal12: pick(&layer_normals, 12),
-        height0: pick(&layer_heights, 0),
-        height1: pick(&layer_heights, 1),
-        height2: pick(&layer_heights, 2),
-        height3: pick(&layer_heights, 3),
-        height4: pick(&layer_heights, 4),
-        height5: pick(&layer_heights, 5),
-        height6: pick(&layer_heights, 6),
-        height7: pick(&layer_heights, 7),
-        height8: pick(&layer_heights, 8),
-        height9: pick(&layer_heights, 9),
-        height10: pick(&layer_heights, 10),
-        height11: pick(&layer_heights, 11),
-        height12: pick(&layer_heights, 12),
-        ao0: pick(&layer_aos, 0),
-        ao1: pick(&layer_aos, 1),
-        ao2: pick(&layer_aos, 2),
-        ao3: pick(&layer_aos, 3),
-        ao4: pick(&layer_aos, 4),
-        ao5: pick(&layer_aos, 5),
-        ao6: pick(&layer_aos, 6),
-        ao7: pick(&layer_aos, 7),
-        ao8: pick(&layer_aos, 8),
-        ao9: pick(&layer_aos, 9),
-        ao10: pick(&layer_aos, 10),
-        ao11: pick(&layer_aos, 11),
-        ao12: pick(&layer_aos, 12),
-        rough0: pick(&layer_roughs, 0),
-        rough1: pick(&layer_roughs, 1),
-        rough2: pick(&layer_roughs, 2),
-        rough3: pick(&layer_roughs, 3),
-        rough4: pick(&layer_roughs, 4),
-        rough5: pick(&layer_roughs, 5),
-        rough6: pick(&layer_roughs, 6),
-        rough7: pick(&layer_roughs, 7),
-        rough8: pick(&layer_roughs, 8),
-        rough9: pick(&layer_roughs, 9),
-        rough10: pick(&layer_roughs, 10),
-        rough11: pick(&layer_roughs, 11),
-        rough12: pick(&layer_roughs, 12),
+        normal0: pick(&bound_normals, 0),
+        normal1: pick(&bound_normals, 1),
+        normal2: pick(&bound_normals, 2),
+        normal3: pick(&bound_normals, 3),
+        normal4: pick(&bound_normals, 4),
+        normal5: pick(&bound_normals, 5),
+        normal6: pick(&bound_normals, 6),
+        normal7: pick(&bound_normals, 7),
+        normal8: pick(&bound_normals, 8),
+        normal9: pick(&bound_normals, 9),
+        normal10: pick(&bound_normals, 10),
+        normal11: pick(&bound_normals, 11),
+        normal12: pick(&bound_normals, 12),
+        height0: pick(&bound_heights, 0),
+        height1: pick(&bound_heights, 1),
+        height2: pick(&bound_heights, 2),
+        height3: pick(&bound_heights, 3),
+        height4: pick(&bound_heights, 4),
+        height5: pick(&bound_heights, 5),
+        height6: pick(&bound_heights, 6),
+        height7: pick(&bound_heights, 7),
+        height8: pick(&bound_heights, 8),
+        height9: pick(&bound_heights, 9),
+        height10: pick(&bound_heights, 10),
+        height11: pick(&bound_heights, 11),
+        height12: pick(&bound_heights, 12),
+        ao0: pick(&bound_aos, 0),
+        ao1: pick(&bound_aos, 1),
+        ao2: pick(&bound_aos, 2),
+        ao3: pick(&bound_aos, 3),
+        ao4: pick(&bound_aos, 4),
+        ao5: pick(&bound_aos, 5),
+        ao6: pick(&bound_aos, 6),
+        ao7: pick(&bound_aos, 7),
+        ao8: pick(&bound_aos, 8),
+        ao9: pick(&bound_aos, 9),
+        ao10: pick(&bound_aos, 10),
+        ao11: pick(&bound_aos, 11),
+        ao12: pick(&bound_aos, 12),
+        rough0: pick(&bound_roughs, 0),
+        rough1: pick(&bound_roughs, 1),
+        rough2: pick(&bound_roughs, 2),
+        rough3: pick(&bound_roughs, 3),
+        rough4: pick(&bound_roughs, 4),
+        rough5: pick(&bound_roughs, 5),
+        rough6: pick(&bound_roughs, 6),
+        rough7: pick(&bound_roughs, 7),
+        rough8: pick(&bound_roughs, 8),
+        rough9: pick(&bound_roughs, 9),
+        rough10: pick(&bound_roughs, 10),
+        rough11: pick(&bound_roughs, 11),
+        rough12: pick(&bound_roughs, 12),
         splat0: planes[0].clone(),
         splat1: planes[1].clone(),
         splat2: planes[2].clone(),
         splat3: planes[3].clone(),
-        params: TerrainChunkParams::new([origin.x, origin.y], side, config),
+        params: chunk_params,
     });
-    // Vigia cada textura do pool: uma que nunca chega é reapontada (o
-    // material só desenha com TODAS residentes). O leito cai para o cascalho,
-    // o resto para a 1.ª OUTRA camada — nunca para si própria.
+    // Albedo no material desde já (é o que destrava o desenho). Detalhe só
+    // entra no watch quando ainda não está residente — o `Loaded` do watch
+    // faz o swap. O leito cai para o cascalho, o resto para a 1.ª OUTRA
+    // camada — nunca para si própria.
     for slot in 0..super::splat::LAYER_COUNT {
         let texture = layer_textures[slot].clone();
         let repoint = if slot == SLOT_RIVERBED && layer_textures[SLOT_GRAVEL] != texture {
@@ -1745,28 +1921,28 @@ fn spawn_terrain_material(
             texture,
             repoint,
         });
-        if layer_normals[slot] != flat_normal {
+        if layer_normals[slot] != flat_normal && bound_normals[slot] == flat_normal {
             watched.push(WatchedTexture::LayerNormal {
                 material: material.clone(),
                 slot,
                 texture: layer_normals[slot].clone(),
             });
         }
-        if layer_heights[slot] != flat_height {
+        if layer_heights[slot] != flat_height && bound_heights[slot] == flat_height {
             watched.push(WatchedTexture::LayerHeight {
                 material: material.clone(),
                 slot,
                 texture: layer_heights[slot].clone(),
             });
         }
-        if layer_aos[slot] != flat_ao {
+        if layer_aos[slot] != flat_ao && bound_aos[slot] == flat_ao {
             watched.push(WatchedTexture::LayerAo {
                 material: material.clone(),
                 slot,
                 texture: layer_aos[slot].clone(),
             });
         }
-        if layer_roughs[slot] != flat_rough {
+        if layer_roughs[slot] != flat_rough && bound_roughs[slot] == flat_rough {
             watched.push(WatchedTexture::LayerRough {
                 material: material.clone(),
                 slot,
@@ -1774,6 +1950,9 @@ fn spawn_terrain_material(
             });
         }
     }
+    world.insert_resource(TerrainTextureGate {
+        albedo: layer_textures.clone(),
+    });
     world.insert_resource(TerrainSplat {
         map,
         planes,
@@ -2318,6 +2497,43 @@ fn load_heightmap(
 
 #[cfg(test)]
 mod tests {
+    /// Os albedos têm de ser os primeiros na fila: o material do chão não
+    /// desenha enquanto falta um, e o `IoTaskPool` só corre 4 loads de cada
+    /// vez. Um `height.ktx2` ausente não pode furar a fila.
+    #[test]
+    fn layer_texture_paths_queue_albedos_before_detail_maps() {
+        use super::{TerrainSpec, layer_texture_paths};
+
+        let dir = tempfile::tempdir().unwrap();
+        let grass = dir.path().join("assets/textures/grass");
+        std::fs::create_dir_all(&grass).unwrap();
+        std::fs::write(grass.join("albedo.ktx2"), b"ktx").unwrap();
+        std::fs::write(grass.join("normal.ktx2"), b"ktx").unwrap();
+        let config = crate::config::fixture();
+        let spec = TerrainSpec {
+            layers: vec!["grass".into()],
+            ..TerrainSpec::default()
+        };
+        let paths = layer_texture_paths(&spec, &config, &[dir.path().to_path_buf()]);
+        let order: Vec<&str> = paths.queue().collect();
+        assert_eq!(order[0], "assets/textures/grass/albedo.ktx2");
+        let pebbles = order
+            .iter()
+            .position(|path| path.ends_with("pebbles/albedo.ktx2"))
+            .expect("leito");
+        let normal = order
+            .iter()
+            .position(|path| path.ends_with("grass/normal.ktx2"))
+            .expect("normal");
+        assert!(pebbles < normal, "albedos antes do detalhe: {order:?}");
+        assert!(
+            order
+                .iter()
+                .all(|path| !path.ends_with("grass/height.ktx2")),
+            "height ausente não entra na fila: {order:?}"
+        );
+    }
+
     /// A fila das edições vivas: o applier aplica no máximo
     /// [`super::delta::EDITS_PER_FRAME`] por frame (o resto fica em fila) e
     /// a revisão do overlay avança por commit.

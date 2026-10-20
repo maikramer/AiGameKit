@@ -36,6 +36,26 @@ pub struct MusicBus;
 #[derive(Resource)]
 pub struct SfxBus;
 
+/// Parâmetros de um loop de SFX pedido por script (`viber.sound_loop`).
+#[derive(Clone, Debug)]
+pub struct ScriptLoopParams {
+    pub clip: String,
+    pub pitch: f64,
+    pub volume: f32,
+    pub position: Option<Vec3>,
+}
+
+/// Loops que os scripts querem vivos neste frame. O driver de áudio lê
+/// `wanted` e reconcilia as instâncias; sem o recurso o comando é no-op.
+#[derive(Resource, Default)]
+pub struct ScriptSoundLoops {
+    pub wanted: std::collections::HashMap<String, ScriptLoopParams>,
+}
+
+/// Layer de BGM forçada por script (`viber.music.layer`). `None` = automático.
+#[derive(Resource, Default)]
+pub struct MusicLayerOverride(pub Option<String>);
+
 /// Bus volumes from `<AudioMixer master music sfx>`.
 ///
 /// The resource always exists (worlds without an `<AudioMixer>` get this
@@ -261,12 +281,18 @@ pub fn mixer_sync(
     }
 }
 
+#[derive(Debug, Default, Resource)]
+pub struct ScriptLoopPlayback {
+    live: std::collections::HashMap<String, (String, Handle<AudioInstance>)>,
+}
+
 /// Move each layer's volume toward its zone target every frame.
 pub fn music_driver(
     time: Res<Time>,
     players: Query<&GlobalTransform, With<crate::player::Player>>,
     scene: Option<Res<crate::worldsys::InteriorSceneConfig>>,
     mut combat: ResMut<CombatMusicState>,
+    forced: Option<Res<MusicLayerOverride>>,
     mut layers: Query<(&MusicLayerTag, &LoopInstance, &mut LoopVolume)>,
     mut instances: ResMut<Assets<AudioInstance>>,
 ) {
@@ -276,10 +302,15 @@ pub fn music_driver(
         return;
     };
     let pos = player.translation();
-    // Combate ativo ganha à zona (boss > battle); sem luta, música do sítio.
-    let zone = combat
+    // Script (`viber.music.layer`) ganha à zona e ao combate. Sem override,
+    // combate ativo ganha à zona (boss > battle).
+    let auto = combat
         .active_layer(time.elapsed_secs_f64())
         .unwrap_or_else(|| bgm_zone(pos.x, pos.z, scene.as_deref()));
+    let zone = forced
+        .as_ref()
+        .and_then(|over| over.0.as_deref())
+        .unwrap_or(auto);
     let dt = time.delta_secs().clamp(0.0, 0.2);
     for (tag, instance, mut volume) in &mut layers {
         let target = layer_target(&tag.layer, zone, tag.base_volume);
@@ -294,6 +325,85 @@ pub fn music_driver(
             );
             volume.0 = next;
         }
+    }
+}
+
+/// Resolve `clip` de `viber.sound_loop`: nome do registry ou caminho relativo
+/// ao `sfx_dir`.
+fn resolve_loop_clip(clip: &str, config: &crate::config::GameConfig) -> String {
+    if let Some(known) = crate::luau::sfx::sfx_clip_from_str(clip) {
+        config.sfx_path(known.file())
+    } else {
+        config.sfx_path(clip)
+    }
+}
+
+/// Mantém os loops pedidos por scripts (pitch, volume, atenuação).
+pub fn script_sound_loops(
+    loops: Res<ScriptSoundLoops>,
+    mut playback: Local<ScriptLoopPlayback>,
+    server: Res<AssetServer>,
+    config: Option<Res<crate::config::GameConfig>>,
+    channel: Option<Res<AudioChannel<SfxBus>>>,
+    mut instances: ResMut<Assets<AudioInstance>>,
+    editor: Query<&GlobalTransform, With<crate::editor_camera::EditorCamera>>,
+    listeners: Query<&GlobalTransform, With<Camera3d>>,
+) {
+    let (Some(channel), Some(config)) = (channel, config) else {
+        return;
+    };
+    let stale: Vec<String> = playback
+        .live
+        .keys()
+        .filter(|id| !loops.wanted.contains_key(*id))
+        .cloned()
+        .collect();
+    for id in stale {
+        if let Some((_, handle)) = playback.live.remove(&id)
+            && let Some(mut snd) = instances.get_mut(&handle)
+        {
+            snd.stop(AudioTween::linear(Duration::from_millis(80)));
+        }
+    }
+    let ear =
+        crate::editor_camera::active_camera_eye(&editor, &listeners).map(|cam| cam.translation());
+    for (id, params) in &loops.wanted {
+        let url = resolve_loop_clip(&params.clip, &config);
+        let restart = match playback.live.get(id) {
+            Some((clip, _)) => clip != &url,
+            None => true,
+        };
+        if restart {
+            if let Some((_, handle)) = playback.live.remove(id)
+                && let Some(mut snd) = instances.get_mut(&handle)
+            {
+                snd.stop(AudioTween::linear(Duration::from_millis(40)));
+            }
+            let handle = channel
+                .play(server.load(url.clone()))
+                .looped()
+                .with_volume(DB_SILENCE)
+                .handle();
+            playback.live.insert(id.clone(), (url, handle));
+        }
+        let Some((_, handle)) = playback.live.get(id) else {
+            continue;
+        };
+        let Some(mut snd) = instances.get_mut(handle) else {
+            continue;
+        };
+        let atten = match (params.position, ear) {
+            (Some(pos), Some(ear)) => (1.0 - pos.distance(ear) / 40.0).clamp(0.0, 1.0),
+            _ => 1.0,
+        };
+        snd.set_playback_rate(
+            params.pitch.max(0.05),
+            AudioTween::linear(Duration::from_millis(90)),
+        );
+        snd.set_decibels(
+            linear_to_db((params.volume * atten).clamp(0.0, 1.0)),
+            AudioTween::linear(Duration::from_millis(90)),
+        );
     }
 }
 

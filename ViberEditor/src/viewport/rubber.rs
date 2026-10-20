@@ -22,7 +22,8 @@ pub struct RubberGrab;
 #[derive(Resource, Debug, Default, Clone, Copy)]
 pub struct RubberBand {
     pub active: bool,
-    pub start: Vec2,
+    /// `None` = não há press. `Vec2::ZERO` é um canto válido do viewport.
+    pub start: Option<Vec2>,
     pub now: Vec2,
 }
 
@@ -46,41 +47,54 @@ fn rubber_interaction(world: &mut World) {
     let hover = world.resource::<ViewportHover>().0;
     let mut band = *world.resource::<RubberBand>();
 
-    if mode != Mode::Select {
+    if mode != Mode::Select
+        || world
+            .get_resource::<super::feature_handles::FeatureGrab>()
+            .is_some()
+    {
+        // Um handle de lago/estrada também é botão esquerdo. Sem esta guarda
+        // o rubber arma aos 6 px e, no release, substitui a seleção.
         band.active = false;
+        band.start = None;
         world.remove_resource::<RubberGrab>();
         *world.resource_mut::<RubberBand>() = band;
+        position_rect(world);
         return;
     }
     let Some(screen) = cursor.screen else {
         band.active = false;
+        band.start = None;
         world.remove_resource::<RubberGrab>();
         *world.resource_mut::<RubberBand>() = band;
         position_rect(world);
         return;
     };
     if buttons.just_pressed(MouseButton::Left) && hover {
-        band.start = screen;
+        band.start = Some(screen);
         band.now = screen;
         band.active = false; // só vira rubber depois do threshold
     }
-    if buttons.pressed(MouseButton::Left) && band.start != Vec2::ZERO {
+    if buttons.pressed(MouseButton::Left)
+        && let Some(start) = band.start
+    {
         band.now = screen;
-        if !band.active && band.now.distance(band.start) > DRAG_PX {
+        if !band.active && band.now.distance(start) > DRAG_PX {
             band.active = true;
             world.insert_resource(RubberGrab);
         }
     }
-    if band.active && buttons.just_released(MouseButton::Left) {
+    if buttons.just_released(MouseButton::Left) {
+        if band.active {
+            select_in_rect(
+                world,
+                band,
+                world.resource::<ButtonInput<KeyCode>>().clone(),
+            );
+        }
         band.active = false;
-        world.remove_resource::<RubberGrab>();
-        select_in_rect(
-            world,
-            band,
-            world.resource::<ButtonInput<KeyCode>>().clone(),
-        );
-        band.start = Vec2::ZERO;
+        band.start = None;
         band.now = Vec2::ZERO;
+        world.remove_resource::<RubberGrab>();
     }
     *world.resource_mut::<RubberBand>() = band;
     position_rect(world);
@@ -106,9 +120,11 @@ fn position_rect(world: &mut World) {
     } else {
         Display::None
     };
-    if band.active {
-        let min = band.start.min(band.now) / scale;
-        let size = (band.now - band.start).abs() / scale;
+    if band.active
+        && let Some(start) = band.start
+    {
+        let min = start.min(band.now) / scale;
+        let size = (band.now - start).abs() / scale;
         node.position_type = PositionType::Absolute;
         node.left = Val::Px(min.x);
         node.top = Val::Px(min.y);
@@ -128,8 +144,11 @@ fn select_in_rect(world: &mut World, band: RubberBand, keys: ButtonInput<KeyCode
     let Ok((camera, camera_global)) = cameras.single(world).map(|(c, g)| (c.clone(), *g)) else {
         return;
     };
-    let rect_min = band.start.min(band.now);
-    let rect_max = band.start.max(band.now);
+    let Some(start) = band.start else {
+        return;
+    };
+    let rect_min = start.min(band.now);
+    let rect_max = start.max(band.now);
     let doc = world.resource::<SceneDoc>().clone();
     let mut sources = world.query_filtered::<(&GlobalTransform, &SceneSource), ()>();
     let mut picked: Vec<viber::scene::doc::NodeRef> = Vec::new();

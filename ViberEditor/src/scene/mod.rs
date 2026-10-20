@@ -25,6 +25,16 @@ use crate::ui::strings::{
 
 use doc::{NodeRef, SceneDoc};
 
+/// Texto vivo de um input. O `FeathersTextInput` do Bevy 0.20 guarda o que foi
+/// digitado em `EditableText`; o componente `Text` ou não existe ou fica no
+/// valor do spawn. Preferir `EditableText` — senão Enter vê o valor antigo.
+pub fn input_text(world: &World, entity: Entity) -> Option<String> {
+    if let Some(editable) = world.get::<bevy::text::EditableText>(entity) {
+        return Some(editable.value().to_string());
+    }
+    world.get::<Text>(entity).map(|text| text.0.clone())
+}
+
 /// The node selected in the Objects dock or the viewport.
 #[derive(Resource, Debug, Default, Clone, PartialEq)]
 pub struct Selection(pub Vec<NodeRef>);
@@ -127,6 +137,7 @@ impl Plugin for ScenePlugin {
                     apply_pending_edits,
                     validate_selection,
                     tree::apply_tree_search,
+                    tree::prefill_rename,
                     tree::commit_rename,
                     tree::render_tree,
                     inspector::render_inspector,

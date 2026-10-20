@@ -303,10 +303,8 @@ fn run(world: &mut World, action: Action, node: Option<NodeRef>) {
     }
 }
 
-/// Agrupa a seleção num `<Group>` novo NO MESMO pai do primeiro selecionado:
-/// append do grupo ao fim do pai (não desloca índices), move dos nós
-/// (por ordem de índice DESCENDENTE — os move-outs não invalidam os
-/// anteriores), e no fim move o grupo para a posição do primeiro.
+/// Agrupa a seleção num `<Group>` novo no mesmo pai, no lugar do primeiro
+/// nó em ordem de documento, com os filhos nessa mesma ordem.
 fn group_selection(world: &mut World) {
     let lang = *world.resource::<Lang>();
     let doc = world.resource::<SceneDoc>().clone();
@@ -331,28 +329,52 @@ fn group_selection(world: &mut World) {
             t(lang, StrKey::GroupSameParent).to_owned();
         return;
     }
+    let Some(ops) = group_ops(&doc, &selected) else {
+        return;
+    };
+    world
+        .resource_mut::<PendingEdits>()
+        .push(t(lang, StrKey::MenuGroup).to_owned(), ops);
+}
+
+/// Agrupa no menor índice da seleção e mantém a ordem do documento.
+/// Os `Move` saem por índice descendente (os caminhos não apodrecem) com
+/// `index: 0` — append descendente invertia os filhos.
+pub fn group_ops(doc: &SceneDoc, selected: &[NodeRef]) -> Option<Vec<EditOp>> {
+    if selected.len() < 2 {
+        return None;
+    }
+    let parent = selected[0].parent()?;
+    if selected
+        .iter()
+        .any(|node| node.parent().as_ref() != Some(&parent))
+    {
+        return None;
+    }
     let parent_selector = doc.selector(&parent);
-    // nome único para o grupo (find_by_attr devolve os nós com esse name)
     let mut group_name = "group".to_owned();
     let mut counter = 1;
     while !doc.find_by_attr("name", &group_name).is_empty() {
         group_name = format!("group{counter}");
         counter += 1;
     }
-    let insert_at = selected[0].path.last().copied().unwrap_or(0);
+    let insert_at = selected
+        .iter()
+        .filter_map(|node| node.path.last().copied())
+        .min()
+        .unwrap_or(0);
     let mut ops = vec![EditOp::Insert {
         parent: parent_selector.clone(),
         index: None,
         xml: format!(r#"<Group name="{group_name}" />"#),
     }];
-    // os índices originais, descendentes (cada move-out desloca os seguintes)
-    let mut ordered = selected.clone();
+    let mut ordered: Vec<&NodeRef> = selected.iter().collect();
     ordered.sort_by(|a, b| b.path.last().cmp(&a.path.last()));
     for node in ordered {
         ops.push(EditOp::Move {
-            node: doc.selector(&node),
+            node: doc.selector(node),
             parent: format!("name={group_name}"),
-            index: None,
+            index: Some(0),
         });
     }
     ops.push(EditOp::Move {
@@ -360,7 +382,38 @@ fn group_selection(world: &mut World) {
         parent: parent_selector,
         index: Some(insert_at),
     });
-    world
-        .resource_mut::<PendingEdits>()
-        .push(t(lang, StrKey::MenuGroup).to_owned(), ops);
+    Some(ops)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn group_keeps_document_order_at_the_earliest_index() {
+        let dir = tempfile::tempdir().unwrap();
+        let world = dir.path().join("world.xml");
+        std::fs::write(
+            &world,
+            r#"<world static="true"><Group name="props"><Entity name="A" /><Entity name="B" /><Entity name="C" /><Entity name="D" /></Group></world>"#,
+        )
+        .unwrap();
+        let mut doc = SceneDoc::load(&world).unwrap();
+        let props = doc.find_by_attr("name", "props")[0].clone();
+        let b = doc.find_by_attr("name", "B")[0].clone();
+        let c = doc.find_by_attr("name", "C")[0].clone();
+        // clique em C e depois em B — a ordem do documento é B, C
+        let ops = group_ops(&doc, &[c, b]).unwrap();
+        viber::scene::ops::apply_batch(&mut doc, "group", &ops).unwrap();
+        let kids = doc.children(&props).unwrap();
+        assert_eq!(kids[0].attr("name"), Some("A"));
+        assert_eq!(kids[1].tag.to_ascii_lowercase(), "group");
+        assert_eq!(kids[2].attr("name"), Some("D"));
+        let inner: Vec<_> = kids[1]
+            .children
+            .iter()
+            .map(|node| node.attr("name").unwrap_or(""))
+            .collect();
+        assert_eq!(inner, ["B", "C"]);
+    }
 }

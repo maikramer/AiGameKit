@@ -68,9 +68,19 @@ const CONFIG_END: &str = "// === END WORLD CONFIG ===";
 /// em vez de descritores próprios no layout do material. O céu e a água
 /// escaparam por não terem textura nenhuma.
 ///
-/// Quem acrescentar um material custom com texturas a este crate tem de o
-/// marcar `#[bindless]` e escrever o WGSL com o ramo `#ifdef BINDLESS` —
-/// senão volta o SIGSEGV, e ele não vem com mensagem nenhuma.
+/// **RE-VERIFICADO AO VIVO (2026-10-18): o SIGSEGV já não reproduz** no bevy
+/// 0.20.0 + wgpu 30.0.1 + driver NV 615.71.09 — o mesmo material com o
+/// `#[bindless]` removido criou pipelines e desenhou o terreno (no look flat
+/// sem o ramo BINDLESS do shader) durante um boot completo em
+/// `worlds/lua-demo/world.xml`, sem sinal nenhum de crash. O gatilho era do
+/// par wgpu 29 + driver 595.84. O bindless MANTÉM-SE pelos benefícios de
+/// layout (8 layers num material, slab partilhada), não por necessidade —
+/// mas quem desligar precisa de um ramo não-bindless no shader (hoje o
+/// `chunk.wesl` só lê texturas pelas binding arrays).
+///
+/// Quem acrescentar um material custom com texturas a este crate: bindless
+/// continua a recomendação (e o shader tem de o acompanhar); o SIGSEGV
+/// histórico já não é o motivo.
 #[derive(Debug, Clone, Asset, TypePath, AsBindGroup)]
 #[data(0, TerrainChunkParams, binding_array(10))]
 // `limit(128)` — DOIS tetos, e o menor é o que mata:
@@ -718,8 +728,9 @@ const WETNESS_PUBLISH_EPS: f32 = 1e-3;
 
 pub fn terrain_day_tint(day: f32) -> [f32; 3] {
     let day = day.clamp(0.0, 1.0);
-    // Noite: silhueta azul-escura — o terreno nunca pode ler-se como dia.
-    const NIGHT: [f32; 3] = [0.07, 0.09, 0.15];
+    // Noite: azul-escuro legível. 0.07 apagava o fallback standard (o
+    // caminho de layers escurece pela luz real, não por este albedo).
+    const NIGHT: [f32; 3] = [0.26, 0.30, 0.40];
     // Golden hour: mão quente leve, pico a meio da rampa.
     const GOLDEN: [f32; 3] = [1.14, 0.99, 0.82];
     let warmth = day * (1.0 - day) * 4.0;

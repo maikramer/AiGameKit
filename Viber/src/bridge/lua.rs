@@ -2112,7 +2112,7 @@ pub fn eval(params: In<Option<Json>>, world: &mut World) -> BrpResult {
                     .and_then(|env| {
                         let mt = host.lua.create_table()?;
                         mt.set("__index", host.lua.globals())?;
-                        env.set_metatable(Some(mt));
+                        env.set_metatable(Some(mt))?;
                         Ok(env)
                     })
                     .map_err(|e| invalid(format!("falha a criar env da REPL: {e}")))?;

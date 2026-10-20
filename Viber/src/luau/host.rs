@@ -5,8 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
@@ -27,8 +27,68 @@ pub struct LoadedScript {
     pub on_update: Option<Function>,
     /// Callback opcional de aggro-chain (`on_player_attack(px, pz)`).
     pub on_player_attack: Option<Function>,
+    /// `on_trigger_enter(other)` — sensor Rapier.
+    pub on_trigger_enter: Option<Function>,
+    /// `on_trigger_stay(other, dt)`.
+    pub on_trigger_stay: Option<Function>,
+    /// `on_trigger_exit(other)`.
+    pub on_trigger_exit: Option<Function>,
+    /// `on_collision_enter(other)` — collider sólido.
+    pub on_collision_enter: Option<Function>,
+    /// `on_collision_stay(other, dt)`.
+    pub on_collision_stay: Option<Function>,
+    /// `on_collision_exit(other)`.
+    pub on_collision_exit: Option<Function>,
     /// True once the chunk's top-level has run.
     pub ran: bool,
+}
+
+/// Qual hook de contacto chamar. Stay leva `(other, dt)`; os outros só `other`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContactHook {
+    /// Sensor começou a intersectar.
+    TriggerEnter,
+    /// Sensor continua a intersectar.
+    TriggerStay,
+    /// Sensor deixou de intersectar.
+    TriggerExit,
+    /// Collider sólido começou o contacto.
+    CollisionEnter,
+    /// Collider sólido continua em contacto.
+    CollisionStay,
+    /// Collider sólido deixou o contacto.
+    CollisionExit,
+}
+
+impl ContactHook {
+    /// Stay passa o `dt` além da tabela `other`.
+    pub fn is_stay(self) -> bool {
+        matches!(self, Self::TriggerStay | Self::CollisionStay)
+    }
+
+    pub(crate) fn enter(trigger: bool) -> Self {
+        if trigger {
+            Self::TriggerEnter
+        } else {
+            Self::CollisionEnter
+        }
+    }
+
+    pub(crate) fn exit(trigger: bool) -> Self {
+        if trigger {
+            Self::TriggerExit
+        } else {
+            Self::CollisionExit
+        }
+    }
+
+    pub(crate) fn stay(trigger: bool) -> Self {
+        if trigger {
+            Self::TriggerStay
+        } else {
+            Self::CollisionStay
+        }
+    }
 }
 
 /// Registry of loaded chunks: `HashMap<path → loaded chunk handle>`.
@@ -115,11 +175,26 @@ impl LuaScriptHost {
     /// Creates the VM, installs the `viber` API table and seeds the app-data
     /// [`ScriptCtx`].
     pub fn new(scripts_dir: PathBuf) -> mlua::Result<Self> {
-        // Sem PACKAGE: o `require` do mlua lê e executa QUALQUER `.lua` do
-        // disco (e o `package.path` é gravável) — os módulos passam pelo
+        // ALL_SAFE no Luau = TODAS as libs do Luau (mlua 0.12): o Luau não
+        // tem `package`/`os`/`io` — o `require` de módulos passa pelo
         // `viber.load`, preso a `scripts/`.
-        let lua = Lua::new_with(StdLib::ALL_SAFE ^ StdLib::PACKAGE, LuaOptions::default())?;
+        let lua = Lua::new_with(StdLib::ALL_SAFE, LuaOptions::default())?;
         lua.set_memory_limit(SCRIPT_MEMORY_LIMIT)?;
+        // Luau JIT (feature `luau-jit`): chunks novos compilam para código
+        // nativo. A rede de segurança é o `set_interrupt` lá em baixo —
+        // `test_infinite_loop_is_interrupted_by_the_cpu_budget` prova que o
+        // orçamento interrompe TAMBÉM em código JIT. `VIBER_LUAU_JIT=0`
+        // volta ao interpretador puro (A/B de perf no mesmo binário).
+        #[cfg(feature = "luau-jit")]
+        {
+            let jit = std::env::var("VIBER_LUAU_JIT")
+                .map(|v| v != "0")
+                .unwrap_or(true);
+            lua.enable_jit(jit);
+        }
+        // mlua 0.12 trouxe o require-by-string do Luau: o global nasce na VM
+        // e leria ficheiros do disco — módulos passam pelo `viber.load`.
+        lua.globals().set("require", mlua::Value::Nil)?;
         // Biblioteca padrão só-leitura: os envs por script isolam globals,
         // mas `string.format = nil` num script mexia na tabela PARTILHADA.
         for lib in [
@@ -218,6 +293,12 @@ impl LuaScriptHost {
                 chunk,
                 on_update: None,
                 on_player_attack: None,
+                on_trigger_enter: None,
+                on_trigger_stay: None,
+                on_trigger_exit: None,
+                on_collision_enter: None,
+                on_collision_stay: None,
+                on_collision_exit: None,
                 ran: false,
             },
         );
@@ -301,6 +382,18 @@ impl LuaScriptHost {
                 .ok_or_else(|| mlua::Error::runtime(format!("script '{path}' not loaded")))?;
             script.on_update = script.env.raw_get::<Option<Function>>("on_update")?;
             script.on_player_attack = script.env.raw_get::<Option<Function>>("on_player_attack")?;
+            script.on_trigger_enter = script.env.raw_get::<Option<Function>>("on_trigger_enter")?;
+            script.on_trigger_stay = script.env.raw_get::<Option<Function>>("on_trigger_stay")?;
+            script.on_trigger_exit = script.env.raw_get::<Option<Function>>("on_trigger_exit")?;
+            script.on_collision_enter = script
+                .env
+                .raw_get::<Option<Function>>("on_collision_enter")?;
+            script.on_collision_stay = script
+                .env
+                .raw_get::<Option<Function>>("on_collision_stay")?;
+            script.on_collision_exit = script
+                .env
+                .raw_get::<Option<Function>>("on_collision_exit")?;
             script.ran = true;
         }
         Ok(())
@@ -370,6 +463,58 @@ impl LuaScriptHost {
         };
         let _budget = self.budget_guard();
         cb.call::<()>((attacker_pos.x, attacker_pos.z))
+    }
+
+    /// Hook de collider/trigger. `stay` passa `(other, dt)`; enter/exit só
+    /// `other` (`{id, name?, x, y, z}`). `Ok(())` quando o script não define
+    /// o hook — o chamador não avisa.
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_contact(
+        &mut self,
+        entity: Entity,
+        path: &str,
+        origin: Vec3,
+        hook: ContactHook,
+        other_id: i64,
+        other_name: Option<&str>,
+        other_pos: Vec3,
+        dt: f32,
+    ) -> mlua::Result<()> {
+        {
+            let mut ctx = self
+                .lua
+                .app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+            ctx.entity = Some(entity);
+            ctx.path = Some(path.to_string());
+            ctx.origin = origin;
+            ctx.dt = dt;
+        }
+        let callback = self.registry.get(path).and_then(|script| match hook {
+            ContactHook::TriggerEnter => script.on_trigger_enter.clone(),
+            ContactHook::TriggerStay => script.on_trigger_stay.clone(),
+            ContactHook::TriggerExit => script.on_trigger_exit.clone(),
+            ContactHook::CollisionEnter => script.on_collision_enter.clone(),
+            ContactHook::CollisionStay => script.on_collision_stay.clone(),
+            ContactHook::CollisionExit => script.on_collision_exit.clone(),
+        });
+        let Some(callback) = callback else {
+            return Ok(());
+        };
+        let other = self.lua.create_table()?;
+        other.raw_set("id", other_id)?;
+        other.raw_set("x", other_pos.x)?;
+        other.raw_set("y", other_pos.y)?;
+        other.raw_set("z", other_pos.z)?;
+        if let Some(name) = other_name {
+            other.raw_set("name", name)?;
+        }
+        let _budget = self.budget_guard();
+        if hook.is_stay() {
+            callback.call::<()>((other, dt))
+        } else {
+            callback.call::<()>(other)
+        }
     }
 
     /// Entrega um sinal/`call_group`: chama a função global `method` do script
@@ -475,7 +620,8 @@ impl LuaScriptHost {
                     | ScriptCommand::FaceTowards(e, _)
                     | ScriptCommand::SetInteraction { entity: e, .. }
                     | ScriptCommand::Despawn(e)
-                    | ScriptCommand::Gesture { entity: e, .. } => *e,
+                    | ScriptCommand::Gesture { entity: e, .. }
+                    | ScriptCommand::SetPose { entity: e, .. } => *e,
                     _ => return true,
                 };
                 owner != entity
@@ -493,7 +639,8 @@ impl LuaScriptHost {
         let env = self.lua.create_table()?;
         let mt = self.lua.create_table()?;
         mt.set("__index", self.lua.globals())?;
-        env.set_metatable(Some(mt));
+        // mlua 0.12: devolve Result (pode falhar em tabelas readonly).
+        env.set_metatable(Some(mt))?;
         Ok(env)
     }
 

@@ -44,27 +44,27 @@ pub const BOMB_RADIUS: f32 = 6.0;
 /// força/KNOCKBACK_DECAY ≈ 1.2 m).
 pub const STRIKE_KNOCKBACK_STRENGTH: f32 = 7.0;
 /// [R]: sparks por inimigo atingido.
-pub const STRIKE_SPARK_COUNT: usize = 18;
+pub const STRIKE_SPARK_COUNT: usize = 6;
 /// [R]: trauma de shake no slam com alvo.
-pub const STRIKE_SHAKE: f32 = 0.45;
-/// [R]: impulso vertical do kick de câmara (o chão sobe contra ela).
-pub const STRIKE_KICK_UP: f32 = 1.2;
+pub const STRIKE_SHAKE: f32 = 0.22;
+/// [R]: impulso vertical do kick de câmara.
+pub const STRIKE_KICK_UP: f32 = 0.35;
 /// [R]: punch de pós-processo (stops de clareza, bloom).
-pub const STRIKE_PUNCH_STOPS: f32 = 0.45;
-pub const STRIKE_PUNCH_BLOOM: f32 = 0.18;
+pub const STRIKE_PUNCH_STOPS: f32 = 0.12;
+pub const STRIKE_PUNCH_BLOOM: f32 = 0.04;
 /// [R]: raio do anel de choque (m) — casa com STRIKE_RADIUS.
 pub const STRIKE_RING_RADIUS: f32 = 4.8;
 /// [R]: fator do snap de facing no cast (1 = teleporta a rotação).
 pub const STRIKE_FACE_SNAP: f32 = 0.45;
 /// [B]: sparks por criatura apanhada pela explosão.
-pub const BOMB_SPARK_COUNT: usize = 16;
+pub const BOMB_SPARK_COUNT: usize = 8;
 /// [B]: trauma de shake na detonação.
-pub const BOMB_SHAKE: f32 = 0.5;
+pub const BOMB_SHAKE: f32 = 0.28;
 /// [B]: impulso vertical do kick de câmara.
-pub const BOMB_KICK_UP: f32 = 1.6;
+pub const BOMB_KICK_UP: f32 = 0.45;
 /// [B]: punch de pós-processo (stops de clareza, bloom).
-pub const BOMB_PUNCH_STOPS: f32 = 0.55;
-pub const BOMB_PUNCH_BLOOM: f32 = 0.22;
+pub const BOMB_PUNCH_STOPS: f32 = 0.16;
+pub const BOMB_PUNCH_BLOOM: f32 = 0.06;
 /// [B]: raio do anel de choque (m) — maior que o slam: é uma explosão.
 pub const BOMB_RING_RADIUS: f32 = 5.5;
 
@@ -727,11 +727,6 @@ pub fn abilities_system(
                 &mut fx.events,
             );
         }
-        toasts.write(ScriptToast(if hit_any {
-            "GOLPE FORTE!".into()
-        } else {
-            "Golpe forte ao ar!".into()
-        }));
         if hit_any {
             fx.sfx.write(crate::ambient::SfxEvent {
                 clip: crate::ambient::SfxClip::Whoosh,
@@ -743,9 +738,10 @@ pub fn abilities_system(
             });
             crate::combat::request_hit_stop(&mut fx.hit_stop, crate::combat::HIT_STOP_HEAVY);
             crate::camera::add_camera_shake(&mut fx.shake, STRIKE_SHAKE);
-            // O slam empurra a câmara PARA CIMA (o chão sobe contra ela).
             crate::camera::add_camera_kick(&mut fx.kick, Vec3::Y * STRIKE_KICK_UP);
             crate::postfx::punch_impact(&mut fx.postfx, STRIKE_PUNCH_STOPS, STRIKE_PUNCH_BLOOM);
+        } else {
+            toasts.write(ScriptToast("Sem alvo.".into()));
         }
         // O anel + poeira saem SEMPRE: o slam aterra, acerte ou não.
         crate::impact::spawn_impact_ring(
@@ -758,9 +754,9 @@ pub fn abilities_system(
         );
         crate::particles::spawn_burst(
             &mut commands,
-            &crate::combat::impact_spec("ground-dust", (0.5, 1.0), (0.5, 1.0), (2.0, 4.5), None),
+            &crate::combat::impact_spec("ground-dust", (0.28, 0.55), (0.35, 0.7), (1.2, 2.4), None),
             pos.with_y(pos.y + 0.15),
-            12,
+            5,
         );
         if let Some(dir) = face_dir {
             crate::combat::snap_facing(&mut transform, dir, STRIKE_FACE_SNAP);
@@ -952,7 +948,6 @@ fn bomb_step_system(
             clip: crate::ambient::SfxClip::Hit,
             position: Some(center),
         });
-        toasts.write(ScriptToast("BOOM!".into()));
         // Peso de explosão: hit-stop + shake + solavanco vertical + punch +
         // anel de choque (sempre — uma bomba detona, acerte ou não).
         crate::combat::request_hit_stop(&mut fx.hit_stop, crate::combat::HIT_STOP_HEAVY);

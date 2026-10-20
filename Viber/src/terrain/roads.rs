@@ -740,6 +740,91 @@ impl RoadPath {
     pub fn progress(&self, p: Vec2) -> Option<f32> {
         nearest_on_path(&self.stations, p).map(|hit| hit.station(self.stations.len()))
     }
+
+    /// Projeção do ponto na linha, mesmo fora da fita. `s` é arco em metros
+    /// desde a primeira estação; `heading` segue a convenção do motor
+    /// (`forward = (sin h, cos h)`). `deck` descreve o troço projectado, não
+    /// se o ponto está na fita — o chamador decide a cota.
+    pub fn sample_at(&self, p: Vec2) -> Option<RoadSample> {
+        let hit = nearest_on_path(&self.stations, p)?;
+        if self.stations.len() < 2 {
+            return None;
+        }
+        let half_width = station_lerp(&self.half_width, &hit);
+        let j = (hit.segment + 1).min(self.stations.len() - 1);
+        let tangent = (self.stations[j] - self.stations[hit.segment]).normalize_or_zero();
+        let perp = Vec2::new(-tangent.y, tangent.x);
+        let lateral = (p - hit.point).dot(perp);
+        let heading = tangent.x.atan2(tangent.y);
+        let mut s = 0.0_f32;
+        for i in 0..hit.segment.min(self.stations.len() - 1) {
+            s += self.stations[i].distance(self.stations[i + 1]);
+        }
+        if hit.segment + 1 < self.stations.len() {
+            s += self.stations[hit.segment].distance(self.stations[hit.segment + 1]) * hit.t;
+        }
+        Some(RoadSample {
+            s,
+            length: path_length(&self.stations),
+            half_width,
+            lateral,
+            deck: self.deck_weight(&hit) > 0.5,
+            deck_y: station_lerp(&self.surface, &hit),
+            heading,
+            center_dist: hit.point.distance(p),
+            cx: hit.point.x,
+            cz: hit.point.y,
+        })
+    }
+
+    /// Ponto na linha a `s` metros de arco (wrap). O sample é o do centro.
+    pub fn point_at_arc(&self, s: f32) -> Option<RoadSample> {
+        let length = path_length(&self.stations);
+        if length <= 1e-3 || self.stations.len() < 2 || !s.is_finite() {
+            return None;
+        }
+        let s = s.rem_euclid(length);
+        let mut acc = 0.0_f32;
+        for i in 0..self.stations.len() - 1 {
+            let a = self.stations[i];
+            let b = self.stations[i + 1];
+            let seg = a.distance(b);
+            if acc + seg >= s || i + 2 == self.stations.len() {
+                let t = if seg > 1e-4 {
+                    ((s - acc) / seg).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                let p = a.lerp(b, t);
+                return self.sample_at(p);
+            }
+            acc += seg;
+        }
+        self.sample_at(*self.stations.last()?)
+    }
+}
+
+/// Projeção de um ponto numa [`RoadPath`] (`viber.road`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RoadSample {
+    /// Arco desde o início da polilinha (m).
+    pub s: f32,
+    /// Comprimento total da polilinha (m).
+    pub length: f32,
+    pub half_width: f32,
+    /// Desvio lateral assinado (m, positivo à esquerda da tangente).
+    pub lateral: f32,
+    /// O troço projectado é tabuleiro suspenso.
+    pub deck: bool,
+    /// Cota do tabuleiro no ponto projectado (só vale com `deck`).
+    pub deck_y: f32,
+    /// Rumo da tangente (rad). `0` aponta +Z.
+    pub heading: f32,
+    /// Distância ao centro da linha (m).
+    pub center_dist: f32,
+    /// Ponto da linha mais próximo (mundo XZ).
+    pub cx: f32,
+    pub cz: f32,
 }
 
 /// Carves one road corridor and returns its registry path. Returns `None`
@@ -2750,5 +2835,43 @@ mod tests {
             pylons(&without),
             pylons(&with_guard)
         );
+    }
+}
+
+#[cfg(test)]
+mod road_sample_tests {
+    use super::*;
+    use bevy::math::Vec2;
+
+    fn straight() -> RoadPath {
+        RoadPath {
+            name: None,
+            stations: vec![Vec2::new(0.0, 0.0), Vec2::new(0.0, 10.0)],
+            half_width: vec![2.0, 2.0],
+            profile: RoadProfile::Artery,
+            surface: vec![0.0, 0.0],
+            deck: vec![false, false],
+            bridge: false,
+            deck_y: None,
+        }
+    }
+
+    #[test]
+    fn sample_at_reports_arc_heading_and_lateral() {
+        let road = straight();
+        let sample = road.sample_at(Vec2::new(1.0, 4.0)).expect("sample");
+        assert!((sample.s - 4.0).abs() < 1e-3, "arco {}", sample.s);
+        assert!((sample.length - 10.0).abs() < 1e-3);
+        assert!((sample.half_width - 2.0).abs() < 1e-3);
+        // Tangente +Z ⇒ heading 0. Ponto em +X fica à direita (lateral negativo:
+        // perp = (-tz, tx) = (-1, 0), (1, 0)·perp = -1).
+        assert!(sample.heading.abs() < 1e-3, "heading {}", sample.heading);
+        assert!(
+            (sample.lateral + 1.0).abs() < 1e-3,
+            "lateral {}",
+            sample.lateral
+        );
+        assert!(!sample.deck);
+        assert!((sample.center_dist - 1.0).abs() < 1e-3);
     }
 }

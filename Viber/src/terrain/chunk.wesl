@@ -10,12 +10,15 @@
 // WORLD SPECIALIZATION: `viber run` rewrites the CONFIG block below from the
 // `<Terrain>` spec before the renderer loads this file.
 //
-// BINDINGS — o material é **bindless** (`TerrainChunkMaterial`), e tem de ser:
-// um material custom NÃO-bindless com uma única textura faz SIGSEGV no driver
-// NVIDIA dentro de `vkCreatePipelineLayout`. As texturas vivem nos arrays
+// BINDINGS — o material é **bindless** (`TerrainChunkMaterial`), por escolha
+// de layout (8 layers num material, slab partilhada): o SIGSEGV histórico do
+// driver NVIDIA em `vkCreatePipelineLayout` com materiais não-bindless +
+// `#[texture]` JÁ NÃO REPRODUZ no wgpu 30 + driver 615.71.09 (re-verificado
+// ao vivo 2026-10-18 — ver layer_material.rs). As texturas vivem nos arrays
 // partilhados de `bevy_render::bindless`; a tabela de índices (binding 0) é
 // lida como `array<u32>` — camada `i` do mapa M em `M_BASE + 2i` (sampler no
-// índice seguinte). Sem bindless o terreno desenha a cor plana das camadas.
+// índice seguinte). Sem bindless o terreno desenha a cor plana das camadas
+// (este shader só lê texturas pelas binding arrays).
 
 import bevy_pbr::render::forward_io::{VertexOutput, FragmentOutput};
 import bevy_pbr::render::mesh_view_bindings::view;
@@ -463,7 +466,7 @@ fn fragment(
     // sol/IBL faz o resto.
     let wet = clamp(params.walls_b.w, 0.0, 1.0) * (1.0 - clamp(tri_mix, 0.0, 1.0) * 0.7);
     if (wet > 0.001) {
-        albedo *= mix(1.0, 0.72, wet);
+        albedo *= mix(1.0, 0.88, wet);
         rough = mix(rough, 0.16, wet);
     }
 

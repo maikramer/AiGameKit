@@ -24,7 +24,7 @@ const STUBS: [(&str, &str); 8] = [
          \x20   @location(0) world_position: vec4<f32>,\n\
          \x20   @location(1) world_normal: vec3<f32>,\n\
          \x20   @location(2) color: vec4<f32>,\n\
-         \x20   @location(3) instance_index: u32,\n\
+         \x20   @location(6) @interpolate(flat) instance_index: u32,\n\
          };\n\
          struct FragmentOutput { @location(0) color: vec4<f32>, };",
     ),
@@ -106,13 +106,15 @@ const STUBS: [(&str, &str); 8] = [
     (
         // Grupo 4: o grupo 3 passou a ser o MATERIAL (MATERIAL_BIND_GROUP)
         // — os arrays de bindless do stub têm de ficar fora dele.
+        // O `enable wgpu_binding_array;` é exigido pelo naga do wgpu 30 e no
+        // bevy real vive no TOPO de `bevy_render/src/bindless.wesl` (linha 14).
         "bevy_render::bindless",
-        "@group(4) @binding(0) var bindless_textures_2d: binding_array<texture_2d<f32>>;\n\
+        "enable wgpu_binding_array;\n\
+         @group(4) @binding(0) var bindless_textures_2d: binding_array<texture_2d<f32>>;\n\
          @group(4) @binding(1) var bindless_samplers_filtering: binding_array<sampler>;",
     ),
 ];
 
-#[ignore = "pré-existente do port WESL: o parser do wesl 0.4 trata `binding_array` como reserved word (spec WGSL) e o stub bevy_render::bindless não compila; reativar quando o stub usar uma alternativa suportada"]
 #[test]
 fn chunk_shader_validates_in_every_define_combination() {
     let template = include_str!("../src/terrain/chunk.wesl");
@@ -153,7 +155,6 @@ fn fog_block_imports_the_view_bindings_namespace() {
     }
 }
 
-#[ignore = "pré-existente do port WESL: binding_array é reserved no parser do wesl 0.4 (stub bevy_render::bindless)"]
 #[test]
 fn specialized_world_config_validates() {
     let config = viber::terrain::layer_material::TerrainChunkConfig {

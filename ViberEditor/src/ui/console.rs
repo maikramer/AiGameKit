@@ -122,6 +122,9 @@ pub fn poll_console(lang: Res<Lang>, bridge: Res<ViberBridge>, mut state: ResMut
                 ok: true,
                 text: eval
                     .result
+                    .as_ref()
+                    .map(methods::format_lua_value)
+                    .filter(|text| !text.is_empty())
                     .unwrap_or_else(|| t(*lang, StrKey::ConOk).into()),
             },
             Ok(eval) => Block::Output {

@@ -180,6 +180,17 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
+    // viber.player_id() -> bits | nil — a entidade do herói, para
+    // `entity_damage`/`entity_heal` no próprio jogador.
+    api.set(
+        "player_id",
+        lua.create_function(|lua, ()| {
+            Ok(lua
+                .app_data_ref::<ScriptCtx>()
+                .and_then(|ctx| ctx.player_bits))
+        })?,
+    )?;
+
     // viber.ground_below(x, y, z) -> y | nil — a superfície sólida mais
     // alta em ou abaixo de `y` nesta coluna. Acima do mundo = o topo;
     // dentro de uma gruta = o piso da gruta; sob um arco = o chão do
@@ -308,6 +319,211 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(surfaces.in_water(x, z))
         })?,
     )?;
+    // viber.road(x, z) -> {y, s, length, half_width, lateral, deck, heading, on} | nil
+    // Projeção na estrada mais próxima, mesmo fora da fita. `s`/`length` em
+    // metros. `y` é o tabuleiro quando o ponto está NUM vão suspenso; senão
+    // é o terreno. Sem estradas = nil.
+    api.set(
+        "road",
+        lua.create_function(|lua, (x, z): (f32, f32)| {
+            if !(x.is_finite() && z.is_finite()) {
+                return Ok(mlua::Value::Nil);
+            }
+            let (sample, ground) = {
+                let ctx = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded");
+                let Some(sample) = ctx.surfaces.as_ref().and_then(|s| s.nearest_road(x, z)) else {
+                    return Ok(mlua::Value::Nil);
+                };
+                let ground = ctx.terrain.as_ref().map(|terrain| {
+                    let base = terrain.base();
+                    if terrain.voxel.is_flat() {
+                        crate::terrain::mesh::HeightField::sample(&base, x, z)
+                    } else {
+                        terrain.voxel.surface_top(&base, x, z)
+                    }
+                });
+                (sample, ground)
+            };
+            let on = sample.center_dist <= sample.half_width + 1e-3;
+            let y = if sample.deck && on {
+                sample.deck_y
+            } else {
+                ground.unwrap_or(sample.deck_y)
+            };
+            let table = lua.create_table()?;
+            table.raw_set("y", y)?;
+            table.raw_set("s", sample.s)?;
+            table.raw_set("length", sample.length)?;
+            table.raw_set("half_width", sample.half_width)?;
+            table.raw_set("lateral", sample.lateral)?;
+            table.raw_set("deck", sample.deck && on)?;
+            table.raw_set("heading", sample.heading)?;
+            table.raw_set("on", on)?;
+            table.raw_set("cx", sample.cx)?;
+            table.raw_set("cz", sample.cz)?;
+            Ok(mlua::Value::Table(table))
+        })?,
+    )?;
+    // viber.road_at(s) -> o mesmo formato, no arco `s` (m) da estrada mais
+    // longa. Serve o look-ahead da IA e a grelha. Sem estradas = nil.
+    api.set(
+        "road_at",
+        lua.create_function(|lua, s: f32| {
+            if !s.is_finite() {
+                return Ok(mlua::Value::Nil);
+            }
+            let (sample, ground) = {
+                let ctx = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded");
+                let Some(sample) = ctx
+                    .surfaces
+                    .as_ref()
+                    .and_then(|surfaces| surfaces.road_at(s))
+                else {
+                    return Ok(mlua::Value::Nil);
+                };
+                let ground = ctx
+                    .terrain
+                    .as_ref()
+                    .map(|terrain| terrain.sample(sample.cx, sample.cz));
+                (sample, ground)
+            };
+            let y = if sample.deck {
+                sample.deck_y
+            } else {
+                ground.unwrap_or(sample.deck_y)
+            };
+            let table = lua.create_table()?;
+            table.raw_set("y", y)?;
+            table.raw_set("s", sample.s)?;
+            table.raw_set("length", sample.length)?;
+            table.raw_set("half_width", sample.half_width)?;
+            table.raw_set("lateral", sample.lateral)?;
+            table.raw_set("deck", sample.deck)?;
+            table.raw_set("heading", sample.heading)?;
+            table.raw_set("on", true)?;
+            table.raw_set("cx", sample.cx)?;
+            table.raw_set("cz", sample.cz)?;
+            table.raw_set("x", sample.cx)?;
+            table.raw_set("z", sample.cz)?;
+            Ok(mlua::Value::Table(table))
+        })?,
+    )?;
+    // viber.set_pose(x, y, z, yaw [, id]) — pose LOCAL. Sem id = a própria
+    // entidade. A escala mantém-se. Com own_system("locomotion") o herói
+    // deixa de andar a pé.
+    api.set(
+        "set_pose",
+        lua.create_function(
+            |lua, (x, y, z, yaw, id): (f32, f32, f32, f32, Option<i64>)| {
+                if !(x.is_finite() && y.is_finite() && z.is_finite() && yaw.is_finite()) {
+                    return Err(mlua::Error::runtime(
+                        "viber.set_pose: x/y/z/yaw têm de ser finitos",
+                    ));
+                }
+                let mut ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded");
+                let entity = match id {
+                    Some(bits) => super::entity::entity_from_id(bits)?,
+                    None => ctx.entity.ok_or_else(|| {
+                        mlua::Error::runtime("viber.set_pose fora de on_update (sem id)")
+                    })?,
+                };
+                ctx.commands.push(ScriptCommand::SetPose {
+                    entity,
+                    pos: Vec3::new(x, y, z),
+                    yaw,
+                });
+                Ok(())
+            },
+        )?,
+    )?;
+    // viber.sound_loop(id, clip [, {pitch, volume, x, y, z}]) /
+    // viber.sound_stop(id). `clip` = nome do registry ou caminho sob sfx_dir.
+    api.set(
+        "sound_loop",
+        lua.create_function(|lua, (id, clip, opts): (String, String, Option<Table>)| {
+            if id.is_empty() || clip.is_empty() {
+                return Err(mlua::Error::runtime(
+                    "viber.sound_loop: id e clip não podem ser vazios",
+                ));
+            }
+            let mut pitch = 1.0_f64;
+            let mut volume = 1.0_f32;
+            let mut position = None;
+            if let Some(opts) = opts {
+                if let Ok(value) = opts.get::<f64>("pitch") {
+                    if !value.is_finite() || value <= 0.0 {
+                        return Err(mlua::Error::runtime(
+                            "viber.sound_loop: pitch tem de ser finito e > 0",
+                        ));
+                    }
+                    pitch = value;
+                }
+                if let Ok(value) = opts.get::<f32>("volume") {
+                    if !value.is_finite() || value < 0.0 {
+                        return Err(mlua::Error::runtime(
+                            "viber.sound_loop: volume tem de ser finito e >= 0",
+                        ));
+                    }
+                    volume = value;
+                }
+                let x = opts.get::<f32>("x").ok();
+                let y = opts.get::<f32>("y").ok();
+                let z = opts.get::<f32>("z").ok();
+                if let (Some(x), Some(z)) = (x, z)
+                    && x.is_finite()
+                    && z.is_finite()
+                {
+                    let y = y.unwrap_or(0.0);
+                    if y.is_finite() {
+                        position = Some(Vec3::new(x, y, z));
+                    }
+                }
+            }
+            lua.app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded")
+                .commands
+                .push(ScriptCommand::SoundLoop {
+                    id,
+                    clip,
+                    pitch,
+                    volume,
+                    position,
+                });
+            Ok(())
+        })?,
+    )?;
+    api.set(
+        "sound_stop",
+        lua.create_function(|lua, id: String| {
+            lua.app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded")
+                .commands
+                .push(ScriptCommand::SoundStop(id));
+            Ok(())
+        })?,
+    )?;
+    // viber.music.layer(nome | nil) — força a layer de BGM. nil devolve
+    // a zona/combate automáticos.
+    {
+        let music = lua.create_table()?;
+        music.set(
+            "layer",
+            lua.create_function(|lua, name: Option<String>| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded")
+                    .commands
+                    .push(ScriptCommand::MusicLayer(name));
+                Ok(())
+            })?,
+        )?;
+        api.set("music", music)?;
+    }
 
     // viber.set_locomotion(walk, run [, turn_rate]) — nominais explícitos
     // do rig. Só é preciso quando a auto-calibração pelas velocidades
@@ -692,6 +908,51 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
             }
         })?,
     )?;
+    // viber.hostiles([raio]) -> { {id, kind, x, y, z, hp, max, distance}, … }
+    // Criaturas vivas de `enemies/` e `bosses/`, à volta do HERÓI (não da
+    // entidade do script). Sem nome no spawner, `find_all("wolf")` é vazio.
+    api.set(
+        "hostiles",
+        lua.create_function(|lua, radius: Option<f32>| {
+            let radius = radius.unwrap_or(2.4);
+            if !radius.is_finite() || radius <= 0.0 {
+                return Err(mlua::Error::runtime(
+                    "viber.hostiles: raio tem de ser finito e > 0",
+                ));
+            }
+            let out = lua.create_table()?;
+            let ctx = lua.app_data_ref::<ScriptCtx>();
+            let Some(ctx) = ctx.as_ref() else {
+                return Ok(out);
+            };
+            let Some(player) = ctx.player else {
+                return Ok(out);
+            };
+            let mut rows: Vec<&super::ctx::HostileSnap> = ctx
+                .hostiles
+                .iter()
+                .filter(|h| h.pos.distance(player) <= radius)
+                .collect();
+            rows.sort_by(|a, b| {
+                a.pos
+                    .distance_squared(player)
+                    .total_cmp(&b.pos.distance_squared(player))
+            });
+            for (i, h) in rows.iter().take(128).enumerate() {
+                let row = lua.create_table()?;
+                row.raw_set("id", h.id)?;
+                row.raw_set("kind", h.kind.clone())?;
+                row.raw_set("x", h.pos.x)?;
+                row.raw_set("y", h.pos.y)?;
+                row.raw_set("z", h.pos.z)?;
+                row.raw_set("hp", h.hp)?;
+                row.raw_set("max", h.max)?;
+                row.raw_set("distance", h.pos.distance(player))?;
+                out.raw_set(i + 1, row)?;
+            }
+            Ok(out)
+        })?,
+    )?;
     // viber.nearby(raio [, limite]) -> { {id, name, x, y, z, distance}, … }
     // — entidades NOMEADAS à volta da entidade corrente, mais perto 1.º.
     api.set(
@@ -1013,9 +1274,9 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
 
     // viber.own_system(nome) — reclama um sistema NATIVO para Lua
-    // (`dialogue`, `abilities`, `bomb`, `guard`, `hotbar`, `harvest`): o
-    // handler nativo correspondente cala e a lógica passa a ser do
-    // script. Sem posse, o comportamento nativo é o de sempre (compat).
+    // (`dialogue`, `abilities`, `bomb`, `guard`, `hotbar`, `harvest`,
+    // `locomotion`): o handler nativo correspondente cala e a lógica passa
+    // a ser do script. Sem posse, o comportamento nativo é o de sempre.
     api.set(
         "own_system",
         lua.create_function(|lua, name: String| {
@@ -1453,163 +1714,6 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     props::install(lua, &api)?;
     super::signals::install(lua, &api)?;
 
-    // ── Corrida (`gameplay: racing`): viber.race.* / viber.vehicle.* ────
-    // Leitura do snapshot por-frame (`racing::publish_lua_state`). Fora do
-    // preset de corrida tudo devolve nil/false.
-    {
-        let race = lua.create_table()?;
-        race.set(
-            "state",
-            lua.create_function(|lua, ()| {
-                Ok(lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .map(|r| r.state.clone()))
-            })?,
-        )?;
-        race.set(
-            "lap",
-            lua.create_function(|lua, ()| {
-                let (lap, laps) = lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .map(|r| (r.lap, r.laps))
-                    .unwrap_or((0, 0));
-                Ok((lap, laps))
-            })?,
-        )?;
-        race.set(
-            "position",
-            lua.create_function(|lua, ()| {
-                let (pos, total) = lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .map(|r| (r.position, r.total_positions))
-                    .unwrap_or((0, 0));
-                Ok((pos, total))
-            })?,
-        )?;
-        race.set(
-            "time",
-            lua.create_function(|lua, ()| {
-                Ok(lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .map(|r| r.race_time)
-                    .unwrap_or(0.0))
-            })?,
-        )?;
-        race.set(
-            "countdown",
-            lua.create_function(|lua, ()| {
-                Ok(lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .and_then(|r| r.countdown))
-            })?,
-        )?;
-        race.set(
-            "best_lap",
-            lua.create_function(|lua, ()| {
-                Ok(lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .and_then(|r| r.best_lap))
-            })?,
-        )?;
-        race.set(
-            "last_lap",
-            lua.create_function(|lua, ()| {
-                Ok(lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .and_then(|r| r.last_lap))
-            })?,
-        )?;
-        race.set(
-            "wrong_way",
-            lua.create_function(|lua, ()| {
-                Ok(lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .map(|r| r.wrong_way)
-                    .unwrap_or(false))
-            })?,
-        )?;
-        race.set(
-            "message",
-            lua.create_function(|lua, ()| {
-                Ok(lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .and_then(|r| r.message.clone()))
-            })?,
-        )?;
-        api.set("race", race)?;
-
-        let vehicle = lua.create_table()?;
-        vehicle.set(
-            "speed",
-            lua.create_function(|lua, ()| {
-                let (speed, top) = lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .map(|r| (r.speed, r.top_speed))
-                    .unwrap_or((0.0, 1.0));
-                Ok((speed, top))
-            })?,
-        )?;
-        vehicle.set(
-            "nitro",
-            lua.create_function(|lua, ()| {
-                Ok(lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .map(|r| r.nitro)
-                    .unwrap_or(0.0))
-            })?,
-        )?;
-        vehicle.set(
-            "drifting",
-            lua.create_function(|lua, ()| {
-                Ok(lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .map(|r| (r.drifting, r.drift_charge))
-                    .unwrap_or((false, 0.0)))
-            })?,
-        )?;
-        vehicle.set(
-            "turbo",
-            lua.create_function(|lua, ()| {
-                Ok(lua
-                    .app_data_ref::<ScriptCtx>()
-                    .and_then(|c| c.race.clone())
-                    .map(|r| r.turbo)
-                    .unwrap_or(0.0))
-            })?,
-        )?;
-        // viber.vehicle.give(nitro, turbo) — power-ups de script (item boxes):
-        // enfileira no registry drenado pelo racing plugin (apply_lua_boosts).
-        vehicle.set(
-            "give",
-            lua.create_function(|lua, (nitro, turbo): (f32, f32)| {
-                if !nitro.is_finite() || !turbo.is_finite() {
-                    return Err(mlua::Error::runtime(
-                        "viber.vehicle.give: valores não finitos",
-                    ));
-                }
-                let queue: Table = lua.named_registry_value("viber_race_boosts")?;
-                let entry = lua.create_table()?;
-                entry.raw_set("nitro", nitro.clamp(0.0, 1.0))?;
-                entry.raw_set("turbo", turbo.clamp(0.0, 10.0))?;
-                queue.push(entry)?;
-                Ok(true)
-            })?,
-        )?;
-        api.set("vehicle", vehicle)?;
-    }
-
     lua.globals().set("viber", api)?;
     let states = lua.create_table()?;
     lua.set_named_registry_value("viber_states", states)?;
@@ -1626,9 +1730,6 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     // Estado de JOGO world-scoped (`viber.game()`) e cache de módulos
     // (`viber.load`) — ambos sobrevivem ao hot-reload.
     lua.set_named_registry_value("viber_game", lua.create_table()?)?;
-    // Fila de power-ups de corrida (`viber.vehicle.give`) — drenada pela
-    // engine (racing::apply_lua_boosts) a cada frame.
-    lua.set_named_registry_value("viber_race_boosts", lua.create_table()?)?;
     lua.set_named_registry_value("viber_modules", lua.create_table()?)?;
     Ok(())
 }

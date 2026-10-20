@@ -6,27 +6,29 @@
 //!   curva quadrática. Na raiz (não nos filhos do GLB) porque as animações
 //!   esqueléticas e o swap de LOD vivem na subárvore; escala não briga com
 //!   rotação/facing nem com o knockback (que move a translation).
-//! - **[`ImpactRing`]** — anel de onda de choque no chão (torus fino unlit)
-//!   que expande e desvanece em ~0,4 s: lê a distância onde as partículas
-//!   ficam pequenas. Finisher, slam [R], bomba e abates.
+//! - **[`ImpactRing`]** — anel fino no chão (unlit) que abre pouco e
+//!   desvanece. Marca zona de perigo e o slam/bomba; não é um aro gordo.
 
 use crate::profiler::{Group, timed};
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::prelude::*;
 use bevy::shape::Torus;
 
-/// Duração do recoil (s) — um terço de um combo de melee.
-pub const RECOIL_DURATION: f32 = 0.22;
+/// Duração do recoil (s) — um flinch curto, não um squash de desenho animado.
+pub const RECOIL_DURATION: f32 = 0.14;
 /// Compressão em Y no pico do recoil (fração da escala base).
-pub const RECOIL_SQUASH_Y: f32 = 0.26;
-/// Esticamento em XZ no pico (conserva volume a olho).
-pub const RECOIL_STRETCH_XZ: f32 = 0.18;
-/// Duração do anel de choque (s).
-pub const RING_DURATION: f32 = 0.42;
-/// Raio inicial do anel (m) — nasce pequeno e expande.
-pub const RING_START_RADIUS: f32 = 0.35;
+pub const RECOIL_SQUASH_Y: f32 = 0.08;
+/// Esticamento em XZ no pico.
+pub const RECOIL_STRETCH_XZ: f32 = 0.04;
+/// Duração do anel (s).
+pub const RING_DURATION: f32 = 0.34;
+/// O anel nasce já perto do raio final — abre um pouco, não varre o chão.
+pub const RING_START_FRAC: f32 = 0.78;
 /// Alpha de nascimento do anel.
-pub const RING_START_ALPHA: f32 = 0.85;
+pub const RING_START_ALPHA: f32 = 0.42;
+/// Tubo do torus unitário (major = 1). A escala da entidade é o raio em metros,
+/// por isso o tubo também escala: 1,6 cm a 1 m, ~8 cm num slam de 5 m.
+pub const RING_TUBE: f32 = 0.016;
 
 // ── recoil (squash-and-stretch por golpe) ───────────────────────────────
 
@@ -109,9 +111,21 @@ pub fn ring_radius_progress(k: f32) -> f32 {
 const IMPACT_RING_MESH: Handle<Mesh> =
     bevy::asset::uuid_handle!("6f0d3c52-9a41-4b7e-8d3a-2c1e5f7b9a10");
 
-/// Spawna um anel de choque em `position` (à altura dos pés + ~8 cm — o
-/// torus é plano no XZ; em declives moderados pode tangenciar o chão, é um
-/// flash de 0,4 s). Cor tipicamente quente (`#ffd9a0`).
+/// Torus unitário do anel: major 1, tubo [`RING_TUBE`].
+///
+/// `Torus::new(inner, outer)` mede o BURACO e o diâmetro exterior. O antigo
+/// `Torus::new(0.045, 1.0)` dava minor ≈ major — um donut quase sólido, que
+/// à escala do golpe lia como um aro gordo no chão.
+pub fn impact_ring_torus() -> Torus {
+    Torus {
+        minor_radius: RING_TUBE,
+        major_radius: 1.0,
+    }
+}
+
+/// Spawna um anel no chão em `position` (pés + ~8 cm — o torus é plano no
+/// XZ; em declive moderado pode tangenciar o chão). Desvanece em
+/// [`RING_DURATION`].
 pub fn spawn_impact_ring(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -120,15 +134,11 @@ pub fn spawn_impact_ring(
     max_radius: f32,
     color: Color,
 ) {
-    // Torus unitário (raio 1, tubo fino): a escala da entidade é o raio em
-    // metros. O tubo engorda com a expansão — lê-se como a onda a perder
-    // energia, não como um aro fino a fugir.
     // Mesh PARTILHADA: o torus é unitário (a escala é o raio), portanto
-    // todos os anéis servem-se do mesmo asset — antes cada golpe tesselava
-    // um torus novo e subia-o para a GPU. O material continua por anel
+    // todos os anéis servem-se do mesmo asset. O material continua por anel
     // (o alpha de cada um desvanece à sua cadência).
     if meshes.get(&IMPACT_RING_MESH).is_none() {
-        let _ = meshes.insert(&IMPACT_RING_MESH, Torus::new(0.045, 1.0).into());
+        let _ = meshes.insert(&IMPACT_RING_MESH, impact_ring_torus().into());
     }
     let mesh = IMPACT_RING_MESH;
     let material = materials.add(StandardMaterial {
@@ -170,8 +180,8 @@ pub fn impact_ring_system(
             commands.entity(entity).despawn();
             continue;
         }
-        let radius =
-            RING_START_RADIUS + (ring.max_radius - RING_START_RADIUS) * ring_radius_progress(k);
+        let start = ring.max_radius * RING_START_FRAC;
+        let radius = start + (ring.max_radius - start) * ring_radius_progress(k);
         transform.scale = Vec3::splat(radius);
         if let Some(mut material) = materials.get_mut(&ring.material) {
             let alpha = ring.start_alpha * (1.0 - k);
@@ -228,6 +238,19 @@ mod tests {
         // No fim volta EXATAMENTE à base (sem erro acumulado entre hits).
         let done = recoil_scale(base, recoil_pulse(1.0));
         assert!(done.distance(base) < 1e-6);
+    }
+
+    #[test]
+    fn test_impact_ring_torus_is_a_thin_band() {
+        let torus = impact_ring_torus();
+        assert!(
+            (torus.major_radius - 1.0).abs() < 1e-4,
+            "major unitário: a escala da entidade é o raio"
+        );
+        assert!(
+            torus.minor_radius / torus.major_radius < 0.04,
+            "tubo fino — `Torus::new(0.045, 1.0)` era um donut sólido"
+        );
     }
 
     #[test]

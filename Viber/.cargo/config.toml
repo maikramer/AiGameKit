@@ -3,4 +3,11 @@
 # `$ORIGIN` põe target/release e ~/.local/bin no caminho de busca sem
 # LD_LIBRARY_PATH. Inofensivo para todos os outros builds (é só um rpath).
 [target.x86_64-unknown-linux-gnu]
-rustflags = ["-C", "link-arg=-Wl,-rpath,$ORIGIN"]
+# lld em vez de bfd: o binário é ~180 MB (engine inteira linkada em cada
+# teste/run) — o bfd gastava minutos só a linkar; o lld corta isso a ~segundos.
+rustflags = [
+    "-C",
+    "link-arg=-fuse-ld=lld",
+    "-C",
+    "link-arg=-Wl,-rpath,$ORIGIN",
+]

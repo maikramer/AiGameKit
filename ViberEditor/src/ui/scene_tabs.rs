@@ -206,9 +206,13 @@ fn on_scene_loaded(
     // A câmara (que a troca não mexe) ainda é a da aba que se deixa: fica guardada nela,
     // venha a troca de uma aba, do dock Ficheiros ou de um agente (`viber.scene.change`).
     let leaving = tabs.active;
+    let same_scene = tabs
+        .tabs
+        .get(leaving)
+        .is_some_and(|tab| tab.path == canonical(&event.path));
     if let Some(cam) = camera.as_deref()
         && let Some(tab) = tabs.tabs.get_mut(leaving)
-        && tab.path != canonical(&event.path)
+        && !same_scene
     {
         tab.camera = Some(TabCamera {
             target: cam.target,
@@ -219,9 +223,10 @@ fn on_scene_loaded(
     }
     let title = scene_title(&event.path);
     let index = tabs.open(&event.path, title.clone());
-    // A câmara volta onde estava nesta cena; numa cena nunca vista, enquadra a origem
-    // (uma sala de interior vive à volta de 0,0 — a pose da vila ficava a km dela).
-    if let Some(mut camera) = camera {
+    // Reload da cena actual (Ctrl+R): a câmara ainda é esta. A aba só guarda a pose
+    // ao SAIR, por isso `tab.camera` é None e o ramo "cena nunca vista" saltava para
+    // a origem e largava a seleção.
+    if !same_scene && let Some(mut camera) = camera {
         match tabs.tabs[index].camera {
             Some(pose) => {
                 camera.target = pose.target;
@@ -240,12 +245,15 @@ fn on_scene_loaded(
         }
     }
     // Everything below addressed NODES or ENTITIES of the old scene.
-    commands.insert_resource(Selection::default());
-    commands.insert_resource(TreeExpansion::default());
+    // Na mesma cena os NodeRef continuam válidos (o XML não mudou de identidade).
+    if !same_scene {
+        commands.insert_resource(Selection::default());
+        commands.insert_resource(TreeExpansion::default());
+        commands.insert_resource(crate::scene::tree::TreeView::default());
+    }
     commands.insert_resource(crate::scene::PendingEdits::default());
     commands.insert_resource(crate::scene::tree_drag::TreeDrag::default());
     commands.insert_resource(crate::scene::tree::RenameState::default());
-    commands.insert_resource(crate::scene::tree::TreeView::default());
     commands.insert_resource(crate::scene::inspector::InspectorView::default());
     commands.insert_resource(crate::scene::add_node::AddNodeOpen::default());
     commands.insert_resource(crate::viewport::gizmo::SelectedEntity::default());

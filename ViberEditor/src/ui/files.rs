@@ -103,11 +103,10 @@ pub fn scan_files(doc: Res<SceneDoc>, mut state: ResMut<FilesState>) {
         return;
     }
     state.built = true;
-    let Some(dir) = doc.world_path().parent() else {
-        warn!("files dock: world sem pasta");
-        return;
-    };
-    state.entries = files::scan(dir, 6);
+    // Relativo à raiz do PROJETO (a pasta do config.yaml), a mesma base de
+    // `open_world` / `glb_drop` / `scene_instance`. A pasta do XML aberto
+    // numa cena interior escondia o resto do jogo e juntava o caminho errado.
+    state.entries = files::scan(&doc.root_dir, 6);
     if let Some((path, _)) = &state.selected
         && !state
             .entries
@@ -391,10 +390,7 @@ fn open_external(
     let Ok(button) = buttons.get(activate.event_target()) else {
         return;
     };
-    let Some(dir) = doc.world_path().parent() else {
-        return;
-    };
-    let path = dir.join(&button.0);
+    let path = doc.root_dir.join(&button.0);
     let opened = std::process::Command::new("xdg-open")
         .arg(&path)
         .spawn()

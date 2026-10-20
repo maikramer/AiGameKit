@@ -100,21 +100,13 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
     );
     // Pré-validação (Fase O1): config.yaml inválido/ausente e mundo
     // procedural abrem um PAINEL DE ERRO em vez de sair para o stderr.
-    if let Err(error) = viber::config::load(
-        &world
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| world.clone()),
-    ) {
-        let hint = if error.to_string().contains("já é um mundo estático") {
-            crate::startup_error::StartupHint::NeedsBake
-        } else {
-            crate::startup_error::StartupHint::CreateConfig
-        };
-        // App mínima de erro: mostra o painel e sai (sem mundo).
+    // A pasta do config é a raiz do projeto — uma cena em `scenes/` não tem
+    // o yaml ao lado.
+    let config_dir = viber::app::world_base_dir(&world).unwrap_or_else(|| world.clone());
+    if let Err(error) = viber::config::load(&config_dir) {
         let mut app = crate::startup_error::error_app(
             format!("{error:#}"),
-            hint,
+            crate::startup_error::StartupHint::CreateConfig,
             world,
             cli.screenshot.clone(),
             cli.frames,
@@ -124,7 +116,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let mut app = viber::app::build_app(
+    let mut app = match viber::app::build_app(
         &world,
         AppOptions {
             mode: RunMode::Edit,
@@ -132,7 +124,27 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             window_title: Some(title),
             ..default()
         },
-    )?;
+    ) {
+        Ok(app) => app,
+        Err(error) => {
+            let message = format!("{error:#}");
+            let hint = if message.contains("mundo procedural") {
+                crate::startup_error::StartupHint::NeedsBake
+            } else {
+                crate::startup_error::StartupHint::CreateConfig
+            };
+            let mut app = crate::startup_error::error_app(
+                message,
+                hint,
+                world,
+                cli.screenshot.clone(),
+                cli.frames,
+                lang,
+            );
+            app.run();
+            return Ok(());
+        }
+    };
     // Embedded from this file (crate-root level) so the asset id is the clean
     // `embedded://vibereditor/assets/fonts/fa-solid-900.ttf`.
     bevy::asset::embedded_asset!(app, "assets/fonts/fa-solid-900.ttf");

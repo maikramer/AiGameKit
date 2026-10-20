@@ -10,7 +10,9 @@
 //!
 //! ```xml
 //! <Entity collider="shape: box; size: 0.8 0.8 0.8" rigidbody="type: fixed" />
+//! <Entity collider="shape: box; size: 4 2 4; trigger: true" script="zone.lua" />
 //! <Entity collider="shape: trimesh; mesh-url: /assets/x_collision.glb; mesh-anchor: base" />
+//! <Entity collider="shape: mesh" /> <!-- GLB do próprio GltfScene -->
 //! <Entity collider="shape: precompute; mesh-url: /assets/rock_lod0.glb" />
 //! <Entity collider="auto" />
 //! <Entity collider="none" />
@@ -18,7 +20,10 @@
 //! ```
 //!
 //! `collider` picks the shape, `rigidbody` (or the `body` shorthand on
-//! `<Group>`) picks the body kind. Everything in `simple-rpg` is `fixed`: the
+//! `<Group>`) picks the body kind. `trigger: true` (alias `sensor`) makes the
+//! shape a Rapier sensor: it does not block, and a script on the entity
+//! receives `on_trigger_*`. The same shapes with the flag off are solid
+//! colliders (`on_collision_*`). Everything in `simple-rpg` is `fixed`: the
 //! world is static scenery, and the moving things (hero, creatures) are
 //! character controllers over the terrain heightfield rather than rigid bodies
 //! — see [`crate::player`].
@@ -92,6 +97,8 @@ pub struct PhysicsSpec {
     pub body: BodyKind,
     pub mass: Option<f32>,
     pub gravity_scale: Option<f32>,
+    /// `trigger: true` / `sensor: true` — sensor Rapier (não bloqueia).
+    pub trigger: bool,
 }
 
 impl PhysicsSpec {
@@ -162,19 +169,17 @@ pub fn parse_collider(value: &str) -> (ColliderShape, Option<String>) {
             );
             (ColliderShape::Box { size, offset }, None)
         }
-        "trimesh" | "mesh" => match get("mesh-url") {
-            Some(url) => {
-                let anchor = match get("mesh-anchor").as_deref() {
-                    Some("base") => MeshAnchor::Base,
-                    _ => MeshAnchor::Origin,
-                };
-                (ColliderShape::Mesh { url, anchor }, None)
-            }
-            None => (
-                ColliderShape::None,
-                Some(format!("collider `{trimmed}`: trimesh without `mesh-url`")),
-            ),
-        },
+        "trimesh" | "mesh" => {
+            // Sem `mesh-url` a forma fica com url vazia: o parse do nó
+            // (`bind_self_mesh`) copia o GLB do próprio `GltfScene` /
+            // `PlayerGLTF`, ou avisa e descarta se o nó não tem malha.
+            let anchor = match get("mesh-anchor").as_deref() {
+                Some("base") => MeshAnchor::Base,
+                _ => MeshAnchor::Origin,
+            };
+            let url = get("mesh-url").unwrap_or_default();
+            (ColliderShape::Mesh { url, anchor }, None)
+        }
         "sphere" | "ball" => {
             let radius = get("radius")
                 .and_then(|r| r.parse::<f32>().ok())
@@ -224,6 +229,91 @@ pub fn parse_collider(value: &str) -> (ColliderShape, Option<String>) {
             ColliderShape::None,
             Some(format!("collider shape `{other}`: not supported — ignored")),
         ),
+    }
+}
+
+/// `trigger` / `sensor` no component-string do collider. Valores aceite:
+/// `true`, `1`, `yes`, `on` (o resto, incluindo ausência, é sólido).
+pub fn collider_is_trigger(value: &str) -> bool {
+    parse_component_string(value).iter().any(|(key, raw)| {
+        matches!(key.as_str(), "trigger" | "sensor")
+            && matches!(
+                raw.trim().to_ascii_lowercase().as_str(),
+                "true" | "1" | "yes" | "on"
+            )
+    })
+}
+
+/// Forma + flag de trigger numa só chamada. Trigger num collider que o parse
+/// descartou (`None`) não fica ligado.
+pub fn parsed_collider(value: &str) -> (ColliderShape, bool, Option<String>) {
+    let (shape, warning) = parse_collider(value);
+    let trigger = collider_is_trigger(value) && !matches!(shape, ColliderShape::None);
+    (shape, trigger, warning)
+}
+
+/// `shape: mesh` sem `mesh-url` usa o GLB do próprio nó. Sem GLB, a forma
+/// volta a [`ColliderShape::None`] e devolve o aviso.
+pub fn bind_self_mesh(shape: &mut ColliderShape, own_gltf: Option<&str>) -> Option<String> {
+    let ColliderShape::Mesh { url, .. } = shape else {
+        return None;
+    };
+    if !url.is_empty() {
+        return None;
+    }
+    match own_gltf.map(str::trim).filter(|url| !url.is_empty()) {
+        Some(own) => {
+            *url = own.to_string();
+            None
+        }
+        None => {
+            *shape = ColliderShape::None;
+            Some(
+                "collider `shape: mesh` without `mesh-url` and no glTF on this node — ignored"
+                    .into(),
+            )
+        }
+    }
+}
+
+/// Aplica [`bind_self_mesh`] e desliga o trigger se a malha foi descartada.
+pub fn finish_collider(spec: &mut PhysicsSpec, own_gltf: Option<&str>) -> Option<String> {
+    let warning = bind_self_mesh(&mut spec.collider, own_gltf);
+    if warning.is_some() {
+        spec.trigger = false;
+    }
+    warning
+}
+
+/// Eventos de contacto só nos colliders com script: `KINEMATIC_STATIC` faz o
+/// herói (corpo kinematic) intersectar o volume; o default do Rapier não o faz.
+/// Pagar isto em cada parede estática do mundo seria o narrowphase inteiro.
+pub fn scripted_collision_bits() -> (ActiveEvents, ActiveCollisionTypes) {
+    (
+        ActiveEvents::COLLISION_EVENTS,
+        ActiveCollisionTypes::default() | ActiveCollisionTypes::KINEMATIC_STATIC,
+    )
+}
+
+/// `trigger` → [`Sensor`]. `scripted` → eventos de colisão (ver
+/// [`scripted_collision_bits`]).
+pub fn stamp_collider_role(entity: &mut EntityWorldMut<'_>, trigger: bool, scripted: bool) {
+    if trigger {
+        entity.insert(Sensor);
+    }
+    if scripted {
+        entity.insert(scripted_collision_bits());
+    }
+}
+
+/// O mesmo que [`stamp_collider_role`] para um `Commands` (filho de offset,
+/// resolver de malha).
+pub fn stamp_collider_role_cmd(commands: &mut Commands, entity: Entity, trigger: bool, scripted: bool) {
+    if trigger {
+        commands.entity(entity).insert(Sensor);
+    }
+    if scripted {
+        commands.entity(entity).insert(scripted_collision_bits());
     }
 }
 
@@ -279,6 +369,10 @@ pub struct PendingCollider {
     /// AABB (da entidade ou da cena filha) — colisor garantido em vez de
     /// parede atravessável.
     pub age: f32,
+    /// `trigger: true` no atributo — o collider resolvido nasce sensor.
+    pub trigger: bool,
+    /// A entidade (ou o pai, no filho de offset) tem script Luau.
+    pub scripted: bool,
 }
 
 /// Segundos de espera pelo glTF antes do fallback por AABB.
@@ -349,9 +443,31 @@ impl bevy::app::Plugin for PhysicsPlugin {
                     stream_voxel_colliders.after(crate::terrain::plugin::TerrainSet::Columns),
                 ),
             );
-        if self.debug {
-            app.add_plugins(RapierDebugRenderPlugin::default());
-        }
+        // O wireframe existe sempre; `enabled` segue `debug` (jogo:
+        // `VIBER_PHYSICS_DEBUG`). O editor liga-o ao vivo via
+        // [`ColliderDebugToggle`] sem precisar da env.
+        let debug_render = RapierDebugRenderPlugin::default();
+        app.add_plugins(if self.debug {
+            debug_render
+        } else {
+            debug_render.disabled()
+        })
+        .add_systems(bevy::app::PostUpdate, apply_collider_debug_toggle);
+    }
+}
+
+/// O editor escreve isto para mostrar o wireframe no viewport de edição.
+/// Ausente no jogo: o toggle do profiler mexe no [`DebugRenderContext`]
+/// directamente e este sistema não o pisa.
+#[derive(Resource, Debug, Default, Clone, Copy)]
+pub struct ColliderDebugToggle(pub bool);
+
+fn apply_collider_debug_toggle(
+    toggle: Option<Res<ColliderDebugToggle>>,
+    mut ctx: ResMut<DebugRenderContext>,
+) {
+    if let Some(toggle) = toggle.as_ref() {
+        ctx.enabled = toggle.0;
     }
 }
 
@@ -468,13 +584,15 @@ pub fn resolve_pending_colliders(
 ) {
     for (entity, mut request, entity_global) in pending.iter_mut() {
         request.age += time.delta_secs();
+        let trigger = request.trigger;
+        let scripted = request.scripted;
         let bounds = || local_bounds(entity, entity_global, &hierarchy, &scene_bounds);
         match &request.shape {
             ColliderShape::Auto => {
                 // Os bounds só existem depois de o mesh (ou a cena glTF, cujos
                 // `Aabb` vivem em netos/bisnetos) carregar.
                 if let Some((center, half)) = bounds() {
-                    bounds_cuboid(&mut commands, entity, center, half);
+                    bounds_cuboid(&mut commands, entity, center, half, trigger, scripted);
                 } else if request.age < PENDING_TIMEOUT {
                     continue;
                 } else {
@@ -533,7 +651,7 @@ pub fn resolve_pending_colliders(
                         *suppressed += 1;
                     }
                     if let Some((center, half)) = bounds() {
-                        bounds_cuboid(&mut commands, entity, center, half);
+                        bounds_cuboid(&mut commands, entity, center, half, trigger, scripted);
                     }
                     commands.entity(entity).insert(ColliderResolved);
                     continue;
@@ -543,7 +661,9 @@ pub fn resolve_pending_colliders(
                     Some(bevy::asset::LoadState::Failed(_))
                 ) {
                     match bounds() {
-                        Some((center, half)) => bounds_cuboid(&mut commands, entity, center, half),
+                        Some((center, half)) => {
+                            bounds_cuboid(&mut commands, entity, center, half, trigger, scripted)
+                        }
                         // O glTF de colisão falha logo; a cena renderizada
                         // pode ainda não ter bounds — espera por eles até ao
                         // timeout em vez de desistir no 1.º frame.
@@ -603,6 +723,7 @@ pub fn resolve_pending_colliders(
                 // footprint, so `mesh-anchor: base` is a statement of that fact
                 // rather than a correction to apply.
                 commands.entity(entity).insert((collider, ColliderResolved));
+                stamp_collider_role_cmd(&mut commands, entity, trigger, scripted);
             }
             // Boxes/spheres/cylinders/capsules are built at spawn time;
             // `None` never becomes a collider.
@@ -679,11 +800,19 @@ fn union_bounds(
 /// FILHO com o offset — mudar o `Transform` da própria entidade teleportava o
 /// prop. O Rapier aplica a escala do `GlobalTransform`, por isso a caixa fica
 /// em unidades locais.
-fn bounds_cuboid(commands: &mut Commands, entity: Entity, center: Vec3, half: Vec3) {
+fn bounds_cuboid(
+    commands: &mut Commands,
+    entity: Entity,
+    center: Vec3,
+    half: Vec3,
+    trigger: bool,
+    scripted: bool,
+) {
     let half = half.max(Vec3::splat(1e-3));
     let collider = Collider::cuboid(half.x, half.y, half.z);
     if center.length_squared() < 1e-8 {
         commands.entity(entity).insert(collider);
+        stamp_collider_role_cmd(commands, entity, trigger, scripted);
         return;
     }
     let child = commands
@@ -693,6 +822,7 @@ fn bounds_cuboid(commands: &mut Commands, entity: Entity, center: Vec3, half: Ve
             Transform::from_translation(center),
         ))
         .id();
+    stamp_collider_role_cmd(commands, child, trigger, scripted);
     commands.entity(entity).add_child(child);
 }
 
@@ -1049,9 +1179,16 @@ mod tests {
 
     #[test]
     fn test_parse_collider_bad_input_warns_but_never_panics() {
+        // Sem url a forma fica pendente do GLB do nó (`bind_self_mesh`).
         let (shape, warning) = parse_collider("shape: trimesh");
-        assert_eq!(shape, ColliderShape::None);
-        assert!(warning.is_some(), "missing mesh-url is reported");
+        assert_eq!(warning, None);
+        assert_eq!(
+            shape,
+            ColliderShape::Mesh {
+                url: String::new(),
+                anchor: MeshAnchor::Origin,
+            }
+        );
 
         let (shape, warning) = parse_collider("size: 1 2 3");
         assert_eq!(shape, ColliderShape::None);
@@ -1579,6 +1716,53 @@ mod shape_collider_tests {
                 radius: 0.5,
                 half_height: 0.5
             }
+        );
+
+        let (shape, trigger, warning) = parsed_collider("shape: box; size: 2 1 2; trigger: true");
+        assert_eq!(warning, None);
+        assert!(trigger);
+        assert!(matches!(shape, ColliderShape::Box { .. }));
+        assert!(!collider_is_trigger("shape: box; trigger: false"));
+        assert!(collider_is_trigger("shape: sphere; sensor: yes"));
+        assert!(!parsed_collider("shape: teapot; trigger: true").1);
+
+        let mut mesh = ColliderShape::Mesh {
+            url: String::new(),
+            anchor: MeshAnchor::Origin,
+        };
+        assert_eq!(bind_self_mesh(&mut mesh, Some("/assets/a.glb")), None);
+        assert_eq!(
+            mesh,
+            ColliderShape::Mesh {
+                url: "/assets/a.glb".into(),
+                anchor: MeshAnchor::Origin,
+            }
+        );
+        let mut orphan = ColliderShape::Mesh {
+            url: String::new(),
+            anchor: MeshAnchor::Origin,
+        };
+        let warning = bind_self_mesh(&mut orphan, None).expect("sem GLB avisa");
+        assert!(warning.contains("mesh-url"), "{warning}");
+        assert_eq!(orphan, ColliderShape::None);
+
+        let mut world = World::new();
+        let solid = world.spawn(Collider::cuboid(0.5, 0.5, 0.5)).id();
+        {
+            let mut entity = world.entity_mut(solid);
+            stamp_collider_role(&mut entity, false, true);
+        }
+        assert!(world.get::<Sensor>(solid).is_none(), "sólido não é sensor");
+        assert!(world.get::<ActiveEvents>(solid).is_some());
+        let zone = world.spawn(Collider::ball(1.0)).id();
+        {
+            let mut entity = world.entity_mut(zone);
+            stamp_collider_role(&mut entity, true, false);
+        }
+        assert!(world.get::<Sensor>(zone).is_some());
+        assert!(
+            world.get::<ActiveEvents>(zone).is_none(),
+            "sem script não há eventos"
         );
 
         // Todas são imediatas (nada pendente).

@@ -75,8 +75,6 @@ pub const KNOWN_TAGS: &[&str] = &[
     "dynamicspawner",
     "vegetation",
     "playergltf",
-    "vehicle",
-    "race",
     "thirdpersoncamera",
     "dialoguenpc",
     "resourcechip",
@@ -97,9 +95,6 @@ pub const KNOWN_TAGS: &[&str] = &[
     "sceneportal",
     "cinematic",
     "projectiletemplate",
-    "vehicletemplate",
-    "trackramp",
-    "boostpad",
     "questtracker",
     "waypointarrow",
     "postfxdebugtoggle",
@@ -482,11 +477,6 @@ pub enum EntityKind {
     PlayerGltf {
         url: String,
     },
-    /// `<Vehicle driver template model-url …>` — kart da corrida (preset
-    /// `gameplay: racing`): [`crate::racing::vehicle::VehicleSpec`].
-    Vehicle {
-        spec: crate::racing::vehicle::VehicleSpec,
-    },
     /// `<DialogueNPC>` — marks the parent NPC as a dialogue target
     /// (`dialogue-id`), with a floating marker at `marker-height`.
     DialogueNpc {
@@ -865,6 +855,8 @@ pub struct StaticSpawnerSpec {
     /// Collider declarado no template (`<GameObject collider="…">`) — cada
     /// instância spawna com colisão (árvores/rochas/props de spawner).
     pub template_collider: Option<crate::physics::ColliderShape>,
+    /// `trigger` do collider do template (sensor em cada instância).
+    pub template_trigger: bool,
     /// `destructible` do template — cada instância spawna colhível
     /// (componente [`crate::harvest::Destructible`]).
     pub template_destructible: Option<DestructibleSpec>,
@@ -991,6 +983,7 @@ impl VegetationSpec {
             template_links: Default::default(),
             activation_radius: crate::luau::DEFAULT_ACTIVATION_RADIUS,
             template_collider: None,
+            template_trigger: false,
             template_destructible: None,
             template_lods: Vec::new(),
             cull_distance: self.cull_distance,
@@ -1373,8 +1366,9 @@ fn apply_use_overrides(
                 None
             }
             "collider" => {
-                let (shape, warning) = parse_collider(value);
+                let (shape, trigger, warning) = crate::physics::parsed_collider(value);
                 spec.physics.collider = shape;
+                spec.physics.trigger = trigger;
                 warning.map(|w| format!("{ctx_tag}: {w}"))
             }
             "rigidbody" | "body" => {
@@ -1445,6 +1439,7 @@ fn apply_use_overrides(
             ctx.warnings.push(warning);
         }
     }
+    bind_node_mesh(spec, ctx, ctx_tag);
 }
 
 /// Ambient lights are applied as a world resource, so more than one is
@@ -1470,13 +1465,29 @@ fn parse_entities(nodes: &[XmlNode], ctx: &mut ParseCtx) -> Result<Vec<EntitySpe
 /// `Ok(None)` = element skipped as a no-op (unknown tag), subtree included.
 fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>> {
     let mut spec = parse_entity_kind(node, ctx)?;
-    if let Some(spec) = spec.as_mut()
-        && node.origin.is_some()
-    {
-        // Sempre o nó que o declarou — num `<Use>` substitui a origem clonada do protótipo.
-        spec.source = node.origin.clone();
+    if let Some(spec) = spec.as_mut() {
+        if node.origin.is_some() {
+            // Sempre o nó que o declarou — num `<Use>` substitui a origem clonada do protótipo.
+            spec.source = node.origin.clone();
+        }
+        bind_node_mesh(spec, ctx, &format!("<{}>", node.tag));
     }
     Ok(spec)
+}
+
+/// GLB do nó, quando a tag é uma cena glTF (o `shape: mesh` sem url usa-o).
+fn own_gltf_url(spec: &EntitySpec) -> Option<String> {
+    match &spec.kind {
+        EntityKind::GltfScene { url, .. } | EntityKind::PlayerGltf { url } => Some(url.clone()),
+        _ => None,
+    }
+}
+
+fn bind_node_mesh(spec: &mut EntitySpec, ctx: &mut ParseCtx, prefix: &str) {
+    let own = own_gltf_url(spec);
+    if let Some(warning) = crate::physics::finish_collider(&mut spec.physics, own.as_deref()) {
+        ctx.warnings.push(format!("{prefix}: {warning}"));
+    }
 }
 
 fn parse_entity_kind(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>> {
@@ -1522,14 +1533,11 @@ fn parse_entity_kind(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<Entity
                 Ok(None)
             }
         },
-        "vehicle" => finish_vehicle(node, ctx).map(Some),
         "thirdpersoncamera" => finish_orbit_camera(node, ctx, true).map(Some),
         "audiomixer" => finish_audio_mixer(node, ctx).map(Some),
         "sky" => finish_sky(node, ctx).map(Some),
         "navmesh" | "spawngate" | "projectiletemplate" | "postfxdebugtoggle"
-        | "adaptivequality" | "vehicletemplate" | "race" | "trackramp" | "boostpad" => {
-            finish_engine_config(node, ctx).map(Some)
-        }
+        | "adaptivequality" => finish_engine_config(node, ctx).map(Some),
         "landmark" => finish_landmark(node, ctx).map(Some),
         // Timeline de câmara/legendas (`crate::cinematic`): os filhos são
         // planos e falas, não entidades.
@@ -1674,8 +1682,9 @@ fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(Stri
                 if matches!(node.tag.to_ascii_lowercase().as_str(), "group" | "scatter") => {}
             "resource-yield" => resource_yield = value.trim().parse::<u32>().unwrap_or(1).max(1),
             "collider" => {
-                let (shape, warning) = parse_collider(value);
+                let (shape, trigger, warning) = crate::physics::parsed_collider(value);
                 common.physics.collider = shape;
+                common.physics.trigger = trigger;
                 if let Some(warning) = warning {
                     ctx.warnings.push(format!("{ctx_tag}: {warning}"));
                 }
@@ -1853,6 +1862,7 @@ fn finish_composition(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
             body,
             mass: common.physics.mass,
             gravity_scale: common.physics.gravity_scale,
+            trigger: false,
         },
         destructible: common.destructible,
         kind: EntityKind::Composition {
@@ -2368,6 +2378,7 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
         template_links: Default::default(),
         activation_radius: crate::luau::DEFAULT_ACTIVATION_RADIUS,
         template_collider: None,
+        template_trigger: false,
         template_destructible: None,
         template_lods: Vec::new(),
         cull_distance: crate::render_lod::DEFAULT_STATIC_CULL,
@@ -2401,13 +2412,20 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
             .map(str::trim)
             .filter(|c| !c.is_empty())
         {
-            let (shape, warning) = crate::physics::parse_collider(value);
+            let (mut shape, mut trigger, warning) = crate::physics::parsed_collider(value);
             if let Some(warning) = warning {
+                ctx.warnings
+                    .push(format!("<{}> template: {warning}", node.tag));
+            }
+            let own = child.attr("url").or_else(|| child.attr("model-url"));
+            if let Some(warning) = crate::physics::bind_self_mesh(&mut shape, own) {
+                trigger = false;
                 ctx.warnings
                     .push(format!("<{}> template: {warning}", node.tag));
             }
             if !matches!(shape, crate::physics::ColliderShape::None) {
                 spec.template_collider = Some(shape);
+                spec.template_trigger = trigger;
             }
             break;
         }
@@ -2768,36 +2786,6 @@ fn finish_player_gltf(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result
         transform: common.transform,
         physics: common.physics,
         kind: EntityKind::PlayerGltf { url },
-        children: Vec::new(),
-        source: None,
-    })
-}
-
-/// `<Vehicle driver="player|ai" template="kart" model-url model-yaw …>` —
-/// kart de corrida do preset `gameplay: racing`.
-fn finish_vehicle(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node, ctx)?;
-    let ctx_tag = format!("<{}>", node.tag);
-    warn_children(node, ctx);
-    // attrs crus para o VehicleSpec::parse (jogo com as keys extra).
-    let attrs: Vec<(String, String)> = node
-        .attrs
-        .iter()
-        .map(|(k, v)| (k.to_ascii_lowercase(), v.clone()))
-        .collect();
-    let _ = rest;
-    let spec = crate::racing::vehicle::VehicleSpec::parse(&attrs, &ctx_tag)?;
-    Ok(EntitySpec {
-        prototype_instance: None,
-        name: common.name.or_else(|| Some("kart".to_string())),
-        tag: common.tag,
-        script: common.script,
-        props: common.props,
-        links: common.links,
-        destructible: common.destructible,
-        transform: common.transform,
-        physics: common.physics,
-        kind: EntityKind::Vehicle { spec },
         children: Vec::new(),
         source: None,
     })
@@ -5303,7 +5291,6 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::SpawnExclusion { .. } => out.spawn_exclusions += 1,
                 EntityKind::Vegetation { .. } => out.vegetation += 1,
                 EntityKind::PlayerGltf { .. } => out.players += 1,
-                EntityKind::Vehicle { .. } => out.vehicles += 1,
                 EntityKind::DialogueNpc { .. } => out.dialogue_npcs += 1,
                 EntityKind::ResourceChip { .. } => out.resource_chips += 1,
                 EntityKind::HudElement { .. } => out.hud_elements += 1,

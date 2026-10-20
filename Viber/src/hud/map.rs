@@ -1075,6 +1075,8 @@ fn map_pins_system(
     state: Res<RegionalMapState>,
     view: Res<MapViewRes>,
     data: MapPinData,
+    time: Res<Time>,
+    mut census: Local<f32>,
     players: Query<&GlobalTransform, With<Player>>,
     bake: Option<Res<MapBake>>,
     mut spots: ResMut<MapSpots>,
@@ -1130,6 +1132,13 @@ fn map_pins_system(
     let half = bake.half;
     let view = view.0;
     spots.0.clear();
+    // QA: 1×/s com o mapa aberto, o censo dos pins (blips + projeção) —
+    // lê-se no `viber debug logs --grep mapa`.
+    *census -= time.delta_secs();
+    let census_due = *census <= 0.0;
+    if census_due {
+        *census = 1.0;
+    }
     let push = |world: Vec3, label: &str, spots: &mut MapSpots| {
         spots.0.push(MapSpot::new(&view, half, world, label));
     };
@@ -1226,6 +1235,22 @@ fn map_pins_system(
                 *visibility = Visibility::Hidden;
             }
         }
+    }
+    if census_due {
+        let resumo: Vec<String> = spots
+            .0
+            .iter()
+            .map(|s| {
+                format!(
+                    "{}@({:.0},{:.0})px mundo({:.0},{:.0})",
+                    s.label, s.px, s.py, s.world.x, s.world.z
+                )
+            })
+            .collect();
+        info!(
+            target: "viber::map",
+            "mapa: censo de {} pins — {}", spots.0.len(), resumo.join(" · ")
+        );
     }
     // Rodapé: progresso da Nota + estado dos biomas com atalaia.
     let signed_count = data

@@ -503,26 +503,29 @@ fn poll_game(world: &mut World) {
             "local c = viber.debug.clock() local w = viber.debug.weather_full() return {minute = c.minute, rain = w.rain, clouds = w.clouds, wind = w.wind_strength}",
         ));
     }
-    let bits = {
+    let name = {
         let selection = world.resource::<Selection>().clone();
         let doc = world.resource::<viber::scene::doc::SceneDoc>().clone();
         selection.primary().and_then(|node| {
-            let origin = doc.origin_of(node);
-            let mut query = world.query_filtered::<(Entity, &viber::scene::SceneSource), ()>();
-            query
-                .iter(world)
-                .find(|(_, source)| *source.0 == origin)
-                .map(|(entity, _)| entity.to_bits())
+            doc.node(node)
+                .and_then(|xml| xml.attr("name"))
+                .map(str::to_owned)
+                .filter(|name| !name.is_empty())
         })
     };
-    if let Some(bits) = bits
+    if let Some(name) = name
         && world.resource::<GameState>().info_task.is_none()
     {
-        world.resource_mut::<GameState>().info_task = Some(methods::lua_eval(
-            &bridge,
-            &format!("return viber.debug.info({bits})"),
-        ));
+        world.resource_mut::<GameState>().info_task =
+            Some(methods::lua_eval(&bridge, &info_call(&name)));
     }
+}
+
+/// `viber.debug.info` no processo do JOGO. Os bits de entidade do editor não
+/// existem lá (a UI e os gizmos deslocam os índices) — o nome resolve.
+pub fn info_call(name: &str) -> String {
+    let escaped = name.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("return viber.debug.info(\"{escaped}\")")
 }
 
 /// The runtime lines from an EntityInfo value.
@@ -586,5 +589,16 @@ fn render_game(
             Pickable::IGNORE,
             ChildOf(body),
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn info_call_uses_the_node_name_and_escapes_quotes() {
+        assert_eq!(info_call("chapel"), "return viber.debug.info(\"chapel\")");
+        assert_eq!(info_call("a\"b"), "return viber.debug.info(\"a\\\"b\")");
     }
 }

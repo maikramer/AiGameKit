@@ -178,6 +178,11 @@ pub fn build_ui_tree(
         blocks_pointer,
         pointer_none,
     ));
+    // O backend de picking lê `Pickable`, não `FocusPolicy` — entidade nova,
+    // só é preciso inserir no caso Pass (ausência bloqueia por default).
+    if let Some(pickable) = super::runtime::ui_pickable(blocks_pointer, pointer_none) {
+        entity.insert(pickable);
+    }
     if pointer_none {
         entity.insert(super::runtime::UiPointerNone);
     }
@@ -713,73 +718,59 @@ mod tests {
     #[test]
     fn test_focus_reaches_journal_through_label_and_menu_root_but_not_open_modal() {
         use super::super::runtime::{UiClicks, collect_ui_clicks};
-        use crate::ui::interaction::ui_focus_system;
-        use bevy::app::HierarchyPropagatePlugin;
-        use bevy::camera::RenderTarget;
+        use crate::ui::interaction::interaction_from_picking;
         use bevy::input::touch::Touches;
-        use bevy::math::Affine2;
-        use bevy::ui::{ComputedUiTargetCamera, UiStack};
-        use bevy::window::PrimaryWindow;
+        use bevy::picking::backend::{HitData, PointerHits};
+        use bevy::picking::pointer::PointerId;
 
+        // O hit-testing é do backend nativo de picking (UiStack/clip/
+        // visibilidade — provado pelo bevy e pelos asserts de `Pickable` nos
+        // testes de política). Aqui testamos O NOSSO contrato: a tradução da
+        // cadeia `PointerHits` (já truncada no 1.º bloqueador) para
+        // `Interaction` + a publicação do clique para os scripts.
         let mut app = tree_app();
-        app.init_resource::<UiScale>()
-            .init_resource::<ButtonInput<MouseButton>>()
+        app.init_resource::<ButtonInput<MouseButton>>()
             .init_resource::<Touches>()
             .init_resource::<UiClicks>()
-            .add_plugins(HierarchyPropagatePlugin::<ComputedUiTargetCamera>::new(
-                PostUpdate,
-            ))
-            .add_systems(Update, bevy::ui::update::propagate_ui_target_cameras)
-            .add_systems(Last, (ui_focus_system, collect_ui_clicks).chain());
-        let mut window = Window::default();
-        window.set_cursor_position(Some(Vec2::splat(50.0)));
-        app.world_mut().spawn((window, PrimaryWindow));
-        let camera = app
-            .world_mut()
-            .spawn((Camera::default(), RenderTarget::default()))
-            .id();
+            // O recurso `PointerHits` é criado pelo PickingPlugin (production
+            // traz via DefaultPlugins) — na app mínima de teste, à mão.
+            .add_message::<bevy::picking::backend::PointerHits>()
+            .add_systems(Last, (interaction_from_picking, collect_ui_clicks).chain());
 
         let mut hud = test_node("uiroot", "hud");
         hud.children.push(test_node("uibutton", "behind-journal"));
         let mut journal = test_node("uibutton", "open-journal");
         journal.children.push(test_node("uitext", "journal-label"));
         hud.children.push(journal);
-        let hud = build_test_node(&mut app, &hud);
         let mut menu = test_node("uiroot", "menu-layer");
         menu.children.push(test_node("uimodal", "menu"));
-        let menu = build_test_node(&mut app, &menu);
-        app.world_mut()
-            .entity_mut(hud)
-            .insert(UiTargetCamera(camera));
-        app.world_mut()
-            .entity_mut(menu)
-            .insert(UiTargetCamera(camera));
-        let registry = app.world().resource::<UiRegistry>();
-        let behind = registry.get("behind-journal").unwrap();
-        let journal = registry.get("open-journal").unwrap();
-        let label = registry.get("journal-label").unwrap();
-        let modal = registry.get("menu").unwrap();
-        // Headless fixture: all rectangles overlap the pointer; actual focus
-        // traversal is Bevy's, with the same back-to-front order as the HUD.
-        let stack = vec![hud, behind, journal, label, menu, modal];
-        for entity in &stack {
-            app.world_mut().entity_mut(*entity).insert((
-                ComputedNode {
-                    size: Vec2::splat(100.0),
-                    ..Default::default()
-                },
-                UiGlobalTransform::from(Affine2::from_translation(Vec2::splat(50.0))),
-                if *entity == modal {
-                    InheritedVisibility::HIDDEN
-                } else {
-                    InheritedVisibility::VISIBLE
-                },
-            ));
-        }
-        app.world_mut().insert_resource(UiStack {
-            partition: vec![0..stack.len()],
-            uinodes: stack,
-        });
+        build_test_node(&mut app, &hud);
+        build_test_node(&mut app, &menu);
+        let (behind, journal, label, modal) = {
+            let registry = app.world().resource::<UiRegistry>();
+            (
+                registry.get("behind-journal").unwrap(),
+                registry.get("open-journal").unwrap(),
+                registry.get("journal-label").unwrap(),
+                registry.get("menu").unwrap(),
+            )
+        };
+
+        let hits_data = |chain: &[Entity]| {
+            PointerHits::new(
+                PointerId::Mouse,
+                chain
+                    .iter()
+                    .map(|entity| (*entity, HitData::new(Entity::PLACEHOLDER, 0.0, None, None)))
+                    .collect(),
+                0.5,
+            )
+        };
+
+        // Cursor sobre o journal, ATRAVÉS do label (Pass) — a cadeia que o
+        // backend emite é [label, journal]; o behind (fora da cadeia) fica
+        // intocado.
+        app.world_mut().write_message(hits_data(&[label, journal]));
         app.world_mut()
             .resource_mut::<ButtonInput<MouseButton>>()
             .press(MouseButton::Left);
@@ -804,9 +795,8 @@ mod tests {
         app.world_mut()
             .entity_mut(journal)
             .insert(Interaction::None);
-        app.world_mut()
-            .entity_mut(modal)
-            .insert((Visibility::Inherited, InheritedVisibility::VISIBLE));
+        // Modal aberto por cima: a cadeia truncada no bloqueador é só [modal].
+        app.world_mut().write_message(hits_data(&[modal]));
         app.world_mut()
             .resource_mut::<ButtonInput<MouseButton>>()
             .press(MouseButton::Left);

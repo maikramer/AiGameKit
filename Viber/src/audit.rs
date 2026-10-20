@@ -1420,6 +1420,7 @@ mod tests {
                 body: Default::default(),
                 mass: None,
                 gravity_scale: None,
+                trigger: false,
             },
             kind,
             children: vec![],

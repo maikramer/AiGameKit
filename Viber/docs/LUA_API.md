@@ -168,12 +168,23 @@ Sequências de câmara declaradas no XML (`<Cinematic id>` com `<Shot>`, `<Line>
 |---|---|---|
 | `viber.cinematic(id[, anchor_id])` | — | toca; `anchor_id` (ex. `viber.self_id()`) é a âncora `self` dos planos |
 | `viber.cinematic_playing()` | id \| `nil` | a cinemática a tocar neste frame |
+| `viber.menu_open()` | bool | `true` quando um menu rouba o input (diário, profiler, mapa [M], viagem [G], cinemática) — o mesmo portão que o movimento nativo |
 
 - Durante a cena o herói não anda nem ataca (`MenusOpen::cinematic`), fica invulnerável e o
   HUD esconde-se; [Esc]/[Espaço]/[Enter] saltam (`skippable`).
 - No fim chega `{type="cinematic_end", id, skipped}` em `viber.events()`.
 - "Só uma vez": guarda uma chave primitiva em `viber.game()` (persiste no save) — ver
   `scripts/cinematic-trigger.lua` do `simple-rpg`.
+
+## Dados, pose, estrada e som
+
+| Função | Retorno | Notas |
+|---|---|---|
+| `viber.load_json(caminho)` | valor | JSON relativo à pasta do mundo (pai de `scripts/`); sem `..` |
+| `viber.road(x, z)` | tabela \| `nil` | estrada mais próxima: `y`, `s`, `length`, `half_width`, `lateral`, `deck`, `heading`, `on` |
+| `viber.set_pose(x, y, z, yaw [, id])` | — | pose LOCAL; sem `id` é a entidade do script; a escala mantém-se |
+| `viber.sound_loop(id, clip [, {pitch, volume, x, y, z}])` | — | loop de SFX; `clip` é nome do registry ou caminho sob `sfx_dir` |
+| `viber.sound_stop(id)` | — | pára o loop com esse `id` |
 
 ## Cenas (`viber.change_scene`)
 
@@ -249,6 +260,20 @@ escoar. O COMBATE
 fino pode usar isto para crateras de bombas, poços de mineração ou valas
 de cerco — `viber.terrain.flatten` é o que se quer debaixo de um edifício
 de script.
+
+## Pose, estrada e som em loop
+
+| Função | Notas |
+|--------|-------|
+| `viber.road(x, z)` | estrada mais próxima: `y`, `s` (m), `length`, `half_width`, `lateral`, `deck`, `heading`, `on`, `cx`, `cz`; `nil` sem estradas |
+| `viber.road_at(s)` | ponto na estrada mais longa ao arco `s` (m), o mesmo formato mais `x`/`z` |
+| `viber.set_pose(x, y, z, yaw [, id])` | pose local; sem `id` = a própria; a escala fica |
+| `viber.own_system("locomotion")` | o `player_movement` cala; o script escreve o corpo |
+| `viber.sound_loop(id, clip [, {pitch, volume, x, y, z}])` | loop no bus de SFX; `clip` = registry ou caminho sob `sfx_dir` |
+| `viber.sound_stop(id)` | pára esse loop |
+| `viber.music.layer(nome)` | força a layer de BGM; `nil` devolve a zona automática |
+| `viber.load_json(caminho)` | JSON relativo à pasta do mundo (sem `..`) |
+| `viber.player_id()` | bits do herói, para `entity_damage` / `entity_heal` |
 
 ## Movimento & rotação
 
@@ -344,47 +369,24 @@ Definições em JSON (27 quests do exemplo, embutidas em `src/quests.rs` via
 | `viber.report_visit(place)` | reporta visita ao marco `place` (objetivo `visit`) |
 | `viber.report_collect(item, amount)` | colheita: deposita no **vault**; objetivos `collect` leem o inventário (auto-progresso). Recursos (`gold/wood/stone`) e itens de objetivo (`"dark-wood"`, `"bog-moss"`) |
 
-## Economia & inventário
+## Economia, quests e progressão
 
-| Função | Notas |
-|--------|-------|
-| `viber.vault_add(kind, amount)` | deposita recurso (`gold`/`wood`/`stone`) |
-| `viber.vault_get(kind)` | quantidade atual (0 se desconhecido) |
-| `viber.item_add(id, amount)` | item de inventário (`potion`, `antidote`, `bomb`, …) |
-| `viber.item_count(id)` | quantidade atual (0 se desconhecido) |
-| `viber.add_skill_points(n)` | soma `n` pontos de talento (`SkillTree` + badge de nível); no-op suave em mundos sem preset rpg |
-| `viber.reveal_biome(bioma)` | a atalaia ativada revela o bioma: os marcos dele acendem na bússola/minimapa e abrem ao [F]/[G]. Persistido no save (`revealed_biomes`) |
-| `viber.biome_revealed(bioma)` | `true` se o bioma já foi revelado (snapshot do frame) — o script da atalaia usa para não re-recompensar |
-| `viber.alive_in_region(idx)` | hostis scriptados VIVOS na banda `idx` (0–4: centro/norte/sul/este/oeste; snapshot a 1 Hz — o gating do boss final usa isto) |
+Cofre, XP, quests, veneno e biomas do `simple-rpg` vivem em
+`examples/simple-rpg/scripts/lib/rules.lua` (`rules.vault_*`, `rules.quest_*`,
+`rules.add_xp`). O estado plano vai no `viber.game()` e no save. O jogo não
+deve usar as funções antigas que ainda estão registadas:
+`viber.vault_add`, `viber.vault_get`, `viber.item_add`, `viber.item_count`,
+`viber.add_skill_points`, `viber.reveal_biome`, `viber.biome_revealed`,
+`viber.alive_in_region`. `viber.load_json` lê os `quests/*.json`.
 
-## Corrida (`viber.race.*` / `viber.vehicle.*`)
+## Corrida
 
-Preset `gameplay: racing` no config.yaml (karts + diretor de corrida +
-rivais AI — ver `examples/simple-racer`). Fora do preset, tudo devolve
-`nil`/`0`/`false`. Snapshot por frame: leitura barata, sem escrita (a
-corrida é conduzida pela engine; os scripts formatam HUD e reagem).
-
-| Função | Devolve |
-|--------|---------|
-| `viber.race.state()` | `"grid"` \| `"countdown"` \| `"racing"` \| `"finished"` |
-| `viber.race.lap()` | volta atual, total de voltas (ex.: `1, 3`) |
-| `viber.race.position()` | posição ao vivo, total de karts (ex.: `5, 5`) |
-| `viber.race.time()` | segundos desde o GO |
-| `viber.race.countdown()` | `3`/`2`/`1` durante o semáforo, `nil` fora dele |
-| `viber.race.best_lap()` | melhor volta do kart do jogador (s) ou `nil` |
-| `viber.race.last_lap()` | última volta completada (s) ou `nil` |
-| `viber.race.wrong_way()` | `true` após ~0,7 s em sentido errado |
-| `viber.race.message()` | cartaz atual do diretor (`"GO!"`, `"VOLTA FINAL"`, …) ou `nil` |
-| `viber.vehicle.speed()` | velocidade (m/s), teto (m/s) |
-| `viber.vehicle.nitro()` | tanque de nitro 0..1 |
-| `viber.vehicle.drifting()` | `true` em drift, carga atual (s; mini-turbo ≥ 1.0, super ≥ 2.1) |
-| `viber.vehicle.turbo()` | turbo ativo restante (s) |
-
-Autoria: `<Vehicle driver="player\|ai" template model-url model-yaw>`,
-`<VehicleTemplate id top-speed accel brake …>` e `<Race laps countdown
-grid-s>`; pista = `<Road closed="1" y="…" widths="…" viaduct-clearance="6">`
-(canais por nó — `Viber/src/terrain/roads.rs`). Teclas: WASD/setas, Space
-drift, Shift nitro, R respawn.
+A corrida não é da engine. O `simple-racer` conduz karts, diretor e rivais
+em `examples/simple-racer/scripts/game/race.lua` (física em `scripts/lib/kart.lua`).
+O HUD lê `viber.game().player`. A engine dá `viber.road`, `viber.road_at`,
+`viber.set_pose`, `viber.sound_loop` e `viber.own_system("locomotion")`.
+Karts são `<Entity groups="kart" tag="player">` com o modelo em filho.
+Pista = `<Road closed="1">`. Teclas: WASD, Space drift, Shift nitro, R reinicia.
 
 ## Input genérico (`viber.input.*`)
 
@@ -513,6 +515,7 @@ que só dependem de componentes/mensagens sempre registados.
 | `viber.entity_position(id?)` | `ok, x, y, z` do snapshot do frame (`ok == false` sem entrada; sem `id` = a própria) |
 | `viber.entity_name(id?)` | nome de MUNDO da entidade (`nil` se não nomeada — spawns de spawner podem não ter; sem `id` = a própria). É o que deixa um script partilhado por várias entidades descobrir QUEM é (ex.: `portal.<room>[.sufixo]`) |
 | `viber.nearby(raio [, limite])` | lista `{id, name, x, y, z, distance}` de entidades NOMEADAS à volta da própria, mais perto 1.º (cap 64; default 16) |
+| `viber.hostiles([raio])` | lista `{id, kind, x, y, z, hp, max, distance}` de criaturas vivas (`enemies/`/`bosses/`) à volta do herói (cap 128; default 2.4 m). Os spawners não lhes dão nome — `find_all("wolf")` não as vê |
 | `viber.player_forward()` | `dx, dz` — forward do herói no plano (modelo olha +Z), para dash/mira |
 
 ### Dano e morte

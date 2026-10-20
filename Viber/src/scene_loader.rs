@@ -809,6 +809,7 @@ pub fn unload_scene(world: &mut World) -> SweepReport {
 pub fn reset_scene_resources(world: &mut World) {
     use crate::recipes::spawn::{EditorGroups, PendingTerrain, PrototypeLibrary, StaticWorld};
     world.remove_resource::<crate::terrain::runtime::TerrainChunkMaterials>();
+    world.remove_resource::<crate::terrain::runtime::TerrainTextureGate>();
     world.remove_resource::<crate::terrain::runtime::TerrainSplat>();
     world.remove_resource::<crate::terrain::runtime::TerrainRuntime>();
     world.remove_resource::<PendingTerrain>();

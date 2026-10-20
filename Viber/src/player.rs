@@ -331,14 +331,18 @@ pub fn facing_slerp_factor(current: Quat, target: Quat, rotation_speed: f32, dt:
 
 /// Gamepad-style movement over the terrain: A/D steer the third-person
 /// camera (which the character follows), W/S walk/sprint, Space jumps with
-/// buffer + coyote + cooldown. Ground snap via `TerrainRuntime`; walls stop
-/// the hero through the Rapier character controller.
+/// buffer + coyote + cooldown. Ground snap via `TerrainRuntime` when the
+/// scene has one; a scene without terrain (an interior) still walks — the
+/// room colliders and the interior floor are the ground. Walls stop the
+/// hero through the Rapier character controller.
 #[allow(clippy::type_complexity)]
 #[allow(clippy::too_many_arguments)]
 pub fn player_movement(
+    mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
     menus: Res<crate::menus::MenusOpen>,
     latches: Res<crate::input_latch::KeyLatches>,
+    locomotion: Option<Res<crate::luau::ownership::ScriptSystemOwners>>,
     time: Res<Time>,
     runtime: Option<Res<TerrainRuntime>>,
     collision: Option<Res<crate::physics::TerrainCollisionStatus>>,
@@ -348,6 +352,7 @@ pub fn player_movement(
     mut sfx: MessageWriter<crate::ambient::SfxEvent>,
     mut players: Query<
         (
+            Entity,
             &mut Transform,
             &mut Player,
             Option<&mut bevy_rapier3d::prelude::KinematicCharacterController>,
@@ -356,21 +361,35 @@ pub fn player_movement(
             Option<&crate::feedback::Dying>,
             Option<&crate::physics_fx::Knockback>,
         ),
-        // Karts de corrida (`racing::Vehicle`): o controller a pé nunca os
-        // toca — o `vehicle_movement` escreve o Transform deles.
-        (Without<crate::racing::vehicle::Vehicle>, Without<Camera>),
+        // `own_system("locomotion")` cala este sistema por completo (kart).
+        Without<Camera>,
     >,
 ) {
-    let Some(runtime) = runtime else {
-        return; // terrain bootstrap has not run yet — hero waits airborne
-    };
+    // O bootstrap do terreno é síncrono (Startup / SceneLoad). Sem
+    // `TerrainRuntime` neste ponto a cena não tem terreno — os interiores
+    // do simple-rpg. Sair aqui deixava o herói preso na entrada: o
+    // character controller nunca recebia `translation`.
+    let runtime = runtime.as_deref();
+    // Um script reclamou o corpo (`viber.own_system("locomotion")` +
+    // `viber.set_pose`). O controller a pé não escreve por cima.
+    if locomotion
+        .as_ref()
+        .is_some_and(|owners| owners.owns(crate::luau::ownership::SYSTEM_LOCOMOTION))
+    {
+        for (_, _, _, controller, _, _, _, _) in &mut players {
+            if let Some(mut controller) = controller {
+                controller.translation = Some(Vec3::ZERO);
+            }
+        }
+        return;
+    }
     // Modal aberto consome o teclado: WASD/Espaço não movem/saltam por
     // trás da loja/menu (W/S navegavam E andavam). O `translation` PENDENTE
     // do character controller limpa-se TAMBÉM — no bevy_rapier3d 0.36 ele
     // persiste e é reaplicado em todos os steps (o herói deslizava com o
     // menu aberto e, se estava em salto, subia indefinidamente).
     if menus.any() {
-        for (_, mut player, controller, _, _, _, _) in &mut players {
+        for (_, _, mut player, controller, _, _, _, _) in &mut players {
             player.vel_y = 0.0;
             if let Some(mut controller) = controller {
                 controller.translation = Some(Vec3::ZERO);
@@ -397,7 +416,7 @@ pub fn player_movement(
         latches.down(&keys, KeyCode::ShiftLeft) || latches.down(&keys, KeyCode::ShiftRight);
     let jump_held = latches.down(&keys, KeyCode::Space);
 
-    for (mut transform, mut player, mut controller, output, mut settle, dying, knockback) in
+    for (entity, mut transform, mut player, mut controller, output, mut settle, dying, knockback) in
         &mut players
     {
         // Herói a cair em combate: sem andar, rodar a câmara nem saltar até
@@ -410,12 +429,22 @@ pub fn player_movement(
         // Tutela pós-teleporte: enquanto dura, o chão ANALÍTICO manda mesmo
         // que já exista collider algures — a coluna de destino pode estar a
         // assar e uma queda a 55 m/s atravessa o trimesh antes disso.
+        // O marcador SAI ao chegar a zero. A troca de cena espera que ele
+        // desapareça (`scene_loader`, fase Settle); deixá-lo para sempre
+        // segurava o fade no preto até ao timeout.
         let settling = match settle.as_deref_mut() {
             Some(state) if state.frames > 0 => {
                 state.frames -= 1;
+                if state.frames == 0 {
+                    commands.entity(entity).remove::<TeleportSettle>();
+                }
                 true
             }
-            _ => false,
+            Some(_) => {
+                commands.entity(entity).remove::<TeleportSettle>();
+                false
+            }
+            None => false,
         };
         // Grounded state update first (the PlayerGroundedSystem runs
         // before movement): refresh the coyote clock and clear the jumping
@@ -542,12 +571,17 @@ pub fn player_movement(
         // a 2 km de distância usada para resgatar o herói — o salto de metro
         // que uma cena de interior fora do mapa levava. Fora do campo as duas
         // rede de segurança desligam-se e manda o collider.
-        let in_field = runtime.in_field(transform.translation.x, transform.translation.z);
-        let top = if in_field {
-            runtime.sample(transform.translation.x, transform.translation.z)
-        } else {
-            f32::NEG_INFINITY
-        };
+        let (px, py, pz) = (
+            transform.translation.x,
+            transform.translation.y,
+            transform.translation.z,
+        );
+        // Sem terreno (interior) não há campo: as duas redes analíticas ficam
+        // desligadas e manda o collider da sala.
+        let field = runtime.filter(|rt| rt.in_field(px, pz));
+        let top = field
+            .map(|rt| rt.sample(px, pz))
+            .unwrap_or(f32::NEG_INFINITY);
 
         // Void rescue: a hero this far under the surface tunnelled through the
         // terrain collider (see [`fell_out_of_world`]). Put them back on the
@@ -566,12 +600,8 @@ pub fn player_movement(
         // gruta o topo é teto, não chão. É só a rede de segurança de
         // "sem collider carregado": com chão de collider debaixo do herói
         // (`TerrainCollisionStatus.ready`), o collider é a autoridade.
-        let ground = if in_field {
-            match runtime.surface_below(
-                transform.translation.x,
-                transform.translation.z,
-                transform.translation.y + GROUND_PROBE,
-            ) {
+        let ground = if let Some(rt) = field {
+            match rt.surface_below(px, pz, py + GROUND_PROBE) {
                 Some(surface) => surface,
                 // TUTELA PÓS-TELEPORTE: a janela do `surface_below` é o
                 // [`GROUND_PROBE`] (5 cm) — quem afunda um dedo abaixo da
@@ -580,9 +610,7 @@ pub fn player_movement(
                 // [`TeleportSettle`] dura, o chão é o TOPO do mundo: o
                 // destino de um teleporte é sempre uma superfície, não o
                 // interior de uma gruta.
-                None if settling => {
-                    runtime.sample(transform.translation.x, transform.translation.z)
-                }
+                None if settling => rt.sample(px, pz),
                 None => f32::NEG_INFINITY,
             }
         } else {
@@ -666,7 +694,7 @@ pub fn player_movement(
         let planar = (player.vel_x * player.vel_x + player.vel_z * player.vel_z).sqrt();
         let grounded = player.grounded;
         if footstep_due(&mut player.step_timer, grounded, planar, dt).is_some() {
-            let clip = if runtime.in_water(transform.translation.x, transform.translation.z) {
+            let clip = if runtime.is_some_and(|rt| rt.in_water(px, pz)) {
                 crate::ambient::SfxClip::FootstepWater
             } else {
                 crate::ambient::SfxClip::Footstep
@@ -1101,6 +1129,64 @@ mod tests {
         assert!(
             run_steps > walk_steps,
             "sprint {run_steps} > andar {walk_steps}"
+        );
+    }
+
+    /// Sala sem `<Terrain>`: o herói anda e a tutela de teleporte acaba.
+    ///
+    /// Os interiores do simple-rpg são cenas próprias, sem `TerrainRuntime`.
+    /// O movimento saía cedo e o character controller ficava sem `translation`
+    /// — o herói nascia na entrada e não respondia ao WASD. O marcador de
+    /// teleporte também tinha de sair: a fase Settle da troca de cena espera
+    /// que ele desapareça.
+    #[test]
+    fn interior_without_terrain_walks_and_settle_ends() {
+        use bevy::ecs::system::RunSystemOnce as _;
+        use std::time::Duration;
+
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<crate::menus::MenusOpen>()
+            .init_resource::<crate::input_latch::KeyLatches>()
+            .add_message::<crate::ambient::SfxEvent>()
+            .insert_resource(crate::worldsys::InteriorSceneConfig {
+                min: [-30.0, -30.0],
+                max: [30.0, 30.0],
+                ..Default::default()
+            })
+            .insert_resource(crate::worldsys::InteriorLighting { active: true });
+        let mut time = app.world_mut().remove_resource::<Time>().unwrap();
+        time.advance_by(Duration::from_secs_f32(1.0 / 60.0));
+        app.world_mut().insert_resource(time);
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyW);
+        let hero = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(0.0, crate::worldsys::INTERIOR_FLOOR_Y, -4.0),
+                Player::default(),
+                hero_controller(),
+                TeleportSettle { frames: 1 },
+            ))
+            .id();
+        app.world_mut()
+            .run_system_once(player_movement)
+            .expect("player_movement");
+        let motion = app
+            .world()
+            .get::<bevy_rapier3d::prelude::KinematicCharacterController>(hero)
+            .and_then(|controller| controller.translation)
+            .expect("pedido de movimento");
+        assert!(
+            motion.xz().length() > 1.0e-3,
+            "sala sem terreno tem de andar, motion={motion:?}"
+        );
+        app.world_mut().flush();
+        assert!(
+            app.world().get::<TeleportSettle>(hero).is_none(),
+            "tutela a zero frames tem de sair — o fade da cena espera por ela"
         );
     }
 }

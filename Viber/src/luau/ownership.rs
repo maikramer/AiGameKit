@@ -25,6 +25,9 @@ pub const SYSTEM_GUARD: &str = "guard";
 pub const SYSTEM_HOTBAR: &str = "hotbar";
 /// Colheita nativa [J] (destrutíveis).
 pub const SYSTEM_HARVEST: &str = "harvest";
+/// Movimento a pé do herói (`player_movement`). Um script que reclama
+/// escreve a pose com `viber.set_pose` (kart, veículo, cutscene).
+pub const SYSTEM_LOCOMOTION: &str = "locomotion";
 
 /// Sistemas reclamáveis — a validação à fila usa esta lista (typo vira erro
 /// de script em vez de no-op silencioso).
@@ -35,6 +38,7 @@ pub const KNOWN_SYSTEMS: &[&str] = &[
     SYSTEM_GUARD,
     SYSTEM_HOTBAR,
     SYSTEM_HARVEST,
+    SYSTEM_LOCOMOTION,
 ];
 
 /// Sistemas reclamados por scripts neste mundo.

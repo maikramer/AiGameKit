@@ -21,7 +21,7 @@ use viber::scene::pose::{Pose, PoseParts, pose_op};
 
 use super::gizmo_math::{
     angle_delta, angle_on_plane, closest_on_axis, distance_to_polyline, distance_to_segment,
-    plane_basis, snap,
+    plane_basis, snap, translate_with_parents,
 };
 use super::{EditorViewport, ViewportHover};
 use crate::scene::doc::{NodeRef, SceneDoc};
@@ -255,6 +255,22 @@ fn tool_keys(
     }
 }
 
+/// Escala escreve `Transform.scale` nos eixos LOCAIS do nó. No modo global o
+/// handle vermelho é o X do mundo — num nó rodado 90° isso esticava o eixo
+/// errado. A escala fica sempre nos eixos do nó; T só afeta mover/rodar.
+fn gizmo_local(tool: GizmoTool) -> bool {
+    tool.local || tool.mode == Mode::Scale
+}
+
+/// Affine do pai, ou identidade quando o nó é raiz (sem `ChildOf`).
+fn parent_affine(world: &World, entity: Entity) -> Affine3A {
+    world
+        .get::<ChildOf>(entity)
+        .and_then(|child_of| world.get::<GlobalTransform>(child_of.parent()))
+        .map(GlobalTransform::affine)
+        .unwrap_or(Affine3A::IDENTITY)
+}
+
 /// World position, size and axes of the gizmo for the selected entity.
 fn gizmo_frame(
     world: &World,
@@ -364,7 +380,7 @@ fn gizmo_interaction(world: &mut World) {
         // ficava selecionado e o Inspector saltava a cada carimbo).
         return;
     }
-    let frame = selected.and_then(|entity| gizmo_frame(world, entity, tool.local, eye));
+    let frame = selected.and_then(|entity| gizmo_frame(world, entity, gizmo_local(tool), eye));
     let hover = match (frame, cursor.screen) {
         (Some((origin, size, axes)), Some(screen))
             if world.resource::<GizmoInput>().drag.is_none() =>
@@ -496,11 +512,7 @@ fn start_drag(
             group.push((other.clone(), entity, local));
         }
     }
-    let parent_world = world
-        .get::<ChildOf>(entity)
-        .and_then(|child_of| world.get::<GlobalTransform>(child_of.parent()))
-        .map(GlobalTransform::affine)
-        .unwrap_or(Affine3A::IDENTITY);
+    let parent_world = parent_affine(world, entity);
     let start_world_rotation = world
         .get::<GlobalTransform>(entity)
         .map(|g| g.to_scale_rotation_translation().1)
@@ -587,29 +599,20 @@ fn update_drag(world: &mut World, mode: Mode, ray: Ray3d, snapping: bool) {
     }
     // A rigid body owns its pose (Rapier writes it back every frame): move the body too.
     viber::scene::sync::teleport_body(world, drag.entity, preview);
-    // GRUPO: o mesmo delta aplicado aos restantes selecionados.
+    // GRUPO: o mesmo deslocamento de MUNDO nos restantes selecionados.
     for (node, entity, start) in &drag.group {
-        let Some(parent_world) = world
-            .get::<ChildOf>(*entity)
-            .and_then(|child_of| world.get::<GlobalTransform>(child_of.parent()))
-            .map(GlobalTransform::affine)
-        else {
-            continue;
-        };
+        let parent_world = parent_affine(world, *entity);
         let mut next = *start;
         match mode {
             Mode::Stamp => {}
             Mode::Translate => {
-                let delta_world = drag.preview.translation - drag.start_local.translation;
-                let delta_parent =
-                    (parent_world * Affine3A::IDENTITY).transform_vector3(delta_world);
-                // delta em espaço do pai da PRIMÁRIA aplicado ao espaço do pai do outro
-                let primary_parent = drag.parent_world;
-                let delta_local = primary_parent.inverse().transform_vector3(delta_world);
-                let _ = delta_parent;
-                next.translation += parent_world
-                    .transform_vector3(primary_parent.inverse().transform_vector3(delta_world));
-                let _ = delta_local;
+                let delta_local = drag.preview.translation - drag.start_local.translation;
+                next.translation = translate_with_parents(
+                    start.translation,
+                    drag.parent_world,
+                    delta_local,
+                    parent_world,
+                );
             }
             Mode::Rotate => {
                 let world_rotation = drag.preview.rotation * drag.start_local.rotation.inverse();
@@ -676,18 +679,18 @@ fn commit_drag(world: &mut World, mode: Mode, drag: Drag) {
         let Some(xml) = doc.node(node) else {
             continue;
         };
-        let parent_world = world
-            .get::<ChildOf>(*entity)
-            .and_then(|child_of| world.get::<GlobalTransform>(child_of.parent()))
-            .map(GlobalTransform::affine)
-            .unwrap_or(Affine3A::IDENTITY);
+        let parent_world = parent_affine(world, *entity);
         let mut next = *start;
         match mode {
             Mode::Stamp => {}
             Mode::Translate => {
-                let delta_local_primary = drag.preview.translation - drag.start_local.translation;
-                let delta_world = drag.parent_world.transform_vector3(delta_local_primary);
-                next.translation += parent_world.transform_vector3(delta_world);
+                let delta_local = drag.preview.translation - drag.start_local.translation;
+                next.translation = translate_with_parents(
+                    start.translation,
+                    drag.parent_world,
+                    delta_local,
+                    parent_world,
+                );
             }
             Mode::Rotate => {
                 let world_rotation = drag.preview.rotation * drag.start_local.rotation.inverse();
@@ -736,7 +739,7 @@ fn draw_selection(world: &mut World) {
         .map(EditorCamState::eye)
         .unwrap_or(Vec3::ZERO);
     let bounds = viber::bridge::selection::world_aabb_of(entity, world);
-    let frame = gizmo_frame(world, entity, tool.local, eye);
+    let frame = gizmo_frame(world, entity, gizmo_local(tool), eye);
     let _ = world.run_system_cached_with(draw_handles, (bounds, frame, tool.mode, hover));
 }
 

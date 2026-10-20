@@ -171,24 +171,17 @@ fn apply_search_input(world: &mut World) {
     if !enter && !escape {
         return;
     }
-    let Some(text) = world.get::<Text>(focused).cloned() else {
+    let Some(text) = crate::scene::input_text(world, focused) else {
         return;
     };
-    let needle = text.0.trim().to_owned();
+    let needle = text.trim().to_owned();
     if escape || needle.is_empty() {
         let mut state = world.resource_mut::<SearchState>();
         state.results.clear();
         state.dirty = true;
         return;
     }
-    let Some(root) = world
-        .resource::<SceneDoc>()
-        .world_path()
-        .parent()
-        .map(|dir| dir.to_path_buf())
-    else {
-        return;
-    };
+    let root = world.resource::<SceneDoc>().root_dir.clone();
     let lang = *world.resource::<Lang>();
     let results = scan(&root, &needle);
     let count = results.len();
@@ -380,11 +373,9 @@ fn hit_clicked(
         }
     }
     // fallback: abre no editor externo
-    if let Some(dir) = doc.world_path().parent() {
-        let _ = std::process::Command::new("xdg-open")
-            .arg(dir.join(&hit.path))
-            .spawn();
-    }
+    let _ = std::process::Command::new("xdg-open")
+        .arg(doc.root_dir.join(&hit.path))
+        .spawn();
     commands.queue(|world: &mut World| {
         let lang = *world.resource::<Lang>();
         world.resource_mut::<crate::scene::EditStatus>().0 =

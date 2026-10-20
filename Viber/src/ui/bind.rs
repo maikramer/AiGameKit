@@ -117,102 +117,22 @@ pub struct UiData {
 }
 
 impl UiData {
-    /// Fractions are clamped and guard against a zero maximum, so a bar never
-    /// renders NaN-wide during the frame an entity is still initialising.
-    fn fraction(current: f32, max: f32) -> f32 {
-        if max <= 0.0 {
-            return 0.0;
-        }
-        (current / max).clamp(0.0, 1.0)
-    }
-
     /// Resolves a binding name. `None` means the name is unknown.
     pub fn get(&self, name: &str) -> Option<BoundValue> {
         let value = match name {
-            "health" => BoundValue::fraction(Self::fraction(self.health, self.health_max)),
-            "health.text" => BoundValue::text(format!(
-                "{}/{}",
-                self.health.max(0.0).round(),
-                self.health_max.round()
-            )),
-            "health.value" => BoundValue::number(self.health.max(0.0).round()),
-            "health.low" => BoundValue::flag(Self::fraction(self.health, self.health_max) <= 0.3),
-            "status.venom" => BoundValue::flag(self.status_venom),
+            // Vida, ouro, quests, cooldowns e alvo são do jogo: o script
+            // publica-os com `viber.ui.set`. A engine só conhece o mundo.
             "weather.rain" => BoundValue::fraction(self.weather_rain.clamp(0.0, 1.0)),
             "weather.wet" => BoundValue::flag(self.weather_rain > 0.05),
-            "talent.points" => BoundValue::number(self.talent_points as f32),
-            "talent.ready" => BoundValue::flag(self.talent_points > 0),
-            "xp" => BoundValue::fraction(Self::fraction(self.xp, self.xp_next)),
-            "xp.text" => BoundValue::text(format!("{}/{}", self.xp.round(), self.xp_next.round())),
-            "level" => BoundValue::number(self.level as f32),
-            "level.text" => BoundValue::text(self.level.to_string()),
-            "gold" => BoundValue::number(self.gold as f32),
-            "wood" => BoundValue::number(self.wood as f32),
-            "stone" => BoundValue::number(self.stone as f32),
-            "cd.dash" => BoundValue::fraction(self.cd_dash),
-            "cd.heal" => BoundValue::fraction(self.cd_heal),
-            "cd.strike" => BoundValue::fraction(self.cd_strike),
-            // Prontidão — o oposto da fração de cooldown, para o class-bind
-            // `cd.dash.ready:ready` acender o slot sem loop de Luau.
-            "cd.dash.ready" => BoundValue::flag(self.cd_dash <= 0.0),
-            "cd.heal.ready" => BoundValue::flag(self.cd_heal <= 0.0),
-            "cd.strike.ready" => BoundValue::flag(self.cd_strike <= 0.0),
-            "target" => {
-                BoundValue::fraction(Self::fraction(self.target_health, self.target_health_max))
-            }
-            "target.name" => BoundValue::text(self.target_name.clone()),
-            "target.alive" => BoundValue::flag(!self.target_name.is_empty()),
             "clock" => BoundValue::text(self.clock.clone()),
             "day" => BoundValue::fraction(self.day_fraction),
             "prompt.key" => BoundValue::text(self.prompt_key.clone()),
             "prompt.label" => BoundValue::text(self.prompt_label.clone()),
             "prompt.active" => BoundValue::flag(!self.prompt_label.is_empty()),
-            "quest.title" => BoundValue::text(self.quest_title.clone()),
-            "quest" => BoundValue::fraction(self.quest_progress),
-            "quest.text" => BoundValue::text(self.quest_progress_text.clone()),
-            "quest.active" => BoundValue::flag(!self.quest_title.is_empty()),
-            "potion" => BoundValue::number(self.potions as f32),
-            "antidote" => BoundValue::number(self.antidotes as f32),
-            "bomb" => BoundValue::number(self.bombs as f32),
-            // Contador de coleção (sementes de canção) na bolsa.
-            "korok-seed" => BoundValue::number(self.korok_seeds as f32),
-            // Esgotado — acende a classe `empty` (slot cinzento) por class-bind.
-            "potion.empty" => BoundValue::flag(self.potions < 1),
-            "antidote.empty" => BoundValue::flag(self.antidotes < 1),
-            "bomb.empty" => BoundValue::flag(self.bombs < 1),
             "toast" => BoundValue::text(self.toast.clone()),
             "toast.active" => BoundValue::flag(self.toast_time > 0.0 && !self.toast.is_empty()),
-            // ── revelações contextuais ─────────────────────────────────
-            "purse.recent" => BoundValue::flag(self.purse_reveal > 0.0),
-            "belt.recent" => BoundValue::flag(self.belt_reveal > 0.0),
-            "xp.recent" => BoundValue::flag(self.xp_reveal > 0.0),
-            "quest.recent" => {
-                BoundValue::flag(self.quest_reveal > 0.0 && !self.quest_title.is_empty())
-            }
-            "combat.active" => BoundValue::flag(self.combat_reveal > 0.0),
-            // Os corações são CONTEXTUAIS (a lição do crítico, r5): vivem no
-            // ecrã quando informam — vida por baixo do máximo ou combate
-            // recente — e derretem devagar com HP cheio e calma. O gesto
-            // BOTW que o A/B premiou quatro rondas seguidas.
-            "vitals.active" => {
-                BoundValue::flag(self.combat_reveal > 0.0 || self.health < self.health_max - 1e-3)
-            }
-            // A barra de acções aparece quando serve para alguma coisa: em
-            // combate, ou enquanto uma habilidade ainda recarrega.
-            "abilities.active" => BoundValue::flag(
-                self.combat_reveal > 0.0
-                    || self.cd_dash > 0.0
-                    || self.cd_heal > 0.0
-                    || self.cd_strike > 0.0,
-            ),
             "zone.name" => BoundValue::text(self.zone_name.clone()),
             "zone.active" => BoundValue::flag(self.zone_reveal > 0.0 && !self.zone_name.is_empty()),
-            "combo" => BoundValue::flag(self.combo_hits >= 2),
-            "combo.text" => BoundValue::text(if self.combo_hits >= 2 {
-                format!("COMBO \u{d7}{}", self.combo_hits)
-            } else {
-                String::new()
-            }),
             _ => return None,
         };
         Some(value)
@@ -235,14 +155,6 @@ impl BoundValue {
         Self {
             fraction: value,
             text: format!("{:.0}%", value * 100.0),
-            truthy: value > 0.0,
-        }
-    }
-
-    fn number(value: f32) -> Self {
-        Self {
-            fraction: value,
-            text: format!("{value:.0}"),
             truthy: value > 0.0,
         }
     }
@@ -442,35 +354,23 @@ mod tests {
     }
 
     #[test]
-    fn test_fraction_bindings_clamp_and_survive_a_zero_maximum() {
-        let mut data = sample();
-        assert!((data.get("health").unwrap().fraction - 0.45).abs() < 1e-6);
-        data.health_max = 0.0;
-        assert_eq!(data.get("health").unwrap().fraction, 0.0);
-        data.health_max = 100.0;
-        data.health = 500.0;
-        assert_eq!(data.get("health").unwrap().fraction, 1.0);
-        data.health = -20.0;
-        assert_eq!(data.get("health").unwrap().fraction, 0.0);
+    fn test_game_bindings_are_not_engine_bindings() {
+        let data = sample();
+        for name in [
+            "health",
+            "gold",
+            "xp",
+            "quest.title",
+            "target.name",
+            "status.venom",
+        ] {
+            assert!(data.get(name).is_none(), "{name} é do script");
+        }
     }
 
     #[test]
     fn test_readiness_empty_and_weather_bindings() {
         let mut data = sample();
-        // cd_dash = 0.5 no sample → ainda a arrefecer; heal/strike prontos.
-        assert!(!data.get("cd.dash.ready").unwrap().truthy);
-        assert!(data.get("cd.heal.ready").unwrap().truthy);
-        assert!(data.get("cd.strike.ready").unwrap().truthy);
-        data.cd_dash = 0.0;
-        assert!(data.get("cd.dash.ready").unwrap().truthy);
-
-        // Consumíveis: inventário vazio por omissão → empty; com stock, não.
-        assert!(data.get("potion.empty").unwrap().truthy);
-        assert!(data.get("bomb.empty").unwrap().truthy);
-        data.potions = 2;
-        assert!(!data.get("potion.empty").unwrap().truthy);
-        assert_eq!(data.get("potion").unwrap().fraction, 2.0);
-
         // Weather: seco = wet falso; acima do limiar liga; fração satura.
         assert!(!data.get("weather.wet").unwrap().truthy);
         assert_eq!(data.get("weather.rain").unwrap().fraction, 0.0);
@@ -479,78 +379,20 @@ mod tests {
         assert!((data.get("weather.rain").unwrap().fraction - 0.4).abs() < 1e-6);
         data.weather_rain = 2.5;
         assert_eq!(data.get("weather.rain").unwrap().fraction, 1.0);
-
-        // Talento: badge só com pontos pendentes.
-        assert!(!data.get("talent.ready").unwrap().truthy);
-        data.talent_points = 1;
-        assert!(data.get("talent.ready").unwrap().truthy);
-        assert_eq!(data.get("talent.points").unwrap().fraction, 1.0);
     }
 
     #[test]
     fn test_text_bindings_format_for_a_hud() {
         let data = sample();
-        assert_eq!(data.get("health.text").unwrap().text, "45/100");
-        assert_eq!(data.get("level.text").unwrap().text, "3");
-        assert_eq!(data.get("gold").unwrap().text, "12");
         assert_eq!(data.get("clock").unwrap().text, "07:15");
-        // A negative health still reads as 0, never "-20/100".
-        let hurt = UiData {
-            health: -5.0,
-            ..sample()
-        };
-        assert_eq!(hurt.get("health.text").unwrap().text, "0/100");
+        assert!(data.get("gold").is_none());
     }
 
     #[test]
     fn test_flag_bindings_gate_visibility() {
         let data = sample();
-        assert!(data.get("target.alive").unwrap().truthy);
         assert!(!data.get("prompt.active").unwrap().truthy);
-        // `health.low` is the hook a stylesheet uses to turn the orb red.
-        assert!(!data.get("health.low").unwrap().truthy);
-        let dying = UiData {
-            health: 12.0,
-            ..sample()
-        };
-        assert!(dying.get("health.low").unwrap().truthy);
-    }
-
-    #[test]
-    fn test_health_low_threshold_is_exactly_thirty_percent() {
-        // No limiar exacto (30/100): já é "vida baixa" — o jogador não pode
-        // perder o alerta por um ponto flutuante.
-        let edge = UiData {
-            health: 30.0,
-            health_max: 100.0,
-            ..Default::default()
-        };
-        assert!(edge.get("health.low").unwrap().truthy);
-        // Um ponto acima, ainda não.
-        let above = UiData {
-            health: 31.0,
-            health_max: 100.0,
-            ..Default::default()
-        };
-        assert!(!above.get("health.low").unwrap().truthy);
-        // E sem vida máxima (entidade a nascer) o fraction é 0 — o alerta
-        // acende, mas o collect só publica o estado quando existe `Health`.
-        let uninit = UiData {
-            health: 0.0,
-            health_max: 0.0,
-            ..Default::default()
-        };
-        assert!(uninit.get("health.low").unwrap().truthy);
-    }
-
-    #[test]
-    fn test_status_venom_mirrors_the_flag() {
-        assert!(!sample().get("status.venom").unwrap().truthy);
-        let poisoned = UiData {
-            status_venom: true,
-            ..sample()
-        };
-        assert!(poisoned.get("status.venom").unwrap().truthy);
+        assert!(data.get("health.low").is_none());
     }
 
     #[test]
@@ -580,15 +422,14 @@ mod tests {
         let card = app
             .world_mut()
             .spawn((
-                UiBind("health.low:danger".into()),
+                UiBind("weather.wet:danger".into()),
                 UiClasses::parse("hud-card vitals"),
                 Visibility::Inherited,
             ))
             .id();
-        // Vida alta: sem classe, e o bind de classe NÃO é reportado como
+        // Seco: sem classe, e o bind de classe NÃO é reportado como
         // desconhecido nem esconde o elemento.
-        app.world_mut().resource_mut::<UiData>().health = 80.0;
-        app.world_mut().resource_mut::<UiData>().health_max = 100.0;
+        app.world_mut().resource_mut::<UiData>().weather_rain = 0.0;
         app.update();
         assert!(
             app.world()
@@ -604,14 +445,14 @@ mod tests {
         );
         assert!(app.world().resource::<UiBindWarnings>().0.is_empty());
 
-        // Vida baixa: a classe entra (idempotente no segundo frame).
-        app.world_mut().resource_mut::<UiData>().health = 12.0;
+        // Chuva: a classe entra (idempotente no segundo frame).
+        app.world_mut().resource_mut::<UiData>().weather_rain = 0.4;
         app.update();
         app.update();
         assert!(app.world().get::<UiClasses>(card).unwrap().has("danger"));
 
-        // Recuperou: a classe sai.
-        app.world_mut().resource_mut::<UiData>().health = 90.0;
+        // Secou: a classe sai.
+        app.world_mut().resource_mut::<UiData>().weather_rain = 0.0;
         app.update();
         assert!(!app.world().get::<UiClasses>(card).unwrap().has("danger"));
     }
@@ -626,60 +467,17 @@ mod tests {
         // Guards against a binding being renamed in `get` but left in a world.
         let data = sample();
         for name in [
-            "health",
-            "health.text",
-            "health.value",
-            "health.low",
-            "status.venom",
-            "xp",
-            "xp.text",
-            "level",
-            "level.text",
-            "gold",
-            "wood",
-            "stone",
-            "cd.dash",
-            "cd.heal",
-            "cd.strike",
-            "target",
-            "target.name",
-            "target.alive",
             "clock",
             "day",
             "prompt.key",
             "prompt.label",
             "prompt.active",
-            "quest.title",
-            "quest",
-            "quest.text",
-            "quest.active",
-            "potion",
-            "antidote",
-            "bomb",
-            "korok-seed",
             "toast",
             "toast.active",
-            "combo",
-            "combo.text",
-            "purse.recent",
-            "belt.recent",
-            "xp.recent",
-            "quest.recent",
-            "combat.active",
-            "abilities.active",
-            "vitals.active",
             "zone.name",
             "zone.active",
             "weather.rain",
             "weather.wet",
-            "talent.points",
-            "talent.ready",
-            "cd.dash.ready",
-            "cd.heal.ready",
-            "cd.strike.ready",
-            "potion.empty",
-            "antidote.empty",
-            "bomb.empty",
         ] {
             assert!(data.get(name).is_some(), "binding `{name}` disappeared");
         }

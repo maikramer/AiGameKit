@@ -51,7 +51,6 @@ pub mod prune;
 pub mod quest_guide;
 pub mod quest_marker;
 pub mod quests;
-pub mod racing;
 pub mod recipes;
 pub mod render_lod;
 pub mod rng;

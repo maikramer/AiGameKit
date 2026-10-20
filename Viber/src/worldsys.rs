@@ -1027,16 +1027,16 @@ pub fn daycycle_drive(
     } else {
         day
     };
-    // Fill de sombras AGRESSIVO (r3): o sol da cena é 10k lux e o ambiente
-    // autoral ~110 — sem isto a sombra é 1:90 e lê-se como preto puro (o
-    // crítico reprovou o golden hour DUAS vezes por isto). +máx ×2.2 na
-    // hora dourada e ×1.9 à noite: o chão em sombra lê TEXTURA (o poço e as
-    // muralhas têm de se ver) e as luzes pontuais ganham contraste contra
-    // um fundo que não é preto absoluto. Um frame velho de elevação não se
-    // nota — o dia inteiro dura 20 minutos.
+    // Fill de sombras: o sol da cena é 10k lux e o ambiente autoral ~110 —
+    // sem isto a sombra é preto puro. Golden hour mantém o ×2.2 de pico
+    // (2.8 no peso, dia não mexe). À noite o peso sobe de 0.8 para 1.6
+    // (×2.6 sobre o rácio night/day): o lado da casa que a lua não vê tem
+    // de mostrar parede, não um buraco. O clamp a 3 impede o fill de
+    // lavar o dia. Um frame velho de elevação não se nota — o dia inteiro
+    // dura 20 minutos.
     let night = 1.0 - (sun.elevation_deg / 6.0).clamp(0.0, 1.0);
     let golden = (-(((sun.elevation_deg - 4.0) / 8.0).powi(2))).exp() * (1.0 - night);
-    let fill = 2.8 * golden + 0.8 * night;
+    let fill = 2.8 * golden + 1.6 * night;
     ambient.brightness = clock.ambient_reference * (scale * (1.0 + fill)).clamp(0.0, 3.0);
     // Cor do ambiente: esfria para azul-profundo à noite (a cor autoral é
     // capturada UMA vez — flag explícita: a sentinela `== 0.0` recapturava
@@ -1338,8 +1338,9 @@ pub fn atmosphere_drive(
     // em `sun_drive`, para que disco e sombra apontem ao mesmo sítio.
     let azimuth = next.sun_dir.x.atan2(next.sun_dir.z).to_degrees();
     next.moon_dir = sky_direction(MOON_ELEVATION_DEG, azimuth + 180.0);
-    // CHUVA (WS-A): fecha ~meio stop e lava o contraste — a intensidade é a
-    // contínua do <Weather> (o fog ×(1+0.6·rain) vive no `biome_fog_system`).
+    // CHUVA (WS-A): um toque de exposição, não um véu. Era −25 % (tempestade
+    // a meio da noite apagava o chão). 8 % ainda lê "céu fechado"; a névoa
+    // e as gotas é que dizem que chove.
     // Só recursos runtime: o shader em disco NUNCA é re-escrito aqui.
     // Não chove dentro de casa: a bolsa já é isenta de chuva, e fechar a
     // exposição por causa do tempo lá fora não faz sentido nenhum.
@@ -1348,7 +1349,7 @@ pub fn atmosphere_drive(
     } else {
         weather.map(|w| w.rain.clamp(0.0, 1.0)).unwrap_or(0.0)
     };
-    next.exposure_scale *= 1.0 - 0.25 * rain;
+    next.exposure_scale *= 1.0 - 0.08 * rain;
     *atmosphere = next;
 }
 
@@ -1645,7 +1646,7 @@ mod tests {
         }
     }
 
-    /// A chuva fecha exposição no [`atmosphere_drive`] (×(1−0.25·rain)).
+    /// A chuva fecha exposição no [`atmosphere_drive`] (×(1−0.08·rain)).
     #[test]
     fn test_atmosphere_drive_couples_rain_to_exposure() {
         let mut app = bevy::app::App::new();
@@ -1668,8 +1669,8 @@ mod tests {
             .resource::<crate::worldsys::AtmosphereState>()
             .exposure_scale;
         assert!(
-            (wet - dry * 0.75).abs() < 1e-5,
-            "tempestade fecha 25 % da exposição: {wet} vs base {dry}"
+            (wet - dry * 0.92).abs() < 1e-5,
+            "tempestade fecha 8 % da exposição: {wet} vs base {dry}"
         );
     }
 

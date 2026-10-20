@@ -204,6 +204,22 @@ impl TreeWalker<'_> {
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct TreeRenameInput;
 
+/// Nome actual a semear no `EditableText` (o widget nasce vazio).
+#[derive(Component, Debug, Clone)]
+struct RenameSeed(String);
+
+/// Põe o nome actual no input de F2 no frame em que aparece.
+pub fn prefill_rename(
+    mut seeds: Query<(Entity, &RenameSeed, &mut bevy::text::EditableText)>,
+    mut commands: Commands,
+) {
+    for (entity, seed, mut text) in &mut seeds {
+        text.editor_mut().set_text(&seed.0);
+        text.queue_edit(bevy::text::TextEdit::SelectAll);
+        commands.entity(entity).remove::<RenameSeed>();
+    }
+}
+
 /// O nó em renomeação inline (F2 / menu de contexto). `.1` = o foco já esteve
 /// no input (arma o commit-on-blur; evita commitar no frame de spawn).
 #[derive(Resource, Debug, Default, Clone)]
@@ -241,12 +257,12 @@ pub fn apply_tree_search(world: &mut World) {
             keys.just_pressed(KeyCode::Escape),
         )
     };
-    let Some(text) = world.get::<Text>(input).cloned() else {
+    let Some(text) = crate::scene::input_text(world, input) else {
         return;
     };
     if enter {
         let mut view = world.resource_mut::<TreeView>();
-        view.filter = text.0.trim().to_owned();
+        view.filter = text.trim().to_owned();
         view.filter_rev += 1;
     } else if escape {
         world.resource_mut::<TreeView>().filter.clear();
@@ -303,15 +319,15 @@ pub fn commit_rename(world: &mut World) {
 /// Escreve o texto corrente do input como `name` (ou `id` em tags UI — a
 /// runtime de UI ignora `name`; era o F2 a criar atributos mortos).
 fn apply_rename(world: &mut World, node: NodeRef) {
-    let mut inputs = world.query_filtered::<&Text, With<TreeRenameInput>>();
-    let Some(text) = inputs.iter(world).next().cloned() else {
+    let mut inputs = world.query_filtered::<&bevy::text::EditableText, With<TreeRenameInput>>();
+    let Some(text) = inputs.iter(world).next() else {
         return;
     };
+    let value = text.value().trim().to_owned();
     let doc = world.resource::<SceneDoc>().clone();
     let Some(xml) = doc.node(&node) else {
         return;
     };
-    let value = text.0.trim().to_owned();
     let key = if viber::ui::is_ui_tag(&xml.tag) {
         "id"
     } else {
@@ -445,7 +461,7 @@ pub fn render_tree(
                             input.spawn((
                                 bevy::feathers::controls::FeathersTextInput,
                                 TreeRenameInput,
-                                Text::new(current),
+                                RenameSeed(current),
                             ));
                         });
                 } else {

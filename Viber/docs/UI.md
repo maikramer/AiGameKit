@@ -695,9 +695,16 @@ deprecados de tipos **privados** — já não podem aparecer numa query fora do
 picking), e toda a UI declarativa — cliques, sliders, checkboxes, modais, a
 `UiClicks` que o bridge lê — foi escrita contra a antiga.
 
-[`src/ui/interaction.rs`](../src/ui/interaction.rs) é o `ui_focus_system` do
-0.19 portado tal e qual sobre um `Interaction` e um `Button` **nossos** (mesmos
-inputs: rato, toques, cursor da janela; mesma `UiStack`), registado pelo
-`UiPlugin` em `PreUpdate`/`UiSystems::Focus`. Código da engine importa
-`crate::ui::interaction::{Button, Interaction}` — o import explícito sombreia
-o do prelude. Migrar para o picking é trocar este ficheiro, não a UI.
+Desde 2026-10-18 a engine **usa o picking nativo**: o hit-testing é o
+`bevy_ui::picking_backend` (a mesma travessia UiStack/clip/visibilidade, que
+trunca a cadeia no 1.º bloqueador) e
+[`src/ui/interaction.rs`](../src/ui/interaction.rs) é um adaptador fino que
+traduz a cadeia `PointerHits` para um `Interaction`/`Button` **nossos** com a
+semântica de sempre (`Pressed` dura enquanto o botão está em baixo; o clique é
+o frame em que o nó entra em `Pressed`). O blocking vive em `Pickable`
+(o backend ignora `FocusPolicy`): `runtime::ui_pickable` traduz a política de
+sempre — `Block` → sem `Pickable`, `Pass` → `should_block_lower: false`.
+Código da engine importa `crate::ui::interaction::{Button, Interaction}` — o
+import explícito sombreia o do prelude. Migrar os consumidores para os
+componentes nativos do picking é uma reescrita da camada de consumo, não da
+entrada.

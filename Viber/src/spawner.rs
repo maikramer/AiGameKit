@@ -673,6 +673,8 @@ pub struct SpawnGroupState {
     pub activation_radius: f32,
     /// Collider do template: cada instância nasce com colisão.
     pub template_collider: Option<crate::physics::ColliderShape>,
+    /// `trigger` do collider do template.
+    pub template_trigger: bool,
     /// Destrutível do template: cada instância nasce colhível
     /// ([`crate::harvest::Destructible`]).
     pub template_destructible: Option<crate::recipes::DestructibleSpec>,
@@ -776,6 +778,8 @@ fn apply_template_collider(
     shape: &crate::physics::ColliderShape,
     handle: &Option<bevy::asset::Handle<bevy::gltf::Gltf>>,
     moving: bool,
+    trigger: bool,
+    scripted: bool,
 ) {
     if moving
         && let Some((body, gravity)) =
@@ -794,14 +798,26 @@ fn apply_template_collider(
             if let Some((collider, offset)) = crate::physics::immediate_collider(shape) {
                 if offset.translation == Vec3::ZERO {
                     entity.insert(collider);
+                    if trigger {
+                        entity.insert(bevy_rapier3d::prelude::Sensor);
+                    }
+                    if scripted {
+                        entity.insert(crate::physics::scripted_collision_bits());
+                    }
                 } else {
                     let parent = entity.id();
-                    entity.commands().spawn((
+                    let mut child = entity.commands().spawn((
                         Name::new("collider"),
                         collider,
                         offset,
                         bevy::ecs::hierarchy::ChildOf(parent),
                     ));
+                    if trigger {
+                        child.insert(bevy_rapier3d::prelude::Sensor);
+                    }
+                    if scripted {
+                        child.insert(crate::physics::scripted_collision_bits());
+                    }
                 }
             }
         }
@@ -810,6 +826,8 @@ fn apply_template_collider(
                 shape: shape.clone(),
                 gltf: handle.clone(),
                 age: 0.0,
+                trigger,
+                scripted,
             });
         }
     }
@@ -1153,7 +1171,14 @@ fn spawn_instance(
         (false, None) => {}
     }
     if let Some(shape) = &group.template_collider {
-        apply_template_collider(&mut entity, shape, &group.collider_handle, group.dynamic);
+        apply_template_collider(
+            &mut entity,
+            shape,
+            &group.collider_handle,
+            group.dynamic,
+            group.template_trigger,
+            group.template_script.is_some(),
+        );
     }
     // Destrutível é coisa de prop estático — criaturas morrem por combate.
     if !group.dynamic
@@ -1215,6 +1240,7 @@ mod tests {
             template_props: Vec::new(),
             template_links: Default::default(),
             template_collider: None,
+            template_trigger: false,
             template_destructible: None,
             activation_radius: 45.0,
             template_lods: Vec::new(),

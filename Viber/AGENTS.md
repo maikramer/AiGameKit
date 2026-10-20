@@ -1,6 +1,6 @@
 # AGENTS.md — Viber
 
-Engine de jogo NATIVA em Rust/Bevy **0.20.0-rc.2** que corre mundos declarativos XML do
+Engine de jogo NATIVA em Rust/Bevy **0.20.0** que corre mundos declarativos XML do
 AiGameKit — sem browser, sem three.js. Estado: **Fases 0–3 ✅** (parse → IR →
 spawn → terreno → Luau → física; port do simple-rpg feito em 10 loops).
 Nomenclatura segue **Bevy** (`translation`, `euler`, `half-size`, `base-color`),
@@ -208,7 +208,7 @@ project:                     # config.yaml — sem este bloco o mundo é de uma 
 ## Bevy 0.20 (WESL + forks vendored + OIT)
 
 * **WESL substituiu o naga_oil** — os shaders do motor são `.wesl`: `#import a::b::{x}` → `import a::b::{x};` (imports no topo, podem ser condicionais), `#ifdef X` → `@if(X)` (anexado a declarações/instruções; blocos `@if(BINDLESS) { … } @else { … }` embrulham regiões inteiras), `#{CONST}` → `constants::CONST` (defs numéricas), e os módulos do PBR ganharam o prefixo `bevy_pbr::render::` (`prepass_utils`→`bevy_pbr::prepass::utils`, `ssao_utils`→`bevy_pbr::ssao::utils`). Os ficheiros gerados em `<mundo>/shaders/` são `.wesl`; WGSL puro SEM diretivas continua válido (`AERIAL_WGSL`/`water_ssr` ficam `from_wgsl`). Harnesses: `tests/common/mod.rs` compila WESL com `wesl::compile` + stubs por módulo + o módulo especial `constants` — o padrão do `bevy_shader::shader_cache`.
-* **bevy 0.20.0-rc.2 pelo git tag** enquanto o crates.io não o publica: tabela `[patch.crates-io]` no `Cargo.toml` (bevy + 21 subcrates → `tag v0.20.0-rc.2`) — REMOVER quando o rc.2 sair no registry. Os crates do ecossistema presos ao 0.19 vivem em `vendor/` (bevy_rapier3d, bevy_rerecast[_core], bevy_landmass, landmass_rerecast — proveniência e condições de des-vendor em [`vendor/FORKS_020.md`](vendor/FORKS_020.md)).
+* **bevy 0.20.0 do crates.io** (final a 2026-10-08; a tabela `[patch.crates-io]` de tags git foi removida e o único patch restante é o `rerecast` com fixes locais). Os crates do ecossistema ainda sem versão bevy-0.20 publicada vivem em `vendor/` (bevy_rerecast[_core], bevy_landmass, landmass_rerecast, rerecast — o fork `bevy_rapier3d` saiu a 2026-10-18: o upstream 0.37.0 é a versão oficial bevy-0.20. Proveniência e condições de des-vendor em [`vendor/FORKS_020.md`](vendor/FORKS_020.md)).
 * **OIT** (transparência order-independent, opt-in `VIBER_OIT=1`): o gate é o componente `OrderIndependentTransparencySettings` na câmara (postfx.rs `oit_requested`); materiais `AlphaMode::Blend/Add` participam por omissão (`enable_oit()` default true), a ÁGUA fica fora (`WaterExtension::enable_oit() = false`).
 * **Reads/writes por sistema no profiler** (tab Sistemas, `viber debug prof --tab sistemas`): `ScheduleData` do `bevy_dev_tools` — os mesmos dados do BRP `schedule.graph`.
 
@@ -228,9 +228,9 @@ project:                     # config.yaml — sem este bloco o mundo é de uma 
 | Camada de pintura do terreno | `src/terrain/paint.rs` | `PaintGrid` (sidecar `<ahgt>.paint`), blend + eleição forçada nos chunks (`splat.rs bake_chunk`), repaint in-place (`runtime::repaint_chunks`), op `terrain_paint`/`splat_patch` |
 | Terreno (specs, sampler, mesh, LOD) | `src/terrain/` | `spec.rs` (contrato), `sampler.rs`/`heightmap.rs` (altura), `mesh.rs` (chunks), `plugin.rs` (LOD runtime + rebuild por edições), `runtime.rs` (bootstrap + carve + applier das edições vivas), `cliffs.rs` (cliffs procedurais + sharpen + CliffMask), `delta.rs` (**terreno vivo**: overlay de edições, Fase 3) |
 | Preview de estado de UI (editor) | `src/ui/runtime.rs` | `UiPreviewState(StyleState)` sobrepõe a interação na cascata (`:hover`/`:active` sem ponteiro); entidades de UI carimbadas com `scene::SceneSource` |
-| Scripts Luau + API `viber.*` | `src/luau/` | módulos categorizados: `host` (VM/chunks), `ctx` (snapshot), `commands` (fila Lua→engine), `runtime` (sistemas), `api` + `input`/`events`/`timers`/`entity`/`game` (grupos da API), `sfx`; referência completa em **`docs/LUA_API.md`**; hooks `on_update(dt)`/`on_player_attack`; "LOD de IA" via `ScriptActivation` |
+| Scripts Luau + API `viber.*` | `src/luau/` | módulos categorizados: `host` (VM/chunks), `ctx` (snapshot), `commands` (fila Lua→engine), `runtime` (sistemas), `api` + `input`/`events`/`timers`/`entity`/`game` (grupos da API), `sfx`; referência completa em **`docs/LUA_API.md`**; hooks `on_update(dt)`/`on_player_attack`; "LOD de IA" via `ScriptActivation`. **Luau JIT** (feature `luau-jit`, default ON desde 2026-10-18): chunks novos compilam para código nativo (codegen do Luau, mlua 0.12) — `VIBER_LUAU_JIT=0` volta ao interpretador; o orçamento de 500 ms interrompe TAMBÉM código JIT (testado ao vivo + `test_infinite_loop_is_interrupted_by_the_cpu_budget`) |
 | Hot-reload de scripts | `src/hot_reload.rs` | watcher (`notify`) sobre `<mundo>/scripts/` — recarga ao gravar com re-corrida do top-level; erro de compilação mantém o chunk antigo; `VIBER_HOT_RELOAD=0` desliga |
-| UI declarativa (`UiRoot`/`UiStyle`) + `viber.ui.*` | `src/ui/` | `tree.rs` (XML→bevy_ui), `style.rs` (stylesheet), `palette.rs` (cores Tailwind), `anim.rs` (movimento), `widgets.rs` (check/slider/input/tooltip/cursor), `script.rs` (API Luau), `bind.rs` (bindings), `modal.rs` (modais autorais) |
+| UI declarativa (`UiRoot`/`UiStyle`) + `viber.ui.*` | `src/ui/` | `tree.rs` (XML→bevy_ui), `style.rs` (stylesheet), `palette.rs` (cores Tailwind), `anim.rs` (movimento), `widgets.rs` (check/slider/input/tooltip/cursor), `script.rs` (API Luau), `bind.rs` (bindings), `modal.rs` (modais autorais). **Interaction via PICKING nativo** (2026-10-18): `interaction.rs` é um adaptador fino `PointerHits`→`Interaction` (o hit-testing é o `bevy_ui::picking_backend`; blocking por `Pickable` via `runtime::ui_pickable` — o backend ignora `FocusPolicy`); o mesh picking ficou `require_markers: true` (sem consumidor) |
 | HUD de jogo | `src/hud/` | widgets que desenham dados do mundo: minimapa, compasso. O profiler e os painéis/menus vivem na UI declarativa (`src/ui/`, `world/profiler.xml`) |
 | Player + câmara | `src/player.rs`, `src/camera.rs` | WASD/setas + Shift sprint + Space salto; third-person com drag/scroll |
 | Combate | `src/combat.rs`, `src/skills.rs`, `src/feedback.rs`, `src/vitals.rs` | melee [J], alvo [V], skills [C]/[R]/[B]/[L], dano flutuante/i-frames/respawn, HP/XP |
@@ -297,8 +297,8 @@ full-res — são injetados pelo próprio Bevy).
   /usr/include/vulkan) + libclang (bindgen). Em runtime: copiar
   `lib/Linux_x86_64/rel/libnvidia-ngx-dlss.so.310.9.1` do SDK para junto do
   binário (`target/release/`, `~/.local/bin/`) — o rpath `$ORIGIN` do
-  `.cargo/config.toml` fá-lo achar. ⚠ lock: `prettyplease` ancorado em 0.2.37
-  (bindgen 0.73.x liga syn 2; prettyplease 0.3 usa syn 3 — incompatíveis).
+  `.cargo/config.toml` fá-lo achar. (O antigo pin `prettyplease 0.2.37` foi
+  retirado — o lock resolve `bindgen 0.73.2` + `prettyplease 0.3` sem âncora.)
 * **Runtime**: LIGADO por omissão quando a feature está compilada; sem
   suporte (sem RTX/NGX/Vulkan) → warn + TAA. Gate: `VIBER_DLSS` > `dlss:` do
   config.yaml > `auto` (off|auto|dlaa|quality|balanced|performance|ultra).
@@ -317,15 +317,13 @@ full-res — são injetados pelo próprio Bevy).
 
 ### Preset de gameplay (`config.yaml` → `gameplay`)
 
-`gameplay: rpg` (default) liga os plugins de DOMÍNIO (combate [J], skills,
-vitals, feedback, economia/hotbar, travel/Nota, save, quests, colheita).
-`gameplay: none` boota a engine SEM eles — o jogo é 100 % XML + Luau sobre a
-API genérica (`viber.game/events/timers/entity_*/find/spawn_prototype`), com
-terreno/céu/player/câmara/UI declarativa/menus(services) intactos. O preset
-resolvido sai no arranque (`gameplay preset: …`). Vitrina:
-**`worlds/lua-demo/`** — micro-jogo de colheita de cristais em ~60 linhas de
-Luau (spawn por `<Prototype>` em runtime, HUD por `viber.ui.set_text`, estado
-em `viber.game`), `cargo run -- analyze worlds/lua-demo/world.xml` valida.
+A engine não liga plugins de regras (combate, quests, economia, viagem,
+colheita, corrida). Um jogo é XML + Luau. O `simple-rpg` guarda cofre, XP
+e quests em `scripts/lib/rules.lua`; o `simple-racer` conduz os karts em
+`scripts/game/race.lua`. Primitivas: `viber.road` / `road_at`, `set_pose`,
+`own_system("locomotion")`, `sound_loop`, `load_json`, `music.layer`,
+`player_id`. Binds de HUD de jogo publicam-se com `viber.ui.set`. Vitrina
+sem regras: **`worlds/lua-demo/`**.
 
 ### Preset de corrida (`gameplay: racing`, `src/racing/`)
 
@@ -428,7 +426,7 @@ o frame muda ~1/255) — é a exposição.
 ### Névoa e visibilidade de noite (`src/ambient.rs`, `src/postfx.rs`)
 
 A névoa é VISIBILIDADE: os multiplicadores de **noite e chuva na densidade do
-`DistanceFog` ficaram subtis** (`(1 + 0.08·night)·(1 + 0.12·rain)`; eram +35 %
+`DistanceFog` ficaram subtis** (`(1 + 0.08·night)·(1 + 0.04·rain)`; eram +35 %
 e +60 %, que no pântano à chuva punham o ~63 % de névoa aos ~90 m — "não se vê
 nada"). A base (`FOG_BASE_DENSITY`, ref. 340 m) e o `fog-density` do bioma no
 XML continuam a mandar, e o DIA fica intacto. Mais decisivo: o **volume de
@@ -899,8 +897,8 @@ faísca de fogueira ao pé da câmara continua opaca):
 
 | Controlo | Default | Env | Porquê |
 |---|---|---|---|
-| `near_fade_m` | 5 m | `VIBER_RAIN_NEAR_FADE` | a câmara de 3.ª pessoa vive DENTRO da coluna de chuva; um streak de 0,5 m a 1 m do olho tapa ~40 % da altura do ecrã |
-| `max_alpha` | 0.5 | `VIBER_RAIN_ALPHA` | cortina translúcida deixa ver a paisagem; opaca é uma parede |
+| `near_fade_m` | 8 m | `VIBER_RAIN_NEAR_FADE` | a câmara de 3.ª pessoa vive DENTRO da coluna de chuva; um streak de 0,5 m a 1 m do olho tapa ~40 % da altura do ecrã |
+| `max_alpha` | 0.28 | `VIBER_RAIN_ALPHA` | cortina translúcida deixa ver a paisagem; opaca é uma parede |
 
 Afinação AO VIVO (sem rebuild): `viber.debug.rain_look{near_fade=…,
 alpha=…, width=…, rate=…}` e `viber.debug.set_weather{rain=…, clouds=…,
@@ -913,7 +911,7 @@ viber debug lua 'viber.debug.rain_look{near_fade=3, alpha=0.6} return 1'
 ```
 
 Outros acopladores da chuva, para quem for caçar "não se vê nada à chuva":
-névoa `×(1+0,12·rain)` (`biome_fog_system`), exposição `×(1−0,25·rain)`
+névoa `×(1+0,04·rain)` (`biome_fog_system`), exposição `×(1−0,08·rain)`
 (`atmosphere_drive`) e chão molhado no SSR (`rain × ground`, `water_ssr.rs`).
 O volume de névoa (god-rays) **não** escala com a chuva.
 
@@ -1116,7 +1114,7 @@ default = budget de 2048 colunas), `height-smoothing` (1 = Catmull-Rom
 monotone; 0 = bilinear — suaviza a GRID de input), `collision-resolution`
 (64; interruptor — **0 desliga os colliders**; já não define geometria), `cliff-angle` (50° — gatilho da
 CliffMask/splat; 90 desliga), `cliff-min-area` (120 m²), `cliff-min-drop` (4 m), `cliff-min-extent` (8 m) — filtro REGIONAL: um componente de declive só é cliff se passar os três (mata declives espúrios), `cliff-streaks` (0.5 — escorrimentos verticais na pele da parede), `cliff-moss` (0.35 — musgo procedural nos ombros/ledges), `sharpen` (false), `sharpen-angle` (35°), `sharpen-seed` (0 = deriva de `seed`), `texture`/`texture-url`, `texture-tile-size` (0 = auto), `seed` (0), tint (caminho LEGADO): `base-color`, `color-low`, `color-mid`, `color-high`, `color-rock`, `snow-height`, `slope-threshold`, `slope-softness`, `height-blend-strength`; blend de camadas: `layers` (lista de ≤13 aliases do pool — `grass vale_grass dirt dirt_trail forest_floor gravel mountain_stone sand desert_sand snow_peak swamp_mud dirt_road pebbles` — ou caminhos de textura; o slot do leito carrega `pebbles` mesmo que o mundo não o liste), `shore-width` (5 m — faixa de areia fora da linha de água) — **PRODUÇÃO**: 8 layers por chunk (material bindless — o crash NV foi resolvido), ligado por omissão; escape hatch para o tint legado: `VIBER_CHUNK_LAYERS=0`; pele das paredes (estratos/streaks/musgo) configurável ao vivo via `viber.debug.ground{...}` |
-| — | **Material de chunk (r8 — 8 layers + roughness, bindless)**: o bootstrap gera UM material por chunk (`generate_chunk_splats` em `splat.rs`): as 8 texturas do pool com MAIOR peso agregado no chunk + DOIS planos splat RGBA8 próprios (plano 0 = slots 0–3, plano 1 = slots 4–7; pesos renormalizados a somar 1 EM CONJUNTO; chunks de montanha carregam snow/stone, de pântano mud — áreas diferentes têm blends diferentes). `rock` (paredes), leito (seixo) e a AREIA DA MARGEM são FORÇADOS na eleição top-8 — sem o force da areia a praia quebrava em costuras retas nos chunks que a perdiam da paleta. Material próprio (`layer_material.rs`, NÃO ExtendedMaterial) `#[bindless]` com 8 layers × (albedo, normal, height, AO, **roughness**) + 2 splats — 42 pares textura/sampler, tabela de índices `range(0..85)`; params em storage array na binding 10: tiles/tints/flats/roughs + origem/tamanho + layer de rocha para paredes triplanares). **Roughness maps** (`roughness.ktx2`; `smoothness.ktx2` entra INVERTIDO — inventário estático `RoughMap` em `SLOT_STYLES`): flags em `roughs[i].y` (mix 0.85 com a constante afinada) e `.z` (inverter); slots sem mapa mantêm a constante (mix 0) — o look não muda um milímetro onde o pool não tem mapa. + day/night tint; shader `shaders/terrain_chunk.wesl` (template embutido reescrito no `run`). ⚠ **porquê bindless**: com bevy 0.19.1 + wgpu 29.0.4 + NV 595.84 (re-verificar no wgpu 30 do 0.20), QUALQUER material custom NÃO-bindless com `#[texture]` morria com SIGSEGV dentro de `libnvidia-gpucomp` ao criar o pipeline layout — teste-guarda `test_chunk_material_stays_bindless`; o `StandardMaterial` e materiais só-`#[storage]` (céu) funcionam; isolado por bissect de mundos M0–M23 (2026-09-04). Falha de textura reponta o slot para o fallback dele (leito → gravel; mapa opcional → plano/constante) |
+| — | **Material de chunk (r8 — 8 layers + roughness, bindless)**: o bootstrap gera UM material por chunk (`generate_chunk_splats` em `splat.rs`): as 8 texturas do pool com MAIOR peso agregado no chunk + DOIS planos splat RGBA8 próprios (plano 0 = slots 0–3, plano 1 = slots 4–7; pesos renormalizados a somar 1 EM CONJUNTO; chunks de montanha carregam snow/stone, de pântano mud — áreas diferentes têm blends diferentes). `rock` (paredes), leito (seixo) e a AREIA DA MARGEM são FORÇADOS na eleição top-8 — sem o force da areia a praia quebrava em costuras retas nos chunks que a perdiam da paleta. Material próprio (`layer_material.rs`, NÃO ExtendedMaterial) `#[bindless]` com 8 layers × (albedo, normal, height, AO, **roughness**) + 2 splats — 42 pares textura/sampler, tabela de índices `range(0..85)`; params em storage array na binding 10: tiles/tints/flats/roughs + origem/tamanho + layer de rocha para paredes triplanares). **Roughness maps** (`roughness.ktx2`; `smoothness.ktx2` entra INVERTIDO — inventário estático `RoughMap` em `SLOT_STYLES`): flags em `roughs[i].y` (mix 0.85 com a constante afinada) e `.z` (inverter); slots sem mapa mantêm a constante (mix 0) — o look não muda um milímetro onde o pool não tem mapa. + day/night tint; shader `shaders/terrain_chunk.wesl` (template embutido reescrito no `run`). ⚠ **porquê bindless (re-verificado 2026-10-18)**: com bevy 0.19.1 + wgpu 29.0.4 + NV 595.84, QUALQUER material custom NÃO-bindless com `#[texture]` morria com SIGSEGV dentro de `libnvidia-gpucomp` ao criar o pipeline layout — isolado por bissect de mundos M0–M23 (2026-09-04). **No bevy 0.20.0 + wgpu 30 + driver NV 615.71.09 o crash JÁ NÃO REPRODUZ** (experimento ao vivo em `worlds/lua-demo`: `#[bindless]` removido → pipelines criados, terreno desenhado no look flat, boot completo sem sinal). O bindless MANTÉM-SE pelo layout (8 layers num material, slab partilhada); desligá-lo exige um ramo não-bindless no shader. Falha de textura reponta o slot para o fallback dele (leito → gravel; mapa opcional → plano/constante) |
 | `TerrainPad` | `at` (`"x z"`), `size` (`"w d"`), `falloff` (8), `corner-radius` (4), `height` (ausente = auto: amostra o centro e escreve de volta) |
 | `InteriorScene` | `at` (`"x z"`, CENTRO), `size` (`"w d"`) — declara um retângulo como **bolsa de interior**, FORA da pegada do heightmap (`|x|` ou `|z|` > `world_size/2`). Dentro dela a `WorldBorder` não trava, não há bioma (névoa/tinta/exposição neutras) e NÃO chove (o emissor de chuva segue o player e seguiria para dentro da sala). A distância (>2 km) desliga o resto por si — render, cull, IA, spawners — e **fora do campo o terreno não gera colunas nem colliders**. A zona de música `dungeon` deixou de ter caixa copiada à mão: segue esta declaração. Um só por mundo/cena; ver `src/worldsys.rs::InteriorSceneConfig`. Num projeto com cenas cada interior é uma cena com `<InteriorScene at="0 0" size=…>` a cobrir a sala (ex.: `examples/simple-rpg/scenes/interiors/chapel.xml`) |
 | `SceneEntry` | `name` (obrigatório), pose — ponto de chegada de uma cena (`viber.change_scene(cena, nome)`, `entry=` dos portais). Ver "Cenas" |

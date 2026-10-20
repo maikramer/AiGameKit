@@ -30,15 +30,28 @@ pub struct LogEntry {
 }
 
 /// `viber.lua` answer from the engine's Luau REPL.
+///
+/// `result` is whatever JSON `value_to_json` produced (número, objeto, string,
+/// array). Tipá-lo como `String` fazia `return 1` e `return viber.debug.player()`
+/// falharem o serde e a consola pintá-los a vermelho.
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct LuaEval {
     pub ok: bool,
     #[serde(default)]
-    pub result: Option<String>,
+    pub result: Option<Value>,
     #[serde(default)]
     pub error: Option<String>,
     #[serde(default)]
     pub applied: Option<Value>,
+}
+
+/// Texto de consola para um `result` JSON. Strings ficam cruas; o resto é JSON.
+pub fn format_lua_value(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        Value::Null => String::new(),
+        other => serde_json::to_string(other).unwrap_or_else(|_| other.to_string()),
+    }
 }
 
 pub fn ping(client: &BrpClient) -> Task<Result<Value, BrpClientError>> {
@@ -132,11 +145,26 @@ mod tests {
         }))
         .unwrap();
         assert!(ok.ok);
-        assert_eq!(ok.result.as_deref(), Some("42"));
+        assert_eq!(
+            ok.result.as_ref().map(format_lua_value).as_deref(),
+            Some("42")
+        );
 
         let err: LuaEval =
             serde_json::from_value(json!({ "ok": false, "error": "syntax error: }" })).unwrap();
         assert!(!err.ok);
         assert_eq!(err.error.as_deref(), Some("syntax error: }"));
+
+        let number: LuaEval = serde_json::from_value(json!({ "ok": true, "result": 2 })).unwrap();
+        assert_eq!(
+            number.result.as_ref().map(format_lua_value).as_deref(),
+            Some("2")
+        );
+        let object: LuaEval =
+            serde_json::from_value(json!({ "ok": true, "result": {"hp": 3} })).unwrap();
+        assert_eq!(
+            object.result.as_ref().map(format_lua_value).as_deref(),
+            Some("{\"hp\":3}")
+        );
     }
 }

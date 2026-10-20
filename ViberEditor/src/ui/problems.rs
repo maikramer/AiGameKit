@@ -32,6 +32,9 @@ pub struct ProblemsState {
     dirty: bool,
     was_dirty: bool,
     initial_done: bool,
+    /// Um save chegou com um lint já em voo. O pedido seguinte era deitado
+    /// fora e o painel ficava com o relatório de antes da gravação.
+    lint_again: bool,
 }
 
 impl ProblemsState {
@@ -73,16 +76,22 @@ fn poll_problems(world: &mut World) {
     // 1. drena o task — devolve ao recurso SÓ se ainda estiver pendente
     //    (recolocar uma task completada é "polled after completion")
     let mut task = world.resource_mut::<ProblemsTask>().0.take();
+    let mut again = false;
     if let Some(current) = task.as_mut() {
         match block_on(poll_once(current)) {
             Some(Ok(report)) => {
                 let mut state = world.resource_mut::<ProblemsState>();
                 state.report = Some(report);
                 state.dirty = true;
+                again = state.lint_again;
+                state.lint_again = false;
                 task = None;
             }
             Some(Err(error)) => {
                 warn!("problems: lint falhou: {error}");
+                let mut state = world.resource_mut::<ProblemsState>();
+                again = state.lint_again;
+                state.lint_again = false;
                 task = None;
             }
             None => {}
@@ -91,6 +100,9 @@ fn poll_problems(world: &mut World) {
     if let Some(current) = task {
         world.resource_mut::<ProblemsTask>().0 = Some(current);
     }
+    if again {
+        run_lint(world);
+    }
     // 2. transição dirty→clean = gravou → revalida (escreve SÓ na transição:
     //    um `resource_mut` incondicional marcava o estado como changed todos
     //    os frames e o badge nunca entrava em curto-circuito)
@@ -98,7 +110,11 @@ fn poll_problems(world: &mut World) {
     let was_dirty = world.resource::<ProblemsState>().was_dirty;
     if was_dirty && !dirty {
         world.resource_mut::<ProblemsState>().was_dirty = false;
-        run_lint(world);
+        if world.resource::<ProblemsTask>().0.is_some() {
+            world.resource_mut::<ProblemsState>().lint_again = true;
+        } else {
+            run_lint(world);
+        }
         return;
     }
     if was_dirty != dirty {

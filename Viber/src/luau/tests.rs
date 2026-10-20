@@ -34,6 +34,48 @@ fn host_with(code: &str, path: &str) -> LuaScriptHost {
 }
 
 #[test]
+fn test_set_pose_writes_local_transform() {
+    let host = host_with(
+        "function on_update(dt)\n\
+             local st = viber.state()\n\
+             if st.done then return end\n\
+             st.done = true\n\
+             viber.set_pose(3, 4, 5, 1.5707963)\n\
+         end",
+        "pose.lua",
+    );
+    let mut app = test_app(host);
+    let entity = app
+        .world_mut()
+        .spawn((
+            Transform::from_scale(Vec3::splat(2.0)),
+            LuaScriptRef {
+                path: "pose.lua".into(),
+            },
+        ))
+        .id();
+    app.update();
+    let transform = app.world().get::<Transform>(entity).unwrap();
+    assert!((transform.translation.x - 3.0).abs() < 1e-4);
+    assert!((transform.translation.y - 4.0).abs() < 1e-4);
+    assert!((transform.translation.z - 5.0).abs() < 1e-4);
+    assert!((transform.scale.x - 2.0).abs() < 1e-4, "escala mantém-se");
+    let (yaw, _, _) = transform.rotation.to_euler(EulerRot::YXZ);
+    assert!((yaw - 1.5707963).abs() < 1e-4, "yaw {yaw}");
+}
+
+#[test]
+fn test_load_json_rejects_parent_segments() {
+    let host = LuaScriptHost::new(PathBuf::from("scripts")).expect("host");
+    let err = host
+        .lua
+        .load("return viber.load_json('../Cargo.toml')")
+        .eval::<mlua::Value>()
+        .expect_err(".. recusado");
+    assert!(err.to_string().contains("load_json"), "{err}");
+}
+
+#[test]
 fn test_script_top_level_runs_and_logs() {
     let mut host = host_with("viber.log('hello from luau')", "log.lua");
     let mut world = World::new();
@@ -652,19 +694,17 @@ fn test_non_finite_and_unknown_key_args_are_rejected() {
     }
     // Valores finitos continuam a passar (fora de on_update os setters
     // de combate/teleporte enfileiram à mesma — não precisam de entidade).
-    assert!(
-        host.lua
-            .load("return viber.damage_player(5)")
-            .exec()
-            .is_ok()
-    );
+    assert!(host
+        .lua
+        .load("return viber.damage_player(5)")
+        .exec()
+        .is_ok());
     assert!(host.lua.load("return viber.heal_player(5)").exec().is_ok());
-    assert!(
-        host.lua
-            .load("return viber.teleport_player(1, 2, 3)")
-            .exec()
-            .is_ok()
-    );
+    assert!(host
+        .lua
+        .load("return viber.teleport_player(1, 2, 3)")
+        .exec()
+        .is_ok());
     // Sem herói no contexto não há alvo implícito: `false`, sem erro.
     let implicit: bool = host
         .lua
@@ -745,13 +785,12 @@ fn test_viber_input_reads_key_states() {
         .expect("keys");
     keys.press(KeyCode::KeyW);
     app.update();
-    assert!(
-        app.world()
-            .get_resource::<LuaScriptHost>()
-            .unwrap()
-            .script_global("input.lua", "saw_pressed")
-            .is_ok_and(|v| v == mlua::Value::Boolean(true))
-    );
+    assert!(app
+        .world()
+        .get_resource::<LuaScriptHost>()
+        .unwrap()
+        .script_global("input.lua", "saw_pressed")
+        .is_ok_and(|v| v == mlua::Value::Boolean(true)));
     let mut keys = app
         .world_mut()
         .get_resource_mut::<ButtonInput<KeyCode>>()
@@ -788,10 +827,24 @@ fn test_simple_rpg_npc_scripts_compile() {
         "healer.lua",
         "watch-guard.lua",
         "lib/fsm.lua",
+        "lib/once.lua",
+        "chest.lua",
+        "notice-board.lua",
+        "bog-moss.lua",
+        "mushroom.lua",
+        "anvil.lua",
+        "crystal-shrine.lua",
+        "stone-pillar.lua",
+        "watch-guard.lua",
+        "poi/sun-relic.lua",
+        "poi/paradise-spring.lua",
         "game/shop.lua",
         "game/abilities.lua",
         "game/bomb-lua.lua",
         "game/hotbar.lua",
+        "poi/song-seed.lua",
+        "poi/paradise-spring.lua",
+        "well.lua",
         "npc/forest-wolves.lua",
         "enemies/wolf.lua",
         "enemies/goblin.lua",
@@ -1571,10 +1624,9 @@ fn test_radial_damage_damages_and_kills() {
     app.update();
     assert!(
         app.world()
-            .entity(alvo)
-            .get::<crate::combat::Corpse>()
-            .is_some(),
-        "o alvo no centro morre com paridade nativa (Corpse)"
+            .get::<Health>(alvo)
+            .is_some_and(|h| h.current <= 0.0),
+        "o alvo no centro chega a 0 HP; o script trata o resto"
     );
     assert!(
         app.world()

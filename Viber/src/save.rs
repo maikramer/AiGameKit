@@ -168,6 +168,10 @@ pub struct SaveGame {
     /// `(cena, portal)` por onde se entrou na cena gravada — o `@back` da porta de saída.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub came_from: Option<(String, String)>,
+    /// Nomes de props já colhidos (`Destructible`). Sem isto, gravar e
+    /// carregar replantava a floresta e a pedra com o loot ainda no cofre.
+    #[serde(default)]
+    pub harvested: Vec<String>,
 }
 
 /// Versão do schema [`SaveGame`] que ESTA engine escreve. Incrementar ao
@@ -198,6 +202,10 @@ pub fn capture(
         xp: Some(xp),
         health: Some(health),
         position: Some(position),
+        // O conjunto de props colhidos é preenchido pelo caller quando o
+        // recurso existe (`capture` não o recebe — o sistema já está no teto
+        // de parâmetros).
+        harvested: Vec::new(),
         gold: vault.map(|v| v.gold).unwrap_or(0),
         wood: vault.map(|v| v.wood).unwrap_or(0),
         stone: vault.map(|v| v.stone).unwrap_or(0),
@@ -412,6 +420,7 @@ fn options_system(
         // Cena carregada: o save grava-a; o load troca para a do save.
         Option<Res<crate::scene_loader::CurrentScene>>,
         Option<Res<crate::terrain::runtime::TerrainRuntime>>,
+        Option<ResMut<crate::harvest::HarvestedNodes>>,
     ),
     mut heroes: Query<
         (
@@ -523,6 +532,9 @@ fn options_system(
             if let Some(host) = host.as_mut() {
                 game.world_kv = crate::luau::game::game_to_json(&host.lua);
             }
+            if let Some(nodes) = world_save_host_request.8.as_deref() {
+                game.harvested = nodes.0.iter().cloned().collect();
+            }
             if let Some(scene) = world_save_host_request
                 .6
                 .as_deref()
@@ -581,6 +593,9 @@ fn options_system(
                     rpg.tree.as_deref_mut(),
                     rpg.stats.as_deref_mut(),
                 );
+                if let Some(nodes) = world_save_host_request.8.as_deref_mut() {
+                    nodes.0 = game.harvested.iter().cloned().collect();
+                }
                 // Marcos renomeados/removidos no editor deixam marcas órfãs no
                 // save (a quest `visit` fica incompletável em silêncio) —
                 // diagnosticar sem MUTAR o save: o marco pode voltar.
@@ -768,6 +783,10 @@ mod tests {
         let future: SaveGame = serde_json::from_str(r#"{"version": 99, "gold": 7}"#).unwrap();
         assert_eq!(future.version, 99);
         assert_eq!(future.gold, 7);
+        let chopped: SaveGame =
+            serde_json::from_str(r#"{"harvested":["inst-grp-18-0001"]}"#).unwrap();
+        assert_eq!(chopped.harvested, vec!["inst-grp-18-0001".to_string()]);
+        assert!(legacy.harvested.is_empty());
     }
 
     #[test]

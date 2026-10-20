@@ -584,10 +584,9 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
         sections.push((
             SectionId::Shape,
             vec![
-                num(
+                text(
                     FieldTarget::Attr { key: "half-size" },
-                    0.1,
-                    Bi("half-extents (m)", "half-extents (m)"),
+                    Bi("m, \"x y z\" ou \"x z\"", "m, \"x y z\" or \"x z\""),
                 ),
                 num(FieldTarget::Attr { key: "radius" }, 0.1, Bi("m", "m")),
                 num(FieldTarget::Attr { key: "half-height" }, 0.1, Bi("m", "m")),
@@ -724,8 +723,28 @@ pub fn component_get(value: &str, key: &str) -> Option<String> {
     None
 }
 
+/// A bare token (`collider="box"`, `rigidbody="dynamic"`) is that component's
+/// primary key. Writing another member has to promote it (`shape:` / `type:`);
+/// otherwise the parser stops recognising the shape or the body.
+fn promote_bare_component(value: &str, key: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.contains(':') {
+        return value.to_owned();
+    }
+    let bare_key = match key {
+        "type" | "gravity-scale" | "mass" => "type",
+        _ => "shape",
+    };
+    if bare_key.eq_ignore_ascii_case(key) {
+        String::new()
+    } else {
+        format!("{bare_key}: {trimmed}")
+    }
+}
+
 /// Rewrites `key` in a component-string, preserving every other key in order.
 pub fn component_set(value: &str, key: &str, new: &str) -> String {
+    let value = promote_bare_component(value, key);
     let mut out: Vec<String> = Vec::new();
     let mut replaced = false;
     for pair in value.split(';') {
@@ -1609,7 +1628,10 @@ pub fn prefill_text_fields(
                 text.0 = field.initial.clone();
             }
             if let Ok(mut editable) = editable.get_mut(child) {
-                editable.queue_edit(bevy::text::TextEdit::Insert(field.initial.as_str().into()));
+                // `set_text` é imediato: Enter no mesmo frame lê o valor, não
+                // o buffer vazio de antes do `queue_edit` aplicar.
+                editable.editor_mut().set_text(&field.initial);
+                editable.queue_edit(bevy::text::TextEdit::TextEnd(false));
             }
         }
     }
@@ -1629,10 +1651,9 @@ pub fn commit_text_fields(world: &mut World) {
     {
         return;
     }
-    let Some(text) = world.get::<Text>(focused) else {
+    let Some(value) = crate::scene::input_text(world, focused) else {
         return;
     };
-    let value = text.0.clone();
     let mut current = focused;
     let target = loop {
         if let Some(field) = world.get::<FieldText>(current) {
@@ -1660,6 +1681,22 @@ pub fn commit_text_fields(world: &mut World) {
 /// Whether a field's control makes sense for the node's current state (the
 /// collider params are per-shape: `size` só faz sentido num `box`, etc).
 fn field_applies(xml: &XmlNode, target: &FieldTarget) -> bool {
+    if let FieldTarget::Attr { key } = target
+        && matches!(*key, "half-size" | "radius" | "half-height")
+    {
+        let tag = xml.tag.to_ascii_lowercase();
+        if matches!(
+            tag.as_str(),
+            "cuboid" | "box" | "sphere" | "cylinder" | "plane" | "capsule"
+        ) {
+            return match (tag.as_str(), *key) {
+                ("cuboid" | "box" | "plane", "half-size") => true,
+                ("sphere", "radius") => true,
+                ("cylinder" | "capsule", "radius" | "half-height") => true,
+                _ => false,
+            };
+        }
+    }
     let shape = xml
         .attr("collider")
         .and_then(|value| component_get(value, "shape"))
@@ -1754,6 +1791,48 @@ mod tests {
             component_set("type: dynamic", "gravity-scale", "2"),
             "type: dynamic; gravity-scale: 2"
         );
+        assert_eq!(
+            component_set("dynamic", "gravity-scale", "0.5"),
+            "type: dynamic; gravity-scale: 0.5",
+            "um rigidbody nu perde o tipo se o token solto ficar sem `type:`"
+        );
+        assert_eq!(
+            component_set("box", "size", "1 2 3"),
+            "shape: box; size: 1 2 3"
+        );
+        assert_eq!(
+            component_set("dynamic", "type", "kinematic"),
+            "type: kinematic"
+        );
+    }
+
+    #[test]
+    fn half_size_is_a_vector_field_and_shape_keys_are_per_tag() {
+        let sections = sections_for("cuboid");
+        let shape = sections
+            .iter()
+            .find(|(id, _)| *id == SectionId::Shape)
+            .expect("shape");
+        let half = shape
+            .1
+            .iter()
+            .find(|field| matches!(field.target, FieldTarget::Attr { key: "half-size" }))
+            .expect("half-size");
+        assert!(matches!(half.kind, FieldKind::Text));
+        let cube = xml(r#"<Cuboid half-size="1 0.5 2" />"#);
+        assert_eq!(field_text(&cube, &half.target), "1 0.5 2");
+        assert!(field_number(&cube, &half.target).is_none());
+        assert!(field_applies(
+            &cube,
+            &FieldTarget::Attr { key: "half-size" }
+        ));
+        assert!(!field_applies(&cube, &FieldTarget::Attr { key: "radius" }));
+        let sphere = xml(r#"<Sphere radius="1.5" />"#);
+        assert!(field_applies(&sphere, &FieldTarget::Attr { key: "radius" }));
+        assert!(!field_applies(
+            &sphere,
+            &FieldTarget::Attr { key: "half-size" }
+        ));
     }
 
     #[test]

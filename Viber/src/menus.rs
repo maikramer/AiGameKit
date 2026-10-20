@@ -10,8 +10,9 @@
 //!   tab, [Q]/Esc fecha.
 //! - **Loja [K]**: perto do `name="merchant"` — comprar poção/antídoto/
 //!   bomba, vender madeira/pedra, com seleção ←/→ e confirmação [J].
-//! - **Loading screen**: overlay "a forjar o mundo" que se levanta quando a
-//!   engine arranca (representativo — GLBs continuam a streamar).
+//! - **Loading screen**: overlay "a forjar o mundo" que se levanta quando o
+//!   jogador existe, passaram 2 s, e os albedos do terreno já carregaram
+//!   (teto 8 s — os GLBs continuam a streamar).
 //!
 //! Enquanto o modal ou a loja estão abertos, a hotbar ([1]/[2]) não consome
 //! ([`MenusOpen`]).
@@ -561,14 +562,21 @@ fn spawn_loading_screen(mut commands: Commands) {
         });
 }
 
-/// Levanta o loading screen quando o mundo arranca (player spawloaded ou
-/// timeout de 8 s — os GLBs continuam a streamar em fundo).
+/// Levanta o loading screen quando o jogador existe, passaram 2 s, e os
+/// albedos do terreno já estão residentes (ou não há terreno de camadas).
+/// Teto de 8 s — os GLBs continuam a streamar em fundo.
 fn loading_hide_system(
     time: Res<Time>,
     players: Query<(), With<Player>>,
     mut loading: Query<&mut Visibility, With<LoadingScreen>>,
+    server: Option<Res<AssetServer>>,
+    gate: Option<Res<crate::terrain::runtime::TerrainTextureGate>>,
 ) {
-    let ready = players.iter().next().is_some() && time.elapsed_secs() > 2.0;
+    let textures_ready = match (&server, &gate) {
+        (Some(server), Some(gate)) => gate.ready(server),
+        _ => true,
+    };
+    let ready = players.iter().next().is_some() && time.elapsed_secs() > 2.0 && textures_ready;
     if !ready && time.elapsed_secs() < 8.0 {
         return;
     }

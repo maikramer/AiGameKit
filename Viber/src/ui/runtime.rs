@@ -172,6 +172,25 @@ pub(super) fn ui_focus_policy(blocks_pointer: bool, pointer_none: bool) -> Focus
     }
 }
 
+/// O backend de picking ignora `FocusPolicy` — o blocking vive em `Pickable`
+/// (`bevy_picking`). `None` = quem bloqueia (a ausência de `Pickable` bloqueia
+/// por default); `Some` = cadeia que passa (`FocusPolicy::Pass` — decoração,
+/// `pointer-events: none`), deixando os irmãos por baixo serem atingidos.
+/// Companheiro de [`ui_focus_policy`]; os dois recebem os MESMOS argumentos.
+pub(super) fn ui_pickable(
+    blocks_pointer: bool,
+    pointer_none: bool,
+) -> Option<bevy::picking::Pickable> {
+    if blocks_pointer && !pointer_none {
+        None
+    } else {
+        Some(bevy::picking::Pickable {
+            should_block_lower: false,
+            is_hoverable: true,
+        })
+    }
+}
+
 /// A progress bar: `value` in 0..1 drives the width of the `fill` child.
 #[derive(Debug, Component)]
 pub struct UiBar {
@@ -724,8 +743,17 @@ pub fn apply_ui_styles(
             // Recompute even when the declaration disappears (class/media
             // changes): auto restores each widget's policy, not always Block.
             let pointer_none = props.pointer_none.unwrap_or(false);
+            let blocks = blockers.contains(entity);
             let mut entity_commands = commands.entity(entity);
-            entity_commands.insert(ui_focus_policy(blockers.contains(entity), pointer_none));
+            entity_commands.insert(ui_focus_policy(blocks, pointer_none));
+            match ui_pickable(blocks, pointer_none) {
+                Some(pickable) => {
+                    entity_commands.insert(pickable);
+                }
+                None => {
+                    entity_commands.remove::<bevy::picking::Pickable>();
+                }
+            }
             if pointer_none {
                 entity_commands.insert(UiPointerNone);
             } else {
@@ -1436,6 +1464,19 @@ mod tests {
                     Some(&ui_focus_policy(blocks, none))
                 );
                 assert_eq!(app.world().get::<UiPointerNone>(entity).is_some(), none);
+                // O backend de picking lê `Pickable`, não `FocusPolicy` —
+                // quem bloqueia NÃO tem o componente (ausência bloqueia);
+                // quem passa tem `should_block_lower: false`.
+                let pickable = app.world().get::<bevy::picking::Pickable>(entity);
+                if ui_focus_policy(blocks, none) == FocusPolicy::Block {
+                    assert!(pickable.is_none(), "{entity:?} bloqueia sem Pickable");
+                } else {
+                    assert_eq!(
+                        pickable.map(|p| p.should_block_lower),
+                        Some(false),
+                        "{entity:?} passa com Pickable"
+                    );
+                }
             }
         }
     }

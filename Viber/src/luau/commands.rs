@@ -248,4 +248,25 @@ pub enum ScriptCommand {
     /// incremental dos colecionáveis; aplica em `SkillTree.points` +
     /// `LevelState.points` quando os recursos existem (preset rpg).
     AddSkillPoints(u32),
+    /// Pose local da entidade (`viber.set_pose`). O yaw é `Quat::from_rotation_y`.
+    /// A escala fica. Com `own_system("locomotion")` o `player_movement` não
+    /// disputa esta escrita no herói.
+    SetPose {
+        entity: Entity,
+        pos: Vec3,
+        yaw: f32,
+    },
+    /// Loop de SFX (`viber.sound_loop`). `clip` é nome do registry ou caminho
+    /// relativo ao `sfx_dir` (`vehicles/engine_rev.ogg`).
+    SoundLoop {
+        id: String,
+        clip: String,
+        pitch: f64,
+        volume: f32,
+        position: Option<Vec3>,
+    },
+    /// Pára um loop (`viber.sound_stop`).
+    SoundStop(String),
+    /// Força a layer de BGM (`viber.music.layer`). `None` devolve o automático.
+    MusicLayer(Option<String>),
 }
