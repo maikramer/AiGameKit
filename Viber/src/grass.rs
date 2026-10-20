@@ -460,9 +460,9 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 /// exact `[1, 1, 1]` — the r1-approved daylight look, bit-identical.
 pub(crate) fn day_tint(day: f32) -> [f32; 3] {
     let day = day.clamp(0.0, 1.0);
-    // Night: dark, slightly blue-lifted silhouettes — grass must never glow
-    // against the night sky (the r2 white-wedge bug).
-    const NIGHT: [f32; 3] = [0.10, 0.12, 0.17];
+    // Night: blue-lifted, still well under noon. 0.10 made every blade a
+    // black cutout once the frame was graded down — texture has to read.
+    const NIGHT: [f32; 3] = [0.32, 0.36, 0.46];
     // Golden hour: peaked mid-ramp (`day*(1-day)*4` is 1 there, 0 at both
     // ends) — a LIGHT warm hand, not a sunset filter.
     const GOLDEN: [f32; 3] = [1.12, 0.97, 0.80];
@@ -536,10 +536,13 @@ impl bevy::app::Plugin for GrassPlugin {
 /// Insert the vertex shader, with the wind of this world baked in as consts.
 ///
 /// A material *uniform* would be the obvious home for the wind vector, but
-/// the Bevy 0.19 slot-1 storage promotion never re-uploads custom material
-/// uniforms (the reason `sky.wgsl` and `layers.wgsl` specialize by consts
-/// too), so the world's `<Weather wind="…">` is written into the shader
-/// source instead — one wind for the sky, the water and the grass.
+/// custom-material uniform mutations do not reach the GPU — re-verificado AO
+/// VIVO no 0.20/wgpu 30 (2026-10-18): um uniform da extensão (`#[uniform(100)]`)
+/// mutado em onda quadrada por `Assets::get_mut` a cada frame não produziu
+/// NENHUMA mudança visível ao longo de 2 períodos (a relva responde só ao
+/// valor do upload inicial). O `<Weather wind="…">` é escrito no fonte do
+/// shader — uma só wind para o sky, a água e a relva. (O mesmo motivo vive em
+/// `sky.rs` e `terrain/water_material.rs`.)
 fn configure_shader(mut shaders: ResMut<Assets<Shader>>, weather: Option<Res<WeatherState>>) {
     let (wind, strength) = weather
         .map(|w| (w.wind, w.wind_strength))
@@ -1548,8 +1551,8 @@ mod tests {
         );
         let night = day_tint(0.0);
         assert!(
-            night[0] < 0.2 && night[1] < 0.2 && night[2] < 0.25,
-            "noite tem de silhuetar: {night:?}"
+            night.iter().all(|c| (0.25..0.55).contains(c)),
+            "noite escura o bastante para não ser dia, clara o bastante para ler textura: {night:?}"
         );
         assert!(night[2] > night[0], "noite azulada, não cinza morta");
         // Golden hour: warmth peaks mid-ramp — warmer than neutral, subtle.

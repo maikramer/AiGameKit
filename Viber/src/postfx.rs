@@ -1286,8 +1286,8 @@ pub fn grade_saturation(golden: f32, _night: f32) -> f32 {
 /// porque a noite É ESCURA: céu 0.05..0.13, chão ao luar ~0.10, poças e
 /// lua por contraste.
 ///
-/// Este desvio EMPURRA o frame inteiro para baixo (−2.8 stops na noite
-/// cheia, rampando com `night`) DEPOIS do medidor — um filtro ND estável
+/// Este desvio EMPURRA o frame inteiro para baixo ([`NIGHT_GRADING_EXPOSURE_EV`]
+/// stops na noite cheia, rampando com `night`) DEPOIS do medidor — um filtro ND estável
 /// que o `AutoExposure` não corrige (o histograma é computado no buffer
 /// HDR pré-grading). As razões preservam-se: o fog e o céu escurecem, e o
 /// que já estava 10..30× acima do fog (chamas emissivas, lua, estrelas e
@@ -1296,16 +1296,14 @@ pub fn grade_saturation(golden: f32, _night: f32) -> f32 {
 /// poças quentes visíveis, céu azul B:R ≈ 1.9.
 ///
 /// O dia (night=0) fica EXACTAMENTE como estava — desvio 0.
-/// **−6,8 (LOOP C; era −2,8 na LOOP A).** Com o joelho da curva do medidor
-/// alargado (ver [`NIGHT_LIFT_KNEE_EV`]) as POÇAS voltaram a viver — mas o
-/// medidor passa a centrar a noite ~2 stops acima do que a cena da LOOP A
-/// pedia (medido 2026-09-13, vantage do crítico às 23:00: ND −2,8 → média
-/// 0,61 "noite de estúdio"; ND −4,8 → 0,38, ND −6,8 → 0,21 — o ombro do TonyMcMapface come
-/// um stop por cada par de EV). −7,4 pousa a noite na banda escura
-/// (0,08–0,20) COM as poças e os halos por cima (flames ≥0,9 sobrevivem ao
-/// filtro no ombro; o miolo das poças também). O dia (night = 0) fica
-/// EXACTAMENTE como estava — desvio 0.
-pub const NIGHT_GRADING_EXPOSURE_EV: f32 = -7.4;
+/// **−4,5 (2026-10-20; era −7,4).** O −7,4 (depois de −6,8 na LOOP C)
+/// empurrava o frame para o toe do tonemap: média medida na curva
+/// −6,8 → 0,21 / −4,8 → 0,38 / −2,8 → 0,61 ("noite de estúdio", rejeitada).
+/// A −7,4 o chão, a relva e as casas do simple-rpg caíam abaixo do que dá
+/// para jogar — "não se vê nada". −4,5 fica junto do ponto medido 0,38:
+/// noite azul, poças e halos ainda acima do fundo (o desvio continua
+/// depois do medidor), dia intacto (night = 0 → desvio 0).
+pub const NIGHT_GRADING_EXPOSURE_EV: f32 = -4.5;
 
 /// Desvio de exposição (stops) para a fração de noite corrente — rampa
 /// linear até [`NIGHT_GRADING_EXPOSURE_EV`] na noite cheia.

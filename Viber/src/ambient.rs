@@ -595,15 +595,12 @@ fn biome_fog_system(
     }
     // À noite a névoa não pode "acender" o mundo: é o azul profundo que
     // engole o longe e deixa as fogueiras a valer ouro. Mas a névoa é
-    // VISIBILIDADE: os multiplicadores de noite/chuva ficaram SUTIS de
-    // propósito — eram +35 %/+60 %, que no pântano à chuva apagavam a
-    // paisagem a ~90 m ("chuva com noite não se vê nada, fica tudo cinza
-    // branco", repro do user 2026-09-11). A base
-    // ([`FOG_BASE_DENSITY`]) e o multiplicador do bioma continuam a mandar;
-    // noite e chuva só dão um toque.
+    // VISIBILIDADE: noite +8 %, chuva +4 % (eram +35 %/+60 %, e o +12 % da
+    // chuva ainda fechava o horizonte). A base ([`FOG_BASE_DENSITY`]) e o
+    // multiplicador do bioma continuam a mandar.
     let rain = weather.map(|w| w.rain.clamp(0.0, 1.0)).unwrap_or(0.0);
     let density =
-        FOG_BASE_DENSITY * smooth_mult * (1.0 + 0.08 * atmosphere.night) * (1.0 + 0.12 * rain);
+        FOG_BASE_DENSITY * smooth_mult * (1.0 + 0.08 * atmosphere.night) * (1.0 + 0.04 * rain);
 
     // Inscattering direcional — a escala NÃO é arbitrária, e errá-la lava o
     // frame inteiro de branco (r1/r2).
@@ -1696,12 +1693,12 @@ mod tests {
             }
         }
         // A névoa é VISIBILIDADE: noite e chuva dão só um toque (eram +35 % e
-        // +60 %, que apagavam a paisagem a ~90 m no pântano à chuva).
+        // +60 %, depois +12 % na chuva — ainda fechava o horizonte).
         let dry = fog_density(0.0, 0.0);
         let wet = fog_density(1.0, 0.0);
         assert!(
-            (wet / dry - 1.12).abs() < 1e-4,
-            "chuva cheia engrossa a névoa ×1.12 (subtil): {wet} vs {dry}"
+            (wet / dry - 1.04).abs() < 1e-4,
+            "chuva cheia engrossa a névoa ×1.04 (subtil): {wet} vs {dry}"
         );
         let night = fog_density(0.0, 1.0);
         assert!(

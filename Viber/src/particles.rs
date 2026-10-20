@@ -368,10 +368,11 @@ pub fn preset(name: &str) -> ResolvedEmitter {
 ///
 /// A câmara de 3.ª pessoa vive DENTRO da coluna de chuva (o emissor segue o
 /// herói, raio 9 m), por isso há sempre gotas a centímetros do olho.
-pub const RAIN_NEAR_FADE_M: f32 = 5.0;
+pub const RAIN_NEAR_FADE_M: f32 = 8.0;
 
 /// Tecto de alpha das gotas — a cortina é translúcida, não uma parede.
-pub const RAIN_MAX_ALPHA: f32 = 0.5;
+/// 0.5 ainda tapava o terço de baixo do ecrã na câmara de 3.ª pessoa.
+pub const RAIN_MAX_ALPHA: f32 = 0.28;
 
 /// `VIBER_RAIN_NEAR_FADE` (m) — `0` devolve o comportamento pré-2026-09-12
 /// (gotas opacas coladas à câmara), que é o braço de CONTROLO do A/B.
