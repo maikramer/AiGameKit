@@ -10,7 +10,7 @@ use viber::scene::doc::SceneDoc;
 
 use crate::scene::{PendingEdits, Selection};
 use crate::ui::icons::{self, icon_caption};
-use crate::ui::strings::{Lang, StrKey, t};
+use crate::ui::strings::{t, Lang, StrKey};
 
 /// Whether the dialog is open (toggled by the Scene dock's `+`).
 #[derive(Resource, Debug, Default)]
@@ -24,9 +24,13 @@ pub struct AddNodePanel;
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct AddNodeBody;
 
-/// A template row.
+/// A template row. O snippet é o do catálogo (duas linhas podem partilhar a
+/// tag `entity` — o contentor vazio e o volume físico).
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TemplateButton(pub &'static str);
+pub struct TemplateButton {
+    pub tag: &'static str,
+    pub snippet: &'static str,
+}
 
 /// The Scene dock's `+` button.
 #[derive(Component, Debug, Clone, Copy, Default)]
@@ -126,7 +130,13 @@ fn render_add_node(
                 }
                 Node { justify_content: JustifyContent::FlexStart, flex_shrink: 0.0 }
             })
-            .insert((TemplateButton(template.tag), ChildOf(body)))
+            .insert((
+                TemplateButton {
+                    tag: template.tag,
+                    snippet: template.snippet,
+                },
+                ChildOf(body),
+            ))
             .observe(insert_template);
     }
 }
@@ -143,13 +153,18 @@ fn insert_template(
     let Ok(button) = buttons.get(activate.event_target()) else {
         return;
     };
-    let tag = button.0;
+    let tag = button.tag;
+    let snippet = button.snippet;
     let parent = match selection.primary().cloned() {
         // inserir DENTRO da seleção (um contentor) ou no raiz do mundo
         Some(node) => doc.selector(&node),
         None => doc.selector(&viber::scene::doc::NodeRef::root(0)),
     };
-    let op = catalog::add_node(&parent, tag, None);
+    let op = viber::scene::ops::EditOp::Insert {
+        parent,
+        index: None,
+        xml: snippet.to_string(),
+    };
     let label = format!("+ {}", crate::ui::strings::tag_display(*lang, tag));
     open.0 = false;
     commands.queue(move |world: &mut World| {

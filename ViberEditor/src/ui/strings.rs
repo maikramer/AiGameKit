@@ -1981,6 +1981,13 @@ pub fn attr_display(lang: Lang, key: &str) -> &str {
                 "Forma"
             }
         }
+        "trigger" => {
+            if en {
+                "Trigger"
+            } else {
+                "Gatilho"
+            }
+        }
         "size" => {
             if en {
                 "Size"
@@ -2529,6 +2536,10 @@ mod tests {
         assert_eq!(
             component_display(Lang::En, "rigidbody", "gravity-scale"),
             "Body · Gravity"
+        );
+        assert_eq!(
+            component_display(Lang::Pt, "collider", "trigger"),
+            "Colisor · Gatilho"
         );
     }
 

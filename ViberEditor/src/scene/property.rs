@@ -199,7 +199,7 @@ const COLLIDER_SHAPES: &[&str] = &[
     "sphere",
     "cylinder",
     "capsule",
-    "trimesh",
+    "mesh",
     "precompute",
 ];
 const BODY_KINDS: &[&str] = &["none", "fixed", "dynamic", "kinematic"];
@@ -335,7 +335,17 @@ pub fn sections_for(tag: &str) -> Vec<(SectionId, Vec<FieldDef>)> {
                         attr: "collider",
                         key: "mesh-url",
                     },
-                    Bi("GLB do trimesh/convex", "trimesh/convex GLB"),
+                    Bi("GLB do mesh/convex", "mesh/convex GLB"),
+                ),
+                bool_field(
+                    FieldTarget::Component {
+                        attr: "collider",
+                        key: "trigger",
+                    },
+                    Bi(
+                        "gatilho: não bloqueia, dispara on_trigger_*",
+                        "trigger: does not block, fires on_trigger_*",
+                    ),
                 ),
                 enumeration(
                     FieldTarget::Component {
@@ -1331,7 +1341,19 @@ pub fn field_text(xml: &XmlNode, target: &FieldTarget) -> String {
 }
 
 pub fn field_enum(xml: &XmlNode, target: &FieldTarget, options: &[&str]) -> Option<usize> {
-    let value = attr_value(xml, target)?.to_ascii_lowercase();
+    let mut value = attr_value(xml, target)?.to_ascii_lowercase();
+    // `trimesh` é o nome antigo de `mesh`: o dropdown mostra mesh e o XML
+    // só muda quando o autor grava a forma.
+    if matches!(
+        target,
+        FieldTarget::Component {
+            attr: "collider",
+            key: "shape"
+        }
+    ) && value == "trimesh"
+    {
+        value = "mesh".into();
+    }
     options
         .iter()
         .position(|option| option.eq_ignore_ascii_case(&value))
@@ -1717,6 +1739,7 @@ fn field_applies(xml: &XmlNode, target: &FieldTarget) -> bool {
             "radius" => matches!(shape.as_str(), "sphere" | "ball" | "cylinder" | "capsule"),
             "half-height" => matches!(shape.as_str(), "cylinder" | "capsule"),
             "mesh-url" => matches!(shape.as_str(), "trimesh" | "mesh" | "precompute" | "convex"),
+            "trigger" => !matches!(shape.as_str(), "" | "none" | "false" | "0"),
             _ => true,
         },
         _ => true,
@@ -1937,5 +1960,25 @@ mod tests {
             color_to_xml(&field_color(&node, &FieldTarget::Attr { key: "color" })),
             "#ff8000"
         );
+    }
+
+    #[test]
+    fn trimesh_reads_as_mesh_and_trigger_follows_the_shape() {
+        let mesh = xml(r#"<Entity collider="shape: trimesh; mesh-url: /a.glb" />"#);
+        let shape = FieldTarget::Component {
+            attr: "collider",
+            key: "shape",
+        };
+        let index = field_enum(&mesh, &shape, COLLIDER_SHAPES).expect("mesh");
+        assert_eq!(COLLIDER_SHAPES[index], "mesh");
+        let trigger = FieldTarget::Component {
+            attr: "collider",
+            key: "trigger",
+        };
+        assert!(field_applies(&mesh, &trigger));
+        let none = xml(r#"<Entity collider="none" />"#);
+        assert!(!field_applies(&none, &trigger));
+        let zone = xml(r#"<Entity collider="shape: box; size: 2 2 2; trigger: true" />"#);
+        assert!(field_bool(&zone, &trigger));
     }
 }

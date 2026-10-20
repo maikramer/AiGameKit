@@ -70,12 +70,13 @@ impl Plugin for ViewOptionsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ViewOptions>()
             .init_resource::<CameraView>()
+            .init_resource::<viber::physics::ColliderDebugToggle>()
             .add_observer(on_view_toggle)
             .add_observer(on_view_button)
             .add_systems(
                 Update,
                 (
-                    apply_startup_views,
+                    (apply_startup_views, sync_edit_collider_debug).chain(),
                     render_view_panel,
                     close_view_panel_outside,
                     apply_projection,
@@ -256,6 +257,17 @@ fn render_view_panel(
                 commands.entity(entity).remove::<Checked>();
             }
         }
+    }
+}
+
+/// O toggle Vista → Colliders também acende o wireframe no mundo in-process
+/// (o bridge continua a falar com o jogo do Play).
+fn sync_edit_collider_debug(
+    options: Res<ViewOptions>,
+    mut toggle: ResMut<viber::physics::ColliderDebugToggle>,
+) {
+    if toggle.0 != options.colliders {
+        toggle.0 = options.colliders;
     }
 }
 

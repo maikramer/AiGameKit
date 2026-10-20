@@ -54,6 +54,12 @@ pub const TEMPLATES: &[NodeTemplate] = &[
     },
     NodeTemplate {
         group: TemplateGroup::Content,
+        tag: "entity",
+        label: "Volume físico (collider / trigger)",
+        snippet: r#"<Entity name="volume" collider="shape: box; size: 2 2 2; trigger: false" rigidbody="type: fixed" />"#,
+    },
+    NodeTemplate {
+        group: TemplateGroup::Content,
         tag: "cinematic",
         label: "Cinematic (câmara + legendas — viber cinematic)",
         snippet: r#"<Cinematic id="nova-cena"><Fade at="0" duration="1" from="1" to="0" /><Shot duration="4" anchor="player" from="4 3 6" look="0 1.5 0" /><Line at="0.5" duration="3" speaker="Narrador">…</Line></Cinematic>"#,
