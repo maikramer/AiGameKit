@@ -44,7 +44,7 @@ CORE_TOOLS = (
     "materialize",
     "aigamekitlab",
 )
-EXAMPLES_EXTRA_TOOLS = ("texture2d", "skymap2d", "text2sound", "terrain3d", "rocks3d", "viber")
+EXAMPLES_EXTRA_TOOLS = ("texture2d", "skymap2d", "text2sound", "terrain3d", "rocks3d")
 ALL_EXTRA_TOOLS = ("part3d", "motion3d", "intrinsic")
 
 PROFILES: dict[str, tuple[str, ...]] = {
@@ -54,7 +54,7 @@ PROFILES: dict[str, tuple[str, ...]] = {
 }
 PROFILE_DESCRIPTIONS = {
     "core": "zero-a-jogo mínimo (DAG GLB animado)",
-    "examples": "tudo que os jogos de exemplo usam (core + céu/áudio/texturas/terreno/rochas + Viber)",
+    "examples": "tudo que os jogos de exemplo usam (core + céu/áudio/texturas/terreno/rochas)",
     "all": "catálogo completo (examples + part3d, motion3d, intrinsic)",
 }
 
@@ -193,7 +193,7 @@ def check_node(tool_set: frozenset[str]) -> Check:
 
 
 def check_cargo(tool_set: frozenset[str]) -> Check:
-    rust_tools = {"materialize", "viber"} & tool_set
+    rust_tools = {"materialize"} & tool_set
     if not rust_tools:
         return Check(name="Rust/cargo", status="ok", detail="não necessário para este conjunto", needed_for="—")
     needed = ", ".join(sorted(rust_tools))

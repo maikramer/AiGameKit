@@ -935,7 +935,7 @@ gameassets dream "open world RPG with forests and mountains" \
 
 After handoff, GLBs are available at `/assets/models/` in the target game's asset directory. The native engine (Viber) loads them directly from `world.xml` / the `public/` layout produced by handoff (`gameassets_handoff.json` lists every copied file).
 
-See the Viber example worlds (e.g. [`Viber/examples/`](../Viber/examples/)) for working engine integration.
+The engine and the playable world live in the sibling repos `../Viber` and `../Vael`.
 
 ## Development
 

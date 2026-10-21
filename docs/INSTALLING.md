@@ -57,7 +57,7 @@ At the **repository root** (folder containing `Shared/`, `install.sh`, `.git`):
 |---------|-------|---------|
 | `./install.sh` (no args) | 9: `vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab` | **Default** — minimum zero-to-game (animated-GLB DAG) |
 | `./install.sh core` | same 9 as above | Same as no-args, explicit |
-| `./install.sh examples` | 15: core + `texture2d skymap2d text2sound terrain3d rocks3d viber` | Everything the example games use (incl. dream sky/terrain/audio) |
+| `./install.sh examples` | core + `texture2d skymap2d text2sound terrain3d rocks3d` | Everything the example games use (incl. dream sky/terrain/audio). The Bevy engine is the sibling repo `../Viber`. |
 | `./install.sh --all` | 18: examples + `part3d motion3d intrinsic` | Full catalog (opt-in extras) |
 
 Before installing, a **pre-flight** (`scripts/preflight.py`) checks the external prerequisites
@@ -105,7 +105,6 @@ Useful variable: `PYTHON_CMD` — interpreter to use (default `python3`, or `pyt
 | `motion3d` | Motion3D | Python | 3.13 | Text-to-motion T2M-GPT; PyTorch + `bpy`; links Animator3D (`cross_deps`) |
 | `paint3d` | Paint3D | Python | 3.13 | Hunyuan3D-Paint + nvdiffrast |
 | `materialize` | Materialize | Rust | — | Needs `cargo`; binary in `~/.local/bin` |
-| `viber` | Viber | Rust | — | Needs `cargo`; Bevy engine (worlds XML) |
 | `intrinsic` | Intrinsic | Python | 3.13 | Intrinsic decomposition (**academic license**) |
 
 Install everything present in the checkout: `./install.sh all` or one-liner `--get aigamekit`.
@@ -125,7 +124,7 @@ pytest-cov, ruff) to the tool's own venv, because that is where the suite runs
 
 Everything below is **detected or installed automatically** unless marked *manual*. On a
 fresh machine the real prerequisites are Python with pip, Node.js (KTX2/meshopt
-compression), and — per tool — Rust (`materialize`, `viber`).
+compression), and — per tool — Rust (`materialize`). The engine `viber` builds from the sibling repo `../Viber`.
 
 | Dependency | Used for | Linux / macOS | Windows | Auto? |
 |------------|----------|---------------|---------|-------|
@@ -135,7 +134,7 @@ compression), and — per tool — Rust (`materialize`, `viber`).
 | Node.js (`npx`) | KTX2/UASTC + meshopt fallback (`@gltf-transform/cli`) | Debian/Ubuntu: `curl -fsSL https://deb.nodesource.com/setup_22.x \| sudo -E bash - && sudo apt install -y nodejs` (apt 24.04 traz 18.x — o pre-flight exige ≥ 20.12); macOS: `brew install node` | `winget install OpenJS.NodeJS.LTS` | manual |
 | KTX-Software `ktx` | UASTC → KTX2 (required for KTX2 GLBs) | ✅ `./install.sh text3d` downloads the tarball → `~/.local/bin/ktx` | ✅ `./install.sh text3d` extracts `ktx.exe` from the NSIS installer via 7-Zip (no admin); without 7-Zip, install `KTX-Software-4.4.2-Windows-x64.exe` manually | Linux ✅ / Windows ✅ with 7-Zip |
 | meshopt (`libmeshoptimizer`) | native GLB mesh compression (bpy 5.2) | Debian/Ubuntu: `sudo apt install libmeshoptimizer-dev`; macOS: `brew install meshoptimizer` | not available natively → automatic fallback to `@gltf-transform/cli` (needs Node.js) | fallback automatic |
-| Rust / cargo | `materialize`, `viber` | `sudo apt install build-essential` (C toolchain) + `curl -sSf https://sh.rustup.rs \| sh` | rustup-init.exe from rustup.rs (includes MSVC toolchain) | manual |
+| Rust / cargo | `materialize` | `sudo apt install build-essential` (C toolchain) + `curl -sSf https://sh.rustup.rs \| sh` | rustup-init.exe from rustup.rs (includes MSVC toolchain) | manual |
 | NVIDIA driver + CUDA | all GPU tools (text2d/text3d/paint3d/…) | `nvidia-smi` must list a GPU | NVIDIA App / driver install | manual |
 
 **Check what your machine is missing:** `gameassets doctor` (single first-use check:

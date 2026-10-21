@@ -22,18 +22,7 @@ tools/bfg-*.jar
 dist/
 build/
 pip-wheel-metadata/
-# Rust — artefactos de build dos crates Viber/ViberEditor (o Materialize usa o seu .gitignore local)
-Viber/target/
-Viber/Cargo.lock
-ViberEditor/target/
-ViberEditor/Cargo.lock
-# Viber simple-rpg — assets POR-JOGO versionados (ícones HUD próprios); o
-# resto é derivado/scratch (meshes_enriched do passe de materiais). Assets
-# PARTILHADOS vivem só no pool shared-assets (Viber/docs/ASSETS.md; guarda:
-# Viber/tests/asset_pool_dedup.rs) — nunca cópias por exemplo.
-Viber/examples/simple-rpg/assets/*
-!Viber/examples/simple-rpg/assets/icons/
-!Viber/examples/simple-rpg/assets/icons/**
+# Rust — artefactos de build do Materialize (o crate tem o seu .gitignore local)
 
 # Test & quality
 .pytest_cache/
@@ -129,10 +118,6 @@ experiments/
 # Estado local de schedulers de agentes
 *.scheduled_tasks.lock
 **/.claude/scheduled_tasks.lock
-
-Viber/examples/shared-assets/public/assets/meshes/
-Viber/examples/shared-assets/public/assets/images/
-Viber/examples/shared-assets/public/assets/sky/
 
 # Backups locais (.bak)
 *.bak.*

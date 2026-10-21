@@ -1,11 +1,11 @@
-# AiGameKit monorepo — common tasks for Python packages (ruff, pytest, mypy) and Rust (Materialize, Viber).
+# AiGameKit monorepo — common tasks for Python packages (ruff, pytest, mypy) and Rust (Materialize).
 # Requires GNU Make; on Windows, use Git Bash / MSYS2 / WSL so shell recipes and `find` work as expected.
 
 PYTHON_PROJECTS := Shared Text2D Text3D Paint3D Part3D GameAssets Texture2D Skymap2D Text2Sound Rigging3D Animator3D Motion3D AiGameKitLab Terrain3D Rocks3D
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-viber test-vibereditor clean dedupe-venvs typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust clean dedupe-venvs typecheck check install-hooks
 
 # Each package is tested from its own venv (installed by ./install.sh <tool>, which
 # adds the [dev] extra). CI has no per-package venv, so the system interpreter stays
@@ -21,29 +21,23 @@ endef
 help: ## List all targets (default)
 	@echo "AiGameKit monorepo targets:"
 	@echo ""
-	@echo "Full Python/Rust CI (Materialize + Viber): make check"
+	@echo "Full Python/Rust CI (Materialize): make check"
 	@echo ""
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-22s %s\n", $$1, $$2}'
 
-lint: ## ruff check at repo root; cargo clippy in Materialize/, Viber/ and ViberEditor/
+lint: ## ruff check at repo root; cargo clippy in Materialize/
 	ruff check .
 	cd Materialize && cargo clippy
-	cd Viber && cargo clippy -- -D warnings
-	cd ViberEditor && cargo clippy -- -D warnings
 
-fmt: ## ruff format at repo root; cargo fmt in Materialize/, Viber/ and ViberEditor/
+fmt: ## ruff format at repo root; cargo fmt in Materialize/
 	ruff format .
 	cd Materialize && cargo fmt
-	cd Viber && cargo fmt
-	cd ViberEditor && cargo fmt
 
-fmt-check: ## ruff format --check; cargo fmt --check in Materialize/, Viber/ and ViberEditor/
+fmt-check: ## ruff format --check; cargo fmt --check in Materialize/
 	ruff format --check .
 	cd Materialize && cargo fmt --check
-	cd Viber && cargo fmt --check
-	cd ViberEditor && cargo fmt --check
 
-test: ## pytest in each Python project; cargo test in Materialize/, Viber/ and ViberEditor/
+test: ## pytest in each Python project; cargo test in Materialize/
 	@for d in $(PYTHON_PROJECTS); do \
 		echo "==> pytest $$d"; \
 		cd "$(CURDIR)/$$d" || exit 1; \
@@ -51,8 +45,6 @@ test: ## pytest in each Python project; cargo test in Materialize/, Viber/ and V
 		cd "$(CURDIR)"; \
 	done
 	cd Materialize && cargo test
-	cd Viber && cargo test
-	cd ViberEditor && cargo test
 
 test-shared: ## pytest only in Shared/
 	$(call run-pytest,Shared)
@@ -111,12 +103,6 @@ test-intrinsic: ## pytest Intrinsic/ (CPU-first; usa o venv da package se existi
 	fi
 
 test-rust: test-materialize ## alias for test-materialize
-
-test-viber: ## cargo test in Viber/
-	cd Viber && cargo test
-
-test-vibereditor: ## cargo test in ViberEditor/
-	cd ViberEditor && cargo test
 
 clean: ## Remove __pycache__, caches, build/, dist/, *.egg-info under the repo
 	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true

@@ -200,11 +200,3 @@ tools:
     min_python: [3, 13]
     needs_pytorch: true
     post_install: aigamekit_shared.installer.clified_hooks:pip_check_post_install
-
-  viber:
-    name: "Viber"
-    kind: rust
-    folder: Viber
-    cli_name: viber
-    cargo_bin_name: viber
-    description: "Motor Bevy nativo (Rust); CLI viber create/run/analyze para mundos XML declarativos"

@@ -64,7 +64,7 @@ duras (git=`main`, vramd, LOD0). Tribal knowledge longa vive nos docs abaixo —
 
 ## Repository Overview
 
-Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textures, skymaps, PBR map generation, rigging, animation, asset batching, and a native Bevy engine. Primarily Python with two Rust crates (Materialize, Viber).
+Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textures, skymaps, PBR map generation, rigging, animation, and asset batching. Primarily Python with the Rust crate Materialize. The Bevy engine and the game live in the sibling repos `../Viber` and `../Vael`.
 
 **Key directories:**
 
@@ -85,7 +85,6 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `AiGameKitLab/` | Python | `aigamekit-lab` | core | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | core | PBR map generation (wgpu compute; 3.0: guided filter, HBAO, make-seamless, `--intrinsic`) |
 | `Intrinsic/` | Python | `intrinsic-worker` | extra | Decomposição intrínseca albedo/shading/especular (compphoto/Intrinsic; **licença académica**; backend vramd `intrinsic` para `materialize --intrinsic`) |
-| `Viber/` | Rust | `viber` | examples | Native Bevy engine (declarative world XML, Bevy naming; static-only runtime: `world.xml` with `static="true"` + `world.data/` = source of truth; Phases: 0 ✅ XML+spawn, 1 terreno ✅ volumétrico (Terrain/Pad/Lake/River/Road/RoadNetwork), 2 Luau scripts ✅ (API `viber.*` — `Viber/docs/LUA_API.md`), 3 physics ✅ (Rapier); simple-rpg port done in 10 loops) |
 | `Terrain3D/` | Python | `terrain3d` | examples | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
 | `Rocks3D/` | Python | `rocks3d` | examples | Procedural 3D rock generation (no PyTorch) |
 | `Vramd/` | Python | `modelserver` (CLI `vramd`/`vramd`) | core | Unified Model Server (vramd) — single-process GPU/VRAM supervisor |
@@ -102,7 +101,7 @@ All Python packages depend on `aigamekit-shared` (install Shared first).
 make check
 ```
 
-This runs: lint + format check + typecheck + all **Python** tests and the Rust crates **Materialize + Viber** (`cargo test`).
+This runs: lint + format check + typecheck + all **Python** tests and the Rust crate **Materialize** (`cargo test`).
 
 ### Lint
 
@@ -151,7 +150,6 @@ make test-rigging3d    # pytest Rigging3D only
 make test-animator3d   # pytest Animator3D only
 make test-motion3d     # pytest Motion3D only
 make test-materialize  # cargo test in Materialize/
-make test-viber        # cargo test in Viber/
 make test-terrain3d    # pytest Terrain3D only
 make test-rocks3d      # pytest Rocks3D only
 ```
@@ -198,7 +196,7 @@ cargo test --manifest-path Materialize/Cargo.toml test_preset_roundtrip  # Singl
                          #   animator3d gameassets materialize aigamekitlab
 ./install.sh core         # o mesmo, explícito
 ./install.sh examples     # tudo que os jogos de exemplo usam (15): core + texture2d skymap2d
-                         #   text2sound terrain3d rocks3d viber
+                         #   text2sound terrain3d rocks3d
 ./install.sh --all        # catálogo completo (acrescenta part3d, motion3d, intrinsic)
 ./install.sh <tool>       # tool individual (sempre disponível)
 ./install.sh --list       # listar perfis e ferramentas
@@ -393,56 +391,13 @@ Requires `bpy` installed in the active venv (`pip install bpy`, Python 3.13+ / B
 
 See `AiGameKitLab/README.md` for full documentation.
 
-## Viber (Bevy engine)
+## Viber e Vael (repos irmãos)
 
-The monorepo also includes **Viber** (`viber`), a native game engine crate in Bevy 0.20 (0.20.0-rc.2 via a git-tag `[patch.crates-io]` until the registry publishes it) that runs declarative world XML. Commands (from repo root, requires `cargo`):
+A engine e o jogo saíram deste monorepo.
 
-```bash
-cd Viber && cargo run -- analyze world.xml   # headless XML validation (CI-ready)
-cd Viber && cargo run -- run world.xml       # open a window and spawn the world
-cd Viber && cargo run -- bake old.xml        # one-time in-place conversion of a legacy procedural world
-make test-viber                              # cargo test in Viber/
-```
-
-**Static-only runtime (source of truth):** the runtime loads only `<world static="true">` worlds — `world.xml` + its includes ARE the source of truth (settled poses, generators resolved into editable `spawn/…` groups next to their `<Scatter>` recipe, vegetation pre-baked as `.vinst`), with binary data in `world.data/` (`terrain.ahgt` + `.paint`, `veg/*.vinst`, `bake.json`). `viber create` scaffolds a static world with a flat editable terrain; `viber bake old.xml` is only the one-time, in-place conversion of a legacy procedural world (never rewrites includes that are already static). Spawners/`place` in a static world are parse errors. Editing goes through `viber scene …` (offline or `--live` on a running engine, with undo/redo), `viber terrain brush|paint`, and `viber tool list|scatter|settle|canonicalize` — never hand-edit expecting runtime seating/settle (it does not run in static worlds). Full contract: `Viber/AGENTS.md`, section "Mundos estáticos + edição por agentes".
-
-**Scenes (Unity/Godot-style, 2026-10-15):** a game folder with `project:` in `config.yaml` is a PROJECT of separate scenes — `world.xml` is `main`, `scenes/**.xml` are their own universes (own entities/terrain/nav/physics), switched in-process with a fade (`<ScenePortal target entry>`, Lua `viber.change_scene`, bridge `viber.scene.change`, `viber run --scene`). Player/camera/HUD live in `project.autoload` and persist; saves record the scene. The `simple-rpg` house interiors are 9 scenes (`scenes/interiors/*`). Contract: `Viber/AGENTS.md` → "Cenas".
-
-**Unified installer (CLI on PATH):** from monorepo root, with `cargo` available:
-
-```bash
-./install.sh viber
-# or: python3 -m aigamekit_shared.installer.unified viber
-```
-
-This runs `cargo build --release` in `Viber/` and installs the binary as `viber` into `~/.local/bin`. Subcommands: `viber create <name>` (static world scaffold, flat editable terrain), `viber analyze [world.xml]` (headless, CI-ready; sem caminho procura `world.xml` → `worlds/*.xml`), `viber run [world.xml]` (Bevy window; `--bridge`, `--release`/`--no-cargo`), `viber bake <world.xml> [--verify]`, `viber scene (ls/get/find/set/insert/rm/mv/dup/apply/undo/redo/save/pick/entities/catalog/add/drop/files) [--live]`, `viber terrain (sample/brush/paint)`, `viber tool (list/scatter/settle/canonicalize)`, `viber debug …` (client do debug bridge), `viber session …` (QA lease), `viber --version`/`help`. `viber run` inside a Viber checkout delegates to `cargo run -- run` (engine rebuilt from source); `analyze` never delegates.
-
-**Debug bridge:** `viber run world.xml --bridge` expõe BRP sobre HTTP na porta 15702 (`--bridge PORT`, env `VIBER_BRIDGE_PORT`) — screenshot (request+poll), input sintético (key/text/click/move), árvore de entidades, ring-buffer de logs, edição viva `viber.scene.*`/`viber.tool.*`, mais os métodos BRP builtin (`world.query`, `world.insert_components`, …) para inspecção/mutação live do ECS. Cliente: `viber debug probe|screenshot|tree|logs|click|move|key|text` (o equivalente nativo do tooling Chrome DevTools MCP) — detalhes em `Viber/AGENTS.md` e `Viber/docs/BRIDGE.md`.
-
-The world XML follows **Bevy naming** (`translation`, `euler`, `half-size`, `base-color`) — no Unity/three.js vocabulary. Short tag contract: `Entity`, `Group`, shapes `Cuboid`/`Sphere`/`Cylinder`/`Plane`/`Capsule`, lights `PointLight`/`DirectionalLight`/`AmbientLight`, `OrbitCamera`, and `<Include src="…">` for composition (depth ≤ 8; an `<Include>` may carry `translation`/`euler`/`scale` — it wraps the file's content in a group, so moving the include moves everything it declares).
-
-**Terrain (Phase 1 ✅):** declarative **volumetric** terrain — `<Terrain>` takes a PNG/`.ahgt`/procedural heightmap as INPUT (the base term of an SDF `VoxelField`), carved by features (`<TerrainPad>`, `<Lake>`, `<River>`, `<Road>`, `<RoadNetwork>`, plus voxel solids `<Cliff>`/`<Cave>`/`<Arch>`/`<Bridge>`); columns are meshed by **transvoxel** (marching cubes with LOD transition cells) with a per-column LOD ladder and trimesh colliders (`Viber/src/terrain/voxel/`). Carve order is Pads → Lakes → Rivers → Roads (bridges last); every mutation goes through the brush engine (`Viber/src/terrain/brush.rs`) with owner-journal reverts. Gameplay queries land as resources: `TerrainRuntime::sample/in_water/on_road`, `WaterBody`, `RoadPath` (spawner `avoid-water`/`near-water`/`isPointOnRoad` parity). Demo world: `Viber/worlds/terrain.xml`. Unknown tags are skipped as no-ops with an `analyze` report (`--strict` fails) — unimplemented tags degrade gracefully.
-
-**Scripts + UI (Phases 2 ✅):** `script="caminho.lua"` (universal attr) binds an entity to a sandboxed Luau chunk in `<world>/scripts/` (`Viber/src/luau/`) — scripts declare per-instance typed props Godot-`@export`-style (`--@export speed: number(0..4) = 1.1`, value in the node's `prop-speed`, read with `viber.prop`; schema `viber scene schema`, lint `script-prop-*`) and Godot-style **signals + groups** (`--@signal opened(gold)` + `viber.emit`; listeners are data on the emitter: `connect-opened="@group:method; name:method"`; `groups="a b"`, `viber.call_group`; `viber scene groups`, lint `connect-*`) — hooks `on_update(dt)` (+ optional `on_player_attack(px, pz)` for aggro chains); the `viber.*` API (perception, terrain-snapped movement, wander/chase AI, combat, quests, vault, interaction) and `viber.ui.*` (declarative `<UiRoot>`/`<UiStyle>` UI) are documented in **`Viber/docs/LUA_API.md`**, with hot-reload on save (`Viber/src/hot_reload.rs`). Scripts outside a spawner's `activation-radius` (default 45 m) don't run at all — the AI LOD.
-
-Roadmap: Phases 0–3 ✅ — XML + spawn; volumetric terrain (+ features); Luau scripting (mlua sandboxed, `viber.*`/`viber.ui.*` API in `Viber/docs/LUA_API.md`); physics via **Rapier** (`bevy_rapier3d`, declarative `collider`/`rigidbody`) + `simple-rpg` ported (combat, quests, economy, menus, travel, save, skills, living world — 10 loops done, see `docs/findings/VIBER_SIMPLE_RPG_PORT.md`); static worlds + agent/editor parity via `viber bake`/`viber scene`. The `EngineConfig` tags (`NavMesh`, `SpawnGate`, `ProjectileTemplate` + `viber.fire_projectile`, `AdaptiveQuality`, `PostFxDebugToggle`) have runtime consumers. Open items: GPU vegetation instancing. Viber consumes the GLB/KTX2/meshopt assets produced by the `gameassets` pipeline.
-
-## ViberEditor (Bevy editor for Viber)
-
-**ViberEditor** (`ViberEditor/`, binary `vibereditor`) is the Godot-style manual/debug editor for Viber worlds. **Viber is agent-first; editor and agents have parity**: all editing lives in `viber::scene` (document + ops with inverses + live sync) and is exposed identically via `viber scene …` (CLI, offline or `--live`), the `viber.scene.*` bridge and the editor. The editor loads the world **in-process** (`viber::app::build_app` in `RunMode::Edit`: live render in a `ViewportNode`, simulation frozen, game UI on an inactive camera). **Play (F5)** saves and runs `viber run <world> --bridge` separately.
-
-**Static worlds are the source of truth:** the runtime and the editor load only `<world static="true">` worlds (`world.xml` + includes + `world.data/`); `viber bake` converts a legacy procedural world in place, once. Contract and commands: `Viber/AGENTS.md` (section "Mundos estáticos + edição por agentes").
-
-```bash
-cd ViberEditor && cargo run                      # simple-rpg (static world)
-cd ViberEditor && cargo run -- --select name=chapel --screenshot out.png --frames 600   # QA capture
-viber scene --live set name=chapel translation="10 8 25"   # same edit, by an agent, on a running engine
-make test-vibereditor                           # cargo test in ViberEditor/
-```
-
-**Scene tabs** (Godot): one tab per open scene of the project; the active tab is the scene in the viewport (switching saves and swaps in-process, per-tab camera); `+` creates `scenes/cena-N.xml`; ▶ Play runs the main scene, **Play scene (F7)** the active tab. Docks: Objects (world tree — node names, type icons, **pesquisa por nome/tag**, Includes as sub-scenes; `+` Add Node do catálogo `scene::catalog`; **Salvar ramo como cena** = `viber scene extract`, **Instanciar** um `.xml` no dock Ficheiros = `viber scene instance`) · Viewport (MMB orbit, Shift+MMB pan, wheel zoom, RMB+WASD fly; click pick; Q/W/E/R/T gizmo, Ctrl snap, F frame; B terreno: 1-5 alturas (5 cratera, 7 ruído), **6 pintura de material** com `,`/`.` a trocar a camada do pool) · **Inspector v2** (secções tipadas colapsáveis: **Script** no topo — props `--@export` do Luau como campos tipados (`prop-<nome>` por instância, ↺ volta ao default, ✕ em props não exportados; linhas **Sinais → alvos** `connect-<sinal>` + `groups`; agentes: `viber scene schema`); **Transform** com campos numéricos arrastáveis X/Y/Z — scrub com preview vivo, commit via `pose_op`; **Física** collider+rigidbody com campos por forma; **Luz**/**Material**/**Forma**/**GLTF** com color pickers/dropdowns/sliders; tooltips com unidades; name/texto editáveis; Ctrl+C/V copy-paste; fallback attrs genéricos em texto) · Console/Logs (jogo a correr + botão **árvore remota** `viber.tree`) · **Profiler** (`viber.debug.prof` ao vivo: fps, frame ms, top sistemas) · World Overview (**minimapa clicável** — a câmara salta para o XZ) · Files (árvore da pasta do mundo, filtros, ações por tipo: inserir GLB no terreno sob o cursor, abrir XML como mundo, abrir fora). Seletor **3D|UI|Script** topo-centro (UI = canvas do jogo letterboxed 16:9 com **handles move/resize** no nó selecionado, **preview de estados** Normal/Hover/Pressed via `UiPreviewState` real da cascata, e linha **menu_data** para `<UiList>`; Script = browser de `.lua` com preview). Drag-drop de `.glb` na janela → insert. Handles de features (Lake/River/Road/Pad) arrastáveis no modo select. Ctrl+Z/Ctrl+Shift+Z/Ctrl+D/Delete/Ctrl+S. Play F5 · **Play from here F9** (`viber.debug.tp` para o alvo da câmara) · Pause F6 · Stop F8. QA sem rato: `--screenshot`, `--select`, `--tab <console|logs|profiler|worlddoc|files>`, `--mode <3d|ui|script>`. **UI bilíngue PT (default) / EN** — toggle na toolbar ou `--lang pt|en`; todos os nomes visíveis vivem em `ViberEditor/src/ui/strings.rs` (chaves/CLI/XML não mudam — paridade agentes intacta). Roadmap: `ViberEditor/README.md`.
-
-**Disk:** Viber/ViberEditor dev profiles use `split-debuginfo = "unpacked"` + no debuginfo for dependencies — each `tests/*.rs` binary links the whole engine and used to weigh ~2.6 GB (165 GB in `Viber/target`, 2026-10-13). Do not revert.
+- Engine e editor: `../Viber` (o editor é a pasta `editor/`). Build: `cd ../Viber && cargo build --release` e copiar `target/release/viber` para `~/.local/bin`.
+- Jogo: `../Vael`. Dia-a-dia: `../Vael/Vael.code-workspace` (jogo + engine).
+- Contrato: `../Viber/AGENTS.md`. Skills: `../Vael/.cursor/skills/`.
 
 ## vramd (VRAM Coordination)
 

@@ -45,7 +45,7 @@ CORE_TOOLS = (
     "materialize",
     "aigamekitlab",
 )
-EXAMPLES_EXTRA_TOOLS = ("texture2d", "skymap2d", "text2sound", "terrain3d", "rocks3d", "viber")
+EXAMPLES_EXTRA_TOOLS = ("texture2d", "skymap2d", "text2sound", "terrain3d", "rocks3d")
 
 # tool → nome do CLI (aigamekitlab difere da chave do tools.yaml).
 TOOL_CLIS = {

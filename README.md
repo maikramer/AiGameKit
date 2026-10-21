@@ -172,7 +172,7 @@ Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://pypi.
 ```bash
 # Linux/macOS — from a clone
 ./install.sh               # pre-flight → core profile (9 tools, zero-to-game) → doctor + next steps
-./install.sh examples      # core + sky/audio/textures/terrain/rocks + Viber (15) — full dream coverage
+./install.sh examples      # core + sky/audio/textures/terrain/rocks — full dream coverage
 ./install.sh --all         # full catalog (adds part3d, motion3d, intrinsic)
 ./install.sh <tool>        # individual tool (keys of tools.yaml: text2d, paint3d, gameassets, …)
 ./install.sh --list        # list profiles and tools

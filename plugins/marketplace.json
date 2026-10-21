@@ -12,8 +12,8 @@
       "name": "viber",
       "source": "./viber",
       "version": "0.1.0",
-      "description": "Viber (engine nativa Bevy do AiGameKit) para agentes ZCode: autorar mundos declarativos XML+Luau e QA vivo via debug bridge — worlds authoring, live QA, screenshot, scene editing.",
-      "displayName": "Viber (AiGameKit)"
+      "description": "Ponteiro. A engine Viber e o jogo Vael são repositórios irmãos (../Viber, ../Vael).",
+      "displayName": "Viber (repo irmão)"
     }
   ]
 }

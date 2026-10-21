@@ -1,7 +1,7 @@
 # AiGameKit Monorepo — Instalador via Clified (PyPI)
 #
 #   .\install.ps1              → perfil 'core' (10 tools, zero-a-jogo)
-#   .\install.ps1 examples     → core + céu/áudio/texturas/terreno/rochas + Viber
+#   .\install.ps1 examples     → core + céu/áudio/texturas/terreno/rochas
 #   .\install.ps1 -All | all   → catálogo completo (acrescenta part3d, motion3d, intrinsic)
 #   .\install.ps1 <tool>       → ferramenta individual (chaves de tools.yaml)
 #   .\install.ps1 -List        → listar perfis e ferramentas
@@ -27,7 +27,7 @@ $env:UV_LINK_MODE = if ($env:UV_LINK_MODE) { $env:UV_LINK_MODE } else { "copy" }
 
 # Perfis de instalação (docs/findings/TOOLKIT_CORE_PROFILE_STUDY.md)
 $CoreTools = @("vramd", "text2d", "text3d", "paint3d", "rigging3d", "animator3d", "gameassets", "materialize", "aigamekitlab")
-$ExamplesExtraTools = @("texture2d", "skymap2d", "text2sound", "terrain3d", "rocks3d", "viber")
+$ExamplesExtraTools = @("texture2d", "skymap2d", "text2sound", "terrain3d", "rocks3d")
 
 # Resolve um Python sem fazer exit (o bootstrap faz a validação completa depois).
 function Get-PythonOrNull {

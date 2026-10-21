@@ -175,7 +175,7 @@ A instalação é orientada pelo [`tools.yaml`](tools.yaml) e pelo [Clified](htt
 ```bash
 # Linux/macOS — a partir de um clone
 ./install.sh               # pre-flight → perfil core (9 tools, zero-a-jogo) → doctor + próximos passos
-./install.sh examples      # core + céu/áudio/texturas/terreno/rochas + Viber (15) — dream completo
+./install.sh examples      # core + céu/áudio/texturas/terreno/rochas — dream completo
 ./install.sh --all         # catálogo completo (acrescenta part3d, motion3d, intrinsic)
 ./install.sh <tool>        # ferramenta individual (chaves de tools.yaml: text2d, paint3d, gameassets, …)
 ./install.sh --list        # listar perfis e ferramentas
