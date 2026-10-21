@@ -20,8 +20,8 @@ pytest.importorskip("bpy")
 import bpy
 
 GOBLIN_SRC = (
-    Path(__file__).resolve().parents[2]
-    / "Viber/examples/shared-assets/public/assets/meshes/characters/_intermediate/goblin_rigged_animated.glb"
+    Path(__file__).resolve().parents[2].parent
+    / "Vael/assets/public/assets/meshes/characters/_intermediate/goblin_rigged_animated.glb"
 )
 
 pytestmark = pytest.mark.skipif(

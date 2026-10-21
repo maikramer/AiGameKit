@@ -29,8 +29,8 @@ class TestEnsureFeetRootBone:
     def test_hero_gains_root_parenting_pelvis(self) -> None:
         # Rig SkinTokens cru (pelvis-as-root) — não o lod público já animado.
         glb = (
-            Path(__file__).resolve().parents[2]
-            / "Viber/examples/shared-assets/public/assets/meshes/characters/_intermediate/hero_rigged.glb"
+            Path(__file__).resolve().parents[2].parent
+            / "Vael/assets/public/assets/meshes/characters/_intermediate/hero_rigged.glb"
         )
         if not glb.is_file():
             pytest.skip("hero_rigged.glb ausente")
