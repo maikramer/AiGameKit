@@ -63,7 +63,6 @@ TOOL_CLIS = {
     "text2sound": "text2sound",
     "terrain3d": "terrain3d",
     "rocks3d": "rocks3d",
-    "viber": "viber",
 }
 
 # Tools que o ``gameassets dream`` usa por defeito mas que só existem no perfil
