@@ -12,7 +12,6 @@ profiles:
       width: 512
       height: 512
       steps: 4
-      guidance: 1.0
     text3d:
       preset: fast
       guidance: 4.5
@@ -90,8 +89,7 @@ profiles:
     text2d:
       width: 768
       height: 768
-      steps: 4
-      guidance: 1.0
+      steps: 8
     text3d:
       preset: fast
       guidance: 4.5
@@ -169,8 +167,7 @@ profiles:
     text2d:
       width: 1024
       height: 1024
-      steps: 4
-      guidance: 1.0
+      steps: 12
     text3d:
       preset: balanced
       guidance: 4.5
@@ -248,8 +245,7 @@ profiles:
     text2d:
       width: 1024
       height: 1024
-      steps: 8
-      guidance: 1.0
+      steps: 16
     text3d:
       preset: hq
       guidance: 4.5
@@ -326,10 +322,9 @@ profiles:
   highest:
     label: "Highest (~10min+, maximum quality)"
     text2d:
-      width: 1024
-      height: 1024
-      steps: 12
-      guidance: 1.5
+      width: 1536
+      height: 1536
+      steps: 16
     text3d:
       preset: hq
       guidance: 4.5

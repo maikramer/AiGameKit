@@ -39,7 +39,7 @@ class Adapter(WorkerAdapter):
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
         import time
 
-        error, steps, should_abort, on_step = self.begin_generate(request, default_steps=4)
+        error, steps, should_abort, on_step = self.begin_generate(request, default_steps=16)
         if error:
             return error
 
@@ -53,11 +53,23 @@ class Adapter(WorkerAdapter):
 
             prompt = augment_prompt_for_icon(prompt)
 
+        # Referências/boxes/num_images opcionais (workflow image_conditioned,
+        # layout por boxes, múltiplas imagens por pedido).
+        refs = request.get("refs") or None
+        boxes = request.get("boxes") or None
+        num_images = int(request.get("num_images") or 1)
+
+        # W/H ausentes = auto (o pipeline deriva o tamanho da 1.ª referência).
+        width = request.get("width")
+        height = request.get("height")
+
         # Observabilidade: shape da geração (admit já usou quant; aqui diagnóstico).
         runtime_budget = {
-            "width": int(request.get("width", 1024)),
-            "height": int(request.get("height", 1024)),
+            "width": width if width is not None else "auto",
+            "height": height if height is not None else "auto",
             "steps": steps,
+            "refs": len(refs) if refs else 0,
+            "boxes": len(boxes) if boxes else 0,
             "memory_efficient": bool(getattr(model, "memory_efficient", False)),
             "group_offload": bool(getattr(model, "group_offload", False)),
             "quant_preset": getattr(model, "quant_preset", None),
@@ -68,11 +80,13 @@ class Adapter(WorkerAdapter):
         try:
             image, _metadata = model.generate(
                 prompt=prompt,
-                height=int(request.get("height", 1024)),
-                width=int(request.get("width", 1024)),
-                guidance_scale=float(request.get("guidance", 1.0)),
+                height=int(height) if height is not None else None,
+                width=int(width) if width is not None else None,
                 num_inference_steps=steps,
                 seed=request.get("seed"),
+                refs=refs,
+                boxes=boxes,
+                num_images=num_images,
                 should_abort=should_abort,
                 on_step=on_step,
             )
@@ -88,6 +102,8 @@ class Adapter(WorkerAdapter):
         ext = out_path.suffix.lower().lstrip(".")
         img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
 
+        all_images = _metadata.get("images") or [image]
+
         # Ícone transparente: RGBA exige PNG (recusar JPEG antes do save) e
         # remoção de fundo via rembg (U2Net) sobre a imagem gerada.
         if request.get("transparent"):
@@ -95,10 +111,13 @@ class Adapter(WorkerAdapter):
                 return {"status": "error", "error": "--transparent requer saída .png"}
             from text2d.bg_removal import remove_background
 
-            image = remove_background(image)
+            all_images = [remove_background(img) for img in all_images]
 
         self.report_progress(request, 0.95, "saving")
-        saved = KleinFluxGenerator.save_image(image, out_path, image_format=img_format)
+        saved = out_path
+        for idx, img in enumerate(all_images):
+            part_path = out_path if idx == 0 else out_path.with_name(f"{out_path.stem}_{idx}{out_path.suffix}")
+            saved = KleinFluxGenerator.save_image(img, part_path, image_format=img_format)
 
         elapsed = time.perf_counter() - t_start
         self.report_progress(request, 1.0, "done")

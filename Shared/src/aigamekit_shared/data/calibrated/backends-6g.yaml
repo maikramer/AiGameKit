@@ -227,44 +227,72 @@ backends:
       não residente)'
 - name: text2d
   adapter: aigamekit_shared.worker_serve_adapter_base
-  vram_mib: 5568
+  vram_mib: 5440
   priority: 25
   tool: text2d
-  footprint_key: flux-klein-9b
+  footprint_key: flux3-klein
   runtime:
     monorepo_tool: text2d
   vram:
-    weights_gib: 0.19
-    activation_gib: 4.99
+    weights_gib: 0.37
+    activation_gib: 4.73
     context_gib: 0.23
-    peak_mib: 5568
+    peak_mib: 5440
     safety_mib: 384
-    admit_peak_mib: 5952
+    admit_peak_mib: 5824
   peak_profile:
     quant_mode: sdnq-int4
     staged_load: true
     load_kwargs:
-      quant_preset: sdnq-int4
-      sdnq_preset: sdnq-int4
       memory_efficient: true
+      quant_preset: sdnq-int4
+      model_id: black-forest-labs/flux-3-image-klein
       allow_group_offload: true
-      torch_compile: false
+  load_keys:
+  - allow_group_offload
+  - channels_last
+  - gpu_ids
+  - memory_efficient
+  - model_id
+  - offload
+  - quant_mode
+  - quant_preset
+  - sdnq_preset
+  - step_cache
+  - torch_compile
+  - torch_compile_mode
+  - upsample
+  - verbose
+  shape_keys:
+  - allow_group_offload
+  - channels_last
+  - gpu_ids
+  - memory_efficient
+  - model_id
+  - offload
+  - quant_mode
+  - sdnq_preset
+  - step_cache
+  - torch_compile
+  - torch_compile_mode
+  - upsample
   measured:
     confidence: low
     repeats: 3
-    samples: 1240
-    load_sec: 19.509
-    generate_sec_median: 9.674
+    samples: 3539
+    load_sec: 31.465
+    generate_sec_median: 44.753
     gpu: NVIDIA GeForce RTX 4050 Laptop GPU
     gpu_total_mib: 6141
     driver: 615.71.09
-    at: '2026-09-11T18:06:37+00:00'
-    fragmentation_mib: 2076
+    at: '2026-10-26T20:16:45+00:00'
+    fragmentation_mib: 4622
+    warmup_delta_mib: 106
     warnings:
-    - 'activação (5108 MiB) > 1.5x pesos (188 MiB): provável carregamento faseado dentro do generate (peso
+    - 'activação (4836 MiB) > 1.5x pesos (374 MiB): provável carregamento faseado dentro do generate (peso
       não residente)'
-    - 'maior intervalo entre amostras 0.22s (alvo 0.05s): pico pode ter escapado'
-
+    - 'primeira repetição com +106 MiB de pico (warmup): excluída da estabilidade'
+    - 'maior intervalo entre amostras 0.45s (alvo 0.05s): pico pode ter escapado'
 - name: skymap2d
   adapter: aigamekit_shared.worker_serve_adapter_base
   vram_mib: 5440

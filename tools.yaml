@@ -26,7 +26,7 @@ tools:
     folder: Text2D
     cli_name: text2d
     python_module: text2d
-    description: "CLI text-to-image com FLUX.2 Klein (SDNQ); ícones de UI via --category icon --transparent"
+    description: "CLI text-to-image com FLUX.3 Image Klein (SDNQ); ícones via --category icon --transparent; referências/silhuetas para consistência 2D"
     min_python: [3, 13]
     extra_aliases: [text2d-generate]
     needs_pytorch: true

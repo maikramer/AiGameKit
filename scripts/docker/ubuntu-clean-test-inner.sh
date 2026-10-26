@@ -310,7 +310,7 @@ if [ "${TEST_INFERENCE:-1}" = "1" ]; then
   has_tool texture2d && ums_clean && run_infer texture2d "$INF_DIR/texture.png" strict \
     texture2d generate "textura seamless de pedra cinzenta" -o "$INF_DIR/texture.png" -W 512 -H 512 --seed 42
 
-  # Ícones: modo icon do text2d (512², 2 steps). Sem --transparent para não
+  # Ícones: modo icon do text2d (512², 4 steps). Sem --transparent para não
   # descarregar o U2Net do rembg no teste limpo.
   has_tool text2d && ums_clean && run_infer text2d "$INF_DIR/icon.png" strict \
     text2d generate "espada de fantasia" --category icon -o "$INF_DIR/icon.png" --seed 42
@@ -326,8 +326,11 @@ if [ "${TEST_INFERENCE:-1}" = "1" ]; then
   has_tool skymap2d && ums_clean && run_infer skymap2d "$INF_DIR/sky.png" tolerate \
     skymap2d generate "céu limpo ao entardecer com nuvens" -o "$INF_DIR/sky.png" -W 1024 -H 512 --seed 42
 
-  has_tool text2d && ums_clean && run_infer text2d "$INF_DIR/ref.png" strict \
-    text2d generate "uma rocha de granito" --model "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic" -o "$INF_DIR/ref.png" -W 512 -H 512 --seed 42
+  # Ref para a cadeia 3D: modelo default (FLUX.3 Klein é gated — o smoke test
+  # limpo pode não ter HF_TOKEN/licença aceite → tolerate; a cadeia 3D só corre
+  # se o ficheiro existir, mas o Text3D também gera a sua própria referência).
+  has_tool text2d && ums_clean && run_infer text2d "$INF_DIR/ref.png" tolerate \
+    text2d generate "uma rocha de granito" -o "$INF_DIR/ref.png" -W 512 -H 512 --seed 42
 
   # --- cadeia 3D: text3d → paint3d → rigging3d → animator3d ----------------
   if has_tool text3d; then

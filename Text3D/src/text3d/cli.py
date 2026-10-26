@@ -3498,7 +3498,7 @@ def models():
 
     table.add_row(
         "Text2D",
-        "FLUX.2 Klein (SDNQ) — texto → imagem",
+        "FLUX.3 Image Klein (SDNQ) — texto → imagem",
         "Pacote text2d no monorepo",
     )
     table.add_row(

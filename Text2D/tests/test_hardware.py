@@ -6,7 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from text2d.cli import cli
-from text2d.generator import HIGH_VRAM_MODEL_ID, LOW_VRAM_MODEL_ID
+from text2d.generator import DEFAULT_MODEL_ID, LOW_VRAM_MODEL_ID
 from text2d.hardware import (
     ALLOC_CONF_DEFAULT,
     ALLOC_CONF_GROUP_OFFLOAD,
@@ -31,19 +31,19 @@ def test_no_gpu_cpu_profile() -> None:
     assert p.quant_preset == "none"
 
 
-def test_rtx4050_6gb_4b_int4_group_stream() -> None:
-    """6GB (validado no hardware): 4B int4 + group offload com streams."""
+def test_rtx4050_6gb_int4_group_stream() -> None:
+    """6GB (validado no hardware): FLUX.3 int4 + group offload com streams."""
     p = profile_from_specs([(0, _gib(6))])
     assert p.device == "cuda"
-    assert p.model_id == LOW_VRAM_MODEL_ID
+    assert p.model_id == DEFAULT_MODEL_ID
     assert p.quant_preset == "sdnq-int4"
     assert p.offload_mode == "group_stream"
     assert p.memory_efficient is True
     assert p.gpu_ids is None
 
 
-def test_single_8gb_4b_int4_group_stream_no_full_gpu() -> None:
-    """8GB: int4 full-GPU ficaria a 83% do orçamento (sem folga) → GO+streams."""
+def test_single_8gb_int4_group_stream_no_full_gpu() -> None:
+    """8GB: int4 full-GPU ficaria sem folga (gate 0.70) → GO+streams."""
     p = profile_from_specs([(0, _gib(8))])
     assert p.model_id == LOW_VRAM_MODEL_ID
     assert p.quant_preset == "sdnq-int4"
@@ -51,29 +51,29 @@ def test_single_8gb_4b_int4_group_stream_no_full_gpu() -> None:
     assert p.memory_efficient is True
 
 
-def test_single_12gb_gets_9b_int4_group_stream() -> None:
-    """12GB: 9B int4 full ficaria a 91% do orçamento → GO+streams (folga real)."""
+def test_single_12gb_int4_group_stream() -> None:
+    """12GB: int4 full fica no limite do gate 0.70 → GO+streams (folga real)."""
     p = profile_from_specs([(0, _gib(12))])
-    assert p.model_id == HIGH_VRAM_MODEL_ID
+    assert p.model_id == DEFAULT_MODEL_ID
     assert p.quant_preset == "sdnq-int4"
     assert p.offload_mode == "group_stream"
     assert p.memory_efficient is True
     assert p.gpu_ids is None
 
 
-def test_single_16gb_9b_int4_full_gpu_with_headroom() -> None:
-    """16GB: 9B int4 full-GPU fica a ~68% do orçamento — folga suficiente."""
+def test_single_16gb_int4_full_gpu_with_headroom() -> None:
+    """16GB: FLUX.3 int4 full-GPU cabe com folga no gate 0.70."""
     p = profile_from_specs([(0, _gib(16))])
-    assert p.model_id == HIGH_VRAM_MODEL_ID
+    assert p.model_id == DEFAULT_MODEL_ID
     assert p.quant_preset == "sdnq-int4"
     assert p.offload_mode == "none"
     assert p.memory_efficient is False
 
 
-def test_dual_rtx3060_gets_9b_multigpu() -> None:
-    """Hardware de referência: 2x RTX 3060 12GB → split 9B."""
+def test_dual_rtx3060_multigpu() -> None:
+    """Hardware de referência: 2x RTX 3060 12GB → split multi-GPU."""
     p = profile_from_specs([(0, _gib(12)), (1, _gib(12))])
-    assert p.model_id == HIGH_VRAM_MODEL_ID
+    assert p.model_id == DEFAULT_MODEL_ID
     assert p.memory_efficient is False
     assert p.gpu_ids == [0, 1]
     assert p.total_vram_gib == 24.0
@@ -95,13 +95,18 @@ def test_3gb_descends_to_int2_group_stream() -> None:
 
 
 def test_group_offload_kill_switch_back_to_classic(monkeypatch) -> None:
-    """TEXT2D_GROUP_OFFLOAD=0 desliga o GO: 8GB volta a full-GPU int4 clássico."""
+    """TEXT2D_GROUP_OFFLOAD=0 desliga o GO: 16GB volta a full-GPU int4 clássico."""
     monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
     monkeypatch.setenv("TEXT2D_GROUP_OFFLOAD", "0")
-    p = profile_from_specs([(0, _gib(8))])
+    p = profile_from_specs([(0, _gib(16))])
     assert p.offload_mode == "none"
     assert p.memory_efficient is False
     assert group_offload_will_engage() is False
+
+    # 8 GB sem GO: o modelo já não cabe full-GPU (int4 ~5.9 GiB + ativação) →
+    # cai para model_cpu, nunca para group_stream.
+    p8 = profile_from_specs([(0, _gib(8))])
+    assert p8.offload_mode != "group_stream"
 
 
 def test_alloc_conf_by_mode(monkeypatch) -> None:
@@ -128,7 +133,7 @@ def test_group_offload_will_engage_pure(monkeypatch) -> None:
 
     class _P:
         device = "cuda"
-        model_id = hw.LOW_VRAM_MODEL_ID
+        model_id = hw.DEFAULT_MODEL_ID
 
     def _fake_will_engage(self, allow=True, gpu_specs=None):
         calls.append("asked")
@@ -142,7 +147,7 @@ def test_group_offload_will_engage_pure(monkeypatch) -> None:
     # CPU → nem pergunta à POLICY.
     class _Cpu:
         device = "cpu"
-        model_id = hw.LOW_VRAM_MODEL_ID
+        model_id = hw.DEFAULT_MODEL_ID
 
     monkeypatch.setattr(hw, "detect_hardware_profile", lambda: _Cpu())
     assert group_offload_will_engage() is False

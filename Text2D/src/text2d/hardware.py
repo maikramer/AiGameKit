@@ -1,13 +1,14 @@
 """
-Detecção automática de hardware → perfil de inferência FLUX.2 Klein.
+Detecção automática de hardware → perfil de inferência FLUX.3 Image Klein.
 
 Soft resolution no CLI: só preenche o que o utilizador não definiu (flags
 explícitas, ``-m``/``TEXT2D_MODEL_ID``, ``--cpu`` ganham).
 Desligável com ``--no-hw-auto`` ou ``TEXT2D_HW_AUTO=0``.
 
-Perfis para os hardwares de referência:
-- 2x RTX 3060 12GB → 9B SDNQ, split multi-GPU (transformer+vae / text_encoder).
-- RTX 4050 6GB → 4B SDNQ int4 + group offload com streams (pico ≈ ativação).
+Desde a migração FLUX.3 há **um só modelo** (transformer 5.6B + Qwen3-VL 4B):
+o hw-auto já não escolhe checkpoint — decide só quantização (SDNQ runtime por
+VRAM) e modo de colocação (group offload + streams vs full-GPU / split
+multi-GPU).
 """
 
 from __future__ import annotations
@@ -25,10 +26,9 @@ from aigamekit_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 from aigamekit_shared.lowvram import OFFLOAD_GROUP_STREAM, OFFLOAD_NONE, plan_offload
 
 from .generator import (
+    DEFAULT_MODEL_ID,
     FULL_GPU_BUDGET_FRACTION,
     GROUP_OFFLOAD_ENV,
-    HIGH_VRAM_MODEL_ID,
-    LOW_VRAM_MODEL_ID,
     model_footprint,
 )
 
@@ -36,9 +36,9 @@ HW_AUTO_ENV = "TEXT2D_HW_AUTO"
 
 # ---------------------------------------------------------------------------
 # needed_mib do fallback in-process quando GO+streams vai correr (calibrado
-# na RTX 4050 6 GB, 2026-09-11): 1024² pico ~5.5 GiB (chunks de ativação usam
-# a VRAM livre pós-offload); 512² ~2.6 GiB. O alloc conf por modo vive no
-# Shared (aigamekit_shared.group_offload).
+# na RTX 4050 6 GB com FLUX.2; FLUX.3 Klein tem pesos menores mas o ladder de
+# ativação é semelhante — recalibrar na fase E2E): 1024² pico ~5.5 GiB; 512²
+# ~2.6 GiB. O alloc conf por modo vive no Shared (aigamekit_shared.group_offload).
 # ---------------------------------------------------------------------------
 GROUP_OFFLOAD_NEEDED_MIB = 5400
 GROUP_OFFLOAD_NEEDED_MIB_SMALL = 3000  # lados ≤ 640 px (quality fast/low)
@@ -56,22 +56,15 @@ def hw_auto_enabled() -> bool:
     return _hw_auto_enabled(HW_AUTO_ENV)
 
 
-def _model_id_for_largest(largest_gib: float) -> str:
-    """Modelo BASE pela VRAM da maior GPU (mesma regra do perfil hw)."""
-    return HIGH_VRAM_MODEL_ID if largest_gib >= 10.0 else LOW_VRAM_MODEL_ID
-
-
 def _footprint_for(specs: list) -> Any:
-    """Footprint dinâmico (4B/9B pela VRAM) para o policy de group offload."""
-    from aigamekit_shared.lowvram import GIB
-
-    largest_gib = max((s[-1] for s in specs), default=0) / GIB
-    return model_footprint(_model_id_for_largest(largest_gib))
+    """Footprint único do FLUX.3 Klein (a assinatura specs mantém-se na POLICY)."""
+    return model_footprint(DEFAULT_MODEL_ID)
 
 
 # Política GO da tool — gate (specs livres, fraction 0.70), alloc conf por modo
 # e needed_mib num só objeto (aigamekit_shared.group_offload.ToolOffloadPolicy).
 POLICY = ToolOffloadPolicy(
+    footprint_key="flux3-klein",
     footprint_fn=_footprint_for,
     tool_env_var=GROUP_OFFLOAD_ENV,
     full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION,
@@ -85,14 +78,13 @@ def group_offload_intent(allow: bool = True) -> bool:
 
 @dataclass(frozen=True)
 class Text2DHardwareProfile(HardwareProfileBase):
-    model_id: str  # modelo BASE sugerido (não sobrepõe -m / TEXT2D_MODEL_ID)
+    model_id: str  # modelo BASE (constante; override real é -m / TEXT2D_MODEL_ID)
     memory_efficient: bool  # True = offload na colocação
     quant_preset: str  # preset SDNQ runtime ("none" | "sdnq-uint8" | ... ) por VRAM
     offload_mode: str = OFFLOAD_NONE  # modo do plano ("none" | "group_stream" | ...)
 
     def summary(self) -> str:
-        model_tag = "9B" if self.model_id == HIGH_VRAM_MODEL_ID else "4B"
-        parts = [self.name, f"base={model_tag}"]
+        parts = [self.name, "base=flux3-klein"]
         if self.quant_preset != "none":
             parts.append(f"quant={self.quant_preset}")
         if self.offload_mode == OFFLOAD_GROUP_STREAM:
@@ -115,14 +107,14 @@ def _plan_kwargs() -> dict:
 def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2DHardwareProfile:
     """Resolve perfil a partir de specs (índice, bytes VRAM). Puro — testável sem GPU.
 
-    Escolhe o modelo BASE por VRAM (9B >=10GB senão 4B) e delega quantização (runtime
-    SDNQ) + offload ao planner partilhado — o checkpoint deixou de ser pré-quantizado.
+    Modelo único FLUX.3 Klein; delega quantização (runtime SDNQ) + offload ao
+    planner partilhado. Multi-GPU (>=2 GPUs, total >=16 GiB) → split acelerate.
     """
     if not gpus:
         return Text2DHardwareProfile(
             name="cpu",
             device="cpu",
-            model_id=LOW_VRAM_MODEL_ID,
+            model_id=DEFAULT_MODEL_ID,
             memory_efficient=True,
             gpu_ids=None,
             total_vram_gib=0.0,
@@ -135,12 +127,12 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2DHardwareProfile:
     name = f"cuda-{len(gpus)}x{largest_gib:.0f}g"
 
     if multi and total_gib >= 16.0:
-        # Split multi-GPU: pesos do 9B base divididos; quant decidido pelo planner.
-        plan = plan_offload(gpus, model_footprint(HIGH_VRAM_MODEL_ID), **_plan_kwargs())
+        # Split multi-GPU: pesos divididos; quant decidido pelo planner.
+        plan = plan_offload(gpus, model_footprint(DEFAULT_MODEL_ID), **_plan_kwargs())
         return Text2DHardwareProfile(
             name=name,
             device="cuda",
-            model_id=HIGH_VRAM_MODEL_ID,
+            model_id=DEFAULT_MODEL_ID,
             memory_efficient=plan.memory_efficient,
             gpu_ids=[idx for idx, _ in gpus],
             total_vram_gib=round(total_gib, 1),
@@ -149,12 +141,11 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2DHardwareProfile:
         )
 
     primary = max(gpus, key=lambda t: t[1])
-    model_id = HIGH_VRAM_MODEL_ID if largest_gib >= 10.0 else LOW_VRAM_MODEL_ID
-    plan = plan_offload([primary], model_footprint(model_id), allow_multi_gpu=False, **_plan_kwargs())
+    plan = plan_offload([primary], model_footprint(DEFAULT_MODEL_ID), allow_multi_gpu=False, **_plan_kwargs())
     return Text2DHardwareProfile(
         name=name,
         device="cuda",
-        model_id=model_id,
+        model_id=DEFAULT_MODEL_ID,
         memory_efficient=plan.memory_efficient,
         gpu_ids=None,
         total_vram_gib=round(total_gib, 1),
@@ -172,7 +163,7 @@ def group_offload_will_engage() -> bool:
     """Réplica pura do gate: o plano para o hardware ATUAL engaja group offload?
 
     Usa **specs com VRAM livre** (o mesmo sinal do placement real) e o footprint
-    do modelo que o hw-auto escolheria (4B/9B) — ver ``POLICY``.
+    do FLUX.3 Klein — ver ``POLICY``.
     """
     hwp = detect_hardware_profile()
     if hwp.device != "cuda":

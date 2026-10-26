@@ -24,7 +24,7 @@ def setup_rich_click(
         from aigamekit_shared.cli_rich import setup_rich_click
 
         RICH_CLICK = setup_rich_click(
-            header="[bold cyan]Text2D[/bold cyan] — FLUX.2 Klein",
+            header="[bold cyan]Text2D[/bold cyan] — FLUX.3 Image Klein",
             footer="[dim]Docs: README[/dim]",
             tool="text2d",
         )

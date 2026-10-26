@@ -301,14 +301,15 @@ class TestAdapterTransparent:
 
 
 class TestQualityCategoryIcon:
-    def test_icon_category_resolves_512_2(self) -> None:
+    def test_icon_category_resolves_512_4(self) -> None:
         from aigamekit_shared.quality import QualityEngine
 
         params = QualityEngine().resolve("text2d", quality="medium", category="icon").params
         assert params["width"] == 512
         assert params["height"] == 512
-        assert params["steps"] == 2
-        assert params["guidance"] == 1.0
+        # FLUX.3 Klein: faixa treinada 4-16 steps (o antigo 2-step não existe).
+        assert params["steps"] == 4
+        assert "guidance" not in params
 
     def test_icon_category_beats_tier(self) -> None:
         """A categoria `icon` ganha aos tiers (ex.: highest não sobe steps)."""
@@ -316,7 +317,7 @@ class TestQualityCategoryIcon:
 
         params = QualityEngine().resolve("text2d", quality="highest", category="icon").params
         assert params["width"] == 512
-        assert params["steps"] == 2
+        assert params["steps"] == 4
 
 
 # --- CLI: --category / --transparent ---
@@ -399,15 +400,15 @@ class TestCliCategoryTransparent:
         assert "category" not in captured["payload"]
         assert "transparent" not in captured["payload"]
 
-    def test_category_icon_resolves_512x512_2_steps(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """Categoria icon viaja no payload com 512²/2 passos (dados do Shared)."""
+    def test_category_icon_resolves_512x512_4_steps(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Categoria icon viaja no payload com 512²/4 passos (dados do Shared)."""
         result, captured = self._invoke_delegate_capture(
             monkeypatch, ["espada", "--category", "icon", "-o", str(tmp_path / "icon.png")]
         )
         assert result.exit_code == 0, result.output
         assert captured["payload"]["width"] == 512
         assert captured["payload"]["height"] == 512
-        assert captured["payload"]["steps"] == 2
+        assert captured["payload"]["steps"] == 4
         assert "512x512" in result.output
 
     def test_generate_help_lists_new_flags(self) -> None:

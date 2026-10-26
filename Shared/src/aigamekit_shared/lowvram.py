@@ -123,6 +123,13 @@ class ModelFootprint:
 # (Antes 7.4 GiB — o peak recusava o skymap2d em GPUs ~6 GB apesar do modelo
 # SDNQ uint4 real caber. Calibrado do checkpoint Disty0/FLUX.1-dev-SDNQ-uint4.)
 FOOTPRINTS: dict[str, ModelFootprint] = {
+    # FLUX.3 Image Klein (Text2D): transformer 5.6B + text encoder Qwen3-VL 4B +
+    # VAE Flux2 ≈ 9.7B (~18.5 GiB fp16); maior módulo = transformer (~11.2 GiB).
+    # Activación = reserva do planner GO (pico real medido anda ~5 GiB a 1024²,
+    # como no FLUX.2) — 2.0 evita mandar 6 GB para int2 sem necessidade.
+    # Estimativa do model card — recalibrar com `vramd calibrate text2d`.
+    "flux3-klein": ModelFootprint(18.5, 2.0, 11.2, architecture="flux"),
+    # FLUX.2 Klein (histórico — Text2D migrou para FLUX.3; mantido para perfstore).
     "flux-klein-4b": ModelFootprint(14.0, 1.5, 5.0, architecture="flux"),
     "flux-klein-9b": ModelFootprint(26.0, 1.5, 9.0, architecture="flux"),
     "flux-dev-uint4": ModelFootprint(2.2, 2.0, 3.0, architecture="flux"),

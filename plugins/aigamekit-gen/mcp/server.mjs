@@ -59,7 +59,7 @@ const TOOLS = [
   {
     name: "text2d_generate",
     description:
-      "Gera uma imagem a partir de texto (FLUX Klein SDNQ). Defaults da tool seguem o CLI: 1024², 4 steps, guidance 1.0. " + GPU_NOTE,
+      "Gera uma imagem a partir de texto (FLUX.3 Image Klein SDNQ; refs via --ref, silhueta via --ref-silhouette). Defaults da tool seguem o CLI: 16 steps (4-16), sem guidance. " + GPU_NOTE,
     bin: "text2d",
     timeout: 900,
     inputSchema: {
@@ -72,7 +72,7 @@ const TOOLS = [
         steps: { type: "integer" },
         seed: { type: "integer" },
         quality: { type: "string", enum: ["fast", "low", "medium", "high", "highest"] },
-        category: { type: "string", enum: ["icon"], description: "Modo ícone: 512², 2 steps" },
+        category: { type: "string", enum: ["icon"], description: "Modo ícone: 512², 4 steps" },
         transparent: { type: "boolean", description: "Remover fundo (rembg; exige .png)" },
       },
       required: ["prompt", "output"],

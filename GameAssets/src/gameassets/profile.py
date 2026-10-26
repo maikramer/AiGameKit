@@ -285,7 +285,7 @@ class GameProfile:
     path_layout: str = "split"
     seed_base: int | None = None
     image_ext: str = "png"
-    # text2d: FLUX Klein (Text2D) · texture2d: texturas seamless (Texture2D) · skymap2d: skymaps 360° (Skymap2D)
+    # text2d: FLUX.3 Image Klein (Text2D) · texture2d: texturas seamless (Texture2D) · skymap2d: skymaps 360° (Skymap2D)
     image_source: str = "text2d"
     text2d: Text2DProfile | None = None
     texture2d: Texture2DProfile | None = None

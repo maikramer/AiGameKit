@@ -218,12 +218,13 @@ class TestResolvePaint3D:
 
 class TestResolveText2D:
     def test_resolve_text2d(self, engine: QualityEngine) -> None:
-        """Text2D resolution from quality profile."""
+        """Text2D resolution from quality profile (FLUX.3 Klein, 4-16 steps)."""
         r = engine.resolve("text2d", quality="medium")
         assert r.params["width"] == 1024
         assert r.params["height"] == 1024
-        assert r.params["steps"] == 4
-        assert r.params["guidance"] == 1.0
+        assert r.params["steps"] == 12
+        # Distilled sem CFG: guidance não é exposto nos tiers.
+        assert "guidance" not in r.params
 
     def test_resolve_text2d_fast(self, engine: QualityEngine) -> None:
         """Fast quality uses smaller resolution."""
@@ -232,24 +233,24 @@ class TestResolveText2D:
         assert r.params["height"] == 512
 
     @pytest.mark.parametrize(
-        "quality,width,height,steps,guidance",
+        "quality,width,height,steps",
         [
-            ("fast", 512, 512, 4, 1.0),
-            ("low", 768, 768, 4, 1.0),
-            ("medium", 1024, 1024, 4, 1.0),
-            ("high", 1024, 1024, 8, 1.0),
-            ("highest", 1024, 1024, 12, 1.5),
+            ("fast", 512, 512, 4),
+            ("low", 768, 768, 8),
+            ("medium", 1024, 1024, 12),
+            ("high", 1024, 1024, 16),
+            ("highest", 1536, 1536, 16),
         ],
     )
     def test_resolve_text2d_tiers_without_category(
-        self, engine: QualityEngine, quality: str, width: int, height: int, steps: int, guidance: float
+        self, engine: QualityEngine, quality: str, width: int, height: int, steps: int
     ) -> None:
         """Sem categoria, cada tier mantém os valores do profile."""
         r = engine.resolve("text2d", quality=quality)
         assert r.params["width"] == width
         assert r.params["height"] == height
         assert r.params["steps"] == steps
-        assert r.params["guidance"] == guidance
+        assert "guidance" not in r.params
         assert r.source == "quality_profile"
 
 
@@ -258,12 +259,11 @@ class TestResolveText2DIconCategory:
 
     @pytest.mark.parametrize("quality", ["fast", "low", "medium", "high", "highest"])
     def test_icon_overrides_win_on_every_tier(self, engine: QualityEngine, quality: str) -> None:
-        """Icon 512x512 / steps 2 / guidance 1.0 independentemente do tier."""
+        """Icon 512x512 / steps 4 independentemente do tier."""
         r = engine.resolve("text2d", quality=quality, category="icon")
         assert r.params["width"] == 512
         assert r.params["height"] == 512
-        assert r.params["steps"] == 2
-        assert r.params["guidance"] == 1.0
+        assert r.params["steps"] == 4
         assert r.source == "category"
         assert r.category == "icon"
 
@@ -271,7 +271,7 @@ class TestResolveText2DIconCategory:
         """A categoria icon existe e expõe os overrides text2d."""
         info = engine.category_info("icon")
         assert info["label"] == "Icon"
-        assert info["text2d"] == {"width": 512, "height": 512, "steps": 2, "guidance": 1.0}
+        assert info["text2d"] == {"width": 512, "height": 512, "steps": 4}
 
     def test_icon_explicit_override_wins(self, engine: QualityEngine) -> None:
         """Overrides explícitos ganham à categoria icon."""

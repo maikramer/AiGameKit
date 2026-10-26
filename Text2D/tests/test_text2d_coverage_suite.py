@@ -34,12 +34,13 @@ def test_vramd_payload_default_width_height() -> None:
     assert req["height"] == 1024
 
 
-def test_vramd_payload_default_steps_guidance() -> None:
+def test_vramd_payload_default_steps_no_guidance() -> None:
     from text2d.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="p", output="o.png")
-    assert req["steps"] == 4
-    assert req["guidance"] == 1.0
+    assert req["steps"] == 16
+    # FLUX.3 Klein é guidance-distilled: guidance omitido por defeito.
+    assert "guidance" not in req
 
 
 def test_vramd_payload_seed_none_by_default() -> None:
@@ -66,7 +67,7 @@ def test_vramd_payload_model_id_omitted_when_none() -> None:
 def test_vramd_payload_model_id_set() -> None:
     from text2d.vramd_payload import build_generate_request
 
-    mid = "black-forest-labs/FLUX.2-klein-4B"
+    mid = "black-forest-labs/flux-3-image-klein"
     req = build_generate_request(prompt="p", output="o.png", model_id=mid)
     assert req["model_id"] == mid
 
@@ -206,8 +207,8 @@ def test_vramd_payload_extra_merged() -> None:
 def test_vramd_payload_footprint_key() -> None:
     from text2d.vramd_payload import build_generate_request
 
-    req = build_generate_request(prompt="p", output="o.png", footprint_key="flux-klein-4b")
-    assert req["footprint_key"] == "flux-klein-4b"
+    req = build_generate_request(prompt="p", output="o.png", footprint_key="flux3-klein")
+    assert req["footprint_key"] == "flux3-klein"
 
 
 def test_vramd_payload_coerces_numeric_types() -> None:
@@ -333,11 +334,11 @@ def test_profile_cpu_empty_gpus_name() -> None:
     assert p.total_vram_gib == 0.0
 
 
-def test_profile_cpu_summary_tag_4b() -> None:
+def test_profile_cpu_summary_tag_flux3() -> None:
     from text2d.hardware import profile_from_specs
 
     p = profile_from_specs([])
-    assert "base=4B" in p.summary()
+    assert "base=flux3-klein" in p.summary()
 
 
 def test_profile_6gb_cuda_name_pattern() -> None:
@@ -348,13 +349,13 @@ def test_profile_6gb_cuda_name_pattern() -> None:
     assert "6" in p.name
 
 
-def test_profile_12gb_single_9b_summary() -> None:
-    from text2d.generator import HIGH_VRAM_MODEL_ID
+def test_profile_12gb_single_summary() -> None:
+    from text2d.generator import DEFAULT_MODEL_ID
     from text2d.hardware import profile_from_specs
 
     p = profile_from_specs([(0, _gib(12))])
-    assert p.model_id == HIGH_VRAM_MODEL_ID
-    assert "base=9B" in p.summary()
+    assert p.model_id == DEFAULT_MODEL_ID
+    assert "base=flux3-klein" in p.summary()
 
 
 def test_profile_12gb_single_no_cpu_offload_in_summary() -> None:
@@ -387,15 +388,15 @@ def test_profile_dual_12gb_total_vram_24() -> None:
     assert p.total_vram_gib == 24.0
 
 
-def test_profile_10gb_threshold_9b() -> None:
-    from text2d.generator import HIGH_VRAM_MODEL_ID
+def test_profile_10gb_single_model() -> None:
+    from text2d.generator import DEFAULT_MODEL_ID
     from text2d.hardware import profile_from_specs
 
     p = profile_from_specs([(0, _gib(10))])
-    assert p.model_id == HIGH_VRAM_MODEL_ID
+    assert p.model_id == DEFAULT_MODEL_ID
 
 
-def test_profile_9gb_stays_4b() -> None:
+def test_profile_9gb_single_model() -> None:
     from text2d.generator import LOW_VRAM_MODEL_ID
     from text2d.hardware import profile_from_specs
 
@@ -403,7 +404,7 @@ def test_profile_9gb_stays_4b() -> None:
     assert p.model_id == LOW_VRAM_MODEL_ID
 
 
-def test_profile_dual_6gb_not_multigpu_9b_split() -> None:
+def test_profile_dual_6gb_not_multigpu_split() -> None:
     from text2d.hardware import profile_from_specs
 
     p = profile_from_specs([(0, _gib(6)), (1, _gib(6))])

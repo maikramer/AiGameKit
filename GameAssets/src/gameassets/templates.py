@@ -28,7 +28,7 @@ image_ext: png
 # Opcional: seed base para reprodutibilidade (inteiro)
 # seed_base: 42
 
-# Fonte de imagens 2D: text2d (defeito, FLUX Klein) ou texture2d (texturas seamless HF).
+# Fonte de imagens 2D: text2d (defeito, FLUX.3 Image Klein) ou texture2d (texturas seamless HF).
 # image_source: text2d
 
 # Hardware: cada sub-tool auto-detecta a VRAM (hw-auto) — offload/SDNQ/multi-GPU

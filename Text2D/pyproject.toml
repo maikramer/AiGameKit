@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "text2d"
 version = "0.1.0"
-description = "CLI Text-to-2D com FLUX.2 Klein 4B (SDNQ) para GPUs modestas"
+description = "CLI Text-to-2D com FLUX.3 Image Klein (SDNQ) para GPUs modestas"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 license = "MIT"
@@ -13,10 +13,10 @@ authors = [{ name = "Text2D Project" }]
 dependencies = [
     "torch>=2.13.0",
     "torchvision>=0.28.0",
-    "diffusers>=0.37.0",
+    "diffusers>=0.42.0",
     "transformers>=5.14.0",
     "accelerate>=0.24.0",
-    "huggingface-hub>=1.5.0,<2",
+    "huggingface-hub>=1.32.0,<2",
     "safetensors>=0.4.0",
     "sdnq>=0.2.1",
     "numpy>=1.24.0",

@@ -50,7 +50,7 @@ def ensure_dirs() -> None:
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
 @click.pass_context
 def cli(ctx: click.Context, verbose: bool) -> None:
-    """Text2D — imagens a partir de texto (FLUX.2 Klein 4B SDNQ)."""
+    """Text2D — imagens a partir de texto (FLUX.3 Image Klein SDNQ)."""
     ctx.ensure_object(dict)
     ctx.obj["VERBOSE"] = verbose
     # Não criar outputs/ aqui: só quando a saída for a pasta por defeito (generate sem -o).
@@ -90,16 +90,28 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @cli.command("generate")
 @click.argument("prompt")
 @click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída (.png ou .jpg)")
-@click.option("--width", "-W", default=1024, show_default=True, type=int)
-@click.option("--height", "-H", default=1024, show_default=True, type=int)
-@click.option("--steps", "-s", default=4, show_default=True, help="Passos de inferência")
+@click.option(
+    "--width",
+    "-W",
+    default=None,
+    type=int,
+    help="Largura (múltiplo de 16 recomendado). Default: 1024, ou o tamanho da 1.ª referência com --ref.",
+)
+@click.option(
+    "--height",
+    "-H",
+    default=None,
+    type=int,
+    help="Altura. Default: 1024, ou o tamanho da 1.ª referência com --ref.",
+)
+@click.option("--steps", "-s", default=16, show_default=True, help="Passos de inferência (faixa treinada: 4-16)")
 @click.option(
     "--guidance",
     "-g",
     "guidance_scale",
-    default=1.0,
-    show_default=True,
-    help="Guidance (recomendado 1.0 para checkpoint SDNQ)",
+    default=None,
+    type=float,
+    help="[Ignorado] FLUX.3 Klein é guidance-distilled (sem CFG); mantido por compatibilidade.",
 )
 @click.option("--seed", type=int, default=None, help="Seed para reprodutibilidade")
 @click.option("--cpu", is_flag=True, help="Forçar CPU")
@@ -108,7 +120,57 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "-m",
     "model_id",
     default=None,
-    help="ID Hugging Face (default: 9B SDNQ, 4B via hw-auto (GPU apertada), ou TEXT2D_MODEL_ID)",
+    help="ID Hugging Face (default: black-forest-labs/flux-3-image-klein, ou TEXT2D_MODEL_ID)",
+)
+@click.option(
+    "--ref",
+    "-r",
+    "refs",
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help=(
+        "Imagem de referência (edit/composição; até 10). No prompt, cite-as como "
+        "'a primeira imagem', 'a segunda imagem'... Geração sai no tamanho da 1.ª "
+        "referência salvo -W/-H explícitos."
+    ),
+)
+@click.option(
+    "--boxes",
+    "boxes_arg",
+    default=None,
+    help=(
+        "Layout por boxes: JSON inline ou path para ficheiro JSON. Cada box: "
+        "{id, desc, bbox:[y0,x0,y1,x1] 0-1} (+ from/src_bbox/tgt_bbox para edits)."
+    ),
+)
+@click.option(
+    "--ref-silhouette",
+    "ref_silhouette",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help=(
+        "Açúcar: extrai a silhueta (rembg) da imagem e usa-a como referência — "
+        "consistência de forma entre poses (animação 2D)."
+    ),
+)
+@click.option(
+    "--num-images",
+    "-n",
+    default=1,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Imagens por pedido (sufixos _1, _2... no output).",
+)
+@click.option(
+    "--upsample",
+    "upsample",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help=(
+        "Prompt upsampler 9B (flux-3-image-klein-pup): expande o prompt curto numa "
+        "caption completa (recomendado pela BFL; +pesos e +10-20 s por imagem)."
+    ),
 )
 @click.option(
     "--verbose",
@@ -139,7 +201,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--category",
     type=click.Choice(["icon"]),
     default=None,
-    help="Categoria de asset (icon: 512², 2 passos, styling de ícone).",
+    help="Categoria de asset (icon: 512², 4 passos, styling de ícone).",
 )
 @click.option(
     "--transparent/--no-transparent",
@@ -199,13 +261,18 @@ def generate_cmd(
     ctx: click.Context,
     prompt: str,
     output: str | None,
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
     steps: int,
-    guidance_scale: float,
+    guidance_scale: float | None,
     seed: int | None,
     cpu: bool,
     model_id: str | None,
+    refs: tuple[str, ...],
+    boxes_arg: str | None,
+    ref_silhouette: str | None,
+    num_images: int,
+    upsample: bool,
     verbose_flag: bool,
     profile: bool,
     gpu_ids_str: str | None,
@@ -222,7 +289,9 @@ def generate_cmd(
     no_vramd: bool,
     vramd_stream: bool,
 ) -> None:
-    """Gera uma imagem a partir do PROMPT."""
+    """Gera uma imagem a partir do PROMPT (com --ref vira edit/composição)."""
+    import tempfile
+
     from aigamekit_shared.gpu import warn_if_vram_occupied
     from aigamekit_shared.profiler import ProfilerSession
     from aigamekit_shared.profiler.env import env_profile_log_path
@@ -255,6 +324,34 @@ def generate_cmd(
     if not _user_set_guidance and "guidance" in _qresolved.params:
         guidance_scale = _qresolved.params["guidance"]
 
+    # Referências: paths validados pelo click; silhueta é extraída ANTES da
+    # delegação (o worker vramd lê o path do ficheiro temporário).
+    ref_paths: list[str] = list(refs)
+    _sil_tmpdir: str | None = None
+    if ref_silhouette:
+        from .silhouette import extract_silhouette_file
+
+        _sil_tmpdir = tempfile.mkdtemp(prefix="text2d-sil-")
+        sil_path = extract_silhouette_file(ref_silhouette, Path(_sil_tmpdir) / "silhouette.png")
+        ref_paths.append(str(sil_path))
+        console.print(f"[dim]Silhueta extraída de {ref_silhouette} → {sil_path}[/dim]")
+    if len(ref_paths) > 10:
+        raise click.ClickException(f"Máximo de 10 imagens de referência (recebidas {len(ref_paths)})")
+
+    # Boxes: JSON inline ou ficheiro (valida schema antes de qualquer GPU).
+    from .boxes import parse_boxes
+
+    try:
+        box_list = parse_boxes(boxes_arg, num_refs=len(ref_paths))
+    except (ValueError, FileNotFoundError, json.JSONDecodeError) as e:
+        raise click.ClickException(f"--boxes inválido: {e}") from e
+
+    # Com referências e sem W/H explícitos: o tamanho sai da 1.ª referência
+    # (comportamento do modelo) — não sobrepor o default do tier de qualidade.
+    if ref_paths and not (_user_set_width or _user_set_height):
+        width = None
+        height = None
+
     # Validar saída transparente ANTES de qualquer trabalho de GPU (a imagem
     # RGBA final só pode ser gravada em PNG).
     if transparent and output is not None and Path(output).suffix.lower() != ".png":
@@ -283,7 +380,7 @@ def generate_cmd(
     mem_eff = mem_eff or cpu
     # Clamp por MÁXIMO (não só o exato 2048²) e só quando o utilizador não
     # fixou resolução — "Flags explícitas ganham" (mesmo guard dos siblings).
-    if mem_eff and not (_user_set_width or _user_set_height):
+    if mem_eff and not (_user_set_width or _user_set_height) and width is not None and height is not None:
         width = min(width, 1024)
         height = min(height, 1024)
     resolved_model = model_id or (hwp.model_id if hwp is not None else _model_id(memory_efficient=mem_eff))
@@ -292,12 +389,20 @@ def generate_cmd(
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
     if gpu_ids is None and hwp is not None and hwp.gpu_ids:
         gpu_ids = hwp.gpu_ids
-    console = Console()
     table = Table(show_header=False, box=box.SIMPLE)
     table.add_row("[bold]Prompt[/bold]", f"[cyan]{prompt}[/cyan]")
-    table.add_row("[bold]Resolução[/bold]", f"{width}x{height}")
+    if ref_paths:
+        table.add_row("[bold]Referências[/bold]", f"{len(ref_paths)} imagem(ns)")
+    if box_list:
+        table.add_row("[bold]Boxes[/bold]", f"{len(box_list)} elemento(s)")
+    table.add_row("[bold]Resolução[/bold]", f"{width}x{height}" if width and height else "auto")
     table.add_row("[bold]Passos[/bold]", str(steps))
-    table.add_row("[bold]Guidance[/bold]", str(guidance_scale))
+    if guidance_scale is not None:
+        table.add_row("[bold]Guidance[/bold]", f"{guidance_scale} [dim](ignorado: distilled)[/dim]")
+    if num_images > 1:
+        table.add_row("[bold]Imagens[/bold]", str(num_images))
+    if upsample:
+        table.add_row("[bold]Upsampler[/bold]", "prompt upsampler 9B (lento, +qualidade de prompt)")
     table.add_row("[bold]Modelo[/bold]", resolved_model)
     if hwp is not None:
         table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
@@ -319,10 +424,7 @@ def generate_cmd(
     vramd_payload: dict[str, Any] = {
         "prompt": prompt,
         "output": str(Path(output).resolve()),
-        "width": width,
-        "height": height,
         "steps": steps,
-        "guidance": guidance_scale,
         "seed": seed,
         "model_id": resolved_model,
         "torch_compile": torch_compile,
@@ -330,7 +432,21 @@ def generate_cmd(
         "channels_last": channels_last,
         "step_cache": step_cache,
         "allow_group_offload": group_offload,
+        "upsample": upsample,
     }
+    # W/H ausentes = auto (tamanho da 1.ª referência) — não enviar None.
+    if width is not None:
+        vramd_payload["width"] = width
+    if height is not None:
+        vramd_payload["height"] = height
+    if guidance_scale is not None:
+        vramd_payload["guidance"] = guidance_scale
+    if ref_paths:
+        vramd_payload["refs"] = ref_paths
+    if box_list:
+        vramd_payload["boxes"] = box_list
+    if num_images > 1:
+        vramd_payload["num_images"] = num_images
     # Categoria/transparente só viajam quando pedidos (contrato vramd).
     if category is not None:
         vramd_payload["category"] = category
@@ -365,7 +481,8 @@ def generate_cmd(
         if group_offload_will_engage():
             # GO+streams: pico ≈ ativação + trânsito de grupos — não exigir
             # pesos+ativação ao ensure_vram (recusava jobs que correm bem).
-            needed_mib = group_offload_needed_mib(width, height)
+            # W/H None (auto por referência) → estimar pelo lado 1024 (conservador).
+            needed_mib = group_offload_needed_mib(width or 1024, height or 1024)
         else:
             needed_mib = needed_mib_for_backend("text2d", quant_mode=_qmode, memory_efficient=mem_eff)
         prepare_gpu_exclusive(
@@ -401,13 +518,14 @@ def generate_cmd(
                 step_cache=step_cache,
                 channels_last=channels_last,
                 group_offload=group_offload,
+                upsample=upsample,
             )
 
             with (
                 prof.span("warmup"),
                 console.status(
                     "[bold yellow]1/2 — Download HF + carregamento de pesos "
-                    "(1ª vez: vários GB/minutos; GPU pode mostrar 0% até ao passo 3/3)",
+                    "(1ª vez: vários GB/minutos; GPU pode mostrar 0% até ao passo final)",
                     spinner="dots",
                 ),
             ):
@@ -436,25 +554,33 @@ def generate_cmd(
                     guidance_scale=guidance_scale,
                     num_inference_steps=steps,
                     seed=seed,
+                    refs=ref_paths,
+                    boxes=box_list,
+                    num_images=num_images,
                 )
                 progress.update(task, description="[green]Concluído")
             emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=100)
+
+            all_images = _metadata.get("images") or [image]
 
             # Ícone transparente: rembg (U2Net) sobre a imagem gerada (RGBA).
             if transparent:
                 from .bg_removal import remove_background
 
-                image = remove_background(image)
+                all_images = [remove_background(img) for img in all_images]
 
             emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=0)
             with prof.span("save"):
                 ext = out_path.suffix.lower().lstrip(".")
                 img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
-                KleinFluxGenerator.save_image(
-                    image,
-                    out_path,
-                    image_format=img_format if img_format == "JPEG" else "PNG",
-                )
+                for idx, img in enumerate(all_images):
+                    # -n > 1: sufixos _1, _2... no stem (a 1.ª fica no output principal).
+                    part_path = out_path if idx == 0 else out_path.with_name(f"{out_path.stem}_{idx}{out_path.suffix}")
+                    KleinFluxGenerator.save_image(
+                        img,
+                        part_path,
+                        image_format=img_format if img_format == "JPEG" else "PNG",
+                    )
             emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=100)
 
         elapsed = time.time() - t_start
@@ -476,6 +602,33 @@ def generate_cmd(
             console.print_exception()
         emit_result(item_id, TOOL_TEXT2D, STATUS_ERROR, error=str(e))
         sys.exit(1)
+
+
+@cli.command("silhouette")
+@click.argument("input", type=click.Path(exists=True, dir_okay=False))
+@click.option("--output", "-o", type=click.Path(), help="PNG de saída (default: <input>_silhouette.png)")
+@click.option(
+    "--threshold",
+    type=click.IntRange(1, 255),
+    default=128,
+    show_default=True,
+    help="Limiar de alpha (0-255) que separa sujeito/fundo.",
+)
+def silhouette_cmd(input: str, output: str | None, threshold: int) -> None:
+    """Extrai a silhueta binária de INPUT (rembg + threshold de alpha).
+
+    A silhueta serve de referência de forma para gerar poses novas com
+    consistência (animação 2D): text2d generate "same character running"
+    --ref <silhueta> -o pose.png
+    """
+    from .silhouette import extract_silhouette_file
+
+    out = output or str(Path(input).with_name(f"{Path(input).stem}_silhouette.png"))
+    try:
+        path = extract_silhouette_file(input, out, threshold=threshold)
+    except ImportError as e:
+        raise click.ClickException(str(e)) from e
+    console.print(f"[bold green]✓[/bold green] Silhueta: [cyan]{path}[/cyan]")
 
 
 _batch_gen = None
@@ -528,14 +681,21 @@ def _parse_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
 @click.option("--output-dir", "-O", type=click.Path(), default=".", help="Diretório base para outputs relativos.")
 @click.option("--width", "-W", default=1024, type=int)
 @click.option("--height", "-H", default=1024, type=int)
-@click.option("--steps", "-s", default=4, type=int, help="Passos de inferência")
+@click.option(
+    "--steps",
+    "-s",
+    default=16,
+    show_default=True,
+    type=int,
+    help="Passos de inferência (faixa treinada 4-16)",
+)
 @click.option(
     "--guidance",
     "-g",
     "guidance_scale",
-    default=1.0,
+    default=None,
     type=float,
-    help="Guidance scale (recomendado 1.0 para SDNQ)",
+    help="[Ignorado] FLUX.3 Klein é guidance-distilled (sem CFG); mantido por compatibilidade.",
 )
 @click.option("--cpu", is_flag=True, help="Forçar CPU")
 @click.option(
@@ -599,7 +759,7 @@ def generate_batch_cmd(
     width: int,
     height: int,
     steps: int,
-    guidance_scale: float,
+    guidance_scale: float | None,
     cpu: bool,
     model_id: str | None,
     gpu_ids_str: str | None,
@@ -699,24 +859,36 @@ def generate_batch_cmd(
             item_steps = item.get("steps", steps)
             item_guidance = item.get("guidance_scale", guidance_scale)
             item_seed = item.get("seed")
+            item_refs = item.get("refs") or None
+            item_boxes = item.get("boxes") or None
+            item_num_images = int(item.get("num_images") or 1)
             out_path.parent.mkdir(parents=True, exist_ok=True)
+
+            item_payload: dict[str, Any] = {
+                "prompt": prompt,
+                "output": str(out_path.resolve()),
+                "width": item_w,
+                "height": item_h,
+                "steps": item_steps,
+                "seed": item_seed,
+                "model_id": resolved_model,
+                "torch_compile": torch_compile,
+                "torch_compile_mode": torch_compile_mode,
+                "channels_last": channels_last,
+                "allow_group_offload": group_offload,
+            }
+            if item_guidance is not None:
+                item_payload["guidance"] = item_guidance
+            if item_refs:
+                item_payload["refs"] = item_refs
+            if item_boxes:
+                item_payload["boxes"] = item_boxes
+            if item_num_images > 1:
+                item_payload["num_images"] = item_num_images
 
             if not cpu and delegate_or_prepare(
                 "text2d",
-                payload={
-                    "prompt": prompt,
-                    "output": str(out_path.resolve()),
-                    "width": item_w,
-                    "height": item_h,
-                    "steps": item_steps,
-                    "guidance": item_guidance,
-                    "seed": item_seed,
-                    "model_id": resolved_model,
-                    "torch_compile": torch_compile,
-                    "torch_compile_mode": torch_compile_mode,
-                    "channels_last": channels_last,
-                    "allow_group_offload": group_offload,
-                },
+                payload=item_payload,
                 t_start=t0,
                 noun="Imagem",
                 console=err_console,
@@ -743,6 +915,9 @@ def generate_batch_cmd(
                     "steps": item_steps,
                     "guidance": item_guidance,
                     "seed": item_seed,
+                    "refs": item_refs,
+                    "boxes": item_boxes,
+                    "num_images": item_num_images,
                 }
             )
 
@@ -801,6 +976,9 @@ def generate_batch_cmd(
                     guidance_scale=it["guidance"],
                     num_inference_steps=it["steps"],
                     seed=it["seed"],
+                    refs=it.get("refs"),
+                    boxes=it.get("boxes"),
+                    num_images=it.get("num_images") or 1,
                 )
                 emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=100)
 
@@ -887,6 +1065,25 @@ def doctor_cmd() -> None:
     _state = "" if hw_auto_enabled() else " [yellow](desligado: TEXT2D_HW_AUTO=0)[/yellow]"
     table.add_row("Perfil hardware (auto)", f"{_hwp.summary()}{_state}")
 
+    # Acesso ao repo gated (FLUX Kommunity License): falha comum de 1ª utilização.
+    try:
+        import diffusers
+
+        table.add_row("diffusers", diffusers.__version__)
+        from huggingface_hub import model_info
+
+        model_info(default_model_id())
+        table.add_row("Acesso ao modelo", "[green]OK (repo gated acessível)[/green]")
+    except ImportError as e:
+        table.add_row("diffusers", f"[red]não instalado ({e})[/red]")
+    except Exception as e:
+        table.add_row(
+            "Acesso ao modelo",
+            f"[red]SEM ACESSO — {type(e).__name__}[/red]\n"
+            f"[yellow]Aceita a licença em https://huggingface.co/{default_model_id()} "
+            "e configura HF_TOKEN.[/yellow]",
+        )
+
     console.print(table)
 
 
@@ -897,17 +1094,23 @@ def models_cmd() -> None:
     t.add_column("ID", style="cyan")
     t.add_column("Notas", style="white")
     t.add_row(
-        "black-forest-labs/FLUX.2-klein-9B",
-        "Padrão (high-VRAM): base fp16 + SDNQ runtime, 9B parâmetros (gated — aceitar termos no Hub)",
+        "black-forest-labs/flux-3-image-klein",
+        "Padrão: 5.6B guidance-distilled + Qwen3-VL 4B (gated — aceitar a licença Kommunity no Hub). "
+        "16 steps, refs até 10 imagens, layout por boxes.",
     )
     t.add_row(
-        "black-forest-labs/FLUX.2-klein-4B",
-        "Padrão hw-auto (GPU apertada): base fp16 + SDNQ runtime, 4B parâmetros (público)",
+        "black-forest-labs/flux-3-image-klein-base",
+        "Base não-distilled (50 steps, CFG 3.5) — para finetunes/LoRA; via TEXT2D_MODEL_ID/--model.",
+    )
+    t.add_row(
+        "black-forest-labs/flux-3-image-klein-pup",
+        "Prompt upsampler 9B — carregado só com --upsample (expande o prompt curto em caption completa).",
     )
     console.print(t)
     console.print(
         Panel(
-            "[dim]Pesos GGUF (Unsloth) em geral usam ComfyUI-GGUF, não este CLI.[/dim]",
+            "[dim]Override global: TEXT2D_MODEL_ID. Referências: --ref (até 10); "
+            "silhuetas: text2d silhouette / --ref-silhouette.[/dim]",
             border_style="dim",
         )
     )

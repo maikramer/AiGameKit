@@ -37,10 +37,10 @@ class TestProfileRegistry:
     ("tier", "expected"),
     [
         ("fast", dict(text2d_width=512, text2d_height=512, text2d_steps=4, text3d_preset="fast")),
-        ("low", dict(text2d_width=768, text2d_height=768, text2d_steps=4, text3d_preset="fast")),
-        ("medium", dict(text2d_width=1024, text2d_height=1024, text2d_steps=4, text3d_preset="balanced")),
-        ("high", dict(text2d_width=1024, text2d_height=1024, text2d_steps=8, text3d_preset="hq")),
-        ("highest", dict(text2d_width=1024, text2d_height=1024, text2d_steps=8, text3d_preset="hq")),
+        ("low", dict(text2d_width=768, text2d_height=768, text2d_steps=8, text3d_preset="fast")),
+        ("medium", dict(text2d_width=1024, text2d_height=1024, text2d_steps=12, text3d_preset="balanced")),
+        ("high", dict(text2d_width=1024, text2d_height=1024, text2d_steps=16, text3d_preset="hq")),
+        ("highest", dict(text2d_width=1536, text2d_height=1536, text2d_steps=16, text3d_preset="hq")),
     ],
 )
 def test_text2d_and_text3d_per_tier(tier: str, expected: dict[str, object]) -> None:
@@ -106,7 +106,7 @@ class TestProfileInvariants:
     def test_quality_monotonic_text2d_resolution(self) -> None:
         sizes = [get_profile(t).text2d_width for t in VALID_GENERATION_PROFILES]
         assert sizes == sorted(sizes)
-        assert sizes[-1] == 1024
+        assert sizes[-1] == 1536
 
     def test_quality_monotonic_paint_texture(self) -> None:
         sizes = [get_profile(t).paint_texture_size for t in VALID_GENERATION_PROFILES]

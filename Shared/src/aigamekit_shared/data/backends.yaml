@@ -45,9 +45,41 @@ backends:
   - name: text2d
     adapter: aigamekit_shared.worker_serve_adapter_base
     vram_mib: 4500
-    footprint_key: flux-klein-9b
+    footprint_key: flux3-klein
     priority: 25
     tool: text2d
+    # FLUX.3 Klein: ``upsample`` escolhe se o prompt upsampler 9B (pup) é
+    # carregado — é decisão de LOAD (pop do bloco) e SHAPE (mudar exige reload).
+    # Declarar as listas substitui a allowlist global do vramd, por isso incluem
+    # tudo o que o ctor/admit do text2d usa.
+    load_keys:
+      - verbose
+      - sdnq_preset
+      - quant_mode
+      - gpu_ids
+      - offload
+      - memory_efficient
+      - torch_compile
+      - torch_compile_mode
+      - channels_last
+      - allow_group_offload
+      - model_id
+      - quant_preset
+      - step_cache
+      - upsample
+    shape_keys:
+      - memory_efficient
+      - sdnq_preset
+      - quant_mode
+      - allow_group_offload
+      - gpu_ids
+      - offload
+      - channels_last
+      - torch_compile
+      - torch_compile_mode
+      - model_id
+      - step_cache
+      - upsample
     peak_profile:
       memory_efficient_with_quant: true
       streams_on_load_with_memory_efficient: true

@@ -18,9 +18,9 @@ def _gib(n: float) -> int:
 @pytest.mark.parametrize(
     ("model_id", "key"),
     [
-        ("black-forest-labs/FLUX.2-klein-4B", "flux-klein-4b"),
-        ("black-forest-labs/FLUX.2-klein-9B", "flux-klein-9b"),
-        ("other/model", "flux-klein-9b"),
+        ("black-forest-labs/flux-3-image-klein", "flux3-klein"),
+        ("black-forest-labs/flux-3-image-klein-base", "flux3-klein"),
+        ("other/model", "flux3-klein"),
     ],
 )
 def test_model_footprint_key(model_id: str, key: str) -> None:
@@ -31,15 +31,16 @@ def test_model_footprint_key(model_id: str, key: str) -> None:
 
 @pytest.mark.parametrize("mem", [False, True])
 def test_default_model_id_respects_memory_efficient(monkeypatch: pytest.MonkeyPatch, mem: bool) -> None:
-    from text2d.generator import HIGH_VRAM_MODEL_ID, LOW_VRAM_MODEL_ID, default_model_id
+    from text2d.generator import DEFAULT_MODEL_ID, default_model_id
 
     monkeypatch.delenv("TEXT2D_MODEL_ID", raising=False)
-    assert default_model_id() == HIGH_VRAM_MODEL_ID
+    # Modelo único desde a migração FLUX.3 (o ladder 4B/9B acabou).
+    assert default_model_id() == DEFAULT_MODEL_ID
     monkeypatch.setenv("TEXT2D_MEMORY_EFFICIENT", "1" if mem else "0")
-    # default_model_id reads memory via _model_id only when called from generator init;
-    # env TEXT2D_MODEL_ID overrides
-    monkeypatch.setenv("TEXT2D_MODEL_ID", LOW_VRAM_MODEL_ID if mem else HIGH_VRAM_MODEL_ID)
-    assert default_model_id() == (LOW_VRAM_MODEL_ID if mem else HIGH_VRAM_MODEL_ID)
+    assert default_model_id() == DEFAULT_MODEL_ID
+    # env TEXT2D_MODEL_ID continua a ser o override.
+    monkeypatch.setenv("TEXT2D_MODEL_ID", "black-forest-labs/flux-3-image-klein-base")
+    assert default_model_id() == "black-forest-labs/flux-3-image-klein-base"
 
 
 def test_model_footprint_returns_positive(monkeypatch: pytest.MonkeyPatch) -> None:
