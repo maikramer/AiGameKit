@@ -343,8 +343,9 @@ def generate_cmd(
         guidance_scale = _qresolved.params["guidance"]
 
     # Referências: paths validados pelo click; silhueta é extraída ANTES da
-    # delegação (o worker vramd lê o path do ficheiro temporário).
-    ref_paths: list[str] = list(refs)
+    # delegação (o worker vramd lê o path do ficheiro temporário). Paths
+    # absolutos: o worker vramd corre noutro cwd (relativo → "não encontrada").
+    ref_paths: list[str] = [str(Path(r).resolve()) for r in refs]
     _sil_tmpdir: str | None = None
     if ref_silhouette:
         from .silhouette import extract_silhouette_file
@@ -363,6 +364,10 @@ def generate_cmd(
         box_list = parse_boxes(boxes_arg, num_refs=len(ref_paths))
     except (ValueError, FileNotFoundError, json.JSONDecodeError) as e:
         raise click.ClickException(f"--boxes inválido: {e}") from e
+    # No pipeline distilled só o bloco prompt_upsampler consome ``boxes``: sem
+    # --upsample o diffusers descarta-as ("Unexpected input") e o layout é no-op.
+    if box_list and not upsample:
+        raise click.ClickException("--boxes precisa de --upsample (o layout é aplicado pelo prompt upsampler)")
 
     # Com referências e sem W/H explícitos: o tamanho sai da 1.ª referência
     # (comportamento do modelo) — não sobrepor o default do tier de qualidade.
@@ -709,9 +714,16 @@ def poses_cmd() -> None:
     default=None,
     help="Imagem de referência do personagem (identidade). Sem ela, é gerado um frame base.",
 )
-@click.option("--size", default=256, show_default=True, type=int, help="Resolução de geração.")
+@click.option(
+    "--size",
+    default=320,
+    show_default=True,
+    type=int,
+    help="Altura de cada célula da folha gerada (largura = 0.8x; 4 células = 1024 px).",
+)
 @click.option("--steps", "-s", default=12, show_default=True, type=int, help="Passos de inferência.")
 @click.option("--seed", default=100, show_default=True, type=int, help="Seed base.")
+@click.option("--frame-ms", default=160, show_default=True, type=int, help="Duração de cada frame no GIF.")
 @click.option(
     "--sprite-size",
     default=96,
@@ -735,6 +747,7 @@ def walk_cycle_cmd(
     size: int,
     steps: int,
     seed: int,
+    frame_ms: int,
     sprite_size: int,
     colors: int,
     transparent: bool,
@@ -748,45 +761,46 @@ def walk_cycle_cmd(
 ) -> None:
     """Gera um ciclo de caminhada (frames + sprites + folha + GIF) numa direção.
 
-    Cada frame é gerado com o **prompt de pose** da fase (pernas e braços
-    descritos) e a mesma referência do personagem — é isso que dá a variação
-    de pose mantendo a identidade.
+    Todos os frames saem numa **só geração** (folha de N células) guiada pela
+    identidade do personagem e por uma folha de silhuetas com a pose de cada
+    célula — mesma personagem, escala e chão em todos os frames; a silhueta
+    impõe a pose. Depois: rembg, alinhamento, downscale e paleta comum.
     """
     from .sprite import generate_cycle
 
     # Gerador in-process (fallback quando o vramd não trata o job).
     _gen: list[Any] = []
 
-    def _fallback_render(prompt: str, path: Path, frame_seed: int, refs: list[Path]) -> None:
+    def _fallback_render(prompt: str, path: Path, frame_seed: int, refs: list[Path], width: int, height: int) -> None:
         if not _gen:
             _gen.append(KleinFluxGenerator(device="cpu" if cpu else None, memory_efficient=not cpu))
         img, _ = _gen[0].generate(
             prompt,
-            width=size,
-            height=size,
+            width=width,
+            height=height,
             refs=refs or None,
             num_inference_steps=steps,
             seed=frame_seed,
         )
         KleinFluxGenerator.save_image(img, path)
 
-    def _render(prompt: str, path: Path, frame_seed: int, refs: list[Path]) -> None:
+    def _render(prompt: str, path: Path, frame_seed: int, refs: list[Path], width: int, height: int) -> None:
         """Delega ao vramd; se recusar/falhar, gera in-process."""
         payload: dict[str, Any] = {
             "prompt": prompt,
             "output": str(path.resolve()),
-            "width": size,
-            "height": size,
+            "width": width,
+            "height": height,
             "steps": steps,
             "seed": frame_seed,
             "model_id": default_model_id(),
-            "refs": [str(r) for r in refs],
+            "refs": [str(r.resolve()) for r in refs],
         }
         if not cpu and delegate_or_prepare(
             "text2d",
             payload=payload,
             t_start=time.time(),
-            noun="Frame",
+            noun="Sprite",
             console=console,
             enabled=not no_vramd,
             priority=vramd_priority or "batch",
@@ -796,7 +810,7 @@ def walk_cycle_cmd(
             footprint_key=model_footprint_key(payload["model_id"]),
         ):
             return
-        _fallback_render(prompt, path, frame_seed, refs)
+        _fallback_render(prompt, path, frame_seed, refs, width, height)
 
     try:
         result = generate_cycle(
@@ -814,6 +828,7 @@ def walk_cycle_cmd(
             make_sheet=sheet,
             make_gif=gif,
             measure=measure,
+            frame_ms=frame_ms,
             render=_render,
         )
     except (ValueError, FileNotFoundError) as e:
@@ -826,7 +841,7 @@ def walk_cycle_cmd(
         Panel(
             f"[bold green]✓[/bold green] {len(result['frames'])} frames → "
             f"[cyan]{Path(out_dir).resolve()}[/cyan]\n"
-            f"[dim]sprites: {len(result['sprites'])} | sheet: {result['sheet']} | gif: {result['gif']}[/dim]",
+            f"[dim]sprites: {len(result['sprites'])} | atlas: {result['atlas']} | gif: {result['gif']}[/dim]",
             title="[bold green]Sprite sheet[/bold green]",
             border_style="green",
         )
@@ -1061,7 +1076,7 @@ def generate_batch_cmd(
             item_steps = item.get("steps", steps)
             item_guidance = item.get("guidance_scale", guidance_scale)
             item_seed = item.get("seed")
-            item_refs = item.get("refs") or None
+            item_refs = [str(Path(r).resolve()) for r in item.get("refs") or []] or None
             item_boxes = item.get("boxes") or None
             item_num_images = int(item.get("num_images") or 1)
             out_path.parent.mkdir(parents=True, exist_ok=True)

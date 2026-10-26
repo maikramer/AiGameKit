@@ -229,9 +229,10 @@ Output:
 
 ### `text2d poses` + `text2d walk-cycle` (animação 2D)
 
-O FLUX.3 não tem pose conditioning: quem controla a pose é o **prompt** (a
-referência mantém a identidade do personagem). O Text2D traz um vocabulário de
-poses e um comando que gera ciclos de caminhada prontos a usar.
+O FLUX.3 não tem pose conditioning: a pose vem de uma **folha de silhuetas**
+desenhada (uma por célula) e a identidade de uma imagem da personagem parada.
+O Text2D traz um vocabulário de poses e um comando que gera ciclos de caminhada
+prontos a usar.
 
 ```bash
 # Listar as poses (pernas/braços descritos em texto)
@@ -240,7 +241,7 @@ text2d poses
 # Um frame com uma pose específica (nome da biblioteca ou texto livre)
 text2d generate "knight hero" --pose walk_contact_front -o frame.png
 
-# Ciclo de caminhada completo: 4 frames + sprites + folha + GIF
+# Ciclo de caminhada completo: 4 frames + sprites + atlas + GIF
 text2d walk-cycle "16-bit SNES-era pixel art knight hero in a blue tunic" \
   --direction east --frames 4 --out-dir outputs/sprites/knight
 ```
@@ -248,28 +249,33 @@ text2d walk-cycle "16-bit SNES-era pixel art knight hero in a blue tunic" \
 | Flag (walk-cycle) | Default | Description |
 |-------------------|---------|-------------|
 | `--direction` | `east` | `south`/`south_east`/`east`/`north_east`/`north`/`north_west`/`west`/`south_west` |
-| `--frames` / `-n` | 4 | Frames do ciclo (fases repetidas se forem mais) |
-| `--out-dir` / `-O` | `outputs/sprites` | Frames crus, sprites, folha e GIF |
-| `--ref` | — | Referência do personagem (identidade); sem ela é gerado um frame base |
-| `--size` / `--steps` / `--seed` | 256 / 12 / 100 | Resolução, passos e seed |
-| `--sprite-size` / `--colors` | 96 / 32 | Lado do sprite e nº de cores (look 16-bit) |
-| `--measure` | on | Mede a variação de silhueta entre frames consecutivos |
+| `--frames` / `-n` | 4 | Frames do ciclo (fases repetidas; >4 → várias folhas com a mesma identidade) |
+| `--out-dir` / `-O` | `outputs/sprites` | Folha crua, frames, sprites, atlas, preview e GIF |
+| `--ref` | — | Referência do personagem (identidade, **parado**); sem ela é gerada a 512² |
+| `--size` / `--steps` / `--seed` | 320 / 12 / 100 | Altura da célula (largura 0.8x), passos e seed |
+| `--sprite-size` / `--colors` | 96 / 32 | Lado do sprite e nº de cores da paleta comum (look 16-bit) |
+| `--frame-ms` | 160 | Duração de cada frame no GIF |
+| `--measure` | on | Mede a variação entre frames (avisa se forem cópias) |
 
 Como funciona:
 
-1. **Frame de referência** (o personagem) — ou usa o `--ref` dado.
-2. **Um frame por fase**, com o prompt de pose da fase ("a perna da frente
-   estendida para a frente, a de trás para trás…") e a **mesma referência** —
-   é esta combinação que dá a variação de pose mantendo a identidade.
-3. **Pós-processamento**: fundo fora (rembg) → downscale → paleta reduzida
-   (16-bit) → folha de sprites + GIF.
+1. **Identidade** — a personagem **parada** (`idle`) a 512², ou o `--ref`.
+2. **Todos os frames numa só geração** (`4 × 256×320` = 1024×320) com duas
+   referências: a identidade e a folha de silhuetas (`poses_00.png`; membros
+   do lado de trás a cinzento). Dentro da mesma imagem o modelo mantém
+   personagem, escala e linha do chão; a silhueta + a pose por extenso de cada
+   célula impõem a passada.
+3. **Pós-processamento**: rembg por célula → alinhamento (tronco no mesmo x,
+   pés na mesma linha) → downscale por área → alpha binário → **uma paleta
+   para o ciclo todo** → `atlas.png` (1x, transparente), `sheet.png`
+   (preview 4x) e `cycle.gif`.
 4. Direções espelhadas (`west`, `north_west`, `south_west`) são geradas a
    partir da direção canónica e espelhadas — a personagem fica idêntica nos
    dois sets.
 
-Medido na RTX 4050 6 GB: **~10,5 s por frame** (256²/12 steps) e **21-27% de
-variação de silhueta** entre frames consecutivos (o método ingénuo — mesma
-referência e prompt genérico — dava 8%: frames quase idênticos).
+Medido na RTX 4050 6 GB (via vramd): **~90 s por ciclo de 4 frames**
+(identidade ~55 s + folha ~31 s). Diagnóstico e números:
+[`docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md`](../docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md#walk-cycle-v2-folha-única-guiada-por-silhuetas).
 
 ### `text2d skill install`
 

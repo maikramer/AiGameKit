@@ -40,8 +40,9 @@ _POSE_TEXT: dict[str, dict[str, str]] = {
     "idle": {
         "side": "standing still with both feet on the ground slightly apart, the front arm and the back arm "
         "hanging relaxed at the sides of the body",
-        "front": "standing still facing the viewer, both feet on the ground slightly apart, both arms hanging "
-        "relaxed at the sides of the body",
+        # Sem "facing the viewer": a vista vem da direção (north = de costas).
+        "front": "standing still, both feet on the ground slightly apart, both arms hanging relaxed at the sides "
+        "of the body",
     },
     "walk_contact_front": {
         "side": "the leading leg stretched far forward with the heel touching the ground, the trailing leg "
@@ -53,8 +54,10 @@ _POSE_TEXT: dict[str, dict[str, str]] = {
     "walk_down": {
         "side": "the leading leg bent sharply under the body pushing off the ground, the trailing leg bent and "
         "lifted behind with the knee raised, the body lowered slightly, both arms pulled in close to the body",
-        "front": "the right leg bent under the body pushing off the ground, the left leg bent and lifted with the "
-        "knee raised, the body lowered slightly, both arms pulled in close to the body",
+        # De frente o "down" é o bob neutro entre passadas (a silhueta frontal
+        # desenha-o com as pernas juntas — texto e silhueta têm de concordar).
+        "front": "both legs under the body with the knees slightly bent, the body lowered slightly, both arms "
+        "pulled in close to the body",
     },
     "walk_contact_back": {
         "side": "the trailing leg now stretched far forward with the heel touching the ground, the leading leg "
@@ -109,8 +112,11 @@ _POSE_TEXT: dict[str, dict[str, str]] = {
     },
 }
 
-# Ordem canónica de um ciclo de caminhada (4 frames).
-WALK_CYCLE: tuple[str, ...] = ("walk_contact_front", "walk_down", "walk_contact_back", "walk_passing")
+# Ordem canónica de um ciclo de caminhada (4 frames): contacto → passagem →
+# contacto da outra perna → passagem com a perna dobrada. Alternar passada
+# aberta e pernas juntas é o que dá o "andar" no loop (contacto→down→contacto
+# deixava 3 frames de passada aberta seguidos e o GIF parecia parado).
+WALK_CYCLE: tuple[str, ...] = ("walk_contact_front", "walk_passing", "walk_contact_back", "walk_down")
 
 # Ordem canónica de um ciclo de corrida (4 frames).
 RUN_CYCLE: tuple[str, ...] = ("run_contact", "run_air", "run_contact", "run_air")
@@ -198,6 +204,17 @@ def direction_prompt(direction: str) -> str:
     return str(DIRECTIONS[direction]["text"])
 
 
+def facing_prompt(direction: str) -> str:
+    """Só a vista da direção, sem "walking ..." — para frames parados.
+
+    A identidade do ``walk-cycle`` tem de sair **parada**: com o texto de
+    direção completo ("..., walking to the right") o modelo desenha-a a meio da
+    passada e depois copia essa pose para todos os frames, ignorando as
+    silhuetas.
+    """
+    return direction_prompt(direction).split(", walking")[0]
+
+
 def is_mirrored(direction: str) -> bool:
     """A direção é o espelho de outra (W é espelho de E, etc.)?"""
     return bool(DIRECTIONS[direction].get("mirror"))
@@ -266,10 +283,13 @@ def walk_cycle_prompts(
 
 
 def draw_pose_silhouette(pose: str, *, view: str = "side", size: int = 256) -> Image.Image:
-    """Desenha a silhueta da pose (branco sobre transparente).
+    """Desenha a silhueta da pose (branco/cinzento sobre transparente).
 
     Serve de **referência de forma**: o modelo copia a pose desenhada (validado
-    E2E — as pernas do sprite seguem os ângulos aqui definidos).
+    E2E — as pernas do sprite seguem os ângulos aqui definidos). Os membros do
+    lado de **trás** são cinzentos e ficam atrás do tronco: sem essa pista de
+    profundidade, ``walk_contact_front`` e ``walk_contact_back`` de perfil são
+    silhuetas idênticas e o modelo não troca a perna da frente.
 
     Args:
         pose: Nome da pose.
@@ -281,42 +301,36 @@ def draw_pose_silhouette(pose: str, *, view: str = "side", size: int = 256) -> I
     """
     if pose not in _POSE_ANGLES:
         raise KeyError(f"pose desconhecida: {pose!r} (disponíveis: {', '.join(pose_names())})")
-    front_leg, back_leg, front_arm, back_arm = _POSE_ANGLES[pose]
     if view == "front":
-        # De frente: pernas simétricas em torno da vertical (o "leading" vai para
-        # a direita do observador).
-        front_leg, back_leg = front_leg, -front_leg
-        front_arm, back_arm = front_arm, -front_arm
+        return _draw_front_silhouette(pose, size=size)
+    front_leg, back_leg, front_arm, back_arm = _POSE_ANGLES[pose]
 
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     white = (255, 255, 255, 255)
+    far = (150, 150, 150, 255)
     cx = size * 0.5
     hip_y = size * 0.56
     torso_len = size * 0.22
     head_r = size * 0.085
 
-    def limb(x: float, y: float, angle_deg: float, length: float, width: int) -> tuple[float, float]:
+    def limb(x: float, y: float, angle_deg: float, length: float, width: int, fill: tuple[int, ...]) -> None:
         a = math.radians(angle_deg)
-        ex, ey = x + math.sin(a) * length, y + math.cos(a) * length
-        d.line([(x, y), (ex, ey)], fill=white, width=width)
-        return ex, ey
+        d.line([(x, y), (x + math.sin(a) * length, y + math.cos(a) * length)], fill=fill, width=width)
 
     leg_w = max(2, int(size * 0.05))
     arm_w = max(2, int(size * 0.042))
-    # Pernas (do quadril para baixo).
-    limb(cx - size * 0.018, hip_y, front_leg, size * 0.28, leg_w)
-    limb(cx + size * 0.018, hip_y, back_leg, size * 0.28, leg_w)
-    # Tronco.
+    sh_y = hip_y - torso_len * 0.85
+    # Lado de trás primeiro (fica tapado pelo tronco).
+    limb(cx + size * 0.018, hip_y, back_leg, size * 0.28, leg_w, far)
+    limb(cx - size * 0.022, sh_y, back_arm, size * 0.2, arm_w, far)
+    limb(cx - size * 0.018, hip_y, front_leg, size * 0.28, leg_w, white)
     d.rounded_rectangle(
         [cx - size * 0.085, hip_y - torso_len, cx + size * 0.085, hip_y],
         radius=size * 0.03,
         fill=white,
     )
-    # Braços (dos ombros).
-    sh_y = hip_y - torso_len * 0.85
-    limb(cx + size * 0.022, sh_y, front_arm, size * 0.2, arm_w)
-    limb(cx - size * 0.022, sh_y, back_arm, size * 0.2, arm_w)
+    limb(cx + size * 0.022, sh_y, front_arm, size * 0.2, arm_w, white)
     # Cabeça + elmo.
     head_cy = sh_y - head_r * 0.85
     d.ellipse([cx - head_r, head_cy - head_r, cx + head_r, head_cy + head_r], fill=white)
@@ -326,6 +340,93 @@ def draw_pose_silhouette(pose: str, *, view: str = "side", size: int = 256) -> I
         fill=white,
     )
     return img
+
+
+def _draw_front_silhouette(pose: str, *, size: int) -> Image.Image:
+    """Silhueta de frente/costas: pernas **verticais**, a passada lê-se no comprimento.
+
+    De frente a passada não abre as pernas para os lados — o pé da frente fica
+    mais abaixo (mais perto) e o de trás com o calcanhar levantado (estilo RPG
+    Maker). Pernas em "V" lateral faziam o modelo virar a personagem de perfil.
+    Poses fora de andar/correr/parado (salto, ataque) mantêm braços pelos
+    ângulos da tabela.
+    """
+    front_leg, _, front_arm, _ = _POSE_ANGLES[pose]
+    # Passada -1..1: >0 = perna direita (do observador) à frente. Só a perna da
+    # frente conta: walk_down/passing ficam neutras → ciclo D, N, E, N.
+    stride = max(-1.0, min(1.0, front_leg / 30.0))
+    if abs(stride) < 0.5:
+        stride = 0.0
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    white = (255, 255, 255, 255)
+    cx = size * 0.5
+    hip_y = size * 0.56
+    torso_len = size * 0.22
+    head_r = size * 0.085
+    leg_len = size * 0.28
+    leg_w = max(2, int(size * 0.055))
+    arm_w = max(2, int(size * 0.042))
+    sh_y = hip_y - torso_len * 0.85
+    for side, sign in ((1, 1.0), (-1, -1.0)):
+        ahead = stride * sign  # >0 esta perna à frente
+        length = leg_len * (1.0 + 0.08 * max(ahead, 0.0) - 0.28 * max(-ahead, 0.0))
+        x = cx + side * size * 0.045
+        d.line([(x, hip_y), (x, hip_y + length)], fill=white, width=leg_w)
+        foot = size * (0.035 + 0.01 * max(ahead, 0.0))
+        d.ellipse([x - foot, hip_y + length - foot * 0.7, x + foot, hip_y + length + foot * 0.7], fill=white)
+    d.rounded_rectangle(
+        [cx - size * 0.085, hip_y - torso_len, cx + size * 0.085, hip_y],
+        radius=size * 0.03,
+        fill=white,
+    )
+    swinging = pose == "idle" or pose.startswith(("walk", "run"))
+    for side, sign in ((1, 1.0), (-1, -1.0)):
+        x = cx + side * size * 0.1
+        if swinging:
+            # Braço oposto à perna da frente vem à frente → encurta (perspetiva).
+            length = size * 0.2 * (1.0 - 0.18 * max(-stride * sign, 0.0))
+            angle = side * 8.0
+        else:
+            length, angle = size * 0.2, side * float(front_arm)
+        a = math.radians(angle)
+        d.line([(x, sh_y), (x + math.sin(a) * length, sh_y + math.cos(a) * length)], fill=white, width=arm_w)
+    head_cy = sh_y - head_r * 0.85
+    d.ellipse([cx - head_r, head_cy - head_r, cx + head_r, head_cy + head_r], fill=white)
+    d.rounded_rectangle(
+        [cx - head_r * 1.1, head_cy - head_r * 1.3, cx + head_r * 1.1, head_cy - head_r * 0.3],
+        radius=size * 0.02,
+        fill=white,
+    )
+    return img
+
+
+def draw_pose_sheet(
+    poses: tuple[str, ...] | list[str],
+    *,
+    view: str = "side",
+    cell: tuple[int, int] = (256, 320),
+) -> Image.Image:
+    """Folha horizontal de silhuetas (uma célula por pose) sobre fundo preto.
+
+    É a referência de forma do ``walk-cycle``: gerar **todos os frames numa só
+    imagem** com esta folha como guia dá a mesma personagem, escala e linha do
+    chão em todas as células (o que frames gerados em separado não garantem).
+
+    Args:
+        poses: Poses, da esquerda para a direita.
+        view: ``"side"`` ou ``"front"``.
+        cell: ``(largura, altura)`` de cada célula em pixels.
+
+    Raises:
+        KeyError: Pose desconhecida.
+    """
+    cell_w, cell_h = cell
+    sheet = Image.new("RGB", (cell_w * len(poses), cell_h), (0, 0, 0))
+    for i, pose in enumerate(poses):
+        sil = draw_pose_silhouette(pose, view=view, size=cell_h)
+        sheet.paste(sil, (i * cell_w + (cell_w - cell_h) // 2, 0), sil)
+    return sheet
 
 
 def save_pose_silhouette(pose: str, path: str | Path, *, view: str = "side", size: int = 256) -> Path:

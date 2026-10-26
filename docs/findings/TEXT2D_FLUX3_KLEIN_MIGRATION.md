@@ -139,7 +139,7 @@ consecutivos (0 = frames idênticos). É a métrica que está em
 | Referência + prompt genérico ("a andar") | **8%** | frames quase idênticos |
 | Referência + **frase de pose** (pernas/braços) | **16-26%** | a pose muda, a personagem mantém-se |
 | **Silhueta da pose desenhada** como referência | 14-29% | a forma desenhada é copiada (as pernas seguem os ângulos) |
-| `text2d walk-cycle` (referência + prompt por frame) | **21-27%** | o que ficou em produção |
+| `text2d walk-cycle` v1 (referência + prompt por frame) | 21-27% | substituído pela v2 (abaixo): o número incluía o salto de escala entre frames |
 
 Regras apuradas:
 
@@ -154,6 +154,44 @@ Regras apuradas:
 - Medição sem pipeline de sprites dá valores enganadores: o PNG cru tem fundo
   opaco → alpha igual → "0% de diferença" mesmo com poses diferentes. Medir
   **após** rembg + downscale.
+
+### Walk-cycle v2: folha única guiada por silhuetas
+
+A receita v1 (um frame por fase a 256², referência + prompt de pose) dava
+frames **repetidos e borrados**. Causas encontradas (2026-10, RTX 4050):
+
+| Sintoma | Causa | Correção |
+|---------|-------|----------|
+| Frames 1-3 iguais à referência | a "referência idle" era gerada com `poses[0]` (= `walk_contact_front`) **e** o texto de direção traz "walking to the right" → identidade a meio da passada; o image-conditioned copia a pose da referência | identidade **parada** (`facing_prompt` corta o "walking"; idle frontal sem "facing the viewer", que contradizia `north`) |
+| Borrão / "pixel art" sujo | geração a 256² (fora da resolução útil do FLUX.3) + LANCZOS 256→96 | identidade a 512², folha 1024×320; downscale por área (BOX) |
+| Cores a cintilar no GIF | `quantize` por frame (paleta diferente em cada) | paleta MEDIANCUT única para o ciclo |
+| Personagem salta/encolhe no loop | cada frame com escala/enquadramento próprios; a métrica alpha media esse salto como "variação" | uma só geração + alinhamento (tronco/pés) antes de medir |
+| Lento (4 min 40 s) | refs relativos ao vramd → worker noutro cwd não os encontra → fallback in-process (recarrega o modelo) | refs absolutos (também em `generate --ref` e `batch`) |
+
+Técnicas medidas (variação média entre frames consecutivos após alinhar, a 96 px):
+
+| Técnica | Resultado |
+|---------|-----------|
+| Folha 4 células, só prompt | identidade perfeita, **pose igual** nas 4 (o modelo replica) |
+| Silhueta por frame (512², refs identidade+silhueta) | pose varia, escala oscila entre frames |
+| **Folha + folha de silhuetas + identidade parada** | identidade, escala e chão iguais; perfil 6-11%, frente 4.6% |
+| Idem com identidade a meio da passada | **2.8%** — cópia (é o que o aviso apanha: < 4% perfil, < 3% frente) |
+
+Regras apuradas:
+
+- **De perfil**, contacto da frente e de trás têm a mesma silhueta: os membros
+  do lado de trás vão a **cinzento** atrás do tronco (pista de profundidade).
+- **De frente**, pernas em "V" lateral fazem o modelo virar a personagem de
+  perfil. A passada frontal desenha-se com pernas **verticais**: pé da frente
+  mais abaixo, calcanhar de trás levantado (D, neutro, E, neutro).
+- Silhueta sozinha (de frente) não chega — a pose de cada célula vai também
+  por extenso no prompt (`frame 1: ...`). Texto e silhueta têm de concordar.
+- Ordem do ciclo: `contact_front, passing, contact_back, down` (alternar
+  passada aberta e pernas juntas; v1 tinha 3 passadas abertas seguidas).
+- `--boxes` **só funciona com `--upsample`**: no pipeline distilled só o bloco
+  `prompt_upsampler` consome `boxes` (sem ele o diffusers avisa "Unexpected
+  input" e ignora). O CLI recusa `--boxes` sem `--upsample`; o generator
+  descarta-as com aviso.
 
 ## Tiers de qualidade retunados
 

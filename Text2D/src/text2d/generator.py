@@ -412,6 +412,11 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             )
 
         ref_images = self._resolve_ref_images(refs)
+        if boxes and not self.upsample:
+            # Só o bloco prompt_upsampler consome ``boxes`` (popado sem upsample):
+            # passá-las dava "Unexpected input ... will be ignored" e no-op.
+            self._log("boxes ignoradas: o layout por boxes precisa de upsample=True (--upsample)")
+            boxes = None
 
         pipe = self._load_pipeline()
         resolved_seed = self._resolve_seed(seed)

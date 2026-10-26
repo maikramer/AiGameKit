@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 from click.testing import CliRunner
 from PIL import Image
@@ -195,18 +196,42 @@ def test_generate_cycle_writes_frames_and_sheet(tmp_path: Path) -> None:
         transparent=False,
         generator=gen,
     )
-    # 1 frame de referência + 4 frames do ciclo.
-    assert len(gen.calls) == 5
+    # Identidade + UMA folha com os 4 frames (mesma imagem = mesma personagem).
+    assert len(gen.calls) == 2
+    identity, sheet = gen.calls
+    assert identity["refs"] is None and identity["width"] == identity["height"] == 512
+    assert "standing still" in identity["prompt"]  # idle, não uma pose de passada
+    assert sheet["seed"] == 8
+    assert len(sheet["refs"]) == 2  # identidade + folha de silhuetas
+    assert sheet["width"] == 4 * 48 and sheet["height"] == 64
     assert len(result["frames"]) == 4
     assert all(p.is_file() for p in result["frames"])
     assert result["sheet"] is not None and result["sheet"].is_file()
+    assert result["atlas"] is not None and Image.open(result["atlas"]).size == (4 * 32, 32)
     assert result["gif"] is not None and result["gif"].is_file()
-    # Cada frame usa a referência e uma seed própria.
-    frame_calls = gen.calls[1:]
-    assert [c["seed"] for c in frame_calls] == [8, 9, 10, 11]
-    assert all(c["refs"] for c in frame_calls)
-    # O prompt de cada frame tem a pose da fase (pernas descritas).
-    assert len({c["prompt"] for c in frame_calls}) == 4
+    assert (out / "poses_00.png").is_file()
+
+
+def test_generate_cycle_splits_long_cycles_into_sheets(tmp_path: Path) -> None:
+    from text2d.sprite import generate_cycle
+
+    gen = _FakeGen()
+    result = generate_cycle(
+        "a blue knight",
+        direction="east",
+        out_dir=tmp_path / "c8",
+        frames=6,
+        size=64,
+        sprite_size=16,
+        transparent=False,
+        generator=gen,
+    )
+    # 6 frames → folhas de 4 + 2, ambas com a mesma identidade e seed.
+    assert len(gen.calls) == 3
+    assert [c["width"] for c in gen.calls[1:]] == [4 * 48, 2 * 48]
+    assert gen.calls[1]["refs"][0] == gen.calls[2]["refs"][0]
+    assert gen.calls[1]["seed"] == gen.calls[2]["seed"]
+    assert len(result["frames"]) == 6
 
 
 def test_generate_cycle_mirrored_direction_uses_canonical(tmp_path: Path) -> None:
@@ -227,6 +252,7 @@ def test_generate_cycle_mirrored_direction_uses_canonical(tmp_path: Path) -> Non
     )
     # O prompt usa a direção canónica (east) e o set pedido fica espelhado.
     assert "right edge" in gen.calls[0]["prompt"]
+    assert "right edge" in gen.calls[1]["prompt"]
     assert (out / "mirrored").is_dir()
     assert len(result["sprites"]) == 4  # 2 pedidos + 2 espelhados
 
@@ -234,28 +260,114 @@ def test_generate_cycle_mirrored_direction_uses_canonical(tmp_path: Path) -> Non
 def test_generate_cycle_uses_render_callback(tmp_path: Path) -> None:
     from text2d.sprite import generate_cycle
 
-    seen: list[tuple[str, int, list[Path]]] = []
+    seen: list[tuple[str, int, list[Path], int, int]] = []
 
-    def _render(prompt: str, path: Path, seed: int, refs: list[Path]) -> None:
-        seen.append((prompt, seed, list(refs)))
+    def _render(prompt: str, path: Path, seed: int, refs: list[Path], width: int, height: int) -> None:
+        seen.append((prompt, seed, list(refs), width, height))
         path.parent.mkdir(parents=True, exist_ok=True)
-        Image.new("RGB", (32, 32)).save(path)
+        Image.new("RGB", (width, height)).save(path)
 
     result = generate_cycle(
         "a blue knight",
         direction="east",
         out_dir=tmp_path / "c",
         frames=2,
-        size=32,
+        size=64,
         steps=4,
         seed=4,
         sprite_size=16,
         transparent=False,
         render=_render,
     )
-    assert len(seen) == 3  # referência + 2 frames
-    assert seen[1][1] == 5 and seen[2][1] == 6
-    assert result["frames"]
+    assert len(seen) == 2  # identidade + 1 folha
+    assert seen[1][1] == 5
+    assert seen[1][3:] == (2 * 48, 64)
+    assert len(result["frames"]) == 2
+
+
+def test_generate_cycle_with_reference_skips_identity(tmp_path: Path) -> None:
+    from text2d.sprite import generate_cycle
+
+    ref = tmp_path / "ref.png"
+    Image.new("RGB", (32, 32), (200, 0, 0)).save(ref)
+    gen = _FakeGen()
+    generate_cycle("k", direction="east", out_dir=tmp_path / "r", frames=4, reference=ref, size=64, generator=gen)
+    assert len(gen.calls) == 1
+    assert gen.calls[0]["refs"][0] == ref
+
+
+# ---------------------------------------------------------------------------
+# sprite — pós-processamento (alinhamento + paleta comum)
+# ---------------------------------------------------------------------------
+
+
+def _figure(x: int, y: int, *, leg: int = 0, size: int = 64) -> Image.Image:
+    """Boneco RGBA: tronco 8x20 em (x, y) e uma perna que se afasta ``leg`` px."""
+    from PIL import ImageDraw
+
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rectangle([x, y, x + 8, y + 20], fill=(200, 30, 30, 255))
+    d.line([(x + 4, y + 20), (x + 4 + leg, y + 34)], fill=(30, 30, 200, 255), width=3)
+    return img
+
+
+def test_align_frames_puts_torso_and_feet_in_same_place() -> None:
+    from text2d.sprite import align_frames
+
+    a = _figure(10, 5, leg=10)
+    b = _figure(30, 20, leg=-8)  # deslocado e com a perna para trás
+    out = align_frames([a, b])
+    assert out[0].size == out[1].size and out[0].width == out[0].height
+    ba = out[0].getchannel("A").getbbox()
+    bb = out[1].getchannel("A").getbbox()
+    assert ba is not None and bb is not None
+    assert ba[3] == bb[3]  # pés na mesma linha
+    # Tronco no mesmo x (a perna não arrasta o âncora).
+    ta = out[0].crop((0, ba[1], out[0].width, ba[1] + 10)).getchannel("A").getbbox()
+    tb = out[1].crop((0, bb[1], out[1].width, bb[1] + 10)).getchannel("A").getbbox()
+    assert ta is not None and tb is not None and abs(ta[0] - tb[0]) <= 1
+
+
+def test_align_frames_keeps_empty_frames() -> None:
+    from text2d.sprite import align_frames
+
+    empty = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    out = align_frames([empty, _figure(4, 4)])
+    assert len(out) == 2
+    assert out[0].getchannel("A").getbbox() is None
+
+
+def test_to_sprites_shares_palette_and_binarizes_alpha() -> None:
+    from text2d.sprite import to_sprites
+
+    frames = [_figure(10, 5, leg=10), _figure(12, 6, leg=-6)]
+    sprites = to_sprites(frames, sprite_size=32, colors=4)
+    assert all(s.size == (32, 32) for s in sprites)
+    colors = set()
+    for s in sprites:
+        arr = np.asarray(s)
+        assert set(np.unique(arr[..., 3]).tolist()) <= {0, 255}
+        colors |= {tuple(c) for c in arr[arr[..., 3] > 0, :3].tolist()}
+    assert len(colors) <= 4  # uma paleta para o ciclo todo
+
+
+def test_draw_pose_sheet_has_one_cell_per_pose() -> None:
+    from text2d.poses import draw_pose_sheet
+
+    sheet = draw_pose_sheet(WALK_CYCLE, cell=(48, 64))
+    assert sheet.size == (4 * 48, 64)
+    for i in range(4):
+        assert sheet.crop((i * 48, 0, (i + 1) * 48, 64)).getbbox() is not None
+
+
+def test_contact_poses_differ_by_depth_cue() -> None:
+    # De perfil, contacto da frente e de trás têm a mesma forma; o cinzento do
+    # lado de trás é o que diz ao modelo qual perna vai à frente.
+    a = draw_pose_silhouette("walk_contact_front", size=128).convert("RGB")
+    b = draw_pose_silhouette("walk_contact_back", size=128).convert("RGB")
+    assert a.tobytes() != b.tobytes()
+    assert (np.asarray(a) == (150, 150, 150)).all(axis=-1).any()
 
 
 def test_generate_cycle_invalid_frames_raises(tmp_path: Path) -> None:
@@ -334,3 +446,66 @@ def test_cli_walk_cycle_help() -> None:
     assert r.exit_code == 0
     for flag in ("--direction", "--frames", "--out-dir", "--ref", "--measure"):
         assert flag in r.output
+
+
+def test_identity_prompt_is_static_and_respects_back_view() -> None:
+    # A identidade não pode estar "walking" (o modelo copiava essa passada para
+    # todos os frames) nem "facing the viewer" quando a vista é de costas.
+    from text2d.sprite import identity_prompt
+
+    east = identity_prompt("a knight", direction="east")
+    assert "walking" not in east and "standing still" in east and "right-side profile" in east
+    north = identity_prompt("a knight", direction="north")
+    assert "behind" in north and "facing the viewer" not in north
+
+
+def test_sheet_prompt_references_identity_and_silhouettes() -> None:
+    from text2d.sprite import sheet_prompt
+
+    prompt = sheet_prompt("a knight.", direction="east", poses=WALK_CYCLE)
+    assert "4-frame" in prompt and "first image" in prompt and "second image" in prompt
+    assert "a knight," in prompt
+    assert "frame 1: the leading leg" in prompt and "frame 4:" in prompt
+
+
+def test_generate_cycle_warns_when_frames_are_copies(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from text2d.sprite import generate_cycle
+
+    def _render(prompt: str, path: Path, seed: int, refs: list[Path], width: int, height: int) -> None:
+        # Folha com 4 bonecos idênticos (a falha que o aviso tem de apanhar).
+        img = Image.new("RGB", (width, height), (255, 255, 255))
+        cell = width // 4 if width > height else width
+        for i in range(max(1, width // cell)):
+            img.paste(_figure(10, 5).convert("RGB"), (i * cell, 0), _figure(10, 5))
+        img.save(path)
+
+    generate_cycle(
+        "k",
+        direction="east",
+        out_dir=tmp_path / "w",
+        frames=4,
+        size=64,
+        sprite_size=32,
+        transparent=False,
+        render=_render,
+    )
+    assert "frames quase iguais" in capsys.readouterr().out
+
+
+def test_front_silhouettes_alternate_legs_without_sideways_spread() -> None:
+    # De frente: D, neutro, E, neutro — e pernas verticais (sem "V" lateral,
+    # que fazia o modelo virar a personagem de perfil).
+    from text2d.poses import draw_pose_silhouette
+
+    def feet(pose: str) -> tuple[int, int]:
+        arr = np.asarray(draw_pose_silhouette(pose, view="front", size=200))[..., 3] > 0
+        return int(np.nonzero(arr[:, :100].any(axis=1))[0].max()), int(np.nonzero(arr[:, 100:].any(axis=1))[0].max())
+
+    l0, r0 = feet("walk_contact_front")
+    l1, r1 = feet("walk_passing")
+    l2, r2 = feet("walk_contact_back")
+    l3, r3 = feet("walk_down")
+    assert r0 > l0 and l2 > r2  # pé da frente mais abaixo, alternando
+    assert l1 == r1 and l3 == r3  # passagens neutras
+    width = np.asarray(draw_pose_silhouette("walk_contact_front", view="front", size=200))[..., 3] > 0
+    assert np.ptp(np.nonzero(width.any(axis=0))[0]) < 0.4 * 200  # sem pernas abertas para os lados

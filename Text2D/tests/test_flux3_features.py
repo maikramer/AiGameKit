@@ -233,6 +233,7 @@ def _gen_with_fake_pipe(monkeypatch: pytest.MonkeyPatch, *, num_images: int = 1)
 
 def test_generate_passes_refs_boxes_num_images(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     gen, pipe = _gen_with_fake_pipe(monkeypatch, num_images=2)
+    gen.upsample = True  # boxes só são consumidas pelo bloco prompt_upsampler
     ref = tmp_path / "ref.png"
     Image.new("RGB", (4, 4)).save(ref)
     boxes = [{"id": "a", "desc": "d", "bbox": [0.1, 0.1, 0.5, 0.5]}]
@@ -248,6 +249,14 @@ def test_generate_passes_refs_boxes_num_images(monkeypatch: pytest.MonkeyPatch, 
     assert meta["refs"] == 1 and meta["boxes"] == 1 and meta["num_images"] == 2
     assert len(meta["images"]) == 2
     assert image.size == (4, 4)
+
+
+def test_generate_drops_boxes_without_upsample(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Sem o bloco prompt_upsampler o diffusers ignora "boxes" — não as enviar.
+    gen, pipe = _gen_with_fake_pipe(monkeypatch)
+    _, meta = gen.generate("p", num_inference_steps=8, seed=1, boxes=[{"id": "a", "desc": "d", "bbox": [0, 0, 1, 1]}])
+    assert "boxes" not in pipe.calls[0]
+    assert meta["boxes"] == 0
 
 
 def test_generate_auto_size_when_wh_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -458,9 +467,19 @@ def test_cli_upsample_off_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: 
 
 def test_cli_boxes_inline_payload(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     boxes = json.dumps([{"id": "balloon", "desc": "a balloon", "bbox": [0.1, 0.1, 0.5, 0.5]}])
-    result, captured = _invoke_generate(monkeypatch, ["p", "--boxes", boxes, "-o", str(tmp_path / "o.png")])
+    result, captured = _invoke_generate(
+        monkeypatch, ["p", "--boxes", boxes, "--upsample", "-o", str(tmp_path / "o.png")]
+    )
     assert result.exit_code == 0, result.output
     assert captured["payload"]["boxes"][0]["id"] == "balloon"
+
+
+def test_cli_boxes_without_upsample_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    boxes = json.dumps([{"id": "balloon", "desc": "a balloon", "bbox": [0.1, 0.1, 0.5, 0.5]}])
+    result, captured = _invoke_generate(monkeypatch, ["p", "--boxes", boxes, "-o", str(tmp_path / "o.png")])
+    assert result.exit_code != 0
+    assert "--upsample" in result.output
+    assert "payload" not in captured
 
 
 def test_cli_boxes_invalid_rejected_before_delegation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
