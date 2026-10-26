@@ -173,6 +173,22 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     ),
 )
 @click.option(
+    "--pose",
+    "pose",
+    default=None,
+    help=(
+        "Pose do personagem: nome da biblioteca (ex.: walk_contact_front, run_air, jump_up) "
+        "ou texto livre describing pernas/braços. Ver `text2d poses`."
+    ),
+)
+@click.option(
+    "--pose-view",
+    type=click.Choice(["side", "front"]),
+    default="side",
+    show_default=True,
+    help="Vocabulário de pose: side (perfil: frente/trás) ou front (de frente: esquerda/direita).",
+)
+@click.option(
     "--verbose",
     "-v",
     "verbose_flag",
@@ -273,6 +289,8 @@ def generate_cmd(
     ref_silhouette: str | None,
     num_images: int,
     upsample: bool,
+    pose: str | None,
+    pose_view: str,
     verbose_flag: bool,
     profile: bool,
     gpu_ids_str: str | None,
@@ -363,6 +381,13 @@ def generate_cmd(
         from .icons import augment_prompt_for_icon
 
         prompt = augment_prompt_for_icon(prompt)
+
+    # Pose: nome da biblioteca de poses ou texto livre (pernas/braços).
+    if pose:
+        from .poses import pose_names, pose_prompt
+
+        pose_text = pose_prompt(pose, view=pose_view) if pose in pose_names() else pose
+        prompt = f"{prompt.rstrip('.')}, {pose_text}"
 
     if not cpu:
         warn_if_vram_occupied()
@@ -629,6 +654,183 @@ def silhouette_cmd(input: str, output: str | None, threshold: int) -> None:
     except ImportError as e:
         raise click.ClickException(str(e)) from e
     console.print(f"[bold green]✓[/bold green] Silhueta: [cyan]{path}[/cyan]")
+
+
+@cli.command("poses")
+def poses_cmd() -> None:
+    """Lista as poses disponíveis (para `--pose` e `walk-cycle`)."""
+    from .poses import DIRECTIONS, WALK_CYCLE, pose_names, pose_prompt
+
+    t = Table(title="[bold blue]Poses[/bold blue]", box=box.ROUNDED)
+    t.add_column("Pose", style="cyan")
+    t.add_column("Vista lateral (side)", style="white")
+    for name in pose_names():
+        t.add_row(name, pose_prompt(name, view="side")[:110])
+    console.print(t)
+    console.print(
+        Panel(
+            f"[dim]Ciclo de caminhada: {', '.join(WALK_CYCLE)}[/dim]\n"
+            f"[dim]Direções: {', '.join(DIRECTIONS)}[/dim]\n"
+            "[dim]Exemplo: text2d generate 'knight' --pose walk_contact_front[/dim]",
+            border_style="dim",
+        )
+    )
+
+
+@cli.command("walk-cycle")
+@click.argument("character")
+@click.option(
+    "--direction",
+    type=click.Choice(["south", "south_east", "east", "north_east", "north", "north_west", "west", "south_west"]),
+    default="east",
+    show_default=True,
+    help="Direção da caminhada (define a vista e se o set é espelhado).",
+)
+@click.option(
+    "--frames",
+    "-n",
+    default=4,
+    show_default=True,
+    type=click.IntRange(min=1, max=16),
+    help="Frames do ciclo.",
+)
+@click.option(
+    "--out-dir",
+    "-O",
+    type=click.Path(),
+    default="outputs/sprites",
+    show_default=True,
+    help="Directório de saída (frames, sprites, sheet, gif).",
+)
+@click.option(
+    "--ref",
+    "reference",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Imagem de referência do personagem (identidade). Sem ela, é gerado um frame base.",
+)
+@click.option("--size", default=256, show_default=True, type=int, help="Resolução de geração.")
+@click.option("--steps", "-s", default=12, show_default=True, type=int, help="Passos de inferência.")
+@click.option("--seed", default=100, show_default=True, type=int, help="Seed base.")
+@click.option(
+    "--sprite-size",
+    default=96,
+    show_default=True,
+    type=int,
+    help="Lado do sprite final (0 = sem downscale).",
+)
+@click.option("--colors", default=32, show_default=True, type=int, help="Cores da paleta (look 16-bit).")
+@click.option("--transparent/--no-transparent", default=True, show_default=True, help="Cortar o fundo (rembg).")
+@click.option("--sheet/--no-sheet", default=True, show_default=True, help="Gerar folha de sprites.")
+@click.option("--gif/--no-gif", default=True, show_default=True, help="Gerar GIF do ciclo.")
+@click.option("--measure/--no-measure", default=True, show_default=True, help="Medir a variação entre frames.")
+@click.option("--cpu", is_flag=True, help="Forçar CPU")
+@add_vramd_options
+def walk_cycle_cmd(
+    character: str,
+    direction: str,
+    frames: int,
+    out_dir: str,
+    reference: str | None,
+    size: int,
+    steps: int,
+    seed: int,
+    sprite_size: int,
+    colors: int,
+    transparent: bool,
+    sheet: bool,
+    gif: bool,
+    measure: bool,
+    cpu: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
+) -> None:
+    """Gera um ciclo de caminhada (frames + sprites + folha + GIF) numa direção.
+
+    Cada frame é gerado com o **prompt de pose** da fase (pernas e braços
+    descritos) e a mesma referência do personagem — é isso que dá a variação
+    de pose mantendo a identidade.
+    """
+    from .sprite import generate_cycle
+
+    # Gerador in-process (fallback quando o vramd não trata o job).
+    _gen: list[Any] = []
+
+    def _fallback_render(prompt: str, path: Path, frame_seed: int, refs: list[Path]) -> None:
+        if not _gen:
+            _gen.append(KleinFluxGenerator(device="cpu" if cpu else None, memory_efficient=not cpu))
+        img, _ = _gen[0].generate(
+            prompt,
+            width=size,
+            height=size,
+            refs=refs or None,
+            num_inference_steps=steps,
+            seed=frame_seed,
+        )
+        KleinFluxGenerator.save_image(img, path)
+
+    def _render(prompt: str, path: Path, frame_seed: int, refs: list[Path]) -> None:
+        """Delega ao vramd; se recusar/falhar, gera in-process."""
+        payload: dict[str, Any] = {
+            "prompt": prompt,
+            "output": str(path.resolve()),
+            "width": size,
+            "height": size,
+            "steps": steps,
+            "seed": frame_seed,
+            "model_id": default_model_id(),
+            "refs": [str(r) for r in refs],
+        }
+        if not cpu and delegate_or_prepare(
+            "text2d",
+            payload=payload,
+            t_start=time.time(),
+            noun="Frame",
+            console=console,
+            enabled=not no_vramd,
+            priority=vramd_priority or "batch",
+            stream=vramd_stream,
+            memory_efficient=not cpu,
+            quant_preset=None,
+            footprint_key=model_footprint_key(payload["model_id"]),
+        ):
+            return
+        _fallback_render(prompt, path, frame_seed, refs)
+
+    try:
+        result = generate_cycle(
+            character,
+            direction=direction,
+            out_dir=out_dir,
+            frames=frames,
+            reference=reference,
+            size=size,
+            steps=steps,
+            seed=seed,
+            sprite_size=sprite_size or None,
+            colors=colors,
+            transparent=transparent,
+            make_sheet=sheet,
+            make_gif=gif,
+            measure=measure,
+            render=_render,
+        )
+    except (ValueError, FileNotFoundError) as e:
+        raise click.ClickException(str(e)) from e
+    finally:
+        for gen in _gen:
+            gen.unload()
+
+    console.print(
+        Panel(
+            f"[bold green]✓[/bold green] {len(result['frames'])} frames → "
+            f"[cyan]{Path(out_dir).resolve()}[/cyan]\n"
+            f"[dim]sprites: {len(result['sprites'])} | sheet: {result['sheet']} | gif: {result['gif']}[/dim]",
+            title="[bold green]Sprite sheet[/bold green]",
+            border_style="green",
+        )
+    )
 
 
 _batch_gen = None

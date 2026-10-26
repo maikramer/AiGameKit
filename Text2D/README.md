@@ -227,6 +227,50 @@ Output:
 
 > GGUF weights target ComfyUI-GGUF workflows, not this CLI.
 
+### `text2d poses` + `text2d walk-cycle` (animação 2D)
+
+O FLUX.3 não tem pose conditioning: quem controla a pose é o **prompt** (a
+referência mantém a identidade do personagem). O Text2D traz um vocabulário de
+poses e um comando que gera ciclos de caminhada prontos a usar.
+
+```bash
+# Listar as poses (pernas/braços descritos em texto)
+text2d poses
+
+# Um frame com uma pose específica (nome da biblioteca ou texto livre)
+text2d generate "knight hero" --pose walk_contact_front -o frame.png
+
+# Ciclo de caminhada completo: 4 frames + sprites + folha + GIF
+text2d walk-cycle "16-bit SNES-era pixel art knight hero in a blue tunic" \
+  --direction east --frames 4 --out-dir outputs/sprites/knight
+```
+
+| Flag (walk-cycle) | Default | Description |
+|-------------------|---------|-------------|
+| `--direction` | `east` | `south`/`south_east`/`east`/`north_east`/`north`/`north_west`/`west`/`south_west` |
+| `--frames` / `-n` | 4 | Frames do ciclo (fases repetidas se forem mais) |
+| `--out-dir` / `-O` | `outputs/sprites` | Frames crus, sprites, folha e GIF |
+| `--ref` | — | Referência do personagem (identidade); sem ela é gerado um frame base |
+| `--size` / `--steps` / `--seed` | 256 / 12 / 100 | Resolução, passos e seed |
+| `--sprite-size` / `--colors` | 96 / 32 | Lado do sprite e nº de cores (look 16-bit) |
+| `--measure` | on | Mede a variação de silhueta entre frames consecutivos |
+
+Como funciona:
+
+1. **Frame de referência** (o personagem) — ou usa o `--ref` dado.
+2. **Um frame por fase**, com o prompt de pose da fase ("a perna da frente
+   estendida para a frente, a de trás para trás…") e a **mesma referência** —
+   é esta combinação que dá a variação de pose mantendo a identidade.
+3. **Pós-processamento**: fundo fora (rembg) → downscale → paleta reduzida
+   (16-bit) → folha de sprites + GIF.
+4. Direções espelhadas (`west`, `north_west`, `south_west`) são geradas a
+   partir da direção canónica e espelhadas — a personagem fica idêntica nos
+   dois sets.
+
+Medido na RTX 4050 6 GB: **~10,5 s por frame** (256²/12 steps) e **21-27% de
+variação de silhueta** entre frames consecutivos (o método ingénuo — mesma
+referência e prompt genérico — dava 8%: frames quase idênticos).
+
 ### `text2d skill install`
 
 Install the Cursor Agent Skill (`SKILL.md`) into a game project's `.cursor/skills/text2d/` directory.

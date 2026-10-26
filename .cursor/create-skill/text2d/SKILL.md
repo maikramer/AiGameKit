@@ -38,6 +38,8 @@ text2d generate "um gato com um cartaz" -o saida.png
 text2d generate "paisagem" --width 768 --height 768 --steps 4 --guidance 1.0
 text2d generate "retrato" --seed 42 -o retrato.png
 text2d -v generate "teste"
+text2d poses                      # vocabulário de poses (pernas/braços)
+text2d walk-cycle "knight hero" --direction east --frames 4 -O sprites/knight
 ```
 
 ## Variáveis de ambiente

@@ -43,6 +43,8 @@ text2d generate "o mesmo personagem a correr" --ref heroi.png -o corrida.png
 text2d generate "heroi aos saltos" --ref-silhouette heroi.png -o salto.png
 text2d generate "dois balões" --boxes '[{"id":"b1","desc":"um balão vermelho","bbox":[0.1,0.1,0.5,0.4]}]'
 text2d silhouette heroi.png -o heroi_sil.png
+text2d poses                      # vocabulário de poses (pernas/braços)
+text2d walk-cycle "knight hero" --direction east --frames 4 -O sprites/knight
 text2d -v generate "teste"
 ```
 

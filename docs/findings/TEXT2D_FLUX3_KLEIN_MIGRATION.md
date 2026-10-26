@@ -128,6 +128,33 @@ Teste real: 10 quadros de um cavaleiro a andar, 8 direções + 2 fases de passo,
   no anti-aliasing", gerar 256², cortar fundo (rembg), downscale 96²
   (LANCZOS) + `quantize(colors=32, MEDIANCUT)`, upscale NEAREST para preview.
 
+### Como dar variação de pose (medido)
+
+Medida de referência: **fração de pixels com alpha diferente** entre frames
+consecutivos (0 = frames idênticos). É a métrica que está em
+`text2d.poses.alpha_difference` e no `--measure` do `walk-cycle`.
+
+| Técnica | Variação entre frames | Notas |
+|---------|----------------------|-------|
+| Referência + prompt genérico ("a andar") | **8%** | frames quase idênticos |
+| Referência + **frase de pose** (pernas/braços) | **16-26%** | a pose muda, a personagem mantém-se |
+| **Silhueta da pose desenhada** como referência | 14-29% | a forma desenhada é copiada (as pernas seguem os ângulos) |
+| `text2d walk-cycle` (referência + prompt por frame) | **21-27%** | o que ficou em produção |
+
+Regras apuradas:
+
+- **A referência manda na pose**: prompts de instrução curta ("side view",
+  "walking left") são ignorados no image-conditioned. Descrever a **imagem
+  final** (quem é, de que vista, em que pose) é o que funciona.
+- **Vocabulário por vista**: de perfil fala-se de "leading/trailing leg" e
+  "front/back arm"; de frente, de "left/right leg/arm" (biblioteca
+  `text2d.poses`).
+- **Direções espelhadas**: gerar a canónica (E) e espelhar dá a personagem
+  idêntica nos dois sets (W) — e metade das gerações.
+- Medição sem pipeline de sprites dá valores enganadores: o PNG cru tem fundo
+  opaco → alpha igual → "0% de diferença" mesmo com poses diferentes. Medir
+  **após** rembg + downscale.
+
 ## Tiers de qualidade retunados
 
 Distilled 4-16 steps (o antigo icon a 2 steps deixou de existir):

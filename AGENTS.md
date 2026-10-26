@@ -71,7 +71,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | Directory | Language | Package name | Perfil | Description |
 |-----------|----------|--------------|--------|-------------|
 | `Shared/` | Python | `aigamekit-shared` | core (auto) | Shared lib (logging, GPU, subprocess, installers, CLI) |
-| `Text2D/` | Python | `text2d` | core | Text-to-image (**FLUX.3 Image Klein** — ModularPipeline diffusers ≥0.42; group offload+streams e int4 por defeito — int3/int2 só em GPUs <4 GB; [`docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md`](docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md)). Refs até 10 (`--ref`), boxes (`--boxes`), silhuetas (`--ref-silhouette`) para animação 2D; ícones: `--category icon` (512², 4 steps) + `--transparent` (rembg) |
+| `Text2D/` | Python | `text2d` | core | Text-to-image (**FLUX.3 Image Klein** — ModularPipeline diffusers ≥0.42; group offload+streams e int4 por defeito — int3/int2 só em GPUs <4 GB; [`docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md`](docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md)). Refs até 10 (`--ref`), boxes (`--boxes`), silhuetas (`--ref-silhouette`); animação 2D: `text2d poses` + `text2d walk-cycle` (ciclo de caminhada com prompt de pose por frame, sprite sheets); ícones: `--category icon` (512², 4 steps) + `--transparent` (rembg) |
 | `Text3D/` | Python | `text3d` | core | Text-to-3D (Hunyuan3D-Omni SDNQ) |
 | `Paint3D/` | Python | `paint3d` | core | 3D texturing (Hunyuan3D-Paint 2.1, bilateral smooth, bake_exp=6) |
 | `Part3D/` | Python | `part3d` | extra | Semantic mesh part decomposition (Hunyuan3D-Part: P3-SAM + X-Part; SDNQ) |
