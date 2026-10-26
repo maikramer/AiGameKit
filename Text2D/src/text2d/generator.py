@@ -223,6 +223,9 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             quant_mode=preset or "none",
             allow_quant=("none", preset) if preset else ("none",),
             model_attr="transformer",
+            # Com --upsample o pup 9B também tem de ser streamado pelo GO (sem
+            # isto ficaria na CPU e cada caption levaria minutos).
+            offload_modules=("transformer", "text_encoder", "prompt_upsampler") if self.upsample else None,
             target_resolution=1024,
             **self._go_planner_kwargs(full_gpu_budget_fraction=FULL_GPU_BUDGET_FRACTION),
         )
@@ -436,9 +439,16 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             should_abort=should_abort,
             on_step=on_step,
         )
-        images = pipe(**pipe_kwargs, output="images")
-        if isinstance(images, dict):
-            images = images.get("images", [])
+        # Com upsampler, pedir também a caption que o pup escreveu (observabilidade
+        # do que o modelo de imagem recebeu).
+        output_keys: str | list[str] = ["images", "prompt"] if self.upsample else "images"
+        out = pipe(**pipe_kwargs, output=output_keys)
+        caption = None
+        if isinstance(out, dict):
+            images = out.get("images") or []
+            caption = out.get("prompt")
+        else:
+            images = out
         if not images:
             raise RuntimeError("o pipeline não devolveu imagens")
         metadata: dict[str, Any] = {
@@ -453,6 +463,9 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             # Lista completa (só difere de [image] com num_images > 1).
             "images": list(images),
         }
+        if caption:
+            # Caption expandida pelo prompt upsampler (None sem --upsample).
+            metadata["caption"] = caption
         return images[0], metadata
 
     @staticmethod

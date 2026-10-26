@@ -99,8 +99,34 @@ clássico `Flux2KleinPipeline`) para **`black-forest-labs/flux-3-image-klein`**
 - **Preflight restrito**: o repo tem 43 GB (variants fp8r/nvfp4 + o
   `model.safetensors` single-file original) mas o pipeline só usa ~20 GB. O
   `_preflight_download` ignora `variants/*` e `model.safetensors`.
-- `--upsample` (pup 9B) não foi corrido E2E nesta migração (download ~19 GB);
-  o caminho de load (pop vs manter bloco) está coberto por testes.
+- **`--upsample` validado E2E** (pup 9B público, ~18 GB): warmup 462,7 s
+  (download+load+quant int4), generate **334 s/imagem** a 256²/10 steps na
+  4050 (o pup é streamado leaf-level pelo GO). A caption expandida saiu
+  perfeita — "full profile facing left… left leg reaches forward, right arm
+  swings back…" — e corrigiu uma direção que o prompt curto não conseguia.
+  Custo alto: usar em imagens críticas, não em batch/sprite sheets.
+  A caption vem em `metadata["caption"]` (e `output=["images","prompt"]`).
+- Com `--upsample`, `prompt_upsampler` entra no `offload_modules` do GO —
+  sem isso o pup ficaria na CPU (minutos por caption).
+
+## 2D animation / sprite sheets (teste de capacidades)
+
+Teste real: 10 quadros de um cavaleiro a andar, 8 direções + 2 fases de passo,
+256², pós-processado para 96² + paleta 32 cores (look 16-bit).
+
+- **Consistência de personagem com `--ref` é excelente** — o mesmo herói,
+  cores e proporções em todos os quadros (a referência domina).
+- **Direções**: instruções curtas ("side view", "walking left") são
+  insuficientes no image-conditioned — o modelo mantém a vista da referência.
+  Com **captions completas do alvo** (como a BFL recomenda: descrever a imagem
+  final, não a edição), S/E/N saem certos e os diagonais parcialmente.
+- **Truque de produção**: para sprites simétricos, gerar E e espelhar → W;
+  NE→NW; SE→SW. Consistência perfeita e metade das gerações.
+- Com `--upsample` a direção difícil (perfil esquerdo) sai certa — o pup
+  escreve a caption completa, ao custo acima.
+- Receita 16-bit: prompt "16-bit SNES-era pixel art, flat colors, crisp pixels,
+  no anti-aliasing", gerar 256², cortar fundo (rembg), downscale 96²
+  (LANCZOS) + `quantize(colors=32, MEDIANCUT)`, upscale NEAREST para preview.
 
 ## Tiers de qualidade retunados
 

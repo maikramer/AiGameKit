@@ -535,3 +535,33 @@ def test_cli_silhouette_default_output_name(monkeypatch: pytest.MonkeyPatch, tmp
     r = CliRunner().invoke(cli, ["silhouette", str(src)])
     assert r.exit_code == 0, r.output
     assert (tmp_path / "hero_silhouette.png").is_file()
+
+
+class _FakeUpsamplePipe(_FakePipe):
+    """Devolve dict quando o caller pede múltiplos outputs (caption do pup)."""
+
+    def __call__(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        images = [Image.new("RGB", (4, 4), (i, i, i)) for i in range(self._num)]
+        if isinstance(kwargs.get("output"), (list, tuple)):
+            return {"images": images, "prompt": "an expanded scene caption"}
+        return images
+
+
+def test_generate_upsample_requests_and_exposes_caption(monkeypatch: pytest.MonkeyPatch) -> None:
+    from text2d.generator import KleinFluxGenerator
+
+    gen = KleinFluxGenerator(device="cpu", memory_efficient=True, upsample=True)
+    pipe = _FakeUpsamplePipe()
+    monkeypatch.setattr(gen, "_load_pipeline", lambda: pipe)
+    image, meta = gen.generate("short prompt", num_inference_steps=4)
+    assert pipe.calls[0]["output"] == ["images", "prompt"]
+    assert meta["caption"] == "an expanded scene caption"
+    assert image.size == (4, 4)
+
+
+def test_generate_without_upsample_has_no_caption(monkeypatch: pytest.MonkeyPatch) -> None:
+    gen, pipe = _gen_with_fake_pipe(monkeypatch)
+    _, meta = gen.generate("p", num_inference_steps=4)
+    assert pipe.calls[0]["output"] == "images"
+    assert "caption" not in meta

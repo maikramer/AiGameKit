@@ -114,7 +114,7 @@ text2d generate "character design" --quality high
 | `--boxes` | JSON / path | — | Layout boxes `{id, desc, bbox:[y0,x0,y1,x1]}` in 0-1 (+ `from`/`src_bbox`/`tgt_bbox` for edits) |
 | `--ref-silhouette` | path | — | Extracts the silhouette (rembg) and uses it as `--ref` (shape consistency) |
 | `-n, --num-images` | int | 1 | Images per prompt (suffixes `_1`, `_2`, ...) |
-| `--upsample` | flag | off | Prompt upsampler 9B (`flux-3-image-klein-pup`) — expands the short prompt into a full scene caption (slower, +19 GB weights streamed) |
+| `--upsample` | flag | off | Prompt upsampler 9B (`flux-3-image-klein-pup`) — expands the short prompt into a full scene caption. Much better direction/pose adherence (e.g. side views) at ~+18 GB weights and **~5 min/image on a 6 GB GPU**; the expanded caption is exposed in `metadata["caption"]` |
 | `--seed` | int | — | Reproducible generation seed |
 | `--cpu` | flag | off | Force CPU inference |
 | `-m, --model` | str | auto | Model ID override (see `text2d models`) |

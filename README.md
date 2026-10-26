@@ -350,7 +350,7 @@ Tool flags: `--vramd-priority interactive|batch`, `--no-vramd`, `--vramd-stream`
 
 | Tool | Default model(s) | HF gate | Notes |
 |------|------------------|---------|-------|
-| **Text2D** | [FLUX.3 Image Klein](https://huggingface.co/black-forest-labs/flux-3-image-klein) (5.6B distilled + Qwen3-VL-4B) — BF16 base + **SDNQ runtime** quantization | **gated** (accept Kommunity license on Hub + `HF_TOKEN`) | `TEXT2D_MODEL_ID` override; 16 steps (4-16 trained), no guidance. Refs up to 10 (`--ref`), layout boxes (`--boxes`), silhouettes (`--ref-silhouette`); icons: `--category icon` (512², 4 steps) + `--transparent` (rembg); optional `--upsample` (9B pup) |
+| **Text2D** | [FLUX.3 Image Klein](https://huggingface.co/black-forest-labs/flux-3-image-klein) (5.6B distilled + Qwen3-VL-4B) — BF16 base + **SDNQ runtime** quantization | **gated** (accept Kommunity license on Hub + `HF_TOKEN`) | `TEXT2D_MODEL_ID` override; 16 steps (4-16 trained), no guidance. Refs up to 10 (`--ref`), layout boxes (`--boxes`), silhouettes (`--ref-silhouette`); icons: `--category icon` (512², 4 steps) + `--transparent` (rembg); optional `--upsample` (9B pup; ~5 min/img on 6 GB, much better direction/pose adherence) |
 | **Text3D** | [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) shape (SDNQ INT4; bbox/pose/point/voxel controls) + Text2D FLUX reference image | no | Tencent Community License; BiRefNet bg-removal |
 | **Paint3D** | [Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) paint (`hunyuan3d-paintpbr-v2-1`) | no | + Real-ESRGAN (optional upscale) |
 | **Part3D** | [Hunyuan3D-Part](https://huggingface.co/tencent/Hunyuan3D-Part) (P3-SAM + X-Part) | no | Tencent Community License |
