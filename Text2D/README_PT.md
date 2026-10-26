@@ -2,7 +2,7 @@
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
-CLI de **text-to-imagem** com [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) em quantização **SDNQ** runtime ([Disty0/sdnq](https://github.com/Disty0/sdnq)), no mesmo espírito do Text3D (Click + Rich, `src/`, scripts).
+CLI de **text-to-imagem** com [FLUX.3 Image Klein](https://huggingface.co/black-forest-labs/flux-3-image-klein) em quantização **SDNQ** runtime ([Disty0/sdnq](https://github.com/Disty0/sdnq)), no mesmo espírito do Text3D (Click + Rich, `src/`, scripts). Suporta referências (até 10), layout por boxes e silhuetas para consistência de personagem (animação 2D).
 
 ## Requisitos
 
@@ -17,7 +17,7 @@ Auto-detecção de hardware (`--hw-auto`, ligada por defeito): GPUs pequenas gan
 **Group offload + CUDA streams (defeito ON):** sempre que o full-GPU não teria folga (FLUX klein int4 ficaria a 83–91% do orçamento em GPUs 8–12 GB), o planner engaja group offload com streams — os pesos streamam por grupos e o pico cai para ≈ ativação, com VAE tiling + attention slicing como chunks menores. Quantização 4 bits por defeito; int3/int2 só em GPUs minúsculas (<4 GB), como último recurso. Kill-switch: `--no-group-offload` ou `TEXT2D_GROUP_OFFLOAD=0` (global: `AIGAMEKIT_GROUP_OFFLOAD=0`).
 | Disco   | ~8 GB  | Cache HF + pesos SDNQ (~2,5 GB em disco) |
 
-**Licença dos pesos:** o default é a base oficial [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (**Apache 2.0**, download público) / [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (**gated** — aceitar termos BFL + `HF_TOKEN`) com quantização **SDNQ em runtime** (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Resumo: [Licenças no monorepo](../README_PT.md).
+**Licença dos pesos:** o default é [black-forest-labs/flux-3-image-klein](https://huggingface.co/black-forest-labs/flux-3-image-klein) (**gated** — aceitar a FLUX Kommunity License v1.0 no Hub + `HF_TOKEN`; text encoder Qwen3-VL Apache-2.0) com quantização **SDNQ em runtime** (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). `--upsample` opcional usa [flux-3-image-klein-pup](https://huggingface.co/black-forest-labs/flux-3-image-klein-pup). Resumo: [Licenças no monorepo](../README_PT.md).
 
 ## Instalação
 
@@ -108,7 +108,7 @@ Kernel opts (~6 GB): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/finding
 
 | Variável | Descrição |
 |----------|-----------|
-| `TEXT2D_MODEL_ID` | Repositório HF alternativo compatível com `Flux2KleinPipeline` (ex.: `black-forest-labs/FLUX.2-klein-4B` para Apache 2.0; default = base BFL fp16 + SDNQ runtime) |
+| `TEXT2D_MODEL_ID` | Repositório HF alternativo compatível com o ModularPipeline FLUX.3 (ex.: `black-forest-labs/flux-3-image-klein-base`; default = distilled + SDNQ runtime) |
 | `HF_HOME` | Cache Hugging Face (por defeito: `~/.cache/huggingface`) |
 | `TEXT2D_MODELS_DIR` | Diretório de modelos locais; o instalador grava em `~/.config/text2d/config.env` quando existe `Text2D/models/` com pesos |
 | `TEXT2D_OUTPUT_DIR` | Diretório de saída das imagens (criado pelo instalador em `~/.text2d/outputs`) |
@@ -118,7 +118,7 @@ Kernel opts (~6 GB): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/finding
 
 ### Guidance
 
-A base oficial FLUX.2 Klein usa **guidance 1.0** por defeito (compatível com o SDNQ runtime); o BF16 original BFL costuma aceitar valores mais altos (ex. 4.0).
+O FLUX.3 Image Klein é **guidance-distilled**: não usa classifier-free guidance. `-g/--guidance` continua aceite por compatibilidade mas é **ignorado**; a aderência ao prompt vem dos steps (4-16) e do prompt upsampler opcional (`--upsample`).
 
 ## Unified Model Server (vramd)
 
@@ -171,4 +171,4 @@ pytest tests/ -v
 ## Licença
 
 - **Código:** MIT — [LICENSE](LICENSE).
-- **Pesos:** default = base oficial BFL fp16 ([FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) Apache 2.0, público; [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) **gated**) + quantização SDNQ runtime (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Tabela completa: [AiGameKit/README_PT.md — Licenças](../README_PT.md).
+- **Pesos:** default = [black-forest-labs/flux-3-image-klein](https://huggingface.co/black-forest-labs/flux-3-image-klein) (**gated**, FLUX Kommunity License v1.0; text encoder Qwen3-VL Apache-2.0) + quantização SDNQ runtime (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). `--upsample` opcional usa [flux-3-image-klein-pup](https://huggingface.co/black-forest-labs/flux-3-image-klein-pup). Tabela completa: [AiGameKit/README_PT.md — Licenças](../README_PT.md).

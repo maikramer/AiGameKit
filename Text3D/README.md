@@ -2,7 +2,7 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-Text-to-3D and image-to-3D generation powered by [Text2D](../Text2D) (FLUX.2 Klein SDNQ) → [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) (image + optional bbox/pose/point/voxel controls; SDNQ INT4 on small GPUs). Outputs geometry-only GLB/PLY/OBJ meshes. For texturing and PBR, use [Paint3D](../Paint3D) or [GameAssets](../GameAssets).
+Text-to-3D and image-to-3D generation powered by [Text2D](../Text2D) (FLUX.3 Image Klein SDNQ) → [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) (image + optional bbox/pose/point/voxel controls; SDNQ INT4 on small GPUs). Outputs geometry-only GLB/PLY/OBJ meshes. For texturing and PBR, use [Paint3D](../Paint3D) or [GameAssets](../GameAssets).
 
 Text3D is also the **central mesh operations hub** in the monorepo — it owns all mesh post-processing (LOD, collision, remesh, simplify, align).
 
@@ -12,7 +12,7 @@ Text3D is also the **central mesh operations hub** in the monorepo — it owns a
 
 Text3D generates 3D meshes in two phases:
 
-1. **Text2D** (text → reference image) — uses FLUX.2 Klein with CPU offload by default; the model is **always unloaded** before loading Hunyuan3D.
+1. **Text2D** (text → reference image) — uses FLUX.3 Image Klein with group offload/CUDA streams by default; the model is **always unloaded** before loading Hunyuan3D (both share the same venv since diffusers 0.42).
 2. **Hunyuan3D-Omni** (image → mesh) — SiT flow matching + optional geometric controls; SDNQ INT4 on small GPUs.
 
 Generation presets (`--preset`) adjust steps, octree resolution, and chunk count together:
@@ -540,7 +540,7 @@ Full CI: `make check` (from repo root) runs lint, format check, typecheck, and t
 ## Credits
 
 - **Tencent Hunyuan3D-Omni** — [GitHub](https://github.com/Tencent-Hunyuan/Hunyuan3D-Omni), [HuggingFace](https://huggingface.co/tencent/Hunyuan3D-Omni) (image + bbox/pose/point/voxel; SDNQ INT4 on small GPUs)
-- **Text2D** — FLUX.2 Klein (official BFL fp16 base + SDNQ runtime by default; optional pre-quantized mirror via `TEXT2D_MODEL_ID`) in the monorepo `text2d` package
+- **Text2D** — FLUX.3 Image Klein (BFL base + SDNQ runtime by default; `TEXT2D_MODEL_ID` override) in the monorepo `text2d` package
 
 ## License
 

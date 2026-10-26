@@ -18,6 +18,7 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [ANIMATOR_QUADRUPED_CLIPS_FINDINGS.md](ANIMATOR_QUADRUPED_CLIPS_FINDINGS.md) | Quadrúpedes: galope transverso (fases por pata, spine flex, voo), front/hind anatómico, death colapso terminal, hit flinch, attack com patas+lunge; Death≠chop / Hit≠mine |
 | [MOTION3D_FINDINGS.md](MOTION3D_FINDINGS.md) | Text-to-motion → SkinTokens: `apply-rigged`, aim/rest/folhas, neutro A-pose vs pés do alvo, in-place, venv |
 | [PRECOMPUTE_COLLIDERS_FINDINGS.md](PRECOMPUTE_COLLIDERS_FINDINGS.md) | Colisores cápsula/cilindro pré-calculados (tronco); `aigamekit-lab precompute` → `gameassets_handoff.json` (consumo no runtime); carve procedural |
+| [TEXT2D_FLUX3_KLEIN_MIGRATION.md](TEXT2D_FLUX3_KLEIN_MIGRATION.md) | Text2D → FLUX.3 Image Klein: ModularPipeline (diffusers 0.42), pop do prompt upsampler, refs/boxes/silhueta, steps 4-16 sem guidance, footprint `flux3-klein`, `load_keys`/`shape_keys` no vramd |
 | [MODEL_CONSOLIDATION_STUDY.md](MODEL_CONSOLIDATION_STUDY.md) | Inventário de modelos/variantes (~166 GB HF) + cortes por tier (~44 GB: órfãos Sana/t5-base/T2MGPT, SA Open legado, Disty0 klein, HY-Motion full) e unificações de vendor (Real-ESRGAN, bg-remover, aliases) |
 | [TOOLKIT_CORE_PROFILE_STUDY.md](TOOLKIT_CORE_PROFILE_STUDY.md) | Uso real das 20 tools nos exemplos: Part3D/Motion3D/Intrinsic não usados (~42 GB); perfis install.sh `core|examples|all`; doc-bug "parts auto-detect" |
 

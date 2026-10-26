@@ -1,14 +1,14 @@
 # Text2D — AI Text-to-Image Generation
 
-> Fast, local text-to-image generation using [FLUX.2 Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) with SDNQ quantization. Designed for modest GPUs (6 GB VRAM; hw-auto engata **group offload + CUDA streams + int4** automaticamente — pico ≈ ativação, com folga real).
+> Fast, local text-to-image generation using [FLUX.3 Image Klein](https://huggingface.co/black-forest-labs/flux-3-image-klein) with SDNQ quantization. Designed for modest GPUs (6 GB VRAM; hw-auto engata **group offload + CUDA streams + int4** automaticamente — pico ≈ ativação, com folga real). Reference images (up to 10), layout boxes and silhouette-guided pose variations make it useful for **2D animation/character consistency**.
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
 ## Overview
 
-Text2D is a CLI tool that generates images from text prompts using the FLUX.2 Klein model in SDNQ (4-bit dynamic quantization). It integrates with the AiGameKit monorepo pipeline and supports quality presets, multi-GPU inference, and batch generation.
+Text2D is a CLI tool that generates images from text prompts using the FLUX.3 Image Klein model in SDNQ (4-bit dynamic quantization). It integrates with the AiGameKit monorepo pipeline and supports quality presets, multi-GPU inference, and batch generation.
 
-**Default model:** [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (low VRAM, public) or [FLUX.2 Klein 9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (high VRAM, **gated** — accept terms on the Hub). Both load the official BFL fp16 base; SDNQ quantization is applied at **runtime** (no pre-quantized checkpoint by default).
+**Default model:** [black-forest-labs/flux-3-image-klein](https://huggingface.co/black-forest-labs/flux-3-image-klein) — 5.6B guidance-distilled transformer + Qwen3-VL-4B text encoder + Flux2 VAE, served through the diffusers **ModularPipeline**. The repo is **gated** (FLUX Kommunity License v1.0 — accept it on the Hub and set `HF_TOKEN`). SDNQ quantization is applied at **runtime** (no pre-quantized checkpoint by default). 16 steps (trained 4-16), no classifier-free guidance.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ Text2D is a CLI tool that generates images from text prompts using the FLUX.2 Kl
 | Python | 3.13+    | Pinned `>=3.13,<3.14` (`pyproject.toml`) |
 | GPU    | Optional | NVIDIA + CUDA recommended for reasonable inference |
 | VRAM   | ~6 GB+   | With hw-auto memory-efficient mode (on by default) and 512² resolution; multi-GPU via `--gpu-ids` |
-| Disk   | ~8 GB    | HF cache + SDNQ weights (~2.5 GB on disk) |
+| Disk   | ~25 GB   | HF cache (BF16 base ≈ 20 GB) + SDNQ runtime |
 
 > **First run** downloads several GB from Hugging Face and may take many minutes. Subsequent runs with cached weights finish in seconds to ~1 minute depending on hardware.
 
@@ -77,13 +77,24 @@ Generate an image from a text prompt using the FLUX pipeline.
 text2d generate "a cat holding a sign that says hello world"
 
 # Custom resolution, steps, and output path
-text2d generate "sunset landscape" -W 768 -H 768 -s 4 -g 1.0 -o sunset.png
+text2d generate "sunset landscape" -W 768 -H 768 -s 12 -o sunset.png
 
 # Reproducible output with seed
 text2d generate "portrait" --seed 42 -o portrait.png
 
-# Low VRAM (4B model auto-selected by hw-auto)
-text2d generate "dragon"
+# Edit / composition with reference images (up to 10; output size = 1st ref unless -W/-H)
+text2d generate "the same character running, flat colors" --ref hero.png -o hero_run.png
+
+# Layout boxes (placement/scale, not a hard mask); JSON inline or a .json file
+text2d generate "hot-air balloons over a valley" \
+  --boxes '[{"id":"b1","desc":"a red balloon","bbox":[0.1,0.1,0.5,0.4]}]' -o balloons.png
+
+# Silhouette-guided consistency (2D animation): extract then use as reference
+text2d silhouette hero.png -o hero_sil.png
+text2d generate "the same character jumping" --ref-silhouette hero.png -o hero_jump.png
+
+# Multiple images per prompt (hero.png, hero_1.png, hero_2.png)
+text2d generate "character portrait" -n 3 -o hero.png
 
 # Multi-GPU: split model across GPUs 0 and 1
 text2d generate "epic scene" --gpu-ids 0,1
@@ -95,17 +106,22 @@ text2d generate "character design" --quality high
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-o, --output` | path | auto | Output file path (`.png` or `.jpg`) |
-| `-W, --width` | int | 1024 | Image width in pixels |
-| `-H, --height` | int | 1024 | Image height in pixels |
-| `-s, --steps` | int | 4 | Inference diffusion steps |
-| `-g, --guidance` | float | 1.0 | Guidance scale (1.0 recommended for SDNQ) |
+| `-W, --width` | int | auto (1024 / 1st ref) | Image width in pixels (multiple of 16 recommended) |
+| `-H, --height` | int | auto (1024 / 1st ref) | Image height in pixels |
+| `-s, --steps` | int | 16 | Inference steps (model trained for 4-16; outside range degrades) |
+| `-g, --guidance` | float | — | **Ignored**: FLUX.3 Klein is guidance-distilled (no CFG); kept for compatibility |
+| `--ref` | path (repeatable) | — | Reference image for edit/composition (max 10); cite as "the first image", "the second image"... |
+| `--boxes` | JSON / path | — | Layout boxes `{id, desc, bbox:[y0,x0,y1,x1]}` in 0-1 (+ `from`/`src_bbox`/`tgt_bbox` for edits) |
+| `--ref-silhouette` | path | — | Extracts the silhouette (rembg) and uses it as `--ref` (shape consistency) |
+| `-n, --num-images` | int | 1 | Images per prompt (suffixes `_1`, `_2`, ...) |
+| `--upsample` | flag | off | Prompt upsampler 9B (`flux-3-image-klein-pup`) — expands the short prompt into a full scene caption (slower, +19 GB weights streamed) |
 | `--seed` | int | — | Reproducible generation seed |
 | `--cpu` | flag | off | Force CPU inference |
 | `-m, --model` | str | auto | Model ID override (see `text2d models`) |
 | `--profile` | flag | off | Measure timing, CPU, RAM, and VRAM |
 | `--gpu-ids` | str | auto | GPU IDs for multi-GPU split (e.g. `0,1`) |
 | `--quality` | str | `medium` | Quality tier: `fast` / `low` / `medium` / `high` / `highest` |
-| `--hw-auto/--no-hw-auto` | flag | on | Hardware auto-detection: enables CPU offload + 4B model on small GPUs (<7.5 GB), keeps 9B / full-GPU / multi-GPU split on big rigs. Explicit flags win. Env kill-switch: `TEXT2D_HW_AUTO=0` |
+| `--hw-auto/--no-hw-auto` | flag | on | Hardware auto-detection: picks the SDNQ preset and placement (GO+streams / full-GPU / multi-GPU split). One model since FLUX.3 — no 4B/9B ladder. Explicit flags win. Env kill-switch: `TEXT2D_HW_AUTO=0` |
 | `--group-offload/--no-group-offload` | flag | on | **Group offload + CUDA streams** whenever full-GPU wouldn't have headroom (peak ≈ activation; smaller chunks via VAE tiling + attention slicing). Quant stays int4 (int3/int2 only as last resort on tiny GPUs). Kill-switch: `TEXT2D_GROUP_OFFLOAD=0` / `AIGAMEKIT_GROUP_OFFLOAD=0` |
 | `--compile/--no-compile` | flag | off (`generate`); **on** (`generate-batch`) | `torch.compile` on the transformer (~−6–10% hot; cold warmup costly) |
 | `--compile-mode` | str | `default` | `default` / `reduce-overhead` / `max-autotune` (Inductor; reduce-overhead only with full-GPU) |
@@ -124,7 +140,7 @@ Icon generation lives in Text2D via the `icon` asset category — same pipeline 
 text2d generate "espada de fantasia" --category icon --transparent -o icon.png
 ```
 
-- `--category icon` resolves **512×512, 2 steps** (QualityEngine category; the category beats `--quality` tiers) and augments the prompt with app-icon styling (idempotent — no duplicate instructions if the prompt already says "icon"/"logo").
+- `--category icon` resolves **512×512, 4 steps** (QualityEngine category; the category beats `--quality` tiers) and augments the prompt with app-icon styling (idempotent — no duplicate instructions if the prompt already says "icon"/"logo").
 - `--transparent` removes the background (rembg/U2Net) after generation; output must be `.png` (clear error otherwise).
 - `--quality` still applies if you want to fine-tune, but the `icon` category wins over tiers — use `-s`/`-W`/`-H` for explicit overrides.
 
@@ -205,8 +221,9 @@ Output:
 
 | ID | Notes |
 |----|-------|
-| `black-forest-labs/FLUX.2-klein-9B` | Default (high VRAM), fp16 base + SDNQ runtime quantization (**gated** — accept terms on Hub) |
-| `black-forest-labs/FLUX.2-klein-4B` | Auto-selected by hw-auto on small GPUs (<7.5 GB), fp16 base + SDNQ runtime (public) |
+| `black-forest-labs/flux-3-image-klein` | Default (distilled, 16 steps): BF16 base + SDNQ runtime (**gated** — accept the Kommunity license on Hub). Refs up to 10, layout boxes, 4-16 steps |
+| `black-forest-labs/flux-3-image-klein-base` | Undistilled base (50 steps, CFG 3.5) for finetunes/LoRA — via `--model` / `TEXT2D_MODEL_ID` |
+| `black-forest-labs/flux-3-image-klein-pup` | Prompt upsampler 9B — loaded only with `--upsample` |
 
 > GGUF weights target ComfyUI-GGUF workflows, not this CLI.
 
@@ -239,18 +256,18 @@ After editing `*/src/`: `vramd respawn text2d`. Full guide: [`Vramd/README.md`](
 
 ## Quality Presets
 
-The `--quality` flag sets resolution, steps, and guidance from a unified profile system ([`QualityEngine`](../Shared/src/aigamekit_shared/quality.py)). Values are **soft defaults** — explicit CLI flags always take precedence.
+The `--quality` flag sets resolution and steps from a unified profile system ([`QualityEngine`](../Shared/src/aigamekit_shared/quality.py)). Values are **soft defaults** — explicit CLI flags always take precedence. FLUX.3 Klein is guidance-distilled, so tiers carry **no guidance**.
 
-| Tier | Resolution | Steps | Guidance |
-|------|-----------|-------|----------|
-| `fast` | 512×512 | 4 | 1.0 |
-| `low` | 768×768 | 4 | 1.0 |
-| `medium` | 1024×1024 | 4 | 1.0 |
-| `high` | 1024×1024 | 8 | 1.0 |
-| `highest` | 1024×1024 | 12 | 1.5 |
+| Tier | Resolution | Steps |
+|------|-----------|-------|
+| `fast` | 512×512 | 4 |
+| `low` | 768×768 | 8 |
+| `medium` | 1024×1024 | 12 |
+| `high` | 1024×1024 | 16 |
+| `highest` | 1536×1536 | 16 |
 
 ```bash
-text2d generate "concept art" --quality high    # 1024², 8 steps
+text2d generate "concept art" --quality high    # 1024², 16 steps
 text2d generate "thumbnail" --quality fast      # 512², 4 steps
 ```
 
@@ -259,7 +276,7 @@ text2d generate "thumbnail" --quality fast      # 512², 4 steps
 | Variable | Description |
 |----------|-------------|
 | `TEXT2D_BIN` | Override `text2d` binary path |
-| `TEXT2D_MODEL_ID` | Alternative HF model ID (e.g. `black-forest-labs/FLUX.2-klein-4B` for Apache 2.0) |
+| `TEXT2D_MODEL_ID` | Alternative HF model ID (e.g. `black-forest-labs/flux-3-image-klein-base`) |
 | `HF_HOME` | Hugging Face cache directory (default: `~/.cache/huggingface`) |
 | `TEXT2D_MODELS_DIR` | Local models directory (installer writes to `~/.config/text2d/config.env`) |
 | `TEXT2D_OUTPUT_DIR` | Default image output directory |
@@ -350,4 +367,4 @@ Text2D/
 ## License
 
 - **Code:** MIT — [LICENSE](LICENSE).
-- **Weights:** default = official BFL fp16 base ([FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) Apache 2.0, public; [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) **gated**) with SDNQ runtime quantization (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Full license table: [AiGameKit/README.md — Licenses](../README.md).
+- **Weights:** default = [black-forest-labs/flux-3-image-klein](https://huggingface.co/black-forest-labs/flux-3-image-klein) (**gated**, FLUX Kommunity License v1.0; Qwen3-VL text encoder Apache-2.0) with SDNQ runtime quantization (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Optional `--upsample` uses [flux-3-image-klein-pup](https://huggingface.co/black-forest-labs/flux-3-image-klein-pup). Full license table: [AiGameKit/README.md — Licenses](../README.md).

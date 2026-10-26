@@ -89,7 +89,7 @@ Useful variable: `PYTHON_CMD` — interpreter to use (default `python3`, or `pyt
 
 | `./install.sh …` command | Folder | Type | Min Python | Notes |
 |--------------------------|--------|------|------------|-------|
-| `text2d` | Text2D | Python | 3.13 | PyTorch/CUDA; SDNQ FLUX; UI icons via `--category icon --transparent` (rembg) |
+| `text2d` | Text2D | Python | 3.13 | PyTorch/CUDA; FLUX.3 Image Klein **gated** (Kommunity license + `HF_TOKEN`, diffusers ≥0.42); UI icons via `--category icon --transparent` (rembg); refs/boxes/silhouettes |
 | `text3d` | Text3D | Python | 3.13 | Depends on Text2D; nvdiffrast after venv |
 | `part3d` | Part3D | Python | 3.13 | Semantic decomposition (Hunyuan3D-Part: P3-SAM + X-Part); PyTorch |
 | `gameassets` | GameAssets | Python | 3.13 | Batch + `dream`; orchestrates CLIs; `doctor` = single first-use check |

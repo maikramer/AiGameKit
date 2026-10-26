@@ -199,4 +199,4 @@ Modelos: shape [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) (
 ## Créditos
 
 - **Tencent Hunyuan3D-Omni** — [Hunyuan3D-Omni](https://github.com/Tencent-Hunyuan/Hunyuan3D-Omni), [tencent/Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) (controlos bbox/pose/point/voxel; SDNQ INT4 em GPUs pequenas)
-- **Text2D** — FLUX.2 Klein (base BFL fp16 + SDNQ runtime por defeito; opcional pré-quantizado via `TEXT2D_MODEL_ID`) no pacote `text2d` do monorepo — licenças: [AiGameKit/README_PT](../README_PT.md)
+- **Text2D** — FLUX.3 Image Klein (base BFL + SDNQ runtime por defeito; override `TEXT2D_MODEL_ID`) no pacote `text2d` do monorepo — licenças: [AiGameKit/README_PT](../README_PT.md)

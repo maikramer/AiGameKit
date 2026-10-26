@@ -89,7 +89,7 @@ Variável útil: `PYTHON_CMD` — interpretador a usar (por defeito `python3`, o
 
 | Comando `./install.sh …` | Pasta | Tipo | Python mín. | Notas |
 |--------------------------|-------|------|---------------|--------|
-| `text2d` | Text2D | Python | 3.13 | PyTorch/CUDA; SDNQ FLUX; ícones de UI via `--category icon --transparent` (rembg) |
+| `text2d` | Text2D | Python | 3.13 | PyTorch/CUDA; FLUX.3 Image Klein **gated** (licença Kommunity + `HF_TOKEN`, diffusers ≥0.42); ícones via `--category icon --transparent` (rembg); refs/boxes/silhuetas |
 | `text3d` | Text3D | Python | 3.13 | Depende de Text2D; nvdiffrast pós-venv |
 | `part3d` | Part3D | Python | 3.13 | Decomposição semântica (Hunyuan3D-Part: P3-SAM + X-Part); PyTorch |
 | `gameassets` | GameAssets | Python | 3.13 | Batch + `dream`; orquestra CLIs; `doctor` = check único de primeiro uso |

@@ -1,9 +1,9 @@
 ---
 name: text2d
-description: Gerar imagens a partir de texto com o CLI text2d (FLUX Klein SDNQ) do AiGameKit — prompts, resolução, seeds, modo ícone com fundo transparente, tiers de qualidade e regras de VRAM/vramd. Usar quando for preciso gerar imagens 2D, ícones de UI ou imagens de referência para text3d/paint3d.
+description: Gerar imagens a partir de texto com o CLI text2d (FLUX.3 Image Klein SDNQ) do AiGameKit — prompts, resolução, seeds, modo ícone com fundo transparente, tiers de qualidade e regras de VRAM/vramd. Usar quando for preciso gerar imagens 2D, ícones de UI ou imagens de referência para text3d/paint3d.
 ---
 
-# Text2D — texto → imagem (FLUX Klein SDNQ)
+# Text2D — texto → imagem (FLUX.3 Image Klein SDNQ)
 
 ## Resolver o binário
 
@@ -28,7 +28,7 @@ Defaults: 1024×1024, 4 steps, guidance 1.0 (checkpoint SDNQ — não subir guid
 | `-s` / `-g` | Steps (4) / guidance (1.0) |
 | `--seed N` | Reprodutibilidade |
 | `--quality fast\|low\|medium\|high\|highest` | Preset soft de qualidade (default `medium`) |
-| `--category icon` | Modo ícone: 512², 2 steps, styling de ícone |
+| `--category icon` | Modo ícone: 512², 4 steps, styling de ícone |
 | `--transparent` | Remove fundo (rembg/U2Net; exige `.png`) |
 | `--cpu` / `--gpu-ids 0,1` | Forçar CPU / split multi-GPU |
 

@@ -1,9 +1,9 @@
 ---
 name: text2d
-description: Gera imagens 2D a partir de texto com FLUX.2 Klein (SDNQ via Disty0). Use quando o utilizador pedir text-to-image, FLUX, imagens por prompt, TEXT2D_MODEL_ID, HF_HOME, memory-efficient mode, ou integração com GameAssets/Text3D.
+description: Gera imagens 2D a partir de texto com FLUX.3 Image Klein (SDNQ runtime). Use quando o utilizador pedir text-to-image, FLUX, imagens por prompt, TEXT2D_MODEL_ID, HF_HOME, memory-efficient mode, ou integração com GameAssets/Text3D.
 ---
 
-# Text2D — text-to-image (FLUX.2 Klein)
+# Text2D — text-to-image (FLUX.3 Image Klein)
 
 ## Quando usar
 
@@ -13,7 +13,7 @@ description: Gera imagens 2D a partir de texto com FLUX.2 Klein (SDNQ via Disty0
 
 ## O que é
 
-CLI **text-to-2D** com [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) em quantização **SDNQ** runtime ([Disty0/sdnq](https://github.com/Disty0/sdnq)), pensado para GPUs modestas (**CPU offload** via hw-auto / modo memory-efficient).
+CLI **text-to-2D** com [FLUX.3 Image Klein](https://huggingface.co/black-forest-labs/flux-3-image-klein) em quantização **SDNQ** runtime ([Disty0/sdnq](https://github.com/Disty0/sdnq)), pensado para GPUs modestas (**CPU offload** via hw-auto / modo memory-efficient).
 
 ## Pré-requisitos
 
@@ -44,7 +44,7 @@ text2d -v generate "teste"
 
 | Variável | Função |
 |----------|--------|
-| `TEXT2D_MODEL_ID` | Repo Hugging Face alternativo compatível com o pipeline Klein (default SDNQ = termos Disty0; `black-forest-labs/FLUX.2-klein-4B` = Apache 2.0 no card BFL) |
+| `TEXT2D_MODEL_ID` | Repo Hugging Face alternativo compatível com o pipeline Klein (default SDNQ = termos Disty0; `black-forest-labs/flux-3-image-klein` = Apache 2.0 no card BFL) |
 | `HF_HOME` | Raiz do cache Hugging Face |
 
 ## Notas importantes
@@ -81,7 +81,7 @@ Quando a imagem 2D vai alimentar **Text3D** (image-to-3D), sombras e iluminaçã
 
 ### Nota sobre guidance
 
-O modelo FLUX.2 Klein SDNQ é **step-wise distilled** e **ignora guidance scale** (funciona sempre como ~1.0). Aumentar `--guidance` não tem efeito. Para melhor aderência ao prompt, aumentar `--steps` (8+ recomendado).
+O modelo FLUX.3 Image Klein SDNQ é **step-wise distilled** e **ignora guidance scale** (funciona sempre como ~1.0). Aumentar `--guidance` não tem efeito. Para melhor aderência ao prompt, aumentar `--steps` (8+ recomendado).
 
 ## Ferramentas relacionadas
 
