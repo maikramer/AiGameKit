@@ -227,54 +227,69 @@ Output:
 
 > GGUF weights target ComfyUI-GGUF workflows, not this CLI.
 
-### `text2d poses` + `text2d walk-cycle` (animação 2D)
+### `text2d animate` / `walk-cycle` / `poses` (animação 2D)
 
 O FLUX.3 não tem pose conditioning: a pose vem de uma **folha de silhuetas**
 desenhada (uma por célula) e a identidade de uma imagem da personagem parada.
-O Text2D traz um vocabulário de poses e um comando que gera ciclos de caminhada
-prontos a usar.
 
 ```bash
-# Listar as poses (pernas/braços descritos em texto)
-text2d poses
+text2d poses                                   # animações, fases e poses
 
-# Um frame com uma pose específica (nome da biblioteca ou texto livre)
-text2d generate "knight hero" --pose walk_contact_front -o frame.png
+# Bípedes: walk | run | idle | jump | attack, em 8 direções
+text2d animate "16-bit SNES-era pixel art knight hero in a blue tunic" \
+  --anim run --direction east --out-dir outputs/sprites/knight_run
 
-# Ciclo de caminhada completo: 4 frames + sprites + atlas + GIF
-text2d walk-cycle "16-bit SNES-era pixel art knight hero in a blue tunic" \
-  --direction east --frames 4 --out-dir outputs/sprites/knight
+# Quadrúpedes: quad-walk | quad-gallop (direções de perfil: east/west)
+text2d animate "16-bit SNES-era pixel art white horse" --anim quad-gallop --direction east
+
+# Atalho histórico (= animate --anim walk)
+text2d walk-cycle "16-bit SNES-era pixel art knight hero in a blue tunic" --direction east
+
+# Conjunto de animações da MESMA personagem: reutiliza a identidade com --ref
+text2d animate "$K" --anim walk  --direction east -O knight/walk
+text2d animate "$K" --anim jump  --direction east -O knight/jump --ref knight/walk/00_reference.png
 ```
 
-| Flag (walk-cycle) | Default | Description |
-|-------------------|---------|-------------|
-| `--direction` | `east` | `south`/`south_east`/`east`/`north_east`/`north`/`north_west`/`west`/`south_west` |
-| `--frames` / `-n` | 4 | Frames do ciclo (fases repetidas; >4 → várias folhas com a mesma identidade) |
-| `--out-dir` / `-O` | `outputs/sprites` | Folha crua, frames, sprites, atlas, preview e GIF |
-| `--ref` | — | Referência do personagem (identidade, **parado**); sem ela é gerada a 512² |
-| `--size` / `--steps` / `--seed` | 320 / 12 / 100 | Altura da célula (largura 0.8x), passos e seed |
-| `--sprite-size` / `--colors` | 96 / 32 | Lado do sprite e nº de cores da paleta comum (look 16-bit) |
+| Animação | Corpo | Fases |
+|----------|-------|-------|
+| `walk` | bípede | contacto, passagem, contacto (outra perna), passagem dobrada |
+| `run` | bípede | contacto, fase aérea, alternando a perna da frente |
+| `idle` | bípede | parado / a expirar (respiração subtil — loop de espera) |
+| `jump` | bípede | agachar, subir, cair, aterrar (a altura do salto é reposta no sprite) |
+| `attack` | bípede | guarda, preparar, golpe, seguimento (arma genérica) |
+| `quad-walk` | quadrúpede | passo lateral em 4 fases (patas do lado de trás a cinzento) |
+| `quad-gallop` | quadrúpede | impulso, extensão no ar, aterragem da frente, recolha |
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--anim` / `-a` | `walk` | Animação (só em `animate`) |
+| `--direction` | `east` | 8 direções; as espelhadas (`west`, `north_west`, `south_west`) geram a canónica e espelham |
+| `--frames` / `-n` | 4 | Frames (fases repetidas; >4 → várias folhas com a mesma identidade) |
+| `--out-dir` / `-O` | `outputs/sprites` | Folha crua, frames, sprites, `atlas.png`, `sheet.png`, `cycle.gif` |
+| `--ref` | — | Identidade (personagem **parada**); sem ela é gerada a 512² |
+| `--size` / `--steps` / `--seed` | 320 / 12 / 100 | Altura da célula, passos e seed |
+| `--sprite-size` / `--colors` | 96 / 32 | Lado do sprite e nº de cores da paleta comum |
 | `--frame-ms` | 160 | Duração de cada frame no GIF |
 | `--measure` | on | Mede a variação entre frames (avisa se forem cópias) |
 
 Como funciona:
 
-1. **Identidade** — a personagem **parada** (`idle`) a 512², ou o `--ref`.
-2. **Todos os frames numa só geração** (`4 × 256×320` = 1024×320) com duas
-   referências: a identidade e a folha de silhuetas (`poses_00.png`; membros
-   do lado de trás a cinzento). Dentro da mesma imagem o modelo mantém
-   personagem, escala e linha do chão; a silhueta + a pose por extenso de cada
-   célula impõem a passada.
-3. **Pós-processamento**: rembg por célula → alinhamento (tronco no mesmo x,
-   pés na mesma linha) → downscale por área → alpha binário → **uma paleta
-   para o ciclo todo** → `atlas.png` (1x, transparente), `sheet.png`
-   (preview 4x) e `cycle.gif`.
-4. Direções espelhadas (`west`, `north_west`, `south_west`) são geradas a
-   partir da direção canónica e espelhadas — a personagem fica idêntica nos
-   dois sets.
+1. **Identidade** — a personagem **parada** a 512² (ou o `--ref`).
+2. **Todos os frames numa só geração** (`4 × 256×320` bípedes, `4 × 320×256`
+   quadrúpedes) com duas referências: a identidade e a folha de silhuetas
+   (`poses_00.png`; membros do lado de trás a cinzento). A pose de cada célula
+   vai também por extenso no prompt.
+3. **Recorte por cor da borda** — fundo branco liso, removido por flood fill
+   a partir das margens (o contorno do pixel art trava o preenchimento, por
+   isso personagens brancas não são furadas). O rembg só entra se o fundo não
+   sair liso — era ele que furava personagens claras.
+4. **Pós-processamento** — alinhamento (tronco no mesmo x, pés no chão,
+   altura do salto reposta), downscale por área, alpha binário, paleta única
+   para a animação → atlas 1x, preview 4x e GIF.
 
-Medido na RTX 4050 6 GB (via vramd): **~90 s por ciclo de 4 frames**
-(identidade ~55 s + folha ~31 s). Diagnóstico e números:
+Medido na RTX 4050 6 GB (via vramd): **~90 s por animação de 4 frames**
+(identidade ~55 s + folha ~31 s; com `--ref` só a folha). Diagnóstico e
+números:
 [`docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md`](../docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md#walk-cycle-v2-folha-única-guiada-por-silhuetas).
 
 ### `text2d skill install`

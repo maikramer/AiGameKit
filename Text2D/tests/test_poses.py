@@ -71,7 +71,9 @@ def test_direction_view_side_and_front() -> None:
     assert direction_view("east") == "side"
     assert direction_view("west") == "side"
     assert direction_view("south") == "front"
-    assert direction_view("north") == "front"
+    assert direction_view("north") == "back"
+    assert direction_view("south_east") == "diag_front"
+    assert direction_view("north_west") == "diag_back"
 
 
 def test_mirrored_directions() -> None:

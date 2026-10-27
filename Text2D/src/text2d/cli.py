@@ -663,82 +663,112 @@ def silhouette_cmd(input: str, output: str | None, threshold: int) -> None:
 
 @cli.command("poses")
 def poses_cmd() -> None:
-    """Lista as poses disponíveis (para `--pose` e `walk-cycle`)."""
-    from .poses import DIRECTIONS, WALK_CYCLE, pose_names, pose_prompt
+    """Lista animações e poses (para `--pose`, `walk-cycle` e `animate`)."""
+    from .anim import ANIMATIONS
+    from .poses import DIRECTIONS, pose_names, pose_prompt
+    from .quadruped import quad_pose_names, quad_pose_prompt
+
+    anims = Table(title="[bold blue]Animações (text2d animate --anim)[/bold blue]", box=box.ROUNDED)
+    anims.add_column("Animação", style="cyan")
+    anims.add_column("Corpo", style="magenta")
+    anims.add_column("Fases", style="white")
+    for anim in ANIMATIONS.values():
+        anims.add_row(anim.name, anim.body, ", ".join(anim.poses))
+    console.print(anims)
 
     t = Table(title="[bold blue]Poses[/bold blue]", box=box.ROUNDED)
     t.add_column("Pose", style="cyan")
-    t.add_column("Vista lateral (side)", style="white")
+    t.add_column("Texto (perfil)", style="white")
     for name in pose_names():
         t.add_row(name, pose_prompt(name, view="side")[:110])
+    for name in quad_pose_names():
+        t.add_row(name, quad_pose_prompt(name)[:110])
     console.print(t)
     console.print(
         Panel(
-            f"[dim]Ciclo de caminhada: {', '.join(WALK_CYCLE)}[/dim]\n"
-            f"[dim]Direções: {', '.join(DIRECTIONS)}[/dim]\n"
-            "[dim]Exemplo: text2d generate 'knight' --pose walk_contact_front[/dim]",
+            f"[dim]Direções: {', '.join(DIRECTIONS)} (quadrúpedes: east/west)[/dim]\n"
+            "[dim]Ex.: text2d animate 'pixel art wolf' --anim quad-gallop --direction east[/dim]\n"
+            "[dim]Ex.: text2d generate 'knight' --pose walk_contact_front[/dim]",
             border_style="dim",
         )
     )
 
 
-@cli.command("walk-cycle")
-@click.argument("character")
-@click.option(
-    "--direction",
-    type=click.Choice(["south", "south_east", "east", "north_east", "north", "north_west", "west", "south_west"]),
-    default="east",
-    show_default=True,
-    help="Direção da caminhada (define a vista e se o set é espelhado).",
-)
-@click.option(
-    "--frames",
-    "-n",
-    default=4,
-    show_default=True,
-    type=click.IntRange(min=1, max=16),
-    help="Frames do ciclo.",
-)
-@click.option(
-    "--out-dir",
-    "-O",
-    type=click.Path(),
-    default="outputs/sprites",
-    show_default=True,
-    help="Directório de saída (frames, sprites, sheet, gif).",
-)
-@click.option(
-    "--ref",
-    "reference",
-    type=click.Path(exists=True, dir_okay=False),
-    default=None,
-    help="Imagem de referência do personagem (identidade). Sem ela, é gerado um frame base.",
-)
-@click.option(
-    "--size",
-    default=320,
-    show_default=True,
-    type=int,
-    help="Altura de cada célula da folha gerada (largura = 0.8x; 4 células = 1024 px).",
-)
-@click.option("--steps", "-s", default=12, show_default=True, type=int, help="Passos de inferência.")
-@click.option("--seed", default=100, show_default=True, type=int, help="Seed base.")
-@click.option("--frame-ms", default=160, show_default=True, type=int, help="Duração de cada frame no GIF.")
-@click.option(
-    "--sprite-size",
-    default=96,
-    show_default=True,
-    type=int,
-    help="Lado do sprite final (0 = sem downscale).",
-)
-@click.option("--colors", default=32, show_default=True, type=int, help="Cores da paleta (look 16-bit).")
-@click.option("--transparent/--no-transparent", default=True, show_default=True, help="Cortar o fundo (rembg).")
-@click.option("--sheet/--no-sheet", default=True, show_default=True, help="Gerar folha de sprites.")
-@click.option("--gif/--no-gif", default=True, show_default=True, help="Gerar GIF do ciclo.")
-@click.option("--measure/--no-measure", default=True, show_default=True, help="Medir a variação entre frames.")
-@click.option("--cpu", is_flag=True, help="Forçar CPU")
-@add_vramd_options
-def walk_cycle_cmd(
+def _anim_names() -> list[str]:
+    from .anim import ANIMATIONS  # leve (só PIL): catálogo único para o --anim
+
+    return list(ANIMATIONS)
+
+
+_DIRECTION_CHOICES = ["south", "south_east", "east", "north_east", "north", "north_west", "west", "south_west"]
+
+
+def _sprite_options(f: Any) -> Any:
+    """Opções comuns de ``walk-cycle`` e ``animate`` (a mesma receita de sprites)."""
+    f = add_vramd_options(f)
+    f = click.option("--cpu", is_flag=True, help="Forçar CPU")(f)
+    f = click.option("--measure/--no-measure", default=True, show_default=True, help="Medir a variação entre frames.")(
+        f
+    )
+    f = click.option("--gif/--no-gif", default=True, show_default=True, help="Gerar GIF do ciclo.")(f)
+    f = click.option("--sheet/--no-sheet", default=True, show_default=True, help="Gerar folha de sprites.")(f)
+    f = click.option("--transparent/--no-transparent", default=True, show_default=True, help="Cortar o fundo (rembg).")(
+        f
+    )
+    f = click.option("--colors", default=32, show_default=True, type=int, help="Cores da paleta (look 16-bit).")(f)
+    f = click.option(
+        "--sprite-size",
+        default=96,
+        show_default=True,
+        type=int,
+        help="Lado do sprite final (0 = sem downscale).",
+    )(f)
+    f = click.option("--frame-ms", default=160, show_default=True, type=int, help="Duração de cada frame no GIF.")(f)
+    f = click.option("--seed", default=100, show_default=True, type=int, help="Seed base.")(f)
+    f = click.option("--steps", "-s", default=12, show_default=True, type=int, help="Passos de inferência.")(f)
+    f = click.option(
+        "--size",
+        default=320,
+        show_default=True,
+        type=int,
+        help="Altura de cada célula da folha gerada (largura = 0.8x; 4 células = 1024 px).",
+    )(f)
+    f = click.option(
+        "--ref",
+        "reference",
+        type=click.Path(exists=True, dir_okay=False),
+        default=None,
+        help="Imagem de referência do personagem (identidade). Sem ela, é gerado um frame base.",
+    )(f)
+    f = click.option(
+        "--out-dir",
+        "-O",
+        type=click.Path(),
+        default="outputs/sprites",
+        show_default=True,
+        help="Directório de saída (frames, sprites, sheet, gif).",
+    )(f)
+    f = click.option(
+        "--frames",
+        "-n",
+        default=4,
+        show_default=True,
+        type=click.IntRange(min=1, max=16),
+        help="Frames do ciclo.",
+    )(f)
+    f = click.option(
+        "--direction",
+        type=click.Choice(_DIRECTION_CHOICES),
+        default="east",
+        show_default=True,
+        help="Direção (define a vista e se o set é espelhado).",
+    )(f)
+    f = click.argument("character")(f)
+    return f
+
+
+def _run_sprite_animation(
+    anim: str,
     character: str,
     direction: str,
     frames: int,
@@ -759,13 +789,7 @@ def walk_cycle_cmd(
     no_vramd: bool,
     vramd_stream: bool,
 ) -> None:
-    """Gera um ciclo de caminhada (frames + sprites + folha + GIF) numa direção.
-
-    Todos os frames saem numa **só geração** (folha de N células) guiada pela
-    identidade do personagem e por uma folha de silhuetas com a pose de cada
-    célula — mesma personagem, escala e chão em todos os frames; a silhueta
-    impõe a pose. Depois: rembg, alinhamento, downscale e paleta comum.
-    """
+    """Corpo partilhado de ``walk-cycle`` / ``animate`` (delegação vramd + fallback)."""
     from .sprite import generate_cycle
 
     # Gerador in-process (fallback quando o vramd não trata o job).
@@ -818,6 +842,7 @@ def walk_cycle_cmd(
             direction=direction,
             out_dir=out_dir,
             frames=frames,
+            animation=anim,
             reference=reference,
             size=size,
             steps=steps,
@@ -842,10 +867,47 @@ def walk_cycle_cmd(
             f"[bold green]✓[/bold green] {len(result['frames'])} frames → "
             f"[cyan]{Path(out_dir).resolve()}[/cyan]\n"
             f"[dim]sprites: {len(result['sprites'])} | atlas: {result['atlas']} | gif: {result['gif']}[/dim]",
-            title="[bold green]Sprite sheet[/bold green]",
+            title=f"[bold green]Sprite sheet — {anim}[/bold green]",
             border_style="green",
         )
     )
+
+
+_ANIM_HELP = """Todos os frames saem numa **só geração** (folha de N células) guiada pela
+    identidade do personagem e por uma folha de silhuetas com a pose de cada
+    célula — mesma personagem, escala e chão em todos os frames; a silhueta
+    impõe a pose. Depois: rembg, alinhamento, downscale e paleta comum."""
+
+
+@cli.command("walk-cycle")
+@_sprite_options
+def walk_cycle_cmd(**kwargs: Any) -> None:
+    """Gera um ciclo de caminhada (frames + sprites + atlas + GIF) numa direção.
+
+    Atalho de ``text2d animate --anim walk``. Todos os frames saem numa só
+    geração guiada pela identidade e por uma folha de silhuetas.
+    """
+    _run_sprite_animation("walk", **kwargs)
+
+
+@cli.command("animate")
+@click.option(
+    "--anim",
+    "-a",
+    type=click.Choice(list(_anim_names())),
+    default="walk",
+    show_default=True,
+    help="Animação. quad-* = quadrúpedes (só direções de perfil: east/west).",
+)
+@_sprite_options
+def animate_cmd(anim: str, **kwargs: Any) -> None:
+    """Gera uma animação 2D (bípede ou quadrúpede) numa direção.
+
+    Ex.: ``text2d animate "pixel art wolf" --anim quad-gallop --direction east``.
+    Todos os frames saem numa só geração guiada pela identidade e por uma folha
+    de silhuetas (ver ``text2d poses``).
+    """
+    _run_sprite_animation(anim, **kwargs)
 
 
 _batch_gen = None

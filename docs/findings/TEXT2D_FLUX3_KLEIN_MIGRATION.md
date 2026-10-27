@@ -188,6 +188,27 @@ Regras apuradas:
   por extenso no prompt (`frame 1: ...`). Texto e silhueta têm de concordar.
 - Ordem do ciclo: `contact_front, passing, contact_back, down` (alternar
   passada aberta e pernas juntas; v1 tinha 3 passadas abertas seguidas).
+- **Vistas próprias por direção** (v2.1): `back` (norte) e três quartos
+  (`diag_front` SE/SW, `diag_back` NE/NW). Com a silhueta de perfil puro, os
+  frames da diagonal SE saíam de perfil; com a passada em profundidade
+  (componente lateral a 55% + perna da frente mais longa/curta) saem a 3/4 com
+  passada real (SE 9.6%, NE 9.0%). De costas o pé que avança **sobe** no
+  ecrã; continua a ser a vista mais fraca (3.0%).
+- **Recorte: flood fill da borda em vez do rembg** (v2.1): um cavalo branco
+  em fundo branco saía do rembg com buracos no corpo (o modelo desenhava-o bem
+  — o recorte é que falhava). Testado fundo magenta (cor-chave clássica): o
+  recorte fica exato, **mas o modelo sombreia com a complementar** — um
+  esqueleto saiu verde. Ficou: fundo branco + flood fill a partir da borda
+  (tolerância 12; a 24 vaza pelo contorno), que o contorno escuro do pixel art
+  trava. 19/19 animações recortadas limpas; ~40 ms/célula; rembg só se a borda
+  não for lisa. Armadilha Pillow 12: uma imagem de `Image.fromarray` partilha o
+  buffer read-only do numpy e `ImageDraw.floodfill` não faz nada, sem erro —
+  `.copy()` antes.
+- **Saltos**: o recorte assenta os pés no chão e perdia a altura; cada pose
+  tem uma elevação (`pose_lift`) que é reposta no sprite depois de alinhar.
+- **Quadrúpedes** (`text2d.quadruped`): só perfil. Patas de duas secções
+  (coxa + canela) — com uma linha reta por pata o modelo ignorava-as. Cão a
+  passo 6.7%, cavalo a galope 6.3%.
 - `--boxes` **só funciona com `--upsample`**: no pipeline distilled só o bloco
   `prompt_upsampler` consome `boxes` (sem ele o diffusers avisa "Unexpected
   input" e ignora). O CLI recusa `--boxes` sem `--upsample`; o generator

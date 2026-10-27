@@ -45,6 +45,8 @@ text2d generate "dois balões" --boxes '[{"id":"b1","desc":"um balão vermelho",
 text2d silhouette heroi.png -o heroi_sil.png
 text2d poses                      # vocabulário de poses (pernas/braços)
 text2d walk-cycle "knight hero" --direction east --frames 4 -O sprites/knight
+text2d animate "knight hero" --anim jump --direction east -O sprites/knight_jump --ref sprites/knight/00_reference.png
+text2d animate "white horse" --anim quad-gallop --direction east -O sprites/horse  # quadrúpedes: east/west
 text2d -v generate "teste"
 ```
 

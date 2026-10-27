@@ -98,17 +98,45 @@ _POSE_TEXT: dict[str, dict[str, str]] = {
         "side": "crouched low with the knees bent and the torso leaning forward, both arms lowered",
         "front": "crouched low with the knees bent and the torso leaning forward, both arms lowered",
     },
+    "attack_ready": {
+        "side": "standing in a fighting stance, the weapon held forward in both arms, one leg forward and the "
+        "other braced behind, the knees slightly bent",
+        "front": "standing in a fighting stance facing forward, the weapon held in front of the body, the feet "
+        "apart, the knees slightly bent",
+    },
     "attack_windup": {
-        "side": "the sword raised high above the head with both arms up, the body turned sideways, one leg "
-        "forward and the other braced behind",
-        "front": "the sword raised high above the head with both arms up, the body turned sideways, one leg "
-        "forward and the other braced behind",
+        "side": "the weapon raised high above the head with both arms up, the body leaning back, one leg forward "
+        "and the other braced behind",
+        "front": "the weapon raised high above the head with both arms up, the feet apart and braced",
     },
     "attack_strike": {
-        "side": "the sword swung down and forward, the front arm extended, the back arm pulled back, the body "
+        "side": "the weapon swung down and forward, the front arm extended, the back arm pulled back, the body "
         "leaning forward, the legs in a wide stance",
-        "front": "the sword swung down and forward, the right arm extended, the left arm pulled back, the body "
+        "front": "the weapon swung down and forward, the right arm extended, the left arm pulled back, the body "
         "leaning forward, the legs in a wide stance",
+    },
+    "attack_follow": {
+        "side": "the weapon swept low past the body after the strike, the arms extended down and forward, the "
+        "front knee bent deeply, the back leg stretched behind",
+        "front": "the weapon swept low across the body after the strike, the arms extended down, the knees bent",
+    },
+    "idle_breathe": {
+        "side": "standing still breathing out, the shoulders and chest slightly lowered, the knees very slightly "
+        "bent, both arms hanging relaxed at the sides",
+        "front": "standing still breathing out, the shoulders slightly lowered, the knees very slightly bent, both "
+        "arms hanging relaxed at the sides",
+    },
+    "run_contact_back": {
+        "side": "a running stride with the trailing leg now stretched far forward, the leading leg bent back with "
+        "the heel raised high, the torso leaning forward, the front arm swung back and the back arm swung forward",
+        "front": "a running stride with the left leg stretched far forward, the right leg bent back, the torso "
+        "leaning forward, the arms pumping in opposite directions",
+    },
+    "run_air_back": {
+        "side": "both feet off the ground in mid-air, the trailing knee now raised high, the leading leg "
+        "stretched back, the torso leaning forward, both arms bent in a running swing",
+        "front": "both feet off the ground in mid-air, the left knee raised high, the right leg stretched back, "
+        "the torso leaning forward, both arms bent in a running swing",
     },
 }
 
@@ -118,14 +146,17 @@ _POSE_TEXT: dict[str, dict[str, str]] = {
 # deixava 3 frames de passada aberta seguidos e o GIF parecia parado).
 WALK_CYCLE: tuple[str, ...] = ("walk_contact_front", "walk_passing", "walk_contact_back", "walk_down")
 
-# Ordem canónica de um ciclo de corrida (4 frames).
-RUN_CYCLE: tuple[str, ...] = ("run_contact", "run_air", "run_contact", "run_air")
+# Ordem canónica de um ciclo de corrida (4 frames) — alterna a perna da frente
+# (a v1 repetia run_contact/run_air com a mesma perna e o loop "coxeava").
+RUN_CYCLE: tuple[str, ...] = ("run_contact", "run_air", "run_contact_back", "run_air_back")
 
-# Direções → (vista, texto de direção, espelha?). "side" = perfil, "front" = de frente.
+# Direções → (vista, texto de direção, espelha?). Vistas: "side" (perfil),
+# "front" (de frente), "back" (de costas), "diag_front"/"diag_back" (três
+# quartos). Cada vista tem a sua silhueta; o texto de pose usa side/front.
 DIRECTIONS: dict[str, dict[str, Any]] = {
     "south": {"view": "front", "text": "facing the viewer, front view", "mirror": False},
     "south_east": {
-        "view": "side",
+        "view": "diag_front",
         "text": "seen from the front-right three-quarter angle, walking toward the lower right corner of the frame",
         "mirror": False,
     },
@@ -135,17 +166,17 @@ DIRECTIONS: dict[str, dict[str, Any]] = {
         "mirror": False,
     },
     "north_east": {
-        "view": "front",
+        "view": "diag_back",
         "text": "seen from behind at a three-quarter angle, walking toward the upper right corner of the frame",
         "mirror": False,
     },
     "north": {
-        "view": "front",
+        "view": "back",
         "text": "seen from directly behind, back view, walking away from the viewer",
         "mirror": False,
     },
     "north_west": {
-        "view": "front",
+        "view": "diag_back",
         "text": "seen from behind at a three-quarter angle, walking toward the upper left corner of the frame",
         "mirror": True,
     },
@@ -155,7 +186,7 @@ DIRECTIONS: dict[str, dict[str, Any]] = {
         "mirror": True,
     },
     "south_west": {
-        "view": "side",
+        "view": "diag_front",
         "text": "seen from the front-left three-quarter angle, walking toward the lower left corner of the frame",
         "mirror": True,
     },
@@ -174,8 +205,39 @@ _POSE_ANGLES: dict[str, tuple[float, float, float, float]] = {
     "jump_up": (24, -24, 55, -55),
     "jump_fall": (12, -12, 40, -40),
     "crouch": (22, -22, -18, 18),
-    "attack_windup": (18, -18, 60, 60),
-    "attack_strike": (26, -20, 35, -20),
+    "attack_ready": (20, -20, 30, 30),
+    "attack_windup": (18, -18, 160, 160),
+    "attack_strike": (26, -20, 70, -20),
+    "attack_follow": (34, -30, 40, 10),
+    "idle_breathe": (5, -5, -4, 4),
+    "run_contact_back": (-38, 44, -30, 30),
+    "run_air_back": (-46, 30, -26, 26),
+}
+
+# Forma por pose: (agachamento, elevação) em fração da altura. O agachamento
+# baixa o tronco e encolhe as pernas; a elevação tira os pés do chão (salto,
+# fase aérea da corrida) — o pós-processamento repõe essa altura depois de
+# alinhar os pés, senão o salto ficava colado ao chão.
+_POSE_SHAPE: dict[str, tuple[float, float]] = {
+    "crouch": (0.1, 0.0),
+    "jump_up": (0.05, 0.2),
+    "jump_fall": (0.0, 0.12),
+    "run_air": (0.0, 0.06),
+    "run_air_back": (0.0, 0.06),
+    "walk_down": (0.02, 0.0),
+    "idle_breathe": (0.015, 0.0),
+    "attack_ready": (0.03, 0.0),
+    "attack_strike": (0.04, 0.0),
+    "attack_follow": (0.07, 0.0),
+}
+
+# Vista → vocabulário de texto (as diagonais falam de perfil, as costas como de frente).
+_TEXT_VIEW: dict[str, str] = {
+    "side": "side",
+    "front": "front",
+    "back": "front",
+    "diag_front": "side",
+    "diag_back": "side",
 }
 
 
@@ -189,14 +251,20 @@ def pose_prompt(pose: str, *, view: str = "side") -> str:
 
     Args:
         pose: Nome da pose (ver :func:`pose_names`).
-        view: ``"side"`` (perfil — frente/trás) ou ``"front"`` (de frente —
-            esquerda/direita).
+        view: Vista (``side``, ``front``, ``back``, ``diag_front``,
+            ``diag_back``) — as diagonais usam o texto de perfil e as costas o
+            de frente.
 
     Raises:
         KeyError: Pose desconhecida.
     """
     entry = _POSE_TEXT[pose]
-    return entry.get(view) or entry["side"]
+    return entry.get(_TEXT_VIEW.get(view, view)) or entry["side"]
+
+
+def pose_lift(pose: str) -> float:
+    """Elevação dos pés (fração da altura da personagem) — 0 para poses no chão."""
+    return _POSE_SHAPE.get(pose, (0.0, 0.0))[1]
 
 
 def direction_prompt(direction: str) -> str:
@@ -239,7 +307,7 @@ def canonical_direction(direction: str) -> str:
 
 
 def direction_view(direction: str) -> str:
-    """``"side"`` ou ``"front"`` — que vocabulário de pose usar."""
+    """Vista da direção (``side``/``front``/``back``/``diag_front``/``diag_back``)."""
     return str(DIRECTIONS[direction]["view"])
 
 
@@ -285,15 +353,23 @@ def walk_cycle_prompts(
 def draw_pose_silhouette(pose: str, *, view: str = "side", size: int = 256) -> Image.Image:
     """Desenha a silhueta da pose (branco/cinzento sobre transparente).
 
-    Serve de **referência de forma**: o modelo copia a pose desenhada (validado
-    E2E — as pernas do sprite seguem os ângulos aqui definidos). Os membros do
-    lado de **trás** são cinzentos e ficam atrás do tronco: sem essa pista de
-    profundidade, ``walk_contact_front`` e ``walk_contact_back`` de perfil são
-    silhuetas idênticas e o modelo não troca a perna da frente.
+    Serve de **referência de forma**: o modelo copia a pose desenhada. Regras
+    por vista (todas validadas E2E na 4050):
+
+    - ``side``: membros pelos ângulos de :data:`_POSE_ANGLES`; os do lado de
+      **trás** a cinzento e atrás do tronco (sem essa pista os dois contactos
+      de perfil são silhuetas iguais e o modelo não troca a perna).
+    - ``front`` / ``back``: pernas **verticais** — pernas em "V" lateral faziam
+      o modelo virar a personagem de perfil. A passada lê-se no comprimento: de
+      frente o pé da frente fica mais abaixo (mais perto); de costas o pé da
+      frente afasta-se (sobe) e o de trás mostra a sola.
+    - ``diag_front`` / ``diag_back``: ângulos de perfil atenuados (a passada
+      vai em profundidade) mais o encurtamento de frente/costas; a silhueta de
+      perfil puro fazia frames da diagonal saírem de perfil.
 
     Args:
         pose: Nome da pose.
-        view: ``"side"`` (perfil) ou ``"front"`` (de frente).
+        view: Vista (ver :data:`DIRECTIONS`).
         size: Lado da imagem em pixels.
 
     Raises:
@@ -301,103 +377,100 @@ def draw_pose_silhouette(pose: str, *, view: str = "side", size: int = 256) -> I
     """
     if pose not in _POSE_ANGLES:
         raise KeyError(f"pose desconhecida: {pose!r} (disponíveis: {', '.join(pose_names())})")
-    if view == "front":
-        return _draw_front_silhouette(pose, size=size)
     front_leg, back_leg, front_arm, back_arm = _POSE_ANGLES[pose]
+    squash, lift = _POSE_SHAPE.get(pose, (0.0, 0.0))
 
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     white = (255, 255, 255, 255)
     far = (150, 150, 150, 255)
     cx = size * 0.5
-    hip_y = size * 0.56
+    hip_y = size * (0.56 + squash - lift)
     torso_len = size * 0.22
     head_r = size * 0.085
+    leg_len = size * 0.28 * (1.0 - 2.2 * squash)
+    arm_len = size * 0.2
+    leg_w = max(2, int(size * 0.05))
+    arm_w = max(2, int(size * 0.042))
+    sh_y = hip_y - torso_len * 0.85
+    torso_half = size * {"side": 0.085, "diag_front": 0.075, "diag_back": 0.075}.get(view, 0.085)
 
     def limb(x: float, y: float, angle_deg: float, length: float, width: int, fill: tuple[int, ...]) -> None:
         a = math.radians(angle_deg)
         d.line([(x, y), (x + math.sin(a) * length, y + math.cos(a) * length)], fill=fill, width=width)
 
-    leg_w = max(2, int(size * 0.05))
-    arm_w = max(2, int(size * 0.042))
-    sh_y = hip_y - torso_len * 0.85
-    # Lado de trás primeiro (fica tapado pelo tronco).
-    limb(cx + size * 0.018, hip_y, back_leg, size * 0.28, leg_w, far)
-    limb(cx - size * 0.022, sh_y, back_arm, size * 0.2, arm_w, far)
-    limb(cx - size * 0.018, hip_y, front_leg, size * 0.28, leg_w, white)
-    d.rounded_rectangle(
-        [cx - size * 0.085, hip_y - torso_len, cx + size * 0.085, hip_y],
-        radius=size * 0.03,
-        fill=white,
-    )
-    limb(cx + size * 0.022, sh_y, front_arm, size * 0.2, arm_w, white)
-    # Cabeça + elmo.
-    head_cy = sh_y - head_r * 0.85
-    d.ellipse([cx - head_r, head_cy - head_r, cx + head_r, head_cy + head_r], fill=white)
-    d.rounded_rectangle(
-        [cx - head_r * 1.05, head_cy - head_r * 1.3, cx + head_r * 1.1, head_cy - head_r * 0.3],
-        radius=size * 0.02,
-        fill=white,
-    )
-    return img
+    def foot(x: float, y: float, r: float, fill: tuple[int, ...]) -> None:
+        d.ellipse([x - r, y - r * 0.7, x + r, y + r * 0.7], fill=fill)
 
+    def torso_and_head() -> None:
+        d.rounded_rectangle(
+            [cx - torso_half, hip_y - torso_len, cx + torso_half, hip_y], radius=size * 0.03, fill=white
+        )
+        head_cy = sh_y - head_r * 0.85
+        d.ellipse([cx - head_r, head_cy - head_r, cx + head_r, head_cy + head_r], fill=white)
+        d.rounded_rectangle(
+            [cx - head_r * 1.05, head_cy - head_r * 1.3, cx + head_r * 1.1, head_cy - head_r * 0.3],
+            radius=size * 0.02,
+            fill=white,
+        )
 
-def _draw_front_silhouette(pose: str, *, size: int) -> Image.Image:
-    """Silhueta de frente/costas: pernas **verticais**, a passada lê-se no comprimento.
+    if view in ("front", "back"):
+        # Passada -1..1: >0 = perna direita (do observador) à frente. Só a perna
+        # da frente conta: walk_down/passing ficam neutras → ciclo D, N, E, N.
+        stride = max(-1.0, min(1.0, front_leg / 30.0))
+        if abs(stride) < 0.5:
+            stride = 0.0
+        for side, sign in ((1, 1.0), (-1, -1.0)):
+            ahead = stride * sign  # >0 esta perna à frente
+            if view == "front":
+                scale = 1.0 + 0.08 * max(ahead, 0.0) - 0.28 * max(-ahead, 0.0)
+                r = size * (0.035 + 0.01 * max(ahead, 0.0))
+            else:
+                scale = 1.0 - 0.24 * max(ahead, 0.0) + 0.04 * max(-ahead, 0.0)
+                r = size * (0.035 + 0.014 * max(-ahead, 0.0))  # sola do pé de trás à vista
+            x = cx + side * size * 0.045
+            length = leg_len * scale
+            d.line([(x, hip_y), (x, hip_y + length)], fill=white, width=int(leg_w * 1.1))
+            foot(x, hip_y + length, r, white)
+        torso_and_head()
+        swinging = pose.startswith(("idle", "walk", "run"))
+        for side, sign in ((1, 1.0), (-1, -1.0)):
+            x = cx + side * size * 0.1
+            if swinging:
+                # Braço oposto à perna da frente vem à frente → encurta (perspetiva).
+                length = arm_len * (1.0 - 0.18 * max(-stride * sign, 0.0))
+                angle = side * 8.0
+            else:
+                length, angle = arm_len, side * float(front_arm)
+            limb(x, sh_y, angle, length, arm_w, white)
+        return img
 
-    De frente a passada não abre as pernas para os lados — o pé da frente fica
-    mais abaixo (mais perto) e o de trás com o calcanhar levantado (estilo RPG
-    Maker). Pernas em "V" lateral faziam o modelo virar a personagem de perfil.
-    Poses fora de andar/correr/parado (salto, ataque) mantêm braços pelos
-    ângulos da tabela.
-    """
-    front_leg, _, front_arm, _ = _POSE_ANGLES[pose]
-    # Passada -1..1: >0 = perna direita (do observador) à frente. Só a perna da
-    # frente conta: walk_down/passing ficam neutras → ciclo D, N, E, N.
-    stride = max(-1.0, min(1.0, front_leg / 30.0))
-    if abs(stride) < 0.5:
-        stride = 0.0
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    white = (255, 255, 255, 255)
-    cx = size * 0.5
-    hip_y = size * 0.56
-    torso_len = size * 0.22
-    head_r = size * 0.085
-    leg_len = size * 0.28
-    leg_w = max(2, int(size * 0.055))
-    arm_w = max(2, int(size * 0.042))
-    sh_y = hip_y - torso_len * 0.85
-    for side, sign in ((1, 1.0), (-1, -1.0)):
-        ahead = stride * sign  # >0 esta perna à frente
-        length = leg_len * (1.0 + 0.08 * max(ahead, 0.0) - 0.28 * max(-ahead, 0.0))
-        x = cx + side * size * 0.045
-        d.line([(x, hip_y), (x, hip_y + length)], fill=white, width=leg_w)
-        foot = size * (0.035 + 0.01 * max(ahead, 0.0))
-        d.ellipse([x - foot, hip_y + length - foot * 0.7, x + foot, hip_y + length + foot * 0.7], fill=white)
-    d.rounded_rectangle(
-        [cx - size * 0.085, hip_y - torso_len, cx + size * 0.085, hip_y],
-        radius=size * 0.03,
-        fill=white,
-    )
-    swinging = pose == "idle" or pose.startswith(("walk", "run"))
-    for side, sign in ((1, 1.0), (-1, -1.0)):
-        x = cx + side * size * 0.1
-        if swinging:
-            # Braço oposto à perna da frente vem à frente → encurta (perspetiva).
-            length = size * 0.2 * (1.0 - 0.18 * max(-stride * sign, 0.0))
-            angle = side * 8.0
-        else:
-            length, angle = size * 0.2, side * float(front_arm)
-        a = math.radians(angle)
-        d.line([(x, sh_y), (x + math.sin(a) * length, sh_y + math.cos(a) * length)], fill=white, width=arm_w)
-    head_cy = sh_y - head_r * 0.85
-    d.ellipse([cx - head_r, head_cy - head_r, cx + head_r, head_cy + head_r], fill=white)
-    d.rounded_rectangle(
-        [cx - head_r * 1.1, head_cy - head_r * 1.3, cx + head_r * 1.1, head_cy - head_r * 0.3],
-        radius=size * 0.02,
-        fill=white,
-    )
+    if view in ("diag_front", "diag_back"):
+        # Passada em profundidade: o componente lateral encolhe e a perna que vai
+        # à frente alonga (vem para o observador) ou encurta (afasta-se).
+        k = 0.22 if view == "diag_front" else -0.22
+        lateral = 0.55
+
+        def diag_leg(x: float, angle: float, fill: tuple[int, ...]) -> None:
+            length = leg_len * (1.0 + k * math.sin(math.radians(angle)))
+            a = math.radians(angle * lateral)
+            ex, ey = x + math.sin(a) * length, hip_y + math.cos(a) * length
+            d.line([(x, hip_y), (ex, ey)], fill=fill, width=leg_w)
+            foot(ex, ey, size * 0.032, fill)
+
+        diag_leg(cx + size * 0.03, back_leg, far)
+        limb(cx - size * 0.05, sh_y, back_arm * lateral, arm_len, arm_w, far)
+        diag_leg(cx - size * 0.03, front_leg, white)
+        torso_and_head()
+        limb(cx + size * 0.05, sh_y, front_arm * lateral, arm_len, arm_w, white)
+        return img
+
+    # Perfil: lado de trás primeiro (fica tapado pelo tronco).
+    limb(cx + size * 0.018, hip_y, back_leg, leg_len, leg_w, far)
+    limb(cx - size * 0.022, sh_y, back_arm, arm_len, arm_w, far)
+    limb(cx - size * 0.018, hip_y, front_leg, leg_len, leg_w, white)
+    torso_and_head()
+    limb(cx + size * 0.022, sh_y, front_arm, arm_len, arm_w, white)
     return img
 
 

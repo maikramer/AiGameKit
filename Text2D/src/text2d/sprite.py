@@ -30,13 +30,12 @@ from typing import Any
 
 from PIL import Image
 
+from .anim import Animation, cell_size, check_direction, draw_guide, get_animation, phase_lift, phase_prompt
 from .poses import (
-    WALK_CYCLE,
     alpha_difference,
     canonical_direction,
     direction_prompt,
     direction_view,
-    draw_pose_sheet,
     facing_prompt,
     pose_prompt,
 )
@@ -50,53 +49,120 @@ MAX_FRAMES_PER_SHEET = 4
 # "pixel art" sai sujo — era a causa dos frames borrados a 256²).
 IDENTITY_SIZE = 512
 
-# Abaixo disto (variação média entre frames consecutivos, após alinhar) os
-# frames são cópias uns dos outros. Medido a 96 px na 4050 — perfil: cópia 2.8%,
-# ciclo bom 6-11%; de frente (passada naturalmente subtil): cópia 1.5%, bom 4.6%.
-MIN_POSE_VARIATION: dict[str, float] = {"side": 0.04, "front": 0.03}
-
 # Callback de render: (prompt, output_path, seed, refs, width, height) -> None
 # (escreve o ficheiro). Permite delegar cada geração ao vramd em vez de correr
 # in-process; o CLI fornece o callback com fallback in-process.
 RenderFn = Callable[[str, Path, int, list[Path], int, int], None]
 
 
-def _cell_size(size: int) -> tuple[int, int]:
-    """Célula ``(largura, altura)`` múltipla de 16 com proporção 4:5 (corpo inteiro)."""
-    height = max(64, (size // 16) * 16)
-    return max(48, round(height * 0.8 / 16) * 16), height
-
-
-def sheet_prompt(character: str, *, direction: str, poses: tuple[str, ...] | list[str]) -> str:
+def sheet_prompt(
+    character: str,
+    *,
+    direction: str,
+    poses: tuple[str, ...] | list[str],
+    animation: str | Animation = "walk",
+) -> str:
     """Prompt da folha: N cópias da personagem, cada uma na pose da silhueta.
 
     A pose de cada célula também vai por extenso (``frame 1: ...``): sozinha, a
     silhueta frontal (diferenças subtis de comprimento das pernas) não chegava
     para o modelo variar a passada.
     """
+    anim = get_animation(animation) if isinstance(animation, str) else animation
     n = len(poses)
     view = direction_view(direction)
-    frames_text = "; ".join(f"frame {i + 1}: {pose_prompt(p, view=view)}" for i, p in enumerate(poses))
+    frames_text = "; ".join(f"frame {i + 1}: {phase_prompt(anim, p, view=view)}" for i, p in enumerate(poses))
+    direction_text = direction_prompt(direction)
+    if anim.name != "walk":
+        # "walking to the right" contradiz salto/ataque/idle; fica só a vista.
+        direction_text = facing_prompt(direction)
+    # Fases aéreas: a silhueta mostra a altura de cada frame (não "mesmo chão").
+    ground = (
+        "each copy at the same height as its silhouette"
+        if any(phase_lift(anim, p) for p in poses)
+        else "feet on the same ground line"
+    )
+    limbs = "legs" if anim.body == "quadruped" else "limbs"
     return (
-        f"a horizontal sprite sheet of a {n}-frame walk cycle animation of "
+        f"a horizontal sprite sheet of a {n}-frame {anim.label} animation of "
         f"{character.strip().rstrip('.')}, {n} copies of the same character from left to right, each copy "
-        f"{direction_prompt(direction)}, posed exactly like the white silhouette at the same position in the "
-        "second image (the grey limbs are the far side of the body), the character looks exactly like the "
-        "first image, identical outfit, colors, size and proportions in every frame, full body, feet on the "
-        f"same ground line. {frames_text}. {STYLE_SUFFIX}"
+        f"{direction_text}, posed exactly like the white silhouette at the same position in the "
+        f"second image (the grey {limbs} are the far side of the body), the character looks exactly like the "
+        f"first image, identical outfit, colors, size and proportions in every frame, full body, {ground}. "
+        f"{frames_text}. {STYLE_SUFFIX}"
     )
 
 
-def identity_prompt(character: str, *, direction: str) -> str:
+def identity_prompt(character: str, *, direction: str, body: str = "biped") -> str:
     """Prompt da identidade: corpo inteiro, **parado** (ver :func:`facing_prompt`)."""
     view = direction_view(direction)
-    return (
-        f"{character.strip().rstrip('.')}, full body, {facing_prompt(direction)}, "
-        f"{pose_prompt('idle', view=view)}, {STYLE_SUFFIX}"
-    )
+    if body == "quadruped":
+        from .quadruped import quad_pose_prompt
+
+        stance = quad_pose_prompt("quad_idle")
+    else:
+        stance = pose_prompt("idle", view=view)
+    return f"{character.strip().rstrip('.')}, full body, {facing_prompt(direction)}, {stance}, {STYLE_SUFFIX}"
+
+
+def chroma_key(
+    image: Image.Image,
+    *,
+    tolerance: float = 12.0,
+    max_border_spread: float = 24.0,
+    pockets: bool = False,
+) -> Image.Image | None:
+    """Recorta o fundo liso pela cor da borda (flood fill a partir das margens).
+
+    A cor do fundo é a mediana dos pixels da borda; só sai a região dessa cor
+    **ligada à borda**, mais a franja anti-aliased de 1 px. O contorno escuro
+    do pixel art trava o preenchimento, por isso uma personagem branca em
+    fundo branco não é furada (o rembg furava: cavalo branco com buracos).
+    Tolerância 12: a 24 o preenchimento já vazava pelo contorno de um cavalo
+    branco.
+
+    Args:
+        pockets: Remover também bolsas fechadas (entre pernas) da cor do fundo.
+            Só para fundos saturados (cor-chave); com fundo branco apagaria o
+            corpo de personagens brancas.
+
+    Returns:
+        RGBA recortado, ou ``None`` se a borda não for uniforme (o modelo não
+        desenhou um fundo liso) — o chamador cai para o rembg.
+    """
+    import numpy as np
+    from PIL import ImageDraw, ImageFilter
+
+    rgb = np.asarray(image.convert("RGB")).astype(np.int16)
+    border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
+    key = np.median(border, axis=0)
+    if float(np.median(np.abs(border - key).max(axis=1))) > max_border_spread:
+        return None
+    dist = np.abs(rgb - key).max(axis=2)
+    # .copy(): com Pillow 12 a imagem de fromarray partilha o buffer read-only do
+    # numpy e o floodfill não faz nada (sem erro).
+    near = Image.fromarray(np.where(dist < tolerance, 255, 0).astype(np.uint8), "L").copy()
+    h, w = dist.shape
+    seeds = [(x, 0) for x in range(w)] + [(x, h - 1) for x in range(w)]
+    seeds += [(0, y) for y in range(h)] + [(w - 1, y) for y in range(h)]
+    for xy in seeds:
+        if near.getpixel(xy) == 255:
+            ImageDraw.floodfill(near, xy, 128)
+    bg = np.asarray(near) == 128
+    if pockets:
+        bg |= dist < tolerance * 0.5
+    # Franja: pixels meio-misturados com o fundo encostados à região de fundo.
+    grown = np.asarray(Image.fromarray(bg.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(3))) > 0
+    bg |= grown & (dist < tolerance * 2)
+    out = image.convert("RGBA")
+    out.putalpha(Image.fromarray(np.where(bg, 0, 255).astype(np.uint8), "L"))
+    return out
 
 
 def _remove_background(image: Image.Image) -> Image.Image:
+    keyed = chroma_key(image)
+    if keyed is not None:
+        return keyed
     from .bg_removal import remove_background
 
     return remove_background(image.convert("RGB")).convert("RGBA")
@@ -119,11 +185,19 @@ def _anchor_x(alpha: Image.Image, bbox: tuple[int, int, int, int]) -> float:
     return left + float((np.arange(hist.size) * hist).sum()) / total
 
 
-def align_frames(frames: list[Image.Image], *, margin: float = 0.06) -> list[Image.Image]:
+def align_frames(
+    frames: list[Image.Image],
+    *,
+    margin: float = 0.06,
+    lifts: list[float] | None = None,
+) -> list[Image.Image]:
     """Alinha frames RGBA numa tela quadrada comum: tronco no centro, pés no chão.
 
     Mantém a escala relativa entre frames (uma só tela para todos) — só
-    translada. Frames sem conteúdo ficam vazios.
+    translada. ``lifts`` (fração da altura da personagem, por frame) repõe a
+    altura das fases aéreas depois de assentar os pés: o modelo desenha o
+    salto no ar, o recorte perde essa altura, e sem a repor o salto ficava
+    colado ao chão. Frames sem conteúdo ficam vazios.
     """
     boxes = [f.getchannel("A").point(lambda a: 255 if a > 127 else 0).getbbox() for f in frames]
     valid = [(f, b) for f, b in zip(frames, boxes, strict=True) if b]
@@ -132,15 +206,17 @@ def align_frames(frames: list[Image.Image], *, margin: float = 0.06) -> list[Ima
     anchors = [_anchor_x(f.getchannel("A"), b) for f, b in valid]
     half_w = max(max(a - b[0], b[2] - a) for (_, b), a in zip(valid, anchors, strict=True))
     height = max(b[3] - b[1] for _, b in valid)
-    side = int(max(2 * half_w, height) * (1 + 2 * margin)) + 1
+    lifts = lifts or [0.0] * len(frames)
+    max_lift = max(lifts) if lifts else 0.0
+    side = int(max(2 * half_w, height * (1 + max_lift)) * (1 + 2 * margin)) + 1
     ground = side - int(side * margin)
     out: list[Image.Image] = []
     it = iter(zip(valid, anchors, strict=True))
-    for box in boxes:
+    for box, lift in zip(boxes, lifts, strict=True):
         canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
         if box:
             (frame, b), anchor = next(it)
-            canvas.alpha_composite(frame, (round(side / 2 - anchor), ground - b[3]))
+            canvas.alpha_composite(frame, (round(side / 2 - anchor), ground - b[3] - round(lift * height)))
         out.append(canvas)
     return out
 
@@ -180,7 +256,8 @@ def generate_cycle(
     direction: str,
     out_dir: str | Path,
     frames: int = 4,
-    poses: tuple[str, ...] = WALK_CYCLE,
+    animation: str = "walk",
+    poses: tuple[str, ...] | None = None,
     reference: str | Path | None = None,
     size: int = 320,
     steps: int = 12,
@@ -202,7 +279,10 @@ def generate_cycle(
         direction: Chave de :data:`text2d.poses.DIRECTIONS` (ex.: ``"east"``).
         out_dir: Directório de saída (folha crua, frames, sprites, atlas, gif).
         frames: Nº de frames do ciclo (o ciclo canónico tem 4).
-        poses: Fases a usar (repete se forem menos que ``frames``).
+        animation: Chave de :data:`text2d.anim.ANIMATIONS` (``walk``, ``run``,
+            ``idle``, ``jump``, ``attack``, ``quad-walk``, ``quad-gallop``...).
+        poses: Fases a usar (default: as da animação; repete se forem menos
+            que ``frames``).
         reference: Imagem de referência do personagem (identidade). Se None,
             gera-se um frame ``idle`` a :data:`IDENTITY_SIZE` e usa-se esse.
         size: Altura de cada célula da folha gerada (largura = 0.8x).
@@ -225,10 +305,15 @@ def generate_cycle(
         ``reference``.
     """
     out = Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
-
     if frames < 1:
         raise ValueError("frames tem de ser >= 1")
+    try:
+        anim = get_animation(animation)
+    except KeyError as e:
+        raise ValueError(str(e)) from None
+    check_direction(anim, canonical_direction(direction))
+    poses = poses or anim.poses
+    out.mkdir(parents=True, exist_ok=True)
     if generator is None and render is None:
         from .generator import KleinFluxGenerator
 
@@ -261,14 +346,14 @@ def generate_cycle(
     if ref_path is not None and not ref_path.is_file():
         raise FileNotFoundError(f"referência não encontrada: {ref_path}")
     if ref_path is None:
-        base_prompt = identity_prompt(character, direction=source_direction)
+        base_prompt = identity_prompt(character, direction=source_direction, body=anim.body)
         ref_path = out / "00_reference.png"
         t0 = time.time()
         _render(base_prompt, ref_path, seed, [], IDENTITY_SIZE, IDENTITY_SIZE)
         print(f"[sprite] identidade: {time.time() - t0:.1f}s → {ref_path}", flush=True)
 
     # 2) Folhas: cada uma com até MAX_FRAMES_PER_SHEET células.
-    cell_w, cell_h = _cell_size(size)
+    cell_w, cell_h = cell_size(anim, size)
     raw_paths: list[Path] = []
     cells: list[Image.Image] = []
     prompts: list[str] = []
@@ -276,8 +361,8 @@ def generate_cycle(
         chunk = phase_list[start : start + MAX_FRAMES_PER_SHEET]
         k = start // MAX_FRAMES_PER_SHEET
         guide = out / f"poses_{k:02d}.png"
-        draw_pose_sheet(chunk, view=view, cell=(cell_w, cell_h)).save(guide)
-        prompt = sheet_prompt(character, direction=source_direction, poses=chunk)
+        draw_guide(anim, chunk, view=view, cell=(cell_w, cell_h)).save(guide)
+        prompt = sheet_prompt(character, direction=source_direction, poses=chunk, animation=anim)
         prompts.append(prompt)
         raw = out / f"sheet_raw_{k:02d}.png"
         t0 = time.time()
@@ -296,7 +381,7 @@ def generate_cycle(
     # 3) Sprites: fundo fora → alinhar → downscale + paleta comum.
     rgba = [_remove_background(c) if transparent else c.convert("RGBA") for c in cells]
     if transparent:
-        rgba = align_frames(rgba)
+        rgba = align_frames(rgba, lifts=[phase_lift(anim, p) for p in phase_list])
     source_sprites = to_sprites(rgba, sprite_size=sprite_size, colors=colors)
     sprites = [s.transpose(Image.Transpose.FLIP_LEFT_RIGHT) for s in source_sprites] if mirror else source_sprites
 
@@ -355,17 +440,18 @@ def generate_cycle(
     # 5) Métrica: os frames são realmente diferentes? (após alinhar → só pose)
     differences: list[float] = []
     if measure and len(sprites) > 1:
-        for a, b in itertools.pairwise([*sprites, sprites[0]]):
+        seq = [*sprites, sprites[0]] if anim.loop else sprites
+        for a, b in itertools.pairwise(seq):
             differences.append(alpha_difference(a, b))
         mean = sum(differences) / len(differences)
         print(
-            "[sprite] variação de silhueta entre frames consecutivos (com o loop): "
+            f"[sprite] variação de silhueta entre frames consecutivos{' (com o loop)' if anim.loop else ''}: "
             + ", ".join(f"{d * 100:.1f}%" for d in differences)
             + f" (média {mean * 100:.1f}%)",
             flush=True,
         )
-        floor = MIN_POSE_VARIATION.get(view, MIN_POSE_VARIATION["side"])
-        if mean < floor:
+        floor = anim.min_variation.get(view, 0.0)
+        if floor and mean < floor:
             print(
                 f"[sprite] AVISO: frames quase iguais (média {mean * 100:.1f}% < {floor * 100:.0f}%) — "
                 "a pose da identidade dominou; tenta outra --seed ou um --ref com a personagem parada.",
