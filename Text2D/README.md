@@ -227,7 +227,7 @@ Output:
 
 > GGUF weights target ComfyUI-GGUF workflows, not this CLI.
 
-### `text2d animate` / `walk-cycle` / `poses` (animação 2D)
+### `text2d animate` / `animate-set` / `walk-cycle` / `poses` (animação 2D)
 
 O FLUX.3 não tem pose conditioning: a pose vem de uma **folha de silhuetas**
 desenhada (uma por célula) e a identidade de uma imagem da personagem parada.
@@ -235,19 +235,26 @@ desenhada (uma por célula) e a identidade de uma imagem da personagem parada.
 ```bash
 text2d poses                                   # animações, fases e poses
 
-# Bípedes: walk | walk8 | run | idle | jump | attack | hurt | death | cast, em 8 direções
+# Bípedes (8 direções): walk | walk8 | run | sneak | idle | jump | roll | attack | block |
+#   shoot | kick | punch | cast | hurt | death | victory
 text2d animate "16-bit SNES-era pixel art knight hero in a blue tunic" \
   --anim run --direction east --out-dir outputs/sprites/knight_run
 
-# Quadrúpedes: quad-walk | quad-gallop (direções de perfil: east/west)
+# Quadrúpedes (east/west): quad-idle | quad-walk | quad-trot | quad-gallop | quad-attack |
+#   quad-jump | quad-hurt
 text2d animate "16-bit SNES-era pixel art white horse" --anim quad-gallop --direction east
 
 # Atalho histórico (= animate --anim walk)
 text2d walk-cycle "16-bit SNES-era pixel art knight hero in a blue tunic" --direction east
 
-# Conjunto de animações da MESMA personagem: reutiliza a identidade com --ref
-text2d animate "$K" --anim walk  --direction east -O knight/walk
-text2d animate "$K" --anim jump  --direction east -O knight/jump --ref knight/walk/00_reference.png
+# Personagem completa numa chamada: animações x direções, uma identidade partilhada
+# (a silhueta impõe a vista), espelhadas sem GPU, set.json para o motor
+text2d animate-set "$K" -d east,west,south,north                    # set standard bípede
+text2d animate-set "$K" --anims walk,attack,hurt -d east,west -O knight
+text2d animate-set "pixel art wolf" --body quadruped -d east,west   # set standard quadrúpede
+
+# Manual: reutilizar a identidade de uma animação noutra com --ref
+text2d animate "$K" --anim jump --direction east -O knight/jump --ref knight/walk/00_reference.png
 ```
 
 | Animação | Corpo | Fases |
@@ -259,21 +266,37 @@ text2d animate "$K" --anim jump  --direction east -O knight/jump --ref knight/wa
 | `jump` | bípede | agachar, subir, cair, aterrar (a altura do salto é reposta no sprite) |
 | `attack` | bípede | guarda, preparar, golpe, seguimento (arma genérica) |
 | `hurt` | bípede | parado, recuo do impacto (corpo inclinado para trás), volta |
-| `death` | bípede | recuo, ajoelha, cai para trás, deitado no chão |
+| `death` | bípede | cambaleia (mão no peito), ajoelha, cai para trás, deitado (último frame segurado) |
 | `cast` | bípede | junta as mãos, ergue os braços, liberta para a frente, recolhe |
+| `block` | bípede | guarda, escudo erguido, impacto (empurrado para trás), guarda |
+| `roll` | bípede | agacha, mergulha, enrolado (de pernas para o ar), levanta |
+| `shoot` | bípede | arco em baixo, puxar a corda, soltar, baixar o arco |
+| `kick` | bípede | guarda, joelho recolhido, pontapé estendido, recolhe |
+| `punch` | bípede | guarda, jab (braço da frente), guarda, direto (braço de trás) — loop |
+| `victory` | bípede | parado, punho no ar, salto de alegria, punho no ar |
+| `sneak` | bípede | andar furtivo agachado (4 fases, mesma alternância do `walk`) |
+| `quad-idle` | quadrúpede | parado, fareja o chão, parado, alerta (cabeça erguida) |
 | `quad-walk` | quadrúpede | passo lateral em 4 fases (patas do lado de trás a cinzento) |
+| `quad-trot` | quadrúpede | pares diagonais em sincronia + fase suspensa |
 | `quad-gallop` | quadrúpede | impulso, extensão no ar, aterragem da frente, recolha |
+| `quad-attack` | quadrúpede | agachar, salto de ataque, morder, recuar |
+| `quad-jump` | quadrúpede | agachar, salto, aterrar com as patas da frente, agachar |
+| `quad-hurt` | quadrúpede | parado, encolhe com o golpe (cabeça para trás), volta |
+
+Cada animação tem **tempos por fase** (`holds`): antecipação longa, golpe
+curto, pose final segurada — o GIF e o `anim.json` usam
+`--frame-ms` × hold.
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--anim` / `-a` | `walk` | Animação (só em `animate`) |
 | `--direction` | `east` | 8 direções; as espelhadas (`west`, `north_west`, `south_west`) geram a canónica e espelham |
 | `--frames` / `-n` | 4 | Frames (fases repetidas; >4 → várias folhas com a mesma identidade) |
-| `--out-dir` / `-O` | `outputs/sprites` | Folha crua, frames, sprites, `atlas.png`, `sheet.png`, `cycle.gif` |
+| `--out-dir` / `-O` | `outputs/sprites` | Folha crua, frames, sprites, `atlas.png`, `sheet.png`, `cycle.gif`, `anim.json` |
 | `--ref` | — | Identidade (personagem **parada**); sem ela é gerada a 512² |
 | `--size` / `--steps` / `--seed` | 320 / 12 / 100 | Altura da célula, passos e seed |
 | `--sprite-size` / `--colors` | 96 / 32 | Lado do sprite e nº de cores da paleta comum |
-| `--frame-ms` | 160 | Duração de cada frame no GIF |
+| `--frame-ms` | 160 | Duração base de cada frame (× hold da fase) |
 | `--retries` | 1 | Se os frames saírem quase iguais, regenera com outra seed e fica a melhor |
 | `--measure` | on | Mede a variação entre frames (avisa se forem cópias) |
 
@@ -293,6 +316,10 @@ Como funciona:
 4. **Pós-processamento** — alinhamento (tronco no mesmo x, pés no chão,
    altura do salto reposta), downscale por área, alpha binário, paleta única
    para a animação → atlas 1x, preview 4x e GIF.
+5. **`anim.json`** — o contrato para o motor: `frame_size`, `pivot` (centro,
+   linha dos pés), `loop`, e por frame `pose`, `x`/`y` no atlas e
+   `duration_ms`; `mirrored_from` nas direções espelhadas. O `animate-set`
+   junta tudo num `set.json` (`animations.<anim>.<direção>` → `anim.json`).
 
 Medido na RTX 4050 6 GB (via vramd): **~90 s por animação de 4 frames**
 (identidade ~55 s + folha ~31 s; com `--ref` ~40-60 s; `walk8` com `--ref`

@@ -11,10 +11,14 @@ O FLUX.3 não tem pose conditioning; a receita (validada E2E na 4050, ver
    do chão; a silhueta impõe a pose. Frames gerados em separado saíam com
    escala/enquadramento diferentes e, com a referência como única guia,
    repetiam a pose da referência.
-3. **Pós-processamento de sprite** — rembg por célula, alinhamento (tronco no
+3. **Pós-processamento de sprite** — recorte por célula (flood fill da borda),
+   alinhamento (tronco no
    mesmo x, pés na mesma linha), downscale por média de área (sem o ringing
    do LANCZOS), alpha binário e **uma paleta para o ciclo todo** (paleta por
    frame fazia as cores cintilar no GIF).
+4. **Entrega** — atlas 1x, preview 4x, GIF com a duração de cada fase
+   (``Animation.holds``) e ``anim.json`` (frames, durações, pivô nos pés,
+   loop) para o motor consumir sem adivinhar.
 
 Até :data:`MAX_FRAMES_PER_SHEET` frames saem numa só geração (grelha de
 :data:`SHEET_COLS` colunas); acima disso geram-se várias folhas com a mesma
@@ -25,6 +29,7 @@ folha é regenerada com outra seed (``retries``) e fica a de maior variação.
 from __future__ import annotations
 
 import itertools
+import json
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -140,11 +145,12 @@ def chroma_key(
     Depois do flood fill há dois filtros contra o "pixel branco" que sobrava:
 
     - **Bolsas** (entre braço e tronco, entre pernas): componentes fechadas
-      da cor do fundo, não minúsculas, até 4% da figura, e **rodeadas de
-      pixels escuros/saturados** (anel com distância mediana > 60). O anel
-      separa o buraco real do brilho de um orbe mágico (rodeado de claro).
-      Desligado sozinho quando a figura é clara (>5% de pixels cor-de-fundo:
-      cavalo branco) — aí as manchas brancas são corpo.
+      da cor do fundo, não minúsculas, até 18% da figura (o vão entre arco e
+      corda chega a 13%), e **rodeadas de pixels escuros/saturados** (anel
+      com distância mediana > 60). O anel separa o buraco real do brilho de
+      um orbe mágico (rodeado de claro). Desligado sozinho quando a figura é
+      clara — maior peça cor-de-fundo > 20% da figura (corpo do cavalo branco:
+      25%) ou > 40% de pixels claros — aí as manchas brancas são corpo.
     - **Franja**: descasca ``peel`` px de borda clara (distância ao fundo <
       ``fringe``) — o anti-aliasing do modelo deixava um halo branco que o
       downscale virava contorno claro. O contorno escuro do pixel art trava.
@@ -179,9 +185,9 @@ def chroma_key(
     bg = np.asarray(near) == 128
     fg_area = int((~bg).sum())
     if pockets is None:
-        pockets = bool(fg_area) and int(((~bg) & (dist < tolerance * 2)).sum()) < 0.05 * fg_area
+        pockets = bool(fg_area) and int(((~bg) & (dist < tolerance * 2)).sum()) < 0.4 * fg_area
     if pockets:
-        bg |= _enclosed_pockets((~bg) & (dist < tolerance), dist, fg_area)
+        bg |= _enclosed_pockets((~bg) & (dist < tolerance), dist, fg_area, auto=True)
     # Franja: pixels meio-misturados com o fundo encostados à região de fundo.
     grown = np.asarray(Image.fromarray(bg.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(3))) > 0
     bg |= grown & (dist < tolerance * 2)
@@ -193,13 +199,21 @@ def chroma_key(
     return out
 
 
-def _enclosed_pockets(cand: Any, dist: Any, fg_area: int, *, min_px: int = 12, max_frac: float = 0.04) -> Any:
-    """Máscara das bolsas de fundo fechadas dentro da figura (ver :func:`chroma_key`)."""
+def _enclosed_pockets(
+    cand: Any, dist: Any, fg_area: int, *, min_px: int = 12, max_frac: float = 0.18, auto: bool = False
+) -> Any:
+    """Máscara das bolsas de fundo fechadas dentro da figura (ver :func:`chroma_key`).
+
+    ``auto``: devolve vazio se a maior peça cor-de-fundo passar 20% da figura
+    (personagem branca — a peça é o corpo, não um buraco).
+    """
     import numpy as np
     from scipy import ndimage
 
     out = np.zeros(cand.shape, bool)
-    labels, _n = ndimage.label(cand)
+    labels, n = ndimage.label(cand)
+    if auto and n and float(np.bincount(labels.ravel())[1:].max()) > 0.2 * fg_area:
+        return out
     for i, sl in enumerate(ndimage.find_objects(labels), 1):
         if sl is None:
             continue
@@ -307,6 +321,138 @@ def to_sprites(frames: list[Image.Image], *, sprite_size: int | None, colors: in
     return sprites
 
 
+def _write_deliverables(
+    out: Path, sprites: list[Image.Image], durations: list[int], *, make_sheet: bool, make_gif: bool
+) -> tuple[Path | None, Path | None, Path | None]:
+    """Atlas 1x (frames em x), preview 4x e GIF com a duração de cada frame."""
+    atlas_path = sheet_path = gif_path = None
+    if not sprites:
+        return atlas_path, sheet_path, gif_path
+    w, h = sprites[0].size
+    if make_sheet:
+        atlas = Image.new("RGBA", (w * len(sprites), h), (0, 0, 0, 0))
+        for i, spr in enumerate(sprites):
+            atlas.alpha_composite(spr, (i * w, 0))
+        atlas_path = out / "atlas.png"
+        atlas.save(atlas_path)
+
+        cols = min(len(sprites), 4)
+        rows = (len(sprites) + cols - 1) // cols
+        side = w * 4
+        pad = 12
+        sheet = Image.new("RGBA", (cols * (side + pad) + pad, rows * (side + pad) + pad), (42, 44, 54, 255))
+        for i, spr in enumerate(sprites):
+            sheet.alpha_composite(
+                spr.resize((side, side * h // w), Image.Resampling.NEAREST),
+                (pad + (i % cols) * (side + pad), pad + (i // cols) * (side + pad)),
+            )
+        sheet_path = out / "sheet.png"
+        sheet.save(sheet_path)
+        print(f"[sprite] atlas: {atlas_path} | preview: {sheet_path}", flush=True)
+    if make_gif:
+        flat = []
+        for spr in sprites:
+            canvas = Image.new("RGBA", spr.size, (42, 44, 54, 255))
+            canvas.alpha_composite(spr)
+            # Paleta comum ≤ colors+1 cores → ADAPTIVE é exato (sem cintilar).
+            flat.append(canvas.convert("RGB").convert("P", palette=Image.Palette.ADAPTIVE, colors=256))
+        gif_path = out / "cycle.gif"
+        flat[0].save(gif_path, save_all=True, append_images=flat[1:], duration=durations, loop=0, disposal=2)
+        print(f"[sprite] gif: {gif_path}", flush=True)
+    return atlas_path, sheet_path, gif_path
+
+
+def mirror_cycle(src_dir: str | Path, out_dir: str | Path, *, direction: str) -> dict[str, Any]:
+    """Espelha um ciclo já gerado (``anim.json`` + sprites) para a direção oposta.
+
+    Sem GPU: num set com ``east`` e ``west`` a segunda direção é a primeira
+    espelhada (truque clássico de sprite — personagem idêntica nos dois).
+
+    Raises:
+        FileNotFoundError: ``src_dir`` sem ``anim.json``.
+    """
+    src, out = Path(src_dir), Path(out_dir)
+    meta = json.loads((src / "anim.json").read_text(encoding="utf-8"))
+    out.mkdir(parents=True, exist_ok=True)
+    sprites = [
+        Image.open(src / f["file"]).convert("RGBA").transpose(Image.Transpose.FLIP_LEFT_RIGHT) for f in meta["frames"]
+    ]
+    paths = []
+    for f, spr in zip(meta["frames"], sprites, strict=True):
+        spr.save(out / f["file"])
+        paths.append(out / f["file"])
+    durations = [f["duration_ms"] for f in meta["frames"]]
+    atlas, sheet, gif = _write_deliverables(out, sprites, durations, make_sheet=True, make_gif=True)
+    w = meta["frame_size"][0]
+    meta.update(
+        direction=direction,
+        mirrored_from=meta["direction"],
+        pivot=[w - meta["pivot"][0], meta["pivot"][1]],
+        atlas=atlas.name if atlas else None,
+    )
+    meta_path = out / "anim.json"
+    meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"sprites": paths, "atlas": atlas, "sheet": sheet, "gif": gif, "meta": meta_path, "durations": durations}
+
+
+def _pivot(sprites: list[Image.Image]) -> tuple[int, int]:
+    """Pivô dos sprites alinhados: centro horizontal, linha do chão (pés).
+
+    Os frames saem de :func:`align_frames` com o tronco no centro e os pés na
+    mesma linha; a linha é a base mais baixa entre os frames (fases aéreas
+    ficam acima dela).
+    """
+    w, h = sprites[0].size
+    bottoms = [b[3] for b in (s.getchannel("A").getbbox() for s in sprites) if b]
+    return w // 2, max(bottoms) if bottoms else h
+
+
+def _write_meta(
+    out: Path,
+    *,
+    character: str,
+    anim: Animation,
+    direction: str,
+    source_direction: str,
+    phases: list[str],
+    sprites: list[Image.Image],
+    sprite_paths: list[Path],
+    durations: list[int],
+    atlas: Path | None,
+    seed: int,
+    attempts: int,
+    differences: list[float],
+) -> Path | None:
+    """Escreve ``anim.json`` — o contrato do atlas para o motor (frames em x)."""
+    if not sprites:
+        return None
+    w, h = sprites[0].size
+    px, py = _pivot(sprites)
+    meta = {
+        "version": 1,
+        "character": character,
+        "animation": anim.name,
+        "body": anim.body,
+        "direction": direction,
+        "mirrored_from": source_direction if source_direction != direction else None,
+        "loop": anim.loop,
+        "frame_size": [w, h],
+        "pivot": [px, py],
+        "atlas": atlas.name if atlas else None,
+        "frames": [
+            {"index": i, "pose": pose, "x": i * w, "y": 0, "duration_ms": ms, "file": path.name}
+            for i, (pose, ms, path) in enumerate(zip(phases, durations, sprite_paths, strict=True))
+        ],
+        "total_ms": sum(durations),
+        "seed": seed,
+        "attempts": attempts,
+        "variation": [round(d, 4) for d in differences],
+    }
+    path = out / "anim.json"
+    path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
+
+
 def generate_cycle(
     character: str,
     *,
@@ -353,7 +499,7 @@ def generate_cycle(
         measure: Medir a variação de silhueta entre frames consecutivos.
         retries: Tentativas extra (outra seed) quando a variação fica abaixo do
             limiar da animação; fica a melhor. 0 = desligado.
-        frame_ms: Duração de cada frame no GIF.
+        frame_ms: Duração base de cada frame (x ``holds`` da animação).
         generator: Instância de :class:`text2d.generator.KleinFluxGenerator`
             (criada se None e se ``render`` não for usado).
         render: Callback que escreve cada geração (ex.: delegar ao vramd). Se
@@ -361,8 +507,8 @@ def generate_cycle(
 
     Returns:
         Dict com ``frames`` (células cruas), ``sprites``, ``sheet`` (preview),
-        ``atlas`` (1x, transparente), ``gif``, ``differences``, ``prompts`` e
-        ``reference``.
+        ``atlas`` (1x, transparente), ``gif``, ``meta`` (``anim.json``),
+        ``durations``, ``differences``, ``prompts`` e ``reference``.
     """
     out = Path(out_dir)
     if frames < 1:
@@ -498,40 +644,10 @@ def generate_cycle(
         print(f"[sprite] set espelhado ({source_direction}) → {mirrored}", flush=True)
 
     # 4) Atlas (1x, transparente — o que o jogo consome), preview 4x e GIF.
-    sheet_path = atlas_path = None
-    if make_sheet and sprites:
-        w, h = sprites[0].size
-        atlas = Image.new("RGBA", (w * len(sprites), h), (0, 0, 0, 0))
-        for i, spr in enumerate(sprites):
-            atlas.alpha_composite(spr, (i * w, 0))
-        atlas_path = out / "atlas.png"
-        atlas.save(atlas_path)
-
-        cols = min(len(sprites), 4)
-        rows = (len(sprites) + cols - 1) // cols
-        side = w * 4
-        pad = 12
-        sheet = Image.new("RGBA", (cols * (side + pad) + pad, rows * (side + pad) + pad), (42, 44, 54, 255))
-        for i, spr in enumerate(sprites):
-            sheet.alpha_composite(
-                spr.resize((side, side * h // w), Image.Resampling.NEAREST),
-                (pad + (i % cols) * (side + pad), pad + (i // cols) * (side + pad)),
-            )
-        sheet_path = out / "sheet.png"
-        sheet.save(sheet_path)
-        print(f"[sprite] atlas: {atlas_path} | preview: {sheet_path}", flush=True)
-
-    gif_path = None
-    if make_gif and sprites:
-        flat = []
-        for spr in sprites:
-            canvas = Image.new("RGBA", spr.size, (42, 44, 54, 255))
-            canvas.alpha_composite(spr)
-            # Paleta comum ≤ colors+1 cores → ADAPTIVE é exato (sem cintilar).
-            flat.append(canvas.convert("RGB").convert("P", palette=Image.Palette.ADAPTIVE, colors=256))
-        gif_path = out / "cycle.gif"
-        flat[0].save(gif_path, save_all=True, append_images=flat[1:], duration=frame_ms, loop=0, disposal=2)
-        print(f"[sprite] gif: {gif_path}", flush=True)
+    durations = anim.durations(len(sprites), frame_ms)
+    atlas_path, sheet_path, gif_path = _write_deliverables(
+        out, sprites, durations, make_sheet=make_sheet, make_gif=make_gif
+    )
 
     # 5) Métrica: os frames são realmente diferentes? (após alinhar → só pose)
     if measure and differences:
@@ -552,14 +668,164 @@ def generate_cycle(
     elif not measure:
         differences = []
 
+    meta_path = _write_meta(
+        out,
+        character=character,
+        anim=anim,
+        direction=direction,
+        source_direction=source_direction,
+        phases=phase_list,
+        sprites=sprites,
+        sprite_paths=sprite_paths[: len(sprites)],
+        durations=durations,
+        atlas=atlas_path,
+        seed=seed,
+        attempts=attempts,
+        differences=differences,
+    )
+
     return {
         "frames": raw_paths,
         "sprites": sprite_paths,
         "sheet": sheet_path,
         "atlas": atlas_path,
         "gif": gif_path,
+        "meta": meta_path,
+        "durations": durations,
         "differences": differences,
         "attempts": attempts,
         "prompts": prompts,
         "reference": ref_path,
     }
+
+
+# ---------------------------------------------------------------------------
+# Set completo: várias animações x direções de uma personagem
+# ---------------------------------------------------------------------------
+
+DEFAULT_SET: dict[str, tuple[str, ...]] = {
+    "biped": ("idle", "walk", "run", "jump", "attack", "hurt", "death"),
+    "quadruped": ("quad-idle", "quad-walk", "quad-trot", "quad-gallop", "quad-attack", "quad-hurt"),
+}
+
+
+def generate_set(
+    character: str,
+    *,
+    out_dir: str | Path,
+    animations: list[str] | tuple[str, ...] | None = None,
+    directions: list[str] | tuple[str, ...] = ("east",),
+    body: str | None = None,
+    reference: str | Path | None = None,
+    seed: int = 100,
+    generator: Any = None,
+    render: RenderFn | None = None,
+    **cycle_kwargs: Any,
+) -> dict[str, Any]:
+    """Gera o set de sprites de uma personagem (animações x direções) de uma vez.
+
+    - **Uma identidade para tudo**, gerada uma vez (ou ``reference``) e
+      passada a todas as animações e vistas. Quem impõe a vista é a folha de
+      silhuetas: medido E2E, uma identidade de frente dá folhas de perfil e
+      de costas corretas. Gerar uma identidade por vista com a primeira como
+      referência não serve — o modelo copia a referência (3 identidades
+      iguais, ~85 s cada, desperdiçados).
+    - Direções espelhadas (``west``, ``north_west``, ``south_west``) saem da
+      canónica espelhada, sem GPU (:func:`mirror_cycle`).
+    - ``set.json`` indexa tudo: identidade e ``anim.json`` por animação/direção.
+
+    Args:
+        animations: Chaves de :data:`text2d.anim.ANIMATIONS` (default: o set
+            standard do corpo — :data:`DEFAULT_SET`). Todas do mesmo corpo.
+        directions: Direções pedidas (quadrúpedes: só ``east``/``west``).
+        body: ``biped``/``quadruped`` — só decide o set default.
+        reference: Identidade da personagem parada (opcional).
+        **cycle_kwargs: Passa para :func:`generate_cycle` (``frames``,
+            ``sprite_size``, ``retries``...).
+
+    Raises:
+        ValueError: Animação desconhecida, corpos misturados ou direção sem vista.
+    """
+    from .anim import ANIMATIONS
+
+    names = list(animations or DEFAULT_SET[body or "biped"])
+    unknown = [a for a in names if a not in ANIMATIONS]
+    if unknown:
+        raise ValueError(f"animações desconhecidas: {', '.join(unknown)} (disponíveis: {', '.join(ANIMATIONS)})")
+    bodies = {ANIMATIONS[a].body for a in names}
+    if len(bodies) > 1:
+        raise ValueError("um set não mistura bípedes e quadrúpedes (identidades diferentes)")
+    set_body = bodies.pop()
+    dirs = list(dict.fromkeys(directions))
+    for d in dirs:
+        check_direction(ANIMATIONS[names[0]], canonical_direction(d))
+    canon = list(dict.fromkeys(canonical_direction(d) for d in dirs))
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    if generator is None and render is None:
+        from .generator import KleinFluxGenerator
+
+        generator = KleinFluxGenerator(memory_efficient=True)
+    steps = int(cycle_kwargs.get("steps", 12))
+    if render is None:
+
+        def render(prompt: str, path: Path, frame_seed: int, refs: list[Path], width: int, height: int) -> None:
+            img, _ = generator.generate(
+                prompt, width=width, height=height, refs=refs or None, num_inference_steps=steps, seed=frame_seed
+            )
+            generator.save_image(img, path)
+
+    # 1) Identidade única (ou --ref), na 1.ª vista canónica pedida.
+    if reference:
+        identity = Path(reference)
+    else:
+        identity = out / "identity.png"
+        t0 = time.time()
+        render(
+            identity_prompt(character, direction=canon[0], body=set_body),
+            identity,
+            seed,
+            [],
+            IDENTITY_SIZE,
+            IDENTITY_SIZE,
+        )
+        print(f"[set] identidade: {time.time() - t0:.1f}s → {identity}", flush=True)
+
+    # 2) Cada animação na vista canónica; espelhadas sem GPU.
+    index: dict[str, dict[str, str]] = {}
+    for name in names:
+        index[name] = {}
+        for d in canon:
+            res = generate_cycle(
+                character,
+                direction=d,
+                out_dir=out / name / d,
+                animation=name,
+                reference=identity,
+                seed=seed,
+                render=render,
+                **cycle_kwargs,
+            )
+            if d in dirs and res["meta"]:
+                index[name][d] = str(Path(res["meta"]).relative_to(out))
+        for d in dirs:
+            src = canonical_direction(d)
+            if src == d:
+                continue
+            res = mirror_cycle(out / name / src, out / name / d, direction=d)
+            index[name][d] = str(Path(res["meta"]).relative_to(out))
+            print(f"[set] {name} {d}: espelho de {src}", flush=True)
+
+    manifest = {
+        "version": 1,
+        "character": character,
+        "body": set_body,
+        "directions": dirs,
+        "identity": str(identity.relative_to(out)) if identity.is_relative_to(out) else str(identity),
+        "animations": index,
+    }
+    set_path = out / "set.json"
+    set_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"[set] {len(names)} animações x {len(dirs)} direções → {set_path}", flush=True)
+    return {"set": set_path, "identity": identity, "animations": index}

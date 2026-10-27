@@ -123,7 +123,7 @@ def test_draw_pose_silhouette_is_rgba_with_content() -> None:
     img = draw_pose_silhouette("walk_contact_front", size=128)
     assert img.mode == "RGBA"
     assert img.size == (128, 128)
-    assert any(p[3] > 0 for p in img.getdata())
+    assert (np.asarray(img)[..., 3] > 0).any()
 
 
 def test_draw_pose_silhouette_differs_between_poses() -> None:

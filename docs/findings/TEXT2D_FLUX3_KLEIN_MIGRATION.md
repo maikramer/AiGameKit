@@ -214,6 +214,34 @@ Regras apuradas:
   2 px de borda com distância ao fundo < 72; o contorno escuro trava. Borda
   clara dos sprites na bateria v2.2: corrida 7.0→0%, oeste 5.6→0%, NE 4.3→0.4%,
   cavalo/lobo/cão intactos.
+- **v2.4 — 23 animações, tempos por fase, `anim.json`, `animate-set`.** Novas
+  bípedes `block`, `roll`, `shoot`, `kick`, `punch`, `victory`, `sneak`;
+  quadrúpedes `quad-idle`, `quad-trot`, `quad-attack`, `quad-jump`,
+  `quad-hurt` (silhueta com cabeça/corpo inclináveis, patas com flexão e
+  assente no chão como os bípedes). Bateria RTX 4050 (variação média):
+  rolar 23.9%, pontapé 12.4%, tiro 11.4%, socos 11.1%, morte 11.4%, bloqueio
+  9.1%, furtivo 7.9%, vitória 4.4% (2 frames iguais de propósito); lobo
+  ataque 14.2%, salto 19.4%, idle 7.5%, trote 6.8%, dano 7.0%, passo 3.2%.
+  Lições:
+  - **O modelo completa adereços pelo texto**: "bow" no prompt + braço
+    esticado na silhueta → arco e corda desenhados sem os pôr na silhueta.
+  - **O vão do arco é uma bolsa grande** (11–13% da figura): o limite de 4%
+    e a proteção "figura >5% clara" deixavam-no branco. Proteção nova: maior
+    peça cor-de-fundo > 20% (corpo do cavalo branco = 25%) ou > 40% clara.
+  - **Morte do esqueleto torta** vinha da 1.ª fase (`hurt`, atirado para
+    trás antes de ajoelhar); `death_hit` (cambalear para a frente) encadeia.
+  - **Quadrúpede de cabeça muito erguida vira lama/veado**: o modelo copia o
+    pescoço vertical da silhueta. Dano/salto usam inclinação do corpo, não da
+    cabeça.
+  - **Passada de frente pela diferença das coxas**, não pela coxa near: em
+    poses agachadas as duas coxas vão para a frente e a v2.2 lia isso como
+    passada larga (agachar/furtivo de frente).
+  - **Identidade por vista não serve**: gerar a identidade de `south`/`north`
+    com a de `east` como referência devolve **cópias** da referência (3×85 s
+    perdidos). A folha de silhuetas é que impõe a vista — uma identidade só
+    deu perfil, frente e costas corretos. O `animate-set` usa uma identidade.
+  - **Lobo**: passada visivelmente maior (26→32°), mas a métrica fica baixa
+    porque o modelo põe passada em todas as fases (a alternância é pouca).
 - **Saltos**: o recorte assenta os pés no chão e perdia a altura; cada pose
   tem uma elevação (`pose_lift`) que é reposta no sprite depois de alinhar.
 - **Quadrúpedes** (`text2d.quadruped`): só perfil. Patas de duas secções

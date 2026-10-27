@@ -334,6 +334,225 @@ _POSES: dict[str, PoseSpec] = {
         knees=(14, 10),
         elbows=(30, 30),
     ),
+    # Morte: a 1.ª fase era o "hurt" (atirado para trás) e o modelo desenhava-o
+    # torto antes de ajoelhar — cambalear para a frente encadeia com o joelho.
+    "death_hit": PoseSpec(
+        "staggering from a fatal blow, one hand clutching the chest, the other arm hanging, the knees starting to "
+        "buckle, the head dropping",
+        "staggering from a fatal blow, one hand clutching the chest, the knees starting to buckle, the head dropping",
+        legs=(10, -10),
+        arms=(30, -8),
+        knees=(30, 22),
+        elbows=(115, 10),
+        tilt=6,
+    ),
+    "block_guard": PoseSpec(
+        "blocking, the shield or weapon raised in front of the face with the front forearm held up vertically, the "
+        "feet braced apart, the knees bent, the body turned slightly behind the guard",
+        "blocking, the shield or weapon raised in front of the face, both forearms up, the feet braced apart, the "
+        "knees bent",
+        legs=(20, -22),
+        arms=(70, 45),
+        knees=(24, 14),
+        elbows=(95, 80),
+    ),
+    "block_impact": PoseSpec(
+        "absorbing a blow behind the raised guard, pushed back, the torso leaning back, the back leg bracing hard, "
+        "the knees deeply bent, both arms locked behind the guard",
+        "absorbing a blow behind the raised guard, pushed back, the knees deeply bent, the feet sliding, both arms "
+        "locked behind the guard",
+        legs=(26, -30),
+        arms=(65, 40),
+        knees=(38, 20),
+        elbows=(100, 85),
+        tilt=-9,
+    ),
+    "roll_tuck": PoseSpec(
+        "diving forward into a roll, the body curled with the head tucked down, the knees pulled to the chest, the "
+        "arms wrapped around the shins",
+        "diving into a roll, the body curled into a ball, the head tucked down, the knees pulled to the chest",
+        legs=(80, 70),
+        arms=(60, 50),
+        knees=(130, 125),
+        elbows=(70, 70),
+        tilt=50,
+    ),
+    "roll_ball": PoseSpec(
+        "rolling on the ground curled into a tight ball, upside down mid-roll, the back rounded on the ground, the "
+        "knees tucked to the chest, the arms hugging the legs",
+        "rolling on the ground curled into a tight ball, the knees tucked to the chest, the arms hugging the legs",
+        legs=(85, 75),
+        arms=(70, 60),
+        knees=(135, 130),
+        elbows=(80, 80),
+        tilt=170,
+    ),
+    "roll_rise": PoseSpec(
+        "coming up out of a roll onto one knee, the body still low, the other foot planted forward, the arms "
+        "reaching forward for balance",
+        "coming up out of a roll into a low crouch, the body still low, the arms reaching forward for balance",
+        legs=(60, -20),
+        arms=(55, 40),
+        knees=(100, 120),
+        elbows=(30, 30),
+        tilt=15,
+    ),
+    "shoot_nock": PoseSpec(
+        "holding a bow lowered in the front hand, the back hand reaching to nock an arrow on the string, standing "
+        "sideways with the legs apart, both arms low",
+        "holding a bow lowered in front of the body, nocking an arrow, the feet apart",
+        legs=(16, -16),
+        arms=(30, 20),
+        knees=(8, 6),
+        elbows=(20, 70),
+    ),
+    "shoot_draw": PoseSpec(
+        "aiming a bow at full draw, the front arm stretched straight forward holding the bow, the back hand pulling "
+        "the string back to the cheek with the elbow high, the feet planted apart",
+        "aiming a bow at full draw toward the viewer, the bow arm stretched forward, the string hand at the cheek",
+        legs=(18, -18),
+        arms=(92, 92),
+        knees=(8, 6),
+        elbows=(0, 160),
+    ),
+    "shoot_release": PoseSpec(
+        "releasing an arrow from the bow, the front arm still stretched forward, the back hand flung open behind "
+        "the head after letting the string go, the arrow flying away, "
+        "the legs planted apart",
+        "releasing an arrow, the bow arm stretched forward, the string hand flung back past the ear",
+        legs=(18, -18),
+        arms=(92, 120),
+        knees=(8, 6),
+        elbows=(0, 90),
+        tilt=-3,
+    ),
+    "shoot_recover": PoseSpec(
+        "lowering the bow after the shot, the front arm dropping, the back hand returning to the side, the legs in a "
+        "relaxed stance",
+        "lowering the bow after the shot, both arms dropping, relaxed stance",
+        legs=(14, -14),
+        arms=(45, 10),
+        knees=(8, 6),
+        elbows=(15, 20),
+    ),
+    "kick_chamber": PoseSpec(
+        "raising the front knee high to chamber a kick, the foot pulled back under the thigh, balancing on the "
+        "back leg, both arms bent with the fists up in guard",
+        "raising the right knee high to chamber a kick, balancing on the left leg, both arms bent with the fists up",
+        legs=(85, -4),
+        arms=(60, 50),
+        knees=(120, 8),
+        elbows=(110, 110),
+        tilt=-4,
+    ),
+    "kick_extend": PoseSpec(
+        "a high front kick with the front leg fully extended forward at waist height, the torso leaning back, "
+        "balancing on the back leg, the arms out for balance",
+        "a high kick with the right leg fully extended toward the viewer, balancing on the left leg, the arms out",
+        legs=(95, -6),
+        arms=(30, -40),
+        knees=(0, 8),
+        elbows=(30, 30),
+        tilt=-14,
+    ),
+    "kick_recover": PoseSpec(
+        "pulling the kicking leg back with the knee bent, about to set the foot down, both arms bent with the fists "
+        "returning to guard",
+        "pulling the kicking leg back down, both arms bent with the fists returning to guard",
+        legs=(50, -10),
+        arms=(55, 45),
+        knees=(80, 10),
+        elbows=(100, 100),
+    ),
+    "punch_guard": PoseSpec(
+        "a boxing stance, both fists raised in front of the chin, both arms bent with the elbows tucked in, one foot "
+        "forward, the knees bent",
+        "a boxing stance facing forward, both fists raised in front of the chin, the knees bent",
+        legs=(18, -18),
+        arms=(55, 50),
+        knees=(16, 12),
+        elbows=(120, 120),
+    ),
+    "punch_jab": PoseSpec(
+        "throwing a straight punch with the front arm fully extended forward at shoulder height, the back fist "
+        "guarding the chin, leaning into the punch, the front "
+        "knee bent",
+        "throwing a straight punch toward the viewer with the right arm extended, the left fist guarding the chin",
+        legs=(24, -22),
+        arms=(90, 50),
+        knees=(20, 8),
+        elbows=(0, 120),
+        tilt=5,
+    ),
+    "punch_cross": PoseSpec(
+        "throwing a powerful cross punch with the back arm fully extended forward, the front fist pulled back to "
+        "the chin, the hips and shoulders rotated into the punch, "
+        "the back leg pushing off",
+        "throwing a cross punch toward the viewer with the left arm extended, the right fist pulled back",
+        legs=(26, -26),
+        arms=(45, 90),
+        knees=(24, 4),
+        elbows=(120, 0),
+        tilt=8,
+    ),
+    "victory_fist": PoseSpec(
+        "celebrating victory, one fist thrust high above the head, the other hand on the hip, standing proud "
+        "on straight legs, the chest out, one arm up and one arm bent",
+        "celebrating victory, one fist thrust high above the head, the other hand on the hip, standing proud",
+        legs=(6, -6),
+        arms=(175, -20),
+        knees=(4, 4),
+        elbows=(5, 110),
+    ),
+    "victory_jump": PoseSpec(
+        "jumping for joy in mid-air, both arms thrown up high in a V, the legs tucked under, a big smile",
+        "jumping for joy in mid-air, both arms thrown up high in a V, the legs tucked under",
+        legs=(30, 15),
+        arms=(165, 150),
+        knees=(70, 60),
+        elbows=(5, 5),
+        lift=0.12,
+    ),
+    "sneak_contact": PoseSpec(
+        "sneaking on tiptoe in a low crouch, the front leg reaching forward carefully, the back leg bent behind, "
+        "the torso hunched forward, both arms bent in front of the chest",
+        "sneaking in a low crouch, the right leg stepping forward carefully, the torso hunched, the arms bent in front",
+        legs=(55, -20),
+        arms=(45, 30),
+        knees=(95, 60),
+        elbows=(90, 90),
+        tilt=10,
+    ),
+    "sneak_passing": PoseSpec(
+        "sneaking in a low crouch, the back leg lifted and passing forward quietly with the knee bent, the torso "
+        "hunched forward, both arms bent in front of the chest",
+        "sneaking in a low crouch, the left knee lifted, the torso hunched, the arms bent in front",
+        legs=(30, 45),
+        arms=(45, 30),
+        knees=(85, 120),
+        elbows=(90, 90),
+        tilt=10,
+    ),
+    "sneak_contact_back": PoseSpec(
+        "sneaking on tiptoe in a low crouch, the other leg now reaching forward carefully, the first leg bent "
+        "behind, the torso hunched forward, both arms bent in front of the chest",
+        "sneaking in a low crouch, the left leg stepping forward carefully, the torso hunched, the arms bent in front",
+        legs=(-20, 55),
+        arms=(30, 45),
+        knees=(60, 95),
+        elbows=(90, 90),
+        tilt=10,
+    ),
+    "sneak_passing_back": PoseSpec(
+        "sneaking in a low crouch, the first leg now lifted and passing forward quietly with the knee bent, the "
+        "torso hunched forward, both arms bent in front of the chest",
+        "sneaking in a low crouch, the right knee lifted, the torso hunched, the arms bent in front",
+        legs=(45, 30),
+        arms=(30, 45),
+        knees=(120, 85),
+        elbows=(90, 90),
+        tilt=10,
+    ),
 }
 
 # Ciclos canónicos. Walk 4: contacto → passa a perna de trás → contacto da
@@ -353,6 +572,9 @@ WALK_CYCLE_8: tuple[str, ...] = (
 
 # Ciclo de corrida (4 frames) — alterna a perna da frente.
 RUN_CYCLE: tuple[str, ...] = ("run_contact", "run_air", "run_contact_back", "run_air_back")
+
+# Furtivo: o andar de 4 tempos agachado (mesma alternância de pernas).
+SNEAK_CYCLE: tuple[str, ...] = ("sneak_contact", "sneak_passing", "sneak_contact_back", "sneak_passing_back")
 
 # Direções → (vista, texto de direção, espelha?). Vistas: "side" (perfil),
 # "front" (de frente), "back" (de costas), "diag_front"/"diag_back" (três
@@ -637,6 +859,16 @@ def draw_pose_silhouette(pose: str, *, view: str = "side", size: int = 256) -> I
     return _ground(img, size=size, lift=spec.lift, center_x=hip[0] if not spec.tilt else None)
 
 
+def _front_stride(spec: PoseSpec) -> float:
+    """Passada de frente/costas -1..1 (>0 = perna near à frente).
+
+    Mede-se pela diferença entre as coxas, não pelo ângulo da near: numa pose
+    agachada as duas coxas vão para a frente (furtivo, agachar) e a v2.2 lia
+    isso como passada larga.
+    """
+    return max(-1.0, min(1.0, (spec.legs[0] - spec.legs[1]) / 56.0))
+
+
 def _draw_front_back(
     d: ImageDraw.ImageDraw,
     spec: PoseSpec,
@@ -652,8 +884,7 @@ def _draw_front_back(
 ) -> None:
     """Pernas de frente/costas: verticais; passada no comprimento, joelho levanta o pé."""
     del pose, arm_len, arm_w, sh_y
-    # Passada -1..1: >0 = perna near (direita do observador) à frente.
-    stride = max(-1.0, min(1.0, spec.legs[0] / 30.0))
+    stride = _front_stride(spec)
     if abs(stride) < 0.5:
         stride = 0.0
     for i, side in ((0, 1), (1, -1)):
@@ -688,7 +919,7 @@ def _draw_front_arms(
 ) -> None:
     """Braços de frente: o ângulo de perfil vira altura (cos) — erguido = para cima."""
     swinging = pose.startswith(("idle", "walk", "run"))
-    stride = max(-1.0, min(1.0, spec.legs[0] / 30.0))
+    stride = _front_stride(spec)
     for i, side in ((0, 1), (1, -1)):
         x = hip[0] + side * s * 0.1
         if swinging:

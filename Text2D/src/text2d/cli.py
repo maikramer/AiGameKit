@@ -712,9 +712,12 @@ def _sprite_options(f: Any) -> Any:
     )
     f = click.option("--gif/--no-gif", default=True, show_default=True, help="Gerar GIF do ciclo.")(f)
     f = click.option("--sheet/--no-sheet", default=True, show_default=True, help="Gerar folha de sprites.")(f)
-    f = click.option("--transparent/--no-transparent", default=True, show_default=True, help="Cortar o fundo (rembg).")(
-        f
-    )
+    f = click.option(
+        "--transparent/--no-transparent",
+        default=True,
+        show_default=True,
+        help="Cortar o fundo (flood fill da borda; rembg se o fundo não for liso).",
+    )(f)
     f = click.option("--colors", default=32, show_default=True, type=int, help="Cores da paleta (look 16-bit).")(f)
     f = click.option(
         "--sprite-size",
@@ -774,32 +777,10 @@ def _sprite_options(f: Any) -> Any:
     return f
 
 
-def _run_sprite_animation(
-    anim: str,
-    character: str,
-    direction: str,
-    frames: int,
-    out_dir: str,
-    reference: str | None,
-    size: int,
-    steps: int,
-    seed: int,
-    frame_ms: int,
-    retries: int,
-    sprite_size: int,
-    colors: int,
-    transparent: bool,
-    sheet: bool,
-    gif: bool,
-    measure: bool,
-    cpu: bool,
-    vramd_priority: str | None,
-    no_vramd: bool,
-    vramd_stream: bool,
-) -> None:
-    """Corpo partilhado de ``walk-cycle`` / ``animate`` (delegação vramd + fallback)."""
-    from .sprite import generate_cycle
-
+def _sprite_renderer(
+    *, steps: int, cpu: bool, no_vramd: bool, vramd_priority: str | None, vramd_stream: bool
+) -> tuple[Any, Any]:
+    """``(render, cleanup)`` dos comandos de sprites: delega ao vramd, fallback in-process."""
     # Gerador in-process (fallback quando o vramd não trata o job).
     _gen: list[Any] = []
 
@@ -826,7 +807,7 @@ def _run_sprite_animation(
             "steps": steps,
             "seed": frame_seed,
             "model_id": default_model_id(),
-            "refs": [str(r.resolve()) for r in refs],
+            "refs": [str(Path(r).resolve()) for r in refs],
         }
         if not cpu and delegate_or_prepare(
             "text2d",
@@ -844,6 +825,42 @@ def _run_sprite_animation(
             return
         _fallback_render(prompt, path, frame_seed, refs, width, height)
 
+    def _cleanup() -> None:
+        for gen in _gen:
+            gen.unload()
+
+    return _render, _cleanup
+
+
+def _run_sprite_animation(
+    anim: str,
+    character: str,
+    direction: str,
+    frames: int,
+    out_dir: str,
+    reference: str | None,
+    size: int,
+    steps: int,
+    seed: int,
+    frame_ms: int,
+    retries: int,
+    sprite_size: int,
+    colors: int,
+    transparent: bool,
+    sheet: bool,
+    gif: bool,
+    measure: bool,
+    cpu: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
+) -> None:
+    """Corpo partilhado de ``walk-cycle`` / ``animate`` (delegação vramd + fallback)."""
+    from .sprite import generate_cycle
+
+    render, cleanup = _sprite_renderer(
+        steps=steps, cpu=cpu, no_vramd=no_vramd, vramd_priority=vramd_priority, vramd_stream=vramd_stream
+    )
     try:
         result = generate_cycle(
             character,
@@ -863,29 +880,23 @@ def _run_sprite_animation(
             measure=measure,
             frame_ms=frame_ms,
             retries=retries,
-            render=_render,
+            render=render,
         )
     except (ValueError, FileNotFoundError) as e:
         raise click.ClickException(str(e)) from e
     finally:
-        for gen in _gen:
-            gen.unload()
+        cleanup()
 
     console.print(
         Panel(
             f"[bold green]✓[/bold green] {len(result['frames'])} frames → "
             f"[cyan]{Path(out_dir).resolve()}[/cyan]\n"
-            f"[dim]sprites: {len(result['sprites'])} | atlas: {result['atlas']} | gif: {result['gif']}[/dim]",
+            f"[dim]sprites: {len(result['sprites'])} | atlas: {result['atlas']} | gif: {result['gif']} | "
+            f"meta: {result['meta']}[/dim]",
             title=f"[bold green]Sprite sheet — {anim}[/bold green]",
             border_style="green",
         )
     )
-
-
-_ANIM_HELP = """Todos os frames saem numa **só geração** (folha de N células) guiada pela
-    identidade do personagem e por uma folha de silhuetas com a pose de cada
-    célula — mesma personagem, escala e chão em todos os frames; a silhueta
-    impõe a pose. Depois: rembg, alinhamento, downscale e paleta comum."""
 
 
 @cli.command("walk-cycle")
@@ -917,6 +928,115 @@ def animate_cmd(anim: str, **kwargs: Any) -> None:
     de silhuetas (ver ``text2d poses``).
     """
     _run_sprite_animation(anim, **kwargs)
+
+
+@cli.command("animate-set")
+@click.argument("character")
+@click.option(
+    "--anims",
+    default=None,
+    help="Animações separadas por vírgula (default: set standard do corpo — ver --body).",
+)
+@click.option(
+    "--directions",
+    "-d",
+    default="east",
+    show_default=True,
+    help="Direções separadas por vírgula (ex. east,west,south,north). Espelhadas saem sem GPU.",
+)
+@click.option(
+    "--body",
+    type=click.Choice(["biped", "quadruped"]),
+    default="biped",
+    show_default=True,
+    help="Corpo do set default (ignorado com --anims).",
+)
+@click.option("--out-dir", "-O", type=click.Path(), default="outputs/sprites/set", show_default=True)
+@click.option(
+    "--ref",
+    "reference",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Identidade da personagem parada (reutilizada em todas as animações e vistas).",
+)
+@click.option("--frames", "-n", default=4, show_default=True, type=click.IntRange(min=1, max=16))
+@click.option("--size", default=320, show_default=True, type=int, help="Altura de cada célula gerada.")
+@click.option("--steps", "-s", default=12, show_default=True, type=int)
+@click.option("--seed", default=100, show_default=True, type=int)
+@click.option("--retries", default=1, show_default=True, type=click.IntRange(min=0, max=4))
+@click.option("--sprite-size", default=96, show_default=True, type=int, help="Lado do sprite (0 = sem downscale).")
+@click.option("--colors", default=32, show_default=True, type=int)
+@click.option("--frame-ms", default=160, show_default=True, type=int, help="Duração base (x holds da animação).")
+@click.option("--cpu", is_flag=True, help="Forçar CPU")
+@add_vramd_options
+def animate_set_cmd(
+    character: str,
+    anims: str | None,
+    directions: str,
+    body: str,
+    out_dir: str,
+    reference: str | None,
+    frames: int,
+    size: int,
+    steps: int,
+    seed: int,
+    retries: int,
+    sprite_size: int,
+    colors: int,
+    frame_ms: int,
+    cpu: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
+) -> None:
+    """Gera a personagem completa: várias animações x direções de uma vez.
+
+    Uma identidade (gerada uma vez ou ``--ref``) reutilizada em todas as
+    animações e vistas, direções espelhadas sem GPU e um ``set.json`` com o
+    índice de ``anim.json`` (frames, durações, pivô) para o motor.
+
+    Ex.: ``text2d animate-set "pixel art knight" -d east,west,south,north``.
+    """
+    from .sprite import generate_set
+
+    anim_list = [a.strip() for a in anims.split(",") if a.strip()] if anims else None
+    dir_list = [d.strip() for d in directions.split(",") if d.strip()]
+    bad = [d for d in dir_list if d not in _DIRECTION_CHOICES]
+    if bad:
+        raise click.BadParameter(f"direções inválidas: {', '.join(bad)} (válidas: {', '.join(_DIRECTION_CHOICES)})")
+    render, cleanup = _sprite_renderer(
+        steps=steps, cpu=cpu, no_vramd=no_vramd, vramd_priority=vramd_priority, vramd_stream=vramd_stream
+    )
+    try:
+        result = generate_set(
+            character,
+            out_dir=out_dir,
+            animations=anim_list,
+            directions=dir_list,
+            body=body,
+            reference=reference,
+            seed=seed,
+            render=render,
+            frames=frames,
+            size=size,
+            steps=steps,
+            retries=retries,
+            sprite_size=sprite_size or None,
+            colors=colors,
+            frame_ms=frame_ms,
+        )
+    except (ValueError, FileNotFoundError) as e:
+        raise click.ClickException(str(e)) from e
+    finally:
+        cleanup()
+    n = sum(len(v) for v in result["animations"].values())
+    console.print(
+        Panel(
+            f"[bold green]✓[/bold green] {n} animações → [cyan]{result['set']}[/cyan]",
+            title="[bold green]Sprite set[/bold green]",
+            border_style="green",
+        )
+    )
 
 
 _batch_gen = None
