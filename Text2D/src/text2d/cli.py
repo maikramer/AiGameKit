@@ -1039,6 +1039,241 @@ def animate_set_cmd(
     )
 
 
+def _kit_options(f: Any) -> Any:
+    """Opções comuns de ``tileset``/``parallax``/``vfx``/``items``."""
+    f = add_vramd_options(f)
+    f = click.option("--cpu", is_flag=True, help="Forçar CPU")(f)
+    f = click.option("--seed", default=100, show_default=True, type=int, help="Seed base.")(f)
+    f = click.option("--steps", "-s", default=12, show_default=True, type=int, help="Passos de inferência.")(f)
+    f = click.option("--style", default=None, help="Estilo visual (default: pixel art 16-bit).")(f)
+    return f
+
+
+def _run_kit(
+    fn: Any,
+    *args: Any,
+    steps: int,
+    cpu: bool,
+    no_vramd: bool,
+    vramd_priority: str | None,
+    vramd_stream: bool,
+    style: str | None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Corre uma ferramenta 2D com o renderer de sprites (vramd → in-process)."""
+    from .kit2d import DEFAULT_STYLE
+
+    render, cleanup = _sprite_renderer(
+        steps=steps, cpu=cpu, no_vramd=no_vramd, vramd_priority=vramd_priority, vramd_stream=vramd_stream
+    )
+    try:
+        return fn(*args, render=render, steps=steps, style=style or DEFAULT_STYLE, **kwargs)
+    except (ValueError, FileNotFoundError, RuntimeError) as e:
+        raise click.ClickException(str(e)) from e
+    finally:
+        cleanup()
+
+
+def _done(title: str, body: str) -> None:
+    console.print(
+        Panel(f"[bold green]✓[/bold green] {body}", title=f"[bold green]{title}[/bold green]", border_style="green")
+    )
+
+
+@cli.command("tileset")
+@click.argument("base")
+@click.argument("top")
+@click.option(
+    "--out-dir", "-O", type=click.Path(), default=None, help="Saída (default: outputs/tilesets/<base>_<top>)."
+)
+@click.option("--tile", default=32, show_default=True, type=int, help="Lado do tile (divisor de 384: 16/24/32/48/64).")
+@click.option("--colors", default=24, show_default=True, type=int, help="Cores da paleta comum.")
+@click.option(
+    "--base-texture",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Textura já gerada do terreno base (reutilizar entre tilesets).",
+)
+@click.option(
+    "--top-texture",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Textura já gerada do terreno de cima.",
+)
+@_kit_options
+def tileset_cmd(
+    base: str,
+    top: str,
+    out_dir: str | None,
+    tile: int,
+    colors: int,
+    base_texture: str | None,
+    top_texture: str | None,
+    **kw: Any,
+) -> None:
+    """Tileset de terreno com autotile de 16 tiles (cantos) — Tiled .tsx + JSON.
+
+    Ex.: ``text2d tileset "lush grass" "dirt path" --tile 32``. O modelo só
+    desenha as duas texturas; transições, sombra e encaixe são determinísticos.
+    """
+    from .kit2d import slug
+    from .tileset import generate_tileset
+
+    out_dir = out_dir or f"outputs/tilesets/{slug(base)}_{slug(top)}"
+    r = _run_kit(
+        generate_tileset,
+        base,
+        top,
+        out_dir=out_dir,
+        tile=tile,
+        colors=colors,
+        base_texture=base_texture,
+        top_texture=top_texture,
+        **kw,
+    )
+    _done("Tileset", f"16 tiles → [cyan]{r['tileset']}[/cyan] · Tiled [cyan]{r['tsx']}[/cyan]")
+
+
+@cli.command("parallax")
+@click.argument("scene")
+@click.option("--out-dir", "-O", type=click.Path(), default=None, help="Saída (default: outputs/parallax/<cena>).")
+@click.option(
+    "--layers",
+    default="sky,far,mid,near",
+    show_default=True,
+    help="Camadas de trás para a frente (sky, far, mid, near).",
+)
+@click.option("--height", default=256, show_default=True, type=int, help="Altura de cada camada (largura = 2x).")
+@click.option("--colors", default=48, show_default=True, type=int, help="Cores da paleta comum (0 = sem quantizar).")
+@click.option("--gif-frames", default=48, show_default=True, type=int, help="Frames do preview.gif (0 = sem GIF).")
+@_kit_options
+def parallax_cmd(
+    scene: str, out_dir: str | None, layers: str, height: int, colors: int, gif_frames: int, **kw: Any
+) -> None:
+    """Fundo em camadas para parallax, cada uma repetível em x — PNGs + parallax.json.
+
+    Ex.: ``text2d parallax "haunted forest at dusk"``.
+    """
+    from .kit2d import slug
+    from .parallax import generate_parallax
+
+    out_dir = out_dir or f"outputs/parallax/{slug(scene)[:40]}"
+    names = [n.strip() for n in layers.split(",") if n.strip()]
+    r = _run_kit(
+        generate_parallax,
+        scene,
+        out_dir=out_dir,
+        layers=names,
+        height=height,
+        colors=colors,
+        gif_frames=gif_frames,
+        **kw,
+    )
+    _done("Parallax", f"{len(r['layers'])} camadas → [cyan]{r['json']}[/cyan]")
+
+
+def _effect_names() -> list[str]:
+    from .vfx import EFFECTS
+
+    return list(EFFECTS)
+
+
+@cli.command("vfx")
+@click.argument("effect", type=click.Choice(_effect_names()))
+@click.option("--subject", default=None, help="Assunto alternativo (ex. 'green acid explosion'), mesmas fases.")
+@click.option("--out-dir", "-O", type=click.Path(), default=None, help="Saída (default: outputs/vfx/<efeito>).")
+@click.option("--frames", "-n", default=8, show_default=True, type=click.IntRange(2, 8))
+@click.option("--sprite-size", default=64, show_default=True, type=int, help="Lado do sprite (0 = sem downscale).")
+@click.option("--colors", default=24, show_default=True, type=int)
+@click.option(
+    "--alpha-levels", default=4, show_default=True, type=int, help="Níveis de alpha (2 = binário, 0 = suave)."
+)
+@click.option("--frame-ms", default=70, show_default=True, type=int, help="Duração base de cada frame.")
+@_kit_options
+def vfx_cmd(
+    effect: str,
+    subject: str | None,
+    out_dir: str | None,
+    frames: int,
+    sprite_size: int,
+    colors: int,
+    alpha_levels: int,
+    frame_ms: int,
+    **kw: Any,
+) -> None:
+    """Animação de efeito (explosão, fogo, fumo, magia, corte, raio, cura, impacto).
+
+    Ex.: ``text2d vfx explosion --subject "green acid explosion"``. Fundo preto
+    → alpha pela luz; atlas + GIF + anim.json (blend sugerido).
+    """
+    from .vfx import generate_vfx
+
+    out_dir = out_dir or f"outputs/vfx/{effect}"
+    r = _run_kit(
+        generate_vfx,
+        effect,
+        out_dir=out_dir,
+        frames=frames,
+        subject=subject,
+        sprite_size=sprite_size or None,
+        colors=colors,
+        alpha_levels=alpha_levels,
+        frame_ms=frame_ms,
+        **kw,
+    )
+    _done("VFX", f"{frames} frames → [cyan]{r['gif']}[/cyan] · [cyan]{r['meta']}[/cyan]")
+
+
+@cli.command("items")
+@click.argument("names", required=False)
+@click.option(
+    "--file",
+    "names_file",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Ficheiro com um item por linha (em vez da lista por vírgulas).",
+)
+@click.option("--theme", default=None, help="Tema comum (ex. 'dark fantasy', 'sci-fi').")
+@click.option("--out-dir", "-O", type=click.Path(), default="outputs/items", show_default=True)
+@click.option("--icon-size", default=32, show_default=True, type=int, help="Lado de cada ícone.")
+@click.option("--colors", default=48, show_default=True, type=int, help="Cores da paleta do pack.")
+@click.option(
+    "--ref",
+    "reference",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Imagem de estilo para todas as folhas.",
+)
+@_kit_options
+def items_cmd(
+    names: str | None,
+    names_file: str | None,
+    theme: str | None,
+    out_dir: str,
+    icon_size: int,
+    colors: int,
+    reference: str | None,
+    **kw: Any,
+) -> None:
+    """Pack de ícones de itens num estilo comum (até 8 por geração) — atlas + items.json.
+
+    Ex.: ``text2d items "health potion, iron sword, wooden shield, gold coin" --theme "dark fantasy"``.
+    """
+    from .items import generate_items
+
+    if names_file:
+        lst = Path(names_file).read_text(encoding="utf-8").splitlines()
+    elif names:
+        lst = names.split(",")
+    else:
+        raise click.UsageError("indica os itens (lista por vírgulas) ou --file")
+    r = _run_kit(
+        generate_items, lst, out_dir=out_dir, theme=theme, icon_size=icon_size, colors=colors, reference=reference, **kw
+    )
+    miss = f" · sem ícone: {', '.join(r['missing'])}" if r["missing"] else ""
+    _done("Items", f"{len(r['icons'])} ícones → [cyan]{r['atlas']}[/cyan]{miss}")
+
+
 _batch_gen = None
 
 

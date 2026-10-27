@@ -132,6 +132,7 @@ def chroma_key(
     pockets: bool | None = None,
     fringe: float = 72.0,
     peel: int = 2,
+    key: tuple[int, int, int] | None = None,
 ) -> Image.Image | None:
     """Recorta o fundo liso pela cor da borda (flood fill a partir das margens).
 
@@ -159,6 +160,9 @@ def chroma_key(
         pockets: ``None`` = automático (acima); ``True``/``False`` força.
         fringe: Distância máxima ao fundo de um pixel de franja.
         peel: Px de franja a descascar (0 = só a franja de 1 px antiga).
+        key: Cor do fundo conhecida (ex. magenta pedido no prompt). Salta a
+            mediana/verificação da borda — para imagens cujo conteúdo ocupa
+            boa parte da borda (camadas de parallax assentes no fundo).
 
     Returns:
         RGBA recortado, ou ``None`` se a borda não for uniforme (o modelo não
@@ -168,11 +172,14 @@ def chroma_key(
     from PIL import ImageDraw, ImageFilter
 
     rgb = np.asarray(image.convert("RGB")).astype(np.int16)
-    border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
-    key = np.median(border, axis=0)
-    if float(np.median(np.abs(border - key).max(axis=1))) > max_border_spread:
-        return None
-    dist = np.abs(rgb - key).max(axis=2)
+    if key is None:
+        border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
+        key_rgb = np.median(border, axis=0)
+        if float(np.median(np.abs(border - key_rgb).max(axis=1))) > max_border_spread:
+            return None
+    else:
+        key_rgb = np.asarray(key, np.int16)
+    dist = np.abs(rgb - key_rgb).max(axis=2)
     # .copy(): com Pillow 12 a imagem de fromarray partilha o buffer read-only do
     # numpy e o floodfill não faz nada (sem erro).
     near = Image.fromarray(np.where(dist < tolerance, 255, 0).astype(np.uint8), "L").copy()

@@ -327,6 +327,38 @@ Medido na RTX 4050 6 GB (via vramd): **~90 s por animação de 4 frames**
 números:
 [`docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md`](../docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md#walk-cycle-v2-folha-única-guiada-por-silhuetas).
 
+### Kit de jogo 2D: `tileset` / `parallax` / `vfx` / `items`
+
+Mesma filosofia das animações: o modelo **só desenha**; encaixe, recorte,
+paleta e metadados são código determinístico. Todos delegam ao vramd (fallback
+in-process) e aceitam `--style`, `--steps`, `--seed`, `--cpu` e as opções
+`--vramd-*`.
+
+```bash
+# Terreno com autotile: 2 texturas geradas → 16 tiles de transição pelos cantos
+text2d tileset "lush green grass" "brown dirt path" --tile 32
+# Reutilizar a mesma base noutro tileset (terreno comum entre transições)
+text2d tileset "lush green grass" "shallow water" \
+  --base-texture outputs/tilesets/lush_green_grass_brown_dirt_path/texture_0_lush_green_grass.png
+
+# Fundo de parallax: sky / far / mid / near, cada camada repetível em x
+text2d parallax "haunted forest at dusk, purple sky" --height 256
+
+# Efeitos: explosion | fire | smoke | magic | slash | lightning | heal | impact
+text2d vfx explosion --subject "green acid explosion" --sprite-size 64
+
+# Ícones de itens num estilo comum (8 por geração; mais = várias folhas)
+text2d items "health potion, mana potion, iron sword, gold coin" --theme "fantasy rpg" --icon-size 32
+text2d items --file loot.txt --ref style.png     # um item por linha, estilo de uma imagem
+```
+
+| Comando | O que o modelo desenha | O que o código faz | Entregas |
+|---------|------------------------|--------------------|----------|
+| `tileset` | 2 texturas top-down 512² | repetível (faixa cruzada), downscale ao tile + reforço de detalhe, paleta comum, 16 transições por campo bilinear dos cantos + ruído periódico (encaixam entre vizinhos), sombra de 1 px | `tileset.png` (4x4, índice = cantos `tl=1 tr=2 bl=4 br=8`), `tileset.tsx` (Tiled wangset *corner*; Godot 4 "Match Corners" usa o mesmo layout), `tileset.json`, `preview.png` |
+| `parallax` | 1 imagem 1280x512 por camada (céu opaco; resto sobre magenta) | recorte pelo magenta da linha de cima (+ bolsas de céu entre ramos, despill), repetível em x, paleta comum | `<z>_<camada>.png`, `parallax.json` (`z`, `scroll` 0.05→0.85, `opaque`), `preview.png`, `preview.gif` a rolar |
+| `vfx` | folha 4x2 sobre preto, guiada por formas desenhadas por fase | alpha pela luz (`a = max(rgb)`: fumo semitransparente, núcleo opaco), alpha em 4 níveis, paleta comum | `atlas.png`, `frames/`, `cycle.gif`, `anim.json` (pivô ao centro, `loop`, `blend` additive/alpha, durações por fase) |
+| `items` | folha 4x2 com um item por célula | recorte da folha inteira; cada peça vai para a célula do seu centro (item que passa da célula não é cortado), enquadramento quadrado, paleta do pack | `icons/<slug>.png`, `atlas.png`, `items.json` (rects; `missing` = células vazias), `preview.png` |
+
 ### `text2d skill install`
 
 Install the Cursor Agent Skill (`SKILL.md`) into a game project's `.cursor/skills/text2d/` directory.

@@ -297,6 +297,7 @@ def run_worker_loop(
             try:
                 result = adapter.generate(model, request)
             except Exception as exc:
+                _release_cuda_cache()
                 tb = traceback.format_exc()
                 code = ERR_VRAM_INSUFFICIENT if _is_vram_error(exc) else ERR_GENERATE_FAILED
                 # Cancelado cooperativamente: o vramd mandou abort (state["abort"])
@@ -313,6 +314,7 @@ def run_worker_loop(
                     traceback=tb,
                 )
                 continue
+            _release_cuda_cache()
             # Limpar hooks antes de enviar o result (não devem serializar).
             result = _scrub_result(result)
             try:
@@ -378,6 +380,24 @@ def _scrub_result(result: Any) -> Any:
             continue
         scrubbed[k] = v
     return scrubbed
+
+
+def _release_cuda_cache() -> None:
+    """Devolve ao driver a memória que o allocator do torch guardou no job.
+
+    Os pesos ficam; só saem os blocos livres (ativações do job). Sem isto o
+    NVML via a VRAM livre abaixo do pico do job seguinte do **mesmo** backend
+    e o vramd despejava o worker para o recarregar (~80 s por job no text2d a
+    1280x512). Só atua se o job já iniciou CUDA (não cria contexto).
+    """
+    torch = sys.modules.get("torch")
+    if torch is None:
+        return
+    try:
+        if torch.cuda.is_initialized():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
 
 
 def _probe_vram_mib() -> int | None:

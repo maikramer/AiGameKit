@@ -38,6 +38,16 @@ Defaults: 1024×1024, 4 steps, guidance 1.0 (checkpoint SDNQ — não subir guid
 text2d generate "espada de ferro" --category icon --transparent -o sword_icon.png
 ```
 
+## Kit de jogo 2D
+
+```bash
+text2d animate-set "pixel art knight" -d east,west,south,north   # personagem: animações x direções + set.json
+text2d tileset "lush grass" "dirt path" --tile 32                # autotile 16 tiles (cantos) + Tiled .tsx + JSON
+text2d parallax "haunted forest at dusk"                         # camadas sky/far/mid/near repetíveis + parallax.json
+text2d vfx explosion --subject "green acid explosion"            # 8 frames com alpha pela luz + anim.json
+text2d items "health potion, iron sword, gold coin" --theme "fantasy rpg"  # ícones num estilo + atlas + items.json
+```
+
 ## Referências para geração 3D
 
 Quando a imagem alimenta `text3d generate`/`paint3d texture`, preferir vista **eye-level 3/4** do objeto inteiro, fundo limpo, sem cortes. Evitar vistas de topo e close-ups.

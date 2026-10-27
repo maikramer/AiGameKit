@@ -273,6 +273,33 @@ Regras apuradas:
   input" e ignora). O CLI recusa `--boxes` sem `--upsample`; o generator
   descarta-as com aviso.
 
+### Kit de jogo 2D: tileset, parallax, vfx, items (2026-10-27)
+
+Regra comum: o modelo **só desenha**; encaixe, recorte, paleta e metadados são
+código. Medido na RTX 4050 6 GB via vramd:
+
+| Ferramenta | Gerações | Tempo (modelo quente) | Resultado |
+|------------|----------|-----------------------|-----------|
+| `tileset` relva/terra, areia/água | 2 × 512² | ~13 s cada | 16 transições encaixam; textura sai fina → `boost_detail` repõe contraste após o downscale 12x |
+| `parallax` floresta assombrada | 4 × 1280x512 | ~24 s/camada | magenta recorta limpo (bolsas de céu entre ramos incluídas); céu com a cena por extenso desenhava árvores → a cena entra só como "mood" |
+| `vfx` explosion / fire / magic | 1 × 1024x512 + guia | ~60 s | progressão segue a guia (flash → bola de fogo → fumo; orbe → anel → faíscas); fogo em loop |
+| `items` 8 itens RPG | 1 × 1024x512 | ~58 s | estilo, contorno e luz iguais nos 8; 32 px perde pormenores pequenos (gargalo verde das poções) |
+
+Lições:
+
+- **Fundo magenta** para camadas que tocam a borda: o conteúdo ocupa >50% da
+  borda e a mediana deixa de ser fundo → `chroma_key(key=…)` com a cor medida
+  na linha de cima, tolerância 48 e despill.
+- **Alpha pela luz** (`a = max(rgb)` sobre preto) serve para luz e fumo; objetos
+  opacos no efeito (lenha da fogueira) ficam semitransparentes — pedir o efeito
+  sem suporte ou usar `blend: alpha`.
+- **Itens por centróide**: recortar a folha inteira e atribuir cada peça à
+  célula do seu centro evita cortar ao meio itens que saem da célula.
+- **vramd despejava o próprio worker** entre jobs a 1280x512 (livre < pico por
+  causa da memória que o allocator do torch guardou) → recarga de ~80 s por
+  camada. `worker_serve` passa a chamar `torch.cuda.empty_cache()` após cada
+  job (só se o CUDA já foi iniciado): parallax 4 camadas 273 s → 135 s.
+
 ## Tiers de qualidade retunados
 
 Distilled 4-16 steps (o antigo icon a 2 steps deixou de existir):

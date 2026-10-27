@@ -444,3 +444,63 @@ class TestParentWatchdog:
         before = self._watchdogs()
         start_parent_watchdog(poll_sec=3600.0)
         assert self._watchdogs() == before
+
+
+# ---------------------------------------------------------------------------
+# Cache CUDA devolvida no fim de cada job
+# ---------------------------------------------------------------------------
+
+
+class _FakeCuda:
+    def __init__(self, initialized: bool) -> None:
+        self.initialized = initialized
+        self.emptied = 0
+
+    def is_initialized(self) -> bool:
+        return self.initialized
+
+    def empty_cache(self) -> None:
+        self.emptied += 1
+
+
+class TestReleaseCudaCache:
+    def _fake_torch(self, monkeypatch: pytest.MonkeyPatch, initialized: bool) -> _FakeCuda:
+        import types
+
+        cuda = _FakeCuda(initialized)
+        monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace(cuda=cuda))
+        return cuda
+
+    def test_empties_after_each_generate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cuda = self._fake_torch(monkeypatch, True)
+        cmds = [
+            _emit_line('{"cmd": "load", "kwargs": {}}'),
+            _emit_line('{"cmd": "generate", "request": {}}'),
+            _emit_line('{"cmd": "generate", "request": {}}'),
+        ]
+        events, _ = _run_with_cmds(cmds)
+        assert sum(e["event"] == "done" for e in events) == 2
+        assert cuda.emptied == 2
+
+    def test_empties_after_failed_generate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class Boom(MockAdapter):
+            def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
+                raise RuntimeError("CUDA out of memory")
+
+        cuda = self._fake_torch(monkeypatch, True)
+        cmds = [_emit_line('{"cmd": "load", "kwargs": {}}'), _emit_line('{"cmd": "generate", "request": {}}')]
+        events, _ = _run_with_cmds(cmds, adapter_class=Boom)
+        assert any(e["event"] == "error" for e in events)
+        assert cuda.emptied == 1
+
+    def test_no_cuda_context_is_not_created(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cuda = self._fake_torch(monkeypatch, False)
+        _run_with_cmds([_emit_line('{"cmd": "load", "kwargs": {}}'), _emit_line('{"cmd": "generate", "request": {}}')])
+        assert cuda.emptied == 0
+
+    def test_without_torch_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from aigamekit_shared import worker_serve
+
+        monkeypatch.delitem(sys.modules, "torch", raising=False)
+        worker_serve._release_cuda_cache()  # não importa torch
+        assert "torch" not in sys.modules

@@ -43,6 +43,10 @@ text2d walk-cycle "knight hero" --direction east --frames 4 -O sprites/knight
 text2d animate "knight hero" --anim jump --direction east -O sprites/knight_jump --ref sprites/knight/00_reference.png
 text2d animate "white horse" --anim quad-gallop --direction east -O sprites/horse  # quadrúpedes: east/west
 text2d animate-set "knight hero" -d east,west,south,north -O sprites/knight_set  # personagem completa + set.json
+text2d tileset "lush grass" "dirt path" --tile 32 -O tiles/grass_dirt   # autotile 16 tiles (cantos) + Tiled .tsx + JSON
+text2d parallax "haunted forest at dusk" -O bg/forest                   # camadas sky/far/mid/near repetíveis em x + parallax.json
+text2d vfx explosion --subject "green acid explosion" -O vfx/acid       # explosion|fire|smoke|magic|slash|lightning|heal|impact
+text2d items "health potion, iron sword, gold coin" --theme "fantasy rpg" -O ui/items  # ícones num estilo + atlas + items.json
 ```
 
 ## Variáveis de ambiente
