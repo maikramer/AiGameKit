@@ -196,6 +196,7 @@ def test_generate_cycle_writes_frames_and_sheet(tmp_path: Path) -> None:
         seed=7,
         sprite_size=32,
         transparent=False,
+        retries=0,
         generator=gen,
     )
     # Identidade + UMA folha com os 4 frames (mesma imagem = mesma personagem).
@@ -214,26 +215,49 @@ def test_generate_cycle_writes_frames_and_sheet(tmp_path: Path) -> None:
     assert (out / "poses_00.png").is_file()
 
 
-def test_generate_cycle_splits_long_cycles_into_sheets(tmp_path: Path) -> None:
+def test_generate_cycle_grid_and_multiple_sheets(tmp_path: Path) -> None:
     from text2d.sprite import generate_cycle
 
     gen = _FakeGen()
     result = generate_cycle(
         "a blue knight",
         direction="east",
-        out_dir=tmp_path / "c8",
-        frames=6,
+        out_dir=tmp_path / "c10",
+        frames=10,
         size=64,
         sprite_size=16,
         transparent=False,
+        retries=0,
         generator=gen,
     )
-    # 6 frames → folhas de 4 + 2, ambas com a mesma identidade e seed.
+    # 10 frames → grelha 4x2 (8) + folha de 2, mesma identidade e seed.
     assert len(gen.calls) == 3
-    assert [c["width"] for c in gen.calls[1:]] == [4 * 48, 2 * 48]
+    assert [(c["width"], c["height"]) for c in gen.calls[1:]] == [(4 * 48, 2 * 64), (2 * 48, 64)]
     assert gen.calls[1]["refs"][0] == gen.calls[2]["refs"][0]
     assert gen.calls[1]["seed"] == gen.calls[2]["seed"]
-    assert len(result["frames"]) == 6
+    assert "2 rows of 4" in gen.calls[1]["prompt"]
+    assert len(result["frames"]) == 10
+
+
+def test_generate_cycle_retries_when_frames_are_copies(tmp_path: Path) -> None:
+    from text2d.sprite import generate_cycle
+
+    gen = _FakeGen()  # devolve sempre a mesma imagem → variação 0
+    result = generate_cycle(
+        "k",
+        direction="east",
+        out_dir=tmp_path / "r",
+        frames=4,
+        size=64,
+        sprite_size=16,
+        transparent=False,
+        retries=2,
+        generator=gen,
+    )
+    # identidade + 3 tentativas de folha, cada uma com seed nova
+    assert len(gen.calls) == 4
+    assert [c["seed"] for c in gen.calls[1:]] == [101, 102, 103]
+    assert result["attempts"] == 3
 
 
 def test_generate_cycle_mirrored_direction_uses_canonical(tmp_path: Path) -> None:
@@ -279,6 +303,7 @@ def test_generate_cycle_uses_render_callback(tmp_path: Path) -> None:
         seed=4,
         sprite_size=16,
         transparent=False,
+        retries=0,
         render=_render,
     )
     assert len(seen) == 2  # identidade + 1 folha
@@ -293,7 +318,9 @@ def test_generate_cycle_with_reference_skips_identity(tmp_path: Path) -> None:
     ref = tmp_path / "ref.png"
     Image.new("RGB", (32, 32), (200, 0, 0)).save(ref)
     gen = _FakeGen()
-    generate_cycle("k", direction="east", out_dir=tmp_path / "r", frames=4, reference=ref, size=64, generator=gen)
+    generate_cycle(
+        "k", direction="east", out_dir=tmp_path / "r", frames=4, reference=ref, size=64, retries=0, generator=gen
+    )
     assert len(gen.calls) == 1
     assert gen.calls[0]["refs"][0] == ref
 
@@ -495,8 +522,9 @@ def test_generate_cycle_warns_when_frames_are_copies(tmp_path: Path, capsys: pyt
 
 
 def test_front_silhouettes_alternate_legs_without_sideways_spread() -> None:
-    # De frente: D, neutro, E, neutro — e pernas verticais (sem "V" lateral,
-    # que fazia o modelo virar a personagem de perfil).
+    # De frente: pé direito à frente, passa a esquerda (levantada), pé esquerdo
+    # à frente, passa a direita — e pernas verticais (sem "V" lateral, que fazia
+    # o modelo virar a personagem de perfil).
     from text2d.poses import draw_pose_silhouette
 
     def feet(pose: str) -> tuple[int, int]:
@@ -506,8 +534,8 @@ def test_front_silhouettes_alternate_legs_without_sideways_spread() -> None:
     l0, r0 = feet("walk_contact_front")
     l1, r1 = feet("walk_passing")
     l2, r2 = feet("walk_contact_back")
-    l3, r3 = feet("walk_down")
+    l3, r3 = feet("walk_passing_back")
     assert r0 > l0 and l2 > r2  # pé da frente mais abaixo, alternando
-    assert l1 == r1 and l3 == r3  # passagens neutras
+    assert l1 < r1 and r3 < l3  # em cada passagem sobe a perna que estava atrás
     width = np.asarray(draw_pose_silhouette("walk_contact_front", view="front", size=200))[..., 3] > 0
     assert np.ptp(np.nonzero(width.any(axis=0))[0]) < 0.4 * 200  # sem pernas abertas para os lados

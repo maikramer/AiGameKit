@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 from PIL import Image
 
-from .poses import RUN_CYCLE, WALK_CYCLE, direction_view, draw_pose_sheet, pose_lift, pose_prompt
+from .poses import RUN_CYCLE, WALK_CYCLE, WALK_CYCLE_8, direction_view, draw_pose_sheet, pose_lift, pose_prompt
 from .quadruped import (
     QUAD_GALLOP_CYCLE,
     QUAD_WALK_CYCLE,
@@ -51,6 +51,11 @@ _WALK_FLOOR = {"side": 0.04, "diag_front": 0.035, "diag_back": 0.035, "front": 0
 
 ANIMATIONS: dict[str, Animation] = {
     "walk": Animation("walk", "biped", WALK_CYCLE, "walk cycle", _WALK_FLOOR),
+    # 8 fases numa grelha 2x4 (uma só geração): contacto/baixo/passagem/cima
+    # por passada. Frames consecutivos mudam menos → limiar a metade.
+    "walk8": Animation(
+        "walk8", "biped", WALK_CYCLE_8, "smooth 8-frame walk cycle", {k: v / 2 for k, v in _WALK_FLOOR.items()}
+    ),
     "run": Animation("run", "biped", RUN_CYCLE, "run cycle", _WALK_FLOOR),
     "idle": Animation("idle", "biped", ("idle", "idle_breathe"), "idle breathing loop", {}),
     "jump": Animation("jump", "biped", ("crouch", "jump_up", "jump_fall", "crouch"), "jump", _WALK_FLOOR, loop=False),
@@ -59,6 +64,18 @@ ANIMATIONS: dict[str, Animation] = {
         "biped",
         ("attack_ready", "attack_windup", "attack_strike", "attack_follow"),
         "melee weapon attack",
+        _WALK_FLOOR,
+        loop=False,
+    ),
+    "hurt": Animation("hurt", "biped", ("idle", "hurt", "hurt", "idle"), "hit reaction", _WALK_FLOOR, loop=False),
+    "death": Animation(
+        "death", "biped", ("hurt", "death_kneel", "death_fall", "death_lie"), "death collapse", _WALK_FLOOR, loop=False
+    ),
+    "cast": Animation(
+        "cast",
+        "biped",
+        ("cast_gather", "cast_raise", "cast_release", "cast_follow"),
+        "magic spell casting",
         _WALK_FLOOR,
         loop=False,
     ),
@@ -121,8 +138,8 @@ def phase_lift(anim: Animation, pose: str) -> float:
     return quad_pose_lift(pose) if anim.body == "quadruped" else pose_lift(pose)
 
 
-def draw_guide(anim: Animation, poses: list[str], *, view: str, cell: tuple[int, int]) -> Image.Image:
-    """Folha de silhuetas da animação (referência de forma)."""
+def draw_guide(anim: Animation, poses: list[str], *, view: str, cell: tuple[int, int], cols: int = 4) -> Image.Image:
+    """Folha de silhuetas da animação (referência de forma), em grelha de ``cols``."""
     if anim.body == "quadruped":
-        return draw_quad_sheet(poses, cell=cell)
-    return draw_pose_sheet(poses, view=view, cell=cell)
+        return draw_quad_sheet(poses, cell=cell, cols=cols)
+    return draw_pose_sheet(poses, view=view, cell=cell, cols=cols)

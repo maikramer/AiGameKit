@@ -139,11 +139,15 @@ def draw_quad_silhouette(pose: str, *, width: int = 320, height: int = 256) -> I
     return img
 
 
-def draw_quad_sheet(poses: tuple[str, ...] | list[str], *, cell: tuple[int, int] = (320, 256)) -> Image.Image:
-    """Folha horizontal de silhuetas de quadrúpede (uma célula por pose)."""
+def draw_quad_sheet(
+    poses: tuple[str, ...] | list[str], *, cell: tuple[int, int] = (320, 256), cols: int = 4
+) -> Image.Image:
+    """Folha de silhuetas de quadrúpede (grelha de ``cols`` colunas)."""
     cell_w, cell_h = cell
-    sheet = Image.new("RGB", (cell_w * len(poses), cell_h), (0, 0, 0))
+    ncols = max(1, min(cols, len(poses)))
+    rows = (len(poses) + ncols - 1) // ncols
+    sheet = Image.new("RGB", (cell_w * ncols, cell_h * rows), (0, 0, 0))
     for i, pose in enumerate(poses):
         sil = draw_quad_silhouette(pose, width=cell_w, height=cell_h)
-        sheet.paste(sil, (i * cell_w, 0), sil)
+        sheet.paste(sil, ((i % ncols) * cell_w, (i // ncols) * cell_h), sil)
     return sheet

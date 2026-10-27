@@ -209,6 +209,27 @@ Regras apuradas:
 - **Quadrúpedes** (`text2d.quadruped`): só perfil. Patas de duas secções
   (coxa + canela) — com uma linha reta por pata o modelo ignorava-as. Cão a
   passo 6.7%, cavalo a galope 6.3%.
+- **Silhuetas articuladas** (v2.2): membros com joelho e cotovelo, pé a
+  apontar a direção, figura assente no chão automaticamente e rodada por
+  `tilt` (dano/queda). Com pernas retas o agachamento era "pernas curtas" e o
+  modelo desenhava a personagem de pé; com joelhos dobrados o `jump` agacha de
+  facto e o `death` ajoelha, cai e deita. Membros da frente com contorno preto
+  (o braço branco sobre o tronco branco desaparecia).
+- **Bug de semântica no walk 4** (v2.2): o 4.º frame (`walk_down`) passava a
+  mesma perna que o 2.º — o loop arrastava uma perna. Agora
+  `walk_passing_back` passa a outra. De costas a passagem levanta o pé certo e
+  a vista norte subiu de 2.9% para 3.7%.
+- **Grelha 2x4** (v2.2): `walk8` em 8 frames numa só geração (1024x640, ~90 s
+  com `--ref` na 4050), variação 8.1% entre frames consecutivos e personagem
+  igual nos 8.
+- **Auto-retry** (v2.2): abaixo do limiar da animação a folha é regenerada com
+  outra seed (`--retries`, default 1) e fica a de maior variação. Na bateria
+  de 19 animações não disparou; existe para os casos de seed azarada (v2.1:
+  norte 2.9%).
+- Bateria v2.2 (19 animações, RTX 4050, vramd): walk 9.8%, walk8 8.1%, run
+  9.2%, jump 8.6%, attack 10.4%, hurt 5.8%, death 11.4%, cast 7.9%, SE 6.2%,
+  NE 6.5%, S 5.3%, N 3.7%, cão 6.7%, cavalo 6.4%, lobo 3.8%; idle 0.9%
+  (respiração, sem limiar).
 - `--boxes` **só funciona com `--upsample`**: no pipeline distilled só o bloco
   `prompt_upsampler` consome `boxes` (sem ele o diffusers avisa "Unexpected
   input" e ignora). O CLI recusa `--boxes` sem `--upsample`; o generator

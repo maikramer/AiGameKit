@@ -39,7 +39,9 @@ def test_every_animation_has_drawable_poses(name: str) -> None:
     anim = ANIMATIONS[name]
     cell = cell_size(anim, 320)
     guide = draw_guide(anim, list(anim.poses), view="side", cell=cell)
-    assert guide.size == (cell[0] * len(anim.poses), cell[1])
+    cols = min(4, len(anim.poses))
+    rows = (len(anim.poses) + cols - 1) // cols
+    assert guide.size == (cell[0] * cols, cell[1] * rows)
     for pose in anim.poses:
         assert phase_prompt(anim, pose, view="side")
 
@@ -136,6 +138,7 @@ def test_generate_cycle_quadruped_uses_wide_cells(tmp_path: Path) -> None:
         size=320,
         sprite_size=32,
         transparent=False,
+        retries=0,
         generator=gen,
     )
     identity, sheet = gen.calls
@@ -207,3 +210,48 @@ def test_chroma_key_gives_up_on_busy_border() -> None:
 
     noise = np.random.default_rng(0).integers(0, 255, (64, 64, 3), dtype=np.uint8)
     assert chroma_key(Image.fromarray(noise, "RGB")) is None
+
+
+def _bbox(pose: str, view: str = "side") -> tuple[int, int, int, int]:
+    box = draw_pose_silhouette(pose, view=view, size=200).getchannel("A").getbbox()
+    assert box is not None
+    return box
+
+
+def test_crouch_is_shorter_than_idle_by_bending_knees() -> None:
+    # Agachar = dobrar joelhos (a figura fica mais baixa), não pernas curtas.
+    idle, crouch = _bbox("idle"), _bbox("crouch")
+    assert (crouch[3] - crouch[1]) < 0.85 * (idle[3] - idle[1])
+    assert crouch[3] == idle[3]  # pés na mesma linha do chão
+
+
+def test_death_lie_is_horizontal_and_grounded() -> None:
+    lie, idle = _bbox("death_lie"), _bbox("idle")
+    assert (lie[2] - lie[0]) > 2 * (lie[3] - lie[1])
+    assert abs(lie[3] - idle[3]) <= 2
+
+
+def test_near_limbs_have_dark_outline_over_torso() -> None:
+    # Sem contorno o braço branco por cima do tronco branco desaparecia.
+    arr = np.asarray(draw_pose_silhouette("cast_release", size=200))
+    opaque = arr[..., 3] > 0
+    dark = (arr[..., :3] < 40).all(axis=-1) & opaque
+    assert dark.sum() > 50
+
+
+def test_walk8_passes_alternate_legs_with_bob() -> None:
+    from text2d.poses import _POSES, WALK_CYCLE_8
+
+    assert len(set(WALK_CYCLE_8)) == 8
+    # Passagens levantam a perna oposta; "up" sobe o corpo.
+    assert _POSES["walk_passing"].knees[1] > _POSES["walk_passing"].knees[0]
+    assert _POSES["walk_passing_back"].knees[0] > _POSES["walk_passing_back"].knees[1]
+    assert _POSES["walk_up"].lift > 0 == _POSES["walk_down"].lift
+
+
+@pytest.mark.parametrize("name", ["hurt", "death", "cast", "walk8"])
+def test_new_animations_registered(name: str) -> None:
+    anim = get_animation(name)
+    assert anim.body == "biped"
+    for pose in anim.poses:
+        assert phase_prompt(anim, pose, view="front")

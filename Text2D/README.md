@@ -235,7 +235,7 @@ desenhada (uma por célula) e a identidade de uma imagem da personagem parada.
 ```bash
 text2d poses                                   # animações, fases e poses
 
-# Bípedes: walk | run | idle | jump | attack, em 8 direções
+# Bípedes: walk | walk8 | run | idle | jump | attack | hurt | death | cast, em 8 direções
 text2d animate "16-bit SNES-era pixel art knight hero in a blue tunic" \
   --anim run --direction east --out-dir outputs/sprites/knight_run
 
@@ -252,11 +252,15 @@ text2d animate "$K" --anim jump  --direction east -O knight/jump --ref knight/wa
 
 | Animação | Corpo | Fases |
 |----------|-------|-------|
-| `walk` | bípede | contacto, passagem, contacto (outra perna), passagem dobrada |
+| `walk` | bípede | contacto, passagem (perna de trás levantada), contacto da outra perna, passagem da outra |
+| `walk8` | bípede | 8 fases numa grelha 2x4: contacto, baixo, passagem, cima × 2 pernas (use `--frames 8`) |
 | `run` | bípede | contacto, fase aérea, alternando a perna da frente |
 | `idle` | bípede | parado / a expirar (respiração subtil — loop de espera) |
 | `jump` | bípede | agachar, subir, cair, aterrar (a altura do salto é reposta no sprite) |
 | `attack` | bípede | guarda, preparar, golpe, seguimento (arma genérica) |
+| `hurt` | bípede | parado, recuo do impacto (corpo inclinado para trás), volta |
+| `death` | bípede | recuo, ajoelha, cai para trás, deitado no chão |
+| `cast` | bípede | junta as mãos, ergue os braços, liberta para a frente, recolhe |
 | `quad-walk` | quadrúpede | passo lateral em 4 fases (patas do lado de trás a cinzento) |
 | `quad-gallop` | quadrúpede | impulso, extensão no ar, aterragem da frente, recolha |
 
@@ -270,15 +274,18 @@ text2d animate "$K" --anim jump  --direction east -O knight/jump --ref knight/wa
 | `--size` / `--steps` / `--seed` | 320 / 12 / 100 | Altura da célula, passos e seed |
 | `--sprite-size` / `--colors` | 96 / 32 | Lado do sprite e nº de cores da paleta comum |
 | `--frame-ms` | 160 | Duração de cada frame no GIF |
+| `--retries` | 1 | Se os frames saírem quase iguais, regenera com outra seed e fica a melhor |
 | `--measure` | on | Mede a variação entre frames (avisa se forem cópias) |
 
 Como funciona:
 
 1. **Identidade** — a personagem **parada** a 512² (ou o `--ref`).
-2. **Todos os frames numa só geração** (`4 × 256×320` bípedes, `4 × 320×256`
-   quadrúpedes) com duas referências: a identidade e a folha de silhuetas
-   (`poses_00.png`; membros do lado de trás a cinzento). A pose de cada célula
-   vai também por extenso no prompt.
+2. **Todos os frames numa só geração** — grelha de 4 colunas e até 2 linhas
+   (`1024×320` para 4 bípedes, `1024×640` para 8) com duas referências: a
+   identidade e a folha de silhuetas **articuladas** (`poses_00.png`: joelhos,
+   cotovelos, pé a apontar a direção; lado de trás a cinzento, membros da
+   frente com contorno). A pose de cada célula vai também por extenso no
+   prompt. Se os frames saírem cópias, a folha é regenerada com outra seed.
 3. **Recorte por cor da borda** — fundo branco liso, removido por flood fill
    a partir das margens (o contorno do pixel art trava o preenchimento, por
    isso personagens brancas não são furadas). O rembg só entra se o fundo não
@@ -288,7 +295,8 @@ Como funciona:
    para a animação → atlas 1x, preview 4x e GIF.
 
 Medido na RTX 4050 6 GB (via vramd): **~90 s por animação de 4 frames**
-(identidade ~55 s + folha ~31 s; com `--ref` só a folha). Diagnóstico e
+(identidade ~55 s + folha ~31 s; com `--ref` ~40-60 s; `walk8` com `--ref`
+~90 s). Diagnóstico e
 números:
 [`docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md`](../docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md#walk-cycle-v2-folha-única-guiada-por-silhuetas).
 

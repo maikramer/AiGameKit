@@ -16,8 +16,10 @@ O FLUX.3 não tem pose conditioning; a receita (validada E2E na 4050, ver
    do LANCZOS), alpha binário e **uma paleta para o ciclo todo** (paleta por
    frame fazia as cores cintilar no GIF).
 
-Ciclos com mais de :data:`MAX_FRAMES_PER_SHEET` frames geram várias folhas
-com a mesma identidade e seed.
+Até :data:`MAX_FRAMES_PER_SHEET` frames saem numa só geração (grelha de
+:data:`SHEET_COLS` colunas); acima disso geram-se várias folhas com a mesma
+identidade. Se os frames saírem quase iguais (a identidade dominou a pose), a
+folha é regenerada com outra seed (``retries``) e fica a de maior variação.
 """
 
 from __future__ import annotations
@@ -42,8 +44,11 @@ from .poses import (
 
 STYLE_SUFFIX = "flat colors, crisp pixels, no anti-aliasing, no text, plain white background"
 
-# Frames por geração: 4 células de 256 px = 1024 de largura (resolução nativa).
-MAX_FRAMES_PER_SHEET = 4
+# Frames por geração: grelha de 4 colunas x até 2 linhas (8 frames bípedes =
+# 1024x640). Mais frames numa geração = mais consistência; acima de 8 a imagem
+# passa de ~0.65 MP e a 6 GB o tempo cresce sem ganho visível.
+MAX_FRAMES_PER_SHEET = 8
+SHEET_COLS = 4
 
 # Resolução da imagem de identidade (abaixo de ~512 o FLUX.3 perde detalhe e o
 # "pixel art" sai sujo — era a causa dos frames borrados a 256²).
@@ -61,6 +66,7 @@ def sheet_prompt(
     direction: str,
     poses: tuple[str, ...] | list[str],
     animation: str | Animation = "walk",
+    cols: int | None = None,
 ) -> str:
     """Prompt da folha: N cópias da personagem, cada uma na pose da silhueta.
 
@@ -73,7 +79,7 @@ def sheet_prompt(
     view = direction_view(direction)
     frames_text = "; ".join(f"frame {i + 1}: {phase_prompt(anim, p, view=view)}" for i, p in enumerate(poses))
     direction_text = direction_prompt(direction)
-    if anim.name != "walk":
+    if not anim.name.startswith("walk"):
         # "walking to the right" contradiz salto/ataque/idle; fica só a vista.
         direction_text = facing_prompt(direction)
     # Fases aéreas: a silhueta mostra a altura de cada frame (não "mesmo chão").
@@ -83,9 +89,17 @@ def sheet_prompt(
         else "feet on the same ground line"
     )
     limbs = "legs" if anim.body == "quadruped" else "limbs"
-    return (
+    cols = cols or n
+    rows = (n + cols - 1) // cols
+    layout = (
         f"a horizontal sprite sheet of a {n}-frame {anim.label} animation of "
-        f"{character.strip().rstrip('.')}, {n} copies of the same character from left to right, each copy "
+        f"{character.strip().rstrip('.')}, {n} copies of the same character from left to right"
+        if rows == 1
+        else f"a sprite sheet grid of a {n}-frame {anim.label} animation of {character.strip().rstrip('.')}, "
+        f"{n} copies of the same character in {rows} rows of {cols}, read left to right then top to bottom"
+    )
+    return (
+        f"{layout}, each copy "
         f"{direction_text}, posed exactly like the white silhouette at the same position in the "
         f"second image (the grey {limbs} are the far side of the body), the character looks exactly like the "
         f"first image, identical outfit, colors, size and proportions in every frame, full body, {ground}. "
@@ -268,6 +282,7 @@ def generate_cycle(
     make_sheet: bool = True,
     make_gif: bool = True,
     measure: bool = True,
+    retries: int = 1,
     frame_ms: int = 160,
     generator: Any = None,
     render: RenderFn | None = None,
@@ -293,6 +308,8 @@ def generate_cycle(
         transparent: Cortar o fundo com rembg.
         make_sheet / make_gif: Gerar folha de pré-visualização / atlas e GIF.
         measure: Medir a variação de silhueta entre frames consecutivos.
+        retries: Tentativas extra (outra seed) quando a variação fica abaixo do
+            limiar da animação; fica a melhor. 0 = desligado.
         frame_ms: Duração de cada frame no GIF.
         generator: Instância de :class:`text2d.generator.KleinFluxGenerator`
             (criada se None e se ``render`` não for usado).
@@ -352,37 +369,73 @@ def generate_cycle(
         _render(base_prompt, ref_path, seed, [], IDENTITY_SIZE, IDENTITY_SIZE)
         print(f"[sprite] identidade: {time.time() - t0:.1f}s → {ref_path}", flush=True)
 
-    # 2) Folhas: cada uma com até MAX_FRAMES_PER_SHEET células.
+    # 2) Folhas em grelha (até MAX_FRAMES_PER_SHEET células, SHEET_COLS por
+    # linha): uma geração por folha → mesma personagem/escala/chão em todas.
     cell_w, cell_h = cell_size(anim, size)
-    raw_paths: list[Path] = []
-    cells: list[Image.Image] = []
-    prompts: list[str] = []
-    for start in range(0, frames, MAX_FRAMES_PER_SHEET):
-        chunk = phase_list[start : start + MAX_FRAMES_PER_SHEET]
-        k = start // MAX_FRAMES_PER_SHEET
-        guide = out / f"poses_{k:02d}.png"
-        draw_guide(anim, chunk, view=view, cell=(cell_w, cell_h)).save(guide)
-        prompt = sheet_prompt(character, direction=source_direction, poses=chunk, animation=anim)
-        prompts.append(prompt)
-        raw = out / f"sheet_raw_{k:02d}.png"
-        t0 = time.time()
-        _render(prompt, raw, seed + 1, [ref_path, guide], cell_w * len(chunk), cell_h)
-        print(f"[sprite] folha {k + 1} ({len(chunk)} frames: {', '.join(chunk)}): {time.time() - t0:.1f}s", flush=True)
-        # A imagem pode vir noutro tamanho (callbacks/testes): fatiar proporcionalmente.
-        sheet_img = Image.open(raw).convert("RGB")
-        step = sheet_img.width / len(chunk)
-        for j, pose in enumerate(chunk):
-            cell = sheet_img.crop((round(j * step), 0, round((j + 1) * step), sheet_img.height))
-            path = out / f"frame_{start + j:02d}_{pose}.png"
-            cell.save(path)
-            raw_paths.append(path)
-            cells.append(cell)
+    lifts = [phase_lift(anim, p) for p in phase_list]
+    floor = anim.min_variation.get(view, 0.0) if measure else 0.0
 
-    # 3) Sprites: fundo fora → alinhar → downscale + paleta comum.
-    rgba = [_remove_background(c) if transparent else c.convert("RGBA") for c in cells]
-    if transparent:
-        rgba = align_frames(rgba, lifts=[phase_lift(anim, p) for p in phase_list])
-    source_sprites = to_sprites(rgba, sprite_size=sprite_size, colors=colors)
+    def _attempt(attempt: int) -> tuple[list[Path], list[Image.Image], list[Image.Image], list[str]]:
+        """Gera todas as folhas com a seed da tentativa → (raws, células, sprites, prompts)."""
+        tag = f"_try{attempt}" if attempt else ""
+        raw_paths: list[Path] = []
+        cells: list[Image.Image] = []
+        prompts: list[str] = []
+        for start in range(0, frames, MAX_FRAMES_PER_SHEET):
+            chunk = phase_list[start : start + MAX_FRAMES_PER_SHEET]
+            k = start // MAX_FRAMES_PER_SHEET
+            cols = min(SHEET_COLS, len(chunk))
+            rows = (len(chunk) + cols - 1) // cols
+            guide = out / f"poses_{k:02d}.png"
+            draw_guide(anim, chunk, view=view, cell=(cell_w, cell_h), cols=cols).save(guide)
+            prompt = sheet_prompt(character, direction=source_direction, poses=chunk, animation=anim, cols=cols)
+            prompts.append(prompt)
+            raw = out / f"sheet_raw_{k:02d}{tag}.png"
+            t0 = time.time()
+            _render(prompt, raw, seed + 1 + attempt, [ref_path, guide], cell_w * cols, cell_h * rows)
+            print(
+                f"[sprite] folha {k + 1}{f' (tentativa {attempt + 1})' if attempt else ''} "
+                f"({len(chunk)} frames: {', '.join(chunk)}): {time.time() - t0:.1f}s",
+                flush=True,
+            )
+            # A imagem pode vir noutro tamanho (callbacks/testes): fatiar proporcionalmente.
+            sheet_img = Image.open(raw).convert("RGB")
+            step_x, step_y = sheet_img.width / cols, sheet_img.height / rows
+            for j, pose in enumerate(chunk):
+                cx, cy = j % cols, j // cols
+                box = (round(cx * step_x), round(cy * step_y), round((cx + 1) * step_x), round((cy + 1) * step_y))
+                cell = sheet_img.crop(box)
+                path = out / f"frame_{start + j:02d}_{pose}{tag}.png"
+                cell.save(path)
+                raw_paths.append(path)
+                cells.append(cell)
+        # 3) Sprites: fundo fora → alinhar → downscale + paleta comum.
+        rgba = [_remove_background(c) if transparent else c.convert("RGBA") for c in cells]
+        if transparent:
+            rgba = align_frames(rgba, lifts=lifts)
+        return raw_paths, cells, to_sprites(rgba, sprite_size=sprite_size, colors=colors), prompts
+
+    def _variation(sprites: list[Image.Image]) -> list[float]:
+        if len(sprites) < 2:
+            return []
+        seq = [*sprites, sprites[0]] if anim.loop else sprites
+        return [alpha_difference(a, b) for a, b in itertools.pairwise(seq)]
+
+    # Auto-retry: se os frames saírem cópias (a identidade dominou a pose), tenta
+    # outra seed e fica com a tentativa de maior variação — o utilizador já não
+    # tem de adivinhar seeds (o aviso da v2 só dizia "tenta outra --seed").
+    best = _attempt(0)
+    differences = _variation(best[2])
+    attempts = 1
+    while floor and differences and sum(differences) / len(differences) < floor and attempts <= retries:
+        mean = sum(differences) / len(differences)
+        print(f"[sprite] variação {mean * 100:.1f}% < {floor * 100:.0f}% — nova tentativa com outra seed", flush=True)
+        candidate = _attempt(attempts)
+        cand_diff = _variation(candidate[2])
+        attempts += 1
+        if sum(cand_diff) > sum(differences):
+            best, differences = candidate, cand_diff
+    raw_paths, _cells, source_sprites, prompts = best
     sprites = [s.transpose(Image.Transpose.FLIP_LEFT_RIGHT) for s in source_sprites] if mirror else source_sprites
 
     sprite_paths: list[Path] = []
@@ -438,25 +491,23 @@ def generate_cycle(
         print(f"[sprite] gif: {gif_path}", flush=True)
 
     # 5) Métrica: os frames são realmente diferentes? (após alinhar → só pose)
-    differences: list[float] = []
-    if measure and len(sprites) > 1:
-        seq = [*sprites, sprites[0]] if anim.loop else sprites
-        for a, b in itertools.pairwise(seq):
-            differences.append(alpha_difference(a, b))
+    if measure and differences:
         mean = sum(differences) / len(differences)
         print(
             f"[sprite] variação de silhueta entre frames consecutivos{' (com o loop)' if anim.loop else ''}: "
             + ", ".join(f"{d * 100:.1f}%" for d in differences)
-            + f" (média {mean * 100:.1f}%)",
+            + f" (média {mean * 100:.1f}%"
+            + (f", {attempts} tentativas)" if attempts > 1 else ")"),
             flush=True,
         )
-        floor = anim.min_variation.get(view, 0.0)
         if floor and mean < floor:
             print(
-                f"[sprite] AVISO: frames quase iguais (média {mean * 100:.1f}% < {floor * 100:.0f}%) — "
-                "a pose da identidade dominou; tenta outra --seed ou um --ref com a personagem parada.",
+                f"[sprite] AVISO: frames quase iguais (média {mean * 100:.1f}% < {floor * 100:.0f}%) mesmo após "
+                f"{attempts} tentativa(s) — tenta um --ref com a personagem parada ou --retries maior.",
                 flush=True,
             )
+    elif not measure:
+        differences = []
 
     return {
         "frames": raw_paths,
@@ -465,6 +516,7 @@ def generate_cycle(
         "atlas": atlas_path,
         "gif": gif_path,
         "differences": differences,
+        "attempts": attempts,
         "prompts": prompts,
         "reference": ref_path,
     }

@@ -1,153 +1,357 @@
-"""Biblioteca de poses para animação 2D — prompts de pernas/braços + silhuetas.
+"""Biblioteca de poses bípedes para animação 2D — texto + silhueta articulada.
 
-O FLUX.3 Image Klein **não** tem pose conditioning: o que controla a pose é a
-*forma* da referência (o workflow ``image_conditioned`` copia a imagem). Duas
-técnicas complementares, ambas validadas E2E (ver
-``docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md``):
+O FLUX.3 Image Klein **não** tem pose conditioning: a pose vem da *forma* de
+uma silhueta desenhada (o workflow ``image_conditioned`` copia-a) e o texto
+de cada fase confirma-a. Ver ``docs/findings/TEXT2D_FLUX3_KLEIN_MIGRATION.md``.
 
-1. **Prompt de pose** — cada frame leva uma frase explícita sobre as pernas e
-   os braços (o texto muda a pose mesmo com a mesma referência: 8% → 16-26% de
-   diferença de silhueta entre fases).
-2. **Silhueta de pose** — :func:`draw_pose_silhouette` desenha a pose pedida
-   (pernas/braços em ângulos concretos) e usa-se essa imagem como referência:
-   a forma desenhada é copiada pelo modelo.
-
-Vocabulário de poses (o mesmo em todas as direções,adaptado à vista):
-
-- ``walk_contact_front`` / ``walk_contact_back`` — passadas abertas (contacto)
-- ``walk_down`` — perna da frente a empurrar, perna de trás a levantar
-- ``walk_passing`` — pernas juntas (a frames de passagem)
-- ``run_contact`` / ``run_air`` — corrida
-- ``jump_up`` / ``jump_fall`` — salto
-- ``idle`` / ``crouch`` — paragem
-- ``attack_windup`` / ``attack_strike`` — ataque
+Cada pose (:class:`PoseSpec`) define, para o lado **near** (do observador,
+branco) e **far** (cinzento, atrás do corpo): ângulo da coxa/braço a partir da
+vertical (positivo = para a frente), flexão do joelho/cotovelo, elevação dos
+pés e inclinação do corpo inteiro (dano, queda). A silhueta é desenhada
+articulada e assente no chão automaticamente — agachar é dobrar os joelhos,
+não encolher pernas.
 """
 
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw
 
-# ---------------------------------------------------------------------------
-# Vocabulário de poses
-# ---------------------------------------------------------------------------
 
-# Textos por vista: "side" (perfil, frente/trás) e "front" (de frente, esquerda/direita).
-_POSE_TEXT: dict[str, dict[str, str]] = {
-    "idle": {
-        "side": "standing still with both feet on the ground slightly apart, the front arm and the back arm "
-        "hanging relaxed at the sides of the body",
-        # Sem "facing the viewer": a vista vem da direção (north = de costas).
-        "front": "standing still, both feet on the ground slightly apart, both arms hanging relaxed at the sides "
-        "of the body",
-    },
-    "walk_contact_front": {
-        "side": "the leading leg stretched far forward with the heel touching the ground, the trailing leg "
-        "stretched far back with only the toe touching the ground, the front arm swung back and the back arm "
-        "swung forward, a wide stride",
-        "front": "the right leg stretched forward and the left leg stretched back, the right arm swung back and "
-        "the left arm swung forward, a wide stride",
-    },
-    "walk_down": {
-        "side": "the leading leg bent sharply under the body pushing off the ground, the trailing leg bent and "
-        "lifted behind with the knee raised, the body lowered slightly, both arms pulled in close to the body",
-        # De frente o "down" é o bob neutro entre passadas (a silhueta frontal
-        # desenha-o com as pernas juntas — texto e silhueta têm de concordar).
-        "front": "both legs under the body with the knees slightly bent, the body lowered slightly, both arms "
-        "pulled in close to the body",
-    },
-    "walk_contact_back": {
-        "side": "the trailing leg now stretched far forward with the heel touching the ground, the leading leg "
-        "stretched far back with only the toe touching the ground, the front arm swung forward and the back arm "
-        "swung back, a wide stride",
-        "front": "the left leg stretched forward and the right leg stretched back, the left arm swung back and "
-        "the right arm swung forward, a wide stride",
-    },
-    "walk_passing": {
-        "side": "both legs together under the body, the trailing leg vertical and just lifting off the ground, "
-        "the leading leg vertical and about to step forward, both arms hanging close to the body",
-        "front": "both legs together under the body, one foot vertical and just lifting off the ground, the other "
-        "foot vertical and about to step forward, both arms hanging close to the body",
-    },
-    "run_contact": {
-        "side": "a running stride with the leading leg stretched far forward, the trailing leg bent back with the "
-        "heel raised high, the torso leaning forward, the front arm swung forward and the back arm swung back",
-        "front": "a running stride with the right leg stretched far forward, the left leg bent back, the torso "
-        "leaning forward, the arms pumping in opposite directions",
-    },
-    "run_air": {
-        "side": "both feet off the ground in mid-air, the leading knee raised high, the trailing leg stretched "
-        "back, the torso leaning forward, both arms bent in a running swing",
-        "front": "both feet off the ground in mid-air, the right knee raised high, the left leg stretched back, "
+@dataclass(frozen=True)
+class PoseSpec:
+    """Uma pose bípede.
+
+    Attributes:
+        side / front: Texto da pose de perfil / de frente.
+        legs: Ângulo das coxas ``(near, far)`` em graus (positivo = para a frente).
+        arms: Ângulo dos braços ``(near, far)`` (90 = horizontal à frente, 180 = para cima).
+        knees: Flexão dos joelhos ``(near, far)`` — a canela roda para trás.
+        elbows: Flexão dos cotovelos ``(near, far)`` — o antebraço roda para a frente.
+        lift: Elevação dos pés (fração da altura) — salto, fase aérea.
+        tilt: Inclinação do corpo inteiro em graus (negativo = para trás).
+    """
+
+    side: str
+    front: str
+    legs: tuple[float, float]
+    arms: tuple[float, float]
+    knees: tuple[float, float] = (3.0, 3.0)
+    elbows: tuple[float, float] = (10.0, 10.0)
+    lift: float = 0.0
+    tilt: float = 0.0
+
+
+_ARMS_SWING = "the arms swinging opposite to the legs"
+
+# Ciclo de caminhada (perfil): near = perna do lado do observador. Em cada
+# passagem passa a perna que estava ATRÁS no contacto anterior — a v2 tinha o
+# 4.º frame a passar a mesma perna do 2.º (o loop "arrastava" uma perna).
+_POSES: dict[str, PoseSpec] = {
+    "idle": PoseSpec(
+        "standing still with both feet on the ground slightly apart, the front arm and the back arm hanging "
+        "relaxed at the sides of the body",
+        "standing still, both feet on the ground slightly apart, both arms hanging relaxed at the sides of the body",
+        legs=(3, -3),
+        arms=(-3, 3),
+        elbows=(8, 8),
+    ),
+    "idle_breathe": PoseSpec(
+        "standing still breathing out, the shoulders and chest slightly lowered, the knees very slightly bent, "
+        "both arms hanging relaxed at the sides",
+        "standing still breathing out, the shoulders slightly lowered, the knees very slightly bent, both arms "
+        "hanging relaxed at the sides",
+        legs=(5, -4),
+        arms=(-4, 4),
+        knees=(16, 16),
+        elbows=(14, 14),
+    ),
+    "walk_contact_front": PoseSpec(
+        "the leading leg stretched far forward with the heel touching the ground, the trailing leg stretched far "
+        "back with only the toe touching the ground, the front arm swung back and the back arm swung forward, a "
+        "wide stride",
+        "the right leg stretched forward and the left leg stretched back, the right arm swung back and the left "
+        "arm swung forward, a wide stride",
+        legs=(30, -26),
+        arms=(-24, 22),
+        knees=(4, 2),
+        elbows=(14, 14),
+    ),
+    "walk_down": PoseSpec(
+        "the leading leg planted forward with the knee bent taking the weight, the trailing leg pushing off "
+        f"behind with the heel raised, the body at its lowest, {_ARMS_SWING}",
+        f"both knees bent with the body at its lowest, the left heel raised behind, {_ARMS_SWING}",
+        legs=(18, -30),
+        arms=(-18, 16),
+        knees=(28, 32),
+        elbows=(16, 16),
+    ),
+    "walk_passing": PoseSpec(
+        "the supporting leg straight under the body, the other leg lifted with the knee bent passing forward "
+        "next to it, both arms hanging close to the body",
+        "standing on the right leg, the left leg lifted with the knee bent, both arms hanging close to the body",
+        legs=(2, 8),
+        arms=(-4, 4),
+        knees=(4, 52),
+        elbows=(14, 14),
+    ),
+    "walk_up": PoseSpec(
+        "rising on the toes of the back leg, the other leg swinging forward with the knee bent, the body at its "
+        f"highest, {_ARMS_SWING}",
+        f"rising on the right toes, the left knee raised forward, the body at its highest, {_ARMS_SWING}",
+        legs=(-14, 26),
+        arms=(10, -12),
+        knees=(0, 40),
+        elbows=(14, 14),
+        lift=0.015,
+    ),
+    "walk_contact_back": PoseSpec(
+        "the trailing leg now stretched far forward with the heel touching the ground, the leading leg stretched "
+        "far back with only the toe touching the ground, the front arm swung forward and the back arm swung back, "
+        "a wide stride",
+        "the left leg stretched forward and the right leg stretched back, the left arm swung back and the right "
+        "arm swung forward, a wide stride",
+        legs=(-26, 30),
+        arms=(22, -24),
+        knees=(2, 4),
+        elbows=(14, 14),
+    ),
+    "walk_down_back": PoseSpec(
+        "the other leg now planted forward with the knee bent taking the weight, the first leg pushing off behind "
+        f"with the heel raised, the body at its lowest, {_ARMS_SWING}",
+        f"both knees bent with the body at its lowest, the right heel raised behind, {_ARMS_SWING}",
+        legs=(-30, 18),
+        arms=(16, -18),
+        knees=(32, 28),
+        elbows=(16, 16),
+    ),
+    "walk_passing_back": PoseSpec(
+        "the other leg now straight under the body supporting it, the first leg lifted with the knee bent passing "
+        "forward next to it, both arms hanging close to the body",
+        "standing on the left leg, the right leg lifted with the knee bent, both arms hanging close to the body",
+        legs=(8, 2),
+        arms=(4, -4),
+        knees=(52, 4),
+        elbows=(14, 14),
+    ),
+    "walk_up_back": PoseSpec(
+        "rising on the toes of the other back leg, the first leg swinging forward with the knee bent, the body at "
+        f"its highest, {_ARMS_SWING}",
+        f"rising on the left toes, the right knee raised forward, the body at its highest, {_ARMS_SWING}",
+        legs=(26, -14),
+        arms=(-12, 10),
+        knees=(40, 0),
+        elbows=(14, 14),
+        lift=0.015,
+    ),
+    "run_contact": PoseSpec(
+        "a running stride with the leading leg stretched far forward, the trailing leg bent back with the heel "
+        "raised high, the torso leaning forward, the front arm swung forward and the back arm swung back",
+        "a running stride with the right leg stretched far forward, the left leg bent back, the torso leaning "
+        "forward, the arms pumping in opposite directions",
+        legs=(40, -30),
+        arms=(-35, 40),
+        knees=(12, 80),
+        elbows=(85, 85),
+    ),
+    "run_air": PoseSpec(
+        "both feet off the ground in mid-air, the leading knee raised high, the trailing leg stretched back, the "
+        "torso leaning forward, both arms bent in a running swing",
+        "both feet off the ground in mid-air, the right knee raised high, the left leg stretched back, the torso "
+        "leaning forward, both arms bent in a running swing",
+        legs=(45, -38),
+        arms=(-30, 35),
+        knees=(85, 35),
+        elbows=(85, 85),
+        lift=0.06,
+    ),
+    "run_contact_back": PoseSpec(
+        "a running stride with the trailing leg now stretched far forward, the leading leg bent back with the heel "
+        "raised high, the torso leaning forward, the front arm swung back and the back arm swung forward",
+        "a running stride with the left leg stretched far forward, the right leg bent back, the torso leaning "
+        "forward, the arms pumping in opposite directions",
+        legs=(-30, 40),
+        arms=(40, -35),
+        knees=(80, 12),
+        elbows=(85, 85),
+    ),
+    "run_air_back": PoseSpec(
+        "both feet off the ground in mid-air, the trailing knee now raised high, the leading leg stretched back, "
         "the torso leaning forward, both arms bent in a running swing",
-    },
-    "jump_up": {
-        "side": "both feet off the ground, the knees tucked up, both arms raised above the head",
-        "front": "both feet off the ground, the knees tucked up, both arms raised above the head",
-    },
-    "jump_fall": {
-        "side": "both feet off the ground, the legs extended downward and slightly apart, both arms spread out to "
-        "the sides",
-        "front": "both feet off the ground, the legs extended downward and slightly apart, both arms spread out "
-        "to the sides",
-    },
-    "crouch": {
-        "side": "crouched low with the knees bent and the torso leaning forward, both arms lowered",
-        "front": "crouched low with the knees bent and the torso leaning forward, both arms lowered",
-    },
-    "attack_ready": {
-        "side": "standing in a fighting stance, the weapon held forward in both arms, one leg forward and the "
-        "other braced behind, the knees slightly bent",
-        "front": "standing in a fighting stance facing forward, the weapon held in front of the body, the feet "
-        "apart, the knees slightly bent",
-    },
-    "attack_windup": {
-        "side": "the weapon raised high above the head with both arms up, the body leaning back, one leg forward "
-        "and the other braced behind",
-        "front": "the weapon raised high above the head with both arms up, the feet apart and braced",
-    },
-    "attack_strike": {
-        "side": "the weapon swung down and forward, the front arm extended, the back arm pulled back, the body "
-        "leaning forward, the legs in a wide stance",
-        "front": "the weapon swung down and forward, the right arm extended, the left arm pulled back, the body "
-        "leaning forward, the legs in a wide stance",
-    },
-    "attack_follow": {
-        "side": "the weapon swept low past the body after the strike, the arms extended down and forward, the "
-        "front knee bent deeply, the back leg stretched behind",
-        "front": "the weapon swept low across the body after the strike, the arms extended down, the knees bent",
-    },
-    "idle_breathe": {
-        "side": "standing still breathing out, the shoulders and chest slightly lowered, the knees very slightly "
-        "bent, both arms hanging relaxed at the sides",
-        "front": "standing still breathing out, the shoulders slightly lowered, the knees very slightly bent, both "
-        "arms hanging relaxed at the sides",
-    },
-    "run_contact_back": {
-        "side": "a running stride with the trailing leg now stretched far forward, the leading leg bent back with "
-        "the heel raised high, the torso leaning forward, the front arm swung back and the back arm swung forward",
-        "front": "a running stride with the left leg stretched far forward, the right leg bent back, the torso "
-        "leaning forward, the arms pumping in opposite directions",
-    },
-    "run_air_back": {
-        "side": "both feet off the ground in mid-air, the trailing knee now raised high, the leading leg "
-        "stretched back, the torso leaning forward, both arms bent in a running swing",
-        "front": "both feet off the ground in mid-air, the left knee raised high, the right leg stretched back, "
-        "the torso leaning forward, both arms bent in a running swing",
-    },
+        "both feet off the ground in mid-air, the left knee raised high, the right leg stretched back, the torso "
+        "leaning forward, both arms bent in a running swing",
+        legs=(-38, 45),
+        arms=(35, -30),
+        knees=(35, 85),
+        elbows=(85, 85),
+        lift=0.06,
+    ),
+    "crouch": PoseSpec(
+        "crouched low with both knees deeply bent and the torso leaning forward, both arms lowered in front",
+        "crouched low with both knees deeply bent, both arms lowered in front",
+        legs=(55, 40),
+        arms=(30, 20),
+        knees=(115, 105),
+        elbows=(30, 30),
+    ),
+    "jump_up": PoseSpec(
+        "both feet off the ground, the knees tucked up high, both arms raised above the head",
+        "both feet off the ground, the knees tucked up high, both arms raised above the head",
+        legs=(45, 30),
+        arms=(160, 150),
+        knees=(110, 100),
+        elbows=(10, 10),
+        lift=0.2,
+    ),
+    "jump_fall": PoseSpec(
+        "both feet off the ground falling, the legs extended downward and slightly apart, both arms spread up and "
+        "out to the sides",
+        "both feet off the ground falling, the legs extended downward and slightly apart, both arms spread up and "
+        "out to the sides",
+        legs=(12, -8),
+        arms=(125, 115),
+        knees=(15, 30),
+        elbows=(20, 20),
+        lift=0.12,
+    ),
+    "attack_ready": PoseSpec(
+        "standing in a fighting stance, the weapon held forward in both arms, one leg forward and the other "
+        "braced behind, the knees slightly bent",
+        "standing in a fighting stance facing forward, the weapon held in front of the body, the feet apart, the "
+        "knees slightly bent",
+        legs=(22, -20),
+        arms=(40, 30),
+        knees=(18, 12),
+        elbows=(60, 60),
+    ),
+    "attack_windup": PoseSpec(
+        "the weapon raised high above the head with both arms up, the body leaning back, one leg forward and the "
+        "other braced behind",
+        "the weapon raised high above the head with both arms up, the feet apart and braced",
+        legs=(20, -22),
+        arms=(165, 160),
+        knees=(10, 10),
+        elbows=(30, 30),
+        tilt=-6,
+    ),
+    "attack_strike": PoseSpec(
+        "the weapon swung down and forward, the front arm extended, the back arm pulled back, the body leaning "
+        "forward, the legs in a wide stance",
+        "the weapon swung down and forward, the right arm extended, the left arm pulled back, the body leaning "
+        "forward, the legs in a wide stance",
+        legs=(32, -28),
+        arms=(80, 30),
+        knees=(25, 5),
+        elbows=(10, 40),
+        tilt=8,
+    ),
+    "attack_follow": PoseSpec(
+        "the weapon swept low past the body after the strike, the arms extended down and forward, the front knee "
+        "bent deeply, the back leg stretched behind",
+        "the weapon swept low across the body after the strike, the arms extended down, the knees bent",
+        legs=(42, -35),
+        arms=(40, 20),
+        knees=(50, 5),
+        elbows=(10, 20),
+        tilt=12,
+    ),
+    "hurt": PoseSpec(
+        "recoiling from a hit, the head and torso thrown back, both arms flung back and out, the knees buckling",
+        "recoiling from a hit, the head thrown back, both arms flung out to the sides, the knees buckling",
+        legs=(10, -14),
+        arms=(-45, -35),
+        knees=(25, 15),
+        elbows=(30, 30),
+        tilt=-14,
+    ),
+    "death_kneel": PoseSpec(
+        "collapsing onto both knees, the torso slumped forward, both arms hanging limp",
+        "collapsing onto both knees, the torso slumped forward, both arms hanging limp",
+        legs=(70, 50),
+        arms=(15, 10),
+        knees=(140, 130),
+        elbows=(15, 15),
+        tilt=10,
+    ),
+    "death_fall": PoseSpec(
+        "falling over backwards defeated, the body tipping back, both legs giving way, the arms thrown up",
+        "falling over defeated, the body tipping to the side, both legs giving way, the arms thrown up",
+        legs=(35, 15),
+        arms=(-70, -50),
+        knees=(45, 45),
+        elbows=(20, 20),
+        tilt=-55,
+    ),
+    "death_lie": PoseSpec(
+        "lying flat on the back on the ground, defeated, the legs stretched out, the arms limp at the sides",
+        "lying flat on the ground, defeated, the legs stretched out, the arms limp at the sides",
+        legs=(10, 2),
+        arms=(-15, -8),
+        knees=(10, 15),
+        elbows=(10, 10),
+        tilt=-88,
+    ),
+    "cast_gather": PoseSpec(
+        "gathering magic, both arms bent with the hands drawn together in front of the chest and a small glow "
+        "between them, the feet planted apart, the knees slightly bent",
+        "gathering magic, both hands drawn together in front of the chest with a small glow between them, the feet "
+        "planted apart",
+        legs=(14, -12),
+        arms=(40, 35),
+        knees=(14, 10),
+        elbows=(95, 95),
+    ),
+    "cast_raise": PoseSpec(
+        "both arms raised high above the head channeling magic, a bright glow over the hands, the body leaning "
+        "back, the legs braced",
+        "both arms raised high above the head channeling magic, a bright glow over the hands, the legs braced",
+        legs=(16, -14),
+        arms=(165, 155),
+        knees=(8, 8),
+        elbows=(15, 15),
+        tilt=-5,
+    ),
+    "cast_release": PoseSpec(
+        "thrusting both arms straight forward releasing a burst of magic from the hands, the body leaning into "
+        "it, the front knee bent",
+        "thrusting both hands toward the viewer releasing a burst of magic, the feet braced apart",
+        legs=(26, -24),
+        arms=(88, 82),
+        knees=(28, 4),
+        elbows=(0, 0),
+        tilt=6,
+    ),
+    "cast_follow": PoseSpec(
+        "the arms lowering after casting, the hands still glowing faintly, the body recovering upright, the knees "
+        "slightly bent",
+        "the arms lowering after casting, the hands still glowing faintly, the knees slightly bent",
+        legs=(16, -14),
+        arms=(55, 45),
+        knees=(14, 10),
+        elbows=(30, 30),
+    ),
 }
 
-# Ordem canónica de um ciclo de caminhada (4 frames): contacto → passagem →
-# contacto da outra perna → passagem com a perna dobrada. Alternar passada
-# aberta e pernas juntas é o que dá o "andar" no loop (contacto→down→contacto
-# deixava 3 frames de passada aberta seguidos e o GIF parecia parado).
-WALK_CYCLE: tuple[str, ...] = ("walk_contact_front", "walk_passing", "walk_contact_back", "walk_down")
+# Ciclos canónicos. Walk 4: contacto → passa a perna de trás → contacto da
+# outra → passa a outra. Walk 8 acrescenta o "down" (mais baixo) e o "up" (mais
+# alto) de cada passada — o bob vertical que dá peso ao andar.
+WALK_CYCLE: tuple[str, ...] = ("walk_contact_front", "walk_passing", "walk_contact_back", "walk_passing_back")
+WALK_CYCLE_8: tuple[str, ...] = (
+    "walk_contact_front",
+    "walk_down",
+    "walk_passing",
+    "walk_up",
+    "walk_contact_back",
+    "walk_down_back",
+    "walk_passing_back",
+    "walk_up_back",
+)
 
-# Ordem canónica de um ciclo de corrida (4 frames) — alterna a perna da frente
-# (a v1 repetia run_contact/run_air com a mesma perna e o loop "coxeava").
+# Ciclo de corrida (4 frames) — alterna a perna da frente.
 RUN_CYCLE: tuple[str, ...] = ("run_contact", "run_air", "run_contact_back", "run_air_back")
 
 # Direções → (vista, texto de direção, espelha?). Vistas: "side" (perfil),
@@ -192,45 +396,6 @@ DIRECTIONS: dict[str, dict[str, Any]] = {
     },
 }
 
-# Ângulos (graus) por pose para a silhueta procedural: perna da frente, perna de
-# trás, braço da frente, braço de trás. Positivo = para a frente (direita).
-_POSE_ANGLES: dict[str, tuple[float, float, float, float]] = {
-    "idle": (4, -4, -3, 3),
-    "walk_contact_front": (32, -28, -25, 25),
-    "walk_down": (12, -34, -10, 12),
-    "walk_contact_back": (-28, 32, 25, -25),
-    "walk_passing": (4, -6, -4, 6),
-    "run_contact": (44, -38, 30, -30),
-    "run_air": (30, -46, 26, -26),
-    "jump_up": (24, -24, 55, -55),
-    "jump_fall": (12, -12, 40, -40),
-    "crouch": (22, -22, -18, 18),
-    "attack_ready": (20, -20, 30, 30),
-    "attack_windup": (18, -18, 160, 160),
-    "attack_strike": (26, -20, 70, -20),
-    "attack_follow": (34, -30, 40, 10),
-    "idle_breathe": (5, -5, -4, 4),
-    "run_contact_back": (-38, 44, -30, 30),
-    "run_air_back": (-46, 30, -26, 26),
-}
-
-# Forma por pose: (agachamento, elevação) em fração da altura. O agachamento
-# baixa o tronco e encolhe as pernas; a elevação tira os pés do chão (salto,
-# fase aérea da corrida) — o pós-processamento repõe essa altura depois de
-# alinhar os pés, senão o salto ficava colado ao chão.
-_POSE_SHAPE: dict[str, tuple[float, float]] = {
-    "crouch": (0.1, 0.0),
-    "jump_up": (0.05, 0.2),
-    "jump_fall": (0.0, 0.12),
-    "run_air": (0.0, 0.06),
-    "run_air_back": (0.0, 0.06),
-    "walk_down": (0.02, 0.0),
-    "idle_breathe": (0.015, 0.0),
-    "attack_ready": (0.03, 0.0),
-    "attack_strike": (0.04, 0.0),
-    "attack_follow": (0.07, 0.0),
-}
-
 # Vista → vocabulário de texto (as diagonais falam de perfil, as costas como de frente).
 _TEXT_VIEW: dict[str, str] = {
     "side": "side",
@@ -243,7 +408,7 @@ _TEXT_VIEW: dict[str, str] = {
 
 def pose_names() -> list[str]:
     """Nomes de pose disponíveis (para ``--help`` e validação)."""
-    return sorted(_POSE_TEXT)
+    return sorted(_POSES)
 
 
 def pose_prompt(pose: str, *, view: str = "side") -> str:
@@ -258,13 +423,13 @@ def pose_prompt(pose: str, *, view: str = "side") -> str:
     Raises:
         KeyError: Pose desconhecida.
     """
-    entry = _POSE_TEXT[pose]
-    return entry.get(_TEXT_VIEW.get(view, view)) or entry["side"]
+    spec = _POSES[pose]
+    return spec.front if _TEXT_VIEW.get(view, view) == "front" else spec.side
 
 
 def pose_lift(pose: str) -> float:
     """Elevação dos pés (fração da altura da personagem) — 0 para poses no chão."""
-    return _POSE_SHAPE.get(pose, (0.0, 0.0))[1]
+    return _POSES[pose].lift
 
 
 def direction_prompt(direction: str) -> str:
@@ -346,132 +511,213 @@ def walk_cycle_prompts(
 
 
 # ---------------------------------------------------------------------------
-# Silhueta procedural (referência de forma)
+# Silhueta procedural articulada (referência de forma)
 # ---------------------------------------------------------------------------
+
+_WHITE = (255, 255, 255, 255)
+_FAR = (150, 150, 150, 255)
+
+
+def _pose(pose: str) -> PoseSpec:
+    try:
+        return _POSES[pose]
+    except KeyError:
+        raise KeyError(f"pose desconhecida: {pose!r} (disponíveis: {', '.join(pose_names())})") from None
 
 
 def draw_pose_silhouette(pose: str, *, view: str = "side", size: int = 256) -> Image.Image:
-    """Desenha a silhueta da pose (branco/cinzento sobre transparente).
+    """Desenha a silhueta articulada da pose (branco/cinzento sobre transparente).
 
     Serve de **referência de forma**: o modelo copia a pose desenhada. Regras
-    por vista (todas validadas E2E na 4050):
+    (validadas E2E na 4050):
 
-    - ``side``: membros pelos ângulos de :data:`_POSE_ANGLES`; os do lado de
-      **trás** a cinzento e atrás do tronco (sem essa pista os dois contactos
-      de perfil são silhuetas iguais e o modelo não troca a perna).
-    - ``front`` / ``back``: pernas **verticais** — pernas em "V" lateral faziam
-      o modelo virar a personagem de perfil. A passada lê-se no comprimento: de
-      frente o pé da frente fica mais abaixo (mais perto); de costas o pé da
-      frente afasta-se (sobe) e o de trás mostra a sola.
-    - ``diag_front`` / ``diag_back``: ângulos de perfil atenuados (a passada
-      vai em profundidade) mais o encurtamento de frente/costas; a silhueta de
-      perfil puro fazia frames da diagonal saírem de perfil.
+    - Membros com **joelho e cotovelo** (coxa+canela, braço+antebraço) e pé a
+      apontar para a frente: com pernas retas um agachamento era só "pernas
+      curtas" e o modelo desenhava a personagem de pé.
+    - Lado **far** a cinzento e atrás do tronco (sem essa pista os dois
+      contactos de perfil são silhuetas iguais).
+    - ``front``/``back``: pernas verticais (em "V" o modelo virava de perfil);
+      a passada lê-se no comprimento e o joelho dobrado levanta o pé.
+    - ``diag_*``: ângulos de perfil atenuados + encurtamento em profundidade.
+    - A figura é desenhada à volta da anca e depois **assente no chão** (o pé
+      mais baixo na linha do chão, menos ``lift``) e rodada por ``tilt``.
 
     Args:
         pose: Nome da pose.
-        view: Vista (ver :data:`DIRECTIONS`).
+        view: ``side``, ``front``, ``back``, ``diag_front`` ou ``diag_back``.
         size: Lado da imagem em pixels.
 
     Raises:
         KeyError: Pose desconhecida.
     """
-    if pose not in _POSE_ANGLES:
-        raise KeyError(f"pose desconhecida: {pose!r} (disponíveis: {', '.join(pose_names())})")
-    front_leg, back_leg, front_arm, back_arm = _POSE_ANGLES[pose]
-    squash, lift = _POSE_SHAPE.get(pose, (0.0, 0.0))
-
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    spec = _pose(pose)
+    big = size * 2
+    img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    white = (255, 255, 255, 255)
-    far = (150, 150, 150, 255)
-    cx = size * 0.5
-    hip_y = size * (0.56 + squash - lift)
-    torso_len = size * 0.22
-    head_r = size * 0.085
-    leg_len = size * 0.28 * (1.0 - 2.2 * squash)
-    arm_len = size * 0.2
-    leg_w = max(2, int(size * 0.05))
-    arm_w = max(2, int(size * 0.042))
-    sh_y = hip_y - torso_len * 0.85
-    torso_half = size * {"side": 0.085, "diag_front": 0.075, "diag_back": 0.075}.get(view, 0.085)
+    s = size * 0.92  # escala do corpo (deixa folga para braços erguidos)
+    hip = (big / 2, big / 2)
+    thigh = shin = s * 0.145
+    upper_arm = forearm = s * 0.105
+    leg_w = max(2, int(s * 0.05))
+    arm_w = max(2, int(s * 0.04))
+    torso_len = s * 0.22
+    head_r = s * 0.085
+    torso_half = s * (0.075 if view.startswith("diag") else 0.085)
+    sh_y = hip[1] - torso_len * 0.85
 
-    def limb(x: float, y: float, angle_deg: float, length: float, width: int, fill: tuple[int, ...]) -> None:
-        a = math.radians(angle_deg)
-        d.line([(x, y), (x + math.sin(a) * length, y + math.cos(a) * length)], fill=fill, width=width)
+    def seg(p: tuple[float, float], angle: float, length: float) -> tuple[float, float]:
+        a = math.radians(angle)
+        return p[0] + math.sin(a) * length, p[1] + math.cos(a) * length
 
-    def foot(x: float, y: float, r: float, fill: tuple[int, ...]) -> None:
-        d.ellipse([x - r, y - r * 0.7, x + r, y + r * 0.7], fill=fill)
+    def chain(
+        p0: tuple[float, float],
+        pts: list[tuple[float, float]],
+        width: int,
+        fill: tuple[int, ...],
+        outline: bool = False,
+    ) -> None:
+        # Contorno preto nos membros near: sem ele o braço branco por cima do
+        # tronco branco desaparecia (só se via a mão a sair do corpo).
+        layers = [((0, 0, 0, 255), width + max(2, width // 2)), (fill, width)] if outline else [(fill, width)]
+        for color, w in layers:
+            d.line([p0, *pts], fill=color, width=w, joint="curve")
+            for q in (p0, *pts):
+                r = w / 2
+                d.ellipse([q[0] - r, q[1] - r, q[0] + r, q[1] + r], fill=color)
 
-    def torso_and_head() -> None:
+    def torso_and_head(facing: float) -> None:
         d.rounded_rectangle(
-            [cx - torso_half, hip_y - torso_len, cx + torso_half, hip_y], radius=size * 0.03, fill=white
+            [hip[0] - torso_half, hip[1] - torso_len, hip[0] + torso_half, hip[1]], radius=s * 0.03, fill=_WHITE
         )
-        head_cy = sh_y - head_r * 0.85
-        d.ellipse([cx - head_r, head_cy - head_r, cx + head_r, head_cy + head_r], fill=white)
-        d.rounded_rectangle(
-            [cx - head_r * 1.05, head_cy - head_r * 1.3, cx + head_r * 1.1, head_cy - head_r * 0.3],
-            radius=size * 0.02,
-            fill=white,
-        )
+        cy = sh_y - head_r * 0.85
+        d.ellipse([hip[0] - head_r, cy - head_r, hip[0] + head_r, cy + head_r], fill=_WHITE)
+        if facing:
+            # Nariz/viseira: diz ao modelo para onde a cabeça olha.
+            nx = hip[0] + facing * head_r
+            d.polygon(
+                [(nx, cy - head_r * 0.3), (nx + facing * head_r * 0.45, cy + head_r * 0.15), (nx, cy + head_r * 0.4)],
+                fill=_WHITE,
+            )
 
     if view in ("front", "back"):
-        # Passada -1..1: >0 = perna direita (do observador) à frente. Só a perna
-        # da frente conta: walk_down/passing ficam neutras → ciclo D, N, E, N.
-        stride = max(-1.0, min(1.0, front_leg / 30.0))
-        if abs(stride) < 0.5:
-            stride = 0.0
-        for side, sign in ((1, 1.0), (-1, -1.0)):
-            ahead = stride * sign  # >0 esta perna à frente
-            if view == "front":
-                scale = 1.0 + 0.08 * max(ahead, 0.0) - 0.28 * max(-ahead, 0.0)
-                r = size * (0.035 + 0.01 * max(ahead, 0.0))
-            else:
-                scale = 1.0 - 0.24 * max(ahead, 0.0) + 0.04 * max(-ahead, 0.0)
-                r = size * (0.035 + 0.014 * max(-ahead, 0.0))  # sola do pé de trás à vista
-            x = cx + side * size * 0.045
-            length = leg_len * scale
-            d.line([(x, hip_y), (x, hip_y + length)], fill=white, width=int(leg_w * 1.1))
-            foot(x, hip_y + length, r, white)
-        torso_and_head()
-        swinging = pose.startswith(("idle", "walk", "run"))
-        for side, sign in ((1, 1.0), (-1, -1.0)):
-            x = cx + side * size * 0.1
-            if swinging:
-                # Braço oposto à perna da frente vem à frente → encurta (perspetiva).
-                length = arm_len * (1.0 - 0.18 * max(-stride * sign, 0.0))
-                angle = side * 8.0
-            else:
-                length, angle = arm_len, side * float(front_arm)
-            limb(x, sh_y, angle, length, arm_w, white)
-        return img
+        _draw_front_back(d, spec, pose, view, hip, s, thigh + shin, upper_arm + forearm, leg_w, arm_w, sh_y)
+        torso_and_head(0.0)
+        _draw_front_arms(d, spec, pose, hip, s, upper_arm + forearm, arm_w, sh_y)
+    else:
+        lateral = 0.55 if view.startswith("diag") else 1.0
+        depth = {"diag_front": 0.22, "diag_back": -0.22}.get(view, 0.0)
+        facing = 0.0 if view == "diag_back" else (0.6 if view == "diag_front" else 1.0)
 
-    if view in ("diag_front", "diag_back"):
-        # Passada em profundidade: o componente lateral encolhe e a perna que vai
-        # à frente alonga (vem para o observador) ou encurta (afasta-se).
-        k = 0.22 if view == "diag_front" else -0.22
-        lateral = 0.55
+        def leg(i: int, x_off: float, fill: tuple[int, ...]) -> None:
+            ang = spec.legs[i]
+            scale = 1.0 + depth * math.sin(math.radians(ang))
+            p0 = (hip[0] + x_off, hip[1])
+            knee = seg(p0, ang * lateral, thigh * scale)
+            ankle = seg(knee, (ang - spec.knees[i]) * lateral, shin * scale)
+            toe = (ankle[0] + s * 0.05 * max(lateral, 0.6), ankle[1])
+            chain(p0, [knee, ankle, toe], leg_w, fill, outline=fill == _WHITE)
 
-        def diag_leg(x: float, angle: float, fill: tuple[int, ...]) -> None:
-            length = leg_len * (1.0 + k * math.sin(math.radians(angle)))
-            a = math.radians(angle * lateral)
-            ex, ey = x + math.sin(a) * length, hip_y + math.cos(a) * length
-            d.line([(x, hip_y), (ex, ey)], fill=fill, width=leg_w)
-            foot(ex, ey, size * 0.032, fill)
+        def arm(i: int, x_off: float, fill: tuple[int, ...]) -> None:
+            ang = spec.arms[i]
+            p0 = (hip[0] + x_off, sh_y)
+            elbow = seg(p0, ang * lateral, upper_arm)
+            hand = seg(elbow, (ang + spec.elbows[i]) * lateral, forearm)
+            chain(p0, [elbow, hand], arm_w, fill, outline=fill == _WHITE)
 
-        diag_leg(cx + size * 0.03, back_leg, far)
-        limb(cx - size * 0.05, sh_y, back_arm * lateral, arm_len, arm_w, far)
-        diag_leg(cx - size * 0.03, front_leg, white)
-        torso_and_head()
-        limb(cx + size * 0.05, sh_y, front_arm * lateral, arm_len, arm_w, white)
-        return img
+        leg(1, s * 0.018, _FAR)
+        arm(1, -s * 0.022, _FAR)
+        leg(0, -s * 0.018, _WHITE)
+        torso_and_head(facing)
+        arm(0, s * 0.022, _WHITE)
 
-    # Perfil: lado de trás primeiro (fica tapado pelo tronco).
-    limb(cx + size * 0.018, hip_y, back_leg, leg_len, leg_w, far)
-    limb(cx - size * 0.022, sh_y, back_arm, arm_len, arm_w, far)
-    limb(cx - size * 0.018, hip_y, front_leg, leg_len, leg_w, white)
-    torso_and_head()
-    limb(cx + size * 0.022, sh_y, front_arm, arm_len, arm_w, white)
-    return img
+    if spec.tilt:
+        # Roda à volta da anca (PIL: positivo = anti-horário = para trás numa
+        # personagem virada à direita).
+        img = img.rotate(-spec.tilt, resample=Image.Resampling.BICUBIC, center=hip)
+    return _ground(img, size=size, lift=spec.lift, center_x=hip[0] if not spec.tilt else None)
+
+
+def _draw_front_back(
+    d: ImageDraw.ImageDraw,
+    spec: PoseSpec,
+    pose: str,
+    view: str,
+    hip: tuple[float, float],
+    s: float,
+    leg_len: float,
+    arm_len: float,
+    leg_w: int,
+    arm_w: int,
+    sh_y: float,
+) -> None:
+    """Pernas de frente/costas: verticais; passada no comprimento, joelho levanta o pé."""
+    del pose, arm_len, arm_w, sh_y
+    # Passada -1..1: >0 = perna near (direita do observador) à frente.
+    stride = max(-1.0, min(1.0, spec.legs[0] / 30.0))
+    if abs(stride) < 0.5:
+        stride = 0.0
+    for i, side in ((0, 1), (1, -1)):
+        ahead = stride * side
+        if view == "front":
+            scale = 1.0 + 0.08 * max(ahead, 0.0) - 0.28 * max(-ahead, 0.0)
+            foot = s * (0.035 + 0.01 * max(ahead, 0.0))
+        else:
+            # De costas o pé que avança afasta-se (sobe); o de trás mostra a sola.
+            scale = 1.0 - 0.24 * max(ahead, 0.0) + 0.04 * max(-ahead, 0.0)
+            foot = s * (0.035 + 0.014 * max(-ahead, 0.0))
+        bend = spec.knees[i]
+        # Joelho dobrado: o pé sobe e o joelho abre um pouco para fora.
+        lift_frac = 1.0 - 0.5 * (1 - math.cos(math.radians(bend)))
+        length = leg_len * scale * lift_frac
+        x = hip[0] + side * s * 0.045
+        knee = (x + side * s * 0.02 * math.sin(math.radians(bend)), hip[1] + length * 0.5)
+        end = (x, hip[1] + length)
+        d.line([(x, hip[1]), knee, end], fill=_WHITE, width=int(leg_w * 1.1), joint="curve")
+        d.ellipse([end[0] - foot, end[1] - foot * 0.7, end[0] + foot, end[1] + foot * 0.7], fill=_WHITE)
+
+
+def _draw_front_arms(
+    d: ImageDraw.ImageDraw,
+    spec: PoseSpec,
+    pose: str,
+    hip: tuple[float, float],
+    s: float,
+    arm_len: float,
+    arm_w: int,
+    sh_y: float,
+) -> None:
+    """Braços de frente: o ângulo de perfil vira altura (cos) — erguido = para cima."""
+    swinging = pose.startswith(("idle", "walk", "run"))
+    stride = max(-1.0, min(1.0, spec.legs[0] / 30.0))
+    for i, side in ((0, 1), (1, -1)):
+        x = hip[0] + side * s * 0.1
+        if swinging:
+            # Braço oposto à perna da frente vem à frente → encurta (perspetiva).
+            length = arm_len * (1.0 - 0.18 * max(-stride * side, 0.0))
+            end = (x + side * math.sin(math.radians(8)) * length, sh_y + math.cos(math.radians(8)) * length)
+        else:
+            a = math.radians(spec.arms[i])
+            vert = math.cos(a) * arm_len  # >0 para baixo, <0 para cima
+            end = (x + side * s * (0.05 + 0.04 * abs(math.sin(a))), sh_y + vert)
+        d.line([(x, sh_y), end], fill=_WHITE, width=arm_w)
+        r = arm_w * 0.8
+        d.ellipse([end[0] - r, end[1] - r, end[0] + r, end[1] + r], fill=_WHITE)
+
+
+def _ground(img: Image.Image, *, size: int, lift: float, center_x: float | None) -> Image.Image:
+    """Recorta a figura desenhada em ``img`` (2x) para ``size``, pés no chão.
+
+    O ponto mais baixo fica na linha do chão (0.94 de ``size``) menos ``lift``;
+    horizontalmente a anca (ou o centro do bbox, se o corpo rodou) fica ao centro.
+    """
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    bbox = img.getchannel("A").getbbox()
+    if bbox is None:
+        return out
+    cx = center_x if center_x is not None else (bbox[0] + bbox[2]) / 2
+    ground = size * 0.94 - lift * size
+    out.alpha_composite(img, (round(size / 2 - cx), round(ground - bbox[3])))
+    return out
 
 
 def draw_pose_sheet(
@@ -479,26 +725,25 @@ def draw_pose_sheet(
     *,
     view: str = "side",
     cell: tuple[int, int] = (256, 320),
+    cols: int = 4,
 ) -> Image.Image:
-    """Folha horizontal de silhuetas (uma célula por pose) sobre fundo preto.
+    """Folha de silhuetas (grelha de ``cols`` colunas) sobre fundo preto.
 
-    É a referência de forma do ``walk-cycle``: gerar **todos os frames numa só
+    É a referência de forma do ``animate``: gerar **todos os frames numa só
     imagem** com esta folha como guia dá a mesma personagem, escala e linha do
-    chão em todas as células (o que frames gerados em separado não garantem).
-
-    Args:
-        poses: Poses, da esquerda para a direita.
-        view: ``"side"`` ou ``"front"``.
-        cell: ``(largura, altura)`` de cada célula em pixels.
+    chão em todas as células. 8 frames = 2 linhas de 4 (1024x640).
 
     Raises:
         KeyError: Pose desconhecida.
     """
     cell_w, cell_h = cell
-    sheet = Image.new("RGB", (cell_w * len(poses), cell_h), (0, 0, 0))
+    ncols = max(1, min(cols, len(poses)))
+    rows = (len(poses) + ncols - 1) // ncols
+    sheet = Image.new("RGB", (cell_w * ncols, cell_h * rows), (0, 0, 0))
     for i, pose in enumerate(poses):
         sil = draw_pose_silhouette(pose, view=view, size=cell_h)
-        sheet.paste(sil, (i * cell_w + (cell_w - cell_h) // 2, 0), sil)
+        x = (i % ncols) * cell_w + (cell_w - cell_h) // 2
+        sheet.paste(sil, (x, (i // ncols) * cell_h), sil)
     return sheet
 
 

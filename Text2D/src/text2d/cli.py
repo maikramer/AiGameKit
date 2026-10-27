@@ -724,6 +724,13 @@ def _sprite_options(f: Any) -> Any:
         help="Lado do sprite final (0 = sem downscale).",
     )(f)
     f = click.option("--frame-ms", default=160, show_default=True, type=int, help="Duração de cada frame no GIF.")(f)
+    f = click.option(
+        "--retries",
+        default=1,
+        show_default=True,
+        type=click.IntRange(min=0, max=4),
+        help="Tentativas extra (outra seed) se os frames saírem quase iguais; fica a melhor.",
+    )(f)
     f = click.option("--seed", default=100, show_default=True, type=int, help="Seed base.")(f)
     f = click.option("--steps", "-s", default=12, show_default=True, type=int, help="Passos de inferência.")(f)
     f = click.option(
@@ -778,6 +785,7 @@ def _run_sprite_animation(
     steps: int,
     seed: int,
     frame_ms: int,
+    retries: int,
     sprite_size: int,
     colors: int,
     transparent: bool,
@@ -854,6 +862,7 @@ def _run_sprite_animation(
             make_gif=gif,
             measure=measure,
             frame_ms=frame_ms,
+            retries=retries,
             render=_render,
         )
     except (ValueError, FileNotFoundError) as e:
