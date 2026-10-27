@@ -204,6 +204,16 @@ Regras apuradas:
   não for lisa. Armadilha Pillow 12: uma imagem de `Image.fromarray` partilha o
   buffer read-only do numpy e `ImageDraw.floodfill` não faz nada, sem erro —
   `.copy()` antes.
+- **Pixel branco residual** (v2.3): o flood fill deixava (a) bolsas de fundo
+  fechadas — entre braço e tronco, entre pernas — e (b) um halo claro de 1–2 px
+  (anti-aliasing do modelo) que o downscale virava contorno branco. Filtros:
+  bolsas = componentes da cor do fundo ≥12 px e ≤4% da figura **rodeadas de
+  escuro/saturado** (anel com distância mediana > 60 — um orbe mágico é
+  rodeado de claro e fica); desligado sozinho quando a figura tem >5% de pixels
+  cor-de-fundo (cavalo branco 31% vs. ≤1.3% nos restantes). Franja = descascar
+  2 px de borda com distância ao fundo < 72; o contorno escuro trava. Borda
+  clara dos sprites na bateria v2.2: corrida 7.0→0%, oeste 5.6→0%, NE 4.3→0.4%,
+  cavalo/lobo/cão intactos.
 - **Saltos**: o recorte assenta os pés no chão e perdia a altura; cada pose
   tem uma elevação (`pose_lift`) que é reposta no sprite depois de alinhar.
 - **Quadrúpedes** (`text2d.quadruped`): só perfil. Patas de duas secções

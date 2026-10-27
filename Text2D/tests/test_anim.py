@@ -195,14 +195,53 @@ def test_chroma_key_keeps_white_body_inside_outline() -> None:
     assert alpha[30, 30] == 255 and alpha[8, 30] == 255  # corpo branco e contorno intactos
 
 
-def test_chroma_key_pockets_only_on_request() -> None:
+def _pocket_scene(body: tuple[int, int, int]) -> Image.Image:
+    """Fundo branco + figura com uma bolsa de fundo fechada (entre braço e tronco)."""
+    img = Image.new("RGB", (96, 96), (255, 255, 255))
+    img.paste(body, (16, 8, 80, 88))
+    img.paste((255, 255, 255), (44, 40, 52, 48))  # bolsa 8x8 = 64 px (~1.3% da figura)
+    return img
+
+
+def test_chroma_key_removes_enclosed_pocket_by_default() -> None:
     from text2d.sprite import chroma_key
 
-    img = Image.new("RGB", (64, 64), (255, 12, 140))
-    img.paste((20, 20, 20), (16, 8, 48, 56))
-    img.paste((255, 12, 140), (28, 30, 36, 40))  # bolsa fechada da cor-chave
-    assert np.asarray(chroma_key(img))[34, 32, 3] == 255
-    assert np.asarray(chroma_key(img, pockets=True))[34, 32, 3] == 0
+    img = _pocket_scene((40, 60, 160))
+    assert np.asarray(chroma_key(img))[44, 48, 3] == 0
+    assert np.asarray(chroma_key(img, pockets=False))[44, 48, 3] == 255
+    assert np.asarray(chroma_key(img))[20, 20, 3] == 255  # corpo intacto
+
+
+def test_chroma_key_keeps_glow_surrounded_by_light() -> None:
+    from text2d.sprite import chroma_key
+
+    # Orbe mágico: miolo branco rodeado de claro (não de contorno) = corpo.
+    img = _pocket_scene((40, 60, 160))
+    img.paste((200, 220, 240), (40, 36, 56, 52))
+    img.paste((255, 255, 255), (44, 40, 52, 48))
+    assert np.asarray(chroma_key(img))[44, 48, 3] == 255
+
+
+def test_chroma_key_skips_pockets_on_white_subject() -> None:
+    from text2d.sprite import chroma_key
+
+    # Figura quase toda branca (cavalo branco): manchas brancas são corpo.
+    img = Image.new("RGB", (96, 96), (255, 255, 255))
+    img.paste((30, 30, 30), (16, 8, 80, 88))
+    img.paste((250, 250, 250), (20, 12, 76, 84))
+    img.paste((40, 40, 40), (40, 36, 56, 52))
+    img.paste((255, 255, 255), (44, 40, 52, 48))
+    assert np.asarray(chroma_key(img))[44, 48, 3] == 255
+
+
+def test_chroma_key_peels_light_fringe() -> None:
+    from text2d.sprite import chroma_key
+
+    img = _pocket_scene((40, 60, 160))
+    img.paste((225, 225, 235), (14, 6, 16, 90))  # halo claro anti-aliased à esquerda
+    alpha = np.asarray(chroma_key(img))[..., 3]
+    assert alpha[40, 14] == 0 and alpha[40, 15] == 0
+    assert alpha[40, 16] == 255  # contorno/corpo escuro trava o descasque
 
 
 def test_chroma_key_gives_up_on_busy_border() -> None:

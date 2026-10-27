@@ -124,7 +124,9 @@ def chroma_key(
     *,
     tolerance: float = 12.0,
     max_border_spread: float = 24.0,
-    pockets: bool = False,
+    pockets: bool | None = None,
+    fringe: float = 72.0,
+    peel: int = 2,
 ) -> Image.Image | None:
     """Recorta o fundo liso pela cor da borda (flood fill a partir das margens).
 
@@ -135,10 +137,22 @@ def chroma_key(
     Tolerância 12: a 24 o preenchimento já vazava pelo contorno de um cavalo
     branco.
 
+    Depois do flood fill há dois filtros contra o "pixel branco" que sobrava:
+
+    - **Bolsas** (entre braço e tronco, entre pernas): componentes fechadas
+      da cor do fundo, não minúsculas, até 4% da figura, e **rodeadas de
+      pixels escuros/saturados** (anel com distância mediana > 60). O anel
+      separa o buraco real do brilho de um orbe mágico (rodeado de claro).
+      Desligado sozinho quando a figura é clara (>5% de pixels cor-de-fundo:
+      cavalo branco) — aí as manchas brancas são corpo.
+    - **Franja**: descasca ``peel`` px de borda clara (distância ao fundo <
+      ``fringe``) — o anti-aliasing do modelo deixava um halo branco que o
+      downscale virava contorno claro. O contorno escuro do pixel art trava.
+
     Args:
-        pockets: Remover também bolsas fechadas (entre pernas) da cor do fundo.
-            Só para fundos saturados (cor-chave); com fundo branco apagaria o
-            corpo de personagens brancas.
+        pockets: ``None`` = automático (acima); ``True``/``False`` força.
+        fringe: Distância máxima ao fundo de um pixel de franja.
+        peel: Px de franja a descascar (0 = só a franja de 1 px antiga).
 
     Returns:
         RGBA recortado, ou ``None`` se a borda não for uniforme (o modelo não
@@ -163,13 +177,42 @@ def chroma_key(
         if near.getpixel(xy) == 255:
             ImageDraw.floodfill(near, xy, 128)
     bg = np.asarray(near) == 128
+    fg_area = int((~bg).sum())
+    if pockets is None:
+        pockets = bool(fg_area) and int(((~bg) & (dist < tolerance * 2)).sum()) < 0.05 * fg_area
     if pockets:
-        bg |= dist < tolerance * 0.5
+        bg |= _enclosed_pockets((~bg) & (dist < tolerance), dist, fg_area)
     # Franja: pixels meio-misturados com o fundo encostados à região de fundo.
     grown = np.asarray(Image.fromarray(bg.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(3))) > 0
     bg |= grown & (dist < tolerance * 2)
+    for _ in range(peel):
+        grown = np.asarray(Image.fromarray(bg.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(3))) > 0
+        bg |= grown & (dist < fringe)
     out = image.convert("RGBA")
     out.putalpha(Image.fromarray(np.where(bg, 0, 255).astype(np.uint8), "L"))
+    return out
+
+
+def _enclosed_pockets(cand: Any, dist: Any, fg_area: int, *, min_px: int = 12, max_frac: float = 0.04) -> Any:
+    """Máscara das bolsas de fundo fechadas dentro da figura (ver :func:`chroma_key`)."""
+    import numpy as np
+    from scipy import ndimage
+
+    out = np.zeros(cand.shape, bool)
+    labels, _n = ndimage.label(cand)
+    for i, sl in enumerate(ndimage.find_objects(labels), 1):
+        if sl is None:
+            continue
+        # Janela com 2 px de folga para o anel (não dilatar a imagem inteira).
+        y0, x0 = max(sl[0].start - 2, 0), max(sl[1].start - 2, 0)
+        win = (slice(y0, sl[0].stop + 2), slice(x0, sl[1].stop + 2))
+        comp = labels[win] == i
+        size = int(comp.sum())
+        if size < min_px or size > max_frac * fg_area:
+            continue
+        ring = ndimage.binary_dilation(comp, iterations=2) & ~comp
+        if ring.any() and float(np.median(dist[win][ring])) > 60:
+            out[win] |= comp
     return out
 
 
