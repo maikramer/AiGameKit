@@ -80,9 +80,10 @@ profiles:
 
     motion3d:
       duration: 2.5
-      cfg_scale: 4.0
-      validation_steps: 20
-      model: lite
+      steps: 6
+      residual_layers: 3
+      text_guidance: 3.0
+      attempts: 2
 
   low:
     label: "Low (~1min, basic quality)"
@@ -158,9 +159,10 @@ profiles:
 
     motion3d:
       duration: 3.5
-      cfg_scale: 4.5
-      validation_steps: 30
-      model: lite
+      steps: 8
+      residual_layers: 4
+      text_guidance: 3.0
+      attempts: 3
 
   medium:
     label: "Medium (~2min, standard quality — DEFAULT)"
@@ -236,9 +238,10 @@ profiles:
 
     motion3d:
       duration: 5.0
-      cfg_scale: 5.0
-      validation_steps: 40
-      model: lite
+      steps: 10
+      residual_layers: 5
+      text_guidance: 3.0
+      attempts: 3
 
   high:
     label: "High (~5min, high quality)"
@@ -315,9 +318,10 @@ profiles:
 
     motion3d:
       duration: 6.5
-      cfg_scale: 5.0
-      validation_steps: 50
-      model: lite
+      steps: 14
+      residual_layers: 5
+      text_guidance: 3.5
+      attempts: 4
 
   highest:
     label: "Highest (~10min+, maximum quality)"
@@ -394,6 +398,7 @@ profiles:
 
     motion3d:
       duration: 6.5
-      cfg_scale: 5.5
-      validation_steps: 50
-      model: full
+      steps: 20
+      residual_layers: 5
+      text_guidance: 4.0
+      attempts: 5

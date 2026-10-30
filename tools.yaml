@@ -152,13 +152,14 @@ tools:
     folder: Motion3D
     cli_name: motion3d
     python_module: motion3d
-    description: "Text-to-motion HY-Motion-1.0 (Lite/Full) → NPZ / GLB (bpy)"
+    description: "Text-to-motion SprongMotion-14M (CPU, runtime C) → NPZ / BVH / GLB (bpy)"
     min_python: [3, 13]
-    needs_pytorch: true
+    # Sem torch/GPU: inferência no runtime C vendorizado + GGUF de 33 MB.
+    needs_pytorch: false
     # `motion3d apply-rigged` calls animator3d.retarget in-process.
     install_before: [animator3d]
     cross_deps: [animator3d]
-    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
+    post_install: aigamekit_shared.installer.clified_hooks:motion3d_post_install
 
   paint3d:
     name: "Paint3D"

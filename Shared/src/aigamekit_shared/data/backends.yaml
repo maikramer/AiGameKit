@@ -178,23 +178,6 @@ backends:
       prompt: "mountain valley"
       output: "/tmp/vramd-calibrate-terrain3d.glb"
 
-  - name: motion3d
-    adapter: aigamekit_shared.worker_serve_adapter_base
-    # HY-Motion staged (DiT GPU + text CPU): admit via footprint hy-motion-* + peak opts.
-    # YAML fallback ~ Full DiT fp16 + act (~4 GiB); hw-auto injecta sdnq/offload.
-    vram_mib: 4500
-    footprint_key: hy-motion-lite
-    priority: 30
-    tool: motion3d
-    peak_profile:
-      memory_efficient_with_quant: true
-      group_offload_with_memory_efficient: true
-    calibrate_request:
-      prompt: "a person walks forward"
-      output: "/tmp/vramd-calibrate-motion3d.glb"
-    calibrate_load_kwargs:
-      sdnq_preset: sdnq-int4
-
   # Decomposição intrínseca (compphoto/Intrinsic, licença ACADEMIA-ONLY +
   # patente pendente — ver Intrinsic/README.md). Módulo intrinsic_worker para
   # não colidir com o módulo `intrinsic` do upstream.

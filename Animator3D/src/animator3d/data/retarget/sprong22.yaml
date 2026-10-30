@@ -1,0 +1,53 @@
+# Perfil de retarget: SprongMotion-22 → SkinTokens.
+#
+# O source GLB do Motion3D (`motion3d export-glb` / `apply-rigged` /
+# `generate -o *.glb`) usa os nomes de joint do SprongMotion (pelvis, l_hip,
+# spine1, …) + root estático nos pés. bone_map = SprongMotion → UE5/SkinTokens.
+# NÃO mapear `root`.
+#
+# Topologia (igual ao HML22, nomes diferentes):
+#   l_hip → thigh_l · l_knee → calf_l · l_ankle → foot_l · l_foot → ball_l
+#   l_collar → clavicle_l · l_shoulder → upperarm_l · l_elbow → lowerarm_l · l_wrist → hand_l
+#
+# Pipeline feliz:
+#   motion3d generate "a person walks forward" -o walk.npz
+#   motion3d apply-rigged walk.npz hero_rigged.glb -o hero_walk.glb --clip walk
+#
+# Ou CLI Animator3D directo:
+#   animator3d retarget hero_rigged.glb sprong_source.glb out.glb \
+#       --profile sprong22 --source-track sprong_motion --clip walk
+#
+# Deep dive (aim/rest/neutro/pés): docs/findings/MOTION3D_FINDINGS.md
+
+profile: sprong22
+
+bone_map:
+  pelvis: [pelvis, Hips]
+  spine1: [spine_01, Spine]
+  spine2: [spine_02, Chest]
+  spine3: [spine_03, UpperChest]
+  neck: [neck_01, Neck]
+  head: [Head]
+  l_collar: [clavicle_l, LeftShoulder]
+  l_shoulder: [upperarm_l, LeftArm]
+  l_elbow: [lowerarm_l, LeftForeArm]
+  l_wrist: [hand_l, LeftHand]
+  r_collar: [clavicle_r, RightShoulder]
+  r_shoulder: [upperarm_r, RightArm]
+  r_elbow: [lowerarm_r, RightForeArm]
+  r_wrist: [hand_r, RightHand]
+  l_hip: [thigh_l, LeftUpLeg]
+  l_knee: [calf_l, LeftLeg]
+  l_ankle: [foot_l, LeftFoot]
+  l_foot: [ball_l, LeftToeBase]
+  r_hip: [thigh_r, RightUpLeg]
+  r_knee: [calf_r, RightLeg]
+  r_ankle: [foot_r, RightFoot]
+  r_foot: [ball_r, RightToeBase]
+
+clip_map:
+  # Clip limpo → action name no source SprongMotion (default export).
+  walk: sprong_motion
+  run: sprong_motion
+  idle: sprong_motion
+  motion: sprong_motion

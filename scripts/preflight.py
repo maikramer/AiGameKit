@@ -43,9 +43,10 @@ CORE_TOOLS = (
     "gameassets",
     "materialize",
     "aigamekitlab",
+    "motion3d",
 )
 EXAMPLES_EXTRA_TOOLS = ("texture2d", "skymap2d", "text2sound", "terrain3d", "rocks3d")
-ALL_EXTRA_TOOLS = ("part3d", "motion3d", "intrinsic")
+ALL_EXTRA_TOOLS = ("part3d", "intrinsic")
 
 PROFILES: dict[str, tuple[str, ...]] = {
     "core": CORE_TOOLS,
@@ -55,7 +56,7 @@ PROFILES: dict[str, tuple[str, ...]] = {
 PROFILE_DESCRIPTIONS = {
     "core": "zero-a-jogo mínimo (DAG GLB animado)",
     "examples": "tudo que os jogos de exemplo usam (core + céu/áudio/texturas/terreno/rochas)",
-    "all": "catálogo completo (examples + part3d, motion3d, intrinsic)",
+    "all": "catálogo completo (examples + part3d, intrinsic)",
 }
 
 # Tools cuja geração depende de GPU NVIDIA (aviso quando o driver não é detetado).
@@ -70,7 +71,6 @@ GPU_TOOLS = frozenset(
         "text2sound",
         "terrain3d",
         "part3d",
-        "motion3d",
         "intrinsic",
     }
 )

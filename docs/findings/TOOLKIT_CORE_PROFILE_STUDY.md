@@ -1,5 +1,10 @@
 # Toolkit core — uso real nos exemplos e proposta de redução
 
+> **Nota (2026-10-30):** o Motion3D deixou de ser uma tool de GPU: passou a
+> **SprongMotion-14M em CPU** (runtime C vendorizado + GGUF de 33 MB, sem torch/vramd)
+> e entrou no perfil `core` (10 tools). Os números de disco/VRAM deste estudo para o
+> Motion3D são históricos.
+
 **Data:** 2026-10-08 · **Estado:** ✅ **EXECUTADO** (ver §6).
 Complementa [`MODEL_CONSOLIDATION_STUDY.md`](MODEL_CONSOLIDATION_STUDY.md) (modelos/venvs).
 

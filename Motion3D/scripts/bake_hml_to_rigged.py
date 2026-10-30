@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bake HumanML3D NPZ onto SkinTokens rigged GLB via Animator3D retarget.
+"""Bake a Motion3D (SprongMotion) NPZ onto a SkinTokens rigged GLB.
 
 Thin wrapper around ``motion3d.apply_rigged`` (same as CLI ``apply-rigged``).
 
@@ -20,7 +20,7 @@ def main() -> None:
     ap.add_argument("rigged", type=Path)
     ap.add_argument("-o", "--output", type=Path, required=True)
     ap.add_argument("--clip", default="walk")
-    ap.add_argument("--profile", default="hml22")
+    ap.add_argument("--profile", default="sprong22")
     ap.add_argument("--keep-source", type=Path, default=None)
     args = ap.parse_args()
 

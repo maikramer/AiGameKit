@@ -64,6 +64,7 @@ O `world.xml` / manifest emitidos descrevem a cena para o runtime (ex. o motor n
 | [**Text2Sound**](Text2Sound/) | CLI **text-to-audio** com Stable Audio 3 Small (música/SFX separados): áudio estéreo 44.1 kHz, presets para game dev. |
 | [**Rigging3D**](Rigging3D/) | **rigging3d** — auto-rigging 3D com [**SkinTokens**](https://github.com/VAST-AI-Research/SkinTokens) (skeleton + skinning unificados autoregressivos, sucessor do UniRig); GPU CUDA; Python **3.13**, **bpy** 5.2 LTS. |
 | [**Animator3D**](Animator3D/) | **animator3d** — **bpy** 5.2 LTS; Python **3.13**; clips procedimentais, **`game-pack`** (presets humanoid/creature/flying), export GLB após rigging. |
+| [**Motion3D**](Motion3D/) | **motion3d** — text-to-motion **SprongMotion-14M** em **CPU** (GGUF 33 MB + runtime C vendorizado); 22 joints @ 20 fps; `apply-rigged` faz retarget para rigs SkinTokens. |
 | [**Materialize**](Materialize/) | CLI **PBR maps** (Rust/wgpu): gera normal, AO, metallic, smoothness a partir de textura difusa. |
 | [**AiGameKitLab**](AiGameKitLab/) | **Lab CLI**: debug 3D, bancos de quantização, profiling, otimização de pipeline. |
 | [**Terrain3D**](Terrain3D/) | **terrain3d** — Geração de terreno por IA via modelos de difusão (terrain-diffusion; CUDA GPU). |
@@ -114,7 +115,7 @@ AiGameKit/
 Num clone do repo, três comandos (o pre-flight avisa **uma vez** com tudo o que falta antes de instalar):
 
 ```bash
-./install.sh               # pre-flight → perfil core (9 tools, zero-a-jogo) → doctor + próximos passos
+./install.sh               # pre-flight → perfil core (10 tools, zero-a-jogo) → doctor + próximos passos
 gameassets doctor          # confirma GPU, compressão GLB e LLM do dream
 gameassets dream "A dark fantasy RPG with skeletons and treasure chests" --dry-run
 ```
@@ -174,9 +175,9 @@ A instalação é orientada pelo [`tools.yaml`](tools.yaml) e pelo [Clified](htt
 
 ```bash
 # Linux/macOS — a partir de um clone
-./install.sh               # pre-flight → perfil core (9 tools, zero-a-jogo) → doctor + próximos passos
+./install.sh               # pre-flight → perfil core (10 tools, zero-a-jogo) → doctor + próximos passos
 ./install.sh examples      # core + céu/áudio/texturas/terreno/rochas — dream completo
-./install.sh --all         # catálogo completo (acrescenta part3d, motion3d, intrinsic)
+./install.sh --all         # catálogo completo (acrescenta part3d, intrinsic)
 ./install.sh <tool>        # ferramenta individual (chaves de tools.yaml: text2d, paint3d, gameassets, …)
 ./install.sh --list        # listar perfis e ferramentas
 

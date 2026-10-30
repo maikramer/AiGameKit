@@ -56,7 +56,7 @@ At the **repository root** (folder containing `Shared/`, `install.sh`, `.git`):
 | Profile | Tools | Purpose |
 |---------|-------|---------|
 | `./install.sh` (no args) | 9: `vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab` | **Default** — minimum zero-to-game (animated-GLB DAG) |
-| `./install.sh core` | same 9 as above | Same as no-args, explicit |
+| `./install.sh core` | same 10 as above | Same as no-args, explicit |
 | `./install.sh examples` | core + `texture2d skymap2d text2sound terrain3d rocks3d` | Everything the example games use (incl. dream sky/terrain/audio). The Bevy engine is the sibling repo `../Viber`. |
 | `./install.sh --all` | 18: examples + `part3d motion3d intrinsic` | Full catalog (opt-in extras) |
 

@@ -100,7 +100,6 @@ BACKEND_FOOTPRINT_KEYS: dict[str, str] = {
     "paint3d": "hunyuan-paint",
     "part3d": "hunyuan3d-part",
     "text2sound": "stable-audio-open",
-    "motion3d": "hy-motion-lite",
 }
 
 # Fallbacks quando não há footprint (MiB) — alinhados a ``backends.yaml`` vram_mib.
@@ -139,7 +138,7 @@ def needed_mib_for_backend(
     mode = (quant_mode or "").strip().lower()
     if mode in ("", "none", "null"):
         if memory_efficient:
-            if backend in ("text2d", "text3d", "motion3d"):
+            if backend in ("text2d", "text3d"):
                 # 4 bits por defeito nos DiT grandes (FLUX klein/Hunyuan/Motion):
                 # pico folgado em GPUs 6-12 GB com group offload.
                 mode = "sdnq-int4"
@@ -508,7 +507,7 @@ def with_vramd_peak_opts(
             out["sdnq_preset"] = "sdnq-int4"
         elif backend in ("paint3d", "part3d"):
             out["sdnq_preset"] = prefer_fp8_preset("sdnq-uint8")
-        elif backend in ("text3d", "motion3d"):
+        elif backend == "text3d":
             out["sdnq_preset"] = "sdnq-int4"
         elif backend == "skymap2d":
             # Pesos já uint4 no footprint; mem_eff = cpu-offload, não SDNQ extra.

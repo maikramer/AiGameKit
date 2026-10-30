@@ -215,13 +215,16 @@ comportamento desenhado, não bug de asset).
 
 ---
 
-## Motion3D (HML22) → SkinTokens: o rest do source manda
+## Motion3D (SprongMotion-22 / HML22) → SkinTokens: o rest do source manda
 
 Doc canónico (happy path, CLIs, QA, anti-padrões):
 [`MOTION3D_FINDINGS.md`](MOTION3D_FINDINGS.md).
 
-`motion3d apply-rigged` constrói um GLB source HML22 (`bpy_export.py`) e deixa o
-retarget ao Animator3D (perfil `Animator3D/src/animator3d/data/retarget/hml22.yaml`).
+`motion3d apply-rigged` constrói um GLB source de 22 joints (`bpy_export.py`) e deixa o
+retarget ao Animator3D — perfil `sprong22` para o SprongMotion atual, `hml22` mantido
+para fontes HumanML3D (`Animator3D/src/animator3d/data/retarget/`). O rest do source
+tem de ficar à altura do corpo: com o pelvis na origem o Animator3D escala a location
+por ~800× (`MOTION3D_FINDINGS.md`).
 Porque o retarget transfere rotações **locais**, qualquer desalinhamento entre o
 rest do source e o rest do alvo aparece como membro colapsado, não como offset
 subtil:

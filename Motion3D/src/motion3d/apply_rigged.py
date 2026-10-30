@@ -1,9 +1,9 @@
-"""Apply Motion3D HML joints onto a SkinTokens rigged GLB via Animator3D retarget.
+"""Apply SprongMotion clips onto a SkinTokens rigged GLB via Animator3D retarget.
 
-Owns the happy path: NPZ/joints → HML22 source GLB → ``retarget_animation`` →
-skinned output. One clip (``apply_motion_to_rigged``) or many clips in one asset
-(``apply_motions_to_rigged`` / CLI ``pack-rigged``). Mesh ops stay out of
-GameAssets; retarget math stays in Animator3D.
+Owns the happy path: NPZ/joints → source GLB (``sprong22`` skeleton) →
+``retarget_animation`` → skinned output. One clip (``apply_motion_to_rigged``)
+or many clips in one asset (``apply_motions_to_rigged`` / CLI ``pack-rigged``).
+Mesh ops stay out of GameAssets; retarget math stays in Animator3D.
 """
 
 from __future__ import annotations
@@ -18,8 +18,11 @@ from typing import Any
 
 import numpy as np
 
-DEFAULT_PROFILE = "hml22"
-DEFAULT_SOURCE_TRACK = "t2m_motion"
+from .npz_io import read_clip
+from .skeleton import DEFAULT_FPS, REFERENCE_OFFSETS, SOURCE_TRACK
+
+DEFAULT_PROFILE = "sprong22"
+DEFAULT_SOURCE_TRACK = SOURCE_TRACK
 
 # ``name=path.npz`` — clip name is a simple identifier (game clip names).
 _MOTION_SPEC_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*)=(.+)$")
@@ -31,12 +34,16 @@ class MotionClip:
 
     Provide ``joints`` **or** ``npz_path`` (exactly one). Pack-level defaults
     fill any ``None`` constraint field; set a field to override for that clip.
+    ``offsets`` is the parent-local rest skeleton; when omitted the clip uses
+    the model reference (
+    :data:`motion3d.skeleton.REFERENCE_OFFSETS`).
     """
 
     name: str
     joints: np.ndarray | None = None
     npz_path: Path | None = None
     fps: int | None = None
+    offsets: np.ndarray | None = None
     in_place: bool | None = None
     arm_neutral: str | None = None
     max_lean_deg: float | None = None
@@ -63,49 +70,37 @@ def parse_motion_spec(spec: str) -> MotionClip:
     return MotionClip(name=name, npz_path=Path(path_s).expanduser())
 
 
-def _load_npz_joints(path: Path | str) -> tuple[np.ndarray, int | None]:
-    """Lê ``joints``/``fps`` de um NPZ com validação defensiva.
+def _load_npz_joints(path: Path | str) -> tuple[np.ndarray, int | None, np.ndarray | None]:
+    """Lê ``joints``/``fps``/``offsets`` de um NPZ com validação defensiva.
 
-    - ``with np.load`` fecha o NpzFile (o handle ficava preso até GC);
-    - ``allow_pickle=False`` — os arrays guardados (joints/fps/prompt/model)
-      são dtypes plain, pickle é desnecessário e é vetor de código arbitrário
-      em NPZ de fonte desconhecida;
-    - NaN/inf em ``joints`` propagariam para bone.head/tail e keyframes —
-      falhar cedo com mensagem clara.
+    - ``read_clip`` valida shape/finitos e recusa NPZs do Motion3D antigo
+      (HY-Motion/HML22) com uma mensagem que diz como regenerar;
+    - ``allow_pickle=False`` — os arrays guardados são dtypes plain, pickle é
+      desnecessário e é vetor de código arbitrário em NPZ de fonte desconhecida.
     """
-    with np.load(path, allow_pickle=False) as data:
-        if "joints" not in data:
-            raise ValueError(f"NPZ missing 'joints': {path}")
-        joints = np.asarray(data["joints"], dtype=np.float64)
-        fps = int(data["fps"]) if "fps" in data else None
-    if joints.ndim != 3 or joints.shape[1] == 0 or joints.shape[2] < 3:
-        raise ValueError(f"NPZ 'joints' com shape inesperado {joints.shape}: {path}")
-    if not np.isfinite(joints).all():
-        raise ValueError(f"NPZ 'joints' contém NaN/inf: {path}")
-    if fps is not None and fps <= 0:
-        raise ValueError(f"NPZ 'fps' inválido ({fps}): {path}")
-    return joints, fps
+    motion = read_clip(path)
+    return motion.joints, motion.fps, motion.offsets
 
 
-def load_clip_joints(clip: MotionClip) -> tuple[np.ndarray, int | None]:
-    """Return ``(joints, fps_or_None)`` from a clip's arrays or NPZ."""
+def load_clip_joints(clip: MotionClip) -> tuple[np.ndarray, int | None, np.ndarray | None]:
+    """Return ``(joints, fps_or_None, offsets_or_None)`` from a clip."""
     if clip.joints is not None and clip.npz_path is not None:
         raise ValueError(f"clip {clip.name!r}: set joints or npz_path, not both")
     if clip.joints is not None:
         joints = np.asarray(clip.joints, dtype=np.float64)
         if not np.isfinite(joints).all():
             raise ValueError(f"clip {clip.name!r}: joints contêm NaN/inf")
-        return joints, clip.fps
+        return joints, clip.fps, clip.offsets
     if clip.npz_path is None:
         raise ValueError(f"clip {clip.name!r}: need joints or npz_path")
     path = Path(clip.npz_path).expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(path)
-    joints, npz_fps = _load_npz_joints(path)
+    joints, npz_fps, npz_offsets = _load_npz_joints(path)
     fps = clip.fps
     if fps is None:
         fps = npz_fps
-    return joints, fps
+    return joints, fps, clip.offsets if clip.offsets is not None else npz_offsets
 
 
 def _bpy() -> Any:
@@ -199,7 +194,7 @@ def apply_motions_to_rigged(
     """Bake many named motions onto one ``rigged_glb`` (multi-clip deliverable).
 
     Each clip is exported to a temporary HML22 source, retargeted with the
-    Animator3D ``hml22`` profile, and left as its own action. The GLB is written
+    Animator3D ``sprong22`` profile, and left as its own action. The GLB is written
     with ``export_animation_mode='ACTIONS'`` so every clip survives reimport
     (same contract as Animator3D ``game-pack``).
 
@@ -209,9 +204,9 @@ def apply_motions_to_rigged(
         rigged_glb: Target SkinTokens / hero ``*_rigged.glb``.
         output: Destination animated GLB (mesh + all retargeted clips).
         fps: Default bake FPS when a clip/NPZ omits it.
-        profile_name: Animator3D retarget profile (default ``hml22``).
+        profile_name: Animator3D retarget profile (default ``sprong22``).
         keep_sources_dir: If set, write each intermediate HML22 source GLB here
-            as ``{clip}_hml22_source.glb``.
+            as ``{clip}_sprong_source.glb``.
         in_place: Default loopable clip (no travel/yaw drift).
         arm_neutral: Default soft hang arm calibration policy.
         max_lean_deg / hands_together_m / plant_feet: Pack-level constraints
@@ -238,17 +233,13 @@ def apply_motions_to_rigged(
     from aigamekit_shared.bpy_mesh import import_gltf, save_glb
     from animator3d import retarget as rt
     from motion3d.bpy_export import (
-        HML22_BONE_NAMES,
-        HML22_NEUTRAL_AIM,
-        HML22_TARGET_REST_BONES,
+        BONE_NAMES,
+        NEUTRAL_AIM,
         export_joints_glb,
         filter_neutral_aim_for_clip,
     )
 
     profile = rt.load_profile(profile_name)
-    foot_names = [HML22_BONE_NAMES[i] for i in sorted(HML22_TARGET_REST_BONES)]
-    # Rest aims need a throwaway bpy session — cache once before the pack scene.
-    foot_aims = target_rest_aims(rigged, profile.bone_map, foot_names)
 
     if keep_sources_dir is not None:
         keep_sources_dir = Path(keep_sources_dir).expanduser().resolve()
@@ -259,14 +250,13 @@ def apply_motions_to_rigged(
         # Pre-bake every source GLB (constraints + look-at) before the pack scene.
         prepared: list[tuple[MotionClip, Path, int, np.ndarray]] = []
         for clip in normalized:
-            joints, clip_fps = load_clip_joints(clip)
+            joints, clip_fps, offsets = load_clip_joints(clip)
             if joints.ndim != 3 or joints.shape[1] != 22 or joints.shape[2] != 3:
                 raise ValueError(f"clip {clip.name!r}: joints must be (T, 22, 3); got {joints.shape}")
             use_fps = int(clip_fps if clip_fps is not None else fps)
-            src_name = f"{clip.name}_hml22_source.glb"
+            src_name = f"{clip.name}_sprong_source.glb"
             src_path = (keep_sources_dir / src_name) if keep_sources_dir else tmp_path / src_name
-            base_neutral = {HML22_BONE_NAMES[i]: d for i, d in HML22_NEUTRAL_AIM.items()}
-            base_neutral.update(foot_aims)
+            base_neutral = {BONE_NAMES[i]: d for i, d in NEUTRAL_AIM.items()}
             use_arm = str(_pick(clip.arm_neutral, arm_neutral))
             neutral_aim = filter_neutral_aim_for_clip(joints, base_neutral, arm_neutral=use_arm)
             export_joints_glb(
@@ -274,6 +264,7 @@ def apply_motions_to_rigged(
                 src_path,
                 fps=use_fps,
                 clip_name=DEFAULT_SOURCE_TRACK,
+                offsets=offsets if offsets is not None else REFERENCE_OFFSETS,
                 in_place=bool(_pick(clip.in_place, in_place)),
                 neutral_aim=neutral_aim,
                 max_lean_deg=_pick(clip.max_lean_deg, max_lean_deg),
@@ -312,7 +303,7 @@ def apply_motions_to_rigged(
             if not sources:
                 raise RuntimeError(f"No source armature from {src_path}")
             source = sources[0]
-            source.name = "HML22_Source"
+            source.name = "Sprong_Source"
 
             src_action = _resolve_source_action(bpy, source, DEFAULT_SOURCE_TRACK)
             if src_action is None:
@@ -330,7 +321,7 @@ def apply_motions_to_rigged(
 
             res = rt.retarget_animation(
                 "Target",
-                "HML22_Source",
+                "Sprong_Source",
                 profile.bone_map,
                 DEFAULT_SOURCE_TRACK,
                 clip.name,
@@ -412,18 +403,19 @@ def apply_motion_to_rigged(
     rigged_glb: str | Path,
     output: str | Path,
     *,
-    fps: int = 20,
+    fps: int = DEFAULT_FPS,
     clip_name: str = "walk",
     source_track: str = DEFAULT_SOURCE_TRACK,
     profile_name: str = DEFAULT_PROFILE,
     keep_source: Path | None = None,
+    offsets: np.ndarray | None = None,
     in_place: bool = True,
     arm_neutral: str = "auto",
     max_lean_deg: float | None = None,
     hands_together_m: float | None = None,
     plant_feet: bool = False,
 ) -> dict[str, Any]:
-    """Bake one Y-up HML motion onto ``rigged_glb`` (thin wrapper over the pack).
+    """Bake one Y-up SprongMotion motion onto ``rigged_glb`` (wrapper over the pack).
 
     ``source_track`` is accepted for API compatibility; pack sources always use
     :data:`DEFAULT_SOURCE_TRACK` internally.
@@ -431,7 +423,7 @@ def apply_motion_to_rigged(
     del source_track  # pack path owns the source action name
     keep_dir = Path(keep_source).expanduser().resolve().parent if keep_source is not None else None
     # If caller asked for an exact source path, bake via pack keep_sources then rename.
-    clip = MotionClip(name=clip_name, joints=np.asarray(joints, dtype=np.float64), fps=fps)
+    clip = MotionClip(name=clip_name, joints=np.asarray(joints, dtype=np.float64), fps=fps, offsets=offsets)
     res = apply_motions_to_rigged(
         [clip],
         rigged_glb,
@@ -448,7 +440,7 @@ def apply_motion_to_rigged(
     )
     source_glb = None
     if keep_source is not None and keep_dir is not None:
-        baked = keep_dir / f"{clip_name}_hml22_source.glb"
+        baked = keep_dir / f"{clip_name}_sprong_source.glb"
         dest = Path(keep_source).expanduser().resolve()
         if baked.is_file() and baked.resolve() != dest:
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -470,12 +462,12 @@ def apply_npz_to_rigged(
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Load NPZ ``joints`` and call :func:`apply_motion_to_rigged`."""
-    joints, npz_fps = _load_npz_joints(Path(npz_path))
+    joints, npz_fps, offsets = _load_npz_joints(Path(npz_path))
     # pop ANTES de escolher a fonte — o fps do NPZ vem no argumento explícito
     # e o kwargs ainda o trazia → "multiple values for keyword 'fps'".
     kwargs_fps = kwargs.pop("fps", None)
-    fps = int(npz_fps if npz_fps is not None else (kwargs_fps if kwargs_fps is not None else 20))
-    return apply_motion_to_rigged(joints, rigged_glb, output, fps=fps, **kwargs)
+    fps = int(npz_fps if npz_fps is not None else (kwargs_fps if kwargs_fps is not None else DEFAULT_FPS))
+    return apply_motion_to_rigged(joints, rigged_glb, output, fps=fps, offsets=offsets, **kwargs)
 
 
 def apply_npzs_to_rigged(

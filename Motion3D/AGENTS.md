@@ -1,22 +1,35 @@
 # Motion3D — agent notes
 
-Text-to-motion (**Tencent HY-Motion-1.0**). GPU via vramd. GLB export via **bpy** (Animator3D / Text3D Shared patterns).
+Text-to-motion (**SprongMotion-14M**, CPU). Runtime C11 vendorizado + GGUF de
+33 MB; sem torch, sem GPU, sem vramd. GLB export via **bpy** (padrões Animator3D /
+Text3D Shared).
 
 ## Hard rules
 
-- Happy path: `motion3d generate` → NPZ `joints` @ 30fps → `motion3d apply-rigged` (`hml22`). Multi-clip: `motion3d pack-rigged … -m name=path.npz` (ACTIONS export).
-- Default model Lite in QualityEngine; **hw-auto may upgrade to Full** on ~6GB (staged text-CPU), like Text2D 4B/9B.
-- Prompt engineering LLM **off** (`disable_prompt_engineering=True`).
-- Vendor: `src/motion3d/vendor/hymotion/` — patch paths/FBX/offload only; no FBX in happy path.
-- Weights: HF `tencent/HY-Motion-1.0` → `~/.cache/aigamekit/models/hy-motion-1.0/`.
-- After code edits: `vramd respawn motion3d` (not full vramd restart).
-- No Motius / `vendor/t2mgpt` — removed.
+- Happy path: `motion3d generate` → NPZ (`joints` + `offsets` + códigos) →
+  `motion3d apply-rigged` (perfil `sprong22`). Multi-clip:
+  `motion3d pack-rigged … -m name=path.npz` (export ACTIONS).
+- **Nunca** reintroduzir torch, `vramd` backend, `--sdnq-preset` ou
+  `--model lite|full` — a inferência é o runtime C (`motion3d/sprong/`).
+- O esqueleto é o do modelo: 22 joints (`pelvis, l_hip, …, l_wrist`), topologia
+  igual ao HML22 em índices, nomes diferentes. `motion3d/skeleton.py` é o
+  contrato; o perfil de retarget é `sprong22.yaml`.
+- Vendor: `src/motion3d/vendor/sprongmotion/` (v1.1.0, Apache-2.0) — **não
+  editar**; ver `VENDORED.md`. Compila para a cache no primeiro uso
+  (`sprong/runtime.py`).
+- Pesos: HF `SegerEnd/SprongMotion-14M` → cache HF; SHA-256 verificado
+  (`weights.py`). `SPRONG_MODEL` aponta para um `.gguf` local.
+- Rest skeleton tem o pelvis na origem; o export **levanta-o** para a altura do
+  clip (`export_joints_glb`). Sem isso o Animator3D escala a location do pelvis
+  por `target_height / source_height` ≈ 800× e o corpo voa.
+- Depois de editar código: nada para reiniciar (in-process). `motion3d doctor`.
 
-## VRAM
+## Qualidade
 
-- Study Text2D `hardware.py` + `plan_offload` for the pattern.
-- FOOTPRINTS `hy-motion-lite|full` = DiT-resident (staged); never admit fp16 stacked Qwen+DiT.
-- Pipeline: DiT load (+SDNQ) → text encoder on CPU when `offload_text_encoder` → encode → hidden.to(GPU) → generate.
+- O modelo varia muito entre seeds: o CLI gera `--attempts` (default 3) e
+  escolhe pelo score mecânico (`quality.py`). Não remover sem substituto.
+- Opções nativas preferidas a pós-processamento: `--loop`, `--foot-lock`,
+  `--in-place`.
 
 ## Docs
 

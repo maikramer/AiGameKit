@@ -143,11 +143,6 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     "hunyuan3d-part": ModelFootprint(4.75, 1.5, 5.2, architecture="dit"),
     "hunyuan-paint": ModelFootprint(6.0, 2.0, 5.0, architecture="unet"),
     "stable-audio-open": ModelFootprint(3.5, 1.5, 2.0, architecture="stable-audio"),
-    # HY-Motion staged load (Text2D-like): GPU holds DiT OR text encode, not both.
-    # Text encoder (Qwen3-8B) runs on CPU when mem-eff; DiT (+optional SDNQ) on GPU.
-    # Pegadas = DiT residente + act (não soma Qwen+DiT ~24 GiB).
-    "hy-motion-lite": ModelFootprint(1.2, 1.2, 1.0, architecture="dit"),
-    "hy-motion-full": ModelFootprint(2.5, 1.5, 2.0, architecture="dit"),
 }
 
 # Footprint genérico de fallback (modelo médio ~8 GiB) quando a chave é desconhecida.

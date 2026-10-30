@@ -1,5 +1,10 @@
 # Consolidação de modelos — inventário e plano de redução
 
+> **Nota (2026-10-30):** o HY-Motion-1.0 (lite+full, ~5,7 GB em
+> `~/.cache/aigamekit/models/hy-motion-1.0/`) foi **substituído** pelo SprongMotion-14M
+> (33 MB, CPU) — ver [`MOTION3D_FINDINGS.md`](MOTION3D_FINDINGS.md). Os pesos antigos
+> podem ser apagados.
+
 **Data:** 2026-10-08 · **Estado:** ✅ **EXECUTADO** (tiers 1+2+3a + unificações de vendor; ver §8).
 
 Objetivo: reduzir o número de modelos/variantes em uso, o espaço em disco e a

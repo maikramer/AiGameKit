@@ -1,0 +1,8 @@
+SprongMotion runtime
+Copyright 2026 Seger Endendijk (segerend.nl)
+
+Licensed under the Apache License, Version 2.0 (LICENSE).
+
+The model files this runtime loads (for example SprongMotion-14M-v1.0-Q8_0.gguf) are not part of this software.
+SprongMotion-14M is open weights under Apache-2.0 too, with its own LICENSE and NOTICE that come with the
+model.

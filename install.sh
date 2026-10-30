@@ -3,7 +3,7 @@
 #
 #   ./install.sh              → perfil 'core' (10 tools, zero-a-jogo)
 #   ./install.sh examples     → core + céu/áudio/texturas/terreno/rochas
-#   ./install.sh --all        → catálogo completo (acrescenta part3d, motion3d, intrinsic)
+#   ./install.sh --all        → catálogo completo (acrescenta part3d, intrinsic)
 #   ./install.sh <tool>       → ferramenta individual (chaves de tools.yaml)
 #   ./install.sh --list       → listar perfis e ferramentas
 #
@@ -24,7 +24,7 @@ source "$SCRIPT_DIR/scripts/install-bootstrap.sh"
 #   ./install.sh core      — zero-a-jogo mínimo: DAG GLB animado → browser
 #   ./install.sh examples  — tudo que os jogos de exemplo usam (core + céu/áudio/
 #                            texturas/terreno/rochas). A engine vive em ../Viber.
-CORE_TOOLS=(vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab)
+CORE_TOOLS=(vramd text2d text3d paint3d rigging3d animator3d gameassets motion3d materialize aigamekitlab)
 EXAMPLES_EXTRA_TOOLS=(texture2d skymap2d text2sound terrain3d rocks3d)
 
 run_preflight() {

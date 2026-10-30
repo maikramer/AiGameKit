@@ -1,174 +1,140 @@
-"""Download and cache Tencent HY-Motion-1.0 weights (Lite / Full)."""
+"""SprongMotion-14M weights: HuggingFace download, cache and SHA-256 check.
+
+Model: ``SegerEnd/SprongMotion-14M`` — one 33 MB GGUF file (Q8_0 generator,
+F32 text encoder/decoder). Apache-2.0.
+
+Cache: standard HuggingFace hub cache (same helper as Text3D:
+:func:`aigamekit_shared.model_download.ensure_model`). Override the whole path
+with ``SPRONG_MODEL`` (offline installs, CI fixtures).
+"""
 
 from __future__ import annotations
 
-import logging
-import shutil
-from dataclasses import dataclass
+import hashlib
+import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal
 
-import yaml
-from huggingface_hub import snapshot_download
+HF_REPO = "SegerEnd/SprongMotion-14M"
+MODEL_FILE = "SprongMotion-14M-v1.0-Q8_0.gguf"
+MODEL_SHA256 = "68fbd311a0d7d75f60508b35254171583c85880e7e124140457b57ac84c5de9d"
+MODEL_BYTES = 33_337_824
+LICENSE = "Apache-2.0"
+CACHE_HINT = "~/.cache/huggingface/hub/models--SegerEnd--SprongMotion-14M/"
 
-from .vendor_bootstrap import hymotion_stats_dir
-
-logger = logging.getLogger(__name__)
-
-HF_REPO = "tencent/HY-Motion-1.0"
-CACHE_DIR = Path.home() / ".cache/aigamekit/models/hy-motion-1.0"
-
-ModelVariant = Literal["lite", "full"]
-
-VARIANT_DIR: dict[ModelVariant, str] = {
-    "lite": "HY-Motion-1.0-Lite",
-    "full": "HY-Motion-1.0",
-}
-
-# Encoders used by HYTextModel (downloaded into cache when requested).
-CLIP_REPO = "openai/clip-vit-large-patch14"
-QWEN_REPO = "Qwen/Qwen3-8B"
+StatusCallback = Callable[[str], None]
 
 
-@dataclass(frozen=True)
-class WeightPaths:
-    """Resolved paths under the local HY-Motion cache."""
-
-    root: Path
-    variant: ModelVariant
-    config: Path
-    ckpt: Path
-    mean_std_dir: Path
-    clip_dir: Path | None = None
-    qwen_dir: Path | None = None
+class ModelIntegrityError(RuntimeError):
+    """The GGUF on disk is missing, truncated or does not match ``MODEL_SHA256``."""
 
 
-def _variant_root(variant: ModelVariant) -> Path:
-    return CACHE_DIR / VARIANT_DIR[variant]
+def sha256_file(path: str | Path, *, chunk: int = 1 << 20) -> str:
+    """Streaming SHA-256 of ``path`` (never loads the file into memory)."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(chunk), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
-def _is_lfs_pointer(path: Path) -> bool:
-    if not path.is_file() or path.stat().st_size > 1024:
-        return False
+def _override() -> Path | None:
+    raw = os.environ.get("SPRONG_MODEL", "").strip()
+    return Path(raw).expanduser() if raw else None
+
+
+def cached_model_path() -> Path | None:
+    """Model path when already on disk (never touches the network).
+
+    Uses ``hf_hub_download(local_files_only=True)``: the repo has a single file,
+    so the snapshot-level check in ``is_model_cached`` would also demand every
+    other file in the repo and report a complete cache as missing.
+    """
+    override = _override()
+    if override is not None:
+        return override if override.is_file() else None
     try:
-        head = path.read_text(encoding="utf-8", errors="ignore")[:80]
-    except OSError:
-        return False
-    return head.startswith("version https://git-lfs.github.com")
+        from huggingface_hub import hf_hub_download
+
+        candidate = Path(hf_hub_download(HF_REPO, MODEL_FILE, local_files_only=True))
+        return candidate if candidate.is_file() else None
+    except Exception:
+        return None
 
 
-def _rewrite_config(src: Path, dest: Path, *, mean_std_dir: Path) -> None:
-    """Rewrite ``mean_std_dir`` to the packaged stats path."""
-    with src.open("r", encoding="utf-8") as fh:
-        cfg: dict[str, Any] = yaml.safe_load(fh) or {}
-    args = cfg.setdefault("train_pipeline_args", {})
-    test_cfg = args.setdefault("test_cfg", {})
-    test_cfg["mean_std_dir"] = str(mean_std_dir.resolve())
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with dest.open("w", encoding="utf-8") as fh:
-        yaml.safe_dump(cfg, fh, sort_keys=False)
+def verify_model(path: str | Path, *, expected_sha256: str = MODEL_SHA256) -> tuple[bool, str]:
+    """Check size then SHA-256.
+
+    Returns:
+        ``(ok, message)`` — message names the problem when ``ok`` is false.
+    """
+    candidate = Path(path).expanduser()
+    if not candidate.is_file():
+        return False, f"modelo em falta: {candidate}"
+    size = candidate.stat().st_size
+    if size != MODEL_BYTES:
+        return False, f"tamanho {size} != {MODEL_BYTES} bytes (download truncado?)"
+    digest = sha256_file(candidate)
+    if digest != expected_sha256:
+        return False, f"sha256 {digest[:12]}… != {expected_sha256[:12]}… (ficheiro corrompido)"
+    return True, "ok"
 
 
-def ensure_weights(
+def ensure_model_path(
     *,
-    model: ModelVariant = "lite",
     force_download: bool = False,
-    download_encoders: bool = False,
-) -> WeightPaths:
-    """Download HY-Motion checkpoint into the AiGameKit cache if missing.
+    verify: bool = True,
+    on_status: StatusCallback | None = None,
+) -> Path:
+    """Return a local GGUF path, downloading it from HuggingFace when missing.
 
     Args:
-        model: ``lite`` (0.46B, default) or ``full``.
-        force_download: Re-fetch from Hub.
-        download_encoders: Also snapshot CLIP-L + Qwen3-8B into the cache
-            (otherwise ``USE_HF_MODELS=1`` uses the transformers Hub cache).
+        force_download: Re-fetch even when a cached copy exists.
+        verify: Check SHA-256 (default on; ~0.1 s for 33 MB).
+        on_status: Progress callback (Rich console / logger).
+
+    Raises:
+        ModelIntegrityError: Download failed, truncated or hash mismatch.
     """
-    variant = model
-    sub = VARIANT_DIR[variant]
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    from huggingface_hub import hf_hub_download
 
-    root = Path(
-        snapshot_download(
-            HF_REPO,
-            allow_patterns=[f"{sub}/*", "LICENSE*", "README*"],
-            local_dir=str(CACHE_DIR),
-            local_dir_use_symlinks=False,
-            force_download=force_download,
-        )
-    )
-    variant_dir = root / sub
-    ckpt = variant_dir / "latest.ckpt"
-    hub_config = variant_dir / "config.yml"
-    if not hub_config.is_file():
-        raise FileNotFoundError(f"HY-Motion config missing under {variant_dir}")
-    if not ckpt.is_file() or _is_lfs_pointer(ckpt):
-        raise FileNotFoundError(
-            f"HY-Motion checkpoint missing or still a Git-LFS pointer: {ckpt}. "
-            f"Re-run with network / `huggingface-cli download {HF_REPO} {sub}/latest.ckpt`."
-        )
-
-    stats = hymotion_stats_dir()
-    if not (stats / "Mean.npy").is_file() or not (stats / "Std.npy").is_file():
-        raise FileNotFoundError(f"HY-Motion Mean/Std missing under {stats}")
-
-    # Rewritten config lives beside the ckpt so T2MRuntime paths stay local.
-    local_config = variant_dir / "config.aigamekit.yml"
-    _rewrite_config(hub_config, local_config, mean_std_dir=stats)
-
-    clip_dir: Path | None = None
-    qwen_dir: Path | None = None
-    if download_encoders:
-        clip_dir = Path(
-            snapshot_download(
-                CLIP_REPO,
-                local_dir=str(CACHE_DIR / "encoders" / "clip-vit-large-patch14"),
-                local_dir_use_symlinks=False,
-                force_download=force_download,
+    override = _override()
+    if override is not None and not force_download:
+        if not override.is_file():
+            raise ModelIntegrityError(f"SPRONG_MODEL aponta para um ficheiro inexistente: {override}")
+        path = override
+    else:
+        if on_status is not None:
+            on_status(f"{'A descarregar' if force_download else 'A obter'} {HF_REPO}/{MODEL_FILE}")
+        try:
+            raw = hf_hub_download(HF_REPO, MODEL_FILE, force_download=force_download)
+        except Exception as exc:  # network/offline/auth — never leave a bare traceback
+            raise ModelIntegrityError(
+                f"não foi possível obter {HF_REPO}/{MODEL_FILE}: {exc}. "
+                "Com rede, corre `motion3d download-model`; offline, aponta SPRONG_MODEL para um .gguf local."
+            ) from exc
+        path = Path(raw)
+    if verify:
+        ok, message = verify_model(path)
+        if not ok:
+            raise ModelIntegrityError(
+                f"{message}. Apaga o ficheiro em cache ({path}) e corre `motion3d download-model`."
             )
-        )
-        qwen_dir = Path(
-            snapshot_download(
-                QWEN_REPO,
-                local_dir=str(CACHE_DIR / "encoders" / "Qwen3-8B"),
-                local_dir_use_symlinks=False,
-                force_download=force_download,
-            )
-        )
-
-    return WeightPaths(
-        root=root,
-        variant=variant,
-        config=local_config,
-        ckpt=ckpt,
-        mean_std_dir=stats,
-        clip_dir=clip_dir,
-        qwen_dir=qwen_dir,
-    )
+    if on_status is not None:
+        on_status(f"Modelo pronto: {path}")
+    return path
 
 
-def load_config(path: Path | None = None, *, model: ModelVariant = "lite") -> dict[str, Any]:
-    """Load rewritten or Hub config.yml."""
-    cfg_path = path
-    if cfg_path is None:
-        candidate = _variant_root(model) / "config.aigamekit.yml"
-        if not candidate.is_file():
-            ensure_weights(model=model)
-            candidate = _variant_root(model) / "config.aigamekit.yml"
-        cfg_path = candidate
-    with Path(cfg_path).open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh)
-    return dict(data) if isinstance(data, dict) else {}
-
-
-def copy_license_into_cache() -> None:
-    """Best-effort: copy vendor LICENSE next to weights for redistributors."""
-    src = Path(__file__).resolve().parent / "vendor" / "hymotion" / "LICENSE.txt"
-    if not src.is_file():
-        return
-    dest = CACHE_DIR / "LICENSE.txt"
-    try:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        if not dest.is_file():
-            shutil.copy2(src, dest)
-    except OSError as exc:
-        logger.debug("Could not copy HY-Motion license into cache: %s", exc)
+def model_info() -> dict[str, str]:
+    """Diagnostics for ``motion3d doctor`` (never raises)."""
+    info = {"repo": HF_REPO, "file": MODEL_FILE, "license": LICENSE, "expected_sha256": MODEL_SHA256}
+    path = cached_model_path()
+    if path is None:
+        info["path"] = CACHE_HINT
+        info["state"] = "missing"
+        return info
+    info["path"] = str(path)
+    ok, message = verify_model(path, expected_sha256=MODEL_SHA256)
+    info["state"] = "ok" if ok else "corrupt"
+    info["detail"] = message
+    return info

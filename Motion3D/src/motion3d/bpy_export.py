@@ -1,12 +1,13 @@
-"""Export HumanML3D joints → animated GLB source for Animator3D retarget.
+"""Export SprongMotion joints → animated GLB source for Animator3D retarget.
 
 Pipeline contract:
-1. Joints enter as HumanML3D **Y-up** (``recover_from_ric``).
+1. Joints enter **Y-up**, metres, facing +Z at t=0 (SprongMotion output).
 2. Convert to Blender **Z-up** (``(x,y,z)_y → (x,-z,y)_z``) — same space as
-   glTF-imported SkinTokens hero after Blender importer.
-3. Build a 22-bone armature with **SkinTokens / UE5 names** so
-   ``animator3d retarget --profile hml22`` (identity map) works.
-4. Rest pose = canonical T-pose from ``t2m_raw_offsets`` (not walk frame-0).
+   glTF-imported SkinTokens hero after the Blender importer.
+3. Build a 22-bone armature named after the SprongMotion joints
+   (``animator3d retarget --profile sprong22`` maps them to SkinTokens names).
+4. Rest pose = the model's own reference skeleton (``REFERENCE_OFFSETS`` or the
+   clip's ``offsets``), not walk frame 0.
 5. Animation = look-at bone aims (child joint) + pelvis location; root static.
 
 Location-only baking on a skinned mesh is wrong — that path is gone.
@@ -20,202 +21,46 @@ from typing import Any
 
 import numpy as np
 
-# SkinTokens / Quaternius naming — identity bone_map in Animator3D hml22 profile.
-HML22_BONE_NAMES: tuple[str, ...] = (
-    "pelvis",
-    "thigh_l",
-    "thigh_r",
-    "spine_01",
-    "calf_l",
-    "calf_r",
-    "spine_02",
-    "foot_l",
-    "foot_r",
-    "spine_03",
-    "ball_l",
-    "ball_r",
-    "neck_01",
-    "clavicle_l",
-    "clavicle_r",
-    "Head",
-    "upperarm_l",
-    "upperarm_r",
-    "lowerarm_l",
-    "lowerarm_r",
-    "hand_l",
-    "hand_r",
+from .skeleton import (
+    AIM_CHILD,
+    ANKLE_HINGES,
+    ARM_NEUTRAL_INDICES,
+    ARM_NEUTRAL_MAX_CORR_DEG,
+    DEFAULT_FPS,
+    ELBOW_HINGES,
+    HANDS_TOGETHER_M,
+    HINGE_FOLLOWERS,
+    KNEE_HINGES,
+    LEAF_BONES,
+    LEG_SPLAY_DEG,
+    MAX_FOOT_PITCH_DEG,
+    MAX_KNEE_DEG,
+    MAX_SWING_DEG,
+    MIN_FOOT_PITCH_DEG,
+    MIN_KNEE_DEG,
+    NEUTRAL_AIM,
+    SPRONG_JOINTS,
+    SPRONG_PARENTS,
+    UPPER_BODY_INDICES,
+    aim_directions,
+    rest_positions_yup,
 )
 
-# Parent index per joint (-1 = root). Matches t2m_kinematic_chain topology.
-HML22_PARENTS: tuple[int, ...] = (
-    -1,
-    0,
-    0,
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    9,
-    9,
-    12,
-    13,
-    14,
-    16,
-    17,
-    18,
-    19,
-)
+BONE_NAMES: tuple[str, ...] = SPRONG_JOINTS
+"""Source armature bone names — the SprongMotion joint names themselves."""
 
-# Joint each bone aims at (its tail). Deriving this from ``t2m_kinematic_chain``
-# is wrong: the three chains starting at spine_03 overwrite each other, so
-# spine_03 ended up aiming at the left clavicle — chest, neck, head and left arm
-# all collapsed sideways.
-HML22_AIM_CHILD: dict[int, int] = {
-    0: 3,  # pelvis   → spine_01
-    3: 6,  # spine_01 → spine_02
-    6: 9,  # spine_02 → spine_03
-    9: 12,  # spine_03 → neck_01
-    12: 15,  # neck_01  → Head
-    1: 4,  # thigh_l  → calf_l
-    4: 7,  # calf_l   → foot_l
-    7: 10,  # foot_l   → ball_l
-    2: 5,  # thigh_r  → calf_r
-    5: 8,  # calf_r   → foot_r
-    8: 11,  # foot_r   → ball_r
-    13: 16,  # clavicle_l → upperarm_l
-    16: 18,  # upperarm_l → lowerarm_l
-    18: 20,  # lowerarm_l → hand_l
-    14: 17,  # clavicle_r → upperarm_r
-    17: 19,  # upperarm_r → lowerarm_r
-    19: 21,  # lowerarm_r → hand_r
-}
-
-# Leaves have no joint to aim at (HML has no toe-tip / finger / skull-top joint).
-# Extending the parent direction onto them curled the toes ("clown shoes"),
-# twisted the hands and added a second nod to the head — leave them at rest and
-# let the parent carry the motion.
-HML22_LEAF_BONES = frozenset(i for i in range(22) if i not in HML22_AIM_CHILD)
-
-# Where each of these bones should point when the motion is at its neutral, in
-# armature space (Z-up, character facing -Y). SMPL/HML anatomy is systematically
-# offset from a game rig: the neck→head segment leans ~28° forward (hero staring
-# at the floor) and the arms hang dead vertical (arms glued to a chunky torso).
-# The clip's median direction is rotated onto these targets, so the pose reads as
-# a game A-pose while every frame keeps its motion relative to it. Legs, pelvis
-# and feet are absent on purpose — facing and foot contacts must stay absolute.
-HML22_NEUTRAL_AIM: dict[int, tuple[float, float, float]] = {
-    3: (0.0, 0.0, 1.0),  # spine_01 → up
-    6: (0.0, 0.0, 1.0),  # spine_02 → up
-    9: (0.0, 0.0, 1.0),  # spine_03 → up
-    12: (0.0, 0.0, 1.0),  # neck_01  → up
-    16: (0.26, 0.0, -0.97),  # upperarm_l → down, 15° out
-    17: (-0.26, 0.0, -0.97),  # upperarm_r
-    18: (0.26, 0.0, -0.97),  # lowerarm_l
-    19: (-0.26, 0.0, -0.97),  # lowerarm_r
-    # Feet stay out of neutral calibration: hinge clamps already keep ankle
-    # angles plantigrade, and a constant median→rest rotation fights the swing
-    # (boots tip toes-to-shin on extreme frames).
-}
-
-# No target-rest override by default. Feet used to live here; that path is gone
-# for the same reason as the missing foot entries in ``HML22_NEUTRAL_AIM``.
-HML22_TARGET_REST_BONES = frozenset()
-
-# Arm soft-hang neutrals. Walk/jump medians sit near hang (~20-35°); chop/raise
-# medians sit ~130°+ away — applying hang then rewrites the whole gesture.
-HML22_ARM_NEUTRAL_INDICES = frozenset({16, 17, 18, 19})
-HML22_ARM_NEUTRAL_MAX_CORR_DEG = 50.0
-
-# Extra outward rotation (degrees towards ±X, about the armature forward axis)
-# applied to the leg aim. The T2M sample walks a narrow catwalk line: the ankles
-# cross by up to 8 cm on 17 of 116 frames, which a chibi rig with wide boots
-# renders as the feet passing through each other. Widening the stance ~6° per leg
-# clears the crossing without touching the gait timing or the ground contacts.
-HML22_LEG_SPLAY_DEG: dict[int, float] = {
-    1: 6.0,  # thigh_l
-    4: 6.0,  # calf_l
-    2: -6.0,  # thigh_r
-    5: -6.0,  # calf_r
-}
-
-# Soft limit on swing-from-rest (degrees). T2M "run" samples often drive one
-# knee under ~70° while the other stays straight — SkinTokens soft weights then
-# pull the thigh into rubber-band horror. Walk stays under these caps.
-HML22_MAX_SWING_DEG: dict[int, float] = {
-    1: 55.0,  # thigh_l
-    2: 55.0,  # thigh_r
-    4: 65.0,  # calf_l
-    5: 65.0,  # calf_r
-    # Feet intentionally absent: a swing cap here stops look-at from aiming at
-    # ``ball_*``, so the boot stays near rest while the shin swings — reads as
-    # toes-to-shin / sole-up. Ankle hinge clamp on joints owns foot limits.
-}
-
-# Minimum knee interior angle (hip-knee-ankle) after joint sanitize.
-# Kept as a named alias of the hinge table for callers/tests.
-HML22_MIN_KNEE_DEG = 120.0
-HML22_MAX_KNEE_DEG = 172.0
-
-# Foot pitch in Y-up (atan2(dy, horiz)): 0 = flat, negative = toes down.
-# Secondary sole-flip guard; the shin-relative ankle hinge is the primary clamp.
-HML22_MIN_FOOT_PITCH_DEG = -35.0
-HML22_MAX_FOOT_PITCH_DEG = 8.0
-
-# Generic hinge limits: (proximal, joint, distal, min_deg, max_deg).
-# Interior angle at ``joint``. Always-on rig safety — gesture-agnostic.
-HML22_KNEE_HINGES: tuple[tuple[int, int, int, float, float], ...] = (
-    (1, 4, 7, HML22_MIN_KNEE_DEG, HML22_MAX_KNEE_DEG),
-    (2, 5, 8, HML22_MIN_KNEE_DEG, HML22_MAX_KNEE_DEG),
-)
-HML22_ANKLE_HINGES: tuple[tuple[int, int, int, float, float], ...] = (
-    (4, 7, 10, 70.0, 115.0),  # plantigrade band (pointe→0°, toes-to-shin→180°)
-    (5, 8, 11, 70.0, 115.0),
-)
-HML22_ELBOW_HINGES: tuple[tuple[int, int, int, float, float], ...] = (
-    (16, 18, 20, 35.0, 170.0),
-    (17, 19, 21, 35.0, 170.0),
-)
-# Full table (docs/tests); runtime applies knee → foot-pitch → ankle → elbow so
-# the shin-relative ankle clamp wins over the world pitch guard.
-HML22_HINGE_LIMITS: tuple[tuple[int, int, int, float, float], ...] = (
-    *HML22_KNEE_HINGES,
-    *HML22_ANKLE_HINGES,
-    *HML22_ELBOW_HINGES,
-)
-
-# When a hinge moves its distal joint, also drag these children (rigid translate)
-# so the foot/hand shape survives the knee/elbow correction.
-HML22_HINGE_FOLLOWERS: dict[int, tuple[int, ...]] = {
-    7: (10,),  # ankle_l → ball_l
-    8: (11,),  # ankle_r → ball_r
-    20: (),
-    21: (),
-}
-
-# Default width when a caller asks for the wrists to hold one object together.
-HML22_HANDS_TOGETHER_M = 0.10
-
-# Everything above the pelvis — moved as one body by the torso lean clamp.
-HML22_UPPER_BODY_INDICES = (3, 6, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
-
-DEFAULT_FPS = 20
+PARENTS: tuple[int, ...] = SPRONG_PARENTS
 
 
 def arm_neutral_applies(
     joints: np.ndarray,
     *,
-    max_corr_deg: float = HML22_ARM_NEUTRAL_MAX_CORR_DEG,
+    max_corr_deg: float = ARM_NEUTRAL_MAX_CORR_DEG,
 ) -> bool:
     """True when clip median arm aims are near soft hang (walk/idle).
 
     Raised-arm clips (chop, throw, reach) have medians far from hang; forcing
-    ``HML22_NEUTRAL_AIM`` onto them rotates every frame ~90-150° and reads as
+    ``NEUTRAL_AIM`` onto them rotates every frame ~90-150° and reads as
     broken bone mapping even when the retarget map is identity.
     """
     j = np.asarray(joints, dtype=np.float64)
@@ -223,8 +68,8 @@ def arm_neutral_applies(
         return True
     aims = _aim_directions(yup_to_blender(j))
     limit = math.radians(float(max_corr_deg))
-    for i in HML22_ARM_NEUTRAL_INDICES:
-        target = HML22_NEUTRAL_AIM.get(i)
+    for i in ARM_NEUTRAL_INDICES:
+        target = NEUTRAL_AIM.get(i)
         if target is None:
             continue
         median = np.median(aims[:, i], axis=0)
@@ -244,16 +89,12 @@ def resolve_neutral_targets(
 ) -> dict[int, tuple[float, float, float]]:
     """Bone-index neutral targets. ``neutral_aim`` replaces the defaults entirely.
 
-    Merging over :data:`HML22_NEUTRAL_AIM` meant a caller could never *drop* a
+    Merging over :data:`NEUTRAL_AIM` meant a caller could never *drop* a
     calibration, so raised-arm clips kept the hang neutrals.
     """
     if neutral_aim is None:
-        return dict(HML22_NEUTRAL_AIM)
-    return {
-        HML22_BONE_NAMES.index(bname): direction
-        for bname, direction in neutral_aim.items()
-        if bname in HML22_BONE_NAMES
-    }
+        return dict(NEUTRAL_AIM)
+    return {BONE_NAMES.index(bname): direction for bname, direction in neutral_aim.items() if bname in BONE_NAMES}
 
 
 def filter_neutral_aim_for_clip(
@@ -265,8 +106,8 @@ def filter_neutral_aim_for_clip(
     """Drop arm hang neutrals when ``arm_neutral`` says so.
 
     Args:
-        joints: Y-up HML22 positions.
-        neutral_aim: Name→direction map (usually ``HML22_NEUTRAL_AIM`` + feet).
+        joints: Y-up joint positions (SprongMotion, 22 joints).
+        neutral_aim: Name→direction map (usually ``NEUTRAL_AIM``).
         arm_neutral: ``auto`` (skip arms if median far from hang), ``on``, ``off``.
     """
     mode = (arm_neutral or "auto").strip().lower()
@@ -275,18 +116,18 @@ def filter_neutral_aim_for_clip(
     out = dict(neutral_aim)
     apply_arms = True if mode == "on" else False if mode == "off" else arm_neutral_applies(joints)
     if not apply_arms:
-        for i in HML22_ARM_NEUTRAL_INDICES:
-            out.pop(HML22_BONE_NAMES[i], None)
+        for i in ARM_NEUTRAL_INDICES:
+            out.pop(BONE_NAMES[i], None)
     return out
 
 
 def sanitize_locomotion_joints(
     joints: np.ndarray,
     *,
-    min_knee_deg: float = HML22_MIN_KNEE_DEG,
-    max_knee_deg: float = HML22_MAX_KNEE_DEG,
-    min_foot_pitch_deg: float = HML22_MIN_FOOT_PITCH_DEG,
-    max_foot_pitch_deg: float = HML22_MAX_FOOT_PITCH_DEG,
+    min_knee_deg: float = MIN_KNEE_DEG,
+    max_knee_deg: float = MAX_KNEE_DEG,
+    min_foot_pitch_deg: float = MIN_FOOT_PITCH_DEG,
+    max_foot_pitch_deg: float = MAX_FOOT_PITCH_DEG,
     hinge_limits: tuple[tuple[int, int, int, float, float], ...] | None = None,
     max_lean_deg: float | None = None,
     hands_together_m: float | None = None,
@@ -321,8 +162,7 @@ def sanitize_locomotion_joints(
         )
     else:
         knees = [
-            (prox, joint, dist, float(min_knee_deg), float(max_knee_deg))
-            for prox, joint, dist, _lo, _hi in HML22_KNEE_HINGES
+            (prox, joint, dist, float(min_knee_deg), float(max_knee_deg)) for prox, joint, dist, _lo, _hi in KNEE_HINGES
         ]
         # Knee → world foot pitch → ankle (shin-relative wins) → elbow.
         _clamp_hinges_yup(j, knees)
@@ -331,8 +171,8 @@ def sanitize_locomotion_joints(
             min_pitch_deg=float(min_foot_pitch_deg),
             max_pitch_deg=float(max_foot_pitch_deg),
         )
-        _clamp_hinges_yup(j, list(HML22_ANKLE_HINGES))
-        _clamp_hinges_yup(j, list(HML22_ELBOW_HINGES))
+        _clamp_hinges_yup(j, list(ANKLE_HINGES))
+        _clamp_hinges_yup(j, list(ELBOW_HINGES))
     if max_lean_deg is not None:
         _clamp_torso_lean_yup(j, max_deg=float(max_lean_deg))
     if plant_feet:
@@ -364,7 +204,7 @@ def _clamp_hinges_yup(
         max_rad = math.radians(float(max_deg))
         if max_rad < min_rad:
             min_rad, max_rad = max_rad, min_rad
-        followers = HML22_HINGE_FOLLOWERS.get(dist, ())
+        followers = HINGE_FOLLOWERS.get(dist, ())
         for fi in range(joints.shape[0]):
             p = joints[fi, prox]
             h = joints[fi, joint]
@@ -428,7 +268,7 @@ def _clamp_torso_lean_yup(joints: np.ndarray, *, max_deg: float) -> None:
         delta = tilt - max_rad
         cos_d = math.cos(delta)
         sin_d = math.sin(delta)
-        for joint_i in HML22_UPPER_BODY_INDICES:
+        for joint_i in UPPER_BODY_INDICES:
             rel = joints[fi, joint_i] - pelvis
             joints[fi, joint_i] = pelvis + (
                 rel * cos_d + np.cross(axis, rel) * sin_d + axis * float(np.dot(axis, rel)) * (1.0 - cos_d)
@@ -474,7 +314,7 @@ def _plant_feet_yup(joints: np.ndarray) -> None:
 def _join_wrists_yup(
     joints: np.ndarray,
     *,
-    max_sep_m: float = HML22_HANDS_TOGETHER_M,
+    max_sep_m: float = HANDS_TOGETHER_M,
 ) -> None:
     """In-place: hold wrists within ``max_sep_m``, same height, uncrossed.
 
@@ -560,63 +400,6 @@ def _clear_scene(bpy: Any) -> None:
             block.remove(item)
 
 
-# HumanML3D / SMPL-22 raw bone directions (Y-up). Was Motius ``paramUtil.t2m_raw_offsets``.
-_T2M_RAW_OFFSETS = np.array(
-    [
-        [0, 0, 0],
-        [1, 0, 0],
-        [-1, 0, 0],
-        [0, 1, 0],
-        [0, -1, 0],
-        [0, -1, 0],
-        [0, 1, 0],
-        [0, -1, 0],
-        [0, -1, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-        [0, 0, 1],
-        [0, 1, 0],
-        [1, 0, 0],
-        [-1, 0, 0],
-        [0, 0, 1],
-        [0, -1, 0],
-        [0, -1, 0],
-        [0, -1, 0],
-        [0, -1, 0],
-        [0, -1, 0],
-        [0, -1, 0],
-    ],
-    dtype=np.float64,
-)
-
-
-def _canonical_rest_joints_yup(ref_joints: np.ndarray) -> np.ndarray:
-    """T-pose joint positions in Y-up from HML22 raw offsets scaled by bone lengths."""
-    offsets = _T2M_RAW_OFFSETS.copy()
-    # Raw offsets put the head *in front of* the neck and hang the arms straight
-    # down. A retarget that transfers bone-local rotations then inherits a ~90°
-    # compensation on neck/head and on every arm bone (collapsed head + arms).
-    # Rebuild those limbs as a real T-pose so source rest ≈ target rest.
-    offsets[15] = (0.0, 1.0, 0.0)  # neck → head: up
-    for i in (16, 18, 20):
-        offsets[i] = (1.0, 0.0, 0.0)  # left arm: +X
-    for i in (17, 19, 21):
-        offsets[i] = (-1.0, 0.0, 0.0)  # right arm: -X
-    parents = HML22_PARENTS
-    lengths = np.ones(22, dtype=np.float64)
-    for i in range(1, 22):
-        p = parents[i]
-        lengths[i] = float(np.linalg.norm(ref_joints[i] - ref_joints[p])) or 1e-3
-    rest = np.zeros((22, 3), dtype=np.float64)
-    for i in range(1, 22):
-        p = parents[i]
-        d = offsets[i]
-        n = float(np.linalg.norm(d)) or 1.0
-        rest[i] = rest[p] + (d / n) * lengths[i]
-    rest[:, 1] += float(ref_joints[0, 1])
-    return rest
-
-
 def stabilize_facing_zup(joints_zup: np.ndarray) -> np.ndarray:
     """Cancel yaw drift so an in-place clip keeps a constant facing.
 
@@ -639,9 +422,9 @@ def stabilize_facing_zup(joints_zup: np.ndarray) -> np.ndarray:
     return j
 
 
-def _build_armature_zup(bpy: Any, rest_zup: np.ndarray, *, name: str = "HML22") -> Any:
-    """Create SkinTokens-named armature; rest bones follow Z-up T-pose joints."""
-    aim_child = HML22_AIM_CHILD
+def _build_armature_zup(bpy: Any, rest_zup: np.ndarray, *, name: str = "Sprong22") -> Any:
+    """Create the 22-bone source armature; rest bones follow the model skeleton."""
+    aim_child = AIM_CHILD
 
     arm_data = bpy.data.armatures.new(name)
     arm_obj = bpy.data.objects.new(name, arm_data)
@@ -651,7 +434,7 @@ def _build_armature_zup(bpy: Any, rest_zup: np.ndarray, *, name: str = "HML22") 
 
     edit_bones = arm_data.edit_bones
     bones: list[Any] = []
-    for i, bname in enumerate(HML22_BONE_NAMES):
+    for i, bname in enumerate(BONE_NAMES):
         bone = edit_bones.new(bname)
         head = rest_zup[i]
         stub = head + np.array([0.0, 0.0, 0.05], dtype=np.float64)
@@ -660,7 +443,7 @@ def _build_armature_zup(bpy: Any, rest_zup: np.ndarray, *, name: str = "HML22") 
             tip = head + np.array([0.0, 0.0, 0.05], dtype=np.float64)
         bone.head = (float(head[0]), float(head[1]), float(head[2]))
         bone.tail = (float(tip[0]), float(tip[1]), float(tip[2]))
-        parent_i = HML22_PARENTS[i]
+        parent_i = PARENTS[i]
         if parent_i >= 0:
             bone.parent = bones[parent_i]
             bone.use_connect = False
@@ -680,13 +463,7 @@ def _build_armature_zup(bpy: Any, rest_zup: np.ndarray, *, name: str = "HML22") 
 
 def _aim_directions(joints_zup: np.ndarray) -> np.ndarray:
     """Unit direction from each bone's joint to the joint it aims at, per frame."""
-    dirs = np.zeros((joints_zup.shape[0], 22, 3), dtype=np.float64)
-    for i, child in HML22_AIM_CHILD.items():
-        d = joints_zup[:, child] - joints_zup[:, i]
-        n = np.linalg.norm(d, axis=-1, keepdims=True)
-        n[n < 1e-8] = 1.0
-        dirs[:, i] = d / n
-    return dirs
+    return aim_directions(joints_zup)
 
 
 def _lookat_keyframe(
@@ -709,7 +486,7 @@ def _lookat_keyframe(
     ``in_place`` keeps the horizontal pelvis travel out of the clip (loopable
     animation); vertical bob stays. Game code drives locomotion, not the clip.
 
-    ``neutral_aim``, when given, **replaces** :data:`HML22_NEUTRAL_AIM` — callers
+    ``neutral_aim``, when given, **replaces** :data:`NEUTRAL_AIM` — callers
     that know the target rig (``apply_rigged``) pass its rest directions so the
     motion is calibrated against the rig the clip actually plays on. Merging
     instead of replacing made it impossible to *drop* a calibration: a raised-arm
@@ -737,17 +514,16 @@ def _lookat_keyframe(
         pb.rotation_mode = "QUATERNION"
         pb.matrix_basis.identity()
 
-    aim_child = HML22_AIM_CHILD
+    aim_child = AIM_CHILD
 
     root0 = joints_zup[0, 0].copy()
     prev: dict[str, Any] = {}
 
     # Rest orientation + rest bone direction, both in ARMATURE space.
     # ``Bone.y_axis`` is bone-local — using it here aimed every bone 90° off.
-    rest_quat = {bn: arm_obj.data.bones[bn].matrix_local.to_quaternion() for bn in HML22_BONE_NAMES}
+    rest_quat = {bn: arm_obj.data.bones[bn].matrix_local.to_quaternion() for bn in BONE_NAMES}
     rest_dir = {
-        bn: (arm_obj.data.bones[bn].tail_local - arm_obj.data.bones[bn].head_local).normalized()
-        for bn in HML22_BONE_NAMES
+        bn: (arm_obj.data.bones[bn].tail_local - arm_obj.data.bones[bn].head_local).normalized() for bn in BONE_NAMES
     }
 
     # Animator3D copies bone directions in world space, so the neutral correction
@@ -760,19 +536,19 @@ def _lookat_keyframe(
         norm = float(np.linalg.norm(median))
         if norm > 1e-6:
             aim_fix[i] = Vector(tuple(median / norm)).rotation_difference(Vector(target))
-    for i, splay in HML22_LEG_SPLAY_DEG.items():
+    for i, splay in LEG_SPLAY_DEG.items():
         outward = Quaternion(Vector((0.0, 1.0, 0.0)), math.radians(-splay))
         aim_fix[i] = outward @ aim_fix[i] if i in aim_fix else outward
 
     for fi in range(n_frames):
         frame = fi + 1
         scene.frame_set(frame)
-        for i, bname in enumerate(HML22_BONE_NAMES):
+        for i, bname in enumerate(BONE_NAMES):
             pb = arm_obj.pose.bones.get(bname)
             if pb is None:
                 continue
             head = joints_zup[fi, i]
-            if i in HML22_LEAF_BONES:
+            if i in LEAF_BONES:
                 q = Quaternion((1.0, 0.0, 0.0, 0.0))
             else:
                 tip = joints_zup[fi, aim_child[i]]
@@ -785,7 +561,7 @@ def _lookat_keyframe(
                     y = aim_fix[i] @ y
                 # Swing-only: no arbitrary roll → no twisted limbs downstream.
                 swing = rest_dir[bname].rotation_difference(y)
-                max_swing = HML22_MAX_SWING_DEG.get(i)
+                max_swing = MAX_SWING_DEG.get(i)
                 if max_swing is not None and swing.angle > math.radians(max_swing):
                     swing = Quaternion(swing.axis, math.radians(max_swing))
                 mat = (swing @ rest_quat[bname]).to_matrix().to_4x4()
@@ -822,23 +598,26 @@ def export_joints_glb(
     output: str | Path,
     *,
     fps: int = DEFAULT_FPS,
-    clip_name: str = "t2m_motion",
+    clip_name: str = "sprong_motion",
+    offsets: np.ndarray | None = None,
     in_place: bool = True,
     neutral_aim: dict[str, tuple[float, float, float]] | None = None,
     max_lean_deg: float | None = None,
     hands_together_m: float | None = None,
     plant_feet: bool = False,
 ) -> Path:
-    """Write an animated HML22 source GLB for Animator3D retarget.
+    """Write an animated source GLB (SprongMotion skeleton) for Animator3D retarget.
 
     Args:
-        joints: Joint positions in meters, Y-up (HumanML3D / recover_from_ric).
+        joints: Joint positions in metres, Y-up, facing +Z at t=0.
         output: Destination ``.glb`` path.
         fps: Scene / bake FPS (default 20).
         clip_name: Action / clip name (retarget ``--source-track``).
+        offsets: Parent-local rest skeleton ``(22, 3)`` (NPZ ``offsets``);
+            defaults to :data:`motion3d.skeleton.REFERENCE_OFFSETS`.
         in_place: Strip horizontal travel + yaw drift (loopable game clip).
         neutral_aim: Per-bone neutral directions (armature space) overriding
-            :data:`HML22_NEUTRAL_AIM` — usually the target rig's rest pose.
+            :data:`NEUTRAL_AIM` — usually the target rig's rest pose.
         max_lean_deg: Cap torso tilt off vertical (degrees).
         hands_together_m: Hold both wrists this close (two-hand prop grip).
         plant_feet: Hold the stance rigid under the pelvis (stationary actions).
@@ -859,7 +638,11 @@ def export_joints_glb(
     out.parent.mkdir(parents=True, exist_ok=True)
 
     joints_y = np.asarray(joints, dtype=np.float64)
-    rest_y = _canonical_rest_joints_yup(joints_y[0])
+    # The model's reference skeleton has the pelvis at the origin (feet at
+    # -0.89 m). Lift it to where the body actually is: Animator3D scales the
+    # transferred ``pelvis`` location by ``target_height / source_height``, and
+    # a rest pelvis on the floor makes that ratio explode (~800x).
+    rest_y = rest_positions_yup(offsets) + joints_y[0, 0]
     rest_z = yup_to_blender(rest_y)
     joints_z = yup_to_blender(joints_y)
     if in_place:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -61,3 +62,19 @@ def paint3d_post_install(installer: PythonProjectInstaller) -> bool:
 
     ok = run_paint3d_post_install(installer)
     return dev_extras_post_install(installer) and ok
+
+
+def motion3d_post_install(installer: PythonProjectInstaller) -> bool:
+    """Motion3D: compila o runtime C vendorizado e pré-descarrega o GGUF.
+
+    Ambos falham em silêncio visível (warn): o CLI recompila/descarrega no
+    primeiro uso e ``motion3d doctor`` reporta o estado real.
+    """
+    from .motion3d_extras import motion3d_install_in_venv
+
+    motion3d_install_in_venv(
+        venv_python=str(installer.venv_python),
+        project_root=Path(installer.project_root),
+        logger=installer.logger,
+    )
+    return dev_extras_post_install(installer)
