@@ -21,17 +21,29 @@ POSE_PRESETS: dict[str, str] = {
     "quaternius-tpose": "quaternius_tpose_bone.txt",
     # Anão / chibi / cabeça grande: tronco curto, ombros mais baixos.
     "quaternius-tpose-dwarf": "quaternius_tpose_dwarf_bone.txt",
-    # A-pose (braços -45°, mãos abertas): humanoides musculados/gordos — a
-    # T-pose horizontal estica músculo/gordura (ogre/merchant). Ver
-    # scripts/derive_openhand_apose.py.
-    "quaternius-apose": "quaternius_apose_bone.txt",
+    # A-pose default: esqueleto **oficial** do Hunyuan3D-Omni
+    # (demos/pose/a_pose_bone.txt, 51 ossos) **sem os 30 ossos de dedo**.
+    # Os ossos de dedo do upstream abrem em profundidade (palma virada para o
+    # corpo) enquanto as refs do Text2D saem com as palmas viradas para a câmara
+    # e os dedos abertos no plano da imagem → o modelo constrói a mão DUAS vezes
+    # (imagem + esqueleto, 90° desfasadas): mãos «balão» e 7-9 dedos por mão
+    # (medido 2026-10-29 no pool Vael: npc_guard @octree 384, bandit @256).
+    # Sem dedos, os braços continuam a -40° (o ganho do oficial) e a mão forma-se
+    # só a partir da imagem — mesma conclusão de ``derive_openhand_apose.py``.
+    # Derivação: ``scripts/derive_omni_apose_nofingers.py``.
+    "omni-apose-nofingers": "omni_apose_nofingers_bone.txt",
+    "quaternius-apose": "omni_apose_nofingers_bone.txt",
+    # Esqueleto oficial COMPLETO (51 ossos, com dedos) — só bench/comparação.
+    "omni-apose": "omni_apose_bone.txt",
+    # Esqueleto mínimo antigo (22 ossos) — só para comparação/bench.
+    "quaternius-apose-min": "quaternius_apose_bone.txt",
     # A-pose chibi (braços -45° no esqueleto dwarf).
     "quaternius-apose-dwarf": "quaternius_apose_dwarf_bone.txt",
     # Aliases
     "dwarf-tpose": "quaternius_tpose_dwarf_bone.txt",
     "chibi-tpose": "quaternius_tpose_dwarf_bone.txt",
-    "a-pose": "quaternius_apose_bone.txt",
-    "apose": "quaternius_apose_bone.txt",
+    "a-pose": "omni_apose_nofingers_bone.txt",
+    "apose": "omni_apose_nofingers_bone.txt",
     "dwarf-apose": "quaternius_apose_dwarf_bone.txt",
     "chibi-apose": "quaternius_apose_dwarf_bone.txt",
 }
@@ -212,6 +224,24 @@ def category_omni_defaults(category: str | None) -> dict[str, Any]:
     return dict(base) if base else {}
 
 
+def pose_bone_count(pose_file: str | Path | None) -> int | None:
+    """Nº de ossos (linhas não vazias) do ficheiro de pose — *identidade* do esqueleto.
+
+    O fingerprint Omni indexa o preset pelo **nome**: re-apontar um nome para
+    outro ficheiro (ex. ``quaternius-apose`` 51→21 ossos em 2026-10-29) não
+    invalidava shapes antigos. Gravar a contagem no sidecar dá identidade ao
+    esqueleto usado — mudar o ficheiro passa a invalidar o resume.
+    """
+    if not pose_file:
+        return None
+    try:
+        text = Path(pose_file).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    n = sum(1 for line in text.splitlines() if line.strip())
+    return n or None
+
+
 def merge_omni_controls(
     *,
     control_type: str | None = None,
@@ -324,6 +354,9 @@ def merge_omni_controls(
         "size_m": list(size_m) if size_m is not None else None,
         "height_m": float(height_m) if height_m is not None else None,
         "footprint_m": float(footprint_m) if footprint_m is not None else None,
+        # Identidade do esqueleto (nº de ossos) — entra no fingerprint para o
+        # resume invalidar quando o preset passa a apontar a outro ficheiro.
+        "pose_bones": pose_bone_count(pose_file),
     }
     return out
 
@@ -418,7 +451,19 @@ def omni_fingerprint(controls: dict[str, Any]) -> dict[str, Any]:
         except (TypeError, ValueError):
             bbox_vals = None
 
-    return {
+    # Identidade do esqueleto (vem de ``merge_omni_controls``). Ausente em
+    # sidecars anteriores a 2026-10-29 → dict diferente do esperado para assets
+    # com pose (regen forçada); assets sem pose não têm a chave em lado nenhum.
+    pose_bones = controls.get("pose_bones")
+    if pose_bones in (None, ""):
+        pose_bones = None
+    else:
+        try:
+            pose_bones = int(pose_bones)
+        except (TypeError, ValueError):
+            pose_bones = None
+
+    fingerprint = {
         "control_type": controls.get("control_type") or "none",
         "bbox": bbox_vals,
         "bbox_preset": bbox_preset,
@@ -434,6 +479,9 @@ def omni_fingerprint(controls: dict[str, Any]) -> dict[str, Any]:
         "octree_resolution": octree,
         "bbox_axis_max": float(OMNI_BBOX_AXIS_MAX),
     }
+    if pose_bones is not None:
+        fingerprint["pose_bones"] = pose_bones
+    return fingerprint
 
 
 def shape_omni_sidecar_path(shape_glb: str | Path) -> Path:

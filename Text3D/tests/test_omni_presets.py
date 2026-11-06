@@ -276,15 +276,38 @@ class TestFingerprintSeed:
 
 
 class TestAposePreset:
-    def test_resolve_apose(self) -> None:
+    def test_resolve_apose_is_upstream_skeleton_without_fingers(self) -> None:
         path = resolve_pose_preset("quaternius-apose")
         assert path.is_file()
-        assert path.name == "quaternius_apose_bone.txt"
+        assert path.name == "omni_apose_nofingers_bone.txt"
         lines = path.read_text(encoding="utf-8").strip().splitlines()
-        assert len(lines) == 22  # esqueleto mínimo (sem dedos)
-        # aliases
+        # Oficial (51) menos os 30 ossos de dedo: ``Wrist`` mantém-se, falanges
+        # não. Com dedos o modelo constrói a mão DUAS vezes (imagem + esqueleto,
+        # 90° desfasadas) → mãos «balão» e 7-9 dedos por mão (2026-10-29).
+        assert len(lines) == 21
+        assert resolve_pose_preset("omni-apose-nofingers") == path
         assert resolve_pose_preset("a-pose") == path
         assert resolve_pose_preset("apose") == path
+
+    def test_upstream_full_skeleton_still_selectable(self) -> None:
+        """O oficial completo (51, com dedos) fica só para bench/comparação."""
+        path = resolve_pose_preset("omni-apose")
+        assert path.name == "omni_apose_bone.txt"
+        assert len(path.read_text(encoding="utf-8").strip().splitlines()) == 51
+
+    def test_nofingers_has_no_finger_bones_but_keeps_wrists(self) -> None:
+        import json
+
+        from text3d.omni_presets import omni_data_path
+
+        names = list(json.loads(omni_data_path("omni_apose_nofingers_bone.json").read_text(encoding="utf-8")))
+        assert len(names) == 21
+        assert not [n for n in names if n.strip().lower().startswith(("thumb", "index", "middle", "ring", "pinky"))]
+        for required in ("Wrist.R", "Wrist.L", "Elbow.R", "Elbow.L", "Head", "Ankle.R", "Ankle.L"):
+            assert required in names
+
+    def test_legacy_minimal_apose_still_resolvable(self) -> None:
+        assert resolve_pose_preset("quaternius-apose-min").name == "quaternius_apose_bone.txt"
 
     def test_apose_arms_below_horizontal(self) -> None:
         import json
@@ -294,12 +317,18 @@ class TestAposePreset:
 
         from text3d.omni_presets import omni_data_path
 
-        data = json.loads(omni_data_path("quaternius_apose_bone.json").read_text(encoding="utf-8"))
-        for name in ("upperarm_l", "upperarm_r"):
-            a, b = (np.array(data[name][i]) for i in (0, 1))
-            d = b - a
-            # Braços ~45° abaixo da horizontal (A-pose para musculados/gordos).
-            assert math.degrees(math.atan2(d[1], abs(d[0]))) == pytest.approx(-45.0, abs=2.0)
+        # Nomes vêm do .json; segmentos reais do .txt (o .json do upstream é
+        # points: start==end em todos os ossos).
+        for jname, tname in (
+            ("omni_apose_bone.json", "omni_apose_bone.txt"),
+            ("omni_apose_nofingers_bone.json", "omni_apose_nofingers_bone.txt"),
+        ):
+            names = list(json.loads(omni_data_path(jname).read_text(encoding="utf-8")))
+            txt = np.loadtxt(omni_data_path(tname))
+            for name in ("Arm.R", "Elbow.R", "Arm.L", "Elbow.L"):
+                d = txt[names.index(name), 3:] - txt[names.index(name), :3]
+                ang = math.degrees(math.atan2(d[1], abs(d[0])))
+                assert ang == pytest.approx(-40.0, abs=3.0), f"{tname}:{name} {ang:.1f}°"
 
     def test_tpose_has_no_finger_bones(self) -> None:
         import json
@@ -314,6 +343,43 @@ class TestAposePreset:
         # Guia essencial presente: coluna, cabeça, braços até ao pulso, pernas.
         for required in ("pelvis", "Head", "upperarm_l", "hand_l", "hand_r", "thigh_l", "ball_r"):
             assert required in names
+
+
+class TestFingerprintPoseBones:
+    """O preset tem o mesmo nome quando o ficheiro muda → gravar o nº de ossos."""
+
+    def test_merge_records_pose_bone_count(self) -> None:
+        out = merge_omni_controls(pose_preset="quaternius-apose")
+        assert out["pose_bones"] == 21
+        full = merge_omni_controls(pose_preset="omni-apose")
+        assert full["pose_bones"] == 51
+
+    def test_bbox_controls_have_no_pose_bones_key(self) -> None:
+        out = merge_omni_controls(bbox_preset="door")
+        assert out["pose_bones"] is None
+        assert "pose_bones" not in omni_fingerprint(out)
+
+    def test_sidecar_from_51_bones_is_stale_after_retarget(self, tmp_path: Path) -> None:
+        glb = tmp_path / "npc_guard_shape.glb"
+        glb.write_bytes(b"glTF")
+        expected = merge_omni_controls(pose_preset="quaternius-apose")  # 21 ossos
+        # Sidecar gerado quando o nome apontava ao oficial completo (51 ossos).
+        write_omni_fingerprint(glb, {**expected, "pose_bones": 51})
+        assert not omni_fingerprint_matches(glb, expected)
+
+    def test_sidecar_without_pose_bones_is_stale_for_posed_assets(self, tmp_path: Path) -> None:
+        # Sidecars anteriores a 2026-10-29 não registavam o esqueleto — regen.
+        import json
+
+        glb = tmp_path / "bandit_shape.glb"
+        glb.write_bytes(b"glTF")
+        expected = merge_omni_controls(pose_preset="quaternius-apose")
+        side = Path(str(glb) + ".omni.json")
+        side.write_text(
+            json.dumps({**omni_fingerprint(expected), "pose_bones": None}),
+            encoding="utf-8",
+        )
+        assert not omni_fingerprint_matches(glb, expected)
 
 
 class TestFingerprintMcLevelZero:

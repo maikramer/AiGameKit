@@ -25,8 +25,8 @@ class TestSnapOctree:
         assert _snap_octree(177) == 192
         assert _snap_octree(256) == 256
         assert _snap_octree(500) == 512
-        # Tecto 512 → 576 (buildings a 544, ver _BUILDING_OCTREE_FLOOR).
-        assert _snap_octree(999) == 576
+        # Tecto 576 → 608 (buildings a 576 desde 2026-10-30).
+        assert _snap_octree(999) == 608
 
     def test_ladder_is_floor_step_ceiling(self) -> None:
         from text3d.bbox_tune import _OCTREE_LADDER
@@ -58,7 +58,12 @@ class TestTuneHunyuanForBbox:
         assert char < max(size)  # volume-eq < altura
 
     def test_small_humanoid_respects_face_budget_cap(self) -> None:
-        """Bandit-scale: face-budget cap impede soft-boost de subir a 224+."""
+        """Bandit-scale: o piso de personagem manda acima do face-cap.
+
+        Medido 2026-10-29: a 160 (alvo percetual de props pequenos) rostos/mãos
+        saem bolhas — daí ``_CHARACTER_OCTREE_FLOOR`` (creature 256, humanoid
+        384) aplicar **depois** do face-cap.
+        """
         r = tune_hunyuan_for_bbox(
             base_steps=30,
             base_octree=256,
@@ -72,9 +77,24 @@ class TestTuneHunyuanForBbox:
         )
         # char = (0.55·1.65·0.4)^(1/3) ≈ 0.71 — não o eixo 1.65.
         assert 0.6 < r.char_m < 0.8
-        assert r.octree >= _OCTREE_FLOOR
-        assert r.octree <= 192
+        assert r.octree >= 256  # piso de criatura, acima do face-cap de props
+        assert r.octree <= _OCTREE_CEILING
         assert (r.octree - _OCTREE_FLOOR) % _OCTREE_STEP == 0
+
+    def test_small_humanoid_floor_is_384(self) -> None:
+        r = tune_hunyuan_for_bbox(
+            base_steps=30,
+            base_octree=256,
+            base_chunks=4,
+            size_m=[0.55, 1.65, 0.4],
+            category="humanoid",
+            quality="medium",
+            total_vram_gib=6.0,
+            group_offload=True,
+            volume_decoder="flashvdm",
+        )
+        assert r.octree >= 384  # validado no hero (rosto/mãos legíveis)
+        assert r.octree <= _OCTREE_CEILING
 
     def test_large_building_steps_up_unchanged_by_soft_floor(self) -> None:
         r = tune_hunyuan_for_bbox(
@@ -151,7 +171,7 @@ class TestTuneHunyuanForBbox:
         assert octree_face_budget_cap(5.0) is None  # building: sem cap
 
     def test_pancake_prop_breaks_face_cap_by_anisotropy(self) -> None:
-        """Fogueira 1.5x0.5x1.5: volume-eq+cap davam 160; eixo fino pede +64."""
+        """Fogueira 1.5x0.5x1.5: a 224 ainda perfurava; 128 células → 384."""
         from text3d.bbox_tune import anisotropy_octree_floor
 
         pit = tune_hunyuan_for_bbox(
@@ -164,8 +184,8 @@ class TestTuneHunyuanForBbox:
             total_vram_gib=6.0,
             group_offload=True,
         )
-        assert anisotropy_octree_floor([1.5, 0.5, 1.5], "prop") == 224
-        assert pit.octree >= 224
+        assert anisotropy_octree_floor([1.5, 0.5, 1.5], "prop") == 384
+        assert pit.octree >= 384
         assert (pit.octree - _OCTREE_FLOOR) % _OCTREE_STEP == 0
         # Cubo / ferradura: sem boost (ratio ≤ 2).
         assert anisotropy_octree_floor([0.8, 0.8, 0.8], "prop") is None
@@ -324,9 +344,9 @@ class TestBuildingOctreeTargets:
 class TestBuildingOctreeFloor:
     """Piso de octree para edifícios: 480 saía pouco sólido nos grandes do
     pool (village_forge/barn/house) — o utilizador validou que precisam de
-    pelo menos +64 (→544)."""
+    pelo menos +64 (→576 desde 2026-10-30)."""
 
-    def test_buildings_get_544_on_6gb_with_offload(self) -> None:
+    def test_buildings_get_576_on_6gb_with_offload(self) -> None:
         from text3d.bbox_tune import tune_hunyuan_for_bbox
 
         for size in ([5.5, 5.0, 5.5], [7.5, 6.0, 11.0], [5.2, 3.2, 6.0]):
@@ -340,7 +360,7 @@ class TestBuildingOctreeFloor:
                 total_vram_gib=6.0,
                 group_offload=True,
             )
-            assert r.octree == 544
+            assert r.octree == 576
 
     def test_small_props_unaffected(self) -> None:
         from text3d.bbox_tune import tune_hunyuan_for_bbox
@@ -370,4 +390,4 @@ class TestBuildingOctreeFloor:
             total_vram_gib=6.0,
             group_offload=True,
         )
-        assert r.octree == 544
+        assert r.octree == 576

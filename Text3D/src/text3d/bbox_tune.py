@@ -28,7 +28,7 @@ _MAX_SCALE = 3.0
 _MIN_SCALE = 0.75
 # Octree: calcular → se <128 → 128; senão degraus de 32 até 512.
 _OCTREE_FLOOR = 128
-_OCTREE_CEILING = 576
+_OCTREE_CEILING = 608
 _OCTREE_STEP = 32
 # Soft-floor não-linear: sobe o piso efectivo nos assets **pequenos**
 # (anti-pinholes leve) e decai a ~0 nos grandes. ``floor_eff = 128 + MAX * e^(-char/τ)``.
@@ -67,14 +67,26 @@ _HOLE_PRONE_CATEGORIES = frozenset({"terrain", "rock", "environment"})
 # — paredes finas/ocrimbas não sobrevivem ao voxel. Validado pelo utilizador:
 # precisam de pelo menos +64 acima do tecto antigo de 480 (→544). O tecto de
 # faces da categoria continua a mandar acima disto quando o orçamento aperta.
-_BUILDING_OCTREE_FLOOR = 544
+_BUILDING_OCTREE_FLOOR = 576
 _BUILDING_LIKE = frozenset({"building"})
+# Personagens/criaturas: o alvo percetual (approach 1.0-1.2 m → voxel 2.5-3 cm)
+# manda o octree para 160 mesmo com o preset hq (384). Medido a 2026-10-29: os
+# shapes de todos os personagens saíram a 160 e rostos/mãos ficaram bolhas; o
+# único bom era o hero com 384 explícito. Piso por categoria: humanoid 384
+# (validado no hero), creature 256 (sobe a 384 nos bosses grandes via
+# ``physics_target_octree``).
+_CHARACTER_OCTREE_FLOOR: dict[str, int] = {
+    "humanoid": 384,
+    "creature": 256,
+}
 # Panqueca/stick (max/min > 2): ``char_m`` volumétrico subestima o eixo fino.
 # O grid MC e cubico no eixo maior, portanto um anel 1.5x0.5 m @160 so leva
-# ~53 células em Y → casca perfurada. Empírico fogueira: +64 (160→224) fecha.
+# ~53 células em Y → casca perfurada. O +64 antigo (160→224) **não chegava**:
+# a fogueira a 224 ainda saía com buracos (voxel 6.7 mm no eixo maior). 128
+# células no eixo fino → 384 na fogueira (voxel 3.9 mm) e 288 no log_pile.
 # Só prop/furniture/chest/item — arma 25:1 iria a 512.
 _ANISO_RATIO_MIN = 2.0
-_ANISO_MIN_THIN_CELLS = 72
+_ANISO_MIN_THIN_CELLS = 128
 _ANISO_FLOOR_CATEGORIES = frozenset({"prop", "furniture", "chest", "item"})
 # Margem sobre o alvo físico (~um degrau de ladder a 256) — cobria o
 # «auto 224 → 256 ainda fraco → +32» do manifesto.
@@ -258,7 +270,7 @@ _OCTREE_LADDER = tuple(range(_OCTREE_FLOOR, _OCTREE_CEILING + 1, _OCTREE_STEP))
 # 480 → 544 (2026-09-08): a 480 os grandes do pool (village_forge/barn/house)
 # ainda saíam pouco sólidos — o utilizador pediu pelo menos +64. O piso
 # ``_BUILDING_OCTREE_FLOOR`` alinha-se; a validar empiricamente no redo.
-LATENT_DETAIL_CEILING = 544
+LATENT_DETAIL_CEILING = 576
 _LATENT_CEILING_ENV = "TEXT3D_LATENT_OCTREE_CEILING"
 
 
@@ -392,6 +404,12 @@ def morph_close_meters(
         return None
     voxel_m = voxel_meters(char_m, octree) if octree is not None and octree > 0 else float(target_voxel_m)
     raw = n * voxel_m
+    # Fecho sub-voxel não existe no output do MC: o remesh não consegue fechar
+    # vãos abaixo de um voxel e, na prática, promove o fecho a ~1 voxel (mais
+    # agressivo do que o pedido e sem fechar os vãos de 2-3 cm). Melhor desligar
+    # o auto-morph; quem precisa de fecho real pede >= 2 voxels explicitamente.
+    if raw < 0.5 * voxel_m:
+        return None
     lo = max(_MORPH_ABS_LO, _MORPH_FRAC_LO * float(char_m))
     hi = min(_MORPH_ABS_HI, _MORPH_FRAC_HI * float(char_m))
     if hi < lo:
@@ -414,7 +432,7 @@ def max_octree_for_vram(
         # nos sidecars), portanto este ramo é o que manda na prática — tem de
         # espelhar o tier ≥5.5 GiB, senão mexer lá em cima não muda nada.
         # (480→544: edifícios grandes pouco sólidos a 480, +64 do utilizador.)
-        return 544 if group_offload else 384
+        return 576 if group_offload else 384
     if group_offload:
         # Stream pesos → VRAM ≈ ativação + MC. Sacrifica tempo, enche a GPU.
         # 6 GB + sdnq-int4 + group_offload: 448 → 480. Os edifícios de 6-11 m
@@ -425,7 +443,7 @@ def max_octree_for_vram(
             return 576
         if total_vram_gib >= 5.5:
             # 5.5 e não 6.0: uma "6 GB" reporta ~5.77 GiB utilizáveis.
-            return 544
+            return 576
         if total_vram_gib >= 5.0:
             return 384
         return 320
@@ -622,6 +640,13 @@ def tune_hunyuan_for_bbox(
         face_cap = octree_face_budget_cap(float(char_m), category)
         if face_cap is not None:
             desired = min(desired, int(face_cap))
+    # Personagens/criaturas: piso explícito de octree. O alvo percetual
+    # (voxel 2.5-3 cm) e o face-cap de props pequenos não servem aqui — um
+    # rosto a 160 células é uma bolha. Corre depois do face-cap para não ser
+    # capado por ele; o tecto de VRAM (``hi``) continua a mandar.
+    char_floor = _CHARACTER_OCTREE_FLOOR.get(cat_key)
+    if char_floor is not None:
+        desired = max(desired, int(char_floor))
     # Piso de edifícios: o face-cap percetual (~320 em char 5-8 m) deixa
     # paredes finas perfuradas nos grandes do pool (forge/barn/house) — o
     # utilizador validou que precisam de pelo menos +64. Corre DEPOIS do
