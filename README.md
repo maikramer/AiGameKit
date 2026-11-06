@@ -60,12 +60,14 @@ The emitted `world.xml` / manifest describe the scene for the runtime (e.g. the 
 | [**Text3D**](Text3D/) | **Text-to-3D** pipeline: 2D image (via Text2D) → GLB mesh with Hunyuan3D-Omni (SDNQ INT4; bbox/pose/point/voxel controls). Texturing via Paint3D (optional). |
 | [**Paint3D**](Paint3D/) | **3D texturing**: Hunyuan3D-Paint 2.1 (multiview PBR) + Materialize PBR + AI upscale (Real-ESRGAN). Standalone or via Text3D. |
 | [**Part3D**](Part3D/) | **Semantic part decomposition**: Hunyuan3D-Part (P3-SAM + X-Part). SDNQ + CPU offload for ~6 GB VRAM. |
+| [**Hi3D**](Hi3D/) | **Mesh refinement** (image-conditioned): Hi3D v1.0 / SPARC3D. Runs as the default `refine` stage between shape and paint (512³ fits a 6 GB GPU with CPU offload, ~130 s). Its own Python **3.10** venv. |
 | [**GameAssets**](GameAssets/) | **Prompt/asset batching**: profile + CSV → `text2d` or `texture2d` + optional `text3d`, rig, **Animator3D** (auto-detected), **`gameassets dream`** (idea → game plan + assets). |
 | [**Texture2D**](Texture2D/) | **Seamless 2D textures** (tileable) via pattern-diffusion (local GPU) + PBR via Materialize. |
 | [**Skymap2D**](Skymap2D/) | **Equirectangular 360° skymaps** — FLUX.1-dev + LoRA locally on GPU (CUDA), skyboxes for game dev. |
 | [**Text2Sound**](Text2Sound/) | **Text-to-audio** CLI with Stable Audio 3 Small (music/SFX split): stereo 44.1 kHz, game-dev presets. |
 | [**Rigging3D**](Rigging3D/) | **rigging3d** — 3D auto-rigging with [**SkinTokens**](https://github.com/VAST-AI-Research/SkinTokens) (unified autoregressive skeleton + skinning, successor to UniRig); CUDA GPU; Python **3.13**, **bpy** 5.2 LTS. |
 | [**Animator3D**](Animator3D/) | **animator3d** — **bpy** 5.2 LTS; Python **3.13**; procedural clips, **`game-pack`** (humanoid/creature/flying presets), GLB export after rigging. |
+| [**Motion3D**](Motion3D/) | **motion3d** — text-to-motion **SprongMotion-14M** on the **CPU** (33 MB GGUF + vendored C runtime); 22 joints @ 20 fps; `apply-rigged` retargets onto SkinTokens rigs. |
 | [**Materialize**](Materialize/) | **PBR maps** CLI (Rust/wgpu): normal, AO, metallic, smoothness from a diffuse texture. |
 | [**AiGameKitLab**](AiGameKitLab/) | **Lab CLI**: debug 3D, quantization benches, profiling, pipeline optimization. |
 | [**Terrain3D**](Terrain3D/) | **terrain3d** — AI terrain generation via diffusion models (terrain-diffusion; CUDA GPU). |
@@ -171,9 +173,9 @@ Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://pypi.
 
 ```bash
 # Linux/macOS — from a clone
-./install.sh               # pre-flight → core profile (9 tools, zero-to-game) → doctor + next steps
+./install.sh               # pre-flight → core profile (10 tools, zero-to-game) → doctor + next steps
 ./install.sh examples      # core + sky/audio/textures/terrain/rocks — full dream coverage
-./install.sh --all         # full catalog (adds part3d, motion3d, intrinsic)
+./install.sh --all         # full catalog (adds part3d, intrinsic, hi3d)
 ./install.sh <tool>        # individual tool (keys of tools.yaml: text2d, paint3d, gameassets, …)
 ./install.sh --list        # list profiles and tools
 

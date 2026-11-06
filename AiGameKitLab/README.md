@@ -285,6 +285,31 @@ aigamekit-lab bench paint-vram --image reference.png --target-vram-mb 5500
 | `--output-json` | path | `quantization_vram_results.json` | Output JSON file |
 | `--project-dir` | path | `.` | Base for relative paths |
 
+#### `bench sdnq`
+
+Compare SDNQ recipes on **real checkpoint tensors** without loading the model.
+Reads `safetensors`/`.bin` shards with mmap, samples 2-D linear layers per size
+stratum, and reports weight error, output error (`||WX - WqX|| / ||WX||`),
+exact bits/weight (weights + scales + SVD) and quantization time.
+
+```bash
+aigamekit-lab bench sdnq --layers 4 --json /tmp/sdnq.json
+aigamekit-lab bench sdnq --checkpoint path/to/model.safetensors \
+  --candidate current-int4 --candidate uint4-proposed --device cuda
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--checkpoint` | path (repeatable) | cached models | Checkpoint file/dir; without it uses HF-cached FLUX.3, SD1.5, Paint and Omni |
+| `--candidate` | str (repeatable) | all | Recipe from `bench_sdnq.CANDIDATES` |
+| `--layers` | int | `4` | Layers sampled per checkpoint |
+| `--device` | `cpu\|cuda\|auto` | `cpu` | Quantization device |
+| `--seed` | int | `0` | Layer sampling + probe input seed |
+| `--output-json / --json` | path | None | Full report (aggregated + per layer) |
+| `--list` | flag | false | List candidates/checkpoints without quantizing |
+
+Results and the preset rationale: [`docs/findings/SDNQ_029_FINDINGS.md`](../docs/findings/SDNQ_029_FINDINGS.md).
+
 #### `bench pre-quantize`
 
 Pre-quantize SDNQ UNet (Paint3D) models.
@@ -582,7 +607,7 @@ aigamekit-lab mesh diff original.glb remeshed.glb --json-out topo_diff.json
 - **TinyVAE**: Incompatible with `HunyuanPaintPBR` (requires `latent_dist` not provided by TinyVAE).
 - **SDNQ in Paint3D**: The custom UNet `UNet2p5DConditionModel` may behave differently with SDNQ applied.
 
-### Backend Coverage (SDNQ >=0.2.1)
+### Backend Coverage (SDNQ >=0.2.9)
 
 SDNQ is pure PyTorch and runs on every backend:
 
@@ -602,13 +627,20 @@ active.
 
 ### Available SDNQ Presets (`aigamekit_shared.sdnq.PRESETS`)
 
-| Preset | dtype | group_size | SVD | Use case |
-|--------|-------|-----------|-----|----------|
-| `sdnq-uint8` | uint8 | 0 | No | **Default** — best tested, all models |
-| `sdnq-int8` | int8 | 0 | No | Signed alternative to uint8 |
-| `sdnq-int4` | int4 | 32 | Yes (r=32) | Maximum compression for low VRAM |
-| `sdnq-uint4` | uint4 | 32 | Yes (r=32) | Matches Disty0 `uint4-svd-r32` checkpoints |
-| `sdnq-fp8` | fp8 | 0 | No | RTX 40 series (Ada Lovelace+) |
+| Preset | dtype | group | SVD | Hadamard | Scales | Use case |
+|--------|-------|------:|-----|----------|--------|----------|
+| `sdnq-uint8` | uint8 | 0 (auto) | No | No | fp32 | **Default** — 8.1 b/w, all models |
+| `sdnq-int8` | int8 | 0 | No | No | fp32 | Signed alternative to uint8 |
+| `sdnq-int4` | uint4 | 32 | r=32 | N4/256 | uint8 (dq) | 4-bit tier (~5.1 b/w) for low VRAM |
+| `sdnq-uint4` | uint4 | 32 | r=32 | N4/256 | uint8 (dq) | Quality alias of `sdnq-int4` |
+| `sdnq-uint4-hq` | uint4 | 16 | r=32 | N4/256 | uint8 (dq) | Opt-in quality tier (~5.6–7.5 b/w) |
+| `sdnq-fp8` | fp8 | 0 | No | No | fp32 | RTX 40 series (Ada Lovelace+) |
+| `sdnq-int3` | uint3 | 32 | No | N4/256 | uint8 (dq) | 3-bit tier (3.5 b/w) |
+| `sdnq-int2` | uint2 | 32 | No | N4/256 | uint8 (dq) | 2-bit tier (2.5 b/w) |
+
+`use_codebook` (Lloyd-Max) is available but **not used by the presets**: it
+stores `2**bits` fp32 levels *per group*, which at `group_size=32` inflated
+int3/int2 to 11/6 b/w. Details: [`docs/findings/SDNQ_029_FINDINGS.md`](../docs/findings/SDNQ_029_FINDINGS.md).
 
 ### Optimization Techniques
 

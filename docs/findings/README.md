@@ -7,6 +7,8 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [UMS_VRAM_FINDINGS.md](UMS_VRAM_FINDINGS.md) | Admit, peak, waves, WAL, respawn, dead VRAM, testes |
 | [UMS_CALIBRATION_RTX4050_6G.md](UMS_CALIBRATION_RTX4050_6G.md) | Footprint **medido** dos 10 backends numa GPU 6 GB (`vramd calibrate`); 4 subdimensionados, skymap2d não carrega |
 | [MESH_PIPELINE_FINDINGS.md](MESH_PIPELINE_FINDINGS.md) | Master DAG Round 3, LOD0, promote/resume; **normais/tangentes** (prune keep-attrs, ktxdecompress); Decimate stepwise; V/Tri; árvores cut-only; compressão ([`../GLB_FINISH_COMPRESSION.md`](../GLB_FINISH_COMPRESSION.md)) |
+| [HI3D_REFINE_FINDINGS.md](HI3D_REFINE_FINDINGS.md) | Hi3D v1.0 (SPARC3D) como stage `refine` default ON: 512³ em 6 GB com **residência por fase** (32 s quente / 60 s frio, 3,74 GiB; offload sequencial = 137 s), normalização do upstream, decimação+debris, `topology_clean` a abrir a malha, venv 3.10 + worker UMS local |
+| [SDNQ_029_FINDINGS.md](SDNQ_029_FINDINGS.md) | SDNQ 0.2.9: **double quantization de escalas** (`scale_dtype`), codebook guarda `2^bits` níveis fp32 **por grupo** (inflacionava int3/int2 para 11/6 b/w), presets novos (`uint4-hq`, int3/int2 reais), dynamic medida e rejeitada; `aigamekit-lab bench sdnq` |
 | [OCTREE_FACES_FINDINGS.md](OCTREE_FACES_FINDINGS.md) | Empírico simple-rpg: faces ≈ 8×10⁴·char_m²; κ·octree² (κ≈5.5); por categoria |
 | [PAINT_PART_FINDINGS.md](PAINT_PART_FINDINGS.md) | Paint SDNQ/bake; Part3D; payload vramd |
 | [IMAGE_SKY_SOUND_FINDINGS.md](IMAGE_SKY_SOUND_FINDINGS.md) | Text2D, Skymap, audio trim, kernels |
@@ -16,7 +18,7 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [ANIMATOR_RETARGET_FINDINGS.md](ANIMATOR_RETARGET_FINDINGS.md) | Quaternius retarget: loc_conv, `_bone_rest_dir`, QA; bipeds → `humanoid` (não `creature`); tabela HML22 |
 | [ANIMATOR_IK_LIMITS_FINDINGS.md](ANIMATOR_IK_LIMITS_FINDINGS.md) | IK 2-ossos + limites de juntas: pole por eixo de flexão, identidade `W=Wp·Rp⁻¹·R·B`, subframe, maioria-voto; `ik-limits` CLI |
 | [ANIMATOR_QUADRUPED_CLIPS_FINDINGS.md](ANIMATOR_QUADRUPED_CLIPS_FINDINGS.md) | Quadrúpedes: galope transverso (fases por pata, spine flex, voo), front/hind anatómico, death colapso terminal, hit flinch, attack com patas+lunge; Death≠chop / Hit≠mine |
-| [MOTION3D_FINDINGS.md](MOTION3D_FINDINGS.md) | Text-to-motion → SkinTokens: `apply-rigged`, aim/rest/folhas, neutro A-pose vs pés do alvo, in-place, venv |
+| [MOTION3D_FINDINGS.md](MOTION3D_FINDINGS.md) | Text-to-motion **SprongMotion-14M** (CPU, runtime C): esqueleto 22 igual ao HML22 em índices, `joints` > `rotations` (erro 1,2 cm), rest do pelvis na origem → loc_scale 800×, perfil `sprong22`, `--attempts` e score mecânico |
 | [PRECOMPUTE_COLLIDERS_FINDINGS.md](PRECOMPUTE_COLLIDERS_FINDINGS.md) | Colisores cápsula/cilindro pré-calculados (tronco); `aigamekit-lab precompute` → `gameassets_handoff.json` (consumo no runtime); carve procedural |
 | [TEXT2D_FLUX3_KLEIN_MIGRATION.md](TEXT2D_FLUX3_KLEIN_MIGRATION.md) | Text2D → FLUX.3 Image Klein: ModularPipeline (diffusers 0.42), pop do prompt upsampler, refs/boxes/silhueta, steps 4-16 sem guidance, footprint `flux3-klein`, `load_keys`/`shape_keys` no vramd |
 | [MODEL_CONSOLIDATION_STUDY.md](MODEL_CONSOLIDATION_STUDY.md) | Inventário de modelos/variantes (~166 GB HF) + cortes por tier (~44 GB: órfãos Sana/t5-base/T2MGPT, SA Open legado, Disty0 klein, HY-Motion full) e unificações de vendor (Real-ESRGAN, bg-remover, aliases) |

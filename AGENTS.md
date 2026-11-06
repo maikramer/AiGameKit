@@ -75,13 +75,14 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Text3D/` | Python | `text3d` | core | Text-to-3D (Hunyuan3D-Omni SDNQ) |
 | `Paint3D/` | Python | `paint3d` | core | 3D texturing (Hunyuan3D-Paint 2.1, bilateral smooth, bake_exp=6) |
 | `Part3D/` | Python | `part3d` | extra | Semantic mesh part decomposition (Hunyuan3D-Part: P3-SAM + X-Part; SDNQ) |
+| `Hi3D/` | Python | `hi3d` | extra | Refinamento de malha image-conditioned (Hi3D v1.0 / SPARC3D). **Único venv Python 3.10** (torch 2.5.0+cu124, flash-attn 2.7.4.post1, spconv-cu120); stage `refine` do batch, default ON; 512³ em 6 GB com offload (~0.86 GiB, ~130 s). [`docs/findings/HI3D_REFINE_FINDINGS.md`](docs/findings/HI3D_REFINE_FINDINGS.md) · [`Hi3D/README.md`](Hi3D/README.md) |
 | `GameAssets/` | Python | `gameassets` | core | Batch asset generation |
 | `Texture2D/` | Python | `texture2d` | examples | Seamless 2D textures (local SD1.5; seamless 2.0: late-circular + noise rolling, decode integral, hires 512+refine, score/auto-heal — [`docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md`](docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md)) |
 | `Skymap2D/` | Python | `skymap2d` | examples | 360-degree skymaps (local FLUX.1-dev + LoRA) |
 | `Text2Sound/` | Python | `text2sound` | examples | Text-to-audio (Stable Audio 3 Small: music/sfx) |
 | `Rigging3D/` | Python | `rigging3d` | core | Auto-rigging (SkinTokens, Python 3.13) |
 | `Animator3D/` | Python | `animator3d` | core | Animation (bpy 5.2 LTS, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
-| `Motion3D/` | Python | `motion3d` | extra | Text-to-motion (HY-Motion-1.0 Lite/Full) → NPZ @30fps; `apply-rigged` → SkinTokens via Animator3D `hml22`; vramd |
+| `Motion3D/` | Python | `motion3d` | core | Text-to-motion **SprongMotion-14M** (CPU, runtime C vendorizado + GGUF 33 MB) → NPZ @20fps / BVH; `apply-rigged` → SkinTokens via Animator3D `sprong22`; sem GPU/vramd/torch |
 | `AiGameKitLab/` | Python | `aigamekit-lab` | core | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | core | PBR map generation (wgpu compute; 3.0: guided filter, HBAO, make-seamless, `--intrinsic`) |
 | `Intrinsic/` | Python | `intrinsic-worker` | extra | Decomposição intrínseca albedo/shading/especular (compphoto/Intrinsic; **licença académica**; backend vramd `intrinsic` para `materialize --intrinsic`) |
@@ -141,6 +142,7 @@ make test-text2d       # pytest Text2D only
 make test-text3d       # pytest Text3D only
 make test-paint3d      # pytest Paint3D only
 make test-part3d       # pytest Part3D only
+make test-hi3d          # pytest Hi3D only (venv 3.10)
 make test-gameassets   # pytest GameAssets only
 make test-texture2d    # pytest Texture2D only
 make test-skymap2d     # pytest Skymap2D only
@@ -165,6 +167,17 @@ animator3d game-pack rigged.glb animated.glb --preset humanoid
 animator3d run
 animator3d jump
 animator3d fall
+```
+
+Hi3D — refinamento de geometria image-conditioned (pós shape, antes do paint;
+`Hi3D/README.md`):
+
+```bash
+hi3d doctor                                  # stack 3.10, GPU/CC, pesos, plano (@512³+offload)
+hi3d download-model                          # 8 artefactos, ~7.7 GB
+hi3d refine clean.glb -i ref.png -o refined.glb --target-faces 60000
+text3d refine clean.glb -i ref.png -o refined.glb   # wrapper (topology_clean morph=0 incluído)
+gameassets batch ...                         # stage `refine` default ON; skip gracioso sem hi3d
 ```
 
 ### GLB handoff & idea-to-game
@@ -192,15 +205,20 @@ cargo test --manifest-path Materialize/Cargo.toml test_preset_roundtrip  # Singl
 ### Instalação por perfil (install.sh)
 
 ```bash
-./install.sh              # SEM ARGUMENTOS = perfil core (9): vramd text2d text3d paint3d rigging3d
-                         #   animator3d gameassets materialize aigamekitlab
+./install.sh              # SEM ARGUMENTOS = perfil core (10): vramd text2d text3d paint3d rigging3d
+                         #   animator3d gameassets motion3d materialize aigamekitlab
 ./install.sh core         # o mesmo, explícito
 ./install.sh examples     # tudo que os jogos de exemplo usam (15): core + texture2d skymap2d
                          #   text2sound terrain3d rocks3d
-./install.sh --all        # catálogo completo (acrescenta part3d, motion3d, intrinsic)
+./install.sh --all        # catálogo completo (acrescenta part3d, intrinsic, hi3d)
 ./install.sh <tool>       # tool individual (sempre disponível)
 ./install.sh --list       # listar perfis e ferramentas
 ```
+
+`hi3d` fica fora do `core` (venv 3.10 + ~5.5 GB de stack + 7.7 GB de pesos); o
+stage `refine` do batch está default ON e **salta com razão visível** quando o
+binário falta, por isso um `core` limpo continua a funcionar — instala-o quando
+quiseres o refinamento: `./install.sh hi3d && hi3d download-model`.
 
 Pre-flight (`scripts/preflight.py`) antes de qualquer install: valida pré-requisitos
 externos (Node ≥ 20.12, cargo, GPU, disco) e pára **uma vez** com os comandos para
@@ -358,6 +376,7 @@ The monorepo includes **AiGameKitLab** (`aigamekit-lab`) for GLB debugging, insp
 | `aigamekit-lab debug bundle <glb> -o <dir>` | Full bundle: inspect + screenshots + bundle.json |
 | `aigamekit-lab debug viz <glb> -m <mode>` | Mesh-debug viz: `normals`, `normals-arrows`, `orientation`, `uv`, `edges`, `weights` (dominant/count/unweighted/bone); `--wireframe` overlay |
 | `aigamekit-lab check glb <glb> <rules.yaml>` | Validate GLB against JSON/YAML rules (CI-ready, exit 0/1) |
+| `aigamekit-lab bench sdnq --layers 4 --json out.json` | Compare SDNQ recipes on real checkpoint tensors (weight/output error, exact b/w, quant time) without loading the model |
 
 ### Mesh Comparison Workflow
 
@@ -572,6 +591,10 @@ CI pitfalls (softfill sem Text3D, pedalboard SIGILL, Shared `[dev]` mesh deps): 
 
 ## Learned Workspace Facts
 
+- **Worker vramd — `done.result["status"]`**: `vramd.job_queue.Job.mark_finished()` marca done/failed por `result.get("status")` (ausente = `error`). Um adapter que devolva só `{output, ...}` faz o job falhar **depois** de escrever o ficheiro. Todo o `generate` de worker deve devolver `{"status": "ok", ...}`.
+- **Paint — frame de entrada**: o Hunyuan-Paint lê `obj.data.vertices` (locais) e as câmaras assumem glTF Y-up com frente em +Z (azim 0 = frente, peso 1.0). `painter._to_paint_frame` faz bake de `matrix_world` + Blender→glTF antes do paint e `_from_paint_frame` desfaz; `_fit_glb_aabb_to_reference` só escala/translada (nunca roda pelo nó do input). Sem isto um `_refined` (vértices já Y-up, nó identidade) chegava **deitado**: rosto pintado só pela vista de topo (peso 0.05) e costas inventadas. Diagnóstico: `PAINT3D_DEBUG_DIR=<dir>` dumpa normal/posição/albedo/enhanced por vista + `tex_baked`/`tex_trust`/`tex_inpainted`.
+- **Omni pose — oficial SEM dedos**: `quaternius-apose` (e `a-pose`/`apose`) resolve para `omni_apose_nofingers_bone.txt` = `demos/pose/a_pose_bone.txt` do Hunyuan3D-Omni (51 ossos) **menos os 30 ossos de dedo** (21 ossos, `Wrist` incluído). Contexto: o mínimo de 22 ossos (`quaternius-apose-min`) era **ignorado** pelo modelo (shape ≈ `control_type=none`, úmero horizontal, cotovelo «quebrado»); o oficial **completo** (`omni-apose`, só bench) corrigiu os braços (−40° rectos, medido no hero: T-pose 22 → +25°, A-pose 22 → ~−10°, oficial → −40°) mas **partiu as mãos**: os ossos de dedo abrem em profundidade (palma virada para o corpo) enquanto as refs do Text2D saem com palmas para a câmara e dedos abertos no plano da imagem → a mão é construída **duas vezes**, a 90° (pool Vael 2026-10-29: `npc_guard` @octree 384 com 7-9 dedos numa mão, `bandit` @256 com pás; as mãos «balão» aparecem nos dois regimes porque a mão tem ~30 px na referência). Derivação: `Text3D/scripts/derive_omni_apose_nofingers.py`. O `omni_apose_bone.json` empacotado é **points** (`start == end`); os segmentos reais vivem no `.txt`. O fingerprint grava `pose_bones` (nº de ossos): re-apontar um preset ao mesmo nome passou a invalidar o resume (antes não invalidava — o sidecar só guardava o nome). Refs 3D: o prefixo `painterly` troca `visible brush strokes` (vira relevo no shape) e o hint A-pose pede mãos relaxadas com dedos juntos (spread fingers = palmas para cima, pulso dobrado) — o Text2D ignora-o e desenha palmas para a frente. Hi3D: `snap_to_bounds` encaixa a AABB do refinado no `_clean` (a normalização pela média própria deixava pés 2-5 cm abaixo → falha `origin.y_min`).
+- **Hi3D refine (default ON)**: o stage `refine` corre entre `topology-fix` e `paint` (`ensure_clean_for_paint` devolve `_intermediate/<id>_refined.glb`) e **nunca falha um asset** — sem binário/pesos/GPU/imagem salta para o `_clean` com razão visível. O output do upstream vem **normalizado (raio 1, centrado na média dos vértices)**: repor o frame do coarse antes de decimar, senão o paint herda escala errada. Decimar só depois do alinhamento e remover ilhas <0.5% (a decimação fragmenta lascas). O `text3d refine` **não** corre `topology_clean` por defeito (`--clean` opt-in): medido, o clean abre a malha (2.8k boundary edges) e fragmenta 298 micro-ilhas; a saída crua do Hi3D sai fechada (1 componente, 0 boundary). O venv é 3.10 e não pode importar `aigamekit_shared` (>=3.13): o worker UMS é local (`hi3d/ums.py`) e um teste compara constantes com a Shared. Medido: 512³/25 passos **32 s com worker quente / 60 s a frio**, pico 3,74 GiB em **residência por fase** (`--no-staging` = offload sequencial do upstream: 137 s, 0,86 GiB). O load de 19,7 s é a **construção** do modelo (1,8B params), não a cópia — não vale otimizar. Detalhe: [`docs/findings/HI3D_REFINE_FINDINGS.md`](docs/findings/HI3D_REFINE_FINDINGS.md).
 - O comando `gameassets mesh reorigin-feet` repõe a origem de GLBs estáticos nos pés/base; modelos rigged com animação podem precisar de correção de orientação de root (ex. rotação) antes de centrar o pivô — não aplicar só `reorigin-feet` sem validar o resultado.
 - O **rigged GLB** tem de herdar a origem/pivô e a orientação do LOD0 (mesh centrada em X/Z, y=0 na sola dos pés, em pé na vertical correta) e o esqueleto tem de estar alinhado e dentro da malha — não rotacionado, não deslocado em Y para fora do mesh. Helpers de debug (ex. icosphere em 0,0,0, eixos visuais) NÃO devem ficar no GLB final exportado pela stage de rig.
 - Text3D / Hunyuan3D (marching cubes): paredes duplas, rachas, edifícios tipo casca-plástico. Reparo: `aigamekit_shared.mesh_repair` perfis `topology_clean` / `pre_decimate_uv` / `part_decode` / `post_voxel`. `topology_clean` actual: weld → slivers/debris → fill → watertight **seletivo** (diâmetro de loop) → shade-smooth; **sem** `force_close_base`/flare/Taubin (removidos — destruíam capela). **Base oca por baixo é OK** — QA `_shape` foca cortes/forma graves, não fechar chão. Refs Text2D eye-level 3/4 (`categories.building` + `prompt_builder`). Paint: `ensure_clean_for_paint` + `paint_prep.restrict_inpaint`. Lições: `docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`.

@@ -6,6 +6,8 @@ AI-powered 3D texturing with **Hunyuan3D-Paint 2.1** — generates multiview PBR
 
 > **PBR enrichment is ON by default** (`--no-pbr-enrich` to disable; env `PAINT3D_PBR_ENRICH=0`). Preset via `--pbr-preset` / env `PAINT3D_PBR_PRESET` (default/default). If the `materialize` binary or a wgpu GPU adapter is unavailable, the paint still succeeds — the asset just ships without normal/AO (logged warning).
 
+> **Bake internals (2026-10):** albedo + mr are baked in a **single 6-channel pass** (the per-view projection is geometric; the result is identical to two separate bakes and saves one rasterization pass per view). View selection runs at **512²** (triangle coverage only; it picks the same views). The `mr` map **skips** Real-ESRGAN (low-frequency; `PAINT3D_ENHANCE_MR=1` restores the old behaviour) — only the albedo is enhanced. The seam gutter is 4 px up to 1024 and 8/16 px at 2048/4096 so mips do not bleed between islands. The unwrap runs xatlas in a **300 s-timed subprocess** (a C call that cannot be interrupted in-process; Hi3D refine can produce meshes that hang xatlas for >170 s) — on timeout the row **fails** instead of hanging the pack, deliberately: Blender's Smart UV Project overlaps islands on these meshes.
+
 > Optimized for GPUs with 6 GB VRAM (RTX 4050 Laptop). SDNQ uint8 quantization and VAE tiling are applied automatically when needed.
 
 ## Overview

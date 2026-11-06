@@ -6,6 +6,8 @@ Texturização 3D: **Hunyuan3D-Paint 2.1** (multivista PBR no GLB exportado — 
 
 O código **`hy3dpaint`** está incluído no Paint3D em `Paint3D/src/paint3d/hy3dpaint/`; os pesos PBR são descarregados sob demanda do Hugging Face (`tencent/Hunyuan3D-2.1`, pasta `hunyuan3d-paintpbr-v2-1`). Ver [docs/PAINT_SETUP.md](docs/PAINT_SETUP.md).
 
+**Bake e custos internos (2026-10):** albedo + mr são bakados num **único passe de 6 canais** (a projecção por vista é geométrica; o resultado é idêntico ao de dois bakes e poupa uma passagem de rasterização por vista). A selecção de vistas corre a **512²** (só precisa de cobertura por triângulo; escolhe as mesmas vistas). O mapa `mr` **não** passa pelo Real-ESRGAN (é de baixa frequência; `PAINT3D_ENHANCE_MR=1` repõe o comportamento antigo), só o albedo. A gutter de costura é 4 px até 1024 e 8/16 px a 2048/4096 para os mips não sangrarem entre ilhas. O unwrap corre o xatlas num **subprocesso com timeout de 300 s** (chamada C que não dá para interromper in-process; o refine Hi3D gera malhas que prendem o xatlas >170 s) — em timeout a linha **falha** em vez de pendurar o lote, de propósito: o Smart UV Project do Blender sobrepõe ilhas nestas malhas.
+
 ## Instalação
 
 ### Oficial (monorepo)

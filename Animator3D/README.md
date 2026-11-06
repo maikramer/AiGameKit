@@ -66,8 +66,9 @@ Animator3D venv (Quaternius lock + fetch). Inventory + bone maps:
 pitfalls (feet OK at rest → waist when a clip plays):
 [`docs/findings/ANIMATOR_RETARGET_FINDINGS.md`](../docs/findings/ANIMATOR_RETARGET_FINDINGS.md).
 
-**Motion3D path:** text-to-motion builds an HML22 source GLB and calls
-`retarget_animation` with profile `hml22` (`data/retarget/hml22.yaml`). Happy path
+**Motion3D path:** text-to-motion (SprongMotion, 22 joints) builds a source GLB
+and calls `retarget_animation` with profile `sprong22` (`data/retarget/sprong22.yaml`).
+The legacy `hml22` profile is still shipped for HumanML3D sources. Happy path
 is `motion3d apply-rigged` — see [`Motion3D/README.md`](../Motion3D/README.md) and
 [`docs/findings/MOTION3D_FINDINGS.md`](../docs/findings/MOTION3D_FINDINGS.md).
 

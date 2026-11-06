@@ -15,7 +15,7 @@ Foundation library for ALL Python packages in the monorepo. 47 files, 7122 LOC +
 | `gpu.py` | ~900 | 31 files | GPU detection, VRAM (NVML→nvidia-smi), exclusive GPU, process mgmt |
 | `quality.py` | 233 | 22 files | QualityEngine: 5 tiers, 14 categories, soft parameter resolution |
 | `quantization.py` | 438 | 22 files | Multi-backend quant: bitsandbytes, torchao, quanto, FP8 |
-| `sdnq.py` | 407 | 16 files | SDNQ quantization: 4 presets, LoRA patch, VRAM estimation |
+| `sdnq.py` | ~600 | 16 files | SDNQ quantization: 8 presets (4-bit + HQ + int3/int2), double-quant scales, LoRA patch, VRAM estimation |
 | `profiler/*` | ~650 | 19 files | ProfilerSession, PerfRecorder, CUDA snapshots, SQLite perf DB |
 | `env.py` | 133 | 10+ files | `TOOL_BINS`, `prefer_monorepo_tools` (`AIGAMEKIT_PREFER_MONOREPO`), `subprocess_gpu_env` |
 | `subprocess_utils.py` | 169 | GameAssets | `resolve_binary` → `<Tool>/.venv/bin` first; `run_cmd` / streaming |
@@ -30,7 +30,7 @@ Foundation library for ALL Python packages in the monorepo. 47 files, 7122 LOC +
 
 1. **GPU/VRAM** (`gpu.py` + `vram_monitor.py` + `cli_helpers.py`): NVML-first inventory; vramd delegation before prep; `prepare_gpu_exclusive` only in-process fallback; kill respects vramd queue; legacy servers need `AIGAMEKIT_ALLOW_LEGACY_SERVER=1`.
 2. **Quality** (`quality.py` + `data/*.yaml`): QualityEngine resolves `--quality` + `--category` to concrete params. Soft resolution: fills only `None` fields (tracked via `ParameterSource` enum).
-3. **Quantization** (`quantization.py` + `sdnq.py`): Multi-backend (bitsandbytes, torchao, quanto, FP8). SDNQ: 4 presets (`int4_dynamic`, `int4_static`, `int8`, `fp8`). VRAM estimation pre-flight.
+3. **Quantization** (`quantization.py` + `sdnq.py`): Multi-backend (bitsandbytes, torchao, quanto, FP8). SDNQ: 8 presets (`uint8`, `int8`, `int4`/`uint4`, `uint4-hq`, `fp8`, `int3`, `int2`) com double-quant scales; medidos por `aigamekit-lab bench sdnq`. VRAM estimation pre-flight.
 4. **Installer** (`installer/` 10 files): `BaseInstaller` base class, `clified_hooks` per-package post-install, `unified.py` Clified bridge. Cross-deps: text3d needs nvdiffrast, rigging3d needs inference env.
 5. **Profiler** (`profiler/` + `perfstore/`): `AIGAMEKIT_PROFILE=1` enables. Session spans, PerfRecorder, SQLite perf.db, CUDA memory snapshots, report formatting.
 6. **File logging** (`logging.py`): process-wide sink → `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log`. `configure_logging(tool)` + `Logger`; stdlib root bridged once. Off under pytest unless `AIGAMEKIT_FILE_LOG=1`. Docs: `docs/LOGGING.md`.

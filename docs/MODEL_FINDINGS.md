@@ -82,10 +82,17 @@ SDNQ aos pesos; `memory_efficient` pode reduzir activação (~×0.65).
 
 **Factors SDNQ (runtime, não checkpoint pré-quant):**
 
-| Preset | × pesos (aprox.) |
+| Preset | × pesos (medido) |
 |--------|------------------|
-| `sdnq-int4` | 0.32 |
-| `sdnq-uint8` / int8 | 0.55 |
+| `sdnq-int4` / `uint4` | 0.32 (~5.1–7.0 b/peso) |
+| `sdnq-uint4-hq` | 0.38 (~5.6–7.5 b/peso) |
+| `sdnq-int3` | 0.24 (3.5 b/peso) |
+| `sdnq-int2` | 0.18 (2.5 b/peso) |
+| `sdnq-uint8` / int8 | 0.55 (planner conservador; medido 8.1 b/peso) |
+| `sdnq-fp8` | 0.55 |
+
+Medição reprodutível: `aigamekit-lab bench sdnq` (FLUX.3, SD1.5, Paint, Omni).
+Detalhe e o porquê de não haver codebook: [`findings/SDNQ_029_FINDINGS.md`](findings/SDNQ_029_FINDINGS.md).
 
 **Group offload (text3d típico c/ SDNQ):** pico ≈ `largest(quant)` + activação
 (full); chunks orçados no runtime budget depois.

@@ -200,6 +200,14 @@ quantizam) — corrigidos para ≥256×256.
 `TestSdnqLayersUnderGroupOffload` (output allclose sob hooks leaf-level) — o
 estado do codebook viaja na layer e os grupos movem-no junto.
 
+> **Revisão 2026-11-04 (SDNQ 0.2.9):** a medição acima era micro (modelos
+> pequenos). Em camadas reais o codebook **não** acelera o load: 10.4 s vs
+> 0.6 s numa 3072×20480 (FLUX.3), e guarda `2**bits` níveis fp32 por grupo —
+> a `group_size=32` isso levava `sdnq-int3`/`sdnq-int2` a 11/6 b/peso (mais do
+> que o int4/uint8) e `sdnq-uint8` a 10–18 b/peso. Os presets passaram a **não
+> usar codebook** e ganharam escalas `uint8` (double quantization). Ver
+> [`SDNQ_029_FINDINGS.md`](SDNQ_029_FINDINGS.md).
+
 **Paint3D (upgrade):** gate GO único `_paint_go_gate_cfg()` com **specs de VRAM
 livre** (o gate antigo via o total — numa GPU ocupada não engajava; lição das
 tools 2D), alloc conf delegado ao Shared (`aigamekit_shared.group_offload`,

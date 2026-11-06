@@ -42,7 +42,7 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 | `hf` | HuggingFace token resolution (`get_hf_token`) and cache display (`hf_home_display_rich`) |
 | `seed_utils` | `generate_seed()`, `resolve_effective_seed()`, `seed_everything()` — reproducible generation across random/numpy/torch |
 | `quantization` | `get_quantization_config()` — bitsandbytes int8/int4, torchao, quanto, FP8; `enable_vae_optimizations()`, `enable_attention_optimizations()` |
-| `sdnq` | SDNQ quantization helpers — 4 tested presets (`uint8`, `int8`, `int4`, `fp8`), `quantize_model()`, `create_config()`, VRAM estimation |
+| `sdnq` | SDNQ quantization helpers — 8 tested presets (`uint8`, `int8`, `int4`/`uint4`, `uint4-hq`, `fp8`, `int3`, `int2`), double-quantized scales (SDNQ ≥0.2.8), `quantize_model()`, `create_config()`, VRAM estimation |
 | `bpy_mesh` | Mesh load/save via bpy (`load_glb()`, `save_glb()`, `load_any()`, `create_mesh_from_arrays()`, `save_colored_mesh()`, `smooth_shade_scene()`); `import_gltf()` defaults to `bone_heuristic=TEMPERANCE` (avoids Icosphere bone-display meshes that bpy's `BLENDER` heuristic materializes) + `strip_bone_display_meshes()` (only when an armature is present) |
 | `gltf_decode` | Decode glTF extensions bpy's importer rejects: `bpy_readable_glb()` context manager (KTX2/BasisU → `ktxdecompress`, meshopt on bpy<5.2 → `copy` via `@gltf-transform/cli`), `glb_extensions()` binary header parse, `bpy_decode_subcommand()`. Used by `import_gltf()` and AiGameKitLab so finished LODs (KTX2+meshopt) import without `Extension KHR_texture_basisu is not available` |
 | `mesh_simplify` | Decimate COLLAPSE helpers + `pre_decimate_uv` / `post_decimate` repair profiles (Text3D LOD / simplify / to_paint) |

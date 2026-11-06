@@ -5,6 +5,27 @@ as tags `v<N>` são snapshots do monorepo — cada package mantém a sua própri
 (`pyproject.toml` / `Cargo.toml` / `package.json`). Pacotes individuais com changelog
 próprio: [`Materialize/CHANGELOG.md`](Materialize/CHANGELOG.md).
 
+## [Unreleased]
+
+### Changed — SDNQ 0.2.9
+
+- **Presets de baixo bit corrigidos e mais precisos.** O codebook Lloyd-Max
+  guarda `2**bits` níveis fp32 **por grupo**: a `group_size=32` isso inflacionava
+  `sdnq-int3`/`sdnq-int2` para 11/6 b/peso (mais do que o int4/uint8) e
+  `sdnq-uint8` para 10–18 b/peso. Os presets deixam de usar codebook e passam a
+  usar **escalas double-quant** (`scale_dtype="uint8"`, SDNQ 0.2.8). Medido em
+  FLUX.3/SD1.5/Paint/Omni: `sdnq-int4` 5.1–7.0 b/peso com -22% de erro vs o
+  int4+SVD anterior; `sdnq-uint8` 8.1 b/peso e load ~100× mais rápido.
+- **Novos tiers:** `sdnq-uint4-hq` (group 16) e `sdnq-int3`/`sdnq-int2` com
+  poupança real (3.5/2.5 b/peso). Expostos no Text3D; Part3D ganha `-q hq`.
+- **`quantize_model` passa `quantization_config=config`:** o filtro por
+  assinatura descartava em silêncio `scale_dtype`/`zero_point_dtype`.
+- **`aigamekit-lab bench sdnq`:** compara receitas em pesos reais (erro de
+  pesos/saída, b/w exatos, tempo) sem carregar o modelo.
+- Pins `sdnq>=0.2.9`; repo irmão `vramd` 0.4.0 com os fatores novos
+  (`uint4-hq` 0.38, int3 0.24, int2 0.18).
+- Estudo: [`docs/findings/SDNQ_029_FINDINGS.md`](docs/findings/SDNQ_029_FINDINGS.md).
+
 ## [v0.6.0] — 2026-10-08
 
 Foco: **zero friction** — instalação num comando, primeiro uso verificado, docs de

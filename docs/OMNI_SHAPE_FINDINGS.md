@@ -178,7 +178,9 @@ explícito obrigatório.
 |--------|--------|
 | `quaternius-tpose` | humanoid adulto → rig SkinTokens |
 | `quaternius-tpose-dwarf` | goblin/chibi/cabeça grande |
-| `quaternius-apose` | default humanoid; braços -45° (T-pose estica ombros/mãos — merchant/ogre) |
+| `quaternius-apose` | default humanoid → **oficial Omni sem dedos** `omni_apose_nofingers_bone.txt` (21 ossos, braços −40°, `Wrist` incluído). Com os 30 ossos de dedo do oficial a mão é construída **duas vezes** — esqueleto (dedos a abrir em Z, palma para o corpo) e imagem (dedos no plano da imagem) a 90° → mão «balão» e 7-9 dedos por mão |
+| `omni-apose` | oficial completo (51 ossos, com dedos/olhos) — só bench/comparação |
+| `quaternius-apose-min` | mínimo antigo (22 ossos, sem dedos) — bench; era ignorado pelo modelo (≈ `none`) |
 | `quaternius-apose-dwarf` | chibi / goblin / cabeça grande |
 
 ---
