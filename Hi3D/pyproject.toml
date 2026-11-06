@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hi3d"
+version = "0.1.0"
+description = "Refinamento de malha image-conditioned (Hi3D v1.0 / SPARC3D) — pós-processamento do Text3D"
+readme = "README.md"
+authors = [{ name = "AiGameKit" }]
+# O upstream (sparc3d) está medido apenas em Python 3.10 / torch 2.5.0+cu124.
+# O venv desta tool é por isso 3.10 — o único do monorepo que não é 3.13.
+requires-python = ">=3.10,<3.11"
+license = "MIT"
+# Sem dependências declaradas de propósito: o stack pesado (torch cu124,
+# spconv-cu120, flash-attn, sparc3d) é instalado pelo hook `hi3d_custom_install`
+# em Shared/src/aigamekit_shared/installer/hi3d_extras.py. Se o resolver do uv
+# visse `torch` aqui, trocava o wheel cu124 por um build de PyPI e o
+# flash-attn (compilado contra torch 2.5 cu124) deixava de carregar.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "pytest-cov>=5.0.0"]
+
+[project.scripts]
+hi3d = "hi3d.cli:main"
+
+[project.urls]
+Homepage = "https://huggingface.co/hi3d-official/Hi3Dv1.0"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["hi3d", "hi3d.*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

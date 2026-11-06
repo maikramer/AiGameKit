@@ -26,6 +26,7 @@ TERRAIN3D_BIN = "TERRAIN3D_BIN"
 ROCKS3D_BIN = "ROCKS3D_BIN"
 PART3D_BIN = "PART3D_BIN"
 MOTION3D_BIN = "MOTION3D_BIN"
+HI3D_BIN = "HI3D_BIN"
 VRAMD_BIN = "VRAMD_BIN"
 HF_HOME = "HF_HOME"
 PYTORCH_CUDA_ALLOC_CONF = "PYTORCH_CUDA_ALLOC_CONF"
@@ -47,6 +48,7 @@ TOOL_BINS = {
     "rocks3d": ROCKS3D_BIN,
     "part3d": PART3D_BIN,
     "motion3d": MOTION3D_BIN,
+    "hi3d": HI3D_BIN,
     "materialize": MATERIALIZE_BIN,
     "vramd": VRAMD_BIN,
 }
@@ -84,6 +86,7 @@ TOOL_LAYOUT: dict[str, ToolLayout] = {
     "rocks3d": ToolLayout("Rocks3D", "rocks3d"),
     "part3d": ToolLayout("Part3D", "part3d"),
     "motion3d": ToolLayout("Motion3D", "motion3d"),
+    "hi3d": ToolLayout("Hi3D", "hi3d"),
     "vramd": ToolLayout("Vramd", "vramd"),
     "materialize": ToolLayout("Materialize", "materialize", kind="rust"),
 }

@@ -183,6 +183,20 @@ tools:
     needs_pytorch: true
     post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
 
+  hi3d:
+    name: "Hi3D"
+    kind: python
+    folder: Hi3D
+    cli_name: hi3d
+    python_module: hi3d
+    description: "Refinamento de malha image-conditioned (Hi3D v1.0 / SPARC3D) — pós-processamento do shape; único venv 3.10 do monorepo"
+    # O upstream só mediu Python 3.10.12 / torch 2.5.0+cu124; o teto é tão duro
+    # como o piso (o pyproject também declara >=3.10,<3.11).
+    min_python: [3, 10]
+    max_python: [3, 10]
+    needs_pytorch: true
+    custom_install: aigamekit_shared.installer.clified_hooks:hi3d_custom_install
+
   materialize:
     name: "Materialize CLI"
     kind: rust

@@ -156,6 +156,25 @@ backends:
     calibrate_load_kwargs:
       sdnq_preset: sdnq-fp8
 
+  # Refinamento de geometria Hi3D (sparc3d). Medido nesta GPU de 6 GB:
+  # 512³ / 25 passos com **residência por fase** (default) → pico 3,74 GiB,
+  # ~60 s por asset; com `--no-staging` (offload sequencial do accelerate) o
+  # pico é 0,9 GiB mas leva ~137 s. O admit tem de assumir o modo default:
+  # 4300 MiB. 1024³/1536³ só em GPUs grandes (o admit por job não conhece a
+  # resolução). O worker corre no venv 3.10 próprio (`Hi3D/.venv`) com
+  # protocolo JSONL local (ver Hi3D/src/hi3d/ums.py).
+  - name: hi3d
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 4300
+    priority: 35
+    tool: hi3d
+    calibrate_request:
+      coarse_mesh: "test-mesh.glb"
+      image: "test-image.png"
+      output: "/tmp/vramd-calibrate-hi3d.glb"
+      resolution: 512
+      num_inference_steps: 5
+
   - name: text2sound
     adapter: aigamekit_shared.worker_serve_adapter_base
     vram_mib: 5000

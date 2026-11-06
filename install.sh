@@ -3,7 +3,10 @@
 #
 #   ./install.sh              → perfil 'core' (10 tools, zero-a-jogo)
 #   ./install.sh examples     → core + céu/áudio/texturas/terreno/rochas
-#   ./install.sh --all        → catálogo completo (acrescenta part3d, intrinsic)
+#   ./install.sh --all        → catálogo completo (acrescenta part3d,
+#                               intrinsic, hi3d)
+#   ./install.sh hi3d         → refinamento de malha Hi3D (venv 3.10 + ~5.5 GB de
+#                               stack; os pesos ~7.7 GB são `hi3d download-model`)
 #   ./install.sh <tool>       → ferramenta individual (chaves de tools.yaml)
 #   ./install.sh --list       → listar perfis e ferramentas
 #

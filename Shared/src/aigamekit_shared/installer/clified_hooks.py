@@ -64,6 +64,18 @@ def paint3d_post_install(installer: PythonProjectInstaller) -> bool:
     return dev_extras_post_install(installer) and ok
 
 
+def hi3d_custom_install(installer: PythonProjectInstaller) -> bool:
+    """Hi3D: venv 3.10 + torch cu124 + kernels + sparc3d (stack medido do upstream)."""
+    from .hi3d_extras import hi3d_install_in_venv
+
+    ok = hi3d_install_in_venv(
+        venv_python=str(installer.venv_python),
+        project_root=Path(installer.project_root),
+        logger=installer.logger,
+    )
+    return dev_extras_post_install(installer) and ok
+
+
 def motion3d_post_install(installer: PythonProjectInstaller) -> bool:
     """Motion3D: compila o runtime C vendorizado e pré-descarrega o GGUF.
 
