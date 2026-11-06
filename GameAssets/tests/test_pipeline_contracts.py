@@ -41,6 +41,7 @@ def test_bbox_preset_aniso_nao_invalida_shape(tmp_path: Path) -> None:
     try:
         from text3d.omni_presets import size_m_to_bbox
     except ImportError:  # job do GameAssets no CI não instala Text3D
+
         def size_m_to_bbox(size_m: list[float]) -> list[float]:
             """Regra do Text3D: eixo maior = OMNI_BBOX_AXIS_MAX (1.0)."""
             m = max(size_m)
