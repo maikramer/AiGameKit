@@ -52,6 +52,54 @@ def _repair_edit_bones(arm: Any, min_gap: float) -> list[str]:
     return fixed
 
 
+_ARM_CHAINS = (("upperarm_l", "lowerarm_l", "hand_l"), ("upperarm_r", "lowerarm_r", "hand_r"))
+# Acima disto o braço está mesmo dobrado na malha (não é ruído do SkinTokens).
+_MAX_ELBOW_KINK_DEG = 45.0
+
+
+def _straighten_elbows(arm: Any, *, min_move: float = 1e-3) -> list[str]:
+    """Põe o cotovelo na linha ombro→pulso, mantendo só a dobra para trás.
+
+    O SkinTokens às vezes põe o joint do cotovelo 2-3 cm acima/abaixo de um
+    braço reto (hero: 3 cm acima, kink 25°). O retarget alinha a direção de
+    cada osso com a do source (braço reto do Quaternius), por isso esse kink
+    falso aparece invertido na malha: o antebraço dobra para cima/baixo —
+    «cotovelo virado». Num A-pose a única dobra natural é para trás; o resto
+    do desvio sai.
+    """
+    import math
+
+    from mathutils import Vector
+
+    back = (arm.matrix_world.to_3x3().inverted() @ Vector((0.0, 1.0, 0.0))).normalized()
+    ebs = arm.data.edit_bones
+    fixed: list[str] = []
+    for upper_n, lower_n, hand_n in _ARM_CHAINS:
+        upper, lower, hand = ebs.get(upper_n), ebs.get(lower_n), ebs.get(hand_n)
+        if upper is None or lower is None or hand is None:
+            continue
+        sh, el, wr = upper.head.copy(), lower.head.copy(), hand.head.copy()
+        u, v = el - sh, wr - el
+        if u.length < 1e-6 or v.length < 1e-6 or math.degrees(u.angle(v)) > _MAX_ELBOW_KINK_DEG:
+            continue
+        line = (wr - sh).normalized()
+        on_line = sh + line * u.dot(line)
+        off = el - on_line
+        # Componente "para trás" perpendicular à linha do braço.
+        back_perp = back - line * back.dot(line)
+        keep = Vector((0.0, 0.0, 0.0))
+        if back_perp.length > 1e-6:
+            back_perp.normalize()
+            keep = back_perp * max(0.0, off.dot(back_perp))
+        new_el = on_line + keep
+        if (new_el - el).length < min_move:
+            continue
+        upper.tail = new_el
+        lower.head = new_el
+        fixed.append(lower_n)
+    return fixed
+
+
 def _import_glb(path: Path) -> tuple[Any, Any]:
     import bpy
 
@@ -95,7 +143,8 @@ def fix_bone_orientation(
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode="EDIT")
     try:
-        fixed = _repair_edit_bones(arm, min_gap)
+        fixed = _straighten_elbows(arm)
+        fixed += [b for b in _repair_edit_bones(arm, min_gap) if b not in fixed]
     finally:
         bpy.ops.object.mode_set(mode="OBJECT")
 
