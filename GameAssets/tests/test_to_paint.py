@@ -22,11 +22,12 @@ class TestResolveToPaintFaces:
         assert _resolve_to_paint_faces(p) == PAINT_FACES_MAX
 
     def test_vram_cap_reduces_target(self, monkeypatch) -> None:
-        # 4050 6 GB (6053 MiB): tecto ≈236k em vez do cap de produto 320k.
+        # 4050 6 GB (6053 MiB): âncora medida 6 GiB → ~282k (era ~236k na
+        # interpolação linear 4→8 GiB).
         monkeypatch.setattr(_pb, "_VRAM_TOTAL_MIB", 6053)
         p = GameProfile(title="t", genre="g", tone="t", style_preset="s", output_dir=".")
         faces = _resolve_to_paint_faces(p)
-        assert 230_000 <= faces <= 240_000
+        assert 275_000 <= faces <= 290_000
 
     def test_override_to_paint_faces(self) -> None:
         p = GameProfile(

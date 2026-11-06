@@ -6,6 +6,7 @@ import contextlib
 import os
 import time
 from collections.abc import Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,18 @@ VRAMD_CHILD_ENV_KEYS: tuple[str, ...] = (
 
 # Sentinel: caller deve usar subprocess generate-batch / texture-batch.
 FALLBACK_SUBPROCESS: object = object()
+
+
+# ``--force`` do batch/resume: as waves não saltam outputs já em disco. Sem
+# isto o batch filtrava bem os itens mas o ``run_gpu_wave`` devolvia
+# ``skipped`` a todos os PNG/GLB existentes — um regen ``--force`` reusava as
+# imagens antigas sem aviso.
+WAVE_FORCE: ContextVar[bool] = ContextVar("gameassets_wave_force", default=False)
+
+# ``--force`` chega também ao master pipeline: sem isto rigged/animated/ladder/
+# collision e as peças de split sobreviviam a um regen forçado (só shape/paint
+# respeitavam o force).
+MASTER_FORCE: ContextVar[bool] = ContextVar("gameassets_master_force", default=False)
 
 
 @dataclass
@@ -261,7 +274,7 @@ def run_gpu_wave(
     try:
         for spec in items:
             out_path = spec.output or spec.payload.get("output")
-            if out_path and Path(str(out_path)).is_file():
+            if out_path and not WAVE_FORCE.get() and Path(str(out_path)).is_file():
                 skipped = UmsJobResult(
                     asset_id=spec.asset_id,
                     status="skipped",

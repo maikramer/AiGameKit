@@ -76,12 +76,18 @@ _I2M_REF_NO_BAKED_VFX = (
     "cold hearths and torch heads without flame, no particle blobs"
 )
 
+# Refs para 3D: o shape (Omni) lê pinceladas como relevo (ondas no avental,
+# lascas nas mangas) e o paint herda ruído. Trocar só na imagem de referência
+# i2m — ícones/2D puros mantêm o estilo do preset.
+_I2M_PREFIX_SWAPS: tuple[tuple[str, str], ...] = (("visible brush strokes", "smooth clean painted shading"),)
+
 # Variante A-pose do hint_rig: usada quando o asset tem pose_preset A-pose
 # (quaternius-apose). O hint_rig humanoid força «T-pose braços horizontais» —
 # em assets A-pose isso luta contra a idea e produz braços in-between/deformados.
 _HINT_RIG_APOSE = (
     "standing upright in a relaxed A-pose with both arms angled down at about 45 degrees "
-    "away from the body, visible gap between arms and torso, open hands with spread fingers, "
+    "away from the body, visible gap between arms and torso, "
+    "relaxed open hands with fingers held together and palms facing the thighs, "
     "legs shoulder-width apart with feet pointing forward, "
     "perfectly symmetrical left-right body, "
     "straight erect spine and neck, head facing forward, "
@@ -175,6 +181,10 @@ def build_prompt(
 
     mood = _mood_atmosphere(profile.genre, profile.tone)
     idea = row.idea.strip()
+
+    if row.generate_3d and not for_3d:
+        for src, dst in _I2M_PREFIX_SWAPS:
+            prefix = prefix.replace(src, dst)
 
     chunks: list[str] = []
     if prefix:

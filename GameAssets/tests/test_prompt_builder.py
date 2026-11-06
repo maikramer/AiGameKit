@@ -83,3 +83,24 @@ def test_generate_3d_bans_baked_vfx(preset_lowpoly: dict) -> None:
     assert "static solid" in p3.lower() or "volumetric smoke" in p3.lower()
     assert "Avoid:" in p2
     assert "chimney smoke" in p2.lower() or "smoke plume" in p2.lower()
+
+
+def test_painterly_3d_ref_drops_brush_strokes() -> None:
+    # Pinceladas na ref viram relevo no shape Omni (avental ondulado, mangas lascadas).
+    preset = get_preset(load_presets_bundle(None), "painterly")
+    profile = GameProfile(title="A", genre="B", tone="C", style_preset="painterly")
+    ref = build_prompt(profile, preset, ManifestRow(id="1", idea="hero", kind="character", generate_3d=True))
+    flat = build_prompt(profile, preset, ManifestRow(id="2", idea="hero", kind="character", generate_3d=False))
+    assert "visible brush strokes" not in ref
+    assert "smooth clean painted shading" in ref
+    assert "visible brush strokes" in flat
+
+
+def test_apose_hint_asks_for_relaxed_hands() -> None:
+    from gameassets.prompt_builder import enhance_prompt_for_pipeline
+
+    p = enhance_prompt_for_pipeline(
+        "hero", category="humanoid", generate_3d=True, generate_rig=True, pose_preset="quaternius-apose"
+    )
+    assert "spread fingers" not in p
+    assert "fingers held together" in p

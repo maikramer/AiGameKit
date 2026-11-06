@@ -139,6 +139,30 @@ class TestRunGpuWave:
             assert wave[0].status == "skipped"
             sub.assert_not_called()
 
+    def test_force_regenerates_existing_output(self, tmp_path: Path) -> None:
+        """``--force`` (WAVE_FORCE) submete mesmo com o output em disco."""
+        from gameassets.vramd_coord import WAVE_FORCE
+
+        out = tmp_path / "exists.png"
+        out.write_bytes(b"png")
+        specs = [UmsJobSpec(asset_id="e", payload={"output": str(out)}, output=str(out))]
+        token = WAVE_FORCE.set(True)
+        try:
+            with (
+                patch("aigamekit_shared.vramd_client.ensure_vramd_running", return_value=True),
+                patch("gameassets.vramd_coord.preload_backend", return_value=None),
+                patch("aigamekit_shared.vramd_client.submit_to_vramd") as sub,
+                patch("aigamekit_shared.vramd_client.wait_vramd_job") as wait,
+            ):
+                sub.return_value = {"status": "ok", "job_id": "j1"}
+                wait.return_value = {"status": "ok", "output": str(out)}
+                wave = run_gpu_wave("text2d", specs, preload=False)
+        finally:
+            WAVE_FORCE.reset(token)
+        assert isinstance(wave, list)
+        assert wave[0].status == "ok"
+        sub.assert_called_once()
+
     def test_submit_none_fallback_cancels(self) -> None:
         specs = [
             UmsJobSpec(asset_id="a", payload={"output": "/no/a.glb"}),

@@ -263,3 +263,77 @@ class TestBatchInitHintCli:
         r = runner.invoke(cli, ["batch"])
         assert r.exit_code != 0
         assert "gameassets init" in r.output
+
+
+class TestHi3DCheck:
+    def test_absent_is_warn_with_install_hint(self) -> None:
+        with patch.object(doctor, "tool_bin", lambda _t: None):
+            checks = doctor.check_hi3d()
+        assert len(checks) == 1
+        assert checks[0].status == "warn"
+        assert "install.sh hi3d" in (checks[0].fix or "")
+
+    def test_ready_reports_plan_and_weights(self) -> None:
+        payload = {
+            "ok": True,
+            "plan": {"resolution": 512, "offload": True},
+            "model": {"complete": True, "weights_gb": 7.73},
+        }
+        proc = SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr="")
+        with (
+            patch.object(doctor, "tool_bin", lambda _t: "/fake/hi3d"),
+            patch.object(doctor.subprocess, "run", lambda *a, **k: proc),
+        ):
+            checks = doctor.check_hi3d()
+        assert checks[0].status == "ok"
+        assert "@512" in checks[0].detail
+        assert "7.73 GB" in checks[0].detail
+
+    def test_unavailable_is_warn_with_reason(self) -> None:
+        payload = {
+            "ok": False,
+            "plan": {"reason": "compute capability 7.5 < 8.0", "resolution": 512, "offload": True},
+            "model": {"complete": False, "weights_gb": 0.0},
+        }
+        proc = SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr="")
+        with (
+            patch.object(doctor, "tool_bin", lambda _t: "/fake/hi3d"),
+            patch.object(doctor.subprocess, "run", lambda *a, **k: proc),
+        ):
+            checks = doctor.check_hi3d()
+        assert checks[0].status == "warn"
+        assert "compute capability 7.5" in checks[0].detail
+
+    def test_incomplete_weights_is_flagged(self) -> None:
+        payload = {
+            "ok": True,
+            "plan": {"resolution": 512, "offload": True},
+            "model": {"complete": False, "weights_gb": 0.0},
+        }
+        proc = SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr="")
+        with (
+            patch.object(doctor, "tool_bin", lambda _t: "/fake/hi3d"),
+            patch.object(doctor.subprocess, "run", lambda *a, **k: proc),
+        ):
+            checks = doctor.check_hi3d()
+        assert "incompletos" in checks[0].detail
+
+    def test_timeout_is_warn(self) -> None:
+        def _boom(*_a, **_k):
+            raise subprocess.TimeoutExpired(cmd="hi3d", timeout=1)
+
+        with (
+            patch.object(doctor, "tool_bin", lambda _t: "/fake/hi3d"),
+            patch.object(doctor.subprocess, "run", _boom),
+        ):
+            checks = doctor.check_hi3d()
+        assert checks[0].status == "warn"
+
+    def test_tool_registered_in_cli_map(self) -> None:
+        assert doctor.TOOL_CLIS["hi3d"] == "hi3d"
+
+    def test_run_doctor_includes_hi3d(self) -> None:
+        sentinel = doctor.DoctorCheck(name="Refinamento Hi3D", status="ok", detail="x")
+        with patch.object(doctor, "check_hi3d", lambda: [sentinel]):
+            names = [c.name for c in doctor.run_doctor()]
+        assert "Refinamento Hi3D" in names

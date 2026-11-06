@@ -357,11 +357,23 @@ def _clean_path(mesh_final: Path) -> Path:
     return _intermediate_dir(mesh_final) / f"{base}_clean{mesh_final.suffix}"
 
 
+def _refined_path(mesh_final: Path) -> Path:
+    """``id_refined.glb`` em ``_intermediate/`` - saída do refinamento Hi3D.
+
+    Passa a ser o input do paint (substitui o ``_clean`` no orçamento atlas) e
+    o high-poly de referência; o ``_clean`` continua a existir como fallback e
+    para o resume quando o refine está desligado/indisponível.
+    """
+    base = _base_stem(mesh_final.stem)
+    return _intermediate_dir(mesh_final) / f"{base}_refined{mesh_final.suffix}"
+
+
 def _to_paint_path(mesh_final: Path) -> Path:
     """``id_to_paint.glb`` em ``_intermediate/`` - remesh pré-paint (orçamento atlas).
 
-    High-poly ``_clean`` fica para bake-master/normais; o Paint3D corre sobre
-    esta malha (faces ~ ``texture_size``) para unwrap/raster não explodirem.
+    High-poly ``_clean``/``_refined`` fica para bake-master/normais; o Paint3D
+    corre sobre esta malha (faces ~ ``texture_size``) para unwrap/raster não
+    explodirem.
     """
     base = _base_stem(mesh_final.stem)
     return _intermediate_dir(mesh_final) / f"{base}_to_paint{mesh_final.suffix}"
@@ -563,6 +575,21 @@ def _clean_existing(mesh_final: Path) -> Path | None:
 def _to_paint_existing(mesh_final: Path) -> Path | None:
     """Encontra o GLB ``_to_paint`` em ``meshes/`` ou ``_intermediate/``."""
     return _resolve_intermediate_or_main(_to_paint_path(mesh_final), mesh_final)
+
+
+def _refined_existing(mesh_final: Path) -> Path | None:
+    """Encontra o GLB ``_refined`` (Hi3D) em ``meshes/`` ou ``_intermediate/``.
+
+    Um refinado sem geometria (refine interrompido) é ignorado — o stage volta
+    a correr em vez de pintar um ficheiro vazio.
+    """
+    found = _resolve_intermediate_or_main(_refined_path(mesh_final), mesh_final)
+    if found is None:
+        return None
+    if not _glb_has_geometry(found):
+        log.warning("refined inválido/vazio ignorado (repete o refine): %s", found)
+        return None
+    return found
 
 
 def _rigged_hi_existing(mesh_final: Path) -> Path | None:

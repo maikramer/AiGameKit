@@ -332,8 +332,38 @@ def shape_omni_stale(
     existing = read_omni_fingerprint(shape_glb)
     if existing is None:
         return False
+    # Normaliza o sidecar pelo **mesmo** merge do expected. O generate grava
+    # `bbox_preset` (a flag CLI), mas o merge descarta-o quando `size_m` é
+    # anisotrópico (o size_m vira o bbox Omni e o preset é metadata) — sem esta
+    # normalização o resume via "preset chapel ≠ None" e regenerava o shape de
+    # TODOS os edifícios em cada resume (2026-10-30, chapel).
+    # O sidecar grava o bbox **resolvido** (não é override do utilizador). Só
+    # o passamos ao merge quando o manifest tem um bbox explícito; caso
+    # contrário o merge vê `user_bbox=True`, mantém o preset e continua a
+    # divergir do expected (que não tem bbox explícito).
+    _bbox_norm = existing.get("bbox") if getattr(omni, "bbox", None) is not None else None
+    existing_norm = merge_omni_controls(
+        control_type=existing.get("control_type"),
+        bbox=_bbox_norm,
+        bbox_preset=existing.get("bbox_preset"),
+        size_m=existing.get("size_m"),
+        height_m=existing.get("height_m"),
+        footprint_m=existing.get("footprint_m"),
+        pose_file=existing.get("pose_file"),
+        pose_preset=existing.get("pose_preset"),
+        point_cloud=existing.get("point_cloud"),
+        voxel_mesh=existing.get("voxel_mesh"),
+        category=category,
+    )
+    # Preserva também a identidade do esqueleto e a escala Omni gravadas: se o
+    # path do preset já não resolver, o merge devolve pose_bones=None e o asset
+    # ficava stale para sempre; um bbox_axis_max antigo (max=2) tem de invalidar.
+    for _k in ("bounds_mode", "mc_level", "seed", "octree_resolution", "bbox_axis_max", "pose_bones"):
+        _v = existing.get(_k)
+        if _v not in (None, ""):
+            existing_norm[_k] = _v
     fp_exp = omni_fingerprint(expected)
-    fp_got = omni_fingerprint(existing)
+    fp_got = omni_fingerprint(existing_norm)
     # Autotune: sidecar pode ter o octree efectivo mas o esperado não pinou —
     # não invalidar por diferença VRAM/máquina.
     if fp_exp.get("octree_resolution") is None:

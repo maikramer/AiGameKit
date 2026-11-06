@@ -63,6 +63,7 @@ TOOL_CLIS = {
     "text2sound": "text2sound",
     "terrain3d": "terrain3d",
     "rocks3d": "rocks3d",
+    "hi3d": "hi3d",
 }
 
 # Tools que o ``gameassets dream`` usa por defeito mas que só existem no perfil
@@ -204,6 +205,63 @@ def check_compression() -> list[DoctorCheck]:
     ]
 
 
+def check_hi3d() -> list[DoctorCheck]:
+    """Refinamento Hi3D (stage pós-topology-fix, default ON no pipeline).
+
+    Três estados: ausente (warn — o pipeline só salta o refine), presente mas
+    indisponível (warn com a razão da GPU/stack), ou pronto.
+    """
+    import json as _json
+
+    hi3d_bin = tool_bin("hi3d")
+    if hi3d_bin is None:
+        return [
+            DoctorCheck(
+                name="Refinamento Hi3D",
+                status="warn",
+                detail="hi3d ausente — o stage 'refine' fica em skip (paint usa o _clean)",
+                fix=f"{install_cmd('hi3d')} && hi3d download-model   (~7.7 GB de pesos)",
+            )
+        ]
+    try:
+        proc = subprocess.run(
+            [hi3d_bin, "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return [
+            DoctorCheck(
+                name="Refinamento Hi3D",
+                status="warn",
+                detail="não foi possível correr 'hi3d doctor' (timeout/exec)",
+            )
+        ]
+    try:
+        payload = _json.loads(proc.stdout or "{}")
+    except ValueError:
+        payload = {}
+    plan = payload.get("plan") or {}
+    model = payload.get("model") or {}
+    if payload.get("ok"):
+        detail = f"@{plan.get('resolution')}³{', offload' if plan.get('offload') else ''}"
+        if model.get("complete"):
+            detail += f" · pesos {model.get('weights_gb', '?')} GB"
+        else:
+            detail += " · pesos incompletos (hi3d download-model)"
+        return [DoctorCheck(name="Refinamento Hi3D", status="ok", detail=detail)]
+    return [
+        DoctorCheck(
+            name="Refinamento Hi3D",
+            status="warn",
+            detail=str(plan.get("reason") or "indisponível (stage refine fica em skip)"),
+            fix="hi3d doctor   (detalhe de stack/GPU/pesos)",
+        )
+    ]
+
+
 def check_node_bun() -> list[DoctorCheck]:
     checks = []
     node = _run_version(["node", "--version"])
@@ -284,6 +342,7 @@ def run_doctor() -> list[DoctorCheck]:
     checks += check_tools()
     checks += check_vramd_gpu()
     checks += check_compression()
+    checks += check_hi3d()
     checks += check_node_bun()
     checks += check_dream_llm()
     checks += check_disk()

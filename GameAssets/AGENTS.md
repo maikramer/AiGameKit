@@ -33,6 +33,12 @@ vramd waves; master finalize is deferred (`MasterDeferQueue`) until the wave dra
 
 1. **generate** — `text3d generate` (raw shape; Omni soft-fill; often `batch_cmd` wave)
 2. **topology-fix** — `text3d topology-fix` (`--export-origin feet|center|none`, `--fill-holes-sides N`)
+2b. **refine** — `text3d refine` (Hi3D, **default ON**, `_intermediate/id_refined.glb`). Corre
+    entre o topology-fix e o paint; o `ensure_clean_for_paint()` devolve o refinado quando
+    existe, e degrada para o `_clean` sem falhar o asset (binário ausente, GPU < Ampere,
+    VRAM livre < 4.8 GiB, exit 3, imagem de referência em falta). Config `refine:` no
+    `game.yaml` (`enabled/resolution/steps/max_faces_scale`). Requer `./install.sh hi3d`
+    (venv 3.10) + `hi3d download-model`. Ver `Hi3D/README.md`.
 3. **paint** — `paint3d` on clean / `to_paint`
 4. **rig** — `rigging3d pipeline` on **`_painted`** → `_intermediate/id_rigged.glb` (not clean HI)
 5. **animate** — `animator3d game-pack` **×1** → `_intermediate/id_rigged_animated.glb`

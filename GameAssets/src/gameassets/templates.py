@@ -82,12 +82,22 @@ text3d:
 paint3d:
   preserve_origin: true
 
+# Refinamento de geometria Hi3D (pós topology-fix, antes do paint). ON por
+# defeito: só corre quando `hi3d` está instalado e a GPU serve; caso contrário
+# o asset segue com o _clean (nunca falha). `./install.sh hi3d` + `hi3d
+# download-model` para o ativar. resolution auto = 512 em GPUs de 6 GB.
+refine:
+  enabled: true
+  resolution: auto
+  steps: 25
+  max_faces_scale: 4.0
+
 # Round 3 — master pipeline (único caminho). DAG:
-#   topology-fix → paint → rigging (sobre painted) → animate 1x →
+#   topology-fix → refine (Hi3D) → paint → rigging (sobre painted) → animate 1x →
 #   text3d lod sobre animated/rigged (lod0/1/2) → collision → validate.
 # Estáticos: bake-master identity (lod0=painted) + lod do painted.
 # Outputs em meshes/ ficam finalizados (KTX2+meshopt+tangents);
-# intermediários (shape/painted/clean/rigged/rigged_animated) em meshes/_intermediate/.
+# intermediários (shape/painted/clean/refined/rigged/rigged_animated) em meshes/_intermediate/.
 master_pipeline: true
 master_validate: true
 # bake_normals resolvido por categoria (humanoid/creature/armor/weapon/chest/tool

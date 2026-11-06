@@ -59,7 +59,13 @@ from .helpers import (
     _texture2d_profile_effective,
     _timing_append,
 )
-from .manifest import ManifestRow, apply_row_text3d_overrides, effective_image_source, row_mc_level
+from .manifest import (
+    ManifestRow,
+    apply_row_text3d_overrides,
+    effective_image_source,
+    row_mc_level,
+    row_octree_resolution,
+)
 from .omni_ctrl import omni_to_batch_item, prepare_shape_for_generation
 from .param_optimizer import (
     optimize_text3d_for_target,
@@ -306,6 +312,10 @@ def batch_cmd(
 ) -> None:
     """Gera imagens (e opcionalmente meshes) para cada linha do manifest."""
     from .helpers import missing_inputs_hint
+    from .vramd_coord import MASTER_FORCE, WAVE_FORCE
+
+    WAVE_FORCE.set(bool(force))
+    MASTER_FORCE.set(bool(force))
 
     hint = missing_inputs_hint(profile_path, _resolve_manifest_path(manifest_path))
     if hint:
@@ -1875,7 +1885,9 @@ def batch_cmd(
                                     bounds_mode=getattr(_t3_d, "bounds_mode", None) if _t3_d else None,
                                     mc_level=row_mc_level(row, getattr(_t3_d, "mc_level", None) if _t3_d else None),
                                     seed=row.seed,
-                                    octree_resolution=getattr(_t3_d, "octree_resolution", None) if _t3_d else None,
+                                    octree_resolution=row_octree_resolution(
+                                        row, getattr(_t3_d, "octree_resolution", None) if _t3_d else None
+                                    ),
                                 ):
                                     # Shape fresco / clean resume — não enfileirar.
                                     shape_skipped_d.add(idx)
@@ -1935,6 +1947,8 @@ def batch_cmd(
                                         _shape_kw["bounds_mode"] = t3.bounds_mode
                                     if getattr(t3, "sdnq_preset", None):
                                         _shape_kw["sdnq_preset"] = t3.sdnq_preset
+                                        if getattr(t3, "preset", None):
+                                            _shape_kw["preset"] = t3.preset
 
                                 ums_shape_results = run_shape_wave_or_fallback(
                                     shape_items_d,
@@ -3353,7 +3367,9 @@ def batch_cmd(
                                     bounds_mode=getattr(_t3_p, "bounds_mode", None) if _t3_p else None,
                                     mc_level=row_mc_level(row, getattr(_t3_p, "mc_level", None) if _t3_p else None),
                                     seed=row.seed,
-                                    octree_resolution=getattr(_t3_p, "octree_resolution", None) if _t3_p else None,
+                                    octree_resolution=row_octree_resolution(
+                                        row, getattr(_t3_p, "octree_resolution", None) if _t3_p else None
+                                    ),
                                 ):
                                     # Shape fresco / clean resume — seguir paint sem generate-batch.
                                     shape_ok.append(idx)
@@ -3421,6 +3437,8 @@ def batch_cmd(
                                         _shape_kw["bounds_mode"] = t3.bounds_mode
                                     if getattr(t3, "sdnq_preset", None):
                                         _shape_kw["sdnq_preset"] = t3.sdnq_preset
+                                        if getattr(t3, "preset", None):
+                                            _shape_kw["preset"] = t3.preset
 
                                 ums_shape_results = run_shape_wave_or_fallback(
                                     shape_manifest_items,

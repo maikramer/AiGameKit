@@ -31,6 +31,9 @@ class Paint3DProfile:
     texture_size: int | None = None
     # Override faces do ``_to_paint`` (None -> fórmula paint_budget ~ texture_size).
     to_paint_faces: int | None = None
+    # Normal + AO via Materialize sobre o albedo do atlas. OFF por defeito: os
+    # bordos das ilhas UV viram arestas normais/AO falsas (costuras).
+    pbr_enrich: bool = False
     bake_exp: int | None = None
     smooth: bool = True
     smooth_passes: int | None = None
@@ -180,8 +183,8 @@ class Rigging3DProfile:
 class LODProfile:
     """LOD triplet generation via ``text3d lod``."""
 
-    lod1_ratio: float = 0.42
-    lod2_ratio: float = 0.14
+    lod1_ratio: float = 0.40
+    lod2_ratio: float = 0.22
     min_faces_lod1: int = 500
     min_faces_lod2: int = 150
     meshfix: bool = False
@@ -190,10 +193,9 @@ class LODProfile:
     # usam 1 (default); personagens que animam à distância (criaturas em
     # ``*_lod2.glb``) precisam de 2.
     rig_max_level: int = 1
-    # Pós-lod: garante normal + occlusion em todos os níveis (patch idempotente
-    # ``text3d patch-pbr`` — o paint3d embute os mapas no painted; este passo
-    # cobre o que o rebake de LOD deixa cair e GLBs legados). 0 desliga.
-    patch_pbr: bool = True
+    # Pós-lod: garantia normal+occlusion derivada do albedo do atlas. OFF por
+    # defeito: cada bordo de ilha UV vira aresta normal/AO falsa (costuras).
+    patch_pbr: bool = False
 
 
 @dataclass
@@ -270,6 +272,73 @@ class Rocks3DProfile:
 
 
 @dataclass
+class RefineProfile:
+    """Pós-processamento Hi3D (refinamento de geometria image-conditioned).
+
+    Ativado por defeito: o stage corre entre o ``topology-fix`` e o ``paint`` e
+    degrada para skip (com razão visível) quando o binário/stack/GPU não estão
+    disponíveis — nunca falha o asset. ``game.yaml``::
+
+        refine:
+          enabled: false        # desliga sem tocar no resto
+          resolution: auto      # 512 | 1024 | 1536
+          steps: 25
+          max_faces_scale: 4.0  # teto = 4x o alvo de LOD0 (0 = sem decimação)
+    """
+
+    enabled: bool = True
+    #: 512|1024|1536 ou ``auto`` (política por VRAM livre).
+    resolution: str = "auto"
+    steps: int = 25
+    seed: int | None = None
+    #: Teto de faces = ``max_faces_scale * target_faces`` do LOD0 (0 desliga).
+    max_faces_scale: float = 4.0
+    #: Caminho/repo id do artefacto; None = cache do monorepo/Hub.
+    model: str | None = None
+    remove_background: bool = False
+
+
+_REFINE_RESOLUTIONS = frozenset({"auto", "512", "1024", "1536"})
+
+
+def _parse_refine_profile(raw: Any) -> RefineProfile | None:
+    """``refine:`` do game.yaml → :class:`RefineProfile` (None = defaults ON)."""
+    if raw is None:
+        return None
+    if raw is False:
+        return RefineProfile(enabled=False)
+    if raw is True:
+        return RefineProfile()
+    if not isinstance(raw, dict):
+        raise ValueError("refine deve ser um mapa YAML (ou true/false)")
+    res = str(raw.get("resolution", "auto")).strip().lower()
+    if res not in _REFINE_RESOLUTIONS:
+        raise ValueError(f"refine.resolution deve ser um de: {', '.join(sorted(_REFINE_RESOLUTIONS))}")
+    try:
+        steps = int(raw.get("steps", 25))
+        scale = float(raw.get("max_faces_scale", 4.0))
+        seed_raw = raw.get("seed")
+        seed = int(seed_raw) if seed_raw is not None else None
+    except (TypeError, ValueError) as e:
+        raise ValueError("refine.steps/seed devem ser inteiros e max_faces_scale um número") from e
+    if steps < 1:
+        raise ValueError("refine.steps deve ser >= 1")
+    if scale < 0:
+        raise ValueError("refine.max_faces_scale deve ser >= 0")
+    model_raw = raw.get("model")
+    model_str = str(model_raw).strip() if model_raw not in (None, "") else ""
+    return RefineProfile(
+        enabled=bool(raw.get("enabled", True)),
+        resolution=res,
+        steps=steps,
+        seed=seed,
+        max_faces_scale=scale,
+        model=model_str or None,
+        remove_background=bool(raw.get("remove_background", False)),
+    )
+
+
+@dataclass
 class GameProfile:
     title: str
     genre: str
@@ -300,6 +369,9 @@ class GameProfile:
     collision: CollisionProfile | None = None
     terrain3d: Terrain3DProfile | None = None
     rocks3d: Rocks3DProfile | None = None
+    # Pós-processamento Hi3D (default ON — ``None`` significa "usar defaults",
+    # não "desligado"; desligar exige ``refine: {enabled: false}``).
+    refine: RefineProfile | None = None
     generation: str | None = None
     # Master pipeline Round 3 é o único caminho. DAG (topology-fix -> paint ->
     # rigging sobre painted -> animate x1 -> text3d lod sobre animated/rigged ->
@@ -704,6 +776,7 @@ class GameProfile:
                 render_size=prs_i,
                 texture_size=pts_i,
                 to_paint_faces=ptpf_i,
+                pbr_enrich=bool(raw_p3d.get("pbr_enrich", False)),
                 bake_exp=pbe_i,
                 smooth=paint_smooth,
                 smooth_passes=psp_i,
@@ -791,7 +864,7 @@ class GameProfile:
                 min_faces_lod2=mf2_i,
                 meshfix=bool(raw_lod.get("meshfix", False)),
                 rig_max_level=rig_max,
-                patch_pbr=bool(raw_lod.get("patch_pbr", True)),
+                patch_pbr=bool(raw_lod.get("patch_pbr", False)),
             )
         coll: CollisionProfile | None = None
         raw_coll = data.get("collision")
@@ -915,6 +988,8 @@ class GameProfile:
 
             if gen_name not in VALID_GENERATION_PROFILES:
                 raise ValueError(f"generation deve ser um de: {', '.join(VALID_GENERATION_PROFILES)}")
+
+        ref_prof = _parse_refine_profile(data.get("refine"))
         return cls(
             title=str(data["title"]),
             genre=str(data["genre"]),
@@ -942,6 +1017,7 @@ class GameProfile:
             collision=coll,
             terrain3d=ter,
             rocks3d=rk3,
+            refine=ref_prof,
             generation=gen_name,
             master_pipeline=bool(data.get("master_pipeline", True)),
             master_validate=bool(data.get("master_validate", True)),
@@ -1020,6 +1096,8 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
         # texture_size: None = autotune por size_m ∩ quality cap (pipeline);
         # só game.yaml explícito fica preenchido (override ganha).
         texture_size=p3d.texture_size,
+        to_paint_faces=p3d.to_paint_faces,
+        pbr_enrich=p3d.pbr_enrich,
         bake_exp=p3d.bake_exp if p3d.bake_exp is not None else gp.paint_bake_exp,
         smooth=p3d.smooth if p3d.smooth else gp.paint_smooth,
         smooth_passes=p3d.smooth_passes if p3d.smooth_passes is not None else gp.paint_smooth_passes,

@@ -76,6 +76,8 @@ from .paths import (
     _painted_path,
     _path_for_log,
     _precompute_path,
+    _refined_existing,
+    _refined_path,
     _rigged_existing,
     _rigged_path,
     _shape_existing,
@@ -245,20 +247,19 @@ def collision_source(
     portas e esquinas. Medido em 14 personagens entregues: desvio de 0.29 a
     0.80 m entre a colisão e o visual.
 
-    **Estáticos** → ``_clean`` (topology-fix, alta resolução) em vez do
-    ``_painted``. O ``_clean`` é fechado em 108/109 assets contra 94/109 do
-    ``_painted``, e o remesh voxel do envelope precisa de superfície fechada
-    para produzir sólido (ver ``text3d.utils.collision._apply_envelope``). Os
-    dois estão alinhados: desvio mediano de 1.4 mm nos 95 assets estáticos.
-
-    Cai para o ``_painted`` e depois para o ``lod0`` quando a preferida falta.
+    **Estáticos** → ``_refined`` quando existe (é a geometria que o paint e o
+    ``lod0`` usam, logo a colisão fica alinhada com o que se desenha). O refine
+    Hi3D pode mudar o enquadramento (city_gate_arch +0.24 m; scarecrow) e a
+    colisão vinda do ``_clean`` ficava até 0.34 m fora. Fallback: ``_clean``
+    (fechado em 108/109 assets; o envelope voxel precisa de superfície fechada
+    — ver ``text3d.utils.collision._apply_envelope``), ``_painted`` e ``lod0``.
     """
     if rigged:
         for cand in (lod0_p, painted_p):
             if cand and cand.is_file():
                 return cand
         return mesh_final
-    for cand in (_clean_existing(mesh_final), painted_p, lod0_p):
+    for cand in (_refined_existing(mesh_final), _clean_existing(mesh_final), painted_p, lod0_p):
         if cand and cand.is_file():
             return cand
     return mesh_final
@@ -540,20 +541,28 @@ def _post_text3d_mesh_extras(
     row_wants_animate = _row_wants_animate(row, with_rig, has_rigging_profile)
     effective_with_rig = with_rig and row_wants_rig and (rigging3d_bin is not None)
     effective_with_animate = with_animate and row_wants_animate and (animator3d_bin is not None)
+    # ``manifest.pipeline`` também filtra lod/collision: o batch ligava
+    # with_lod/with_collision para o manifest inteiro e um cliff com
+    # ``[3d, paint, collision]`` recebia ladder na mesma.
+    effective_with_lod = bool(with_lod and getattr(row, "generate_lod", True))
+    effective_with_collision = bool(with_collision and getattr(row, "generate_collision", True))
+    from .vramd_coord import MASTER_FORCE
+
     mres = run_master_pipeline(
         profile,
         row,
         mesh_final,
         manifest_dir=manifest_dir,
         child_env=child_env,
-        with_lod=with_lod,
-        with_collision=with_collision,
+        with_lod=effective_with_lod,
+        with_collision=effective_with_collision,
         with_rig=effective_with_rig,
         with_animate=effective_with_animate,
         with_validate=with_validate,
         bake_normals=bake_normals,
         on_progress_line=on_progress_line,
         gpu_ids=gpu_ids,
+        force=bool(MASTER_FORCE.get()),
     )
     aggregate_master_results(mres.stages, rec)
     if mres.lod0_path and mres.lod0_path.is_file():
@@ -562,7 +571,10 @@ def _post_text3d_mesh_extras(
         rec["intermediates_dir"] = _path_for_log(mres.intermediates_dir, manifest_dir)
     _emit_precompute(row, mres, rec, manifest_dir, child_env)
     if not mres.ok:
-        errors = [s.error for s in mres.stages if not s.ok and s.error]
+        # validate-lod1/2 são só avisos: listar primeiro o que fez o gate falhar.
+        failed = [s for s in mres.stages if not s.ok and s.error]
+        failed.sort(key=lambda s: s.name in ("validate-lod1", "validate-lod2"))
+        errors = [f"{s.name}: {s.error}" for s in failed]
         rec["status"] = "error"
         rec["error"] = "; ".join(errors[:3]) or "master pipeline falhou"
         console.print(f"[red]master pipeline falhou[/red] {row.id}: {rec['error'][:200]}")
@@ -735,6 +747,9 @@ def _paint3d_texture_argv(
         args.append("--no-smooth")
     if p3.smooth_passes is not None:
         args.extend(["--smooth-passes", str(p3.smooth_passes)])
+    # Normal+AO derivados do albedo do atlas (bordos de ilha = arestas
+    # falsas). O perfil do Vael desliga-o.
+    args.append("--pbr-enrich" if p3.pbr_enrich else "--no-pbr-enrich")
     if gpu_ids:
         args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
     if not hw_auto:
@@ -754,6 +769,17 @@ def _texture_subprocess_argv(
     gpu_ids: list[int] | None = None,
 ) -> list[str]:
     p3 = profile.paint3d or Paint3DProfile()
+    # Overrides por linha (bloco ``paint3d:`` do manifest): views/render/tex.
+    if row is not None and row.paint3d:
+        import dataclasses as _dc
+
+        _over = {
+            k: v
+            for k, v in row.paint3d.items()
+            if k in ("max_views", "view_resolution", "render_size", "texture_size", "bake_exp")
+        }
+        if _over:
+            p3 = _dc.replace(p3, **_over)
     effective_style = (p3.style or "hunyuan").strip().lower()
     if (
         profile.paint3d is not None
@@ -999,6 +1025,10 @@ def _text3d_argv(
         str(image_path),
         "-o",
         str(mesh_path),
+        # Sidecar ``<stem>_input.png`` junto ao shape: é a imagem que o stage de
+        # refine (Hi3D) usa como condição. Sem isto um ``text3d generate`` manual
+        # (prompt → mesh) ficava sem referência para refinar.
+        "--save-reference-image",
     ]
     if quality:
         args.extend(["--quality", quality])
@@ -1227,6 +1257,228 @@ def _topology_fix_extra_argv(
     return args
 
 
+def _reference_image_for(mesh_final: Path, profile: GameProfile) -> Path | None:
+    """Localiza a imagem de referência (concept) usada no shape do asset.
+
+    Ordem: sidecars do Text3D (``<base>_text2d.png``/``_input.png``) →
+    ``images_subdir`` do layout split → ficheiro ao lado da mesh (layout flat).
+    Sem imagem o refine não arranca (o modelo é image-conditioned).
+    """
+    base = _base_stem(mesh_final.stem)
+    canon = _canonical_mesh_final(mesh_final)
+    inter = _intermediate_dir(canon)
+    meshes_dir = canon.parent
+    exts = ("png", "jpg", "jpeg")
+
+    candidates: list[Path] = []
+    for stem_suffix in ("_text2d", "_input"):
+        for ext in exts:
+            candidates.append(inter / f"{base}{stem_suffix}.{ext}")
+            candidates.append(meshes_dir / f"{base}{stem_suffix}.{ext}")
+    imgs_sub = getattr(profile, "images_subdir", "images") or "images"
+    # Raiz do layout split: tirar ``meshes_subdir`` (pode ter vários níveis,
+    # ex. ``meshes/characters`` com ``images/characters``) do diretório da mesh.
+    meshes_sub = Path(getattr(profile, "meshes_subdir", "meshes") or "meshes").parts
+    root = meshes_dir.parent
+    if meshes_sub and meshes_dir.parts[-len(meshes_sub) :] == meshes_sub:
+        root = Path(*meshes_dir.parts[: -len(meshes_sub)])
+    for ext in exts:
+        candidates.append(root / imgs_sub / f"{base}.{ext}")
+        # Pack do layout split (``meshes/<pack>`` → ``images/<pack>``). O
+        # ``root`` acima só acerta quando ``profile.meshes_subdir`` traz o
+        # pack; o profile tem o default ``meshes`` e o pack vive no manifest.
+        candidates.append(meshes_dir.parent.parent / imgs_sub / meshes_dir.name / f"{base}.{ext}")
+        candidates.append(canon.parent / f"{base}.{ext}")
+    for cand in candidates:
+        if cand.is_file() and cand.stat().st_size > 0:
+            return cand
+    # Último recurso: sidecar com prefixo (``<base>_v2_text2d.png`` ou
+    # ``<base>_shape_input.png`` — o ``--save-reference-image`` do generate
+    # escreve ``<stem-do-output>_input``, que inclui o sufixo do shape).
+    if inter.is_dir():
+        for pattern in (f"{base}*_text2d.*", f"{base}*_input.*"):
+            for cand in sorted(inter.glob(pattern)):
+                if cand.is_file() and cand.stat().st_size > 0:
+                    return cand
+    return None
+
+
+# Entrada do Hi3D: um clean acima disto estoura a VRAM do spconv a 6 GB
+# (campfire_pit a 384: clean 3,15M faces → CUDA OOM, refine saltado). O refine
+# re-mesha de qualquer forma e o alvo dele é ≤320k — simplificar a entrada
+# preserva o detalhe útil e evita o OOM.
+_REFINE_INPUT_MAX_FACES = 1_200_000
+
+
+def _run_refine_stage(
+    clean_p: Path,
+    mesh_final: Path,
+    *,
+    text3d_bin: str,
+    profile: GameProfile,
+    child_env: dict[str, str],
+    manifest_dir: Path,
+    force: bool,
+    row: ManifestRow | None,
+) -> Path | None:
+    """Corre o Hi3D (``text3d refine``) e devolve ``_refined.glb`` ou ``None``.
+
+    Skip gracioso (devolve ``None``, nunca levanta) quando: refine desligado no
+    perfil, ``hi3d`` ausente, imagem de referência ausente, GPU/stack
+    indisponíveis (exit 3) ou o binário falhou. O asset segue para o paint com
+    o ``_clean`` — o refinamento é qualidade extra, não pré-condição.
+    """
+    from .profile import RefineProfile
+
+    rp = profile.refine or RefineProfile()
+    if not rp.enabled:
+        return None
+
+    # Riggados e personagens/criaturas: o Hi3D re-sintetiza a forma a partir da
+    # imagem e **muda a pose** (medido no hero: braços sobem/torcem, olhos
+    # saltam). O rigging3d/animator3d esperam a A-pose do omni. Gate por
+    # categoria além de ``generate_rig`` — cobre também quem ainda não vai ser
+    # rigado nesta passagem. O detalhe vem do octree do shape.
+    if row is not None:
+        _rigged = bool(getattr(row, "generate_rig", False))
+        _cat = str(getattr(row, "category", None) or getattr(row, "kind", None) or "").strip().lower()
+        if _rigged or _cat in {"humanoid", "creature"}:
+            log.info(
+                "refine: skip %s (%s — Hi3D muda a pose)",
+                row.id,
+                "rigged" if _rigged else _cat,
+            )
+            return None
+
+    refined_p = _refined_path(mesh_final)
+    if not force and refined_p.is_file() and _glb_has_geometry(refined_p):
+        with contextlib.suppress(OSError):
+            if refined_p.stat().st_mtime >= clean_p.stat().st_mtime:
+                log.info("refine: reuso %s", refined_p.name)
+                return refined_p
+
+    hi3d_bin = _bin_or_none("HI3D_BIN", "hi3d")
+    if not hi3d_bin:
+        console.print(
+            "[yellow]⤵ refine[/yellow] hi3d ausente — instala com "
+            "[cyan]./install.sh hi3d[/cyan] + [cyan]hi3d download-model[/cyan]"
+        )
+        return None
+
+    image_p = _reference_image_for(mesh_final, profile)
+    if image_p is None:
+        log.warning("refine: imagem de referência ausente para %s — a saltar", row.id if row else mesh_final.stem)
+        return None
+
+    target = _resolve_lod_target_faces(profile, row) if row is not None else 0
+    max_faces = int(target * rp.max_faces_scale) if target > 0 and rp.max_faces_scale > 0 else 0
+    # Piso do teto: nunca decimar abaixo da coarse. Sem isto um asset com
+    # orçamento LOD baixo (boss_ogre: target 6k → teto 24k) saía do refine
+    # **com menos faces do que o clean** (103k) — "refinado low-poly".
+    if max_faces > 0:
+        clean_faces = _count_faces_glb(clean_p)
+        if clean_faces > max_faces:
+            # Tecto do piso: o paint já simplifica para ~320k (atlas 2k); um
+            # clean de edifício com 1-2M faces não deve arrastar o refine para
+            # um intermédio gigante (unwrap/raster e disco).
+            floor = min(clean_faces, 320_000)
+            if floor > max_faces:
+                log.info(
+                    "refine: teto %s → %s faces (piso = clean, máx 320k)",
+                    f"{max_faces:,}",
+                    f"{floor:,}",
+                )
+                max_faces = floor
+    # seed: perfil > override da row (re-roll cirúrgico, como no shape) >
+    # determinístico por id.
+    seed = rp.seed
+    if seed is None and row is not None:
+        seed = getattr(row, "seed", None)
+    if seed is None:
+        seed = _seed_for_row(profile, row.id if row is not None else "")
+    cat = (row.category or row.kind) if row is not None else None
+    label = row.id if row is not None else mesh_final.stem
+
+    refined_p.parent.mkdir(parents=True, exist_ok=True)
+    # Clean grande → simplifica a entrada do Hi3D (evita OOM do spconv).
+    refine_in = clean_p
+    clean_in_faces = _count_faces_glb(clean_p)
+    if clean_in_faces > _REFINE_INPUT_MAX_FACES:
+        refine_in = clean_p.with_name(clean_p.stem + "_refinein" + clean_p.suffix)
+        reuse_in = (
+            not force
+            and refine_in.is_file()
+            and refine_in.stat().st_mtime >= clean_p.stat().st_mtime
+            and 0 < _count_faces_glb(refine_in) <= int(_REFINE_INPUT_MAX_FACES * 1.1)
+        )
+        if not reuse_in:
+            console.print(
+                f"[cyan]⏳ refine input[/cyan] {label} ({clean_in_faces:,} → {_REFINE_INPUT_MAX_FACES:,} faces)"
+            )
+            sargv = [
+                text3d_bin,
+                "simplify",
+                str(clean_p),
+                "-o",
+                str(refine_in),
+                "--target-faces",
+                str(_REFINE_INPUT_MAX_FACES),
+                "--no-repair",
+            ]
+            rs = run_cmd(sargv, extra_env=child_env, cwd=manifest_dir)
+            if rs.returncode != 0 or not refine_in.is_file() or not _glb_has_geometry(refine_in):
+                err = merge_subprocess_output(rs, max_chars=300) or "simplify do input do refine falhou"
+                log.warning("refine: simplify do input falhou (%s) — a tentar com o clean", err)
+                refine_in = clean_p
+    argv = [
+        text3d_bin,
+        "refine",
+        str(refine_in),
+        "-i",
+        str(image_p),
+        "-o",
+        str(refined_p),
+        "--resolution",
+        rp.resolution,
+        "--steps",
+        str(rp.steps),
+        "--max-faces",
+        str(max_faces),
+        "--json",
+    ]
+    if seed is not None:
+        argv.extend(["--seed", str(seed)])
+    if cat:
+        argv.extend(["--category", str(cat)])
+    if rp.model:
+        argv.extend(["--model", rp.model])
+    if rp.remove_background:
+        argv.append("--remove-background")
+
+    console.print(f"[cyan]⏳ refine[/cyan] {label} (Hi3D @{rp.resolution})")
+    t0 = time.perf_counter()
+    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
+    elapsed = time.perf_counter() - t0
+
+    if r.returncode == 3:
+        reason = merge_subprocess_output(r, max_chars=300) or "indisponível nesta GPU/instalação"
+        console.print(f"[yellow]⤵ refine[/yellow] {label}: {reason}")
+        return None
+    if r.returncode != 0 or not refined_p.is_file() or not _glb_has_geometry(refined_p):
+        err = merge_subprocess_output(r, max_chars=400) or "text3d refine falhou"
+        log.warning("refine falhou (%s): %s — a continuar com _clean", label, err)
+        console.print(f"[yellow]⤵ refine[/yellow] {label}: falhou (segue _clean)")
+        return None
+
+    faces = _count_faces_glb(refined_p)
+    console.print(
+        f"[green]✓ refine[/green] {label} → {refined_p.name} "
+        + (f"({faces:,} faces, " if faces > 0 else "(")
+        + f"{elapsed:.0f}s)"
+    )
+    return refined_p
+
+
 def ensure_clean_for_paint(
     mesh_final: Path,
     *,
@@ -1239,13 +1491,30 @@ def ensure_clean_for_paint(
 ) -> Path:
     """Garante ``_clean.glb`` (topology-fix) e devolve path para input do paint.
 
-    Master DAG canónico: shape -> topology-fix -> paint. Batch/resume antigos
-    pintavam ``_shape`` cru (paredes duplas / cascas internas). Com isto o
-    paint corre sobre mesh já limpa (incl. ``remove_internal_shell_faces``).
+    Master DAG canónico: shape -> topology-fix -> **refine (Hi3D)** -> paint.
+    Batch/resume antigos pintavam ``_shape`` cru (paredes duplas / cascas
+    internas). Com isto o paint corre sobre mesh já limpa (incl.
+    ``remove_internal_shell_faces``) e, quando o Hi3D está disponível, sobre a
+    geometria refinada (mais fiel à silhueta da imagem).
+
+    O refine é **default ON** mas opcional em runtime: qualquer indisponibilidade
+    degrada para o ``_clean`` sem falhar o asset.
     """
     clean_existing = _clean_existing(mesh_final)
     if clean_existing is not None and clean_existing.is_file() and not force:
-        return clean_existing
+        return (
+            _run_refine_stage(
+                clean_existing,
+                mesh_final,
+                text3d_bin=text3d_bin,
+                profile=profile,
+                child_env=child_env,
+                manifest_dir=manifest_dir,
+                force=force,
+                row=row,
+            )
+            or clean_existing
+        )
 
     shape_p = _shape_existing(mesh_final) or _shape_path(mesh_final)
     if not shape_p.is_file():
@@ -1266,7 +1535,19 @@ def ensure_clean_for_paint(
         with contextlib.suppress(OSError):
             clean_p.unlink()
         raise RuntimeError(f"topology-fix produziu clean vazio: {clean_p}")
-    return clean_p
+    return (
+        _run_refine_stage(
+            clean_p,
+            mesh_final,
+            text3d_bin=text3d_bin,
+            profile=profile,
+            child_env=child_env,
+            manifest_dir=manifest_dir,
+            force=force,
+            row=row,
+        )
+        or clean_p
+    )
 
 
 def _quality_paint_texture_cap(profile: GameProfile) -> int:
@@ -1367,7 +1648,11 @@ def _resolve_paint_texture_size(profile: GameProfile, row: ManifestRow | None = 
 
 
 def _resolve_to_paint_faces(profile: GameProfile, row: ManifestRow | None = None) -> int:
-    """Faces alvo do ``_to_paint``: override profile ou fórmula ~ texture_size."""
+    """Faces alvo do ``_to_paint``: row > profile > fórmula ~ texture_size."""
+    if row is not None and row.paint3d:
+        row_tpf = row.paint3d.get("to_paint_faces")
+        if row_tpf is not None and int(row_tpf) >= 4:
+            return int(row_tpf)
     p3 = profile.paint3d
     if p3 is not None and p3.to_paint_faces is not None and int(p3.to_paint_faces) >= 4:
         return int(p3.to_paint_faces)
@@ -1418,7 +1703,22 @@ def ensure_to_paint_for_paint(
     if current < 0:
         log.warning("to_paint: não consegui contar faces de %s - paint no clean", clean_p)
         return clean_p
-    if current <= int(target * 1.1):
+
+    to_paint_p = _to_paint_path(mesh_final)
+    existing = _to_paint_existing(mesh_final)
+    reuse_ok = (
+        not force
+        and existing is not None
+        and existing.is_file()
+        and existing.stat().st_mtime >= clean_p.stat().st_mtime
+    )
+    # O refine Hi3D devolve topologia própria (não passou topology-fix): o
+    # xatlas parte-a em >15k charts (campfire_pit: >60 s) e o bake fica sem
+    # cobertura (trust 0,9% vs 62-70% de uma malha limpa). A malha do paint
+    # tem de ser refixada mesmo quando cabe no orçamento de faces.
+    refined_input = "_refined" in clean_p.stem
+
+    if current <= int(target * 1.1) and not refined_input:
         log.info(
             "to_paint: skip remesh %s faces=%s ≤ alvo %s (tex=%s)",
             clean_p.name,
@@ -1428,14 +1728,7 @@ def ensure_to_paint_for_paint(
         )
         return clean_p
 
-    to_paint_p = _to_paint_path(mesh_final)
-    existing = _to_paint_existing(mesh_final)
-    if (
-        not force
-        and existing is not None
-        and existing.is_file()
-        and existing.stat().st_mtime >= clean_p.stat().st_mtime
-    ):
+    if reuse_ok:
         tp_faces = _count_faces_glb(existing)
         if 0 < tp_faces <= int(target * 1.25):
             log.info(
@@ -1446,8 +1739,53 @@ def ensure_to_paint_for_paint(
             )
             return existing
 
-    to_paint_p.parent.mkdir(parents=True, exist_ok=True)
     row_id = row.id if row is not None else clean_p.stem
+    to_paint_p.parent.mkdir(parents=True, exist_ok=True)
+
+    if refined_input:
+        # O refined hi3d pode exceder o budget do atlas: simplificar primeiro
+        # (o ``to_paint_faces`` por linha manda — witch_hut a 60k) e só depois o
+        # refix leve. Sem isto o budget era ignorado neste caminho.
+        paint_src = clean_p
+        if current > int(target * 1.1):
+            simplified_p = to_paint_p.with_name(to_paint_p.stem + "_simplified" + to_paint_p.suffix)
+            console.print(
+                f"[cyan]⏳ to_paint[/cyan] {row_id} ({clean_p.name} {current:,} -> ~{target:,} faces, atlas={tex_size})"
+            )
+            sargv = [
+                text3d_bin,
+                "simplify",
+                str(clean_p),
+                "-o",
+                str(simplified_p),
+                "--target-faces",
+                str(target),
+                "--no-repair",
+            ]
+            rs = run_cmd(sargv, extra_env=child_env, cwd=manifest_dir)
+            if rs.returncode != 0 or not simplified_p.is_file():
+                err = merge_subprocess_output(rs, max_chars=400) or "simplify do refined falhou"
+                raise RuntimeError(err)
+            paint_src = simplified_p
+        console.print(
+            f"[cyan]⏳ to_paint[/cyan] {row_id} "
+            f"(refix {paint_src.name}, {_count_faces_glb(paint_src):,} faces, atlas={tex_size})"
+        )
+        _refix_paint_input(
+            paint_src,
+            to_paint_p,
+            text3d_bin=text3d_bin,
+            child_env=child_env,
+            manifest_dir=manifest_dir,
+            row=row,
+        )
+        out_faces = _count_faces_glb(to_paint_p)
+        console.print(
+            f"[green]✓ to_paint[/green] {row_id} -> {to_paint_p.name}"
+            + (f" ({out_faces:,} faces)" if out_faces > 0 else "")
+        )
+        return to_paint_p
+
     console.print(f"[cyan]⏳ to_paint[/cyan] {row_id} ({current:,} -> ~{target:,} faces, atlas={tex_size})")
     # ``_clean`` já passou topology-fix: --no-repair evita pre_decimate_uv /
     # post_decimate a apagar slivers/paredes finas (edifícios casca-plástico).
@@ -1474,11 +1812,45 @@ def ensure_to_paint_for_paint(
     # Re-topology-fix leve: fecha micro-ilhas do COLLAPSE. Morph-close AUTO
     # derrete cascas de edifícios (chapel: body_pct -19% clean->to_paint) —
     # desligar morph; weld/fill do profile bastam.
-    refix_p = to_paint_p.with_name(to_paint_p.stem + "_refixed" + to_paint_p.suffix)
+    _refix_paint_input(
+        to_paint_p,
+        to_paint_p,
+        text3d_bin=text3d_bin,
+        child_env=child_env,
+        manifest_dir=manifest_dir,
+        row=row,
+        required=False,
+    )
+    refix_faces = _count_faces_glb(to_paint_p)
+    console.print(
+        f"[green]✓ to_paint re-fix[/green] {row_id}" + (f" ({refix_faces:,} faces, morph=0)" if refix_faces > 0 else "")
+    )
+
+    return to_paint_p
+
+
+def _refix_paint_input(
+    src: Path,
+    dst: Path,
+    *,
+    text3d_bin: str,
+    child_env: dict[str, str],
+    manifest_dir: Path,
+    row: ManifestRow | None,
+    required: bool = True,
+) -> Path:
+    """``topology-fix`` leve (weld/fill, morph 0) do input do paint.
+
+    O refine Hi3D gera topologia que o xatlas não consegue abrir (15,8k charts,
+    >60 s) e o bake fica sem cobertura. Refixar antes do paint dá ao xatlas uma
+    malha saneada (e remove cascas internas invisíveis). ``required=False``
+    mantém o caminho antigo (simplify já saneia) e só avisa.
+    """
+    refix_p = dst.with_name(dst.stem + "_refixed" + dst.suffix)
     refix_argv = [
         text3d_bin,
         "topology-fix",
-        str(to_paint_p),
+        str(src),
         "-o",
         str(refix_p),
         "--engine",
@@ -1488,18 +1860,15 @@ def ensure_to_paint_for_paint(
     ]
     if row is not None and row.category:
         refix_argv.extend(["--category", str(row.category)])
-    r2 = run_cmd(refix_argv, extra_env=child_env, cwd=manifest_dir)
-    if r2.returncode == 0 and refix_p.is_file():
-        refix_p.replace(to_paint_p)
-        refix_faces = _count_faces_glb(to_paint_p)
-        console.print(
-            f"[green]✓ to_paint re-fix[/green] {row_id}"
-            + (f" ({refix_faces:,} faces, morph=0)" if refix_faces > 0 else "")
-        )
-    else:
-        log.warning("to_paint re-fix falhou para %s (continua com simplify)", row_id)
-
-    return to_paint_p
+    r = run_cmd(refix_argv, extra_env=child_env, cwd=manifest_dir)
+    if r.returncode == 0 and refix_p.is_file():
+        refix_p.replace(dst)
+        return dst
+    err = merge_subprocess_output(r, max_chars=400) or "topology-fix (refix) falhou"
+    if required:
+        raise RuntimeError(err)
+    log.warning("to_paint re-fix falhou para %s (continua com simplify)", dst.name)
+    return src
 
 
 def _rules_dir() -> Path:
@@ -1518,6 +1887,19 @@ def _rules_need_bpy_inspect(rules: Path) -> bool:
     except OSError:
         return True  # não conseguimos decidir — validar a fundo é o lado seguro
     return any(key in text for key in _RULES_REQUIRING_BPY)
+
+
+def _check_glb_failures(stdout: str) -> list[str]:
+    """Lista ``failures`` do JSON do ``aigamekit-lab check glb`` (vazia se não parseável)."""
+    start = stdout.find("{")
+    if start < 0:
+        return []
+    try:
+        data, _ = json.JSONDecoder().raw_decode(stdout[start:])
+    except ValueError:
+        return []
+    failures = data.get("failures") if isinstance(data, dict) else None
+    return [str(f) for f in failures] if isinstance(failures, list) else []
 
 
 def _run_check_glb(
@@ -1547,7 +1929,12 @@ def _run_check_glb(
     r = run_cmd(argv, extra_env=env, cwd=cwd)
     dt = _time.perf_counter() - t0
     if r.returncode != 0:
-        err = merge_subprocess_output(r, max_chars=400) or f"check glb falhou (rc={r.returncode})"
+        # O JSON do check é longo: o tail truncado escondia qual regra falhou.
+        failures = _check_glb_failures(r.stdout or "")
+        if failures:
+            err = f"{glb.name} ({Path(rules).name}): " + "; ".join(failures)
+        else:
+            err = merge_subprocess_output(r, max_chars=400) or f"check glb falhou (rc={r.returncode})"
         return StageResult("validate", False, dt, err, glb)
     return StageResult("validate", True, dt, output=glb)
 
@@ -1914,6 +2301,7 @@ def _run_static_lod_stages(
     text3d_bin: str,
     with_rig: bool,
     texture_size_lod0: int | None = None,
+    lod_profile: Any = None,
 ) -> None:
     """Caminho estático (sem rig): ladder LOD0/1/2 via ``text3d lod``.
 
@@ -1931,12 +2319,16 @@ def _run_static_lod_stages(
     lod0_is_promoted = lod0_p.is_file() and (
         _glb_is_promoted_animated(lod0_p) or (with_rig and _glb_is_promoted_rigged(lod0_p))
     )
+    # Frescura por mtime: o skip antigo comparava as faces de LOD1/2 com o
+    # painted (25%/8%) e nunca disparava (LOD1 ~ 0.4x target << 0.25x painted),
+    # pelo que a ladder era regenerada em cada passagem do master.
+    _painted_mtime = painted_p.stat().st_mtime if painted_p.is_file() else 0.0
+
+    def _fresh_lod(p: Path) -> bool:
+        return p.is_file() and p.stat().st_size > 64 and p.stat().st_mtime >= _painted_mtime and _glb_has_materials(p)
+
     lod0_matches_painted = (
-        lod0_p.is_file()
-        and not lod0_is_promoted
-        and _glb_has_materials(lod0_p)
-        and painted_faces > 0
-        and lod0_faces >= int(painted_faces * 0.99)
+        lod0_p.is_file() and not lod0_is_promoted and _glb_has_materials(lod0_p) and _fresh_lod(lod0_p)
     )
 
     if lod0_is_promoted:
@@ -1964,14 +2356,7 @@ def _run_static_lod_stages(
     lod1_faces = _count_faces_glb(lod1_p) if lod1_p.is_file() else -1
     lod2_faces = _count_faces_glb(lod2_p) if lod2_p.is_file() else -1
     lod_ladder_ok = (
-        lod1_p.is_file()
-        and lod2_p.is_file()
-        and _glb_has_materials(lod1_p)
-        and _glb_has_materials(lod2_p)
-        and painted_faces > 0
-        and lod1_faces >= int(painted_faces * 0.25)
-        and lod2_faces >= int(painted_faces * 0.08)
-        and lod2_faces < lod1_faces
+        _fresh_lod(lod1_p) and _fresh_lod(lod2_p) and lod1_faces > 0 and lod2_faces > 0 and lod2_faces < lod1_faces
     )
     if lod0_is_promoted:
         res.stages.append(
@@ -1989,6 +2374,13 @@ def _run_static_lod_stages(
         lod_min1 = max(target_faces // 2, 500)
         # Piso LOD2 = target/3 (alinha com text3d lod //3; edifícios grandes).
         lod_min2 = max(target_faces // 3, 150)
+        # Rácios do perfil (defaults 0.40/0.22, o mesmo da ladder do repo) e
+        # alvos explícitos: o ``--painted-mesh`` usava /2 e /3 fixos, ignorando
+        # o perfil e deixando LOD1/2 fora do contrato.
+        _r1 = float(getattr(lod_profile, "lod1_ratio", 0.40) or 0.40)
+        _r2 = float(getattr(lod_profile, "lod2_ratio", 0.22) or 0.22)
+        lod1_faces = max(lod_min1, int(lod0_target * _r1))
+        lod2_faces = max(lod_min2, int(lod0_target * _r2))
         out_dir = mesh_final.parent.resolve()
         lod_argv = [
             text3d_bin,
@@ -2004,9 +2396,13 @@ def _run_static_lod_stages(
             str(lod0_target),
             "--finish-lod0",
             "--lod1-ratio",
-            "0.40",
+            str(_r1),
             "--lod2-ratio",
-            "0.22",
+            str(_r2),
+            "--lod1-faces",
+            str(lod1_faces),
+            "--lod2-faces",
+            str(lod2_faces),
             "--min-faces-lod1",
             str(lod_min1),
             "--min-faces-lod2",
@@ -2299,6 +2695,7 @@ def run_master_pipeline(
     bake_normals: bool | None = None,
     on_progress_line: Callable[[str], None] | None = None,
     gpu_ids: list[int] | None = None,
+    force: bool = False,
 ) -> MasterPipelineResult:
     """Executa o DAG novo a partir de ``id_shape.glb`` e ``id_painted.glb``.
 
@@ -2316,6 +2713,14 @@ def run_master_pipeline(
     """
     # Aceita painted/shape/lod paths — ancora sempre em meshes/{id}.glb.
     mesh_final = _canonical_mesh_final(mesh_final)
+    if force:
+        # ``--force`` tem de invalidar o que o master reutiliza por existência:
+        # rigged/animated, ladder, collision e peças de split. O painted é
+        # tratado pelo stage de paint (que também recebe force).
+        for _p in (_rigged_path(mesh_final), _animated_path(mesh_final)):
+            with contextlib.suppress(OSError):
+                _p.unlink()
+        invalidate_split_artifacts(mesh_final)
     res = MasterPipelineResult(asset_id=row.id, ok=True)
     res.intermediates_dir = _intermediate_dir(mesh_final)
 
@@ -2387,7 +2792,7 @@ def run_master_pipeline(
     # Stage 2 - topology-fix (shape -> clean). Skip se já temos um clean
     # válido (em meshes/ ou _intermediate/) - resume-friendly.
     clean_p.parent.mkdir(parents=True, exist_ok=True)
-    if clean_existing is not None and clean_existing.is_file():
+    if clean_existing is not None and clean_existing.is_file() and not force:
         res.stages.append(StageResult("topology-fix", True, 0.0, "skipped (clean existente)", clean_p))
     else:
         topo_argv = [text3d_bin, "topology-fix", str(shape_p), "-o", str(clean_p)]
@@ -2464,11 +2869,11 @@ def run_master_pipeline(
         # Stage 7 - rigging3d pipeline sobre o PAINTED (topologia final do
         # LOD0, com textura — ~6x mais leve que o antigo rig sobre _clean HI
         # e o output serve directamente de fonte da ladder).
-        if lod0_promoted_anim or (not with_animate and lod0_promoted_rig):
+        if not force and (lod0_promoted_anim or (not with_animate and lod0_promoted_rig)):
             res.stages.append(StageResult("rigging3d", True, 0.0, "skipped (lod0 já promovido)", lod0_p))
-        elif with_animate and _animated_ok(animated_p):
+        elif not force and with_animate and _animated_ok(animated_p):
             res.stages.append(StageResult("rigging3d", True, 0.0, "skipped (animated existente)", animated_p))
-        elif _rigged_ok(rigged_p):
+        elif not force and _rigged_ok(rigged_p):
             res.stages.append(StageResult("rigging3d", True, 0.0, "skipped (rigged existente)", rigged_p))
         else:
             _release_vramd_before_external_stage("rigging3d")
@@ -2575,11 +2980,13 @@ def run_master_pipeline(
         ladder_ok = expect(lod0_p, 0) and (
             not with_lod or (lod1_p.is_file() and lod2_p.is_file() and expect(lod1_p, 1) and expect(lod2_p, 2))
         )
-        if ladder_ok:
+        if not force and ladder_ok:
             res.stages.append(StageResult("lod", True, 0.0, f"skipped (ladder {promotion_kind} ok)", lod0_p))
         elif with_lod:
             lod_min1 = max(target_faces // 2, 500)
             lod_min2 = max(target_faces // 3, 150)
+            _r1 = float(getattr(profile.lod, "lod1_ratio", 0.40) or 0.40) if profile.lod else 0.40
+            _r2 = float(getattr(profile.lod, "lod2_ratio", 0.22) or 0.22) if profile.lod else 0.22
             lod_argv = [
                 text3d_bin,
                 "lod",
@@ -2589,9 +2996,9 @@ def run_master_pipeline(
                 "--basename",
                 _bake_base,
                 "--lod1-ratio",
-                "0.40",
+                str(_r1),
                 "--lod2-ratio",
-                "0.22",
+                str(_r2),
                 "--min-faces-lod1",
                 str(lod_min1),
                 "--min-faces-lod2",
@@ -2648,6 +3055,7 @@ def run_master_pipeline(
             text3d_bin=text3d_bin,
             with_rig=with_rig,
             texture_size_lod0=lod0_tex,
+            lod_profile=profile.lod,
         )
 
     # Stage 5.5 - patch-pbr pós-lod: garante normal+AO em todos os níveis
@@ -2673,7 +3081,7 @@ def run_master_pipeline(
     _split_lod_did_collision = wants_split_at_height(profile, row) and not bool(rig_source)
     if with_collision and not _split_lod_did_collision:
         coll_p = _collision_path(mesh_final)
-        if coll_p.is_file():
+        if coll_p.is_file() and not force:
             res.stages.append(StageResult("collision", True, 0.0, "skipped (collision existente)", coll_p))
         else:
             coll_src = collision_source(mesh_final, painted_p, lod0_p, rigged=bool(rig_source))

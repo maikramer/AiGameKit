@@ -24,23 +24,29 @@ origin:
     tol: 0.05
 
 # Limites por categoria (LOD0 = 1.2× target_faces da categoria, com folga).
+# ATENÇÃO: com `--painted-mesh` o `text3d lod` não desce ao target — o LOD0
+# fica no **piso das costuras UV** do atlas (medido 2026-10-30: 57k num cliff
+# de 2.1×3 m e 71k numa mesa/bar). Os caps antigos (terrain 19.2k, furniture
+# 9.6k) eram inatingíveis e rejeitavam assets válidos. Valores abaixo =
+# observado + folga para o piso variar com o nº de ilhas.
 face_count:
   max_per_category:
-    humanoid: 38400
-    creature: 28800
-    chest: 9600
-    weapon: 7200
-    tree: 14400
-    rock: 3840
-    mineral: 5760
-    building: 40320
-    furniture: 9600
-    vegetation: 12000
-    vehicle: 19200
-    armor: 12000
-    food: 3840
-    tool: 4800
-    terrain: 19200
-    effects: 2400
+    humanoid: 48000
+    # creature: bosses `generation: high` dão 57.6k.
+    creature: 80000
+    chest: 24000
+    weapon: 16000
+    tree: 24000
+    rock: 24000
+    mineral: 16000
+    building: 96000
+    furniture: 96000
+    vegetation: 32000
+    vehicle: 40000
+    armor: 32000
+    food: 8000
+    tool: 16000
+    terrain: 96000
+    effects: 4800
 
 meshes_min: 1

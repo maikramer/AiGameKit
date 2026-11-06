@@ -29,7 +29,7 @@ from .helpers import (
     _texture2d_material_maps_path_manifest,
     _texture2d_profile_effective,
 )
-from .manifest import apply_row_text3d_overrides, effective_image_source, row_mc_level
+from .manifest import apply_row_text3d_overrides, effective_image_source, row_mc_level, row_octree_resolution
 from .omni_ctrl import omni_to_batch_item, prepare_shape_for_generation, shape_omni_stale
 from .param_optimizer import optimize_text3d_for_target, should_optimize_text3d
 from .paths import (
@@ -167,6 +167,10 @@ def resume_cmd(
       - paint em falta → paint3d texture (GLB final com PBR)
       - tudo OK       → skip
     """
+    from .vramd_coord import MASTER_FORCE, WAVE_FORCE
+
+    WAVE_FORCE.set(bool(force))
+    MASTER_FORCE.set(bool(force))
     gpu_ids: list[int] | None = None
     if gpu_ids_str:
         try:
@@ -271,7 +275,9 @@ def resume_cmd(
                 bounds_mode=getattr(_t3_r, "bounds_mode", None) if _t3_r else None,
                 mc_level=row_mc_level(row, getattr(_t3_r, "mc_level", None) if _t3_r else None),
                 seed=row.seed,
-                octree_resolution=getattr(_t3_r, "octree_resolution", None) if _t3_r else None,
+                octree_resolution=row_octree_resolution(
+                    row, getattr(_t3_r, "octree_resolution", None) if _t3_r else None
+                ),
             )
         )
         master_state = _classify_row_state_master(
@@ -827,6 +833,8 @@ def resume_cmd(
                             _shape_kw["bounds_mode"] = t3.bounds_mode
                         if getattr(t3, "sdnq_preset", None):
                             _shape_kw["sdnq_preset"] = t3.sdnq_preset
+                            if getattr(t3, "preset", None):
+                                _shape_kw["preset"] = t3.preset
 
                     ums_shape_results = run_shape_wave_or_fallback(
                         shape_manifest_items,
@@ -1006,6 +1014,42 @@ def resume_cmd(
                             if not continue_on_error:
                                 raise click.Abort() from exc
                             continue
+                        if row.paint3d:
+                            # Overrides por linha (render/views) não cabem nos
+                            # flags globais do texture-batch: corre individual.
+                            painted_out = _painted_path(it["mesh_final"])
+                            t_tex = _texture_subprocess_argv(
+                                paint3d_bin,
+                                profile,
+                                mesh_paint,
+                                it["img_final"],
+                                painted_out,
+                                row_id=row.id,
+                                row=row,
+                                gpu_ids=gpu_ids,
+                            )
+                            r_ind = run_cmd_streaming(
+                                t_tex,
+                                extra_env=child_env,
+                                cwd=manifest_dir,
+                                on_stdout_line=dash.feed_line,
+                            )
+                            if r_ind.returncode == 0 and painted_out.is_file():
+                                rec_ok = {
+                                    "id": row.id,
+                                    "status": "ok",
+                                    "mesh_path": str(it["mesh_final"]),
+                                }
+                                _after_paint_ok(it, row, rec_ok, painted_out)
+                                append_log(rec_ok)
+                            else:
+                                failures += 1
+                                err = merge_subprocess_output(r_ind, max_chars=200) or "paint falhou"
+                                append_log({"id": row.id, "status": "error", "error": err})
+                                if not continue_on_error:
+                                    raise click.Abort()
+                            dash.advance_phase()
+                            continue
                         paint_manifest_items.append(
                             {
                                 "id": row.id,
@@ -1121,8 +1165,21 @@ def resume_cmd(
                             row = it["row"]
                             if item_result.get("status") in ("ok", "skipped"):
                                 painted_out = _painted_path(it["mesh_final"])
+                                # O texture-batch pode devolver ok/skipped sem
+                                # escrever o GLB (erro interno engolido) — sem
+                                # esta verificação a linha ficava "ok" sem
+                                # artefacto e o pack dava 0 falhas (forest:
+                                # witch_hut/tree_oak/tree_pine).
+                                if not painted_out.is_file():
+                                    failures += 1
+                                    err = item_result.get("error") or (f"paint não produziu {painted_out.name}")
+                                    append_log({"id": row.id, "status": "error", "error": err})
+                                    if not continue_on_error:
+                                        raise click.Abort()
+                                    dash.advance_phase()
+                                    continue
                                 rec_ok = {"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])}
-                                _after_paint_ok(it, row, rec_ok, painted_out if painted_out.is_file() else None)
+                                _after_paint_ok(it, row, rec_ok, painted_out)
                                 append_log(rec_ok)
                             else:
                                 failures += 1
@@ -1583,6 +1640,8 @@ def resume_cmd(
                             _shape_kw["bounds_mode"] = t3.bounds_mode
                         if getattr(t3, "sdnq_preset", None):
                             _shape_kw["sdnq_preset"] = t3.sdnq_preset
+                            if getattr(t3, "preset", None):
+                                _shape_kw["preset"] = t3.preset
 
                     ums_shape_results = run_shape_wave_or_fallback(shape_manifest_items, **_shape_kw)
 

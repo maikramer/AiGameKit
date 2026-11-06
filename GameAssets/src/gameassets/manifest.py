@@ -270,6 +270,10 @@ class ManifestRow:
     text3d: RowText3D | None = None
     # Overrides collision por asset (bloco ``collision:`` — ver RowCollision).
     collision: RowCollision | None = None
+    # Overrides paint3d por asset (bloco ``paint3d:``). Hoje: ``to_paint_faces``
+    # (budget do mesh que entra no unwrap/paint). Edifícios com muitos charts
+    # (witch_hut: 262k → xatlas >180 s) pedem um budget menor por linha.
+    paint3d: dict[str, Any] | None = None
 
 
 def effective_image_source(profile: GameProfile, row: ManifestRow) -> str:
@@ -304,6 +308,18 @@ def row_mc_level(row: ManifestRow, profile_mc_level: float | str | None) -> floa
     if rt3 is not None and rt3.mc_level is not None:
         return rt3.mc_level
     return profile_mc_level
+
+
+def row_octree_resolution(row: ManifestRow, profile_octree: int | None) -> int | None:
+    """``octree_resolution`` efectivo: override do manifest > profile.
+
+    Só o override explícito entra no fingerprint Omni; usar o do profile em vez
+    do da row fazia uma mudança por-asset nunca invalidar o shape.
+    """
+    rt3 = row.text3d
+    if rt3 is not None and rt3.octree_resolution is not None:
+        return int(rt3.octree_resolution)
+    return int(profile_octree) if profile_octree is not None else None
 
 
 def effective_collision_args(profile: GameProfile, row: ManifestRow) -> dict[str, Any]:
@@ -363,6 +379,18 @@ def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
 
         row_text3d = _row_text3d_from_dict(entry.get("text3d"), str(entry.get("id")))
         row_collision = _row_collision_from_dict(entry.get("collision"), str(entry.get("id")))
+        row_paint3d = entry.get("paint3d")
+        if row_paint3d is not None and not isinstance(row_paint3d, dict):
+            raise ValueError(f"asset {entry.get('id')!r}: paint3d deve ser um mapa")
+        if isinstance(row_paint3d, dict):
+            tpf = row_paint3d.get("to_paint_faces")
+            if tpf is not None:
+                try:
+                    row_paint3d = {**row_paint3d, "to_paint_faces": int(tpf)}
+                except (TypeError, ValueError):
+                    raise ValueError(f"asset {entry.get('id')!r}: paint3d.to_paint_faces inválido ({tpf!r})") from None
+                if row_paint3d["to_paint_faces"] < 4:
+                    raise ValueError(f"asset {entry.get('id')!r}: paint3d.to_paint_faces deve ser >= 4")
 
         rows.append(
             ManifestRow(
@@ -395,6 +423,7 @@ def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
                 seed=row_seed,
                 text3d=row_text3d,
                 collision=row_collision,
+                paint3d=row_paint3d,
             )
         )
     if not rows:

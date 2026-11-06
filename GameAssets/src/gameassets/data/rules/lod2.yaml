@@ -24,7 +24,8 @@ face_count:
     rock: 960
     mineral: 1440
     building: 13440
-    furniture: 2400
+    # furniture target=48k → LOD2 ≈ 0.22×LOD0 (12.7k); cap antigo 2.4k era pré-48k.
+    furniture: 16800
     vegetation: 3000
     vehicle: 4800
     armor: 3000

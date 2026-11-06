@@ -515,4 +515,8 @@ def effective_face_ratio(profile: GameProfile, row: ManifestRow) -> float:
         return 1.0
     from .generation_profiles import get_profile
 
-    return get_profile(gen_name).simplify_face_ratio
+    ratio = float(get_profile(gen_name).simplify_face_ratio)
+    # ``highest`` usa 0.0 para "não simplificar"; no orçamento isso é ratio 1.0.
+    # Devolver 0 fazia get_target_faces→0 e o master caía no fallback 8000
+    # (um humanoid highest ficava com LOD0 9.6k em vez de 38.4k).
+    return ratio if ratio > 0 else 1.0
