@@ -123,9 +123,9 @@ class TestGroupStreamConfig:
 
     def test_group_config_leaf_when_extremely_tight(self) -> None:
         """GPU minúscula: headroom < largest*1.2 → leaf_level (VRAM mínima)."""
-        # usable 3.6 (4 GiB * 0.9); FLUX int4 weights 5.76; largest 2.3;
-        # headroom = 3.6 - 1.5 = 2.1 < largest*1.2 = 2.76 → leaf_level.
-        plan = plan_offload([_gpu(4)], FLUX_9B)
+        # usable 2.7 (3 GiB * 0.9); headroom = 2.7 - 1.5 = 1.2 < 1.5 → int2;
+        # largest = 7.2*0.18 = 1.30; 1.2 < largest*1.2 = 1.56 → leaf_level.
+        plan = plan_offload([_gpu(3)], FLUX_9B)
         assert plan.offload == OFFLOAD_GROUP_STREAM
         assert plan.group_config.offload_type == "leaf_level"
 

@@ -42,7 +42,21 @@ class TestText3dChunks:
         gib = 1024**3
         assert text3d_num_chunks(None) is None
         n = text3d_num_chunks(4 * gib)
-        assert n == int(4 * gib * 0.7 / (96 * 1024))
+        raw = int(4 * gib * 0.7 / (96 * 1024))
+        # Quantizado para baixo em ~5% (nunca acima do orçamento).
+        assert n is not None and 0 < n <= raw
+        assert n >= int(raw * 0.94)
+
+    def test_free_vram_jitter_nao_muda_o_tile(self) -> None:
+        """Regressão: 2 MB de VRAM livre a mais mudava ``num_chunks`` e o
+        flashvdm re-tesselava a malha (mesmo seed, shape diferente)."""
+        a = text3d_num_chunks(2_693_267_456)
+        b = text3d_num_chunks(2_691_170_304)
+        assert a is not None and a == b
+
+    def test_tight_vram_nao_colapsa_para_zero(self) -> None:
+        n = text3d_num_chunks(200_000)
+        assert n is not None and n >= 1
 
 
 class TestPaintRuntimeBudget:

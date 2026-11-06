@@ -117,9 +117,30 @@ def text3d_num_chunks(
     lo: int = TEXT3D_CHUNKS_LO,
     hi: int = TEXT3D_CHUNKS_HI,
 ) -> int | None:
-    """Batch de queries do decode Omni (alias canónico partilhado)."""
+    """Batch de queries do decode Omni (alias canónico partilhado).
+
+    O resultado é quantizado em passos de ~5%. O decode usa ``num_chunks``
+    como tamanho do tile do flashvdm: dois valores diferentes re-tesselam a
+    malha no marching cubes (mesmo seed → malhas diferentes). A VRAM livre
+    oscila alguns MB entre arranques (alocações do driver/outros processos),
+    o que sem bucket mudava o tile — e a regeneração de um asset deixava de
+    ser reprodutível. O bucket absorve essa oscilação sem mexer no orçamento
+    (arredonda para baixo, nunca acima do que a VRAM permite).
+    """
     bpq = bytes_per_query if bytes_per_query and bytes_per_query > 0 else text3d_bytes_per_query()
-    return budget_units(free_vram_bytes, bpq, fraction=fraction, lo=lo, hi=hi)
+    n = budget_units(free_vram_bytes, bpq, fraction=fraction, lo=lo, hi=hi)
+    if n is None:
+        return None
+    n = int(n)
+    if n >= int(hi):
+        return int(hi)  # tecto duro: não quantizar para baixo
+    if n <= 1:
+        return 1
+    step = max(1, n // 20)
+    q = (n // step) * step
+    if n >= int(lo):
+        q = max(q, int(lo))  # piso soft preservado quando o orçamento o alcança
+    return max(1, q)
 
 
 def paint_bytes_per_view(view_resolution: int) -> int:

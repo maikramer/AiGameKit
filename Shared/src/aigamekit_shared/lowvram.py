@@ -51,9 +51,14 @@ QUANT_WEIGHT_FACTOR: dict[str, float] = {
     "int4": 0.32,
     "sdnq-int4": 0.32,
     "sdnq-uint4": 0.32,
-    # Bits finos (Hadamard+SVD): fator = bits/16 + escalas/svd (~0.07 medido no int4).
-    "sdnq-int3": 0.28,
-    "sdnq-int2": 0.25,
+    # Tier de qualidade opt-in: uint4 group 16 + SVD + Hadamard + escalas
+    # double-quant. Medido ~5.6 b/peso nas camadas grandes (0.35), com margem.
+    "sdnq-uint4-hq": 0.38,
+    # Bits finos (SDNQ 0.2.9): uint3/uint2 + Hadamard + escalas double-quant,
+    # sem codebook. Medido 3.5 / 2.5 b/peso (0.22 / 0.16) — antes o codebook
+    # a group 32 inflava-os para 11 / 6 b/peso.
+    "sdnq-int3": 0.24,
+    "sdnq-int2": 0.18,
 }
 
 # Ordem de preferência (qualidade desce, poupança sobe). "none" primeiro; int4 por
