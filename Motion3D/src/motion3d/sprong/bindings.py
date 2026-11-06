@@ -123,7 +123,6 @@ class SmOptions(C.Structure):
     ]
 
 
-
 class SprongError(RuntimeError):
     """A runtime call failed; the message is ``sm_get_error()``."""
 
