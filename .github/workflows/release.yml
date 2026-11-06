@@ -15,6 +15,11 @@ jobs:
     name: GitHub Release (tag push)
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    # O GITHUB_TOKEN é read-only por omissão: sem contents:write a criação da
+    # Release (e o generate_release_notes) devolve 403 "Resource not
+    # accessible by integration".
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - name: Extract CHANGELOG entry for this tag
