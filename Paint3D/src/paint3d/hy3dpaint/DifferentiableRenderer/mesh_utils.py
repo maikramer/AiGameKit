@@ -220,6 +220,17 @@ def _create_mtl_file(base_path: str, texture_maps: dict[str, str], is_pbr: bool)
             _write_mtl_properties(f, properties)
 
 
+def _seam_dilation_pixels(texture_width: int) -> int:
+    """Gutter em texels proporcional à resolução do atlas.
+
+    4 px chega a 1024, mas a 2048 os mips 2+ filtram além da margem (o
+    trilinear lê ~8 px no mip 3) e o vizinho é outra ilha. 8 px a 2048 e
+    16 a 4096 mantêm as ilhas isoladas nos mips; o interior não muda (só a
+    gutter fora da cobertura é preenchida).
+    """
+    return max(4, int(texture_width) // 256)
+
+
 def _dilate_texture_at_seams(texture_np, vtx_uv, uv_idx, dilation_pixels=4):
     """Dilate texture at UV island boundaries to prevent visible seam cracks.
 
@@ -378,7 +389,9 @@ def _save_glb_mesh_bpy(
 
     # 1. Save texture to temp JPG (albedo — foto; os data maps PBR vão em PNG)
     texture_uint8 = (texture * 255).astype(np.uint8)
-    texture_uint8 = _dilate_texture_at_seams(texture_uint8, vtx_uv, uv_idx, dilation_pixels=4)
+    texture_uint8 = _dilate_texture_at_seams(
+        texture_uint8, vtx_uv, uv_idx, dilation_pixels=_seam_dilation_pixels(texture_uint8.shape[1])
+    )
     tmp_fd, tmp_tex_path = tempfile.mkstemp(suffix=".jpg")
     os.close(tmp_fd)
     tmp_pbr_paths: list[str] = []

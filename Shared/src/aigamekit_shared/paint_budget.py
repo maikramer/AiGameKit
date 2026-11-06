@@ -38,6 +38,10 @@ PAINT_FACES_MAX = 320_000
 # 298k-343k OOM intermitente, 288k-318k passa na maioria → 6 GB fica abaixo
 # do cap de produto. Linear entre as âncoras, clamp ao cap de produto.
 PAINT_FACES_AT_4GB = 160_000
+# Âncora medida (4050 6 GB): 288k-318k passa na maioria; 298k-343k OOM
+# intermitente. A interpolação linear 4→8 GiB dava ~228k a 6 GiB — abaixo do
+# que a GPU aguenta e com menos detalhe de projeção no bake.
+PAINT_FACES_AT_6GB = 288_000
 PAINT_FACES_AT_8GB = 320_000
 # Cache da VRAM total (NVML, GPU 0; ``None`` = sem GPU/CI → cap de produto).
 _UNPROBED = object()
@@ -107,20 +111,24 @@ def paint_faces_cap_for_vram(vram_total_mib: int | None = None) -> int:
 
     Returns:
         Cap efectivo em ``[PAINT_FACES_MIN, PAINT_FACES_MAX]`` — linear entre
-        as âncoras medidas (4 GiB → 160k, 8 GiB → 320k).
+        as âncoras medidas (4 GiB → 160k, 6 GiB → 288k, 8 GiB → 320k).
     """
     total = _vram_total_mib() if vram_total_mib is None else int(vram_total_mib)
     if not total or total <= 0:
         return PAINT_FACES_MAX
     lo_mib, lo_cap = 4096, PAINT_FACES_AT_4GB
+    mid_mib, mid_cap = 6144, PAINT_FACES_AT_6GB
     hi_mib, hi_cap = 8192, PAINT_FACES_AT_8GB
     if total <= lo_mib:
         cap = float(lo_cap)
     elif total >= hi_mib:
         cap = float(hi_cap)
+    elif total <= mid_mib:
+        frac = (total - lo_mib) / (mid_mib - lo_mib)
+        cap = lo_cap + frac * (mid_cap - lo_cap)
     else:
-        frac = (total - lo_mib) / (hi_mib - lo_mib)
-        cap = lo_cap + frac * (hi_cap - lo_cap)
+        frac = (total - mid_mib) / (hi_mib - mid_mib)
+        cap = mid_cap + frac * (hi_cap - mid_cap)
     return int(max(PAINT_FACES_MIN, min(PAINT_FACES_MAX, cap)))
 
 

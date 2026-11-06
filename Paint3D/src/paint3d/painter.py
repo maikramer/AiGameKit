@@ -691,9 +691,10 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
     hooks ( caller), e as camadas SDNQ subclassam ``Conv2d``/``Linear`` com
     ``scale``/``zero_point`` registados como Parameters — o leaf-level
     apanha-as como folhas e o grupo move peso+escalas juntos (micro-testado).
-    Desde a SDNQ 0.2.6 o preset ``sdnq-uint8`` traz Lloyd-Max codebook
-    (``use_codebook=True``): o estado do codebook viaja na própria layer e o
-    output mantém-se estável sob os hooks (micro-testado em
+    Desde a SDNQ 0.2.9 o preset ``sdnq-uint8`` é uint8 puro (sem codebook —
+    a group auto 1024 + o codebook custavam 10-18 b/peso). O estado SDNQ
+    (peso empacotado + escalas) viaja na própria layer e o output mantém-se
+    estável sob os hooks (micro-testado em
     ``TestSdnqLayersUnderGroupOffload``).
     Quando aplica, o ``offload_ref_unet`` custom fica desligado (os hooks são
     donos da colocação; ver ``_paint_group_offload_active``).
@@ -856,6 +857,51 @@ def _apply_translation(objects: list, offset: np.ndarray) -> None:
         obj.data.update()
 
 
+# Blender (Z-up) → glTF (Y-up): (x, y, z) → (x, z, -y). O Hunyuan-Paint lê
+# ``obj.data.vertices`` (coords locais) e as câmaras assumem o frame glTF Y-up
+# com a frente em +Z (azim 0 = frente, peso 1.0).
+_BL_TO_PAINT = ((1.0, 0.0, 0.0, 0.0), (0.0, 0.0, 1.0, 0.0), (0.0, -1.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))
+
+
+def _to_paint_frame(objects: list) -> None:
+    """Baked ``matrix_world`` + Blender→glTF nos vértices (frame do Hunyuan).
+
+    Sem isto o frame que o paint vê dependia de **como** o GLB guardava a
+    orientação: um ``_clean`` com a rotação Y-up no nó caía por acaso no frame
+    certo, mas um ``_refined`` (vértices já Y-up, nó identidade) chegava deitado
+    — a câmara frontal via o topo da cabeça e o rosto era pintado só pela vista
+    de topo (peso 0.05): rosto borrado e costas inventadas.
+    """
+    from mathutils import Matrix
+
+    conv = Matrix(_BL_TO_PAINT)
+    if not isinstance(objects, (list, tuple)):
+        objects = [objects]
+    for obj in objects:
+        if getattr(obj, "type", None) != "MESH":
+            continue
+        mw = obj.matrix_world.copy()
+        obj.parent = None
+        obj.data.transform(conv @ mw)
+        obj.matrix_world = Matrix.Identity(4)
+        obj.data.update()
+
+
+def _from_paint_frame(objects: list) -> None:
+    """Inverso de :func:`_to_paint_frame` — devolve os vértices ao frame Blender."""
+    from mathutils import Matrix
+
+    inv = Matrix(_BL_TO_PAINT).inverted()
+    if not isinstance(objects, (list, tuple)):
+        objects = [objects]
+    for obj in objects:
+        if getattr(obj, "type", None) != "MESH":
+            continue
+        obj.data.transform(inv @ obj.matrix_world)
+        obj.matrix_world = Matrix.Identity(4)
+        obj.data.update()
+
+
 def _fit_glb_aabb_to_reference(output_path: str | Path, reference_path: str | Path, *, verbose: bool = False) -> None:
     """Encaixa o AABB do GLB de saída no AABB do GLB de referência (input), em
     espaço glTF (Y-up), preservando texturas/materiais/normais.
@@ -883,33 +929,11 @@ def _fit_glb_aabb_to_reference(output_path: str | Path, reference_path: str | Pa
         )
         return
 
-    rot = np.eye(3)
-    nodes = list(ref.graph.nodes_geometry)
-    if nodes:
-        node_t, _ = ref.graph[nodes[0]]
-        r = np.asarray(node_t, float)[:3, :3]
-        norms = np.linalg.norm(r, axis=0)
-        norms[norms < 1e-9] = 1.0
-        rot = r / norms
-
+    # O paint devolve a mesh já no frame do mundo do input (_to_paint_frame /
+    # _from_paint_frame): só escala + translação, nunca rodar pelo nó do input
+    # (isso compensava o frame local antigo e rodava a dobrar um input baked).
     mesh = out_scene.dump(concatenate=True)
-    center0 = np.asarray(mesh.bounds.mean(axis=0), float)
-    rot4 = np.eye(4)
-    rot4[:3, :3] = rot
-    t_center = np.eye(4)
-    t_center[:3, 3] = center0
-    t_neg = np.eye(4)
-    t_neg[:3, 3] = -center0
-    pre = t_center @ rot4 @ t_neg
-
-    # Bounds após rotação (sem mutar o mesh de export — só métrica).
-    corners = np.asarray(mesh.bounds, float)
-    # 8 cantos do AABB
-    mins, maxs = corners[0], corners[1]
-    box = np.array([[x, y, z] for x in (mins[0], maxs[0]) for y in (mins[1], maxs[1]) for z in (mins[2], maxs[2])])
-    ones = np.ones((len(box), 1))
-    rotated = (pre @ np.hstack([box, ones]).T).T[:, :3]
-    omin, omax = rotated.min(axis=0), rotated.max(axis=0)
+    omin, omax = np.asarray(mesh.bounds[0], float), np.asarray(mesh.bounds[1], float)
 
     rmin, rmax = np.asarray(ref.bounds[0], float), np.asarray(ref.bounds[1], float)
     rext, oext = rmax - rmin, omax - omin
@@ -920,7 +944,11 @@ def _fit_glb_aabb_to_reference(output_path: str | Path, reference_path: str | Pa
     fit = np.eye(4)
     fit[:3, :3] *= scale
     fit[:3, 3] = ref_center - scale * out_center
-    mat = fit @ pre
+    # ``fit`` vive em glTF (trimesh); os vértices bpy estão em Blender Z-up.
+    from mathutils import Matrix
+
+    conv = np.asarray(_BL_TO_PAINT, float)
+    mat = np.linalg.inv(conv) @ fit @ conv
 
     objs = load_mesh_bpy(output_path)
     for obj in objs:
@@ -930,15 +958,17 @@ def _fit_glb_aabb_to_reference(output_path: str | Path, reference_path: str | Pa
         obj.data.vertices.foreach_get("co", co)
         pts = co.reshape(-1, 3)
         h = np.hstack([pts, np.ones((len(pts), 1))])
-        pts2 = (mat @ h.T).T[:, :3]
+        world = np.asarray(obj.matrix_world, float)
+        pts2 = (mat @ world @ h.T).T[:, :3]
         obj.data.vertices.foreach_set("co", pts2.ravel())
+        obj.parent = None
+        obj.matrix_world = Matrix.Identity(4)
         obj.data.update()
 
     save_glb(objs, output_path)
 
     if verbose:
-        ang = float(np.degrees(np.arccos(np.clip((np.trace(rot) - 1.0) / 2.0, -1.0, 1.0))))
-        _logger.info(f"placement preservado (glTF/bpy): rot_input={ang:.1f}° scale={scale:.4f}")
+        _logger.info(f"placement preservado (glTF/bpy): scale={scale:.4f}")
 
 
 def _apply_uniform_scale(objects: list, center: np.ndarray, scale: float) -> None:
@@ -1069,6 +1099,7 @@ def apply_hunyuan_paint(
             # Resize-in para o envelope de paint (bounds capturados ANTES —
             # o _preserve_placement no fim restaura o tamanho original).
             _scale_mesh_for_paint(mesh, logger=_logger, verbose=verbose)
+            _to_paint_frame(mesh)
             # Cascas internas: topology-fix (shape→clean) antes do paint.
             save_glb(mesh, mesh_in, verify_stage="to_paint")
 
@@ -1250,6 +1281,7 @@ def apply_hunyuan_paint(
             raise FileNotFoundError(f"Paint 2.1 não gerou GLB esperado: {out_glb}")
 
         textured = load_mesh_trimesh(out_glb)
+        _from_paint_frame(textured)
 
     if not textured or not all(hasattr(o, "data") and getattr(o, "type", "") == "MESH" for o in textured):
         raise TypeError(f"Paint devolveu tipos inesperados: {[type(o) for o in textured]}")
@@ -1610,6 +1642,7 @@ class PaintBatchProcessor:
                 # Resize-in para o envelope de paint (bounds ANTES — o
                 # _preserve_placement no fim restaura o tamanho original).
                 _scale_mesh_for_paint(mesh, logger=_logger, verbose=self._verbose)
+                _to_paint_frame(mesh)
                 save_glb(mesh, mesh_in, verify_stage="to_paint")
                 if isinstance(image, (str, Path)):
                     shutil.copy2(image, ref_path)
@@ -1635,6 +1668,7 @@ class PaintBatchProcessor:
                 raise FileNotFoundError(f"Paint 2.1 não gerou GLB esperado: {out_glb}")
 
             textured = load_mesh_trimesh(out_glb)
+            _from_paint_frame(textured)
 
         if not textured or not all(hasattr(o, "data") and getattr(o, "type", "") == "MESH" for o in textured):
             raise TypeError(f"Paint devolveu tipos inesperados: {[type(o) for o in textured]}")

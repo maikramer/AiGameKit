@@ -16,6 +16,33 @@ import numpy as np
 import torch
 
 
+def _rgb_float_view(image):
+    """PIL/np → float32 HxWx3 em 0..1 (tons de cinza replicados em RGB)."""
+    arr = np.asarray(image, dtype=np.float32)
+    if arr.ndim == 2:
+        arr = np.repeat(arr[..., None], 3, axis=2)
+    return arr / 255.0
+
+
+def merge_albedo_mr_views(albedo_views, mr_views):
+    """Concatena albedo (3ch) + mr (3ch) de cada vista num único 6ch float32 0..1.
+
+    O bake por vista é geométrico (rasterização, cos map, boundary) — idêntico
+    para os dois mapas. Um só passe de 6 canais projecta as N vistas uma vez em
+    vez de duas. O merge ponderado é linear por canal, portanto o resultado é
+    igual ao de dois bakes separados.
+    """
+    return [
+        np.concatenate([_rgb_float_view(albedo), _rgb_float_view(mr)], axis=2)
+        for albedo, mr in zip(albedo_views, mr_views, strict=False)
+    ]
+
+
+def split_baked_albedo_mr(texture6):
+    """Separa o bake 6ch em albedo e mr (3ch contíguos, para o render/inpaint)."""
+    return texture6[..., :3].contiguous(), texture6[..., 3:].contiguous()
+
+
 class ViewProcessor:
     def __init__(self, config, render):
         self.config = config
@@ -41,7 +68,15 @@ class ViewProcessor:
         self, candidate_camera_elevs, candidate_camera_azims, candidate_view_weights, max_selected_view_num
     ):
         original_resolution = self.render.default_resolution
-        self.render.set_default_render_resolution(1024)
+        # A selecção só precisa de cobertura por triângulo (não de cor): 512²
+        # chega e corta ~4× os pixels rasterizados nas ~30 vistas candidatas.
+        # Nunca acima da resolução de render pedida (evita subir em GPUs pequenas).
+        _res = (
+            original_resolution
+            if isinstance(original_resolution, (list, tuple))
+            else (original_resolution, original_resolution)
+        )
+        self.render.set_default_render_resolution(min(512, int(_res[0]), int(_res[1])))
 
         selected_camera_elevs = []
         selected_camera_azims = []

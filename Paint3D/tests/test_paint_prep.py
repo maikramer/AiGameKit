@@ -6,6 +6,7 @@ import os
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 
 
 def test_restrict_inpaint_mask_keeps_far_holes() -> None:
@@ -397,3 +398,59 @@ class TestScaleMeshForPaint:
 
         monkeypatch.setenv("PAINT3D_PAINT_MAX_EXTENT_M", "0")
         assert painter._scale_mesh_for_paint([]) == 1.0
+
+
+class TestPaintFrame:
+    """O frame do paint (glTF Y-up, frente +Z) não pode depender de a orientação
+    vir no nó do GLB (``_clean``) ou já baked nos vértices (``_refined``) —
+    senão a câmara frontal vê o topo da cabeça e o rosto sai borrado."""
+
+    @staticmethod
+    def _standing_mesh(*, rotation_in_node: bool):
+        bpy = pytest.importorskip("bpy")
+        import math
+
+        from aigamekit_shared.bpy_mesh import clear_scene
+
+        clear_scene()
+        # Boneco 0.2 x 0.1 x 1.5 m em pé (Blender Z-up), frente em -Y.
+        verts = [(x, y, z) for x in (-0.1, 0.1) for y in (-0.05, 0.05) for z in (0.0, 1.5)]
+        if rotation_in_node:
+            # Mesmo boneco com os dados deitados e a rotação no objeto.
+            verts = [(x, z, -y) for x, y, z in verts]
+        mesh = bpy.data.meshes.new("m")
+        mesh.from_pydata(verts, [], [(0, 1, 3, 2)])
+        obj = bpy.data.objects.new("o", mesh)
+        bpy.context.scene.collection.objects.link(obj)
+        if rotation_in_node:
+            obj.rotation_euler = (math.radians(90), 0.0, 0.0)
+        bpy.context.view_layer.update()
+        return obj
+
+    @staticmethod
+    def _local(obj) -> np.ndarray:
+        co = np.empty(len(obj.data.vertices) * 3)
+        obj.data.vertices.foreach_get("co", co)
+        return co.reshape(-1, 3)
+
+    @pytest.mark.parametrize("rotation_in_node", [False, True])
+    def test_paint_frame_is_y_up(self, rotation_in_node: bool) -> None:
+        from paint3d import painter
+
+        obj = self._standing_mesh(rotation_in_node=rotation_in_node)
+        painter._to_paint_frame([obj])
+        local = self._local(obj)
+        # Altura no Y (glTF), não no Z: a câmara azim 0 vê a frente.
+        assert np.allclose(local[:, 1].min(), 0.0, atol=1e-5)
+        assert np.allclose(local[:, 1].max(), 1.5, atol=1e-5)
+        assert np.allclose(np.abs(local[:, 2]).max(), 0.05, atol=1e-5)
+        assert np.allclose(np.asarray(obj.matrix_world), np.eye(4))
+
+    def test_roundtrip_restores_world(self) -> None:
+        from paint3d import painter
+
+        obj = self._standing_mesh(rotation_in_node=True)
+        world = (np.asarray(obj.matrix_world) @ np.c_[self._local(obj), np.ones(8)].T).T[:, :3]
+        painter._to_paint_frame([obj])
+        painter._from_paint_frame([obj])
+        assert np.allclose(self._local(obj), world, atol=1e-5)

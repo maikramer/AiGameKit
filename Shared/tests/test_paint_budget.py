@@ -90,11 +90,10 @@ class TestPaintFacesCapForVram:
     def test_linear_interpolation(self) -> None:
         from aigamekit_shared.paint_budget import paint_faces_cap_for_vram
 
-        # 6 GiB: 160k + 0.5 x 160k = 240k — abaixo do cap de produto e dos
-        # 298k+ que OOMavam intermitentemente na 4050.
-        assert paint_faces_cap_for_vram(6144) == 240_000
-        # 4050 real (6053 MiB): ≈236k
-        assert 230_000 <= paint_faces_cap_for_vram(6053) <= 240_000
+        # 6 GiB: âncora medida 288k (288k-318k passam na 4050).
+        assert paint_faces_cap_for_vram(6144) == 288_000
+        # 4050 real (6053 MiB): ≈282k
+        assert 275_000 <= paint_faces_cap_for_vram(6053) <= 290_000
 
     def test_sem_vram_conhecida_devolve_cap_de_produto(self, monkeypatch) -> None:
         import aigamekit_shared.paint_budget as pb
@@ -110,7 +109,7 @@ class TestPaintFacesCapForVram:
         # atlas 512 (raw 28.8k) não é afectado pelo tecto de VRAM.
         assert paint_target_faces(512, vram_total_mib=4096) == 28_835
         # atlas 2048 numa GPU de 6 GiB fica no tecto de VRAM, não no de produto.
-        assert paint_target_faces(2048, vram_total_mib=6144) == 240_000
+        assert paint_target_faces(2048, vram_total_mib=6144) == 288_000
 
     def test_monotonico_na_vram(self) -> None:
         from aigamekit_shared.paint_budget import paint_faces_cap_for_vram

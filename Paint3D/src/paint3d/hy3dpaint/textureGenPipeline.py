@@ -24,7 +24,7 @@ from aigamekit_shared.bpy_mesh import load_glb
 from .DifferentiableRenderer.MeshRender import MeshRender
 from .utils.image_super_utils import imageSuperNet
 from .utils.multiview_utils import multiviewDiffusionNet
-from .utils.pipeline_utils import ViewProcessor
+from .utils.pipeline_utils import ViewProcessor, merge_albedo_mr_views, split_baked_albedo_mr
 from .utils.simplify_mesh_utils import remesh_mesh
 from .utils.uvwrap_utils import mesh_uv_wrap
 
@@ -52,6 +52,11 @@ class Hunyuan3DPaintConfig:
         self.resolution = resolution
         self.bake_exp = 4
         self.merge_method = "fast"
+        # O canal ``mr`` (metallic/roughness) é de baixa frequência: o Real-ESRGAN
+        # inventa micro-detalhe que não existe no material e custa o mesmo que o
+        # albedo. Por omissão só o albedo passa pelo enhance; ``PAINT3D_ENHANCE_MR=1``
+        # repõe o comportamento antigo.
+        self.enhance_mr = os.environ.get("PAINT3D_ENHANCE_MR", "0").strip().lower() in ("1", "true", "yes", "on")
 
         # view selection
         self.candidate_camera_azims = [0, 90, 180, 270, 0, 180]
@@ -151,7 +156,9 @@ class Hunyuan3DPaintPipeline:
 
         # Load mesh
         mesh = load_glb(processed_mesh_path)
-        mesh = mesh_uv_wrap(mesh)
+        _tex = self.config.texture_size
+        _tex = int(_tex[0]) if isinstance(_tex, (list, tuple)) else int(_tex)
+        mesh = mesh_uv_wrap(mesh, texture_size=_tex)
         self.render.load_mesh(mesh=mesh)
         _step("uv_unwrap", 100)
 
@@ -192,6 +199,18 @@ class Hunyuan3DPaintPipeline:
             resize_input=True,
         )
         _step("multiview_render", 100)
+        # PAINT3D_DEBUG_DIR: dump das vistas (normal/posição/albedo/mr) + referência
+        # para diagnosticar o paint sem reabrir o GLB.
+        debug_dir = os.environ.get("PAINT3D_DEBUG_DIR", "").strip()
+        if debug_dir:
+            os.makedirs(debug_dir, exist_ok=True)
+            image_style[0].save(os.path.join(debug_dir, "ref.png"))
+            for i, (elev, azim) in enumerate(zip(selected_camera_elevs, selected_camera_azims, strict=False)):
+                tag = f"{i:02d}_e{elev}_a{azim}"
+                normal_maps[i].save(os.path.join(debug_dir, f"normal_{tag}.png"))
+                position_maps[i].save(os.path.join(debug_dir, f"position_{tag}.png"))
+                multiviews_pbr["albedo"][i].save(os.path.join(debug_dir, f"albedo_{tag}.png"))
+                multiviews_pbr["mr"][i].save(os.path.join(debug_dir, f"mr_{tag}.png"))
         ###########  Enhance  ##########
         _step("enhance", 0)
         # Cópia rasa: cada elemento é substituído pelo output do super_model,
@@ -202,7 +221,11 @@ class Hunyuan3DPaintPipeline:
 
         for i in range(len(enhance_images["albedo"])):
             enhance_images["albedo"][i] = self.models["super_model"](enhance_images["albedo"][i])
-            enhance_images["mr"][i] = self.models["super_model"](enhance_images["mr"][i])
+            if self.config.enhance_mr:
+                enhance_images["mr"][i] = self.models["super_model"](enhance_images["mr"][i])
+        if debug_dir:
+            for i, im in enumerate(enhance_images["albedo"]):
+                im.save(os.path.join(debug_dir, f"enhanced_{i:02d}.png"))
         _step("enhance", 100)
 
         ###########  Bake  ##########
@@ -212,16 +235,25 @@ class Hunyuan3DPaintPipeline:
                 (self.config.render_size, self.config.render_size)
             )
             enhance_images["mr"][i] = enhance_images["mr"][i].resize((self.config.render_size, self.config.render_size))
-        texture, mask = self.view_processor.bake_from_multiview(
-            enhance_images["albedo"], selected_camera_elevs, selected_camera_azims, selected_view_weights
+        # Um só passe de bake: albedo (3ch) + mr (3ch) concatenados em 6 canais.
+        # A rasterização/back-projection é geométrica (idêntica para os dois
+        # mapas) — assim as N vistas são projectadas uma vez em vez de duas. A
+        # soma ponderada por canal é linear, logo o resultado é igual ao dos
+        # dois bakes separados.
+        merged_views = merge_albedo_mr_views(enhance_images["albedo"], enhance_images["mr"])
+        texture6, mask = self.view_processor.bake_from_multiview(
+            merged_views, selected_camera_elevs, selected_camera_azims, selected_view_weights
         )
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
-        texture_mr, mask_mr = self.view_processor.bake_from_multiview(
-            enhance_images["mr"], selected_camera_elevs, selected_camera_azims, selected_view_weights
-        )
-        mask_mr_np = (mask_mr.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
+        mask_mr_np = mask_np
+        texture, texture_mr = split_baked_albedo_mr(texture6)
 
         _step("bake", 100)
+        if debug_dir:
+            Image.fromarray((texture.clamp(0, 1).cpu().numpy() * 255).astype(np.uint8)).save(
+                os.path.join(debug_dir, "tex_baked.png")
+            )
+            Image.fromarray(mask_np).save(os.path.join(debug_dir, "tex_trust.png"))
 
         ##########  inpaint  ###########
         _step("inpaint", 0)
@@ -231,6 +263,10 @@ class Hunyuan3DPaintPipeline:
             texture_mr = self.view_processor.texture_inpaint(texture_mr, mask_mr_np)
             self.render.set_texture_mr(texture_mr)
         _step("inpaint", 100)
+        if debug_dir:
+            Image.fromarray((texture.clamp(0, 1).cpu().numpy() * 255).astype(np.uint8)).save(
+                os.path.join(debug_dir, "tex_inpainted.png")
+            )
 
         _step("save", 0)
         self.render.save_mesh(output_mesh_path, downsample=False)
