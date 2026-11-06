@@ -243,7 +243,12 @@ def format_quantization_info(quant_config: dict[str, Any] | None) -> str:
         "quanto-int4": "Quanto INT4",
         "sdnq-int8": "SDNQ INT8 (modern)",
         "sdnq-uint8": "SDNQ UINT8 (modern unsigned)",
-        "sdnq-int4": "SDNQ INT4 (modern aggressive)",
+        "sdnq-int4": "SDNQ 4-bit (uint4 + SVD + Hadamard + double-quant scales)",
+        "sdnq-uint4": "SDNQ UINT4 (alias de qualidade do sdnq-int4)",
+        "sdnq-uint4-hq": "SDNQ 4-bit HQ (group 16 + double-quant scales)",
+        "sdnq-fp8": "SDNQ FP8 (Ada Lovelace+)",
+        "sdnq-int3": "SDNQ 3-bit (uint3 + Hadamard + double-quant scales)",
+        "sdnq-int2": "SDNQ 2-bit (uint2 + Hadamard + double-quant scales)",
     }
 
     return descriptions.get(qtype, f"Quantização: {qtype}")

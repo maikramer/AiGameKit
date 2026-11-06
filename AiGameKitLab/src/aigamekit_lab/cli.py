@@ -1076,6 +1076,70 @@ def bench_sdnq_sweep_cmd(
     )
 
 
+@bench_group.command("sdnq")
+@click.option(
+    "--checkpoint",
+    "checkpoints",
+    multiple=True,
+    type=click.Path(path_type=Path, exists=True),
+    help="Checkpoint .safetensors/.bin ou diretório. Repetível; sem isto usa os modelos em cache.",
+)
+@click.option(
+    "--candidate",
+    "candidates",
+    multiple=True,
+    type=str,
+    help="Receita a medir (repetível). Sem isto corre todas as de bench_sdnq.CANDIDATES.",
+)
+@click.option("--layers", type=int, default=4, show_default=True, help="Camadas amostradas por checkpoint.")
+@click.option(
+    "--device",
+    type=click.Choice(["cpu", "cuda", "auto"]),
+    default="cpu",
+    show_default=True,
+    help="Device da quantização (CPU evita disputar VRAM com outros jobs).",
+)
+@click.option(
+    "--seed",
+    type=int,
+    default=0,
+    show_default=True,
+    help="Semente da amostragem de camadas e do probe de saída.",
+)
+@click.option(
+    "--output-json",
+    "--json",
+    "output_json",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Escreve o relatório completo (agregado + por camada) em JSON.",
+)
+@click.option("--list", "list_only", is_flag=True, help="Lista candidatos e checkpoints sem quantizar.")
+def bench_sdnq_cmd(
+    checkpoints: tuple[Path, ...],
+    candidates: tuple[str, ...],
+    layers: int,
+    device: str,
+    seed: int,
+    output_json: Path | None,
+    list_only: bool,
+) -> None:
+    """Compara receitas SDNQ em pesos reais (erro de pesos/saída, b/w, tempo)."""
+    from aigamekit_lab.bench_sdnq import run_sdnq_bench
+
+    sys.exit(
+        run_sdnq_bench(
+            checkpoints=[str(path) for path in checkpoints] or None,
+            candidates=list(candidates) or None,
+            max_layers=layers,
+            device=device,
+            output_json=output_json.resolve() if output_json else None,
+            seed=seed,
+            list_only=list_only,
+        )
+    )
+
+
 @bench_group.command("batch")
 @click.option("--mode", type=click.Choice(["sweep", "test", "dry-run"]), default="dry-run")
 @click.option("--config", "config_name", type=str, default=None, help="Nome da config (modo test).")

@@ -78,10 +78,13 @@ def main() -> None:
 @click.option(
     "--quantization",
     "-q",
-    type=click.Choice(["auto", "none", "int8", "int4"], case_sensitive=False),
+    type=click.Choice(["auto", "none", "int8", "int4", "hq"], case_sensitive=False),
     default=_d.DEFAULT_QUANTIZATION_MODE,
     show_default=True,
-    help="Quantização DiT: auto (SDNQ em GPUs <8 GB), int8/int4 (SDNQ explícito), none.",
+    help=(
+        "Quantização DiT: auto (SDNQ em GPUs <8 GB), int8/int4 (SDNQ explícito), "
+        "hq (uint4 group 16 + double-quant scales), none."
+    ),
 )
 @click.option(
     "--no-quantize-dit",

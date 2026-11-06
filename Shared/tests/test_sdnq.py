@@ -192,6 +192,31 @@ class TestQuantizeModel:
             assert result is fake_result
             fake_sdnq.sdnq_post_load_quant.assert_called_once()  # type: ignore[attr-defined]
 
+    def test_passes_full_config_when_supported(self):
+        """SDNQ >=0.2.5 aceita ``quantization_config``; é o caminho que preserva
+        ``scale_dtype``/``zero_point_dtype`` (não são kwargs explícitos da função)."""
+        sdnq = pytest.importorskip("sdnq")
+        from aigamekit_shared.sdnq import quantize_model
+
+        captured: dict[str, object] = {}
+
+        def _fake_post_load(model, quantization_config=None):
+            captured["config"] = quantization_config
+            return "quantized"
+
+        with patch.object(sdnq, "sdnq_post_load_quant", _fake_post_load):
+            result = quantize_model(
+                MagicMock(),
+                preset="sdnq-int4",
+                quantization_device="cpu",
+                return_device="cpu",
+            )
+
+        assert result == "quantized"
+        config = captured["config"]
+        assert getattr(config, "scale_dtype", None) == "uint8"
+        assert getattr(config, "weights_dtype", None) == "uint4"
+
 
 class TestApplyQuantizedMatmul:
     def test_noop_when_disabled(self):
@@ -275,6 +300,12 @@ class TestEstimateVramMb:
             result = estimate_vram_mb(1000.0, name)
             assert result < 1000.0 * 1.5
 
+    def test_hq_between_int4_and_uint8(self):
+        int4 = estimate_vram_mb(1000.0, "sdnq-int4")
+        hq = estimate_vram_mb(1000.0, "sdnq-uint4-hq")
+        uint8 = estimate_vram_mb(1000.0, "sdnq-uint8")
+        assert int4 < hq < uint8
+
 
 class TestSuggestPresetForVram:
     def test_high_vram_suggests_uint8(self):
@@ -350,47 +381,87 @@ class TestAutoQuantizedMatmulDefault:
 
 
 class TestFineBitPresets:
-    """Degraus 3/2 bits: exclusivos de offload; SDNQ 0.2.6 — unsigned + Hadamard
-    N4 + Lloyd-Max codebook (a chave ``sdnq-intN`` mantém-se por compat)."""
+    """SDNQ 0.2.9: presets sem codebook e com escalas double-quant.
+
+    Medido com ``aigamekit-lab bench sdnq`` em FLUX.3/SD1.5/Paint/Omni: o
+    codebook guarda ``2**bits`` níveis fp32 **por grupo**; a group 32 isso
+    levava int3/int2 a 11/6 b/peso (mais do que o int4) e uint8 a 10-18 b/peso.
+    Escalas ``uint8`` fazem double quantization e cortam ~1 bit/peso.
+    """
 
     def test_int3_preset_fields(self):
         p = PRESETS["sdnq-int3"]
-        assert p.weights_dtype == "uint3"  # codebook exige unsigned (0.2.6)
+        assert p.weights_dtype == "uint3"
         assert p.use_hadamard is True
         assert p.hadamard_group_size == 256  # N4/ConvRot
-        assert p.use_codebook is True
-        assert p.use_svd is False  # Lloyd-Max captura o residual melhor (medido)
+        assert p.use_codebook is False  # 11 b/peso a group 32
+        assert p.scale_dtype == "uint8"  # double quantization das escalas
+        assert p.use_svd is False
         assert p.group_size == 32
 
     def test_int2_preset_fields(self):
         p = PRESETS["sdnq-int2"]
         assert p.weights_dtype == "uint2"
         assert p.use_hadamard is True
-        assert p.use_codebook is True
+        assert p.use_codebook is False
+        assert p.scale_dtype == "uint8"
+        assert p.group_size == 32
 
-    def test_uint8_has_codebook(self):
-        """Default do pipeline: Lloyd-Max ON (-34% erro, quantização mais rápida)."""
-        assert PRESETS["sdnq-uint8"].use_codebook is True
-        assert PRESETS["sdnq-uint8"].use_hadamard is False
+    def test_uint8_has_no_codebook(self):
+        """Default: sem codebook — 8.1 b/peso e load ~100x mais rápido."""
+        p = PRESETS["sdnq-uint8"]
+        assert p.use_codebook is False
+        assert p.use_hadamard is False
+        assert p.scale_dtype is None
 
-    def test_uint4_has_codebook_and_hadamard_n4(self):
+    def test_uint4_is_svd_hadamard_dq(self):
         p = PRESETS["sdnq-uint4"]
-        assert p.use_codebook is True
-        assert p.hadamard_group_size == 256
+        assert p.weights_dtype == "uint4"
         assert p.use_svd is True  # formato Disty0
+        assert p.use_hadamard is True
+        assert p.hadamard_group_size == 256
+        assert p.use_codebook is False
+        assert p.scale_dtype == "uint8"
 
-    def test_coarse_signed_presets_untouched(self):
-        """int4/int8/fp8 = produção validada: sem hadamard/codebook."""
-        for name in ("sdnq-int8", "sdnq-int4", "sdnq-fp8"):
+    def test_int4_uses_best_4bit_recipe(self):
+        """``sdnq-int4`` é um tier, não um dtype: uint4+Hadamard+SVD+dq."""
+        p = PRESETS["sdnq-int4"]
+        assert p.weights_dtype == "uint4"
+        assert p.use_hadamard is True
+        assert p.use_svd is True
+        assert p.use_codebook is False
+        assert p.scale_dtype == "uint8"
+
+    def test_uint4_hq_uses_group16(self):
+        p = PRESETS["sdnq-uint4-hq"]
+        assert p.weights_dtype == "uint4"
+        assert p.group_size == 16
+        assert p.use_svd is True
+        assert p.use_hadamard is True
+        assert p.scale_dtype == "uint8"
+
+    def test_int8_and_fp8_untouched(self):
+        for name in ("sdnq-int8", "sdnq-fp8"):
             assert PRESETS[name].use_hadamard is False
             assert PRESETS[name].use_codebook is False
+            assert PRESETS[name].scale_dtype is None
 
     def test_create_config_passes_hadamard(self):
-        """create_config inclui use_hadamard/use_codebook/hadamard_group_size."""
+        """create_config inclui use_hadamard/hadamard_group_size."""
         pytest.importorskip("sdnq")  # runtime externo (SDNQ PyPI) — skip no CI sem o pacote
         from aigamekit_shared.sdnq import create_config
 
         cfg = create_config("sdnq-int3", quantization_device="cpu", return_device="cpu")
         assert cfg.use_hadamard is True
         assert cfg.hadamard_group_size == 256
-        assert cfg.use_codebook is True
+        assert cfg.use_codebook is False
+
+    def test_create_config_passes_scale_dtype(self):
+        """``scale_dtype`` não é parâmetro de ``sdnq_post_load_quant``, mas
+        ``create_config`` tem de o entregar ao ``SDNQConfig``."""
+        pytest.importorskip("sdnq")
+        from aigamekit_shared.sdnq import create_config
+
+        cfg = create_config("sdnq-int4", quantization_device="cpu", return_device="cpu")
+        assert cfg.scale_dtype == "uint8"
+        assert cfg.weights_dtype == "uint4"

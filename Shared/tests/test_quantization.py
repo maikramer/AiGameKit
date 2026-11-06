@@ -211,7 +211,10 @@ class TestFormatQuantizationInfo:
             ("quanto-int4", "Quanto INT4"),
             ("sdnq-int8", "SDNQ INT8 (modern)"),
             ("sdnq-uint8", "SDNQ UINT8 (modern unsigned)"),
-            ("sdnq-int4", "SDNQ INT4 (modern aggressive)"),
+            ("sdnq-int4", "SDNQ 4-bit (uint4 + SVD + Hadamard + double-quant scales)"),
+            ("sdnq-uint4-hq", "SDNQ 4-bit HQ (group 16 + double-quant scales)"),
+            ("sdnq-int3", "SDNQ 3-bit (uint3 + Hadamard + double-quant scales)"),
+            ("sdnq-int2", "SDNQ 2-bit (uint2 + Hadamard + double-quant scales)"),
         ],
     )
     def test_known_keys(self, qtype, expected):

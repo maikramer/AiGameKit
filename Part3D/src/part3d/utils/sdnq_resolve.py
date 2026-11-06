@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-# CLI Choice: auto | none | int8 | int4  (+ legacy sdnq-* / torchao-* se passados)
+# CLI Choice: auto | none | int8 | int4 | hq  (+ legacy sdnq-* se passados)
 _CLI_TO_SDNQ: dict[str, str] = {
     "auto": "sdnq-uint8",
     "int8": "sdnq-int8",
     "int4": "sdnq-int4",
+    "hq": "sdnq-uint4-hq",
     "8bit": "sdnq-int8",
     "4bit": "sdnq-int4",
+    "4bit-hq": "sdnq-uint4-hq",
 }
 
 

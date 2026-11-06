@@ -8,7 +8,7 @@ Single source of truth for SDNQ quantization across all packages:
 
 Default preset: ``sdnq-uint8`` — best tested across all models and GPUs.
 
-Backend coverage (SDNQ >=0.2.1):
+Backend coverage (SDNQ >=0.2.9):
     SDNQ is pure PyTorch. On CUDA/ROCm/XPU it uses the Inductor backend via Triton
     (quantized matmul is auto-enabled when ``use_torch_compile`` is truthy). On CPU
     and MPS (Apple Mac) it falls back to PyTorch eager mode — quantization works but
@@ -22,11 +22,15 @@ References:
 
 from __future__ import annotations
 
+import inspect
 import json
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 
 def _auto_quantized_matmul_default() -> bool:
@@ -50,11 +54,16 @@ class SDNQPreset:
     """Tested SDNQ quantization preset with all parameters for ``SDNQConfig``.
 
     These presets encode the best-tested configurations from benchmark sweeps
-    across Text2D (FLUX Klein), Paint3D (Hunyuan3D-Paint UNet).
+    across Text2D (FLUX Klein), Text3D (Hunyuan3D-Omni), Paint3D
+    (Hunyuan3D-Paint UNet) e SD1.5 - reproduzivel com
+    ``aigamekit-lab bench sdnq`` (ver ``docs/findings/SDNQ_029_FINDINGS.md``).
 
-    SDNQ >=0.2.6 features: ``use_codebook`` (Lloyd-Max quantization — unsigned
-    dtypes only; ~-34% error no uint8, ~-52% no 3-bit vs signed int) e
-    ``hadamard_group_size`` 256 (N4/Hadamard ConvRot, melhor que N2-32).
+    SDNQ >=0.2.8 features: ``scale_dtype``/``zero_point_dtype`` fazem
+    *double quantization* das escalas. Com group_size=32, uint4 com escalas
+    fp32 custa ~6 bits/peso; com escalas uint8 custa ~5 bits — mesmo erro,
+    1 bit menos. ``use_codebook`` (Lloyd-Max) continua disponível, mas **não é usado
+    nos presets**: guarda ``2**bits`` níveis fp32 *por grupo*, o que a group
+    size 32 inflaciona o preset para 11-20 bits/peso.
     """
 
     name: str
@@ -68,6 +77,14 @@ class SDNQPreset:
     use_hadamard: bool = False
     hadamard_group_size: int | None = None  # None = group_size (compat N2)
     use_codebook: bool = False
+    scale_dtype: str | None = None
+    zero_point_dtype: str | None = None
+    use_codebook_scale: bool = False
+    use_dynamic_quantization: bool = False
+    dynamic_loss_threshold: float | None = None
+    weights_dtype_order: list[str] | None = None
+    # Fator de VRAM (peso_quant / peso_fp16) medido; None = usa o dtype.
+    vram_factor: float | None = None
 
 
 PRESETS: dict[str, SDNQPreset] = {
@@ -79,11 +96,11 @@ PRESETS: dict[str, SDNQPreset] = {
         svd_rank=32,
         svd_steps=8,
         dequantize_fp32=True,
-        use_codebook=True,
         description=(
-            "SDNQ UINT8 + Lloyd-Max codebook — default (best tested); 0.2.6: "
-            "-34% de erro e quantização mais rápida vs sem codebook"
+            "SDNQ UINT8 — default; group auto (1024 em lineares) e sem codebook: "
+            "8.1 b/peso e ~100x mais rápido no load que o codebook (que gastava 10-18 b/peso)"
         ),
+        vram_factor=0.55,
     ),
     "sdnq-int8": SDNQPreset(
         name="sdnq-int8",
@@ -94,16 +111,24 @@ PRESETS: dict[str, SDNQPreset] = {
         svd_steps=8,
         dequantize_fp32=True,
         description="SDNQ INT8 — signed, alternative to uint8",
+        vram_factor=0.55,
     ),
     "sdnq-int4": SDNQPreset(
         name="sdnq-int4",
-        weights_dtype="int4",
+        weights_dtype="uint4",
         group_size=32,
         use_svd=True,
         svd_rank=32,
         svd_steps=8,
         dequantize_fp32=True,
-        description="SDNQ INT4 — maximum compression for low VRAM GPUs",
+        use_hadamard=True,
+        hadamard_group_size=256,
+        scale_dtype="uint8",
+        description=(
+            "SDNQ 4-bit — uint4 + SVD + Hadamard N4 + escalas double-quant (uint8); "
+            "~5.1 b/peso com -23% de erro vs int4+SVD (5.6 b/peso)"
+        ),
+        vram_factor=0.32,
     ),
     "sdnq-uint4": SDNQPreset(
         name="sdnq-uint4",
@@ -115,8 +140,28 @@ PRESETS: dict[str, SDNQPreset] = {
         dequantize_fp32=True,
         use_hadamard=True,
         hadamard_group_size=256,
-        use_codebook=True,
-        description=("SDNQ UINT4 + SVD + Hadamard N4 + Lloyd-Max (formato Disty0; 0.2.6: -31% de erro vs svd only)"),
+        scale_dtype="uint8",
+        description=(
+            "SDNQ UINT4 — alias de qualidade do sdnq-int4 (mesma receita 0.2.9, sem o codebook que gastava 20 b/peso)"
+        ),
+        vram_factor=0.32,
+    ),
+    "sdnq-uint4-hq": SDNQPreset(
+        name="sdnq-uint4-hq",
+        weights_dtype="uint4",
+        group_size=16,
+        use_svd=True,
+        svd_rank=32,
+        svd_steps=8,
+        dequantize_fp32=True,
+        use_hadamard=True,
+        hadamard_group_size=256,
+        scale_dtype="uint8",
+        description=(
+            "SDNQ 4-bit HQ — group 16 + SVD + Hadamard + double-quant scales; "
+            "mesma VRAM do int4 antigo com -35% de erro (tier opt-in)"
+        ),
+        vram_factor=0.38,
     ),
     "sdnq-fp8": SDNQPreset(
         name="sdnq-fp8",
@@ -127,13 +172,14 @@ PRESETS: dict[str, SDNQPreset] = {
         svd_steps=8,
         dequantize_fp32=True,
         description="SDNQ FP8 — RTX 40 series (Ada Lovelace+)",
+        vram_factor=0.55,
     ),
     # Degraus abaixo de 4 bits: exclusivos dos modos de offload do planner
-    # (lowvram) — quando nem int4 + group offload dá folga. SDNQ 0.2.6: dtype
-    # unsigned + Hadamard N4 + Lloyd-Max codebook (signed int não suporta
-    # codebook) — medido: 3-bit -52% / 2-bit -65% de erro vs signed int, sem
-    # SVD (o codebook captura o residual melhor). A chave ``sdnq-intN`` mantém-
-    # se por compat com o ladder do planner/vramd (mesmos bits, mesma poupança).
+    # (lowvram) — quando nem int4 + group offload dá folga. Sem codebook: a
+    # 3/2 bits o codebook (2**bits níveis fp32 por grupo) gastava 11/6 b/peso,
+    # mais do que o int4; com escalas double-quant ficam em 3.5/2.5 b/peso e
+    # são degraus reais de memória. A chave ``sdnq-intN`` mantém-se por compat
+    # com o ladder do planner/vramd.
     "sdnq-int3": SDNQPreset(
         name="sdnq-int3",
         weights_dtype="uint3",
@@ -144,8 +190,9 @@ PRESETS: dict[str, SDNQPreset] = {
         dequantize_fp32=True,
         use_hadamard=True,
         hadamard_group_size=256,
-        use_codebook=True,
-        description="SDNQ 3-bit — uint3 + Hadamard N4 + Lloyd-Max (degrau de offload)",
+        scale_dtype="uint8",
+        description="SDNQ 3-bit — uint3 + Hadamard N4 + double-quant scales (3.5 b/peso)",
+        vram_factor=0.24,
     ),
     "sdnq-int2": SDNQPreset(
         name="sdnq-int2",
@@ -157,8 +204,9 @@ PRESETS: dict[str, SDNQPreset] = {
         dequantize_fp32=True,
         use_hadamard=True,
         hadamard_group_size=256,
-        use_codebook=True,
-        description="SDNQ 2-bit — uint2 + Hadamard N4 + Lloyd-Max (último recurso)",
+        scale_dtype="uint8",
+        description="SDNQ 2-bit — uint2 + Hadamard N4 + double-quant scales (2.5 b/peso)",
+        vram_factor=0.18,
     ),
 }
 
@@ -296,6 +344,45 @@ def _check_cuda() -> bool:
 # SDNQConfig factory
 # ---------------------------------------------------------------------------
 
+_CONFIG_KEYS_CACHE: set[str] | None = None
+
+
+def _supported_config_keys() -> set[str]:
+    """Return the keyword names accepted by the installed ``SDNQConfig``.
+
+    A SDNQ evolui rápido (0.2.8 adicionou ``scale_dtype``, 0.2.9
+    ``weights_dtype_order``); filtrar por assinatura evita ``TypeError`` em
+    venvs que ainda não foram atualizados.
+    """
+    global _CONFIG_KEYS_CACHE
+    if _CONFIG_KEYS_CACHE is None:
+        from sdnq import SDNQConfig
+
+        try:
+            parameters = inspect.signature(SDNQConfig.__init__).parameters
+        except (TypeError, ValueError):
+            # Mocks/test doubles sem assinatura — assume a versão moderna.
+            return {
+                "scale_dtype",
+                "zero_point_dtype",
+                "use_codebook_scale",
+                "use_dynamic_quantization",
+                "dynamic_loss_threshold",
+                "weights_dtype_order",
+            }
+        keys = {
+            name
+            for name, parameter in parameters.items()
+            if name != "self"
+            and parameter.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+        }
+        # Só cacheia assinaturas reais. Um mock devolve ``(*args, **kw)``
+        # (conjunto vazio) e envenenaria o cache para o resto do processo.
+        if keys:
+            _CONFIG_KEYS_CACHE = keys
+        return keys
+    return _CONFIG_KEYS_CACHE
+
 
 def create_config(
     preset: str = DEFAULT_PRESET,
@@ -326,6 +413,9 @@ def create_config(
               ``weights_dtype`` becomes the minimum allowed type.
             - ``use_hadamard`` (bool) + ``hadamard_group_size``: Hadamard rotations
               on quantized weights (improves accuracy at low bit-widths).
+            - ``scale_dtype`` / ``zero_point_dtype`` (SDNQ >=0.2.8): double
+              quantization of scales (e.g. ``"uint8"``) — cuts ~1 bit/peso a
+              ``group_size=32`` sem perda mensurável.
             - ``offload_buffers`` (bool): basic CPU offload of optimizer/weight
               buffers — useful for the 6 GB VRAM target.
 
@@ -364,6 +454,31 @@ def create_config(
         # Hadamard N4 (ConvRot) quando o grupo é potência de 4 (ex.: 256) —
         # melhor qualidade que N2; None = group_size do preset (compat).
         kwargs["hadamard_group_size"] = p.hadamard_group_size or p.group_size
+
+    # Campos introduzidos na SDNQ 0.2.8/0.2.9. Só os passamos quando o preset os
+    # define (passar None/False é no-op) e quando a versão instalada os conhece
+    # — venvs antigos continuam a carregar os presets antigos sem TypeError.
+    optional: dict[str, Any] = {
+        "scale_dtype": p.scale_dtype,
+        "zero_point_dtype": p.zero_point_dtype,
+        "use_codebook_scale": p.use_codebook_scale or None,
+        "use_dynamic_quantization": p.use_dynamic_quantization or None,
+        "dynamic_loss_threshold": p.dynamic_loss_threshold,
+        "weights_dtype_order": p.weights_dtype_order,
+    }
+    supported = _supported_config_keys()
+    for key, value in optional.items():
+        if value is None or value is False:
+            continue
+        if key in supported:
+            kwargs[key] = value
+        else:
+            _logger.warning(
+                "SDNQ instalado não conhece %s (preset %s) — campo ignorado; atualiza `sdnq>=0.2.9`.",
+                key,
+                preset,
+            )
+
     if modules_to_not_convert is not None:
         kwargs["modules_to_not_convert"] = modules_to_not_convert
     kwargs.update(overrides)
@@ -403,9 +518,14 @@ def quantize_model(
     from sdnq import sdnq_post_load_quant
 
     config = create_config(preset, modules_to_not_convert=modules_to_not_convert, **overrides)
-    import inspect
+    params = inspect.signature(sdnq_post_load_quant).parameters
+    if "quantization_config" in params:
+        # SDNQ >=0.2.5 aceita o config completo. É o caminho correto: o filtro
+        # por assinatura usado antes descartava em silêncio ``scale_dtype`` e
+        # ``zero_point_dtype``, que não são parâmetros explícitos da função.
+        return sdnq_post_load_quant(model, quantization_config=config)
 
-    supported = set(inspect.signature(sdnq_post_load_quant).parameters.keys()) - {"model"}
+    supported = set(params) - {"model"}
     config_vars = {k: v for k, v in vars(config).items() if k in supported}
     return sdnq_post_load_quant(model, **config_vars)
 
@@ -494,12 +614,20 @@ def pre_quantize_model(
 
         torch.save(quantized.state_dict(), output_dir / "model.pt")
 
+    p = PRESETS[preset]
     quant_meta = {
-        "quantization": f"sdnq-{PRESETS[preset].weights_dtype}",
+        "quantization": f"sdnq-{p.weights_dtype}",
         "preset": preset,
-        "weights_dtype": PRESETS[preset].weights_dtype,
-        "group_size": PRESETS[preset].group_size,
-        "use_svd": PRESETS[preset].use_svd,
+        "weights_dtype": p.weights_dtype,
+        "group_size": p.group_size,
+        "use_svd": p.use_svd,
+        "use_hadamard": p.use_hadamard,
+        "use_codebook": p.use_codebook,
+        "scale_dtype": p.scale_dtype,
+        "zero_point_dtype": p.zero_point_dtype,
+        "use_codebook_scale": p.use_codebook_scale,
+        "use_dynamic_quantization": p.use_dynamic_quantization,
+        "weights_dtype_order": p.weights_dtype_order,
         **(meta or {}),
     }
     (output_dir / "quantization_meta.json").write_text(json.dumps(quant_meta, indent=2), encoding="utf-8")
@@ -520,17 +648,19 @@ def pre_quantize_model(
 # VRAM estimation
 # ---------------------------------------------------------------------------
 
+# Fatores medidos com `aigamekit-lab bench sdnq` (bits/peso / 16), com margem
+# para camadas pequenas onde SVD/escalas pesam mais. Incluem escalas e SVD.
 _COMPRESSION_FACTORS: dict[str, float] = {
     "fp16": 1.0,
-    "fp8": 0.5,
-    "uint8": 0.5,
-    "int8": 0.5,
-    "int4": 0.25,
-    "uint4": 0.25,
-    "int3": 0.1875,
-    "uint3": 0.1875,
-    "int2": 0.125,
-    "uint2": 0.125,
+    "fp8": 0.55,
+    "uint8": 0.55,
+    "int8": 0.55,
+    "int4": 0.32,
+    "uint4": 0.32,
+    "int3": 0.24,
+    "uint3": 0.24,
+    "int2": 0.18,
+    "uint2": 0.18,
 }
 
 
@@ -550,7 +680,8 @@ def estimate_vram_mb(
     if preset not in PRESETS:
         return model_size_mb * 1.5
 
-    factor = _COMPRESSION_FACTORS.get(PRESETS[preset].weights_dtype, 1.0)
+    p = PRESETS[preset]
+    factor = p.vram_factor if p.vram_factor is not None else _COMPRESSION_FACTORS.get(p.weights_dtype, 1.0)
     model_mb = model_size_mb * factor
     activation_overhead = 1.5
     return model_mb * activation_overhead
