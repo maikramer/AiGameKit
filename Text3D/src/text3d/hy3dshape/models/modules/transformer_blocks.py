@@ -6,6 +6,24 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+def _flash_sdpa(q, k, v):
+    """SDPA com o mesmo conjunto de backends do contexto legado.
+
+    O contexto antigo (``sdp_kernel(enable_flash=True, enable_math=False,
+    enable_mem_efficient=True)``) não mexia no cuDNN: com o cuDNN SDP ligado
+    (default do torch) ele tem prioridade sobre o flash. Excluí-lo muda a
+    numérica e, através do ODE, a malha final (mesmo seed → outra tesselagem).
+    O contexto é scoped (não global) para não afectar outros modelos.
+    """
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+
+    backends = [SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]
+    if torch.backends.cuda.cudnn_sdp_enabled():
+        backends.insert(0, SDPBackend.CUDNN_ATTENTION)
+    with sdpa_kernel(backends):
+        return F.scaled_dot_product_attention(q, k, v)
 from einops import rearrange
 
 from hy3dshape.models.modules.checkpoint import checkpoint
@@ -114,13 +132,8 @@ class QKVMultiheadAttention(nn.Module):
         # import pdb; pdb.set_trace()
 
         if self.flash:
-            with torch.backends.cuda.sdp_kernel(
-                enable_flash=True,
-                enable_math=False,
-                enable_mem_efficient=True
-            ):
-                q, k, v = map(lambda t: rearrange(t, 'b n h d -> b h n d', h=self.heads), (q, k, v))
-                out = F.scaled_dot_product_attention(q, k, v).transpose(1, 2).reshape(bs, n_ctx, -1)
+            q, k, v = map(lambda t: rearrange(t, 'b n h d -> b h n d', h=self.heads), (q, k, v))
+            out = _flash_sdpa(q, k, v).transpose(1, 2).reshape(bs, n_ctx, -1)
         else:
             weight = torch.einsum(
                 "bthc,bshc->bhts", q * scale, k * scale
@@ -308,12 +321,8 @@ class QKVMultiheadCrossAttention(nn.Module):
         q = self.q_norm(q)
 
         if self.flash:
-            with torch.backends.cuda.sdp_kernel(enable_flash=True,
-                enable_math=False,
-                enable_mem_efficient=True
-            ):
-                q, k, v = map(lambda t: rearrange(t, 'b n h d -> b h n d', h=self.heads), (q, k, v))
-                out = F.scaled_dot_product_attention(q, k, v).transpose(1, 2).reshape(bs, n_ctx, -1)
+            q, k, v = map(lambda t: rearrange(t, 'b n h d -> b h n d', h=self.heads), (q, k, v))
+            out = _flash_sdpa(q, k, v).transpose(1, 2).reshape(bs, n_ctx, -1)
         else:
             weight = torch.einsum(
                 "bthc,bshc->bhts", q * scale, k * scale

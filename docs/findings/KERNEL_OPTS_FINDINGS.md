@@ -42,6 +42,7 @@ Helpers: `aigamekit_shared.quantization.apply_torch_compile` /
 | **Part3D** | flashvdm+CL; autotune anti-OOM | DiT compile **skip** em ≤8 GB+offload |
 | **Texture2D / Text2Sound** | flags wired | sem ganho útil nestes benches |
 | **Terrain3D** | `torch.compile` já ON (Linux+CUDA, vendor) | — |
+| **Hi3D** | **residência por fase** (default): um componente inteiro na GPU por fase | idem; compile **off** (medido sem ganho; `reduce-overhead` falha) |
 
 ---
 
@@ -81,6 +82,9 @@ One-shot `generate` continua default **OFF** (cold do compile não compensa).
 | Text2Icon / Texture2D / Sound compile | ≈baseline ou pior | skip em 6 GB |
 | Paint3D compile mem-eff | FAIL | SDNQ `QConv2d.weight` |
 | Part3D compile mem-eff | 77 vs 71 | DiT skip; sem ganho |
+| **Hi3D phase staging vs sequential offload** | **27 vs 92** (sampler) | **−70%**; pico 3,74 GiB vs 0,86 GiB |
+| Hi3D `torch.compile` | 60 (5 passos, cold) | sem ganho hot; `reduce-overhead` falha (CUDA graphs) |
+| Hi3D `fast_postprocess` | −1 s | opt-in (muda ordem do filtro) |
 
 ---
 
@@ -130,3 +134,4 @@ Input preferido: mesh **shape** Text3D — paint GLB pode hangar em `fix_mesh`.
 | Data | Nota |
 |------|------|
 | 2026-07-24 | Extraído da campanha bench; defaults vramd/batch Text2D/Skymap/Icon |
+| 2026-10-29 | Hi3D: residência por fase default (−70% no sampler); compile/autocast/fp16 medidos e rejeitados |

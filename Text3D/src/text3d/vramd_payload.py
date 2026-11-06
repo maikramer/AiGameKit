@@ -35,6 +35,7 @@ def build_generate_request(
     verbose: bool = False,
     category: str | None = None,
     quality: str | None = None,
+    preset: str | None = None,
     bbox_tune: bool = True,
     control_type: str | None = None,
     pose_preset: str | None = None,
@@ -47,6 +48,8 @@ def build_generate_request(
     gpu_ids: list[int] | str | None = None,
     sdnq_preset: str | None = None,
     memory_efficient: bool | None = None,
+    dino_image_size: int | None = None,
+    image_processor_size: int | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload vramd text3d com peak/load opts.
@@ -64,7 +67,7 @@ def build_generate_request(
             "seed": seed,
             "mc_level": mc_level,
             "bounds_mode": bounds_mode,
-            "auto_num_chunks": False,
+            "auto_num_chunks": True,
             "origin_mode": origin_mode,
             "topology_fix": bool(topology_fix),
             "torch_compile": bool(torch_compile),
@@ -89,6 +92,7 @@ def build_generate_request(
             "torch_compile_mode": torch_compile_mode,
             "category": category,
             "quality": quality,
+            "preset": preset,
             "control_type": control_type,
             "pose_preset": pose_preset,
             "bbox_preset": bbox_preset,
@@ -97,6 +101,9 @@ def build_generate_request(
             "pose_file": None if not pose_file else str(pose_file),
             "point_cloud": None if not point_cloud else str(point_cloud),
             "voxel_mesh": None if not voxel_mesh else str(voxel_mesh),
+            # Condicionamento avançado (default None = config do modelo: 512→518).
+            "dino_image_size": None if dino_image_size is None else int(dino_image_size),
+            "image_processor_size": None if image_processor_size is None else int(image_processor_size),
         },
         extra=extra,
     )

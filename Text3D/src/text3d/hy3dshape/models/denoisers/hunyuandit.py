@@ -30,6 +30,24 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+def _flash_sdpa(q, k, v):
+    """SDPA com o mesmo conjunto de backends do contexto legado.
+
+    O contexto antigo (``sdp_kernel(enable_flash=True, enable_math=False,
+    enable_mem_efficient=True)``) não mexia no cuDNN: com o cuDNN SDP ligado
+    (default do torch) ele tem prioridade sobre o flash. Excluí-lo muda a
+    numérica e, através do ODE, a malha final (mesmo seed → outra tesselagem).
+    O contexto é scoped (não global) para não afectar outros modelos.
+    """
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+
+    backends = [SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]
+    if torch.backends.cuda.cudnn_sdp_enabled():
+        backends.insert(0, SDPBackend.CUDNN_ATTENTION)
+    with sdpa_kernel(backends):
+        return F.scaled_dot_product_attention(q, k, v)
 from einops import rearrange
 
 from .moe_layers import MoEBlock
@@ -212,26 +230,13 @@ class CrossAttention(nn.Module):
         q = self.q_norm(q)
         k = self.k_norm(k)
 
-        with torch.backends.cuda.sdp_kernel(
-            enable_flash=True,
-            enable_math=False,
-            enable_mem_efficient=True
-        ):
-            q, k, v = map(lambda t: rearrange(t, 'b n h d -> b h n d', h=self.num_heads), (q, k, v))
-            context = F.scaled_dot_product_attention(
-                q, k, v
-            ).transpose(1, 2).reshape(b, s1, -1)
+        q, k, v = map(lambda t: rearrange(t, 'b n h d -> b h n d', h=self.num_heads), (q, k, v))
+        context = _flash_sdpa(q, k, v).transpose(1, 2).reshape(b, s1, -1)
 
         if self.with_dca:
-            with torch.backends.cuda.sdp_kernel(
-                enable_flash=True,
-                enable_math=False,
-                enable_mem_efficient=True
-            ):
-                k_dca, v_dca = map(lambda t: rearrange(t, 'b n h d -> b h n d', h=self.num_heads),
-                                   (k_dca, v_dca))
-                context_dca = F.scaled_dot_product_attention(
-                    q, k_dca, v_dca).transpose(1, 2).reshape(b, s1, -1)
+            k_dca, v_dca = map(lambda t: rearrange(t, 'b n h d -> b h n d', h=self.num_heads),
+                               (k_dca, v_dca))
+            context_dca = _flash_sdpa(q, k_dca, v_dca).transpose(1, 2).reshape(b, s1, -1)
 
             context = context + self.dca_weight * context_dca
 
@@ -289,13 +294,8 @@ class Attention(nn.Module):
         q = self.q_norm(q)  # [b, h, s, d]
         k = self.k_norm(k)  # [b, h, s, d]
 
-        with torch.backends.cuda.sdp_kernel(
-            enable_flash=True,
-            enable_math=False,
-            enable_mem_efficient=True
-        ):
-            x = F.scaled_dot_product_attention(q, k, v)
-            x = x.transpose(1, 2).reshape(B, N, -1)
+        x = _flash_sdpa(q, k, v)
+        x = x.transpose(1, 2).reshape(B, N, -1)
 
         x = self.out_proj(x)
         return x

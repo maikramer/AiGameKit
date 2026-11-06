@@ -410,7 +410,9 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @click.option(
     "--sdnq-preset",
     default=None,
-    type=click.Choice(["sdnq-uint8", "sdnq-int8", "sdnq-int4", "sdnq-fp8", "none"]),
+    type=click.Choice(
+        ["sdnq-uint8", "sdnq-int8", "sdnq-int4", "sdnq-uint4-hq", "sdnq-int3", "sdnq-int2", "sdnq-fp8", "none"]
+    ),
     help=(
         "Preset SDNQ para quantização do DiT. Defeito: none (full precision), "
         "ou sdnq-int4 via hw-auto em GPUs pequenas."
@@ -609,6 +611,25 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=None,
     help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
 )
+@click.option(
+    "--dino-image-size",
+    type=int,
+    default=None,
+    help=(
+        "Lado da ref que o DINOv2 do condicionamento vê (default = config, 518). "
+        "Subir (múltiplo de 14: 728, 1036) dá mais tokens a mãos/rosto, mas 518 é a "
+        "resolução de treino (37x37 patches + CLS = text_len 1370) — experimental."
+    ),
+)
+@click.option(
+    "--image-processor-size",
+    type=int,
+    default=None,
+    help=(
+        "Resize do ImageProcessorV2 antes do DINO (default 512). Só compensa subir "
+        "em conjunto com --dino-image-size (senão o DINO volta a reduzir)."
+    ),
+)
 @add_vramd_options
 @click.pass_context
 def generate(
@@ -670,6 +691,8 @@ def generate(
     no_topology_fix,
     quality,
     category,
+    dino_image_size,
+    image_processor_size,
     vramd_priority,
     no_vramd,
     vramd_stream,
@@ -983,6 +1006,10 @@ def generate(
                     _ums_request["point_cloud"] = str(point_cloud)
                 if voxel_mesh:
                     _ums_request["voxel_mesh"] = str(voxel_mesh)
+                if dino_image_size is not None:
+                    _ums_request["dino_image_size"] = int(dino_image_size)
+                if image_processor_size is not None:
+                    _ums_request["image_processor_size"] = int(image_processor_size)
                 if from_image:
                     _ums_request["from_image"] = from_image
                 else:
@@ -1085,6 +1112,8 @@ def generate(
                             auto_num_chunks=not _user_set_chunks,
                             remove_bg=not no_remove_bg,
                             step_callback=_make_step_callback(item_id, steps),
+                            dino_image_size=dino_image_size,
+                            image_processor_size=image_processor_size,
                             **_ctrl,
                         )
                     else:
@@ -1162,6 +1191,7 @@ def generate(
                     from .omni_presets import (
                         build_generate_debug,
                         mesh_stats_for_debug,
+                        pose_bone_count,
                         write_omni_fingerprint,
                     )
 
@@ -1235,6 +1265,9 @@ def generate(
                             "bbox_preset": bbox_preset,
                             "pose_preset": pose_preset,
                             "pose_file": str(pose_file) if pose_file else None,
+                            # Identidade do esqueleto — sem isto o resume não
+                            # distingue 51→21 ossos (preset tem o mesmo nome).
+                            "pose_bones": pose_bone_count(pose_file),
                             "point_cloud": str(point_cloud) if point_cloud else None,
                             "voxel_mesh": str(voxel_mesh) if voxel_mesh else None,
                             "bounds_mode": bounds_mode,
@@ -1895,6 +1928,225 @@ def topology_fix_cmd(
     )
 
 
+@cli.command("refine")
+@click.argument("coarse_mesh", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--image",
+    "-i",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Imagem de referência usada no shape (concept).",
+)
+@click.option(
+    "--output",
+    "-o",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="GLB refinado (geometria; sem textura).",
+)
+@click.option(
+    "--resolution",
+    default="auto",
+    show_default=True,
+    help="512|1024|1536 ou 'auto' pela VRAM livre (1536 exige ~40 GiB).",
+)
+@click.option("--steps", type=int, default=25, show_default=True, help="Passos do sampler por passe.")
+@click.option("--seed", type=int, default=0, show_default=True)
+@click.option(
+    "--max-faces",
+    type=int,
+    default=0,
+    show_default=True,
+    help="Teto de faces do refinado (0 = sem decimação; o Hi3D devolve ~1M).",
+)
+@click.option(
+    "--clean/--no-clean",
+    default=False,
+    show_default=True,
+    help=(
+        "Corre topology_clean (arrays, morph=0) após o refine. Desligado por "
+        "defeito: a superfície do Hi3D já sai fechada (0 arestas de fronteira) e "
+        "o clean abre-a (medi ~2.8k boundary edges) e fragmenta micro-ilhas."
+    ),
+)
+@click.option(
+    "--remove-background/--no-remove-background",
+    "remove_background",
+    default=False,
+    show_default=True,
+    help="Remove o fundo da imagem de referência antes do Hi3D (exige sparc3d[demo]).",
+)
+@click.option("--category", default=None, help="Categoria (cascas internas / prior de escala).")
+@click.option("--model", default=None, help="Diretório/repo id do artefacto Hi3D (defeito: cache do monorepo).")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Payload JSON (para o GameAssets).")
+@add_vramd_options
+def refine_cmd(
+    coarse_mesh: Path,
+    image: Path,
+    output: Path,
+    resolution: str,
+    steps: int,
+    seed: int,
+    max_faces: int,
+    clean: bool,
+    remove_background: bool,
+    category: str | None,
+    model: str | None,
+    as_json: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
+) -> None:
+    """Refina uma malha coarse com Hi3D v1.0 (pós-processamento do shape).
+
+    O ``hi3d`` corre no venv 3.10 próprio (sparc3d/torch 2.5 cu124). Se não
+    estiver instalado — ou a GPU não servir — devolve exit 3 (skip gracioso do
+    batch) em vez de falhar o asset.
+
+    \b
+        text3d refine id_clean.glb -i images/id.png -o id_refined.glb
+    """
+    import subprocess
+
+    from aigamekit_shared.subprocess_utils import merge_subprocess_output, resolve_binary
+
+    try:
+        hi3d_bin = resolve_binary("HI3D_BIN", "hi3d")
+    except FileNotFoundError:
+        raise click.ClickException(
+            "hi3d não encontrado. Instala o refinamento com ``./install.sh hi3d`` "
+            "(venv 3.10 + sparc3d) e ``hi3d download-model`` (~7.7 GB)."
+        ) from None
+
+    argv = [
+        hi3d_bin,
+        "refine",
+        str(coarse_mesh),
+        "-i",
+        str(image),
+        "-o",
+        str(output),
+        "--resolution",
+        str(resolution),
+        "--steps",
+        str(steps),
+        "--seed",
+        str(seed),
+        "--json",
+    ]
+    if max_faces > 0:
+        argv.extend(["--target-faces", str(max_faces)])
+    if remove_background:
+        argv.append("--remove-background")
+    if model:
+        argv.extend(["--model", str(model)])
+
+    t0 = time.perf_counter()
+    payload: dict[str, Any] = {}
+
+    # vramd primeiro (admit por pico medido ~0.86 GiB em 512³; evita correr
+    # ao lado de um worker carregado). Sem vramd -> binário in-process.
+    delegated = False
+    if not no_vramd:
+        from aigamekit_shared.vramd_client import delegate_to_vramd
+
+        req = {
+            "coarse_mesh": str(coarse_mesh),
+            "image": str(image),
+            "output": str(output),
+            "resolution": str(resolution),
+            "num_inference_steps": int(steps),
+            "seed": int(seed),
+            "target_faces": int(max_faces),
+            "align_to_coarse": True,
+            "remove_background": bool(remove_background),
+        }
+        if model:
+            req["model"] = str(model)
+        resp = delegate_to_vramd("hi3d", req, timeout_sec=1800.0, priority=vramd_priority)
+        if resp is not None:
+            code = str(resp.get("error_code") or "")
+            if resp.get("status") == "ok":
+                payload = dict(resp)
+                delegated = output.is_file()
+            elif code in ("VRAM_INSUFFICIENT", "QUEUE_FULL", "VRAMD_NO_RESPONSE"):
+                reason = str(resp.get("error") or code)
+                if as_json:
+                    click.echo(json.dumps({"ok": True, "skipped": True, "reason": reason}))
+                else:
+                    console.print(f"[yellow]refine ignorado:[/] {reason}")
+                raise SystemExit(3)
+            else:
+                raise click.ClickException(f"vramd hi3d [{code or 'erro'}]: {resp.get('error', '?')}")
+            if not delegated:
+                raise click.ClickException("vramd devolveu ok sem GLB de saída")
+
+    if not delegated:
+        proc = subprocess.run(argv, capture_output=True, text=True)
+        with contextlib.suppress(json.JSONDecodeError, ValueError):
+            payload = json.loads(proc.stdout or "{}") if (proc.stdout or "").strip() else {}
+        rc = proc.returncode
+        detail = merge_subprocess_output(proc, max_chars=400)
+    else:
+        rc = 0
+        detail = ""
+
+    if rc == 3 or payload.get("available") is False:
+        reason = payload.get("reason") or detail or "indisponível"
+        if as_json:
+            click.echo(json.dumps({"ok": True, "skipped": True, "reason": reason}))
+        else:
+            console.print(f"[yellow]refine ignorado:[/] {reason}")
+        raise SystemExit(3)
+    if rc != 0 or not output.is_file():
+        err = payload.get("error") or detail or "hi3d refine falhou"
+        raise click.ClickException(err)
+
+    cleaned_faces: int | None = None
+    if clean:
+        from text3d.utils.mesh_lod import prepare_mesh_topology
+
+        tmp = output.with_name(output.stem + "_clean" + output.suffix)
+        try:
+            prepare_mesh_topology(
+                output,
+                tmp,
+                fill_holes_sides=64,
+                # A superfície do Hi3D já vem de marching cubes; o voxel remesh do
+                # morph-close derretia o detalhe fino recuperado pelo refino.
+                morph_close=0.0,
+                watertight=False,
+                remove_internal_shells=None,
+                category=category,
+                engine="arrays",
+            )
+            if tmp.is_file() and tmp.stat().st_size > 0:
+                tmp.replace(output)
+                from text3d.utils.gltf_finish import glb_face_count
+
+                cleaned_faces = glb_face_count(output)
+        finally:
+            tmp.unlink(missing_ok=True)
+
+    elapsed = time.perf_counter() - t0
+    result = {
+        "ok": True,
+        "skipped": False,
+        "output": str(output),
+        "faces": cleaned_faces if cleaned_faces is not None else payload.get("faces", 0),
+        "coarse_faces": payload.get("coarse_faces", 0),
+        "resolution": payload.get("resolution", resolution),
+        "elapsed_sec": round(elapsed, 1),
+    }
+    if as_json:
+        click.echo(json.dumps(result))
+        return
+    console.print(
+        f"[bold green]✓[/bold green] refine → [cyan]{output}[/cyan] "
+        f"[dim]({result['faces']} faces, @{result['resolution']}³, {elapsed:.0f}s)[/dim]"
+    )
+
+
 @cli.command("gpu-processes")
 def gpu_processes_cmd() -> None:
     """Lista GPUs e processos compute (NVML → nvidia-smi) — útil quando VRAM exclusiva falha."""
@@ -2012,6 +2264,18 @@ def gpu_processes_cmd() -> None:
     help="Mínimo de faces no LOD2",
 )
 @click.option(
+    "--lod1-faces",
+    type=int,
+    default=None,
+    help="Alvo absoluto de faces do LOD1 (sobrepõe mínimo/ratio; requer --painted-mesh)",
+)
+@click.option(
+    "--lod2-faces",
+    type=int,
+    default=None,
+    help="Alvo absoluto de faces do LOD2 (sobrepõe mínimo/ratio; requer --painted-mesh)",
+)
+@click.option(
     "--meshfix",
     is_flag=True,
     default=False,
@@ -2098,6 +2362,8 @@ def lod_cmd(
     lod2_ratio: float,
     min_faces_lod1: int,
     min_faces_lod2: int,
+    lod1_faces: int | None,
+    lod2_faces: int | None,
     meshfix: bool,
     painted_mesh: Path | None,
     texture_size: int,
@@ -2130,6 +2396,8 @@ def lod_cmd(
                 lod2_ratio=lod2_ratio,
                 min_faces_lod1=min_faces_lod1,
                 min_faces_lod2=min_faces_lod2,
+                lod1_faces=lod1_faces,
+                lod2_faces=lod2_faces,
                 texture_size_lod0=texture_size,
                 target_faces=target_faces,
                 apply_finish=finish,
@@ -2914,6 +3182,13 @@ def align_plus_z_cmd(
         "in-process (custo duplo se também correr topology-fix depois)."
     ),
 )
+@click.option(
+    "--t2d-full-gpu",
+    "t2d_full_gpu",
+    is_flag=True,
+    default=False,
+    help="Compat: o generate-batch é image→3D e ignora o full-GPU do Text2D.",
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
 @add_vramd_options
 @click.pass_context
@@ -2948,6 +3223,7 @@ def generate_batch(
     quality: str,
     category: str | None,
     no_topology_fix: bool,
+    t2d_full_gpu: bool,
     batch_verbose: bool,
     vramd_priority: str | None,
     no_vramd: bool,
@@ -3394,7 +3670,9 @@ def generate_batch(
 @click.option(
     "--sdnq-preset",
     default=None,
-    type=click.Choice(["sdnq-uint8", "sdnq-int8", "sdnq-int4", "sdnq-fp8", "none"]),
+    type=click.Choice(
+        ["sdnq-uint8", "sdnq-int8", "sdnq-int4", "sdnq-uint4-hq", "sdnq-int3", "sdnq-int2", "sdnq-fp8", "none"]
+    ),
     help="Quantização DiT no bench (default: hw-auto).",
 )
 @click.option("-o", "--output", "out_dir", type=click.Path(file_okay=False), default="bench_decode_out")

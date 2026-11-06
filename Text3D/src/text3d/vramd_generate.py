@@ -92,7 +92,26 @@ def run_generate(
     guidance = float(request.get("guidance", 4.5))
     octree = int(request.get("octree_resolution", 384))
     chunks = int(request.get("num_chunks", 20000))
+    # ``preset`` (fast|balanced|hq) é a base de steps/octree/chunks, como no
+    # caminho CLI. Sem isto o worker usava sempre 50/384/20k e o
+    # ``text3d.preset`` do game.yaml era ignorado no batch vramd.
+    preset_name = str(request.get("preset") or "").strip().lower()
+    if preset_name:
+        from text3d.defaults import PRESET_HUNYUAN
+
+        _pv = PRESET_HUNYUAN.get(preset_name)
+        if _pv:
+            if not request.get("steps") and not request.get("num_inference_steps"):
+                steps = int(_pv["steps"])
+            if not request.get("octree_resolution"):
+                octree = int(_pv["octree"])
+            if not request.get("num_chunks"):
+                chunks = int(_pv["chunks"])
     seed = request.get("seed")
+    dino_image_size = request.get("dino_image_size")
+    image_processor_size = request.get("image_processor_size")
+    dino_image_size = int(dino_image_size) if dino_image_size not in (None, "", 0) else None
+    image_processor_size = int(image_processor_size) if image_processor_size not in (None, "", 0) else None
     mc_level_raw = request.get("mc_level", "auto")
     mc_level: float | str = "auto" if str(mc_level_raw).strip().lower() == "auto" else float(mc_level_raw)
     bounds_mode = str(request.get("bounds_mode", "auto"))
@@ -163,6 +182,8 @@ def run_generate(
             auto_num_chunks=auto_chunks,
             remove_bg=remove_bg,
             keep_loaded=True,
+            dino_image_size=dino_image_size,
+            image_processor_size=image_processor_size,
             **control_kwargs,
         )
     else:
@@ -194,6 +215,8 @@ def run_generate(
             t2d_full_gpu=bool(request.get("t2d_full_gpu", False)),
             optimize_prompt=bool(request.get("optimize_prompt", True)),
             remove_bg=remove_bg,
+            dino_image_size=dino_image_size,
+            image_processor_size=image_processor_size,
             **control_kwargs,
         )
         mesh = result if not isinstance(result, tuple) else result[0]

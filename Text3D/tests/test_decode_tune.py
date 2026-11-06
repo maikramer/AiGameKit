@@ -131,5 +131,8 @@ class TestAutoNumChunks:
 
     def test_explicit_bytes_per_query(self):
         gib = 1024**3
+        raw = int(4 * gib * 0.7 / (96 * 1024))
         n = auto_num_chunks(4 * gib, bytes_per_query=96 * 1024, fraction=0.7)
-        assert n == int(4 * gib * 0.7 / (96 * 1024))
+        # Quantizado para baixo em ~5% (tile reprodutível, nunca acima do budget).
+        assert n is not None and 0 < n <= raw
+        assert n >= int(raw * 0.94)

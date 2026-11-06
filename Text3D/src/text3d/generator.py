@@ -575,6 +575,8 @@ class HunyuanTextTo3DGenerator:
         voxel_mesh: str | Path | None = None,
         bounds_mode: str = "auto",
         auto_num_chunks: bool = True,
+        dino_image_size: int | None = None,
+        image_processor_size: int | None = None,
     ) -> trimesh.Trimesh:
         """Image-to-3D com Hunyuan3D-Omni (sem Text2D).
 
@@ -589,6 +591,13 @@ class HunyuanTextTo3DGenerator:
                 assets achatados); ``"cube"`` mantém o cubo clássico ±1.01.
             auto_num_chunks: dimensiona o batch de queries do decode pela VRAM
                 livre no momento (``mem_get_info``) em vez do valor estático.
+            dino_image_size: lado da ref que o DINOv2 do condicionamento vê.
+                O config do modelo fixa 518 (37x37 patches = ``text_len`` 1370
+                do DiT); subir (múltiplo de 14) dá mais tokens à mão/rosto mas
+                sai da distribuição de treino — ver OMNI_SHAPE_FINDINGS.
+            image_processor_size: lado do resize do ``ImageProcessorV2`` antes
+                do DINO (default 512). Só compensa subir junto com
+                ``dino_image_size`` — senão o DINO volta a reduzir a 518.
         """
         if isinstance(image, (str, Path)):
             image = Image.open(image).convert("RGB")
@@ -616,6 +625,16 @@ class HunyuanTextTo3DGenerator:
 
         self._log("Fase 2: Hunyuan3D-Omni (imagem → mesh)")
         pipe = self._load_hunyuan()
+        # Knobs de condicionamento (default = config do modelo: 512 → 518).
+        # Subir o DINO acima de 518 aumenta os tokens de imagem no DiT; 518 é a
+        # resolução de treino (37x37 patches + CLS = text_len 1370).
+        if image_processor_size is not None and getattr(pipe, "image_processor", None) is not None:
+            pipe.image_processor.size = int(image_processor_size)
+            self._log(f"ImageProcessorV2.size={pipe.image_processor.size} (override)")
+        if dino_image_size is not None:
+            cur = getattr(getattr(pipe, "cond_encoder", None), "image_encoder", None)
+            cur_size = getattr(cur, "image_size", None)
+            self._log(f"DINO image_size={int(dino_image_size)} (config={cur_size})")
 
         pd = getattr(pipe, "device", self.device)
         gen_device = pd if isinstance(pd, torch.device) else (pd if pd == "cpu" else self.device)
@@ -701,7 +720,8 @@ class HunyuanTextTo3DGenerator:
         self._log(
             f"Inferência Omni: steps={num_inference_steps} octree={octree_resolution} "
             f"chunks={num_chunks} guidance={guidance_scale} control={control_type or 'none'} "
-            f"mc_level={mc_level_eff:.5f} bounds={'aniso' if bounds else 'cube'}"
+            f"mc_level={mc_level_eff:.5f} bounds={'aniso' if bounds else 'cube'} "
+            f"dino={dino_image_size or 'cfg'} imgproc={image_processor_size or 'cfg'}"
         )
         if step_callback is not None:
             _logger.warn("step_callback ignorado — Hunyuan3D-Omni não expõe callback por step.")
@@ -722,6 +742,8 @@ class HunyuanTextTo3DGenerator:
             )
             if bounds is not None:
                 pipe_kwargs["bounds"] = bounds
+            if dino_image_size is not None:
+                pipe_kwargs["dino_image_size"] = int(dino_image_size)
             raw = pipe(**pipe_kwargs)
 
         mesh = _as_trimesh(raw)

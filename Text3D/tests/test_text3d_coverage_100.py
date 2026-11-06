@@ -141,8 +141,8 @@ def test_voxel_meters(char_m: float, octree: int, expected: float) -> None:
         (384, 384),
         (448, 448),
         (512, 512),
-        (600, 576),
-        (999, 576),
+        (600, 608),
+        (999, 608),
         (161, 160),
         (177, 192),
         (200, 192),
@@ -164,8 +164,8 @@ def test_snap_octree_ladder(raw: int, expected: int) -> None:
     "vram,offload,expected",
     [
         (None, False, 384),
-        (None, True, 544),
-        (6.0, True, 544),
+        (None, True, 576),
+        (6.0, True, 576),
         (6.0, False, 320),
         (12.0, False, 512),
         (10.0, False, 448),
@@ -174,8 +174,8 @@ def test_snap_octree_ladder(raw: int, expected: int) -> None:
         (4.0, True, 320),
         (16.0, False, 512),
         (11.0, True, 576),
-        (8.0, True, 544),
-        (5.5, True, 544),
+        (8.0, True, 576),
+        (5.5, True, 576),
         (5.5, False, 256),
     ],
 )
@@ -211,7 +211,8 @@ def test_morph_close_meters_invalid_char(char_m: float) -> None:
 
 
 def test_morph_close_meters_positive() -> None:
-    m = morph_close_meters(2.0, 256, category="humanoid")
+    # default humanoid 0.24 voxel é sub-voxel → None (guard novo); terrain 3x fecha.
+    m = morph_close_meters(2.0, 256, category="terrain")
     assert m is not None
     assert 0.001 <= m <= 0.08
 

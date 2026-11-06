@@ -197,14 +197,40 @@ class FastGeometryExtractorV2(BaseGeometryExtractor):
                     # vez cobre esses cubos — as células novas já têm o valor
                     # "fora" (-10000), portanto não inventam superfície.
                     mask_t = self.dilate((next_index > 0).to(dtype).unsqueeze(0)).squeeze(0)
-                    mask = (mask_t > 0).cpu().numpy()
-                    grid_logits = grid_logits.cpu().numpy()
-                    vertices, faces, normals, _ = measure.marching_cubes(
-                        grid_logits[0], mc_level, method="lewiner", mask=mask
-                    )
+                    # Recorta à AABB da máscara (+1 voxel) antes de passar para
+                    # CPU/NumPy: o grid hierárquico (1024/1536) é 1-3 GiB e o
+                    # skimage MC escala com o volume, não com a superfície.
+                    # A AABB sai de reduções por eixo; ``torch.where(mask)``
+                    # materializa 3 arrays int64 com uma entrada por voxel
+                    # positivo (GBs numa máscara cheia) — a redução é O(n) sem
+                    # essas alocações.
+                    m_bool = mask_t > 0
+                    any_d = m_bool.any(dim=2).any(dim=1)
+                    any_h = m_bool.any(dim=2).any(dim=0)
+                    any_w = m_bool.any(dim=1).any(dim=0)
+                    if bool(any_d.any()):
+                        d_idx = torch.nonzero(any_d).flatten()
+                        h_idx = torch.nonzero(any_h).flatten()
+                        w_idx = torch.nonzero(any_w).flatten()
+                        d0 = max(int(d_idx[0].item()) - 1, 0)
+                        d1 = min(int(d_idx[-1].item()) + 2, int(grid_logits.shape[1]))
+                        h0 = max(int(h_idx[0].item()) - 1, 0)
+                        h1 = min(int(h_idx[-1].item()) + 2, int(grid_logits.shape[2]))
+                        w0 = max(int(w_idx[0].item()) - 1, 0)
+                        w1 = min(int(w_idx[-1].item()) + 2, int(grid_logits.shape[3]))
+                        sub = grid_logits[0, d0:d1, h0:h1, w0:w1].float().cpu().numpy()
+                        submask = (mask_t[d0:d1, h0:h1, w0:w1] > 0).cpu().numpy()
+                        vertices, faces, normals, _ = measure.marching_cubes(
+                            sub, mc_level, method="lewiner", mask=submask
+                        )
+                        vertices = vertices + np.array([d0, h0, w0], dtype=np.float32)
+                    else:
+                        vertices, faces, normals, _ = measure.marching_cubes(
+                            grid_logits[0].float().cpu().numpy(), mc_level, method="lewiner"
+                        )
                 else:
                     vertices, faces, normals, _ = measure.marching_cubes(
-                        grid_logits[0].cpu().numpy(), mc_level, method="lewiner"
+                        grid_logits[0].float().cpu().numpy(), mc_level, method="lewiner"
                     )
                 vertices = vertices / (grid_size - 1) * bbox_size + bbox_min
                 # vertices[:, [0, 1]] = vertices[:, [1, 0]]
