@@ -29,8 +29,8 @@ class TestQualityProfiles:
 
 class TestCategories:
     def test_list_categories_count(self, engine: QualityEngine) -> None:
-        """Returns 16 categories."""
-        assert len(engine.list_categories()) == 16
+        """Returns 19 categories."""
+        assert len(engine.list_categories()) == 19
 
     def test_list_categories_sorted(self, engine: QualityEngine) -> None:
         categories = engine.list_categories()

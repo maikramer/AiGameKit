@@ -22,6 +22,15 @@ categories:
       style: hunyuan
       max_views: 6
 
+  vocal:
+    label: "Vocalization"
+    target_faces: 0
+    audio:
+      profile: effects
+      kind: sfx_vocal
+      duration: 1
+      trim: true
+
   humanoid:
     label: "Humanoid"
     target_faces: 32000
@@ -144,6 +153,24 @@ categories:
       width: 512
       height: 512
       steps: 4
+
+  movement:
+    label: "Movement / Footstep"
+    target_faces: 0
+    audio:
+      profile: effects
+      kind: sfx_movement
+      duration: 0.6
+      trim: true
+
+  collectible:
+    label: "Collectible / Pickup"
+    target_faces: 0
+    audio:
+      profile: effects
+      kind: sfx_collectible
+      duration: 1
+      trim: true
 
   # ── Vehicles & Structures ──
   vehicle:
