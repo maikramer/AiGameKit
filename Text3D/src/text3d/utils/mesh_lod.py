@@ -976,6 +976,8 @@ def generate_lod_textured_glb_triplet(
     lod2_ratio: float = 0.14,
     min_faces_lod1: int = 500,
     min_faces_lod2: int = 150,
+    lod1_faces: int | None = None,
+    lod2_faces: int | None = None,
     texture_size_lod0: int = 2048,
     target_faces: int | None = None,
     apply_finish: bool = True,
@@ -1033,13 +1035,19 @@ def generate_lod_textured_glb_triplet(
 
     if target_faces and target_faces > 0:
         lod0_target = _clamp_decimate_target(n, target_faces)
-        lod1_target = _clamp_decimate_target(n, max(min_faces_lod1, lod0_target // 2))
+        # Alvos explícitos (GameAssets: 1.2x target x lod1/lod2_ratio): o /2 e /3
+        # fixos ignoravam o perfil e deixavam LOD1/2 fora do contrato.
+        _l1 = lod1_faces if lod1_faces is not None else max(min_faces_lod1, lod0_target // 2)
+        _l2 = lod2_faces if lod2_faces is not None else max(min_faces_lod2, lod0_target // 3)
+        lod1_target = _clamp_decimate_target(n, _l1)
         # /3 (não /4): edifícios/props grandes degeneram em silhueta no far LOD.
-        lod2_target = _clamp_decimate_target(n, max(min_faces_lod2, lod0_target // 3))
+        lod2_target = _clamp_decimate_target(n, _l2)
     else:
         lod0_target = n
-        lod1_target = _clamp_decimate_target(n, max(min_faces_lod1, int(n * lod1_ratio)))
-        lod2_target = _clamp_decimate_target(n, max(min_faces_lod2, int(n * lod2_ratio)))
+        _l1 = lod1_faces if lod1_faces is not None else max(min_faces_lod1, int(n * lod1_ratio))
+        _l2 = lod2_faces if lod2_faces is not None else max(min_faces_lod2, int(n * lod2_ratio))
+        lod1_target = _clamp_decimate_target(n, _l1)
+        lod2_target = _clamp_decimate_target(n, _l2)
 
     # Ladder achatada = três meshes iguais em disco e em VRAM, sem ganho de LOD.
     # Acontecia quando o piso relativo de clamp_decimate_target subia lod1 e
@@ -1058,15 +1066,45 @@ def generate_lod_textured_glb_triplet(
     lod0_path = output_dir / f"{basename}_lod0.glb"
     # Sempre passar por remesh_textured (mesmo sem decimate) para forçar
     # downscale de atlas — copy2 do painted deixava lod0/1/2 com a mesma tex.
-    remesh_textured_glb(painted, lod0_path, target_faces=lod0_target, texture_size=tex0)
+    remesh_textured_glb(painted, lod0_path, target_faces=lod0_target, texture_size=tex0, allow_rebake=False)
     out_paths.append(lod0_path)
 
+    # Guarda de silhueta: decimar malha fina (straw/scarecrow) abaixo do piso
+    # de costuras erode a AABB (z -15-17%). Se o LOD1/2 encolher >5% vs o LOD0,
+    # refaz com o alvo do LOD0 e sem rebake — o shape visível manda; a ladder
+    # achata nesse asset (o aviso "achatada" regista).
+    from aigamekit_shared.glb_verify import glb_world_bounds
+
+    def _ext(b):
+        return [b[1][i] - b[0][i] for i in range(3)]
+
+    def _shrink(b_ref, b_new) -> float:
+        if not b_ref or not b_new:
+            return 0.0
+        e0, e1 = _ext(b_ref), _ext(b_new)
+        return max((e0[i] - e1[i]) / e0[i] if e0[i] > 1e-6 else 0.0 for i in range(3))
+
+    b_lod0 = glb_world_bounds(lod0_path)
     for level, target, tex_size in (
         (1, lod1_target, tex1),
         (2, lod2_target, tex2),
     ):
         path = output_dir / f"{basename}_lod{level}.glb"
         remesh_textured_glb(painted, path, target_faces=target, texture_size=tex_size)
+        shrink = _shrink(b_lod0, glb_world_bounds(path))
+        if shrink > 0.05:
+            log.warning(
+                "LOD%d encolheu %.0f%% vs LOD0 — refaz com alvo do LOD0 (sem decimação agressiva)",
+                level,
+                shrink * 100.0,
+            )
+            remesh_textured_glb(
+                painted,
+                path,
+                target_faces=lod0_target,
+                texture_size=tex_size,
+                allow_rebake=False,
+            )
         out_paths.append(path)
 
     missing = [p for p in out_paths if not p.is_file() or p.stat().st_size < 64]

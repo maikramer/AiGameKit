@@ -146,11 +146,26 @@ def resolve_materialize_bin() -> str | None:
     return shutil.which("materialize") or shutil.which("materialize-cli")
 
 
-def derive_maps(albedo_png: Path, tmp: Path, *, preset: str, logger: Any) -> tuple[Path, Path]:
-    """Normal+AO do albedo via Materialize (convenção do pbr_enrich do paint3d)."""
+def derive_maps(
+    albedo_png: Path,
+    tmp: Path,
+    *,
+    preset: str,
+    logger: Any,
+    want_normal: bool = True,
+    want_ao: bool = True,
+) -> tuple[Path | None, Path | None]:
+    """Normal+AO do albedo via Materialize (convenção do pbr_enrich do paint3d).
+
+    ``want_normal``/``want_ao`` limitam o custo: um GLB que só precisa de AO
+    não paga a derivação da normal (que é a que cria arestas falsas no atlas).
+    """
     materialize_bin = resolve_materialize_bin()
     if materialize_bin is None:
         raise RuntimeError("materialize não encontrado (MATERIALIZE_BIN / Materialize/target/release / PATH)")
+    only = ",".join(x for x, on in (("normal", want_normal), ("ao", want_ao)) if on)
+    if not only:
+        return None, None
     cmd = [
         materialize_bin,
         str(albedo_png),
@@ -159,7 +174,7 @@ def derive_maps(albedo_png: Path, tmp: Path, *, preset: str, logger: Any) -> tup
         "-p",
         preset,
         "--only",
-        "normal,ao",
+        only,
         "--no-seamless",
         "--normal-format",
         "opengl",
@@ -172,10 +187,12 @@ def derive_maps(albedo_png: Path, tmp: Path, *, preset: str, logger: Any) -> tup
         raise RuntimeError(f"materialize falhou: {tail}")
     normal_p = tmp / f"{albedo_png.stem}_normal.png"
     ao_p = tmp / f"{albedo_png.stem}_ao.png"
-    if not normal_p.is_file() or not ao_p.is_file():
-        raise RuntimeError("mapas esperados ausentes após materialize")
-    logger.info("patch-pbr: normal+ao derivados do albedo (%dx%d)", *_png_size(normal_p))
-    return normal_p, ao_p
+    if want_normal and not normal_p.is_file():
+        raise RuntimeError("normal esperada ausente após materialize")
+    if want_ao and not ao_p.is_file():
+        raise RuntimeError("ao esperado ausente após materialize")
+    logger.info("patch-pbr: %s derivados do albedo (%dx%d)", only, *_png_size(normal_p if want_normal else ao_p))
+    return (normal_p if want_normal else None), (ao_p if want_ao else None)
 
 
 def _png_size(path: Path) -> tuple[int, int]:
@@ -240,13 +257,20 @@ def _png_to_ktx2(png: Path, tmp: Path) -> Path:
 def _inject_maps(
     gltf: dict[str, Any],
     bin_data: bytearray,
-    normal_png: Path,
-    ao_png: Path,
+    normal_png: Path | None,
+    ao_png: Path | None,
     tmp: Path,
+    *,
+    inject_normal: bool = True,
+    inject_ao: bool = True,
 ) -> None:
     """Injeta normal+AO como KTX2 (convenção gltf-transform: image/ktx2 +
     ``extensions.KHR_texture_basisu.source`` no texture). Geometria e meshopt
-    existentes ficam intactos — nenhum re-encode."""
+    existentes ficam intactos — nenhum re-encode.
+
+    Só injeta os slots pedidos: um normal map existente nunca é substituído
+    por um derivado do albedo (o derivado tem arestas falsas em cada ilha UV).
+    """
     mat = gltf["materials"][0]
     images = gltf.setdefault("images", [])
     textures = gltf.setdefault("textures", [])
@@ -254,7 +278,12 @@ def _inject_maps(
     used = gltf.setdefault("extensionsUsed", [])
     if "KHR_texture_basisu" not in used:
         used.append("KHR_texture_basisu")
-    for slot, png in (("normalTexture", normal_png), ("occlusionTexture", ao_png)):
+    slots: list[tuple[str, Path]] = []
+    if inject_normal and normal_png is not None:
+        slots.append(("normalTexture", normal_png))
+    if inject_ao and ao_png is not None:
+        slots.append(("occlusionTexture", ao_png))
+    for slot, png in slots:
         ktx2 = _png_to_ktx2(png, tmp)
         blob = ktx2.read_bytes()
         blob += b"\x00" * ((4 - len(blob) % 4) % 4)
@@ -283,15 +312,28 @@ def patch_glb_pbr(
     force: bool = False,
     logger: Any = None,
 ) -> PatchPbrResult:
-    """Idempotente: injeta normal+AO se faltarem; geometria intacta.
+    """Idempotente: injeta só os slots em falta; geometria intacta.
 
-    Skip quando o material já tem os dois slots (``force`` refaz mesmo assim).
+    Um normal map existente **nunca** é substituído por um derivado do albedo
+    (o derivado tem arestas falsas em cada ilha UV). ``force`` refaz ambos.
     """
     gltf, _bin = _load_glb(glb_path)
     if glb_is_pbr_complete(gltf) and not force:
         return PatchPbrResult(True, "já tem normalTexture + occlusionTexture")
-    if gltf.get("materials", [{}])[0].get("pbrMetallicRoughness", {}).get("baseColorTexture") is None:
+    mats = gltf.get("materials") or []
+    if not mats or mats[0].get("pbrMetallicRoughness", {}).get("baseColorTexture") is None:
         return PatchPbrResult(True, "sem baseColorTexture — GLB sem PBR para enriquecer")
+    if len(mats) > 1 and logger is not None:
+        logger.warning(
+            "patch-pbr: %d materiais — só o material 0 é enriquecido (mapas derivados do albedo dele)",
+            len(mats),
+        )
+    has_normal = "normalTexture" in mats[0]
+    has_ao = "occlusionTexture" in mats[0]
+    inject_normal = force or not has_normal
+    inject_ao = force or not has_ao
+    if not inject_normal and not inject_ao:
+        return PatchPbrResult(True, "nada em falta")
 
     dst = output_path or glb_path
     # Tempdir no filesystem do DESTINO: os.replace é atómico no mesmo device
@@ -300,14 +342,30 @@ def patch_glb_pbr(
     with tempfile.TemporaryDirectory(prefix="text3d_patch_pbr_", dir=dst.parent) as td_raw:
         tmp = Path(td_raw)
         albedo_png = extract_albedo_png(glb_path, tmp)
-        normal_png, ao_png = derive_maps(albedo_png, tmp, preset=preset, logger=logger)
+        normal_png, ao_png = derive_maps(
+            albedo_png,
+            tmp,
+            preset=preset,
+            logger=logger,
+            want_normal=inject_normal,
+            want_ao=inject_ao,
+        )
 
         gltf, bin_data = _load_glb(glb_path)
-        _inject_maps(gltf, bin_data, normal_png, ao_png, tmp)
+        _inject_maps(
+            gltf,
+            bin_data,
+            normal_png,
+            ao_png,
+            tmp,
+            inject_normal=inject_normal,
+            inject_ao=inject_ao,
+        )
         final = tmp / "final.glb"
         _save_glb(final, gltf, bin_data)
 
         # Escrita atómica (crash entre passes não deixa GLB intermédio).
         os.replace(final, dst)
 
-    return PatchPbrResult(False, "normal+AO injetados", output=dst)
+    added = "+".join(x for x, on in (("normal", inject_normal), ("AO", inject_ao)) if on)
+    return PatchPbrResult(False, f"{added} injetados", output=dst)

@@ -119,6 +119,16 @@ def adapt_morph_max_grid_axis(
     """
     req = max(int(min_axis), int(requested))
     lo = max(8, int(min_axis))
+    # Override determinístico (CI/regen reprodutível): a grelha adaptativa por
+    # RAM faz o mesmo asset sair sólido ou oco conforme a máquina.
+    import os
+
+    _forced = os.environ.get("AIGAMEKIT_MORPH_MAX_GRID", "").strip()
+    if _forced:
+        try:
+            return max(lo, min(req, int(_forced)))
+        except ValueError:
+            pass
     if available_bytes is None or available_bytes <= 0:
         return min(req, 400)
     bpp = max(1, int(bytes_per_cell))
@@ -401,7 +411,7 @@ def remove_internal_shell_faces(
     *,
     wall_gap_ratio: float = 0.12,
     max_removal_ratio: float = 0.55,
-    opposite_dot: float = -0.2,
+    opposite_dot: float = -0.7,
     # Compat / deprecated.
     room_gap_ratio: float | None = None,
     gap_ratio: float | None = None,
@@ -409,7 +419,7 @@ def remove_internal_shell_faces(
     """Apaga faces do sanduíche fino de paredes duplas Hunyuan / MC.
 
     Só remove faces cujo ``+N`` (e/ou ``-N``) bate noutra face **dentro de
-    ``wall_gap``** com normal aproximadamente oposta — o vão fino entre as
+    ``wall_gap``** com normal fortemente anti/paralela — o vão fino entre as
     duas paredes. Não usa hit à escala do oco/edifício: isso apagava props
     interiores (sino na torre, mobiliário) e interiores legítimos.
 
@@ -421,9 +431,12 @@ def remove_internal_shell_faces(
 
     Args:
         obj: bpy mesh object.
-        wall_gap_ratio: Fração da diagonal AABB = espessura máxima do sanduíche.
-        max_removal_ratio: Fração máxima de faces removíveis.
-        opposite_dot: Limiar ``|n·hit_n|`` — aceita anti/paralelo (≥ ``|opp|``).
+        wall_gap_ratio: Fração da diagonal AABB = espessura máxima do sanduíche
+            (cap absoluto de 3 cm: 8-12% de um edifício de 10 m eram ~1 m).
+        max_removal_ratio: Fração máxima de faces removíveis (0.25: 55% apagava
+            paredes/interiores legítimos).
+        opposite_dot: Limiar ``|n·hit_n|`` — só aceita alinhamento forte
+            (anti/paralelo ≥ 0.7); 0.2 aceitava qualquer face a ~78°.
         room_gap_ratio: Deprecated — ignorado (causava false positives).
         gap_ratio: Deprecated — se dado, usa-se como ``wall_gap_ratio``.
 
@@ -450,7 +463,12 @@ def remove_internal_shell_faces(
 
     coords = np.array([v.co[:] for v in bm.verts], dtype=np.float64)
     diag = float(np.linalg.norm(coords.max(axis=0) - coords.min(axis=0))) or 1.0
-    wall_gap = max(float(wall_gap_ratio) * diag, 1e-5)
+    # Cap absoluto: um vão de parede dupla MC é sub-voxel (~1-2 cm). 8-12% da
+    # diagonal de um edifício de 10 m (~1.1 m) apanhava interiores/chãos.
+    wall_gap = max(
+        min(float(wall_gap_ratio) * diag, 0.05) if float(wall_gap_ratio) <= 0.12 else float(wall_gap_ratio) * diag,
+        1e-5,
+    )
     eps = max(1e-6, 1e-5 * diag)
     opp = float(opposite_dot)
 
@@ -2037,7 +2055,9 @@ REPAIR_PROFILES: dict[str, RepairProfile] = {
         # (capela 638→0 boundary sem matar faces). Diâmetro de loop limita
         # portas/janelas grandes.
         do_remove_internal_shells=False,
-        fill_holes_sides=96,
+        # 96 tapava janelas/portas com leques n-gon antes do watertight; 32
+        # cobre rachas MC e deixa os vãos arquitetónicos ao guard de diâmetro.
+        fill_holes_sides=32,
         watertight=True,
         watertight_cap_base=True,
         watertight_final_fill=True,

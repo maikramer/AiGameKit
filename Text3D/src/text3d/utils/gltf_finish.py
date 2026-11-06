@@ -103,8 +103,6 @@ def _run_gltf_transform(
     timeout: int = 600,
 ) -> tuple[bool, str]:
     _ensure_finish_path()
-    if not _has_npx():
-        return False, "npx ausente no PATH"
     if subcmd == "uastc" and not _has_ktx():
         return (
             False,
@@ -112,7 +110,15 @@ def _run_gltf_transform(
             "instale https://github.com/KhronosGroup/KTX-Software/releases "
             "ou `./install.sh text3d` (extras)",
         )
-    args = ["npx", "--yes", "@gltf-transform/cli", subcmd, str(src), str(dst)]
+    # Binário instalado evita `npx --yes` (resolve o pacote em cada invocação,
+    # 1.5-3 s x 18-27 por asset). Só cai para npx se não houver binário.
+    gt_bin = shutil.which("gltf-transform")
+    if gt_bin:
+        args = [gt_bin, subcmd, str(src), str(dst)]
+    else:
+        if not _has_npx():
+            return False, "npx/gltf-transform ausentes no PATH"
+        args = ["npx", "--yes", "@gltf-transform/cli", subcmd, str(src), str(dst)]
     if extra_args:
         args.extend(extra_args)
     try:
@@ -132,13 +138,36 @@ def _run_gltf_transform(
     return True, ""
 
 
+_GLB_JSON_CACHE: dict[tuple[str, int, int], dict | None] = {}
+_GLB_JSON_CACHE_MAX = 64
+
+
 def _glb_json(path: Path) -> dict | None:
+    """Lê só o chunk JSON do GLB (header + json_len), com cache por mtime/size.
+
+    Antes lia o ficheiro inteiro (5-15 MB) por cada sonda de metadados; num
+    asset há dezenas (`_glb_has_ktx2`, `_glb_has_meshopt`, `_glb_has_skins`,
+    `_glb_vertex_attrs`, `glb_face_count`…), em disco externo.
+    """
     try:
-        raw = path.read_bytes()
-        if raw[:4] != b"glTF" or len(raw) < 20:
-            return None
-        json_len = struct.unpack_from("<I", raw, 12)[0]
-        return json.loads(raw[20 : 20 + json_len])
+        p = Path(path)
+        st = p.stat()
+        key = (str(p), st.st_mtime_ns, st.st_size)
+        cached = _GLB_JSON_CACHE.get(key)
+        if cached is not None or key in _GLB_JSON_CACHE:
+            return cached
+        with p.open("rb") as f:
+            header = f.read(20)
+            if len(header) < 20 or header[:4] != b"glTF":
+                meta = None
+            else:
+                json_len = struct.unpack_from("<I", header, 12)[0]
+                raw = f.read(json_len)
+                meta = json.loads(raw) if len(raw) == json_len else None
+        if len(_GLB_JSON_CACHE) >= _GLB_JSON_CACHE_MAX:
+            _GLB_JSON_CACHE.clear()
+        _GLB_JSON_CACHE[key] = meta
+        return meta
     except Exception:
         return None
 
@@ -310,12 +339,17 @@ def _glb_vertex_attrs(path: Path) -> set[str]:
 
 
 def _recalc_tangents_inplace(glb_path: Path) -> bool:
-    """Garante NORMAL+TANGENT no GLB via bpy (smooth-by-angle + MikkTSpace).
+    """Garante NORMAL+TANGENT no GLB via bpy (MikkTSpace), preservando normais.
 
-    Sempre aplica ``smooth_shade_scene`` antes do export — import de GLB sem
-    NORMAL fica flat e o exporter escreve V/Tri≈3 (edges vivos). Tangents só
-    quando há UVs. Devolve True se o export correu com UVs (tangents pedidos).
+    Só corre quando falta NORMAL ou TANGENT (com UVs): um GLB já completo não
+    volta a passar por import/export bpy (3-10 s e re-encode de texturas). O
+    shade-smooth só é aplicado quando o ficheiro não traz NORMAL (import flat);
+    com normais existentes são preservadas. Devolve True se o export correu com
+    UVs (tangents pedidos).
     """
+    attrs = _glb_vertex_attrs(glb_path)
+    if "NORMAL" in attrs and ("TANGENT" in attrs or "TEXCOORD_0" not in attrs):
+        return False
     try:
         import bpy
 
@@ -338,8 +372,10 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
     if not mesh_objs:
         return False
 
-    # Anti V/Tri=3: mesh flat (sem NORMAL no ficheiro) → exporter per-corner.
-    smooth_shade_scene(mesh_objs)
+    # Anti V/Tri=3 só quando não há NORMAL no ficheiro (import flat). Com
+    # normais, recalcular shade a 60° cria creases espúrias nos seams.
+    if "NORMAL" not in attrs:
+        smooth_shade_scene(mesh_objs)
 
     has_uv = False
     for m in mesh_objs:
@@ -355,6 +391,7 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
         o.select_set(True)
     bpy.context.view_layer.objects.active = arm_objs[0] if arm_objs else mesh_objs[0]
 
+    props = bpy.ops.export_scene.gltf.get_rna_type().properties
     export_kwargs: dict = {
         "filepath": str(glb_path),
         "export_format": "GLB",
@@ -369,13 +406,12 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
         "export_animations": bool(arm_objs),
         "export_skins": bool(arm_objs),
     }
+    # q92 em vez do default q75: o KTX2 final herdava o double-encode lossy.
+    if "export_jpeg_quality" in props:
+        export_kwargs["export_jpeg_quality"] = 92
     try:
-        from aigamekit_shared.bpy_mesh import gltf_export_supports_meshopt
-
-        if gltf_export_supports_meshopt():
-            props = bpy.ops.export_scene.gltf.get_rna_type().properties
-            if "export_optimize_disable_viewport" in props:
-                export_kwargs["export_optimize_disable_viewport"] = True
+        if "export_optimize_disable_viewport" in props:
+            export_kwargs["export_optimize_disable_viewport"] = True
     except Exception:
         pass
 
@@ -427,7 +463,9 @@ def _apply_meshopt_bpy(glb_in: Path, glb_out: Path) -> tuple[bool, str]:
 
     from aigamekit_shared.bpy_mesh import smooth_shade_scene
 
-    smooth_shade_scene(mesh_objs)
+    attrs_in = _glb_vertex_attrs(glb_in)
+    if "NORMAL" not in attrs_in:
+        smooth_shade_scene(mesh_objs)
     for m in mesh_objs:
         if m.data.uv_layers:
             with contextlib.suppress(Exception):
@@ -438,6 +476,7 @@ def _apply_meshopt_bpy(glb_in: Path, glb_out: Path) -> tuple[bool, str]:
         o.select_set(True)
     bpy.context.view_layer.objects.active = arm_objs[0] if arm_objs else mesh_objs[0]
 
+    props = bpy.ops.export_scene.gltf.get_rna_type().properties
     export_kwargs: dict = {
         "filepath": str(glb_out),
         "export_format": "GLB",
@@ -452,7 +491,8 @@ def _apply_meshopt_bpy(glb_in: Path, glb_out: Path) -> tuple[bool, str]:
         "export_skins": bool(arm_objs),
         **gltf_meshopt_export_kwargs(enable=True),
     }
-    props = bpy.ops.export_scene.gltf.get_rna_type().properties
+    if "export_jpeg_quality" in props:
+        export_kwargs["export_jpeg_quality"] = 92
     if "export_optimize_disable_viewport" in props:
         export_kwargs["export_optimize_disable_viewport"] = True
 
@@ -542,23 +582,27 @@ def gltf_transform_finish(
         had_tangent = "TANGENT" in attrs_before
 
         if apply_tangents:
-            # bpy 5.x sem KHR_texture_basisu falha o import de KTX2
-            # ("Extension KHR_texture_basisu is not available") e o passe de
-            # shade/tangents fica no-op — V/Tri≈3 e sem TANGENT. Descomprimir
-            # para PNG antes; uastc mais abaixo volta a KTX2.
-            if _glb_has_ktx2(current):
-                staged = tmp / "ktxdecompress.glb"
-                ok_d, err_d = _run_gltf_transform("ktxdecompress", current, staged)
-                if ok_d:
-                    current = staged
-                    log.info("gltf_finish: KTX2→PNG (ktxdecompress) antes de shade/tangents")
-                else:
-                    log.warning("gltf_finish: ktxdecompress falhou — %s", err_d)
+            attrs_now = _glb_vertex_attrs(current)
+            need_tangents = "NORMAL" not in attrs_now or ("TANGENT" not in attrs_now and "TEXCOORD_0" in attrs_now)
+            if need_tangents:
+                # bpy 5.x sem KHR_texture_basisu falha o import de KTX2
+                # ("Extension KHR_texture_basisu is not available") e o passe de
+                # shade/tangents fica no-op — V/Tri≈3 e sem TANGENT. Descomprimir
+                # para PNG antes; uastc mais abaixo volta a KTX2.
+                if _glb_has_ktx2(current):
+                    staged = tmp / "ktxdecompress.glb"
+                    ok_d, err_d = _run_gltf_transform("ktxdecompress", current, staged)
+                    if ok_d:
+                        current = staged
+                        log.info("gltf_finish: KTX2→PNG (ktxdecompress) antes de shade/tangents")
+                    else:
+                        log.warning("gltf_finish: ktxdecompress falhou — %s", err_d)
 
-            # Sempre shade+export: import flat (sem NORMAL) ou V/Tri≈3 legado
-            # precisam do passe; smooth_shade_scene é idempotente em mesh boa.
-            ok = _recalc_tangents_inplace(current)
-            res.tangents_added = ok or "TANGENT" in _glb_vertex_attrs(current)
+                ok = _recalc_tangents_inplace(current)
+                res.tangents_added = ok or "TANGENT" in _glb_vertex_attrs(current)
+            else:
+                # Já tem NORMAL+TANGENT: não há roundtrip bpy nem re-encode.
+                res.tangents_added = True
 
         steps: list[tuple[str, str, list[str] | None]] = []
         if apply_dedup:

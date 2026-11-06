@@ -714,7 +714,7 @@ def drop_internal_shell_faces(
     *,
     wall_gap_ratio: float = 0.08,
     max_removal_ratio: float = 0.55,
-    opposite_dot: float = -0.2,
+    opposite_dot: float = -0.7,
     passes: int = 2,
     k_neighbors: int = 16,
 ) -> tuple[np.ndarray, np.ndarray, int]:
@@ -740,7 +740,12 @@ def drop_internal_shell_faces(
         if len(tris) == 0:
             break
         diag = float(np.linalg.norm(verts.max(axis=0) - verts.min(axis=0))) or 1.0
-        wall_gap = max(float(wall_gap_ratio) * diag, 1e-5)
+        # Cap absoluto de 3 cm: 8% da diagonal de um edifício de 10 m (~1.1 m)
+        # apanhava interiores e chãos como "parede dupla".
+        wall_gap = max(
+            min(float(wall_gap_ratio) * diag, 0.05) if float(wall_gap_ratio) <= 0.12 else float(wall_gap_ratio) * diag,
+            1e-5,
+        )
         eps = max(1e-6, 1e-5 * diag)
         doomed = _shell_doomed_mask(
             verts,
@@ -866,7 +871,10 @@ def repair_arrays_topology_clean(
     long_edge_length: float = 8.0 / 512.0,
     long_edge_median_factor: float = 8.0,
     sliver_max_aspect: float | None = 80.0,
-    debris_face_ratio: float = 0.0005,
+    # 1% do total: o Omni deixa fragmentos soltos (dead_willow: tiras a
+    # flutuar ao lado da copa). 0.05% deixava passar ilhas de centenas de
+    # faces; a maior ilha nunca é apagada.
+    debris_face_ratio: float = 0.01,
     debris_min_faces: int = 64,
     do_remove_internal_shells: bool = False,
     internal_shell_wall_gap_ratio: float = 0.08,

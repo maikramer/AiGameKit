@@ -708,7 +708,7 @@ class TestClampBaseFlareAndTaubin:
         from aigamekit_shared.mesh_repair import get_repair_profile
 
         p = get_repair_profile("topology_clean")
-        assert p.fill_holes_sides == 96
+        assert p.fill_holes_sides == 32
         assert p.do_remove_internal_shells is False
         assert p.watertight is True
         assert p.do_clamp_base_flare is False

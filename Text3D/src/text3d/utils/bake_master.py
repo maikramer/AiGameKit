@@ -169,6 +169,21 @@ def _bake_master_bpy_session(
                 img.save()
                 nm_path = target_nm
 
+                # Ligar o bake ao BSDF: sem Normal Map→Normal o PNG ficava só
+                # num nó solto e o GLB exportado mantinha a normal antiga (ou
+                # nenhuma) — o único caminho de normal geometricamente correta
+                # estava inerte.
+                try:
+                    nm_node = next((n for n in nodes if n.type == "NORMAL_MAP"), None)
+                    if nm_node is None:
+                        nm_node = nodes.new("ShaderNodeNormalMap")
+                    bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
+                    if bsdf is not None:
+                        mat.node_tree.links.new(tex_node.outputs["Color"], nm_node.inputs["Color"])
+                        mat.node_tree.links.new(nm_node.outputs["Normal"], bsdf.inputs["Normal"])
+                except Exception as link_exc:
+                    log.debug("bake-master: ligação Normal Map falhou: %s", link_exc)
+
                 # Remover high-poly antes do export para não inflar o GLB
                 bpy.data.objects.remove(high, do_unlink=True)
         except Exception as exc:
@@ -194,7 +209,8 @@ def _bake_master_bpy_session(
         "filepath": str(output_glb),
         "export_format": "GLB",
         "use_selection": True,
-        "export_apply": True,
+        # export_apply com armature congela-a (armature modifier aplicado).
+        "export_apply": not bool(arm_objs),
         "export_normals": True,
         "export_tangents": True,
         "export_texcoords": True,

@@ -46,11 +46,14 @@ def downscale_image_replace(node, size: int) -> bool:
     if max(w, h) > want:
         log.warning("image.scale failed %dx%d → %dx%d (want %d)", w0, h0, w, h, want)
         return False
-    pixels = list(img.pixels)
+    # ``list(img.pixels)`` num atlas 2048² são 16,8M floats Python (~400-500 MB
+    # e segundos). foreach_get/set copia em bloco (float32, ~67 MB).
+    buf = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(buf)
     # JPEG: alpha=False já. PNG aqui fazia lod1 (atlas refeito) pesar MAIS que
     # lod0 (JPEG original intacto quando max≤want) — bytes lod1 > lod0.
     new = bpy.data.images.new(f"{img.name}_s{want}", width=w, height=h, alpha=False)
-    new.pixels = pixels
+    new.pixels.foreach_set(buf)
     new.file_format = "JPEG"
     new.alpha_mode = "NONE"
     new.pack()
@@ -148,8 +151,11 @@ def _bpy_image_to_rgb_array(bpy_img) -> np.ndarray | None:
     if w <= 0 or h <= 0:
         return None
     # bpy.pixels = bottom-up (OpenGL); transfer/sample usam top-down (V flip
-    # em _sample_texture_at_uvs / PIL).
-    pixels = np.array(bpy_img.pixels[:]).reshape(h, w, 4)
+    # em _sample_texture_at_uvs / PIL). foreach_get evita a lista Python
+    # (``pixels[:]``) de 16,8M floats num atlas 2048².
+    buf = np.empty(w * h * 4, dtype=np.float32)
+    bpy_img.pixels.foreach_get(buf)
+    pixels = buf.reshape(h, w, 4)
     return np.flipud((pixels[:, :, :3] * 255).astype(np.uint8))
 
 
@@ -1192,6 +1198,7 @@ def remesh_textured_glb(
     target_faces: int,
     texture_size: int = 2048,
     repair: bool = True,
+    allow_rebake: bool = True,
 ) -> Path:
     """Simplifica GLB texturado sem esticar a textura.
 
@@ -1238,6 +1245,7 @@ def remesh_textured_glb(
             texture_size=texture_size,
             repair=repair,
             scratch=scratch,
+            allow_rebake=allow_rebake,
         )
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
@@ -1280,7 +1288,7 @@ def _meshopt_preserve_atlas(path_in: Path, target_faces: int, scratch: Path) -> 
             faces,
             target,
         )
-        return None, True
+        return out, True
 
     v_per_tri = glb_v_per_tri(out)
     if v_per_tri > MESHOPT_MAX_V_PER_TRI:
@@ -1290,10 +1298,18 @@ def _meshopt_preserve_atlas(path_in: Path, target_faces: int, scratch: Path) -> 
             v_per_tri,
             MESHOPT_MAX_V_PER_TRI,
         )
-        return None, True
+        return out, True
 
     log.info("LOD via meshopt: %d → %d faces (alvo %d), atlas preservado", n_source, faces, target)
     return out, False
+
+
+def _obj_aabb_extents(obj):
+    """Extensões (m) da AABB em espaço-mundo — guarda de erosão do rebake."""
+    from mathutils import Vector
+
+    pts = [obj.matrix_world @ Vector(c) for c in obj.bound_box]
+    return [max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3)]
 
 
 def _remesh_textured_session(
@@ -1304,6 +1320,7 @@ def _remesh_textured_session(
     texture_size: int,
     repair: bool,
     scratch: Path,
+    allow_rebake: bool = True,
 ) -> Path:
     """Corpo de ``remesh_textured_glb`` (sessão bpy + escolha de rota)."""
     import bpy
@@ -1342,11 +1359,39 @@ def _remesh_textured_session(
             break
 
     rebaked = False
-    if force_rebake and not has_arm:
+    if force_rebake and allow_rebake and not has_arm:
         source = _extract_source_data(obj)
         if source.uvs is not None and source.texture_image is not None:
-            obj, temp_pngs = _rebake_textured_lod(obj, source, effective_target, texture_size or 2048)
-            rebaked = True
+            before_ext = _obj_aabb_extents(obj)
+            cand_obj, cand_pngs = _rebake_textured_lod(obj, source, effective_target, texture_size or 2048)
+            after_ext = _obj_aabb_extents(cand_obj)
+            shrink = max(
+                (before_ext[i] - after_ext[i]) / before_ext[i] if before_ext[i] > 1e-6 else 0.0 for i in range(3)
+            )
+            if shrink > 0.05:
+                # Voxel remesh a um alvo baixo come features finas (scarecrow:
+                # z 2.19 → 1.85 m, -15%). O shape visível não pode mudar: fica
+                # o meshopt (piso de costuras, atlas intacto) — sem rebake.
+                log.warning(
+                    "rebake encolheu a AABB %.1f%% (>5%%) — rejeitado, mantém meshopt/collapse",
+                    shrink * 100.0,
+                )
+                for pth in cand_pngs:
+                    with contextlib.suppress(OSError):
+                        Path(pth).unlink(missing_ok=True)
+                clear_scene()
+                from aigamekit_shared.bpy_mesh import import_gltf as _import_gltf2
+
+                _import_gltf2(meshopt_glb or path_in)
+                obj = max(
+                    (o for o in bpy.context.scene.objects if o.type == "MESH"),
+                    key=lambda o: len(o.data.polygons),
+                )
+                bpy.context.view_layer.objects.active = obj
+                obj.select_set(True)
+            else:
+                obj, temp_pngs = cand_obj, cand_pngs
+                rebaked = True
         else:
             log.warning("Alvo abaixo do piso de costuras mas sem UVs/textura para rebake — COLLAPSE cru")
 
@@ -1404,6 +1449,23 @@ def _remesh_textured_session(
                     n_after,
                     effective_target,
                 )
+
+    # Pós-condição do orçamento: nenhuma rota (meshopt/COLLAPSE/rebake) garante
+    # o alvo. Se ficou acima de +5%, uma última passagem sem proteção; se ainda
+    # assim não descer, fica registado com o desvio (o GameAssets valida).
+    n_final = len(obj.data.polygons)
+    if allow_rebake and not has_arm and n_final > int(target_faces * 1.05):
+        simplify_mesh_object(obj, target_faces, repair=False)
+        n_red = len(obj.data.polygons)
+        if n_red > int(target_faces * 1.05):
+            log.warning(
+                "LOD acima do alvo após segunda passagem: %d faces (alvo %d, +%.0f%%)",
+                n_red,
+                target_faces,
+                (100.0 * n_red / max(1, target_faces)) - 100.0,
+            )
+        else:
+            log.info("LOD re-decimado para o orçamento: %d → %d faces (alvo %d)", n_final, n_red, target_faces)
 
     mesh = obj.data
 

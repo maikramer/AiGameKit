@@ -60,7 +60,9 @@ class TestMeshoptPreserveAtlas:
         monkeypatch.setattr("text3d.utils.gltf_finish.meshopt_simplify_glb", floored_simplify)
         out, floored = mrt._meshopt_preserve_atlas(glb, 1440, tmp_path)
 
-        assert out is None
+        # O output fica disponível: com allow_rebake=False (LOD0/guarda de
+        # silhueta) usa-se este meshopt em vez de rebakar.
+        assert out is not None and Path(out).is_file()
         assert floored is True
 
     def test_rebakes_when_preserved_atlas_costs_too_many_verts(self, tmp_path: Path, monkeypatch) -> None:
@@ -77,7 +79,7 @@ class TestMeshoptPreserveAtlas:
         monkeypatch.setattr(gltf_finish, "glb_v_per_tri", lambda p: 1.6)
         out, floored = mrt._meshopt_preserve_atlas(glb, 1440, tmp_path)
 
-        assert out is None
+        assert out is not None and Path(out).is_file()
         assert floored is True
 
     def test_v_per_tri_cap_leaves_headroom_for_export_inflation(self) -> None:
