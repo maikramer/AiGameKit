@@ -224,6 +224,37 @@ def _row_text3d_from_dict(raw: Any, asset_id: str) -> RowText3D | None:
 
 
 @dataclass(frozen=True)
+class RowRefine:
+    """Override do stage ``refine`` (Hi3D) por asset (bloco ``refine:``).
+
+    ``enabled: false`` salta o Hi3D nesse asset. Uso típico: vegetação de ramos
+    finos, em que o refine re-sintetiza centenas de ramos soltos e o atlas do
+    paint explode em charts — o LOD0 não desce ao orçamento da categoria
+    (dead_willow: 45k faces contra o alvo de 12k). O shape/clean ficam como
+    estão; a colisão passa a sair do ``_clean`` (não de um ``_refined`` órfão).
+    """
+
+    enabled: bool | None = None
+
+
+def _row_refine_from_dict(raw: Any, asset_id: str) -> RowRefine | None:
+    """Parse ``refine:`` por asset (bool ou ``{enabled: bool}``); ``None`` se ausente."""
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return RowRefine(enabled=raw)
+    if not isinstance(raw, dict):
+        raise ValueError(f"asset {asset_id!r}: refine deve ser bool ou mapeamento")
+    unknown = set(raw) - {"enabled"}
+    if unknown:
+        raise ValueError(f"asset {asset_id!r} refine: chaves desconhecidas {sorted(unknown)} (válida: enabled)")
+    en = raw.get("enabled")
+    if en is not None and not isinstance(en, bool):
+        raise ValueError(f"asset {asset_id!r} refine.enabled deve ser bool")
+    return RowRefine(enabled=en)
+
+
+@dataclass(frozen=True)
 class ManifestRow:
     id: str
     idea: str
@@ -274,6 +305,8 @@ class ManifestRow:
     # (budget do mesh que entra no unwrap/paint). Edifícios com muitos charts
     # (witch_hut: 262k → xatlas >180 s) pedem um budget menor por linha.
     paint3d: dict[str, Any] | None = None
+    # Override do stage ``refine`` (Hi3D) por asset (bloco ``refine:``).
+    refine: RowRefine | None = None
 
 
 def effective_image_source(profile: GameProfile, row: ManifestRow) -> str:
@@ -379,6 +412,7 @@ def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
 
         row_text3d = _row_text3d_from_dict(entry.get("text3d"), str(entry.get("id")))
         row_collision = _row_collision_from_dict(entry.get("collision"), str(entry.get("id")))
+        row_refine = _row_refine_from_dict(entry.get("refine"), str(entry.get("id")))
         row_paint3d = entry.get("paint3d")
         if row_paint3d is not None and not isinstance(row_paint3d, dict):
             raise ValueError(f"asset {entry.get('id')!r}: paint3d deve ser um mapa")
@@ -424,6 +458,7 @@ def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
                 text3d=row_text3d,
                 collision=row_collision,
                 paint3d=row_paint3d,
+                refine=row_refine,
             )
         )
     if not rows:

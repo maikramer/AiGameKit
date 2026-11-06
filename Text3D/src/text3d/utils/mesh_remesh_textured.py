@@ -1199,6 +1199,7 @@ def remesh_textured_glb(
     texture_size: int = 2048,
     repair: bool = True,
     allow_rebake: bool = True,
+    max_aabb_shrink: float = 0.05,
 ) -> Path:
     """Simplifica GLB texturado sem esticar a textura.
 
@@ -1221,6 +1222,11 @@ def remesh_textured_glb(
         texture_size: Resolução da textura de saída.
         repair: Aplica reparo pré/pós-decimação (default True). Use False
             para decimação crua (debug/inputs já limpos).
+        allow_rebake: Permite a rota de atlas refeito quando o alvo fica abaixo
+            do piso de costuras.
+        max_aabb_shrink: Queda máxima da AABB aceite no rebake (fração). 5% é o
+            default; vegetação/palmeiras com ramos finos aceitam mais sem perder
+            a silhueta útil (ver ``mesh_lod.aabb_shrink_tolerance``).
 
     Returns:
         Path do ficheiro escrito.
@@ -1246,6 +1252,7 @@ def remesh_textured_glb(
             repair=repair,
             scratch=scratch,
             allow_rebake=allow_rebake,
+            max_aabb_shrink=max_aabb_shrink,
         )
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
@@ -1321,6 +1328,7 @@ def _remesh_textured_session(
     repair: bool,
     scratch: Path,
     allow_rebake: bool = True,
+    max_aabb_shrink: float = 0.05,
 ) -> Path:
     """Corpo de ``remesh_textured_glb`` (sessão bpy + escolha de rota)."""
     import bpy
@@ -1368,13 +1376,16 @@ def _remesh_textured_session(
             shrink = max(
                 (before_ext[i] - after_ext[i]) / before_ext[i] if before_ext[i] > 1e-6 else 0.0 for i in range(3)
             )
-            if shrink > 0.05:
+            if shrink > max_aabb_shrink:
                 # Voxel remesh a um alvo baixo come features finas (scarecrow:
                 # z 2.19 → 1.85 m, -15%). O shape visível não pode mudar: fica
                 # o meshopt (piso de costuras, atlas intacto) — sem rebake.
+                # A tolerância é da categoria (``mesh_lod.aabb_shrink_tolerance``):
+                # vegetação com ramos finos aceita mais sem perder a silhueta.
                 log.warning(
-                    "rebake encolheu a AABB %.1f%% (>5%%) — rejeitado, mantém meshopt/collapse",
+                    "rebake encolheu a AABB %.1f%% (>%.0f%%) — rejeitado, mantém meshopt/collapse",
                     shrink * 100.0,
+                    max_aabb_shrink * 100.0,
                 )
                 for pth in cand_pngs:
                     with contextlib.suppress(OSError):

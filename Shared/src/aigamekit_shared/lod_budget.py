@@ -29,6 +29,27 @@ LOD_FACES_ABS_MIN = 800
 LOD_TEX_SNAP = 64
 LOD_TEX_MIN = 64
 
+# Tolerância de erosão da AABB nos LODs (rebake e guarda de silhueta).
+#
+# 5% é o default: uma malha fina (straw/scarecrow) decimada abaixo do piso de
+# costuras perde 15-17% de altura e o shape visível manda. Vegetação com ramos
+# finos (dead_willow) define a caixa pelas pontas: qualquer decimação encolhe
+# >5%, o rebake é rejeitado e o LOD0 fica no piso de costuras (~18k), acima do
+# orçamento da categoria (vegetation 10k → LOD0 12k) — o asset falha a
+# validação por faces e por v/tri. A 15% os ramos interiores perdem-se mas a
+# silhueta útil mantém-se, e o LOD cabe no contrato.
+LOD_AABB_SHRINK_TOL = 0.05
+LOD_AABB_SHRINK_TOL_BY_CATEGORY = {
+    "vegetation": 0.15,
+    "tree": 0.15,
+}
+
+
+def aabb_shrink_tolerance(category: str | None) -> float:
+    """Tolerância de erosão da AABB para a categoria (fração, 0.05 default)."""
+    cat = (category or "").strip().lower()
+    return float(LOD_AABB_SHRINK_TOL_BY_CATEGORY.get(cat, LOD_AABB_SHRINK_TOL))
+
 
 def silhouette_equivalent_meters(size_m: list[float] | tuple[float, ...] | None) -> float | None:
     """Silhueta equivalente ``sqrt(d1·d2)`` dos dois eixos maiores de ``size_m``.

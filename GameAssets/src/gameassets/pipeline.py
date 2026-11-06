@@ -237,6 +237,7 @@ def collision_source(
     lod0_p: Path,
     *,
     rigged: bool,
+    allow_refined: bool = True,
 ) -> Path:
     """Escolhe a malha de onde nasce a colisão.
 
@@ -259,7 +260,12 @@ def collision_source(
             if cand and cand.is_file():
                 return cand
         return mesh_final
-    for cand in (_refined_existing(mesh_final), _clean_existing(mesh_final), painted_p, lod0_p):
+    for cand in (
+        _refined_existing(mesh_final) if allow_refined else None,
+        _clean_existing(mesh_final),
+        painted_p,
+        lod0_p,
+    ):
         if cand and cand.is_file():
             return cand
     return mesh_final
@@ -326,6 +332,16 @@ def is_tree_like_asset(row: ManifestRow) -> bool:
         return True
     blob = f"{row.id} {row.idea or ''}"
     return bool(_TREE_LIKE_NAME_RE.search(blob))
+
+
+def _row_refine_disabled(row: ManifestRow | None) -> bool:
+    """True quando o manifest desliga o Hi3D neste asset (``refine: false``).
+
+    Vegetação de ramos finos (dead_willow) sai do refine com centenas de ramos
+    soltos: o atlas do paint fragmenta-se e o LOD0 não desce ao orçamento da
+    categoria. Desligado, o paint e o LOD partem do ``clean`` (mais contínuo).
+    """
+    return bool(row is not None and row.refine is not None and row.refine.enabled is False)
 
 
 def wants_split_at_height(profile: GameProfile, row: ManifestRow) -> bool:
@@ -1332,6 +1348,13 @@ def _run_refine_stage(
 
     rp = profile.refine or RefineProfile()
     if not rp.enabled:
+        return None
+
+    # Override do manifest (``refine: false``): não corre o Hi3D e **não** reusa
+    # um ``_refined`` órfão de uma passagem anterior — senão o LOD volta a
+    # partir da geometria errada (o ``collision_source`` também o ignora).
+    if _row_refine_disabled(row):
+        log.info("refine: skip %s (desligado no manifest)", row.id if row is not None else mesh_final.stem)
         return None
 
     # Riggados e personagens/criaturas: o Hi3D re-sintetiza a forma a partir da
@@ -2407,6 +2430,8 @@ def _run_static_lod_stages(
             str(lod_min1),
             "--min-faces-lod2",
             str(lod_min2),
+            "--category",
+            str(row.category or row.kind or ""),
         ]
         if texture_size_lod0 is not None and int(texture_size_lod0) > 0:
             lod_argv.extend(["--texture-size", str(int(texture_size_lod0))])
@@ -2599,6 +2624,8 @@ def _run_split_lod_stages(
             str(max(stump_target // 2, 300)),
             "--min-faces-lod2",
             str(max(stump_target // 4, 100)),
+            "--category",
+            str(row.category or row.kind or ""),
         ]
         s_stump = run_stage("lod-stump", stump_lod_argv, None)
         res.stages.append(s_stump)
@@ -2627,6 +2654,8 @@ def _run_split_lod_stages(
             str(max(top_target // 2, 400)),
             "--min-faces-lod2",
             str(max(top_target // 4, 150)),
+            "--category",
+            str(row.category or row.kind or ""),
         ]
         s_top = run_stage("lod-top", top_lod_argv, None)
         res.stages.append(s_top)
@@ -3084,7 +3113,13 @@ def run_master_pipeline(
         if coll_p.is_file() and not force:
             res.stages.append(StageResult("collision", True, 0.0, "skipped (collision existente)", coll_p))
         else:
-            coll_src = collision_source(mesh_final, painted_p, lod0_p, rigged=bool(rig_source))
+            coll_src = collision_source(
+                mesh_final,
+                painted_p,
+                lod0_p,
+                rigged=bool(rig_source),
+                allow_refined=not _row_refine_disabled(row),
+            )
             from .manifest import effective_collision_args
 
             coll_opts = effective_collision_args(profile, row)

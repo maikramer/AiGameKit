@@ -219,7 +219,7 @@ class TestRunRefineStage:
             child_env={},
             manifest_dir=mesh.parent.parent,
             force=bool(kw.get("force", False)),
-            row=None,
+            row=kw.get("row"),
         )
 
     def test_disabled_returns_none(self, tmp_path: Path) -> None:
@@ -315,6 +315,20 @@ class TestRunRefineStage:
         self._call(mesh, clean, _profile(), force=True)
         assert called == [1]
 
+    def test_row_disabled_ignores_existing_refined(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``refine: false`` na row não reusa um ``_refined`` órfão da passagem anterior."""
+        from gameassets.manifest import ManifestRow, RowRefine
+
+        mesh, clean, _img = self._setup(tmp_path, monkeypatch)
+        _refined_path(mesh).write_bytes(b"glb")
+        called: list[int] = []
+        monkeypatch.setattr(P, "_bin_or_none", lambda *_a: "/bin/hi3d")
+        monkeypatch.setattr(P, "run_cmd", lambda *a, **k: called.append(1))
+        monkeypatch.setattr(P, "_glb_has_geometry", lambda _p: True)
+        row = ManifestRow(id="dead_willow", idea="", kind=None, generate_3d=True, refine=RowRefine(enabled=False))
+        assert self._call(mesh, clean, _profile(), row=row) is None
+        assert called == []
+
 
 class TestEnsureCleanReturnsRefined:
     def test_clean_passthrough_when_refine_unavailable(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -396,3 +410,39 @@ class TestCheckGlbFailures:
 
     def test_non_json_returns_empty(self) -> None:
         assert P._check_glb_failures("Traceback: boom") == []
+
+
+class TestRowRefineOverride:
+    """``refine: false`` no manifest desliga o Hi3D só nesse asset.
+
+    O dead_willow (ramos finos) saía do refine com centenas de ramos soltos: o
+    atlas do paint fragmentava-se e o LOD0 ficava em 33-45k faces contra o
+    alvo de 12k da categoria.
+    """
+
+    @staticmethod
+    def _row(**kw: object) -> object:
+        from gameassets.manifest import ManifestRow
+
+        return ManifestRow(id="dead_willow", idea="", kind=None, generate_3d=True, **kw)
+
+    def test_absent_does_not_disable(self) -> None:
+        assert P._row_refine_disabled(self._row()) is False
+
+    def test_row_false_disables(self) -> None:
+        from gameassets.manifest import RowRefine
+
+        assert P._row_refine_disabled(self._row(refine=RowRefine(enabled=False))) is True
+
+    def test_row_true_keeps_refine(self) -> None:
+        from gameassets.manifest import RowRefine
+
+        assert P._row_refine_disabled(self._row(refine=RowRefine(enabled=True))) is False
+
+    def test_yaml_bool_and_mapping_parse(self) -> None:
+        from gameassets.manifest import _row_refine_from_dict
+
+        assert _row_refine_from_dict(False, "x") is not None
+        assert _row_refine_from_dict(False, "x").enabled is False
+        assert _row_refine_from_dict({"enabled": False}, "x").enabled is False
+        assert _row_refine_from_dict(None, "x") is None

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from aigamekit_shared.lod_budget import (
+    LOD_AABB_SHRINK_TOL,
     LOD_FACE_SCALE_CEIL,
     LOD_FACE_SCALE_FLOOR,
     LOD_FACES_ABS_MIN,
+    aabb_shrink_tolerance,
     lod_face_scale,
     lod_texture_ladder,
     lod_texture_size_for_char,
@@ -95,3 +97,24 @@ class TestLodTextureLadder:
 class TestLodFacesAbsMin:
     def test_constant(self) -> None:
         assert LOD_FACES_ABS_MIN == 800
+
+
+class TestAabbShrinkTolerance:
+    """A guarda de silhueta do LOD aceita mais erosão em vegetação.
+
+    O dead_willow (ramos finos que definem a AABB) foi o caso real: a 5% o
+    rebake era rejeitado e o LOD0 ficava no piso de costuras (18k, v/tri 1,63)
+    em vez do alvo de 12k — falhava a validação da categoria.
+    """
+
+    def test_default(self) -> None:
+        assert LOD_AABB_SHRINK_TOL == 0.05
+        assert aabb_shrink_tolerance(None) == 0.05
+        assert aabb_shrink_tolerance("humanoid") == 0.05
+
+    def test_vegetation(self) -> None:
+        assert aabb_shrink_tolerance("vegetation") == 0.15
+        assert aabb_shrink_tolerance("tree") == 0.15
+
+    def test_case_and_space_insensitive(self) -> None:
+        assert aabb_shrink_tolerance(" Vegetation ") == 0.15

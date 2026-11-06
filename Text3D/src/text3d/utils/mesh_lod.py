@@ -967,6 +967,11 @@ def _generate_lod_glb_triplet_bpy_collapse(
     return out_paths
 
 
+# A tolerância de erosão da AABB (5% default, 15% em vegetação) vive no Shared,
+# com o resto do orçamento de LOD: ``aabb_shrink_tolerance``.
+from aigamekit_shared.lod_budget import aabb_shrink_tolerance
+
+
 def generate_lod_textured_glb_triplet(
     painted_path: Path,
     output_dir: Path,
@@ -986,6 +991,7 @@ def generate_lod_textured_glb_triplet(
     skin_source: Path | None = None,
     animation_source: Path | None = None,
     rig_max_level: int = DEFAULT_RIG_MAX_LEVEL,
+    category: str | None = None,
 ) -> list[Path]:
     """Gera três GLB texturizados por decimação com preservação de UV.
 
@@ -1000,6 +1006,8 @@ def generate_lod_textured_glb_triplet(
     ``aigamekit_shared.skin_transfer`` (KDTree weights + armature + anims).
     ``animation_source``: GLB com clips quando ``skin_source`` não tem animações
     (ex.: ``rigged_hi`` + ``*_animated.glb``).
+    ``category``: afina a tolerância de erosão da AABB (``aabb_shrink_tolerance``):
+    vegetação/palmeiras aceitam 15% para o rebake poder chegar ao alvo.
     """
     from aigamekit_shared.lod_budget import lod_texture_ladder
     from text3d.utils.mesh_remesh_textured import _clamp_decimate_target, remesh_textured_glb
@@ -1062,17 +1070,29 @@ def generate_lod_textured_glb_triplet(
         )
 
     out_paths: list[Path] = []
+    shrink_tol = aabb_shrink_tolerance(category)
 
     lod0_path = output_dir / f"{basename}_lod0.glb"
     # Sempre passar por remesh_textured (mesmo sem decimate) para forçar
     # downscale de atlas — copy2 do painted deixava lod0/1/2 com a mesma tex.
-    remesh_textured_glb(painted, lod0_path, target_faces=lod0_target, texture_size=tex0, allow_rebake=False)
+    # ``allow_rebake`` só dispara quando o meshopt não atinge o alvo (piso de
+    # costuras): aí o atlas refeito é a única rota para o LOD0 caber no
+    # orçamento da categoria, e a guarda de AABB (com a tolerância da
+    # categoria) continua a proteger a silhueta.
+    remesh_textured_glb(
+        painted,
+        lod0_path,
+        target_faces=lod0_target,
+        texture_size=tex0,
+        allow_rebake=True,
+        max_aabb_shrink=shrink_tol,
+    )
     out_paths.append(lod0_path)
 
     # Guarda de silhueta: decimar malha fina (straw/scarecrow) abaixo do piso
-    # de costuras erode a AABB (z -15-17%). Se o LOD1/2 encolher >5% vs o LOD0,
-    # refaz com o alvo do LOD0 e sem rebake — o shape visível manda; a ladder
-    # achata nesse asset (o aviso "achatada" regista).
+    # de costuras erode a AABB (z -15-17%). Se o LOD1/2 encolher além da
+    # tolerância da categoria vs o LOD0, refaz com o alvo do LOD0 e sem rebake
+    # — o shape visível manda; a ladder achata nesse asset (o aviso regista).
     from aigamekit_shared.glb_verify import glb_world_bounds
 
     def _ext(b):
@@ -1090,9 +1110,15 @@ def generate_lod_textured_glb_triplet(
         (2, lod2_target, tex2),
     ):
         path = output_dir / f"{basename}_lod{level}.glb"
-        remesh_textured_glb(painted, path, target_faces=target, texture_size=tex_size)
+        remesh_textured_glb(
+            painted,
+            path,
+            target_faces=target,
+            texture_size=tex_size,
+            max_aabb_shrink=shrink_tol,
+        )
         shrink = _shrink(b_lod0, glb_world_bounds(path))
-        if shrink > 0.05:
+        if shrink > shrink_tol:
             log.warning(
                 "LOD%d encolheu %.0f%% vs LOD0 — refaz com alvo do LOD0 (sem decimação agressiva)",
                 level,
@@ -1104,6 +1130,7 @@ def generate_lod_textured_glb_triplet(
                 target_faces=lod0_target,
                 texture_size=tex_size,
                 allow_rebake=False,
+                max_aabb_shrink=shrink_tol,
             )
         out_paths.append(path)
 

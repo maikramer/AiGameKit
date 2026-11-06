@@ -2354,6 +2354,16 @@ def gpu_processes_cmd() -> None:
         "percorre e recompõe todos os nós da cena por frame). 0 = só o LOD0 anima."
     ),
 )
+@click.option(
+    "--category",
+    type=str,
+    default=None,
+    help=(
+        "Categoria da row (vegetation/tree…): afina a tolerância de erosão da "
+        "AABB nos LODs. Vegetação aceita 15% em vez dos 5% — sem isso o rebake "
+        "é rejeitado e o LOD0 fica no piso de costuras, acima do orçamento."
+    ),
+)
 def lod_cmd(
     input_mesh: Path,
     output_dir: Path,
@@ -2374,6 +2384,7 @@ def lod_cmd(
     skin_source: Path | None,
     animation_source: Path | None,
     rig_max_level: int,
+    category: str | None,
 ) -> None:
     """Gera três GLB com níveis de detalhe (LOD0=cheio, LOD1/LOD2 decimados).
 
@@ -2406,6 +2417,7 @@ def lod_cmd(
                 skin_source=skin_source,
                 animation_source=animation_source,
                 rig_max_level=rig_max_level,
+                category=category,
             )
         else:
             paths = generate_lod_glb_triplet(
