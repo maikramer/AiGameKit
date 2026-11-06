@@ -5,7 +5,72 @@ as tags `v<N>` são snapshots do monorepo — cada package mantém a sua própri
 (`pyproject.toml` / `Cargo.toml` / `package.json`). Pacotes individuais com changelog
 próprio: [`Materialize/CHANGELOG.md`](Materialize/CHANGELOG.md).
 
-## [Unreleased]
+## [v0.7.0] — 2026-11-06
+
+Foco: **a malha volta a ser o produto** — o refinamento Hi3D entra como stage,
+o shape recupera o sampling e a pose certa, e o paint/LOD deixam de custar
+costuras.
+
+### Added — Hi3D (refinamento image-conditioned)
+
+- **Ferramenta nova `Hi3D/`** (Hi3D v1.0 / SPARC3D): re-mesha o shape com a
+  imagem de referência como condição. É o stage `refine` do batch, default ON,
+  e corre como worker com protocolo JSONL próprio (`Hi3D/src/hi3d/ums.py`).
+- **Único venv Python 3.10 do monorepo** — o `tools.yaml` declara piso e teto
+  `3.10` porque o upstream só mediu 3.10.12 / torch 2.5.0+cu124.
+- **Admit de 4300 MiB** a 512³/25 passos com residência por fase (3,74 GiB de
+  pico, ~60 s por asset); `--no-staging` desce a 0,9 GiB a ~137 s.
+- `hi3d download-model` (~7,7 GB de pesos), `./install.sh hi3d` e
+  `make test-hi3d`.
+- Estudo: [`docs/findings/HI3D_REFINE_FINDINGS.md`](docs/findings/HI3D_REFINE_FINDINGS.md).
+
+### Added — GameAssets
+
+- **Stage `refine` integrado no pipeline**, com gates: `humanoid`/`creature` e
+  tudo o que vai ser rigado fica de fora — o Hi3D re-sintetiza a forma e muda a
+  pose, e o rigging espera a A-pose. A entrada leva teto de 1,2M faces (o
+  spconv estoura a VRAM de 6 GB).
+- **Imagem de referência em sidecar** `<stem>_input.png`: um `text3d generate`
+  manual passa a ter condição para o refine.
+- **Overrides por linha** no bloco `paint3d:` do manifest (faces a pintar,
+  vistas, resolução) e flag `--pbr-enrich`.
+- O `pipeline:` do manifest passa a filtrar mesmo lod/collision; o `resume`
+  confirma que o artefacto existe antes de marcar a linha como ok; o `doctor`
+  verifica o Hi3D.
+
+### Changed — Text3D
+
+- **A-pose oficial sem dedos** (21 ossos): os 30 ossos de dedo do upstream
+  abrem em profundidade enquanto as referências saem com a palma virada à
+  câmara, e o modelo construía a mão duas vezes — mãos «balão» e 7–9 dedos.
+  Tabela de presets em [`docs/OMNI_SHAPE_FINDINGS.md`](docs/OMNI_SHAPE_FINDINGS.md).
+- **Pisos de octree por categoria**: humanoid 384, creature 256, edifícios 576,
+  teto 608 e 128 células no eixo fino (a casca deixava de perfurar).
+- **`text3d refine` no CLI** (Hi3D pelo vramd; in-process sem ele), alvos
+  explícitos de LOD1/LOD2 e a identidade do esqueleto no fingerprint do resume.
+- **Finish:** binário instalado em vez de `npx --yes`, export a q92, KTX2
+  descomprimido antes do bpy e sem roundtrip quando NORMAL+TANGENT já existem.
+- **Ladder com guarda de silhueta**: se o LOD encolher >5% da AABB, refaz com o
+  alvo do LOD0; o remesh troca listas Python de 16,8M floats por `foreach_get`.
+- **Decode:** marching cubes recorta à AABB da máscara antes de ir para NumPy.
+
+### Changed — Paint3D
+
+- **xatlas em subprocesso com timeout de 300 s** — a chamada C não se
+  interrompe e o refine produz malhas que a penduram (>170 s); em timeout a
+  linha falha e o pack continua.
+- **Bake de 6 canais num só passe** (albedo + mr); o `mr` deixa de passar pelo
+  Real-ESRGAN (`PAINT3D_ENHANCE_MR=1` repõe); gutter de costuras por resolução.
+- **Frame correto**: Blender Z-up → glTF Y-up para as câmaras do Hunyuan, sem
+  rodar duas vezes inputs já baked.
+- `PAINT3D_DEBUG_DIR` despeja as vistas (normal/posição/albedo/mr).
+
+### Fixed — Rigging3D
+
+- **Cotovelo falso do SkinTokens**: o joint 2–3 cm fora da linha ombro→pulso
+  aparecia invertido depois do retarget («cotovelo virado»). O `bone_repair`
+  põe-no na linha e preserva só a dobra para trás, que é a única natural numa
+  A-pose; acima de 45° assume braço dobrado e não toca.
 
 ### Changed — SDNQ 0.2.9
 
@@ -25,6 +90,14 @@ próprio: [`Materialize/CHANGELOG.md`](Materialize/CHANGELOG.md).
 - Pins `sdnq>=0.2.9`; repo irmão `vramd` 0.4.0 com os fatores novos
   (`uint4-hq` 0.38, int3 0.24, int2 0.18).
 - Estudo: [`docs/findings/SDNQ_029_FINDINGS.md`](docs/findings/SDNQ_029_FINDINGS.md).
+
+### Changed — Shared
+
+- **19 categorias de áudio** (novas `vocal`, `movement`, `collectible`), cada
+  uma com o seu `audio_kind`: sem ele a geração saía sem hints e o pipeline não
+  sabia que um passo é UM passo, não uma sequência.
+- **Fatores de VRAM dos tiers novos** no `lowvram` (0,38 / 0,24 / 0,18) e
+  orçamento do decode com piso soft quando o orçamento o alcança.
 
 ## [v0.6.0] — 2026-10-08
 
