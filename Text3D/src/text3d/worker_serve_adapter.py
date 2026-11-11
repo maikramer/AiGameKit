@@ -7,6 +7,7 @@ Herdam de :class:`aigamekit_shared.worker_serve_adapter_base.WorkerAdapter`
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from aigamekit_shared.worker_serve_adapter_base import WorkerAdapter
@@ -43,6 +44,17 @@ class Adapter(WorkerAdapter):
         )
 
     def unload(self, model: Any) -> None:
-        unload = getattr(model, "unload_hunyuan", None) or getattr(model, "unload", None)
-        if callable(unload):
-            unload()
+        # Contrato do WorkerAdapter: idempotente e à prova de exceções. Um
+        # unload que falhe não pode deixar ~4 GiB no allocator (a fase paint3d
+        # seguinte era recusada por VRAM).
+        with contextlib.suppress(Exception):
+            unload = getattr(model, "unload_hunyuan", None) or getattr(model, "unload", None)
+            if callable(unload):
+                unload()
+        try:
+            import torch
+
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+        except Exception:
+            pass

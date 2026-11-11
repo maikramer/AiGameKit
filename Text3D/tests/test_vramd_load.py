@@ -36,3 +36,43 @@ class TestMapUmsLoadKwargs:
     def test_drops_legacy_subfolder(self) -> None:
         kw = map_vramd_load_kwargs({"hunyuan_subfolder": "hunyuan3d-dit-v2-1"})
         assert "hunyuan_subfolder" not in kw
+
+
+class TestAdapterUnload:
+    """O unload do worker tem de libertar a VRAM mesmo se o teardown falhar."""
+
+    def test_cache_released_when_unload_raises(self, monkeypatch) -> None:
+        import torch
+
+        from text3d.worker_serve_adapter import Adapter
+
+        calls: list[str] = []
+        monkeypatch.setattr(torch.cuda, "empty_cache", lambda: calls.append("empty"))
+        monkeypatch.setattr(torch.cuda, "ipc_collect", lambda: calls.append("ipc"))
+
+        class _Model:
+            def unload_hunyuan(self) -> None:
+                raise RuntimeError("teardown falhou")
+
+        # Contrato do WorkerAdapter: à prova de exceções.
+        Adapter().unload(_Model())
+        assert calls == ["empty", "ipc"]
+
+    def test_unload_prefers_hunyuan_method(self, monkeypatch) -> None:
+        import torch
+
+        from text3d.worker_serve_adapter import Adapter
+
+        monkeypatch.setattr(torch.cuda, "empty_cache", lambda: None)
+        monkeypatch.setattr(torch.cuda, "ipc_collect", lambda: None)
+        seen: list[str] = []
+
+        class _Model:
+            def unload_hunyuan(self) -> None:
+                seen.append("hunyuan")
+
+            def unload(self) -> None:
+                seen.append("generic")
+
+        Adapter().unload(_Model())
+        assert seen == ["hunyuan"]
