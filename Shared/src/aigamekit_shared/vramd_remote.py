@@ -15,6 +15,8 @@ Env:
 from __future__ import annotations
 
 import base64
+import binascii
+import contextlib
 import fnmatch
 import hashlib
 import json
@@ -40,6 +42,10 @@ except ImportError:  # pragma: no cover
 
 CHUNK_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+# Jobs submetidos à espera de ``wait``. Um batch que submete e nunca espera
+# (crash do caller) não pode deixar ligações/sandboxes referenciados para
+# sempre; os mais antigos são fechados (o sandbox fica para o TTL do servidor).
+PENDING_MAX = 256
 SPECS_PATH = Path(__file__).resolve().parent / "data" / "backends.yaml"
 
 
@@ -335,6 +341,24 @@ class StagedJob:
             close()
 
 
+def reconnect(staged: StagedJob) -> bool:
+    """Reabre a ligação do staging no mesmo servidor.
+
+    O servidor fecha ligações persistentes ao fim de ``VRAMD_CLIENT_IDLE_TIMEOUT_SEC``
+    (300 s por omissão). Um batch pode submeter uma wave e só chamar ``wait``
+    muito depois; sem reconexão o job (que está vivo) era reportado como
+    ``VRAMD_REMOTE_DOWN``. Só o cliente binário sabe o endpoint e o handshake;
+    o caminho legacy fica como está.
+    """
+    if TransferClient is None or not isinstance(staged.client, TransferClient):
+        return False
+    try:
+        staged.client.reconnect()
+    except (TransferError, OSError):
+        return False
+    return True
+
+
 def _resolve_local(value: str | os.PathLike[str]) -> Path:
     path = Path(value).expanduser()
     return path if path.is_absolute() else (Path.cwd() / path)
@@ -575,8 +599,11 @@ def finalize(staged: StagedJob, response: Any) -> Any:
             names = staged.client.list(staged.job, "out")
         except (RemoteStagingError, TransferError):
             names = []
+        # `list` devolve nomes soltos de `out/`; um template expandido com
+        # `{output}` traria o path absoluto e `fnmatch` nunca casaria.
+        basename_pattern = Path(pattern).name
         for name in names:
-            if name in known or not fnmatch.fnmatch(name, pattern):
+            if name in known or not fnmatch.fnmatch(name, basename_pattern):
                 continue
             staged.client.get_file(staged.job, f"out/{name}", local_dir / name)
             known.add(name)

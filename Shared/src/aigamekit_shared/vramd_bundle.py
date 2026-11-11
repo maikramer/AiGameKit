@@ -378,6 +378,8 @@ def ensure_session(backends: Iterable[str] | None = None) -> str | None:
             raise BundleError(
                 f"session-open recusado: {response.get('error') or response}"
             )
+        if not response.get("session"):
+            raise BundleError(f"session-open sem id de sessão: {response}")
         previous = _SESSION
         _SESSION = {
             "session": str(response["session"]),

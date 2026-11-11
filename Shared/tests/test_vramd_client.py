@@ -372,3 +372,63 @@ class TestGpuTarget:
         response = ms.wait_vramd_job("j1", remote=True)
         assert response is not None
         assert response["error_code"] == "VRAMD_REMOTE_NOT_CONFIGURED"
+
+    def test_wait_reconnects_after_idle_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """O servidor fecha a ligação ociosa entre submit e wait; o job está vivo."""
+        from aigamekit_shared import vramd_remote
+
+        class Flaky:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def rpc(self, request, *, timeout=60.0):
+                self.calls += 1
+                if self.calls == 1:
+                    raise vramd_remote.TransferError("servidor fechou a ligação antes do END")
+                return {"status": "ok", "output": "/remote/out/x.glb"}
+
+        flaky = Flaky()
+        staged = vramd_remote.StagedJob(client=flaky, job="a" * 32, root="/remote", request={})
+        reconnects: list[object] = []
+        monkeypatch.setattr(vramd_remote, "remote_enabled", lambda: True)
+        monkeypatch.setattr(vramd_remote, "peek", lambda _job: staged)
+        monkeypatch.setattr(vramd_remote, "reconnect", lambda item: reconnects.append(item) or True)
+        monkeypatch.setattr(vramd_remote, "take", lambda _job: None)
+        monkeypatch.setattr(vramd_remote, "finalize", lambda _staged, response: response)
+
+        response = ms.wait_vramd_job("a" * 32, timeout_sec=1.0, remote=True)
+
+        assert response is not None and response["status"] == "ok"
+        assert flaky.calls == 2
+        assert reconnects == [staged]
+
+
+def _serve_once(sock_path: Path, response: bytes) -> threading.Thread:
+    """Mini-servidor de uma ligação: lê uma linha e responde ``response``."""
+
+    def _run() -> None:
+        srv, _info = endpoint.listen(sock_path)
+        srv.settimeout(5.0)
+        try:
+            conn, _ = srv.accept()
+            with conn:
+                data = b""
+                while b"\n" not in data:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+                conn.sendall(response)
+        finally:
+            srv.close()
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    return thread
+
+
+def _wait_for_path(path: Path) -> None:
+    deadline = time.monotonic() + 2.0
+    while not path.exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert path.exists()

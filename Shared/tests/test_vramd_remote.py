@@ -217,6 +217,22 @@ def test_finalize_downloads_globbed_extras(tmp_path: Path, monkeypatch, specs) -
     assert not (tmp_path / "hero_notes.txt").exists()
 
 
+def test_finalize_glob_template_with_output_path(tmp_path: Path, monkeypatch, specs) -> None:
+    """Um glob expandido com `{output}` é absoluto; `list` devolve nomes soltos."""
+    spec = BackendRemoteSpec(inputs=(), outputs=("output",), sidecar_globs=("{output}_*.png",))
+    monkeypatch.setattr(vramd_remote, "spec_for", lambda _backend: spec)
+    client = FakeClient()
+    out = tmp_path / "hero.png"
+    client.files["out/hero.png"] = b"0"
+    client.files["out/hero.png_1.png"] = b"1"
+
+    staged = vramd_remote.stage_request("text2d", {"output": str(out)}, client=client)
+    finalize(staged, {"status": "ok", "output": f"{client.root}/out/hero.png"})
+
+    assert out.read_bytes() == b"0"
+    assert (tmp_path / "hero.png_1.png").read_bytes() == b"1"
+
+
 def test_finalize_error_keeps_sandbox(tmp_path: Path, specs) -> None:
     image = tmp_path / "x.png"
     image.write_bytes(b"X")

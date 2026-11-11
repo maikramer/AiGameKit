@@ -765,7 +765,8 @@ def _resolve_remote(remote: bool | None) -> bool | None:
     return None
 
 
-def _remote_error(code: str, message: str) -> dict[str, Any]:    return {
+def _remote_error(code: str, message: str) -> dict[str, Any]:
+    return {
         "status": "error",
         "error": message,
         "error_code": code,
@@ -824,7 +825,7 @@ def _delegate_remote(
             )
             response = staged.client.rpc(req, timeout=timeout_sec)
         return vramd_remote.finalize(staged, response)
-    except vramd_remote.RemoteDown as exc:
+    except (vramd_remote.RemoteDown, OSError) as exc:
         # O job pode estar a correr no servidor; não limpar o sandbox (TTL limpa).
         return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
     except vramd_remote.RemoteStagingError as exc:
@@ -872,9 +873,7 @@ def submit_to_vramd(
                     backend, request, cmd="submit", priority=pri
                 )
                 response = staged.client.rpc(req, timeout=timeout_sec)
-        except vramd_remote.RemoteDown as exc:
-            return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
-        except vramd_remote.TransferError as exc:
+        except (vramd_remote.RemoteDown, vramd_remote.TransferError, OSError) as exc:
             return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
         if response.get("status") == "ok" and response.get("job_id"):
             vramd_remote.remember(str(response["job_id"]), staged)
@@ -928,14 +927,22 @@ def wait_vramd_job(
         client = staged.client if staged is not None else vramd_remote.RemoteClient()
         try:
             response = client.rpc(req, timeout=timeout_sec + 30.0)
-        except (vramd_remote.RemoteDown, vramd_remote.TransferError) as exc:
-            return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
+        except (vramd_remote.RemoteDown, vramd_remote.TransferError, OSError) as exc:
+            # A ligação persistente pode ter sido fechada pelo idle timeout do
+            # servidor entre o submit e o wait. O job continua na fila: reabre
+            # no mesmo endpoint e repete o wait (idempotente).
+            if staged is None or not vramd_remote.reconnect(staged):
+                return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
+            try:
+                response = staged.client.rpc(req, timeout=timeout_sec + 30.0)
+            except (vramd_remote.RemoteDown, vramd_remote.TransferError, OSError) as retry_exc:
+                return _remote_error("VRAMD_REMOTE_DOWN", str(retry_exc))
         if staged is None:
             return response
         vramd_remote.take(job_id)
         try:
             return vramd_remote.finalize(staged, response)
-        except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError, vramd_remote.TransferError) as exc:
+        except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError, vramd_remote.TransferError, OSError) as exc:
             return _remote_error("VRAMD_REMOTE_TRANSFER", str(exc))
 
     return send_to_vramd(req, timeout_sec=timeout_sec + 30.0, auto_start=False, force_local=True)
