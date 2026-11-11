@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import hi3d.refine as refine
@@ -372,3 +373,66 @@ class TestOomFallback:
                 seed=0,
                 emit=lambda *_a: None,
             )
+
+
+class TestResidencyContract:
+    """Precedência dos modos de residência e knob HI3D_PASS_BUDGET."""
+
+    def test_explicit_sequential_wins_over_group_offload(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``offload=True`` pede o offload sequencial do upstream de propósito.
+
+        Antes o group offload era tentado primeiro e devolvia sempre "group",
+        ignorando o pedido explícito (escape quando os hooks têm bugs num
+        build/new GPU).
+        """
+        pipeline = _ResidencyPipeline()
+        monkeypatch.setattr(refine, "apply_group_offload_staging", lambda _p, **_k: True)
+        mode = refine._apply_residency(pipeline, offload=True, staging=None, fast_postprocess=False)
+        assert mode == "sequential"
+        assert pipeline.mode_calls == ["offload:cuda"]
+
+    def test_auto_tries_group_offload_first(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        pipeline = _ResidencyPipeline()
+        monkeypatch.setattr(refine, "apply_group_offload_staging", lambda _p, **_k: True)
+        assert refine._apply_residency(pipeline, offload=None, staging=None, fast_postprocess=False) == "group"
+        assert pipeline.mode_calls == []
+
+    def test_auto_falls_back_when_group_offload_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        pipeline = _ResidencyPipeline()
+        monkeypatch.setattr(refine, "apply_group_offload_staging", lambda _p, **_k: False)
+        monkeypatch.setattr(refine, "_free_vram_mib", lambda: 5800)
+        monkeypatch.setattr(refine, "staging_supported", lambda _p: True)
+        monkeypatch.setattr(refine, "apply_phase_staging", lambda p, **_k: True)
+        assert refine._apply_residency(pipeline, offload=None, staging=None, fast_postprocess=False) == "staged"
+
+
+def _fake_sparc3d_pipeline_module(monkeypatch: pytest.MonkeyPatch, budgets: tuple[int, ...]) -> Any:
+    """Instala um ``sparc3d.pipelines.sparc3d_pipeline`` falso só com a ladder."""
+    module = ModuleType("sparc3d.pipelines.sparc3d_pipeline")
+    module.PASS_BUDGETS = budgets
+    for name in ("sparc3d", "sparc3d.pipelines"):
+        monkeypatch.setitem(sys.modules, name, ModuleType(name))
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    return module
+
+
+class TestPassBudgetOverride:
+    def test_caps_every_rung(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Só baixar o [0] não chegava a 1024/1536 (o passe seguinte usa o [1])."""
+        module = _fake_sparc3d_pipeline_module(monkeypatch, (80_000, 90_000, 110_000))
+        monkeypatch.setenv("HI3D_PASS_BUDGET", "30000")
+        refine._apply_pass_budget_override()
+        assert module.PASS_BUDGETS == (30_000, 30_000, 30_000)
+
+    def test_keeps_rungs_below_the_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        module = _fake_sparc3d_pipeline_module(monkeypatch, (80_000, 90_000, 110_000))
+        monkeypatch.setenv("HI3D_PASS_BUDGET", "100000")
+        refine._apply_pass_budget_override()
+        assert module.PASS_BUDGETS == (80_000, 90_000, 100_000)
+
+    @pytest.mark.parametrize("raw", ["", "abc", "500"])
+    def test_invalid_or_too_low_is_ignored(self, monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
+        module = _fake_sparc3d_pipeline_module(monkeypatch, (80_000, 90_000, 110_000))
+        monkeypatch.setenv("HI3D_PASS_BUDGET", raw)
+        refine._apply_pass_budget_override()
+        assert module.PASS_BUDGETS == (80_000, 90_000, 110_000)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -10,8 +11,10 @@ from hi3d import perf
 from hi3d.perf import (
     STAGING_MIN_FREE_MIB,
     PerfConfig,
+    apply_group_offload_staging,
     apply_phase_staging,
     configure_torch,
+    restore_group_offload,
     restore_phase_staging,
     staging_supported,
     use_sequential_offload,
@@ -216,3 +219,95 @@ class TestStagingThreshold:
     def test_threshold_is_above_measured_peak(self) -> None:
         # Pico medido: 3.74 GiB -> 4600 MiB deixa ~700 MiB de folga.
         assert 3744 < STAGING_MIN_FREE_MIB < 5000
+
+
+class _FakeTransformer(_FakeModule):
+    """Transformer mínimo aceite pelo wrapper de ``_sample_latents``."""
+
+    def parameters(self) -> Any:
+        return iter([SimpleNamespace(device=SimpleNamespace(type="cpu"))])
+
+
+def _allow_group_offload(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(perf.GROUP_OFFLOAD_ENV, raising=False)
+    monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+
+
+class TestGroupOffload:
+    """Gate diffusers-hooks do refine (sem GPU; hooks e módulos falsos)."""
+
+    def test_applies_to_transformer_and_vae_then_sets_device(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _allow_group_offload(monkeypatch)
+        pipeline = _FakePipeline()
+        applied: list[str] = []
+        monkeypatch.setattr(perf, "_apply_group_offloading", lambda m, _t: applied.append(m.name))
+        assert apply_group_offload_staging(pipeline, device="cuda") is True
+        assert applied == ["t512", "vae"]
+        assert str(pipeline._device) == "cuda"
+        assert pipeline._hi3d_group_offload is True
+        # O conditioner continua a ser movido por fase (uma chamada/refine).
+        assert pipeline.conditioner.name == "cond"
+
+    def test_transformer_failure_keeps_device_on_cpu(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Sem isto o fallback ``enable_sequential_cpu_offload`` rebentava.
+
+        O upstream recusa instalar o offload sequencial com ``_device`` fora da
+        CPU ("enable offload while all components are still on CPU"): uma falha
+        dos hooks deixava o load do refine a falhar em vez de degradar.
+        """
+        _allow_group_offload(monkeypatch)
+
+        def _boom(module: Any, _target: Any) -> None:
+            raise RuntimeError("diffusers sem hooks para este módulo")
+
+        pipeline = _FakePipeline()
+        cleared: list[str] = []
+        monkeypatch.setattr(perf, "_apply_group_offloading", _boom)
+        monkeypatch.setattr(perf, "_clear_module_hooks", lambda m: cleared.append(m.name))
+        assert apply_group_offload_staging(pipeline, device="cuda") is False
+        assert str(pipeline._device) == "cpu"
+        assert cleared == ["t512"]
+        assert not getattr(pipeline, "_hi3d_group_offload", False)
+
+    def test_clear_hooks_is_safe_on_non_module(self) -> None:
+        # O caminho de falha limpa hooks antes de degradar: um stub sem
+        # ``modules()`` não pode transformar o fallback num AttributeError.
+        perf._clear_module_hooks(object())
+
+    def test_wraps_bound_sample_latents_for_lazy_1024(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """O wrapper de ``_sample_latents`` tem de apanhar o transformer lazy.
+
+        A versão anterior só o instalava se ``_sample_latents`` estivesse no
+        ``__dict__`` do pipeline (nunca está: é método de classe), por isso o
+        ``transformer_1024`` era materializado inteiro na GPU a 1024/1536.
+        """
+        _allow_group_offload(monkeypatch)
+        pipeline = _FakePipeline()
+        applied: list[str] = []
+        monkeypatch.setattr(perf, "_apply_group_offloading", lambda m, _t: applied.append(m.name))
+        assert apply_group_offload_staging(pipeline, device="cpu") is True
+        assert "_sample_latents" in pipeline.__dict__
+
+        lazy = _FakeTransformer("t1024")
+        assert pipeline._sample_latents(lazy, "cond") == "sample-out"
+        assert applied == ["t512", "vae", "t1024"]
+        assert lazy._hi3d_group_offload_applied is True
+        # Já gerido: o forward seguinte não reaplica hooks.
+        assert pipeline._sample_latents(lazy, "cond") == "sample-out"
+        assert applied == ["t512", "vae", "t1024"]
+
+    def test_restore_removes_wrapper_and_hooks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _allow_group_offload(monkeypatch)
+        pipeline = _FakePipeline()
+        original_conditioner = pipeline.conditioner
+        monkeypatch.setattr(perf, "_apply_group_offloading", lambda m, _t: None)
+        cleared: list[str] = []
+        monkeypatch.setattr(perf, "_clear_module_hooks", lambda m: cleared.append(m.name))
+        apply_group_offload_staging(pipeline, device="cuda")
+
+        assert restore_group_offload(pipeline) is True
+        assert "_sample_latents" not in pipeline.__dict__
+        assert pipeline.conditioner is original_conditioner
+        assert set(cleared) >= {"t512", "vae"}
+        assert pipeline._hi3d_group_offload is False
+        assert restore_group_offload(pipeline) is False

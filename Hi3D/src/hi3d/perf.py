@@ -26,12 +26,19 @@ O que foi medido e rejeitado (não repetir sem bench novo):
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any
 
+log = logging.getLogger(__name__)
+
 #: VRAM livre mínima para a residência por fase (pico medido 3.74 GiB + folga).
 STAGING_MIN_FREE_MIB = 4600
+
+#: Gate do group offload. ``HI3D_GROUP_OFFLOAD=0`` volta à residência por fase;
+#: ``AIGAMEKIT_GROUP_OFFLOAD=0`` desliga em todo o monorepo.
+GROUP_OFFLOAD_ENV = "HI3D_GROUP_OFFLOAD"
 
 #: Alocador: reduz fragmentação nos picos de 3.7 GB (não sobrepõe valor do utilizador).
 ALLOC_CONF = "expandable_segments:True"
@@ -228,13 +235,220 @@ def restore_phase_staging(pipeline: Any) -> bool:
     return True
 
 
+def _group_offload_enabled() -> bool:
+    """Gate do group offload (tool > global), como nas outras tools."""
+    value = os.environ.get(GROUP_OFFLOAD_ENV, "").strip().lower()
+    if value in ("0", "false", "no", "off"):
+        return False
+    if value in ("1", "true", "yes", "on"):
+        return True
+    return os.environ.get("AIGAMEKIT_GROUP_OFFLOAD", "1") != "0"
+
+
+def group_offload_supported(pipeline: Any) -> bool:
+    """True quando diffusers.hooks existe e o pipeline expõe as peças."""
+    try:
+        from diffusers.hooks import apply_group_offloading  # noqa: F401
+    except ImportError:
+        return False
+    return all(hasattr(pipeline, name) for name in ("transformer_512", "vae", "conditioner", "_device"))
+
+
+def _apply_group_offloading(module: Any, target: Any) -> None:
+    """Leaf-level + CUDA streams: um leaf na GPU de cada vez, com prefetch."""
+    import torch
+    from diffusers.hooks import apply_group_offloading
+
+    apply_group_offloading(
+        module,
+        onload_device=target,
+        offload_device=torch.device("cpu"),
+        offload_type="leaf_level",
+        use_stream=True,
+    )
+
+
+class _StagedConditioner:
+    """Move o conditioner inteiro na chamada (chamado uma vez por refine)."""
+
+    def __init__(self, module: Any, device: Any) -> None:
+        self._module = module
+        self._device = device
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        import torch
+
+        self._module.to(self._device)
+        try:
+            return self._module(*args, **kwargs)
+        finally:
+            self._module.to("cpu")
+            with contextlib.suppress(RuntimeError):
+                torch.cuda.empty_cache()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._module, name)
+
+
+def apply_group_offload_staging(pipeline: Any, *, device: str = "cuda") -> bool:
+    """Group offload do transformer (diffusers hooks) + fase para conditioner/VAE.
+
+    O ``Sparc3DTransformer`` (1.8B, ~3.6 GB em fp16) era movido inteiro para a
+    GPU na residência por fase; com o spconv da malha grosa o pico passava dos
+    6 GiB e o refine falhava (era o caso do chapel/market_stall). Com group
+    offload os pesos ficam em CPU e só um leaf/bloco está na GPU de cada vez
+    (streams sobrepõem a transferência), libertando VRAM para a ativação.
+
+    O conditioner é chamado uma vez por refine e continua em fase (mover o
+    DINO+CLIP inteiro é mais barato que hooks leaf-level num modelo HF). O VAE
+    fica em fase porque group offload em autoencoders conflitua com tiling/decode.
+    """
+    if getattr(pipeline, "_hi3d_group_offload", False):
+        return True
+    if not _group_offload_enabled() or not group_offload_supported(pipeline):
+        return False
+
+    import torch
+
+    target = torch.device(device)
+    try:
+        _apply_group_offloading(pipeline.transformer_512, target)
+        pipeline.transformer_512._hi3d_group_offload_applied = True
+    except Exception as exc:
+        # Hooks a meio deixam o módulo inconsistente e, sobretudo, ``_device``
+        # não pode ficar em cuda: o fallback ``enable_sequential_cpu_offload``
+        # do upstream exige todos os componentes em CPU ("enable offload while
+        # all components are still on CPU") e o refine falhava no load em vez
+        # de degradar.
+        _clear_module_hooks(pipeline.transformer_512)
+        pipeline._device = torch.device("cpu")
+        log.warning("Hi3D: group offload no transformer_512 falhou (%s)", exc)
+        return False
+    # Só depois do transformer ficar gerido é que o dispatch passa a cuda.
+    pipeline._device = target
+    # VAE também em group offload: o decode a 512 com os pesos do decoder
+    # inteiros na GPU estourava a seguir ao sampler (market_stall). O aviso do
+    # diffusers sobre VAE/tiling é para autoencoders densos com tiling; o
+    # SparconvVAE é sparse e não usa esse caminho.
+    vae_grouped = False
+    try:
+        _apply_group_offloading(pipeline.vae, target)
+        pipeline.vae._hi3d_group_offload_applied = True
+        vae_grouped = True
+    except Exception as exc:
+        log.warning("Hi3D: group offload no VAE falhou (%s) — decode fica em fase", exc)
+
+    originals: dict[str, Any] = {}
+    # ``__dict__`` diz o que repor no restore (None = apagar o override e
+    # voltar ao método da classe); o callable a chamar vem sempre do getattr —
+    # com ``__dict__`` directo o wrapper nunca era instalado num pipeline
+    # normal e o ``transformer_1024`` lazy (resolução 1024/1536) era
+    # materializado inteiro na GPU a meio do refine (OOM em 6 GB).
+    original_sample = getattr(pipeline, "_sample_latents", None)
+    if original_sample is not None:
+
+        def _group_sample(transformer: Any, *args: Any, **kwargs: Any) -> Any:
+            if not getattr(transformer, "_hi3d_group_offload_applied", False):
+                # transformer_1024 é lazy; o property materializa-o (e move-o
+                # para cuda quando _device já é cuda) — devolve-se a CPU antes
+                # de instalar os hooks para não duplicar pesos na GPU.
+                try:
+                    if next(transformer.parameters()).device.type != "cpu":
+                        transformer.to("cpu")
+                    _apply_group_offloading(transformer, target)
+                    transformer._hi3d_group_offload_applied = True
+                except Exception as exc:
+                    log.warning("Hi3D: group offload no transformer materializado falhou (%s)", exc)
+            return original_sample(transformer, *args, **kwargs)
+
+        originals["_sample_latents"] = pipeline.__dict__.get("_sample_latents")
+        pipeline._sample_latents = _group_sample
+
+    if not vae_grouped:
+        originals["_decode_latents"] = pipeline.__dict__.get("_decode_latents")
+        pipeline._decode_latents = _staged_call(
+            pipeline._decode_latents,
+            lambda *a, **k: pipeline.vae,
+            target,
+            autocast=True,
+        )
+    originals["conditioner"] = pipeline.conditioner
+    pipeline.conditioner = _StagedConditioner(pipeline.conditioner, target)
+    pipeline._hi3d_group_offload = True
+    pipeline._hi3d_group_originals = originals
+    log.info("Hi3D: group offload (leaf_level, streams) no transformer; conditioner/vae por fase")
+    return True
+
+
+def _clear_module_hooks(module: Any) -> None:
+    """Remove os hooks de group offload do HookRegistry (diffusers 0.38).
+
+    Os hooks vivem em ``sub._diffusers_hook`` (registro por módulo) e trocam o
+    ``forward``; limpar só ``_forward_pre_hooks`` (como antes) deixava o hook
+    ativo e o fallback sequential combinava accelerate + diffusers no mesmo
+    forward (KeyError em parâmetros meta).
+
+    Best-effort: o caminho de falha chama isto antes de degradar para a
+    residência por fase — um módulo sem ``modules()`` (stub/upstream diferente)
+    não pode transformar o fallback num AttributeError.
+    """
+    named_modules = getattr(module, "modules", None)
+    if not callable(named_modules):
+        return
+    try:
+        subs = module.modules()
+    except Exception:
+        return
+    for sub in subs:
+        registry = getattr(sub, "_diffusers_hook", None)
+        if registry is None:
+            continue
+        for name in ("lazy_prefetch_group_offloading", "group_offloading"):
+            with contextlib.suppress(Exception):
+                registry.remove_hook(name, recurse=False)
+
+
+def restore_group_offload(pipeline: Any) -> bool:
+    """Remove o group offload e devolve os componentes à CPU (fallback OOM)."""
+    if not getattr(pipeline, "_hi3d_group_offload", False):
+        return False
+    originals = getattr(pipeline, "_hi3d_group_originals", {}) or {}
+    for attr in ("_sample_latents", "_decode_latents", "conditioner"):
+        previous = originals.get(attr)
+        if previous is None:
+            with contextlib.suppress(AttributeError):
+                delattr(pipeline, attr)
+        else:
+            setattr(pipeline, attr, previous)
+    for module in (
+        getattr(pipeline, "transformer_512", None),
+        getattr(pipeline, "_transformer_1024", None),
+        getattr(pipeline, "vae", None),
+    ):
+        if module is not None:
+            _clear_module_hooks(module)
+    for module in (
+        getattr(pipeline, "transformer_512", None),
+        getattr(pipeline, "conditioner", None),
+        getattr(pipeline, "vae", None),
+    ):
+        if module is not None:
+            with contextlib.suppress(Exception):
+                module.to("cpu")
+    pipeline._hi3d_group_offload = False
+    return True
+
+
 def use_sequential_offload(pipeline: Any, *, device: str = "cuda") -> bool:
     """Fallback do upstream (lento mas com pico de ~0.9 GiB)."""
     import torch
 
     restore_phase_staging(pipeline)
+    restore_group_offload(pipeline)
     try:
-        pipeline._device = torch.device(device)
+        # O upstream exige os componentes em CPU antes de instalar os hooks;
+        # ``enable_sequential_cpu_offload`` põe ``_device`` no fim.
+        pipeline._device = torch.device("cpu")
         pipeline.enable_sequential_cpu_offload(device)
         return True
     except Exception:

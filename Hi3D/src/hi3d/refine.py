@@ -8,6 +8,8 @@ entre jobs.
 from __future__ import annotations
 
 import importlib.util
+import logging
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -29,6 +31,7 @@ from .paths import resolve_model_ref
 from .perf import (
     STAGING_MIN_FREE_MIB,
     PerfConfig,
+    apply_group_offload_staging,
     apply_phase_staging,
     configure_torch,
     staging_supported,
@@ -36,6 +39,8 @@ from .perf import (
 )
 
 ProgressFn = Callable[[float | None, str | None], None]
+
+log = logging.getLogger(__name__)
 
 #: Resoluções aceites pelo upstream (não há valor contínuo).
 VALID_RESOLUTIONS = (512, 1024, 1536)
@@ -52,7 +57,8 @@ class RefineResult:
     elapsed_sec: float
     offloaded: bool
     model: str
-    #: ``staged`` (residência por fase), ``sequential`` (accelerate) ou ``full``.
+    #: ``group`` (diffusers hooks), ``staged`` (residência por fase),
+    #: ``sequential`` (accelerate) ou ``full``.
     mode: str = "sequential"
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -109,6 +115,37 @@ def _free_vram_mib() -> int:
     return int(gpu.free_mib) if gpu is not None else 0
 
 
+def _apply_pass_budget_override(log: Any = None) -> None:
+    """``HI3D_PASS_BUDGET`` limita o orçamento de pontos de **todos** os degraus.
+
+    O decode do VAE escala com os pontos da estrutura; num building de toldo
+    fino (market_stall) precisa de ~5 GiB de ativação e estoura os 6 GiB mesmo
+    com os pesos em group offload. Um orçamento menor (ex. 30000) reduz a
+    ativação proporcionalmente. Aplicado como tecto (``min``) a toda a ladder:
+    para 512 o primeiro degrau é o único e basta, mas a 1024/1536 o
+    ``_adaptive_voxelize`` do passe seguinte usa ``PASS_BUDGETS[1]`` — baixar só
+    o [0] não reduzia nada e o knob não tinha efeito.
+    """
+    raw = os.environ.get("HI3D_PASS_BUDGET", "").strip()
+    if not raw:
+        return
+    try:
+        budget = int(raw)
+    except ValueError:
+        if log is not None:
+            log.warning("HI3D_PASS_BUDGET=%r inválido (inteiro esperado) — ignorado", raw)
+        return
+    if budget < 1000:
+        if log is not None:
+            log.warning("HI3D_PASS_BUDGET=%d abaixo de 1000 — ignorado", budget)
+        return
+    try:
+        import sparc3d.pipelines.sparc3d_pipeline as sp
+    except ImportError:
+        return
+    sp.PASS_BUDGETS = tuple(min(int(b), budget) for b in sp.PASS_BUDGETS)
+
+
 def load_pipeline(
     *,
     model: str | None = None,
@@ -131,6 +168,7 @@ def load_pipeline(
         raise RuntimeError(f"stack Hi3D indisponível: {why}")
     from sparc3d import Sparc3DPipeline
 
+    _apply_pass_budget_override(log)
     configure_torch(PerfConfig(staging=staging is not False, fast_postprocess=fast_postprocess))
     model_ref = resolve_model_ref(model)
     pipeline = Sparc3DPipeline.from_pretrained(
@@ -163,6 +201,15 @@ def _apply_residency(
     if offload is False:
         pipeline.to("cuda")
         return "full"
+    # ``offload=True`` é o pedido explícito do offload sequencial do upstream
+    # (usado como escape quando o group offload tem bugs num build): não pode
+    # ser silenciosamente substituído por "group".
+    # Group offload (diffusers hooks) é o automático: o transformer (1.8B) fica
+    # em CPU e só um leaf está na GPU, libertando VRAM para o spconv da malha
+    # grossa. É o que permite refinar buildings que estouravam os 6 GiB na
+    # residência por fase. HI3D_GROUP_OFFLOAD=0 volta ao comportamento antigo.
+    if offload is None and apply_group_offload_staging(pipeline, device="cuda"):
+        return "group"
     if offload is True:
         pipeline.enable_sequential_cpu_offload("cuda")
         return "sequential"
@@ -226,9 +273,18 @@ def run_pipeline(
     try:
         return _invoke()
     except Exception as exc:
-        # OOM com residência por fase degrada para o offload sequencial do
-        # upstream (pico ~0.9 GiB) em vez de falhar o asset.
-        if type(exc).__name__ != "OutOfMemoryError" or not getattr(pipeline, "_hi3d_staged", False):
+        # OOM degrada para o offload sequencial do upstream (pico ~0.9 GiB) em
+        # vez de falhar o asset. O spconv/cumm levanta RuntimeError com
+        # "out of memory" (não OutOfMemoryError) — sem o teste da mensagem o
+        # fallback nunca corria e chapel/market_stall falhavam o refine.
+        message = str(exc).lower()
+        is_oom = (
+            type(exc).__name__ == "OutOfMemoryError"
+            or "out of memory" in message
+            or "cuda failed with error 2" in message
+        )
+        offloaded = getattr(pipeline, "_hi3d_staged", False) or getattr(pipeline, "_hi3d_group_offload", False)
+        if not is_oom or not offloaded:
             raise
         import torch
 
@@ -237,7 +293,7 @@ def run_pipeline(
             raise
         pipeline._hi3d_mode = "sequential"
         pipeline._hi3d_offloaded = True
-        emit(0.05, "OOM na residência por fase — a repetir com offload sequencial")
+        emit(0.05, "OOM no refine — a repetir com offload sequencial")
         return _invoke()
 
 
