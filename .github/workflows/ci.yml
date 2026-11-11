@@ -81,7 +81,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/pip
-          key: pip-${{ matrix.python-version }}-${{ matrix.package }}-${{ hashFiles(format('Shared/pyproject.toml', matrix.package, '/pyproject.toml')) }}
+          key: pip-${{ matrix.python-version }}-${{ matrix.package }}-${{ hashFiles('Shared/pyproject.toml', format('{0}/pyproject.toml', matrix.package)) }}
           restore-keys: |
             pip-${{ matrix.python-version }}-${{ matrix.package }}-
             pip-${{ matrix.python-version }}-
