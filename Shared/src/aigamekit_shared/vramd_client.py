@@ -171,6 +171,13 @@ def send_request(
     Returns:
         Dict de resposta, ou ``None`` se o server não estiver disponível.
     """
+    from . import vramd_remote
+
+    if vramd_remote.remote_enabled():
+        try:
+            return vramd_remote.RemoteClient().rpc(request, timeout=timeout_sec)
+        except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError):
+            return None
     spath = Path(socket_path) if socket_path else server_socket_path("text2d")
     if not spath.exists():
         return None
@@ -203,9 +210,20 @@ def send_request_stream(
 ) -> Iterator[dict[str, Any]]:
     """Envia um pedido e faz yield de cada linha NDJSON (eventos + resultado).
 
+    No modo remoto não há stream: devolve-se uma única linha com o resultado
+    (a transferência de ficheiros não combina com progresso incremental).
+
     Yields:
         Dict por linha. A última tipicamente tem ``status`` ok/error.
     """
+    from . import vramd_remote
+
+    if vramd_remote.remote_enabled():
+        try:
+            yield vramd_remote.RemoteClient().rpc(request, timeout=timeout_sec)
+        except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError):
+            return
+        return
     spath = Path(socket_path) if socket_path else server_socket_path("text2d")
     if not spath.exists():
         return
@@ -277,7 +295,11 @@ VRAMD_DO_NOT_KILL_TIP = (
 
 
 def is_vramd_running() -> bool:
-    """Verifica se o vramd está ativo no socket canónico."""
+    """Verifica se o vramd está ativo no socket canónico (ou no remoto)."""
+    from . import vramd_remote
+
+    if vramd_remote.remote_enabled():
+        return vramd_remote.RemoteClient().is_up()
     return is_server_running(VRAMD_SOCKET)
 
 
@@ -523,6 +545,13 @@ def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True) 
     Returns:
         ``True`` se o vramd está ativo e pronto a receber pedidos.
     """
+    from . import vramd_remote
+
+    if vramd_remote.remote_enabled():
+        # Remoto: só se verifica; NUNCA se arranca um supervisor local (os jobs
+        # iriam para a GPU errada sem o utilizador saber).
+        return vramd_remote.RemoteClient().is_up(timeout=min(timeout_sec, 5.0))
+
     if is_vramd_running():
         return True
 
@@ -675,8 +704,13 @@ def delegate_to_vramd(
 
     Returns:
         Dict de resposta (``{"status": "ok", "output": ...}``) ou ``None`` se o
-        vramd não estiver ativo (nem pôde ser arrancado).
+        vramd não está ativo (nem pôde ser arrancado).
     """
+    from . import vramd_remote
+
+    if vramd_remote.remote_enabled():
+        return _delegate_remote(backend, request, timeout_sec=timeout_sec, priority=priority)
+
     if not ensure_vramd_running():
         return None
     pri = resolve_vramd_priority(priority if priority is not None else request.get("priority"))
@@ -702,6 +736,49 @@ def delegate_to_vramd(
     return resp
 
 
+def _remote_error(code: str, message: str) -> dict[str, Any]:
+    return {
+        "status": "error",
+        "error": message,
+        "error_code": code,
+        "hint": (
+            "vramd remoto: verifica VRAMD_REMOTE/VRAMD_REMOTE_TOKEN e "
+            "`vramd status`; o fallback in-process está desligado em modo remoto."
+        ),
+    }
+
+
+def _delegate_remote(
+    backend: str,
+    request: dict[str, Any],
+    *,
+    timeout_sec: float,
+    priority: str | None,
+) -> dict[str, Any] | None:
+    """Staging + generate + download contra o daemon remoto."""
+    from . import vramd_remote
+
+    try:
+        staged = vramd_remote.stage_request(backend, request)
+    except vramd_remote.RemoteDown as exc:
+        if not vramd_remote.strict():
+            return None
+        return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
+    except vramd_remote.RemoteStagingError as exc:
+        return _remote_error("VRAMD_REMOTE_STAGE", str(exc))
+
+    pri = resolve_vramd_priority(priority if priority is not None else request.get("priority"))
+    req = {**staged.request, "cmd": "generate", "backend": backend, "priority": pri}
+    try:
+        response = staged.client.rpc(req, timeout=timeout_sec)
+        return vramd_remote.finalize(staged, response)
+    except vramd_remote.RemoteDown as exc:
+        # O job pode estar a correr no servidor; não limpar o sandbox (TTL limpa).
+        return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
+    except vramd_remote.RemoteStagingError as exc:
+        return _remote_error("VRAMD_REMOTE_TRANSFER", str(exc))
+
+
 def submit_to_vramd(
     backend: str,
     request: dict[str, Any],
@@ -710,6 +787,29 @@ def submit_to_vramd(
     priority: str | None = None,
 ) -> dict[str, Any] | None:
     """Enfileira um job no vramd (async). Retorna ``{"status":"ok","job_id":...}``."""
+    from . import vramd_remote
+
+    if vramd_remote.remote_enabled():
+        try:
+            staged = vramd_remote.stage_request(backend, request)
+        except vramd_remote.RemoteDown as exc:
+            if not vramd_remote.strict():
+                return None
+            return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
+        except vramd_remote.RemoteStagingError as exc:
+            return _remote_error("VRAMD_REMOTE_STAGE", str(exc))
+        pri = resolve_vramd_priority(priority if priority is not None else request.get("priority"))
+        req = {**staged.request, "cmd": "submit", "backend": backend, "priority": pri}
+        try:
+            response = staged.client.rpc(req, timeout=timeout_sec)
+        except vramd_remote.RemoteDown as exc:
+            return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
+        if response.get("status") == "ok" and response.get("job_id"):
+            vramd_remote.remember(str(response["job_id"]), staged)
+        # Em erro não se limpa o sandbox: o submit pode ter enfileirado o job
+        # antes de a resposta se perder (TTL recolhe).
+        return response
+
     if not ensure_vramd_running():
         return None
     pri = resolve_vramd_priority(priority if priority is not None else request.get("priority"))
@@ -740,6 +840,24 @@ def wait_vramd_job(
     req: dict[str, Any] = {"cmd": "wait", "job_id": job_id, "timeout_sec": timeout_sec}
     if stream:
         req["stream"] = True
+
+    from . import vramd_remote
+
+    if vramd_remote.remote_enabled():
+        staged = vramd_remote.peek(job_id)
+        client = staged.client if staged is not None else vramd_remote.RemoteClient()
+        try:
+            response = client.rpc(req, timeout=timeout_sec + 30.0)
+        except vramd_remote.RemoteDown as exc:
+            return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
+        if staged is None:
+            return response
+        vramd_remote.take(job_id)
+        try:
+            return vramd_remote.finalize(staged, response)
+        except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError) as exc:
+            return _remote_error("VRAMD_REMOTE_TRANSFER", str(exc))
+
     return send_to_vramd(req, timeout_sec=timeout_sec + 30.0, auto_start=False)
 
 

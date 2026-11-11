@@ -4,20 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aigamekit-vramd"
-version = "0.3.9"
+version = "0.4.0"
 description = "Supervisor de VRAM do AiGameKit — pin do vramd no venv canónico"
 readme = "README.md"
 authors = [{ name = "AiGameKit Project" }]
 requires-python = ">=3.13,<3.14"
 license = "MIT"
-# O supervisor vem do PyPI (`pip install vramd==0.3.9` no Vramd/.venv — o
+# O supervisor vem do PyPI (`pip install vramd` no Vramd/.venv — o
 # `./install.sh vramd` refresca). O clone irmão ~/GitClones/vramd é o upstream
 # de desenvolvimento: só se instala editável quando se está a desenvolver o
 # próprio vramd, nunca como dependência do monorepo.
-# Windows: requer vramd>=0.5.0 (endpoint TCP+token, pipes por thread, lock
-# msvcrt) — o pin permite versões mais novas de propósito.
+# 0.6.0: modo remoto (--listen, sandbox stage/put/get/list/clean) e o cliente
+# com VRAMD_REMOTE — é o que o servidor de GPU do Vael usa.
 dependencies = [
-    "vramd>=0.3.9",
+    "vramd>=0.6.0",
 ]
 
 [project.scripts]

@@ -1,0 +1,45 @@
+# Servidor de GPU do AiGameKit — vramd em modo remoto.
+#
+#   scripts/docker/server-deploy.sh build && ... up
+#
+# O cache (/srv/vramd-cache) é o "cache do vramd": modelos, sandboxes e logs.
+# O porto 8790 fica exposto na LAN; o token está em /srv/vramd-cache/token.
+name: aigamekit
+
+services:
+  vramd:
+    build:
+      context: ../..
+      dockerfile: scripts/docker/Dockerfile.server
+    image: aigamekit-server:local
+    container_name: aigamekit-vramd
+    restart: unless-stopped
+    ports:
+      - "8790:8790"
+    volumes:
+      - /srv/vramd-cache:/cache
+    environment:
+      VRAMD_CACHE_DIR: /cache
+      VRAMD_LISTEN: 0.0.0.0:8790
+      VRAMD_TOKEN_FILE: /cache/token
+      VRAMD_TOOLS_ROOT: /opt/AiGameKit
+      VRAMD_BACKENDS_FILE: /opt/AiGameKit/Shared/src/aigamekit_shared/data/backends.yaml:/opt/AiGameKit/Shared/src/aigamekit_shared/data/calibrated/backends-6g.yaml
+      VRAMD_IDLE_TIMEOUT_MIN: "0"
+      HF_HOME: /cache/models/hf
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      AIGAMEKIT_MODELS_DIR: /cache/models/aigamekit
+      U2NET_HOME: /cache/models/u2net
+      AIGAMEKIT_LOG_DIR: /cache/logs
+      NVIDIA_VISIBLE_DEVICES: all
+    shm_size: "8gb"
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

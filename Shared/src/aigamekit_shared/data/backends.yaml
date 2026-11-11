@@ -32,6 +32,11 @@ backends:
     footprint_key: sd15-base
     priority: 20
     tool: texture2d
+    # Contrato de ficheiros para o vramd remoto (ver vramd_remote.py): campos do
+    # payload que são inputs/outputs e os sidecars escritos ao lado do output.
+    remote:
+      outputs: [output]
+      sidecars: ["{stem}.json"]
     # Calibrar o path de produção: GO+streams (default das tools 2D). O
     # load_kwargs grava ``allow_group_offload`` no descriptor — o admit 0.3.7+
     # só usa a medição para requests do mesmo modo.
@@ -48,6 +53,11 @@ backends:
     footprint_key: flux3-klein
     priority: 25
     tool: text2d
+    remote:
+      inputs: [refs]
+      outputs: [output]
+      # num_images>1 escreve <stem>_1.png … ao lado do output principal.
+      sidecar_globs: ["{stem}_*{suffix}"]
     # FLUX.3 Klein: ``upsample`` escolhe se o prompt upsampler 9B (pup) é
     # carregado — é decisão de LOAD (pop do bloco) e SHAPE (mudar exige reload).
     # Declarar as listas substitui a allowlist global do vramd, por isso incluem
@@ -100,6 +110,9 @@ backends:
     footprint_key: flux-dev-uint4
     priority: 25
     tool: skymap2d
+    remote:
+      outputs: [output]
+      sidecars: ["{stem}.json"]
     calibrate_request:
       prompt: "stormy sky over mountains"
       output: "/tmp/vramd-calibrate-skymap2d.png"
@@ -115,6 +128,10 @@ backends:
     footprint_key: hunyuan3d-omni
     priority: 40
     tool: text3d
+    remote:
+      inputs: [from_image, pose_file, point_cloud, voxel_mesh]
+      outputs: [output]
+      sidecars: ["{output}.omni.json"]
     peak_profile:
       memory_efficient_with_quant: true
       group_offload_with_memory_efficient: true
@@ -128,6 +145,9 @@ backends:
     footprint_key: hunyuan-paint
     priority: 40
     tool: paint3d
+    remote:
+      inputs: [mesh_path, image_path, images]
+      outputs: [output]
     peak_profile:
       memory_efficient_with_quant: true
     calibrate_request:
@@ -149,6 +169,9 @@ backends:
     footprint_key: hunyuan3d-part
     priority: 35
     tool: part3d
+    remote:
+      inputs: [mesh_path, segmentation_proxy]
+      outputs: [output, output_segmented]
     calibrate_request:
       mesh_path: "test-mesh.glb"
       output: "/tmp/vramd-calibrate-part3d.glb"
@@ -168,6 +191,9 @@ backends:
     vram_mib: 4300
     priority: 35
     tool: hi3d
+    remote:
+      inputs: [coarse_mesh, image]
+      outputs: [output]
     calibrate_request:
       coarse_mesh: "test-mesh.glb"
       image: "test-image.png"
@@ -181,6 +207,9 @@ backends:
     footprint_key: stable-audio-open
     priority: 30
     tool: text2sound
+    remote:
+      outputs: [output]
+      sidecars: ["{output}.json"]
     calibrate_request:
       prompt: "soft pad"
       output: "/tmp/vramd-calibrate-text2sound.wav"
@@ -193,6 +222,8 @@ backends:
     vram_mib: 3200
     priority: 40
     tool: terrain3d
+    remote:
+      outputs: [output, metadata_path]
     calibrate_request:
       prompt: "mountain valley"
       output: "/tmp/vramd-calibrate-terrain3d.glb"

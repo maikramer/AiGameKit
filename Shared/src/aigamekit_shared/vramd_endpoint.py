@@ -195,6 +195,70 @@ def connect(path: Path, *, timeout: float | None = None) -> tuple[socket.socket,
     raise FileNotFoundError(f"endpoint inválido: {path}")
 
 
+def parse_host_port(text: str) -> tuple[str, int]:
+    """``HOST:PORT`` → ``(host, port)``; aceita ``[::1]:8790``.
+
+    Raises:
+        ValueError: formato inválido ou porta fora de 1..65535.
+    """
+    spec = text.strip()
+    if not spec:
+        raise ValueError("endpoint vazio")
+    if spec.startswith("["):
+        host_text, _, rest = spec[1:].partition("]")
+        port_text = rest.lstrip(":")
+    elif spec.count(":") == 1:
+        host_text, _, port_text = spec.partition(":")
+    else:
+        raise ValueError(f"esperado HOST:PORT, recebi {text!r}")
+    if not host_text:
+        raise ValueError(f"endpoint sem host: {text!r}")
+    try:
+        port = int(port_text)
+    except ValueError as exc:
+        raise ValueError(f"porta inválida em {text!r}") from exc
+    if not (1 <= port <= 65535):
+        raise ValueError(f"porta fora de 1..65535 em {text!r}")
+    return host_text, port
+
+
+def remote_endpoints() -> list[EndpointInfo]:
+    """Endpoints remotos de ``VRAMD_REMOTE`` (CSV) e token de ``VRAMD_REMOTE_TOKEN``.
+
+    Vazio ⇒ modo local (descritor/socket). Um endpoint inválido é ignorado com
+    aviso, para um typo na lista não impedir os restantes.
+    """
+    raw = os.environ.get("VRAMD_REMOTE", "").strip()
+    if not raw:
+        return []
+    token = os.environ.get("VRAMD_REMOTE_TOKEN", "").strip() or None
+    endpoints: list[EndpointInfo] = []
+    for item in raw.split(","):
+        if not item.strip():
+            continue
+        try:
+            host_text, port = parse_host_port(item)
+        except ValueError:
+            continue
+        endpoints.append(EndpointInfo(transport=TRANSPORT_TCP, host=host_text, port=port, token=token))
+    return endpoints
+
+
+def connect_remote(info: EndpointInfo, *, timeout: float | None = None) -> tuple[socket.socket, str | None]:
+    """Liga a um endpoint remoto explícito (``VRAMD_REMOTE``)."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if timeout is not None:
+            sock.settimeout(timeout)
+        sock.connect((info.host, int(info.port or 0)))
+        with contextlib.suppress(OSError):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        return sock, info.token
+    except BaseException:
+        sock.close()
+        raise
+
+
 def _write_descriptor(path: Path, *, port: int, token: str) -> None:
     payload = {
         "version": DESCRIPTOR_VERSION,

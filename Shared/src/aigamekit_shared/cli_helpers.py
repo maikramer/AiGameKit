@@ -575,6 +575,13 @@ def try_vramd_delegation(
         console.print("[dim]vramd: --no-vramd → geração in-process[/dim]")
         return False
 
+    from .vramd_remote import remote_enabled
+
+    if remote_enabled():
+        # Remoto: a transferência é por job (upload → generate → download), não
+        # por evento; o progresso incremental do vramd fica de fora.
+        stream = False
+
     output = payload.get(output_key)
     if output is None:
         return False
@@ -641,6 +648,13 @@ def try_vramd_delegation(
             import json
 
             console.print(f"[dim]ums_debug: {json.dumps(result['ums_debug'], ensure_ascii=False)}[/dim]")
+        # Falhas do modo remoto são fatais: o fallback in-process correria na
+        # GPU local (ou numa máquina sem GPU), longe do sítio pedido.
+        if code.startswith("VRAMD_REMOTE_"):
+            import click
+
+            tip = hint or "verifica VRAMD_REMOTE/VRAMD_REMOTE_TOKEN e `vramd status`"
+            raise click.ClickException(f"vramd remoto [{code}]: {err}. Sem fallback in-process. {tip}")
         # vramd ainda com jobs → não competir in-process pela mesma GPU.
         if vramd_is_busy():
             import click
