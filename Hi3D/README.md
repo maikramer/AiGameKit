@@ -122,6 +122,14 @@ The stage is skipped (with a visible reason) when the binary, weights, a
 suitable GPU, or the reference image are missing. It never fails an asset.
 Disable globally with `refine: false` or `refine: {enabled: false}`.
 
+### Multiview
+
+Hi3D v1.0 itself accepts **one image per pass** (`--image` is scalar and
+`ImageConditioner` rejects lists). The GameAssets pipeline can approximate
+multiview by generating one Text2D image per view and chaining one `hi3d refine`
+pass per view (`refine.views`). See
+[GameAssets/README.md](../GameAssets/README.md#hi3d-multiview-refine-optional).
+
 ## CLI
 
 ```

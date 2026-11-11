@@ -22,6 +22,7 @@ from aigamekit_shared.path_utils import safe_filename as _safe_slug
 from aigamekit_shared.profiler.session import ProfilerSession
 from aigamekit_shared.subprocess_utils import run_cmd_streaming
 
+from . import multiview
 from .batch_guard import batch_directory_lock, detect_gpu_ids, query_gpu_free_mib, subprocess_gpu_env
 from .cli_rich import click
 from .helpers import (
@@ -87,6 +88,7 @@ from .paths import (
 )
 from .pipeline import (
     _animator3d_game_pack_argv,
+    _paint_item_overrides,
     _post_text3d_mesh_extras,
     _quality_paint_texture_cap,
     _resolve_animator3d_bin,
@@ -1033,6 +1035,7 @@ def batch_cmd(
                                 wants_collision=_cr.generate_collision,
                                 lod0_path=_lod0,
                                 collision_path=_coll,
+                                refine_stale=multiview.refine_stale(profile, _cr, _ci_mesh, manifest_dir),
                             )
 
                     # Skip fully-done items: advance all phases and mark skipped in dashboard
@@ -1398,6 +1401,38 @@ def batch_cmd(
                                         if _mi["id"] == _bid:
                                             texture2d_batch_done_d[_bidx] = _ir
                                             break
+
+                    # --- Vistas Text2D para o refine multiview ---
+                    if not skip_text2d and text2d_bin:
+                        try:
+                            _vw = multiview.ensure_multiview_images_for_rows(
+                                rows,
+                                profile=profile,
+                                preset=preset,
+                                manifest_dir=manifest_dir,
+                                text2d_bin=text2d_bin,
+                                child_env=child_env,
+                                no_vramd=no_vramd,
+                                vramd_stream=vramd_stream,
+                                gpu_ids=gpu_ids,
+                                force=force,
+                                seed_for_row=lambda r: _seed_for_manifest_row(profile, r),
+                                width=(profile.text2d.width if profile.text2d else None),
+                                height=(profile.text2d.height if profile.text2d else None),
+                                steps=(profile.text2d.steps if profile.text2d else None),
+                                guidance=(profile.text2d.guidance_scale if profile.text2d else None),
+                                quality=profile.generation,
+                                on_progress=lambda r: dash.feed_event(
+                                    str(r.asset_id).split("__")[0], "text2d", r.status, phase="views"
+                                ),
+                            )
+                            if _vw.get("generated") or _vw.get("failed"):
+                                console.print(
+                                    f"  [cyan]vistas Text2D[/cyan]: {_vw.get('generated', 0)} geradas, "
+                                    f"{_vw.get('reused', 0)} reutilizadas, {_vw.get('failed', 0)} falhadas"
+                                )
+                        except Exception as exc:
+                            console.print(f"  [yellow]vistas Text2D[/yellow] falhou: {exc} — a continuar")
 
                     for idx, row in enumerate(rows):
                         img_final, _mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
@@ -2162,6 +2197,7 @@ def batch_cmd(
                                                 "image": str(img_f),
                                                 "output": str(mesh_painted),
                                                 "texture_size": _resolve_paint_texture_size(profile, row),
+                                                **_paint_item_overrides(profile, row),
                                             }
                                         )
                                         paint_idx_map_d[row.id] = idx
@@ -2247,6 +2283,9 @@ def batch_cmd(
                                                     batch_args.append("--no-smooth")
                                                 if p3.smooth_passes is not None:
                                                     batch_args.extend(["--smooth-passes", str(p3.smooth_passes)])
+                                                batch_args.append(
+                                                    "--pbr-enrich" if p3.pbr_enrich else "--no-pbr-enrich"
+                                                )
                                             if gpu_ids:
                                                 batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
 
@@ -2753,6 +2792,7 @@ def batch_cmd(
                             wants_collision=_crow.generate_collision,
                             lod0_path=_ci_lod0,
                             collision_path=_ci_coll,
+                            refine_stale=multiview.refine_stale(profile, _crow, _ci_mesh, manifest_dir),
                         )
                         if not force and _ci_state == _ROW_DONE:
                             done_indices.add(_ci)
@@ -2878,6 +2918,35 @@ def batch_cmd(
                                         if _mi["id"] == _bid:
                                             texture2d_batch_done[_bidx] = _ir
                                             break
+
+                    # --- Vistas Text2D para o refine multiview ---
+                    if not skip_text2d and text2d_bin:
+                        try:
+                            _vw_p = multiview.ensure_multiview_images_for_rows(
+                                rows,
+                                profile=profile,
+                                preset=preset,
+                                manifest_dir=manifest_dir,
+                                text2d_bin=text2d_bin,
+                                child_env=child_env,
+                                no_vramd=no_vramd,
+                                vramd_stream=vramd_stream,
+                                gpu_ids=gpu_ids,
+                                force=force,
+                                seed_for_row=lambda r: _seed_for_manifest_row(profile, r),
+                                width=(profile.text2d.width if profile.text2d else None),
+                                height=(profile.text2d.height if profile.text2d else None),
+                                steps=(profile.text2d.steps if profile.text2d else None),
+                                guidance=(profile.text2d.guidance_scale if profile.text2d else None),
+                                quality=profile.generation,
+                            )
+                            if _vw_p.get("generated") or _vw_p.get("failed"):
+                                console.print(
+                                    f"  [cyan]vistas Text2D[/cyan]: {_vw_p.get('generated', 0)} geradas, "
+                                    f"{_vw_p.get('reused', 0)} reutilizadas, {_vw_p.get('failed', 0)} falhadas"
+                                )
+                        except Exception as exc:
+                            console.print(f"  [yellow]vistas Text2D[/yellow] falhou: {exc} — a continuar")
 
                     for idx, row in enumerate(rows):
                         img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
@@ -3689,6 +3758,7 @@ def batch_cmd(
                                             "image": str(img_final),
                                             "output": str(mesh_painted),
                                             "texture_size": _resolve_paint_texture_size(profile, row),
+                                            **_paint_item_overrides(profile, row),
                                         }
                                     )
                                     paint_idx_map[row.id] = idx
@@ -3772,6 +3842,7 @@ def batch_cmd(
                                                 batch_args.append("--no-smooth")
                                             if p3.smooth_passes is not None:
                                                 batch_args.extend(["--smooth-passes", str(p3.smooth_passes)])
+                                            batch_args.append("--pbr-enrich" if p3.pbr_enrich else "--no-pbr-enrich")
                                         if gpu_ids:
                                             batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
 

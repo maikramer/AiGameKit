@@ -90,6 +90,13 @@ class Adapter(WorkerAdapter):
         if self.should_abort(request):
             return self.cancelled_response("cancelled before generate")
 
+        # O worker é outro processo: o ``--no-pbr-enrich`` do CLI/GameAssets não
+        # chegava aqui e o default ON derivava normal+AO do albedo (bordos das
+        # ilhas UV viram arestas). O request traz o valor efectivo.
+        from paint3d.pbr_enrich import set_pbr_enrich_override
+
+        set_pbr_enrich_override(request.get("pbr_enrich"))
+
         self.report_progress(request, 0.0, "started")
         t_start = time.perf_counter()
 

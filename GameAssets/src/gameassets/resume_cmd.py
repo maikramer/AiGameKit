@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
+from . import multiview
 from .batch_guard import subprocess_gpu_env
 from .cli_rich import click
 from .helpers import (
@@ -49,6 +50,7 @@ from .paths import (
     _shape_path,
 )
 from .pipeline import (
+    _paint_item_overrides,
     _post_text3d_mesh_extras,
     _quality_paint_texture_cap,
     _resolve_animator3d_bin,
@@ -280,6 +282,10 @@ def resume_cmd(
                 ),
             )
         )
+        # Multiview: se o sidecar do refine não corresponde às vistas/params
+        # atuais, volta ao passo paint (que re-corre o Hi3D antes de pintar).
+        # Em mono-vista devolve False e mantém o reuso legacy por mtime.
+        _refine_stale = multiview.refine_stale(profile, row, mesh_final, manifest_dir)
         master_state = _classify_row_state_master(
             img_final=img_final,
             mesh_final=mesh_final,
@@ -289,6 +295,7 @@ def resume_cmd(
             wants_lod=row.generate_lod,
             wants_collision=row.generate_collision,
             omni_stale=_omni_stale,
+            refine_stale=_refine_stale,
         )
         # Mapeia para os 6 buckets clássicos usados pelo planeador/loop
         # do resume_cmd. O bucket determina onde a execução vai retomar:
@@ -496,6 +503,43 @@ def resume_cmd(
             _finalize_deferred(rec, mesh_f, row_m, on_progress_line=on_progress_line)
 
         master_q.drain(_finalize)
+
+    def _ensure_views_phase(*, on_progress: Any = None) -> None:
+        """Gera as vistas Text2D em falta para o refine multiview.
+
+        Corre depois da fase de imagens (a frontal tem de existir) e antes de
+        shape/paint. Percorre também rows já ``done``: ligar o multiview num
+        pool existente só precisa de gerar vistas + re-refinar. Falhas são
+        não fatais — o refine usa as vistas que existirem.
+        """
+        try:
+            res = multiview.ensure_multiview_images_for_rows(
+                [it["row"] for it in items],
+                profile=profile,
+                preset=preset,
+                manifest_dir=manifest_dir,
+                text2d_bin=text2d_bin,
+                child_env=child_env,
+                no_vramd=no_vramd,
+                vramd_stream=vramd_stream,
+                gpu_ids=gpu_ids,
+                force=force,
+                seed_for_row=lambda r: _seed_for_manifest_row(profile, r),
+                width=(profile.text2d.width if profile.text2d else None),
+                height=(profile.text2d.height if profile.text2d else None),
+                steps=(profile.text2d.steps if profile.text2d else None),
+                guidance=(profile.text2d.guidance_scale if profile.text2d else None),
+                quality=profile.generation,
+                on_progress=on_progress,
+            )
+        except Exception as exc:
+            console.print(f"  [yellow]vistas Text2D[/yellow] falhou: {exc} — a continuar")
+            return
+        if res.get("generated") or res.get("failed"):
+            console.print(
+                f"  [cyan]vistas Text2D[/cyan]: {res.get('generated', 0)} geradas, "
+                f"{res.get('reused', 0)} reutilizadas, {res.get('failed', 0)} falhadas"
+            )
 
     if not no_dashboard:
         # === Dashboard TUI path ===
@@ -754,6 +798,13 @@ def resume_cmd(
                         if not continue_on_error:
                             raise click.Abort()
                     dash.advance_phase()
+
+            # --- Fase 1b: Vistas Text2D (refine multiview) ---
+            _ensure_views_phase(
+                on_progress=lambda r: dash.feed_event(
+                    str(r.asset_id).split("__")[0], "text2d", r.status, phase="views"
+                )
+            )
 
             # --- Fase 2: Shape (batch) ---
             need_shape = [it for it in items if it["state"] == _ROW_NEED_SHAPE]
@@ -1057,6 +1108,7 @@ def resume_cmd(
                                 "image": str(it["img_final"]),
                                 "output": str(_painted_path(it["mesh_final"])),
                                 "texture_size": _resolve_paint_texture_size(profile, row),
+                                **_paint_item_overrides(profile, row),
                             }
                         )
                         paint_item_map[row.id] = i
@@ -1134,6 +1186,7 @@ def resume_cmd(
                                     batch_args.append("--no-smooth")
                                 if p3.smooth_passes is not None:
                                     batch_args.extend(["--smooth-passes", str(p3.smooth_passes)])
+                                batch_args.append("--pbr-enrich" if p3.pbr_enrich else "--no-pbr-enrich")
                             if gpu_ids:
                                 batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
 
@@ -1557,6 +1610,9 @@ def resume_cmd(
                             break
                     progress.advance(task)
 
+        # --- Fase 1b: Vistas Text2D (refine multiview) ---
+        _ensure_views_phase()
+
         # --- Fase 2: Shape (batch) ---
         need_shape = [it for it in items if it["state"] == _ROW_NEED_SHAPE]
         if need_shape and text3d_bin:
@@ -1833,6 +1889,7 @@ def resume_cmd(
                                 "image": str(it["img_final"]),
                                 "output": str(_painted_path(it["mesh_final"])),
                                 "texture_size": _resolve_paint_texture_size(profile, row),
+                                **_paint_item_overrides(profile, row),
                             }
                         )
                         paint_item_map[row.id] = i
@@ -1906,6 +1963,7 @@ def resume_cmd(
                                     batch_args.append("--no-smooth")
                                 if p3.smooth_passes is not None:
                                     batch_args.extend(["--smooth-passes", str(p3.smooth_passes)])
+                                batch_args.append("--pbr-enrich" if p3.pbr_enrich else "--no-pbr-enrich")
                             if gpu_ids:
                                 batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
 

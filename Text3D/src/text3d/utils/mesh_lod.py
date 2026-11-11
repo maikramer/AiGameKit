@@ -214,11 +214,35 @@ def _is_hollow_shell_category(category: str | None) -> bool:
     return str(category).strip().lower() in _HOLLOW_SHELL_CATEGORIES
 
 
+# Personagens/criaturas: o decode Omni deixa uma **casca interna** (parede
+# dupla MC) contida no corpo, com ~metade da área de superfície. Não há
+# interior modelado legítimo nestas categorias — remover por componente antes
+# do paint liberta metade do atlas e tira as ilhas UV da casca invisível.
+_CHARACTER_SHELL_CATEGORIES = frozenset(
+    {
+        "humanoid",
+        "creature",
+        "character",
+        "npc",
+        "monster",
+        "beast",
+        "animal",
+    }
+)
+
+
+def _is_character_shell_category(category: str | None) -> bool:
+    if not category:
+        return False
+    return str(category).strip().lower() in _CHARACTER_SHELL_CATEGORIES
+
+
 def _repair_topology_arrays_phase(
     mesh_obj,
     *,
     remove_internal_shells: bool,
     morph_close: float | None,
+    character_shell: bool = False,
 ) -> dict:
     """Fase de filtro do ``topology_clean`` em arrays (numpy/scipy) + morph-close.
 
@@ -226,6 +250,10 @@ def _repair_topology_arrays_phase(
     menos vértices sem os splits de normal) e morph-close **depois** — o
     solidify deixa de criar paredes por-triângulo em mesh split e o VDB passa
     a ver volume (casco exterior em vez de 2 shells preservadas).
+
+    ``character_shell`` liga o modo componente: a casca interna é removida
+    inteira (contida + grande + perto da parede da principal), em vez de só
+    as faces cujo raio cabe no cap de 5 cm do strip por face.
     """
     log = logging.getLogger(__name__)
     from aigamekit_shared.mesh_repair_arrays import (
@@ -239,8 +267,15 @@ def _repair_topology_arrays_phase(
         co,
         tris,
         do_remove_internal_shells=remove_internal_shells,
+        internal_shell_min_volume_ratio=0.20 if character_shell else None,
     )
     replace_mesh_arrays(mesh_obj, co, tris)
+    if stats.get("internal_shell_components"):
+        log.info(
+            "remove_internal_shells: %d componente(s) / %d faces (modo componente)",
+            stats["internal_shell_components"],
+            stats.get("internal_shell_faces", 0),
+        )
 
     if morph_close is not None and morph_close > 0:
         from aigamekit_shared.mesh_repair import morphological_close
@@ -292,8 +327,9 @@ def _prepare_topology_bpy(
     from aigamekit_shared.mesh_repair_arrays import arrays_engine_ok
 
     hollow = _is_hollow_shell_category(category)
+    character_shell = _is_character_shell_category(category)
     if remove_internal_shells is None:
-        remove_internal_shells = hollow
+        remove_internal_shells = hollow or character_shell
 
     arrays_ok = arrays_engine_ok(mesh_obj, has_armature=has_armature)
     use_arrays = engine in ("auto", "arrays") and arrays_ok
@@ -314,6 +350,7 @@ def _prepare_topology_bpy(
             mesh_obj,
             remove_internal_shells=bool(remove_internal_shells),
             morph_close=morph_close,
+            character_shell=character_shell,
         )
         if n_faces_before > 0 and len(mesh_obj.data.polygons) == 0:
             log.warning(
@@ -481,7 +518,9 @@ def prepare_mesh_topology(
         size_m: ``[L,H,W]`` metros reais — escala a mesh (unidades Omni ~2u →
             metros) antes do reparo, para que distâncias métricas (morph,
             weld) façam sentido físico. No-op se já em escala.
-        remove_internal_shells: Strip cascas internas. ``None`` → auto building.
+        remove_internal_shells: Strip cascas internas. ``None`` → auto
+            building/chapel (strip por face) e personagens/criaturas (strip
+            por componente).
         category: Categoria do asset (hints de fecho de shell).
         engine: ``auto``/``arrays`` ativa a fase vetorizada (numpy/scipy) nos
             passos de filtro quando o mesh não tem UVs/weights/shape-keys/
@@ -969,7 +1008,7 @@ def _generate_lod_glb_triplet_bpy_collapse(
 
 # A tolerância de erosão da AABB (5% default, 15% em vegetação) vive no Shared,
 # com o resto do orçamento de LOD: ``aabb_shrink_tolerance``.
-from aigamekit_shared.lod_budget import aabb_shrink_tolerance
+from aigamekit_shared.lod_budget import aabb_shrink_tolerance  # noqa: E402
 
 
 def generate_lod_textured_glb_triplet(

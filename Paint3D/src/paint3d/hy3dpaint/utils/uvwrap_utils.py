@@ -12,8 +12,13 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+import logging
+import os
+
 import numpy as np
 import xatlas
+
+log = logging.getLogger(__name__)
 
 # O xatlas pode ficar preso em malhas do refine Hi3D (campfire_pit_refined:
 # >170 s) e a chamada é C — não dá para interromper in-process. O unwrap corre
@@ -21,7 +26,9 @@ import xatlas
 # vez de pendurar o lote. O mesh do paint deve vir topology-fixado do
 # GameAssets (refix pós-refine) — aí o xatlas termina (~60 s no caso patológico,
 # com atlas utilizável).
-_XATLAS_TIMEOUT_S = 300.0
+# 300 s era curto para humanoides de ~260k faces com topologia fina (3/15 no
+# pack Vael 2026-11-10); o limite é só anti-pendura, não orçamento de qualidade.
+_XATLAS_TIMEOUT_S = float(os.environ.get("PAINT3D_XATLAS_TIMEOUT_S", "900") or 900)
 
 
 def _triangulate_in_place(mesh_obj) -> None:
@@ -90,6 +97,43 @@ def xatlas_parametrize_bounded(verts, faces, *, timeout_s: float = _XATLAS_TIMEO
         return data["vmapping"], data["indices"], data["uvs"]
 
 
+def _atlas_padding(texture_size: int) -> int:
+    """Gutter de empacotamento em texels (o bake ainda dilata as seams)."""
+    return 2 if int(texture_size) <= 2048 else 4
+
+
+def _weld_positions(verts: np.ndarray, faces: np.ndarray) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
+    """Solder vértices por posição antes do xatlas.
+
+    O GLB chega ao paint com os splits de normal do export (o ogro tem 16k
+    vértices duplicados e 35k arestas de fronteira). O xatlas trata cada split
+    como fronteira e fragmenta o atlas; soldar por posição antes do unwrap é
+    o que evita gastar charts em cracks falsos (no lod0 antigo: 2703→618
+    ilhas). Tolerância de 1 µm: só funde cópias exactas, nunca geometria
+    vizinha.
+
+    Returns:
+        ``(verts, faces, stats)`` — ``welded_verts`` e ``degenerate_faces``.
+    """
+    empty = {"welded_verts": 0, "degenerate_faces": 0}
+    if len(verts) == 0 or len(faces) == 0:
+        return np.asarray(verts, dtype=np.float32), np.asarray(faces, dtype=np.int32), empty
+    key = np.round(np.asarray(verts, dtype=np.float64), 6)
+    _uniq, first, inverse = np.unique(key, axis=0, return_index=True, return_inverse=True)
+    inv = np.asarray(inverse, dtype=np.int64).reshape(-1)
+    new_verts = np.asarray(verts, dtype=np.float32)[first]
+    new_faces = inv[np.asarray(faces, dtype=np.int64)]
+    ok = (new_faces[:, 0] != new_faces[:, 1]) & (new_faces[:, 1] != new_faces[:, 2]) & (new_faces[:, 0] != new_faces[:, 2])
+    stats = {
+        "welded_verts": int(len(verts) - len(new_verts)),
+        "degenerate_faces": int((~ok).sum()),
+    }
+    if not ok.any():
+        # Salvaguarda: weld colapsou tudo (malha degenerada) — usar a original.
+        return np.asarray(verts, dtype=np.float32), np.asarray(faces, dtype=np.int32), empty
+    return new_verts, new_faces[ok].astype(np.int32), stats
+
+
 def mesh_uv_wrap(mesh_objects, *, texture_size: int = 2048):
     import bpy
 
@@ -121,7 +165,21 @@ def mesh_uv_wrap(mesh_objects, *, texture_size: int = 2048):
     if len(faces) > 500_000_000:
         raise ValueError("The mesh has more than 500,000,000 faces, which is not supported.")
 
-    vmapping, indices, uvs = xatlas_parametrize_bounded(verts, faces)
+    verts, faces, weld_stats = _weld_positions(verts, faces)
+    if weld_stats["welded_verts"] or weld_stats["degenerate_faces"]:
+        log.info(
+            "mesh_uv_wrap: weld por posição — %d vértices, %d faces degeneradas; %d faces para o xatlas",
+            weld_stats["welded_verts"],
+            weld_stats["degenerate_faces"],
+            len(faces),
+        )
+
+    vmapping, indices, uvs = xatlas_parametrize_bounded(
+        verts,
+        faces,
+        resolution=int(texture_size),
+        padding=_atlas_padding(texture_size),
+    )
     new_verts = verts[vmapping]
     _rebuild_with_per_vertex_uvs(mesh, new_verts, indices, uvs)
 

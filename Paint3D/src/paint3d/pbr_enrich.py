@@ -26,9 +26,22 @@ import numpy as np
 
 _TIMEOUT_S = 600
 
+# Override por-request (worker vramd): o ``--no-pbr-enrich`` do CLI vive no
+# processo que faz o pedido; o worker é outro processo e herdava o default ON.
+# ``None`` → cai para o env (CLI interactiva).
+_ENABLED_OVERRIDE: bool | None = None
+
+
+def set_pbr_enrich_override(enabled: bool | None) -> None:
+    """Liga/desliga o enriquecimento para o próximo job do worker."""
+    global _ENABLED_OVERRIDE
+    _ENABLED_OVERRIDE = None if enabled is None else bool(enabled)
+
 
 def pbr_enrich_enabled() -> bool:
     """``PAINT3D_PBR_ENRICH`` — default ON; ``0`` desliga o enriquecimento."""
+    if _ENABLED_OVERRIDE is not None:
+        return _ENABLED_OVERRIDE
     return os.environ.get("PAINT3D_PBR_ENRICH", "").strip() != "0"
 
 

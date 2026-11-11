@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import hashlib
 from contextlib import ExitStack
 from importlib import resources
 from pathlib import Path
@@ -32,7 +33,13 @@ POSE_PRESETS: dict[str, str] = {
     # só a partir da imagem — mesma conclusão de ``derive_openhand_apose.py``.
     # Derivação: ``scripts/derive_omni_apose_nofingers.py``.
     "omni-apose-nofingers": "omni_apose_nofingers_bone.txt",
-    "quaternius-apose": "omni_apose_nofingers_bone.txt",
+    # A-pose de produção: o nofingers com as pernas abertas ±10°. O oficial tem
+    # os tornozelos na vertical (gap 0.166 no esqueleto) e o Hunyuan fundia as
+    # coxas no MC — no pool Vael o vão aos joelhos media 0-2 cm. A rotação da
+    # cadeia da perna (não do joelho) abre o vão sem dobrar nada.
+    "omni-apose-spread": "omni_apose_nofingers_spread_bone.txt",
+    "quaternius-apose-spread": "omni_apose_nofingers_spread_bone.txt",
+    "quaternius-apose": "omni_apose_nofingers_spread_bone.txt",
     # Esqueleto oficial COMPLETO (51 ossos, com dedos) — só bench/comparação.
     "omni-apose": "omni_apose_bone.txt",
     # Esqueleto mínimo antigo (22 ossos) — só para comparação/bench.
@@ -42,8 +49,8 @@ POSE_PRESETS: dict[str, str] = {
     # Aliases
     "dwarf-tpose": "quaternius_tpose_dwarf_bone.txt",
     "chibi-tpose": "quaternius_tpose_dwarf_bone.txt",
-    "a-pose": "omni_apose_nofingers_bone.txt",
-    "apose": "omni_apose_nofingers_bone.txt",
+    "a-pose": "omni_apose_nofingers_spread_bone.txt",
+    "apose": "omni_apose_nofingers_spread_bone.txt",
     "dwarf-apose": "quaternius_apose_dwarf_bone.txt",
     "chibi-apose": "quaternius_apose_dwarf_bone.txt",
 }
@@ -242,6 +249,22 @@ def pose_bone_count(pose_file: str | Path | None) -> int | None:
     return n or None
 
 
+def pose_digest(pose_file: str | Path | None) -> str | None:
+    """Hash curto do conteúdo da pose — identidade dos *valores* do esqueleto.
+
+    ``pose_bones`` só muda quando a contagem muda. Re-derivar o mesmo preset
+    com outras posições (ex. pernas abertas ±10° em 2026-11-10) mantém o nome
+    e os 21 ossos, por isso sem o digest o ``resume`` dava o shape por bom.
+    """
+    if not pose_file:
+        return None
+    try:
+        data = Path(pose_file).read_bytes()
+    except OSError:
+        return None
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
 def merge_omni_controls(
     *,
     control_type: str | None = None,
@@ -354,9 +377,11 @@ def merge_omni_controls(
         "size_m": list(size_m) if size_m is not None else None,
         "height_m": float(height_m) if height_m is not None else None,
         "footprint_m": float(footprint_m) if footprint_m is not None else None,
-        # Identidade do esqueleto (nº de ossos) — entra no fingerprint para o
-        # resume invalidar quando o preset passa a apontar a outro ficheiro.
+        # Identidade do esqueleto (nº de ossos + hash dos valores) — entra no
+        # fingerprint para o resume invalidar quando o preset passa a apontar a
+        # outro ficheiro ou quando os valores mudam sem mudar a contagem.
         "pose_bones": pose_bone_count(pose_file),
+        "pose_digest": pose_digest(pose_file),
     }
     return out
 
@@ -463,6 +488,12 @@ def omni_fingerprint(controls: dict[str, Any]) -> dict[str, Any]:
         except (TypeError, ValueError):
             pose_bones = None
 
+    # Hash dos valores da pose (vem de ``merge_omni_controls``). Sidecars
+    # antigos não têm a chave → regen assim que o preset é re-derivado.
+    pose_digest_val = controls.get("pose_digest")
+    if not isinstance(pose_digest_val, str) or not pose_digest_val.strip():
+        pose_digest_val = None
+
     fingerprint = {
         "control_type": controls.get("control_type") or "none",
         "bbox": bbox_vals,
@@ -481,6 +512,8 @@ def omni_fingerprint(controls: dict[str, Any]) -> dict[str, Any]:
     }
     if pose_bones is not None:
         fingerprint["pose_bones"] = pose_bones
+    if pose_digest_val is not None:
+        fingerprint["pose_digest"] = pose_digest_val
     return fingerprint
 
 

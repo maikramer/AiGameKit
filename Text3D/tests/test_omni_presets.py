@@ -277,7 +277,7 @@ class TestFingerprintSeed:
 
 class TestAposePreset:
     def test_resolve_apose_is_upstream_skeleton_without_fingers(self) -> None:
-        path = resolve_pose_preset("quaternius-apose")
+        path = resolve_pose_preset("omni-apose-nofingers")
         assert path.is_file()
         assert path.name == "omni_apose_nofingers_bone.txt"
         lines = path.read_text(encoding="utf-8").strip().splitlines()
@@ -285,9 +285,59 @@ class TestAposePreset:
         # não. Com dedos o modelo constrói a mão DUAS vezes (imagem + esqueleto,
         # 90° desfasadas) → mãos «balão» e 7-9 dedos por mão (2026-10-29).
         assert len(lines) == 21
-        assert resolve_pose_preset("omni-apose-nofingers") == path
+
+    def test_default_apose_is_spread_variant(self) -> None:
+        path = resolve_pose_preset("quaternius-apose")
+        assert path.is_file()
+        assert path.name == "omni_apose_nofingers_spread_bone.txt"
+        assert len(path.read_text(encoding="utf-8").strip().splitlines()) == 21
+        assert resolve_pose_preset("omni-apose-spread") == path
+        assert resolve_pose_preset("quaternius-apose-spread") == path
         assert resolve_pose_preset("a-pose") == path
         assert resolve_pose_preset("apose") == path
+
+    def test_spread_opens_ankles_but_keeps_arms_and_knees(self) -> None:
+        """A variante de produção abre as pernas sem tocar nos braços.
+
+        O oficial tem tornozelos a ±0.083 (praticamente verticais) e o Hunyuan
+        fundia as coxas no MC; a rotação da cadeia inteira abre o vão e mantém
+        o joelho direito (ângulo Foot↔Knee invariante).
+        """
+        import json
+        import math
+
+        import numpy as np
+
+        from text3d.omni_presets import omni_data_path
+
+        base_names = list(json.loads(omni_data_path("omni_apose_nofingers_bone.json").read_text(encoding="utf-8")))
+        base = np.loadtxt(omni_data_path("omni_apose_nofingers_bone.txt"))
+        sp_names = list(
+            json.loads(omni_data_path("omni_apose_nofingers_spread_bone.json").read_text(encoding="utf-8"))
+        )
+        spread = np.loadtxt(omni_data_path("omni_apose_nofingers_spread_bone.txt"))
+
+        def ankle_gap(names: list[str], txt: np.ndarray) -> float:
+            return abs(
+                float(txt[names.index("Ankle.L"), 3]) - float(txt[names.index("Ankle.R"), 3])
+            )
+
+        def bone_angle(names: list[str], txt: np.ndarray, a: str, b: str) -> float:
+            va = txt[names.index(a), 3:] - txt[names.index(a), :3]
+            vb = txt[names.index(b), 3:] - txt[names.index(b), :3]
+            c = float(np.dot(va, vb) / (np.linalg.norm(va) * np.linalg.norm(vb)))
+            return math.degrees(math.acos(max(-1.0, min(1.0, c))))
+
+        assert ankle_gap(sp_names, spread) > ankle_gap(base_names, base) * 2.5
+        for side in ("R", "L"):
+            assert bone_angle(sp_names, spread, f"Foot.{side}", f"Knee.{side}") == pytest.approx(
+                bone_angle(base_names, base, f"Foot.{side}", f"Knee.{side}"), abs=1e-6
+            )
+        # Braços intactos (mesmos valores do nofingers).
+        for name in ("Arm.R", "Elbow.R", "Wrist.R", "Arm.L", "Elbow.L", "Wrist.L"):
+            assert np.allclose(
+                spread[sp_names.index(name)], base[base_names.index(name)], atol=1e-12
+            )
 
     def test_upstream_full_skeleton_still_selectable(self) -> None:
         """O oficial completo (51, com dedos) fica só para bench/comparação."""
@@ -322,6 +372,7 @@ class TestAposePreset:
         for jname, tname in (
             ("omni_apose_bone.json", "omni_apose_bone.txt"),
             ("omni_apose_nofingers_bone.json", "omni_apose_nofingers_bone.txt"),
+            ("omni_apose_nofingers_spread_bone.json", "omni_apose_nofingers_spread_bone.txt"),
         ):
             names = list(json.loads(omni_data_path(jname).read_text(encoding="utf-8")))
             txt = np.loadtxt(omni_data_path(tname))
@@ -380,6 +431,45 @@ class TestFingerprintPoseBones:
             encoding="utf-8",
         )
         assert not omni_fingerprint_matches(glb, expected)
+
+
+class TestFingerprintPoseDigest:
+    """Mudar os valores do preset (pernas ±10°) não muda nome nem nº de ossos."""
+
+    def test_merge_records_pose_digest(self) -> None:
+        out = merge_omni_controls(pose_preset="quaternius-apose")
+        assert isinstance(out["pose_digest"], str)
+        assert len(out["pose_digest"]) == 16
+        assert omni_fingerprint(out)["pose_digest"] == out["pose_digest"]
+
+    def test_bbox_controls_have_no_pose_digest_key(self) -> None:
+        out = merge_omni_controls(bbox_preset="door")
+        assert out["pose_digest"] is None
+        assert "pose_digest" not in omni_fingerprint(out)
+
+    def test_digest_changes_when_values_change(self, tmp_path: Path) -> None:
+        from text3d.omni_presets import pose_digest
+
+        src = resolve_pose_preset("quaternius-apose")
+        a = tmp_path / "a.txt"
+        a.write_bytes(src.read_bytes())
+        b = tmp_path / "b.txt"
+        b.write_text(src.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        assert pose_digest(a) != pose_digest(b)
+
+    def test_sidecar_without_pose_digest_is_stale(self, tmp_path: Path) -> None:
+        glb = tmp_path / "hero_shape.glb"
+        glb.write_bytes(b"glTF")
+        expected = merge_omni_controls(pose_preset="quaternius-apose")
+        write_omni_fingerprint(glb, {**expected, "pose_digest": None})
+        assert not omni_fingerprint_matches(glb, expected)
+
+    def test_sidecar_with_same_digest_matches(self, tmp_path: Path) -> None:
+        glb = tmp_path / "hero_shape.glb"
+        glb.write_bytes(b"glTF")
+        expected = merge_omni_controls(pose_preset="quaternius-apose")
+        write_omni_fingerprint(glb, expected)
+        assert omni_fingerprint_matches(glb, expected)
 
 
 class TestFingerprintMcLevelZero:

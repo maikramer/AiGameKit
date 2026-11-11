@@ -71,6 +71,61 @@ def test_classify_master_need_topology_fix(tmp_path: Path) -> None:
     assert state == _ROW_NEED_TOPOLOGY_FIX
 
 
+def test_classify_master_refine_stale_forces_paint(tmp_path: Path) -> None:
+    """Multiview mudou: mesmo com painted, volta ao passo paint."""
+    from gameassets.paths import (
+        _ROW_NEED_PAINT,
+        _classify_row_state_master,
+        _clean_path,
+        _painted_path,
+        _shape_path,
+    )
+
+    img = tmp_path / "img.png"
+    _touch(img)
+    mesh = tmp_path / "mesh.glb"
+    _touch(_shape_path(mesh))
+    _touch(_clean_path(mesh))
+    _touch(_painted_path(mesh))
+    state = _classify_row_state_master(
+        img_final=img,
+        mesh_final=mesh,
+        want_texture=True,
+        wants_rig=False,
+        wants_animate=False,
+        refine_stale=True,
+    )
+    assert state == _ROW_NEED_PAINT
+
+
+def test_classify_legacy_refine_stale_forces_paint(tmp_path: Path) -> None:
+    from gameassets.paths import (
+        _ROW_NEED_PAINT,
+        _classify_row_state,
+        _clean_path,
+        _painted_path,
+        _shape_path,
+    )
+
+    img = tmp_path / "img.png"
+    _touch(img)
+    mesh = tmp_path / "mesh.glb"
+    _touch(_shape_path(mesh))
+    _touch(_clean_path(mesh))
+    _touch(_painted_path(mesh))
+    state = _classify_row_state(
+        img_final=img,
+        mesh_final=mesh,
+        rig_out=tmp_path / "mesh_rigged.glb",
+        anim_out=tmp_path / "mesh_rigged_animated.glb",
+        want_texture=True,
+        wants_rig=False,
+        wants_animate=False,
+        refine_stale=True,
+    )
+    assert state == _ROW_NEED_PAINT
+
+
 def test_classify_master_need_paint(tmp_path: Path) -> None:
     from gameassets.paths import (
         _ROW_NEED_PAINT,

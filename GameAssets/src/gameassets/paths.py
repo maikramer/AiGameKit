@@ -630,6 +630,7 @@ def _classify_row_state(
     wants_collision: bool = False,
     lod0_path: Path | None = None,
     collision_path: Path | None = None,
+    refine_stale: bool = False,
 ) -> str:
     shape = _shape_path(mesh_final)
     painted = _painted_path(mesh_final)
@@ -638,6 +639,10 @@ def _classify_row_state(
     final_exists = (_valid_file(painted) or _valid_file(mesh_final)) if want_texture else _valid_file(shape)
 
     if final_exists:
+        # Multiview mudou: re-pinta primeiro; rig/animate/LOD herdam o painted
+        # novo e voltam a correr a seguir.
+        if refine_stale:
+            return _ROW_NEED_PAINT
         if wants_rig and not _valid_file(rig_out):
             return _ROW_NEED_RIG
         if wants_rig and wants_animate and not _valid_file(anim_out):
@@ -662,6 +667,7 @@ def _classify_row_state_master(
     wants_lod: bool = True,
     wants_collision: bool = True,
     omni_stale: bool = False,
+    refine_stale: bool = False,
 ) -> str:
     """Classifica estado da row para o master pipeline (Round 3 DAG).
 
@@ -671,6 +677,9 @@ def _classify_row_state_master(
     Devolve o primeiro estágio que ainda falta.
 
     ``omni_stale``: shape existe mas fingerprint Omni mudou -> ``need_shape``.
+    ``refine_stale``: multiview ativo mas o sidecar do Hi3D não corresponde às
+    vistas/params -> ``need_paint`` (o passo paint re-corre
+    ``ensure_to_paint_for_paint``, que re-refina antes de pintar).
     """
     shape_any = _shape_existing(mesh_final)
     painted_any = _painted_existing(mesh_final)
@@ -691,6 +700,11 @@ def _classify_row_state_master(
     if clean_any is None:
         return _ROW_NEED_TOPOLOGY_FIX
     if want_texture and painted_any is None:
+        return _ROW_NEED_PAINT
+    # Refine multiview desatualizado (vistas ou params mudaram): volta ao passo
+    # paint para re-correr Hi3D -> _to_paint -> paint -> LOD. Não mexe em
+    # frontal/shape, que são reutilizados.
+    if refine_stale:
         return _ROW_NEED_PAINT
 
     promoted_anim = _valid_file(lod0) and _glb_is_promoted_animated(lod0)

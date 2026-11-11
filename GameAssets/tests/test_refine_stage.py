@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import time
 from pathlib import Path
 
 import pytest
 
+from gameassets import multiview as MV
 from gameassets import pipeline as P
 from gameassets.paths import _intermediate_dir, _refined_existing, _refined_path
 from gameassets.profile import GameProfile, RefineProfile, _parse_refine_profile
@@ -258,7 +261,8 @@ class TestRunRefineStage:
         out = _refined_path(mesh)
 
         def _fake_run(argv: list[str], **_kw: object) -> _FakeRun:
-            out.write_bytes(b"glb-refined")
+            # O passe escreve no ``-o`` (temporário por vista), não no _refined.
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glb-refined")
             return _FakeRun(0)
 
         monkeypatch.setattr(P, "_bin_or_none", lambda *_a: "/bin/hi3d")
@@ -270,12 +274,11 @@ class TestRunRefineStage:
 
     def test_argv_contains_expected_flags(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         mesh, clean, img = self._setup(tmp_path, monkeypatch)
-        out = _refined_path(mesh)
         captured: list[list[str]] = []
 
         def _fake_run(argv: list[str], **_kw: object) -> _FakeRun:
             captured.append(argv)
-            out.write_bytes(b"glb")
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glb")
             return _FakeRun(0)
 
         monkeypatch.setattr(P, "_bin_or_none", lambda *_a: "/bin/hi3d")
@@ -330,6 +333,181 @@ class TestRunRefineStage:
         assert called == []
 
 
+class TestMultiviewChain:
+    """Cadeia de passes Hi3D: uma imagem por vista, saída = coarse seguinte."""
+
+    def _setup(self, tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
+        mesh = tmp_path / "meshes" / "goblin.glb"
+        mesh.parent.mkdir(parents=True)
+        mesh.write_bytes(b"glb")
+        clean = _intermediate_dir(mesh) / "goblin_clean.glb"
+        clean.parent.mkdir(parents=True)
+        clean.write_bytes(b"glb")
+        images = tmp_path / "images"
+        images.mkdir(parents=True)
+        front = images / "goblin.png"
+        front.write_bytes(b"front")
+        back = images / "goblin_back.png"
+        back.write_bytes(b"back")
+        left = images / "goblin_left.png"
+        left.write_bytes(b"left")
+        return mesh, clean, front, back, left
+
+    def _call(self, mesh: Path, clean: Path, profile: GameProfile, row: object | None = None):
+        return P._run_refine_stage(
+            clean,
+            mesh,
+            text3d_bin="/bin/text3d",
+            profile=profile,
+            child_env={},
+            manifest_dir=mesh.parent.parent,
+            force=False,
+            row=row,  # type: ignore[arg-type]
+        )
+
+    def _patch(self, monkeypatch: pytest.MonkeyPatch, run) -> None:
+        monkeypatch.setattr(P, "_bin_or_none", lambda *_a: "/bin/hi3d")
+        monkeypatch.setattr(P, "run_cmd", run)
+        monkeypatch.setattr(P, "_count_faces_glb", lambda _p: 10)
+        monkeypatch.setattr(P, "_glb_has_geometry", lambda _p: True)
+        monkeypatch.setattr(P, "_resolve_lod_target_faces", lambda *_a, **_k: 1000)
+        monkeypatch.setattr(P.console, "print", lambda *a, **k: None)
+
+    def test_chain_order_cap_and_sidecar(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mesh, clean, front, back, left = self._setup(tmp_path)
+        prof = _profile(refine={"views": 3, "max_faces_scale": 4.0})
+        calls: list[list[str]] = []
+
+        def _fake_run(argv: list[str], **_kw: object) -> _FakeRun:
+            calls.append(argv)
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glb")
+            return _FakeRun(0)
+
+        self._patch(monkeypatch, _fake_run)
+        from gameassets.manifest import ManifestRow
+
+        row = ManifestRow(id="goblin", idea="", kind=None, category="prop", generate_3d=True)
+        out = self._call(mesh, clean, prof, row=row)
+
+        assert out == _refined_path(mesh) and out.is_file()
+        assert len(calls) == 3
+        assert [c[c.index("-i") + 1] for c in calls] == [str(front), str(back), str(left)]
+        # Intermédios sem decimação; o último aplica o teto (1000 x 4.0).
+        assert [c[c.index("--max-faces") + 1] for c in calls] == ["0", "0", "4000"]
+        sidecar = json.loads(MV.refine_sidecar_path(mesh).read_text(encoding="utf-8"))
+        assert sidecar["views"] == ["front", "back", "left"]
+
+    def test_sidecar_reuses_without_calling_hi3d(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mesh, clean, _front, _back, _left = self._setup(tmp_path)
+        prof = _profile(refine={"views": 3, "max_faces_scale": 4.0})
+        calls: list[list[str]] = []
+
+        def _fake_run(argv: list[str], **_kw: object) -> _FakeRun:
+            calls.append(argv)
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glb")
+            return _FakeRun(0)
+
+        self._patch(monkeypatch, _fake_run)
+        self._call(mesh, clean, prof)
+        assert len(calls) == 3
+        self._call(mesh, clean, prof)
+        assert len(calls) == 3
+
+    def test_changed_view_invalidates_cache(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mesh, clean, _front, back, _left = self._setup(tmp_path)
+        prof = _profile(refine={"views": 3, "max_faces_scale": 4.0})
+        calls: list[list[str]] = []
+
+        def _fake_run(argv: list[str], **_kw: object) -> _FakeRun:
+            calls.append(argv)
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glb")
+            return _FakeRun(0)
+
+        self._patch(monkeypatch, _fake_run)
+        self._call(mesh, clean, prof)
+        assert len(calls) == 3
+        time.sleep(0.002)
+        back.write_bytes(b"back-v2")
+        self._call(mesh, clean, prof)
+        assert len(calls) == 6
+
+    def test_partial_failure_uses_last_good(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mesh, clean, _front, _back, _left = self._setup(tmp_path)
+        prof = _profile(refine={"views": 3, "max_faces_scale": 4.0})
+        calls: list[list[str]] = []
+
+        def _fake_run(argv: list[str], **_kw: object) -> _FakeRun:
+            calls.append(argv)
+            if len(calls) == 2:
+                return _FakeRun(1, stderr="boom")
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glb")
+            return _FakeRun(0)
+
+        self._patch(monkeypatch, _fake_run)
+        out = self._call(mesh, clean, prof)
+
+        assert out is not None and out.is_file()
+        assert len(calls) == 2
+        sidecar = json.loads(MV.refine_sidecar_path(mesh).read_text(encoding="utf-8"))
+        assert sidecar["views"] == ["front"]
+
+    def test_success_invalidates_painted_lod_and_collision(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mesh, clean, _front, _back, _left = self._setup(tmp_path)
+        prof = _profile(refine={"views": [("front"), ("back"), ("left")], "max_faces_scale": 4.0})
+        downstream = [
+            P._painted_path(mesh),
+            P._lod_path(mesh, 0),
+            P._lod_path(mesh, 1),
+            P._lod_path(mesh, 2),
+            P._collision_path(mesh),
+            P._precompute_path(mesh),
+        ]
+        for p in downstream:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b"old")
+
+        def _fake_run(argv: list[str], **_kw: object) -> _FakeRun:
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glb")
+            return _FakeRun(0)
+
+        self._patch(monkeypatch, _fake_run)
+        out = self._call(mesh, clean, prof)
+        assert out is not None and out.is_file()
+        assert not any(p.exists() for p in downstream)
+
+    def test_single_view_keeps_downstream(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mesh, clean, _front, _back, _left = self._setup(tmp_path)
+        painted = P._painted_path(mesh)
+        painted.parent.mkdir(parents=True, exist_ok=True)
+        painted.write_bytes(b"old")
+
+        def _fake_run(argv: list[str], **_kw: object) -> _FakeRun:
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glb")
+            return _FakeRun(0)
+
+        self._patch(monkeypatch, _fake_run)
+        self._call(mesh, clean, _profile())
+        assert painted.exists()
+
+    def test_single_view_has_no_sidecar(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mesh, clean, _front, _back, _left = self._setup(tmp_path)
+        calls: list[list[str]] = []
+
+        def _fake_run(argv: list[str], **_kw: object) -> _FakeRun:
+            calls.append(argv)
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glb")
+            return _FakeRun(0)
+
+        self._patch(monkeypatch, _fake_run)
+        out = self._call(mesh, clean, _profile())
+
+        assert out is not None and out.is_file()
+        assert len(calls) == 1
+        assert not MV.refine_sidecar_path(mesh).exists()
+
+
 class TestEnsureCleanReturnsRefined:
     def test_clean_passthrough_when_refine_unavailable(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         mesh = tmp_path / "meshes" / "goblin.glb"
@@ -366,7 +544,7 @@ class TestEnsureCleanReturnsRefined:
         refined = _refined_path(mesh)
 
         def _fake_run(argv: list[str], **_kw: object) -> _FakeRun:
-            refined.write_bytes(b"glb")
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glb")
             return _FakeRun(0)
 
         monkeypatch.setattr(P, "_bin_or_none", lambda *_a: "/bin/hi3d")

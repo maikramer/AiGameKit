@@ -31,6 +31,7 @@ def build_texture_request(
     allow_group_offload: bool = True,
     memory_efficient: bool = False,
     sdnq_preset: str | None = None,
+    pbr_enrich: bool | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload vramd paint3d com peak opts."""
@@ -56,6 +57,7 @@ def build_texture_request(
             "upscale": True if upscale else None,
             "upscale_factor": None if upscale_factor is None else float(upscale_factor),
             "torch_compile_mode": torch_compile_mode,
+            "pbr_enrich": pbr_enrich,
         },
         extra=extra,
     )

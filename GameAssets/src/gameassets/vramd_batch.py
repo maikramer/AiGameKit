@@ -179,6 +179,7 @@ def paint_specs_from_items(
     gpu_ids: list[int] | None = None,
     memory_efficient: bool | None = None,
     sdnq_preset: str | None = None,
+    pbr_enrich: bool | None = None,
 ) -> list[UmsJobSpec]:
     """Converte items do paint_manifest.json em ``UmsJobSpec``."""
     try:
@@ -213,6 +214,7 @@ def paint_specs_from_items(
             gpu_ids=gpu_ids,
             memory_efficient=bool(item_mem),
             sdnq_preset=item_sdnq,
+            pbr_enrich=item.get("pbr_enrich", pbr_enrich),
         )
         specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
     return specs
@@ -663,6 +665,7 @@ def text2d_specs_from_items(
             footprint_key=footprint,
             category=category,
             transparent=True if transparent else None,
+            refs=item.get("refs"),
         )
         specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
     return specs

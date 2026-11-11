@@ -38,6 +38,7 @@ from typing import Any
 
 from rich.console import Console
 
+from . import multiview
 from .categories import (
     animator_preset_for_category,
     category_wants_bake_normals,
@@ -796,6 +797,19 @@ def _texture_subprocess_argv(
         }
         if _over:
             p3 = _dc.replace(p3, **_over)
+    # Personagens: mais vistas/resolução que o default do tier, sem pisar um
+    # override explícito do manifest (``paint3d.max_views``/``view_resolution``).
+    char_views, char_res = _character_paint_opts(row)
+    if char_views is not None or char_res is not None:
+        import dataclasses as _dc
+
+        _char_over: dict[str, int] = {}
+        if p3.max_views is None and char_views is not None:
+            _char_over["max_views"] = char_views
+        if p3.view_resolution is None and char_res is not None:
+            _char_over["view_resolution"] = char_res
+        if _char_over:
+            p3 = _dc.replace(p3, **_char_over)
     effective_style = (p3.style or "hunyuan").strip().lower()
     if (
         profile.paint3d is not None
@@ -1374,24 +1388,31 @@ def _run_refine_stage(
             return None
 
     refined_p = _refined_path(mesh_final)
-    if not force and refined_p.is_file() and _glb_has_geometry(refined_p):
-        with contextlib.suppress(OSError):
-            if refined_p.stat().st_mtime >= clean_p.stat().st_mtime:
-                log.info("refine: reuso %s", refined_p.name)
-                return refined_p
-
-    hi3d_bin = _bin_or_none("HI3D_BIN", "hi3d")
-    if not hi3d_bin:
-        console.print(
-            "[yellow]⤵ refine[/yellow] hi3d ausente — instala com "
-            "[cyan]./install.sh hi3d[/cyan] + [cyan]hi3d download-model[/cyan]"
-        )
-        return None
 
     image_p = _reference_image_for(mesh_final, profile)
     if image_p is None:
         log.warning("refine: imagem de referência ausente para %s — a saltar", row.id if row else mesh_final.stem)
         return None
+
+    # Cadeia multiview: uma imagem por vista, um passe Hi3D por imagem. Vistas
+    # extra em falta são saltadas (a fase de imagens do resume/batch devia
+    # tê-las gerado); uma falha nunca invalida o asset. O sidecar do refine
+    # registra as vistas que correram, por isso o próximo resume volta a tentar
+    # as que faltarem.
+    chain: list[tuple[str, Path]] = []
+    for view in multiview.configured_views(profile, row):
+        view_p = image_p if view == "front" else multiview.resolve_view_image(mesh_final, profile, view, front=image_p)
+        if view_p is None:
+            log.warning(
+                "refine: vista %s em falta para %s — a saltar essa vista",
+                view,
+                row.id if row is not None else mesh_final.stem,
+            )
+            continue
+        chain.append((view, view_p))
+    if not chain:
+        return None
+    multi = len(chain) > 1
 
     target = _resolve_lod_target_faces(profile, row) if row is not None else 0
     max_faces = int(target * rp.max_faces_scale) if target > 0 and rp.max_faces_scale > 0 else 0
@@ -1453,52 +1474,172 @@ def _run_refine_stage(
                 err = merge_subprocess_output(rs, max_chars=300) or "simplify do input do refine falhou"
                 log.warning("refine: simplify do input falhou (%s) — a tentar com o clean", err)
                 refine_in = clean_p
-    argv = [
-        text3d_bin,
-        "refine",
-        str(refine_in),
-        "-i",
-        str(image_p),
-        "-o",
-        str(refined_p),
-        "--resolution",
-        rp.resolution,
-        "--steps",
-        str(rp.steps),
-        "--max-faces",
-        str(max_faces),
-        "--json",
-    ]
-    if seed is not None:
-        argv.extend(["--seed", str(seed)])
-    if cat:
-        argv.extend(["--category", str(cat)])
-    if rp.model:
-        argv.extend(["--model", rp.model])
-    if rp.remove_background:
-        argv.append("--remove-background")
 
-    console.print(f"[cyan]⏳ refine[/cyan] {label} (Hi3D @{rp.resolution})")
-    t0 = time.perf_counter()
-    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
-    elapsed = time.perf_counter() - t0
+    params = {
+        "resolution": rp.resolution,
+        "steps": rp.steps,
+        "seed": seed,
+        "max_faces": max_faces,
+        "model": rp.model,
+        "remove_background": rp.remove_background,
+    }
 
-    if r.returncode == 3:
-        reason = merge_subprocess_output(r, max_chars=300) or "indisponível nesta GPU/instalação"
-        console.print(f"[yellow]⤵ refine[/yellow] {label}: {reason}")
-        return None
-    if r.returncode != 0 or not refined_p.is_file() or not _glb_has_geometry(refined_p):
-        err = merge_subprocess_output(r, max_chars=400) or "text3d refine falhou"
-        log.warning("refine falhou (%s): %s — a continuar com _clean", label, err)
-        console.print(f"[yellow]⤵ refine[/yellow] {label}: falhou (segue _clean)")
+    # Reuso. Mono-vista mantém o contrato legacy (mtime); multiview exige o
+    # sidecar com vistas/params/clean exatos — mudar uma vista re-refina.
+    if not force and refined_p.is_file() and _glb_has_geometry(refined_p):
+        if multi:
+            if multiview.refine_cache_ok(
+                mesh_final,
+                views=chain,
+                clean_path=clean_p,
+                input_path=refine_in,
+                params=params,
+            ):
+                log.info("refine: reuso %s (multiview cache)", refined_p.name)
+                return refined_p
+        else:
+            with contextlib.suppress(OSError):
+                if refined_p.stat().st_mtime >= clean_p.stat().st_mtime:
+                    log.info("refine: reuso %s", refined_p.name)
+                    return refined_p
+
+    hi3d_bin = _bin_or_none("HI3D_BIN", "hi3d")
+    if not hi3d_bin:
+        console.print(
+            "[yellow]⤵ refine[/yellow] hi3d ausente — instala com "
+            "[cyan]./install.sh hi3d[/cyan] + [cyan]hi3d download-model[/cyan]"
+        )
         return None
 
+    n = len(chain)
+
+    def _pass_input(src: Path, idx: int) -> Path:
+        """Entrada do passe ``idx``.
+
+        512/1024 devolvem ~1M faces (< cap); 1536 pode devolver ~2M — simplifica
+        para o próximo passe não rebentar o spconv.
+        """
+        if idx == 1 or _count_faces_glb(src) <= _REFINE_INPUT_MAX_FACES:
+            return src
+        dst = src.with_name(src.stem + "_refinein" + src.suffix)
+        sargv = [
+            text3d_bin,
+            "simplify",
+            str(src),
+            "-o",
+            str(dst),
+            "--target-faces",
+            str(_REFINE_INPUT_MAX_FACES),
+            "--no-repair",
+        ]
+        rs = run_cmd(sargv, extra_env=child_env, cwd=manifest_dir)
+        if rs.returncode != 0 or not dst.is_file() or not _glb_has_geometry(dst):
+            log.warning("refine: simplify do input intermédio falhou — a usar %s", src.name)
+            return src
+        return dst
+
+    # Temporários de uma execução anterior.
+    for stale in refined_p.parent.glob(f"{refined_p.stem}_pass*.glb"):
+        with contextlib.suppress(OSError):
+            stale.unlink()
+
+    t_all = time.perf_counter()
+    prev = refine_in
+    used: list[tuple[str, Path]] = []
+    for i, (view, view_p) in enumerate(chain, start=1):
+        out = refined_p.parent / f"{refined_p.stem}_pass{i}.glb"
+        pass_in = _pass_input(prev, i)
+        # Intermédios sem decimação (preserva detalhe); o último aplica o teto.
+        pass_max = 0 if i < n else max_faces
+        argv = [
+            text3d_bin,
+            "refine",
+            str(pass_in),
+            "-i",
+            str(view_p),
+            "-o",
+            str(out),
+            "--resolution",
+            rp.resolution,
+            "--steps",
+            str(rp.steps),
+            "--max-faces",
+            str(pass_max),
+            "--json",
+        ]
+        if seed is not None:
+            argv.extend(["--seed", str(seed)])
+        if cat:
+            argv.extend(["--category", str(cat)])
+        if rp.model:
+            argv.extend(["--model", rp.model])
+        if rp.remove_background:
+            argv.append("--remove-background")
+
+        tag = f"[{i}/{n}] {view} " if multi else ""
+        console.print(f"[cyan]⏳ refine[/cyan] {label} {tag}(Hi3D @{rp.resolution})")
+        r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
+
+        if r.returncode == 3:
+            reason = merge_subprocess_output(r, max_chars=300) or "indisponível nesta GPU/instalação"
+            if i == 1:
+                console.print(f"[yellow]⤵ refine[/yellow] {label}: {reason}")
+                return None
+            console.print(
+                f"[yellow]⤵ refine[/yellow] {label}: vista {view} indisponível ({reason}); "
+                f"a usar {len(used)} vista(s)"
+            )
+            break
+        if r.returncode != 0 or not out.is_file() or not _glb_has_geometry(out):
+            err = merge_subprocess_output(r, max_chars=400) or "text3d refine falhou"
+            if i == 1:
+                log.warning("refine falhou (%s): %s — a continuar com _clean", label, err)
+                console.print(f"[yellow]⤵ refine[/yellow] {label}: falhou (segue _clean)")
+                return None
+            log.warning("refine falhou na vista %s (%s): %s — última saída boa", view, label, err)
+            console.print(
+                f"[yellow]⤵ refine[/yellow] {label}: vista {view} falhou; a usar {len(used)} vista(s)"
+            )
+            break
+
+        prev = out
+        used.append((view, view_p))
+
+    if not used:
+        return None
+    prev.replace(refined_p)
+    if multi:
+        # Um _refined novo invalida tudo o que nasceu do painted/LOD antigo.
+        # Sem isto o master via os LOD/collision existentes e não os
+        # reconstruía — o entregável ficava com a geometria velha.
+        invalidate_split_artifacts(mesh_final)
+        for stale in (
+            _painted_path(mesh_final),
+            _lod_path(mesh_final, 0),
+            _lod_path(mesh_final, 1),
+            _lod_path(mesh_final, 2),
+            _collision_path(mesh_final),
+            _precompute_path(mesh_final),
+        ):
+            with contextlib.suppress(OSError):
+                stale.unlink()
+        multiview.write_refine_sidecar(
+            mesh_final,
+            views=used,
+            clean_path=clean_p,
+            input_path=refine_in,
+            params=params,
+        )
+    for stale in refined_p.parent.glob(f"{refined_p.stem}_pass*.glb"):
+        with contextlib.suppress(OSError):
+            stale.unlink()
+
+    total = time.perf_counter() - t_all
     faces = _count_faces_glb(refined_p)
-    console.print(
-        f"[green]✓ refine[/green] {label} → {refined_p.name} "
-        + (f"({faces:,} faces, " if faces > 0 else "(")
-        + f"{elapsed:.0f}s)"
-    )
+    inner = (f"{faces:,} faces, " if faces > 0 else "") + f"{total:.0f}s"
+    if multi:
+        inner += f", {len(used)}/{n} vistas"
+    console.print(f"[green]✓ refine[/green] {label} → {refined_p.name} ({inner})")
     return refined_p
 
 
@@ -1670,6 +1811,57 @@ def _resolve_paint_texture_size(profile: GameProfile, row: ManifestRow | None = 
     return quality_cap
 
 
+_CHARACTER_PAINT_CATEGORIES = frozenset({"humanoid", "creature", "character", "npc", "monster", "beast", "animal"})
+# Personagens/bosses: 8 vistas (combo do tier ``high``) em vez das 6 do
+# ``medium``. Subir a resolução para 640 estoura a VRAM em 6 GiB (pico do
+# worker com raster+UNet) — 8@512 é o ponto seguro e já cobre melhor o atlas.
+_CHARACTER_PAINT_MAX_VIEWS = 8
+_CHARACTER_PAINT_VIEW_RESOLUTION = 512
+# O xatlas é superlinear nos charts: 260k faces num atlas 2048 rebentava o
+# timeout de 300 s em vários personagens. 100k ainda dá ~2.5x o LOD0 e ~23
+# texels/face; o reflexo no atlas é muito maior que o detalhe perdido.
+_CHARACTER_TO_PAINT_FACES_CAP = 100_000
+_CHARACTER_TO_PAINT_FACES_CAP_4K = 160_000
+
+
+def _is_character_row(row: ManifestRow | None) -> bool:
+    """Row de personagem/criatura (o kind do manifest ou a categoria)."""
+    if row is None:
+        return False
+    kind = str(getattr(row, "kind", None) or "").strip().lower()
+    category = str(getattr(row, "category", None) or "").strip().lower()
+    return kind == "character" or category in _CHARACTER_PAINT_CATEGORIES
+
+
+def _character_paint_opts(row: ManifestRow | None) -> tuple[int | None, int | None]:
+    """``(max_views, view_resolution)`` por defeito para personagens."""
+    if not _is_character_row(row):
+        return None, None
+    return _CHARACTER_PAINT_MAX_VIEWS, _CHARACTER_PAINT_VIEW_RESOLUTION
+
+
+def _paint_item_overrides(profile: GameProfile, row: ManifestRow | None) -> dict[str, object]:
+    """Overrides por-item do paint (manifest row + defaults de personagem).
+
+    O ``texture-batch`` do vramd lê estas chaves de cada item do manifesto; o
+    caminho subprocesso usa o argv global (``_texture_subprocess_argv``).
+    ``pbr_enrich`` vai sempre explícito para o worker não cair no default ON.
+    """
+    opts: dict[str, object] = {}
+    if row is not None and row.paint3d:
+        for key in ("max_views", "view_resolution", "render_size", "texture_size", "bake_exp"):
+            if row.paint3d.get(key) is not None:
+                opts[key] = row.paint3d[key]
+    char_views, char_res = _character_paint_opts(row)
+    if char_views is not None and "max_views" not in opts:
+        opts["max_views"] = char_views
+    if char_res is not None and "view_resolution" not in opts:
+        opts["view_resolution"] = char_res
+    p3 = profile.paint3d
+    opts["pbr_enrich"] = bool(p3.pbr_enrich) if p3 is not None else False
+    return opts
+
+
 def _resolve_to_paint_faces(profile: GameProfile, row: ManifestRow | None = None) -> int:
     """Faces alvo do ``_to_paint``: row > profile > fórmula ~ texture_size."""
     if row is not None and row.paint3d:
@@ -1681,7 +1873,12 @@ def _resolve_to_paint_faces(profile: GameProfile, row: ManifestRow | None = None
         return int(p3.to_paint_faces)
     from aigamekit_shared.paint_budget import paint_target_faces
 
-    return paint_target_faces(_resolve_paint_texture_size(profile, row))
+    tex = _resolve_paint_texture_size(profile, row)
+    target = paint_target_faces(tex)
+    if _is_character_row(row):
+        cap = _CHARACTER_TO_PAINT_FACES_CAP if tex <= 2048 else _CHARACTER_TO_PAINT_FACES_CAP_4K
+        target = min(target, cap)
+    return target
 
 
 def ensure_to_paint_for_paint(
@@ -2325,6 +2522,7 @@ def _run_static_lod_stages(
     with_rig: bool,
     texture_size_lod0: int | None = None,
     lod_profile: Any = None,
+    category: str | None = None,
 ) -> None:
     """Caminho estático (sem rig): ladder LOD0/1/2 via ``text3d lod``.
 
@@ -2431,7 +2629,7 @@ def _run_static_lod_stages(
             "--min-faces-lod2",
             str(lod_min2),
             "--category",
-            str(row.category or row.kind or ""),
+            str(category or ""),
         ]
         if texture_size_lod0 is not None and int(texture_size_lod0) > 0:
             lod_argv.extend(["--texture-size", str(int(texture_size_lod0))])
@@ -3085,6 +3283,7 @@ def run_master_pipeline(
             with_rig=with_rig,
             texture_size_lod0=lod0_tex,
             lod_profile=profile.lod,
+            category=row.category or row.kind,
         )
 
     # Stage 5.5 - patch-pbr pós-lod: garante normal+AO em todos os níveis

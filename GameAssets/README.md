@@ -75,6 +75,45 @@ Manifest + game.yaml
 
 Pipeline stages (3D, rig, animate, lod, collision) are **auto-detected** from the manifest `pipeline` field and `game.yaml` profile blocks. Use `--no-3d`, `--no-rig`, `--no-animate`, `--no-lod`, `--no-collision` to explicitly opt out.
 
+## Hi3D multiview refine (optional)
+
+Hi3D v1.0 is **single-image per pass**. `refine.views` orchestrates a local
+multiview approximation: Text2D generates one image per view (the front is the
+existing reference image; the others are edits conditioned on it with `--ref`),
+then the refine stage runs one Hi3D pass per view, chaining each output as the
+next pass's coarse mesh.
+
+```yaml
+refine:
+  enabled: true
+  resolution: auto
+  steps: 25
+  max_faces_scale: 4.0
+  views: 4            # front, back, left, right (see measured note below)
+  # views: 6          # adds top + bottom; may soften thin front features
+  # views: [front, back, left, right, top]  # subset + chain order
+```
+
+- `views: 1` or omitted = mono-view (legacy path, mtime cache).
+- Per-row override: `refine: {views: 1}` (opt out) or
+  `refine: {views: [front, back]}` (custom set/order).
+- Extra views are written next to the front image as `<id>_<view>.png`.
+- Rigged rows and `humanoid`/`creature` categories skip refine (Hi3D changes the
+  pose) and do not generate extra views.
+- Cache: `_intermediate/<id>_views.json` (view generation) and
+  `_intermediate/<id>_refined.glb.multiview.json` (refine chain). Changing a
+  view or a refine parameter invalidates the chain and re-runs refine → paint →
+  LOD; the front image and shape are reused.
+- Cost: N Text2D images + N Hi3D passes per asset (~6× the mono-view refine plus
+  the extra Text2D time). A failed view is non-fatal: the chain uses the
+  available views and the next resume retries the missing ones.
+- **Measured (A/B, watchtower on a 6 GB RTX 4050):** `views: 4`
+  (`front, back, left, right`) preserved the ladder, flag and crenellations and
+  added stone courses to the base. Adding `top`/`bottom` re-synthesized the
+  crown/flag and could drop thin front features; the last pass dominates the
+  final surface. Start with 4 views for buildings/vegetation with thin details,
+  and use 6 for simple props/rocks.
+
 ## Debug / lab tools
 
 Visual GLB debugging (screenshots, inspect, compare, bundle) lives in **[AiGameKitLab](../AiGameKitLab)** (`aigamekit-lab debug …`), not in `gameassets`.

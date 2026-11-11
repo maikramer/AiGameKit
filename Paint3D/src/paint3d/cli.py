@@ -480,6 +480,7 @@ def texture(
             torch_compile_mode=torch_compile_mode,
             channels_last=channels_last,
             allow_group_offload=allow_group_offload,
+            pbr_enrich=pbr_enrich,
         ),
         t_start=t_start,
         noun="Mesh texturizado",
@@ -848,14 +849,17 @@ def texture_batch(
                         item_tex = int(item_tex)
                     except (TypeError, ValueError):
                         item_tex = texture_size
+                item_pbr = item.get("pbr_enrich", pbr_enrich)
+                item_views = int(item.get("max_views", item.get("max_num_view", max_views)))
+                item_res = int(item.get("view_resolution", view_resolution))
                 if delegate_or_prepare(
                     "paint3d",
                     payload=build_texture_request(
                         mesh_path=str(mesh_path),
                         image_path=str(image_path),
                         output=str(output_path),
-                        max_num_view=max_views,
-                        view_resolution=view_resolution,
+                        max_num_view=item_views,
+                        view_resolution=item_res,
                         render_size=render_size,
                         texture_size=item_tex,
                         bake_exp=bake_exp,
@@ -867,6 +871,7 @@ def texture_batch(
                         torch_compile_mode=torch_compile_mode,
                         channels_last=channels_last,
                         allow_group_offload=allow_group_offload,
+                        pbr_enrich=item_pbr,
                     ),
                     t_start=t0,
                     noun="Mesh texturizado",

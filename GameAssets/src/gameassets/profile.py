@@ -10,6 +10,8 @@ import yaml
 
 from aigamekit_shared.anim_packs import AnimPackError, expand_anim_packs
 
+from .views import parse_views
+
 
 def _parse_output_dir(raw: Any) -> str:
     """Raiz dos assets (defeito: diretório atual - só `images/` e `meshes/`, sem pasta `outputs/`)."""
@@ -284,6 +286,13 @@ class RefineProfile:
           resolution: auto      # 512 | 1024 | 1536
           steps: 25
           max_faces_scale: 4.0  # teto = 4x o alvo de LOD0 (0 = sem decimação)
+          views: 6              # front, back, left, right, top, bottom
+                                # (ou lista explícita; 1 = mono-vista)
+
+    ``views`` ativa o refinamento multiview encadeado: o GameAssets gera as
+    vistas em falta com Text2D (a frontal é a referência) e corre um passe do
+    Hi3D por vista, encadeando a saída de cada um como coarse do seguinte. É
+    uma orquestração local — o Hi3D v1.0 continua mono-imagem por passe.
     """
 
     enabled: bool = True
@@ -296,6 +305,8 @@ class RefineProfile:
     #: Caminho/repo id do artefacto; None = cache do monorepo/Hub.
     model: str | None = None
     remove_background: bool = False
+    #: Vistas do refine encadeado (None/1 vista = comportamento mono-imagem).
+    views: tuple[str, ...] | None = None
 
 
 _REFINE_RESOLUTIONS = frozenset({"auto", "512", "1024", "1536"})
@@ -327,6 +338,7 @@ def _parse_refine_profile(raw: Any) -> RefineProfile | None:
         raise ValueError("refine.max_faces_scale deve ser >= 0")
     model_raw = raw.get("model")
     model_str = str(model_raw).strip() if model_raw not in (None, "") else ""
+    views = parse_views(raw.get("views"), where="refine.views")
     return RefineProfile(
         enabled=bool(raw.get("enabled", True)),
         resolution=res,
@@ -335,6 +347,7 @@ def _parse_refine_profile(raw: Any) -> RefineProfile | None:
         max_faces_scale=scale,
         model=model_str or None,
         remove_background=bool(raw.get("remove_background", False)),
+        views=views,
     )
 
 

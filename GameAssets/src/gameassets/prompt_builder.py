@@ -62,6 +62,43 @@ _I2M_EXTRA_NEGATIVES: tuple[str, ...] = (
     "fire plume",
 )
 
+# Vistas extra do refine multiview. O Text2D é chamado com a frontal como
+# ``--ref``; o Klein responde bem a uma *caption curta* do resultado ("the same
+# watchtower seen from directly behind") e mal a instruções de edição longas
+# com os hints/negativos da frontal — medido no watchtower: o prompt completo
+# devolvia a frontal outra vez; o mínimo gerou a vista de trás verdadeira (sem
+# escada/porta). Por isso estas vistas levam só sujeito + ângulo + framing; o
+# estilo vem da imagem de referência. Se uma vista continuar teimosa,
+# ``--upsample`` no Text2D melhora a aderência (9B, ~5 min/imagem a 6 GB).
+_VIEW_HINTS: dict[str, str] = {
+    "back": (
+        "seen from directly behind, strict back view, rear elevation; front-facing details "
+        "(door, ladder, front panel) are hidden on the far side; rear surfaces fully visible"
+    ),
+    "left": (
+        "seen from its left side, strict left profile view; left-side surfaces fully visible, "
+        "the front is at the right edge of the frame"
+    ),
+    "right": (
+        "seen from its right side, strict right profile view; right-side surfaces fully visible, "
+        "the front is at the left edge of the frame"
+    ),
+    "top": (
+        "seen from directly above, strict top-down plan view; roof and top surfaces fully "
+        "visible, sides foreshortened"
+    ),
+    "bottom": (
+        "seen from directly below, strict bottom-up view; underside and base surfaces fully "
+        "visible, sides foreshortened"
+    ),
+}
+
+_VIEW_FRAMING = (
+    "same design, proportions, colors and materials as the first image; single isolated "
+    "object centered in frame, entire object visible, neutral seamless white background, "
+    "flat ambient lighting, no cast shadow, no ground plane"
+)
+
 _MESH_HINT_NO_FAKE_GROUND = (
     "Watertight mesh only; no spurious ground disc, pedestal ring, or base slab from shadow-like shading"
 )
@@ -84,11 +121,16 @@ _I2M_PREFIX_SWAPS: tuple[tuple[str, str], ...] = (("visible brush strokes", "smo
 # Variante A-pose do hint_rig: usada quando o asset tem pose_preset A-pose
 # (quaternius-apose). O hint_rig humanoid força «T-pose braços horizontais» —
 # em assets A-pose isso luta contra a idea e produz braços in-between/deformados.
+# Pernas primeiro de propósito: o hint é anexado ao fim do prompt e as últimas
+# frases perdem peso no Text2D — era por isso que «legs shoulder-width apart»
+# no fim era ignorado e as coxas saíam coladas.
 _HINT_RIG_APOSE = (
-    "standing upright in a relaxed A-pose with both arms angled down at about 45 degrees "
-    "away from the body, visible gap between arms and torso, "
+    "standing upright in a relaxed A-pose, "
+    "feet shoulder-width apart with a clear open gap between the legs from the crotch "
+    "down to the ankles, straight legs with knees and calves separated, "
+    "both arms straight, angled down at about 45 degrees away from the body, "
+    "visible gap between arms and torso, straight elbows, "
     "relaxed open hands with fingers held together and palms facing the thighs, "
-    "legs shoulder-width apart with feet pointing forward, "
     "perfectly symmetrical left-right body, "
     "straight erect spine and neck, head facing forward, "
     "all limbs fully visible and clearly separated from torso, "
@@ -234,6 +276,52 @@ def build_prompt(
         )
 
     return main
+
+
+def _view_subject(idea: str) -> str:
+    """Sujeito curto da caption de vista: 1.ª cláusula, no máximo 18 palavras.
+
+    A ideia completa da frontal costuma listar detalhes que não existem na
+    vista pedida (a escada da torre, a porta). A caption do Klein fica mais
+    obediente com o objeto curto; o resto do detalhe vem da imagem de
+    referência.
+    """
+    text = " ".join(idea.split()).strip().rstrip(".")
+    for sep in (",", ";", "."):
+        if sep in text:
+            head = text.split(sep, 1)[0].strip()
+            if len(head.split()) >= 3:
+                text = head
+            break
+    words = text.split()
+    if len(words) > 18:
+        text = " ".join(words[:18])
+    return text or "object"
+
+
+def build_view_prompt(
+    profile: GameProfile,
+    preset: dict[str, Any],
+    row: ManifestRow,
+    view: str,
+) -> str:
+    """Prompt de uma vista extra (``back``/``left``/``right``/``top``/``bottom``).
+
+    A ``front`` devolve o prompt normal do asset — o ``<id>.png`` que alimenta o
+    shape não muda. As outras vistas são captions curtas para o Text2D com a
+    frontal como ``--ref``: sujeito + ângulo + framing, sem os hints/negativos
+    específicos da frontal (contradiziam o ângulo pedido e faziam o Klein
+    copiar a frontal).
+    """
+    if view == "front":
+        return build_prompt(profile, preset, row, for_3d=False)
+    hint = _VIEW_HINTS.get(view)
+    if not hint:
+        raise ValueError(f"vista desconhecida: {view!r}")
+
+    subject = _view_subject(row.idea)
+    prompt = f"the same {subject} as the first image, {hint}. {_VIEW_FRAMING}."
+    return re.sub(r"\s+", " ", prompt).strip()
 
 
 def build_audio_prompt(

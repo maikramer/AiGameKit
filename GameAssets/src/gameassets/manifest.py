@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .profile import GameProfile
+from .views import parse_views
 
 # Chaves top-level que o manifest pode declarar (antes de ``assets:``) para
 # definir a pasta de saída do grupo. Ganham do game.yaml (profile) para este
@@ -232,9 +233,13 @@ class RowRefine:
     paint explode em charts — o LOD0 não desce ao orçamento da categoria
     (dead_willow: 45k faces contra o alvo de 12k). O shape/clean ficam como
     estão; a colisão passa a sair do ``_clean`` (não de um ``_refined`` órfão).
+
+    ``views`` sobrepõe o ``refine.views`` do perfil para este asset (int 1-6 ou
+    lista; ``views: 1`` volta a mono-vista sem desligar o Hi3D).
     """
 
     enabled: bool | None = None
+    views: tuple[str, ...] | None = None
 
 
 def _row_refine_from_dict(raw: Any, asset_id: str) -> RowRefine | None:
@@ -245,13 +250,17 @@ def _row_refine_from_dict(raw: Any, asset_id: str) -> RowRefine | None:
         return RowRefine(enabled=raw)
     if not isinstance(raw, dict):
         raise ValueError(f"asset {asset_id!r}: refine deve ser bool ou mapeamento")
-    unknown = set(raw) - {"enabled"}
+    unknown = set(raw) - {"enabled", "views"}
     if unknown:
-        raise ValueError(f"asset {asset_id!r} refine: chaves desconhecidas {sorted(unknown)} (válida: enabled)")
+        raise ValueError(
+            f"asset {asset_id!r} refine: chaves desconhecidas {sorted(unknown)} "
+            "(válidas: enabled, views)"
+        )
     en = raw.get("enabled")
     if en is not None and not isinstance(en, bool):
         raise ValueError(f"asset {asset_id!r} refine.enabled deve ser bool")
-    return RowRefine(enabled=en)
+    views = parse_views(raw.get("views"), where=f"asset {asset_id!r} refine.views")
+    return RowRefine(enabled=en, views=views)
 
 
 @dataclass(frozen=True)

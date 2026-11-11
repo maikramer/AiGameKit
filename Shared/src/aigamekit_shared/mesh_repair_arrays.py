@@ -773,6 +773,165 @@ def drop_internal_shell_faces(
     return verts, tris, total_removed
 
 
+def _component_labels(verts: np.ndarray, tris: np.ndarray) -> tuple[np.ndarray, int]:
+    """Labels de componente conexo (arestas weldadas) para todos os vértices."""
+    edges, _counts, _inv = _unique_edges(tris)
+    return _connected_components(len(verts), edges[:, 0], edges[:, 1])
+
+
+def _ray_tri_hit_count(
+    origin: np.ndarray,
+    direction: np.ndarray,
+    v0: np.ndarray,
+    e1: np.ndarray,
+    e2: np.ndarray,
+) -> int:
+    """Nº de triângulos atingidos por um raio (paridade point-in-mesh).
+
+    Mesma matemática do ``_ray_tri_first_hit_t``, mas conta **todos** os
+    impactes em vez de devolver o primeiro ``t`` — um ponto dentro de uma
+    malha fechada tem paridade ímpar.
+    """
+    p = np.cross(direction, e2)
+    det = np.einsum("ij,ij->i", e1, p)
+    ok = np.abs(det) > 1e-12
+    inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
+    tvec = origin - v0
+    u = np.einsum("ij,ij->i", tvec, p) * inv
+    q = np.cross(tvec, e1)
+    vv = np.einsum("j,ij->i", direction, q) * inv
+    t = np.einsum("ij,ij->i", e2, q) * inv
+    hit = ok & (u >= -1e-9) & (vv >= -1e-9) & ((u + vv) <= 1.0 + 1e-9) & (t > 1e-9)
+    return int(hit.sum())
+
+
+def drop_internal_shell_components(
+    verts: np.ndarray,
+    tris: np.ndarray,
+    *,
+    wall_gap_ratio: float = 0.08,
+    wall_gap_max_m: float = 0.10,
+    min_volume_ratio: float = 0.20,
+    containment_samples: int = 8,
+    containment_min_frac: float = 0.60,
+) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
+    """Remove cascas internas **inteiras** (parede dupla Hunyuan/MC).
+
+    Complementa :func:`drop_internal_shell_faces` para personagens: a casca
+    interna é um componente conexo separado, contido no principal, com
+    superfície a uma distância ~constante da principal (a espessura da
+    parede) e volume grande (o miolo do corpo). O strip por face falha quando
+    a espessura passa do cap de 5 cm; este passo remove o componente de uma
+    vez.
+
+    Só remove quando **as três** condições se verificam:
+
+    1. volume do componente ≥ ``min_volume_ratio`` do principal (uma peça
+       pequena dentro do corpo — sino, dente, olho — fica);
+    2. 95% dos vértices a ≤ ``min(wall_gap_ratio·diag, wall_gap_max_m)`` da
+       superfície principal (uma peça funda no interior fica);
+    3. a maioria de ``containment_samples`` pontos está **dentro** do
+       principal (paridade de raios; uma peça encostada por fora fica).
+
+    Args:
+        verts/tris: Malha já weldada (o caller corre isto após os welds).
+        wall_gap_ratio: Fração da diagonal AABB para o vão máximo da parede.
+        wall_gap_max_m: Cap absoluto do vão (metros) — o mesmo espírito do
+            cap de 5 cm do strip por face, mas folgado para bosses grandes.
+        min_volume_ratio: Volume mínimo relativo ao componente principal.
+        containment_samples: Pontos amostrados por componente para paridade.
+        containment_min_frac: Fração mínima de amostras dentro do principal.
+
+    Returns:
+        ``(verts, tris, stats)`` com ``internal_shell_components`` e
+        ``internal_shell_faces`` removidos.
+    """
+    verts = np.asarray(verts, dtype=np.float64)
+    tris = np.asarray(tris, dtype=np.int64)
+    empty = {"internal_shell_components": 0, "internal_shell_faces": 0}
+    if len(tris) == 0 or len(verts) == 0:
+        return verts, tris, empty
+
+    labels, n_comp = _component_labels(verts, tris)
+    if n_comp <= 1:
+        return verts, tris, empty
+
+    face_comp = labels[tris[:, 0]]
+    n_faces = np.bincount(face_comp, minlength=n_comp)
+    v = verts[tris]
+    signed_vol = np.einsum("ij,ij->i", v[:, 0], np.cross(v[:, 1], v[:, 2])) / 6.0
+    volumes = np.bincount(face_comp, weights=signed_vol, minlength=n_comp)
+    abs_vol = np.abs(volumes)
+    main = int(np.argmax(abs_vol))
+    if abs_vol[main] <= 0.0:
+        main = int(np.argmax(n_faces))
+    main_vol = max(float(abs_vol[main]), 1e-12)
+
+    diag = float(np.linalg.norm(verts.max(axis=0) - verts.min(axis=0))) or 1.0
+    wall_gap = max(min(float(wall_gap_ratio) * diag, float(wall_gap_max_m)), 1e-5)
+
+    main_mask = face_comp == main
+    main_vids = np.flatnonzero(labels == main)
+    main_verts = verts[main_vids]
+    if len(main_vids) == 0 or not main_mask.any():
+        return verts, tris, empty
+    remap_main = np.full(len(verts), -1, dtype=np.int64)
+    remap_main[main_vids] = np.arange(len(main_vids), dtype=np.int64)
+    main_tris = remap_main[tris[main_mask]]
+    if len(main_tris) == 0:
+        return verts, tris, empty
+    main_v0 = main_verts[main_tris[:, 0]]
+    main_e1 = main_verts[main_tris[:, 1]] - main_v0
+    main_e2 = main_verts[main_tris[:, 2]] - main_v0
+    # Direção genérica (não alinhada a eixos) para evitar arestas partilhadas.
+    direction = np.array([0.997, 0.051, 0.058], dtype=np.float64)
+    direction /= np.linalg.norm(direction)
+    cKDTree = _require_scipy_spatial()
+    tree = cKDTree(main_verts)
+
+    keep = np.ones(len(tris), dtype=bool)
+    removed_components = 0
+    removed_faces = 0
+    for cid in range(n_comp):
+        if cid == main or n_faces[cid] == 0:
+            continue
+        if abs_vol[cid] / main_vol < float(min_volume_ratio):
+            continue
+        cand_vids = np.flatnonzero(labels == cid)
+        if len(cand_vids) == 0:
+            continue
+        cand = verts[cand_vids]
+        dist, _ = tree.query(cand, k=1)
+        if float(np.percentile(dist, 95)) > wall_gap:
+            continue
+        n_samples = min(int(containment_samples), len(cand))
+        sample_idx = np.linspace(0, len(cand) - 1, n_samples, dtype=np.int64)
+        inside = 0
+        for p in cand[sample_idx]:
+            if _ray_tri_hit_count(p, direction, main_v0, main_e1, main_e2) % 2 == 1:
+                inside += 1
+        if inside / max(1, n_samples) < float(containment_min_frac):
+            continue
+        keep &= face_comp != cid
+        removed_components += 1
+        removed_faces += int(n_faces[cid])
+
+    if removed_components == 0:
+        return verts, tris, empty
+    out_v, out_t = compact_mesh(verts, tris, keep)
+    log.info(
+        "drop_internal_shell_components: %d componente(s), %d faces (wall_gap=%.4f, diag=%.4f)",
+        removed_components,
+        removed_faces,
+        wall_gap,
+        diag,
+    )
+    return out_v, out_t, {
+        "internal_shell_components": removed_components,
+        "internal_shell_faces": removed_faces,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Decimação rápida (fast_simplification — quadric, C++)
 # ---------------------------------------------------------------------------
@@ -880,6 +1039,10 @@ def repair_arrays_topology_clean(
     internal_shell_wall_gap_ratio: float = 0.08,
     internal_shell_max_removal_ratio: float = 0.55,
     internal_shell_passes: int = 2,
+    # Não-None → modo componente (personagens): remove a casca interna inteira
+    # quando ela é um componente contido, grande e perto da parede. Neste modo
+    # o strip por face NÃO corre — apagaria capas/cabelo/cartões finos.
+    internal_shell_min_volume_ratio: float | None = None,
     shell_k_neighbors: int = 16,
     weld_method: WeldMethod = "exact",
     sliver_collapse: bool = True,
@@ -1007,14 +1170,27 @@ def repair_arrays_topology_clean(
         ),
     )
     if do_remove_internal_shells and len(tris):
-        verts, tris, stats["internal_shell_faces"] = drop_internal_shell_faces(
-            verts,
-            tris,
-            wall_gap_ratio=internal_shell_wall_gap_ratio,
-            max_removal_ratio=internal_shell_max_removal_ratio,
-            passes=internal_shell_passes,
-            k_neighbors=shell_k_neighbors,
-        )
+        if internal_shell_min_volume_ratio is not None:
+            # Personagens: só o modo componente. O strip por face (raio em
+            # +N a ≤5 cm) apagaria capas/cabelo/cartões finos legítimos; se a
+            # casca não for um componente separado, é melhor não tocar.
+            verts, tris, shell_stats = drop_internal_shell_components(
+                verts,
+                tris,
+                wall_gap_ratio=internal_shell_wall_gap_ratio,
+                min_volume_ratio=float(internal_shell_min_volume_ratio),
+            )
+            stats.update(shell_stats)
+        else:
+            verts, tris, n_shell = drop_internal_shell_faces(
+                verts,
+                tris,
+                wall_gap_ratio=internal_shell_wall_gap_ratio,
+                max_removal_ratio=internal_shell_max_removal_ratio,
+                passes=internal_shell_passes,
+                k_neighbors=shell_k_neighbors,
+            )
+            stats["internal_shell_faces"] = int(n_shell)
     return verts, tris, stats
 
 

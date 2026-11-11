@@ -362,6 +362,10 @@ def shape_omni_stale(
         _v = existing.get(_k)
         if _v not in (None, ""):
             existing_norm[_k] = _v
+    # O digest da pose tem de vir do sidecar, não do merge: o merge re-resolve
+    # o preset *atual* e um shape antigo passaria por atual. Ausente = gerado
+    # antes da chave existir → regenerar.
+    existing_norm["pose_digest"] = existing.get("pose_digest")
     fp_exp = omni_fingerprint(expected)
     fp_got = omni_fingerprint(existing_norm)
     # Autotune: sidecar pode ter o octree efectivo mas o esperado não pinou —

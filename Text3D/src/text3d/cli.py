@@ -1192,6 +1192,7 @@ def generate(
                         build_generate_debug,
                         mesh_stats_for_debug,
                         pose_bone_count,
+                        pose_digest,
                         write_omni_fingerprint,
                     )
 
@@ -1268,6 +1269,9 @@ def generate(
                             # Identidade do esqueleto — sem isto o resume não
                             # distingue 51→21 ossos (preset tem o mesmo nome).
                             "pose_bones": pose_bone_count(pose_file),
+                            # Hash dos valores: distingue o mesmo preset
+                            # re-derivado (ex. pernas abertas ±10°).
+                            "pose_digest": pose_digest(pose_file),
                             "point_cloud": str(point_cloud) if point_cloud else None,
                             "voxel_mesh": str(voxel_mesh) if voxel_mesh else None,
                             "bounds_mode": bounds_mode,
@@ -1757,7 +1761,10 @@ def bake_master_cmd(
 @click.option(
     "--remove-internal-shells/--keep-internal-shells",
     default=None,
-    help="Strip cascas internas. Omitido: auto ON para building/chapel.",
+    help=(
+        "Strip cascas internas. Omitido: auto ON para building/chapel e "
+        "personagens/criaturas (nestes, por componente — a parede dupla do decode)."
+    ),
 )
 @click.option(
     "--engine",

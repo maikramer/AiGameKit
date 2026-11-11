@@ -117,9 +117,24 @@ _RENDER_SUFFIX_LIGHT = "flat lit, clean render, game asset, static mesh only, no
 
 # Bipedais / humanoides: gap leve entre pernas na imagem 2D (Hunyuan lê
 # silhueta — coxas coladas → webbing no mesh). Só quando o prompt sugere personagem.
+# Positivo de propósito: FLUX ignora negações («no fused legs» processa "fused
+# legs"). O stance tem de vir cedo no prompt — no fim é o primeiro a perder peso.
 _BIPED_STANCE = (
-    "feet slightly apart with a clear open gap between the legs, "
-    "thighs separated, relaxed upright stance, no fused or joined legs"
+    "feet shoulder-width apart with a clear open gap between the legs from the "
+    "crotch down to the ankles, straight separated thighs and calves, "
+    "relaxed upright stance"
+)
+
+# Marcadores de que o prompt **já** pede pernas afastadas. Não usar "gap between"
+# sozinho: «visible gap between arms and torso» é o tronco e fazia o stance de
+# pernas ser saltado em todos os manifestos de personagens.
+_LEG_STANCE_MARKERS: tuple[str, ...] = (
+    "feet slightly apart",
+    "feet shoulder-width apart",
+    "gap between the legs",
+    "legs slightly apart",
+    "legs shoulder-width apart",
+    "thighs separated",
 )
 
 _BIPED_MARKERS: tuple[str, ...] = (
@@ -205,7 +220,7 @@ def _looks_bipedal(prompt_lower: str) -> bool:
 def _with_biped_stance(prompt: str) -> str:
     """Acrescenta stance de pernas abertas se ainda não estiver no prompt."""
     pl = prompt.lower()
-    if "gap between" in pl or "feet slightly apart" in pl or "thighs separated" in pl:
+    if any(marker in pl for marker in _LEG_STANCE_MARKERS):
         return prompt
     if not _looks_bipedal(pl):
         return prompt

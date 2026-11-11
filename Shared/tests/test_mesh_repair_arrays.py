@@ -11,6 +11,7 @@ from aigamekit_shared.mesh_repair_arrays import (
     collapse_sliver_faces,
     compact_mesh,
     dedupe_coincident_faces,
+    drop_internal_shell_components,
     drop_internal_shell_faces,
     drop_long_edge_faces,
     drop_loose_debris,
@@ -355,6 +356,57 @@ class TestDropInternalShellFaces:
         _v2, f2, n = drop_internal_shell_faces(v, f, wall_gap_ratio=0.08, max_removal_ratio=0.1, passes=1)
         assert n == 0  # 12/24 = 50% > 10% → abort
         assert len(f2) == 24
+
+
+class TestDropInternalShellComponents:
+    """Casca interna como componente separado (personagens/bosses)."""
+
+    def test_nested_box_component_removed(self) -> None:
+        outer_v, outer_f = _box(extents=(2.0, 2.0, 2.0))
+        inner_v, inner_f = _box(extents=(1.9, 1.9, 1.9))
+        v = np.vstack([outer_v, inner_v])
+        f = np.vstack([outer_f, inner_f + 8])
+        v2, f2, stats = drop_internal_shell_components(v, f)
+        assert stats["internal_shell_components"] == 1
+        assert stats["internal_shell_faces"] == 12
+        assert len(f2) == 12
+        assert len(v2) == 8
+
+    def test_small_nested_box_kept(self) -> None:
+        outer_v, outer_f = _box(extents=(2.0, 2.0, 2.0))
+        inner_v, inner_f = _box(extents=(0.4, 0.4, 0.4))
+        v = np.vstack([outer_v, inner_v])
+        f = np.vstack([outer_f, inner_f + 8])
+        _v2, f2, stats = drop_internal_shell_components(v, f)
+        assert stats["internal_shell_components"] == 0
+        assert len(f2) == 24
+
+    def test_large_outside_box_kept(self) -> None:
+        outer_v, outer_f = _box(extents=(2.0, 2.0, 2.0))
+        # Caixa grande encostada por fora: volume passa o filtro, containment não.
+        out_v, out_f = _box(extents=(1.6, 1.6, 1.6), center=(1.7, 0.0, 0.0))
+        v = np.vstack([outer_v, out_v])
+        f = np.vstack([outer_f, out_f + 8])
+        _v2, f2, stats = drop_internal_shell_components(v, f)
+        assert stats["internal_shell_components"] == 0
+        assert len(f2) == 24
+
+    def test_repair_arrays_component_mode(self) -> None:
+        outer_v, outer_f = _box(extents=(2.0, 2.0, 2.0))
+        inner_v, inner_f = _box(extents=(1.9, 1.9, 1.9))
+        v = np.vstack([outer_v, inner_v])
+        f = np.vstack([outer_f, inner_f + 8])
+        v2, f2, stats = repair_arrays_topology_clean(
+            v,
+            f,
+            do_remove_internal_shells=True,
+            internal_shell_min_volume_ratio=0.2,
+            debris_min_faces=1,
+        )
+        assert stats["internal_shell_components"] == 1
+        assert stats["internal_shell_faces"] == 12
+        assert len(f2) == 12
+        assert len(v2) == 8
 
 
 class TestTaubin:

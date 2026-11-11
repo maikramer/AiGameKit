@@ -7,6 +7,9 @@ from aigamekit_shared.paint_budget import PAINT_FACES_MAX
 from gameassets.manifest import ManifestRow
 from gameassets.omni_ctrl import OmniControls
 from gameassets.pipeline import (
+    _character_paint_opts,
+    _is_character_row,
+    _paint_item_overrides,
     _resolve_paint_texture_size,
     _resolve_to_paint_faces,
 )
@@ -61,3 +64,63 @@ class TestResolvePaintTextureBySize:
         profile = _profile(generation="highest")
         house = _row(rid="house", category="building", size_m=(5.0, 4.2, 6.0))
         assert _resolve_paint_texture_size(profile, house) == 4096
+
+
+def _char_row(
+    *,
+    rid: str = "boss_ogre",
+    category: str = "creature",
+    size_m: tuple[float, float, float] = (1.2, 2.8, 0.9),
+    paint3d: dict | None = None,
+) -> ManifestRow:
+    return ManifestRow(
+        id=rid,
+        idea=rid,
+        kind="character",
+        generate_3d=True,
+        category=category,
+        omni=OmniControls(size_m=size_m),
+        paint3d=paint3d,
+    )
+
+
+class TestCharacterPaintDefaults:
+    def test_character_category_detected(self) -> None:
+        assert _is_character_row(_char_row())
+        assert _is_character_row(_char_row(category="humanoid"))
+        assert not _is_character_row(_row(rid="house", category="building", size_m=(5, 4, 6)))
+
+    def test_to_paint_faces_capped_for_xatlas(self, monkeypatch) -> None:
+        # Sem cap a fórmula dá ~269k em 6 GiB / 461k em 16 GiB; o xatlas
+        # rebentava os 300 s no personagem. O cap é o lever.
+        monkeypatch.setattr(_pb, "_VRAM_TOTAL_MIB", 16384)
+        profile = _profile(generation="medium")
+        assert _resolve_to_paint_faces(profile, _char_row()) == 100_000
+
+    def test_row_to_paint_override_still_wins(self) -> None:
+        profile = _profile(generation="medium")
+        row = _char_row(paint3d={"to_paint_faces": 60_000})
+        assert _resolve_to_paint_faces(profile, row) == 60_000
+
+    def test_paint_item_overrides_character(self) -> None:
+        profile = _profile(paint3d=Paint3DProfile(pbr_enrich=False))
+        opts = _paint_item_overrides(profile, _char_row())
+        assert opts == {"max_views": 8, "view_resolution": 512, "pbr_enrich": False}
+
+    def test_row_paint_override_beats_character_default(self) -> None:
+        profile = _profile(paint3d=Paint3DProfile(pbr_enrich=False))
+        row = _char_row(paint3d={"max_views": 6, "view_resolution": 512})
+        opts = _paint_item_overrides(profile, row)
+        assert opts["max_views"] == 6
+        assert opts["view_resolution"] == 512
+
+    def test_non_character_has_no_view_defaults(self) -> None:
+        profile = _profile(paint3d=Paint3DProfile(pbr_enrich=False))
+        opts = _paint_item_overrides(profile, _row(rid="house", category="building", size_m=(5, 4, 6)))
+        assert "max_views" not in opts
+        assert "view_resolution" not in opts
+        assert opts["pbr_enrich"] is False
+
+    def test_character_paint_opts(self) -> None:
+        assert _character_paint_opts(_char_row()) == (8, 512)
+        assert _character_paint_opts(_row(rid="prop", category="prop", size_m=(0.4, 0.4, 0.4))) == (None, None)
