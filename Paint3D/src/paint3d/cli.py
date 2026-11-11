@@ -129,10 +129,21 @@ def cli(ctx, verbose):
 @click.option(
     "--image",
     "-i",
-    "image_file",
+    "image_files",
+    multiple=True,
     required=True,
     type=click.Path(exists=True, dir_okay=False),
-    help="Imagem de referência (alinhada com a mesh).",
+    help="Imagem de referência (alinhada com a mesh); repetir para várias vistas (front/back/left/right).",
+)
+@click.option(
+    "--blend-refs/--no-blend-refs",
+    default=False,
+    help="Misturar as referências por vista (várias --image + --image-azims).",
+)
+@click.option(
+    "--image-azims",
+    default=None,
+    help="Azimutes das referências em graus, na ordem das --image (ex.: 0,180,90,270).",
 )
 @click.option("--output", "-o", type=click.Path(), help="Ficheiro GLB de saída (textura embutida).")
 @click.option(
@@ -290,7 +301,9 @@ def cli(ctx, verbose):
 def texture(
     ctx,
     mesh_file,
-    image_file,
+    image_files,
+    blend_refs,
+    image_azims,
     output,
     upscale,
     upscale_factor,
@@ -324,6 +337,14 @@ def texture(
     """Texturizar mesh com Hunyuan3D-Paint 2.1 → GLB com PBR."""
     from .painter import paint_file_to_file
 
+    image_list = [str(p) for p in image_files]
+    image_arg: object = image_list[0] if len(image_list) == 1 else image_list
+    parsed_azims: list[float] | None = None
+    if image_azims:
+        try:
+            parsed_azims = [float(x) for x in str(image_azims).split(",") if x.strip()]
+        except ValueError as exc:
+            raise click.ClickException(f"--image-azims inválido: {image_azims!r}") from exc
     verbose = bool(ctx.obj.get("VERBOSE")) or texture_verbose
     sage_attention = _enable_sage_attention(sage_attention)
 
@@ -414,7 +435,7 @@ def texture(
 
     info_table = Table(show_header=False, box=box.SIMPLE)
     info_table.add_row("[bold]Mesh[/bold]", f"[cyan]{mesh_path}[/cyan]")
-    info_table.add_row("[bold]Imagem[/bold]", f"[cyan]{image_file}[/cyan]")
+    info_table.add_row("[bold]Imagem[/bold]", f"[cyan]{', '.join(image_list)}[/cyan]")
     info_table.add_row("[bold]Saída[/bold]", f"[cyan]{output}[/cyan]")
     quant_label = "SDNQ uint8 (memory-efficient)" if mem_eff else "FP16 (sem quantização)"
     attn_label = " · sage-attn" if sage_attention else ""
@@ -463,7 +484,10 @@ def texture(
         "paint3d",
         payload=build_texture_request(
             mesh_path=str(mesh_path),
-            image_path=str(image_file),
+            image_path=str(image_list[0]),
+            images=image_list if len(image_list) > 1 else None,
+            blend_refs=blend_refs,
+            image_azims=parsed_azims,
             output=str(output),
             max_num_view=max_views,
             view_resolution=view_resolution,
@@ -509,7 +533,7 @@ def texture(
             with console.status("[bold yellow]A carregar modelos (1ª vez: download HF)...", spinner="dots"):
                 out = paint_file_to_file(
                     mesh_path,
-                    image_file,
+                    image_arg,
                     output,
                     max_num_view=max_views,
                     view_resolution=view_resolution,
@@ -524,6 +548,8 @@ def texture(
                     torch_compile_mode=torch_compile_mode,
                     channels_last=channels_last,
                     allow_group_offload=allow_group_offload,
+                    blend_refs=blend_refs,
+                    image_azims=parsed_azims,
                 )
             emit_progress(item_id, TOOL_PAINT3D, phase="multiview_render", percent=100)
             emit_progress(item_id, TOOL_PAINT3D, phase="bake", percent=100)

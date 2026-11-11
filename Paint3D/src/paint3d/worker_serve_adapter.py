@@ -84,9 +84,13 @@ class Adapter(WorkerAdapter):
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
         mesh_path = request.get("mesh_path") or request.get("mesh")
         image_path = request.get("image_path") or request.get("image")
+        images = request.get("images")
+        image_arg = images or image_path
+        blend_refs = bool(request.get("blend_refs"))
+        image_azims = request.get("image_azims")
         output = request.get("output")
-        if not mesh_path or not image_path or not output:
-            return {"status": "error", "error": "mesh_path, image_path e output são obrigatórios"}
+        if not mesh_path or not image_arg or not output:
+            return {"status": "error", "error": "mesh_path, image_path/images e output são obrigatórios"}
         if self.should_abort(request):
             return self.cancelled_response("cancelled before generate")
 
@@ -144,7 +148,13 @@ class Adapter(WorkerAdapter):
             lo, hi = phase_bounds.get(str(phase), (0.25, 0.90))
             self.report_progress(request, lo + (hi - lo) * max(0.0, min(1.0, pct / 100.0)), f"paint_{phase}")
 
-        textured = model.paint_mesh(mesh_objs, image_path, step_callback=_phase_progress)
+        textured = model.paint_mesh(
+            mesh_objs,
+            image_arg,
+            step_callback=_phase_progress,
+            blend_refs=blend_refs,
+            image_azims=image_azims,
+        )
 
         if self.should_abort(request):
             return self.cancelled_response("cancelled before save")

@@ -13,6 +13,9 @@ def build_texture_request(
     mesh_path: str,
     image_path: str,
     output: str,
+    images: list[str] | None = None,
+    blend_refs: bool = False,
+    image_azims: list[float] | None = None,
     max_num_view: int = 6,
     view_resolution: int = 512,
     render_size: int = 1024,
@@ -52,6 +55,10 @@ def build_texture_request(
             "allow_group_offload": bool(allow_group_offload),
         },
         optional={
+            # Multi-ref: o worker passa a lista ao paint_mesh (blend por vista).
+            "images": [str(p) for p in images] if images else None,
+            "blend_refs": True if blend_refs else None,
+            "image_azims": [float(a) for a in image_azims] if image_azims else None,
             "bake_exp": bake_exp,
             "smooth_passes": None if smooth_passes is None else int(smooth_passes),
             "upscale": True if upscale else None,

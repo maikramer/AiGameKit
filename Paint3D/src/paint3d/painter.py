@@ -31,7 +31,6 @@ logging.getLogger("xformers").setLevel(logging.ERROR)
 
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
-from PIL import Image  # noqa: E402
 
 from aigamekit_shared.group_offload import ToolOffloadPolicy  # noqa: E402
 
@@ -1024,9 +1023,35 @@ def _preserve_placement(
         _logger.info(f"placement preservado (sem rotação): scale={scale:.4f} offset={offset.tolist()}")
 
 
+def _copy_reference_images(image: Any, tdir: Path) -> tuple[list[Path], str | list[str]]:
+    """Copia 1..N referências para ``tdir``; devolve paths e o arg do pipeline.
+
+    Uma lista ativa o blend por vista no ``textureGenPipeline``; uma única
+    referência mantém o contrato antigo (``ref.png`` + string).
+    """
+    if isinstance(image, (list, tuple)):
+        paths: list[Path] = []
+        for i, item in enumerate(image):
+            rp = tdir / f"ref_{i}.png"
+            if isinstance(item, (str, Path)):
+                shutil.copy2(item, rp)
+            else:
+                im = item.convert("RGB") if item.mode != "RGB" else item
+                im.save(rp)
+            paths.append(rp)
+        return paths, [str(p) for p in paths]
+    rp = tdir / "ref.png"
+    if isinstance(image, (str, Path)):
+        shutil.copy2(image, rp)
+    else:
+        im = image.convert("RGB") if image.mode != "RGB" else image
+        im.save(rp)
+    return [rp], str(rp)
+
+
 def apply_hunyuan_paint(
     mesh: Any,
-    image: str | Path | Image.Image,
+    image: Any,
     *,
     model_repo: str = _defaults.DEFAULT_PAINT_HF_REPO,
     subfolder: str = _defaults.DEFAULT_PAINT_SUBFOLDER,
@@ -1047,9 +1072,14 @@ def apply_hunyuan_paint(
     torch_compile_mode: str = "default",
     channels_last: bool = False,
     allow_group_offload: bool = True,
+    blend_refs: bool = False,
+    image_azims: list[float] | None = None,
 ) -> Any:
     """
     Aplica Hunyuan3D-Paint 2.1: mesh + imagem de referência → mesh com UV e textura/PBR (GLB).
+
+    ``image`` pode ser uma lista (front/back/left/right); ``blend_refs=True``
+    usa cada referência na vista correspondente ao seu azimute.
 
     Por defeito corre em alta precisão (FP16, sem quantização, render 2048, texture 4096).
     Com ``memory_efficient=True`` ativa quantização SDNQ uint8 e resoluções reduzidas (1024/2048).
@@ -1103,11 +1133,8 @@ def apply_hunyuan_paint(
             # Cascas internas: topology-fix (shape→clean) antes do paint.
             save_glb(mesh, mesh_in, verify_stage="to_paint")
 
-            if isinstance(image, (str, Path)):
-                shutil.copy2(image, ref_path)
-            else:
-                im = image.convert("RGB") if image.mode != "RGB" else image
-                im.save(ref_path)
+            ref_paths, image_arg = _copy_reference_images(image, tdir)
+            ref_path = ref_paths[0]
 
         with profile_span("paint_configure"):
             config = Hunyuan3DPaintConfig(max_num_view, view_resolution)
@@ -1268,10 +1295,12 @@ def apply_hunyuan_paint(
                 with torch.no_grad():
                     pipe(
                         mesh_path=str(mesh_in),
-                        image_path=str(ref_path),
+                        image_path=image_arg,
                         output_mesh_path=str(out_obj),
                         use_remesh=use_remesh,
                         save_glb=True,
+                        blend_refs=blend_refs,
+                        image_azims=image_azims,
                     )
             finally:
                 del pipe
@@ -1294,7 +1323,7 @@ def apply_hunyuan_paint(
 
 def paint_file_to_file(
     mesh_path: str | Path,
-    image_path: str | Path,
+    image_path: Any,
     output_path: str | Path,
     *,
     model_repo: str | None = None,
@@ -1316,8 +1345,14 @@ def paint_file_to_file(
     torch_compile_mode: str = "default",
     channels_last: bool = False,
     allow_group_offload: bool = True,
+    blend_refs: bool = False,
+    image_azims: list[float] | None = None,
 ) -> Path:
-    """Atalho: carrega mesh, pinta com Hunyuan3D-Paint 2.1 (PBR baked), exporta GLB."""
+    """Atalho: carrega mesh, pinta com Hunyuan3D-Paint 2.1 (PBR baked), exporta GLB.
+
+    ``image_path`` aceita uma lista de referências; ``blend_refs=True`` usa
+    cada uma na vista do seu azimute (``image_azims``).
+    """
     repo = model_repo or _defaults.DEFAULT_PAINT_HF_REPO
     sub = subfolder or _defaults.DEFAULT_PAINT_SUBFOLDER
     if max_num_view is None:
@@ -1359,6 +1394,8 @@ def paint_file_to_file(
         torch_compile_mode=torch_compile_mode,
         channels_last=channels_last,
         allow_group_offload=allow_group_offload,
+        blend_refs=blend_refs,
+        image_azims=image_azims,
     )
 
     output_path = Path(output_path)
@@ -1623,8 +1660,20 @@ class PaintBatchProcessor:
         self._config = None
         clear_cuda_memory()
 
-    def paint_mesh(self, mesh: Any, image: str | Path | Image.Image, *, step_callback=None) -> Any:
-        """Pinta uma mesh usando o pipeline carregado. Mesh + imagem → objectos bpy texturizados."""
+    def paint_mesh(
+        self,
+        mesh: Any,
+        image: Any,
+        *,
+        step_callback=None,
+        blend_refs: bool = False,
+        image_azims: list[float] | None = None,
+    ) -> Any:
+        """Pinta uma mesh usando o pipeline carregado.
+
+        ``image`` pode ser uma lista (front/back/left/right); com
+        ``blend_refs=True`` cada referência entra na vista do seu azimute.
+        """
         from aigamekit_shared.profiler import profile_span
 
         if self._pipe is None:
@@ -1644,11 +1693,8 @@ class PaintBatchProcessor:
                 _scale_mesh_for_paint(mesh, logger=_logger, verbose=self._verbose)
                 _to_paint_frame(mesh)
                 save_glb(mesh, mesh_in, verify_stage="to_paint")
-                if isinstance(image, (str, Path)):
-                    shutil.copy2(image, ref_path)
-                else:
-                    im = image.convert("RGB") if image.mode != "RGB" else image
-                    im.save(ref_path)
+                ref_paths, image_arg = _copy_reference_images(image, tdir)
+                ref_path = ref_paths[0]
                 # Referência cinzenta (blockout / text2d falhado) => asset escuro.
                 from .paint_prep import check_reference_image
 
@@ -1657,11 +1703,13 @@ class PaintBatchProcessor:
             with profile_span("paint_batch_inference", sync_cuda=True), torch.no_grad():
                 self._pipe(
                     mesh_path=str(mesh_in),
-                    image_path=str(ref_path),
+                    image_path=image_arg,
                     output_mesh_path=str(out_obj),
                     use_remesh=self._use_remesh,
                     save_glb=True,
                     step_callback=step_callback,
+                    blend_refs=blend_refs,
+                    image_azims=image_azims,
                 )
 
             if not out_glb.is_file():

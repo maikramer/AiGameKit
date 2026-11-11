@@ -12,8 +12,10 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+import math
 import os
 import warnings
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -27,6 +29,62 @@ from .utils.multiview_utils import multiviewDiffusionNet
 from .utils.pipeline_utils import ViewProcessor, merge_albedo_mr_views, split_baked_albedo_mr
 from .utils.simplify_mesh_utils import remesh_mesh
 from .utils.uvwrap_utils import mesh_uv_wrap
+
+
+def _default_ref_azims(n: int) -> list[float]:
+    """Azimutes canónicos para N referências na ordem front/back/left/right."""
+    if n <= 1:
+        return [0.0]
+    if n == 2:
+        return [0.0, 180.0]
+    if n == 4:
+        return [0.0, 180.0, 90.0, 270.0]
+    return [i * 360.0 / n for i in range(n)]
+
+
+def _blend_multiview_runs(
+    runs: list[dict[str, list[Image.Image]]],
+    view_azims: list[float],
+    ref_azims: list[float],
+    *,
+    sharp: float = 4.0,
+) -> dict[str, list[Image.Image]]:
+    """Mistura N difusões single-ref por vista, pesando cada ref pelo azimute.
+
+    Cada run viu uma referência diferente (front/back/left/right). Para cada
+    vista escolhida pelo bake, o peso de cada ref é
+    ``max(0, cos(Δazim)) ** sharp`` normalizado: a vista frontal usa a ref
+    frontal, a traseira a ref de trás, as laterais as refs laterais; topo/base
+    usam a ref de azimute mais próximo.
+    """
+    if not runs:
+        raise ValueError("runs vazio")
+    keys = [k for k in ("albedo", "mr", "hdr") if k in runs[0]]
+    if not keys:
+        raise ValueError(f"runs sem albedo/mr: {sorted(runs[0])}")
+    out: dict[str, list[Image.Image]] = {}
+    for key in keys:
+        n_views = len(runs[0][key])
+        blended: list[Image.Image] = []
+        for i in range(n_views):
+            weights: list[float] = []
+            for ref_azim in ref_azims:
+                c = math.cos(math.radians(float(view_azims[i]) - float(ref_azim)))
+                # cos(90°) dá ~6e-17, não 0: sem o corte, uma vista a 90° de
+                # uma ref escolhia-a com peso 1 em vez de empatar com a oposta.
+                weights.append(0.0 if c <= 1e-6 else c**sharp)
+            total = sum(weights)
+            weights = [1.0 / len(ref_azims)] * len(ref_azims) if total <= 0 else [w / total for w in weights]
+            arr = None
+            for weight, run in zip(weights, runs, strict=True):
+                cur = np.asarray(run[key][i], dtype=np.float32)
+                arr = cur * weight if arr is None else arr + cur * weight
+            if arr is None:
+                raise ValueError("sem runs para misturar")
+            blended.append(Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)))
+        out[key] = blended
+    return out
+
 
 warnings.filterwarnings("ignore")
 from diffusers.utils import logging as diffusers_logging
@@ -123,20 +181,37 @@ class Hunyuan3DPaintPipeline:
 
     @torch.no_grad()
     def __call__(
-        self, mesh_path=None, image_path=None, output_mesh_path=None, use_remesh=True, save_glb=True, step_callback=None
+        self,
+        mesh_path=None,
+        image_path=None,
+        output_mesh_path=None,
+        use_remesh=True,
+        save_glb=True,
+        step_callback=None,
+        blend_refs: bool = False,
+        image_azims: list[float] | None = None,
     ):
-        """Generate texture for 3D mesh using multiview diffusion"""
+        """Generate texture for 3D mesh using multiview diffusion.
+
+        ``image_path`` pode ser uma lista (front/back/left/right). Com
+        ``blend_refs=True`` corre a difusão uma vez por referência e mistura as
+        albedos por vista pelo azimute (``image_azims``); sem blend usa só a
+        primeira, como antes.
+        """
 
         def _step(phase, pct):
             if step_callback:
                 step_callback(phase, pct)
 
-        # Ensure image_prompt is a list
-        if isinstance(image_path, str):
+        if isinstance(image_path, (list, tuple)):
+            image_prompt = [Image.open(p) if isinstance(p, (str, Path)) else p for p in image_path]
+        elif isinstance(image_path, (str, Path)):
             image_prompt = Image.open(image_path)
         elif isinstance(image_path, Image.Image):
             image_prompt = image_path
-        image_prompt = [image_prompt] if not isinstance(image_prompt, list) else image_path
+        else:
+            raise ValueError(f"image_path inválido: {type(image_path).__name__}")
+        image_prompt = [image_prompt] if not isinstance(image_prompt, list) else image_prompt
 
         _step("uv_unwrap", 0)
         # Process mesh
@@ -191,13 +266,31 @@ class Hunyuan3DPaintPipeline:
 
         ###########  Multiview  ##########
         _step("multiview_render", 0)
-        multiviews_pbr = self.models["multiview_model"](
-            image_style,
-            normal_maps + position_maps,
-            prompt=image_caption,
-            custom_view_size=self.config.resolution,
-            resize_input=True,
-        )
+        if blend_refs and len(image_style) > 1:
+            ref_azims = (
+                [float(a) for a in image_azims] if image_azims is not None else _default_ref_azims(len(image_style))
+            )
+            if len(ref_azims) != len(image_style):
+                raise ValueError(f"image_azims tem {len(ref_azims)} valores para {len(image_style)} referências")
+            runs = [
+                self.models["multiview_model"](
+                    [ref],
+                    normal_maps + position_maps,
+                    prompt=image_caption,
+                    custom_view_size=self.config.resolution,
+                    resize_input=True,
+                )
+                for ref in image_style
+            ]
+            multiviews_pbr = _blend_multiview_runs(runs, selected_camera_azims, ref_azims)
+        else:
+            multiviews_pbr = self.models["multiview_model"](
+                image_style,
+                normal_maps + position_maps,
+                prompt=image_caption,
+                custom_view_size=self.config.resolution,
+                resize_input=True,
+            )
         _step("multiview_render", 100)
         # PAINT3D_DEBUG_DIR: dump das vistas (normal/posição/albedo/mr) + referência
         # para diagnosticar o paint sem reabrir o GLB.
