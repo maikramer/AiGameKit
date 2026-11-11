@@ -163,13 +163,59 @@ class TestEnsureToPaint:
             )
         assert out == to_paint
         assert to_paint.is_file()
-        # simplify then re-topology-fix (morph=0: não derreter casca de edifício).
+        # Caminho ``_clean``: só simplify. O re-fix (topology-fix) com
+        # --morph-close é exclusivo do caminho ``_refined``; repeti-lo aqui
+        # parte a malha sã em ilhas (ver `pipeline.ensure_to_paint_for_paint`).
         cmds = [c.args[0][:2] for c in run_cmd.call_args_list]
         assert ["text3d", "simplify"] in cmds
-        assert ["text3d", "topology-fix"] in cmds
+        assert ["text3d", "topology-fix"] not in cmds
         simplify_argv = next(c.args[0] for c in run_cmd.call_args_list if c.args[0][:2] == ["text3d", "simplify"])
         assert "--target-faces" in simplify_argv
         assert "--no-repair" in simplify_argv
+
+    def test_refined_runs_topology_fix_before_simplify(self, tmp_path: Path) -> None:
+        """O caminho ``_refined`` refixa (morph-close > 0) antes de decimar."""
+        mesh_final = tmp_path / "meshes" / "chapel.glb"
+        mesh_final.parent.mkdir(parents=True)
+        refined = tmp_path / "meshes" / "_intermediate" / "chapel_refined.glb"
+        refined.parent.mkdir(parents=True)
+        refined.write_bytes(b"glTF")
+        to_paint = _to_paint_path(mesh_final)
+        profile = GameProfile(
+            title="t",
+            genre="g",
+            tone="t",
+            style_preset="s",
+            output_dir=str(tmp_path / "meshes"),
+            paint3d=Paint3DProfile(texture_size=2048),
+        )
+
+        def _fake_run(argv, **_kw):
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glTF")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        def _faces(path: Path) -> int:
+            return 2_000_000 if "refined" in path.name or "refixsrc" in path.name else 79_000
+
+        with (
+            patch("gameassets.pipeline.ensure_clean_for_paint", return_value=refined),
+            patch("gameassets.pipeline._count_faces_glb", side_effect=_faces),
+            patch("gameassets.pipeline._glb_has_geometry", return_value=True),
+            patch("gameassets.pipeline.run_cmd", side_effect=_fake_run) as run_cmd,
+        ):
+            out = ensure_to_paint_for_paint(
+                mesh_final,
+                text3d_bin="text3d",
+                profile=profile,
+                child_env={},
+                manifest_dir=tmp_path,
+                force=True,
+            )
+        assert out == to_paint
+        cmds = [c.args[0][:2] for c in run_cmd.call_args_list]
+        assert ["text3d", "topology-fix"] in cmds
+        assert ["text3d", "simplify"] in cmds
+        assert cmds.index(["text3d", "topology-fix"]) < cmds.index(["text3d", "simplify"])
         refix_argv = next(c.args[0] for c in run_cmd.call_args_list if c.args[0][:2] == ["text3d", "topology-fix"])
         assert "--morph-close" in refix_argv
-        assert refix_argv[refix_argv.index("--morph-close") + 1] == "0"
+        assert float(refix_argv[refix_argv.index("--morph-close") + 1]) > 0

@@ -1,7 +1,11 @@
-# LOD2 — 25% do target da categoria. TANGENT opcional.
+# v_per_tri 1.8: o atlas do refine+morph tem mais ilhas UV; 1.6 rejeitava
+# meshes válidas (shepherd_cottage 1.66/1.77) sem sinal de faceting (3.0).
+
+# LOD2 — 22% do target da categoria (lod2_ratio 0.22 no pipeline e no
+# tools/make_lods.py). TANGENT opcional.
 mesh_totals:
   v_per_tri:
-    max: 1.6
+    max: 1.8
   vertex_count:
     min: 4
     max: 50000
@@ -23,9 +27,13 @@ face_count:
     tree: 3600
     rock: 960
     mineral: 1440
-    building: 13440
+    # building 19.2k: idem high (48k alvo); LOD2 57.6k × 0.22 ≈ 12.7k, piso
+    # de costuras 16k (watchtower).
+    building: 19200
     # furniture target=48k → LOD2 ≈ 0.22×LOD0 (12.7k); cap antigo 2.4k era pré-48k.
     furniture: 16800
+    # prop target=24k → LOD2 0.22× = 5.3k; cap com folga para o piso de UV.
+    prop: 8400
     vegetation: 3000
     vehicle: 4800
     armor: 3000

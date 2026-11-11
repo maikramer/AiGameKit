@@ -92,6 +92,55 @@ def test_master_force_e_master_force_contextvar() -> None:
     assert MASTER_FORCE.get() is False
 
 
+def test_clean_paint_cap_honours_explicit_budget() -> None:
+    """O cap de 80k do caminho ``_clean`` não pode sobrepor um budget explícito."""
+    from gameassets.pipeline import _explicit_to_paint_faces
+
+    profile = SimpleNamespace(paint3d=None)
+    assert _explicit_to_paint_faces(profile, SimpleNamespace(paint3d={"to_paint_faces": 120000}), None)
+    assert _explicit_to_paint_faces(profile, None, 50_000)  # degradação do retry
+    assert _explicit_to_paint_faces(SimpleNamespace(paint3d=SimpleNamespace(to_paint_faces=120000)), None, None)
+    assert not _explicit_to_paint_faces(profile, SimpleNamespace(paint3d=None), None)
+
+
+def test_resume_force_replans_even_when_everything_is_done() -> None:
+    """``resume --force`` não pode sair em "Todos os assets estão completos"."""
+    from gameassets.resume_cmd import _ROW_NEED_IMAGE, _apply_force_states
+
+    items = [{"state": "done"}, {"state": "done"}]
+    _apply_force_states(items, force=False)
+    assert [it["state"] for it in items] == ["done", "done"]
+    _apply_force_states(items, force=True)
+    assert [it["state"] for it in items] == [_ROW_NEED_IMAGE, _ROW_NEED_IMAGE]
+
+
+def test_refix_rejects_an_empty_glb(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """rc=0 com GLB vazio não pode substituir a malha boa do paint."""
+    from glb_fixtures import write_min_glb
+
+    import gameassets.pipeline as P
+
+    src = tmp_path / "src.glb"
+    write_min_glb(src)
+    dst = tmp_path / "dst.glb"
+
+    def fake_run(argv: list[str], **_kw: object) -> SimpleNamespace:
+        Path(argv[argv.index("-o") + 1]).write_bytes(b"")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(P, "run_cmd", fake_run)
+    with pytest.raises(RuntimeError, match="refix"):
+        P._refix_paint_input(
+            src,
+            dst,
+            text3d_bin="text3d",
+            child_env={},
+            manifest_dir=tmp_path,
+            row=None,
+        )
+    assert not dst.exists()
+
+
 @pytest.mark.parametrize(
     "func_name",
     ["_run_static_lod_stages"],

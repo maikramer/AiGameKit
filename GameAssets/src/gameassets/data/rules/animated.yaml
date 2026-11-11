@@ -1,8 +1,10 @@
 # Animated GLB (Round 2) — pós animator3d game-pack + gltf_transform_finish.
 # Exige skin + armature + pelo menos uma action + KTX2/meshopt/tangents.
+# v_per_tri 1.8: o atlas do refine+morph tem mais ilhas UV; 1.6 rejeitava
+# meshes válidas (shade 1.635). 3.0 é o sinal de faceting.
 mesh_totals:
   v_per_tri:
-    max: 1.6
+    max: 1.8
 
 attributes_required:
   - POSITION

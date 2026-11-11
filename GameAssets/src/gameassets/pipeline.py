@@ -1589,8 +1589,7 @@ def _run_refine_stage(
                 console.print(f"[yellow]⤵ refine[/yellow] {label}: {reason}")
                 return None
             console.print(
-                f"[yellow]⤵ refine[/yellow] {label}: vista {view} indisponível ({reason}); "
-                f"a usar {len(used)} vista(s)"
+                f"[yellow]⤵ refine[/yellow] {label}: vista {view} indisponível ({reason}); a usar {len(used)} vista(s)"
             )
             break
         if r.returncode != 0 or not out.is_file() or not _glb_has_geometry(out):
@@ -1600,9 +1599,7 @@ def _run_refine_stage(
                 console.print(f"[yellow]⤵ refine[/yellow] {label}: falhou (segue _clean)")
                 return None
             log.warning("refine falhou na vista %s (%s): %s — última saída boa", view, label, err)
-            console.print(
-                f"[yellow]⤵ refine[/yellow] {label}: vista {view} falhou; a usar {len(used)} vista(s)"
-            )
+            console.print(f"[yellow]⤵ refine[/yellow] {label}: vista {view} falhou; a usar {len(used)} vista(s)")
             break
 
         prev = out
@@ -1889,6 +1886,25 @@ def _resolve_to_paint_faces(profile: GameProfile, row: ManifestRow | None = None
     return target
 
 
+def _explicit_to_paint_faces(
+    profile: GameProfile,
+    row: ManifestRow | None,
+    target_faces: int | None,
+) -> bool:
+    """Há um orçamento de ``_to_paint`` escolhido à mão?
+
+    O cap de segurança do caminho ``_clean`` (``_PAINT_CLEAN_MAX_FACES``) é para
+    a fórmula (~texture_size), não para um override explícito da row/profile:
+    esse pedido tem de ganhar, como documenta ``_resolve_to_paint_faces``.
+    """
+    if target_faces is not None:
+        return True
+    if row is not None and row.paint3d and row.paint3d.get("to_paint_faces") is not None:
+        return True
+    p3 = profile.paint3d
+    return bool(p3 is not None and p3.to_paint_faces is not None)
+
+
 def ensure_to_paint_for_paint(
     mesh_final: Path,
     *,
@@ -1940,7 +1956,7 @@ def ensure_to_paint_for_paint(
     # tem de ser refixada mesmo quando cabe no orçamento de faces — e um
     # ``_to_paint`` antigo (gerado antes do refix+morph) não pode ser reusado.
     refined_input = "_refined" in clean_p.stem
-    if not refined_input:
+    if not refined_input and not _explicit_to_paint_faces(profile, row, target_faces):
         target = min(target, _PAINT_CLEAN_MAX_FACES)
     reuse_ok = (
         not force
@@ -2112,7 +2128,10 @@ def _refix_paint_input(
     if row is not None and row.category:
         refix_argv.extend(["--category", str(row.category)])
     r = run_cmd(refix_argv, extra_env=child_env, cwd=manifest_dir)
-    if r.returncode == 0 and refix_p.is_file():
+    # Um rc=0 com GLB vazio/corrupto (worker morto a meio do save) não pode
+    # substituir a malha boa do paint — o simplify/paint seguinte falharia longe
+    # daqui. ``_glb_has_geometry`` é o mesmo gate do refine/master.
+    if r.returncode == 0 and refix_p.is_file() and _glb_has_geometry(refix_p):
         refix_p.replace(dst)
         return dst
     err = merge_subprocess_output(r, max_chars=400) or "topology-fix (refix) falhou"

@@ -1,10 +1,13 @@
+# v_per_tri 1.8: o atlas do refine+morph tem mais ilhas UV; 1.6 rejeitava
+# meshes válidas (shepherd_cottage 1.66/1.77) sem sinal de faceting (3.0).
+
 # Regras de validação para o GLB LOD0 (master).
 # Aplicado pelo orquestrador via:
 #   aigamekit-lab check glb id_lod0.glb rules/lod0.yaml --category <cat>
 
 mesh_totals:
   v_per_tri:
-    max: 1.6
+    max: 1.8
   vertex_count:
     min: 8
     max: 200000
@@ -41,6 +44,9 @@ face_count:
     mineral: 16000
     building: 96000
     furniture: 96000
+    # ``prop`` tem target 24000 (categories.py) e faltava na regra: o check
+    # não impunha teto nenhum aos props.
+    prop: 48000
     vegetation: 32000
     vehicle: 40000
     armor: 32000

@@ -251,11 +251,38 @@ def test_rules_lod0_required_attrs() -> None:
     assert {"POSITION", "NORMAL", "TEXCOORD_0", "TANGENT"}.issubset(attrs)
     assert rules.get("texture_format") == "ktx2"
     assert rules.get("compression") == "meshopt"
-    assert rules["mesh_totals"]["v_per_tri"]["max"] == 1.6
+    assert rules["mesh_totals"]["v_per_tri"]["max"] == 1.8
     # Categorias do plano garantidas
     per_cat = rules["face_count"]["max_per_category"]
     for cat in ("humanoid", "creature", "weapon", "chest"):
         assert cat in per_cat, f"categoria {cat} ausente"
+
+
+def test_rules_lod_caps_cobrem_todas_as_categorias() -> None:
+    """Cada categoria do pipeline tem teto LOD e o teto >= target * ratio.
+
+    O ``prop`` (target 24k) faltava nas três regras — o check não impunha teto
+    nenhum. E ``lod1``/``lod2`` têm de comportar o ``lod1_ratio``/``lod2_ratio``
+    que o pipeline e o ``tools/make_lods.py`` usam (0.40/0.22).
+    """
+    import yaml
+
+    from gameassets.categories import CATEGORIES
+
+    rules_dir = Path(__file__).resolve().parent.parent / "src" / "gameassets" / "data" / "rules"
+    for name, ratio in (("lod1", 0.40), ("lod2", 0.22)):
+        rules = yaml.safe_load((rules_dir / f"{name}.yaml").read_text())
+        caps = rules["face_count"]["max_per_category"]
+        assert rules["mesh_totals"]["v_per_tri"]["max"] == 1.8
+        for cat, meta in CATEGORIES.items():
+            assert cat in caps, f"{name}: categoria {cat} sem teto"
+            assert caps[cat] >= int(meta.target_faces * ratio), (
+                f"{name}: teto de {cat} ({caps[cat]}) abaixo do target {int(meta.target_faces * ratio)}"
+            )
+    lod0 = yaml.safe_load((rules_dir / "lod0.yaml").read_text())["face_count"]["max_per_category"]
+    for cat, meta in CATEGORIES.items():
+        assert cat in lod0, f"lod0: categoria {cat} sem teto"
+        assert lod0[cat] >= meta.target_faces, f"lod0: teto de {cat} abaixo do target"
 
 
 def test_pipeline_master_module_imports() -> None:

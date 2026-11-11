@@ -1,7 +1,11 @@
-# LOD1 — 50% do target da categoria, mesmas exigências de PBR.
+# v_per_tri 1.8: o atlas do refine+morph tem mais ilhas UV; 1.6 rejeitava
+# meshes válidas (shepherd_cottage 1.66/1.77) sem sinal de faceting (3.0).
+
+# LOD1 — 40% do target da categoria (lod1_ratio 0.40 no pipeline e no
+# tools/make_lods.py), mesmas exigências de PBR.
 mesh_totals:
   v_per_tri:
-    max: 1.6
+    max: 1.8
   vertex_count:
     min: 4
     max: 100000
@@ -24,9 +28,13 @@ face_count:
     tree: 7200
     rock: 1920
     mineral: 2880
-    building: 20160
+    # building 28.8k: `generation: high` (face_ratio 2.0) duplica o alvo
+    # base (48k); LOD0 57.6k × 0.4 ≈ 23k e o piso de costuras sobe a 24k (watchtower).
+    building: 28800
     # furniture target=48k → LOD1 ≈ 0.48×target (23k); cap antigo 4.8k era pré-48k.
     furniture: 26400
+    # prop target=24k → LOD1 0.40× = 9.6k; cap com folga para o piso de UV.
+    prop: 14400
     vegetation: 6000
     vehicle: 9600
     armor: 6000

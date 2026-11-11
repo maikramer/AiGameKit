@@ -1,8 +1,9 @@
 # Rigged GLB (Round 2) — pós transfer-weights + gltf_transform_finish.
 # Exige skin (JOINTS_0/WEIGHTS_0) + armature + KTX2/meshopt/tangents.
+# v_per_tri 1.8: atlas com mais ilhas UV; 1.6 rejeitava meshes válidas.
 mesh_totals:
   v_per_tri:
-    max: 1.6
+    max: 1.8
 
 attributes_required:
   - POSITION
