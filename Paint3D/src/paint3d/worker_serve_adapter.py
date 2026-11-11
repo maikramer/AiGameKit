@@ -19,6 +19,51 @@ from typing import Any
 from aigamekit_shared.worker_serve_adapter_base import WorkerAdapter
 
 
+def _normalize_refs(request: dict[str, Any]) -> tuple[Any, bool, list[float] | None]:
+    """Normaliza ``images``/``image_path``/``image_azims`` do payload.
+
+    Um cliente externo pode mandar ``images`` como string (``"a.png,b.png"``)
+    ou ``image_azims`` como texto. Sem isto o adapter passava a string ao
+    ``paint_mesh`` — o blend em ``textureGenPipeline`` iterava caracteres e o
+    worker morria a meio do paint (levando a sessão do vramd). Os erros de
+    contrato saem em ValueError para o ``generate`` devolver um ``status:
+    error`` limpo em vez de estourar o processo.
+
+    Returns:
+        ``(image_arg, blend_refs, image_azims)`` — ``image_arg`` é a lista de
+        paths (multi-ref) ou o path único (contrato antigo).
+    """
+    images = request.get("images")
+    image_path = request.get("image_path") or request.get("image")
+    if isinstance(images, str):
+        images = [part.strip() for part in images.replace(";", ",").split(",") if part.strip()]
+    if images is not None and not isinstance(images, (list, tuple)):
+        raise ValueError("`images` tem de ser uma lista de paths")
+    ref_images = [str(p) for p in images] if images else None
+    if ref_images is not None and any(not p.strip() for p in ref_images):
+        raise ValueError("`images` contém um path vazio")
+
+    blend_refs = bool(request.get("blend_refs"))
+    if blend_refs and (ref_images is None or len(ref_images) < 2):
+        raise ValueError("blend_refs=True exige `images` com 2+ referências")
+
+    azims = request.get("image_azims")
+    if azims is not None:
+        if isinstance(azims, str):
+            chunks = [chunk.strip() for chunk in azims.replace(";", ",").split(",")]
+            azims = [float(chunk) % 360.0 for chunk in chunks if chunk]
+        elif isinstance(azims, (list, tuple)):
+            try:
+                azims = [float(value) % 360.0 for value in azims]
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"image_azims inválido: {azims!r}") from exc
+        else:
+            raise ValueError(f"image_azims inválido: {azims!r}")
+        if ref_images and len(azims) != len(ref_images):
+            raise ValueError(f"image_azims tem {len(azims)} valores para {len(ref_images)} imagens")
+    return ref_images or image_path, blend_refs, azims
+
+
 class Adapter(WorkerAdapter):
     """Adapter paint3d (PaintBatchProcessor — context manager) para subprocesso.
 
@@ -83,12 +128,11 @@ class Adapter(WorkerAdapter):
 
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
         mesh_path = request.get("mesh_path") or request.get("mesh")
-        image_path = request.get("image_path") or request.get("image")
-        images = request.get("images")
-        image_arg = images or image_path
-        blend_refs = bool(request.get("blend_refs"))
-        image_azims = request.get("image_azims")
         output = request.get("output")
+        try:
+            image_arg, blend_refs, image_azims = _normalize_refs(request)
+        except ValueError as exc:
+            return {"status": "error", "error": str(exc)}
         if not mesh_path or not image_arg or not output:
             return {"status": "error", "error": "mesh_path, image_path/images e output são obrigatórios"}
         if self.should_abort(request):
@@ -192,7 +236,19 @@ class Adapter(WorkerAdapter):
         return out
 
     def unload(self, model: Any) -> None:
-        exit_method = getattr(model, "__exit__", None)
-        if callable(exit_method):
-            with contextlib.suppress(Exception):
-                model.__exit__(None, None, None)
+        # ``finally``: o cache do allocator tem de voltar ao driver mesmo que o
+        # __exit__ do PaintBatchProcessor falhe (refine/rig/animação recusados
+        # por VRAM é pior que um teardown ruidoso).
+        try:
+            exit_method = getattr(model, "__exit__", None)
+            if callable(exit_method):
+                with contextlib.suppress(Exception):
+                    model.__exit__(None, None, None)
+        finally:
+            try:
+                import torch
+
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+            except Exception:
+                pass

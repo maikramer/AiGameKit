@@ -1,84 +1,16 @@
-"""Builders de request vramd para Paint3D texture (CLI + GameAssets)."""
+"""Builders de request vramd para Paint3D texture (CLI + GameAssets).
+
+A implementação vive em :mod:`aigamekit_shared.vramd_paint_payload` para o
+GameAssets montar as waves sem importar o pacote Paint3D (que puxa torch).
+Este módulo mantém a API histórica ``paint3d.vramd_payload``.
+"""
 
 from __future__ import annotations
 
-from typing import Any
+from aigamekit_shared.vramd_paint_payload import (  # noqa: F401
+    _coerce_ref_azims,
+    _validate_multi_ref,
+    build_texture_request,
+)
 
-from aigamekit_shared.cli_helpers import with_vramd_load_opts, with_vramd_peak_opts
-from aigamekit_shared.vramd_payload import build_request_body
-
-
-def build_texture_request(
-    *,
-    mesh_path: str,
-    image_path: str,
-    output: str,
-    images: list[str] | None = None,
-    blend_refs: bool = False,
-    image_azims: list[float] | None = None,
-    max_num_view: int = 6,
-    view_resolution: int = 512,
-    render_size: int = 1024,
-    texture_size: int = 1024,
-    bake_exp: float | None = None,
-    verbose: bool = False,
-    preserve_origin: bool = True,
-    smooth: bool = True,
-    smooth_passes: int | None = None,
-    upscale: bool = False,
-    upscale_factor: float | None = None,
-    gpu_ids: list[int] | str | None = None,
-    torch_compile: bool = False,
-    torch_compile_mode: str | None = None,
-    channels_last: bool = False,
-    allow_group_offload: bool = True,
-    memory_efficient: bool = False,
-    sdnq_preset: str | None = None,
-    pbr_enrich: bool | None = None,
-    extra: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Monta payload vramd paint3d com peak opts."""
-    payload = build_request_body(
-        core={
-            "mesh_path": str(mesh_path),
-            "image_path": str(image_path),
-            "output": str(output),
-            "max_num_view": int(max_num_view),
-            "view_resolution": int(view_resolution),
-            "render_size": int(render_size),
-            "texture_size": int(texture_size),
-            "verbose": bool(verbose),
-            "preserve_origin": bool(preserve_origin),
-            "smooth": bool(smooth),
-            "torch_compile": bool(torch_compile),
-            "channels_last": bool(channels_last),
-            "allow_group_offload": bool(allow_group_offload),
-        },
-        optional={
-            # Multi-ref: o worker passa a lista ao paint_mesh (blend por vista).
-            "images": [str(p) for p in images] if images else None,
-            "blend_refs": True if blend_refs else None,
-            "image_azims": [float(a) for a in image_azims] if image_azims else None,
-            "bake_exp": bake_exp,
-            "smooth_passes": None if smooth_passes is None else int(smooth_passes),
-            "upscale": True if upscale else None,
-            "upscale_factor": None if upscale_factor is None else float(upscale_factor),
-            "torch_compile_mode": torch_compile_mode,
-            "pbr_enrich": pbr_enrich,
-        },
-        extra=extra,
-    )
-
-    mem_eff = bool(memory_efficient)
-    preset = sdnq_preset
-    if preset is None and mem_eff:
-        preset = "sdnq-uint8"
-    elif preset in (None, "none", ""):
-        preset = "none" if not mem_eff else "sdnq-uint8"
-
-    return with_vramd_peak_opts(
-        with_vramd_load_opts(payload, gpu_ids=gpu_ids),
-        backend="paint3d",
-        memory_efficient=mem_eff,
-        sdnq_preset=None if preset in (None, "none", "") else preset,
-    )
+__all__ = ["build_texture_request"]

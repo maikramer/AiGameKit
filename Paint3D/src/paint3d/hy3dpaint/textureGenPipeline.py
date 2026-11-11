@@ -12,10 +12,12 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+import contextlib
 import math
 import os
 import warnings
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -42,6 +44,73 @@ def _default_ref_azims(n: int) -> list[float]:
     return [i * 360.0 / n for i in range(n)]
 
 
+def _resolve_ref_azims(n_refs: int, image_azims: Any, *, blend_refs: bool) -> list[float]:
+    """Valida/deriva os azimutes das referências **antes** do unwrap do mesh.
+
+    ``image_azims`` aceita lista de números ou string ``"0,180,90,270"`` (um
+    cliente externo pode mandar o campo como texto no payload). A contagem tem
+    de bater com o número de imagens: sem esta validação o erro só aparecia no
+    fim do ``uv_unwrap`` + seleção de vistas, minutos depois de começar.
+    """
+    if not blend_refs or n_refs <= 1:
+        return []
+    if image_azims is None:
+        return _default_ref_azims(n_refs)
+    if isinstance(image_azims, str):
+        chunks = [chunk.strip() for chunk in image_azims.replace(";", ",").split(",")]
+        values: list[Any] = [chunk for chunk in chunks if chunk]
+    else:
+        try:
+            values = list(image_azims)
+        except TypeError as exc:
+            raise ValueError(f"image_azims inválido: {image_azims!r}") from exc
+    try:
+        azims = [float(value) % 360.0 for value in values]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"image_azims inválido: {image_azims!r}") from exc
+    if len(azims) != n_refs:
+        raise ValueError(f"image_azims tem {len(azims)} valores para {n_refs} referências")
+    return azims
+
+
+def _load_reference_images(image_path: Any) -> tuple[list[Image.Image], list[Image.Image]]:
+    """Normaliza ``image_path`` em lista de PIL.
+
+    Devolve também as imagens que **nós** abrimos (ficheiros) para o caller as
+    fechar: em Windows o ``TemporaryDirectory`` do painter não apaga ficheiros
+    com handle aberto — um multi-ref esgotava descritores e a limpeza do
+    ``tempdir`` falhava depois do paint todo.
+    """
+    opened: list[Image.Image] = []
+    if isinstance(image_path, (list, tuple)):
+        images: list[Image.Image] = []
+        if not image_path:
+            raise ValueError("image_path lista vazia — o paint precisa de 1+ referências")
+        for item in image_path:
+            if isinstance(item, (str, Path)):
+                image = Image.open(item)
+                opened.append(image)
+                images.append(image)
+            elif isinstance(item, Image.Image):
+                images.append(item)
+            else:
+                raise ValueError(f"referência inválida: {type(item).__name__}")
+        return images, opened
+    if isinstance(image_path, (str, Path)):
+        image = Image.open(image_path)
+        return [image], [image]
+    if isinstance(image_path, Image.Image):
+        return [image_path], []
+    raise ValueError(f"image_path inválido: {type(image_path).__name__}")
+
+
+def _close_images(images: list[Image.Image]) -> None:
+    """Fecha handles abertos por ``_load_reference_images`` (best-effort)."""
+    for image in images:
+        with contextlib.suppress(Exception):
+            image.close()
+
+
 def _blend_multiview_runs(
     runs: list[dict[str, list[Image.Image]]],
     view_azims: list[float],
@@ -59,12 +128,24 @@ def _blend_multiview_runs(
     """
     if not runs:
         raise ValueError("runs vazio")
+    if len(ref_azims) != len(runs):
+        raise ValueError(f"ref_azims tem {len(ref_azims)} valores para {len(runs)} runs")
+    if not view_azims:
+        raise ValueError("view_azims vazio")
     keys = [k for k in ("albedo", "mr", "hdr") if k in runs[0]]
     if not keys:
         raise ValueError(f"runs sem albedo/mr: {sorted(runs[0])}")
     out: dict[str, list[Image.Image]] = {}
+    sizes: dict[str, tuple[int, int]] = {}
     for key in keys:
         n_views = len(runs[0][key])
+        if n_views > len(view_azims):
+            raise ValueError(f"run '{key}' tem {n_views} vistas para {len(view_azims)} azimutes")
+        for idx, run in enumerate(runs):
+            if key not in run:
+                raise ValueError(f"run {idx} sem canal '{key}'")
+            if len(run[key]) != n_views:
+                raise ValueError(f"run {idx} tem {len(run[key])} vistas em '{key}', esperado {n_views}")
         blended: list[Image.Image] = []
         for i in range(n_views):
             weights: list[float] = []
@@ -78,6 +159,10 @@ def _blend_multiview_runs(
             arr = None
             for weight, run in zip(weights, runs, strict=True):
                 cur = np.asarray(run[key][i], dtype=np.float32)
+                if arr is None:
+                    sizes[key] = (cur.shape[0], cur.shape[1])
+                elif (cur.shape[0], cur.shape[1]) != sizes[key]:
+                    raise ValueError(f"run com vista {i} de tamanho {cur.shape[:2]} em '{key}', esperado {sizes[key]}")
                 arr = cur * weight if arr is None else arr + cur * weight
             if arr is None:
                 raise ValueError("sem runs para misturar")
@@ -203,15 +288,29 @@ class Hunyuan3DPaintPipeline:
             if step_callback:
                 step_callback(phase, pct)
 
-        if isinstance(image_path, (list, tuple)):
-            image_prompt = [Image.open(p) if isinstance(p, (str, Path)) else p for p in image_path]
-        elif isinstance(image_path, (str, Path)):
-            image_prompt = Image.open(image_path)
-        elif isinstance(image_path, Image.Image):
-            image_prompt = image_path
-        else:
-            raise ValueError(f"image_path inválido: {type(image_path).__name__}")
-        image_prompt = [image_prompt] if not isinstance(image_prompt, list) else image_prompt
+        image_prompt, owned_images = _load_reference_images(image_path)
+        try:
+            # Validação dos azimutes ANTES do uv_unwrap/seleção de vistas: um
+            # pedido inconsistente (-‑blend-refs com azimutes a menos) falhava
+            # minutos depois, já com o mesh processado.
+            ref_azims = _resolve_ref_azims(len(image_prompt), image_azims, blend_refs=blend_refs)
+
+            ##########  Style  ###########
+            image_caption = "high quality"
+            image_style = []
+            for image in image_prompt:
+                image = image.resize((512, 512))
+                if image.mode == "RGBA":
+                    white_bg = Image.new("RGB", image.size, (255, 255, 255))
+                    white_bg.paste(image, mask=image.getchannel("A"))
+                    image = white_bg
+                image_style.append(image)
+            image_style = [image.convert("RGB") for image in image_style]
+        finally:
+            # As originais já estão carregadas em memória (resize/convert
+            # fizeram load): fechar aqui liberta os handles antes do
+            # TemporaryDirectory do painter tentar limpar em Windows.
+            _close_images(owned_images)
 
         _step("uv_unwrap", 0)
         # Process mesh
@@ -252,26 +351,14 @@ class Hunyuan3DPaintPipeline:
         position_maps = self.view_processor.render_position_multiview(selected_camera_elevs, selected_camera_azims)
         _step("view_selection", 100)
 
-        ##########  Style  ###########
-        image_caption = "high quality"
-        image_style = []
-        for image in image_prompt:
-            image = image.resize((512, 512))
-            if image.mode == "RGBA":
-                white_bg = Image.new("RGB", image.size, (255, 255, 255))
-                white_bg.paste(image, mask=image.getchannel("A"))
-                image = white_bg
-            image_style.append(image)
-        image_style = [image.convert("RGB") for image in image_style]
+        ##########  Style (já resolvido antes do unwrap)  ###########
 
         ###########  Multiview  ##########
         _step("multiview_render", 0)
         if blend_refs and len(image_style) > 1:
-            ref_azims = (
-                [float(a) for a in image_azims] if image_azims is not None else _default_ref_azims(len(image_style))
-            )
-            if len(ref_azims) != len(image_style):
-                raise ValueError(f"image_azims tem {len(ref_azims)} valores para {len(image_style)} referências")
+            # N referências = N difusões completas (custo linear); as vistas
+            # normais/posição são calculadas uma vez e reutilizadas.
+            print(f"Paint3D: blend de {len(image_style)} referências ({len(image_style)} difusões)")
             runs = [
                 self.models["multiview_model"](
                     [ref],
@@ -284,6 +371,10 @@ class Hunyuan3DPaintPipeline:
             ]
             multiviews_pbr = _blend_multiview_runs(runs, selected_camera_azims, ref_azims)
         else:
+            if len(image_style) > 1:
+                # Sem blend o modelo só vê a 1.ª referência (forward_one usa
+                # input_images[0:1]); as restantes eram descartadas em silêncio.
+                print(f"Paint3D: {len(image_style)} referências sem --blend-refs — a usar só a primeira")
             multiviews_pbr = self.models["multiview_model"](
                 image_style,
                 normal_maps + position_maps,

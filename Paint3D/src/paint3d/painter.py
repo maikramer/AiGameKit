@@ -323,20 +323,31 @@ def _park_ref_unet_on_cpu(pipe: Any, *, verbose: bool = False) -> bool:
 
 
 def _paint_group_offload_active(unet_wrapper: Any) -> bool:
-    """True se os UNets internos têm hooks de group offload do diffusers.
+    """True se **todos** os UNets presentes têm hooks de group offload.
 
     Reutiliza o detector do vendor (``_group_offload_managed``): com hooks
     activos a colocação dos pesos é dos hooks — o offload_ref_unet/park
     custom ficam desligados para não lutarem contra o streaming.
+
+    Tem de ser ``all`` e não ``any``: quando só o ``unet`` (ou só o
+    ``unet_dual``) ficou com hooks — aplicação parcial ou ``unet_dual`` sem
+    ``enable_group_offload`` — o UNet restante ainda precisa do park/offload
+    custom. Com ``any`` ele ficava residente na GPU (foi o OOM-spin em 6 GB).
     """
+    modules = [
+        m
+        for m in (
+            getattr(unet_wrapper, "unet", None),
+            getattr(unet_wrapper, "unet_dual", None),
+        )
+        if m is not None
+    ]
+    if not modules:
+        return False
     try:
         from .hy3dpaint.hunyuanpaintpbr.unet.modules import _group_offload_managed
 
-        return any(
-            _group_offload_managed(m)
-            for m in (getattr(unet_wrapper, "unet", None), getattr(unet_wrapper, "unet_dual", None))
-            if m is not None
-        )
+        return all(_group_offload_managed(m) for m in modules)
     except Exception:
         return False
 
@@ -743,6 +754,7 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
     # ``exclude_kwargs`` preserva o dict ``cross_attention_kwargs`` por
     # identidade nos pre_forward hooks (send_to_device recria dicts).
     applied_unet = False
+    applied_attrs: set[str] = set()
     inner_unet = getattr(diff_pipe, "unet", None)
     if inner_unet is not None:
         # O wrapper expõe .unet (UNet2DConditionModel real) e opcionalmente .unet_dual.
@@ -761,6 +773,7 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
                         exclude_kwargs=["cross_attention_kwargs"],
                     )
                     applied_unet = True
+                    applied_attrs.add(attr)
                     if verbose:
                         _logger.info(f"Group offload ({cfg.summary()}) aplicado a unet.{attr}")
                 except Exception as e:
@@ -779,9 +792,12 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
 
     if applied_unet or applied_rest:
         # Hooks são donos da colocação: o offload_ref_unet custom (park + .to)
-        # lutaria contra o streaming por grupo.
+        # lutaria contra o streaming por grupo. Só se o dual UNet também está
+        # gerido — com o dual sem hooks, desligar o offload deixava os dois
+        # UNets residentes na GPU (OOM em 6 GB).
         if hasattr(inner_unet, "offload_ref_unet"):
-            inner_unet.offload_ref_unet = False
+            dual = getattr(inner_unet, "unet_dual", None)
+            inner_unet.offload_ref_unet = dual is not None and "unet_dual" not in applied_attrs
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         if verbose:
@@ -1023,30 +1039,67 @@ def _preserve_placement(
         _logger.info(f"placement preservado (sem rotação): scale={scale:.4f} offset={offset.tolist()}")
 
 
+def _save_reference_image(item: Any, dst: Path) -> None:
+    """Guarda uma referência em ``dst`` preservando o canal alfa.
+
+    O ``textureGenPipeline`` compõe RGBA sobre branco (a referência do text2d
+    com ``--transparent`` chega assim). Converter para ``RGB`` aqui deitava o
+    alfa fora — o fundo transparente (0,0,0) virava preto opaco e o paint
+    propagava-o para as vistas, deixando o asset escuro.
+    """
+    if isinstance(item, (str, Path)):
+        shutil.copy2(item, dst)
+        return
+    mode = getattr(item, "mode", "RGB")
+    has_alpha = mode in ("RGBA", "LA", "PA", "RGBa", "La") or (
+        mode == "P" and "transparency" in getattr(item, "info", {})
+    )
+    if has_alpha:
+        item.convert("RGBA").save(dst)
+    else:
+        item.convert("RGB").save(dst)
+
+
 def _copy_reference_images(image: Any, tdir: Path) -> tuple[list[Path], str | list[str]]:
     """Copia 1..N referências para ``tdir``; devolve paths e o arg do pipeline.
 
     Uma lista ativa o blend por vista no ``textureGenPipeline``; uma única
-    referência mantém o contrato antigo (``ref.png`` + string).
+    referência mantém o contrato antigo (``ref.png`` + string). A lista vazia
+    é erro de chamada (o ``ref_paths[0]`` do caller estourava com IndexError).
     """
     if isinstance(image, (list, tuple)):
+        refs = list(image)
+        if not refs:
+            raise ValueError("lista de referências vazia — o paint precisa de 1+ imagens")
         paths: list[Path] = []
-        for i, item in enumerate(image):
+        for i, item in enumerate(refs):
             rp = tdir / f"ref_{i}.png"
-            if isinstance(item, (str, Path)):
-                shutil.copy2(item, rp)
-            else:
-                im = item.convert("RGB") if item.mode != "RGB" else item
-                im.save(rp)
+            _save_reference_image(item, rp)
             paths.append(rp)
         return paths, [str(p) for p in paths]
     rp = tdir / "ref.png"
-    if isinstance(image, (str, Path)):
-        shutil.copy2(image, rp)
-    else:
-        im = image.convert("RGB") if image.mode != "RGB" else image
-        im.save(rp)
+    _save_reference_image(image, rp)
     return [rp], str(rp)
+
+
+def _check_reference_images(paths: list[Path], *, logger: Any = None) -> None:
+    """Avisa por cada referência chapada, não só pela primeira.
+
+    Abre/fecha cada ficheiro com ``with``: o ``check_reference_image`` do
+    paint_prep abre o path e não fecha (o fd ficava até ao GC — em Windows o
+    ``TemporaryDirectory`` não limpa ficheiros com handle aberto).
+    """
+    from PIL import Image
+
+    from .paint_prep import check_reference_image
+
+    for path in paths:
+        try:
+            with Image.open(path) as image:
+                check_reference_image(image, logger=logger)
+        except OSError:
+            # Deixa o helper reportar a falha de leitura com a mesma mensagem.
+            check_reference_image(path, logger=logger)
 
 
 def apply_hunyuan_paint(
@@ -1116,7 +1169,6 @@ def apply_hunyuan_paint(
     with tempfile.TemporaryDirectory(prefix="paint3d_h21_") as td_raw:
         tdir = Path(td_raw)
         mesh_in = tdir / "input_mesh.glb"
-        ref_path = tdir / "ref.png"
         out_obj = tdir / "textured_mesh.glb"
         out_glb = tdir / "textured_mesh.glb"
 
@@ -1134,7 +1186,6 @@ def apply_hunyuan_paint(
             save_glb(mesh, mesh_in, verify_stage="to_paint")
 
             ref_paths, image_arg = _copy_reference_images(image, tdir)
-            ref_path = ref_paths[0]
 
         with profile_span("paint_configure"):
             config = Hunyuan3DPaintConfig(max_num_view, view_resolution)
@@ -1184,14 +1235,13 @@ def apply_hunyuan_paint(
             # Skip inpaint em ilhas UV nunca baked (cascas internas / occlusas).
             from .paint_prep import (
                 apply_top_view_weight,
-                check_reference_image,
                 install_depth_bias,
                 install_restricted_inpaint,
             )
 
             apply_top_view_weight(config, logger=_logger)
             # Referência cinzenta (blockout / text2d falhado) => asset escuro.
-            check_reference_image(ref_path, logger=_logger)
+            _check_reference_images(ref_paths, logger=_logger)
 
             install_restricted_inpaint(pipe.view_processor, logger=_logger)
             # Bake depth bias: recupera os texels visíveis que a tolerância fixa
@@ -1682,7 +1732,6 @@ class PaintBatchProcessor:
         with tempfile.TemporaryDirectory(prefix="paint3d_batch_") as td_raw:
             tdir = Path(td_raw)
             mesh_in = tdir / "input_mesh.glb"
-            ref_path = tdir / "ref.png"
             out_obj = tdir / "textured_mesh.glb"
             out_glb = tdir / "textured_mesh.glb"
 
@@ -1694,11 +1743,8 @@ class PaintBatchProcessor:
                 _to_paint_frame(mesh)
                 save_glb(mesh, mesh_in, verify_stage="to_paint")
                 ref_paths, image_arg = _copy_reference_images(image, tdir)
-                ref_path = ref_paths[0]
                 # Referência cinzenta (blockout / text2d falhado) => asset escuro.
-                from .paint_prep import check_reference_image
-
-                check_reference_image(ref_path, logger=_logger)
+                _check_reference_images(ref_paths, logger=_logger)
 
             with profile_span("paint_batch_inference", sync_cuda=True), torch.no_grad():
                 self._pipe(

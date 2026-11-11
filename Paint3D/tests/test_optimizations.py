@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -128,3 +130,76 @@ class TestSdpaResolver:
         from paint3d.hy3dpaint.hunyuanpaintpbr.unet import attn_processor
 
         importlib.reload(attn_processor)
+
+
+class TestGroupOffloadPartialPlacement:
+    """Group offload parcial (só um dos UNets) não pode largar o park do dual."""
+
+    @staticmethod
+    def _wrapper(unet: object, dual: object) -> Any:
+        return SimpleNamespace(unet=unet, unet_dual=dual, offload_ref_unet=True)
+
+    def test_active_requires_every_present_unet(self, monkeypatch) -> None:
+        import paint3d.hy3dpaint.hunyuanpaintpbr.unet.modules as modules
+        import paint3d.painter as painter
+
+        monkeypatch.setattr(modules, "_group_offload_managed", lambda m: bool(getattr(m, "_managed", False)))
+        unet = SimpleNamespace(_managed=True)
+        dual = SimpleNamespace(_managed=False)
+        # Só o unet gerido: o dual ainda precisa do park/offload custom.
+        assert painter._paint_group_offload_active(self._wrapper(unet, dual)) is False
+        dual._managed = True
+        assert painter._paint_group_offload_active(self._wrapper(unet, dual)) is True
+        # Sem dual (variante single-stream) basta o unet.
+        assert painter._paint_group_offload_active(self._wrapper(unet, None)) is True
+        assert painter._paint_group_offload_active(SimpleNamespace(unet=None, unet_dual=None)) is False
+
+    def test_dual_without_hooks_keeps_offload_ref_unet(self, monkeypatch) -> None:
+        """Se o ``unet_dual`` não aceita hooks, desligar o offload deixava-o na GPU."""
+        import paint3d.painter as painter
+        from aigamekit_shared.group_offload import GroupOffloadConfig
+
+        class _UNet:
+            def __init__(self, fail: bool = False) -> None:
+                self.fail = fail
+                self.calls = 0
+
+            def enable_group_offload(self, **_kwargs) -> None:
+                self.calls += 1
+                if self.fail:
+                    raise RuntimeError("sem suporte a hooks")
+
+        unet = _UNet()
+        dual = _UNet(fail=True)
+        wrapper = self._wrapper(unet, dual)
+        diff_pipe = SimpleNamespace(unet=wrapper, text_encoder=None)
+        inner = SimpleNamespace(pipeline=diff_pipe, _unet_quantized=False)
+        pipe = SimpleNamespace(models={"multiview_model": inner})
+
+        monkeypatch.setattr("aigamekit_shared.group_offload.is_group_offload_enabled", lambda **_k: True)
+        monkeypatch.setattr(painter, "_paint_go_cfg", lambda: GroupOffloadConfig())
+        monkeypatch.setattr("aigamekit_shared.group_offload.try_group_offloading", lambda *_a, **_k: False)
+
+        assert painter._try_paint_group_offload(pipe, allow=True) is True
+        assert unet.calls == 1
+        assert dual.calls == 1
+        assert wrapper.offload_ref_unet is True
+
+    def test_dual_with_hooks_disables_offload_ref_unet(self, monkeypatch) -> None:
+        import paint3d.painter as painter
+        from aigamekit_shared.group_offload import GroupOffloadConfig
+
+        class _UNet:
+            def enable_group_offload(self, **_kwargs) -> None:
+                return None
+
+        wrapper = self._wrapper(_UNet(), _UNet())
+        diff_pipe = SimpleNamespace(unet=wrapper, text_encoder=None)
+        pipe = SimpleNamespace(models={"multiview_model": SimpleNamespace(pipeline=diff_pipe, _unet_quantized=False)})
+
+        monkeypatch.setattr("aigamekit_shared.group_offload.is_group_offload_enabled", lambda **_k: True)
+        monkeypatch.setattr(painter, "_paint_go_cfg", lambda: GroupOffloadConfig())
+        monkeypatch.setattr("aigamekit_shared.group_offload.try_group_offloading", lambda *_a, **_k: False)
+
+        assert painter._try_paint_group_offload(pipe, allow=True) is True
+        assert wrapper.offload_ref_unet is False

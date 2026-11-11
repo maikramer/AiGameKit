@@ -342,9 +342,16 @@ def texture(
     parsed_azims: list[float] | None = None
     if image_azims:
         try:
-            parsed_azims = [float(x) for x in str(image_azims).split(",") if x.strip()]
+            parsed_azims = [float(x) % 360.0 for x in str(image_azims).split(",") if x.strip()]
         except ValueError as exc:
             raise click.ClickException(f"--image-azims inválido: {image_azims!r}") from exc
+    # Validação do multi-ref antes de carregar modelo/GPU: sem blend, as
+    # --image extra eram descartadas em silêncio (o modelo só usa a 1.ª) e uma
+    # contagem de azimutes errada só falhava depois do uv_unwrap do mesh.
+    if blend_refs and len(image_list) < 2:
+        raise click.ClickException("--blend-refs precisa de 2+ --image (uma só referência não mistura)")
+    if parsed_azims is not None and len(parsed_azims) != len(image_list):
+        raise click.ClickException(f"--image-azims tem {len(parsed_azims)} valores para {len(image_list)} --image")
     verbose = bool(ctx.obj.get("VERBOSE")) or texture_verbose
     sage_attention = _enable_sage_attention(sage_attention)
 
