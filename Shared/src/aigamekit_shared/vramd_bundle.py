@@ -23,9 +23,10 @@ import shutil
 import subprocess
 import tarfile
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
@@ -34,6 +35,10 @@ from .monorepo import try_find_monorepo_root
 
 SPECS_PATH = Path(__file__).resolve().parent / "data" / "backends.yaml"
 _MAX_FILE_BYTES = 64 * 1024 * 1024
+# O bundle viaja inteiro em memória (BytesIO) e é enviado como um blob. Um
+# code_root mal configurado (ex.: a apontar para ~/Downloads) não pode
+# materializar gigabytes no cliente antes de o servidor o recusar.
+_MAX_TOTAL_BYTES = 256 * 1024 * 1024
 _SKIP_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "node_modules"}
 # Pesos não são código: ficam no cache de modelos do servidor (HF/ensure_*).
 _SKIP_SUFFIXES = {
@@ -140,9 +145,7 @@ def _freeze(tool_dir: str, root: Path) -> tuple[str, str]:
     venv = root / tool_dir / ".venv"
     python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if not python.is_file():
-        raise BundleError(
-            f"venv da tool não encontrado: {venv} — instala {tool_dir} antes de usar GPU remota"
-        )
+        raise BundleError(f"venv da tool não encontrado: {venv} — instala {tool_dir} antes de usar GPU remota")
     try:
         version = subprocess.run(
             [str(python), "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
@@ -172,6 +175,7 @@ def _freeze(tool_dir: str, root: Path) -> tuple[str, str]:
         raise BundleError(f"`freeze` falhou em {tool_dir}: {frozen.stderr[-500:]}")
     lines: list[str] = []
     cuda_tag: str | None = None
+    dropped_cu12_torch = False
     root_text = str(root)
     local_names = {
         "aigamekit-shared",
@@ -189,17 +193,27 @@ def _freeze(tool_dir: str, root: Path) -> tuple[str, str]:
             continue
         if " @ file://" in text or root_text in text:
             continue
-        if any(marker in text for marker in _CUDA12_MARKERS):
-            # Só cu13 no pipeline remoto; ver o comentário em _DEFAULT_SESSIONS.
-            continue
         package = text.split("==", 1)[0].split("@", 1)[0].strip().lower().replace("_", "-")
         if package in local_names:
             # O código local vem do bundle via PYTHONPATH, não do PyPI.
+            continue
+        if any(marker in text for marker in _CUDA12_MARKERS):
+            # Só cu13 no pipeline remoto; ver o comentário em _DEFAULT_SESSIONS.
+            if package == "torch" or package.startswith("torch-"):
+                dropped_cu12_torch = True
             continue
         match = re.search(r"\+cu(\d{2,3})", text)
         if match and cuda_tag is None:
             cuda_tag = f"cu{match.group(1)}"
         lines.append(text)
+    if dropped_cu12_torch and not any(line.split("==", 1)[0].strip().lower().startswith("torch") for line in lines):
+        # Filtrar o torch cu12 sem alternativa deixava um lock sem torch: a
+        # env remota era construída e o worker morria no import. Falhar aqui
+        # diz o que fazer, em vez de rebentar 20 min depois no servidor.
+        raise BundleError(
+            f"o venv de {tool_dir} tem torch CUDA 12; o pipeline remoto só suporta "
+            "CUDA 13 — reinstala a tool com torch cu13 ou marca os assets `gpu: local`"
+        )
     if not lines:
         raise BundleError(f"freeze de {tool_dir} ficou vazio")
     header = ["--index-url https://pypi.org/simple"]
@@ -289,31 +303,46 @@ def build_bundle(backends: Iterable[str] | None = None) -> Bundle:
 
     files: list[dict[str, Any]] = []
     payloads: dict[str, bytes] = {}
+    total_bytes = 0
     for rel, path in _iter_files(root, sorted(set(code_roots))):
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        total_bytes += size
+        if total_bytes > _MAX_TOTAL_BYTES:
+            # ``build_bundle`` materializa tudo em memória antes do blob; um
+            # code_root errado não pode esgotar a RAM do cliente.
+            raise BundleError(
+                f"bundle excede {_MAX_TOTAL_BYTES // (1024 * 1024)} MiB de código "
+                f"(chegou a {total_bytes // (1024 * 1024)} MiB em {rel})"
+            )
         payloads[rel] = path.read_bytes()
     payloads.update(extras)
+    if sum(len(data) for data in payloads.values()) > _MAX_TOTAL_BYTES:
+        raise BundleError(f"bundle excede {_MAX_TOTAL_BYTES // (1024 * 1024)} MiB (código + locks)")
     for rel in sorted(payloads):
         data = payloads[rel]
-        files.append(
-            {"path": rel, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
-        )
+        files.append({"path": rel, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()})
 
     buffer = io.BytesIO()
     # gzip mtime=0 + metadados fixos no tar → o mesmo código dá o mesmo hash
     # (dedupe do bundle no CAS entre processos/batches).
-    with gzip.GzipFile(fileobj=buffer, mode="wb", compresslevel=1, mtime=0) as gz:
-        with tarfile.open(fileobj=gz, mode="w") as tf:
-            for rel in sorted(payloads):
-                data = payloads[rel]
-                info = tarfile.TarInfo(rel)
-                info.size = len(data)
-                info.mode = 0o755 if rel.endswith(".py") and "/scripts/" in rel else 0o644
-                info.mtime = 0
-                info.uid = 0
-                info.gid = 0
-                info.uname = ""
-                info.gname = ""
-                tf.addfile(info, io.BytesIO(data))
+    with (
+        gzip.GzipFile(fileobj=buffer, mode="wb", compresslevel=1, mtime=0) as gz,
+        tarfile.open(fileobj=gz, mode="w") as tf,
+    ):
+        for rel in sorted(payloads):
+            data = payloads[rel]
+            info = tarfile.TarInfo(rel)
+            info.size = len(data)
+            info.mode = 0o755 if rel.endswith(".py") and "/scripts/" in rel else 0o644
+            info.mtime = 0
+            info.uid = 0
+            info.gid = 0
+            info.uname = ""
+            info.gname = ""
+            tf.addfile(info, io.BytesIO(data))
     data = buffer.getvalue()
     return Bundle(
         sha256=hashlib.sha256(data).hexdigest(),
@@ -341,7 +370,14 @@ def ensure_session(backends: Iterable[str] | None = None) -> str | None:
         try:
             from vramd.transfer import TransferClient, TransferError
         except ImportError:
-            return None
+            # Sem o cliente vramd>=0.7 o staging remoto não abre sessão e o
+            # servidor responde "backend desconhecido: <tool>" — um erro que
+            # não aponta para a causa. Falha alto e diz o que instalar.
+            raise BundleError(
+                "cliente `vramd` não instalado neste venv (precisa vramd>=0.7): "
+                "sem ele o staging remoto não abre sessão e o servidor responde "
+                "'backend desconhecido'. Instala: pip install 'vramd>=0.7'."
+            ) from None
         bundle = build_bundle(requested)
         client = TransferClient()
         try:
@@ -375,9 +411,7 @@ def ensure_session(backends: Iterable[str] | None = None) -> str | None:
             code = response.get("error_code")
             if code == "SESSION_DISABLED" and mode not in ("on", "1", "true", "yes"):
                 return None
-            raise BundleError(
-                f"session-open recusado: {response.get('error') or response}"
-            )
+            raise BundleError(f"session-open recusado: {response.get('error') or response}")
         if not response.get("session"):
             raise BundleError(f"session-open sem id de sessão: {response}")
         previous = _SESSION
@@ -393,9 +427,7 @@ def ensure_session(backends: Iterable[str] | None = None) -> str | None:
                 old_client = TransferClient()
                 try:
                     old_client.connect()
-                    old_client.request(
-                        {"cmd": "session-close", "session": previous["session"]}
-                    )
+                    old_client.request({"cmd": "session-close", "session": previous["session"]})
                 except Exception:
                     pass
                 finally:

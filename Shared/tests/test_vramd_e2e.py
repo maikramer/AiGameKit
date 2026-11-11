@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 import tarfile
 import threading
 import time
@@ -19,7 +18,7 @@ import pytest
 
 from aigamekit_shared import vramd_bundle, vramd_client, vramd_remote
 
-WORKER = r'''
+WORKER = r"""
 import json, sys
 for line in sys.stdin:
     try:
@@ -46,7 +45,7 @@ for line in sys.stdin:
         print(json.dumps({"event": "pong"}), flush=True)
     elif cmd == "shutdown":
         break
-'''
+"""
 
 
 def _bundle() -> vramd_bundle.Bundle:

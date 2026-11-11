@@ -58,6 +58,18 @@ _SOCKET_FOR_TOOL: dict[str, str] = {
 
 DEFAULT_IDLE_TIMEOUT_MIN = 30
 
+# Tectos do protocolo JSON local: uma linha/resposta maior é sinal de servidor
+# corrompido (ou de um endpoint que não é o vramd), não de um job válido.
+MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+# Pedido de um cliente per-tool (JSON de uma linha). Evita que uma ligação
+# sem newline consuma RAM sem limite no accept thread.
+MAX_REQUEST_BYTES = 4 * 1024 * 1024
+
+# Serializa o auto-start: duas threads da mesma tool não podem arrancar dois
+# supervisores (o segundo perde o bind e suja o log; no pior caso fica um
+# processo a competir pela GPU).
+_START_LOCK = threading.Lock()
+
 
 def server_socket_path(tool: str) -> Path:
     """Path do socket para uma tool (ex: ``text2d`` → ``text2d-server.sock``)."""
@@ -83,20 +95,26 @@ def _ensure_server_dir() -> None:
 
 
 def is_server_running(socket_path: Path | str | None = None) -> bool:
-    """Verifica se um server está vivo via PID file + socket connect."""
+    """Verifica se um server está vivo via PID file + socket connect.
+
+    Um descritor TCP é auto-suficiente (host/porta/token): não exige PID file.
+    Só os endpoints Unix (per-tool legacy) dependem do PID, porque um socket
+    órfão no filesystem não distingue um server vivo de um morto.
+    """
     spath = Path(socket_path) if socket_path else server_socket_path("text2d")
     ppath = _pid_path(spath)
 
-    if not ppath.exists():
-        return False
+    if endpoint.read_endpoint(spath) is None:
+        if not ppath.exists():
+            return False
 
-    try:
-        pid = int(ppath.read_text().strip())
-    except (ValueError, OSError):
-        return False
+        try:
+            pid = int(ppath.read_text().strip())
+        except (ValueError, OSError):
+            return False
 
-    if not endpoint.pid_exists(pid):
-        return False
+        if not endpoint.pid_exists(pid):
+            return False
 
     if not spath.exists():
         return False
@@ -157,6 +175,22 @@ def discover_active_sockets() -> list[Path]:
 # ---------------------------------------------------------------------------
 
 
+def _follows_remote(socket_path: Path | str | None) -> bool:
+    """True se o pedido deve seguir ``VRAMD_REMOTE`` (em vez de forçar local).
+
+    O endpoint canónico do vramd (``None`` ou ``VRAMD_SOCKET``) segue a política
+    global. Um path explícito diferente — ex.: o socket per-tool passado a
+    ``request_release``/``get_server_status`` — é sempre local: quem o passa
+    quer aquele servidor, não o daemon remoto.
+    """
+    if socket_path is None:
+        return True
+    try:
+        return Path(socket_path) == VRAMD_SOCKET
+    except TypeError:
+        return False
+
+
 def send_request(
     request: dict[str, Any],
     socket_path: Path | str | None = None,
@@ -178,7 +212,9 @@ def send_request(
     """
     from . import vramd_remote
 
-    if vramd_remote.remote_enabled() and not force_local:
+    # O socket canónico do vramd segue VRAMD_REMOTE; um path per-tool fica
+    # sempre local (ver :func:`_follows_remote`).
+    if _follows_remote(socket_path) and vramd_remote.remote_enabled() and not force_local:
         try:
             return vramd_remote.RemoteClient().rpc(request, timeout=timeout_sec)
         except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError):
@@ -199,11 +235,19 @@ def send_request(
                 if not chunk:
                     break
                 data += chunk
+                if len(data) > MAX_RESPONSE_BYTES:
+                    return None
             lines = data.decode("utf-8", errors="replace").strip().split("\n")
             if not lines:
                 return None
-            return cast(dict[str, Any] | None, json.loads(lines[-1]))
-    except (OSError, json.JSONDecodeError):
+            try:
+                response = json.loads(lines[-1])
+            except json.JSONDecodeError:
+                return None
+            # Uma resposta que não é um objecto não tem o contrato (``.get``);
+            # devolvê-la rebentava em todos os callers.
+            return cast(dict[str, Any], response) if isinstance(response, dict) else None
+    except OSError:
         return None
 
 
@@ -224,7 +268,9 @@ def send_request_stream(
     """
     from . import vramd_remote
 
-    if vramd_remote.remote_enabled() and not force_local:
+    # Ver a nota em send_request: o socket canónico segue VRAMD_REMOTE; um
+    # path per-tool explícito é local.
+    if _follows_remote(socket_path) and vramd_remote.remote_enabled() and not force_local:
         try:
             yield vramd_remote.RemoteClient().rpc(request, timeout=timeout_sec)
         except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError):
@@ -237,23 +283,58 @@ def send_request_stream(
         sock, token = endpoint.connect(spath, timeout=timeout_sec)
     except OSError:
         return
-    with sock:
-        sock.sendall((json.dumps(endpoint.with_auth(request, token)) + "\n").encode())
-        buf = b""
-        while True:
-            chunk = sock.recv(8192)
-            if not chunk:
-                break
-            buf += chunk
-            while b"\n" in buf:
-                line, buf = buf.split(b"\n", 1)
-                text = line.decode("utf-8", errors="replace").strip()
-                if not text:
-                    continue
-                try:
-                    yield json.loads(text)
-                except json.JSONDecodeError:
-                    continue
+    try:
+        with sock:
+            sock.sendall((json.dumps(endpoint.with_auth(request, token)) + "\n").encode())
+            buf = b""
+            while True:
+                chunk = sock.recv(8192)
+                if not chunk:
+                    break
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    if len(line) > MAX_RESPONSE_BYTES:
+                        yield {
+                            "status": "error",
+                            "error": f"linha NDJSON excedeu {MAX_RESPONSE_BYTES} bytes",
+                            "error_code": "VRAMD_PROTOCOL",
+                        }
+                        return
+                    text = line.decode("utf-8", errors="replace").strip()
+                    if not text:
+                        continue
+                    try:
+                        event = json.loads(text)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(event, dict):
+                        yield event
+                if len(buf) > MAX_RESPONSE_BYTES:
+                    # Uma única linha sem newline: não deixar o buffer crescer sem
+                    # limite (o servidor não vai terminar a linha).
+                    yield {
+                        "status": "error",
+                        "error": f"linha NDJSON excedeu {MAX_RESPONSE_BYTES} bytes",
+                        "error_code": "VRAMD_PROTOCOL",
+                    }
+                    return
+            # O servidor fechou sem newline na última linha (ex.: um stream de
+            # uma só resposta): não perder o evento final em silêncio.
+            if buf:
+                text = buf.decode("utf-8", errors="replace").strip()
+                if text:
+                    try:
+                        event = json.loads(text)
+                    except json.JSONDecodeError:
+                        pass
+                    else:
+                        if isinstance(event, dict):
+                            yield event
+    except OSError:
+        # Socket caiu a meio do stream: terminar o gerador em silêncio (o
+        # caller trata a ausência do evento final), em vez de rebentar o CLI.
+        return
 
 
 def resolve_vramd_priority(explicit: str | None = None) -> str:
@@ -568,7 +649,16 @@ def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True, 
     if os.environ.get("VRAMD_AUTO_START", "1") == "0":
         return False
 
-    # Tentar arrancar o vramd em background.
+    with _START_LOCK:
+        # Outra thread pode ter arrancado o supervisor enquanto esperávamos
+        # pelo lock; re-provar antes de lançar um segundo processo.
+        if is_vramd_running():
+            return True
+        return _start_vramd_process(timeout_sec=timeout_sec)
+
+
+def _start_vramd_process(*, timeout_sec: float) -> bool:
+    """Arranca o vramd e espera pelo endpoint (chamado sob ``_START_LOCK``)."""
     import shutil
     import subprocess
     import sys
@@ -657,6 +747,14 @@ def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True, 
         if is_vramd_running():
             _logger.info("[vramd] Auto-start: vramd ativo e pronto.")
             return True
+        # O supervisor saiu (falta de deps, lock de outro supervisor, etc.):
+        # esperar o timeout inteiro só atrasava o fallback do caller.
+        if proc.poll() is not None:
+            _logger.warn(
+                f"[vramd] Auto-start: processo terminou (exit={proc.returncode}) antes do "
+                f"endpoint ficar pronto; vê {log_path}."
+            )
+            return False
 
     _logger.warn(f"[vramd] Auto-start: timeout após {timeout_sec:.0f}s à espera do socket.")
     return False
@@ -820,17 +918,19 @@ def _delegate_remote(
             # O supervisor reiniciou e perdeu as sessões em memória; o job não
             # chegou a correr. Reabre e tenta uma vez (o bundle está no CAS).
             staged.discard()
-            staged, req = _restage_after_session_loss(
-                backend, request, cmd="generate", priority=pri
-            )
+            staged, req = _restage_after_session_loss(backend, request, cmd="generate", priority=pri)
             response = staged.client.rpc(req, timeout=timeout_sec)
         return vramd_remote.finalize(staged, response)
     except (vramd_remote.RemoteDown, OSError) as exc:
         # O job pode estar a correr no servidor; não limpar o sandbox (TTL limpa).
+        # Fechar a ligação é seguro e evita um socket persistente por job falhado.
+        staged.close()
         return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
     except vramd_remote.RemoteStagingError as exc:
+        staged.close()
         return _remote_error("VRAMD_REMOTE_TRANSFER", str(exc))
     except vramd_remote.TransferError as exc:
+        staged.close()
         return _remote_error("VRAMD_REMOTE_TRANSFER", str(exc))
 
 
@@ -869,14 +969,18 @@ def submit_to_vramd(
             response = staged.client.rpc(req, timeout=timeout_sec)
             if response.get("error_code") == "SESSION_UNKNOWN":
                 staged.discard()
-                staged, req = _restage_after_session_loss(
-                    backend, request, cmd="submit", priority=pri
-                )
+                staged, req = _restage_after_session_loss(backend, request, cmd="submit", priority=pri)
                 response = staged.client.rpc(req, timeout=timeout_sec)
-        except (vramd_remote.RemoteDown, vramd_remote.TransferError, OSError) as exc:
+        except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError, vramd_remote.TransferError, OSError) as exc:
+            staged.close()
             return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
         if response.get("status") == "ok" and response.get("job_id"):
             vramd_remote.remember(str(response["job_id"]), staged)
+        else:
+            # Sem job_id não há ``wait`` para recolher a ligação e o sandbox;
+            # fechar já o socket evita um leak por submit recusado. O sandbox
+            # fica para o TTL (o submit pode ter enfileirado antes do erro).
+            staged.close()
         # Em erro não se limpa o sandbox: o submit pode ter enfileirado o job
         # antes de a resposta se perder (TTL recolhe).
         return response
@@ -939,24 +1043,40 @@ def wait_vramd_job(
                 return _remote_error("VRAMD_REMOTE_DOWN", str(retry_exc))
         if staged is None:
             return response
-        vramd_remote.take(job_id)
+        # ``take`` pode devolver None se outra thread já levou o staging;
+        # usar o ``staged`` do peek mantém o caminho idempotente.
+        target = vramd_remote.take(job_id) or staged
         try:
-            return vramd_remote.finalize(staged, response)
+            return vramd_remote.finalize(target, response)
         except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError, vramd_remote.TransferError, OSError) as exc:
+            # O download falhou a meio: não deixar o socket persistente
+            # aberto (o sandbox fica para o TTL, não para um retry local).
+            target.close()
             return _remote_error("VRAMD_REMOTE_TRANSFER", str(exc))
 
     return send_to_vramd(req, timeout_sec=timeout_sec + 30.0, auto_start=False, force_local=True)
 
 
-def cancel_vramd_job(
-    job_id: str, *, timeout_sec: float = 10.0, remote: bool | None = None
-) -> dict[str, Any] | None:
-    """Pede cancelamento de um job vramd (queued imediato; running best-effort)."""
+def cancel_vramd_job(job_id: str, *, timeout_sec: float = 10.0, remote: bool | None = None) -> dict[str, Any] | None:
+    """Pede cancelamento de um job vramd (queued imediato; running best-effort).
+
+    ``remote=True`` explícito exige ``VRAMD_REMOTE`` configurado — sem isto o
+    ``send_to_vramd`` cairia no supervisor local e cancelaria o job errado.
+    """
+    from . import vramd_remote
+
+    resolved = _resolve_remote(remote)
+    use_remote = resolved if resolved is not None else vramd_remote.remote_enabled()
+    if resolved is True and not vramd_remote.remote_enabled():
+        return _remote_error(
+            "VRAMD_REMOTE_NOT_CONFIGURED",
+            "cancel pediu GPU remota mas VRAMD_REMOTE/VRAMD_REMOTE_TOKEN não estão definidos",
+        )
     return send_to_vramd(
         {"cmd": "cancel", "job_id": job_id},
         timeout_sec=timeout_sec,
         auto_start=False,
-        force_local=remote is False,
+        force_local=not use_remote,
     )
 
 
@@ -966,10 +1086,22 @@ def cancel_vramd_all(
     timeout_sec: float = 30.0,
 ) -> dict[str, Any] | None:
     """Cancela todos os jobs vramd (``flush`` / ``cancel --all``)."""
+    from . import vramd_remote
+
+    resolved = _resolve_remote(None)
+    use_remote = resolved if resolved is not None else vramd_remote.remote_enabled()
+    if resolved is True and not vramd_remote.remote_enabled():
+        # ``VRAMD_GPU_MODE=remote`` sem VRAMD_REMOTE: não cancelar jobs no
+        # supervisor errado (o local) em silêncio.
+        return _remote_error(
+            "VRAMD_REMOTE_NOT_CONFIGURED",
+            "flush pediu GPU remota mas VRAMD_REMOTE/VRAMD_REMOTE_TOKEN não estão definidos",
+        )
     return send_to_vramd(
         {"cmd": "flush", "queued_only": queued_only},
         timeout_sec=timeout_sec,
         auto_start=False,
+        force_local=not use_remote,
     )
 
 
@@ -1059,17 +1191,28 @@ def ensure_vram_available(
     Returns:
         ``True`` se há VRAM suficiente (ou se não foi possível verificar).
     """
+    from . import vramd_remote
     from .gpu import query_gpu_free_mib
 
-    free = query_gpu_free_mib()
-    if free is not None and free >= needed_mib:
-        # Já há espaço para a necessidade declarada pelo caller — que conhece o
-        # seu modo real (quantização / group offload com pesos em streaming).
-        # O pico calibrado do backend é um worst-case estático (fp16 residente)
-        # que recusava jobs que cabem (ex.: paint3d SDNQ+streams, ~3 GiB de
-        # pico vs 5+ GiB calibrados). O vramd só é consultado quando falta
-        # espaço — para pedir evicção.
-        return True
+    # Em modo remoto a GPU que importa é a do servidor; a VRAM livre desta
+    # máquina não diz nada sobre a admissão do job. Sondá-la aqui podia
+    # devolver True (GPU local folgada) sem nunca pedir evicção ao daemon, ou
+    # pedir evicção por uma GPU local apertada que não corre o job.
+    remote_mode = _resolve_remote(None)
+    if remote_mode is None:
+        remote_mode = vramd_remote.remote_enabled()
+
+    free: int | None = None
+    if not remote_mode:
+        free = query_gpu_free_mib()
+        if free is not None and free >= needed_mib:
+            # Já há espaço para a necessidade declarada pelo caller — que conhece o
+            # seu modo real (quantização / group offload com pesos em streaming).
+            # O pico calibrado do backend é um worst-case estático (fp16 residente)
+            # que recusava jobs que cabem (ex.: paint3d SDNQ+streams, ~3 GiB de
+            # pico vs 5+ GiB calibrados). O vramd só é consultado quando falta
+            # espaço — para pedir evicção.
+            return True
 
     # Preferir o vramd se ativo (evicção inteligente peso+LRU + peak por backend).
     if is_vramd_running():
@@ -1078,12 +1221,19 @@ def ensure_vram_available(
             req["backend"] = backend
         if quant_mode:
             req["quant_mode"] = quant_mode
-        _logger.info(
-            f"VRAM insuficiente ({free} MiB livres, preciso {needed_mib}"
-            + (f", backend={backend}" if backend else "")
-            + ") — a pedir evicção ao vramd"
-        )
-        resp = send_to_vramd(req, timeout_sec=timeout_sec)
+        if remote_mode:
+            _logger.info(
+                f"VRAM remota: a pedir ensure-vram ao vramd (preciso {needed_mib}"
+                + (f", backend={backend}" if backend else "")
+                + ")"
+            )
+        else:
+            _logger.info(
+                f"VRAM insuficiente ({free} MiB livres, preciso {needed_mib}"
+                + (f", backend={backend}" if backend else "")
+                + ") — a pedir evicção ao vramd"
+            )
+        resp = send_to_vramd(req, timeout_sec=timeout_sec, force_local=not remote_mode)
         if resp is not None:
             ok = resp.get("status") == "ok"
             if not ok:
@@ -1168,13 +1318,21 @@ class ModelServer:
         self._generator = generator
 
         self._obj: Any = None  # o modelo carregado (lazy)
-        self._obj_lock = threading.Lock()
+        # RLock: ``_handle_generate`` segura-o durante todo o generate e chama
+        # ``_ensure_loaded`` (que também o adquire) na mesma thread. Um Lock
+        # simples obrigava a libertar entre load e generate — janela em que um
+        # ``release`` concorrente descarregava o modelo que ia ser usado.
+        self._obj_lock = threading.RLock()
         self._server_sock: socket.socket | None = None
         self._auth_token: str | None = None
         self._transport = endpoint.TRANSPORT_UNIX
         self._running = False
         self._last_activity = time.monotonic()
         self._requests_served = 0
+        # Handlers em curso: o idle timeout não pode encerrar o server (e
+        # descarregar o modelo) por baixo de um generate ativo.
+        self._active_clients = 0
+        self._clients_lock = threading.Lock()
         self._pid = os.getpid()
 
     def _log(self, msg: str) -> None:
@@ -1205,9 +1363,11 @@ class ModelServer:
                 self._log("Modelo descarregado.")
 
     def _handle_generate(self, request: dict[str, Any]) -> dict[str, Any]:
-        obj = self._ensure_loaded()
         try:
+            # Load + generate sob a MESMA lock: sem isto, um ``release`` entre
+            # os dois deixava-nos a gerar sobre um modelo já descarregado.
             with self._obj_lock:
+                obj = self._ensure_loaded()
                 return self._generator(obj, request)
         except Exception as e:
             self._log(f"Erro na geração: {e}")
@@ -1223,6 +1383,8 @@ class ModelServer:
 
     def _handle_client(self, conn: socket.socket) -> None:
         self._last_activity = time.monotonic()
+        with self._clients_lock:
+            self._active_clients += 1
         try:
             conn.settimeout(300.0)
             data = b""
@@ -1231,6 +1393,22 @@ class ModelServer:
                 if not chunk:
                     break
                 data += chunk
+                if len(data) > MAX_REQUEST_BYTES:
+                    # Sem newline e acima do tecto: não continuar a acumular.
+                    with contextlib.suppress(OSError):
+                        conn.sendall(
+                            (
+                                json.dumps(
+                                    {
+                                        "status": "error",
+                                        "error": f"pedido excede {MAX_REQUEST_BYTES} bytes",
+                                        "error_code": "REQUEST_TOO_LARGE",
+                                    }
+                                )
+                                + "\n"
+                            ).encode()
+                        )
+                    return
 
             line = data.decode("utf-8", errors="replace").strip()
             if not line:
@@ -1294,11 +1472,18 @@ class ModelServer:
             with contextlib.suppress(OSError):
                 conn.sendall((json.dumps({"status": "error", "error": str(e)}) + "\n").encode())
         finally:
+            with self._clients_lock:
+                self._active_clients = max(0, self._active_clients - 1)
+            # Um generate longo não pode deixar o relógio de idle no inicio da
+            # ligação e disparar o shutdown mal o handler acabe.
+            self._last_activity = time.monotonic()
             conn.close()
 
     def _cleanup(self) -> None:
         self._log("Cleanup...")
-        with contextlib.suppress(Exception):
+        # Sob a lock do modelo: não descarregar por baixo de um generate que
+        # ainda está a correr num handler thread.
+        with self._obj_lock, contextlib.suppress(Exception):
             if self._obj is not None:
                 unload = getattr(self._obj, "unload", None)
                 if callable(unload):
@@ -1328,7 +1513,13 @@ class ModelServer:
 
         self.ppid_path.write_text(str(self._pid))
 
-        self._server_sock, info = endpoint.listen(self.socket_path)
+        try:
+            self._server_sock, info = endpoint.listen(self.socket_path)
+        except OSError:
+            # Sem bind não há server; o pid file não pode ficar a fingir que há.
+            with contextlib.suppress(OSError):
+                self.ppid_path.unlink(missing_ok=True)
+            raise
         self._auth_token = info.token
         self._transport = info.transport
 
@@ -1351,7 +1542,7 @@ class ModelServer:
         try:
             while self._running:
                 idle = time.monotonic() - self._last_activity
-                if self._requests_served > 0 and idle > self.idle_timeout_sec:
+                if self._requests_served > 0 and self._active_clients == 0 and idle > self.idle_timeout_sec:
                     _logger.info(f"Idle {idle / 60:.0f}min > timeout — a encerrar.")
                     break
                 try:

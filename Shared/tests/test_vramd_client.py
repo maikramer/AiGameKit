@@ -401,3 +401,317 @@ class TestGpuTarget:
         assert response is not None and response["status"] == "ok"
         assert flaky.calls == 2
         assert reconnects == [staged]
+
+
+def _serve_once(sock_path: Path, response: bytes) -> threading.Thread:
+    """Mini-servidor de uma ligação: lê uma linha e responde ``response``."""
+
+    def _run() -> None:
+        srv, _info = endpoint.listen(sock_path)
+        srv.settimeout(5.0)
+        try:
+            conn, _ = srv.accept()
+            with conn:
+                data = b""
+                while b"\n" not in data:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+                conn.sendall(response)
+        finally:
+            srv.close()
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    return thread
+
+
+def _wait_for_path(path: Path) -> None:
+    deadline = time.monotonic() + 2.0
+    while not path.exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert path.exists()
+
+
+class TestExplicitSocketStaysLocal:
+    def test_send_request_ignores_remote_env_with_explicit_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``socket_path`` explícito = aquele endpoint, não o VRAMD_REMOTE."""
+        monkeypatch.setenv("VRAMD_REMOTE", "127.0.0.1:9")
+        sock = tmp_path / "local.sock"
+        _serve_once(sock, b'{"status":"status","local":true}\n')
+        _wait_for_path(sock)
+
+        result = ms.send_request({"cmd": "status"}, sock, timeout_sec=3.0)
+
+        assert result == {"status": "status", "local": True}
+
+    def test_stream_ignores_remote_env_with_explicit_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("VRAMD_REMOTE", "127.0.0.1:9")
+        sock = tmp_path / "local-stream.sock"
+        _serve_once(sock, b'{"event":"queued"}\n{"status":"ok"}\n')
+        _wait_for_path(sock)
+
+        lines = list(ms.send_request_stream({"cmd": "submit"}, sock, timeout_sec=3.0))
+
+        assert [line.get("event") for line in lines] == ["queued", None]
+
+
+class TestResponseValidation:
+    def test_non_dict_response_is_none(self, tmp_path: Path) -> None:
+        sock = tmp_path / "list.sock"
+        _serve_once(sock, b"[1, 2, 3]\n")
+        _wait_for_path(sock)
+        assert ms.send_request({"cmd": "status"}, sock, timeout_sec=3.0) is None
+
+    def test_oversized_response_is_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "MAX_RESPONSE_BYTES", 32)
+        sock = tmp_path / "big.sock"
+        _serve_once(sock, b'{"status":"ok","x":"' + b"a" * 64 + b'"}\n')
+        _wait_for_path(sock)
+        assert ms.send_request({"cmd": "status"}, sock, timeout_sec=3.0) is None
+
+    def test_stream_oversized_line_emits_protocol_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "MAX_RESPONSE_BYTES", 16)
+        sock = tmp_path / "big-line.sock"
+        _serve_once(sock, b"x" * 64)  # sem newline: buffer não pode crescer
+        _wait_for_path(sock)
+
+        lines = list(ms.send_request_stream({"cmd": "generate"}, sock, timeout_sec=3.0))
+
+        assert lines and lines[-1]["error_code"] == "VRAMD_PROTOCOL"
+
+    def test_stream_yields_final_line_without_newline(self, tmp_path: Path) -> None:
+        """Um servidor que fecha sem ``\\n`` não pode perder o resultado."""
+        sock = tmp_path / "no-newline.sock"
+        _serve_once(sock, b'{"status":"ok"}')
+        _wait_for_path(sock)
+
+        lines = list(ms.send_request_stream({"cmd": "status"}, sock, timeout_sec=3.0))
+
+        assert lines == [{"status": "ok"}]
+
+
+class TestAutoStartSerialization:
+    def test_two_threads_spawn_one_supervisor(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("VRAMD_REMOTE", raising=False)
+        monkeypatch.delenv("VRAMD_GPU_MODE", raising=False)
+        monkeypatch.delenv("VRAMD_AUTO_START", raising=False)
+        state = {"up": False}
+        calls: list[float] = []
+
+        def _running() -> bool:
+            return state["up"]
+
+        def _start(*, timeout_sec: float) -> bool:
+            calls.append(timeout_sec)
+            time.sleep(0.2)  # simula o arranque do supervisor
+            state["up"] = True
+            return True
+
+        monkeypatch.setattr(ms, "is_vramd_running", _running)
+        monkeypatch.setattr(ms, "_start_vramd_process", _start)
+        results: list[bool] = []
+        barrier = threading.Barrier(2)
+
+        def _race() -> None:
+            barrier.wait()
+            results.append(ms.ensure_vramd_running())
+
+        threads = [threading.Thread(target=_race) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5.0)
+
+        assert results == [True, True]
+        assert calls == [30.0]  # um único Popen
+
+    def test_dead_child_aborts_wait_early(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        class DeadProc:
+            pid = 4242
+            returncode = 1
+
+            def poll(self) -> int:
+                return 1
+
+        monkeypatch.delenv("VRAMD_REMOTE", raising=False)
+        monkeypatch.setattr(ms, "is_vramd_running", lambda: False)
+        monkeypatch.setattr(ms, "_resolve_vramd_start_cmd", lambda **_k: (["/bin/vramd", "start"], ""))
+        monkeypatch.setattr(ms, "resolve_vramd_calibration", lambda *a, **k: None)
+        monkeypatch.setattr(endpoint, "autostart_log_path", lambda: tmp_path / "autostart.log")
+        monkeypatch.setattr("subprocess.Popen", lambda *a, **k: DeadProc())
+
+        started = time.monotonic()
+        assert ms._start_vramd_process(timeout_sec=5.0) is False
+        assert time.monotonic() - started < 3.0
+
+
+class TestRemoteModeAdmission:
+    def test_ensure_vram_available_skips_local_probe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Em modo remoto a GPU local não decide a admissão do job."""
+        monkeypatch.setenv("VRAMD_REMOTE", "127.0.0.1:9")
+        monkeypatch.delenv("VRAMD_GPU_MODE", raising=False)
+        monkeypatch.setattr("aigamekit_shared.gpu.query_gpu_free_mib", lambda: 999_999)
+        monkeypatch.setattr(ms, "is_vramd_running", lambda: True)
+        calls: list[dict] = []
+
+        def _send(req: dict, *, timeout_sec: float, auto_start: bool = True, force_local: bool = False) -> dict:
+            calls.append({"req": req, "force_local": force_local})
+            return {"status": "ok"}
+
+        monkeypatch.setattr(ms, "send_to_vramd", _send)
+        assert ms.ensure_vram_available(4000, backend="paint3d") is True
+        assert calls and calls[0]["req"]["cmd"] == "ensure-vram"
+        assert calls[0]["force_local"] is False
+
+    def test_ensure_vram_available_uses_local_with_gpu_mode_local(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VRAMD_REMOTE", "127.0.0.1:9")
+        monkeypatch.setenv("VRAMD_GPU_MODE", "local")
+        monkeypatch.setattr("aigamekit_shared.gpu.query_gpu_free_mib", lambda: 999_999)
+        monkeypatch.setattr(ms, "send_to_vramd", lambda *_a, **_k: pytest.fail("não devia consultar o remoto"))
+        assert ms.ensure_vram_available(4000, backend="paint3d") is True
+
+    def test_cancel_remote_without_env_is_an_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("VRAMD_REMOTE", raising=False)
+        monkeypatch.delenv("VRAMD_GPU_MODE", raising=False)
+        response = ms.cancel_vramd_job("abc", remote=True)
+        assert response is not None and response["error_code"] == "VRAMD_REMOTE_NOT_CONFIGURED"
+
+    def test_cancel_all_remote_mode_without_env_is_an_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("VRAMD_REMOTE", raising=False)
+        monkeypatch.setenv("VRAMD_GPU_MODE", "remote")
+        response = ms.cancel_vramd_all()
+        assert response is not None and response["error_code"] == "VRAMD_REMOTE_NOT_CONFIGURED"
+
+
+class TestCanonicalSocketFollowsRemote:
+    def test_send_request_uses_remote_for_vramd_socket(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """O socket canónico (VRAMD_SOCKET) segue VRAMD_REMOTE — só os
+        endpoints per-tool passados explicitamente ficam locais."""
+        from aigamekit_shared import vramd_remote
+
+        monkeypatch.setenv("VRAMD_REMOTE", "127.0.0.1:9")
+        seen: list[dict] = []
+
+        class FakeRemote:
+            def rpc(self, request, *, timeout: float = 60.0) -> dict:
+                seen.append(request)
+                return {"status": "ok", "remote": True}
+
+        monkeypatch.setattr(vramd_remote, "RemoteClient", FakeRemote)
+
+        result = ms.send_request({"cmd": "status"}, ms.VRAMD_SOCKET, timeout_sec=2.0)
+
+        assert result == {"status": "ok", "remote": True}
+        assert seen == [{"cmd": "status"}]
+
+    def test_stream_uses_remote_for_vramd_socket(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from aigamekit_shared import vramd_remote
+
+        monkeypatch.setenv("VRAMD_REMOTE", "127.0.0.1:9")
+
+        class FakeRemote:
+            def rpc(self, request, *, timeout: float = 60.0) -> dict:
+                return {"status": "ok", "remote": True}
+
+        monkeypatch.setattr(vramd_remote, "RemoteClient", FakeRemote)
+
+        events = list(ms.send_request_stream({"cmd": "generate"}, ms.VRAMD_SOCKET, timeout_sec=2.0))
+        assert events == [{"status": "ok", "remote": True}]
+
+    def test_send_to_vramd_uses_remote_when_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``send_to_vramd`` passa VRAMD_SOCKET explícito; não pode cair no local."""
+        from aigamekit_shared import vramd_remote
+
+        monkeypatch.setenv("VRAMD_REMOTE", "127.0.0.1:9")
+
+        class FakeRemote:
+            def is_up(self, *, timeout: float = 3.0) -> bool:
+                return True
+
+            def rpc(self, request, *, timeout: float = 60.0) -> dict:
+                return {"status": "ok", "remote": True, "cmd": request["cmd"]}
+
+        monkeypatch.setattr(vramd_remote, "RemoteClient", FakeRemote)
+
+        response = ms.send_to_vramd({"cmd": "queue"}, auto_start=False)
+
+        assert response == {"status": "ok", "remote": True, "cmd": "queue"}
+
+
+class _BrokenSock:
+    """Socket cujo ``sendall`` rebenta (servidor fechou a meio do stream)."""
+
+    def __enter__(self) -> _BrokenSock:
+        return self
+
+    def __exit__(self, *_exc: object) -> bool:
+        return False
+
+    def sendall(self, _data: bytes) -> None:
+        raise ConnectionResetError("reset")
+
+    def close(self) -> None:
+        pass
+
+
+def test_stream_ends_quietly_on_socket_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Um reset a meio do NDJSON não pode rebentar o gerador/CLI."""
+    monkeypatch.delenv("VRAMD_REMOTE", raising=False)
+    sock = tmp_path / "broken.sock"
+    sock.write_text("stale", encoding="utf-8")  # só para passar o exists()
+    monkeypatch.setattr(endpoint, "connect", lambda *_a, **_k: (_BrokenSock(), None))
+
+    assert list(ms.send_request_stream({"cmd": "generate"}, sock, timeout_sec=1.0)) == []
+
+
+class TestRemoteCleanupOnError:
+    @staticmethod
+    def _staged(rpc_result: dict | Exception):
+        from aigamekit_shared import vramd_remote
+
+        closed: list[bool] = []
+
+        class Client:
+            def rpc(self, _request, *, timeout: float = 60.0) -> dict:
+                if isinstance(rpc_result, Exception):
+                    raise rpc_result
+                return rpc_result
+
+            def close(self) -> None:
+                closed.append(True)
+
+            def clean(self, _job: str) -> None:
+                raise AssertionError("não devia limpar o sandbox num erro incerto")
+
+        staged = vramd_remote.StagedJob(client=Client(), job="a" * 32, root="/srv/remote/a", request={})
+        return staged, closed
+
+    def test_submit_refused_closes_staging(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from aigamekit_shared import vramd_remote
+
+        staged, closed = self._staged({"status": "error", "error": "fila cheia"})
+        monkeypatch.setattr(vramd_remote, "remote_enabled", lambda: True)
+        monkeypatch.setattr(vramd_remote, "stage_request", lambda *_a, **_k: staged)
+
+        response = ms.submit_to_vramd("text3d", {"output": "/tmp/x.glb"}, remote=True)
+
+        assert response == {"status": "error", "error": "fila cheia"}
+        assert closed == [True]  # sem job_id não há wait que a feche
+
+    def test_delegate_rpc_down_closes_staging(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from aigamekit_shared import vramd_remote
+
+        staged, closed = self._staged(vramd_remote.RemoteDown("caiu"))
+        monkeypatch.setattr(vramd_remote, "remote_enabled", lambda: True)
+        monkeypatch.setattr(vramd_remote, "stage_request", lambda *_a, **_k: staged)
+
+        response = ms.delegate_to_vramd("text3d", {"output": "/tmp/x.glb"}, remote=True)
+
+        assert response is not None and response["error_code"] == "VRAMD_REMOTE_DOWN"
+        assert closed == [True]

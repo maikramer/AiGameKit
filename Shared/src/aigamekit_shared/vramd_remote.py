@@ -37,8 +37,10 @@ try:  # pragma: no cover - depende do venv onde a tool corre
     from vramd.transfer import TransferClient, TransferError
 except ImportError:  # pragma: no cover
     TransferClient = None  # type: ignore[assignment,misc]
+
     class TransferError(RuntimeError):  # type: ignore[no-redef]
         """Placeholder quando o pacote vramd não está instalado."""
+
 
 CHUNK_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
@@ -86,10 +88,7 @@ def binary_enabled() -> bool:
         return False
     if TransferClient is None:
         if mode in ("binary", "frames", "1", "on", "true", "yes"):
-            raise RemoteDown(
-                "VRAMD_REMOTE_PROTOCOL=binary mas o pacote vramd>=0.7 não está instalado "
-                "no venv da tool"
-            )
+            raise RemoteDown("VRAMD_REMOTE_PROTOCOL=binary mas o pacote vramd>=0.7 não está instalado no venv da tool")
         return False
     return True
 
@@ -142,8 +141,7 @@ def spec_for(backend: str) -> BackendRemoteSpec:
     spec = load_specs().get(backend)
     if spec is None:
         raise RemoteStagingError(
-            f"backend {backend!r} sem bloco `remote:` em {SPECS_PATH.name}; "
-            "não é possível transferir os ficheiros"
+            f"backend {backend!r} sem bloco `remote:` em {SPECS_PATH.name}; não é possível transferir os ficheiros"
         )
     return spec
 
@@ -204,10 +202,14 @@ class RemoteClient:
 
     def is_up(self, *, timeout: float = 3.0) -> bool:
         try:
-            self.rpc({"cmd": "status"}, timeout=timeout)
-            return True
+            response = self.rpc({"cmd": "status"}, timeout=timeout)
         except (RemoteDown, RemoteStagingError, OSError):
             return False
+        # O daemon devolve JSON de erro com 200 de transporte quando o token
+        # está errado ou o comando é inválido. Considerar isso "up" fazia o
+        # ensure_vramd_running dizer que estava pronto e todos os jobs falharem
+        # com UNAUTHORIZED.
+        return response.get("status") in ("ok", "status")
 
     def rpc(self, request: dict[str, Any], *, timeout: float = 60.0) -> dict[str, Any]:
         """Envia um pedido ao daemon remoto (fixa o endpoint na primeira resposta)."""
@@ -217,7 +219,12 @@ class RemoteClient:
         response = self._rpc({"cmd": "stage"}, timeout=30.0)
         if response.get("status") != "ok" or not response.get("job"):
             raise RemoteStagingError(f"stage falhou: {response.get('error') or response}")
-        return str(response["job"]), str(response.get("root") or "")
+        root = str(response.get("root") or "").strip()
+        if not root:
+            # Sem root os outputs virariam ``/out/x`` (fora do sandbox); o
+            # staging tem de falhar alto em vez de escrever no servidor.
+            raise RemoteStagingError(f"stage sem root do sandbox: {response}")
+        return str(response["job"]), root
 
     def put_file(self, job: str, rel: str, local: Path, *, timeout: float = 120.0) -> int:
         size = local.stat().st_size
@@ -274,10 +281,25 @@ class RemoteClient:
                     )
                     if response.get("status") != "ok":
                         raise RemoteStagingError(f"get {rel} falhou: {response.get('error') or response}")
-                    payload = base64.b64decode(response.get("data") or "")
+                    raw = response.get("data") or ""
+                    if not isinstance(raw, str):
+                        raise RemoteStagingError(f"get {rel}: campo data não é base64 textual")
+                    try:
+                        payload = base64.b64decode(raw, validate=True)
+                    except (binascii.Error, ValueError) as exc:
+                        raise RemoteStagingError(f"get {rel}: base64 inválido ({exc})") from exc
+                    if not payload and not response.get("eof"):
+                        # Sem bytes e sem EOF o offset não avança: o loop
+                        # anterior ficava a martelar o servidor para sempre.
+                        raise RemoteStagingError(f"get {rel}: chunk vazio antes do EOF")
                     handle.write(payload)
                     offset += len(payload)
-                    size = int(response.get("size") or 0)
+                    try:
+                        size = int(response.get("size") or 0)
+                    except (TypeError, ValueError) as exc:
+                        raise RemoteStagingError(f"get {rel}: size inválido") from exc
+                    if size < 0:
+                        raise RemoteStagingError(f"get {rel}: size negativo ({size})")
                     if response.get("eof"):
                         break
             if offset != size:
@@ -292,13 +314,18 @@ class RemoteClient:
         response = self._rpc({"cmd": "list", "job": job, "path": rel}, timeout=30.0)
         if response.get("status") != "ok":
             raise RemoteStagingError(f"list {rel} falhou: {response.get('error') or response}")
-        return [str(entry["name"]) for entry in response.get("entries") or [] if not entry.get("is_dir")]
+        names: list[str] = []
+        for entry in response.get("entries") or []:
+            if not isinstance(entry, dict) or entry.get("is_dir"):
+                continue
+            name = entry.get("name")
+            if isinstance(name, str) and name:
+                names.append(name)
+        return names
 
     def clean(self, job: str) -> None:
-        try:
+        with contextlib.suppress(RemoteDown, RemoteStagingError, OSError):
             self._rpc({"cmd": "clean", "job": job}, timeout=30.0)
-        except (RemoteDown, RemoteStagingError, OSError):
-            pass
 
 
 # ---------------------------------------------------------------------------
@@ -333,12 +360,23 @@ class StagedJob:
     globs: list[tuple[str, Path]] = field(default_factory=list)
     keep: bool = False
 
-    def discard(self) -> None:
-        if not self.keep:
-            self.client.clean(self.job)
+    def close(self) -> None:
+        """Fecha a ligação sem tocar no sandbox (o TTL do servidor recolhe-o)."""
         close = getattr(self.client, "close", None)
-        if callable(close):
+        if not callable(close):
+            return
+        with contextlib.suppress(Exception):
             close()
+
+    def discard(self) -> None:
+        try:
+            if not self.keep:
+                with contextlib.suppress(Exception):
+                    self.client.clean(self.job)
+        finally:
+            # O close tem de acontecer mesmo que o clean rebente; senão um
+            # job descartado deixa o socket persistente do TransferClient.
+            self.close()
 
 
 def reconnect(staged: StagedJob) -> bool:
@@ -393,12 +431,21 @@ def _prepare_outputs(
     sidecars: list[StagedFile] = []
     globs: list[tuple[str, Path]] = []
     primary: Path | None = None
+    used_rels: set[str] = set()
     for field_name in spec.outputs:
         value = request.get(field_name)
         if value is None:
             continue
         local = _resolve_local(value)
         rel = f"out/{local.name}"
+        # Dois outputs com o mesmo basename (``a/x.glb`` e ``b/x.glb``) iam
+        # para o mesmo path do sandbox: o segundo apagava o primeiro e ambos
+        # os downloads recebiam o mesmo ficheiro.
+        suffix = 1
+        while rel in used_rels:
+            suffix += 1
+            rel = f"out/{suffix}-{local.name}"
+        used_rels.add(rel)
         remote_path = f"{root}/{rel}"
         outputs.append(StagedFile(field_name, rel, remote_path, local))
         new_request[field_name] = remote_path
@@ -437,30 +484,41 @@ def _stage_legacy(
     uploaded: dict[Path, str] = {}
     counter = 0
 
-    for field_name in spec.inputs:
-        value = request.get(field_name)
-        if value is None:
-            continue
-        is_list = isinstance(value, (list, tuple))
-        values = list(value) if is_list else [value]
-        mapped: list[Any] = []
-        for item in values:
-            if not isinstance(item, (str, os.PathLike)):
-                mapped.append(item)  # não é um path — deixa como está
+    try:
+        for field_name in spec.inputs:
+            value = request.get(field_name)
+            if value is None:
                 continue
-            local = _resolve_local(item)
-            if not local.is_file():
-                raise RemoteStagingError(f"{backend}.{field_name}: input não existe: {local}")
-            rel = uploaded.get(local)
-            if rel is None:
-                counter += 1
-                rel = f"in/{counter:02d}-{local.name}"
-                client.put_file(job, rel, local)
-                uploaded[local] = rel
-            mapped.append(f"{root}/{rel}")
-        new_request[field_name] = mapped if is_list else mapped[0]
+            is_list = isinstance(value, (list, tuple))
+            values = list(value) if is_list else [value]
+            mapped: list[Any] = []
+            for item in values:
+                if not isinstance(item, (str, os.PathLike)):
+                    mapped.append(item)  # não é um path — deixa como está
+                    continue
+                local = _resolve_local(item)
+                if not local.is_file():
+                    raise RemoteStagingError(f"{backend}.{field_name}: input não existe: {local}")
+                # ``refs/a.png`` e ``refs/../refs/a.png`` são o mesmo ficheiro:
+                # deduplicar pelo path resolvido evita dois uploads.
+                key = local.resolve()
+                rel = uploaded.get(key)
+                if rel is None:
+                    counter += 1
+                    rel = f"in/{counter:02d}-{local.name}"
+                    client.put_file(job, rel, local)
+                    uploaded[key] = rel
+                mapped.append(f"{root}/{rel}")
+            new_request[field_name] = mapped if is_list else mapped[0]
 
-    new_request, outputs, sidecars, globs = _prepare_outputs(backend, spec, new_request, root)
+        new_request, outputs, sidecars, globs = _prepare_outputs(backend, spec, new_request, root)
+    except BaseException:
+        # O sandbox foi criado por ``stage`` mas nunca chegou a ser devolvido:
+        # sem este clean ficava órfão até ao TTL (e, num batch, acumulava).
+        if not keep_sandbox():
+            with contextlib.suppress(Exception):
+                client.clean(job)
+        raise
     return StagedJob(
         client=client,
         job=job,
@@ -500,25 +558,32 @@ def _stage_blobs(
             local = _resolve_local(item)
             if not local.is_file():
                 raise RemoteStagingError(f"{backend}.{field_name}: input não existe: {local}")
-            entry = uploaded.get(local)
+            key = local.resolve()
+            entry = uploaded.get(key)
             if entry is None:
                 counter += 1
                 rel = f"in/{counter:02d}-{local.name}"
                 sha = _sha256(local)
                 client.put_blob(sha, local)
                 entry = (rel, sha)
-                uploaded[local] = entry
+                uploaded[key] = entry
                 blob_map[rel] = sha
             mapped.append(_Rel(entry[0]))
         pending[field_name] = (is_list, mapped)
 
     job, root = client.stage(blob_map)
     root = root.rstrip("/")
-    for field_name, (is_list, mapped) in pending.items():
-        rewritten = [f"{root}/{item.rel}" if isinstance(item, _Rel) else item for item in mapped]
-        new_request[field_name] = rewritten if is_list else rewritten[0]
+    try:
+        for field_name, (is_list, mapped) in pending.items():
+            rewritten = [f"{root}/{item.rel}" if isinstance(item, _Rel) else item for item in mapped]
+            new_request[field_name] = rewritten if is_list else rewritten[0]
 
-    new_request, outputs, sidecars, globs = _prepare_outputs(backend, spec, new_request, root)
+        new_request, outputs, sidecars, globs = _prepare_outputs(backend, spec, new_request, root)
+    except BaseException:
+        if not keep_sandbox():
+            with contextlib.suppress(Exception):
+                client.clean(job)
+        raise
     return StagedJob(
         client=client,
         job=job,
@@ -559,25 +624,42 @@ def stage_request(
         staged = _stage_legacy(backend, request, client=client)
     elif binary_enabled():
         transfer: TransferClient | None = None
+        success = False
         try:
             transfer = TransferClient()
             transfer.connect()
             staged = _stage_blobs(backend, request, transfer)
+            success = True
         except TransferError as exc:
-            if transfer is not None:
-                transfer.close()
             if "sem protocolo binário" not in str(exc):
                 raise RemoteDown(str(exc)) from exc
+            # O handshake binário falhou nesta ligação persistente; não a
+            # reutilizar no caminho legacy (ficaria um socket aberto por job
+            # até ao GC).
+            if transfer is not None:
+                transfer.close()
             # Servidor 0.6/0.7 sem features: segue pelo caminho antigo.
             staged = _stage_legacy(backend, request)
+            success = True
         except OSError as exc:
             raise RemoteDown(str(exc)) from exc
+        finally:
+            # Qualquer falha (missing input, staging recusado, OSError) tem de
+            # fechar a ligação persistente; antes só o TransferError o fazia e
+            # um batch com inputs em falta vazava um socket por job.
+            if transfer is not None and not success:
+                transfer.close()
     else:
         staged = _stage_legacy(backend, request)
 
     if session:
         staged.request["session"] = session
     return staged
+
+
+def _is_missing_remote_file(exc: Exception) -> bool:
+    """True se o erro do servidor é "esse ficheiro não existe no sandbox"."""
+    return "não existe" in str(exc).lower() or "nao existe" in str(exc).lower()
 
 
 def finalize(staged: StagedJob, response: Any) -> Any:
@@ -587,26 +669,48 @@ def finalize(staged: StagedJob, response: Any) -> Any:
     if response.get("status") != "ok":
         # Não limpar: um timeout do `wait` não garante que o job acabou — apagar
         # o sandbox podia remover ficheiros de um job ainda a correr. O TTL
-        # (VRAMD_REMOTE_TTL_HOURS) recolhe-os mais tarde.
+        # (VRAMD_REMOTE_TTL_HOURS) recolhe-os mais tarde. Fechar a ligação é
+        # seguro e evita um socket persistente por job falhado.
+        staged.close()
         return response
 
-    for staged_file in [*staged.outputs, *staged.sidecars]:
-        staged.client.get_file(staged.job, staged_file.remote_rel, staged_file.local)
+    try:
+        for staged_file in staged.outputs:
+            staged.client.get_file(staged.job, staged_file.remote_rel, staged_file.local)
+        for staged_file in staged.sidecars:
+            try:
+                staged.client.get_file(staged.job, staged_file.remote_rel, staged_file.local)
+            except (RemoteStagingError, TransferError) as exc:
+                # Um sidecar declarado pode não ser produzido por todos os modos
+                # (ex.: metadados opcionais). Não perder o output principal por
+                # causa disso; um erro de rede continua a propagar.
+                if _is_missing_remote_file(exc):
+                    continue
+                raise
 
-    known = {item.local.name for item in [*staged.outputs, *staged.sidecars]}
-    for pattern, local_dir in staged.globs:
-        try:
-            names = staged.client.list(staged.job, "out")
-        except (RemoteStagingError, TransferError):
-            names = []
-        # `list` devolve nomes soltos de `out/`; um template expandido com
-        # `{output}` traria o path absoluto e `fnmatch` nunca casaria.
-        basename_pattern = Path(pattern).name
-        for name in names:
-            if name in known or not fnmatch.fnmatch(name, basename_pattern):
-                continue
-            staged.client.get_file(staged.job, f"out/{name}", local_dir / name)
-            known.add(name)
+        known = {item.local.name for item in [*staged.outputs, *staged.sidecars]}
+        for pattern, local_dir in staged.globs:
+            try:
+                names = staged.client.list(staged.job, "out")
+            except (RemoteStagingError, TransferError):
+                names = []
+            # `list` devolve nomes soltos de `out/`; um template expandido com
+            # `{output}` traria o path absoluto e `fnmatch` nunca casaria.
+            basename_pattern = Path(pattern).name
+            for name in names:
+                # Defesa em profundidade: o nome vem do servidor e vai ser usado
+                # para escrever localmente. Só componentes simples são aceites.
+                if not name or name in (".", "..") or Path(name).name != name:
+                    continue
+                if name in known or not fnmatch.fnmatch(name, basename_pattern):
+                    continue
+                staged.client.get_file(staged.job, f"out/{name}", local_dir / name)
+                known.add(name)
+    except BaseException:
+        # O download falhou: não deixar o socket persistente aberto. O sandbox
+        # fica para o TTL porque o job pode ter produzido o resto.
+        staged.close()
+        raise
 
     for staged_file in staged.outputs:
         response[staged_file.field_name] = str(staged_file.local)
@@ -626,6 +730,16 @@ _PENDING_LOCK = threading.Lock()
 
 def remember(job_id: str, staged: StagedJob) -> None:
     with _PENDING_LOCK:
+        previous = _PENDING.pop(job_id, None)
+        if previous is not None:
+            # Dois submits para o mesmo job_id não podem deixar o primeiro
+            # staged (socket + sandbox) sem dono.
+            previous.close()
+        while len(_PENDING) >= PENDING_MAX:
+            # ``dict`` preserva a ordem de inserção desde o 3.7: a primeira
+            # chave é o job mais antigo.
+            _oldest = next(iter(_PENDING))
+            _PENDING.pop(_oldest).close()
         _PENDING[job_id] = staged
 
 

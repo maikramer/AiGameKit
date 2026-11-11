@@ -31,6 +31,9 @@ TRANSPORT_TCP = "tcp"
 ENV_TRANSPORT = "VRAMD_TRANSPORT"
 DEFAULT_TCP_HOST = "127.0.0.1"
 DESCRIPTOR_VERSION = 1
+# O descritor é um JSON pequeno (host/porta/token). Um path apontado por env
+# ou um ficheiro corrompido não pode obrigar-nos a ler gigabytes para a RAM.
+MAX_DESCRIPTOR_BYTES = 64 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +109,11 @@ def pid_exists(pid: int) -> bool:
             return False
         try:
             os.kill(int(pid), 0)
+        except PermissionError:
+            # O processo existe mas é de outro utilizador: ``kill(pid, 0)``
+            # nega a permissão. Dizer que morreu faria o cliente apagar o
+            # endpoint/PID de um supervisor vivo.
+            return True
         except OSError:
             return False
         return True
@@ -143,12 +151,25 @@ def has_unix_sockets() -> bool:
 
 
 def read_endpoint(path: Path) -> EndpointInfo | None:
-    """Lê um descritor TCP; ``None`` se o path não for um descritor válido."""
+    """Lê um descritor TCP; ``None`` se o path não for um descritor válido.
+
+    Um descritor de versão futura é aceite (os campos usados aqui são
+    estáveis), mas um ``version`` malformado é recusado — melhor falhar do que
+    interpretar um formato desconhecido como se fosse o actual.
+    """
+    try:
+        if path.stat().st_size > MAX_DESCRIPTOR_BYTES:
+            return None
+    except OSError:
+        return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         return None
     if not isinstance(data, dict) or data.get("transport") != TRANSPORT_TCP:
+        return None
+    raw_version = data.get("version", DESCRIPTOR_VERSION)
+    if isinstance(raw_version, bool) or not isinstance(raw_version, int) or raw_version < 1:
         return None
     host = str(data.get("host") or DEFAULT_TCP_HOST).strip() or DEFAULT_TCP_HOST
     try:
@@ -160,7 +181,30 @@ def read_endpoint(path: Path) -> EndpointInfo | None:
     token = data.get("token")
     if token is not None and not isinstance(token, str):
         return None
-    return EndpointInfo(transport=TRANSPORT_TCP, host=host, port=port, token=token)
+    # Um token vazio não autentica nada; tratá-lo como "sem token" evita
+    # enviar ``auth: ""`` e receber UNAUTHORIZED em vez de tentar o handshake.
+    if token == "":
+        token = None
+    return EndpointInfo(
+        transport=TRANSPORT_TCP,
+        host=host,
+        port=port,
+        token=token,
+        version=raw_version,
+    )
+
+
+def _tcp_connect(host: str, port: int, *, timeout: float | None) -> socket.socket:
+    """Liga por TCP a IPv4 ou IPv6 (getaddrinfo), com o timeout no connect.
+
+    Um ``socket.AF_INET`` fixo recusava ``[::1]:8790`` (host IPv6 válido no
+    descritor/VRAMD_REMOTE) com "Address family not supported". O
+    ``create_connection`` resolve e tenta as famílias do host.
+    """
+    sock = socket.create_connection((host, int(port)), timeout=timeout)
+    with contextlib.suppress(OSError):
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    return sock
 
 
 def connect(path: Path, *, timeout: float | None = None) -> tuple[socket.socket, str | None]:
@@ -171,17 +215,8 @@ def connect(path: Path, *, timeout: float | None = None) -> tuple[socket.socket,
     """
     info = read_endpoint(path)
     if info is not None:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            if timeout is not None:
-                sock.settimeout(timeout)
-            sock.connect((info.host, int(info.port or 0)))
-            with contextlib.suppress(OSError):
-                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            return sock, info.token
-        except BaseException:
-            sock.close()
-            raise
+        sock = _tcp_connect(info.host, int(info.port or 0), timeout=timeout)
+        return sock, info.token
     if has_unix_sockets():
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
@@ -206,7 +241,11 @@ def parse_host_port(text: str) -> tuple[str, int]:
         raise ValueError("endpoint vazio")
     if spec.startswith("["):
         host_text, _, rest = spec[1:].partition("]")
-        port_text = rest.lstrip(":")
+        # ``[::1]8790`` (sem ':') não é um endpoint válido; ``lstrip(":")``
+        # aceitava-o em silêncio.
+        if not rest.startswith(":"):
+            raise ValueError(f"esperado [HOST]:PORT, recebi {text!r}")
+        port_text = rest[1:]
     elif spec.count(":") == 1:
         host_text, _, port_text = spec.partition(":")
     else:
@@ -246,17 +285,8 @@ def remote_endpoints() -> list[EndpointInfo]:
 
 def connect_remote(info: EndpointInfo, *, timeout: float | None = None) -> tuple[socket.socket, str | None]:
     """Liga a um endpoint remoto explícito (``VRAMD_REMOTE``)."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        if timeout is not None:
-            sock.settimeout(timeout)
-        sock.connect((info.host, int(info.port or 0)))
-        with contextlib.suppress(OSError):
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        return sock, info.token
-    except BaseException:
-        sock.close()
-        raise
+    sock = _tcp_connect(info.host, int(info.port or 0), timeout=timeout)
+    return sock, info.token
 
 
 def _write_descriptor(path: Path, *, port: int, token: str) -> None:
@@ -271,7 +301,17 @@ def _write_descriptor(path: Path, *, port: int, token: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     text = json.dumps(payload, separators=(",", ":")) + "\n"
-    tmp.write_text(text, encoding="utf-8")
+    # O descritor carrega o token: criar o temporário já com 0600 evita a
+    # janela em que um ficheiro com umask 022 (0644) fica legível por outros
+    # utilizadores antes do chmod. O modo é mascarado pelo umask, mas 0600 já
+    # não tem bits de grupo/outros para remover.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    fd = os.open(tmp, flags, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    if not IS_WINDOWS:
+        with contextlib.suppress(OSError):
+            os.chmod(tmp, 0o600)
     # No Windows um cliente a ler o descritor (ou o AV) pode impedir o replace
     # durante alguns ms. Tentar; em último recurso escrever no destino.
     for attempt in range(8):
@@ -286,6 +326,7 @@ def _write_descriptor(path: Path, *, port: int, token: str) -> None:
                 break
             time.sleep(0.02)
     if not IS_WINDOWS:
+        # O fallback ``write_text`` criou o destino com o umask corrente.
         with contextlib.suppress(OSError):
             os.chmod(path, 0o600)
 
@@ -303,6 +344,12 @@ def listen(path: Path) -> tuple[socket.socket, EndpointInfo]:
         try:
             sock.settimeout(1.0)
             sock.bind(str(path))
+            # O modo de um socket Unix segue o umask (normalmente 0777&~022 =
+            # 0755): qualquer utilizador da máquina podia ligar-se ao server
+            # per-tool (que no POSIX não tem token). Fechar a 0600 é o mesmo
+            # contrato do descritor TCP. Falhar o chmod é falhar o bind: um
+            # socket inseguro não deve ficar exposto.
+            os.chmod(path, 0o600)
             sock.listen(8)
         except OSError:
             sock.close()
@@ -311,6 +358,13 @@ def listen(path: Path) -> tuple[socket.socket, EndpointInfo]:
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
+        # SO_REUSEADDR no POSIX (o vramd 0.7.6 fez o mesmo no listener TCP):
+        # ligações em TIME_WAIT não podem impedir o rebind de um endpoint
+        # explícito. No Windows o equivalente é SO_EXCLUSIVEADDRUSE (impede
+        # que outro processo tome a porta), por isso são mutuamente exclusivos.
+        if not IS_WINDOWS and hasattr(socket, "SO_REUSEADDR"):
+            with contextlib.suppress(OSError):
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             with contextlib.suppress(OSError):
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)

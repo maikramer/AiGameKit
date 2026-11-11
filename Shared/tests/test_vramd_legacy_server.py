@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 from pathlib import Path
@@ -9,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from aigamekit_shared import vramd_endpoint as endpoint
 from aigamekit_shared.vramd_client import (
     ModelServer,
     _resolve_vramd_start_cmd,
@@ -271,6 +273,100 @@ class TestModelServer:
         assert running_server in sockets
 
 
+class TestIdleTimeoutSafety:
+    @pytest.fixture()
+    def slow_server(self, tmp_path: Path):
+        """Server com idle timeout curto e generate lento (1.5 s)."""
+        sock_path = tmp_path / "slow-server.sock"
+        state: dict[str, object] = {}
+
+        class _Gen:
+            def __init__(self) -> None:
+                self.loaded = True
+
+            def unload(self) -> None:
+                self.loaded = False
+
+        def _loader() -> _Gen:
+            gen = _Gen()
+            state["gen"] = gen
+            return gen
+
+        def _generator(gen: _Gen, request: dict) -> dict:
+            if request.get("sleep"):
+                time.sleep(1.5)
+                # O modelo não pode ter sido descarregado a meio do job.
+                assert gen.loaded is True, "modelo descarregado durante o generate"
+            return {"status": "ok", "output": "/tmp/mock.png"}
+
+        server = ModelServer(
+            socket_path=sock_path,
+            loader=_loader,
+            generator=_generator,
+            idle_timeout_min=60,
+            verbose=False,
+            tool_name="slow",
+        )
+        # Mais curto que o generate, mais longo que o resto do teste depois
+        # dele: o main loop acorda a cada 1 s e veria idle > timeout sem a
+        # contagem de handlers ativos.
+        server.idle_timeout_sec = 0.8
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 5.0
+        while not sock_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert sock_path.exists(), "servidor não arrancou"
+        try:
+            yield sock_path, server
+        finally:
+            server._running = False
+            server._cleanup()
+            thread.join(timeout=5.0)
+
+    def test_generate_ativo_nao_dispara_idle(self, slow_server) -> None:
+        sock_path, _server = slow_server
+        # Primeiro job: requests_served passa a > 0 (pré-requisito do idle).
+        first = send_request({"cmd": "generate"}, sock_path, timeout_sec=5.0)
+        assert first is not None and first["status"] == "ok"
+
+        second = send_request({"cmd": "generate", "sleep": True}, sock_path, timeout_sec=10.0)
+        assert second is not None and second["status"] == "ok", second
+        # O server continua vivo logo após o job (idle 0.2 s < 0.8 s).
+        time.sleep(0.2)
+        status = send_request({"cmd": "status"}, sock_path, timeout_sec=3.0)
+        assert status is not None and status["status"] == "status"
+
+
+class TestRequestSizeLimit:
+    def test_oversized_request_is_rejected(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("aigamekit_shared.vramd_client.MAX_REQUEST_BYTES", 32)
+        sock_path = tmp_path / "limit.sock"
+        server = ModelServer(
+            socket_path=sock_path,
+            loader=_mock_loader,
+            generator=_mock_generator,
+            idle_timeout_min=60,
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 5.0
+        while not sock_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        try:
+            client, _token = endpoint.connect(sock_path, timeout=3.0)
+            with client:
+                client.sendall(b'{"cmd":"status","pad":"' + b"x" * 128)
+                raw = client.recv(8192).decode()
+            response = json.loads(raw.strip().split("\n")[-1])
+            assert response["error_code"] == "REQUEST_TOO_LARGE"
+            assert "excede" in response["error"]
+        finally:
+            server._running = False
+            server._cleanup()
+            thread.join(timeout=5.0)
+
+
 # ---------------------------------------------------------------------------
 # ensure_vram_available (com query_gpu_free_mib mockado)
 # ---------------------------------------------------------------------------
@@ -336,7 +432,7 @@ class TestEnsureVram:
 
         calls: list[dict] = []
 
-        def _mock_send(req, timeout_sec=None):
+        def _mock_send(req, timeout_sec=None, **kwargs):
             calls.append(req)
             return {"status": "ok"}
 
