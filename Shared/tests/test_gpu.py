@@ -274,7 +274,8 @@ class TestQueryGpuFreeMib:
 
 
 class TestDetectGpuIds:
-    def test_prefers_nvml_count(self, monkeypatch):
+    def test_prefers_nvml_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
         monkeypatch.setattr(gpu_module, "_nvml_device_count", lambda: 2)
         monkeypatch.setattr(
             gpu_module,
@@ -283,7 +284,8 @@ class TestDetectGpuIds:
         )
         assert gpu_module.detect_gpu_ids() == [0, 1]
 
-    def test_falls_back_to_smi(self, monkeypatch):
+    def test_falls_back_to_smi(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
         monkeypatch.setattr(gpu_module, "_nvml_device_count", lambda: None)
         monkeypatch.setattr(gpu_module, "_smi_detect_gpu_ids", lambda: [0])
         assert gpu_module.detect_gpu_ids() == [0]
@@ -340,10 +342,39 @@ class TestQueryGpuSnapshot:
         assert snap.source == "nvidia-smi"
 
 
+class TestSupportsFp8:
+    def test_nvml_path_does_not_deadlock(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``supports_fp8`` chama ``_nvml_init`` (com lock) dentro do lock.
+
+        Com ``threading.Lock`` não-reentrante isto bloqueava para sempre o
+        primeiro ``hw-auto`` que consultasse FP8 numa GPU Ada/Hopper.
+        """
+        import threading
+
+        fake_pynvml = MagicMock()
+        fake_pynvml.nvmlDeviceGetHandleByIndex.return_value = object()
+        fake_pynvml.nvmlDeviceGetCudaComputeCapability.return_value = (8, 9)
+        monkeypatch.setitem(__import__("sys").modules, "pynvml", fake_pynvml)
+        # Estado real de NVML já inicializado: _nvml_init() readquire o lock.
+        monkeypatch.setattr(gpu_module, "_nvml_inited", True)
+        monkeypatch.setattr(gpu_module, "_nvml_ok", True)
+
+        result: dict[str, bool] = {}
+
+        def _call() -> None:
+            result["value"] = gpu_module.supports_fp8(0)
+
+        worker = threading.Thread(target=_call, daemon=True)
+        worker.start()
+        worker.join(timeout=2.0)
+        assert not worker.is_alive(), "supports_fp8 ficou em deadlock no _nvml_lock"
+        assert result["value"] is True
+
+
 class TestNvmlComputeAppsForDevice:
     def test_parses_process_info(self, monkeypatch):
         handle = object()
-        monkeypatch.setattr(gpu_module, "_nvml_handle", lambda device: handle)
+        monkeypatch.setattr(gpu_module, "_nvml_handle", lambda device, **_kw: handle)
         monkeypatch.setattr(gpu_module, "_process_basename", lambda pid: f"proc-{pid}")
 
         fake_pynvml = MagicMock()
@@ -374,3 +405,153 @@ class TestNvidiaDriverMatch:
         ok, detail = check_nvidia_driver_match()
         assert ok is True
         assert "595.84" in detail
+
+
+class TestCudaVisibleDevices:
+    """CUDA_VISIBLE_DEVICES renumera devices: IDs lógicos ≠ índices físicos."""
+
+    def test_detect_returns_logical_ids(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+        monkeypatch.setattr(gpu_module, "_nvml_device_count", lambda: 4)
+        assert gpu_module.detect_gpu_ids() == [0, 1]
+
+    def test_empty_cvd_means_no_gpus(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+        monkeypatch.setattr(gpu_module, "_nvml_device_count", lambda: 4)
+        assert gpu_module.detect_gpu_ids() == []
+
+    def test_negative_entries_are_invisible(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "-1")
+        monkeypatch.setattr(gpu_module, "_nvml_device_count", lambda: 4)
+        assert gpu_module.detect_gpu_ids() == []
+
+    def test_physical_mapping(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+        assert gpu_module._physical_gpu_id(0) == 2
+        assert gpu_module._physical_gpu_id(1) == 3
+        assert gpu_module._physical_gpu_id(2) is None
+
+    def test_uuid_entry_kept_as_string(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-1234-abcd")
+        assert gpu_module._physical_gpu_id(0) == "GPU-1234-abcd"
+
+    def test_without_cvd_identity(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+        assert gpu_module._physical_gpu_id(1) == 1
+
+    def test_smi_query_uses_physical_index(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+        calls: list[list[str]] = []
+
+        def _fake_run(argv, **_kw):
+            calls.append(argv)
+            return SimpleNamespace(returncode=0, stdout="1234\n", stderr="")
+
+        monkeypatch.setattr(gpu_module, "_nvidia_smi_path", lambda: "nvidia-smi")
+        monkeypatch.setattr(gpu_module.subprocess, "run", _fake_run)
+        assert gpu_module._smi_query_free_mib(1) == 1234
+        assert "--id=3" in calls[0]
+
+
+class TestSmiComputeAppsDedup:
+    """nvidia-smi lista o mesmo PID uma vez por GPU; o NVML já deduplicava."""
+
+    def test_nvml_enumeration_uses_physical_indices(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A lista de processos varre GPUs físicas, mesmo com CUDA_VISIBLE_DEVICES."""
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+        flags: list[bool] = []
+
+        def _apps(device: int, *, logical: bool = True):
+            flags.append(logical)
+            return []
+
+        monkeypatch.setattr(gpu_module, "_nvml_device_count", lambda: 2)
+        monkeypatch.setattr(gpu_module, "_nvml_compute_apps_for_device", _apps)
+        assert gpu_module._nvml_list_compute_apps() == []
+        assert flags == [False, False]
+
+    def test_same_pid_across_gpus_is_summed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(gpu_module, "_nvidia_smi_path", lambda: "nvidia-smi")
+        monkeypatch.setattr(
+            gpu_module.subprocess,
+            "run",
+            lambda *_a, **_k: SimpleNamespace(
+                returncode=0,
+                stdout="123, python, 100\n123, python, 250\n456, torch, 50\n",
+                stderr="",
+            ),
+        )
+        assert gpu_module._smi_list_compute_apps() == [(123, "python", 350), (456, "torch", 50)]
+
+    def test_process_vram_not_double_counted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            gpu_module,
+            "list_nvidia_compute_apps",
+            lambda: [(123, "python", 350)],
+        )
+        assert gpu_module.process_vram_mib(123) == 350
+
+
+class TestClearCudaMemoryRestore:
+    def test_restores_original_device_on_scrub_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[str, int]] = []
+
+        class _Cuda:
+            @staticmethod
+            def is_available() -> bool:
+                return True
+
+            @staticmethod
+            def is_initialized() -> bool:
+                return True
+
+            @staticmethod
+            def current_device() -> int:
+                return 0
+
+            @staticmethod
+            def set_device(device: int) -> None:
+                calls.append(("set", device))
+
+            @staticmethod
+            def synchronize() -> None:
+                raise RuntimeError("driver em baixo")
+
+            @staticmethod
+            def empty_cache() -> None:
+                pass
+
+            @staticmethod
+            def ipc_collect() -> None:
+                pass
+
+        monkeypatch.setattr(gpu_module, "_torch", lambda: SimpleNamespace(cuda=_Cuda()))
+        with pytest.raises(RuntimeError):
+            gpu_module.clear_cuda_memory(devices=[1])
+        # Mesmo com o scrub a rebentar, o device corrente volta ao original.
+        assert calls == [("set", 1), ("set", 0)]
+
+
+class TestProcessUid:
+    def test_undecodable_proc_status_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``/proc/<pid>/status`` com bytes inválidos não pode rebentar o kill."""
+        from pathlib import Path
+
+        def _bad_decode(self, *_a, **_k):
+            raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+        monkeypatch.setattr(Path, "read_text", _bad_decode)
+        assert gpu_module._process_uid(12345) is None
+
+
+class TestWarnVramMarkup:
+    def test_process_name_brackets_survive_rich(self, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+        pytest.importorskip("rich")
+        monkeypatch.setattr(
+            gpu_module,
+            "list_nvidia_compute_apps",
+            lambda: [(42, "proc [N/A]", 2048)],
+        )
+        monkeypatch.setattr("aigamekit_shared.vramd_client.is_vramd_running", lambda: False)
+        gpu_module.warn_if_vram_occupied()
+        assert "[N/A]" in capsys.readouterr().out

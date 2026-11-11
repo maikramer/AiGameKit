@@ -198,6 +198,10 @@ backends:
     peak_mib: 5440
     safety_mib: 384
     admit_peak_mib: 5824
+    # A medição foi a 1024² (default do text2d). O Vael gera a 768²: o admit
+    # escala a ativação por (w*h)/reference_pixels — sem isto recusava os jobs
+    # a 768 com ~5367 MiB livres (pico medido 5440, ativação real ~2.7 GiB).
+    reference_pixels: 1048576
   peak_profile:
     quant_mode: sdnq-int4
     staged_load: true

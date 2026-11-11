@@ -40,10 +40,58 @@ def _torch() -> types.ModuleType:
 
 
 # ---------------------------------------------------------------------------
+# CUDA_VISIBLE_DEVICES — índice lógico (torch) ↔ índice físico (NVML/smi)
+# ---------------------------------------------------------------------------
+
+
+def _cuda_visible_entries() -> list[str] | None:
+    """Entradas de ``CUDA_VISIBLE_DEVICES``, ou ``None`` se a variável não existe.
+
+    Devolve a lista já normalizada (sem espaços/vazios). Uma string vazia é
+    intencional no CUDA ("nenhuma GPU visível") e resulta em ``[]``; entradas
+    negativas desactivam o dispositivo e são descartadas.
+    """
+    raw = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if raw is None:
+        return None
+    entries: list[str] = []
+    for chunk in raw.split(","):
+        entry = chunk.strip()
+        if not entry:
+            continue
+        with contextlib.suppress(ValueError):
+            if int(entry) < 0:
+                continue
+        entries.append(entry)
+    return entries
+
+
+def _physical_gpu_id(device: int) -> int | str | None:
+    """Índice lógico CUDA → índice físico (``int``), UUID (``str``) ou ``None``.
+
+    ``CUDA_VISIBLE_DEVICES`` renumera os dispositivos: com ``"2,3"`` o
+    ``cuda:0`` do PyTorch é a GPU física 2. NVML e ``nvidia-smi`` indexam por
+    hardware, por isso a tradução tem de acontecer antes de os consultar.
+    Sem a variável, o índice lógico é o físico. UUID/MIG ficam como string
+    (ambos os backends aceitam UUID).
+    """
+    entries = _cuda_visible_entries()
+    if entries is None:
+        return int(device)
+    if device < 0 or device >= len(entries):
+        return None
+    entry = entries[device]
+    try:
+        return int(entry)
+    except ValueError:
+        return entry
+
+
+# ---------------------------------------------------------------------------
 # NVML (nvidia-ml-py) — preferido para free/used/processos
 # ---------------------------------------------------------------------------
 
-_nvml_lock = threading.Lock()
+_nvml_lock = threading.RLock()
 _nvml_inited = False
 _nvml_ok = False
 
@@ -132,13 +180,24 @@ def _nvml_device_count() -> int | None:
         return None
 
 
-def _nvml_handle(device: int) -> Any | None:
+def _nvml_handle(device: int, *, logical: bool = True) -> Any | None:
+    """Handle NVML. ``logical=True`` traduz ``CUDA_VISIBLE_DEVICES``.
+
+    ``_nvml_list_compute_apps`` enumera GPUs **físicas** (quer ver processos de
+    todas, mesmo as não visíveis ao torch), por isso usa ``logical=False``.
+    """
     if not _nvml_init():
+        return None
+    physical: int | str | None = _physical_gpu_id(device) if logical else int(device)
+    if physical is None:
         return None
     try:
         import pynvml
 
-        return pynvml.nvmlDeviceGetHandleByIndex(int(device))
+        if isinstance(physical, str):
+            # UUID/MIG: o handle resolve diretamente pela string.
+            return pynvml.nvmlDeviceGetHandleByUUID(physical)
+        return pynvml.nvmlDeviceGetHandleByIndex(physical)
     except Exception:
         return None
 
@@ -177,9 +236,9 @@ def _nvml_device_name(device: int = 0) -> str | None:
         return None
 
 
-def _nvml_compute_apps_for_device(device: int) -> list[tuple[int, str, int | None]] | None:
+def _nvml_compute_apps_for_device(device: int, *, logical: bool = True) -> list[tuple[int, str, int | None]] | None:
     """Processos compute numa GPU, ou ``None`` se NVML falhar."""
-    handle = _nvml_handle(device)
+    handle = _nvml_handle(device, logical=logical)
     if handle is None:
         return None
     try:
@@ -213,7 +272,7 @@ def _nvml_list_compute_apps() -> list[tuple[int, str, int | None]] | None:
     # Dedup por PID (mesmo processo em várias GPUs / MIG).
     by_pid: dict[int, tuple[int, str, int | None]] = {}
     for idx in range(n):
-        apps = _nvml_compute_apps_for_device(idx)
+        apps = _nvml_compute_apps_for_device(idx, logical=False)
         if apps is None:
             return None
         for pid, name, mib in apps:
@@ -379,10 +438,16 @@ def clear_cuda_memory(devices: list[int] | None = None) -> None:
         _scrub_device()
         return
     original = torch.cuda.current_device()
-    for d in devices:
-        torch.cuda.set_device(d)
-        _scrub_device()
-    torch.cuda.set_device(original)
+    try:
+        for d in devices:
+            torch.cuda.set_device(d)
+            _scrub_device()
+    finally:
+        # Mesmo que um scrub rebente (driver em baixo/OOM), o device corrente
+        # do processo não pode ficar trocado para as operações seguintes. Não
+        # mascarar o erro original se o restore também falhar.
+        with contextlib.suppress(Exception):
+            torch.cuda.set_device(original)
 
 
 def process_vram_mib(pid: int | None = None) -> int | None:
@@ -447,9 +512,10 @@ def supports_fp8(device: int = 0) -> bool:
             import pynvml
 
             with _nvml_lock:
-                handle = pynvml.nvmlDeviceGetHandleByIndex(device)
-                major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
-            return (int(major), int(minor)) >= (8, 9)
+                handle = _nvml_handle(device)
+                if handle is not None:
+                    major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
+                    return (int(major), int(minor)) >= (8, 9)
         except Exception:
             pass
     try:
@@ -573,7 +639,7 @@ def _process_uid(pid: int) -> int | None:
         for line in status.splitlines():
             if line.startswith("Uid:"):
                 return int(line.split()[1])
-    except (OSError, ValueError, IndexError):
+    except (OSError, UnicodeError, ValueError, IndexError):
         pass
     return None
 
@@ -688,7 +754,10 @@ def _smi_list_compute_apps() -> list[tuple[int, str, int | None]]:
         return []
     if r.returncode != 0 or not (r.stdout or "").strip():
         return []
-    out: list[tuple[int, str, int | None]] = []
+    # Um processo com contexto em N GPUs aparece N vezes na query (uma por GPU).
+    # Dedup por PID somando a VRAM, como no caminho NVML — senão o kill dispara
+    # duas vezes o mesmo PID e ``process_vram_mib`` conta VRAM a dobrar.
+    by_pid: dict[int, tuple[int, str, int | None]] = {}
     for line in r.stdout.strip().splitlines():
         parts = [p.strip() for p in line.split(",")]
         if len(parts) < 2:
@@ -702,8 +771,12 @@ def _smi_list_compute_apps() -> list[tuple[int, str, int | None]]:
         if len(parts) >= 3 and parts[2] and parts[2].upper() not in ("N/A", "[N/A]"):
             with contextlib.suppress(ValueError):
                 mib = int(float(parts[2].replace(" MiB", "").strip()))
-        out.append((pid, name, mib))
-    return out
+        prev = by_pid.get(pid)
+        if prev is None:
+            by_pid[pid] = (pid, name, mib)
+        elif mib is not None:
+            by_pid[pid] = (pid, name, (prev[2] or 0) + mib)
+    return list(by_pid.values())
 
 
 def list_nvidia_compute_apps() -> list[tuple[int, str, int | None]]:
@@ -767,7 +840,11 @@ def warn_if_vram_occupied(threshold_mib: int = 1024) -> list[str]:
             + tip
         )
         if c is not None:
-            c.print(f"[yellow]{msg}[/yellow]")
+            # Nomes de processos podem conter ``[``/``]`` (ex.: ``[N/A]``) — sem
+            # escape o Rich interpreta-os como markup e come o texto.
+            from rich.markup import escape as _escape
+
+            c.print(f"[yellow]{_escape(msg)}[/yellow]")
         else:
             print(msg)
     return big
@@ -908,11 +985,14 @@ def _smi_query_free_mib(device: int = 0) -> int | None:
     smi = _nvidia_smi_path()
     if not smi:
         return None
+    physical = _physical_gpu_id(device)
+    if physical is None:
+        return None
     try:
         r = subprocess.run(
             [
                 smi,
-                f"--id={device}",
+                f"--id={physical}",
                 "--query-gpu=memory.free",
                 "--format=csv,noheader,nounits",
             ],
@@ -959,11 +1039,14 @@ def _smi_gpu_snapshot(device: int = 0) -> GpuSnapshot | None:
     smi = _nvidia_smi_path()
     if not smi:
         return None
+    physical = _physical_gpu_id(device)
+    if physical is None:
+        return None
     try:
         r = subprocess.run(
             [
                 smi,
-                f"--id={device}",
+                f"--id={physical}",
                 "--query-gpu=name,memory.total,memory.free,memory.used",
                 "--format=csv,noheader,nounits",
             ],
@@ -998,8 +1081,9 @@ def query_gpu_free_mib(device: int = 0) -> int | None:
     """VRAM livre numa GPU (MiB), ou ``None`` se NVML e nvidia-smi falharem.
 
     Args:
-        device: Índice da GPU (0 por omissão). Em rigs multi-GPU, especificar o
-            dispositivo alvo para que a coordenação de VRAM mire o correto.
+        device: Índice **lógico** da GPU (0 por omissão), tal como o PyTorch o
+            vê. Com ``CUDA_VISIBLE_DEVICES`` definido, a consulta NVML/smi é
+            traduzida para o índice físico correspondente.
     """
     mem = _nvml_memory_mib(device)
     if mem is not None:
@@ -1008,7 +1092,17 @@ def query_gpu_free_mib(device: int = 0) -> int | None:
 
 
 def detect_gpu_ids() -> list[int] | None:
-    """Detecta GPUs disponíveis (NVML → nvidia-smi). Lista de IDs ou ``None``."""
+    """Detecta GPUs disponíveis, devolvendo **IDs lógicos CUDA**.
+
+    ``CUDA_VISIBLE_DEVICES`` tem prioridade: com ``"2,3"`` devolve ``[0, 1]``
+    (os dispositivos que o PyTorch numera como 0 e 1), não os índices físicos
+    ``[2, 3]`` — os callers passam estes IDs a ``CUDA_VISIBLE_DEVICES`` dos
+    subprocessos e a ``torch.cuda``. Sem a variável, NVML → nvidia-smi.
+    Uma string vazia (ou só entradas negativas) significa zero GPUs visíveis.
+    """
+    entries = _cuda_visible_entries()
+    if entries is not None:
+        return list(range(len(entries)))
     n = _nvml_device_count()
     if n is not None and n > 0:
         return list(range(n))
