@@ -7,6 +7,83 @@ próprio: [`Materialize/CHANGELOG.md`](Materialize/CHANGELOG.md).
 
 ## [Unreleased]
 
+### Fixed — animator3d: retarget A-pose (braços dentro da cintura)
+
+- **Abertura A-pose no retarget** (`Animator3D/src/animator3d/retarget.py`): o
+  swing T-pose→A-pose era removido por inteiro, o que tratava o target como se
+  fosse T-pose — no idle/walk do Quaternius os braços ficavam a ~26° da
+  vertical e, nos corpos chibi do Vael (hero, merchant, blacksmith), as mãos
+  entravam na cintura/calções. O novo `apose_open_deg` (default **15°**) abre
+  o ombro para fora nos ossos de braço (`upperarm_*`, `lowerarm_*`, `hand_*`),
+  rodando a cadeia em bloco (cotovelo intacto). Ângulo fixo em vez de fracção
+  do arco: os rigs do Vael têm arcos de ~26° a ~60°, e uma fracção deixava o
+  blacksmith quase em T-pose. Configurável por perfil
+  (`apose_open_deg`/`apose_bones`) e validado no `load_profile`; a clavícula
+  fica de fora. Testes: `tests/test_retarget.py`.
+- **Facing auto em humanoides** (`Animator3D/src/animator3d/cli.py`): o
+  fallback procedural chamava `canonicalize_creature_facing(auto)` para todos
+  os rigs, e o heurístico de bbox (mais largo do que fundo = "de lado") rodava
+  humanoides em A-pose 90° — o merchant do Vael saía de perfil, com o braço
+  dentro da barriga. Preset `humanoid` passa a `+z` (já canónico no pipeline);
+  `--facing` explícito continua a mandar e criaturas continuam no auto.
+
+### Fixed — concorrência de manifestos e waves multi-GPU
+
+- **Lock do `resume` (mesmo manifesto, local+remoto).** O `resume` não tinha
+  lock: dois `resume` do mesmo manifesto — ou o mesmo manifesto 1× `--gpu
+  local` e 1× `--gpu remote` — corriam em paralelo sobre os mesmos
+  `_intermediate`/LODs. Passa a usar o mesmo lock de pasta do `batch`
+  (`GameAssets/src/gameassets/batch_guard.py`), agora com metadata JSON
+  (PID/host/comando/`gpu`/manifesto) e mensagem que mostra o dono. Um PID
+  morto só é recuperado no mesmo host; `--skip-batch-lock` é o override
+  consciente. Testes: `tests/test_batch_guard.py`.
+- **Wave paint sem o pacote Paint3D.** O `paint_specs_from_items` importava
+  `paint3d.vramd_payload`; no venv do GameAssets o pacote não existe (puxa
+  torch) e a wave caía para o `paint3d texture-batch` sequencial — a 2.ª GPU
+  remota ficava parada. O builder passou para
+  `aigamekit_shared.vramd_paint_payload`; `paint3d.vramd_payload` re-exporta.
+  Testes: `tests/test_vramd_coord.py`.
+- **`topology` em vramd 0.7.10.** O servidor anunciava `routing`/`lanes` no
+  `status` mas ainda não tinha o comando `topology`; o cliente via
+  `capacity=1` e submetia um job de cada vez. `fetch_topology` sintetiza a
+  topologia a partir do `status.routing` (capacidade, tamanhos de GPU,
+  features `routing`/`hw_tiers`/`criticality`); com o vramd 0.8.0 o comando
+  nativo passa a ser usado. Testes: `Shared/tests/test_vramd_topology.py`.
+- **Resume com clean+painted sem shape.** O classificador forçava
+  `need_shape` quando o `_shape` tinha sido apagado, apesar de o master
+  pipeline aceitar explicitamente clean+painted sem shape — os
+  `characters-interiors` regeneravam o asset todo em vez de só animar/LOD.
+  Agora segue para rig/animate/LOD (ou paint a partir do clean). Testes:
+  `tests/test_master_rig_dag.py`.
+- **Cliente vramd em falta explicado.** Um venv sem `vramd>=0.7` fazia o
+  staging remoto cair sem sessão e o servidor respondia `backend desconhecido:
+  <tool>` (aconteceu no GameAssets). `ensure_session` passa a falhar com
+  `BundleError` a dizer que falta instalar `vramd>=0.7` e porquê. Testes:
+  `Shared/tests/test_vramd_bundle.py`.
+
+### Added — várias GPUs e peers (router do vramd)
+
+- **Qualidade pela GPU de destino** (`aigamekit_shared.vramd_topology`,
+  `gameassets.vramd_routing`): os payloads text3d/paint3d/text2d levam
+  `hw_tiers` — o hw-auto de cada tool corrido para cada tamanho de GPU que o
+  vramd anuncia em `topology`. O vramd aplica o tier da GPU onde o job cai
+  (fp16 numa de 24 GB, int4 numa de 6 GB). Antes valia a GPU de quem
+  submetia — errado num cliente remoto e num servidor com placas diferentes.
+- **`criticality:` por asset** no manifesto (`high`/`hero`, `normal`,
+  `low`/`filler`, `auto` = pela categoria). Críticos vão para a GPU de melhor
+  tier e são submetidos primeiro; enchimento fica na GPU mais pequena.
+- **Prefetch shape→paint** (`PaintPrefetcher`): com várias GPUs, o paint de
+  cada asset entra na fila assim que o shape acaba (preparação em background);
+  a wave de paint espera pelos jobs já submetidos.
+- **Janela rolante** no `run_gpu_wave`, dimensionada à capacidade do vramd
+  (antes: blocos de 16 com drain completo — GPUs paradas na cauda).
+
+### Changed
+
+- Com várias GPUs/peers o batch deixa de fazer `release` global entre fases.
+- `_paint_wave_kwargs`: uma só construção dos argumentos da wave de paint
+  (estava duplicada nos caminhos dashboard e `--plain`).
+
 ### Added — Windows (cliente vramd)
 
 - **`aigamekit_shared.vramd_endpoint`**: transporte espelhado do vramd. No POSIX
