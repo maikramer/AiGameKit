@@ -13,7 +13,6 @@ Tudo é não-interativo: falhas são reportadas no logger e devolvem ``False``
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +34,12 @@ FLASH_ATTN_WHEEL = (
 
 SPARC3D_GIT = "git+https://github.com/hi3d-official/Hi3Dv1.0.git"
 
+#: Timeouts dos subprocessos. Sondagens (imports/metadata) não podem pendurar o
+#: install; os pip installs incluem builds de ~30 min (flash-attn), daí o teto
+#: folgado. Sem timeout um nvidia-smi/pip pendurado bloqueava o install.sh.
+PROBE_TIMEOUT_SEC = 60.0
+INSTALL_TIMEOUT_SEC = 3600.0
+
 #: Dependências do sparc3d com as versões que o upstream mediu. `einops` e
 #: `setuptools` não estão declarados lá mas são exigidos em runtime (CLIP e o
 #: loader do Triton, respetivamente) — descobertos numa instalação limpa.
@@ -42,6 +47,9 @@ STACK_PACKAGES = (
     "numpy==1.26.4",
     "transformers==4.46.3",
     "accelerate>=0.31.0,<2",
+    # Group offload do transformer (diffusers.hooks.apply_group_offloading).
+    # 0.38 é a versão dos outros tools; os hooks são a API canónica.
+    "diffusers==0.38.0",
     "spconv-cu120==2.3.6",
     "trimesh>=4.4.0,<5",
     "Pillow>=10.3.0",
@@ -62,10 +70,21 @@ def _pip_prefix(venv_python: str) -> list[str]:
     return [venv_python, "-m", "pip", "install"]
 
 
-def _run(argv: list[str], *, logger: Logger, cwd: Path) -> bool:
+def _run(argv: list[str], *, logger: Logger, cwd: Path, timeout: float = INSTALL_TIMEOUT_SEC) -> bool:
     logger.info("$ " + " ".join(argv))
     try:
-        proc = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True)
+        proc = subprocess.run(
+            argv,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warn(f"comando excedeu {timeout:.0f}s: {' '.join(argv[:3])}…")
+        return False
     except (OSError, subprocess.SubprocessError) as exc:
         logger.warn(f"comando falhou: {exc}")
         return False
@@ -76,17 +95,54 @@ def _run(argv: list[str], *, logger: Logger, cwd: Path) -> bool:
     return True
 
 
+def _probe(argv: list[str], *, timeout: float = PROBE_TIMEOUT_SEC) -> subprocess.CompletedProcess[str] | None:
+    """Corre uma sonda curta; ``None`` em erro/timeout (nunca levanta)."""
+    try:
+        return subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def _module_ok(venv_python: str, module: str, attr: str = "__version__") -> bool:
     code = f"import {module} as m; print(getattr(m, '{attr}', 'ok'))"
-    proc = subprocess.run([venv_python, "-c", code], capture_output=True, text=True)
-    return proc.returncode == 0
+    proc = _probe([venv_python, "-c", code])
+    return proc is not None and proc.returncode == 0
+
+
+def _torch_stack_ok(venv_python: str) -> bool:
+    """Torch instalado É o pin do upstream (versão + CUDA 12.4)?
+
+    Só ``import torch`` não chega para idempotência: um torch CPU/cu121 de
+    outra tool no mesmo venv passa o import mas o flash-attn cu12/torch2.5
+    falha no ``import`` em runtime. Nesse caso reinstalamos o wheel medido.
+    """
+    code = (
+        "import sys, torch;"
+        "v = torch.__version__.split('+')[0];"
+        "c = torch.version.cuda or '';"
+        f"sys.exit(0 if (v == '{TORCH_VERSION}' and c.startswith('12.4')) else 1)"
+    )
+    proc = _probe([venv_python, "-c", code])
+    return proc is not None and proc.returncode == 0
 
 
 def _nvidia_driver_ok() -> bool:
-    if shutil.which("nvidia-smi") is None:
+    # Usa o resolvedor do gpu.py (inclui System32/NVSMI no Windows; antes um
+    # nvidia-smi fora do PATH dava falso negativo).
+    from ..gpu import _nvidia_smi_path
+
+    smi = _nvidia_smi_path()
+    if not smi:
         return False
-    proc = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True)
-    return proc.returncode == 0 and bool((proc.stdout or "").strip())
+    proc = _probe([smi, "--query-gpu=name", "--format=csv,noheader"])
+    return proc is not None and proc.returncode == 0 and bool((proc.stdout or "").strip())
 
 
 def install_hi3d_stack(venv_python: str, project_root: Path, logger: Logger) -> bool:
@@ -101,8 +157,8 @@ def install_hi3d_stack(venv_python: str, project_root: Path, logger: Logger) -> 
 
     pip = _pip_prefix(venv_python)
 
-    if _module_ok(venv_python, "torch"):
-        logger.info("Hi3D: torch já instalado")
+    if _torch_stack_ok(venv_python):
+        logger.info("Hi3D: torch cu124 já instalado")
     else:
         if not _nvidia_driver_ok():
             logger.warn("Hi3D: nenhuma GPU NVIDIA visível — a instalar wheels CUDA mesmo assim (CPU não é suportado)")
@@ -146,7 +202,7 @@ def install_hi3d_stack(venv_python: str, project_root: Path, logger: Logger) -> 
         logger.warn("Hi3D: falha ao instalar sparc3d a partir do git")
         return False
 
-    missing = [m for m in ("torch", "flash_attn", "spconv", "sparc3d") if not _module_ok(venv_python, m)]
+    missing = [m for m in ("torch", "flash_attn", "spconv", "sparc3d", "diffusers") if not _module_ok(venv_python, m)]
     if missing:
         logger.warn("Hi3D: módulos em falta após instalação: " + ", ".join(missing))
         return False

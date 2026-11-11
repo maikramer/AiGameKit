@@ -12,7 +12,9 @@ from aigamekit_shared.cli_helpers import (
     env_bool,
     legacy_server_allowed,
     needed_mib_for_backend,
+    prepare_gpu_exclusive,
     try_vramd_delegation,
+    with_vramd_load_opts,
     with_vramd_peak_opts,
 )
 
@@ -364,6 +366,75 @@ class TestWithUmsPeakOpts:
     def test_terrain3d_passthrough(self) -> None:
         out = with_vramd_peak_opts({"size": 512}, backend="terrain3d")
         assert out["size"] == 512
+
+
+class TestPrepareGpuExclusive:
+    """prepare_gpu_exclusive: env de allow-shared e logs de kill."""
+
+    def _run(self, monkeypatch, *, allow_shared: bool, env_value: str | None) -> bool:
+        calls: dict = {}
+
+        def _enforce(**kwargs):
+            calls.update(kwargs)
+
+        if env_value is None:
+            monkeypatch.delenv("TOOL_ALLOW_SHARED", raising=False)
+        else:
+            monkeypatch.setenv("TOOL_ALLOW_SHARED", env_value)
+        with (
+            patch("aigamekit_shared.vramd_client.ensure_vram_available", return_value=True),
+            patch("aigamekit_shared.vramd_client.is_vramd_running", return_value=False),
+            patch("aigamekit_shared.gpu.kill_gpu_compute_processes_aggressive", return_value=[]),
+            patch("aigamekit_shared.gpu.clear_cuda_memory"),
+            patch("aigamekit_shared.gpu.enforce_exclusive_gpu", side_effect=_enforce),
+            patch("aigamekit_shared.gpu.warn_if_vram_occupied"),
+        ):
+            prepare_gpu_exclusive(
+                allow_shared=allow_shared,
+                allow_shared_env="TOOL_ALLOW_SHARED",
+                kill_others=False,
+            )
+        return bool(calls["allow_shared"])
+
+    def test_env_false_overrides_cli_true(self, monkeypatch) -> None:
+        assert self._run(monkeypatch, allow_shared=True, env_value="0") is False
+
+    def test_env_true_overrides_cli_false(self, monkeypatch) -> None:
+        assert self._run(monkeypatch, allow_shared=False, env_value="1") is True
+
+    def test_no_env_keeps_cli(self, monkeypatch) -> None:
+        assert self._run(monkeypatch, allow_shared=True, env_value=None) is True
+
+    def test_kill_log_line_keeps_recusado_prefix(self, monkeypatch) -> None:
+        """``[recusado]`` é prefixo de log, não markup: não pode desaparecer."""
+        import io
+
+        import click
+        from rich.console import Console
+
+        buf = io.StringIO()
+        console = Console(file=buf, force_terminal=False, width=200)
+        monkeypatch.setattr(
+            "aigamekit_shared.gpu.kill_gpu_compute_processes_aggressive",
+            lambda **_kw: ["[recusado] vramd tem jobs"],
+        )
+        with (
+            patch("aigamekit_shared.vramd_client.ensure_vram_available", return_value=True),
+            patch("aigamekit_shared.vramd_client.is_vramd_running", return_value=False),
+            pytest.raises(click.ClickException),
+        ):
+            prepare_gpu_exclusive(console=console, kill_others=True)
+        assert "[recusado]" in buf.getvalue()
+
+
+class TestWithVramdLoadOpts:
+    def test_invalid_gpu_ids_raises_with_context(self) -> None:
+        with pytest.raises(ValueError, match="gpu_ids inválido"):
+            with_vramd_load_opts({}, gpu_ids="0,x")
+
+    def test_parses_string_and_int_lists(self) -> None:
+        assert with_vramd_load_opts({}, gpu_ids="0, 2")["gpu_ids"] == [0, 2]
+        assert with_vramd_load_opts({}, gpu_ids=[1])["gpu_ids"] == [1]
 
 
 class TestLegacyServerAllowed:

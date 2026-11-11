@@ -10,6 +10,7 @@ import pytest
 from aigamekit_shared.logging import (
     Logger,
     configure_logging,
+    current_log_path,
     detect_tool_name,
     file_logging_enabled,
     reset_file_logging_for_tests,
@@ -112,6 +113,44 @@ class TestLoggerRich:
         if logger.rich_available:
             logger.info("teste rich")
 
+    def test_bracket_prefixes_not_eaten_by_markup(self):
+        """``[batch]``/``[vramd]`` são prefixos de log, não tags Rich."""
+        import io
+
+        from rich.console import Console
+
+        buf = io.StringIO()
+        logger = Logger(console=Console(file=buf, force_terminal=False, width=200), file_logging=False)
+        if not logger.rich_available:
+            pytest.skip("rich não instalado")
+        logger.info("[batch] manter")
+        logger.warn("[vramd] manter também")
+        logger.dim("[recusado] kill")
+        out = buf.getvalue()
+        assert "[batch] manter" in out
+        assert "[vramd] manter também" in out
+        assert "[recusado] kill" in out
+
+    def test_header_and_panel_escape_markup(self):
+        import io
+
+        from rich.console import Console
+
+        buf = io.StringIO()
+        logger = Logger(console=Console(file=buf, force_terminal=False, width=200), file_logging=False)
+        if not logger.rich_available:
+            pytest.skip("rich não instalado")
+        logger.header("Secção [teste]")
+        logger.panel("conteúdo [x]", title="Título [y]")
+        logger.table([("[k]", "[v]")], title="Tabela [z]")
+        out = buf.getvalue()
+        assert "[teste]" in out
+        assert "[x]" in out
+        assert "[y]" in out
+        assert "[k]" in out
+        assert "[v]" in out
+        assert "[z]" in out
+
 
 class TestFileLogging:
     def test_file_logging_enabled_with_env(self):
@@ -155,7 +194,63 @@ class TestFileLogging:
         monkeypatch.delenv("AIGAMEKIT_LOG_TOOL", raising=False)
         assert detect_tool_name() == "ums"
 
+    def test_unwritable_log_dir_does_not_raise(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """Log dir inválido/read-only não pode matar o CLI a cada mensagem."""
+        blocker = tmp_path / "blocker"
+        blocker.write_text("x", encoding="utf-8")
+        monkeypatch.setenv("AIGAMEKIT_FILE_LOG", "1")
+        monkeypatch.setenv("AIGAMEKIT_LOG_DIR", str(blocker / "sub"))
+        reset_file_logging_for_tests()
+        Logger(file_logging=True).info("sem crash", console=False)
+        assert current_log_path() is None
+
     def test_resolve_log_file_override(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         target = tmp_path / "custom.log"
         monkeypatch.setenv("AIGAMEKIT_LOG_FILE", str(target))
         assert resolve_log_path("ignored") == target
+
+
+class TestPipelineTrace:
+    """O trace é observabilidade: nunca pode matar o pipeline."""
+
+    def test_unwritable_path_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        from aigamekit_shared import pipeline_trace
+
+        blocker = tmp_path / "blocker"
+        blocker.write_text("x", encoding="utf-8")
+        monkeypatch.setenv("AIGAMEKIT_PIPELINE_TRACE", "1")
+        monkeypatch.delenv("AIGAMEKIT_PIPELINE_TRACE_ASSET", raising=False)
+        monkeypatch.setenv("AIGAMEKIT_PIPELINE_TRACE_LOG", str(blocker / "trace.jsonl"))
+        assert pipeline_trace.trace_event("stage", value=1) is None
+
+    def test_structural_fields_win_over_payload(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        import json
+
+        from aigamekit_shared import pipeline_trace
+
+        log = tmp_path / "trace.jsonl"
+        monkeypatch.setenv("AIGAMEKIT_PIPELINE_TRACE", "1")
+        monkeypatch.delenv("AIGAMEKIT_PIPELINE_TRACE_ASSET", raising=False)
+        monkeypatch.setenv("AIGAMEKIT_PIPELINE_TRACE_LOG", str(log))
+        assert pipeline_trace.trace_event("real", ts="spoof", value=1) == log
+        rec = json.loads(log.read_text(encoding="utf-8").splitlines()[0])
+        assert rec["event"] == "real"
+        assert rec["ts"] != "spoof"
+        assert rec["value"] == 1
+
+    def test_trace_exception_does_not_duplicate_fields(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        import json
+
+        from aigamekit_shared import pipeline_trace
+
+        log = tmp_path / "trace.jsonl"
+        monkeypatch.setenv("AIGAMEKIT_PIPELINE_TRACE", "1")
+        monkeypatch.delenv("AIGAMEKIT_PIPELINE_TRACE_ASSET", raising=False)
+        monkeypatch.setenv("AIGAMEKIT_PIPELINE_TRACE_LOG", str(log))
+        try:
+            raise ValueError("boom")
+        except ValueError as exc:
+            pipeline_trace.trace_exception("falha", exc, error="payload")
+        rec = json.loads(log.read_text(encoding="utf-8").splitlines()[0])
+        assert rec["error"] == "boom"
+        assert rec["error_type"] == "ValueError"

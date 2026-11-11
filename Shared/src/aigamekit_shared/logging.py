@@ -40,12 +40,24 @@ _configure_stdio_utf8()
 try:
     from rich import box
     from rich.console import Console
+    from rich.markup import escape as _rich_escape
     from rich.panel import Panel
     from rich.table import Table
 
     _RICH = True
 except ImportError:
     _RICH = False
+
+
+def _escape(text: str) -> str:
+    """Escapa markup Rich em texto vindo de processos/mensagens.
+
+    Nomes de processos e mensagens do monorepo usam prefixos como ``[vramd]``
+    ou ``[batch]``; sem escape o Rich interpreta-os como tags de estilo e
+    **remove-os** do output (perda de informação silenciosa). Sem Rich o texto
+    fica inalterado.
+    """
+    return _rich_escape(text) if _RICH else text
 
 
 # ---------------------------------------------------------------------------
@@ -171,8 +183,16 @@ def _ensure_file(tool: str | None = None, *, force: bool = False) -> tuple[Path 
         _close_file()
         _tool_name = wanted_tool
         _min_rank = _parse_min_level()
-        wanted_path.parent.mkdir(parents=True, exist_ok=True)
-        _file_fp = wanted_path.open("a", encoding="utf-8")
+        try:
+            wanted_path.parent.mkdir(parents=True, exist_ok=True)
+            _file_fp = wanted_path.open("a", encoding="utf-8")
+        except OSError:
+            # File logging é best-effort: um log dir read-only, cheio ou um
+            # path inválido não pode derrubar a tool (antes o OSError subia a
+            # cada mensagem e matava o CLI).
+            _file_fp = None
+            _file_path = None
+            return None, False
         _file_path = wanted_path
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
         with contextlib.suppress(OSError):
@@ -338,7 +358,7 @@ class Logger:
         if not console:
             return
         if self.rich_available:
-            self._console.print(f"[bold green]INFO[/bold green] {msg}")  # type: ignore[union-attr]
+            self._console.print(f"[bold green]INFO[/bold green] {_escape(msg)}")  # type: ignore[union-attr]
         else:
             print(f"\033[0;32m[INFO]\033[0m {msg}")
 
@@ -347,7 +367,7 @@ class Logger:
         if not console:
             return
         if self.rich_available:
-            self._console.print(f"[bold yellow]WARN[/bold yellow] {msg}")  # type: ignore[union-attr]
+            self._console.print(f"[bold yellow]WARN[/bold yellow] {_escape(msg)}")  # type: ignore[union-attr]
         else:
             print(f"\033[1;33m[WARN]\033[0m {msg}")
 
@@ -356,7 +376,7 @@ class Logger:
         if not console:
             return
         if self.rich_available:
-            self._console.print(f"[bold red]ERROR[/bold red] {msg}")  # type: ignore[union-attr]
+            self._console.print(f"[bold red]ERROR[/bold red] {_escape(msg)}")  # type: ignore[union-attr]
         else:
             print(f"\033[0;31m[ERROR]\033[0m {msg}")
 
@@ -365,7 +385,7 @@ class Logger:
         if not console:
             return
         if self.rich_available:
-            self._console.print(f"[bold blue]STEP[/bold blue] {msg}")  # type: ignore[union-attr]
+            self._console.print(f"[bold blue]STEP[/bold blue] {_escape(msg)}")  # type: ignore[union-attr]
         else:
             print(f"\033[0;34m[STEP]\033[0m {msg}")
 
@@ -375,7 +395,7 @@ class Logger:
         if not console:
             return
         if self.rich_available:
-            self._console.print(f"[dim]{msg}[/dim]")  # type: ignore[union-attr]
+            self._console.print(f"[dim]{_escape(msg)}[/dim]")  # type: ignore[union-attr]
         else:
             print(f"\033[2m{msg}\033[0m")
 
@@ -384,7 +404,7 @@ class Logger:
         if not console:
             return
         if self.rich_available:
-            self._console.print(f"[bold green]✓[/bold green] {msg}")  # type: ignore[union-attr]
+            self._console.print(f"[bold green]✓[/bold green] {_escape(msg)}")  # type: ignore[union-attr]
         else:
             print(f"\033[92m✓ {msg}\033[0m")
 
@@ -397,7 +417,7 @@ class Logger:
             self._console.print()  # type: ignore[union-attr]
             self._console.print(  # type: ignore[union-attr]
                 Panel(
-                    f"[bold cyan]{text}[/bold cyan]",
+                    f"[bold cyan]{_escape(text)}[/bold cyan]",
                     border_style="cyan",
                     expand=False,
                 )
@@ -414,7 +434,11 @@ class Logger:
             return
         if self.rich_available:
             self._console.print(  # type: ignore[union-attr]
-                Panel(content, title=title or None, border_style=border)
+                Panel(
+                    _escape(content),
+                    title=_escape(title) if title else None,
+                    border_style=border,
+                )
             )
         else:
             if title:
@@ -430,9 +454,9 @@ class Logger:
         if not console:
             return
         if self.rich_available:
-            t = Table(show_header=False, box=box.SIMPLE, title=title or None)
+            t = Table(show_header=False, box=box.SIMPLE, title=_escape(title) if title else None)
             for k, v in rows:
-                t.add_row(k, v)
+                t.add_row(_escape(str(k)), _escape(str(v)))
             self._console.print(Panel(t, border_style="cyan"))  # type: ignore[union-attr]
         else:
             if title:

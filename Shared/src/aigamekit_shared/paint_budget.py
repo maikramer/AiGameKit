@@ -45,7 +45,7 @@ PAINT_FACES_AT_6GB = 288_000
 PAINT_FACES_AT_8GB = 320_000
 # Cache da VRAM total (NVML, GPU 0; ``None`` = sem GPU/CI → cap de produto).
 _UNPROBED = object()
-_VRAM_TOTAL_MIB: int | None | object = _UNPROBED
+_VRAM_TOTAL_MIB: int | object | None = _UNPROBED
 # V/F típico em malha triangular welded (antes do UV split).
 PAINT_VERTS_PER_FACE = 0.55
 

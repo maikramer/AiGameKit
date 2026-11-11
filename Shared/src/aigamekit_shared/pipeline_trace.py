@@ -72,12 +72,15 @@ def trace_event(event: str, **fields: Any) -> Path | None:
             return None
 
     rec: dict[str, Any] = {
+        # Campos do caller primeiro; os campos estruturais abaixo ganham
+        # sempre (um ``event=``/``ts=`` vindo dos fields não pode corromper o
+        # formato nem duplicar chaves).
+        **fields,
         "ts": datetime.now(timezone.utc).isoformat(),
         "mono_s": round(time.monotonic(), 3),
         "pid": os.getpid(),
         "session": session_id(),
         "event": event,
-        **fields,
     }
 
     # Sanitize non-JSON values lightly
@@ -94,22 +97,30 @@ def trace_event(event: str, **fields: Any) -> Path | None:
 
     rec = {k: _safe(v) for k, v in rec.items()}
     path = default_log_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    line = json.dumps(rec, ensure_ascii=False) + "\n"
-    with _lock, path.open("a", encoding="utf-8") as fh:
-        fh.write(line)
+    # Trace é observabilidade, nunca o caminho crítico: disco cheio, log dir
+    # read-only ou path inválido não podem rebentar o pipeline (antes o
+    # ``mkdir``/open propagavam FileExistsError/OSError e matavam a geração).
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(rec, ensure_ascii=False) + "\n"
+        with _lock, path.open("a", encoding="utf-8") as fh:
+            fh.write(line)
+    except Exception:
+        # Trace é best-effort por definição (inclui RecursionError de um field
+        # circular): nunca pode propagar para o pipeline.
+        return None
     return path
 
 
 def trace_exception(event: str, exc: BaseException, **fields: Any) -> Path | None:
     """Regista excepção com traceback completo."""
-    return trace_event(
-        event,
-        error=str(exc),
-        error_type=type(exc).__name__,
-        traceback="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+    data = {
         **fields,
-    )
+        "error": str(exc),
+        "error_type": type(exc).__name__,
+        "traceback": "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+    }
+    return trace_event(event, **data)
 
 
 def trace_stage(

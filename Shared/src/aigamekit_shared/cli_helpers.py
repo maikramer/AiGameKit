@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from rich.console import Console
+from rich.markup import escape as _escape_markup
 
 from .logging import Logger
 from .vramd_client import delegate_to_vramd, send_request_stream
@@ -234,7 +235,9 @@ def prepare_gpu_exclusive(
         )
 
     kill = env_bool(kill_others_env, kill_others) if kill_others_env else kill_others
-    allow = allow_shared or (env_bool(allow_shared_env, False) if allow_shared_env else False)
+    # A env é override nos dois sentidos (como o kill): ``=0`` tem de conseguir
+    # desligar o ``--allow-shared-gpu``; antes só ligava, nunca desligava.
+    allow = env_bool(allow_shared_env, allow_shared) if allow_shared_env else allow_shared
 
     if kill:
         snap = fetch_vramd_queue_snapshot() if is_vramd_running() else None
@@ -265,7 +268,8 @@ def prepare_gpu_exclusive(
             )
         for line in kill_gpu_compute_processes_aggressive(exclude_pid=os.getpid()):
             if console is not None:
-                console.print(f"[dim]{line}[/dim]")
+                # ``[recusado]``/``[alvo]`` são prefixos de log, não markup Rich.
+                console.print(f"[dim]{_escape_markup(line)}[/dim]")
             if line.startswith("[recusado]"):
                 raise click.ClickException(line)
         clear_cuda_memory()
@@ -380,12 +384,12 @@ def _print_vramd_success(
     console.print(f"[bold green]\u2713[/bold green] {noun} (via vramd): [cyan]{out}[/cyan] [dim]({sz})[/dim]")
     if result.get("seed") is not None:
         console.print(f"[dim]Seed: {result.get('seed', '?')}[/dim]")
-    console.print(f"[dim]vramd: {format_vramd_debug_line(result)}[/dim]")
+    console.print(f"[dim]vramd: {_escape_markup(format_vramd_debug_line(result))}[/dim]")
     console.print(f"[dim]Tempo total (cliente): {elapsed:.1f}s[/dim]")
     if _vramd_debug_enabled() and result.get("ums_debug"):
         import json
 
-        console.print(f"[dim]ums_debug: {json.dumps(result['ums_debug'], ensure_ascii=False)}[/dim]")
+        console.print(f"[dim]ums_debug: {_escape_markup(json.dumps(result['ums_debug'], ensure_ascii=False))}[/dim]")
 
 
 def _local_forced(remote: bool | None) -> bool:
@@ -438,7 +442,7 @@ def _vramd_generate_stream(
                 pct = event.get("pct")
                 msg = event.get("message") or ""
                 pct_s = f"{pct:.0%}" if isinstance(pct, (int, float)) else "?"
-                console.print(f"[dim]vramd progresso: {pct_s} {msg}[/dim]")
+                console.print(f"[dim]vramd progresso: {pct_s} {_escape_markup(str(msg))}[/dim]")
             continue
         final = event
     return final
@@ -458,7 +462,12 @@ def with_vramd_load_opts(
     out = dict(payload)
     if gpu_ids is not None:
         if isinstance(gpu_ids, str):
-            parsed = [int(x.strip()) for x in gpu_ids.split(",") if x.strip()]
+            try:
+                parsed = [int(x.strip()) for x in gpu_ids.split(",") if x.strip()]
+            except ValueError as exc:
+                raise ValueError(
+                    f"gpu_ids inválido ({gpu_ids!r}): usa inteiros separados por vírgulas, ex. '0,1'"
+                ) from exc
         else:
             parsed = [int(x) for x in gpu_ids]
         if parsed:
@@ -694,11 +703,12 @@ def try_vramd_delegation(
         code = str(result.get("error_code", "?") or "?")
         hint = result.get("hint")
         err = result.get("error", "?")
-        console.print(f"[dim]vramd: {format_vramd_debug_line(result)}[/dim]")
+        console.print(f"[dim]vramd: {_escape_markup(format_vramd_debug_line(result))}[/dim]")
         if _vramd_debug_enabled() and result.get("ums_debug"):
             import json
 
-            console.print(f"[dim]ums_debug: {json.dumps(result['ums_debug'], ensure_ascii=False)}[/dim]")
+            debug_json = _escape_markup(json.dumps(result["ums_debug"], ensure_ascii=False))
+            console.print(f"[dim]ums_debug: {debug_json}[/dim]")
         # Em modo remoto QUALQUER erro é fatal: o fallback in-process correria
         # na GPU local (ou numa máquina sem GPU), longe do sítio pedido.
         if remote_enabled() and not force_local:
