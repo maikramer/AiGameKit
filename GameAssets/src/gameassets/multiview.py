@@ -436,7 +436,10 @@ def ensure_multiview_images(
             payload_jobs,
             manifest_dir / ".gameassets_work" / "text2d_views_manifest.json",
         )
-        argv = [text2d_bin, "generate-batch", str(manifest_path), "--force"]
+        # --no-compile: o generate-batch in-process compila o transformer e o
+        # pipeline modular rebenta em `len(OptimizedModule)`; o caminho vramd
+        # já corre sem compile.
+        argv = [text2d_bin, "generate-batch", str(manifest_path), "--force", "--no-compile"]
         _append_text2d_profile_args(profile, argv)
         # Os valores resolvidos ganham do perfil (o fallback tem de espelhar a
         # wave: um override 512/fast não pode cair para 768/medium).

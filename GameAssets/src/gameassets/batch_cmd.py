@@ -1319,7 +1319,12 @@ def batch_cmd(
                                 **_t2d_kw,
                             )
                             if ums_t2d is None:
-                                batch_args_d = [text2d_bin, "generate-batch", str(t2d_manifest_path)]
+                                batch_args_d = [
+                                    text2d_bin,
+                                    "generate-batch",
+                                    str(t2d_manifest_path),
+                                    "--no-compile",
+                                ]
                                 if force:
                                     batch_args_d.append("--force")
                                 _append_text2d_profile_args(profile, batch_args_d)
@@ -2840,7 +2845,12 @@ def batch_cmd(
                                     _t2d_kw_p["guidance"] = _t2p.guidance_scale
                             ums_t2d_p = run_text2d_wave_or_fallback(t2d_items, **_t2d_kw_p)
                             if ums_t2d_p is None:
-                                batch_args = [text2d_bin, "generate-batch", str(t2d_manifest_path)]
+                                batch_args = [
+                                    text2d_bin,
+                                    "generate-batch",
+                                    str(t2d_manifest_path),
+                                    "--no-compile",
+                                ]
                                 if force:
                                     batch_args.append("--force")
                                 _append_text2d_profile_args(profile, batch_args)

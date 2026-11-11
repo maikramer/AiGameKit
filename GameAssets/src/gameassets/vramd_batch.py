@@ -662,6 +662,10 @@ def text2d_specs_from_items(
             gpu_ids=gpu_ids,
             memory_efficient=mem,
             quant_preset=quant,
+            # O footprint/calibração do vramd só casa quando o load_kwargs
+            # inclui o group offload do perfil de 6 GB (estava a cair no
+            # fallback genérico 2430 MiB e o worker text2d OOMava).
+            allow_group_offload=mem,
             footprint_key=footprint,
             category=category,
             transparent=True if transparent else None,
