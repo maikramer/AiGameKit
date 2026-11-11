@@ -84,8 +84,7 @@ _VIEW_HINTS: dict[str, str] = {
         "the front is at the left edge of the frame"
     ),
     "top": (
-        "seen from directly above, strict top-down plan view; roof and top surfaces fully "
-        "visible, sides foreshortened"
+        "seen from directly above, strict top-down plan view; roof and top surfaces fully visible, sides foreshortened"
     ),
     "bottom": (
         "seen from directly below, strict bottom-up view; underside and base surfaces fully "

@@ -926,10 +926,14 @@ def drop_internal_shell_components(
         wall_gap,
         diag,
     )
-    return out_v, out_t, {
-        "internal_shell_components": removed_components,
-        "internal_shell_faces": removed_faces,
-    }
+    return (
+        out_v,
+        out_t,
+        {
+            "internal_shell_components": removed_components,
+            "internal_shell_faces": removed_faces,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

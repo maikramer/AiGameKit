@@ -312,15 +312,11 @@ class TestAposePreset:
 
         base_names = list(json.loads(omni_data_path("omni_apose_nofingers_bone.json").read_text(encoding="utf-8")))
         base = np.loadtxt(omni_data_path("omni_apose_nofingers_bone.txt"))
-        sp_names = list(
-            json.loads(omni_data_path("omni_apose_nofingers_spread_bone.json").read_text(encoding="utf-8"))
-        )
+        sp_names = list(json.loads(omni_data_path("omni_apose_nofingers_spread_bone.json").read_text(encoding="utf-8")))
         spread = np.loadtxt(omni_data_path("omni_apose_nofingers_spread_bone.txt"))
 
         def ankle_gap(names: list[str], txt: np.ndarray) -> float:
-            return abs(
-                float(txt[names.index("Ankle.L"), 3]) - float(txt[names.index("Ankle.R"), 3])
-            )
+            return abs(float(txt[names.index("Ankle.L"), 3]) - float(txt[names.index("Ankle.R"), 3]))
 
         def bone_angle(names: list[str], txt: np.ndarray, a: str, b: str) -> float:
             va = txt[names.index(a), 3:] - txt[names.index(a), :3]
@@ -335,9 +331,7 @@ class TestAposePreset:
             )
         # Braços intactos (mesmos valores do nofingers).
         for name in ("Arm.R", "Elbow.R", "Wrist.R", "Arm.L", "Elbow.L", "Wrist.L"):
-            assert np.allclose(
-                spread[sp_names.index(name)], base[base_names.index(name)], atol=1e-12
-            )
+            assert np.allclose(spread[sp_names.index(name)], base[base_names.index(name)], atol=1e-12)
 
     def test_upstream_full_skeleton_still_selectable(self) -> None:
         """O oficial completo (51, com dedos) fica só para bench/comparação."""

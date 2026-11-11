@@ -42,9 +42,7 @@ def parse_views(raw: Any, *, where: str = "views") -> tuple[str, ...] | None:
         raise ValueError(f"{where} não pode ser vazio")
     unknown = [n for n in names if n not in VIEW_SET]
     if unknown:
-        raise ValueError(
-            f"{where}: vistas desconhecidas {unknown} (válidas: {', '.join(VIEW_ORDER)})"
-        )
+        raise ValueError(f"{where}: vistas desconhecidas {unknown} (válidas: {', '.join(VIEW_ORDER)})")
     seen: set[str] = set()
     for name in names:
         if name in seen:

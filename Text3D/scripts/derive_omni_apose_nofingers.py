@@ -145,10 +145,7 @@ def main() -> int:
     gap_after = _ankle_gap(spread)
     print(f"{SRC_TXT.name}: {len(names)} ossos → {len(kept)} (removidos {removed} de dedos)")
     if gap_before is not None and gap_after is not None:
-        print(
-            f"pernas: tornozelos {gap_before:.3f} → {gap_after:.3f} "
-            f"(±{APOSE_LEG_SPREAD_DEG:g}°)"
-        )
+        print(f"pernas: tornozelos {gap_before:.3f} → {gap_after:.3f} (±{APOSE_LEG_SPREAD_DEG:g}°)")
     print(f"escritos: {OUT_JSON.name}, {OUT_TXT.name}")
     print(f"escritos: {OUT_SPREAD_JSON.name}, {OUT_SPREAD_TXT.name}")
     return 0
