@@ -28,6 +28,12 @@ class TestIsGroupOffloadEnabled:
         with patch.dict("os.environ", {"AIGAMEKIT_GROUP_OFFLOAD": "1"}):
             assert is_group_offload_enabled() is True
 
+    def test_global_false_variants(self) -> None:
+        """``AIGAMEKIT_GROUP_OFFLOAD=false/no/off`` desliga como na env da tool."""
+        for false_val in ("0", "false", "no", "off", "FALSE"):
+            with patch.dict("os.environ", {"AIGAMEKIT_GROUP_OFFLOAD": false_val}):
+                assert is_group_offload_enabled() is False
+
     def test_tool_env_overrides_global(self) -> None:
         """Env var da tool tem precedência sobre o global."""
         with patch.dict("os.environ", {"AIGAMEKIT_GROUP_OFFLOAD": "1", "TEXTURE2D_GROUP_OFFLOAD": "0"}):
@@ -137,6 +143,35 @@ class TestTryGroupOffloading:
             result = try_group_offloading(pipe, log=False)
 
         assert result is False
+
+    def test_partial_failure_keeps_applied_modules(self) -> None:
+        """Falha num text encoder não devolve False com o transformer já offloaded.
+
+        O caller usaria o retorno para tentar model_cpu/sequential por cima de
+        hooks de group offload (o diffusers recusa); o contrato é True se pelo
+        menos um módulo foi aplicado.
+        """
+        transformer = MagicMock()
+        text_encoder = MagicMock()
+        text_encoder.enable_group_offload = MagicMock(side_effect=RuntimeError("incompatível"))
+        pipe = MagicMock()
+        pipe.transformer = transformer
+        pipe.text_encoder = text_encoder
+        pipe.text_encoder_2 = None
+        pipe.vae = None
+
+        try:
+            import diffusers.hooks as real_hooks
+        except ImportError:
+            import pytest
+
+            pytest.skip("diffusers não instalado")
+
+        with patch.object(real_hooks, "apply_group_offloading"):
+            result = try_group_offloading(pipe, log=False)
+
+        assert result is True
+        transformer.enable_group_offload.assert_called_once()
 
 
 class TestPlanGroupOffload:
@@ -259,6 +294,46 @@ class TestTryGroupOffloadingWithConfig:
         assert result is True
         custom_mod.enable_group_offload.assert_called_once()
 
+    def test_block_level_defaults_num_blocks_per_group(self) -> None:
+        """``block_level`` sem num_blocks rebentava no diffusers; default 1."""
+        transformer = MagicMock()
+        pipe = MagicMock()
+        pipe.transformer = transformer
+        pipe.vae = None
+        pipe.text_encoder = None
+        pipe.text_encoder_2 = None
+
+        try:
+            import diffusers.hooks as real_hooks
+        except ImportError:
+            import pytest
+
+            pytest.skip("diffusers não instalado")
+
+        with patch.object(real_hooks, "apply_group_offloading"):
+            assert try_group_offloading(pipe, offload_type="block_level", log=False) is True
+        assert transformer.enable_group_offload.call_args[1]["num_blocks_per_group"] == 1
+
+    def test_record_stream_requires_stream(self) -> None:
+        """``record_stream=True`` sem stream é ValueError no diffusers."""
+        transformer = MagicMock()
+        pipe = MagicMock()
+        pipe.transformer = transformer
+        pipe.vae = None
+        pipe.text_encoder = None
+        pipe.text_encoder_2 = None
+
+        try:
+            import diffusers.hooks as real_hooks
+        except ImportError:
+            import pytest
+
+            pytest.skip("diffusers não instalado")
+
+        with patch.object(real_hooks, "apply_group_offloading"):
+            assert try_group_offloading(pipe, use_stream=False, record_stream=True, log=False) is True
+        assert transformer.enable_group_offload.call_args[1]["record_stream"] is False
+
 
 class TestAllocConfByMode:
     """Alloc conf comum: sem max_split_size_mb quando GO vai correr."""
@@ -354,14 +429,59 @@ class TestGoPlannerKwargsBase:
         g = _G(device="cpu")
         assert g._go_planner_kwargs(full_gpu_budget_fraction=0.7) == {
             "allow_group_offload": True,
+            "group_offload_streams": True,
             "full_gpu_budget_fraction": 0.7,
         }
         monkeypatch.setenv("TESTTOOL_GROUP_OFFLOAD", "0")
         assert g._go_planner_kwargs(full_gpu_budget_fraction=0.7) == {
             "allow_group_offload": False,
+            "group_offload_streams": None,
             "full_gpu_budget_fraction": None,
         }
         assert g.group_offload is True  # default ON na base
+
+    def test_kwargs_honours_no_streams_class_flag(self, monkeypatch) -> None:
+        """Subclasses com ramos condicionais (FLUX.3 CFG) desligam streams."""
+        from aigamekit_shared.base_generator import DiffusionGeneratorBase
+
+        class _G(DiffusionGeneratorBase):
+            GROUP_OFFLOAD_STREAMS = False
+
+            def _load_pipeline(self):
+                return None
+
+            def generate(self, prompt, **kw):
+                return None
+
+        monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+        g = _G(device="cpu")
+        assert g._go_planner_kwargs()["group_offload_streams"] is False
+
+    def test_try_group_offload_honours_streams_flag(self, monkeypatch) -> None:
+        """Sem config da fórmula, ``_try_group_offload`` não pode forçar streams."""
+        from unittest.mock import patch
+
+        from aigamekit_shared.base_generator import DiffusionGeneratorBase
+
+        class _G(DiffusionGeneratorBase):
+            GROUP_OFFLOAD_STREAMS = False
+
+            def _load_pipeline(self):
+                return None
+
+            def generate(self, prompt, **kw):
+                return None
+
+        monkeypatch.delenv("AIGAMEKIT_GROUP_OFFLOAD", raising=False)
+        g = _G(device="cpu")
+        g.device = "cuda"  # simular colocação CUDA sem GPU real
+        seen: dict = {}
+        with patch(
+            "aigamekit_shared.group_offload.try_group_offloading",
+            side_effect=lambda pipe, **kw: seen.update(kw) or True,
+        ):
+            assert g._try_group_offload(object()) is True
+        assert seen["use_stream"] is False
 
 
 class TestToolOffloadPolicy:
@@ -385,6 +505,47 @@ class TestToolOffloadPolicy:
         )
         assert p.will_engage(gpu_specs=[(0, 5815 * 2**20, 6141 * 2**20)]) is True  # fp16 8 > 5.7
         assert p.will_engage(gpu_specs=[(0, 12 * GIB, 12 * GIB)]) is False  # fp16 cabe
+
+    def test_classic_gate_accepts_2tuple_specs(self) -> None:
+        """``gpu_specs`` 2-tuple (idx,total) não pode rebentar o gate clássico."""
+        from aigamekit_shared.group_offload import ToolOffloadPolicy
+        from aigamekit_shared.lowvram import GIB
+
+        p = ToolOffloadPolicy(footprint_key="hunyuan-paint", full_gpu_budget_fraction=None)
+        assert p.will_engage(gpu_specs=[(0, 6 * GIB)]) is True
+        assert p.will_engage(gpu_specs=[(0, 24 * GIB)]) is False
+
+    def test_dynamic_footprint_receives_specs(self) -> None:
+        """footprint_fn precisa das specs reais (4B/9B escolhido pela VRAM)."""
+        from aigamekit_shared.group_offload import ToolOffloadPolicy
+        from aigamekit_shared.lowvram import GIB, ModelFootprint
+
+        seen: list[object] = []
+
+        def _footprint(specs):
+            seen.append(specs)
+            return ModelFootprint(fp16_weights_gib=60.0, activation_gib=1.5)
+
+        p = ToolOffloadPolicy(footprint_fn=_footprint, full_gpu_budget_fraction=0.70)
+        specs = [(0, 24 * GIB, 24 * GIB)]
+        # Modelo de 60 GiB não cabe nem com int4 na folga de 24 GiB → GO.
+        assert p.will_engage(gpu_specs=specs) is True
+        assert seen == [specs]
+
+    def test_dynamic_footprint_receives_specs_in_plan_mode(self) -> None:
+        from aigamekit_shared.group_offload import ToolOffloadPolicy
+        from aigamekit_shared.lowvram import GIB, ModelFootprint
+
+        seen: list[object] = []
+
+        def _footprint(specs):
+            seen.append(specs)
+            return ModelFootprint(fp16_weights_gib=30.0, activation_gib=1.5)
+
+        p = ToolOffloadPolicy(footprint_fn=_footprint, allow_quant=("none",))
+        gpus = [(0, 6 * GIB)]
+        assert p.plan_offload_mode(gpus) == "group_stream"
+        assert seen == [gpus]
 
     def test_kill_switch_disables_everything(self, monkeypatch) -> None:
         from aigamekit_shared.group_offload import ToolOffloadPolicy
@@ -431,3 +592,12 @@ class TestToolOffloadPolicy:
         kw = {"allow_group_offload": False, "x": 1}
         assert pop_allow_group_offload(kw) is False and "allow_group_offload" not in kw
         assert pop_allow_group_offload({"x": 1}) is True  # default ON no request
+
+    def test_pop_allow_group_offload_parses_strings(self) -> None:
+        """Requests JSON/CLI podem mandar ``"false"`` — não pode virar True."""
+        from aigamekit_shared.group_offload import pop_allow_group_offload
+
+        assert pop_allow_group_offload({"allow_group_offload": "false"}) is False
+        assert pop_allow_group_offload({"allow_group_offload": "0"}) is False
+        assert pop_allow_group_offload({"allow_group_offload": "true"}) is True
+        assert pop_allow_group_offload({"allow_group_offload": "1"}) is True

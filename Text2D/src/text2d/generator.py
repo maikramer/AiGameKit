@@ -66,6 +66,26 @@ FULL_GPU_BUDGET_FRACTION = 0.70
 GROUP_OFFLOAD_ENV = "TEXT2D_GROUP_OFFLOAD"
 
 
+def _flatten_reference(image: Image.Image) -> Image.Image:
+    """Referência em RGB com o alfa composto sobre branco.
+
+    ``convert("RGB")`` num PNG transparente (o `--transparent` do text2d)
+    mantém os valores RGB por baixo do alfa — normalmente (0,0,0) — e o modelo
+    image_conditioned recebia uma referência preta. O Paint3D já compõe sobre
+    branco; aqui é o mesmo contrato.
+    """
+    mode = getattr(image, "mode", "RGB")
+    has_alpha = mode in ("RGBA", "LA", "PA", "RGBa", "La") or (
+        mode == "P" and "transparency" in getattr(image, "info", {})
+    )
+    if not has_alpha:
+        return image.convert("RGB")
+    rgba = image.convert("RGBA")
+    background = Image.new("RGB", rgba.size, (255, 255, 255))
+    background.paste(rgba, mask=rgba.getchannel("A"))
+    return background
+
+
 def model_footprint(model_id: str) -> Any:
     """Pegada fp16 (GiB) do modelo BASE — consulta o registry centralizado.
 
@@ -109,6 +129,14 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
     """
 
     GROUP_OFFLOAD_ENV = "TEXT2D_GROUP_OFFLOAD"
+
+    # FLUX.3 Klein tem CFG (dois ramos no transformer). O lazy-prefetch do
+    # group offload com streams traça o modelo, encontra as camadas do ramo
+    # não executado e rebenta com device mismatch ("some layers were not
+    # executed during the forward pass... unexecuted_layers=[...]"); o worker
+    # morre a meio do generate e leva o vramd. GO sem streams usa o
+    # GroupOffloadingHook por grupo — mesmo pico, sem tracing.
+    GROUP_OFFLOAD_STREAMS = False
 
     def __init__(
         self,
@@ -197,7 +225,15 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
 
         if preset:
             self._status(f"Passo 3/5 — quantização SDNQ {preset} em runtime (layer-by-layer)")
-            self._runtime_quantize(pipe, preset)
+            # Se o transformer não quantizou (SDNQ sem suporte para uma camada,
+            # OOM ao mover para o device de quant...), o plano tem de ser
+            # refeito a bf16: planear com o footprint quantizado levava a
+            # full-GPU/offload sub-dimensionado e OOM no forward.
+            if not self._runtime_quantize(pipe, preset):
+                self._log(f"SDNQ {preset} não aplicou ao transformer — a planear em bf16")
+                preset = None
+                self.quant_preset = None
+                qlabel = "bf16 (sem quant)"
 
         self._status("Passo 4/5 — SDNQ (matmul quantizado desligado no FLUX.3)")
         # FLUX.3 calcula o embedding de timestep em float32 e o kernel int8 do
@@ -288,13 +324,20 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             return None
         return preset
 
-    def _runtime_quantize(self, pipe: Any, preset: str) -> None:
+    def _runtime_quantize(self, pipe: Any, preset: str) -> bool:
         """Quantiza os componentes pesados do pipeline em runtime (SDNQ post-load).
 
         Componentes FLUX.3 Klein: ``transformer`` (5.6B), ``text_encoder``
         (Qwen3-VL 4B) e, quando ``upsample=True``, ``prompt_upsampler``
         (Qwen3.5 9B — sem quant não passa de GPUs pequenas). O VAE fica em
         fp32 (qualidade do decode).
+
+        Returns:
+            ``True`` quando o ``transformer`` (o componente que domina o
+            footprint) ficou quantizado. Uma falha deixa esse componente em
+            bf16 e o plano de colocação tem de voltar a ``quant_mode="none"``
+            — senão o planner dimensiona para ~11 GiB quantizados e o pipeline
+            real ocupa ~2x isso (OOM no forward/VAE).
         """
         from aigamekit_shared.sdnq import quantize_model
 
@@ -302,6 +345,7 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
         attrs = ["transformer", "text_encoder"]
         if self.upsample:
             attrs.append("prompt_upsampler")
+        transformer_quantized = False
         for attr in attrs:
             mod = getattr(pipe, attr, None)
             if mod is None:
@@ -325,25 +369,43 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
                     ),
                 )
                 self._log(f"SDNQ {preset} aplicado a {attr}")
+                if attr == "transformer":
+                    transformer_quantized = True
             except Exception as exc:
                 self._log(f"quantização de {attr} falhou ({exc}); componente fica em bf16")
         self._clear_cache()
+        return transformer_quantized
 
-    def _resolve_ref_images(self, refs: list[Any] | None) -> list[Any] | None:
-        """Normaliza referências para PIL (aceita paths/str/PIL). Valida limite."""
+    def _resolve_ref_images(self, refs: Any) -> list[Any] | None:
+        """Normaliza referências para PIL (aceita path, lista de paths ou PIL).
+
+        Valida o limite **antes** de abrir ficheiros e fecha os handles: o
+        ``Image.open(...).convert()`` deixa o fd aberto até ao GC e uma lista
+        longa (ou um worker de vida longa) esgotava descritores. Um ``refs``
+        string era iterado caractere a caractere (``FileNotFoundError``
+        absurdo); aceita-se como um path único.
+        """
         if not refs:
             return None
+        if isinstance(refs, (str, Path, Image.Image)):
+            refs = [refs]
+        try:
+            total = len(refs)
+        except TypeError as exc:
+            raise ValueError(f"refs inválido: {type(refs).__name__}") from exc
+        if total > MAX_REFS:
+            raise ValueError(f"Máximo de {MAX_REFS} imagens de referência (recebidas {total})")
         images: list[Any] = []
         for ref in refs:
             if isinstance(ref, Image.Image):
-                images.append(ref)
+                images.append(_flatten_reference(ref))
                 continue
             path = Path(ref)
             if not path.is_file():
                 raise FileNotFoundError(f"Imagem de referência não encontrada: {path}")
-            images.append(Image.open(path).convert("RGB"))
-        if len(images) > MAX_REFS:
-            raise ValueError(f"Máximo de {MAX_REFS} imagens de referência (recebidas {len(images)})")
+            # ``with`` fecha o fd; ``_flatten_reference`` já carregou os pixels.
+            with Image.open(path) as opened:
+                images.append(_flatten_reference(opened))
         return images
 
     def generate(

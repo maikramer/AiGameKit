@@ -258,6 +258,7 @@ def plan_offload(
     allow_group_offload: bool = True,
     force_group_offload: bool = False,
     prefer_leaf_offload: bool = False,
+    group_offload_streams: bool | None = None,
     target_resolution: int | None = None,
     usable_fraction: float = USABLE_VRAM_FRACTION,
     full_gpu_budget_fraction: float | None = None,
@@ -315,7 +316,12 @@ def plan_offload(
     if not ladder:
         ladder = ("none",)
     # Full-GPU (e split multi-GPU) nunca usam os bits finos — ver _OFFLOAD_ONLY_QUANT.
-    full_ladder = tuple(q for q in ladder if q not in _OFFLOAD_ONLY_QUANT) or ("none",)
+    # Exceção: se a tool SÓ permite bits finos (allow_quant=("sdnq-int2",)), não há
+    # degrau "none/int4" legítimo; usar "none" inventava um full-GPU fp16 que a tool
+    # não suporta. Nesse caso o degrau mais poupador da ladder é o único válido.
+    full_ladder = tuple(q for q in ladder if q not in _OFFLOAD_ONLY_QUANT)
+    if not full_ladder:
+        full_ladder = (ladder[-1],)
     # Gate de folga sem GO disponível é contraditório (a única alternativa seria
     # model_cpu, mais lento e com pior pico que full-GPU): ignoramos o fraction.
     if full_gpu_budget_fraction is not None and not allow_group_offload:
@@ -410,6 +416,7 @@ def plan_offload(
             off_quant,
             prefer_leaf=prefer_leaf_offload,
             force=force_go,
+            use_stream=group_offload_streams,
         )
         if allow_group_offload
         else None
@@ -418,6 +425,9 @@ def plan_offload(
         # group offload: pico ≈ ativação (só as layers necessárias onloaded).
         leaf_note = group_cfg.offload_type
         force_note = " (force, VRAM→ativação)" if force_go else ""
+        # Não anunciar streams quando a config os desligou (FLUX.3 com CFG):
+        # a nota alimenta logs/perfis e não pode mentir sobre o modo real.
+        stream_note = "+streams" if group_cfg.use_stream else "sem streams"
         return OffloadPlan(
             device="cuda",
             quant_mode=off_quant,
@@ -429,7 +439,7 @@ def plan_offload(
             primary_gpu=primary,
             usable_vram_gib=round(primary_budget, 2),
             est_peak_gib=round(act, 2),
-            notes=(f"group {leaf_note}+streams + {off_quant} + vae-tiling/attn-slice{force_note}",),
+            notes=(f"group {leaf_note}+{stream_note} + {off_quant} + vae-tiling/attn-slice{force_note}",),
             group_config=group_cfg,
         )
 
@@ -653,6 +663,7 @@ def place_pipeline(
     allow_group_offload: bool = True,
     force_group_offload: bool = False,
     prefer_leaf_offload: bool = False,
+    group_offload_streams: bool | None = None,
     target_resolution: int | None = None,
     full_gpu_budget_fraction: float | None = None,
     model_attr: str | None = None,
@@ -708,6 +719,7 @@ def place_pipeline(
         allow_group_offload=allow_group_offload,
         force_group_offload=force_group_offload,
         prefer_leaf_offload=prefer_leaf_offload,
+        group_offload_streams=group_offload_streams,
         target_resolution=target_resolution,
         full_gpu_budget_fraction=full_gpu_budget_fraction,
     )
@@ -728,6 +740,7 @@ def place_pipeline(
             allow_group_offload=allow_group_offload,
             force_group_offload=force_group_offload,
             prefer_leaf_offload=prefer_leaf_offload,
+            group_offload_streams=group_offload_streams,
             target_resolution=target_resolution,
             full_gpu_budget_fraction=full_gpu_budget_fraction,
         )

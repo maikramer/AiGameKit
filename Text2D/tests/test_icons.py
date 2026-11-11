@@ -277,7 +277,7 @@ class TestAdapterTransparent:
             {"prompt": "sword icon", "output": str(out), "category": "icon", "transparent": True},
         )
         assert resp["status"] == "error"
-        assert resp["error"] == "--transparent requer saída .png"
+        assert resp["error"] == "--transparent requer saída .png ou .webp"
         assert not out.exists()
 
     def test_transparent_jpeg_extension_also_rejected(self, tmp_path: Path) -> None:
@@ -286,7 +286,7 @@ class TestAdapterTransparent:
         out = tmp_path / "icon.jpeg"
         resp = Adapter().generate(_fake_model(), {"prompt": "sword icon", "output": str(out), "transparent": True})
         assert resp["status"] == "error"
-        assert resp["error"] == "--transparent requer saída .png"
+        assert resp["error"] == "--transparent requer saída .png ou .webp"
 
     def test_no_transparent_saves_jpg_normally(self, tmp_path: Path) -> None:
         from text2d.worker_serve_adapter import Adapter
@@ -353,7 +353,7 @@ class TestCliCategoryTransparent:
             ["generate", "espada", "--category", "icon", "--transparent", "-o", str(tmp_path / "icon.jpg")],
         )
         assert result.exit_code != 0
-        assert "--transparent requer saída .png" in result.output
+        assert "--transparent requer saída .png ou .webp" in result.output
         # Falha ANTES de qualquer trabalho de GPU/delegação.
         delegate.assert_not_called()
         gen_mock.assert_not_called()
@@ -364,7 +364,7 @@ class TestCliCategoryTransparent:
         runner = CliRunner()
         result = runner.invoke(cli, ["generate", "espada", "--transparent", "-o", str(tmp_path / "icon.jpeg")])
         assert result.exit_code != 0
-        assert "--transparent requer saída .png" in result.output
+        assert "--transparent requer saída .png ou .webp" in result.output
 
     def test_transparent_png_passes_validation(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         result, captured = self._invoke_delegate_capture(
@@ -374,6 +374,16 @@ class TestCliCategoryTransparent:
         assert result.exit_code == 0, result.output
         assert captured["payload"]["transparent"] is True
         assert captured["payload"]["category"] == "icon"
+
+    def test_transparent_webp_passes_validation(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        # WebP suporta alfa e o save usa format= explícito; não deve ser
+        # recusado pela validação de --transparent.
+        result, captured = self._invoke_delegate_capture(
+            monkeypatch,
+            ["espada", "--category", "icon", "--transparent", "-o", str(tmp_path / "icon.webp")],
+        )
+        assert result.exit_code == 0, result.output
+        assert captured["payload"]["transparent"] is True
 
     def test_category_icon_augments_prompt_in_payload(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         result, captured = self._invoke_delegate_capture(

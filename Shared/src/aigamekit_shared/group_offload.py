@@ -84,6 +84,7 @@ def plan_group_offload(
     *,
     prefer_leaf: bool = False,
     force: bool = False,
+    use_stream: bool | None = None,
 ) -> GroupOffloadConfig | None:
     """**A fórmula** — auto-tuner VRAM-aware para group offload com streams.
 
@@ -107,12 +108,17 @@ def plan_group_offload(
         prefer_leaf: Forçar ``leaf_level`` (grupos menores) mesmo com folga.
         force: Devolver config mesmo quando pesos+ativação cabem (qualidade >
             velocidade: stream pesos, VRAM para ativação).
+        use_stream: ``False`` desliga streams/lazy-prefetch (necessário em
+            modelos com ramos condicionais, ex. FLUX.3 Klein com CFG: o
+            lazy-prefetch traça o modelo, encontra camadas não executadas e
+            rebenta com device mismatch a meio do generate). ``None`` = streams.
 
     Returns:
         :class:`GroupOffloadConfig` ou ``None`` se não for preciso offload.
     """
     weights = footprint.weights_gib(quant_mode)
     activation = footprint.activation_gib
+    stream = True if use_stream is None else bool(use_stream)
 
     # Passo 0: cabe todo na GPU? → sem offload (mais rápido), salvo force.
     if not force and weights + activation <= usable_vram_gib:
@@ -129,14 +135,14 @@ def plan_group_offload(
         # sem record os frees são determinísticos ao custo de ligeiro overhead.
         return GroupOffloadConfig(
             offload_type="leaf_level",
-            use_stream=True,
+            use_stream=stream,
             record_stream=False,
         )
     # Folga para blocks inteiros: menos sync points, ainda com overlap de stream.
     # (diffusers força num_blocks_per_group=1 quando use_stream=True.)
     return GroupOffloadConfig(
         offload_type="block_level",
-        use_stream=True,
+        use_stream=stream,
         num_blocks_per_group=1,
         record_stream=False,
     )
@@ -156,8 +162,11 @@ def is_group_offload_enabled(*, tool_env_var: str | None = None) -> bool:
             return False
         if v in ("1", "true", "yes", "on"):
             return True
-    # Default: global env var (default "1" = habilitado).
-    return os.environ.get("AIGAMEKIT_GROUP_OFFLOAD", "1") != "0"
+    # Default: global env var (default "1" = habilitado). Aceita as mesmas
+    # variantes que a env da tool — antes só "0" desligava, pelo que
+    # ``AIGAMEKIT_GROUP_OFFLOAD=false`` era ignorado em silêncio.
+    raw = os.environ.get("AIGAMEKIT_GROUP_OFFLOAD", "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
 
 
 def try_group_offloading(
@@ -209,7 +218,9 @@ def try_group_offloading(
 
     Returns:
         ``True`` se o group offloading foi aplicado com sucesso a pelo menos 1 módulo;
-        ``False`` se o diffusers não suportar ou a aplicação falhar (caller deve fallback).
+        ``False`` se nenhum módulo o suportar ou todos falharem (caller deve
+        fallback). Uma falha isolada (ex.: text encoder incompatível) não
+        desfaz os hooks já aplicados — nesse caso o retorno continua ``True``.
     """
     # config (da fórmula) tem precedência sobre os defaults.
     if config is not None:
@@ -218,6 +229,14 @@ def try_group_offloading(
         num_blocks_per_group = config.num_blocks_per_group
         record_stream = config.record_stream
         non_blocking = config.non_blocking
+
+    # Normalizar combinações que o diffusers rejeita com ValueError:
+    # - block_level exige num_blocks_per_group (default 1, como a fórmula);
+    # - record_stream só faz sentido com use_stream.
+    if offload_type == "block_level" and not num_blocks_per_group:
+        num_blocks_per_group = 1
+    if not use_stream and record_stream:
+        record_stream = False
 
     def _log(msg: str) -> None:
         if log:
@@ -243,12 +262,12 @@ def try_group_offloading(
         offload_device = torch.device("cpu")
 
     applied_any = False
-    try:
-        for name in target_modules:
-            mod = getattr(pipe, name, None)
-            if mod is None:
-                continue
+    for name in target_modules:
+        mod = getattr(pipe, name, None)
+        if mod is None:
+            continue
 
+        try:
             # ModelMixin nativo (transformer, vae, AutoencoderKL, UNet2D, etc.).
             if hasattr(mod, "enable_group_offload"):
                 mod.enable_group_offload(
@@ -272,12 +291,16 @@ def try_group_offloading(
                     record_stream=record_stream,
                     non_blocking=non_blocking,
                 )
-            applied_any = True
-            _log(f"Group offload aplicado a {name} ({offload_type}, streams={'on' if use_stream else 'off'})")
-
-    except Exception as e:
-        _log(f"Group offload falhou ({e})")
-        return False
+        except Exception as e:
+            # Falha num módulo não invalida os hooks já aplicados nos anteriores:
+            # devolver False aqui faria o caller tentar model_cpu/sequential por
+            # cima de um pipeline parcialmente offloaded — o diffusers recusa
+            # hooks de accelerate com group offload ativo. Isola o módulo e
+            # continua; no fim, ``applied_any`` decide o retorno.
+            _log(f"Group offload falhou em {name} ({e})")
+            continue
+        applied_any = True
+        _log(f"Group offload aplicado a {name} ({offload_type}, streams={'on' if use_stream else 'off'})")
 
     return applied_any
 
@@ -481,17 +504,22 @@ class ToolOffloadPolicy:
         """O plano para ESTE hardware engaja group offload? (specs de VRAM livre)."""
         if not self.intent(allow):
             return False
-        return (
-            group_offload_will_engage(
-                self.footprint(),
-                full_gpu_budget_fraction=self.full_gpu_budget_fraction if self.full_gpu_budget_fraction else 0.0,
-                gpu_specs=gpu_specs,
+        # Resolver specs UMA vez e passá-las ao footprint: um ``footprint_fn``
+        # dinâmico (ex.: text2d escolhe 4B/9B pela VRAM) precisa das specs; sem
+        # isto o gate decidia com o footprint genérico e não com o modelo real.
+        specs = self._specs(gpu_specs)
+        if not specs:
+            return False
+        footprint = self.footprint(specs)
+        if self.full_gpu_budget_fraction:
+            return group_offload_will_engage(
+                footprint,
+                full_gpu_budget_fraction=self.full_gpu_budget_fraction,
+                gpu_specs=specs,
                 tool_env_var=self.tool_env_var,
                 allow_quant=self.allow_quant,
             )
-            if self.full_gpu_budget_fraction
-            else self._classic_gate_engages(gpu_specs)
-        )
+        return self._classic_gate_engages(specs)
 
     @staticmethod
     def _specs(gpu_specs: Any | None = None) -> Any:
@@ -507,7 +535,14 @@ class ToolOffloadPolicy:
         specs = self._specs(gpu_specs)
         if not specs:
             return False
-        _idx, free, total = max(specs, key=lambda s: s[-1])
+        primary = max(specs, key=lambda s: s[-1])
+        # Aceita 2-tuple (idx, total) e 3-tuple (idx, free, total): com free,
+        # o budget respeita GPUs já ocupadas por outros processos.
+        if len(primary) >= 3:
+            _idx, free, total = primary[0], primary[1], primary[2]
+        else:
+            _idx, total = primary[0], primary[1]
+            free = total
         usable = min((total / GIB) * 0.9, (free / GIB) * 0.95)
         return plan_group_offload(usable, self.footprint(specs), quant_mode="none") is not None
 
@@ -520,7 +555,9 @@ class ToolOffloadPolicy:
         primary = max(gpus, key=lambda t: t[1])
         plan = plan_offload(
             [primary],
-            self.footprint(),
+            # ``gpus`` são 2-tuples: o footprint_fn dinâmico recebe-as na mesma
+            # forma que o gate/hardware das tools espera.
+            self.footprint(gpus),
             allow_multi_gpu=False,
             allow_quant=self.allow_quant,
             full_gpu_budget_fraction=self.full_gpu_budget_fraction,
@@ -545,8 +582,13 @@ def pop_allow_group_offload(kwargs: dict[str, Any]) -> bool:
 
     Devolve o valor para o ctor ``group_offload`` da tool (o env do supervisor
     não reflete o pedido do utilizador; o pedido explícito viaja no request).
+    Strings (``"false"``/``"0"``) são interpretadas — antes ``bool("false")``
+    devolvia ``True`` e o request não conseguia desligar o GO.
     """
-    return bool(kwargs.pop("allow_group_offload", True))
+    raw = kwargs.pop("allow_group_offload", True)
+    if isinstance(raw, str):
+        return raw.strip().lower() in ("1", "true", "yes", "on")
+    return bool(raw)
 
 
 def apply_alloc_conf_for_request(policy: ToolOffloadPolicy, allow: bool) -> None:

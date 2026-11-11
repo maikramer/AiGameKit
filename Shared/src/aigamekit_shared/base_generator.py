@@ -76,6 +76,12 @@ class DiffusionGeneratorBase(ABC):
     # Env var do kill-switch de group offload desta tool (override por subclass).
     GROUP_OFFLOAD_ENV: str | None = None
 
+    #: Streams CUDA + lazy-prefetch no group offload. ``False`` usa o GO sem
+    #: streams (sem lazy-prefetch): necessário em modelos com ramos condicionais
+    #: (FLUX.3 Klein com CFG — o tracing do lazy-prefetch encontra camadas não
+    #: executadas e rebenta com device mismatch a meio do generate).
+    GROUP_OFFLOAD_STREAMS: bool = True
+
     def __init__(
         self,
         *,
@@ -186,6 +192,9 @@ class DiffusionGeneratorBase(ABC):
             return
         del self._pipe
         self._pipe = None
+        # Um reload pode ter outro placement (single-GPU, CPU): não herdar o
+        # estado multi-GPU do pipeline anterior no _build_generator.
+        self._multi_gpu = False
         self._clear_cache()
 
     # ------------------------------------------------------------------
@@ -198,7 +207,10 @@ class DiffusionGeneratorBase(ABC):
         if self._multi_gpu and self.gpu_ids:
             gen_device = f"cuda:{self.gpu_ids[0]}"
         elif self.device != "cpu":
-            gen_device = "cuda"
+            # Respeitar o índice explícito (``cuda:1``) e outros aceleradores
+            # (``mps``). Usar ``"cuda"`` fixo punha o gerador no device corrente
+            # (cuda:0) enquanto o modelo estava em cuda:1 → device mismatch.
+            gen_device = self.device
         else:
             gen_device = "cpu"
         generator = torch.Generator(device=gen_device)
@@ -276,7 +288,15 @@ class DiffusionGeneratorBase(ABC):
         if not is_group_offload_enabled():
             return False
 
-        return try_group_offloading(pipe, config=config, log=True, log_fn=self._log)
+        # Sem config da fórmula, o default é leaf_level: homenagear a flag da
+        # subclasse (ex.: FLUX.3 Klein com CFG não suporta lazy-prefetch/streams).
+        return try_group_offloading(
+            pipe,
+            config=config,
+            use_stream=bool(self.GROUP_OFFLOAD_STREAMS),
+            log=True,
+            log_fn=self._log,
+        )
 
     def _go_planner_kwargs(self, *, full_gpu_budget_fraction: float | None = None) -> dict[str, Any]:
         """kwargs de planner coerentes com a flag GO + env kill-switch da tool.
@@ -297,6 +317,7 @@ class DiffusionGeneratorBase(ABC):
         go = bool(self.group_offload) and is_group_offload_enabled(tool_env_var=self.GROUP_OFFLOAD_ENV)
         return {
             "allow_group_offload": go,
+            "group_offload_streams": bool(self.GROUP_OFFLOAD_STREAMS) if go else None,
             "full_gpu_budget_fraction": full_gpu_budget_fraction if go else None,
         }
 
@@ -313,6 +334,7 @@ class DiffusionGeneratorBase(ABC):
         allow_group_offload: bool = True,
         force_group_offload: bool = False,
         prefer_leaf_offload: bool = False,
+        group_offload_streams: bool | None = None,
         target_resolution: int | None = None,
         full_gpu_budget_fraction: float | None = None,
     ) -> Any:
@@ -372,6 +394,7 @@ class DiffusionGeneratorBase(ABC):
             allow_group_offload=allow_group_offload,
             force_group_offload=force_group_offload,
             prefer_leaf_offload=prefer_leaf_offload,
+            group_offload_streams=group_offload_streams,
             target_resolution=target_resolution,
             full_gpu_budget_fraction=full_gpu_budget_fraction,
             on_status=self._status,
@@ -379,8 +402,9 @@ class DiffusionGeneratorBase(ABC):
 
         if plan.offload == "none" and plan.multi_gpu_ids is None:
             self._report_vram()
-        elif plan.multi_gpu_ids is not None:
-            self._multi_gpu = True
+        # Atribuir sempre (não só quando True): um reload after single-GPU não
+        # pode ficar com o flag multi-GPU do placement anterior.
+        self._multi_gpu = plan.multi_gpu_ids is not None
 
         self._log(f"offload: {plan.summary()}")
         return plan

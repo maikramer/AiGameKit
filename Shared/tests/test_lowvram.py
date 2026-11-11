@@ -139,6 +139,14 @@ class TestGroupStreamConfig:
         s = plan.summary()
         assert "group-offload" in s
 
+    def test_notes_do_not_claim_streams_when_disabled(self) -> None:
+        """FLUX.3 com CFG usa GO sem streams — a nota não pode dizer +streams."""
+        plan = plan_offload([_gpu(6)], FLUX_9B, group_offload_streams=False)
+        assert plan.group_config is not None
+        assert plan.group_config.use_stream is False
+        assert "sem streams" in plan.notes[0]
+        assert "+streams" not in plan.notes[0]
+
 
 class TestMultiGpu:
     def test_two_gpus_split_without_offload(self) -> None:
@@ -300,3 +308,14 @@ class TestOffloadFineBits:
         respeita a ladder — nunca inventa degraus que a tool não suporta."""
         plan = plan_offload([_gpu(3)], self.KLEIN_4B, allow_quant=("none",))
         assert plan.quant_mode == "none"
+
+    def test_fine_bits_only_ladder_never_falls_back_to_none(self) -> None:
+        """Tool que só suporta int2/int3 não pode ser planeada em fp16 "none".
+
+        Os bits finos são exclusivos dos modos de offload, mas quando são a
+        ÚNICA quantização suportada o full-GPU tem de usar o degrau disponível
+        — ``or ("none",)`` inventava um modelo fp16 que a tool não carrega.
+        """
+        for quant in ("sdnq-int2", "sdnq-int3"):
+            plan = plan_offload([_gpu(24)], SMALL_4B, allow_quant=(quant,))
+            assert plan.quant_mode == quant, quant

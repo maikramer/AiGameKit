@@ -74,6 +74,41 @@ class TestLifecycle:
         gen.unload()  # não deve levantar
         assert gen._pipe is None
 
+    def test_unload_resets_multi_gpu_state(self) -> None:
+        """Reload após unload não pode herdar o placement multi-GPU anterior."""
+        gen = _MockGenerator(device="cpu")
+        gen.warmup()
+        gen._multi_gpu = True
+        gen.unload()
+        assert gen._pipe is None
+        assert gen._multi_gpu is False
+
+    def test_place_with_planner_clears_stale_multi_gpu(self, monkeypatch: Any) -> None:
+        """Um plano single-GPU depois de um split tem de repor ``_multi_gpu``."""
+        from aigamekit_shared.lowvram import OffloadPlan
+
+        gen = _MockGenerator(device="cpu")
+        gen.device = "cuda"
+        gen._multi_gpu = True
+        gen._report_vram = lambda: None  # type: ignore[method-assign]
+
+        plan = OffloadPlan(
+            device="cuda",
+            quant_mode="none",
+            offload="none",
+            vae_slicing=False,
+            vae_tiling=False,
+            attention_slicing=False,
+            multi_gpu_ids=None,
+            primary_gpu=0,
+            usable_vram_gib=8.0,
+            est_peak_gib=4.0,
+        )
+        monkeypatch.setattr("aigamekit_shared.hardware.cuda_gpu_free_specs", lambda: [(0, 8 * 1024**3, 8 * 1024**3)])
+        monkeypatch.setattr("aigamekit_shared.lowvram.place_pipeline", lambda *_a, **_k: plan)
+        gen._place_with_planner(object(), object())
+        assert gen._multi_gpu is False
+
 
 class TestLogging:
     """_log / _status / set_status_callback."""
@@ -96,6 +131,46 @@ class TestLogging:
         gen.set_status_callback(lambda msg: messages.append(msg))
         gen._status("phase 1")
         assert messages == ["phase 1"]
+
+
+class TestBuildGeneratorDevice:
+    """O generator tem de viver no MESMO device que o pipeline (cuda:1)."""
+
+    def test_uses_explicit_cuda_index(self, monkeypatch: Any) -> None:
+        import types
+
+        from aigamekit_shared import base_generator as bg
+
+        class _Gen:
+            def __init__(self, device: str) -> None:
+                self.device = device
+
+            def manual_seed(self, seed: int) -> None:
+                pass
+
+        class _Cuda:
+            @staticmethod
+            def is_available() -> bool:
+                return True
+
+            @staticmethod
+            def device_count() -> int:
+                return 2
+
+            @staticmethod
+            def is_bf16_supported() -> bool:
+                return True
+
+        fake = types.SimpleNamespace(
+            cuda=_Cuda(),
+            Generator=_Gen,
+            float16="float16",
+            float32="float32",
+            bfloat16="bfloat16",
+        )
+        monkeypatch.setattr(bg, "_torch", lambda: fake)
+        gen = _MockGenerator(device="cuda:1")
+        assert gen._build_generator(42).device == "cuda:1"
 
 
 class TestSeedResolution:

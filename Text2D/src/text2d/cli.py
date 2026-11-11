@@ -41,6 +41,17 @@ DEFAULT_OUTPUT_DIR = Path("outputs")
 DEFAULT_IMAGE_DIR = DEFAULT_OUTPUT_DIR / "images"
 
 
+def _image_format_for(path: Path | str) -> str:
+    """Formato PIL a partir da extensão; desconhecidas caem em PNG.
+
+    ``save_image`` usa ``format=`` explícito: sem este mapa um ``-o foo.webp``
+    gravava bytes PNG dentro de um ficheiro ``.webp`` (o mesmo bug já corrigido
+    no adapter do worker).
+    """
+    ext = Path(path).suffix.lower().lstrip(".")
+    return {"jpg": "JPEG", "jpeg": "JPEG", "webp": "WEBP"}.get(ext, "PNG")
+
+
 def ensure_dirs() -> None:
     DEFAULT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -89,7 +100,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 
 @cli.command("generate")
 @click.argument("prompt")
-@click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída (.png ou .jpg)")
+@click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída (.png, .jpg ou .webp)")
 @click.option(
     "--width",
     "-W",
@@ -223,7 +234,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--transparent/--no-transparent",
     default=False,
     show_default=True,
-    help="Remover fundo (rembg/U2Net); requer saída .png.",
+    help="Remover fundo (rembg/U2Net); requer saída .png ou .webp.",
 )
 @click.option(
     "--hw-auto/--no-hw-auto",
@@ -377,8 +388,8 @@ def generate_cmd(
 
     # Validar saída transparente ANTES de qualquer trabalho de GPU (a imagem
     # RGBA final só pode ser gravada em PNG).
-    if transparent and output is not None and Path(output).suffix.lower() != ".png":
-        raise click.ClickException("--transparent requer saída .png")
+    if transparent and output is not None and Path(output).suffix.lower() not in (".png", ".webp"):
+        raise click.ClickException("--transparent requer saída .png ou .webp")
 
     # Categoria icon: styling de app-icon no prompt (idempotente; a tabela da
     # consola abaixo mostra o prompt final augmentado).
@@ -601,16 +612,11 @@ def generate_cmd(
 
             emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=0)
             with prof.span("save"):
-                ext = out_path.suffix.lower().lstrip(".")
-                img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
+                img_format = _image_format_for(out_path)
                 for idx, img in enumerate(all_images):
                     # -n > 1: sufixos _1, _2... no stem (a 1.ª fica no output principal).
                     part_path = out_path if idx == 0 else out_path.with_name(f"{out_path.stem}_{idx}{out_path.suffix}")
-                    KleinFluxGenerator.save_image(
-                        img,
-                        part_path,
-                        image_format=img_format if img_format == "JPEG" else "PNG",
-                    )
+                    KleinFluxGenerator.save_image(img, part_path, image_format=img_format)
             emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=100)
 
         elapsed = time.time() - t_start
@@ -1626,8 +1632,7 @@ def generate_batch_cmd(
                 emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=100)
 
                 emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=0)
-                ext = it["out_path"].suffix.lower().lstrip(".")
-                img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
+                img_format = _image_format_for(it["out_path"])
                 KleinFluxGenerator.save_image(image, it["out_path"], image_format=img_format)
                 emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=100)
 

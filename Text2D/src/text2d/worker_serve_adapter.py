@@ -7,6 +7,7 @@ Herdam de :class:`aigamekit_shared.worker_serve_adapter_base.WorkerAdapter`
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -100,30 +101,46 @@ class Adapter(WorkerAdapter):
 
         out_path = Path(output)
         ext = out_path.suffix.lower().lstrip(".")
-        img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
+        # ``save_image`` usa o format= explícito: um pedido .webp era gravado
+        # como PNG (bytes PNG num ficheiro .webp). Mantém-se o default PNG só
+        # para extensões desconhecidas.
+        img_format = {"jpg": "JPEG", "jpeg": "JPEG", "webp": "WEBP"}.get(ext, "PNG")
 
         all_images = _metadata.get("images") or [image]
 
-        # Ícone transparente: RGBA exige PNG (recusar JPEG antes do save) e
-        # remoção de fundo via rembg (U2Net) sobre a imagem gerada.
+        # Ícone transparente: RGBA exige PNG/WebP (recusar JPEG antes do save)
+        # e remoção de fundo via rembg (U2Net) sobre a imagem gerada.
         if request.get("transparent"):
-            if ext in ("jpg", "jpeg"):
-                return {"status": "error", "error": "--transparent requer saída .png"}
+            if img_format == "JPEG":
+                return {"status": "error", "error": "--transparent requer saída .png ou .webp"}
             from text2d.bg_removal import remove_background
 
             all_images = [remove_background(img) for img in all_images]
 
         self.report_progress(request, 0.95, "saving")
-        saved = out_path
         for idx, img in enumerate(all_images):
             part_path = out_path if idx == 0 else out_path.with_name(f"{out_path.stem}_{idx}{out_path.suffix}")
-            saved = KleinFluxGenerator.save_image(img, part_path, image_format=img_format)
+            KleinFluxGenerator.save_image(img, part_path, image_format=img_format)
 
         elapsed = time.perf_counter() - t_start
         self.report_progress(request, 1.0, "done")
-        return self.finish_response(output=saved, seconds=elapsed, runtime_budget=runtime_budget)
+        # ``output`` é o path pedido (a 1.ª imagem). Devolver a última parte
+        # fazia o GameAssets procurar ``foo_3.png`` em vez de ``foo.png``.
+        return self.finish_response(output=out_path, seconds=elapsed, runtime_budget=runtime_budget)
 
     def unload(self, model: Any) -> None:
-        unload = getattr(model, "unload", None)
-        if callable(unload):
-            unload()
+        # Contrato do WorkerAdapter: unload idempotente e à prova de exceções.
+        # O unload do gerador (e o cache do allocator) têm de correr sempre —
+        # mesmo que um levante, a VRAM tem de voltar ao driver antes da fase
+        # seguinte (text3d/paint3d eram recusados com ~5 GiB presos).
+        with contextlib.suppress(Exception):
+            unload = getattr(model, "unload", None)
+            if callable(unload):
+                unload()
+        try:
+            import torch
+
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+        except Exception:
+            pass
