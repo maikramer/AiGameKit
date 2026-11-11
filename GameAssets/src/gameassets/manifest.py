@@ -252,10 +252,7 @@ def _row_refine_from_dict(raw: Any, asset_id: str) -> RowRefine | None:
         raise ValueError(f"asset {asset_id!r}: refine deve ser bool ou mapeamento")
     unknown = set(raw) - {"enabled", "views"}
     if unknown:
-        raise ValueError(
-            f"asset {asset_id!r} refine: chaves desconhecidas {sorted(unknown)} "
-            "(válidas: enabled, views)"
-        )
+        raise ValueError(f"asset {asset_id!r} refine: chaves desconhecidas {sorted(unknown)} (válidas: enabled, views)")
     en = raw.get("enabled")
     if en is not None and not isinstance(en, bool):
         raise ValueError(f"asset {asset_id!r} refine.enabled deve ser bool")
@@ -320,6 +317,11 @@ class ManifestRow:
     # ``local`` (GPU desta máquina) ou ``auto`` (política do batch). O vramd
     # remoto é escolhido com ``VRAMD_REMOTE``/peers; ver docs/REMOTE_GPU.md.
     gpu: str = "auto"
+    # Quanto vale a qualidade deste asset face ao tempo: ``high`` (herói — vai
+    # para a GPU com melhor tier, mesmo que espere), ``normal``, ``low``
+    # (enchimento — fica na GPU mais pequena e deixa a grande livre) ou
+    # ``auto`` (deriva da categoria). Ver docs/GAMEASSETS_UMS_BATCH.md.
+    criticality: str = "auto"
 
 
 def effective_image_source(profile: GameProfile, row: ManifestRow) -> str:
@@ -394,11 +396,37 @@ def effective_collision_args(profile: GameProfile, row: ManifestRow) -> dict[str
 
 def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
     """Constrói rows a partir do documento YAML (lista ou mapa com ``assets:``)."""
-    assets = doc if isinstance(doc, list) else doc.get("assets", [])
+    if isinstance(doc, list):
+        assets = doc
+    elif isinstance(doc, dict):
+        assets = doc.get("assets") or []
+        if not isinstance(assets, list):
+            raise ValueError(f"manifest {path}: assets deve ser uma lista")
+    else:
+        raise ValueError(f"manifest {path}: documento deve ser uma lista ou um mapa com assets")
     rows: list[ManifestRow] = []
     for entry in assets:
+        if not isinstance(entry, dict):
+            raise ValueError(f"manifest {path}: cada asset deve ser um mapa (recebi {type(entry).__name__})")
+        asset_id = entry.get("id")
+        if asset_id is None or not str(asset_id).strip():
+            raise ValueError(f"manifest {path}: asset sem id")
+        if not str(entry.get("idea") or "").strip():
+            raise ValueError(f"asset {asset_id!r}: idea obrigatória")
         pipeline = entry.get("pipeline", [])
-        pipeline_items = [p.strip().lower() for p in pipeline] if isinstance(pipeline, list) else []
+        if pipeline is None:
+            pipeline_items: list[str] = []
+        elif isinstance(pipeline, list):
+            if not all(isinstance(p, str) for p in pipeline):
+                raise ValueError(f"asset {entry.get('id')!r}: pipeline só aceita strings (ex.: [3d, paint])")
+            pipeline_items = [p.strip().lower() for p in pipeline]
+        else:
+            # ``pipeline: 3d`` (string) era ignorado em silêncio: o asset não
+            # gerava nada e o batch só mostrava "0 linhas com 3d".
+            raise ValueError(
+                f"asset {entry.get('id')!r}: pipeline deve ser uma lista (ex.: [3d, paint]); "
+                f"recebi {type(pipeline).__name__}"
+            )
 
         audio_cfg = entry.get("audio") or {}
         if not isinstance(audio_cfg, dict):
@@ -445,6 +473,19 @@ def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
                 f"asset {entry.get('id')!r}: gpu deve ser remote, local ou auto (recebi {entry.get('gpu')!r})"
             )
 
+        try:
+            from aigamekit_shared.vramd_topology import normalize_criticality
+        except ImportError:
+            # GameAssets pode correr contra um aigamekit-shared mais antigo (sem
+            # topologia). Não vale falhar o manifest inteiro: sem router, a
+            # criticidade fica ``auto`` e o comportamento é o legado.
+            crit_raw = "auto"
+        else:
+            try:
+                crit_raw = normalize_criticality(entry.get("criticality"))
+            except ValueError as exc:
+                raise ValueError(f"asset {entry.get('id')!r}: {exc}") from None
+
         rows.append(
             ManifestRow(
                 id=entry["id"],
@@ -479,6 +520,7 @@ def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
                 paint3d=row_paint3d,
                 refine=row_refine,
                 gpu=gpu_raw,
+                criticality=crit_raw,
             )
         )
     if not rows:

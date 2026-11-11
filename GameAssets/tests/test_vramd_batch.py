@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from aigamekit_shared.vramd_topology import Topology
 from gameassets.vramd_batch import (
     resolve_paint3d_vram_opts,
     resolve_skymap2d_vram_opts,
@@ -351,3 +352,73 @@ class TestOptionalWaveOrFallback:
             out = run_terrain3d_wave_or_fallback(items, manifest_dir=tmp_path, no_vramd=False)
             assert out is not None
             assert out[0]["id"] == "terrain"
+
+
+class TestRemoteGpuIds:
+    """``gpu_ids`` locais não podem ir num payload que corre no servidor remoto."""
+
+    @staticmethod
+    def _shape_kwargs(tmp_path: Path, *, gpu: str, remote: bool) -> dict[str, object]:
+        out = tmp_path / "a.glb"
+        items = [{"id": "a", "image": str(tmp_path / "a.png"), "output": str(out), "gpu": gpu}]
+        mock_build = MagicMock(return_value={"output": str(out)})
+        mods = _make_pkg("text3d.vramd_payload", build_generate_request=mock_build)
+        with (
+            _temp_modules(mods),
+            patch("gameassets.vramd_coord._gpu_remote", return_value=remote),
+        ):
+            shape_specs_from_items(items, manifest_dir=tmp_path, gpu_ids=[0, 1])
+        return mock_build.call_args.kwargs
+
+    def test_remote_target_drops_client_gpu_ids(self, tmp_path: Path) -> None:
+        assert self._shape_kwargs(tmp_path, gpu="remote", remote=True)["gpu_ids"] is None
+
+    def test_local_target_keeps_client_gpu_ids(self, tmp_path: Path) -> None:
+        assert self._shape_kwargs(tmp_path, gpu="local", remote=False)["gpu_ids"] == [0, 1]
+
+    def test_auto_follows_the_global_remote_policy(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setenv("VRAMD_REMOTE", "127.0.0.1:9")
+        out = tmp_path / "a.glb"
+        items = [{"id": "a", "image": str(tmp_path / "a.png"), "output": str(out), "gpu": "auto"}]
+        mock_build = MagicMock(return_value={"output": str(out)})
+        mods = _make_pkg("text3d.vramd_payload", build_generate_request=mock_build)
+        with (
+            _temp_modules(mods),
+            patch("gameassets.vramd_coord._gpu_remote", return_value=None),
+        ):
+            shape_specs_from_items(items, manifest_dir=tmp_path, gpu_ids=[0])
+        assert mock_build.call_args.kwargs["gpu_ids"] is None
+
+
+class TestSimpleBackendRouting:
+    def test_texture2d_spec_carries_criticality(self, tmp_path: Path) -> None:
+        """texture2d/skymap/áudio/terreno não perdiam a criticidade do manifest."""
+        out = tmp_path / "t.png"
+        mock_build = MagicMock(return_value={"output": str(out)})
+        mods = _make_pkg("texture2d.vramd_payload", build_generate_request=mock_build)
+        topo = Topology(capacity=2, features=frozenset({"criticality"}))
+        with (
+            _temp_modules(mods),
+            patch("gameassets.vramd_routing.fetch_topology", return_value=topo),
+        ):
+            (spec,) = texture2d_specs_from_items(
+                [{"id": "t", "prompt": "rock", "output": str(out), "criticality": "high"}],
+                manifest_dir=tmp_path,
+            )
+        assert spec.criticality == "high"
+        assert spec.payload["criticality"] == "high"
+
+    def test_texture2d_without_topology_keeps_the_old_payload(self, tmp_path: Path) -> None:
+        out = tmp_path / "t.png"
+        mock_build = MagicMock(return_value={"output": str(out)})
+        mods = _make_pkg("texture2d.vramd_payload", build_generate_request=mock_build)
+        with (
+            _temp_modules(mods),
+            patch("gameassets.vramd_routing.fetch_topology", return_value=None),
+        ):
+            (spec,) = texture2d_specs_from_items(
+                [{"id": "t", "prompt": "rock", "output": str(out), "criticality": "high"}],
+                manifest_dir=tmp_path,
+            )
+        assert spec.criticality == "high"
+        assert "criticality" not in spec.payload

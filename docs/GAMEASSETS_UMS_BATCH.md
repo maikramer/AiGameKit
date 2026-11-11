@@ -108,6 +108,26 @@ do supervisor). Ver [`Vramd/README.md`](../Vramd/README.md).
 
 ---
 
+## Várias GPUs e peers
+
+Com mais de uma GPU (local ou peers do vramd — `capacity > 1` no
+`{"cmd": "topology"}`) o batch deixa de decidir onde e com que qualidade cada
+job corre: dá ao vramd a fila e a informação, e o router decide.
+
+| O quê | Como |
+|-------|------|
+| **Fila cheia** | Janela rolante (`wave_window`): 16 jobs, ou 4 por slot com muitas GPUs, até `max_depth - 1`. Um wait abre logo espaço para o submit seguinte — o drain por blocos deixava GPUs paradas na cauda. |
+| **Paint sem esperar a wave** | `PaintPrefetcher`: quando o shape de um asset acaba, a preparação (topology-fix, refine Hi3D, `_to_paint`) corre num pool em background e o paint entra na fila. Com uma GPU livre, o vramd decide se o pinta já (réplica de paint3d) ou se mantém a GPU no text3d. A wave de paint só espera pelos jobs que encontra pré-submetidos. Desligado com uma GPU (trocaria de modelo a cada job). `VRAMD_PREFETCH_WORKERS` (default 2). |
+| **Qualidade pela GPU de destino** | Cada payload leva `hw_tiers`: o hw-auto da tool (`profile_from_specs`) corrido para cada tamanho de GPU disponível. O vramd aplica o da GPU onde o job cai: text3d int4 até ~10 GB e fp16 acima; text2d int3/int4/fp8 conforme a placa. Quant fixado à mão (profile/manifesto) → sem tiers. |
+| **Críticos na GPU grande** | `criticality` do asset (manifesto ou categoria: humanoid/creature/weapon/armor/vehicle → `high`; rock/tree/vegetation/prop/food → `low`). O vramd converte a diferença de tier em segundos: um herói espera pela GPU de 24 GB, uma pedra fica na de 6 GB. Os críticos são submetidos primeiro. |
+| **Sem `release` entre fases** | `_evict_backend` (text2d→shape, shape→paint) só corre com uma GPU: com várias, cada GPU abre espaço sozinha e um release global despejaria réplicas quentes. |
+
+`vramd route <backend> -p criticality=hero …` mostra a decisão com tier e custo
+de qualidade; `vramd devices` / `vramd peers` o que o router vê. Com um vramd
+antigo (sem `topology`) tudo volta ao comportamento de uma GPU.
+
+---
+
 ## Checklist agente
 
 1. `vramd status` / `queue` / `doctor` — HOLDING, free vs peak.  
@@ -134,3 +154,4 @@ do supervisor). Ver [`Vramd/README.md`](../Vramd/README.md).
 | Data | Nota |
 |------|------|
 | 2026-07-24 | Guia operador: waves, window≤16, defer master, softfill, peak hw_auto |
+| 2026-11-11 | Várias GPUs/peers: janela rolante por capacidade, prefetch shape→paint, `hw_tiers`, `criticality` |

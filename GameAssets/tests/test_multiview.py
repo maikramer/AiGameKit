@@ -330,3 +330,57 @@ class TestEnsureViewImages:
         )
         assert captured == []
         assert res["generated"] == 0 and res["reused"] == 2
+
+    def test_failed_force_view_is_removed_from_the_sidecar(self, tmp_path: Path, monkeypatch) -> None:
+        """Vista apagada para regenerar e falhada não pode ficar no sidecar."""
+        import gameassets.vramd_batch as VB
+
+        mesh = tmp_path / "meshes" / "crate.glb"
+        mesh.parent.mkdir(parents=True)
+        write_min_glb(mesh)
+        front = tmp_path / "images" / "crate.png"
+        front.parent.mkdir(parents=True)
+        front.write_bytes(b"front")
+        prof = _profile(refine={"views": 3})
+        entry = [{"row": _row(), "mesh_final": mesh, "front": front}]
+
+        def ok_wave(items, **_kw):
+            for item in items:
+                Path(item["output"]).write_bytes(b"view")
+            return [{"id": item["id"], "status": "ok"} for item in items]
+
+        def fail_wave(items, **_kw):
+            return [{"id": item["id"], "status": "error", "error": "boom"} for item in items]
+
+        kw = dict(
+            profile=prof,
+            preset=_PRESET,
+            manifest_dir=tmp_path,
+            text2d_bin="/bin/text2d",
+            width=768,
+            height=768,
+            steps=8,
+            guidance=1.0,
+        )
+        monkeypatch.setattr(VB, "run_text2d_wave_or_fallback", ok_wave)
+        MV.ensure_multiview_images(entry, **kw)
+        assert set(MV.load_views_sidecar(mesh)["views"]) == {"back", "left"}
+
+        monkeypatch.setattr(VB, "run_text2d_wave_or_fallback", fail_wave)
+        res = MV.ensure_multiview_images(entry, force=True, **kw)
+        assert res["failed"] == 2
+        assert MV.load_views_sidecar(mesh)["views"] == {}
+
+
+class TestAtomicSidecarWrite:
+    def test_tmp_paths_are_unique_and_cleaned(self, tmp_path: Path) -> None:
+        """Dois escritores no mesmo sidecar não podem partilhar ``<nome>.tmp``."""
+        target = tmp_path / "crate_views.json"
+        first = MV._atomic_tmp_path(target)
+        second = MV._atomic_tmp_path(target)
+        assert first != second
+        assert first.parent == target.parent and first.name.endswith(".tmp")
+
+        MV._write_json_atomic(target, {"version": 1})
+        assert json.loads(target.read_text(encoding="utf-8")) == {"version": 1}
+        assert [p.name for p in tmp_path.iterdir() if p.name.endswith(".tmp")] == []

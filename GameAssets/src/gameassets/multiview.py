@@ -14,6 +14,9 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import os
+import threading
+import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -26,6 +29,7 @@ log = logging.getLogger(__name__)
 
 #: Categorias em que o Hi3D muda a pose (o refine é saltado em pipeline.py).
 _SKIP_CATEGORIES = frozenset({"humanoid", "creature"})
+
 
 def _paths():
     """Import tardio de ``paths`` (``paths`` importa ``profile``; evita ciclo)."""
@@ -170,6 +174,49 @@ def _stamp_matches(expected: dict[str, Any], actual: Any) -> bool:
     return not actual.get("missing")
 
 
+def _entry_file_ok(entry: Any) -> bool:
+    """Entrada de sidecar só vale se o ficheiro referido ainda existe e tem bytes."""
+    if not isinstance(entry, dict):
+        return False
+    raw = entry.get("path")
+    if not raw:
+        return False
+    try:
+        target = Path(str(raw))
+        return target.is_file() and target.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _merge_sidecar_views(
+    current: dict[str, Any],
+    updates: dict[str, dict[str, Any]],
+    keep: set[str],
+    *,
+    mesh_final: Path,
+    front: Path,
+    params: dict[str, Any],
+) -> None:
+    """Funde as vistas atuais, mantendo só as configuradas e com ficheiro.
+
+    Uma vista que falhou (o ficheiro stale foi apagado antes do job) não pode
+    continuar no sidecar: ``refine_stale``/``view_is_current`` viam uma entrada
+    sem ficheiro e o próximo resume repetia o refine sem saber porquê.
+    """
+    merged = dict(current.get("views") or {})
+    for view, entry in updates.items():
+        path = Path(str(entry.get("path") or ""))
+        if path.is_file() and path.stat().st_size > 0:
+            merged[view] = {**_stamp(path), **entry}
+    merged = {v: e for v, e in merged.items() if v in keep and _entry_file_ok(e)}
+    write_views_sidecar(
+        mesh_final,
+        front=front,
+        params=params,
+        entries=merged,
+    )
+
+
 def _prompt_digest(prompt: str) -> str:
     import hashlib
 
@@ -195,11 +242,26 @@ def load_views_sidecar(mesh_final: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _atomic_tmp_path(path: Path) -> Path:
+    """Nome de temporário único (pid+thread+uuid) para escritas concorrentes.
+
+    Um ``<nome>.tmp`` fixo fazia dois escritores (batch + resume, ou o pool de
+    prefetch) intercalarem bytes no mesmo ficheiro e o ``replace`` final podia
+    apanhar JSON a meio.
+    """
+    return path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex[:8]}.tmp")
+
+
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    tmp = _atomic_tmp_path(path)
+    try:
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        tmp.replace(path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+        raise
 
 
 def write_views_sidecar(
@@ -397,18 +459,13 @@ def ensure_multiview_images(
         # Nada a gerar: atualiza stamps das vistas reutilizadas.
         for mesh_final, side in sidecars.items():
             if side["views"]:
-                current = load_views_sidecar(mesh_final)
-                merged = dict(current.get("views") or {})
-                for view, entry in side["views"].items():
-                    path = Path(entry["path"])
-                    if path.is_file() and path.stat().st_size > 0:
-                        merged[view] = {**_stamp(path), **entry}
-                merged = {v: e for v, e in merged.items() if v in side["keep"]}
-                write_views_sidecar(
-                    mesh_final,
+                _merge_sidecar_views(
+                    load_views_sidecar(mesh_final),
+                    side["views"],
+                    side["keep"],
+                    mesh_final=mesh_final,
                     front=side["front"],
                     params=params,
-                    entries=merged,
                 )
         return {"generated": 0, "reused": reused, "failed": 0}
 
@@ -483,19 +540,15 @@ def ensure_multiview_images(
             log.warning("multiview: vista %s de %s falhou", job["_view"], job["_row"].id)
 
     for mesh_final, side in sidecars.items():
-        current = load_views_sidecar(mesh_final)
-        merged = dict(current.get("views") or {})
-        for view, entry in side["views"].items():
-            path = Path(entry["path"])
-            if path.is_file() and path.stat().st_size > 0:
-                merged[view] = {**_stamp(path), **entry}
-        # Só mantém vistas ainda configuradas para esta row.
-        merged = {v: e for v, e in merged.items() if v in side["keep"]}
-        write_views_sidecar(
-            mesh_final,
+        # Só mantém vistas ainda configuradas para esta row — e com ficheiro
+        # (uma geração falhada apagou a vista stale antes do job).
+        _merge_sidecar_views(
+            load_views_sidecar(mesh_final),
+            side["views"],
+            side["keep"],
+            mesh_final=mesh_final,
             front=side["front"],
             params=params,
-            entries=merged,
         )
 
     return {"generated": generated, "reused": reused, "failed": failed}

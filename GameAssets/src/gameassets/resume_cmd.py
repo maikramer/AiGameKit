@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import sys
@@ -13,8 +14,10 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
+from aigamekit_shared.cli_helpers import add_gpu_option
+
 from . import multiview
-from .batch_guard import subprocess_gpu_env
+from .batch_guard import batch_directory_lock, subprocess_gpu_env
 from .cli_rich import click
 from .helpers import (
     _append_text2d_profile_args,
@@ -72,10 +75,61 @@ from .vramd_batch import (
     run_text2d_wave_or_fallback,
     run_texture2d_wave_or_fallback,
 )
-from .vramd_coord import MasterDeferQueue, apply_vramd_child_env, attach_gpu
-from aigamekit_shared.cli_helpers import add_gpu_option
+from .vramd_coord import (
+    MasterDeferQueue,
+    apply_vramd_child_env,
+    attach_gpu,
+    cuda_visible_for_children,
+)
 
 console = Console()
+
+
+def _apply_force_states(items: list[dict[str, Any]], force: bool) -> None:
+    """``resume --force`` volta a correr desde a imagem.
+
+    O classificador só olha para o disco: com tudo completo, o ``--force``
+    imprimia "Todos os assets estão completos" e voltava sem gerar nada (os
+    contextvars ``WAVE_FORCE``/``MASTER_FORCE`` nunca chegavam a uma wave).
+    """
+    if not force:
+        return
+    for it in items:
+        it["state"] = _ROW_NEED_IMAGE
+
+
+def _manifest_lock_guard(func: Any) -> Any:
+    """Lock da pasta do manifesto por toda a execução do ``resume``.
+
+    O ``resume`` não tinha lock nenhum: dois ``resume`` do mesmo manifesto
+    (ou o mesmo manifesto uma vez ``--gpu local`` e outra ``--gpu remote``) corriam
+    em paralelo sobre os mesmos ``_intermediate``/LODs. O lock é o mesmo do
+    ``batch``; ``--dry-run`` não escreve e ``--skip-batch-lock`` permite o
+    override consciente.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        if kwargs.get("dry_run") or kwargs.get("skip_batch_lock"):
+            return func(*args, **kwargs)
+        raw_manifest = kwargs.get("manifest_path")
+        manifest: Path | None = None
+        if raw_manifest is not None:
+            try:
+                manifest = _resolve_manifest_path(raw_manifest)
+            except Exception:
+                # Deixa o caminho normal falhar com a mensagem própria.
+                manifest = None
+        if manifest is None:
+            return func(*args, **kwargs)
+        with batch_directory_lock(
+            manifest,
+            command="resume",
+            mode=os.environ.get("VRAMD_GPU_MODE", ""),
+        ):
+            return func(*args, **kwargs)
+
+    return wrapper
 
 
 @click.command("resume")
@@ -147,6 +201,13 @@ console = Console()
     default=False,
     help="Invalida artefactos de split (stump/top/lod/collision) e refaz a partir do painted.",
 )
+@click.option(
+    "--skip-batch-lock",
+    is_flag=True,
+    default=False,
+    help="Permite dois batches/resumes na mesma pasta (não recomendado: disputa de VRAM / OOM).",
+)
+@_manifest_lock_guard
 def resume_cmd(
     profile_path: Path,
     manifest_path: Path,
@@ -161,6 +222,7 @@ def resume_cmd(
     vramd_stream: bool,
     no_vramd: bool,
     redo_split: bool,
+    skip_batch_lock: bool,
 ) -> None:
     """Batch inteligente: analisa o estado de cada asset e executa apenas as fases pendentes.
 
@@ -227,7 +289,8 @@ def resume_cmd(
     work_dir = manifest_dir / ".gameassets_work" if work_dir is None else work_dir.resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    child_env = dict(subprocess_gpu_env(gpu_ids=gpu_ids))
+    # IDs lógicos → entradas físicas do CVD do pai (ver batch_cmd).
+    child_env = dict(subprocess_gpu_env(gpu_ids=cuda_visible_for_children(gpu_ids)))
     apply_vramd_child_env(child_env, vramd_stream=vramd_stream, no_vramd=no_vramd)
     if redo_split:
         child_env["AIGAMEKIT_REDO_SPLIT"] = "1"
@@ -337,6 +400,9 @@ def resume_cmd(
                 "wants_animate": row_wants_animate,
             }
         )
+
+    # ``--force`` tem de vencer a classificação por ficheiros (ver helper).
+    _apply_force_states(items, force)
 
     # --- Relatório ---
     counts: dict[str, int] = {
@@ -805,9 +871,7 @@ def resume_cmd(
 
             # --- Fase 1b: Vistas Text2D (refine multiview) ---
             _ensure_views_phase(
-                on_progress=lambda r: dash.feed_event(
-                    str(r.asset_id).split("__")[0], "text2d", r.status, phase="views"
-                )
+                on_progress=lambda r: dash.feed_event(str(r.asset_id).split("__")[0], "text2d", r.status, phase="views")
             )
 
             # --- Fase 2: Shape (batch) ---

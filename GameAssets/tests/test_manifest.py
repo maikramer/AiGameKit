@@ -443,3 +443,77 @@ def test_load_manifest_gpu_invalid() -> None:
             load_manifest(path)
     finally:
         path.unlink(missing_ok=True)
+
+
+def test_load_manifest_pipeline_must_be_a_list() -> None:
+    """``pipeline: 3d`` (string) era ignorado e o asset não gerava nada."""
+    content = yaml.dump({"assets": [{"id": "x", "idea": "x", "pipeline": "3d"}]})
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        with pytest.raises(ValueError, match="pipeline deve ser uma lista"):
+            load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_load_manifest_pipeline_items_must_be_strings() -> None:
+    content = yaml.dump({"assets": [{"id": "x", "idea": "x", "pipeline": ["3d", 5]}]})
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        with pytest.raises(ValueError, match="só aceita strings"):
+            load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_load_manifest_assets_must_be_a_list() -> None:
+    content = yaml.dump({"assets": {"x": {"idea": "x"}}})
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        with pytest.raises(ValueError, match="assets deve ser uma lista"):
+            load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+@pytest.mark.parametrize(
+    ("entry", "match"),
+    [
+        ({"idea": "x"}, "asset sem id"),
+        ({"id": "a"}, "idea obrigatória"),
+        ({"id": "a", "idea": "   "}, "idea obrigatória"),
+    ],
+)
+def test_load_manifest_requires_id_and_idea(entry: dict, match: str) -> None:
+    """Campo em falta era ``KeyError`` (traceback) em vez de erro de manifest."""
+    content = yaml.dump({"assets": [entry]})
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        with pytest.raises(ValueError, match=match):
+            load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_load_manifest_without_vramd_topology_falls_back_to_auto(monkeypatch) -> None:
+    """Um aigamekit-shared antigo (sem ``vramd_topology``) não pode falhar o manifest."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "aigamekit_shared.vramd_topology", None)
+    content = yaml.dump({"assets": [{"id": "a", "idea": "x", "pipeline": ["3d"], "criticality": "high"}]})
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        rows = load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)
+    assert rows[0].criticality == "auto"

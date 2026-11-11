@@ -23,8 +23,13 @@ from gameassets.vramd_coord import (
     UmsJobSpec,
     apply_vramd_child_env,
     attach_gpu,
+    cuda_visible_for_children,
+    discard_prefetched,
+    is_prefetched,
     preload_backend,
+    register_prefetched,
     run_gpu_wave,
+    take_prefetched,
 )
 
 
@@ -55,6 +60,31 @@ class TestApplyUmsChildEnv:
     def test_keys_tuple_complete(self) -> None:
         assert "VRAMD_MAX_AFFINITY_CUTS" in VRAMD_CHILD_ENV_KEYS
         assert "VRAMD_MAX_INFLIGHT" in VRAMD_CHILD_ENV_KEYS
+
+
+class TestCudaVisibleForChildren:
+    def test_maps_logical_ids_to_the_parent_visibility(self, monkeypatch) -> None:
+        """Pai com CVD=2,3: lógicos 0,1 têm de virar físicos 2,3 no filho."""
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+        assert cuda_visible_for_children([0, 1]) == [2, 3]
+        assert cuda_visible_for_children([0]) == [2]
+
+    def test_uuid_entries_are_preserved(self, monkeypatch) -> None:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-abc,3")
+        assert cuda_visible_for_children([0, 1]) == ["GPU-abc", 3]
+
+    def test_without_parent_visibility_ids_are_physical(self, monkeypatch) -> None:
+        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+        assert cuda_visible_for_children([0, 1]) == [0, 1]
+
+    def test_negative_and_out_of_range_entries(self, monkeypatch) -> None:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "-1,3")
+        assert cuda_visible_for_children([0, 5]) == [3, 5]
+
+    def test_empty_input_is_none(self, monkeypatch) -> None:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+        assert cuda_visible_for_children(None) is None
+        assert cuda_visible_for_children([]) is None
 
 
 class TestMasterDeferQueue:
@@ -203,6 +233,64 @@ class TestRunGpuWave:
             assert wave[0].status == "error"
             assert wave[1].status == "ok"
 
+    def test_wait_error_cancels_the_orphan_job(self) -> None:
+        """Sem cancel, um retry de paint submetia o mesmo output outra vez.
+
+        O job que o wait deu como falhado pode continuar na fila/GPU; o batch
+        de paint re-submete os falhados e dois jobs escreveriam o mesmo GLB.
+        """
+        specs = [UmsJobSpec(asset_id="a", payload={"output": "/no/a.glb"})]
+        with (
+            patch("aigamekit_shared.vramd_client.ensure_vramd_running", return_value=True),
+            patch("gameassets.vramd_coord.preload_backend", return_value=None),
+            patch("aigamekit_shared.vramd_client.submit_to_vramd", return_value={"status": "ok", "job_id": "j1"}),
+            patch("aigamekit_shared.vramd_client.wait_vramd_job", return_value={"status": "error", "error": "boom"}),
+            patch("aigamekit_shared.vramd_client.cancel_vramd_job") as cancel,
+        ):
+            wave = run_gpu_wave("text3d", specs, preload=False)
+        assert isinstance(wave, list) and wave[0].status == "error"
+        cancel.assert_called_once_with("j1", remote=None)
+
+    def test_wait_without_response_cancels_the_orphan_job(self) -> None:
+        specs = [UmsJobSpec(asset_id="a", payload={"output": "/no/a.glb"})]
+        with (
+            patch("aigamekit_shared.vramd_client.ensure_vramd_running", return_value=True),
+            patch("gameassets.vramd_coord.preload_backend", return_value=None),
+            patch("aigamekit_shared.vramd_client.submit_to_vramd", return_value={"status": "ok", "job_id": "j1"}),
+            patch("aigamekit_shared.vramd_client.wait_vramd_job", return_value=None),
+            patch("aigamekit_shared.vramd_client.cancel_vramd_job") as cancel,
+        ):
+            wave = run_gpu_wave("text3d", specs, preload=False)
+        assert isinstance(wave, list) and wave[0].error == "vramd wait sem resposta"
+        cancel.assert_called_once_with("j1", remote=None)
+
+    def test_wait_skipped_is_a_success_not_an_error(self) -> None:
+        """O worker pode dizer ``skipped`` se o output apareceu entretanto."""
+        specs = [UmsJobSpec(asset_id="a", payload={"output": "/no/a.glb"})]
+        with (
+            patch("aigamekit_shared.vramd_client.ensure_vramd_running", return_value=True),
+            patch("gameassets.vramd_coord.preload_backend", return_value=None),
+            patch("aigamekit_shared.vramd_client.submit_to_vramd", return_value={"status": "ok", "job_id": "j1"}),
+            patch(
+                "aigamekit_shared.vramd_client.wait_vramd_job",
+                return_value={"status": "skipped", "output": "/no/a.glb"},
+            ),
+            patch("aigamekit_shared.vramd_client.cancel_vramd_job") as cancel,
+        ):
+            wave = run_gpu_wave("text3d", specs, preload=False)
+        assert isinstance(wave, list) and wave[0].status == "skipped"
+        cancel.assert_not_called()
+
+
+class TestPrefetchRegistry:
+    def test_discard_only_removes_the_same_job(self, tmp_path: Path) -> None:
+        out = tmp_path / "painted.glb"
+        register_prefetched("paint3d", str(out), "j1")
+        assert discard_prefetched("paint3d", str(out), "outro") is False
+        assert is_prefetched("paint3d", str(out))
+        assert discard_prefetched("paint3d", str(out), "j1") is True
+        assert take_prefetched("paint3d", str(out)) is None
+
 
 class TestResultsAsBatchJsonl:
     def test_format(self) -> None:
@@ -226,13 +314,13 @@ class TestShapePaintSpecs:
         assert "from_image" in specs[0].payload
         assert specs[0].payload["steps"] == 40
 
-    def test_paint_specs_import_or_empty(self, tmp_path: Path) -> None:
+    def test_paint_specs_without_paint3d_package(self, tmp_path: Path) -> None:
+        """A wave paint monta os specs sem importar ``paint3d`` (que puxa torch).
+
+        O builder vive no Shared; com o import antigo o GameAssets caía no
+        ``texture-batch`` sequencial e a 2.ª GPU remota ficava parada.
+        """
         items = [{"id": "p", "mesh": "m.glb", "image": "i.png", "output": "o.glb"}]
-        try:
-            import paint3d.vramd_payload  # noqa: F401
-        except ImportError:
-            assert paint_specs_from_items(items, manifest_dir=tmp_path) == []
-            return
         specs = paint_specs_from_items(items, manifest_dir=tmp_path, max_views=4)
         assert len(specs) == 1
         assert specs[0].payload["max_num_view"] == 4

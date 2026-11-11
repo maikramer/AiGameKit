@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import contextlib
 import os
+import threading
 import time
+from collections import deque
 from collections.abc import Callable, Iterable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -51,20 +53,102 @@ class UmsJobSpec:
     output: str | None = None
     # remote | local | auto (campo ``gpu:`` do manifesto; auto = política global)
     gpu: str = "auto"
+    # high | normal | low — o vramd põe os críticos na GPU com melhor tier.
+    criticality: str = "normal"
 
 
 def attach_gpu(items: list[dict[str, Any]], rows: Iterable[Any]) -> None:
-    """Copia o campo ``gpu:`` dos ManifestRow para os itens de trabalho.
+    """Copia ``gpu:`` e a criticidade efectiva dos ManifestRow para os itens.
 
     Os itens passam por ficheiros JSON intermédios (shape/paint/text2d); sem
-    isto o ``vramd_batch`` não sabe se um asset é remoto, local ou auto.
+    isto o ``vramd_batch`` não sabe se um asset é remoto, local ou auto, nem
+    quanto vale a qualidade dele face ao tempo.
     """
-    by_id = {
-        str(getattr(row, "id", "")): str(getattr(row, "gpu", "auto") or "auto")
-        for row in rows
-    }
+    from .vramd_routing import effective_criticality
+
+    rows = list(rows)
+    by_id = {str(getattr(row, "id", "")): row for row in rows}
     for item in items:
-        item.setdefault("gpu", by_id.get(str(item.get("id")), "auto"))
+        row = by_id.get(str(item.get("id")))
+        item.setdefault("gpu", str(getattr(row, "gpu", "auto") or "auto") if row is not None else "auto")
+        if row is not None:
+            item.setdefault("criticality", effective_criticality(row))
+
+
+_CRIT_ORDER = {"high": 0, "normal": 1, "low": 2}
+
+# Jobs submetidos antes da wave deles (ex.: o paint de um asset assim que o
+# shape acaba, com várias GPUs). A wave encontra-os aqui pelo output e espera
+# por eles em vez de os submeter outra vez.
+_prefetched: dict[tuple[str, str], tuple[str, str]] = {}
+_prefetched_lock = threading.Lock()
+
+
+def _prefetch_key(backend: str, output: str | None) -> tuple[str, str] | None:
+    if not output:
+        return None
+    return backend, os.path.realpath(str(output))
+
+
+def register_prefetched(backend: str, output: str | None, job_id: str, gpu: str = "auto") -> None:
+    key = _prefetch_key(backend, output)
+    if key is not None:
+        with _prefetched_lock:
+            _prefetched[key] = (str(job_id), gpu)
+
+
+def take_prefetched(backend: str, output: str | None) -> tuple[str, str] | None:
+    """Job já submetido para este output (consumido: um retry submete de novo)."""
+    key = _prefetch_key(backend, output)
+    if key is None:
+        return None
+    with _prefetched_lock:
+        return _prefetched.pop(key, None)
+
+
+def is_prefetched(backend: str, output: str | None) -> bool:
+    key = _prefetch_key(backend, output)
+    with _prefetched_lock:
+        return key is not None and key in _prefetched
+
+
+def discard_prefetched(backend: str, output: str | None, job_id: str) -> bool:
+    """Remove a entrada **se ainda for este job**; ``False`` se já foi consumida.
+
+    O ``close`` de um prefetcher não pode limpar o registo global: outro
+    prefetcher (ou um retry) pode ter um job para o mesmo output. Só se apaga
+    quando o ``job_id`` ainda é o nosso.
+    """
+    key = _prefetch_key(backend, output)
+    if key is None:
+        return False
+    with _prefetched_lock:
+        current = _prefetched.get(key)
+        if current is None or current[0] != str(job_id):
+            return False
+        del _prefetched[key]
+        return True
+
+
+def clear_prefetched() -> list[tuple[str, str]]:
+    """Esvazia o registo; devolve os ``(job_id, gpu)`` que ninguém consumiu."""
+    with _prefetched_lock:
+        left = list(_prefetched.values())
+        _prefetched.clear()
+    return left
+
+
+def wave_window(capacity: int | None, max_depth: int | None = None) -> int:
+    """Jobs em voo por wave: 16, ou 4 por slot quando há muitas GPUs/peers.
+
+    O router do vramd só decide bem o que vê na fila — com 4 GPUs e 16 jobs em
+    voo, uma réplica nova só compensa se houver fila para a amortizar. Nunca
+    passa do ``max_depth - 1`` do servidor (fila cheia recusa submits).
+    """
+    window = max(16, 4 * max(1, int(capacity or 1)))
+    if max_depth:
+        window = min(window, max(1, int(max_depth) - 1))
+    return window
 
 
 @dataclass
@@ -204,6 +288,49 @@ def _gpu_remote(gpu: str | None) -> bool | None:
     return None
 
 
+def cuda_visible_for_children(gpu_ids: list[int] | None) -> list[int | str] | None:
+    """IDs lógicos (torch) → entradas do ``CUDA_VISIBLE_DEVICES`` do pai.
+
+    ``detect_gpu_ids`` devolve IDs **lógicos**: com
+    ``CUDA_VISIBLE_DEVICES=2,3`` no pai, devolve ``[0, 1]`` (as GPUs que o torch
+    numera 0/1). Passá-los crus a ``subprocess_gpu_env`` reescrevia o CVD do
+    filho para ``0,1`` e mudava-o para as GPUs físicas 0/1. Aqui cada ID lógico
+    é traduzido para a entrada correspondente do CVD do pai (índice físico ou
+    UUID); sem CVD do pai os IDs já são físicos.
+
+    Um ID fora do intervalo visível fica como está (não há entrada para o
+    traduzir) — mantém o comportamento antigo em vez de rebentar o batch.
+    """
+    if not gpu_ids:
+        return None
+    raw = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if raw is None:
+        return list(gpu_ids)
+    entries: list[str] = []
+    for chunk in raw.split(","):
+        entry = chunk.strip()
+        if not entry:
+            continue
+        with contextlib.suppress(ValueError):
+            if int(entry) < 0:
+                continue
+        entries.append(entry)
+    if not entries:
+        return list(gpu_ids)
+    mapped: list[int | str] = []
+    for gpu_id in gpu_ids:
+        idx = int(gpu_id)
+        if 0 <= idx < len(entries):
+            entry = entries[idx]
+            try:
+                mapped.append(int(entry))
+            except ValueError:
+                mapped.append(entry)  # UUID/MIG
+        else:
+            mapped.append(idx)
+    return mapped
+
+
 def run_gpu_wave(
     backend: str,
     items: list[UmsJobSpec],
@@ -244,14 +371,11 @@ def run_gpu_wave(
     need_local = False in modes or (None in modes and not remote_enabled())
     if need_remote and not remote_enabled():
         raise RuntimeError(
-            "a wave pede GPU remota (`gpu: remote`) mas VRAMD_REMOTE/VRAMD_REMOTE_TOKEN "
-            "não estão definidos."
+            "a wave pede GPU remota (`gpu: remote`) mas VRAMD_REMOTE/VRAMD_REMOTE_TOKEN não estão definidos."
         )
     if need_local and not ensure_vramd_running(force_local=True):
         if need_remote:
-            raise RuntimeError(
-                "wave mista: o vramd local não está disponível para os assets `gpu: local`."
-            )
+            raise RuntimeError("wave mista: o vramd local não está disponível para os assets `gpu: local`.")
         return FALLBACK_SUBPROCESS
     if need_remote and not ensure_vramd_running():
         # Remoto: o fallback local correria na GPU do laptop (ou numa máquina
@@ -267,21 +391,43 @@ def run_gpu_wave(
             preload_backend(backend, load_opts=preload_opts, force_local=(mode is False))
 
     # Janela ≤ max_depth vramd — submit-all-then-wait com 60 jobs + depth=32
-    # marcava os restantes como «fila cheia» sem nunca os correr.
-    window = 16
-    if need_remote:
-        try:
-            from aigamekit_shared.vramd_client import fetch_vramd_queue_snapshot
+    # marcava os restantes como «fila cheia» sem nunca os correr. Com várias
+    # GPUs/peers a janela cresce com a capacidade (o router precisa de fila).
+    capacity = 1
+    try:
+        from aigamekit_shared.vramd_topology import fetch_topology
 
-            snap = fetch_vramd_queue_snapshot()
-            if isinstance(snap, dict):
-                max_d = int(snap.get("max_depth") or 32)
-                window = max(1, min(16, max_d - 1))
-        except Exception:
-            pass
+        topo = fetch_topology(remote=False if not need_remote else None)
+        if topo is not None:
+            capacity = topo.capacity
+    except Exception:
+        pass
+    max_d: int | None = None
+    try:
+        from aigamekit_shared.vramd_client import fetch_vramd_queue_snapshot
+
+        snap = fetch_vramd_queue_snapshot()
+        if isinstance(snap, dict) and snap.get("max_depth"):
+            max_d = int(snap["max_depth"])
+    except Exception:
+        pass
+    window = wave_window(capacity, max_d or 32)
+
+    # Críticos primeiro: chegam à fila antes e apanham a GPU grande livre.
+    items = sorted(items, key=lambda s: _CRIT_ORDER.get(s.criticality, 1))
 
     results: list[UmsJobResult] = []
-    submitted: list[tuple[UmsJobSpec, str]] = []
+    submitted: deque[tuple[UmsJobSpec, str]] = deque()
+
+    def _cancel_orphan(spec: UmsJobSpec, job_id: str) -> None:
+        """Melhor esforço: um job que o wait não confirmou pode ficar a correr.
+
+        Num retry (paint) o mesmo output seria submetido outra vez e dois jobs
+        escreviam o mesmo GLB; num shape ficava VRAM ocupada sem ninguém à
+        espera. O cancel é idempotente e não falha o batch.
+        """
+        with contextlib.suppress(Exception):
+            cancel_vramd_job(job_id, remote=_gpu_remote(spec.gpu))
 
     def _wait_one(spec: UmsJobSpec, job_id: str) -> UmsJobResult:
         t0 = time.time()
@@ -293,6 +439,7 @@ def run_gpu_wave(
         )
         elapsed = round(time.time() - t0, 2)
         if wait_resp is None:
+            _cancel_orphan(spec, job_id)
             return UmsJobResult(
                 asset_id=spec.asset_id,
                 status="error",
@@ -302,10 +449,12 @@ def run_gpu_wave(
             )
         st = str(wait_resp.get("status") or "error")
         out = wait_resp.get("output") or spec.output or spec.payload.get("output")
-        if st == "ok":
+        if st in ("ok", "skipped"):
+            # ``skipped`` = o worker encontrou o output já feito (outro processo
+            # ou retry). Não é erro: o batch trata os dois como concluídos.
             return UmsJobResult(
                 asset_id=spec.asset_id,
-                status="ok",
+                status=st,
                 output=str(out) if out else None,
                 seconds=elapsed,
                 job_id=job_id,
@@ -320,6 +469,7 @@ def run_gpu_wave(
                 seconds=elapsed,
                 raw=wait_resp,
             )
+        _cancel_orphan(spec, job_id)
         return UmsJobResult(
             asset_id=spec.asset_id,
             status="error",
@@ -329,18 +479,27 @@ def run_gpu_wave(
             raw=wait_resp,
         )
 
+    def _wait_oldest() -> None:
+        spec, job_id = submitted.popleft()
+        jr = _wait_one(spec, job_id)
+        results.append(jr)
+        if on_progress:
+            on_progress(jr)
+
     def _drain_submitted() -> None:
-        nonlocal submitted
-        for spec, job_id in submitted:
-            jr = _wait_one(spec, job_id)
-            results.append(jr)
-            if on_progress:
-                on_progress(jr)
-        submitted = []
+        while submitted:
+            _wait_oldest()
 
     try:
         for spec in items:
             out_path = spec.output or spec.payload.get("output")
+            # Já submetido antes da wave (prefetch): só esperar por ele.
+            pre = take_prefetched(backend, out_path)
+            if pre is not None:
+                submitted.append((spec, pre[0]))
+                if len(submitted) >= window:
+                    _wait_oldest()
+                continue
             if out_path and not WAVE_FORCE.get() and Path(str(out_path)).is_file():
                 skipped = UmsJobResult(
                     asset_id=spec.asset_id,
@@ -375,8 +534,7 @@ def run_gpu_wave(
                         return FALLBACK_SUBPROCESS
                     if remote_enabled():
                         raise RuntimeError(
-                            "vramd remoto sem resposta no submit — sem fallback local "
-                            "(VRAMD_REMOTE ativo)."
+                            "vramd remoto sem resposta no submit — sem fallback local (VRAMD_REMOTE ativo)."
                         )
                     return FALLBACK_SUBPROCESS
                 if resp.get("status") == "ok" and resp.get("job_id"):
@@ -401,8 +559,11 @@ def run_gpu_wave(
                 continue
 
             submitted.append((spec, str(resp["job_id"])))
+            # Janela rolante: espera só pelo mais antigo e volta a submeter. O
+            # drain completo a cada 16 deixava as GPUs paradas na cauda de
+            # cada bloco à espera do job mais lento.
             if len(submitted) >= window:
-                _drain_submitted()
+                _wait_oldest()
 
         _drain_submitted()
     except KeyboardInterrupt:

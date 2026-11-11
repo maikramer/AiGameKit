@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -118,9 +119,131 @@ from .vramd_batch import (
     run_text2sound_wave_or_fallback,
     run_texture2d_wave_or_fallback,
 )
-from .vramd_coord import MasterDeferQueue, apply_vramd_child_env, attach_gpu
+from .vramd_coord import MasterDeferQueue, apply_vramd_child_env, attach_gpu, cuda_visible_for_children
+from .vramd_routing import PaintPrefetcher, is_parallel
 
 console = Console()
+
+
+def _paint_wave_kwargs(
+    profile: Any,
+    *,
+    manifest_dir: Path,
+    no_vramd: bool,
+    vramd_stream: bool,
+    gpu_ids: list[int] | None,
+) -> dict[str, Any]:
+    """Argumentos da wave paint3d (fonte única: a wave e o prefetch usam estes)."""
+    kw: dict[str, Any] = {
+        "manifest_dir": manifest_dir,
+        "no_vramd": no_vramd,
+        "vramd_stream": vramd_stream,
+        "gpu_ids": gpu_ids,
+        "texture_size": _quality_paint_texture_cap(profile),
+    }
+    p3 = profile.paint3d
+    if p3:
+        if p3.max_views is not None:
+            kw["max_views"] = p3.max_views
+        if p3.view_resolution is not None:
+            kw["view_resolution"] = p3.view_resolution
+        if p3.render_size is not None:
+            kw["render_size"] = p3.render_size
+        if p3.texture_size is not None:
+            kw["texture_size"] = p3.texture_size
+        if p3.bake_exp is not None:
+            kw["bake_exp"] = p3.bake_exp
+        kw["preserve_origin"] = p3.preserve_origin
+        kw["smooth"] = p3.smooth
+        if p3.smooth_passes is not None:
+            kw["smooth_passes"] = p3.smooth_passes
+    return kw
+
+
+def _make_paint_prefetcher(
+    *,
+    profile: Any,
+    rows: list[ManifestRow],
+    manifest_dir: Path,
+    text3d_bin: str | None,
+    child_env: dict[str, str],
+    force: bool,
+    no_vramd: bool,
+    vramd_stream: bool,
+    gpu_ids: list[int] | None,
+    skip_if_lod0: bool,
+) -> PaintPrefetcher:
+    """Prefetch shape→paint: o paint de cada asset entra na fila quando o shape acaba.
+
+    Só activo nos assets cujo vramd de destino tem várias GPUs/peers
+    (``capacity > 1``) e paint Hunyuan: com uma GPU, sobrepor paint e shapes
+    faria o vramd trocar de modelo a cada job. O ``gpu:`` de cada row decide o
+    destino — usar a topologia global ligava o prefetch no servidor remoto
+    multi-GPU mesmo quando todos os assets eram ``gpu: local`` numa GPU só.
+    """
+    style = ((profile.paint3d.style if profile.paint3d else None) or "hunyuan").strip().lower()
+    paint_rows = [r for r in rows if r.generate_paint]
+    # Só as rows que vão ser pintadas interessam; ``prepare`` volta a filtrar
+    # por destino (um batch misto pode ter rows paralelas e rows não).
+    parallel_rows = [r for r in paint_rows if is_parallel(getattr(r, "gpu", "auto"))]
+    enabled = not no_vramd and bool(text3d_bin) and style not in ("solid", "perlin") and bool(parallel_rows)
+    by_id = {r.id: r for r in rows}
+
+    def prepare(row_id: str) -> dict[str, Any] | None:
+        row = by_id.get(row_id)
+        if row is None or not row.generate_paint:
+            return None
+        if not is_parallel(getattr(row, "gpu", "auto")):
+            # Destino de uma GPU só: a wave serializa shape→paint como antes.
+            return None
+        img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
+        mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
+        if not force:
+            if mesh_painted.is_file():
+                return None
+            if skip_if_lod0:
+                from .paths import _lod_path
+
+                if _lod_path(mesh_f, 0).is_file():
+                    return None
+        assert text3d_bin is not None
+        mesh_paint = ensure_to_paint_for_paint(
+            mesh_f,
+            text3d_bin=text3d_bin,
+            profile=profile,
+            child_env=child_env,
+            manifest_dir=manifest_dir,
+            force=force,
+            row=row,
+        )
+        item: dict[str, Any] = {
+            "id": row.id,
+            "mesh": str(mesh_paint),
+            "image": str(img_f),
+            "output": str(mesh_painted),
+            "texture_size": _resolve_paint_texture_size(profile, row),
+            **_paint_item_overrides(profile, row),
+        }
+        attach_gpu([item], rows)
+        return item
+
+    kw = _paint_wave_kwargs(
+        profile, manifest_dir=manifest_dir, no_vramd=no_vramd, vramd_stream=vramd_stream, gpu_ids=gpu_ids
+    )
+    spec_kwargs = {k: v for k, v in kw.items() if k not in ("no_vramd", "vramd_stream")}
+    return PaintPrefetcher(prepare, spec_kwargs, enabled=enabled)
+
+
+def _close_prefetchers(prefetchers: list[PaintPrefetcher]) -> None:
+    """Fecha todos os prefetchers; um erro num não impede fechar os restantes.
+
+    Chamado no ``finally`` do batch: um ``fail-fast``/``Ctrl-C`` a meio da wave
+    de shapes deixava os jobs prefetched na fila do vramd e threads do pool
+    vivas (``close`` só corria no caminho feliz do paint).
+    """
+    for pf in prefetchers:
+        with contextlib.suppress(Exception):
+            pf.close()
 
 
 @click.command("batch")
@@ -952,7 +1075,9 @@ def batch_cmd(
         except Exception:
             pass  # sem vramd — continuar com subprocess cold-start
 
-    child_env = dict(subprocess_gpu_env(gpu_ids=gpu_ids))
+    # ``gpu_ids`` são lógicos (NVML/CVD do pai); o filho recebe as entradas
+    # físicas do CVD para não cair noutras GPUs quando o pai tem CVD=2,3.
+    child_env = dict(subprocess_gpu_env(gpu_ids=cuda_visible_for_children(gpu_ids)))
     # Pedidos GPU via vramd ficam atrás de CLIs interactivas (afinidade/prioridade).
     apply_vramd_child_env(child_env, vramd_stream=vramd_stream, no_vramd=no_vramd)
     if profile_tools:
@@ -977,9 +1102,16 @@ def batch_cmd(
             cli_profile=profile_tools,
             params=_batch_params,
         ),
-        batch_directory_lock(manifest_path, skip=skip_batch_lock),
+        batch_directory_lock(
+            manifest_path,
+            skip=skip_batch_lock,
+            command="batch",
+            mode=os.environ.get("VRAMD_GPU_MODE", ""),
+        ),
     ):
         batch_tmp = Path(tempfile.mkdtemp(prefix="gameassets_"))
+        # Prefetchers vivos neste batch; fechados no finally (qualquer saída).
+        active_prefetchers: list[PaintPrefetcher] = []
         try:
             if not no_dashboard:
                 # === Dashboard TUI path ===
@@ -1963,6 +2095,22 @@ def batch_cmd(
 
                             shape_ok_d: list[int] = []
                             finalized_d: set[int] = set()
+                            paint_pf_d = _make_paint_prefetcher(
+                                profile=profile,
+                                rows=rows,
+                                manifest_dir=manifest_dir,
+                                text3d_bin=text3d_bin,
+                                child_env=child_env,
+                                force=force,
+                                no_vramd=no_vramd,
+                                vramd_stream=vramd_stream,
+                                gpu_ids=gpu_ids,
+                                skip_if_lod0=False,
+                            )
+                            active_prefetchers.append(paint_pf_d)
+                            # Shapes já prontos (resume): o paint deles pode entrar já.
+                            for _sk in shape_skipped_d:
+                                paint_pf_d.prefetch(rows[_sk].id)
 
                             if shape_items_d:
                                 attach_gpu(shape_items_d, rows)
@@ -1999,8 +2147,8 @@ def batch_cmd(
 
                                 ums_shape_results = run_shape_wave_or_fallback(
                                     shape_items_d,
-                                    on_progress=lambda r: dash.feed_event(
-                                        r.asset_id, "text3d", r.status, phase="shape"
+                                    on_progress=paint_pf_d.chain(
+                                        lambda r: dash.feed_event(r.asset_id, "text3d", r.status, phase="shape")
                                     ),
                                     **_shape_kw,
                                 )
@@ -2179,20 +2327,26 @@ def batch_cmd(
                                         rec_d = results_d[idx]
                                         img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
                                         mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
-                                        if not force and mesh_painted.is_file():
+                                        _pf_owned_d = paint_pf_d.owns(row.id)
+                                        if not force and mesh_painted.is_file() and not _pf_owned_d:
                                             paint_skipped_d.add(idx)
                                             paint_idx_map_d[row.id] = idx
                                             continue
                                         try:
                                             assert text3d_bin is not None
-                                            mesh_paint = ensure_to_paint_for_paint(
-                                                mesh_f,
-                                                text3d_bin=text3d_bin,
-                                                profile=profile,
-                                                child_env=child_env,
-                                                manifest_dir=manifest_dir,
-                                                force=force,
-                                                row=row,
+                                            _pf_mesh_d = paint_pf_d.prepared_mesh(row.id)
+                                            mesh_paint = (
+                                                Path(_pf_mesh_d)
+                                                if _pf_mesh_d
+                                                else ensure_to_paint_for_paint(
+                                                    mesh_f,
+                                                    text3d_bin=text3d_bin,
+                                                    profile=profile,
+                                                    child_env=child_env,
+                                                    manifest_dir=manifest_dir,
+                                                    force=force,
+                                                    row=row,
+                                                )
                                             )
                                         except Exception as exc:
                                             failures += 1
@@ -2221,28 +2375,13 @@ def batch_cmd(
                                         paint_manifest_path.write_text(json.dumps(paint_items_d, indent=2))
 
                                         p3 = profile.paint3d
-                                        _paint_kw: dict[str, Any] = {
-                                            "manifest_dir": manifest_dir,
-                                            "no_vramd": no_vramd,
-                                            "vramd_stream": vramd_stream,
-                                            "gpu_ids": gpu_ids,
-                                            "texture_size": _quality_paint_texture_cap(profile),
-                                        }
-                                        if p3:
-                                            if p3.max_views is not None:
-                                                _paint_kw["max_views"] = p3.max_views
-                                            if p3.view_resolution is not None:
-                                                _paint_kw["view_resolution"] = p3.view_resolution
-                                            if p3.render_size is not None:
-                                                _paint_kw["render_size"] = p3.render_size
-                                            if p3.texture_size is not None:
-                                                _paint_kw["texture_size"] = p3.texture_size
-                                            if p3.bake_exp is not None:
-                                                _paint_kw["bake_exp"] = p3.bake_exp
-                                            _paint_kw["preserve_origin"] = p3.preserve_origin
-                                            _paint_kw["smooth"] = p3.smooth
-                                            if p3.smooth_passes is not None:
-                                                _paint_kw["smooth_passes"] = p3.smooth_passes
+                                        _paint_kw = _paint_wave_kwargs(
+                                            profile,
+                                            manifest_dir=manifest_dir,
+                                            no_vramd=no_vramd,
+                                            vramd_stream=vramd_stream,
+                                            gpu_ids=gpu_ids,
+                                        )
 
                                         if paint_idx_map_d and text3d_bin:
                                             _paint_kw["reprep_item"] = make_paint_degrader(
@@ -2264,6 +2403,7 @@ def batch_cmd(
                                             ),
                                             **_paint_kw,
                                         )
+                                        paint_pf_d.close()
 
                                         if ums_paint_results is None:
                                             batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
@@ -3433,6 +3573,8 @@ def batch_cmd(
                         if use_phased:
                             # === SHAPE BATCH ===
                             shape_manifest_items: list[dict[str, Any]] = []
+                            # Prefetch shape→paint (só com várias GPUs); None = sem shapes a gerar.
+                            _paint_pf_plain: PaintPrefetcher | None = None
                             shape_idx_map: dict[str, int] = {}
                             shape_ok: list[int] = []
                             finalized_indices: set[int] = set()
@@ -3527,8 +3669,22 @@ def batch_cmd(
                                         if getattr(t3, "preset", None):
                                             _shape_kw["preset"] = t3.preset
 
+                                _paint_pf_plain = _make_paint_prefetcher(
+                                    profile=profile,
+                                    rows=rows,
+                                    manifest_dir=manifest_dir,
+                                    text3d_bin=text3d_bin,
+                                    child_env=child_env,
+                                    force=force,
+                                    no_vramd=no_vramd,
+                                    vramd_stream=vramd_stream,
+                                    gpu_ids=gpu_ids,
+                                    skip_if_lod0=True,
+                                )
+                                active_prefetchers.append(_paint_pf_plain)
                                 ums_shape_results = run_shape_wave_or_fallback(
                                     shape_manifest_items,
+                                    on_progress=_paint_pf_plain.chain(None),
                                     **_shape_kw,
                                 )
 
@@ -3744,19 +3900,25 @@ def batch_cmd(
                                         if task_paint is not None:
                                             progress.advance(task_paint)
                                         continue
-                                    if mesh_painted.is_file() and not force:
+                                    _pf_owned = _paint_pf_plain is not None and _paint_pf_plain.owns(row.id)
+                                    if mesh_painted.is_file() and not force and not _pf_owned:
                                         _queue_master(rec, mesh_painted, row)
 
                                     assert text3d_bin is not None
                                     try:
-                                        mesh_paint = ensure_to_paint_for_paint(
-                                            mesh_final,
-                                            text3d_bin=text3d_bin,
-                                            profile=profile,
-                                            child_env=child_env,
-                                            manifest_dir=manifest_dir,
-                                            force=force,
-                                            row=row,
+                                        _pf_mesh = _paint_pf_plain.prepared_mesh(row.id) if _paint_pf_plain else None
+                                        mesh_paint = (
+                                            Path(_pf_mesh)
+                                            if _pf_mesh
+                                            else ensure_to_paint_for_paint(
+                                                mesh_final,
+                                                text3d_bin=text3d_bin,
+                                                profile=profile,
+                                                child_env=child_env,
+                                                manifest_dir=manifest_dir,
+                                                force=force,
+                                                row=row,
+                                            )
                                         )
                                     except Exception as exc:
                                         failures += 1
@@ -3786,28 +3948,13 @@ def batch_cmd(
                                     paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
 
                                     p3 = profile.paint3d
-                                    _paint_kw: dict[str, Any] = {
-                                        "manifest_dir": manifest_dir,
-                                        "no_vramd": no_vramd,
-                                        "vramd_stream": vramd_stream,
-                                        "gpu_ids": gpu_ids,
-                                        "texture_size": _quality_paint_texture_cap(profile),
-                                    }
-                                    if p3:
-                                        if p3.max_views is not None:
-                                            _paint_kw["max_views"] = p3.max_views
-                                        if p3.view_resolution is not None:
-                                            _paint_kw["view_resolution"] = p3.view_resolution
-                                        if p3.render_size is not None:
-                                            _paint_kw["render_size"] = p3.render_size
-                                        if p3.texture_size is not None:
-                                            _paint_kw["texture_size"] = p3.texture_size
-                                        if p3.bake_exp is not None:
-                                            _paint_kw["bake_exp"] = p3.bake_exp
-                                        _paint_kw["preserve_origin"] = p3.preserve_origin
-                                        _paint_kw["smooth"] = p3.smooth
-                                        if p3.smooth_passes is not None:
-                                            _paint_kw["smooth_passes"] = p3.smooth_passes
+                                    _paint_kw = _paint_wave_kwargs(
+                                        profile,
+                                        manifest_dir=manifest_dir,
+                                        no_vramd=no_vramd,
+                                        vramd_stream=vramd_stream,
+                                        gpu_ids=gpu_ids,
+                                    )
 
                                     if paint_idx_map and text3d_bin:
                                         _paint_kw["reprep_item"] = make_paint_degrader(
@@ -3826,6 +3973,8 @@ def batch_cmd(
                                         paint_manifest_items,
                                         **_paint_kw,
                                     )
+                                    if _paint_pf_plain is not None:
+                                        _paint_pf_plain.close()
 
                                     t_paint_total = time.perf_counter()
                                     r4 = None
@@ -4106,6 +4255,9 @@ def batch_cmd(
                                     raise click.Abort()
                                 progress.advance(task2)
         finally:
+            # Qualquer saída (erro, fail-fast, Ctrl-C): jobs prefetched que a
+            # wave de paint não reclamou não podem ficar na fila do vramd.
+            _close_prefetchers(active_prefetchers)
             shutil.rmtree(batch_tmp, ignore_errors=True)
 
         summary = Table(box=box.SIMPLE, show_header=False, title="[bold]Resumo[/bold]")

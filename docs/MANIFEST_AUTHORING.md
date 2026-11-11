@@ -108,6 +108,8 @@ assets:
 | `omni.control_type` | opcional | Softfill se omitido; humanoid → `pose`, props → `bbox` |
 | `text3d.*` | raro | Override lab (octree, mc_level, morph…) — ver §6 |
 | `animate` / `rig` | se no pipeline | Preset Quaternius; bipedes → `humanoid` + `force_preset` |
+| `criticality` | opcional | `high`/`hero`, `normal`, `low`/`filler`, `auto` (default: pela `category`). Com várias GPUs o vramd põe os críticos na GPU de melhor tier e o enchimento na mais pequena — ver [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md#várias-gpus-e-peers) |
+| `gpu` | opcional | `remote`/`local`/`auto` — em que vramd correm as fases GPU |
 
 `game.yaml` define defaults globais (`generation: medium`, `text3d:`, paths).
 O manifesto **por asset** ganha quando há conflito explícito.

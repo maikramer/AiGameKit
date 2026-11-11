@@ -25,6 +25,83 @@ def _resolve_path(manifest_dir: Path, raw: str) -> Path:
     return (manifest_dir / p).resolve()
 
 
+def _payload_gpu_ids(item: dict[str, Any], gpu_ids: list[int] | None) -> list[int] | None:
+    """``gpu_ids`` só para jobs locais; no remoto o router decide as GPUs.
+
+    ``gpu_ids`` vem do NVML da máquina que submete. Num job remoto esses IDs não
+    correspondem às GPUs do servidor (podem nem existir: um portátil com
+    ``0,1`` a mandar para um servidor de uma GPU). Em ``auto`` segue
+    ``VRAMD_GPU_MODE``/``VRAMD_REMOTE``, como ``run_gpu_wave``.
+    """
+    if not gpu_ids:
+        return None
+    from aigamekit_shared.vramd_remote import remote_enabled
+
+    from .vramd_coord import _gpu_remote
+
+    remote = _gpu_remote(str(item.get("gpu") or "auto"))
+    if remote is True or (remote is None and remote_enabled()):
+        return None
+    return gpu_ids
+
+
+def _evict_backend(name: str, gpu: str | None = None) -> None:
+    """Liberta os pesos de um backend antes da wave seguinte (transição de fase).
+
+    O vramd mantém o worker do backend carregado (idle evict 120s). Na transição
+    imagem→shape o text2d (~5.4 GiB) impediu o load do text3d (~4.5 GiB): o
+    worker text3d morreu com "EOF no load" e o batch falhou. Uma evicção
+    explícita no início de cada wave liberta a VRAM sem depender do idle evict
+    ou das affinity cuts. ``VRAMD_PHASE_EVICT=0`` desliga.
+
+    Args:
+        gpu: ``remote``/``local``/``auto`` do asset — um ``release`` sem isto
+            ia sempre ao vramd global e, com ``VRAMD_REMOTE`` ligado, evictava
+            o servidor errado para uma wave ``gpu: local`` (e vice-versa).
+    """
+    import os
+
+    if os.environ.get("VRAMD_PHASE_EVICT", "1").strip().lower() in ("0", "false", "no", "off"):
+        return
+    # Várias GPUs/peers: cada GPU tem o seu gestor e o vramd abre espaço onde
+    # o job cai. Um ``release`` global aqui despejaria réplicas quentes noutras
+    # GPUs (ou o paint de um asset prefetched) sem ganho nenhum.
+    from .vramd_coord import _gpu_remote
+    from .vramd_routing import is_parallel
+
+    remote = _gpu_remote(gpu)
+    if is_parallel(gpu):
+        return
+    try:
+        from aigamekit_shared.vramd_client import send_request
+
+        # hard=True (vramd >= 0.7.9): evicta E mata o worker. Só descarregar os
+        # pesos deixava o contexto CUDA/allocator preso (~5 GiB no text2d) e a
+        # wave seguinte era recusada por "VRAM insuficiente". O vramd antigo
+        # ignora a chave e mantém o comportamento soft.
+        send_request(
+            {"cmd": "release", "backend": name, "hard": True},
+            timeout_sec=30.0,
+            force_local=remote is False,
+        )
+    except Exception:
+        pass
+
+
+def _evict_for_items(name: str, items: list[dict[str, Any]]) -> None:
+    """Evicta ``name`` no vramd de **cada** destino (local e/ou remoto)."""
+    from aigamekit_shared.vramd_remote import remote_enabled
+
+    from .vramd_coord import _gpu_remote
+
+    targets: set[bool] = set()
+    for item in items:
+        remote = _gpu_remote(str(item.get("gpu") or "auto"))
+        targets.add(remote if remote is not None else remote_enabled())
+    for remote in sorted(targets):
+        _evict_backend(name, "remote" if remote else "local")
+
+
 def resolve_text3d_vram_opts(
     sdnq_preset: str | None,
     memory_efficient: bool | None,
@@ -118,6 +195,10 @@ def shape_specs_from_items(
                 return int(item[k])
         return int(wave) if wave is not None else None
 
+    from .vramd_routing import text3d_opts_for_size, tiered_payload
+
+    wave_hw_auto = sdnq_preset is None and memory_efficient is None
+
     specs: list[UmsJobSpec] = []
     for item in items:
         aid = str(item["id"])
@@ -126,12 +207,15 @@ def shape_specs_from_items(
         item_steps = _opt_int(item, "steps", wave=steps)
         item_octree = _opt_int(item, "octree_resolution", "octree", wave=octree_resolution)
         item_chunks = _opt_int(item, "num_chunks", "chunks", wave=num_chunks)
-        # Wave já resolveu via hw_auto; item pode override (ainda passa pelo resolver).
+        # Wave já resolveu via hw_auto; item pode override. ``null`` no item
+        # herda a wave (era tratado como override vazio e perdia o preset/offload
+        # explícito do profile).
         item_sdnq, item_mem = resolve_text3d_vram_opts(
-            item.get("sdnq_preset", wave_sdnq),
-            item.get("memory_efficient", wave_mem),
+            item.get("sdnq_preset") if item.get("sdnq_preset") is not None else wave_sdnq,
+            item.get("memory_efficient") if item.get("memory_efficient") is not None else wave_mem,
         )
-        payload = build_generate_request(
+        item_gpu_ids = _payload_gpu_ids(item, gpu_ids)
+        kwargs: dict[str, Any] = dict(
             from_image=str(img),
             output=str(out),
             steps=item_steps,
@@ -156,18 +240,32 @@ def shape_specs_from_items(
             pose_file=str(item["pose_file"]) if item.get("pose_file") else None,
             point_cloud=str(item["point_cloud"]) if item.get("point_cloud") else None,
             voxel_mesh=str(item["voxel_mesh"]) if item.get("voxel_mesh") else None,
-            gpu_ids=gpu_ids,
+            gpu_ids=item_gpu_ids,
             sdnq_preset=item_sdnq,
             memory_efficient=bool(item_mem),
         )
-        specs.append(
-            UmsJobSpec(
-                asset_id=aid,
-                payload=payload,
-                output=str(out),
-                gpu=str(item.get("gpu") or "auto"),
-            )
+        payload = build_generate_request(**kwargs)
+
+        def _variant(size_mib: int, _kw: dict[str, Any] = kwargs) -> dict[str, Any] | None:
+            opts = text3d_opts_for_size(size_mib)
+            if opts is None:
+                return None
+            return build_generate_request(**{**_kw, "sdnq_preset": opts[0], "memory_efficient": bool(opts[1])})
+
+        gpu = str(item.get("gpu") or "auto")
+        crit = str(item.get("criticality") or "normal")
+        # ``sdnq_preset: null`` no item continua a significar "usa o hw-auto da
+        # wave" (o resolver trata None como omitido) — presença da chave não
+        # desliga os tiers.
+        item_hw_auto = item.get("sdnq_preset") is None and item.get("memory_efficient") is None
+        tiered_payload(
+            payload,
+            gpu=gpu,
+            criticality=crit,
+            hw_auto=wave_hw_auto and item_hw_auto,
+            variant_for_size=_variant,
         )
+        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out), gpu=gpu, criticality=crit))
     return specs
 
 
@@ -190,11 +288,17 @@ def paint_specs_from_items(
 ) -> list[UmsJobSpec]:
     """Converte items do paint_manifest.json em ``UmsJobSpec``."""
     try:
-        from paint3d.vramd_payload import build_texture_request
+        # Shared: não importa o pacote Paint3D (torch/trimesh) no venv do
+        # GameAssets — era o que fazia a wave cair para o texture-batch
+        # sequencial e deixava a 2.ª GPU remota parada.
+        from aigamekit_shared.vramd_paint_payload import build_texture_request
     except ImportError:
         return []
 
+    from .vramd_routing import paint3d_opts_for_size, tiered_payload
+
     wave_sdnq, wave_mem = resolve_paint3d_vram_opts(memory_efficient, sdnq_preset)
+    wave_hw_auto = memory_efficient is None and sdnq_preset is None
 
     specs: list[UmsJobSpec] = []
     for item in items:
@@ -203,10 +307,11 @@ def paint_specs_from_items(
         image = _resolve_path(manifest_dir, str(item.get("image") or item.get("image_path")))
         out = _resolve_path(manifest_dir, str(item["output"]))
         item_sdnq, item_mem = resolve_paint3d_vram_opts(
-            item.get("memory_efficient", wave_mem),
-            item.get("sdnq_preset", wave_sdnq),
+            item.get("memory_efficient") if item.get("memory_efficient") is not None else wave_mem,
+            item.get("sdnq_preset") if item.get("sdnq_preset") is not None else wave_sdnq,
         )
-        payload = build_texture_request(
+        item_gpu_ids = _payload_gpu_ids(item, gpu_ids)
+        kwargs: dict[str, Any] = dict(
             mesh_path=str(mesh),
             image_path=str(image),
             output=str(out),
@@ -218,19 +323,30 @@ def paint_specs_from_items(
             preserve_origin=bool(item.get("preserve_origin", preserve_origin)),
             smooth=bool(item.get("smooth", smooth)),
             smooth_passes=item.get("smooth_passes", smooth_passes),
-            gpu_ids=gpu_ids,
+            gpu_ids=item_gpu_ids,
             memory_efficient=bool(item_mem),
             sdnq_preset=item_sdnq,
             pbr_enrich=item.get("pbr_enrich", pbr_enrich),
         )
-        specs.append(
-            UmsJobSpec(
-                asset_id=aid,
-                payload=payload,
-                output=str(out),
-                gpu=str(item.get("gpu") or "auto"),
-            )
+        payload = build_texture_request(**kwargs)
+
+        def _variant(size_mib: int, _kw: dict[str, Any] = kwargs) -> dict[str, Any] | None:
+            opts = paint3d_opts_for_size(size_mib)
+            if opts is None:
+                return None
+            return build_texture_request(**{**_kw, "sdnq_preset": opts[0], "memory_efficient": opts[1]})
+
+        gpu = str(item.get("gpu") or "auto")
+        crit = str(item.get("criticality") or "normal")
+        item_hw_auto = item.get("sdnq_preset") is None and item.get("memory_efficient") is None
+        tiered_payload(
+            payload,
+            gpu=gpu,
+            criticality=crit,
+            hw_auto=wave_hw_auto and item_hw_auto,
+            variant_for_size=_variant,
         )
+        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out), gpu=gpu, criticality=crit))
     return specs
 
 
@@ -259,6 +375,10 @@ def run_shape_wave_or_fallback(
         return None
     if not items:
         return []
+    # Transição imagem→shape: libertar o worker text2d (~5.4 GiB) antes de
+    # carregar o text3d (~4.5 GiB); sem isto o load do text3d morria (EOF).
+    # Por destino: um asset ``gpu: local`` não pode evictar o servidor remoto.
+    _evict_for_items("text2d", items)
     specs = shape_specs_from_items(
         items,
         manifest_dir=manifest_dir,
@@ -469,6 +589,10 @@ def run_paint_wave_or_fallback(
         return None
     if not items:
         return []
+    # Transição shape/refine→paint: libertar text3d/hi3d antes do paint3d.
+    # Por destino (local/remoto) — ver ``_evict_for_items``.
+    for _prior in ("text3d", "hi3d"):
+        _evict_for_items(_prior, items)
     specs = paint_specs_from_items(
         items,
         manifest_dir=manifest_dir,
@@ -660,11 +784,14 @@ def text2d_specs_from_items(
         except Exception:
             pass
 
+    from .vramd_routing import text2d_opts_for_size, tiered_payload
+
     specs: list[UmsJobSpec] = []
     for item in items:
         aid = str(item["id"])
         out = _resolve_path(manifest_dir, str(item["output"]))
-        payload = build_generate_request(
+        item_gpu_ids = _payload_gpu_ids(item, gpu_ids)
+        kwargs: dict[str, Any] = dict(
             prompt=str(item["prompt"]),
             output=str(out),
             width=int(item.get("width", w)),
@@ -673,7 +800,7 @@ def text2d_specs_from_items(
             guidance=float(item.get("guidance", item.get("guidance_scale", g))),
             seed=item.get("seed"),
             model_id=item.get("model_id", model_id),
-            gpu_ids=gpu_ids,
+            gpu_ids=item_gpu_ids,
             memory_efficient=mem,
             quant_preset=quant,
             # O footprint/calibração do vramd só casa quando o load_kwargs
@@ -685,14 +812,30 @@ def text2d_specs_from_items(
             transparent=True if transparent else None,
             refs=item.get("refs"),
         )
-        specs.append(
-            UmsJobSpec(
-                asset_id=aid,
-                payload=payload,
-                output=str(out),
-                gpu=str(item.get("gpu") or "auto"),
+        payload = build_generate_request(**kwargs)
+
+        def _variant(
+            size_mib: int, _kw: dict[str, Any] = kwargs, _item: dict[str, Any] = item
+        ) -> dict[str, Any] | None:
+            opts = text2d_opts_for_size(size_mib)
+            if opts is None:
+                return None
+            v_quant, v_mem, v_model, v_footprint = opts
+            return build_generate_request(
+                **{
+                    **_kw,
+                    "quant_preset": v_quant,
+                    "memory_efficient": v_mem,
+                    "allow_group_offload": v_mem,
+                    "model_id": _kw["model_id"] if "model_id" in _item else v_model,
+                    "footprint_key": v_footprint,
+                }
             )
-        )
+
+        gpu = str(item.get("gpu") or "auto")
+        crit = str(item.get("criticality") or "normal")
+        tiered_payload(payload, gpu=gpu, criticality=crit, hw_auto=True, variant_for_size=_variant)
+        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out), gpu=gpu, criticality=crit))
     return specs
 
 
@@ -720,6 +863,8 @@ def texture2d_specs_from_items(
     except ImportError:
         return []
 
+    from .vramd_routing import routed_payload
+
     w, h, st, g = width, height, steps, guidance
     if quality:
         try:
@@ -741,6 +886,7 @@ def texture2d_specs_from_items(
     for item in items:
         aid = str(item["id"])
         out = _resolve_path(manifest_dir, str(item["output"]))
+        item_gpu_ids = _payload_gpu_ids(item, gpu_ids)
         payload = build_generate_request(
             prompt=str(item["prompt"]),
             output=str(out),
@@ -755,14 +901,18 @@ def texture2d_specs_from_items(
             # bool() aqui desligava o ground-enhancer no caminho delegado.
             ground=item.get("ground", "auto"),
             model_id=item.get("model_id", model_id),
-            gpu_ids=gpu_ids,
+            gpu_ids=item_gpu_ids,
         )
+        gpu = str(item.get("gpu") or "auto")
+        crit = str(item.get("criticality") or "normal")
+        routed_payload(payload, gpu=gpu, criticality=crit)
         specs.append(
             UmsJobSpec(
                 asset_id=aid,
                 payload=payload,
                 output=str(out),
-                gpu=str(item.get("gpu") or "auto"),
+                gpu=gpu,
+                criticality=crit,
             )
         )
     return specs
@@ -788,6 +938,8 @@ def skymap2d_specs_from_items(
     except ImportError:
         return []
 
+    from .vramd_routing import routed_payload
+
     mem = resolve_skymap2d_vram_opts()
     specs: list[UmsJobSpec] = []
     for item in items:
@@ -805,15 +957,19 @@ def skymap2d_specs_from_items(
             cfg_scale=item.get("cfg_scale", cfg_scale),
             lora_strength=item.get("lora_strength", lora_strength),
             preset=item.get("preset", preset),
-            gpu_ids=gpu_ids,
+            gpu_ids=_payload_gpu_ids(item, gpu_ids),
             memory_efficient=mem,
         )
+        gpu = str(item.get("gpu") or "auto")
+        crit = str(item.get("criticality") or "normal")
+        routed_payload(payload, gpu=gpu, criticality=crit)
         specs.append(
             UmsJobSpec(
                 asset_id=aid,
                 payload=payload,
                 output=str(out),
-                gpu=str(item.get("gpu") or "auto"),
+                gpu=gpu,
+                criticality=crit,
             )
         )
     return specs
@@ -837,6 +993,8 @@ def text2sound_specs_from_items(
     except ImportError:
         return []
 
+    from .vramd_routing import routed_payload
+
     half = resolve_text2sound_vram_opts(half_precision)
     specs: list[UmsJobSpec] = []
     for item in items:
@@ -855,16 +1013,20 @@ def text2sound_specs_from_items(
             sampler_type=item.get("sampler_type", item.get("sampler")),
             negative_prompt=item.get("negative_prompt"),
             half_precision=bool(item_half) if item_half is not None else half,
-            gpu_ids=gpu_ids,
+            gpu_ids=_payload_gpu_ids(item, gpu_ids),
             quality=item.get("quality", quality),
             category=item.get("category", category),
         )
+        gpu = str(item.get("gpu") or "auto")
+        crit = str(item.get("criticality") or "normal")
+        routed_payload(payload, gpu=gpu, criticality=crit)
         specs.append(
             UmsJobSpec(
                 asset_id=aid,
                 payload=payload,
                 output=str(out),
-                gpu=str(item.get("gpu") or "auto"),
+                gpu=gpu,
+                criticality=crit,
             )
         )
     return specs
@@ -882,15 +1044,18 @@ def terrain3d_specs_from_items(
     except ImportError:
         return []
 
+    from .vramd_routing import routed_payload
+
     specs: list[UmsJobSpec] = []
     for item in items:
         aid = str(item["id"])
         out = _resolve_path(manifest_dir, str(item["output"]))
         meta = item.get("metadata_path")
         meta_s = str(_resolve_path(manifest_dir, str(meta))) if meta else None
+        item_gpu_ids = _payload_gpu_ids(item, gpu_ids)
         device = item.get("device")
-        if device is None and gpu_ids:
-            device = f"cuda:{gpu_ids[0]}"
+        if device is None and item_gpu_ids:
+            device = f"cuda:{item_gpu_ids[0]}"
         payload = build_generate_request(
             output=str(out),
             metadata_path=meta_s,
@@ -904,14 +1069,18 @@ def terrain3d_specs_from_items(
             dtype=item.get("dtype"),
             cache_size=item.get("cache_size"),
             coarse_window=item.get("coarse_window"),
-            gpu_ids=gpu_ids,
+            gpu_ids=item_gpu_ids,
         )
+        gpu = str(item.get("gpu") or "auto")
+        crit = str(item.get("criticality") or "normal")
+        routed_payload(payload, gpu=gpu, criticality=crit)
         specs.append(
             UmsJobSpec(
                 asset_id=aid,
                 payload=payload,
                 output=str(out),
-                gpu=str(item.get("gpu") or "auto"),
+                gpu=gpu,
+                criticality=crit,
             )
         )
     return specs
@@ -938,6 +1107,10 @@ def run_text2d_wave_or_fallback(
         return None
     if not items:
         return []
+    # Transição shape/paint→imagem: libertar os workers pesados do 3D.
+    # Por destino (local/remoto) — ver ``_evict_for_items``.
+    for _prior in ("text3d", "paint3d", "hi3d"):
+        _evict_for_items(_prior, items)
     specs = text2d_specs_from_items(
         items,
         manifest_dir=manifest_dir,

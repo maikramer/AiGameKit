@@ -14,10 +14,12 @@ license = "MIT"
 # `./install.sh vramd` refresca). O clone irmão ~/GitClones/vramd é o upstream
 # de desenvolvimento: só se instala editável quando se está a desenvolver o
 # próprio vramd, nunca como dependência do monorepo.
-# 0.6.0: modo remoto (--listen, sandbox stage/put/get/list/clean) e o cliente
-# com VRAMD_REMOTE — é o que o servidor de GPU do Vael usa.
+# 0.7.0: router/topologia (`topology`, `hw_tiers`) e o protocolo binário de
+# blobs que o cliente do Shared usa (frames + CAS). O piso acompanha o
+# `Shared/pyproject.toml` (>=0.7.0): com 0.6 o staging remoto caía no caminho
+# JSON/base64 e não havia topologia para dimensionar a fila.
 dependencies = [
-    "vramd>=0.6.0",
+    "vramd>=0.7.0",
 ]
 
 [project.scripts]
