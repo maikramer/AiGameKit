@@ -1181,7 +1181,14 @@ def cmd_game_pack(
     # Caminho procedural (criaturas / fallback): canonicalizar a frente do
     # modelo (quadrúpedes chegam "de lado" do Hunyuan3D e o classificador/gait
     # assumem lateral=X), renomear chains e aplicar preset.
-    facing_info = bpy_ops.canonicalize_creature_facing(arm_name, facing=facing)
+    #
+    # Humanoide NÃO passa pelo auto: o bbox de um humanoide em A-pose é mais
+    # largo (X) do que fundo (Y) — exactamente o que o heurístico de criatura
+    # lê como "de lado" e roda 90° (merchant do Vael saía de perfil). O shape
+    # humanoide do pipeline já nasce de frente para −Y; o auto só faz sentido
+    # em criaturas. Um --facing explícito continua a mandar.
+    effective_facing = "+z" if (facing == "auto" and preset.lower() == "humanoid") else facing
+    facing_info = bpy_ops.canonicalize_creature_facing(arm_name, facing=effective_facing)
     if facing_info.get("rotated_deg"):
         console.print(
             f"[cyan]Facing:[/cyan] modelo rodado {facing_info['rotated_deg']:+.0f}° "
@@ -1958,6 +1965,8 @@ def cmd_retarget(
         clip_name,
         enforce_limits=ik_limits,
         limits=limits,
+        apose_open_deg=profile.apose_open_deg,
+        apose_bones=profile.apose_bones,
     )
     _print_retarget_result(res)
 

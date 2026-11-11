@@ -2,14 +2,20 @@
 CC0 do Quaternius) sobre um rig *target* (ex.: humanoides do simple-rpg).
 
 Método: o target adopta a pose global *absoluta* do source por osso. A correção
-fixa por osso é ``inverse(rest_source) @ inverse(swing) @ rest_target``, onde
-``swing`` é a rotação de arco mínimo entre a direção de rest do osso source e a
-do osso target (em espaço de armature). Remover o swing é essencial quando os
-rests diferem (source T-pose vs target A-pose): sem isso, o delta "baixar
+fixa por osso é ``inverse(rest_source) @ inverse(swing) @ open(apose_open_deg) @ rest_target``,
+onde ``swing`` é a rotação de arco mínimo entre a direção de rest do osso source
+e a do osso target (em espaço de armature). Remover o swing é essencial quando
+os rests diferem (source T-pose vs target A-pose): sem isso, o delta "baixar
 braços" do idle Quaternius é aplicado por cima de braços já baixados no A-pose
-e enfia-os dentro do tronco. Com o swing removido, a direção mundial do osso
-target iguala sempre a do source — o idle fica com os braços ao lado das coxas
-como no Quaternius.
+e enfia-os dentro do tronco.
+
+Mas remover o swing *por inteiro* trata o target como se fosse T-pose: o
+idle/walk do Quaternius fica com os braços a ~26° da vertical e, num corpo
+chibi de ancas largas, as mãos entram na cintura/calções. Por isso os ossos de
+braço abrem ``apose_open_deg`` (default 15°) para fora do arco T→A — um ângulo
+fixo, não uma fracção (os arcos dos rigs variam de ~26° a ~60°), rodando a
+cadeia do braço em bloco (o cotovelo não muda). O resto do corpo segue o
+source à risca.
 
 A pose global do pai é propagada analiticamente (dict por frame, pais primeiro),
 nunca lida de ``pose.bone.matrix`` a meio do frame — essa leitura seria stale
@@ -49,6 +55,26 @@ _DATA_DIR = Path(__file__).resolve().parent / "data" / "retarget"
 # (Quaternius), ``B-hips`` (KevDev) ou ``Hips`` (Mixamo). O root fica sempre
 # estático (ver ensure_feet_root_bone).
 _HIPS_CANDIDATES = ("pelvis", "Hips")
+
+# Abertura A-pose: ossos de braço que recebem parte do arco T→A de volta para
+# fora. A clavícula fica de fora — o swing dela mistura frente/trás (a ombreira
+# não é um arco limpo) e rodá-la desloca o ombro em vez de abrir o braço. A
+# cadeia toda (upperarm/lowerarm/hand) roda em bloco, logo o cotovelo não muda.
+_DEFAULT_APOSE_BONES = (
+    "upperarm_l",
+    "upperarm_r",
+    "lowerarm_l",
+    "lowerarm_r",
+    "hand_l",
+    "hand_r",
+)
+# Abertura em GRAUS do ombro (não fracção do arco): os rigs do Vael têm A-pose
+# entre ~26° e ~60° de arco, e uma fracção fixa dava idles de 40° a 60° — o
+# blacksmith ficava quase em T-pose. 15° põe os braços a ~41° da vertical em
+# todos, tira as mãos da cintura e é limitado pelo arco do próprio rig (uma
+# A-pose mais fechada que 15° não é empurrada para lá do T-pose). Override por
+# perfil: ``apose_open_deg:``/``apose_bones:``.
+APOSE_OPEN_DEG_DEFAULT = 15.0
 
 
 def _resolve_location_pair(tgt_to_src: dict[str, str]) -> tuple[str | None, str | None]:
@@ -94,6 +120,12 @@ class RetargetProfile:
     # Bloco ``ik_limits:`` (merge raso sobre data/ik/limits.yaml) — limites de
     # juntas aplicados no passe IK pós-retarget (animator3d.ik). None = default.
     ik_limits: dict[str, Any] | None = None
+    # Abertura A-pose (ver _axis_correction): graus de abertura do ombro nos
+    # ossos de ``apose_bones``, limitados pelo arco T→A do próprio rig.
+    # Aplicada por retarget_batch/_retarget_from_file; retarget_animation só a
+    # recebe explicitamente.
+    apose_open_deg: float = APOSE_OPEN_DEG_DEFAULT
+    apose_bones: tuple[str, ...] = _DEFAULT_APOSE_BONES
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -162,6 +194,15 @@ def load_profile(name_or_path: str | Path) -> RetargetProfile:
         if not isinstance(ik_limits_raw, dict):
             raise ValueError(f"ik_limits do perfil {p.name!r} tem de ser um mapa (enabled/roles)")
         ik_limits = dict(ik_limits_raw)
+    apose_open_raw = raw.get("apose_open_deg", APOSE_OPEN_DEG_DEFAULT)
+    if isinstance(apose_open_raw, bool) or not isinstance(apose_open_raw, (int, float)):
+        raise ValueError(f"apose_open_deg do perfil {p.name!r} tem de ser um número de graus")
+    apose_open_deg = float(apose_open_raw)
+    if apose_open_deg < 0.0:
+        raise ValueError(f"apose_open_deg do perfil {p.name!r} não pode ser negativo (recebido {apose_open_deg})")
+    apose_bones_raw = raw.get("apose_bones", list(_DEFAULT_APOSE_BONES))
+    if not isinstance(apose_bones_raw, list) or not all(isinstance(b, str) for b in apose_bones_raw):
+        raise ValueError(f"apose_bones do perfil {p.name!r} tem de ser uma lista de nomes de ossos")
     return RetargetProfile(
         name=raw.get("profile", p.stem),
         bone_map=bone_map,
@@ -170,6 +211,8 @@ def load_profile(name_or_path: str | Path) -> RetargetProfile:
         source_files_root=(str(raw["source_files"]["root"]) if raw.get("source_files", {}).get("root") else None),
         replace_keys=replace_keys,
         ik_limits=ik_limits,
+        apose_open_deg=apose_open_deg,
+        apose_bones=tuple(apose_bones_raw),
         extra=extra,
     )
 
@@ -375,21 +418,37 @@ def _bone_rest_dir(arm: Any, bone_name: str, mapped: set[str]) -> Any:
     return (bone.tail_local - bone.head_local).normalized()
 
 
-def _axis_correction(src_rest: Any, tgt_rest: Any, src_dir: Any, tgt_dir: Any) -> Any:
+def _axis_correction(src_rest: Any, tgt_rest: Any, src_dir: Any, tgt_dir: Any, *, apose_open_deg: float = 0.0) -> Any:
     """Correção fixa por osso: converte pose global source em pose global target.
 
     ``desired_target = source_pose @ correction`` faz a direção mundial do osso
-    target seguir exactamente a do source. O ``swing`` (arco mínimo entre as
-    direções de rest) é removido para que diferenças T-pose/A-pose entre rigs
-    não sejam re-aplicadas como delta por cima do rest do target.
+    target seguir a do source. O ``swing`` (arco mínimo entre as direções de
+    rest) é removido para que diferenças T-pose/A-pose entre rigs não sejam
+    re-aplicadas como delta por cima do rest do target.
+
+    ``apose_open_deg`` abre o braço para fora (target-rest → source-rest) esse
+    número de graus. 0 segue o source à risca (target como T-pose); 15° tira as
+    mãos da cintura dos corpos chibi sem devolver o idle ao A-pose completo. É
+    aplicado ao osso e aos filhos com o mesmo ângulo, logo o cotovelo fica
+    intacto.
 
     Args:
         src_rest: quaternion do rest do osso source (armature space).
         tgt_rest: quaternion do rest do osso target (armature space).
         src_dir: direção de rest do osso source (``tail - head`` normalizado).
         tgt_dir: direção de rest do osso target.
+        apose_open_deg: graus de abertura do ombro para fora do arco T→A.
     """
+    from math import radians
+
     swing = src_dir.rotation_difference(tgt_dir)
+    if apose_open_deg:
+        from mathutils import Quaternion
+
+        # O eixo do arco T→A é o eixo do ombro. Rodar no sentido oposto ao
+        # swing (``inv(swing)``) abre o braço para fora da pose do source.
+        extra = Quaternion(swing.axis, -radians(float(apose_open_deg)))
+        return src_rest.inverted() @ swing.inverted() @ extra @ tgt_rest
     return src_rest.inverted() @ swing.inverted() @ tgt_rest
 
 
@@ -438,6 +497,53 @@ def resolve_bone_pairs(
     return tgt_to_src, skipped
 
 
+_SIDE_PAIRS = ("_l", "_r")
+
+
+def _rig_sides_mirrored(target: Any, source: Any, tgt_to_src: dict[str, str]) -> bool:
+    """True se os lados ``_l``/``_r`` do target estão trocados face ao source.
+
+    Alguns rigs saem do Rigging3D com os ossos ``_l`` no lado oposto do mesh
+    (o bandit do Vael é 180° espelhado: ``upperarm_l`` em -X). Como o bone_map
+    é por nome, sem detectar isto o braço esquerdo do mesh segue o direito do
+    source e cruza o tronco. Compara as direções de rest dos pares ``_l``/``_r``:
+    se a soma dos produtos internos cruzados ganhar à dos mesmos lados, o rig
+    está espelhado e os valores do map devem trocar.
+
+    Só corre com ambos os lados mapeados; a margem evita trocas em rigs
+    simétricos (T-pose/A-pose normais dão same-side ≈ +0.8, swapped ≈ -0.8).
+    """
+    src_mapped = set(tgt_to_src.values())
+    tgt_mapped = set(tgt_to_src)
+    same = 0.0
+    swapped = 0.0
+    pairs = 0
+    for tgt_bn in tgt_to_src:
+        if not tgt_bn.endswith("_l"):
+            continue
+        other = tgt_bn[:-2] + "_r"
+        if other not in tgt_to_src:
+            continue
+        tgt_l_dir = _bone_rest_dir(target, tgt_bn, tgt_mapped)
+        tgt_r_dir = _bone_rest_dir(target, other, tgt_mapped)
+        src_l_dir = _bone_rest_dir(source, tgt_to_src[tgt_bn], src_mapped)
+        src_r_dir = _bone_rest_dir(source, tgt_to_src[other], src_mapped)
+        same += tgt_l_dir.dot(src_l_dir) + tgt_r_dir.dot(src_r_dir)
+        swapped += tgt_l_dir.dot(src_r_dir) + tgt_r_dir.dot(src_l_dir)
+        pairs += 1
+    return pairs > 0 and swapped > same + 0.25
+
+
+def _swap_side_pairs(tgt_to_src: dict[str, str]) -> None:
+    """Troca os valores source dos pares target ``_l``/``_r`` (in-place)."""
+    for tgt_bn in list(tgt_to_src):
+        if not tgt_bn.endswith("_l"):
+            continue
+        other = tgt_bn[:-2] + "_r"
+        if other in tgt_to_src:
+            tgt_to_src[tgt_bn], tgt_to_src[other] = tgt_to_src[other], tgt_to_src[tgt_bn]
+
+
 def retarget_animation(
     target_arm_name: str,
     source_arm_name: str,
@@ -447,6 +553,8 @@ def retarget_animation(
     *,
     enforce_limits: bool = True,
     limits: Any | None = None,
+    apose_open_deg: float = 0.0,
+    apose_bones: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Retarget de uma action do source para o target (matrix_basis copy).
 
@@ -463,6 +571,9 @@ def retarget_animation(
             (:mod:`animator3d.ik`) — repara joelhos invertidos e clampa o curso
             anatómico. ON por defeito; poses válidas ficam intactas.
         limits: limites pré-carregados (override do perfil); None = default.
+        apose_open_deg: graus de abertura do ombro para fora do arco T→A nos
+            ossos de ``apose_bones`` (0 = sem abertura; ver _axis_correction).
+        apose_bones: ossos do target que recebem ``apose_open_deg``; None/[] = nenhum.
 
     Returns:
         Dict com ``clip``, ``frames``, ``bones_mapped``, ``skipped_bones``, ``ik``.
@@ -482,15 +593,21 @@ def retarget_animation(
 
     # Pares mapeados que existem em ambos os rigs (candidatos: primeiro ganha).
     tgt_to_src, skipped = resolve_bone_pairs(target.data.bones, source.data.bones, bone_map)
+    # Rig espelhado (bandit): trocar os lados antes de calcular as correcções,
+    # senão o braço esquerdo do mesh segue o direito do source e cruza o tronco.
+    if _rig_sides_mirrored(target, source, tgt_to_src):
+        _swap_side_pairs(tgt_to_src)
 
     order = _topo_sort_target_bones(target, list(tgt_to_src))
 
     # Correção fixa por osso (ver _axis_correction): pose global target =
     # pose global source @ correction. O swing entre direções de rest é
-    # removido para que T-pose vs A-pose não vire delta duplicado.
+    # removido para que T-pose vs A-pose não vire delta duplicado; os ossos de
+    # braço abrem ``apose_open_deg`` desse arco para fora (mãos fora da cintura).
     axis_correction: dict[str, Any] = {}
     src_mapped = set(tgt_to_src.values())
     tgt_mapped = set(tgt_to_src)
+    apose_set = set(apose_bones) if apose_bones is not None else set()
     for tgt_bn, src_bn in tgt_to_src.items():
         src_bone = source.data.bones[src_bn]
         tgt_bone = target.data.bones[tgt_bn]
@@ -501,6 +618,7 @@ def retarget_animation(
             tgt_bone.matrix_local.to_quaternion(),
             src_dir,
             tgt_dir,
+            apose_open_deg=apose_open_deg if tgt_bn in apose_set else 0.0,
         )
 
     # Rests do target pré-calculados para a propagação analítica por frame.
@@ -676,6 +794,8 @@ def retarget_batch(
                 clean_name,
                 enforce_limits=enforce_limits,
                 limits=limits,
+                apose_open_deg=profile.apose_open_deg,
+                apose_bones=profile.apose_bones,
             )
             results.append(res)
         except ValueError as e:
@@ -746,6 +866,8 @@ def retarget_batch_files(
                     clean_name,
                     enforce_limits=enforce_limits,
                     limits=limits,
+                    apose_open_deg=profile.apose_open_deg,
+                    apose_bones=profile.apose_bones,
                 )
             )
         except ValueError as e:
@@ -770,6 +892,8 @@ def _retarget_from_file(
     *,
     enforce_limits: bool = True,
     limits: Any | None = None,
+    apose_open_deg: float = 0.0,
+    apose_bones: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Importa um FBX de animação, retargetiza a sua action única e limpa a cena.
 
@@ -800,6 +924,8 @@ def _retarget_from_file(
             clean_name,
             enforce_limits=enforce_limits,
             limits=limits,
+            apose_open_deg=apose_open_deg,
+            apose_bones=apose_bones,
         )
     finally:
         # Descartar o source e os actions do take (a action nova do target

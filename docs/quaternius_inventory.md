@@ -254,19 +254,28 @@ O rig do Quaternius usa **T-pose** (braços horizontais); os rigs do simple-rpg
 sobre rests diferentes produz o dobro do movimento. Resultado: no idle, os braços
 do hero cruzavam o tronco em V.
 
-### A solução: axis correction + swing removal
+### A solução: axis correction + swing removal + abertura A-pose
 
 Para cada osso mapeado, pré-computa-se uma correcção fixa (uma vez, do rest pose):
 
 ```
 swing = src_dir.rotation_difference(tgt_dir)   # arco mínimo entre direções de rest
-correction = src_rest⁻¹ @ swing⁻¹ @ tgt_rest
+correction = src_rest⁻¹ @ swing⁻¹ @ open_deg(apose_open_deg) @ tgt_rest
 ```
 
 - `src_dir`/`tgt_dir`: direção do osso (tail − head) no rest, em armature space
 - `swing`: rotação que alinha a direção de rest do source com a do target
 - Remover o swing (`swing⁻¹`) garante que a diferença T-pose/A-pose **não** é
   re-aplicada como delta — só o movimento real da animação é transferido
+- `apose_open_deg` (default **15°**, `apose_open_deg`/`apose_bones` no perfil)
+  abre o ombro para fora, no eixo do arco T→A, nos ossos de braço
+  (`upperarm_*`, `lowerarm_*`, `hand_*`). Sem isto o target é tratado como se
+  fosse T-pose: o idle/walk do Quaternius fica com os braços a ~26° da vertical
+  e, num corpo chibi de ancas largas (hero, merchant, blacksmith), as mãos
+  entram na cintura/calções. 15° põe o braço a ~41° da vertical em todos os
+  rigs (os arcos variam de ~26° a ~60°; uma fracção fixa dava idles de 40° a
+  60°) e a cadeia roda em bloco, logo o cotovelo não muda. A clavícula fica de
+  fora (o swing dela mistura frente/trás e desloca o ombro).
 
 ### Propagação analítica por frame
 

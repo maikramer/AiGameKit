@@ -31,6 +31,31 @@ def test_load_builtin_profile_quaternius() -> None:
     assert profile.clip_map["walk"] == "Walk_Loop"
     assert profile.clip_map["death"] == "Death01"
     assert profile.clip_map["attack"] == "Sword_Attack"
+    # Abertura A-pose default (15° de ombro, limitada pelo arco do rig).
+    assert profile.apose_open_deg == rt.APOSE_OPEN_DEG_DEFAULT == 15.0
+    assert profile.apose_bones[:2] == ("upperarm_l", "upperarm_r")
+
+
+def test_load_profile_apose_open_override(tmp_path: Path) -> None:
+    """``apose_open_deg``/``apose_bones`` do YAML sobrepõem os defaults."""
+    p = tmp_path / "apose.yaml"
+    p.write_text(
+        "profile: apose\nbone_map: {}\nclip_map: {}\napose_open_deg: 30\napose_bones: [upperarm_l]\n",
+        encoding="utf-8",
+    )
+    profile = rt.load_profile(p)
+    assert profile.apose_open_deg == 30.0
+    assert profile.apose_bones == ("upperarm_l",)
+
+
+def test_load_profile_apose_open_negative_raises(tmp_path: Path) -> None:
+    """``apose_open_deg`` negativo falha cedo, com mensagem clara."""
+    import pytest
+
+    p = tmp_path / "apose.yaml"
+    p.write_text("profile: apose\nbone_map: {}\nclip_map: {}\napose_open_deg: -5\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="apose_open_deg"):
+        rt.load_profile(p)
 
 
 def test_load_profile_missing_raises() -> None:
@@ -283,11 +308,46 @@ def test_solve_target_basis_maps_source_rest_to_target_rest() -> None:
     _assert_same_rotation(basis, Quaternion())
 
 
+def _fake_arm(dirs: dict[str, tuple[float, float, float]]) -> SimpleNamespace:
+    """Armature mínimo (só ``data.bones`` com direções de rest) para os helpers."""
+    from mathutils import Vector
+
+    bones = {
+        name: SimpleNamespace(
+            name=name,
+            head_local=Vector((0.0, 0.0, 0.0)),
+            tail_local=Vector(d).normalized(),
+            parent=None,
+            children=[],
+        )
+        for name, d in dirs.items()
+    }
+    return SimpleNamespace(data=SimpleNamespace(bones=bones))
+
+
+def test_rig_sides_mirrored_detects_swapped_lr() -> None:
+    """Rig com ``_l`` em -X e ``_r`` em +X (bandit) -> espelhado; normal -> não."""
+    src = _fake_arm({"upperarm_l": (1.0, 0.0, 0.0), "upperarm_r": (-1.0, 0.0, 0.0)})
+    normal = _fake_arm({"upperarm_l": (1.0, 0.0, -1.0), "upperarm_r": (-1.0, 0.0, -1.0)})
+    mirrored = _fake_arm({"upperarm_l": (-1.0, 0.0, -1.0), "upperarm_r": (1.0, 0.0, -1.0)})
+    pairs = {"upperarm_l": "upperarm_l", "upperarm_r": "upperarm_r"}
+
+    assert rt._rig_sides_mirrored(normal, src, pairs) is False
+    assert rt._rig_sides_mirrored(mirrored, src, pairs) is True
+
+
+def test_swap_side_pairs() -> None:
+    pairs = {"upperarm_l": "upperarm_l", "upperarm_r": "upperarm_r", "pelvis": "pelvis"}
+    rt._swap_side_pairs(pairs)
+    assert pairs == {"upperarm_l": "upperarm_r", "upperarm_r": "upperarm_l", "pelvis": "pelvis"}
+
+
 def test_axis_correction_matches_source_direction_tpose_vs_apose() -> None:
     """Source T-pose (braço +X) vs target A-pose (braço 45° para baixo).
 
-    Com a correção, a direção mundial do osso target tem de seguir a do source
-    em qualquer pose — incluindo o rest do source e uma pose animada.
+    Com ``apose_open_deg=0`` (default da correcção), a direção mundial do osso
+    target segue a do source em qualquer pose — incluindo o rest do source e
+    uma pose animada. É o modo "target tratado como T-pose".
     """
     from mathutils import Vector
 
@@ -308,6 +368,33 @@ def test_axis_correction_matches_source_direction_tpose_vs_apose() -> None:
     animated = _rotation((0, 0, 1), -80) @ source_rest
     animated_target_pose = animated @ correction
     assert (animated_target_pose @ y - animated @ y).length < 1e-6
+
+
+def test_axis_correction_apose_open_rotates_arm_outward() -> None:
+    """``apose_open_deg`` abre o braço para fora do arco T→A, não o remove.
+
+    Num par T-pose/A-pose de 45°, abrir 22.5° deixa o braço 22.5° acima do
+    T-pose — é isto que tira as mãos da cintura nos rigs chibi.
+    """
+    from mathutils import Vector
+
+    y = Vector((0, 1, 0))
+    source_rest = _rotation((0, 0, 1), -90)
+    target_rest = _rotation((0, 0, 1), -45)
+    src_dir = source_rest @ y
+    tgt_dir = target_rest @ y
+
+    correction = rt._axis_correction(source_rest, target_rest, src_dir, tgt_dir, apose_open_deg=22.5)
+
+    rest_dir = (source_rest @ correction) @ y
+    expected = _rotation((0, 0, 1), -22.5) @ src_dir
+    assert (rest_dir - expected).length < 1e-6
+
+    # A pose animada mantém o mesmo offset outward (as rotações partilham eixo).
+    animated = _rotation((0, 0, 1), -80) @ source_rest
+    animated_dir = (animated @ correction) @ y
+    expected_animated = _rotation((0, 0, 1), -22.5) @ (animated @ y)
+    assert (animated_dir - expected_animated).length < 1e-6
 
 
 def test_axis_correction_identity_when_rests_equal() -> None:
