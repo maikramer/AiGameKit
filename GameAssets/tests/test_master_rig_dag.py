@@ -204,3 +204,35 @@ def test_lod0_white_guard_requires_parseable_glb(tmp_path: Path) -> None:
         img_final=img, mesh_final=mesh, want_texture=True, wants_rig=False, wants_animate=False
     )
     assert state == _ROW_DONE
+
+
+def test_clean_painted_without_shape_goes_to_animate(tmp_path: Path) -> None:
+    """Shape apagado por stale, mas clean+painted+rigged presentes -> animate.
+
+    O master pipeline aceita explicitamente clean+painted sem shape; o
+    classificador forçava need_shape e o resume regenerava todo o asset (era o
+    atrito dos characters-interiors).
+    """
+    from gameassets.paths import (
+        _ROW_NEED_ANIMATE,
+        _classify_row_state_master,
+        _clean_path,
+        _painted_path,
+        _rigged_path,
+    )
+
+    img = tmp_path / "img.png"
+    img.write_bytes(b"png")
+    mesh = tmp_path / "mesh.glb"
+    for p in (_clean_path(mesh), _painted_path(mesh), _rigged_path(mesh)):
+        write_min_glb(p)
+
+    state = _classify_row_state_master(
+        img_final=img,
+        mesh_final=mesh,
+        want_texture=True,
+        wants_rig=True,
+        wants_animate=True,
+        wants_lod=False,
+    )
+    assert state == _ROW_NEED_ANIMATE

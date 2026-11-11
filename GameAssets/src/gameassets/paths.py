@@ -695,7 +695,12 @@ def _classify_row_state_master(
         return _ROW_NEED_IMAGE
     # Omni mudou ou shape ausente → regenerar. Clean órfão (sem shape) NÃO
     # salta Stage 1 — senão resume avança paint sobre mesh gorda/stale.
-    if omni_stale or shape_any is None:
+    # Sem shape, mas com clean (e eventualmente painted) o master pipeline
+    # consegue fazer topology-fix→paint (clean existe) ou seguir para
+    # rig/animate/LOD — ver o comentário "clean+painted sem shape (apagado por
+    # stale) -> segue bake/LOD" em pipeline.py. Só é preciso regenerar o shape
+    # quando não há sequer clean (ou o omni está stale).
+    if omni_stale or (shape_any is None and clean_any is None):
         return _ROW_NEED_SHAPE
     if clean_any is None:
         return _ROW_NEED_TOPOLOGY_FIX
