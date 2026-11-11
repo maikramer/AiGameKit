@@ -1926,17 +1926,19 @@ def ensure_to_paint_for_paint(
 
     to_paint_p = _to_paint_path(mesh_final)
     existing = _to_paint_existing(mesh_final)
+    # O refine Hi3D devolve topologia própria (não passou topology-fix): o
+    # xatlas parte-a em >15k charts (campfire_pit: >60 s) e o bake fica sem
+    # cobertura (trust 0,9% vs 62-70% de uma malha limpa). A malha do paint
+    # tem de ser refixada mesmo quando cabe no orçamento de faces — e um
+    # ``_to_paint`` antigo (gerado antes do refix+morph) não pode ser reusado.
+    refined_input = "_refined" in clean_p.stem
     reuse_ok = (
         not force
+        and not refined_input
         and existing is not None
         and existing.is_file()
         and existing.stat().st_mtime >= clean_p.stat().st_mtime
     )
-    # O refine Hi3D devolve topologia própria (não passou topology-fix): o
-    # xatlas parte-a em >15k charts (campfire_pit: >60 s) e o bake fica sem
-    # cobertura (trust 0,9% vs 62-70% de uma malha limpa). A malha do paint
-    # tem de ser refixada mesmo quando cabe no orçamento de faces.
-    refined_input = "_refined" in clean_p.stem
 
     if current <= int(target * 1.1) and not refined_input:
         log.info(
@@ -1963,19 +1965,33 @@ def ensure_to_paint_for_paint(
     to_paint_p.parent.mkdir(parents=True, exist_ok=True)
 
     if refined_input:
-        # O refined hi3d pode exceder o budget do atlas: simplificar primeiro
-        # (o ``to_paint_faces`` por linha manda — witch_hut a 60k) e só depois o
-        # refix leve. Sem isto o budget era ignorado neste caminho.
-        paint_src = clean_p
-        if current > int(target * 1.1):
+        # ORDEM: refix ANTES do simplify. O Hi3D devolve arestas non-manifold;
+        # o Decimate sobre essa malha estilhaça-a (5.186 componentes/86k bordos
+        # no longhouse) e o xatlas passa de >600 s a ~160 s depois do morph-close
+        # + keep das cascas. O budget do atlas aplica-se ao simplify seguinte.
+        refix_src = to_paint_p.with_name(to_paint_p.stem + "_refixsrc" + to_paint_p.suffix)
+        _refix_paint_input(
+            clean_p,
+            refix_src,
+            text3d_bin=text3d_bin,
+            child_env=child_env,
+            manifest_dir=manifest_dir,
+            row=row,
+            morph_close=_refined_refix_morph(profile, row),
+            keep_internal_shells=True,
+        )
+        refix_faces = _count_faces_glb(refix_src)
+        paint_src = refix_src
+        if refix_faces > int(target * 1.1):
             simplified_p = to_paint_p.with_name(to_paint_p.stem + "_simplified" + to_paint_p.suffix)
             console.print(
-                f"[cyan]⏳ to_paint[/cyan] {row_id} ({clean_p.name} {current:,} -> ~{target:,} faces, atlas={tex_size})"
+                f"[cyan]⏳ to_paint[/cyan] {row_id} "
+                f"({refix_src.name} {refix_faces:,} -> ~{target:,} faces, atlas={tex_size})"
             )
             sargv = [
                 text3d_bin,
                 "simplify",
-                str(clean_p),
+                str(refix_src),
                 "-o",
                 str(simplified_p),
                 "--target-faces",
@@ -1987,18 +2003,11 @@ def ensure_to_paint_for_paint(
                 err = merge_subprocess_output(rs, max_chars=400) or "simplify do refined falhou"
                 raise RuntimeError(err)
             paint_src = simplified_p
-        console.print(
-            f"[cyan]⏳ to_paint[/cyan] {row_id} "
-            f"(refix {paint_src.name}, {_count_faces_glb(paint_src):,} faces, atlas={tex_size})"
-        )
-        _refix_paint_input(
-            paint_src,
-            to_paint_p,
-            text3d_bin=text3d_bin,
-            child_env=child_env,
-            manifest_dir=manifest_dir,
-            row=row,
-        )
+        if paint_src != to_paint_p:
+            paint_src.replace(to_paint_p)
+        if refix_src.is_file() and refix_src != to_paint_p:
+            with contextlib.suppress(OSError):
+                refix_src.unlink()
         out_faces = _count_faces_glb(to_paint_p)
         console.print(
             f"[green]✓ to_paint[/green] {row_id} -> {to_paint_p.name}"
@@ -2049,6 +2058,22 @@ def ensure_to_paint_for_paint(
     return to_paint_p
 
 
+def _refined_refix_morph(profile: GameProfile, row: ManifestRow | None) -> float:
+    """Morph-close (m) do refix do ``_refined`` antes do simplify.
+
+    O Hi3D devolve arestas não-manifold (4 faces por aresta). Decimar essa
+    malha directamente estilhaça-a (longhouse: 5.186 componentes/86k bordos a
+    150k) e o xatlas explode (>600 s; bake trust 28,8% → mosaico). Um fecho
+    sub-cm sela as rachas sem apagar detalhe visível e deixa o xatlas em ~160 s
+    a 265k (medido a 2026-11-11). Escala com a silhueta: 0,5 mm por metro,
+    clamp 0,3-10 mm.
+    """
+    char = _char_m_for_budget(profile, row)
+    if char is None or char <= 0:
+        return 0.003
+    return max(0.0003, min(0.01, float(char) * 0.0005))
+
+
 def _refix_paint_input(
     src: Path,
     dst: Path,
@@ -2058,13 +2083,20 @@ def _refix_paint_input(
     manifest_dir: Path,
     row: ManifestRow | None,
     required: bool = True,
+    morph_close: float = 0.0,
+    keep_internal_shells: bool = True,
 ) -> Path:
-    """``topology-fix`` leve (weld/fill, morph 0) do input do paint.
+    """``topology-fix`` leve (weld/fill) do input do paint.
 
-    O refine Hi3D gera topologia que o xatlas não consegue abrir (15,8k charts,
-    >60 s) e o bake fica sem cobertura. Refixar antes do paint dá ao xatlas uma
-    malha saneada (e remove cascas internas invisíveis). ``required=False``
-    mantém o caminho antigo (simplify já saneia) e só avisa.
+    O refine Hi3D devolve topologia que o xatlas não abre (vértices split,
+    arestas não-manifold, 15,8k charts e >60 s) e o bake fica sem cobertura.
+    Refixar antes do paint dá ao xatlas uma malha saneada.
+
+    ``keep_internal_shells=True``: o refix é weld/fill, não limpeza de cascas.
+    Strip por face abre a malha (longhouse: 15k faces removidas, 21 componentes)
+    e custa 264 s vs 4 s do keep; a limpeza de cascas já foi feita no ``_clean``.
+    ``morph_close`` > 0 sela rachas/non-manifold do refine (voxel close).
+    ``required=False`` mantém o caminho antigo (simplify já saneia) e só avisa.
     """
     refix_p = dst.with_name(dst.stem + "_refixed" + dst.suffix)
     refix_argv = [
@@ -2076,8 +2108,10 @@ def _refix_paint_input(
         "--engine",
         "arrays",
         "--morph-close",
-        "0",
+        f"{float(morph_close):g}",
     ]
+    if keep_internal_shells:
+        refix_argv.append("--keep-internal-shells")
     if row is not None and row.category:
         refix_argv.extend(["--category", str(row.category)])
     r = run_cmd(refix_argv, extra_env=child_env, cwd=manifest_dir)
