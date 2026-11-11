@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import socket
 import threading
 import time
 from pathlib import Path
@@ -12,6 +11,23 @@ from unittest.mock import patch
 import pytest
 
 from aigamekit_shared import vramd_client as ms
+from aigamekit_shared import vramd_endpoint as endpoint
+
+
+class TestDiscoverVramdPython:
+    def test_vramd_venv_override_posix_layout(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        python = tmp_path / "venv" / "bin" / "python"
+        python.parent.mkdir(parents=True)
+        python.write_text("#!/bin/sh\n")
+        monkeypatch.setenv("VRAMD_VENV", str(tmp_path / "venv"))
+        assert ms._discover_vramd_python() == python
+
+    def test_vramd_venv_override_windows_layout(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        python = tmp_path / "venv" / "Scripts" / "python.exe"
+        python.parent.mkdir(parents=True)
+        python.write_text("")
+        monkeypatch.setenv("VRAMD_VENV", str(tmp_path / "venv"))
+        assert ms._discover_vramd_python() == python
 
 
 class TestResolveUmsPriority:
@@ -120,9 +136,8 @@ class TestUmsClientAgainstMockSocket:
         received: list[dict] = []
 
         def _serve() -> None:
-            srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            srv.bind(str(sock_path))
-            srv.listen(16)
+            # Transporte do SO: Unix no POSIX, TCP+token no Windows.
+            srv, _info = endpoint.listen(sock_path)
             srv.settimeout(5.0)
             # is_server_running faz connect+close sem enviar — ignorar ligações vazias.
             for _ in range(16):
@@ -192,9 +207,7 @@ class TestUmsClientAgainstMockSocket:
         sock_path = tmp_path / "stream.sock"
 
         def _serve() -> None:
-            srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            srv.bind(str(sock_path))
-            srv.listen(1)
+            srv, _info = endpoint.listen(sock_path)
             conn, _ = srv.accept()
             with conn:
                 while b"\n" not in conn.recv(4096):

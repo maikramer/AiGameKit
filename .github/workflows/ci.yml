@@ -93,6 +93,36 @@ jobs:
           pytest -v --tb=short
         working-directory: ${{ steps.repo.outputs.path }}/${{ matrix.package }}
 
+  # O vramd supervisor já tem CI Windows próprio (repo irmão). Aqui valida-se
+  # o lado cliente: transporte TCP+token, ModelServer per-tool, watchdog do
+  # worker e kill de GPU sem os caminhos POSIX.
+  test-vramd-windows:
+    name: vramd cliente/worker (windows, Python 3.13)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install Shared (core) + pytest
+        run: |
+          pip install --upgrade pip
+          pip install -e ./Shared/
+          pip install pytest
+      - name: Tests
+        working-directory: Shared
+        env:
+          PYTHONUTF8: "1"
+        run: >
+          pytest -v --tb=short
+          tests/test_vramd_endpoint.py
+          tests/test_vramd_client.py
+          tests/test_vramd_legacy_server.py
+          tests/test_worker_serve.py
+          tests/test_worker_protocol.py
+          tests/test_worker_adapter_base.py
+          tests/test_gpu_vramd_kill.py
+
   test-rust:
     name: cargo (Materialize)
     runs-on: ubuntu-latest

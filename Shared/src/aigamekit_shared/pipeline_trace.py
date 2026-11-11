@@ -46,7 +46,12 @@ def default_log_path() -> Path:
     if override:
         return Path(override).expanduser().resolve()
     base = os.environ.get("AIGAMEKIT_LOG_DIR", "").strip()
-    root = Path(base).expanduser() if base else Path.home() / ".cache" / "aigamekit" / "logs"
+    if base:
+        root = Path(base).expanduser()
+    else:
+        from .vramd_endpoint import aigamekit_cache_dir
+
+        root = aigamekit_cache_dir() / "logs"
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return root / f"pipeline-trace-{day}.jsonl"
 

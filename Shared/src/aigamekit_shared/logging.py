@@ -28,7 +28,8 @@ def _configure_stdio_utf8() -> None:
     """Evita UnicodeEncodeError no Windows (cp1252) com Rich e símbolos como ✓."""
     if sys.platform != "win32":
         return
-    for stream in (sys.stdout, sys.stderr):
+    # stdin também: protocolo MCP/NDJSON é UTF-8.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
         if stream is not None and hasattr(stream, "reconfigure"):
             with contextlib.suppress(OSError, ValueError):
                 stream.reconfigure(encoding="utf-8")
@@ -81,14 +82,10 @@ _atexit_registered: bool = False
 
 
 def _cache_dir() -> Path:
-    """Mesma precedência que ``quaternius_fetch.cache_dir`` (sem import circular)."""
-    env = os.environ.get("VRAMD_CACHE_DIR", "").strip()
-    if env:
-        return Path(env)
-    xdg = os.environ.get("XDG_CACHE_HOME", "").strip()
-    if xdg:
-        return Path(xdg) / "aigamekit"
-    return Path.home() / ".cache" / "aigamekit"
+    """Cache do monorepo (``%LOCALAPPDATA%\\aigamekit`` no Windows)."""
+    from .vramd_endpoint import aigamekit_cache_dir
+
+    return aigamekit_cache_dir()
 
 
 def detect_tool_name() -> str:

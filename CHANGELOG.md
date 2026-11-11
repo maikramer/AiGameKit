@@ -5,6 +5,30 @@ as tags `v<N>` são snapshots do monorepo — cada package mantém a sua própri
 (`pyproject.toml` / `Cargo.toml` / `package.json`). Pacotes individuais com changelog
 próprio: [`Materialize/CHANGELOG.md`](Materialize/CHANGELOG.md).
 
+## [Unreleased]
+
+### Added — Windows (cliente vramd)
+
+- **`aigamekit_shared.vramd_endpoint`**: transporte espelhado do vramd. No POSIX
+  continua Unix socket; no Windows o endpoint `%LOCALAPPDATA%\vramd\vramd.sock`
+  é um descritor JSON (TCP loopback + token) e os pedidos sem token são
+  recusados. A detecção é pelo conteúdo do endpoint, por isso o cliente fala
+  com qualquer supervisor sem configuração.
+- `ModelServer` legacy per-tool passa a usar o mesmo transporte; `status`
+  inclui `transport`/`endpoint`.
+- `vramd_client`: `pid_exists` seguro no Windows (nunca `os.kill(pid, 0)`, que
+  chama `TerminateProcess`), auto-start com `CREATE_NO_WINDOW`/
+  `CREATE_NEW_PROCESS_GROUP`, `VRAMD_VENV` e paths
+  `%LOCALAPPDATA%\aigamekit` (`%APPDATA%` para config).
+- Worker (`worker_serve`) com watchdog por instante de criação do pai (o PPID
+  não muda no Windows) e protocolo JSONL forçado a UTF-8 (os pipes herdariam
+  cp1252).
+- `gpu`: kills via `psutil` no Windows, descoberta de `nvidia-smi` em
+  `System32`/`NVSMI`, dono do processo por `username` e verificação de driver
+  adaptada (pacote único).
+- CI: job `test-vramd-windows` com os testes de cliente/worker; o supervisor
+  tem CI Windows próprio no repo irmão `vramd`.
+
 ## [v0.7.0] — 2026-11-06
 
 Foco: **a malha volta a ser o produto** — o refinamento Hi3D entra como stage,

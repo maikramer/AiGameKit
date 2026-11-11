@@ -1,9 +1,10 @@
 # Vramd — supervisor de VRAM do monorepo
 
-O vramd é o **gestor único de GPU/VRAM** do AiGameKit: um processo, um socket
-(`~/.cache/vramd/vramd.sock`), fila com prioridade + afinidade, admissão pelo
-**pico real** de VRAM, evicção peso+LRU e um worker subprocesso persistente por
-tool (`serve --ums-worker`). Substituiu o antigo ModelServer.
+O vramd é o **gestor único de GPU/VRAM** do AiGameKit: um processo, um endpoint
+(`~/.cache/vramd/vramd.sock` no POSIX; `%LOCALAPPDATA%\vramd\vramd.sock` no
+Windows, um descritor TCP+token), fila com prioridade + afinidade, admissão
+pelo **pico real** de VRAM, evicção peso+LRU e um worker subprocesso
+persistente por tool (`serve --ums-worker`). Substituiu o antigo ModelServer.
 
 Este package é um **wrapper clified**: instala o
 [`vramd`](https://pypi.org/project/vramd/) (PyPI) no venv canónico `Vramd/.venv`.
@@ -16,6 +17,17 @@ monorepo vive em `Shared/src/aigamekit_shared/data/backends.yaml`.
 ./install.sh vramd          # raiz do monorepo (perfil core inclui-o)
 ```
 
+No Windows:
+
+```powershell
+.\install.ps1 vramd
+```
+
+O supervisor usa o mesmo CLI. O transporte, os paths de cache/config e a
+descoberta de `nvidia-smi` adaptam-se ao Windows; os workers continuam a ser
+arrancados no venv de cada tool (`Scripts\python.exe`). Detalhe:
+[`vramd` — Platforms](https://github.com/maikramer/vramd#platforms).
+
 ## Arranque
 
 Normalmente **não precisas de o arrancar**: o cliente
@@ -26,7 +38,7 @@ Kill-switch: `VRAMD_AUTO_START=0`.
 
 ```bash
 vramd start                 # arranque manual, se quiseres
-vramd status                # socket, fila, VRAM por backend
+vramd status                # endpoint/transporte, fila, VRAM por backend
 ```
 
 ## Comandos essenciais

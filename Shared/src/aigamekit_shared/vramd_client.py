@@ -36,18 +36,19 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any, cast
 
+from . import vramd_endpoint as endpoint
 from .logging import Logger
 
 _logger = Logger()
 
-# Paths canónicos.
-DEFAULT_SERVER_DIR = Path.home() / ".cache" / "aigamekit"
+# Paths canónicos (``%LOCALAPPDATA%`` no Windows, ``~/.cache`` no POSIX).
+DEFAULT_SERVER_DIR = endpoint.aigamekit_cache_dir()
 
-# Socket canónico do vramd — supervisor único de VRAM (substitui o ModelServer).
-# Quando o vramd está ativo, todas as ferramentas delegam nele; este socket é o
+# Endpoint canónico do vramd — supervisor único de VRAM (substitui o ModelServer).
+# Quando o vramd está ativo, todas as ferramentas delegam nele; este endpoint é o
 # ponto de entrada para geração (cmd "generate" com "backend") e coordenação
 # de VRAM (cmd "ensure-vram"). Ver a tool ``Vramd/`` no monorepo (PyPI vramd).
-VRAMD_SOCKET = Path.home() / ".cache" / "vramd" / "vramd.sock"
+VRAMD_SOCKET = endpoint.default_vramd_socket()
 
 # Um socket por tool — evita misturar modelos diferentes (legacy per-tool servers).
 _SOCKET_FOR_TOOL: dict[str, str] = {
@@ -94,19 +95,16 @@ def is_server_running(socket_path: Path | str | None = None) -> bool:
     except (ValueError, OSError):
         return False
 
-    try:
-        os.kill(pid, 0)
-    except (OSError, ProcessLookupError):
+    if not endpoint.pid_exists(pid):
         return False
 
     if not spath.exists():
         return False
 
     try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-            s.settimeout(2.0)
-            s.connect(str(spath))
-            return True
+        sock, _token = endpoint.connect(spath, timeout=2.0)
+        sock.close()
+        return True
     except OSError:
         return False
 
@@ -119,8 +117,7 @@ def get_server_pid(socket_path: Path | str | None = None) -> int | None:
         return None
     try:
         pid = int(ppath.read_text().strip())
-        os.kill(pid, 0)
-        return pid
+        return pid if endpoint.pid_exists(pid) else None
     except (ValueError, OSError, ProcessLookupError):
         return None
 
@@ -137,9 +134,9 @@ def discover_server_pids() -> set[int]:
     for pid_file in DEFAULT_SERVER_DIR.glob("*.pid"):
         try:
             pid = int(pid_file.read_text().strip())
-            os.kill(pid, 0)
-            pids.add(pid)
-        except (ValueError, OSError, ProcessLookupError):
+            if endpoint.pid_exists(pid):
+                pids.add(pid)
+        except (ValueError, OSError):
             pass
     return pids
 
@@ -178,13 +175,15 @@ def send_request(
     if not spath.exists():
         return None
     try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-            s.settimeout(timeout_sec)
-            s.connect(str(spath))
-            s.sendall((json.dumps(request) + "\n").encode())
+        sock, token = endpoint.connect(spath, timeout=timeout_sec)
+    except OSError:
+        return None
+    try:
+        with sock:
+            sock.sendall((json.dumps(endpoint.with_auth(request, token)) + "\n").encode())
             data = b""
             while True:
-                chunk = s.recv(8192)
+                chunk = sock.recv(8192)
                 if not chunk:
                     break
                 data += chunk
@@ -211,27 +210,26 @@ def send_request_stream(
     if not spath.exists():
         return
     try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-            s.settimeout(timeout_sec)
-            s.connect(str(spath))
-            s.sendall((json.dumps(request) + "\n").encode())
-            buf = b""
-            while True:
-                chunk = s.recv(8192)
-                if not chunk:
-                    break
-                buf += chunk
-                while b"\n" in buf:
-                    line, buf = buf.split(b"\n", 1)
-                    text = line.decode("utf-8", errors="replace").strip()
-                    if not text:
-                        continue
-                    try:
-                        yield json.loads(text)
-                    except json.JSONDecodeError:
-                        continue
+        sock, token = endpoint.connect(spath, timeout=timeout_sec)
     except OSError:
         return
+    with sock:
+        sock.sendall((json.dumps(endpoint.with_auth(request, token)) + "\n").encode())
+        buf = b""
+        while True:
+            chunk = sock.recv(8192)
+            if not chunk:
+                break
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                text = line.decode("utf-8", errors="replace").strip()
+                if not text:
+                    continue
+                try:
+                    yield json.loads(text)
+                except json.JSONDecodeError:
+                    continue
 
 
 def resolve_vramd_priority(explicit: str | None = None) -> str:
@@ -423,11 +421,20 @@ def calibrated_peak_signals(backend: str) -> dict[str, Any] | None:
 
 
 def _discover_vramd_python() -> Path | None:
-    """Procura ``Vramd/.venv/bin/python`` relativo ao monorepo / Shared.
+    """Procura um venv dedicado ao supervisor (``VRAMD_VENV``) ou o canónico
+    ``Vramd/.venv`` relativo ao monorepo / Shared.
 
     O venv canónico do supervisor é criado por ``./install.sh vramd`` (tool
-    clified que instala o pacote ``vramd`` do PyPI).
+    clified que instala o pacote ``vramd`` do PyPI). ``VRAMD_VENV`` permite
+    separar o supervisor das tools (mesma semântica do vramd; no Windows o
+    interpretador vive em ``Scripts\\python.exe``).
     """
+    raw = os.environ.get("VRAMD_VENV", "").strip()
+    if raw:
+        venv = Path(os.path.expanduser(raw))
+        for candidate in (venv / "bin" / "python", venv / "Scripts" / "python.exe", venv):
+            if candidate.is_file():
+                return candidate
     here = Path(__file__).resolve()
     # Shared/src/aigamekit_shared/vramd_client.py → monorepo root = parents[3]
     candidates: list[Path] = []
@@ -552,9 +559,7 @@ def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True) 
         _logger.warn(f"[vramd] Auto-start: {warning}")
 
     _logger.info(f"[vramd] Auto-start: {' '.join(cmd)}")
-    log_path = Path(
-        os.environ.get("VRAMD_AUTO_START_LOG", "").strip() or (Path.home() / ".cache" / "vramd" / "vramd-autostart.log")
-    )
+    log_path = endpoint.autostart_log_path()
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_fh = open(log_path, "a", encoding="utf-8")  # noqa: SIM115
@@ -595,7 +600,7 @@ def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True) 
             stderr=subprocess.STDOUT if log_fh is not subprocess.DEVNULL else subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
             env=env,
-            start_new_session=True,  # detach: sobrevive ao processo chamador
+            **endpoint.detached_popen_kwargs(),  # detach: sobrevive ao chamador
         )
         if log_fh is not subprocess.DEVNULL:
             _logger.info(f"[vramd] Auto-start log: {log_path} (pid={proc.pid})")
@@ -953,6 +958,8 @@ class ModelServer:
         self._obj: Any = None  # o modelo carregado (lazy)
         self._obj_lock = threading.Lock()
         self._server_sock: socket.socket | None = None
+        self._auth_token: str | None = None
+        self._transport = endpoint.TRANSPORT_UNIX
         self._running = False
         self._last_activity = time.monotonic()
         self._requests_served = 0
@@ -1018,6 +1025,24 @@ class ModelServer:
                 return
 
             request = json.loads(line)
+            if not isinstance(request, dict):
+                conn.sendall((json.dumps({"status": "error", "error": "request não é objecto"}) + "\n").encode())
+                return
+            if not endpoint.is_authorized(request, self._auth_token):
+                conn.sendall(
+                    (
+                        json.dumps(
+                            {
+                                "status": "error",
+                                "error": "token do endpoint ausente ou inválido",
+                                "error_code": "UNAUTHORIZED",
+                            }
+                        )
+                        + "\n"
+                    ).encode()
+                )
+                return
+            request.pop("auth", None)
             cmd = request.get("cmd", "generate")
             self._log(f"Pedido: {cmd}")
 
@@ -1032,6 +1057,8 @@ class ModelServer:
                     "model_loaded": self._obj is not None,
                     "requests_served": self._requests_served,
                     "socket": str(self.socket_path),
+                    "transport": self._transport,
+                    "endpoint": endpoint.endpoint_label(self.socket_path),
                     "tool": self.tool_name,
                 }
                 conn.sendall((json.dumps(response) + "\n").encode())
@@ -1065,13 +1092,13 @@ class ModelServer:
                 if callable(unload):
                     unload()
             self._obj = None
-        with contextlib.suppress(OSError):
-            self.socket_path.unlink(missing_ok=True)
+        endpoint.remove_endpoint(self.socket_path)
         with contextlib.suppress(OSError):
             self.ppid_path.unlink(missing_ok=True)
         if self._server_sock is not None:
             with contextlib.suppress(OSError):
                 self._server_sock.close()
+        self._auth_token = None
 
     def _signal_handler(self, signum: int, frame: Any) -> None:
         self._log(f"Sinal {signum} recebido — a encerrar.")
@@ -1089,23 +1116,24 @@ class ModelServer:
 
         self.ppid_path.write_text(str(self._pid))
 
-        self._server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self._server_sock.settimeout(1.0)
-        try:
-            self._server_sock.bind(str(self.socket_path))
-        except OSError as e:
-            _logger.error(f"Não foi possível bind ao socket {self.socket_path}: {e}")
-            self._cleanup()
-            raise
-        self._server_sock.listen(8)
+        self._server_sock, info = endpoint.listen(self.socket_path)
+        self._auth_token = info.token
+        self._transport = info.transport
 
         # Registar signals só na main thread (signal.signal exige main thread).
         if threading.current_thread() is threading.main_thread():
-            signal.signal(signal.SIGTERM, self._signal_handler)
-            signal.signal(signal.SIGINT, self._signal_handler)
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                with contextlib.suppress(OSError, ValueError):
+                    signal.signal(sig, self._signal_handler)
+            if endpoint.IS_WINDOWS and hasattr(signal, "SIGBREAK"):
+                with contextlib.suppress(OSError, ValueError):
+                    signal.signal(signal.SIGBREAK, self._signal_handler)  # type: ignore[attr-defined]
 
         self._running = True
-        _logger.info(f"{self.tool_name} model server ativo em {self.socket_path} (PID {self._pid})")
+        _logger.info(
+            f"{self.tool_name} model server ativo em {endpoint.endpoint_label(self.socket_path)} "
+            f"({self._transport}, {self.socket_path}) (PID {self._pid})"
+        )
         _logger.info(f"Idle timeout: {self.idle_timeout_sec / 60:.0f} min")
 
         try:

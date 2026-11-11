@@ -22,6 +22,7 @@ Lifecycle do worker:
 
 from __future__ import annotations
 
+import contextlib
 import io
 import queue
 import sys
@@ -108,11 +109,46 @@ def start_parent_watchdog(*, poll_sec: float = 5.0) -> None:
     import os
     import threading
 
+    from .vramd_endpoint import IS_WINDOWS
+
     if os.environ.get("VRAMD_WORKER_PARENT_WATCHDOG", "1") == "0":
         return
     initial_ppid = os.getppid()
     if initial_ppid <= 1:
         return
+
+    def _create_time(pid: int) -> float | None:
+        try:
+            import psutil
+
+            return float(psutil.Process(pid).create_time())
+        except Exception:
+            return None
+
+    def _same_parent(ctime: float | None) -> bool:
+        if not IS_WINDOWS:
+            return os.getppid() == initial_ppid
+        # No Windows o PPID não muda com a morte do pai; comparar o instante
+        # de criação evita confundir um PID reutilizado com o supervisor.
+        try:
+            import psutil
+        except ImportError:
+            return True
+        try:
+            proc = psutil.Process(initial_ppid)
+        except psutil.NoSuchProcess:
+            return False
+        except Exception:
+            # Sem visibilidade (ACLs/processo protegido): não matar o worker.
+            return True
+        try:
+            if not proc.is_running():
+                return False
+            return ctime is None or abs(float(proc.create_time()) - ctime) < 0.001
+        except Exception:
+            return True
+
+    initial_ctime = _create_time(initial_ppid) if IS_WINDOWS else None
 
     def _watch() -> None:
         import sys as _sys
@@ -120,10 +156,10 @@ def start_parent_watchdog(*, poll_sec: float = 5.0) -> None:
 
         while True:
             _time.sleep(poll_sec)
-            if os.getppid() == initial_ppid:
+            if _same_parent(initial_ctime):
                 continue
             print(
-                f"[worker] supervisor {initial_ppid} desapareceu (ppid={os.getppid()}) — a sair.",
+                f"[worker] supervisor {initial_ppid} desapareceu — a sair.",
                 file=_sys.stderr,
                 flush=True,
             )
@@ -160,13 +196,21 @@ def _install_jsonl_stdout() -> None:
     import sys
 
     real_stdout = sys.stdout
+    if real_stdout is None:  # pythonw / consola inexistente — não há canal
+        return
+    # Protocolo é JSON UTF-8. No Windows o stdin/stderr do worker herdariam
+    # cp1252; um comando ou log não-ASCII partiria a linha.
+    for stream in (sys.stdin, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            with contextlib.suppress(OSError, ValueError):
+                stream.reconfigure(encoding="utf-8")
     # Tudo o que a tool imprime vai para o stderr do worker (log do vramd).
     sys.stdout = sys.stderr
     # Novo stdout limpo só para JSONL — duplica o fd original (que o vramd lê).
     # Se o stdout não tem fileno() (ex.: capsys em testes), usar o próprio.
     try:
         jsonl_fd = os.dup(real_stdout.fileno())
-        jsonl_stream: TextIO = os.fdopen(jsonl_fd, "w", buffering=1)  # line-buffered
+        jsonl_stream: TextIO = os.fdopen(jsonl_fd, "w", buffering=1, encoding="utf-8")  # line-buffered
     except (AttributeError, OSError, io.UnsupportedOperation):
         jsonl_stream = cast(TextIO, real_stdout)
     # Activar no protocolo — emit_event passa a usar este stream.

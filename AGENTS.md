@@ -421,15 +421,20 @@ A engine e o jogo saíram deste monorepo.
 ## vramd (VRAM Coordination)
 
 The canonical system is the **vramd** supervisor in `Vramd/` (PyPI package,
-installed by `./install.sh vramd`) — one process, one socket
-(`~/.cache/vramd/vramd.sock`), 10 GPU backends, smart job queue (priority + VRAM
+installed by `./install.sh vramd`, or `.\install.ps1 vramd` on Windows) — one
+process, one endpoint (`~/.cache/vramd/vramd.sock` on POSIX; on Windows
+`%LOCALAPPDATA%\vramd\vramd.sock` is a JSON descriptor for a loopback
+TCP+token transport), 10 GPU backends, smart job queue (priority + VRAM
 affinity cuts≤3), and weight+LRU eviction. It replaces the former
 `ModelServer/`. Client helpers live in
-`Shared/src/aigamekit_shared/vramd_client.py`.
+`Shared/src/aigamekit_shared/vramd_client.py` + `vramd_endpoint.py`.
 CLI: `vramd` (`vramd start` / `status` / `queue` / `cancel` / `respawn` / …).
+Windows needs no extra flags; `VRAMD_TRANSPORT=tcp` reproduces the TCP path on
+Linux (CI).
 
 **File logs:** all Python tools + vramd write
-`~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` via `aigamekit_shared.logging`
+`~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` on POSIX (or
+`%LOCALAPPDATA%\aigamekit\logs` on Windows) via `aigamekit_shared.logging`
 (`configure_logging` / `Logger`). vramd always files `_log` lines; console needs
 `-v`. Guide: [`docs/LOGGING.md`](docs/LOGGING.md).
 
@@ -442,7 +447,8 @@ Per-tool legacy servers (`texture2d server`, etc.) remain as **deprecated** fall
 **Canonical venv + subprocess workers (live):** vramd runs in `Vramd/.venv`
 (`./install.sh vramd`). Auto-start precedence
 (`_resolve_vramd_start_cmd`): `VRAMD_BIN` → `Vramd/.venv/bin/python`
-→ `vramd` on PATH → `sys.executable` (last resort, warns).
+(or `Scripts\python.exe` on Windows) → `vramd` on PATH → `sys.executable`
+(last resort, warns).
 The auto-start sets `VRAMD_TOOLS_ROOT` (checkout) and `VRAMD_BACKENDS_FILE`
 (`Shared/src/aigamekit_shared/data/backends.yaml`).
 Each GPU backend = persistent worker in `<Tool>/.venv` (JSONL stdin/stdout).
