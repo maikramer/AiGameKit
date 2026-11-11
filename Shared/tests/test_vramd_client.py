@@ -401,34 +401,3 @@ class TestGpuTarget:
         assert response is not None and response["status"] == "ok"
         assert flaky.calls == 2
         assert reconnects == [staged]
-
-
-def _serve_once(sock_path: Path, response: bytes) -> threading.Thread:
-    """Mini-servidor de uma ligação: lê uma linha e responde ``response``."""
-
-    def _run() -> None:
-        srv, _info = endpoint.listen(sock_path)
-        srv.settimeout(5.0)
-        try:
-            conn, _ = srv.accept()
-            with conn:
-                data = b""
-                while b"\n" not in data:
-                    chunk = conn.recv(4096)
-                    if not chunk:
-                        break
-                    data += chunk
-                conn.sendall(response)
-        finally:
-            srv.close()
-
-    thread = threading.Thread(target=_run, daemon=True)
-    thread.start()
-    return thread
-
-
-def _wait_for_path(path: Path) -> None:
-    deadline = time.monotonic() + 2.0
-    while not path.exists() and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert path.exists()
