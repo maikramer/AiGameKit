@@ -72,12 +72,14 @@ from .vramd_batch import (
     run_text2d_wave_or_fallback,
     run_texture2d_wave_or_fallback,
 )
-from .vramd_coord import MasterDeferQueue, apply_vramd_child_env
+from .vramd_coord import MasterDeferQueue, apply_vramd_child_env, attach_gpu
+from aigamekit_shared.cli_helpers import add_gpu_option
 
 console = Console()
 
 
 @click.command("resume")
+@add_gpu_option
 @click.option(
     "--profile",
     "profile_path",
@@ -625,6 +627,7 @@ def resume_cmd(
                         if seed is not None:
                             item["seed"] = seed
                         t2d_items_r.append(item)
+                    attach_gpu(t2d_items_r, [it["row"] for it in t2d_need])
                     _t2 = profile.text2d
                     _kw: dict[str, Any] = {
                         "manifest_dir": manifest_dir,
@@ -676,6 +679,7 @@ def resume_cmd(
                         if seed is not None:
                             item["seed"] = seed
                         tex_items_r.append(item)
+                    attach_gpu(tex_items_r, [it["row"] for it in tex_need])
                     ums_tex = run_texture2d_wave_or_fallback(
                         tex_items_r,
                         manifest_dir=manifest_dir,
@@ -858,6 +862,7 @@ def resume_cmd(
                     shape_item_map[row.id] = i
 
                 if shape_manifest_items:
+                    attach_gpu(shape_manifest_items, rows)
                     s_manifest_path = work_dir / "resume_shape_manifest.json"
                     s_manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
                     t3 = t3_opts
@@ -1114,6 +1119,7 @@ def resume_cmd(
                         paint_item_map[row.id] = i
 
                     if paint_manifest_items:
+                        attach_gpu(paint_manifest_items, rows)
                         paint_manifest_path = work_dir / "resume_paint_manifest.json"
                         paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
                         _paint_kw: dict[str, Any] = {
@@ -1455,6 +1461,7 @@ def resume_cmd(
                     }
                     for it in t2d_need_p
                 ]
+                attach_gpu(t2d_items_rp, [it["row"] for it in t2d_need_p])
                 ums_t2d_rp = run_text2d_wave_or_fallback(
                     t2d_items_rp,
                     manifest_dir=manifest_dir,
@@ -1487,6 +1494,7 @@ def resume_cmd(
                     }
                     for it in tex_need_p
                 ]
+                attach_gpu(tex_items_rp, [it["row"] for it in tex_need_p])
                 ums_tex_rp = run_texture2d_wave_or_fallback(
                     tex_items_rp,
                     manifest_dir=manifest_dir,
@@ -1670,6 +1678,7 @@ def resume_cmd(
                     shape_item_map[row.id] = i
 
                 if shape_manifest_items:
+                    attach_gpu(shape_manifest_items, rows)
                     manifest_path = work_dir / "resume_shape_manifest.json"
                     manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
                     t3 = t3_opts
@@ -1895,6 +1904,7 @@ def resume_cmd(
                         paint_item_map[row.id] = i
 
                     if paint_manifest_items:
+                        attach_gpu(paint_manifest_items, rows)
                         paint_manifest_path = work_dir / "resume_paint_manifest.json"
                         paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
                         _paint_kw: dict[str, Any] = {

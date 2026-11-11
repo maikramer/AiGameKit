@@ -316,6 +316,10 @@ class ManifestRow:
     paint3d: dict[str, Any] | None = None
     # Override do stage ``refine`` (Hi3D) por asset (bloco ``refine:``).
     refine: RowRefine | None = None
+    # Onde correr as fases GPU deste asset: ``remote`` (servidor vramd),
+    # ``local`` (GPU desta máquina) ou ``auto`` (política do batch). O vramd
+    # remoto é escolhido com ``VRAMD_REMOTE``/peers; ver docs/REMOTE_GPU.md.
+    gpu: str = "auto"
 
 
 def effective_image_source(profile: GameProfile, row: ManifestRow) -> str:
@@ -435,6 +439,12 @@ def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
                 if row_paint3d["to_paint_faces"] < 4:
                     raise ValueError(f"asset {entry.get('id')!r}: paint3d.to_paint_faces deve ser >= 4")
 
+        gpu_raw = str(entry.get("gpu") or "auto").strip().lower()
+        if gpu_raw not in ("remote", "local", "auto"):
+            raise ValueError(
+                f"asset {entry.get('id')!r}: gpu deve ser remote, local ou auto (recebi {entry.get('gpu')!r})"
+            )
+
         rows.append(
             ManifestRow(
                 id=entry["id"],
@@ -468,6 +478,7 @@ def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
                 collision=row_collision,
                 paint3d=row_paint3d,
                 refine=row_refine,
+                gpu=gpu_raw,
             )
         )
     if not rows:

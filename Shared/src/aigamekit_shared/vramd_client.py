@@ -162,18 +162,23 @@ def send_request(
     socket_path: Path | str | None = None,
     *,
     timeout_sec: float = 300.0,
+    force_local: bool = False,
 ) -> dict[str, Any] | None:
     """Envia um pedido JSON ao server e lê a resposta.
 
     Se o servidor enviar várias linhas NDJSON (stream), devolve a **última**
     linha (resultado final).
 
+    Args:
+        force_local: Ignora ``VRAMD_REMOTE`` e usa o socket local (batch misto
+            com assets ``gpu: local``).
+
     Returns:
         Dict de resposta, ou ``None`` se o server não estiver disponível.
     """
     from . import vramd_remote
 
-    if vramd_remote.remote_enabled():
+    if vramd_remote.remote_enabled() and not force_local:
         try:
             return vramd_remote.RemoteClient().rpc(request, timeout=timeout_sec)
         except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError):
@@ -207,6 +212,7 @@ def send_request_stream(
     socket_path: Path | str | None = None,
     *,
     timeout_sec: float = 600.0,
+    force_local: bool = False,
 ) -> Iterator[dict[str, Any]]:
     """Envia um pedido e faz yield de cada linha NDJSON (eventos + resultado).
 
@@ -218,7 +224,7 @@ def send_request_stream(
     """
     from . import vramd_remote
 
-    if vramd_remote.remote_enabled():
+    if vramd_remote.remote_enabled() and not force_local:
         try:
             yield vramd_remote.RemoteClient().rpc(request, timeout=timeout_sec)
         except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError):
@@ -529,7 +535,7 @@ def _resolve_vramd_start_cmd(
     return None, ""
 
 
-def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True) -> bool:
+def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True, force_local: bool = False) -> bool:
     """Garante que o vramd está ativo. Arranca-o automaticamente se necessário.
 
     Quando uma tool chama ``delegate_to_vramd``, esta função assegura que o vramd
@@ -547,7 +553,7 @@ def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True) 
     """
     from . import vramd_remote
 
-    if vramd_remote.remote_enabled():
+    if vramd_remote.remote_enabled() and not force_local:
         # Remoto: só se verifica; NUNCA se arranca um supervisor local (os jobs
         # iriam para a GPU errada sem o utilizador saber).
         return vramd_remote.RemoteClient().is_up(timeout=min(timeout_sec, 5.0))
@@ -661,6 +667,7 @@ def send_to_vramd(
     *,
     timeout_sec: float = 300.0,
     auto_start: bool = True,
+    force_local: bool = False,
 ) -> dict[str, Any] | None:
     """Envia um pedido ao vramd.
 
@@ -671,9 +678,9 @@ def send_to_vramd(
             ``poll`` / ``wait`` / ``cancel`` / ``queue`` devem usar ``False`` —
             auto-start a meio de um job perde o ``job_id`` (vramd vazio novo).
     """
-    if not ensure_vramd_running(auto_start=auto_start):
+    if not ensure_vramd_running(auto_start=auto_start, force_local=force_local):
         return None
-    return send_request(request, VRAMD_SOCKET, timeout_sec=timeout_sec)
+    return send_request(request, VRAMD_SOCKET, timeout_sec=timeout_sec, force_local=force_local)
 
 
 def delegate_to_vramd(
@@ -682,6 +689,7 @@ def delegate_to_vramd(
     *,
     timeout_sec: float = 600.0,
     priority: str | None = None,
+    remote: bool | None = None,
 ) -> dict[str, Any] | None:
     """Delega um pedido de geração ao vramd, arrancando-o automaticamente se necessário.
 
@@ -708,10 +716,19 @@ def delegate_to_vramd(
     """
     from . import vramd_remote
 
-    if vramd_remote.remote_enabled():
+    # ``remote`` explícito (manifesto ``gpu:``) vence o modo global. ``None``
+    # mantém o comportamento antigo: remote se VRAMD_REMOTE estiver definido.
+    resolved = _resolve_remote(remote)
+    use_remote = resolved if resolved is not None else vramd_remote.remote_enabled()
+    if use_remote:
+        if not vramd_remote.remote_enabled():
+            return _remote_error(
+                "VRAMD_REMOTE_NOT_CONFIGURED",
+                "asset pediu GPU remota mas VRAMD_REMOTE/VRAMD_REMOTE_TOKEN não estão definidos",
+            )
         return _delegate_remote(backend, request, timeout_sec=timeout_sec, priority=priority)
 
-    if not ensure_vramd_running():
+    if not ensure_vramd_running(force_local=True):
         return None
     pri = resolve_vramd_priority(priority if priority is not None else request.get("priority"))
     # ``cmd``/``backend`` explícitos por último: o payload do pedido nunca deve
@@ -719,7 +736,7 @@ def delegate_to_vramd(
     req = {**request, "cmd": "generate", "backend": backend, "priority": pri}
     # send_request directo (não send_to_vramd): o ensure acima já garantiu o vramd —
     # evita repetir o probe pid-file + os.kill + connect a cada delegação.
-    resp = send_request(req, VRAMD_SOCKET, timeout_sec=timeout_sec)
+    resp = send_request(req, VRAMD_SOCKET, timeout_sec=timeout_sec, force_local=True)
     if resp is None and is_vramd_running():
         # Socket morreu/timeout mas o supervisor está vivo — o job pode estar a
         # meio do generate na GPU. NÃO devolver None: o caller faria fallback
@@ -736,8 +753,19 @@ def delegate_to_vramd(
     return resp
 
 
-def _remote_error(code: str, message: str) -> dict[str, Any]:
-    return {
+def _resolve_remote(remote: bool | None) -> bool | None:
+    """``remote`` explícito > ``VRAMD_GPU_MODE`` > ``None`` (política global)."""
+    if remote is not None:
+        return remote
+    mode = os.environ.get("VRAMD_GPU_MODE", "").strip().lower()
+    if mode == "remote":
+        return True
+    if mode == "local":
+        return False
+    return None
+
+
+def _remote_error(code: str, message: str) -> dict[str, Any]:    return {
         "status": "error",
         "error": message,
         "error_code": code,
@@ -746,6 +774,22 @@ def _remote_error(code: str, message: str) -> dict[str, Any]:
             "`vramd status`; o fallback in-process está desligado em modo remoto."
         ),
     }
+
+
+def _restage_after_session_loss(
+    backend: str,
+    request: dict[str, Any],
+    *,
+    cmd: str,
+    priority: str,
+) -> tuple[Any, dict[str, Any]]:
+    """Reabre a sessão (o servidor reiniciou) e reencaminha o job uma vez."""
+    from . import vramd_bundle, vramd_remote
+
+    vramd_bundle.reset()
+    staged = vramd_remote.stage_request(backend, request)
+    req = {**staged.request, "cmd": cmd, "backend": backend, "priority": priority}
+    return staged, req
 
 
 def _delegate_remote(
@@ -771,11 +815,21 @@ def _delegate_remote(
     req = {**staged.request, "cmd": "generate", "backend": backend, "priority": pri}
     try:
         response = staged.client.rpc(req, timeout=timeout_sec)
+        if response.get("error_code") == "SESSION_UNKNOWN":
+            # O supervisor reiniciou e perdeu as sessões em memória; o job não
+            # chegou a correr. Reabre e tenta uma vez (o bundle está no CAS).
+            staged.discard()
+            staged, req = _restage_after_session_loss(
+                backend, request, cmd="generate", priority=pri
+            )
+            response = staged.client.rpc(req, timeout=timeout_sec)
         return vramd_remote.finalize(staged, response)
     except vramd_remote.RemoteDown as exc:
         # O job pode estar a correr no servidor; não limpar o sandbox (TTL limpa).
         return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
     except vramd_remote.RemoteStagingError as exc:
+        return _remote_error("VRAMD_REMOTE_TRANSFER", str(exc))
+    except vramd_remote.TransferError as exc:
         return _remote_error("VRAMD_REMOTE_TRANSFER", str(exc))
 
 
@@ -785,11 +839,19 @@ def submit_to_vramd(
     *,
     timeout_sec: float = 30.0,
     priority: str | None = None,
+    remote: bool | None = None,
 ) -> dict[str, Any] | None:
     """Enfileira um job no vramd (async). Retorna ``{"status":"ok","job_id":...}``."""
     from . import vramd_remote
 
-    if vramd_remote.remote_enabled():
+    resolved = _resolve_remote(remote)
+    use_remote = resolved if resolved is not None else vramd_remote.remote_enabled()
+    if use_remote:
+        if not vramd_remote.remote_enabled():
+            return _remote_error(
+                "VRAMD_REMOTE_NOT_CONFIGURED",
+                "asset pediu GPU remota mas VRAMD_REMOTE/VRAMD_REMOTE_TOKEN não estão definidos",
+            )
         try:
             staged = vramd_remote.stage_request(backend, request)
         except vramd_remote.RemoteDown as exc:
@@ -798,11 +860,21 @@ def submit_to_vramd(
             return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
         except vramd_remote.RemoteStagingError as exc:
             return _remote_error("VRAMD_REMOTE_STAGE", str(exc))
+        except vramd_remote.TransferError as exc:
+            return _remote_error("VRAMD_REMOTE_STAGE", str(exc))
         pri = resolve_vramd_priority(priority if priority is not None else request.get("priority"))
         req = {**staged.request, "cmd": "submit", "backend": backend, "priority": pri}
         try:
             response = staged.client.rpc(req, timeout=timeout_sec)
+            if response.get("error_code") == "SESSION_UNKNOWN":
+                staged.discard()
+                staged, req = _restage_after_session_loss(
+                    backend, request, cmd="submit", priority=pri
+                )
+                response = staged.client.rpc(req, timeout=timeout_sec)
         except vramd_remote.RemoteDown as exc:
+            return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
+        except vramd_remote.TransferError as exc:
             return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
         if response.get("status") == "ok" and response.get("job_id"):
             vramd_remote.remember(str(response["job_id"]), staged)
@@ -810,13 +882,13 @@ def submit_to_vramd(
         # antes de a resposta se perder (TTL recolhe).
         return response
 
-    if not ensure_vramd_running():
+    if not ensure_vramd_running(force_local=True):
         return None
     pri = resolve_vramd_priority(priority if priority is not None else request.get("priority"))
     # Mesma regra do delegate_to_vramd: cmd/backend explícitos vencem o payload.
     req = {**request, "cmd": "submit", "backend": backend, "priority": pri}
     # send_request directo: ensure já feito acima (ver delegate_to_vramd).
-    return send_request(req, VRAMD_SOCKET, timeout_sec=timeout_sec)
+    return send_request(req, VRAMD_SOCKET, timeout_sec=timeout_sec, force_local=True)
 
 
 def poll_vramd_job(job_id: str, *, timeout_sec: float = 5.0) -> dict[str, Any] | None:
@@ -829,6 +901,7 @@ def wait_vramd_job(
     *,
     timeout_sec: float = 600.0,
     stream: bool = False,
+    remote: bool | None = None,
 ) -> dict[str, Any] | None:
     """Espera um job vramd terminar. Com ``stream=True`` devolve só o resultado final.
 
@@ -843,27 +916,41 @@ def wait_vramd_job(
 
     from . import vramd_remote
 
-    if vramd_remote.remote_enabled():
+    resolved = _resolve_remote(remote)
+    use_remote = resolved if resolved is not None else vramd_remote.remote_enabled()
+    if use_remote:
+        if not vramd_remote.remote_enabled():
+            return _remote_error(
+                "VRAMD_REMOTE_NOT_CONFIGURED",
+                "asset pediu GPU remota mas VRAMD_REMOTE/VRAMD_REMOTE_TOKEN não estão definidos",
+            )
         staged = vramd_remote.peek(job_id)
         client = staged.client if staged is not None else vramd_remote.RemoteClient()
         try:
             response = client.rpc(req, timeout=timeout_sec + 30.0)
-        except vramd_remote.RemoteDown as exc:
+        except (vramd_remote.RemoteDown, vramd_remote.TransferError) as exc:
             return _remote_error("VRAMD_REMOTE_DOWN", str(exc))
         if staged is None:
             return response
         vramd_remote.take(job_id)
         try:
             return vramd_remote.finalize(staged, response)
-        except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError) as exc:
+        except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError, vramd_remote.TransferError) as exc:
             return _remote_error("VRAMD_REMOTE_TRANSFER", str(exc))
 
-    return send_to_vramd(req, timeout_sec=timeout_sec + 30.0, auto_start=False)
+    return send_to_vramd(req, timeout_sec=timeout_sec + 30.0, auto_start=False, force_local=True)
 
 
-def cancel_vramd_job(job_id: str, *, timeout_sec: float = 10.0) -> dict[str, Any] | None:
+def cancel_vramd_job(
+    job_id: str, *, timeout_sec: float = 10.0, remote: bool | None = None
+) -> dict[str, Any] | None:
     """Pede cancelamento de um job vramd (queued imediato; running best-effort)."""
-    return send_to_vramd({"cmd": "cancel", "job_id": job_id}, timeout_sec=timeout_sec, auto_start=False)
+    return send_to_vramd(
+        {"cmd": "cancel", "job_id": job_id},
+        timeout_sec=timeout_sec,
+        auto_start=False,
+        force_local=remote is False,
+    )
 
 
 def cancel_vramd_all(

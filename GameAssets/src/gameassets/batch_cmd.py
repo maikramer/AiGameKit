@@ -18,6 +18,7 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
+from aigamekit_shared.cli_helpers import add_gpu_option
 from aigamekit_shared.path_utils import safe_filename as _safe_slug
 from aigamekit_shared.profiler.session import ProfilerSession
 from aigamekit_shared.subprocess_utils import run_cmd_streaming
@@ -117,12 +118,13 @@ from .vramd_batch import (
     run_text2sound_wave_or_fallback,
     run_texture2d_wave_or_fallback,
 )
-from .vramd_coord import MasterDeferQueue, apply_vramd_child_env
+from .vramd_coord import MasterDeferQueue, apply_vramd_child_env, attach_gpu
 
 console = Console()
 
 
 @click.command("batch")
+@add_gpu_option
 @click.option(
     "--profile",
     "profile_path",
@@ -1209,6 +1211,7 @@ def batch_cmd(
                             if icon_eff.model_id:
                                 _ii["model_id"] = icon_eff.model_id
                             icon_items_d.append(_ii)
+                        attach_gpu(icon_items_d, rows)
                         ums_icons = run_text2d_wave_or_fallback(
                             icon_items_d,
                             manifest_dir=manifest_dir,
@@ -1292,6 +1295,7 @@ def batch_cmd(
                             t2d_indices_d.append(_bi)
 
                         if t2d_items_d:
+                            attach_gpu(t2d_items_d, rows)
                             t2d_manifest_path = batch_tmp / "text2d_manifest.json"
                             t2d_manifest_path.write_text(json.dumps(t2d_items_d, indent=2), encoding="utf-8")
                             _t2 = profile.text2d
@@ -1381,6 +1385,7 @@ def batch_cmd(
                             tex_items_d.append(_bitem_d)
                             tex_indices_d.append(_bi)
                         if tex_items_d:
+                            attach_gpu(tex_items_d, rows)
                             ums_tex = run_texture2d_wave_or_fallback(
                                 tex_items_d,
                                 manifest_dir=manifest_dir,
@@ -1781,6 +1786,7 @@ def batch_cmd(
                                     _ai["half_precision"] = ts_line.half_precision
                                 au_items_d.append(_ai)
                                 au_finals_d[row.id] = audio_final
+                            attach_gpu(au_items_d, rows)
                             ums_au = run_text2sound_wave_or_fallback(
                                 au_items_d,
                                 manifest_dir=manifest_dir,
@@ -1959,6 +1965,7 @@ def batch_cmd(
                             finalized_d: set[int] = set()
 
                             if shape_items_d:
+                                attach_gpu(shape_items_d, rows)
                                 dash.set_phase("Text3D shape", len(shape_items_d))
                                 shape_manifest_path = batch_tmp / "shape_manifest.json"
                                 shape_manifest_path.write_text(json.dumps(shape_items_d, indent=2))
@@ -2208,6 +2215,7 @@ def batch_cmd(
                                         paint_idx_map_d[row.id] = idx
 
                                     if paint_items_d:
+                                        attach_gpu(paint_items_d, rows)
                                         dash.set_phase("Paint3D texture", len(paint_items_d))
                                         paint_manifest_path = batch_tmp / "paint_manifest.json"
                                         paint_manifest_path.write_text(json.dumps(paint_items_d, indent=2))

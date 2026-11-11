@@ -160,7 +160,14 @@ def shape_specs_from_items(
             sdnq_preset=item_sdnq,
             memory_efficient=bool(item_mem),
         )
-        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
+        specs.append(
+            UmsJobSpec(
+                asset_id=aid,
+                payload=payload,
+                output=str(out),
+                gpu=str(item.get("gpu") or "auto"),
+            )
+        )
     return specs
 
 
@@ -216,7 +223,14 @@ def paint_specs_from_items(
             sdnq_preset=item_sdnq,
             pbr_enrich=item.get("pbr_enrich", pbr_enrich),
         )
-        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
+        specs.append(
+            UmsJobSpec(
+                asset_id=aid,
+                payload=payload,
+                output=str(out),
+                gpu=str(item.get("gpu") or "auto"),
+            )
+        )
     return specs
 
 
@@ -671,7 +685,14 @@ def text2d_specs_from_items(
             transparent=True if transparent else None,
             refs=item.get("refs"),
         )
-        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
+        specs.append(
+            UmsJobSpec(
+                asset_id=aid,
+                payload=payload,
+                output=str(out),
+                gpu=str(item.get("gpu") or "auto"),
+            )
+        )
     return specs
 
 
@@ -736,7 +757,14 @@ def texture2d_specs_from_items(
             model_id=item.get("model_id", model_id),
             gpu_ids=gpu_ids,
         )
-        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
+        specs.append(
+            UmsJobSpec(
+                asset_id=aid,
+                payload=payload,
+                output=str(out),
+                gpu=str(item.get("gpu") or "auto"),
+            )
+        )
     return specs
 
 
@@ -780,7 +808,14 @@ def skymap2d_specs_from_items(
             gpu_ids=gpu_ids,
             memory_efficient=mem,
         )
-        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
+        specs.append(
+            UmsJobSpec(
+                asset_id=aid,
+                payload=payload,
+                output=str(out),
+                gpu=str(item.get("gpu") or "auto"),
+            )
+        )
     return specs
 
 
@@ -824,7 +859,14 @@ def text2sound_specs_from_items(
             quality=item.get("quality", quality),
             category=item.get("category", category),
         )
-        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
+        specs.append(
+            UmsJobSpec(
+                asset_id=aid,
+                payload=payload,
+                output=str(out),
+                gpu=str(item.get("gpu") or "auto"),
+            )
+        )
     return specs
 
 
@@ -864,7 +906,14 @@ def terrain3d_specs_from_items(
             coarse_window=item.get("coarse_window"),
             gpu_ids=gpu_ids,
         )
-        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
+        specs.append(
+            UmsJobSpec(
+                asset_id=aid,
+                payload=payload,
+                output=str(out),
+                gpu=str(item.get("gpu") or "auto"),
+            )
+        )
     return specs
 
 

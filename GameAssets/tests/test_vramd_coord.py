@@ -22,6 +22,7 @@ from gameassets.vramd_coord import (
     UmsJobResult,
     UmsJobSpec,
     apply_vramd_child_env,
+    attach_gpu,
     preload_backend,
     run_gpu_wave,
 )
@@ -123,7 +124,7 @@ class TestRunGpuWave:
             assert wave[0].status == "ok"
             assert wave[0].asset_id == "a"
             sub.assert_called_once()
-            wait.assert_called_once_with("j1", timeout_sec=1800.0, stream=False)
+            wait.assert_called_once_with("j1", timeout_sec=1800.0, stream=False, remote=None)
 
     def test_skip_existing_output(self, tmp_path: Path) -> None:
         out = tmp_path / "exists.glb"
@@ -176,7 +177,7 @@ class TestRunGpuWave:
         ):
             sub.side_effect = [{"status": "ok", "job_id": "j1"}, None]
             assert run_gpu_wave("text3d", specs, preload=False) is FALLBACK_SUBPROCESS
-            cancel.assert_called_once_with("j1")
+            cancel.assert_called_once_with("j1", remote=None)
 
     def test_partial_error_continues(self) -> None:
         specs = [
@@ -318,3 +319,50 @@ def test_payload_builders_smoke(backend: str) -> None:
 
         p = build_generate_request(output="/h.png", prompt="hills", seed=1)
         assert p["output"] == "/h.png"
+
+
+class _GpuRow:
+    def __init__(self, row_id: str, gpu: str) -> None:
+        self.id = row_id
+        self.gpu = gpu
+
+
+def test_attach_gpu_maps_rows_to_items() -> None:
+    items = [{"id": "a"}, {"id": "b"}, {"id": "c", "gpu": "local"}]
+    attach_gpu(items, [_GpuRow("a", "remote"), _GpuRow("b", "auto")])
+    assert [item["gpu"] for item in items] == ["remote", "auto", "local"]
+
+
+def test_wave_mixed_remote_and_local(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VRAMD_REMOTE", "127.0.0.1:9")
+    specs = [
+        UmsJobSpec(asset_id="r", payload={"output": str(tmp_path / "r.glb")}, gpu="remote"),
+        UmsJobSpec(asset_id="l", payload={"output": str(tmp_path / "l.glb")}, gpu="local"),
+    ]
+    with (
+        patch("aigamekit_shared.vramd_client.ensure_vramd_running", return_value=True),
+        patch(
+            "aigamekit_shared.vramd_client.fetch_vramd_queue_snapshot",
+            return_value={"max_depth": 32},
+        ),
+        patch("aigamekit_shared.vramd_client.submit_to_vramd") as sub,
+        patch("aigamekit_shared.vramd_client.wait_vramd_job") as wait,
+    ):
+        sub.side_effect = [
+            {"status": "ok", "job_id": "j1"},
+            {"status": "ok", "job_id": "j2"},
+        ]
+        wait.return_value = {"status": "ok"}
+        results = run_gpu_wave("text3d", specs, preload=False)
+    assert len(results) == 2
+    assert sub.call_args_list[0].kwargs["remote"] is True
+    assert sub.call_args_list[1].kwargs["remote"] is False
+    assert wait.call_args_list[0].kwargs["remote"] is True
+    assert wait.call_args_list[1].kwargs["remote"] is False
+
+
+def test_wave_remote_without_endpoint_raises(monkeypatch) -> None:
+    monkeypatch.delenv("VRAMD_REMOTE", raising=False)
+    specs = [UmsJobSpec(asset_id="r", payload={"output": "/no/r.glb"}, gpu="remote")]
+    with pytest.raises(RuntimeError, match="VRAMD_REMOTE"):
+        run_gpu_wave("text3d", specs, preload=False)

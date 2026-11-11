@@ -410,3 +410,36 @@ class TestManifestConfig:
         finally:
             path.unlink(missing_ok=True)
         assert [r.id for r in rows] == ["a"]
+
+
+def test_load_manifest_gpu_field() -> None:
+    """``gpu:`` por asset: remote/local/auto, default auto."""
+    content = yaml.dump(
+        {
+            "assets": [
+                {"id": "r", "idea": "remote", "pipeline": ["3d"], "gpu": "remote"},
+                {"id": "l", "idea": "local", "pipeline": ["3d"], "gpu": "local"},
+                {"id": "a", "idea": "auto", "pipeline": ["3d"]},
+            ]
+        }
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        rows = load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)
+    assert [row.gpu for row in rows] == ["remote", "local", "auto"]
+
+
+def test_load_manifest_gpu_invalid() -> None:
+    content = yaml.dump({"assets": [{"id": "x", "idea": "x", "pipeline": ["3d"], "gpu": "cloud"}]})
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        with pytest.raises(ValueError, match="gpu deve ser"):
+            load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)

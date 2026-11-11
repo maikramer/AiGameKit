@@ -58,6 +58,13 @@ backends:
       outputs: [output]
       # num_images>1 escreve <stem>_1.png … ao lado do output principal.
       sidecar_globs: ["{stem}_*{suffix}"]
+    session:
+      env: text2d
+      tool: text2d
+      code_roots: [Shared/src, Text2D/src]
+    models:
+      - repo: black-forest-labs/flux-3-image-klein
+        ignore: ["variants/*", "model.safetensors", "*.md"]
     # FLUX.3 Klein: ``upsample`` escolhe se o prompt upsampler 9B (pup) é
     # carregado — é decisão de LOAD (pop do bloco) e SHAPE (mudar exige reload).
     # Declarar as listas substitui a allowlist global do vramd, por isso incluem
@@ -132,6 +139,16 @@ backends:
       inputs: [from_image, pose_file, point_cloud, voxel_mesh]
       outputs: [output]
       sidecars: ["{output}.omni.json"]
+    session:
+      env: text3d
+      tool: text3d
+      code_roots: [Shared/src, Text2D/src, Text3D/src]
+    models:
+      - repo: tencent/Hunyuan3D-Omni
+      - repo: black-forest-labs/flux-3-image-klein
+        ignore: ["variants/*", "model.safetensors", "*.md"]
+      - repo: ZhengPeng7/BiRefNet
+      - repo: facebook/dinov2-large
     peak_profile:
       memory_efficient_with_quant: true
       group_offload_with_memory_efficient: true
@@ -148,6 +165,14 @@ backends:
     remote:
       inputs: [mesh_path, image_path, images]
       outputs: [output]
+    session:
+      env: paint3d
+      tool: paint3d
+      code_roots: [Shared/src, Paint3D/src]
+    models:
+      - repo: tencent/Hunyuan3D-2.1
+        allow: ["hunyuan3d-paintpbr-v2-1/*", "*.json", "*.yaml"]
+      - repo: facebook/dinov2-giant
     peak_profile:
       memory_efficient_with_quant: true
     calibrate_request:
@@ -194,6 +219,11 @@ backends:
     remote:
       inputs: [coarse_mesh, image]
       outputs: [output]
+    # Sem `session:`: o Hi3D (refine) fica **local**. O stack é Python 3.10 +
+    # torch 2.5.0+cu124 (spconv-cu120/flash-attn), sem build cu13; não entra no
+    # bundle/sessão remota nem no servidor. O refine corre no vramd local.
+    models:
+      - repo: hi3d-official/Hi3Dv1.0
     calibrate_request:
       coarse_mesh: "test-mesh.glb"
       image: "test-image.png"
@@ -210,6 +240,13 @@ backends:
     remote:
       outputs: [output]
       sidecars: ["{output}.json"]
+    session:
+      env: text2sound
+      tool: text2sound
+      code_roots: [Shared/src, Text2Sound/src]
+    models:
+      - repo: stabilityai/stable-audio-3-small-music
+      - repo: stabilityai/stable-audio-3-small-sfx
     calibrate_request:
       prompt: "soft pad"
       output: "/tmp/vramd-calibrate-text2sound.wav"

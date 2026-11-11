@@ -1575,6 +1575,9 @@ def _run_refine_stage(
             argv.extend(["--model", rp.model])
         if rp.remove_background:
             argv.append("--remove-background")
+        # O Hi3D fica **local**: é o único stack cu124 (torch 2.5) sem build
+        # cu13. O shape/paint seguem o alvo do asset/batch; o refine não.
+        argv.extend(["--gpu", "local"])
 
         tag = f"[{i}/{n}] {view} " if multi else ""
         console.print(f"[cyan]⏳ refine[/cyan] {label} {tag}(Hi3D @{rp.resolution})")
@@ -1822,6 +1825,11 @@ _CHARACTER_PAINT_VIEW_RESOLUTION = 512
 # texels/face; o reflexo no atlas é muito maior que o detalhe perdido.
 _CHARACTER_TO_PAINT_FACES_CAP = 100_000
 _CHARACTER_TO_PAINT_FACES_CAP_4K = 160_000
+# Caminho ``clean`` (sem refine): o simplify directo deixa milhares de
+# rebordos e o xatlas é superlinear — 80k: ~90 s; 100k: >150 s; 269k: ~500 s.
+# 80k mantém ~26 texels/face no atlas 2048 e o unwrap dentro do watchdog.
+# O ``_refined`` com refix+morph-close é coerente e pode ir ao orçamento cheio.
+_PAINT_CLEAN_MAX_FACES = 80_000
 
 
 def _is_character_row(row: ManifestRow | None) -> bool:
@@ -1932,6 +1940,8 @@ def ensure_to_paint_for_paint(
     # tem de ser refixada mesmo quando cabe no orçamento de faces — e um
     # ``_to_paint`` antigo (gerado antes do refix+morph) não pode ser reusado.
     refined_input = "_refined" in clean_p.stem
+    if not refined_input:
+        target = min(target, _PAINT_CLEAN_MAX_FACES)
     reuse_ok = (
         not force
         and not refined_input
@@ -2037,24 +2047,11 @@ def ensure_to_paint_for_paint(
         f"[green]✓ to_paint[/green] {row_id} -> {to_paint_p.name}"
         + (f" ({out_faces:,} faces)" if out_faces > 0 else "")
     )
-
-    # Re-topology-fix leve: fecha micro-ilhas do COLLAPSE. Morph-close AUTO
-    # derrete cascas de edifícios (chapel: body_pct -19% clean->to_paint) —
-    # desligar morph; weld/fill do profile bastam.
-    _refix_paint_input(
-        to_paint_p,
-        to_paint_p,
-        text3d_bin=text3d_bin,
-        child_env=child_env,
-        manifest_dir=manifest_dir,
-        row=row,
-        required=False,
-    )
-    refix_faces = _count_faces_glb(to_paint_p)
-    console.print(
-        f"[green]✓ to_paint re-fix[/green] {row_id}" + (f" ({refix_faces:,} faces, morph=0)" if refix_faces > 0 else "")
-    )
-
+    # SEM re-fix no caminho clean: o simplify do ``_clean`` já é uma malha sã
+    # (longhouse 80k: 349 componentes/3.860 bordos). O topology-fix com
+    # ``--morph-close 0`` parte-a em 1.568/31.414 (market_stall) e o xatlas
+    # enche o atlas de ilhas minúsculas (mosaico). O re-fix só é necessário no
+    # caminho ``_refined``, e aí corre ANTES do simplify com morph-close.
     return to_paint_p
 
 

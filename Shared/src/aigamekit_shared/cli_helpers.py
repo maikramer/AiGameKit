@@ -70,7 +70,30 @@ def add_vramd_options(fn: F) -> F:
         default=None,
         help=("Prioridade na fila vramd (default: interactive, ou VRAMD_PRIORITY). GameAssets batch usa 'batch'."),
     )(fn)
-    return fn
+    return add_gpu_option(fn)
+
+
+def add_gpu_option(fn: F) -> F:
+    """Decorator Click: ``--gpu auto|local|remote`` → ``VRAMD_GPU_MODE``."""
+    click = _click_module()
+    return click.option(
+        "--gpu",
+        type=click.Choice(["auto", "local", "remote"], case_sensitive=False),
+        default=None,
+        expose_value=False,
+        callback=_set_gpu_mode,
+        help=(
+            "Onde correr as fases GPU: auto (VRAMD_REMOTE), local (ignora o servidor) "
+            "ou remote. Também via VRAMD_GPU_MODE."
+        ),
+    )(fn)
+
+
+def _set_gpu_mode(ctx: Any, param: Any, value: str | None) -> str | None:
+    """``--gpu`` → ``VRAMD_GPU_MODE`` (lido pelo cliente em cada pedido)."""
+    if value:
+        os.environ["VRAMD_GPU_MODE"] = str(value).lower()
+    return value
 
 
 def env_bool(env_var: str, cli_wants: bool) -> bool:
@@ -365,6 +388,13 @@ def _print_vramd_success(
         console.print(f"[dim]ums_debug: {json.dumps(result['ums_debug'], ensure_ascii=False)}[/dim]")
 
 
+def _local_forced(remote: bool | None) -> bool:
+    """True quando o pedido deve ignorar ``VRAMD_REMOTE`` (gpu local)."""
+    if remote is not None:
+        return not remote
+    return os.environ.get("VRAMD_GPU_MODE", "").strip().lower() == "local"
+
+
 def _vramd_generate_stream(
     tool: str,
     payload: dict[str, Any],
@@ -372,17 +402,19 @@ def _vramd_generate_stream(
     priority: str | None,
     timeout_sec: float,
     console: Console,
+    remote: bool | None = None,
 ) -> dict[str, Any] | None:
     """Gera via vramd com ``stream: true`` e imprime eventos de fila/progresso."""
     from .vramd_client import VRAMD_SOCKET, ensure_vramd_running, resolve_vramd_priority
 
-    if not ensure_vramd_running():
+    force_local = _local_forced(remote)
+    if not ensure_vramd_running(force_local=force_local):
         return None
     pri = resolve_vramd_priority(priority if priority is not None else payload.get("priority"))
     req = {"cmd": "generate", "backend": tool, "stream": True, "priority": pri, **payload}
     req["priority"] = pri
     final: dict[str, Any] | None = None
-    for event in send_request_stream(req, VRAMD_SOCKET, timeout_sec=timeout_sec):
+    for event in send_request_stream(req, VRAMD_SOCKET, timeout_sec=timeout_sec, force_local=force_local):
         if "event" in event and "status" not in event:
             ev = event.get("event")
             if ev == "queued":
@@ -523,6 +555,7 @@ def call_vramd(
     stream: bool = False,
     timeout_sec: float = 600.0,
     console: Console | None = None,
+    remote: bool | None = None,
 ) -> dict[str, Any] | None:
     """Chamada vramd de baixo nível (sync ou stream). Não faz fallback.
 
@@ -530,8 +563,15 @@ def call_vramd(
         Dict de resposta, ou ``None`` se o vramd não estiver disponível.
     """
     if stream and console is not None:
-        return _vramd_generate_stream(tool, payload, priority=priority, timeout_sec=timeout_sec, console=console)
-    return delegate_to_vramd(tool, payload, timeout_sec=timeout_sec, priority=priority)
+        return _vramd_generate_stream(
+            tool,
+            payload,
+            priority=priority,
+            timeout_sec=timeout_sec,
+            console=console,
+            remote=remote,
+        )
+    return delegate_to_vramd(tool, payload, timeout_sec=timeout_sec, priority=priority, remote=remote)
 
 
 def try_vramd_delegation(
@@ -546,6 +586,7 @@ def try_vramd_delegation(
     enabled: bool = True,
     priority: str | None = None,
     stream: bool = False,
+    remote: bool | None = None,
 ) -> bool:
     """Delega uma geração no vramd se ativo. Retorna ``True`` se handled.
 
@@ -577,7 +618,8 @@ def try_vramd_delegation(
 
     from .vramd_remote import remote_enabled
 
-    if remote_enabled():
+    force_local = _local_forced(remote)
+    if remote_enabled() and not force_local:
         # Remoto: a transferência é por job (upload → generate → download), não
         # por evento; o progresso incremental do vramd fica de fora.
         stream = False
@@ -614,8 +656,17 @@ def try_vramd_delegation(
         stream=stream,
         timeout_sec=timeout_sec,
         console=console if stream else None,
+        remote=remote,
     )
     if result is None:
+        # Remoto: nunca cair para a GPU local (iria para o hardware errado).
+        if remote_enabled() and not force_local:
+            import click
+
+            raise click.ClickException(
+                "vramd remoto sem resposta — sem fallback in-process. "
+                "Verifica VRAMD_REMOTE/VRAMD_REMOTE_TOKEN e `vramd status`."
+            )
         # Timeout/socket morreu com vramd ainda up → GPU pode estar a meio de generate.
         # Fallback in-process corre em paralelo e OOMa / mata o job errado.
         if is_vramd_running():
@@ -648,9 +699,9 @@ def try_vramd_delegation(
             import json
 
             console.print(f"[dim]ums_debug: {json.dumps(result['ums_debug'], ensure_ascii=False)}[/dim]")
-        # Falhas do modo remoto são fatais: o fallback in-process correria na
-        # GPU local (ou numa máquina sem GPU), longe do sítio pedido.
-        if code.startswith("VRAMD_REMOTE_"):
+        # Em modo remoto QUALQUER erro é fatal: o fallback in-process correria
+        # na GPU local (ou numa máquina sem GPU), longe do sítio pedido.
+        if remote_enabled() and not force_local:
             import click
 
             tip = hint or "verifica VRAMD_REMOTE/VRAMD_REMOTE_TOKEN e `vramd status`"
@@ -726,6 +777,7 @@ def delegate_or_prepare(
     priority: str | None = None,
     stream: bool = False,
     timeout_sec: float = 600.0,
+    remote: bool | None = None,
     gpu_ids: list[int] | str | None = None,
     memory_efficient: bool | None = None,
     sdnq_preset: str | None = None,
@@ -774,6 +826,7 @@ def delegate_or_prepare(
         priority=priority,
         stream=stream,
         timeout_sec=timeout_sec,
+        remote=remote,
     ):
         return True
     if prepare is not None:

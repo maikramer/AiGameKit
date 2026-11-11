@@ -28,6 +28,16 @@ import yaml
 
 from . import vramd_endpoint as endpoint
 
+# Cliente do protocolo binário/blobs (vramd >= 0.7). É uma dependência leve,
+# mas mantemos o import opcional: um venv antigo sem `vramd` continua a usar
+# o caminho JSON/base64 em vez de rebentar no import.
+try:  # pragma: no cover - depende do venv onde a tool corre
+    from vramd.transfer import TransferClient, TransferError
+except ImportError:  # pragma: no cover
+    TransferClient = None  # type: ignore[assignment,misc]
+    class TransferError(RuntimeError):  # type: ignore[no-redef]
+        """Placeholder quando o pacote vramd não está instalado."""
+
 CHUNK_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 SPECS_PATH = Path(__file__).resolve().parent / "data" / "backends.yaml"
@@ -56,6 +66,26 @@ def strict() -> bool:
 
 def keep_sandbox() -> bool:
     return os.environ.get("VRAMD_KEEP_SANDBOX", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def binary_enabled() -> bool:
+    """``VRAMD_REMOTE_PROTOCOL``: auto (default), binary ou json.
+
+    ``auto`` usa frames/blobs quando o pacote ``vramd`` está instalado; um
+    servidor antigo faz o ``stage_request`` cair para o caminho JSON/base64.
+    ``json`` força o caminho antigo (debug/rollback).
+    """
+    mode = os.environ.get("VRAMD_REMOTE_PROTOCOL", "auto").strip().lower()
+    if mode in ("json", "legacy", "0", "off", "false", "no"):
+        return False
+    if TransferClient is None:
+        if mode in ("binary", "frames", "1", "on", "true", "yes"):
+            raise RemoteDown(
+                "VRAMD_REMOTE_PROTOCOL=binary mas o pacote vramd>=0.7 não está instalado "
+                "no venv da tool"
+            )
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -278,9 +308,17 @@ class StagedFile:
     local: Path
 
 
+@dataclass(frozen=True)
+class _Rel:
+    """Path relativo ao sandbox, resolvido para ``<root>/<rel>`` após o stage."""
+
+    rel: str
+
+
 @dataclass
 class StagedJob:
-    client: RemoteClient
+    # RemoteClient (JSON/base64) ou TransferClient (frames/blobs).
+    client: Any
     job: str
     root: str
     request: dict[str, Any]
@@ -292,6 +330,9 @@ class StagedJob:
     def discard(self) -> None:
         if not self.keep:
             self.client.clean(self.job)
+        close = getattr(self.client, "close", None)
+        if callable(close):
+            close()
 
 
 def _resolve_local(value: str | os.PathLike[str]) -> Path:
@@ -316,13 +357,54 @@ def _expand(template: str, primary: Path) -> str:
     )
 
 
-def stage_request(
+def _prepare_outputs(
+    backend: str,
+    spec: BackendRemoteSpec,
+    request: dict[str, Any],
+    root: str,
+) -> tuple[dict[str, Any], list[StagedFile], list[StagedFile], list[tuple[str, Path]]]:
+    """Reescreve os outputs/sidecars para o sandbox remoto."""
+    new_request = dict(request)
+    outputs: list[StagedFile] = []
+    sidecars: list[StagedFile] = []
+    globs: list[tuple[str, Path]] = []
+    primary: Path | None = None
+    for field_name in spec.outputs:
+        value = request.get(field_name)
+        if value is None:
+            continue
+        local = _resolve_local(value)
+        rel = f"out/{local.name}"
+        remote_path = f"{root}/{rel}"
+        outputs.append(StagedFile(field_name, rel, remote_path, local))
+        new_request[field_name] = remote_path
+        if primary is None:
+            primary = local
+            for template in spec.sidecars:
+                side_local = Path(_expand(template, local))
+                sidecars.append(
+                    StagedFile(
+                        field_name,
+                        f"out/{side_local.name}",
+                        f"{root}/out/{side_local.name}",
+                        side_local,
+                    )
+                )
+            for template in spec.sidecar_globs:
+                globs.append((_expand(template, local), local.parent))
+
+    if primary is None or "output" not in new_request:
+        raise RemoteStagingError(f"{backend}: request sem `output` para encaminhar")
+    return new_request, outputs, sidecars, globs
+
+
+def _stage_legacy(
     backend: str,
     request: dict[str, Any],
     *,
     client: RemoteClient | None = None,
 ) -> StagedJob:
-    """Sobe os inputs, reescreve os paths e devolve o job preparado."""
+    """Caminho antigo: stage → put_file base64 → paths do sandbox."""
     spec = spec_for(backend)
     client = client or RemoteClient()
     job, root = client.stage()
@@ -354,32 +436,7 @@ def stage_request(
             mapped.append(f"{root}/{rel}")
         new_request[field_name] = mapped if is_list else mapped[0]
 
-    outputs: list[StagedFile] = []
-    sidecars: list[StagedFile] = []
-    globs: list[tuple[str, Path]] = []
-    primary: Path | None = None
-    for field_name in spec.outputs:
-        value = request.get(field_name)
-        if value is None:
-            continue
-        local = _resolve_local(value)
-        rel = f"out/{local.name}"
-        remote_path = f"{root}/{rel}"
-        outputs.append(StagedFile(field_name, rel, remote_path, local))
-        new_request[field_name] = remote_path
-        if primary is None:
-            primary = local
-            for template in spec.sidecars:
-                side_local = Path(_expand(template, local))
-                sidecars.append(
-                    StagedFile(field_name, f"out/{side_local.name}", f"{root}/out/{side_local.name}", side_local)
-                )
-            for template in spec.sidecar_globs:
-                globs.append((_expand(template, local), local.parent))
-
-    if primary is None or "output" not in new_request:
-        raise RemoteStagingError(f"{backend}: request sem `output` para encaminhar")
-
+    new_request, outputs, sidecars, globs = _prepare_outputs(backend, spec, new_request, root)
     return StagedJob(
         client=client,
         job=job,
@@ -390,6 +447,113 @@ def stage_request(
         globs=globs,
         keep=keep_sandbox(),
     )
+
+
+def _stage_blobs(
+    backend: str,
+    request: dict[str, Any],
+    client: TransferClient,
+) -> StagedJob:
+    """Caminho v2: sobe cada input uma vez como blob e materializa por hardlink."""
+    spec = spec_for(backend)
+    new_request = dict(request)
+    uploaded: dict[Path, tuple[str, str]] = {}
+    blob_map: dict[str, str] = {}
+    pending: dict[str, tuple[bool, list[Any]]] = {}
+    counter = 0
+
+    for field_name in spec.inputs:
+        value = request.get(field_name)
+        if value is None:
+            continue
+        is_list = isinstance(value, (list, tuple))
+        values = list(value) if is_list else [value]
+        mapped: list[Any] = []
+        for item in values:
+            if not isinstance(item, (str, os.PathLike)):
+                mapped.append(item)
+                continue
+            local = _resolve_local(item)
+            if not local.is_file():
+                raise RemoteStagingError(f"{backend}.{field_name}: input não existe: {local}")
+            entry = uploaded.get(local)
+            if entry is None:
+                counter += 1
+                rel = f"in/{counter:02d}-{local.name}"
+                sha = _sha256(local)
+                client.put_blob(sha, local)
+                entry = (rel, sha)
+                uploaded[local] = entry
+                blob_map[rel] = sha
+            mapped.append(_Rel(entry[0]))
+        pending[field_name] = (is_list, mapped)
+
+    job, root = client.stage(blob_map)
+    root = root.rstrip("/")
+    for field_name, (is_list, mapped) in pending.items():
+        rewritten = [f"{root}/{item.rel}" if isinstance(item, _Rel) else item for item in mapped]
+        new_request[field_name] = rewritten if is_list else rewritten[0]
+
+    new_request, outputs, sidecars, globs = _prepare_outputs(backend, spec, new_request, root)
+    return StagedJob(
+        client=client,
+        job=job,
+        root=root,
+        request=new_request,
+        outputs=outputs,
+        sidecars=sidecars,
+        globs=globs,
+        keep=keep_sandbox(),
+    )
+
+
+def stage_request(
+    backend: str,
+    request: dict[str, Any],
+    *,
+    client: RemoteClient | None = None,
+) -> StagedJob:
+    """Sobe os inputs, reescreve os paths e devolve o job preparado.
+
+    Usa frames/blobs quando o servidor os anuncia; se o servidor for antigo
+    (sem ``binary``/``blobs``), cai para o caminho JSON/base64. Um ``client``
+    explícito força o caminho legacy (usado pelos testes e por rollback).
+    """
+    # Sessão de código do cliente: o bundle/env é aberto no primeiro job de
+    # cada backend (wave) e reutilizado nos jobs seguintes. Num servidor sem
+    # sessões (ou com `VRAMD_SESSION=off`) isto é `None` e o job usa os
+    # backends fixos.
+    # Antes do staging: uma falha de bundle não deixa um sandbox órfão.
+    from . import vramd_bundle
+
+    try:
+        session = vramd_bundle.ensure_session([backend])
+    except vramd_bundle.BundleError as exc:
+        raise RemoteStagingError(str(exc)) from exc
+
+    if client is not None:
+        staged = _stage_legacy(backend, request, client=client)
+    elif binary_enabled():
+        transfer: TransferClient | None = None
+        try:
+            transfer = TransferClient()
+            transfer.connect()
+            staged = _stage_blobs(backend, request, transfer)
+        except TransferError as exc:
+            if transfer is not None:
+                transfer.close()
+            if "sem protocolo binário" not in str(exc):
+                raise RemoteDown(str(exc)) from exc
+            # Servidor 0.6/0.7 sem features: segue pelo caminho antigo.
+            staged = _stage_legacy(backend, request)
+        except OSError as exc:
+            raise RemoteDown(str(exc)) from exc
+    else:
+        staged = _stage_legacy(backend, request)
+
+    if session:
+        staged.request["session"] = session
+    return staged
 
 
 def finalize(staged: StagedJob, response: Any) -> Any:
@@ -409,7 +573,7 @@ def finalize(staged: StagedJob, response: Any) -> Any:
     for pattern, local_dir in staged.globs:
         try:
             names = staged.client.list(staged.job, "out")
-        except RemoteStagingError:
+        except (RemoteStagingError, TransferError):
             names = []
         for name in names:
             if name in known or not fnmatch.fnmatch(name, pattern):

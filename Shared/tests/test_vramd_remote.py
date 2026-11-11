@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -240,3 +241,144 @@ def test_keep_sandbox_env(monkeypatch, specs) -> None:
     )
     staged.discard()
     assert client.cleaned is False
+
+
+class FakeTransfer:
+    """Contrato mínimo do ``vramd.transfer.TransferClient`` para os testes."""
+
+    def __init__(self, job: str = "b" * 32, root: str = "/srv/remote/b") -> None:
+        self.job = job
+        self.root = root
+        self.puts: list[tuple[str, str]] = []
+        self.staged_blobs: dict[str, str] = {}
+        self.files: dict[str, bytes] = {}
+        self.gets: list[str] = []
+        self.cleaned = False
+        self.closed = False
+
+    def stage(self, blobs: dict[str, str] | None = None) -> tuple[str, str]:
+        self.staged_blobs = dict(blobs or {})
+        return self.job, self.root
+
+    def put_blob(self, sha256: str, path: Path, *, chunk_size: int = 0) -> dict:
+        self.puts.append((sha256, str(path)))
+        return {"status": "ok", "sha256": sha256, "size": path.stat().st_size}
+
+    def get_file(self, job: str, rel: str, local: Path, *, timeout: float = 120.0) -> int:
+        assert rel in self.files, f"get de {rel} sem ficheiro remoto"
+        local.parent.mkdir(parents=True, exist_ok=True)
+        local.write_bytes(self.files[rel])
+        self.gets.append(rel)
+        return len(self.files[rel])
+
+    def list(self, job: str, rel: str = "out") -> list[str]:
+        prefix = rel.rstrip("/") + "/"
+        return sorted(
+            name[len(prefix) :]
+            for name in self.files
+            if name.startswith(prefix) and "/" not in name[len(prefix) :]
+        )
+
+    def clean(self, job: str) -> None:
+        self.cleaned = True
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_stage_blobs_uploads_once_and_rewrites(tmp_path: Path, monkeypatch, specs) -> None:
+    monkeypatch.chdir(tmp_path)
+    image = tmp_path / "hero.png"
+    image.write_bytes(b"PNG")
+    out = tmp_path / "out" / "hero.glb"
+    client = FakeTransfer()
+
+    staged = vramd_remote._stage_blobs(
+        "text3d",
+        {
+            "prompt": "hero",
+            "from_image": ["hero.png", "hero.png"],
+            "output": str(out),
+        },
+        client,
+    )
+
+    sha = hashlib.sha256(b"PNG").hexdigest()
+    assert client.puts == [(sha, str(image))]
+    assert client.staged_blobs == {"in/01-hero.png": sha}
+    assert staged.request["from_image"] == [f"{client.root}/in/01-hero.png"] * 2
+    assert staged.request["output"] == f"{client.root}/out/hero.glb"
+    assert [s.remote_rel for s in staged.outputs] == ["out/hero.glb"]
+    assert [s.remote_rel for s in staged.sidecars] == ["out/hero.glb.omni.json"]
+
+
+def test_stage_blobs_finalize_and_close(tmp_path: Path, monkeypatch, specs) -> None:
+    image = tmp_path / "hero.png"
+    image.write_bytes(b"PNG")
+    out = tmp_path / "out" / "hero.glb"
+    client = FakeTransfer()
+    client.files["out/hero.glb"] = b"GLB"
+    client.files["out/hero.glb.omni.json"] = b"{}"
+
+    staged = vramd_remote._stage_blobs(
+        "text3d", {"from_image": str(image), "output": str(out)}, client
+    )
+    result = finalize(staged, {"status": "ok", "output": f"{client.root}/out/hero.glb"})
+
+    assert result["output"] == str(out)
+    assert out.read_bytes() == b"GLB"
+    assert Path(str(out) + ".omni.json").read_bytes() == b"{}"
+    assert client.cleaned is True
+    assert client.closed is True
+
+
+def test_stage_request_falls_back_to_legacy_on_old_server(
+    tmp_path: Path, monkeypatch, specs
+) -> None:
+    image = tmp_path / "hero.png"
+    image.write_bytes(b"PNG")
+    legacy = FakeClient()
+
+    class OldTransfer(FakeTransfer):
+        def connect(self) -> dict:
+            raise vramd_remote.TransferError("servidor vramd sem protocolo binário/blobs")
+
+    monkeypatch.setattr(vramd_remote, "TransferClient", OldTransfer)
+    monkeypatch.setattr(vramd_remote, "RemoteClient", lambda: legacy)
+
+    staged = stage_request(
+        "text3d",
+        {"from_image": str(image), "output": str(tmp_path / "hero.glb")},
+    )
+    assert staged.client is legacy
+    assert legacy.puts == ["in/01-hero.png"]
+
+
+def test_stage_request_honours_json_protocol(tmp_path: Path, monkeypatch, specs) -> None:
+    image = tmp_path / "hero.png"
+    image.write_bytes(b"PNG")
+    legacy = FakeClient()
+    monkeypatch.setenv("VRAMD_REMOTE_PROTOCOL", "json")
+    monkeypatch.setattr(vramd_remote, "TransferClient", FakeTransfer)
+    monkeypatch.setattr(vramd_remote, "RemoteClient", lambda: legacy)
+
+    staged = stage_request(
+        "text3d",
+        {"from_image": str(image), "output": str(tmp_path / "hero.glb")},
+    )
+    assert staged.client is legacy
+    assert legacy.puts == ["in/01-hero.png"]
+
+
+def test_stage_request_adds_session(tmp_path: Path, monkeypatch, specs) -> None:
+    from aigamekit_shared import vramd_bundle
+
+    image = tmp_path / "hero.png"
+    image.write_bytes(b"PNG")
+    monkeypatch.setattr(vramd_bundle, "ensure_session", lambda backends=None: "sess-123")
+    staged = stage_request(
+        "text3d",
+        {"from_image": str(image), "output": str(tmp_path / "hero.glb")},
+        client=FakeClient(),
+    )
+    assert staged.request["session"] == "sess-123"

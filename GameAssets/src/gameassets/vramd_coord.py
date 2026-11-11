@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +22,8 @@ VRAMD_CHILD_ENV_KEYS: tuple[str, ...] = (
     "VRAMD_STARVATION_TIMEOUT_SEC",
     "VRAMD_MAX_INFLIGHT",
     "VRAMD_ALLOW_LEGACY_SERVER",
+    "VRAMD_GPU_MODE",
+    "VRAMD_AUTO_GPU",
 )
 
 # Sentinel: caller deve usar subprocess generate-batch / texture-batch.
@@ -47,6 +49,22 @@ class UmsJobSpec:
     asset_id: str
     payload: dict[str, Any]
     output: str | None = None
+    # remote | local | auto (campo ``gpu:`` do manifesto; auto = política global)
+    gpu: str = "auto"
+
+
+def attach_gpu(items: list[dict[str, Any]], rows: Iterable[Any]) -> None:
+    """Copia o campo ``gpu:`` dos ManifestRow para os itens de trabalho.
+
+    Os itens passam por ficheiros JSON intermédios (shape/paint/text2d); sem
+    isto o ``vramd_batch`` não sabe se um asset é remoto, local ou auto.
+    """
+    by_id = {
+        str(getattr(row, "id", "")): str(getattr(row, "gpu", "auto") or "auto")
+        for row in rows
+    }
+    for item in items:
+        item.setdefault("gpu", by_id.get(str(item.get("id")), "auto"))
 
 
 @dataclass
@@ -143,6 +161,7 @@ def preload_backend(
     *,
     load_opts: dict[str, Any] | None = None,
     timeout_sec: float = 1800.0,
+    force_local: bool = False,
 ) -> dict[str, Any] | None:
     """Pré-carrega um backend no vramd. Best-effort: ``None`` se vramd down/erro.
 
@@ -150,20 +169,39 @@ def preload_backend(
         backend: Nome (``text3d``, ``paint3d``, …).
         load_opts: Kwargs de load (``gpu_ids``, ``sdnq_preset``, …).
         timeout_sec: Timeout do RPC preload.
+        force_local: Ignora ``VRAMD_REMOTE`` (wave ``gpu: local``).
     """
     try:
         from aigamekit_shared.vramd_client import ensure_vramd_running, send_to_vramd
     except ImportError:
         return None
-    if not ensure_vramd_running():
+    if not ensure_vramd_running(force_local=force_local):
         return None
     req: dict[str, Any] = {"cmd": "preload", "backend": backend}
     if load_opts:
         req.update(load_opts)
     try:
-        return send_to_vramd(req, timeout_sec=timeout_sec)
+        return send_to_vramd(req, timeout_sec=timeout_sec, force_local=force_local)
     except Exception:
         return None
+
+
+def _gpu_remote(gpu: str | None) -> bool | None:
+    """``remote``/``local``/``auto`` → True/False/None (None = política global)."""
+    mode = str(gpu or "auto").strip().lower()
+    if mode == "remote":
+        return True
+    if mode == "local":
+        return False
+    auto = os.environ.get("VRAMD_AUTO_GPU", "").strip().lower()
+    if not auto:
+        # ``--gpu``/VRAMD_GPU_MODE das CLIs serve de default para assets auto.
+        auto = os.environ.get("VRAMD_GPU_MODE", "").strip().lower()
+    if auto == "remote":
+        return True
+    if auto == "local":
+        return False
+    return None
 
 
 def run_gpu_wave(
@@ -199,31 +237,60 @@ def run_gpu_wave(
     except ImportError:
         return FALLBACK_SUBPROCESS
 
-    if not ensure_vramd_running():
+    from aigamekit_shared.vramd_remote import remote_enabled
+
+    modes = {_gpu_remote(spec.gpu) for spec in items}
+    need_remote = True in modes or (None in modes and remote_enabled())
+    need_local = False in modes or (None in modes and not remote_enabled())
+    if need_remote and not remote_enabled():
+        raise RuntimeError(
+            "a wave pede GPU remota (`gpu: remote`) mas VRAMD_REMOTE/VRAMD_REMOTE_TOKEN "
+            "não estão definidos."
+        )
+    if need_local and not ensure_vramd_running(force_local=True):
+        if need_remote:
+            raise RuntimeError(
+                "wave mista: o vramd local não está disponível para os assets `gpu: local`."
+            )
         return FALLBACK_SUBPROCESS
+    if need_remote and not ensure_vramd_running():
+        # Remoto: o fallback local correria na GPU do laptop (ou numa máquina
+        # sem GPU). Falha alto em vez de mudar de hardware em silêncio.
+        raise RuntimeError(
+            "vramd remoto inacessível — sem fallback local (VRAMD_REMOTE ativo). "
+            "Verifica VRAMD_REMOTE/VRAMD_REMOTE_TOKEN e `vramd status`."
+        )
 
     if preload:
-        preload_backend(backend, load_opts=preload_opts)
+        mode = next(iter(modes)) if len(modes) == 1 else "mixed"
+        if mode != "mixed":
+            preload_backend(backend, load_opts=preload_opts, force_local=(mode is False))
 
     # Janela ≤ max_depth vramd — submit-all-then-wait com 60 jobs + depth=32
     # marcava os restantes como «fila cheia» sem nunca os correr.
     window = 16
-    try:
-        from aigamekit_shared.vramd_client import fetch_vramd_queue_snapshot
+    if need_remote:
+        try:
+            from aigamekit_shared.vramd_client import fetch_vramd_queue_snapshot
 
-        snap = fetch_vramd_queue_snapshot()
-        if isinstance(snap, dict):
-            max_d = int(snap.get("max_depth") or 32)
-            window = max(1, min(16, max_d - 1))
-    except Exception:
-        pass
+            snap = fetch_vramd_queue_snapshot()
+            if isinstance(snap, dict):
+                max_d = int(snap.get("max_depth") or 32)
+                window = max(1, min(16, max_d - 1))
+        except Exception:
+            pass
 
     results: list[UmsJobResult] = []
     submitted: list[tuple[UmsJobSpec, str]] = []
 
     def _wait_one(spec: UmsJobSpec, job_id: str) -> UmsJobResult:
         t0 = time.time()
-        wait_resp = wait_vramd_job(job_id, timeout_sec=timeout_sec, stream=stream)
+        wait_resp = wait_vramd_job(
+            job_id,
+            timeout_sec=timeout_sec,
+            stream=stream,
+            remote=_gpu_remote(spec.gpu),
+        )
         elapsed = round(time.time() - t0, 2)
         if wait_resp is None:
             return UmsJobResult(
@@ -288,11 +355,29 @@ def run_gpu_wave(
             # Fila cheia → drena janela e tenta de novo (até 3x).
             resp: dict[str, Any] | None = None
             for _attempt in range(3):
-                resp = submit_to_vramd(backend, dict(spec.payload), priority=priority, timeout_sec=30.0)
+                resp = submit_to_vramd(
+                    backend,
+                    dict(spec.payload),
+                    priority=priority,
+                    timeout_sec=30.0,
+                    remote=_gpu_remote(spec.gpu),
+                )
                 if resp is None:
                     for _s, jid in submitted:
                         with contextlib.suppress(Exception):
-                            cancel_vramd_job(jid)
+                            cancel_vramd_job(jid, remote=_gpu_remote(_s.gpu))
+                    if _gpu_remote(spec.gpu) is True:
+                        raise RuntimeError(
+                            f"asset {spec.asset_id}: vramd remoto sem resposta no submit "
+                            "(`gpu: remote`) — sem fallback local."
+                        )
+                    if _gpu_remote(spec.gpu) is False:
+                        return FALLBACK_SUBPROCESS
+                    if remote_enabled():
+                        raise RuntimeError(
+                            "vramd remoto sem resposta no submit — sem fallback local "
+                            "(VRAMD_REMOTE ativo)."
+                        )
                     return FALLBACK_SUBPROCESS
                 if resp.get("status") == "ok" and resp.get("job_id"):
                     break
@@ -323,7 +408,7 @@ def run_gpu_wave(
     except KeyboardInterrupt:
         for _s, jid in submitted:
             with contextlib.suppress(Exception):
-                cancel_vramd_job(jid)
+                cancel_vramd_job(jid, remote=_gpu_remote(_s.gpu))
         raise
 
     return results

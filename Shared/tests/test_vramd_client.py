@@ -332,3 +332,43 @@ class TestCalibratedPeakSignals:
     def test_no_calibration_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(ms, "CALIBRATED_DIR", tmp_path / "vazio")
         assert ms.calibrated_peak_signals("paint3d") is None
+
+
+class TestGpuTarget:
+    def test_explicit_remote_without_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("VRAMD_REMOTE", raising=False)
+        response = ms.delegate_to_vramd("text3d", {"output": "/tmp/x.glb"}, remote=True)
+        assert response is not None
+        assert response["error_code"] == "VRAMD_REMOTE_NOT_CONFIGURED"
+
+    def test_explicit_local_ignores_remote_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VRAMD_REMOTE", "127.0.0.1:9")
+        with (
+            patch.object(ms, "ensure_vramd_running", return_value=True),
+            patch.object(ms, "send_request", return_value={"status": "ok"}) as send,
+        ):
+            response = ms.delegate_to_vramd("text3d", {"output": "/tmp/x.glb"}, remote=False)
+        assert response == {"status": "ok"}
+        assert send.call_args.kwargs["force_local"] is True
+
+    def test_gpu_mode_env_local(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VRAMD_REMOTE", "127.0.0.1:9")
+        monkeypatch.setenv("VRAMD_GPU_MODE", "local")
+        with (
+            patch.object(ms, "ensure_vramd_running", return_value=True),
+            patch.object(ms, "send_request", return_value={"status": "ok"}) as send,
+        ):
+            ms.delegate_to_vramd("text3d", {"output": "/tmp/x.glb"})
+        assert send.call_args.kwargs["force_local"] is True
+
+    def test_submit_remote_without_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("VRAMD_REMOTE", raising=False)
+        response = ms.submit_to_vramd("text3d", {"output": "/tmp/x.glb"}, remote=True)
+        assert response is not None
+        assert response["error_code"] == "VRAMD_REMOTE_NOT_CONFIGURED"
+
+    def test_wait_remote_without_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("VRAMD_REMOTE", raising=False)
+        response = ms.wait_vramd_job("j1", remote=True)
+        assert response is not None
+        assert response["error_code"] == "VRAMD_REMOTE_NOT_CONFIGURED"
