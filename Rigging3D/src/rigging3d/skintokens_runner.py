@@ -12,6 +12,7 @@ Ver ``docs/RIGGING3D_SKINTOKENS_MIGRATION_PLAN.md`` no root do monorepo.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import sys
@@ -80,6 +81,11 @@ def ensure_checkpoints(home: Path | None = None) -> Path:
         local_path = root / filename
         if local_path.is_file():
             continue
+        if local_path.is_symlink():
+            # Cache HF recolhido pelo GC: o symlink ficou pendurado e o
+            # download não pode escrever por cima da entrada existente.
+            with contextlib.suppress(OSError):
+                local_path.unlink()
         local_path.parent.mkdir(parents=True, exist_ok=True)
         cached = _cached_checkpoint(filename)
         if cached is not None:

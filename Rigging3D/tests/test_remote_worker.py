@@ -92,6 +92,32 @@ class TestAdapter:
         assert skintokens_runner._loaded_ckpt is None
 
 
+class TestCheckpoints:
+    def test_links_from_hf_cache_instead_of_downloading(self, monkeypatch, tmp_path: Path) -> None:
+        cached = tmp_path / "cached.ckpt"
+        cached.write_bytes(b"ckpt")
+        monkeypatch.setattr(skintokens_runner, "_cached_checkpoint", lambda _name: cached)
+        root = tmp_path / "root"
+        result = skintokens_runner.ensure_checkpoints(root)
+        assert result == root
+        for filename in (skintokens_runner.DEFAULT_TOKENRIG_CKPT, skintokens_runner.DEFAULT_SKIN_VAE_CKPT):
+            target = root / filename
+            assert target.is_file()
+            assert target.read_bytes() == b"ckpt"
+        assert (root / "configs").is_symlink()
+
+    def test_dangling_link_is_replaced(self, monkeypatch, tmp_path: Path) -> None:
+        cached = tmp_path / "cached.ckpt"
+        cached.write_bytes(b"new")
+        root = tmp_path / "root"
+        dangling = root / skintokens_runner.DEFAULT_TOKENRIG_CKPT
+        dangling.parent.mkdir(parents=True)
+        dangling.symlink_to(tmp_path / "gone.ckpt")
+        monkeypatch.setattr(skintokens_runner, "_cached_checkpoint", lambda _name: cached)
+        skintokens_runner.ensure_checkpoints(root)
+        assert dangling.read_bytes() == b"new"
+
+
 class TestCliDelegation:
     def _post_fixes(self, monkeypatch) -> None:
         import rigging3d.cli as cli_mod
