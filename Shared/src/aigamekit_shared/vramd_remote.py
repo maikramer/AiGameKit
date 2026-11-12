@@ -36,7 +36,7 @@ from . import vramd_endpoint as endpoint
 try:  # pragma: no cover - depende do venv onde a tool corre
     from vramd.transfer import TransferClient, TransferError
 except ImportError:  # pragma: no cover
-    TransferClient = None  # type: ignore[assignment,misc]
+    TransferClient = None
 
     class TransferError(RuntimeError):  # type: ignore[no-redef]
         """Placeholder quando o pacote vramd não está instalado."""

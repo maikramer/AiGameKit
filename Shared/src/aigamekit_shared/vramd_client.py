@@ -920,7 +920,7 @@ def _delegate_remote(
             staged.discard()
             staged, req = _restage_after_session_loss(backend, request, cmd="generate", priority=pri)
             response = staged.client.rpc(req, timeout=timeout_sec)
-        return vramd_remote.finalize(staged, response)
+        return cast("dict[str, Any] | None", vramd_remote.finalize(staged, response))
     except (vramd_remote.RemoteDown, OSError) as exc:
         # O job pode estar a correr no servidor; não limpar o sandbox (TTL limpa).
         # Fechar a ligação é seguro e evita um socket persistente por job falhado.
@@ -983,7 +983,7 @@ def submit_to_vramd(
             staged.close()
         # Em erro não se limpa o sandbox: o submit pode ter enfileirado o job
         # antes de a resposta se perder (TTL recolhe).
-        return response
+        return cast("dict[str, Any] | None", response)
 
     if not ensure_vramd_running(force_local=True):
         return None
@@ -1047,7 +1047,7 @@ def wait_vramd_job(
         # usar o ``staged`` do peek mantém o caminho idempotente.
         target = vramd_remote.take(job_id) or staged
         try:
-            return vramd_remote.finalize(target, response)
+            return cast("dict[str, Any] | None", vramd_remote.finalize(target, response))
         except (vramd_remote.RemoteDown, vramd_remote.RemoteStagingError, vramd_remote.TransferError, OSError) as exc:
             # O download falhou a meio: não deixar o socket persistente
             # aberto (o sandbox fica para o TTL, não para um retry local).
@@ -1530,7 +1530,7 @@ class ModelServer:
                     signal.signal(sig, self._signal_handler)
             if endpoint.IS_WINDOWS and hasattr(signal, "SIGBREAK"):
                 with contextlib.suppress(OSError, ValueError):
-                    signal.signal(signal.SIGBREAK, self._signal_handler)  # type: ignore[attr-defined]
+                    signal.signal(signal.SIGBREAK, self._signal_handler)
 
         self._running = True
         _logger.info(

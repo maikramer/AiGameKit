@@ -18,7 +18,7 @@ import os
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from rich.console import Console
 from rich.markup import escape as _escape_markup
@@ -77,17 +77,20 @@ def add_vramd_options(fn: F) -> F:
 def add_gpu_option(fn: F) -> F:
     """Decorator Click: ``--gpu auto|local|remote`` → ``VRAMD_GPU_MODE``."""
     click = _click_module()
-    return click.option(
-        "--gpu",
-        type=click.Choice(["auto", "local", "remote"], case_sensitive=False),
-        default=None,
-        expose_value=False,
-        callback=_set_gpu_mode,
-        help=(
-            "Onde correr as fases GPU: auto (VRAMD_REMOTE), local (ignora o servidor) "
-            "ou remote. Também via VRAMD_GPU_MODE."
-        ),
-    )(fn)
+    return cast(
+        F,
+        click.option(
+            "--gpu",
+            type=click.Choice(["auto", "local", "remote"], case_sensitive=False),
+            default=None,
+            expose_value=False,
+            callback=_set_gpu_mode,
+            help=(
+                "Onde correr as fases GPU: auto (VRAMD_REMOTE), local (ignora o servidor) "
+                "ou remote. Também via VRAMD_GPU_MODE."
+            ),
+        )(fn),
+    )
 
 
 def _set_gpu_mode(ctx: Any, param: Any, value: str | None) -> str | None:

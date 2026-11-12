@@ -285,7 +285,8 @@ def build_bundle(backends: Iterable[str] | None = None) -> Bundle:
             extras[rel] = lock_text.encode()
             envs[env_name] = {"python": python_version, "lock": rel}
         code_roots.extend(block["code_roots"])
-        remote = entry.get("remote") if isinstance(entry.get("remote"), dict) else {}
+        remote_raw = entry.get("remote")
+        remote: dict[str, Any] = remote_raw if isinstance(remote_raw, dict) else {}
         backend_specs.append(
             {
                 "name": name,
@@ -432,7 +433,7 @@ def ensure_session(backends: Iterable[str] | None = None) -> str | None:
                     pass
                 finally:
                     old_client.close()
-        return _SESSION["session"]
+        return str(_SESSION["session"])
 
 
 def session_id() -> str | None:

@@ -172,9 +172,12 @@ def read_endpoint(path: Path) -> EndpointInfo | None:
     if isinstance(raw_version, bool) or not isinstance(raw_version, int) or raw_version < 1:
         return None
     host = str(data.get("host") or DEFAULT_TCP_HOST).strip() or DEFAULT_TCP_HOST
+    raw_port = data.get("port")
+    if isinstance(raw_port, bool) or not isinstance(raw_port, (int, str)):
+        return None
     try:
-        port = int(data.get("port"))
-    except (TypeError, ValueError):
+        port = int(raw_port)
+    except ValueError:
         return None
     if not (1 <= port <= 65535):
         return None
