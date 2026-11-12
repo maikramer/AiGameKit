@@ -55,7 +55,7 @@ class TestResolveVramdStartCmd:
             import_probe=lambda: True,
             sys_executable="/some/tool/.venv/bin/python",
         )
-        assert cmd == ["/repo/Vramd/.venv/bin/python", "-m", "vramd", "start"]
+        assert cmd == [str(Path("/repo/Vramd/.venv/bin/python")), "-m", "vramd", "start"]
         assert warning == ""
 
     def test_path_lookup_used_when_no_canonical(self) -> None:
@@ -96,7 +96,7 @@ class TestResolveVramdStartCmd:
             path_lookup=lambda _: None,
             import_probe=lambda: False,
         )
-        assert cmd == ["/repo/Vramd/.venv/bin/python", "-m", "vramd", "start"]
+        assert cmd == [str(Path("/repo/Vramd/.venv/bin/python")), "-m", "vramd", "start"]
 
 
 # ---------------------------------------------------------------------------

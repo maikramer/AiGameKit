@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import threading
 import time
 from collections.abc import Callable
@@ -26,6 +27,16 @@ from gameassets.vramd_coord import (
     wave_window,
 )
 from gameassets.vramd_routing import PaintPrefetcher, effective_criticality
+
+# `shape_specs_from_items`/`text2d_specs_from_items` usam o builder da tool
+# real (text3d/text2d); o job de CI do GameAssets só instala Shared + este
+# pacote, por isso os testes de tiers saltam quando a tool não está presente.
+_NEEDS_TEXT3D = pytest.mark.skipif(
+    importlib.util.find_spec("text3d") is None, reason="text3d não instalado"
+)
+_NEEDS_TEXT2D = pytest.mark.skipif(
+    importlib.util.find_spec("text2d") is None, reason="text2d não instalado"
+)
 
 TWO_SIZES = Topology(
     capacity=3,
@@ -102,6 +113,7 @@ class TestCriticality:
         ]
 
 
+@_NEEDS_TEXT3D
 class TestTiersInSpecs:
     def _shape(self, tmp_path: Path, topo: Topology | None, **kw: Any) -> dict[str, Any]:
         items = [
@@ -150,6 +162,7 @@ class TestTiersInSpecs:
             (spec,) = shape_specs_from_items(items, manifest_dir=tmp_path)
         assert "hw_tiers" in spec.payload
 
+    @_NEEDS_TEXT2D
     def test_text2d_specs(self, tmp_path: Path) -> None:
         items = [{"id": "i", "prompt": "a sword", "output": str(tmp_path / "i.png"), "criticality": "low"}]
         with patch("gameassets.vramd_routing.fetch_topology", return_value=TWO_SIZES):
