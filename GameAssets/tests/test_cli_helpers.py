@@ -336,6 +336,20 @@ def test_rigging3d_pipeline_argv_minimal() -> None:
     assert "42" in argv
 
 
+def test_rigging3d_pipeline_argv_explicit_gpu() -> None:
+    """O master pipeline explicita ``--gpu remote`` (worker vramd remoto)."""
+    for gpu in ("remote", "local"):
+        argv = _rigging3d_pipeline_argv(
+            "rigging3d",
+            Path("/in.glb"),
+            Path("/out_rigged.glb"),
+            seed=None,
+            rig_profile=None,
+            gpu=gpu,
+        )
+        assert argv[argv.index("--gpu") + 1] == gpu
+
+
 def test_rigging3d_pipeline_argv_with_profile() -> None:
     rg = Rigging3DProfile(root="/u", python="/py/bin/python")
     argv = _rigging3d_pipeline_argv(

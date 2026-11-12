@@ -3160,10 +3160,16 @@ def run_master_pipeline(
             from .vramd_coord import gpu_is_remote
 
             rig_gpu = str(getattr(row, "gpu", "auto") or "auto")
-            if not gpu_is_remote(rig_gpu):
+            rig_remote = gpu_is_remote(rig_gpu)
+            if not rig_remote:
                 # Só o vramd local precisa de ser zerado: no remoto o job passa
                 # pelo supervisor e um `zero` mataria o worker do próprio rig.
                 _release_vramd_before_external_stage("rigging3d")
+            # Explicitar o destino: com ``gpu: auto`` o filho herdava
+            # VRAMD_GPU_MODE, mas um subprocesso lançado sem a env (ou num
+            # runner que a limpa) caía no rig in-process e enchia a GPU local.
+            # O Rigging3D tem worker/adapter no vramd remoto (SkinTokens).
+            rig_gpu_arg = "remote" if rig_remote else ("local" if rig_gpu == "local" else None)
             rig_argv = _rigging3d_pipeline_argv(
                 rigging3d_bin,
                 painted_p,
@@ -3173,7 +3179,7 @@ def run_master_pipeline(
                 gpu_ids=gpu_ids,
                 hw_auto=profile.hw_auto,
                 quality=profile.generation,
-                gpu=rig_gpu,
+                gpu=rig_gpu_arg,
             )
             s = _run("rigging3d", rig_argv, rigged_p)
             res.stages.append(s)

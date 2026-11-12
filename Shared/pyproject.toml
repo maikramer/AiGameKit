@@ -24,9 +24,9 @@ dependencies = [
     # vinha por transitividade do stack pesado, e só apareceu ao separar o
     # núcleo. Sem isto, ``aigamekit_shared.quality`` falha num venv leve.
     "PyYAML>=6.0",
-    # Cliente do protocolo v2 do vramd (frames binários + blobs). É um pacote
-    # puro-Python pequeno; o servidor remoto é a mesma versão. Sem ele, o
-    # staging remoto cai no caminho JSON/base64 antigo.
+    # Cliente do protocolo v2 do vramd (frames binários + blobs + sessões).
+    # 0.8.0 traz ``topology``/``hw_tiers``/``criticality`` nativos; 0.7.x
+    # continua aceite (o cliente sintetiza a topologia a partir do status).
     "vramd>=0.7.0",
 ]
 

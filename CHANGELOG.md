@@ -60,6 +60,12 @@ próprio: [`Materialize/CHANGELOG.md`](Materialize/CHANGELOG.md).
   <tool>` (aconteceu no GameAssets). `ensure_session` passa a falhar com
   `BundleError` a dizer que falta instalar `vramd>=0.7` e porquê. Testes:
   `Shared/tests/test_vramd_bundle.py`.
+- **Rigging3D no vramd remoto.** O `rigging3d pipeline` já tem worker/adapter
+  (`worker_serve_adapter.py`) e backend em `backends.yaml` (SkinTokens), mas o
+  master pipeline passava `gpu: auto` e o filho caía no rig in-process quando
+  a env não chegava — enchia a GPU local e falhava por OOM com a engine do
+  Vael aberta. O pipeline passa a explicitar `--gpu remote` (ou `local`) com
+  `gpu_is_remote(row.gpu)`. Testes: `tests/test_cli_helpers.py`.
 
 ### Added — várias GPUs e peers (router do vramd)
 

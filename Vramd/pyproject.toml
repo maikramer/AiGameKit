@@ -15,9 +15,10 @@ license = "MIT"
 # de desenvolvimento: só se instala editável quando se está a desenvolver o
 # próprio vramd, nunca como dependência do monorepo.
 # 0.7.0: router/topologia (`topology`, `hw_tiers`) e o protocolo binário de
-# blobs que o cliente do Shared usa (frames + CAS). O piso acompanha o
-# `Shared/pyproject.toml` (>=0.7.0): com 0.6 o staging remoto caía no caminho
-# JSON/base64 e não havia topologia para dimensionar a fila.
+# blobs que o cliente do Shared usa (frames + CAS). 0.8.0 publica o
+# `topology` nativo, criticidade, forecast e tier_health; o piso acompanha o
+# `Shared/pyproject.toml` (>=0.7.0) porque o cliente sintetiza a topologia a
+# partir do `status` num servidor 0.7.x.
 dependencies = [
     "vramd>=0.7.0",
 ]
