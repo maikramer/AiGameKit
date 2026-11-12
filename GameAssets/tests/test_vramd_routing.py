@@ -31,12 +31,8 @@ from gameassets.vramd_routing import PaintPrefetcher, effective_criticality
 # `shape_specs_from_items`/`text2d_specs_from_items` usam o builder da tool
 # real (text3d/text2d); o job de CI do GameAssets só instala Shared + este
 # pacote, por isso os testes de tiers saltam quando a tool não está presente.
-_NEEDS_TEXT3D = pytest.mark.skipif(
-    importlib.util.find_spec("text3d") is None, reason="text3d não instalado"
-)
-_NEEDS_TEXT2D = pytest.mark.skipif(
-    importlib.util.find_spec("text2d") is None, reason="text2d não instalado"
-)
+_NEEDS_TEXT3D = pytest.mark.skipif(importlib.util.find_spec("text3d") is None, reason="text3d não instalado")
+_NEEDS_TEXT2D = pytest.mark.skipif(importlib.util.find_spec("text2d") is None, reason="text2d não instalado")
 
 TWO_SIZES = Topology(
     capacity=3,
