@@ -168,6 +168,7 @@ def _rigging3d_pipeline_argv(
     gpu_ids: list[int] | None = None,
     hw_auto: bool = True,
     quality: str | None = None,
+    gpu: str | None = None,
 ) -> list[str]:
     args = [rigging3d_bin]
     if gpu_ids:
@@ -175,6 +176,9 @@ def _rigging3d_pipeline_argv(
     if not hw_auto:
         args.append("--no-hw-auto")
     args.append("pipeline")
+    if gpu in ("remote", "local"):
+        # Override por asset; ``auto`` deixa a política global (VRAMD_GPU_MODE).
+        args.extend(["--gpu", gpu])
     args.extend(["--input", str(mesh_in), "--output", str(mesh_out)])
     if seed is not None:
         args.extend(["--seed", str(seed)])
@@ -3153,7 +3157,13 @@ def run_master_pipeline(
         elif not force and _rigged_ok(rigged_p):
             res.stages.append(StageResult("rigging3d", True, 0.0, "skipped (rigged existente)", rigged_p))
         else:
-            _release_vramd_before_external_stage("rigging3d")
+            from .vramd_coord import gpu_is_remote
+
+            rig_gpu = str(getattr(row, "gpu", "auto") or "auto")
+            if not gpu_is_remote(rig_gpu):
+                # Só o vramd local precisa de ser zerado: no remoto o job passa
+                # pelo supervisor e um `zero` mataria o worker do próprio rig.
+                _release_vramd_before_external_stage("rigging3d")
             rig_argv = _rigging3d_pipeline_argv(
                 rigging3d_bin,
                 painted_p,
@@ -3163,6 +3173,7 @@ def run_master_pipeline(
                 gpu_ids=gpu_ids,
                 hw_auto=profile.hw_auto,
                 quality=profile.generation,
+                gpu=rig_gpu,
             )
             s = _run("rigging3d", rig_argv, rigged_p)
             res.stages.append(s)

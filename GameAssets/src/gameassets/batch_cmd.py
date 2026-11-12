@@ -981,6 +981,7 @@ def batch_cmd(
                     seed=seed,
                     rig_profile=rg,
                     gpu_ids=gpu_ids,
+                    gpu=str(getattr(row, "gpu", "auto") or "auto"),
                 )
                 _dry_run_emit(dry_plan, phase="rigging3d", row_id=row.id, argv=rg_args)
         if (

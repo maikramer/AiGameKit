@@ -204,6 +204,30 @@ backends:
     calibrate_load_kwargs:
       sdnq_preset: sdnq-fp8
 
+  # Auto-rigging SkinTokens (skeleton + skin numa passada). O adapter do
+  # worker vive em Rigging3D/src/rigging3d/worker_serve_adapter.py; os
+  # checkpoints ficam no cache HF normal (VAST-AI/SkinTokens) e o runner liga-os
+  # ao layout ``experiments/...`` que o TokenRig espera. O bpy corre no worker
+  # (headless) para o dataloader/export/transfer. Sem spconv/cumm no lock
+  # remoto: o SkinTokens não os importa e não há wheel cu13.
+  - name: rigging3d
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 7000
+    priority: 35
+    tool: rigging3d
+    remote:
+      inputs: [input]
+      outputs: [output]
+    session:
+      env: rigging3d
+      tool: rigging3d
+      code_roots: [Shared/src, Rigging3D/src]
+    models:
+      - repo: VAST-AI/SkinTokens
+        allow:
+          - experiments/articulation_xl_quantization_256_token_4/grpo_1400.ckpt
+          - experiments/skin_vae_2_10_32768/last.ckpt
+
   # Refinamento de geometria Hi3D (sparc3d). Medido nesta GPU de 6 GB:
   # 512³ / 25 passos com **residência por fase** (default) → pico 3,74 GiB,
   # ~60 s por asset; com `--no-staging` (offload sequencial do accelerate) o

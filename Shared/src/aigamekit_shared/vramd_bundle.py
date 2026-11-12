@@ -70,6 +70,25 @@ _DEFAULT_SESSIONS: dict[str, dict[str, Any]] = {
         "tool": "text2sound",
         "code_roots": ["Shared/src", "Text2Sound/src"],
     },
+    "rigging3d": {
+        "env": "rigging3d",
+        "tool": "rigging3d",
+        "code_roots": ["Shared/src", "Rigging3D/src"],
+    },
+}
+
+# Pacotes sem uso no código remoto: spconv/cumm são wheels CUDA 12.1 (sem
+# equivalente cu13) e restos do UniRig no venv local; pyrender/pyopengl são só
+# visualização e o par do venv (0.1.45/3.1.10) é insatisfazível para o uv
+# (pyrender exige pyopengl==3.1.0). Ficam fora do lock remoto.
+_REMOTE_UNUSED_PACKAGES = {
+    "spconv",
+    "cumm",
+    "pyrender",
+    "pyopengl",
+    # Wheels `+pt211` construídos localmente (sem build no índice do torch).
+    "torch-cluster",
+    "torch-scatter",
 }
 
 # CUDA 13 em todo o pipeline remoto. O Hi3D (refine) fica **local**: o seu
@@ -82,6 +101,7 @@ _TOOL_DIRS = {
     "text3d": "Text3D",
     "paint3d": "Paint3D",
     "text2sound": "Text2Sound",
+    "rigging3d": "Rigging3D",
     "hi3d": "Hi3D",
     "texture2d": "Texture2D",
     "skymap2d": "Skymap2D",
@@ -185,6 +205,7 @@ def _freeze(tool_dir: str, root: Path) -> tuple[str, str]:
         "text3d",
         "paint3d",
         "text2sound",
+        "rigging3d",
         "hi3d",
     }
     for line in frozen.stdout.splitlines():
@@ -196,6 +217,9 @@ def _freeze(tool_dir: str, root: Path) -> tuple[str, str]:
         package = text.split("==", 1)[0].split("@", 1)[0].strip().lower().replace("_", "-")
         if package in local_names:
             # O código local vem do bundle via PYTHONPATH, não do PyPI.
+            continue
+        if package in _REMOTE_UNUSED_PACKAGES or package.startswith(("spconv-cu", "cumm-cu")):
+            # Ver _REMOTE_UNUSED_PACKAGES (pesos/código não usam nenhum).
             continue
         if any(marker in text for marker in _CUDA12_MARKERS):
             # Só cu13 no pipeline remoto; ver o comentário em _DEFAULT_SESSIONS.

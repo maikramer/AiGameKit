@@ -288,6 +288,20 @@ def _gpu_remote(gpu: str | None) -> bool | None:
     return None
 
 
+def gpu_is_remote(gpu: str | None) -> bool:
+    """Resolve ``gpu:`` + política global para "corre no servidor remoto?".
+
+    Usado pelos stages externos (rigging3d) para decidir se ainda faz sentido
+    zerar a VRAM do vramd local antes de lançar o CLI.
+    """
+    mode = _gpu_remote(gpu)
+    if mode is not None:
+        return mode
+    from aigamekit_shared.vramd_remote import remote_enabled
+
+    return remote_enabled()
+
+
 def cuda_visible_for_children(gpu_ids: list[int] | None) -> list[int | str] | None:
     """IDs lógicos (torch) → entradas do ``CUDA_VISIBLE_DEVICES`` do pai.
 

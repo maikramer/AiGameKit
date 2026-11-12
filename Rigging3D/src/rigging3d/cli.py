@@ -15,6 +15,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from aigamekit_shared.cli_helpers import add_vramd_options, delegate_or_prepare
 from aigamekit_shared.profiler.session import ProfilerSession
 from aigamekit_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_RIGGING3D, emit_progress, emit_result
 from aigamekit_shared.quality import VALID_QUALITIES
@@ -741,6 +742,7 @@ def _ctx_gpu_ids(ctx: click.Context) -> list[int] | None:
     show_default=True,
     help="Quality tier (fast / low / medium / high / highest).",
 )
+@add_vramd_options
 @click.pass_context
 def pipeline_cmd(
     ctx: click.Context,
@@ -757,6 +759,9 @@ def pipeline_cmd(
     repetition_penalty: float,
     num_beams: int,
     quality: str,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Gera um GLB rigado (skeleton + skin, um único passo autoregressivo)."""
     from aigamekit_shared.gpu import warn_if_vram_occupied
@@ -779,6 +784,7 @@ def pipeline_cmd(
 
     item_id = mesh.stem
     t0 = time.monotonic()
+    t_start = time.time()
 
     _old_cuda = os.environ.get("CUDA_VISIBLE_DEVICES")
     try:
@@ -795,20 +801,48 @@ def pipeline_cmd(
         ):
             emit_progress(item_id, TOOL_RIGGING3D, phase="rig", percent=0)
             try:
-                run_rig_inprocess(
-                    str(mesh),
-                    str(out),
-                    use_skeleton=use_existing_skeleton,
-                    use_transfer=use_transfer,
-                    use_postprocess=use_postprocess,
-                    top_k=top_k,
-                    top_p=top_p,
-                    temperature=temperature,
-                    repetition_penalty=repetition_penalty,
-                    num_beams=num_beams,
-                    group_per_vertex=groups_per_vertex,
-                    seed=seed,
+                # vramd primeiro (local ou remoto): o adaptador do worker
+                # reutiliza o SkinTokens carregado e os checkpoints do cache HF.
+                delegated = delegate_or_prepare(
+                    "rigging3d",
+                    payload={
+                        "input": str(mesh),
+                        "output": str(out),
+                        "seed": seed,
+                        "use_skeleton": use_existing_skeleton,
+                        "use_transfer": use_transfer,
+                        "use_postprocess": use_postprocess,
+                        "groups_per_vertex": groups_per_vertex,
+                        "top_k": top_k,
+                        "top_p": top_p,
+                        "temperature": temperature,
+                        "repetition_penalty": repetition_penalty,
+                        "num_beams": num_beams,
+                        "quality": quality,
+                    },
+                    t_start=t_start,
+                    noun="Rig",
+                    console=console,
+                    enabled=not no_vramd,
+                    priority=vramd_priority,
+                    stream=vramd_stream,
+                    timeout_sec=3600.0,
                 )
+                if not delegated:
+                    run_rig_inprocess(
+                        str(mesh),
+                        str(out),
+                        use_skeleton=use_existing_skeleton,
+                        use_transfer=use_transfer,
+                        use_postprocess=use_postprocess,
+                        top_k=top_k,
+                        top_p=top_p,
+                        temperature=temperature,
+                        repetition_penalty=repetition_penalty,
+                        num_beams=num_beams,
+                        group_per_vertex=groups_per_vertex,
+                        seed=seed,
+                    )
             except Exception as exc:
                 emit_result(
                     item_id,
@@ -997,6 +1031,24 @@ def fix_bone_orientation_cmd(input_glb: Path, output_glb: Path | None, min_gap: 
 # ---------------------------------------------------------------------------
 # Entry
 # ---------------------------------------------------------------------------
+
+
+@cli.command("serve")
+@click.option(
+    "--ums-worker",
+    is_flag=True,
+    help=(
+        "Modo worker subprocesso do vramd: lê comandos JSONL do stdin (load / "
+        "generate / unload / shutdown) e emite eventos no stdout."
+    ),
+)
+def serve_cmd(ums_worker: bool) -> None:
+    """Worker subprocesso do vramd (``rigging3d serve --ums-worker``)."""
+    from aigamekit_shared.worker_serve import run_ums_worker_cli
+
+    from .worker_serve_adapter import Adapter
+
+    run_ums_worker_cli(Adapter, tool_name="rigging3d", ums_worker=ums_worker, console=console)
 
 
 def main() -> None:

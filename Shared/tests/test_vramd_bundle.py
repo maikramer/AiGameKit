@@ -87,9 +87,10 @@ def test_build_bundle_real_monorepo() -> None:
         assert env["lock"] in paths
         assert env["python"]
     names = {item["name"] for item in bundle.backends}
-    assert {"text2d", "text3d", "paint3d", "text2sound"} <= names
+    assert {"text2d", "text3d", "paint3d", "text2sound", "rigging3d"} <= names
     # Hi3D fica local (cu124); não entra no bundle/sessão remota.
     assert "hi3d" not in names
+    assert "Rigging3D/src/rigging3d/worker_serve_adapter.py" in paths
     for backend in bundle.backends:
         assert backend["code_roots"]
         assert backend["tool"]
@@ -139,6 +140,40 @@ def test_freeze_rejects_torch_cu12_without_replacement(tmp_path, monkeypatch: py
 
     with pytest.raises(vramd_bundle.BundleError, match="CUDA 12"):
         vramd_bundle._freeze("Tool", tmp_path)
+
+
+def test_freeze_drops_cuda12_only_packages(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """spconv/cumm cu121 não usados pelo código ficam fora do lock remoto."""
+    python = tmp_path / "Tool" / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    python.parent.mkdir(parents=True)
+    python.write_text("", encoding="utf-8")
+
+    class Result:
+        returncode = 0
+        stderr = ""
+
+        def __init__(self, stdout: str) -> None:
+            self.stdout = stdout
+
+    results = iter(
+        [
+            Result("3.13\n"),
+            Result(
+                "torch==2.13.0+cu130\nspconv-cu121==2.3.8\ncumm-cu121==0.8.2\n"
+                "pyrender==0.1.45\npyopengl==3.1.10\n"
+                "torch-cluster==1.6.3+pt211cu130\ntorch-scatter==2.1.2+pt211cu130\n"
+                "numpy==2.1.0\n"
+            ),
+        ]
+    )
+    monkeypatch.setattr(vramd_bundle.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(vramd_bundle.subprocess, "run", lambda *_a, **_k: next(results))
+
+    _version, lock = vramd_bundle._freeze("Tool", tmp_path)
+    for unused in ("spconv", "cumm", "pyrender", "pyopengl", "torch-cluster", "torch-scatter"):
+        assert unused not in lock
+    assert "torch==2.13.0+cu130" in lock
+    assert "download.pytorch.org/whl/cu130" in lock
 
 
 def test_vramd_pin_covers_shared_requirement() -> None:

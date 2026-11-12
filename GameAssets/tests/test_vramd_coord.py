@@ -25,6 +25,7 @@ from gameassets.vramd_coord import (
     attach_gpu,
     cuda_visible_for_children,
     discard_prefetched,
+    gpu_is_remote,
     is_prefetched,
     preload_backend,
     register_prefetched,
@@ -85,6 +86,31 @@ class TestCudaVisibleForChildren:
         monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
         assert cuda_visible_for_children(None) is None
         assert cuda_visible_for_children([]) is None
+
+
+class TestGpuIsRemote:
+    def test_explicit_modes(self, monkeypatch) -> None:
+        monkeypatch.delenv("VRAMD_AUTO_GPU", raising=False)
+        monkeypatch.delenv("VRAMD_GPU_MODE", raising=False)
+        assert gpu_is_remote("remote") is True
+        assert gpu_is_remote("local") is False
+
+    def test_auto_uses_global_gpu_mode(self, monkeypatch) -> None:
+        monkeypatch.delenv("VRAMD_AUTO_GPU", raising=False)
+        monkeypatch.setenv("VRAMD_GPU_MODE", "remote")
+        assert gpu_is_remote("auto") is True
+        monkeypatch.setenv("VRAMD_GPU_MODE", "local")
+        assert gpu_is_remote("auto") is False
+
+    def test_auto_falls_back_to_remote_enabled(self, monkeypatch) -> None:
+        monkeypatch.delenv("VRAMD_AUTO_GPU", raising=False)
+        monkeypatch.delenv("VRAMD_GPU_MODE", raising=False)
+        import aigamekit_shared.vramd_remote as remote
+
+        monkeypatch.setattr(remote, "remote_enabled", lambda: True)
+        assert gpu_is_remote("auto") is True
+        monkeypatch.setattr(remote, "remote_enabled", lambda: False)
+        assert gpu_is_remote("auto") is False
 
 
 class TestMasterDeferQueue:

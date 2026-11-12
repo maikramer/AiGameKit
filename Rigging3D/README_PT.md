@@ -117,9 +117,17 @@ export RIGGING3D_ROOT=/outro/caminho
 ```bash
 rigging3d pipeline char.glb -o char_rigged.glb --vramd-stream
 rigging3d pipeline char.glb -o char_rigged.glb --no-vramd   # forçar in-process
+rigging3d pipeline char.glb -o char_rigged.glb --gpu remote # GPU do servidor
 vramd status
 vramd respawn rigging3d                                     # recarrega código src/ editado
 ```
+
+Com `--gpu remote` (ou `VRAMD_GPU_MODE=remote`/`VRAMD_REMOTE`) o pipeline
+abre uma sessão de código no servidor: o bundle leva `Shared/src` +
+`Rigging3D/src`, a env é construída do freeze local (bpy + torch cu130) e os
+checkpoints vêm do cache HF (`VAST-AI/SkinTokens`) sem re-download. O worker
+`rigging3d serve --ums-worker` carrega o SkinTokens uma vez e reutiliza-o;
+os pós-fixes de bones/origem correm no cliente sobre o GLB descarregado.
 
 Modelo: [SkinTokens](https://huggingface.co/VAST-AI/SkinTokens) (TokenRig; download público, MIT — ~1,6 GB descarregados automaticamente no primeiro run). Guia completo: [`Vramd/README.md`](../Vramd/README.md).
 

@@ -13,6 +13,7 @@ Ver ``docs/RIGGING3D_SKINTOKENS_MIGRATION_PLAN.md`` no root do monorepo.
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -43,12 +44,31 @@ def _checkpoints_home() -> Path:
     return Path.home() / ".cache" / "rigging3d" / "skintokens"
 
 
+def _cached_checkpoint(filename: str) -> Path | None:
+    """Ficheiro do repo SkinTokens já presente no cache HF normal.
+
+    No servidor remoto o vramd faz ``models ensure`` (e pina) antes do worker
+    carregar; reaproveitar a snapshot evita um segundo download de ~1,5 GiB
+    para ``RIGGING3D_SKINTOKENS_HOME``. Localmente, sem cache, devolve ``None``
+    e o ``hf_hub_download`` abaixo trata do download.
+    """
+    try:
+        from huggingface_hub import snapshot_download
+
+        snapshot = snapshot_download(DEFAULT_CKPT_REPO, local_files_only=True)
+    except Exception:
+        return None
+    candidate = Path(snapshot) / filename
+    return candidate if candidate.is_file() else None
+
+
 def ensure_checkpoints(home: Path | None = None) -> Path:
     """Baixa (se preciso) os checkpoints TokenRig + FSQ-CVAE do HF Hub.
 
-    Idempotente: ``hf_hub_download`` já faz cache local por hash de conteúdo.
-    Também garante um symlink para ``configs/`` (vendored no pacote) dentro da
-    raiz de checkpoints — o config gravado no ``.ckpt`` referencia
+    Idempotente: procura primeiro o cache HF (snapshot já descarregada e
+    pinada pelo vramd) e só depois baixa para ``local_dir``. Também garante um
+    symlink para ``configs/`` (vendored no pacote) dentro da raiz de
+    checkpoints — o config gravado no ``.ckpt`` referencia
     ``configs/skeleton/*.yaml`` por caminho relativo ao cwd (ver
     ``Order.parse``), e o cwd durante o load é esta raiz, não o pacote.
     """
@@ -59,6 +79,15 @@ def ensure_checkpoints(home: Path | None = None) -> Path:
     for filename in (DEFAULT_TOKENRIG_CKPT, DEFAULT_SKIN_VAE_CKPT):
         local_path = root / filename
         if local_path.is_file():
+            continue
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        cached = _cached_checkpoint(filename)
+        if cached is not None:
+            try:
+                os.symlink(cached, local_path)
+            except OSError:
+                # Windows sem privilégio de symlink: copia (uma vez).
+                shutil.copy2(cached, local_path)
             continue
         hf_hub_download(repo_id=DEFAULT_CKPT_REPO, filename=filename, local_dir=str(root))
 

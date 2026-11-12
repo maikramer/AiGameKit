@@ -365,6 +365,32 @@ def test_rigging3d_pipeline_argv_with_gpu_ids() -> None:
     assert argv.index("--gpu-ids") < argv.index("pipeline")
 
 
+def test_rigging3d_pipeline_argv_with_remote_gpu() -> None:
+    argv = _rigging3d_pipeline_argv(
+        "rigging3d",
+        Path("/in.glb"),
+        Path("/out.glb"),
+        seed=None,
+        rig_profile=None,
+        gpu="remote",
+    )
+    # O --gpu é opção do subcomando pipeline (não do grupo).
+    assert argv.index("--gpu") > argv.index("pipeline")
+    assert argv[argv.index("--gpu") + 1] == "remote"
+
+
+def test_rigging3d_pipeline_argv_auto_does_not_override_env() -> None:
+    argv = _rigging3d_pipeline_argv(
+        "rigging3d",
+        Path("/in.glb"),
+        Path("/out.glb"),
+        seed=None,
+        rig_profile=None,
+        gpu="auto",
+    )
+    assert "--gpu" not in argv
+
+
 def test_terrain3d_profile_effective_default() -> None:
     """When no terrain3d block in profile, returns default Terrain3DProfile."""
     from gameassets.helpers import _terrain3d_profile_effective
