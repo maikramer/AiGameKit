@@ -87,6 +87,30 @@ rácio passa a ≈1. Verificado: pelvis 0,926 → 0,975 m com bob de caminhada n
   `hero_rigged_animated.glb` do pool (clip `attack`) — é skinning do rig, não regressão do
   retarget.
 
+## Bug: export-glb neutralizava os braços em clips de gesto (2026-11-13)
+
+Sintoma: um clip gerado de "stumble" (Vael) retargetizado para um NPC ficava com os
+antebraços dentro do tronco — as mãos cruzadas atrás das costas na pose final. Mediação
+por FK: o `joints` do NPZ tinha o braço a 41–84° da vertical; o GLB source saía a 11–41°.
+
+Causa (duas pontas):
+
+1. `motion3d export-glb` não aplicava o filtro `--arm-neutral auto` que o
+   `apply-rigged` já usava — `export_joints_glb` recebia `neutral_aim=None` e bakeava o
+   `NEUTRAL_AIM` completo (calibração de hang, 15° para fora) em **todos** os clips.
+2. `arm_neutral_applies` decidia sobre os joints **crus**, mas o bake estabiliza o yaw
+   quando `in_place` — no stumble o cotovelo dava 52,6° (skip) estabilizado e ≤50°
+   (aplica) nos crus. Além disso o `aim_fix` é a rotação da *mediana* do clip até o hang:
+   num gesto com braços fora na maior parte do tempo isso são ~40° **para dentro** em
+   todos os frames, matando a amplitude.
+
+Fix: `export-glb` ganhou `--arm-neutral auto|on|off` e passa pelo
+`filter_neutral_aim_for_clip` como o `apply-rigged`; `arm_neutral_applies` /
+`filter_neutral_aim_for_clip` aceitam `in_place` e medem a decisão nos joints
+estabilizados. Regressões: `test_export_glb_applies_the_arm_neutral_filter` (CLI) e
+`test_in_place_measures_the_bake_frame` (flip cru↔estabilizado). Verificado por render
+workbench: braços fora do corpo em frontal/traseira.
+
 ## Variação entre seeds
 
 O model card avisa: "results vary a lot between prompts and seeds". Medido em "a person

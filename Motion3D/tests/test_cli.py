@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from click.core import ParameterSource
 from click.testing import CliRunner, Result
@@ -49,6 +50,78 @@ class TestCommands:
     def test_doctor_help(self) -> None:
         output = run("doctor", "--help").output
         assert "--json" in output and "--build" in output
+
+
+class TestExportGlbArmNeutral:
+    """Regression: ``export-glb`` must filter the hang neutral like ``apply-rigged``.
+
+    The plain export used to pass no ``neutral_aim`` at all, so
+    ``export_joints_glb`` baked the full ``NEUTRAL_AIM`` (15° hang calibration)
+    into every clip. Gesture clips (stumble/throw/reach) got their arms rotated
+    30-50° inward and the hands ended up inside the torso.
+    """
+
+    def capture_export(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, joints) -> dict:
+        npz = tmp_path / "clip.npz"
+        npz.write_bytes(b"not-a-real-npz")
+        captured: dict = {}
+
+        def fake_read(path):
+            return SimpleNamespace(joints=joints, offsets=None, fps=20)
+
+        def fake_export(joints_arg, output, **kwargs):
+            captured["neutral_aim"] = kwargs.get("neutral_aim")
+            Path(output).write_bytes(b"")
+            return Path(output)
+
+        monkeypatch.setattr("motion3d.npz_io.read_clip", fake_read)
+        monkeypatch.setattr("motion3d.bpy_export.export_joints_glb", fake_export)
+        result = run("export-glb", str(npz), "-o", str(tmp_path / "out.glb"))
+        assert result.exit_code == 0, result.output
+        return captured
+
+    def test_walk_keeps_the_hang_calibration(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from .conftest import make_walk_joints
+
+        captured = self.capture_export(tmp_path, monkeypatch, make_walk_joints())
+        assert "l_shoulder" in captured["neutral_aim"]
+        assert "spine1" in captured["neutral_aim"]
+
+    def test_gesture_clip_drops_the_arm_neutral(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from .conftest import make_walk_joints
+
+        joints = make_walk_joints().copy()
+        for side, sign in (("l", 1.0), ("r", -1.0)):
+            shoulder = 16 if side == "l" else 17
+            elbow = 18 if side == "l" else 19
+            wrist = 20 if side == "l" else 21
+            joints[:, elbow] = joints[:, shoulder] + np.array([sign * 0.5, -0.18, 0.0])
+            joints[:, wrist] = joints[:, elbow] + np.array([sign * 0.45, -0.16, 0.0])
+        captured = self.capture_export(tmp_path, monkeypatch, joints)
+        assert "l_shoulder" not in captured["neutral_aim"]
+        assert "r_elbow" not in captured["neutral_aim"]
+        assert "spine1" in captured["neutral_aim"]
+
+    def test_arm_neutral_off_drops_the_arms(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from .conftest import make_walk_joints
+
+        npz = tmp_path / "clip.npz"
+        npz.write_bytes(b"not-a-real-npz")
+        captured: dict = {}
+
+        def fake_read(path):
+            return SimpleNamespace(joints=make_walk_joints(), offsets=None, fps=20)
+
+        def fake_export(joints_arg, output, **kwargs):
+            captured["neutral_aim"] = kwargs.get("neutral_aim")
+            Path(output).write_bytes(b"")
+            return Path(output)
+
+        monkeypatch.setattr("motion3d.npz_io.read_clip", fake_read)
+        monkeypatch.setattr("motion3d.bpy_export.export_joints_glb", fake_export)
+        result = run("export-glb", str(npz), "-o", str(tmp_path / "out.glb"), "--arm-neutral", "off")
+        assert result.exit_code == 0, result.output
+        assert "l_shoulder" not in captured["neutral_aim"]
 
 
 class TestQualityDefaults:

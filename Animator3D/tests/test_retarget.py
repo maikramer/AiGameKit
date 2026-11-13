@@ -409,6 +409,57 @@ def test_axis_correction_identity_when_rests_equal() -> None:
     _assert_same_rotation(correction, Quaternion())
 
 
+def test_full_rest_correction_preserves_the_twist() -> None:
+    """``full_rest_bones`` (mãos): a orientação do source chega inteira, com roll.
+
+    A correcção swing-only trata o target como T-pose e deixa o roll no rest
+    do target: as palmas dos rigs gerados (palma do A-pose para a frente)
+    ficam para a frente em TODOS os clips — o idle "a rezar". A correcção
+    completa ``inv(rest_src) @ rest_tgt`` leva o twist do source (palmas nas
+    coxas no idle Quaternius) sem duplicar a diferença de rest.
+    """
+    from mathutils import Vector
+
+    y = Vector((0, 1, 0))
+    # Rest source: T-pose (osso ao longo de +X); rest target: A-pose (45° abaixo).
+    source_rest = _rotation((0, 0, 1), -90)
+    target_rest = _rotation((0, 0, 1), -45)
+    src_dir = source_rest @ y
+    tgt_dir = target_rest @ y
+
+    correction = source_rest.inverted() @ target_rest
+
+    # Em repouso a correcção mapeia rest→rest exactamente.
+    _assert_same_rotation(source_rest @ correction, target_rest)
+
+    # Pose animada com roll (palma a rodar em torno do eixo do próprio osso).
+    twist = _rotation((0, 1, 0), 70)
+    animated = twist @ _rotation((0, 0, 1), -80) @ source_rest
+    expected = twist @ _rotation((0, 0, 1), -80) @ target_rest
+    _assert_same_rotation(animated @ correction, expected)
+
+    # A correcção swing-only perde o roll (~70° de diferença de orientação).
+    swing_only = rt._axis_correction(source_rest, target_rest, src_dir, tgt_dir)
+    lost = (animated @ swing_only).rotation_difference(expected).angle
+    assert lost > radians(20)
+
+
+def test_profile_full_rest_bones_defaults_to_hands() -> None:
+    """Todos os perfis bundled herdam o fix de orientação das mãos."""
+    for name in ("quaternius", "quaternius2", "sprong22"):
+        assert rt.load_profile(name).full_rest_bones == ("hand_l", "hand_r"), name
+
+
+def test_load_profile_full_rest_bones_override(tmp_path: Path) -> None:
+    """``full_rest_bones`` do YAML substitui o default (lista vazia desliga)."""
+    p = tmp_path / "hands.yaml"
+    p.write_text("profile: hands\nbone_map: {}\nclip_map: {}\nfull_rest_bones: [hand_l]\n", encoding="utf-8")
+    assert rt.load_profile(p).full_rest_bones == ("hand_l",)
+    p2 = tmp_path / "nohands.yaml"
+    p2.write_text("profile: nohands\nbone_map: {}\nclip_map: {}\nfull_rest_bones: []\n", encoding="utf-8")
+    assert rt.load_profile(p2).full_rest_bones == ()
+
+
 def test_solve_target_basis_compensates_animated_parent() -> None:
     source_rest = _rotation((0, 1, 0), 20)
     source_pose = _rotation((0, 0, 1), 65) @ source_rest

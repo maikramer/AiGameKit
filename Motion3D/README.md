@@ -81,7 +81,12 @@ pipeline for game clips — all opt-in:
 | `--max-lean 25` | Cap torso tilt off vertical (degrees) |
 | `--hands-together 0.10` | Both wrists within N metres (two-hand prop) |
 | `--plant-feet` | Freeze the stance horizontally (stationary actions) |
-| `--arm-neutral auto\|on\|off` | Soft hang calibration; `auto` skips raised-arm clips |
+| `--arm-neutral auto\|on\|off` | Soft hang calibration; `auto` skips gesture clips |
+
+`export-glb` accepts the same `--in-place` and `--arm-neutral` options and
+applies the same filter, so a gesture clip exported straight from the NPZ keeps
+its arm motion (the hang calibration otherwise rotates the arms 30–50° inward
+on stumble/throw/reach clips, tucking the hands into the torso).
 
 ## Prompting
 

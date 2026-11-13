@@ -76,6 +76,16 @@ _DEFAULT_APOSE_BONES = (
 # perfil: ``apose_open_deg:``/``apose_bones:``.
 APOSE_OPEN_DEG_DEFAULT = 15.0
 
+# Ossos que recebem a correção REST COMPLETA (``inv(rest_src) @ rest_tgt``) em
+# vez da correção com swing removido: mãos. O swing-only preserva a DIREÇÃO do
+# osso mas deixa o roll/twist no rest do target; quem gera os rigs em A-pose de
+# manequim (palmas para a frente) ficava com todas as palmas viradas para a
+# frente em TODOS os clips (idle "a rezar", palmas à frente no walk/attack). A
+# correção completa leva a orientação do source (palmas nas coxas no idle
+# Quaternius) e também é convenção-segura: cada osso mapeia rest→rest.
+# Override por perfil: ``full_rest_bones:`` (lista de ossos do target; [] desliga).
+_DEFAULT_FULL_REST_BONES = ("hand_l", "hand_r")
+
 
 def _resolve_location_pair(tgt_to_src: dict[str, str]) -> tuple[str | None, str | None]:
     """Par ``(tgt_hips, src_hips)`` que recebe location (gait/bob); ``(None, None)`` sem hips.
@@ -126,6 +136,9 @@ class RetargetProfile:
     # recebe explicitamente.
     apose_open_deg: float = APOSE_OPEN_DEG_DEFAULT
     apose_bones: tuple[str, ...] = _DEFAULT_APOSE_BONES
+    # Ossos do target que recebem a correção rest completa (ver
+    # _DEFAULT_FULL_REST_BONES): a orientação (incluindo twist) segue o source.
+    full_rest_bones: tuple[str, ...] = _DEFAULT_FULL_REST_BONES
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -203,6 +216,9 @@ def load_profile(name_or_path: str | Path) -> RetargetProfile:
     apose_bones_raw = raw.get("apose_bones", list(_DEFAULT_APOSE_BONES))
     if not isinstance(apose_bones_raw, list) or not all(isinstance(b, str) for b in apose_bones_raw):
         raise ValueError(f"apose_bones do perfil {p.name!r} tem de ser uma lista de nomes de ossos")
+    full_rest_bones_raw = raw.get("full_rest_bones", list(_DEFAULT_FULL_REST_BONES))
+    if not isinstance(full_rest_bones_raw, list) or not all(isinstance(b, str) for b in full_rest_bones_raw):
+        raise ValueError(f"full_rest_bones do perfil {p.name!r} tem de ser uma lista de nomes de ossos")
     return RetargetProfile(
         name=raw.get("profile", p.stem),
         bone_map=bone_map,
@@ -213,6 +229,7 @@ def load_profile(name_or_path: str | Path) -> RetargetProfile:
         ik_limits=ik_limits,
         apose_open_deg=apose_open_deg,
         apose_bones=tuple(apose_bones_raw),
+        full_rest_bones=tuple(full_rest_bones_raw),
         extra=extra,
     )
 
@@ -555,6 +572,7 @@ def retarget_animation(
     limits: Any | None = None,
     apose_open_deg: float = 0.0,
     apose_bones: tuple[str, ...] | None = None,
+    full_rest_bones: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Retarget de uma action do source para o target (matrix_basis copy).
 
@@ -608,9 +626,19 @@ def retarget_animation(
     src_mapped = set(tgt_to_src.values())
     tgt_mapped = set(tgt_to_src)
     apose_set = set(apose_bones) if apose_bones is not None else set()
+    full_rest_set = set(full_rest_bones) if full_rest_bones is not None else set()
     for tgt_bn, src_bn in tgt_to_src.items():
         src_bone = source.data.bones[src_bn]
         tgt_bone = target.data.bones[tgt_bn]
+        if tgt_bn in full_rest_set:
+            # Rest completo (sem swing, sem open): a orientação do osso —
+            # incluindo o twist/roll que o swing-only não transporta — segue o
+            # source. É o que põe as palmas a apontar para dentro no idle em
+            # vez de ficarem na palma-do-rest (para a frente) do rig gerado.
+            axis_correction[tgt_bn] = (
+                src_bone.matrix_local.to_quaternion().inverted() @ tgt_bone.matrix_local.to_quaternion()
+            )
+            continue
         src_dir = _bone_rest_dir(source, src_bn, src_mapped)
         tgt_dir = _bone_rest_dir(target, tgt_bn, tgt_mapped)
         axis_correction[tgt_bn] = _axis_correction(
@@ -796,6 +824,7 @@ def retarget_batch(
                 limits=limits,
                 apose_open_deg=profile.apose_open_deg,
                 apose_bones=profile.apose_bones,
+                full_rest_bones=profile.full_rest_bones,
             )
             results.append(res)
         except ValueError as e:
@@ -868,6 +897,7 @@ def retarget_batch_files(
                     limits=limits,
                     apose_open_deg=profile.apose_open_deg,
                     apose_bones=profile.apose_bones,
+                    full_rest_bones=profile.full_rest_bones,
                 )
             )
         except ValueError as e:
@@ -894,6 +924,7 @@ def _retarget_from_file(
     limits: Any | None = None,
     apose_open_deg: float = 0.0,
     apose_bones: tuple[str, ...] | None = None,
+    full_rest_bones: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Importa um FBX de animação, retargetiza a sua action única e limpa a cena.
 
@@ -926,6 +957,7 @@ def _retarget_from_file(
             limits=limits,
             apose_open_deg=apose_open_deg,
             apose_bones=apose_bones,
+            full_rest_bones=full_rest_bones,
         )
     finally:
         # Descartar o source e os actions do take (a action nova do target

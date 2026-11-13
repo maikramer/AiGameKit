@@ -258,14 +258,23 @@ def apply_motions_to_rigged(
             src_path = (keep_sources_dir / src_name) if keep_sources_dir else tmp_path / src_name
             base_neutral = {BONE_NAMES[i]: d for i, d in NEUTRAL_AIM.items()}
             use_arm = str(_pick(clip.arm_neutral, arm_neutral))
-            neutral_aim = filter_neutral_aim_for_clip(joints, base_neutral, arm_neutral=use_arm)
+            use_in_place = bool(_pick(clip.in_place, in_place))
+            # The auto arm-neutral must be decided on the same (stabilized)
+            # joints the bake will sample, or a gesturing clip that turns gets
+            # its arms neutralized and ends up inside the torso.
+            neutral_aim = filter_neutral_aim_for_clip(
+                joints,
+                base_neutral,
+                arm_neutral=use_arm,
+                in_place=use_in_place,
+            )
             export_joints_glb(
                 joints,
                 src_path,
                 fps=use_fps,
                 clip_name=DEFAULT_SOURCE_TRACK,
                 offsets=offsets if offsets is not None else REFERENCE_OFFSETS,
-                in_place=bool(_pick(clip.in_place, in_place)),
+                in_place=use_in_place,
                 neutral_aim=neutral_aim,
                 max_lean_deg=_pick(clip.max_lean_deg, max_lean_deg),
                 hands_together_m=_pick(clip.hands_together_m, hands_together_m),
@@ -325,6 +334,7 @@ def apply_motions_to_rigged(
                 profile.bone_map,
                 DEFAULT_SOURCE_TRACK,
                 clip.name,
+                full_rest_bones=profile.full_rest_bones,
             )
             results.append(res)
             kept_actions.add(clip.name)

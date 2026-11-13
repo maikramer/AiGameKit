@@ -22,6 +22,11 @@ Text3D Shared).
 - Rest skeleton tem o pelvis na origem; o export **levanta-o** para a altura do
   clip (`export_joints_glb`). Sem isso o Animator3D escala a location do pelvis
   por `target_height / source_height` ≈ 800× e o corpo voa.
+- O neutral de braços (`NEUTRAL_AIM`) só vale para clips de hang (walk/idle).
+  `export-glb` **e** `apply-rigged` filtram-no com `--arm-neutral auto`: a
+  decisão tem de ser medida nos joints **estabilizados** que o bake amostra
+  (`in_place`), nunca nos crus — senão um gesto que vira durante o clip leva o
+  hang aplicado e as mãos ficam dentro do tronco.
 - Depois de editar código: nada para reiniciar (in-process). `motion3d doctor`.
 
 ## Qualidade

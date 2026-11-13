@@ -56,17 +56,29 @@ def arm_neutral_applies(
     joints: np.ndarray,
     *,
     max_corr_deg: float = ARM_NEUTRAL_MAX_CORR_DEG,
+    in_place: bool = True,
 ) -> bool:
     """True when clip median arm aims are near soft hang (walk/idle).
 
     Raised-arm clips (chop, throw, reach) have medians far from hang; forcing
     ``NEUTRAL_AIM`` onto them rotates every frame ~90-150° and reads as
     broken bone mapping even when the retarget map is identity.
+
+    The medians must be measured on the **same frame the bake uses**: the
+    exporter stabilizes the facing yaw when ``in_place`` (game clips), so a
+    clip that turns while gesturing can look near-hang in raw world space and
+    far from it after stabilization (or the reverse). Deciding on the raw
+    joints made ``apply-rigged`` neutralize arms the bake would have kept —
+    the "arms inside the trunk" regression. Always pass the clip's real
+    ``in_place`` value.
     """
     j = np.asarray(joints, dtype=np.float64)
     if j.ndim != 3 or j.shape[1] != 22:
         return True
-    aims = _aim_directions(yup_to_blender(j))
+    aims_zup = yup_to_blender(j)
+    if in_place:
+        aims_zup = stabilize_facing_zup(aims_zup)
+    aims = _aim_directions(aims_zup)
     limit = math.radians(float(max_corr_deg))
     for i in ARM_NEUTRAL_INDICES:
         target = NEUTRAL_AIM.get(i)
@@ -102,6 +114,7 @@ def filter_neutral_aim_for_clip(
     neutral_aim: dict[str, tuple[float, float, float]],
     *,
     arm_neutral: str = "auto",
+    in_place: bool = True,
 ) -> dict[str, tuple[float, float, float]]:
     """Drop arm hang neutrals when ``arm_neutral`` says so.
 
@@ -109,12 +122,15 @@ def filter_neutral_aim_for_clip(
         joints: Y-up joint positions (SprongMotion, 22 joints).
         neutral_aim: Name→direction map (usually ``NEUTRAL_AIM``).
         arm_neutral: ``auto`` (skip arms if median far from hang), ``on``, ``off``.
+        in_place: Must match the bake's ``in_place`` — the auto decision is
+            measured on the stabilized (or not) joints, exactly like
+            :func:`_lookat_keyframe` will sample them.
     """
     mode = (arm_neutral or "auto").strip().lower()
     if mode not in {"auto", "on", "off"}:
         raise ValueError(f"arm_neutral must be auto|on|off; got {arm_neutral!r}")
     out = dict(neutral_aim)
-    apply_arms = True if mode == "on" else False if mode == "off" else arm_neutral_applies(joints)
+    apply_arms = True if mode == "on" else False if mode == "off" else arm_neutral_applies(joints, in_place=in_place)
     if not apply_arms:
         for i in ARM_NEUTRAL_INDICES:
             out.pop(BONE_NAMES[i], None)

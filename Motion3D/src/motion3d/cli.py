@@ -247,13 +247,42 @@ def generate_cmd(
     show_default=True,
     help="Clip loopable (sem viagem/yaw) vs manter root motion",
 )
-def export_glb_cmd(npz_path: str, output: str, fps: int | None, clip_name: str, in_place: bool) -> None:
+@click.option(
+    "--arm-neutral",
+    type=click.Choice(["auto", "on", "off"]),
+    default="auto",
+    show_default=True,
+    help="Neutral de braços: auto salta clips com braços fora do hang (gestos)",
+)
+def export_glb_cmd(
+    npz_path: str,
+    output: str,
+    fps: int | None,
+    clip_name: str,
+    in_place: bool,
+    arm_neutral: str,
+) -> None:
     """NPZ → GLB source (armature SprongMotion + bake look-at)."""
-    from .bpy_export import export_joints_glb
+    from .bpy_export import (
+        BONE_NAMES,
+        NEUTRAL_AIM,
+        export_joints_glb,
+        filter_neutral_aim_for_clip,
+    )
     from .npz_io import read_clip
 
     try:
         motion = read_clip(npz_path)
+        # Mesma política de neutral de braços que o ``apply-rigged``: o export
+        # simples debaixava o hang em todos os clips e esmagava gestos
+        # (stumble/throw/reach) em 30-50°, metendo as mãos no tronco.
+        base_neutral = {BONE_NAMES[i]: d for i, d in NEUTRAL_AIM.items()}
+        neutral_aim = filter_neutral_aim_for_clip(
+            motion.joints,
+            base_neutral,
+            arm_neutral=arm_neutral,
+            in_place=in_place,
+        )
         saved = export_joints_glb(
             motion.joints,
             output,
@@ -261,6 +290,7 @@ def export_glb_cmd(npz_path: str, output: str, fps: int | None, clip_name: str, 
             clip_name=clip_name,
             offsets=motion.offsets,
             in_place=in_place,
+            neutral_aim=neutral_aim,
         )
     except Exception as exc:
         _emit_error("export-glb falhou:", exc)

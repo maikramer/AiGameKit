@@ -1967,6 +1967,7 @@ def cmd_retarget(
         limits=limits,
         apose_open_deg=profile.apose_open_deg,
         apose_bones=profile.apose_bones,
+        full_rest_bones=profile.full_rest_bones,
     )
     _print_retarget_result(res)
 

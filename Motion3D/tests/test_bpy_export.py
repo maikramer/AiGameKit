@@ -84,6 +84,37 @@ class TestNeutralAim:
             joints[:, wrist, 1] = joints[:, shoulder, 1] + 0.55
         assert be.arm_neutral_applies(joints) is False
 
+    def test_in_place_measures_the_bake_frame(self) -> None:
+        """The auto decision must be taken on the same joints the bake samples.
+
+        Regression (Vael stumble): a gesturing clip that turns while it moves
+        can look near-hang in raw world space and far from it once the facing
+        yaw is stabilized (or the reverse). Deciding on the raw joints
+        neutralized arms the bake would have kept — hands and forearms ended
+        up inside the torso ("T-pose vs A-pose" read). The exporter stabilizes
+        when ``in_place``, so ``arm_neutral_applies`` must accept the same flag
+        and this clip must flip between the two frames.
+        """
+        joints = make_walk_joints(12).copy()
+        for side, sign in (("l", 1.0), ("r", -1.0)):
+            shoulder = SPRONG_JOINTS.index(f"{side}_shoulder")
+            elbow = SPRONG_JOINTS.index(f"{side}_elbow")
+            wrist = SPRONG_JOINTS.index(f"{side}_wrist")
+            joints[:, elbow] = joints[:, shoulder] + np.array([sign * 0.38, -0.18, 0.0])
+            joints[:, wrist] = joints[:, elbow] + np.array([sign * 0.34, -0.16, 0.0])
+        # Yaw ramp: the body turns while the arms stay out (gesture + travel).
+        zup = be.yup_to_blender(joints)
+        for frame in range(len(zup)):
+            angle = 0.8 * frame / (len(zup) - 1)
+            cos, sin = np.cos(angle), np.sin(angle)
+            pivot = zup[frame, 0, :2]
+            xy = zup[frame, :, :2] - pivot
+            zup[frame, :, 0] = xy[:, 0] * cos - xy[:, 1] * sin + pivot[0]
+            zup[frame, :, 1] = xy[:, 0] * sin + xy[:, 1] * cos + pivot[1]
+        joints = np.stack([np.stack([(x, z, -y) for (x, y, z) in frame]) for frame in zup])
+        assert be.arm_neutral_applies(joints, in_place=False) is False
+        assert be.arm_neutral_applies(joints, in_place=True) is True
+
 
 class TestStabilizeFacing:
     def yaw_series(self, joints: np.ndarray) -> np.ndarray:

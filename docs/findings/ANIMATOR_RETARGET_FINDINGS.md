@@ -62,6 +62,28 @@ source a que estiver mapeado, seja `pelvis` (Quaternius), `B-hips` (KevDev) ou
 `test_retarget_root.py::TestProfileMapsRoot` (QA numérico E2E: sola dos pés
 ≤1.5 cm do chão ao longo do `mineground` retargetado).
 
+### 4. Twist das mãos perdido no swing-only (2026-11-13)
+
+A correcção é swing-only: cada osso adopta a DIREÇÃO do source mas o roll fica
+no rest do target. Para o tronco/pernas isso é o que evita o delta T→A
+duplicado, mas para as **mãos** o resultado era a palma do rest do rig — e os
+personagens do Vael são gerados em A-pose de manequim com as palmas viradas
+para a FRENTE (o prompt pede "palmas nas coxas"; o Omni não segue). Sintoma em
+jogo: todos os NPCs em idle parecem "a rezar/mandar um spell", mãos à frente e
+levantadas; e o tropeço (Motion3D) punha as mãos dentro do tronco.
+
+Medido no elder (FK dos dedos): o `hand_l` retargetizado diferia 59° do
+esperado; com a correcção completa, as palmas seguem o source (Quaternius idle
+= palmas para as coxas).
+
+**Fix:** `full_rest_bones` (default `("hand_l","hand_r")`, override por YAML):
+estes ossos usam a correcção rest COMPLETA `inv(rest_src) @ rest_tgt` em vez de
+`inv(swing)` + `apose_open`. É convenção-segura (mapeia rest→rest) e leva o
+delta do source inteiro — incluindo o roll. Regressões:
+`test_retarget.py::test_full_rest_correction_preserves_the_twist` e
+`test_profile_full_rest_bones_defaults_to_hands`; validação visual por render
+workbench (palmas para dentro, sem tocar na barriga em `apose_open` 0–15°).
+
 ---
 
 ## QA numérico (sem bpy)
@@ -251,6 +273,7 @@ ciclo; `pelvis` só oscila em Z (~4 cm).
 
 | Data | Nota |
 |------|------|
+| 2026-11-13 | `full_rest_bones`: mãos com correcção rest completa (twist do source) — fim do idle "a rezar" nos rigs de palma-à-frente |
 | 2026-09-13 | Creature procedural: yaw do mesh não canónico (lobo/escorpião +X) — bake −90° nos GLBs públicos; regen reintroduz (follow-up na raiz) |
 | 2026-08-02 | Motion3D HML22: aim explícito + rest T-pose; neutro A-pose; pés do rest alvo; doc canónica `MOTION3D_FINDINGS.md` |
 | 2026-07-24 | Bípedes creature→humanoid Quaternius; incidente shade; force_preset |
