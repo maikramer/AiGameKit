@@ -21,7 +21,11 @@ dependencies = [
     "torchvision>=0.28.0",
     "numpy>=1.26.4,<3",
     "transformers>=5.14.0",
-    "diffusers>=0.35.0",
+    # <0.43: o SkinTokens (várias cópias vendored do Tripo2) importa
+    # ``diffusers.models.normalization.LayerNorm``, removido em 0.43.0 — o
+    # backend remoto morria no load com "cannot import name 'LayerNorm'"
+    # (rigging3d, 2026-11-13).
+    "diffusers>=0.35.0,<0.43.0",
     "scipy",
     "python-box",
     "einops",
