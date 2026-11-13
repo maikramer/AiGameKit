@@ -1,0 +1,21 @@
+This directory contains a vendored, inference-only subset of StarVector.
+
+Upstream: https://github.com/joanrod/star-vector
+Paper:    https://arxiv.org/abs/2312.11556
+Model:    starvector/starvector-1b-im2svg on Hugging Face
+License:  Apache License 2.0 (see LICENSE in this directory)
+
+Copyright (c) ServiceNow Research, Mila, ETS Montreal, and the StarVector
+contributors.
+
+Changes from upstream:
+- relative imports instead of the top-level `starvector` package;
+- removed the training/processor machinery, VQGAN/ConvNeXt/SigLIP branches,
+  and the fairscale/omegaconf/taming dependencies;
+- the LLM is built from its config (the fine-tuned weights are in the
+  StarVector checkpoint) and the SVG tokenizer is loaded from the StarVector
+  repository;
+- compatibility adjustments for transformers 5.x.
+
+The base language model (`bigcode/starcoderbase-1b`) is distributed under the
+BigCode OpenRAIL-M license. See the model card on Hugging Face.

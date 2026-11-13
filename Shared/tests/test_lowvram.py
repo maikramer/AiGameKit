@@ -319,3 +319,13 @@ class TestOffloadFineBits:
         for quant in ("sdnq-int2", "sdnq-int3"):
             plan = plan_offload([_gpu(24)], SMALL_4B, allow_quant=(quant,))
             assert plan.quant_mode == quant, quant
+
+
+def test_starvector_footprint_is_registered() -> None:
+    """text2svg usa StarVector-1B (~2,9 GiB fp16 + 1,2 GiB de ativação)."""
+    from aigamekit_shared.cli_helpers import BACKEND_FOOTPRINT_KEYS
+
+    fp = get_footprint("starvector-1b")
+    assert BACKEND_FOOTPRINT_KEYS["text2svg"] == "starvector-1b"
+    assert 2.5 <= fp.fp16_weights_gib <= 3.5
+    assert fp.activation_gib > 0

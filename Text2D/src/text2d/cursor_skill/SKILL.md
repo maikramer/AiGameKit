@@ -25,7 +25,8 @@ CLI **text-to-2D** com [FLUX.3 Image Klein](https://huggingface.co/black-forest-
 
 | Comando | Função |
 |---------|--------|
-| `text2d generate PROMPT [-o ficheiro.png]` | Gera uma imagem (com `--ref` vira edit/composição) |
+| `text2d generate PROMPT [-o ficheiro.png]` | Gera uma imagem (com `--ref` vira edit/composição); `--svg` acrescenta um sidecar SVG |
+| `text2d vectorize IMG [-o ficheiro.svg]` | Vectoriza um raster existente (VTracer CPU ou StarVector GPU) |
 | `text2d silhouette IMG [-o sil.png]` | Extrai a silhueta (rembg) para usar como referência |
 | `text2d info` | Sistema, CUDA, VRAM, cache HF |
 | `text2d models` | Modelos suportados / notas |
@@ -53,6 +54,32 @@ text2d parallax "haunted forest at dusk" -O bg/forest                   # camada
 text2d vfx explosion --subject "green acid explosion" -O vfx/acid       # explosion|fire|smoke|magic|slash|lightning|heal|impact
 text2d items "health potion, iron sword, gold coin" --theme "fantasy rpg" -O ui/items  # ícones num estilo + atlas + items.json
 text2d -v generate "teste"
+```
+
+## SVG (text2svg)
+
+`generate --svg` escreve `<stem>.svg` ao lado do PNG (o PNG continua a ser a
+fonte para 3D/QA); `vectorize` converte um raster existente e `generate-batch
+--svg` faz uma segunda passagem. Motores:
+
+- `vtracer` (CPU, default, MIT) — arte flat/ícones, determinístico; quantiza a
+  paleta e remove o fundo transparente.
+- `starvector` (`starvector/starvector-1b-im2svg`, GPU, Apache-2.0, ~4–5 GB
+  fp16) — ícones/logos/diagramas. **Não** usar em ilustrações/painterly; o
+  `auto` só o escolhe com `--category icon` e checkpoint cacheado.
+
+`--svg-enhance` (default on) troca termos raster (painterly, brush strokes,
+gradientes, texturas) por directivas vector-friendly e preserva o sujeito e o
+`Avoid:`. Flags: `--svg-engine {auto,vtracer,starvector}`, `--svg-style
+{flat,line,detailed}`, `--svg-colors`, `--svg-detail {low,medium,high}`,
+`--svg-max-tokens`, `--svg-seed`, `--svg-device {auto,cuda,cpu}`,
+`--svg-preview` (cairosvg), `--svg-transparent`, `--svg-meta`,
+`--svg-strict`, `--svg-max-kb`, `--svg-keep-raster`.
+
+```bash
+text2d generate "blue dash swirl, fantasy RPG UI" --category icon --svg -o dash.png
+text2d vectorize dash.png -o dash.svg --engine vtracer --colors 8
+text2d generate-batch icons.json --svg --svg-engine auto --no-hw-auto
 ```
 
 ## Variáveis de ambiente

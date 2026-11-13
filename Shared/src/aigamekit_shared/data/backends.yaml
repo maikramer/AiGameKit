@@ -111,6 +111,73 @@ backends:
       memory_efficient: true
       allow_group_offload: true
 
+  # text2svg — mesmo tool/venv do text2d, outro modelo (StarVector-1B).
+  # O worker ramifica por ``task: vectorize`` no load; o FLUX do text2d é
+  # descarregado pelo vramd antes deste backend (não cabem os dois em 6 GB).
+  - name: text2svg
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 4200
+    priority: 20
+    tool: text2d
+    # Estimativa fp16 (não calibrada): StarCoder-1B + CLIP ViT-L/14 + adapter
+    # ≈ 2,9 GiB de pesos e 1,2 GiB de ativação/KV para 4k tokens. O
+    # `vramd calibrate text2svg` substitui isto por valores medidos; o
+    # `footprint_key: starvector-1b` do lado do cliente serve o planner
+    # in-process e o vramd >= 0.9 (a 0.8.0 não conhece a chave).
+    vram:
+      weights_gib: 2.9
+      activation_gib: 1.2
+      context_gib: 0.1
+      peak_mib: 4300
+      safety_mib: 256
+      admit_peak_mib: 4600
+    runtime:
+      load_timeout_sec: 1800
+      event_timeout_sec: 900
+      monorepo_tool: text2d
+    remote:
+      inputs: [image]
+      outputs: [output]
+      # O CLI pede meta=True por defeito: <output>.json (ex.: foo.svg.json).
+      sidecars: ["{name}.json"]
+    session:
+      env: text2d
+      tool: text2d
+      code_roots: [Shared/src, Text2D/src]
+    models:
+      # O checkpoint inclui o LLM fine-tuned e o tokenizer; o repo base
+      # (bigcode/starcoderbase-1b) é gated e não é necessário.
+      - repo: starvector/starvector-1b-im2svg
+        ignore: ["*.md"]
+    # ``task=vectorize`` é decisão de LOAD (escolhe StarVector em vez do FLUX).
+    load_keys:
+      - task
+      - engine
+      - model_id
+      - device
+      - gpu_ids
+      - verbose
+    shape_keys:
+      - task
+      - engine
+      - model_id
+      - device
+      - gpu_ids
+    peak_profile:
+      quant_mode: none
+      staged_load: false
+    calibrate_request:
+      task: vectorize
+      engine: starvector
+      image: test-image.png
+      output: /tmp/vramd-calibrate-text2svg.svg
+      max_tokens: 512
+    calibrate_load_kwargs:
+      task: vectorize
+      engine: starvector
+      model_id: starvector/starvector-1b-im2svg
+      device: auto
+
   - name: skymap2d
     adapter: aigamekit_shared.worker_serve_adapter_base
     vram_mib: 7000

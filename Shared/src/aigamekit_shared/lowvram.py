@@ -134,6 +134,9 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     # como no FLUX.2) — 2.0 evita mandar 6 GB para int2 sem necessidade.
     # Estimativa do model card — recalibrar com `vramd calibrate text2d`.
     "flux3-klein": ModelFootprint(18.5, 2.0, 11.2, architecture="flux"),
+    # StarVector-1B (image→SVG): StarCoder-1B + CLIP ViT-L/14 + adapter,
+    # ~1.43B params em fp16 (~2.9 GiB); KV/activação para 4k tokens ~1.2 GiB.
+    "starvector-1b": ModelFootprint(2.9, 1.2, 2.9, architecture="starvector"),
     # FLUX.2 Klein (histórico — Text2D migrou para FLUX.3; mantido para perfstore).
     "flux-klein-4b": ModelFootprint(14.0, 1.5, 5.0, architecture="flux"),
     "flux-klein-9b": ModelFootprint(26.0, 1.5, 9.0, architecture="flux"),

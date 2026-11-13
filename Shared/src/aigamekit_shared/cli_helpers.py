@@ -121,6 +121,7 @@ def env_bool(env_var: str, cli_wants: bool) -> bool:
 # Backend vramd → chave em ``aigamekit_shared.lowvram.FOOTPRINTS`` (ou None = YAML/heuristic).
 BACKEND_FOOTPRINT_KEYS: dict[str, str] = {
     "text2d": "flux3-klein",
+    "text2svg": "starvector-1b",
     "skymap2d": "flux-dev-uint4",
     "texture2d": "sd15-base",
     "text3d": "hunyuan3d-omni",

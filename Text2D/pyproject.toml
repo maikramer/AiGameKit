@@ -26,6 +26,7 @@ dependencies = [
     "rembg>=2.0.0",
     "rich>=13.0.0",
     "rich-click>=1.8.0",
+    "vtracer>=0.6.15",
     "aigamekit-shared[gpu,image] @ file:../Shared",
 ]
 
@@ -41,6 +42,9 @@ dev = [
     "pytest-cov>=4.0.0",
     "ruff>=0.11.0",
 ]
+# --svg-preview rasteriza o SVG para QA. Fica fora do core porque precisa de
+# libcairo no sistema e o servidor remoto não tem de a ter.
+svg-preview = ["cairosvg>=2.7"]
 
 [project.scripts]
 text2d = "text2d.cli:main"
@@ -49,7 +53,11 @@ text2d = "text2d.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-text2d = ["cursor_skill/*.md"]
+text2d = [
+    "cursor_skill/*.md",
+    "svg/vendor/starvector/LICENSE",
+    "svg/vendor/starvector/NOTICE",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

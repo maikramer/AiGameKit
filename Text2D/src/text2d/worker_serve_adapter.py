@@ -26,6 +26,29 @@ class Adapter(WorkerAdapter):
         from text2d.hardware import POLICY
         from text2d.vramd_load import map_vramd_load_kwargs
 
+        # Backend ``text2svg``: o mesmo tool/venv, mas outro modelo. O
+        # request traz ``task=vectorize`` (declarado em load_keys no
+        # backends.yaml), por isso o vramd trata-o como um load diferente.
+        if kwargs.get("task") == "vectorize":
+            from text2d.svg.engines import get_engine
+
+            engine = kwargs.get("engine") or "starvector"
+            if engine == "auto":
+                engine = "starvector"
+            device = kwargs.get("device") or "auto"
+            gpu_ids = kwargs.get("gpu_ids") or []
+            if device == "auto" and gpu_ids:
+                device = f"cuda:{int(gpu_ids[0])}"
+            vectorizer = get_engine(
+                engine,
+                model_id=kwargs.get("model_id"),
+                device=device,
+                max_tokens=int(kwargs.get("max_tokens") or 4000),
+                verbose=bool(kwargs.get("verbose", False)),
+            )
+            vectorizer.warmup()
+            return vectorizer
+
         # Alloc conf por-request (o serve pode ter arrancado com o conf
         # clássico/max_split e o request pedir GO); ``allow_group_offload``
         # viaja no request e o map_vramd_load repassa-o ao ctor.
@@ -39,6 +62,9 @@ class Adapter(WorkerAdapter):
 
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
         import time
+
+        if getattr(model, "name", None) in ("starvector", "vtracer"):
+            return self._generate_vectorize(model, request)
 
         error, steps, should_abort, on_step = self.begin_generate(request, default_steps=16)
         if error:
@@ -127,6 +153,59 @@ class Adapter(WorkerAdapter):
         # ``output`` é o path pedido (a 1.ª imagem). Devolver a última parte
         # fazia o GameAssets procurar ``foo_3.png`` em vez de ``foo.png``.
         return self.finish_response(output=out_path, seconds=elapsed, runtime_budget=runtime_budget)
+
+    def _generate_vectorize(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
+        """Backend ``text2svg``: imagem → SVG, com o motor já carregado."""
+
+        import time
+
+        error, _steps, should_abort, _on_step = self.begin_generate(
+            request, default_steps=1, required=("image", "output")
+        )
+        if error:
+            return error
+        if should_abort is not None and should_abort():
+            return self.cancelled_response("cancelled before vectorize")
+
+        from text2d.svg.api import vectorize_file
+        from text2d.svg.options import SvgOptions
+
+        opts = SvgOptions.from_mapping(request)
+        opts.engine = getattr(model, "name", opts.engine) or "starvector"
+        opts.model_id = getattr(model, "model_id", opts.model_id)
+        try:
+            opts.validate()
+        except ValueError as exc:
+            return {"status": "error", "error": str(exc)}
+
+        t_start = time.perf_counter()
+        self.report_progress(request, 0.05, "vectorizing")
+        try:
+            result = vectorize_file(
+                request["image"],
+                request["output"],
+                opts,
+                engine=model,
+                prompt=request.get("prompt"),
+                seed=request.get("seed"),
+                verbose=bool(request.get("verbose", False)),
+            )
+        except Exception as exc:
+            return {"status": "error", "error": f"vectorize: {exc}"}
+
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled after vectorize")
+
+        elapsed = time.perf_counter() - t_start
+        self.report_progress(request, 1.0, "done")
+        return self.finish_response(
+            output=result.path,
+            seconds=elapsed,
+            svg=str(result.path),
+            path_count=result.path_count,
+            svg_bytes=result.bytes,
+            warning=result.warning,
+        )
 
     def unload(self, model: Any) -> None:
         # Contrato do WorkerAdapter: unload idempotente e à prova de exceções.

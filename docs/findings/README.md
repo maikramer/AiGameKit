@@ -21,6 +21,7 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [MOTION3D_FINDINGS.md](MOTION3D_FINDINGS.md) | Text-to-motion **SprongMotion-14M** (CPU, runtime C): esqueleto 22 igual ao HML22 em índices, `joints` > `rotations` (erro 1,2 cm), rest do pelvis na origem → loc_scale 800×, perfil `sprong22`, `--attempts` e score mecânico |
 | [PRECOMPUTE_COLLIDERS_FINDINGS.md](PRECOMPUTE_COLLIDERS_FINDINGS.md) | Colisores cápsula/cilindro pré-calculados (tronco); `aigamekit-lab precompute` → `gameassets_handoff.json` (consumo no runtime); carve procedural |
 | [TEXT2D_FLUX3_KLEIN_MIGRATION.md](TEXT2D_FLUX3_KLEIN_MIGRATION.md) | Text2D → FLUX.3 Image Klein: ModularPipeline (diffusers 0.42), pop do prompt upsampler, refs/boxes/silhueta, steps 4-16 sem guidance, footprint `flux3-klein`, `load_keys`/`shape_keys` no vramd |
+| [TEXT2SVG_MODEL_RESEARCH.md](TEXT2SVG_MODEL_RESEARCH.md) | text2svg: StarVector-1B vs OmniSVG vs VTracer; `--svg`/`vectorize`; vendor inference-only no transformers 5.x; backend `text2svg` + footprint `starvector-1b` |
 | [MODEL_CONSOLIDATION_STUDY.md](MODEL_CONSOLIDATION_STUDY.md) | Inventário de modelos/variantes (~166 GB HF) + cortes por tier (~44 GB: órfãos Sana/t5-base/T2MGPT, SA Open legado, Disty0 klein, HY-Motion full) e unificações de vendor (Real-ESRGAN, bg-remover, aliases) |
 | [TOOLKIT_CORE_PROFILE_STUDY.md](TOOLKIT_CORE_PROFILE_STUDY.md) | Uso real das 20 tools nos exemplos: Part3D/Motion3D/Intrinsic não usados (~42 GB); perfis install.sh `core|examples|all`; doc-bug "parts auto-detect" |
 

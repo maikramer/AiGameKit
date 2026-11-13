@@ -4,6 +4,7 @@ Text2D — CLI principal (text-to-2D).
 """
 
 import atexit
+import contextlib
 import json
 import os
 import signal
@@ -33,6 +34,8 @@ from aigamekit_shared.skill_install import install_my_skill
 
 from .cli_rich import click
 from .generator import KleinFluxGenerator, _model_id, default_model_id, model_footprint_key
+from .svg import SvgOptions, enhance_prompt_for_svg
+from .svg.options import SVG_DETAILS, SVG_ENGINES, SVG_STYLES
 from .utils.memory import format_bytes
 
 console = Console()
@@ -54,6 +57,434 @@ def _image_format_for(path: Path | str) -> str:
 
 def ensure_dirs() -> None:
     DEFAULT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _svg_paths_for_raster(primary_svg: Path, num_images: int) -> list[Path]:
+    """``foo.svg``, ``foo_1.svg``, … para ``-n > 1``."""
+
+    paths = [primary_svg]
+    for idx in range(1, max(1, int(num_images))):
+        paths.append(primary_svg.with_name(f"{primary_svg.stem}_{idx}{primary_svg.suffix}"))
+    return paths
+
+
+def _svg_summary(result: Any, *, engine_hint: str | None = None) -> dict[str, Any]:
+    """Resumo uniforme para resultados in-process (SvgResult) e vramd (path)."""
+
+    from .svg.options import SvgResult
+    from .svg.validate import count_svg_shapes_file
+
+    if isinstance(result, SvgResult):
+        return {
+            "path": str(result.path),
+            "engine": result.engine,
+            "path_count": result.path_count,
+            "bytes": result.bytes,
+            "seconds": result.seconds,
+            "warning": result.warning,
+        }
+
+    path = Path(result)
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = 0
+    return {
+        "path": str(path),
+        "engine": engine_hint or "starvector",
+        "path_count": count_svg_shapes_file(path),
+        "bytes": size,
+        "seconds": None,
+        "warning": None,
+    }
+
+
+def _print_svg_results(results: list[dict[str, Any]]) -> None:
+    for item in results:
+        size = format_bytes(int(item["bytes"])) if item.get("bytes") else "?"
+        engine = item.get("engine") or "?"
+        secs = f" · {item['seconds']:.1f}s" if item.get("seconds") is not None else ""
+        console.print(
+            f"[bold green]✓[/bold green] SVG: [cyan]{item['path']}[/cyan] "
+            f"[dim]({engine}, {item['path_count']} paths, {size}{secs})[/dim]"
+        )
+        if item.get("warning"):
+            console.print(f"[yellow]⚠ SVG: {item['warning']}[/yellow]")
+
+
+def _svg_stage(
+    images: list[Path],
+    svg_paths: list[Path],
+    opts: SvgOptions,
+    *,
+    prompt: str | None,
+    seed: int | None,
+    category: str | None,
+    enabled: bool,
+    priority: str | None,
+    stream: bool,
+    gpu_ids: list[int] | None,
+    verbose: bool,
+    engine: Any | None = None,
+) -> list[dict[str, Any]]:
+    """Corre a fase SVG (VTracer local ou StarVector vramd/in-process)."""
+
+    from dataclasses import replace
+
+    from .svg.api import vectorize_file
+    from .svg.engines import get_engine, resolve_engine, starvector_available
+
+    pairs = [
+        (Path(image), Path(svg))
+        for image, svg in zip(images, svg_paths, strict=True)
+        if Path(image).is_file()
+    ]
+    if not pairs:
+        return []
+
+    opts.validate()
+    resolved = resolve_engine(opts.engine, category=category)
+    if resolved == "starvector" and opts.engine == "auto" and not starvector_available(require_cached=True):
+        console.print("[yellow]SVG: StarVector não está cacheado — a usar VTracer.[/yellow]")
+        resolved = "vtracer"
+
+    results: list[dict[str, Any]] = []
+    if resolved == "vtracer":
+        for image, svg_path in pairs:
+            result = vectorize_file(
+                image,
+                svg_path,
+                replace(opts, engine="vtracer"),
+                prompt=prompt,
+                seed=seed,
+                verbose=verbose,
+            )
+            results.append(_svg_summary(result))
+        return results
+
+    # StarVector: tenta o backend text2svg, depois in-process.
+    remaining = list(pairs)
+    if enabled:
+        from aigamekit_shared.cli_helpers import try_vramd_delegation
+
+        from .svg.vramd import build_vectorize_request
+
+        for image, svg_path in list(pairs):
+            payload = build_vectorize_request(
+                image=image,
+                output=svg_path,
+                opts=replace(opts, engine="starvector"),
+                gpu_ids=gpu_ids,
+            )
+            handled = try_vramd_delegation(
+                "text2svg",
+                payload,
+                t_start=time.time(),
+                noun="SVG",
+                console=console,
+                enabled=True,
+                priority=priority,
+                stream=stream,
+            )
+            if not handled:
+                break
+            results.append(_svg_summary(svg_path, engine_hint="starvector"))
+            remaining.remove((image, svg_path))
+
+    if remaining:
+        engine_obj = engine
+        owns_engine = engine_obj is None
+        try:
+            if owns_engine and opts.device != "cpu":
+                from aigamekit_shared.cli_helpers import (
+                    needed_mib_for_backend,
+                    prepare_gpu_exclusive,
+                )
+
+                prepare_gpu_exclusive(
+                    needed_mib=needed_mib_for_backend("text2svg", quant_mode="none"),
+                    allow_shared=True,
+                    kill_others=False,
+                    backend="text2svg",
+                    quant_mode="none",
+                    console=console,
+                )
+            engine_obj = engine_obj or get_engine(
+                "starvector",
+                model_id=opts.model_id,
+                device=opts.device,
+                max_tokens=opts.max_tokens,
+                verbose=verbose,
+            )
+            engine_obj.warmup()
+            for image, svg_path in remaining:
+                result = vectorize_file(
+                    image,
+                    svg_path,
+                    replace(opts, engine="starvector"),
+                    engine=engine_obj,
+                    prompt=prompt,
+                    seed=seed,
+                    verbose=verbose,
+                )
+                results.append(_svg_summary(result))
+        except Exception as exc:
+            if opts.engine == "auto" and not opts.strict:
+                console.print(f"[yellow]SVG: StarVector falhou ({exc}); a usar VTracer.[/yellow]")
+                for image, svg_path in remaining:
+                    if svg_path.is_file():
+                        continue
+                    result = vectorize_file(
+                        image,
+                        svg_path,
+                        replace(opts, engine="vtracer"),
+                        prompt=prompt,
+                        seed=seed,
+                        verbose=verbose,
+                    )
+                    results.append(_svg_summary(result))
+            else:
+                raise
+        finally:
+            if owns_engine and engine_obj is not None:
+                engine_obj.unload()
+    return results
+
+
+def _batch_svg_entries(
+    item_id: str,
+    raster_path: Path,
+    svg_path: Path,
+    num_images: int,
+    opts: SvgOptions,
+    *,
+    prompt: str | None,
+    seed: int | None,
+    category: str | None,
+) -> list[dict[str, Any]]:
+    """Uma entrada por imagem existente (``-n > 1`` → ``_1``, ``_2``…)."""
+
+    entries: list[dict[str, Any]] = []
+    for idx in range(max(1, int(num_images))):
+        raster = (
+            raster_path
+            if idx == 0
+            else raster_path.with_name(f"{raster_path.stem}_{idx}{raster_path.suffix}")
+        )
+        if not raster.is_file():
+            continue
+        svg = (
+            svg_path
+            if idx == 0
+            else svg_path.with_name(f"{svg_path.stem}_{idx}{svg_path.suffix}")
+        )
+        entries.append(
+            {
+                "id": item_id,
+                "raster_path": raster,
+                "svg_path": svg,
+                "opts": opts,
+                "prompt": prompt,
+                "seed": seed,
+                "category": category,
+            }
+        )
+    return entries
+
+
+def _batch_svg_pass(
+    entries: list[dict[str, Any]],
+    *,
+    priority: str | None,
+    stream: bool,
+    gpu_ids: list[int] | None,
+    no_vramd: bool,
+    verbose: bool,
+    force: bool,
+) -> None:
+    """Fase SVG do batch (uma linha `phase=svg` por imagem)."""
+
+    if not entries:
+        return
+
+    from dataclasses import replace
+
+    from .svg.api import vectorize_file
+    from .svg.engines import get_engine, resolve_engine
+
+    vtracer_entries: list[dict[str, Any]] = []
+    star_entries: list[dict[str, Any]] = []
+
+    for entry in entries:
+        opts: SvgOptions = entry["opts"]
+        svg_path: Path = entry["svg_path"]
+        if not force and svg_path.is_file():
+            emit_result(
+                entry["id"], TOOL_TEXT2D, STATUS_SKIPPED, phase="svg", output=str(svg_path)
+            )
+            continue
+        resolved = resolve_engine(opts.engine, category=entry.get("category"))
+        if resolved == "starvector":
+            star_entries.append(entry)
+        else:
+            vtracer_entries.append(entry)
+
+    def _ok(entry: dict[str, Any], result: Any, started: float) -> None:
+        emit_result(
+            entry["id"],
+            TOOL_TEXT2D,
+            STATUS_OK,
+            phase="svg",
+            output=str(result.path),
+            seconds=round(time.time() - started, 3),
+            svg_engine=result.engine,
+            path_count=result.path_count,
+            svg_bytes=result.bytes,
+        )
+
+    def _err(entry: dict[str, Any], exc: Exception) -> None:
+        emit_result(
+            entry["id"], TOOL_TEXT2D, STATUS_ERROR, phase="svg", error=str(exc)
+        )
+
+    for entry in vtracer_entries:
+        started = time.time()
+        try:
+            result = vectorize_file(
+                entry["raster_path"],
+                entry["svg_path"],
+                replace(entry["opts"], engine="vtracer"),
+                prompt=entry["prompt"],
+                seed=entry["seed"],
+                verbose=verbose,
+            )
+            _ok(entry, result, started)
+        except Exception as exc:
+            _err(entry, exc)
+
+    if not star_entries:
+        return
+
+    remaining = list(star_entries)
+    if not no_vramd:
+        from aigamekit_shared.cli_helpers import try_vramd_delegation
+
+        from .svg.vramd import build_vectorize_request
+
+        for entry in list(star_entries):
+            started = time.time()
+            payload = build_vectorize_request(
+                image=entry["raster_path"],
+                output=entry["svg_path"],
+                opts=replace(entry["opts"], engine="starvector"),
+                gpu_ids=gpu_ids,
+            )
+            try:
+                handled = try_vramd_delegation(
+                    "text2svg",
+                    payload,
+                    t_start=started,
+                    noun="SVG",
+                    console=console,
+                    enabled=True,
+                    priority=priority,
+                    stream=stream,
+                )
+            except click.ClickException as exc:
+                _err(entry, exc)
+                remaining.remove(entry)
+                continue
+            if not handled:
+                break
+            emit_result(
+                entry["id"],
+                TOOL_TEXT2D,
+                STATUS_OK,
+                phase="svg",
+                output=str(entry["svg_path"]),
+                seconds=round(time.time() - started, 3),
+                svg_engine="starvector",
+            )
+            remaining.remove(entry)
+
+    if not remaining:
+        return
+
+    # O FLUX dos itens in-process tem de sair antes do StarVector.
+    _batch_cleanup()
+    engine = None
+    err_console = Console(stderr=True)
+    device = remaining[0]["opts"].device or "auto"
+    try:
+        if device != "cpu":
+            from aigamekit_shared.cli_helpers import (
+                needed_mib_for_backend,
+                prepare_gpu_exclusive,
+            )
+
+            prepare_gpu_exclusive(
+                needed_mib=needed_mib_for_backend("text2svg", quant_mode="none"),
+                allow_shared=True,
+                kill_others=False,
+                backend="text2svg",
+                quant_mode="none",
+                console=err_console,
+            )
+        engine = get_engine("starvector", device=device, verbose=verbose)
+        engine.warmup()
+    except Exception as exc:
+        for entry in remaining:
+            if entry["opts"].engine == "auto" and not entry["opts"].strict:
+                started = time.time()
+                try:
+                    result = vectorize_file(
+                        entry["raster_path"],
+                        entry["svg_path"],
+                        replace(entry["opts"], engine="vtracer"),
+                        prompt=entry["prompt"],
+                        seed=entry["seed"],
+                        verbose=verbose,
+                    )
+                    _ok(entry, result, started)
+                except Exception as fallback_exc:
+                    _err(entry, fallback_exc)
+            else:
+                _err(entry, exc)
+        return
+
+    try:
+        for entry in remaining:
+            started = time.time()
+            try:
+                result = vectorize_file(
+                    entry["raster_path"],
+                    entry["svg_path"],
+                    replace(entry["opts"], engine="starvector"),
+                    engine=engine,
+                    prompt=entry["prompt"],
+                    seed=entry["seed"],
+                    verbose=verbose,
+                )
+                _ok(entry, result, started)
+            except Exception as exc:
+                if entry["opts"].engine == "auto" and not entry["opts"].strict:
+                    started = time.time()
+                    try:
+                        result = vectorize_file(
+                            entry["raster_path"],
+                            entry["svg_path"],
+                            replace(entry["opts"], engine="vtracer"),
+                            prompt=entry["prompt"],
+                            seed=entry["seed"],
+                            verbose=verbose,
+                        )
+                        _ok(entry, result, started)
+                    except Exception as fallback_exc:
+                        _err(entry, fallback_exc)
+                else:
+                    _err(entry, exc)
+    finally:
+        engine.unload()
 
 
 @click.group()
@@ -237,6 +668,92 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Remover fundo (rembg/U2Net); requer saída .png ou .webp.",
 )
 @click.option(
+    "--svg/--no-svg",
+    "svg",
+    default=False,
+    show_default=True,
+    help="Gerar também um SVG ao lado do PNG (o raster continua a ser guardado).",
+)
+@click.option(
+    "--svg-output",
+    type=click.Path(),
+    default=None,
+    help="Path do SVG (default: <stem>.svg ao lado do PNG).",
+)
+@click.option(
+    "--svg-engine",
+    type=click.Choice(list(SVG_ENGINES)),
+    default="auto",
+    show_default=True,
+    help="auto: StarVector para --category icon (se cacheado), senão VTracer.",
+)
+@click.option(
+    "--svg-style",
+    type=click.Choice(list(SVG_STYLES)),
+    default="flat",
+    show_default=True,
+    help="Estilo vectorial (flat/line/detailed).",
+)
+@click.option(
+    "--svg-colors",
+    type=click.IntRange(2, 64),
+    default=8,
+    show_default=True,
+    help="Paleta do raster antes do tracing (2-64).",
+)
+@click.option(
+    "--svg-detail",
+    type=click.Choice(list(SVG_DETAILS)),
+    default="medium",
+    show_default=True,
+    help="Detalhe do tracing (low/medium/high).",
+)
+@click.option(
+    "--svg-enhance/--no-svg-enhance",
+    "svg_enhance",
+    default=True,
+    show_default=False,
+    help="Reescrever o prompt para arte vector-friendly (default: ligado).",
+)
+@click.option(
+    "--svg-max-tokens",
+    type=click.IntRange(min=64),
+    default=4000,
+    show_default=True,
+    help="Máximo de tokens SVG do StarVector.",
+)
+@click.option("--svg-seed", type=int, default=None, help="Seed do StarVector (VTracer é determinístico).")
+@click.option(
+    "--svg-device",
+    type=click.Choice(["auto", "cuda", "cpu"]),
+    default="auto",
+    show_default=True,
+    help="Dispositivo do StarVector (auto: CUDA se existir).",
+)
+@click.option("--svg-preview", is_flag=True, help="Gravar <stem>_preview.png rasterizado (requer cairosvg).")
+@click.option(
+    "--svg-transparent/--no-svg-transparent",
+    "svg_transparent",
+    default=None,
+    help="Fundo transparente no SVG (default: segue --transparent/alpha da imagem).",
+)
+@click.option(
+    "--svg-meta/--no-svg-meta",
+    "svg_meta",
+    default=True,
+    show_default=False,
+    help="Escrever <stem>.svg.json com prompt/engine/params/paths (default: ligado).",
+)
+@click.option("--svg-strict", is_flag=True, help="Falhar se o SVG for inválido ou exceder --svg-max-kb.")
+@click.option(
+    "--svg-max-kb",
+    type=click.IntRange(min=1),
+    default=2048,
+    show_default=True,
+    help="Orçamento de bytes do SVG (warning; --svg-strict falha).",
+)
+@click.option("--svg-keep-raster", is_flag=True, help="Com -o *.svg, manter o PNG intermédio.")
+@click.option(
     "--hw-auto/--no-hw-auto",
     "hw_auto",
     default=True,
@@ -308,6 +825,22 @@ def generate_cmd(
     quality: str,
     category: str | None,
     transparent: bool,
+    svg: bool,
+    svg_output: str | None,
+    svg_engine: str,
+    svg_style: str,
+    svg_colors: int,
+    svg_detail: str,
+    svg_enhance: bool,
+    svg_max_tokens: int,
+    svg_seed: int | None,
+    svg_device: str,
+    svg_preview: bool,
+    svg_transparent: bool | None,
+    svg_meta: bool,
+    svg_strict: bool,
+    svg_max_kb: int,
+    svg_keep_raster: bool,
     hw_auto: bool,
     group_offload: bool,
     torch_compile: bool,
@@ -405,6 +938,61 @@ def generate_cmd(
         pose_text = pose_prompt(pose, view=pose_view) if pose in pose_names() else pose
         prompt = f"{prompt.rstrip('.')}, {pose_text}"
 
+    # ── SVG: resolver raster/SVG e o prompt antes do payload vramd ─────
+    safe = "".join(c if c.isalnum() else "_" for c in prompt[:40]) or "single"
+    user_output = output
+    output_was_svg = bool(user_output and Path(user_output).suffix.lower() == ".svg")
+    svg_requested = bool(svg) or output_was_svg
+    svg_opts: SvgOptions | None = None
+    svg_path: Path | None = None
+    raster_is_temp = False
+
+    if svg_requested:
+        svg_opts = SvgOptions(
+            engine=svg_engine,
+            style=svg_style,
+            colors=svg_colors,
+            detail=svg_detail,
+            max_tokens=svg_max_tokens,
+            seed=svg_seed if svg_seed is not None else seed,
+            device=svg_device,
+            preview=svg_preview,
+            transparent=bool(svg_transparent) if svg_transparent is not None else transparent,
+            enhance=svg_enhance,
+            meta=svg_meta,
+            strict=svg_strict,
+            max_kb=svg_max_kb,
+            keep_raster=svg_keep_raster,
+        )
+        try:
+            svg_opts.validate()
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+        if svg_output and output_was_svg and Path(svg_output).resolve() != Path(str(user_output)).resolve():
+            raise click.ClickException("--svg-output conflitua com -o *.svg")
+
+        if output_was_svg:
+            svg_path = Path(str(user_output)).resolve()
+            output = str(svg_path.with_suffix(".png"))
+            raster_is_temp = not svg_keep_raster
+        else:
+            if output is None:
+                ensure_dirs()
+                output = str((DEFAULT_IMAGE_DIR / f"{safe}_{int(time.time())}.png").resolve())
+            svg_path = (
+                Path(svg_output).resolve()
+                if svg_output
+                else Path(output).resolve().with_suffix(".svg")
+            )
+
+        if svg_enhance:
+            prompt = enhance_prompt_for_svg(prompt, style=svg_style, colors=svg_colors)
+    elif output is None:
+        # Corrige o default antes do payload vramd (o Path(None) rebentava).
+        ensure_dirs()
+        output = str((DEFAULT_IMAGE_DIR / f"{safe}_{int(time.time())}.png").resolve())
+
     if not cpu:
         warn_if_vram_occupied()
 
@@ -445,6 +1033,11 @@ def generate_cmd(
     if upsample:
         table.add_row("[bold]Upsampler[/bold]", "prompt upsampler 9B (lento, +qualidade de prompt)")
     table.add_row("[bold]Modelo[/bold]", resolved_model)
+    if svg_requested and svg_opts is not None:
+        table.add_row(
+            "[bold]SVG[/bold]",
+            f"{svg_opts.engine} · {svg_opts.style} · {svg_opts.colors} cores · detalhe {svg_opts.detail}",
+        )
     if hwp is not None:
         table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
     _accel = []
@@ -494,24 +1087,50 @@ def generate_cmd(
     if transparent:
         vramd_payload["transparent"] = True
 
-    if (
-        not cpu
-        and output is not None
-        and delegate_or_prepare(
-            "text2d",
-            payload=vramd_payload,
-            t_start=t_start,
-            noun="Imagem",
-            console=console,
-            enabled=not no_vramd,
-            priority=vramd_priority,
-            stream=vramd_stream,
-            gpu_ids=gpu_ids,
-            memory_efficient=mem_eff,
-            quant_preset=quant_preset,
-            footprint_key=model_footprint_key(resolved_model),
-        )
+    if not cpu and delegate_or_prepare(
+        "text2d",
+        payload=vramd_payload,
+        t_start=t_start,
+        noun="Imagem",
+        console=console,
+        enabled=not no_vramd,
+        priority=vramd_priority,
+        stream=vramd_stream,
+        gpu_ids=gpu_ids,
+        memory_efficient=mem_eff,
+        quant_preset=quant_preset,
+        footprint_key=model_footprint_key(resolved_model),
     ):
+        if svg_requested and svg_opts is not None and svg_path is not None:
+            raster_paths = [Path(output)] + [
+                Path(output).with_name(f"{Path(output).stem}_{idx}{Path(output).suffix}")
+                for idx in range(1, max(1, num_images))
+            ]
+            raster_paths = [path for path in raster_paths if path.is_file()]
+            try:
+                results = _svg_stage(
+                    raster_paths,
+                    _svg_paths_for_raster(svg_path, len(raster_paths)),
+                    svg_opts,
+                    prompt=prompt,
+                    seed=seed,
+                    category=category,
+                    enabled=not no_vramd,
+                    priority=vramd_priority,
+                    stream=vramd_stream,
+                    gpu_ids=gpu_ids,
+                    verbose=verbose,
+                )
+                _print_svg_results(results)
+                if raster_is_temp:
+                    for path in raster_paths:
+                        path.unlink(missing_ok=True)
+            except click.ClickException:
+                raise
+            except Exception as exc:
+                console.print(f"[yellow]SVG falhou: {exc}[/yellow]")
+                if svg_strict or svg_engine == "starvector":
+                    raise click.ClickException(f"SVG: {exc}") from exc
         return
 
     # Fallback in-process: coordenação VRAM (paridade Text3D/Paint3D).
@@ -535,8 +1154,7 @@ def generate_cmd(
             console=console,
         )
 
-    safe = "".join(c if c.isalnum() else "_" for c in prompt[:40])
-    item_id = safe or "single"
+    item_id = safe
 
     try:
         emit_progress(item_id, TOOL_TEXT2D, phase="loading_model", percent=0)
@@ -572,10 +1190,6 @@ def generate_cmd(
             ):
                 gen.warmup()
 
-            if output is None:
-                ensure_dirs()
-                ts = int(time.time())
-                output = str(DEFAULT_IMAGE_DIR / f"{safe}_{ts}.png")
             out_path = Path(output)
 
             emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=0)
@@ -619,6 +1233,34 @@ def generate_cmd(
                     KleinFluxGenerator.save_image(img, part_path, image_format=img_format)
             emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=100)
 
+        svg_results: list[dict[str, Any]] = []
+        if svg_requested and svg_opts is not None and svg_path is not None:
+            raster_paths = [out_path] + [
+                out_path.with_name(f"{out_path.stem}_{idx}{out_path.suffix}")
+                for idx in range(1, max(1, num_images))
+            ]
+            raster_paths = [path for path in raster_paths if path.is_file()]
+            # Liberta o FLUX antes do StarVector; para VTracer é inofensivo.
+            with contextlib.suppress(Exception):
+                gen.unload()
+            svg_results = _svg_stage(
+                raster_paths,
+                _svg_paths_for_raster(svg_path, len(raster_paths)),
+                svg_opts,
+                prompt=prompt,
+                seed=seed,
+                category=category,
+                enabled=not no_vramd,
+                priority=vramd_priority,
+                stream=vramd_stream,
+                gpu_ids=gpu_ids,
+                verbose=verbose,
+            )
+            _print_svg_results(svg_results)
+            if raster_is_temp:
+                for path in raster_paths:
+                    path.unlink(missing_ok=True)
+
         elapsed = time.time() - t_start
         try:
             sz = format_bytes(out_path.stat().st_size)
@@ -627,7 +1269,15 @@ def generate_cmd(
         console.print(Rule("[bold green]Resultado", style="green"))
         console.print(f"[bold green]✓[/bold green] Imagem: [cyan]{out_path.resolve()}[/cyan] [dim]({sz})[/dim]")
         console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
-        emit_result(item_id, TOOL_TEXT2D, STATUS_OK, output=str(out_path), seconds=elapsed)
+        final_output = svg_path if output_was_svg and svg_path is not None else out_path
+        emit_result(
+            item_id,
+            TOOL_TEXT2D,
+            STATUS_OK,
+            output=str(final_output),
+            seconds=elapsed,
+            **({"svg": str(svg_path)} if (svg_results and svg_path is not None) else {}),
+        )
     except ImportError as e:
         console.print(f"\n[bold red]✗[/bold red] {e}")
         emit_result(item_id, TOOL_TEXT2D, STATUS_ERROR, error=str(e))
@@ -665,6 +1315,134 @@ def silhouette_cmd(input: str, output: str | None, threshold: int) -> None:
     except ImportError as e:
         raise click.ClickException(str(e)) from e
     console.print(f"[bold green]✓[/bold green] Silhueta: [cyan]{path}[/cyan]")
+
+
+@cli.command("vectorize")
+@click.argument("input", type=click.Path(exists=True, dir_okay=False))
+@click.option("--output", "-o", type=click.Path(), default=None, help="SVG de saída (default: <input>.svg).")
+@click.option(
+    "--engine",
+    type=click.Choice(["vtracer", "starvector"]),
+    default="vtracer",
+    show_default=True,
+    help="vtracer (CPU, robusto) ou starvector (GPU, ícones/logos).",
+)
+@click.option("--style", type=click.Choice(list(SVG_STYLES)), default="flat", show_default=True)
+@click.option("--colors", type=click.IntRange(2, 64), default=8, show_default=True)
+@click.option("--detail", type=click.Choice(list(SVG_DETAILS)), default="medium", show_default=True)
+@click.option("--max-kb", type=click.IntRange(min=1), default=2048, show_default=True)
+@click.option(
+    "--max-tokens",
+    type=click.IntRange(min=64),
+    default=4000,
+    show_default=True,
+    help="Limite do StarVector.",
+)
+@click.option("--seed", type=int, default=None, help="Seed do StarVector.")
+@click.option(
+    "--device",
+    type=click.Choice(["auto", "cuda", "cpu"]),
+    default="auto",
+    show_default=True,
+    help="Dispositivo do StarVector.",
+)
+@click.option("--gpu-ids", "gpu_ids_str", default=None, help="IDs das GPUs (StarVector usa a 1.ª).")
+@click.option(
+    "--transparent/--no-transparent",
+    "transparent",
+    default=None,
+    help="Fundo transparente (default: deteta o alpha da imagem).",
+)
+@click.option("--preview", is_flag=True, help="Gravar <stem>_preview.png (requer cairosvg).")
+@click.option("--meta/--no-meta", "meta", default=True, show_default=True, help="Escrever <stem>.svg.json.")
+@click.option("--strict", is_flag=True, help="Falhar se o SVG for inválido ou exceder --max-kb.")
+@click.option("-v", "--verbose", "verbose_flag", is_flag=True, help="Logs detalhados.")
+@add_vramd_options
+def vectorize_cmd(
+    input: str,
+    output: str | None,
+    engine: str,
+    style: str,
+    colors: int,
+    detail: str,
+    max_kb: int,
+    max_tokens: int,
+    seed: int | None,
+    device: str,
+    gpu_ids_str: str | None,
+    transparent: bool | None,
+    preview: bool,
+    meta: bool,
+    strict: bool,
+    verbose_flag: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
+) -> None:
+    """Vectoriza uma imagem existente (PNG/WebP/JPEG) num SVG validado."""
+
+    from .svg.api import vectorize_file
+    from .svg.vramd import build_vectorize_request
+
+    ctx = click.get_current_context(silent=True)
+    verbose = bool(ctx.obj.get("VERBOSE")) if ctx is not None and ctx.obj else False
+    verbose = verbose or verbose_flag
+    opts = SvgOptions(
+        engine=engine,
+        style=style,
+        colors=colors,
+        detail=detail,
+        max_tokens=max_tokens,
+        seed=seed,
+        device=device,
+        preview=preview,
+        transparent=bool(transparent),
+        meta=meta,
+        strict=strict,
+        max_kb=max_kb,
+    )
+    try:
+        opts.validate()
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    source = Path(input).resolve()
+    destination = Path(output).resolve() if output else source.with_suffix(".svg")
+    gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+
+    if engine == "starvector" and not no_vramd:
+        from aigamekit_shared.cli_helpers import try_vramd_delegation
+
+        payload = build_vectorize_request(
+            image=source, output=destination, opts=opts, gpu_ids=gpu_ids
+        )
+        if try_vramd_delegation(
+            "text2svg",
+            payload,
+            t_start=time.time(),
+            noun="SVG",
+            console=console,
+            enabled=True,
+            priority=vramd_priority,
+            stream=vramd_stream,
+        ):
+            _print_svg_results([_svg_summary(destination, engine_hint="starvector")])
+            return
+
+    if engine == "starvector" and opts.device != "cpu":
+        from aigamekit_shared.cli_helpers import needed_mib_for_backend, prepare_gpu_exclusive
+
+        prepare_gpu_exclusive(
+            needed_mib=needed_mib_for_backend("text2svg", quant_mode="none"),
+            allow_shared=True,
+            kill_others=False,
+            backend="text2svg",
+            quant_mode="none",
+            console=console,
+        )
+
+    result = vectorize_file(source, destination, opts, verbose=verbose)
+    _print_svg_results([_svg_summary(result)])
 
 
 @cli.command("poses")
@@ -1377,6 +2155,36 @@ def _parse_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     help="Quality tier (fast / low / medium / high / highest).",
 )
 @click.option(
+    "--category",
+    type=click.Choice(["icon"]),
+    default=None,
+    help="Categoria global (icon: 512², flat, prompt de ícone). Item pode sobrepor.",
+)
+@click.option("--transparent", is_flag=True, help="Remover o fundo dos PNGs (requer PNG/WebP).")
+@click.option("--svg/--no-svg", "svg", default=False, show_default=True, help="Gerar um SVG ao lado de cada PNG.")
+@click.option("--svg-engine", type=click.Choice(list(SVG_ENGINES)), default="auto", show_default=True)
+@click.option("--svg-style", type=click.Choice(list(SVG_STYLES)), default="flat", show_default=True)
+@click.option("--svg-colors", type=click.IntRange(2, 64), default=8, show_default=True)
+@click.option("--svg-detail", type=click.Choice(list(SVG_DETAILS)), default="medium", show_default=True)
+@click.option(
+    "--svg-enhance/--no-svg-enhance",
+    "svg_enhance",
+    default=True,
+    help="Reescrever o prompt para arte vector-friendly (default: ligado).",
+)
+@click.option("--svg-max-tokens", type=click.IntRange(min=64), default=4000, show_default=True)
+@click.option("--svg-seed", type=int, default=None)
+@click.option("--svg-device", type=click.Choice(["auto", "cuda", "cpu"]), default="auto", show_default=True)
+@click.option("--svg-preview", is_flag=True, help="Gravar <stem>_preview.png (requer cairosvg).")
+@click.option(
+    "--svg-meta/--no-svg-meta",
+    "svg_meta",
+    default=True,
+    help="Escrever <stem>.svg.json (default: ligado).",
+)
+@click.option("--svg-strict", is_flag=True)
+@click.option("--svg-max-kb", type=click.IntRange(min=1), default=2048, show_default=True)
+@click.option(
     "--compile/--no-compile",
     "torch_compile",
     default=True,
@@ -1417,6 +2225,21 @@ def generate_batch_cmd(
     group_offload: bool,
     batch_verbose: bool,
     quality: str,
+    category: str | None,
+    transparent: bool,
+    svg: bool,
+    svg_engine: str,
+    svg_style: str,
+    svg_colors: int,
+    svg_detail: str,
+    svg_enhance: bool,
+    svg_max_tokens: int,
+    svg_seed: int | None,
+    svg_device: str,
+    svg_preview: bool,
+    svg_meta: bool,
+    svg_strict: bool,
+    svg_max_kb: int,
     torch_compile: bool,
     torch_compile_mode: str,
     channels_last: bool,
@@ -1489,18 +2312,90 @@ def generate_batch_cmd(
         err_console.print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
 
     pending_inprocess: list[dict[str, Any]] = []
+    svg_items: list[dict[str, Any]] = []
 
     try:
         # vramd por item (paridade Paint3D) — load in-process só se sobrar trabalho.
         for item in items:
             t0 = time.time()
             item_id = item["id"]
-            prompt = item["prompt"]
+            raw_prompt = item["prompt"]
+            item_category = item.get("category") or category
+            item_transparent = bool(item.get("transparent", transparent))
             out_rel = Path(item["output"])
-            out_path = out_root / out_rel if not out_rel.is_absolute() else out_rel
+            requested_path = out_root / out_rel if not out_rel.is_absolute() else out_rel
 
-            if not force and out_path.is_file():
-                emit_result(item_id, TOOL_TEXT2D, STATUS_SKIPPED, output=str(out_rel))
+            # --svg produz um sidecar; -o *.svg implica SVG e raster temporário.
+            # O campo ``svg`` do item sobrepõe o flag global.
+            item_svg_flag = item.get("svg")
+            svg_requested_item = (
+                bool(svg) if item_svg_flag is None else bool(item_svg_flag)
+            ) or requested_path.suffix.lower() == ".svg"
+            item_svg_opts: SvgOptions | None = None
+            svg_path: Path | None = None
+            raster_path = requested_path
+            if svg_requested_item:
+                item_svg_opts = SvgOptions(
+                    engine=item.get("svg_engine") or svg_engine,
+                    style=item.get("svg_style") or svg_style,
+                    colors=int(item.get("svg_colors") or svg_colors),
+                    detail=item.get("svg_detail") or svg_detail,
+                    max_tokens=int(item.get("svg_max_tokens") or svg_max_tokens),
+                    seed=(
+                        item.get("svg_seed")
+                        if item.get("svg_seed") is not None
+                        else (svg_seed if svg_seed is not None else item.get("seed"))
+                    ),
+                    device=svg_device,
+                    preview=svg_preview,
+                    transparent=item_transparent,
+                    enhance=svg_enhance,
+                    meta=svg_meta,
+                    strict=svg_strict,
+                    max_kb=svg_max_kb,
+                )
+                try:
+                    item_svg_opts.validate()
+                except ValueError as exc:
+                    emit_result(item_id, TOOL_TEXT2D, STATUS_ERROR, error=str(exc))
+                    continue
+                if requested_path.suffix.lower() == ".svg":
+                    svg_path = requested_path
+                    raster_path = requested_path.with_suffix(".png")
+                else:
+                    svg_path = (
+                        Path(item["svg_output"])
+                        if item.get("svg_output")
+                        else requested_path.with_suffix(".svg")
+                    )
+
+            prompt = raw_prompt
+            if svg_requested_item and svg_enhance and item_svg_opts is not None:
+                prompt = enhance_prompt_for_svg(
+                    prompt, style=item_svg_opts.style, colors=item_svg_opts.colors
+                )
+
+            raster_rel = (
+                raster_path.relative_to(out_root)
+                if raster_path.is_relative_to(out_root)
+                else raster_path
+            )
+
+            if not force and raster_path.is_file():
+                emit_result(item_id, TOOL_TEXT2D, STATUS_SKIPPED, output=str(raster_rel))
+                if svg_requested_item and item_svg_opts is not None and svg_path is not None:
+                    svg_items.extend(
+                        _batch_svg_entries(
+                            item_id,
+                            raster_path,
+                            svg_path,
+                            int(item.get("num_images") or 1),
+                            item_svg_opts,
+                            prompt=prompt,
+                            seed=item.get("seed"),
+                            category=item_category,
+                        )
+                    )
                 continue
 
             item_w = item.get("width", width)
@@ -1511,11 +2406,11 @@ def generate_batch_cmd(
             item_refs = [str(Path(r).resolve()) for r in item.get("refs") or []] or None
             item_boxes = item.get("boxes") or None
             item_num_images = int(item.get("num_images") or 1)
-            out_path.parent.mkdir(parents=True, exist_ok=True)
+            raster_path.parent.mkdir(parents=True, exist_ok=True)
 
             item_payload: dict[str, Any] = {
                 "prompt": prompt,
-                "output": str(out_path.resolve()),
+                "output": str(raster_path.resolve()),
                 "width": item_w,
                 "height": item_h,
                 "steps": item_steps,
@@ -1534,6 +2429,10 @@ def generate_batch_cmd(
                 item_payload["boxes"] = item_boxes
             if item_num_images > 1:
                 item_payload["num_images"] = item_num_images
+            if item_category is not None:
+                item_payload["category"] = item_category
+            if item_transparent:
+                item_payload["transparent"] = True
 
             if not cpu and delegate_or_prepare(
                 "text2d",
@@ -1550,7 +2449,20 @@ def generate_batch_cmd(
                 footprint_key=model_footprint_key(resolved_model),
             ):
                 elapsed = time.time() - t0
-                emit_result(item_id, TOOL_TEXT2D, STATUS_OK, output=str(out_rel), seconds=round(elapsed, 3))
+                emit_result(item_id, TOOL_TEXT2D, STATUS_OK, output=str(raster_rel), seconds=round(elapsed, 3))
+                if svg_requested_item and item_svg_opts is not None and svg_path is not None:
+                    svg_items.extend(
+                        _batch_svg_entries(
+                            item_id,
+                            raster_path,
+                            svg_path,
+                            item_num_images,
+                            item_svg_opts,
+                            prompt=prompt,
+                            seed=item_seed,
+                            category=item_category,
+                        )
+                    )
                 continue
 
             pending_inprocess.append(
@@ -1558,7 +2470,12 @@ def generate_batch_cmd(
                     "id": item_id,
                     "prompt": prompt,
                     "out_rel": out_rel,
-                    "out_path": out_path,
+                    "raster_rel": raster_rel,
+                    "raster_path": raster_path,
+                    "svg_path": svg_path,
+                    "svg_opts": item_svg_opts,
+                    "svg_requested": svg_requested_item,
+                    "category": item_category,
                     "width": item_w,
                     "height": item_h,
                     "steps": item_steps,
@@ -1571,6 +2488,15 @@ def generate_batch_cmd(
             )
 
         if not pending_inprocess:
+            _batch_svg_pass(
+                svg_items,
+                priority=vramd_priority or "batch",
+                stream=vramd_stream,
+                gpu_ids=parsed_gpu_ids,
+                no_vramd=no_vramd,
+                verbose=batch_verbose,
+                force=force,
+            )
             return
 
         if not cpu:
@@ -1632,16 +2558,47 @@ def generate_batch_cmd(
                 emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=100)
 
                 emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=0)
-                img_format = _image_format_for(it["out_path"])
-                KleinFluxGenerator.save_image(image, it["out_path"], image_format=img_format)
+                all_images = _metadata.get("images") or [image]
+                img_format = _image_format_for(it["raster_path"])
+                for idx, img in enumerate(all_images):
+                    part_path = (
+                        it["raster_path"]
+                        if idx == 0
+                        else it["raster_path"].with_name(
+                            f"{it['raster_path'].stem}_{idx}{it['raster_path'].suffix}"
+                        )
+                    )
+                    KleinFluxGenerator.save_image(img, part_path, image_format=img_format)
                 emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=100)
 
                 elapsed = time.time() - t0
-                emit_result(item_id, TOOL_TEXT2D, STATUS_OK, output=str(it["out_rel"]), seconds=round(elapsed, 3))
+                emit_result(item_id, TOOL_TEXT2D, STATUS_OK, output=str(it["raster_rel"]), seconds=round(elapsed, 3))
+                if it.get("svg_requested") and it.get("svg_opts") is not None and it.get("svg_path") is not None:
+                    svg_items.extend(
+                        _batch_svg_entries(
+                            item_id,
+                            it["raster_path"],
+                            it["svg_path"],
+                            int(it.get("num_images") or 1),
+                            it["svg_opts"],
+                            prompt=it["prompt"],
+                            seed=it["seed"],
+                            category=it.get("category"),
+                        )
+                    )
             except Exception as exc:
                 emit_result(item_id, TOOL_TEXT2D, STATUS_ERROR, error=str(exc))
 
         _batch_cleanup()
+        _batch_svg_pass(
+            svg_items,
+            priority=vramd_priority or "batch",
+            stream=vramd_stream,
+            gpu_ids=parsed_gpu_ids,
+            no_vramd=no_vramd,
+            verbose=batch_verbose,
+            force=force,
+        )
     except ImportError as exc:
         console.print(f"\n[bold red]✗[/bold red] {exc}")
         sys.exit(1)
@@ -1732,6 +2689,37 @@ def doctor_cmd() -> None:
             "e configura HF_TOKEN.[/yellow]",
         )
 
+    # text2svg: VTracer é core; StarVector é opcional (cache + CUDA).
+    try:
+        import vtracer
+
+        version = getattr(vtracer, "__version__", "") or ""
+        table.add_row("vtracer (CPU)", f"[green]OK[/green] {version}".strip())
+    except ImportError:
+        table.add_row("vtracer (CPU)", "[yellow]não instalado — `pip install vtracer`[/yellow]")
+
+    try:
+        import cairosvg  # noqa: F401
+
+        table.add_row("cairosvg (preview)", "[green]OK[/green]")
+    except ImportError:
+        table.add_row(
+            "cairosvg (preview)",
+            "[dim]opcional — `pip install 'text2d[svg-preview]'`[/dim]",
+        )
+
+    from aigamekit_shared.model_download import is_model_cached
+
+    from .svg.starvector import DEFAULT_MODEL_ID
+
+    sv_cached = is_model_cached(DEFAULT_MODEL_ID)
+    table.add_row(
+        "StarVector-1B (cache)",
+        "[green]OK[/green]"
+        if sv_cached
+        else "[yellow]não cacheado — o 1.º `--svg-engine starvector` descarrega ~5 GB[/yellow]",
+    )
+
     console.print(table)
 
 
@@ -1753,6 +2741,20 @@ def models_cmd() -> None:
     t.add_row(
         "black-forest-labs/flux-3-image-klein-pup",
         "Prompt upsampler 9B — carregado só com --upsample (expande o prompt curto em caption completa).",
+    )
+    t.add_row(
+        "starvector/starvector-1b-im2svg",
+        "SVG image→SVG (Apache-2.0, ~4-5 GB fp16). Ícones/logos/diagramas; NÃO usar em "
+        "ilustrações/painterly. `--svg-engine starvector` ou `text2d vectorize --engine starvector`.",
+    )
+    t.add_row(
+        "bigcode/starcoderbase-1b",
+        "LLM base do StarVector (BigCode OpenRAIL-M). NÃO é descarregado: é gated e o "
+        "checkpoint StarVector já traz o LLM fine-tuned + tokenizer.",
+    )
+    t.add_row(
+        "vtracer (PyPI)",
+        "Tracer clássico CPU (MIT) — default de `--svg`; quantiza a paleta e remove o fundo.",
     )
     console.print(t)
     console.print(

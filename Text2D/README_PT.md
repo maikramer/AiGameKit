@@ -77,6 +77,7 @@ Documentação detalhada: [docs/INSTALL.md](docs/INSTALL.md). Problemas de GPU/c
 | Subcomando | Descrição |
 |-----------|-----------|
 | `text2d generate PROMPT` | Gera uma imagem a partir de texto |
+| `text2d vectorize IMAGE` | Vectoriza um raster existente num SVG |
 | `text2d info` | Mostra configuração e ambiente (GPU, cache, modelo) |
 | `text2d models` | Lista modelos disponíveis |
 | `text2d skill install` | Instala Agent Skill Cursor no projeto |
@@ -103,6 +104,42 @@ text2d models
 ```
 
 Kernel opts (~6 GB): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
+
+### SVG (`--svg` / `vectorize`)
+
+O PNG continua a ser o entregável do jogo; o SVG é um sidecar (ícones de UI,
+emblemas, web). Pesquisa e comparação de modelos:
+[`docs/findings/TEXT2SVG_MODEL_RESEARCH.md`](../docs/findings/TEXT2SVG_MODEL_RESEARCH.md).
+
+```bash
+# Ícone: PNG + SVG ao lado (StarVector-1B se --category icon e cacheado)
+text2d generate "blue dash wind speed swirl, fantasy RPG UI" \
+  --category icon --svg -o ability_dash.png
+
+# Ícone com VTracer (CPU, sem GPU)
+text2d generate "flat red apple icon" --category icon --svg \
+  --svg-engine vtracer -o apple.png
+
+# Vectorizar um raster existente
+text2d vectorize ability_dash.png -o ability_dash.svg --engine vtracer --colors 8
+
+# Lote: PNGs existentes → só os SVGs em falta
+text2d generate-batch icons.json --svg --svg-engine vtracer --no-hw-auto
+```
+
+- **vtracer** (default, CPU, MIT): tracing de cor; quantiza a paleta, remove o
+  fundo transparente e é determinístico. Melhor em arte flat; arte detalhada
+  pode gerar centenas de paths.
+- **starvector** (`starvector/starvector-1b-im2svg`, GPU, Apache-2.0, ~4–5 GB
+  fp16): ícones/logos/diagramas. **Não** foi treinado em ilustrações; o `auto`
+  só o escolhe em `--category icon`.
+- O prompt é reescrito deterministicamente (`--svg-enhance`, default on) para
+  cores flat/paleta limitada/sem gradientes; preserva o sujeito e o `Avoid:`.
+- O SVG passa sempre por extract → repair → sanitize (sem `script`,
+  `foreignObject`, `on*`, `href` externo). `--svg-meta` grava `<stem>.svg.json`.
+- `--svg-preview` precisa de `pip install 'text2d[svg-preview]'` (cairosvg).
+- `vectorize`/`generate-batch` aceitam os mesmos `--style/--colors/--detail`;
+  no batch o JSONL ganha linhas `phase=svg`.
 
 ### Variáveis de ambiente
 

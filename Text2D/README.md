@@ -149,6 +149,76 @@ text2d generate "espada de fantasia" --category icon --transparent -o icon.png
 | `--category` | str | — | Asset category: `icon` (512², 2 steps, icon styling) |
 | `--transparent/--no-transparent` | flag | off | Remove background (rembg/U2Net); requires `.png` output |
 
+### SVG output (`--svg`, `text2d vectorize`)
+
+`text2d` can keep the PNG and also write a vector sidecar. SVG is useful for
+UI icons, emblems, map markers and web; the Vael runtime still consumes
+PNG/KTX2, so the PNG remains the game deliverable. Research and model
+comparison: [`docs/findings/TEXT2SVG_MODEL_RESEARCH.md`](../docs/findings/TEXT2SVG_MODEL_RESEARCH.md).
+
+```bash
+# Icon: PNG + SVG next to it (StarVector-1B for --category icon when cached)
+text2d generate "blue dash wind speed swirl, fantasy RPG UI" \
+  --category icon --svg -o ability_dash.png
+
+# Flat icon with VTracer (CPU, no GPU)
+text2d generate "flat red apple icon" --category icon --svg \
+  --svg-engine vtracer -o apple.png
+
+# Vectorize an existing raster
+text2d vectorize ability_dash.png -o ability_dash.svg --engine vtracer --colors 8
+
+# Batch: existing PNGs -> only the missing SVGs (JSONL gets phase=svg lines)
+text2d generate-batch icons.json --svg --svg-engine vtracer --no-hw-auto
+```
+
+Engines:
+
+- **vtracer** (default, CPU, MIT): colour tracing. Quantizes the palette, strips the
+  transparent background with a sentinel colour, deterministic and fast. Best for
+  flat/stylized art; detailed art can produce hundreds of paths.
+- **starvector** (GPU, Apache-2.0): `starvector/starvector-1b-im2svg`, ~4–5 GB fp16.
+  Great for icons/logos/diagrams; **not trained on illustrations/natural images**.
+  Runs in the `text2svg` vramd backend (same `text2d` venv); the FLUX model is
+  unloaded first.
+- `auto`: StarVector when `--category icon` and the checkpoint is cached, else
+  VTracer. An explicit `--svg-engine starvector` allows the first download (~5 GB).
+
+Prompt enhancement (`--svg-enhance`, on by default) rewrites raster terms
+(painterly, brush strokes, gradients, textures, soft shadows) into vector-friendly
+directives (flat colours, limited palette, bold silhouette, no gradients) and
+appends a style hint. It is deterministic/idempotent, preserves the subject and
+the `Avoid:` clause, and can be disabled with `--no-svg-enhance`. Do not combine
+it with `--upsample` (the PUP expands the caption inside the pipeline).
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--svg/--no-svg` | flag | off | Also write `<stem>.svg` next to the PNG |
+| `--svg-output` | path | `<stem>.svg` | Explicit SVG path (`-o foo.svg` implies `--svg`) |
+| `--svg-engine` | str | `auto` | `auto`, `vtracer`, `starvector` |
+| `--svg-style` | str | `flat` | `flat`, `line`, `detailed` |
+| `--svg-colors` | int | 8 | Palette size for the raster/tracer (2–64) |
+| `--svg-detail` | str | `medium` | `low`, `medium`, `high` (speckle/path precision) |
+| `--svg-enhance/--no-svg-enhance` | flag | on | Deterministic vector-friendly prompt rewrite |
+| `--svg-max-tokens` | int | 4000 | StarVector SVG token budget |
+| `--svg-seed` | int | — | StarVector seed (VTracer is deterministic) |
+| `--svg-device` | str | `auto` | StarVector device (`auto`/`cuda`/`cpu`) |
+| `--svg-preview` | flag | off | Write `<stem>_preview.png` (needs `cairosvg`) |
+| `--svg-transparent/--no-svg-transparent` | flag | follows image alpha | Transparent background |
+| `--svg-meta/--no-svg-meta` | flag | on | Write `<stem>.svg.json` (engine/params/paths) |
+| `--svg-strict` | flag | off | Fail on invalid SVG or over `--svg-max-kb` |
+| `--svg-max-kb` | int | 2048 | SVG byte budget (warning; strict fails) |
+| `--svg-keep-raster` | flag | off | With `-o *.svg`, keep the intermediate PNG |
+
+`text2d vectorize INPUT` accepts the same style/colour/detail/preview flags plus
+`--engine {vtracer,starvector}`, `--max-kb`, `--max-tokens`, `--seed`,
+`--device`, `--gpu-ids` and the vramd options.
+
+All SVGs (including StarVector output) go through extract → repair (truncated
+tags) → sanitize (`script`, `foreignObject`, `style`, `on*`, external `href`,
+`DOCTYPE/ENTITY` removed) → write. The optional preview requires
+`pip install 'text2d[svg-preview]'` (libcairo).
+
 ### `text2d generate-batch MANIFEST`
 
 Batch generate multiple images from a JSON manifest file. Emits JSONL progress on stdout.
@@ -177,7 +247,15 @@ Manifest format:
 ]
 ```
 
-Each item requires `id`, `prompt`, and `output`. Optional per-item overrides: `width`, `height`, `steps`, `guidance_scale`, `seed`.
+Each item requires `id`, `prompt`, and `output`. Optional per-item overrides:
+`width`, `height`, `steps`, `guidance_scale`, `seed`, `category`, `transparent`,
+`svg`, `svg_engine`, `svg_style`, `svg_colors`, `svg_detail`, `svg_output`,
+`svg_max_tokens`, `svg_seed`.
+
+With `--svg` (or per-item `svg: true`), a second pass writes the SVGs and emits
+one extra JSONL line per image with `"phase": "svg"` (the raster line keeps its
+status). A skipped raster whose PNG exists is still vectorized; an existing SVG
+is skipped unless `--force`. `svg: false` on an item overrides the global flag.
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
@@ -190,7 +268,12 @@ Each item requires `id`, `prompt`, and `output`. Optional per-item overrides: `w
 | `-m, --model` | str | auto | Model ID override |
 | `--gpu-ids` | str | auto | GPU IDs for multi-GPU split |
 | `--hw-auto/--no-hw-auto` | flag | on | Hardware auto-detection (offload/model/multi-GPU); `TEXT2D_HW_AUTO=0` disables |
-| `--force` | flag | off | Overwrite existing files |
+| `--force` | flag | off | Overwrite existing files (raster and SVG) |
+| `--category` | str | — | Global asset category (`icon`); item `category` wins |
+| `--transparent` | flag | off | Remove the PNG background (icons) |
+| `--svg/--no-svg` | flag | off | Write an SVG next to each PNG |
+| `--svg-engine` / `--svg-style` / `--svg-colors` / `--svg-detail` | — | `auto`/`flat`/`8`/`medium` | Same semantics as `generate` |
+| `--svg-enhance` / `--svg-meta` / `--svg-preview` / `--svg-strict` | flag | on/on/off/off | Same semantics as `generate` |
 | `-v, --verbose` | flag | off | Detailed log output |
 
 ### `text2d info`
