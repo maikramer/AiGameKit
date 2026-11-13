@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Any
@@ -282,6 +283,139 @@ def softfill_omni_from_category(omni: OmniControls, category: str | None) -> Omn
     return expand_omni_world_size(filled, category=category)
 
 
+def _norm_control_type(raw: Any) -> str:
+    return str(raw).strip().lower() if raw not in (None, "") else "none"
+
+
+def _expected_control_type(omni: OmniControls) -> str:
+    """Controlo que o ``merge_omni_controls`` resolveria (soft-fill mínimo)."""
+    ct = _norm_control_type(omni.control_type)
+    if ct != "none":
+        return ct
+    if omni.point_cloud:
+        return "point"
+    if omni.voxel_mesh:
+        return "voxel"
+    if omni.pose_preset or omni.pose_file:
+        return "pose"
+    if omni.bbox is not None or omni.bbox_preset:
+        return "bbox"
+    return "none"
+
+
+def _round_floats(raw: Any) -> list[float] | None:
+    if raw is None:
+        return None
+    try:
+        return [round(float(v), 4) for v in raw]
+    except (TypeError, ValueError):
+        return None
+
+
+# Eixo canónico do bbox Omni (docs 0-1) — espelho de
+# ``text3d.utils.omni_controls.OMNI_BBOX_AXIS_MAX`` para o fallback.
+_FALLBACK_BBOX_AXIS_MAX = 1.0
+
+
+def _shape_omni_stale_without_text3d(
+    shape_glb: Path,
+    omni: OmniControls,
+    *,
+    bounds_mode: str | None,
+    mc_level: float | str | None,
+    seed: int | None,
+    octree_resolution: int | None,
+) -> bool:
+    """Fallback de :func:`shape_omni_stale` quando ``text3d`` não importa.
+
+    O GameAssets corre no seu próprio venv (as tools são venvs separados): sem
+    ``text3d``, ``merge_omni_controls``/``omni_fingerprint`` não existem e o
+    caminho antigo devolvia ``False`` — o resume **reutilizava shapes com Omni
+    diferente** (mudar ``pose_preset``/``size_m`` no manifest não regenerava
+    nada; visto no npc_merchant a 2026-11-13). Aqui comparam-se os campos do
+    sidecar que mudam a geometria, espelhando as regras do merge. Conservador:
+    só invalida o que o manifest define; ``pose_digest`` (identidade do
+    esqueleto) fica de fora porque exige resolver o preset.
+    """
+    try:
+        existing = json.loads(Path(str(shape_glb) + ".omni.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(existing, dict):
+        return False
+
+    if _norm_control_type(existing.get("control_type")) != _expected_control_type(omni):
+        return True
+    ex_pose = (existing.get("pose_preset") or "").strip().lower() or None
+    want_pose = (omni.pose_preset or "").strip().lower() or None
+    if ex_pose != want_pose:
+        return True
+    if want_pose is None and omni.pose_file:
+        ex_pf = existing.get("pose_file")
+        if not ex_pf or Path(str(ex_pf)).name != Path(str(omni.pose_file)).name:
+            return True
+    if omni.bbox is not None and _round_floats(existing.get("bbox")) != _round_floats(omni.bbox):
+        return True
+    # ``bbox_preset`` só quando ambos existem: com size_m anisotrópico o merge
+    # descarta o preset (o size_m vira o molde) e o sidecar grava None.
+    want_bp = (omni.bbox_preset or "").strip().lower() or None
+    ex_bp = (existing.get("bbox_preset") or "").strip().lower() or None
+    if want_bp and ex_bp and want_bp != ex_bp:
+        return True
+    ex_sm = _round_floats(existing.get("size_m"))
+    want_sm = _round_floats(omni.size_m)
+    # Remover size_m também invalida: o shape antigo foi escalado (e o
+    # bbox_tune calculado) com ele.
+    if ex_sm != want_sm:
+        return True
+    for key, want in (("point_cloud", omni.point_cloud), ("voxel_mesh", omni.voxel_mesh)):
+        if want:
+            ex_v = existing.get(key)
+            if not ex_v or Path(str(ex_v)).name != Path(str(want)).name:
+                return True
+
+    def _norm_bounds(raw: Any) -> str | None:
+        val = str(raw).strip().lower() if raw not in (None, "") else ""
+        return None if val in ("", "auto") else val
+
+    if bounds_mode is not None and _norm_bounds(existing.get("bounds_mode")) != _norm_bounds(bounds_mode):
+        return True
+
+    def _norm_mc(raw: Any) -> float | None:
+        if raw in (None, "") or (isinstance(raw, str) and raw.strip().lower() == "auto"):
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
+    if mc_level is not None and _norm_mc(existing.get("mc_level")) != _norm_mc(mc_level):
+        return True
+    if seed is not None:
+        ex_seed = existing.get("seed")
+        try:
+            ex_seed_i = int(ex_seed) if ex_seed not in (None, "") else None
+        except (TypeError, ValueError):
+            ex_seed_i = None
+        if ex_seed_i != int(seed):
+            return True
+    if octree_resolution is not None:
+        ex_oct = existing.get("octree_resolution")
+        try:
+            ex_oct_i = int(ex_oct) if ex_oct not in (None, "") else None
+        except (TypeError, ValueError):
+            ex_oct_i = None
+        if ex_oct_i != int(octree_resolution):
+            return True
+    try:
+        ex_axis = existing.get("bbox_axis_max")
+        if ex_axis is not None and abs(float(ex_axis) - _FALLBACK_BBOX_AXIS_MAX) > 1e-6:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
+
+
 def shape_omni_stale(
     shape_glb: Path,
     omni: OmniControls,
@@ -301,13 +435,22 @@ def shape_omni_stale(
     só este shape (re-roll cirúrgico); o determinístico nunca entra aqui.
     ``octree_resolution``: só o override explícito do manifest entra no expected;
     autotune (``None``) ignora o valor gravado no sidecar (VRAM-dependente).
+    Sem ``text3d`` importável (venv do GameAssets) → compara os campos do
+    sidecar diretamente; ver :func:`_shape_omni_stale_without_text3d`.
     """
     if not shape_glb.is_file():
         return True
     try:
         from text3d.omni_presets import merge_omni_controls, omni_fingerprint, read_omni_fingerprint
     except ImportError:
-        return False
+        return _shape_omni_stale_without_text3d(
+            shape_glb,
+            omni,
+            bounds_mode=bounds_mode,
+            mc_level=mc_level,
+            seed=seed,
+            octree_resolution=octree_resolution,
+        )
 
     expected = merge_omni_controls(
         control_type=omni.control_type,

@@ -2505,6 +2505,40 @@ def _glb_has_duplicate_clips(path: Path) -> bool:
         return False
 
 
+@dataclass(frozen=True)
+class _FinishResult:
+    """Resultado do finish (in-process ou CLI) — subconjunto do ``FinishResult`` Text3D."""
+
+    ktx2_applied: bool
+    meshopt_applied: bool
+    meshopt_backend: str | None = None
+
+
+def _finish_glb_via_cli(p: Path) -> _FinishResult:
+    """``text3d finish`` por subprocesso (venv do GameAssets sem ``text3d``).
+
+    Mesmo passe do ``gltf_transform_finish`` in-process: tangents → dedup/prune
+    → KTX2 → meshopt. O ``ktx2`` é lido do GLB resultante (``images[].mimeType``)
+    e o meshopt do warning do CLI (a lib é opcional).
+    """
+    from .paths import _glb_json
+
+    bin_ = _bin_or_none("TEXT3D_BIN", "text3d")
+    if not bin_:
+        raise RuntimeError("text3d não encontrado no PATH (e não importável neste venv)")
+    r = run_cmd([bin_, "finish", str(p)], cwd=p.parent)
+    if r.returncode != 0:
+        tail = ((r.stderr or "") + (r.stdout or ""))[-300:]
+        raise RuntimeError(f"text3d finish rc={r.returncode}: {tail}")
+    text = f"{r.stdout or ''}\n{r.stderr or ''}"
+    meshopt = "meshopt não aplicado" not in text
+    ktx2 = False
+    payload = _glb_json(p)
+    if payload:
+        ktx2 = any(str(img.get("mimeType", "")).startswith("image/ktx2") for img in payload.get("images", []))
+    return _FinishResult(ktx2_applied=ktx2, meshopt_applied=meshopt, meshopt_backend="cli" if meshopt else None)
+
+
 def _finish_lod_with_rollback(
     p: Path,
     level: int,
@@ -2523,9 +2557,18 @@ def _finish_lod_with_rollback(
     pre = p.with_suffix(p.suffix + ".pre_finish")
     try:
         _sh_finish.copy2(p, pre)
-        from text3d.utils.gltf_finish import gltf_transform_finish
-
-        fr = gltf_transform_finish(p, p, apply_uastc=True, apply_meshopt=True)
+        try:
+            from text3d.utils.gltf_finish import gltf_transform_finish
+        except ImportError:
+            # O GameAssets corre num venv próprio (as tools são venvs
+            # separados): sem `text3d` importável o except genérico abaixo só
+            # escrevia um warning de log e os GLBs ficavam em JPEG — a
+            # validação (`texture_format: esperado image/ktx2`) falhava e o
+            # asset saía sem compressão (npc_merchant, 2026-11-13). O CLI faz
+            # o mesmo passe (tangents → KTX2 → meshopt).
+            fr = _finish_glb_via_cli(p)
+        else:
+            fr = gltf_transform_finish(p, p, apply_uastc=True, apply_meshopt=True)
         if not expect_ok(p):
             log.error("master: finish lod%d destruiu skins/clips/paint — a restaurar pré-finish", level)
             _sh_finish.copy2(pre, p)

@@ -181,7 +181,7 @@ explícito obrigatório.
 | `quaternius-apose` | default humanoid → **oficial Omni sem dedos** `omni_apose_nofingers_bone.txt` (21 ossos, braços −40°, `Wrist` incluído). Com os 30 ossos de dedo do oficial a mão é construída **duas vezes** — esqueleto (dedos a abrir em Z, palma para o corpo) e imagem (dedos no plano da imagem) a 90° → mão «balão» e 7-9 dedos por mão |
 | `omni-apose` | oficial completo (51 ossos, com dedos/olhos) — só bench/comparação |
 | `quaternius-apose-min` | mínimo antigo (22 ossos, sem dedos) — bench; era ignorado pelo modelo (≈ `none`) |
-| `quaternius-apose-dwarf` | chibi / goblin / cabeça grande |
+| `quaternius-apose-dwarf` | chibi / goblin / **cabeça grande e corpos largos**. Clavículas ~2× mais largas que o adulto (ombro a ~19% da altura) e braços longos: é o preset que mantém os braços fora da barriga nos corpos gordos (merchant, 2026-11-13). O adulto põe o ombro a ±0,10 m num corpo de 1,5 m e o cotovelo fica *dentro* do tronco → o Omni funde os braços, as mãos saem em bico e o rig fica sem ossos de braço |
 
 ---
 
@@ -274,7 +274,7 @@ pós-shape (`topology-fix`) vs regen.
 ### D. Artefactos Omni “normais”
 
 - Dedos fundidos (`hero`)
-- Braços gordos / costuras manga (`npc_merchant`) — tentar A-pose
+- Braços fundidos ao tronco em corpos gordos (`npc_merchant`) — **resolvido** com `quaternius-apose-dwarf` (ombros largos/braços longos); o A-pose adulto punha o cotovelo dentro da barriga
 - Folhagem gorda / ramos tubulares (`pine_dark`, `dead_bush`)
 - Disco fino na base de árvores mortas (`dead_tree`, `dead_willow`)
 - Armas `WARN_FLAT` nos bounds → **esperado**, não é clip MC

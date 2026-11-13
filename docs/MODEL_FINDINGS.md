@@ -14,6 +14,7 @@ vramd, budgets). **Não** substitui READMEs por tool — aponta e consolida.
 | [`Shared/README.md`](../Shared/README.md) (sec. GPU/NVML) | `query_gpu_free_mib`, snapshots, apps; dep `nvidia-ml-py` |
 | [`findings/PAINT_PART_FINDINGS.md`](findings/PAINT_PART_FINDINGS.md) | Paint bake/SDNQ; `restrict_inpaint` + `_clean`; Part3D **faces**/p3sam/fine-parts/`label_fuse` |
 | [`findings/IMAGE_SKY_SOUND_FINDINGS.md`](findings/IMAGE_SKY_SOUND_FINDINGS.md) | Text2D 1024; Skymap shift/PMREM; audio trim; kernel flags |
+| [`findings/TEXT2SVG_MODEL_RESEARCH.md`](findings/TEXT2SVG_MODEL_RESEARCH.md) | text2svg: StarVector-1B vs OmniSVG vs VTracer; `--svg`, `vectorize`, backend `text2svg`, footprint `starvector-1b` |
 | [`findings/MESH_PIPELINE_FINDINGS.md`](findings/MESH_PIPELINE_FINDINGS.md) | Master DAG **Round 3**; promote/resume; **N/T sobreviver** + V/Tri; Decimate stepwise; árvores cut-only; compressão |
 | [`GLB_FINISH_COMPRESSION.md`](GLB_FINISH_COMPRESSION.md) | Happy path KTX2+meshopt: `text3d finish`, deps `ktx`+npx, GameAssets rollback |
 | [`findings/ANIMATOR_RETARGET_FINDINGS.md`](findings/ANIMATOR_RETARGET_FINDINGS.md) | Quaternius retarget; root/pelvis; **humanoid p/ bípedes** (não creature procedural) |
@@ -325,6 +326,7 @@ actualizar **esta hub** §5 + KERNEL_OPTS “Aplicado” +
 
 | Data | Nota |
 |------|------|
+| 2026-11-12 | `text2svg`: StarVector-1B (vendored, fp16 ~4–5 GB) + VTracer; `--svg`/`vectorize`; backend `text2svg` + footprint `starvector-1b` |
 | 2026-07-24 | `GLB_FINISH_COMPRESSION.md` — KTX2+meshopt, dep `ktx`, `text3d finish` |
 | 2026-07-24 | Guia `GAMEASSETS_UMS_BATCH`; mission/; findings index; Round 3 nos ponteiros mesh |
 | 2026-07-24 | `ANIMATOR_RETARGET_FINDINGS` + índice Quaternius (root estático / cintura-ao-play) |

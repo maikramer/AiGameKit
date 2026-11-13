@@ -7,6 +7,31 @@ próprio: [`Materialize/CHANGELOG.md`](Materialize/CHANGELOG.md).
 
 ## [Unreleased]
 
+### Fixed — rigging3d: `diffusers` < 0.43 (LayerNorm do Tripo2)
+
+- **Pin `diffusers>=0.35.0,<0.43.0`** (`Rigging3D/pyproject.toml`): o SkinTokens
+  (cópias vendored do Tripo2) importa
+  `diffusers.models.normalization.LayerNorm`, removido em 0.43.0. Um install
+  novo (2026-11-13) puxou 0.43 e o backend remoto morria no load com
+  `cannot import name 'LayerNorm'`; o GameAssets caía para o fallback estático
+  (LODs sem rig/anim, sem falhar o batch — o gate `_rigged_ok` só desliga
+  `with_rig`). Validado com 0.42.0.
+
+### Fixed — `resume` reutilizava shape com Omni diferente (sem `text3d`)
+
+- **`shape_omni_stale` sem `text3d` importável.** O GameAssets corre no seu
+  próprio venv (as tools são venvs separados) e `text3d` não está lá: o
+  `except ImportError: return False` fazia o resume tratar **qualquer** shape
+  como fresco. Mudar `pose_preset`/`size_m` num manifest não invalidava nada —
+  visto no `npc_merchant` do Vael (2026-11-13), que regenerava
+  paint/rig/animate sobre a geometria antiga (braços fundidos ao tronco) e só
+  mudava o `bbox_tune`. Novo `_shape_omni_stale_without_text3d` compara os
+  campos do sidecar (`control_type`, `pose_preset`, `size_m`, `bbox`/preset,
+  `bounds_mode`, `mc_level`, `seed`, `octree_resolution`, `bbox_axis_max`)
+  espelhando as regras do merge; `pose_digest` continua a exigir a tool (só
+  pelo caminho completo). Testes:
+  `tests/test_omni_ctrl.py::TestShapeOmniStaleWithoutText3d`.
+
 ### Fixed — animator3d: retarget A-pose (braços dentro da cintura)
 
 - **Abertura A-pose no retarget** (`Animator3D/src/animator3d/retarget.py`): o

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -307,3 +309,115 @@ class TestDerivedCascade:
         paths = _derived_glb_paths_for_shape(shape)
         assert own in paths
         assert other not in paths
+
+
+class TestShapeOmniStaleWithoutText3d:
+    """Fallback do resume sem ``text3d`` importável (venv próprio do GameAssets).
+
+    Regressão 2026-11-13 (npc_merchant): mudar ``pose_preset``/``size_m`` no
+    manifest não invalidava o shape — o resume reutilizava a mesh antiga e as
+    fases seguintes pintavam/rigavam a geometria errada.
+    """
+
+    @staticmethod
+    def _write(shape: Path, payload: dict) -> None:
+        shape.write_bytes(b"glTF")
+        Path(str(shape) + ".omni.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    @pytest.fixture(autouse=True)
+    def _no_text3d(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # ``None`` em ``sys.modules`` faz o ``from text3d.omni_presets import …``
+        # levantar ImportError — replica o venv do GameAssets sem a tool.
+        monkeypatch.setitem(sys.modules, "text3d", None)
+
+    def test_pose_preset_change_stales(self, tmp_path: Path) -> None:
+        shape = tmp_path / "npc_merchant_shape.glb"
+        self._write(
+            shape,
+            {
+                "control_type": "pose",
+                "pose_preset": "quaternius-apose",
+                "size_m": [0.65, 1.5, 0.5],
+                "bbox_axis_max": 1.0,
+            },
+        )
+        omni = OmniControls(
+            control_type="pose",
+            pose_preset="quaternius-apose-dwarf",
+            size_m=(1.5, 1.5, 0.6),
+        )
+        assert shape_omni_stale(shape, omni) is True
+
+    def test_same_omni_stays_fresh(self, tmp_path: Path) -> None:
+        shape = tmp_path / "npc_merchant_shape.glb"
+        self._write(
+            shape,
+            {
+                "control_type": "pose",
+                "pose_preset": "quaternius-apose-dwarf",
+                "size_m": [1.5, 1.5, 0.6],
+                "bbox_axis_max": 1.0,
+            },
+        )
+        omni = OmniControls(
+            control_type="pose",
+            pose_preset="quaternius-apose-dwarf",
+            size_m=(1.5, 1.5, 0.6),
+        )
+        assert shape_omni_stale(shape, omni) is False
+
+    def test_size_m_change_stales(self, tmp_path: Path) -> None:
+        shape = tmp_path / "chapel_shape.glb"
+        self._write(
+            shape,
+            {
+                "control_type": "bbox",
+                "bbox_preset": None,
+                "size_m": [6.0, 7.0, 4.5],
+                "bbox_axis_max": 1.0,
+            },
+        )
+        omni = OmniControls(control_type="bbox", size_m=(8.0, 7.0, 4.5))
+        assert shape_omni_stale(shape, omni) is True
+
+    def test_bbox_preset_change_stales(self, tmp_path: Path) -> None:
+        shape = tmp_path / "door_shape.glb"
+        self._write(
+            shape,
+            {"control_type": "bbox", "bbox_preset": "door", "bbox_axis_max": 1.0},
+        )
+        omni = OmniControls(control_type="bbox", bbox_preset="crate")
+        assert shape_omni_stale(shape, omni) is True
+
+    def test_decode_knobs_and_seed_stale(self, tmp_path: Path) -> None:
+        shape = tmp_path / "wall_shape.glb"
+        self._write(
+            shape,
+            {
+                "control_type": "bbox",
+                "size_m": [4.0, 2.0, 0.4],
+                "bounds_mode": None,
+                "mc_level": None,
+                "seed": None,
+                "bbox_axis_max": 1.0,
+            },
+        )
+        omni = OmniControls(control_type="bbox", size_m=(4.0, 2.0, 0.4))
+        assert shape_omni_stale(shape, omni, bounds_mode="auto") is False
+        assert shape_omni_stale(shape, omni, bounds_mode="cube") is True
+        assert shape_omni_stale(shape, omni, seed=90210) is True
+        assert shape_omni_stale(shape, omni, octree_resolution=320) is True
+
+    def test_old_bbox_axis_max_stales(self, tmp_path: Path) -> None:
+        shape = tmp_path / "crate_shape.glb"
+        self._write(
+            shape,
+            {"control_type": "bbox", "bbox_preset": "crate", "bbox_axis_max": 2.0},
+        )
+        assert shape_omni_stale(shape, OmniControls(control_type="bbox", bbox_preset="crate")) is True
+
+    def test_missing_sidecar_not_stale(self, tmp_path: Path) -> None:
+        shape = tmp_path / "orphan_shape.glb"
+        shape.write_bytes(b"glTF")
+        omni = OmniControls(control_type="pose", pose_preset="quaternius-apose")
+        assert shape_omni_stale(shape, omni) is False
