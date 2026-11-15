@@ -1,41 +1,27 @@
 ---
-description: Validação headless CI-ready de um mundo Viber (analyze + interpretação do relatório)
-argument-hint: [world.xml] [--strict]
+description: Validação headless de um mundo `.bsn` com `vael-tools analyze`
+argument-hint: [world.bsn] [--strict]
 allowed-tools: Bash
 ---
 
-# Analisar um mundo Viber (headless)
+# Analisar o mundo (headless)
 
-Mundo alvo: `$ARGUMENTS` (se vazio: `viber analyze` procura
-`world.xml` → `worlds/*.xml` no cwd). `analyze` NUNCA delega a cargo e é exit 1
-em erro — CI-ready. Corre da pasta do mundo ou passa o caminho.
-
-Executar:
+Mundo alvo: `$ARGUMENTS` (se vazio, `vael-tools analyze` procura `world.bsn`
+no cwd). Não abre janela e é exit 1 em erro — CI-ready.
 
 ```bash
-viber analyze <mundo>            # (sair do checkout do Viber evita delegação de run; analyze nunca delega)
+vael-tools analyze <mundo> [--json] [--strict]
 ```
 
-Interpretar e reportar por severidade (skill **viber-worlds**, references/xml-contract.md):
+Interpretar e reportar:
 
-- **Erros** (exit 1): XML inválido, `world`/`scene` aninhados, `<Include>` não
-  expandido, `<Road>` sem `path`, `<Arch>` sem `at` nem `path`, Prototype
-  desconhecido em `--strict`.
-- **✗ assets** (erro em `--strict`): GLB/texturas/heightmaps/BGM/scripts/estilos
-  ausentes — resolver caminhos contra as asset roots do `config.yaml` (a pasta do
-  jogo 1.ª, roots extra depois). GLB Draco/Basis não são lidos (meshopt sim).
-- **⚠ conflitos**: estrada × lago/rio (contorno REAL do lago, ±45%)/cliff com
-  meia-largura do ribbon; `profile="bridge"` sobre água = travessia quebrada
-  (usar `<Bridge>` volumétrico ou `<Composition>`); cut × água; lago sobre
-  `Plateau`.
-- **⚠ quests** (`audit_quests`): dador sem `<DialogueNPC dialogue-id=…>`, marco
-  `visit` inexistente, alvo `kill` sem script de criatura que o produza. Um
-  `biome` em falta derruba o FICHEIRO inteiro.
-- **ℹ / no-ops**: tags desconhecidas (mundos legados degradam com garcia —
-  decidir se é intenção), glTF sem collider, estrada × cut.
-- **Erros de mundo estático**: `<StaticSpawner>`/`place`/`<Vegetation>` sem
-  `instances` num `<world static="true">` falham o parse (usar `viber tool
-  scatter|settle`/`viber scene drop`). Um mundo SEM `static="true"` é procedural
-  antigo: o `run` recusa-o — converter uma vez com `viber bake mundo.xml`.
-Terminar com veredicto: LIMPO / avisos (lista) / erros (lista + correção
-sugerida). Em CI: `--strict`.
+- **Erros**: `.bsn`/includes que não carregam; assets e scripts em falta.
+- **Avisos**: nomes duplicados, protótipos `mob-*` sem `<Prototype>`, script
+  referido que não existe em `scripts/`.
+- **Info**: entidades por tag, assets/scripts contados, ficheiros do mundo
+  carregados.
+- `--strict` promove avisos/protótipos desconhecidos a falha.
+
+As regras de conteúdo (quests, itens, NPCs, locale) são
+`python3 tools/lint_content.py` no repo do jogo. O painel **Vael: Problems**
+do Jackdaw usa a mesma lib.

@@ -1,7 +1,8 @@
 # Bridge BRP — métodos e API de debug
 
 Transporte: BRP sobre HTTP (`bevy_remote`), porta 15702. Cliente CLI std-only.
-Fonte canónica: `Viber/docs/BRIDGE.md` + `Viber/src/bridge/mod.rs`.
+Fonte canónica: `bevy_extensions/crates/bevy_ext_viber_engine/src/bridge/mod.rs`.
+O runtime novo (`bevy_ext_bridge_runtime`) publica `vael-tools/*` no mesmo servidor; o CLI cai para os `viber.*` abaixo quando o método novo não existe.
 
 ## Métodos `viber.*` registados no BRP
 

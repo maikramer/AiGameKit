@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// MCP stdio server `viber` — envolve o CLI `viber` (não reimplementa o cliente BRP:
+// MCP stdio server `viber` — envolve o CLI `vael-tools` (não reimplementa o cliente BRP:
 // a resolução de porta/identidade, request/poll e formatting ficam no CLI).
 // Zero dependências: JSON-RPC newline-delimited sobre stdin/stdout (MCP stdio).
 //
 // Tools: viber_status, viber_screenshot (PNG inline), viber_burst, viber_tree,
-// viber_logs, viber_input, viber_lua, viber_scene, viber_tool, viber_terrain.
+// viber_logs, viber_input, viber_lua.
 //
-// Binário: env VIBER_BIN (default "viber" — userConfig.viberBin do plugin injeta-o).
+// Binário: env VAEL_TOOLS_BIN (default "vael-tools" — userConfig.vaelToolsBin do plugin injeta-o).
 
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
@@ -15,13 +15,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const execFile = promisify(execFileCb);
-const VIBER_BIN = process.env.VIBER_BIN || "viber";
-const WORK_DIR = join(tmpdir(), "viber-mcp");
-const SERVER_INFO = { name: "viber", version: "0.1.0" };
+const VAEL_TOOLS_BIN = process.env.VAEL_TOOLS_BIN || "vael-tools";
+const WORK_DIR = join(tmpdir(), "vael-tools-mcp");
+const SERVER_INFO = { name: "vael-tools", version: "0.2.0" };
 
 const run = async (args, timeoutMs = 30_000) => {
   try {
-    const { stdout, stderr } = await execFile(VIBER_BIN, args, {
+    const { stdout, stderr } = await execFile(VAEL_TOOLS_BIN, args, {
       timeout: timeoutMs,
       maxBuffer: 32 * 1024 * 1024,
       encoding: "utf8",
@@ -39,7 +39,7 @@ const run = async (args, timeoutMs = 30_000) => {
   }
 };
 
-// Flags de engine alvo — os subcomandos `viber debug <sub>` aceitam --world/--port.
+// Flags de engine alvo — os subcomandos `vael-tools debug <sub>` aceitam --world/--port.
 const targetFlags = (a = {}) => {
   const f = [];
   if (a.world) f.push("--world", String(a.world));
@@ -52,7 +52,7 @@ const num = (v) => (typeof v === "number" ? String(v) : undefined);
 const text = (t) => ({ type: "text", text: String(t) });
 const errorContent = (r, hint) => [
   text(
-    `${VIBER_BIN} falhou (exit ${r.code ?? "?"}): ${(r.stderr || r.stdout || r.message || "").trim()}` +
+    `${VAEL_TOOLS_BIN} falhou (exit ${r.code ?? "?"}): ${(r.stderr || r.stdout || r.message || "").trim()}` +
       (hint ? `\n${hint}` : "")
   ),
 ];
@@ -68,7 +68,7 @@ const tools = [
   {
     name: "viber_status",
     description:
-      "Estado do debug bridge: engines vivas (`viber debug engines`) + probe (`viber debug probe`). " +
+      "Estado do debug bridge: engines vivas (`vael-tools debug engines`) + probe (`vael-tools debug probe`). " +
       "Sem engine a correr, o probe falha — o texto explica. Útil antes de qualquer outra tool.",
     inputSchema: {
       type: "object",
@@ -99,7 +99,7 @@ const tools = [
       properties: {
         world: { type: "string" },
         port: { type: "number" },
-        output: { type: "string", description: "Caminho do PNG (default: <tmp>/viber-mcp/screenshot-<ts>.png)" },
+        output: { type: "string", description: "Caminho do PNG (default: <tmp>/vael-tools-mcp/screenshot-<ts>.png)" },
         timeout_ms: { type: "number", description: "Timeout do CLI em ms (default 10000)" },
       },
     },
@@ -154,11 +154,10 @@ const tools = [
     description: "Árvore de entidades da engine viva (id/nome/pai/transform/componentes) — como take_snapshot.",
     inputSchema: {
       type: "object",
-      properties: { world: { type: "string" }, port: { type: "number" }, json: { type: "boolean" } },
+      properties: { world: { type: "string" }, port: { type: "number" } },
     },
     handler: async (a) => {
       const args = ["debug", "tree"];
-      if (a.json) args.push("--json");
       const r = await run([...args, ...targetFlags(a)]);
       return r.ok
         ? { content: [text((r.stdout || r.stderr).trim())] }
@@ -174,17 +173,11 @@ const tools = [
         world: { type: "string" },
         port: { type: "number" },
         limit: { type: "number", description: "Default 100" },
-        level: { type: "string", enum: ["error", "warn", "info", "debug", "trace"], description: "Nível mínimo" },
-        grep: { type: "string", description: "Substring na mensagem/target" },
-        json: { type: "boolean" },
       },
     },
     handler: async (a) => {
       const args = ["debug", "logs"];
       if (a.limit) args.push("--limit", String(a.limit));
-      if (a.level) args.push("--level", a.level);
-      if (a.grep) args.push("--grep", a.grep);
-      if (a.json) args.push("--json");
       const r = await run([...args, ...targetFlags(a)]);
       return r.ok
         ? { content: [text((r.stdout || r.stderr).trim() || "(sem logs)")] }
@@ -201,11 +194,9 @@ const tools = [
       properties: {
         action: { type: "string", enum: ["key", "text", "click", "move"] },
         key: { type: "string", description: "action=key: w, space, enter, esc, up, ctrl, f3…" },
-        shift: { type: "boolean", description: "action=key" },
         text: { type: "string", description: "action=text: string completa (typing por char)" },
         x: { type: "number", description: "action=click|move" },
         y: { type: "number", description: "action=click|move" },
-        button: { type: "string", description: "action=click: ex. 'right'" },
         world: { type: "string" },
         port: { type: "number" },
       },
@@ -216,7 +207,6 @@ const tools = [
       if (a.action === "key") {
         if (!a.key) return { content: [text("action=key exige `key`")], isError: true };
         args = ["debug", "key", a.key];
-        if (a.shift) args.push("--shift");
       } else if (a.action === "text") {
         if (a.text === undefined) return { content: [text("action=text exige `text`")], isError: true };
         args = ["debug", "text", String(a.text)];
@@ -224,7 +214,6 @@ const tools = [
         if (num(a.x) === undefined || num(a.y) === undefined)
           return { content: [text("action=click exige `x` e `y`")], isError: true };
         args = ["debug", "click", num(a.x), num(a.y)];
-        if (a.button) args.push("--button", a.button);
       } else {
         if (num(a.x) === undefined || num(a.y) === undefined)
           return { content: [text("action=move exige `x` e `y`")], isError: true };
@@ -241,12 +230,11 @@ const tools = [
     description:
       "Avalia Luau NA engine (REPL `viber.lua`): toda a API viber.debug.* (VER/MEXER/PROVAR/DESCOBRIR) + viber.* de scripts. " +
       "Globals persistem entre chamadas; `return` devolve valor. Leituras = snapshot do INÍCIO da chamada — escrever e verificar em chamadas SEPARADAS. " +
-      "API: `viber debug api` na engine. Ex.: 'viber.debug.tp(0, -20) return viber.debug.player()'",
+      "API: `vael-tools debug api` na engine. Ex.: 'viber.debug.tp(0, -20) return viber.debug.player()'",
     inputSchema: {
       type: "object",
       properties: {
         code: { type: "string", description: "Código Luau (vai por ficheiro temp — sem problemas de quoting)" },
-        json: { type: "boolean", description: "Default true: resposta completa {ok, result, applied, warnings}" },
         world: { type: "string" },
         port: { type: "number" },
       },
@@ -258,117 +246,21 @@ const tools = [
       try {
         await writeFile(file, a.code.endsWith("\n") ? a.code : a.code + "\n", "utf8");
         const args = ["debug", "lua", "--file", file];
-        if (a.json !== false) args.push("--json");
         const r = await run([...args, ...targetFlags(a)]);
         if (!r.ok) return { content: errorContent(r, "Engine a correr? viber_status primeiro."), isError: true };
         const out = (r.stdout || r.stderr).trim();
         let luaError = false;
-        if (a.json !== false) {
-          try {
-            const parsed = JSON.parse(out);
-            if (parsed && parsed.ok === false) luaError = true;
-          } catch { /* saída não-JSON: devolver crua */ }
-        }
+        try {
+          const parsed = JSON.parse(out);
+          if (parsed && parsed.ok === false) luaError = true;
+        } catch { /* saída não-JSON: devolver crua */ }
         return { content: [text(out || "(sem saída)")], isError: luaError };
       } finally {
         await rm(file, { force: true });
       }
     },
   },
-  {
-    name: "viber_scene",
-    description:
-      "Edição de cena: `viber scene <sub>` offline ou --live (engine a correr; grava + sync ao vivo + undo/redo). " +
-      "Subs: ls [SEL] [--depth], get SEL, find --tag X [--attr k=v], set SEL k=v… [--unset k] [--dry-run], " +
-      "insert PARENT '<xml>' [--index], rm SEL, mv SEL PARENT, dup SEL, undo|redo|save (só --live; save grava o " +
-      "estado vivo), pick --x N --y N [--max-distance M] (só --live: px do ecrã → nó), entities [SEL] " +
-      "(só --live: entidades vivas + pose mundo; sem SEL = todas), apply ops.json|- [--coalesce K] " +
-      "(--coalesce só --live: N applies com a mesma chave = 1 undo), " +
-      "catalog, lint [--strict] (offline: sintaxe Luau/viber.load/quest schema/nomes duplicados), " +
-      "add TAG [--parent SEL], drop GLB --at 'x y z' (MUNDO) [--parent SEL], files [--depth N]. " +
-      "Seletores: name=well ou world/village.xml#3/0. live + terreno/céu/UI/spawners = needs_reload. " +
-      "Requer binário viber rebuilt (>=2026-10-13).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        sub: { type: "string", description: "Subcomando scene (ls|get|find|set|insert|rm|mv|dup|undo|redo|save|pick|entities|apply|catalog|lint|add|drop|files)" },
-        args: { type: "array", items: { type: "string" }, description: "Argumentos posicionais do subcomando (strings exatas)" },
-        live: { type: "boolean", description: "Default true: engine a correr via bridge" },
-        world: { type: "string" },
-        port: { type: "number" },
-      },
-      required: ["sub"],
-    },
-    handler: async (a) => {
-      const args = ["scene"];
-      if (a.live !== false) args.push("--live");
-      if (a.world) args.push("--world", String(a.world));
-      if (a.port) args.push("--port", String(a.port));
-      args.push(a.sub, ...((a.args || []).map(String)));
-      const r = await run(args, 60_000);
-      return r.ok
-        ? { content: [text((r.stdout || r.stderr).trim() || "(ok)")] }
-        : {
-            content: errorContent(
-              r,
-              "`scene` exige binário rebuilt (./install.sh viber) se o instalado for anterior a 2026-10-13."
-            ),
-            isError: true,
-          };
-    },
-  },
-  cliTool(
-    "viber_tool",
-    "tool",
-    "Ferramentas geradoras: `viber tool <sub>` offline ou --live. Subs: list, scatter SEL " +
-      "(regenera o <Group generated-by> de um <Scatter id>), settle SEL [--offset m] (assenta no " +
-      "terreno atual; um grupo assenta os filhos), canonicalize [SEL] (poses canónicas, idempotente). " +
-      "Cada uma = UMA transação desfazível.",
-    "list|scatter|settle|canonicalize"
-  ),
-  cliTool(
-    "viber_terrain",
-    "terrain",
-    "Terreno pré-gerado (.ahgt + camada de pintura): `viber terrain <sub>` offline ou --live. " +
-      "Subs: sample X Z (usar '--' antes de negativos), brush MODE --at 'x z' --radius R --amount A " +
-      "(MODE raise|lower|flatten|smooth|crater|noise; --height H no flatten), paint --at 'x z' " +
-      "--radius R --layer ALIAS [--amount 0..1]. Undo exato; props não se re-assentam (viber_tool settle).",
-    "sample|brush|paint"
-  ),
 ];
-
-/// Ferramenta MCP que embrulha `viber <command> [--live] [--world] [--port] <sub> args…`.
-function cliTool(name, command, description, subs) {
-  return {
-    name,
-    description: description + " Requer binário viber rebuilt (>=2026-10-14).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        sub: { type: "string", description: `Subcomando (${subs})` },
-        args: { type: "array", items: { type: "string" }, description: "Argumentos do subcomando (strings exatas)" },
-        live: { type: "boolean", description: "Default false: ficheiros do mundo; true = engine/editor a correr" },
-        world: { type: "string" },
-        port: { type: "number" },
-      },
-      required: ["sub"],
-    },
-    handler: async (a) => {
-      const args = [command];
-      if (a.live === true) args.push("--live");
-      if (a.world) args.push("--world", String(a.world));
-      if (a.port) args.push("--port", String(a.port));
-      args.push(a.sub, ...((a.args || []).map(String)));
-      const r = await run(args, 120_000);
-      return r.ok
-        ? { content: [text((r.stdout || r.stderr).trim() || "(ok)")] }
-        : {
-            content: errorContent(r, `\`${command}\` exige binário rebuilt (./install.sh viber).`),
-            isError: true,
-          };
-    },
-  };
-}
 
 const toolMap = new Map(tools.map((t) => [t.name, t]));
 
@@ -456,4 +348,4 @@ process.stdin.on("end", () => {
   maybeExit();
 });
 
-process.stderr.write(`[viber-mcp] up — binário: ${VIBER_BIN}\n`);
+process.stderr.write(`[vael-tools-mcp] up — binário: ${VAEL_TOOLS_BIN}\n`);

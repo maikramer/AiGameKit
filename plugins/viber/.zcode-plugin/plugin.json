@@ -1,7 +1,7 @@
 {
   "name": "viber",
-  "version": "0.1.0",
-  "description": "Viber (engine nativa Bevy do AiGameKit) para agentes ZCode: autorar mundos declarativos XML+Luau e QA vivo via debug bridge — worlds authoring, live QA, screenshot, scene editing.",
+  "version": "0.2.0",
+  "description": "Vael (Bevy) para agentes ZCode: análise do mundo .bsn e QA vivo via debug bridge — screenshots, burst, árvore, logs, input e REPL Luau pelo CLI vael-tools.",
   "author": { "name": "AiGameKit" },
   "license": "MIT",
   "skills": "skills",
@@ -11,16 +11,16 @@
       "type": "stdio",
       "command": "node",
       "args": ["${ZCODE_PLUGIN_ROOT}/scripts/server.mjs"],
-      "env": { "VIBER_BIN": "${user_config.viberBin}" },
+      "env": { "VAEL_TOOLS_BIN": "${user_config.vaelToolsBin}" },
       "cwd": "${ZCODE_PROJECT_DIR}"
     }
   },
   "userConfig": {
-    "viberBin": {
+    "vaelToolsBin": {
       "type": "string",
-      "default": "viber",
-      "title": "Binário viber",
-      "description": "Caminho do CLI viber (default: viber no PATH; ex. ~/.local/bin/viber)"
+      "default": "vael-tools",
+      "title": "Binário vael-tools",
+      "description": "Caminho do CLI vael-tools (default: vael-tools no PATH; ex. ~/.local/bin/vael-tools)"
     }
   }
 }
