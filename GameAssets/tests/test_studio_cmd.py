@@ -126,7 +126,9 @@ def test_studio_check_initial_state(runner: CliRunner, project: Path) -> None:
     assert payload["refine"]["views"] == ["front"]
     assert payload["artifacts"]["shape"]["exists"] is False
     assert payload["lock"] is None
-    assert payload["tools"]["text3d"]
+    # O contrato é a CHAVE existir (o valor é o caminho resolvido ou None);
+    # a CI não tem os CLIs do AiGameKit instalados no job do GameAssets.
+    assert "text3d" in payload["tools"]
 
 
 def test_studio_check_master_state_progression(runner: CliRunner, project: Path) -> None:
