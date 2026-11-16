@@ -1186,9 +1186,11 @@ def dream_explain_cmd(plan_json: Path, max_assets: int, as_json: bool) -> None:
 # --- Register extracted commands ---
 from .batch_cmd import batch_cmd  # noqa: E402
 from .resume_cmd import resume_cmd  # noqa: E402
+from .studio_cmd import studio_group  # noqa: E402
 
 main.add_command(batch_cmd)
 main.add_command(resume_cmd)
+main.add_command(studio_group)
 
 
 if __name__ == "__main__":
