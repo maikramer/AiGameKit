@@ -1,0 +1,49 @@
+[workspace]
+members = ["crates/studio_core", "crates/studio_app"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT OR Apache-2.0"
+authors = ["Maikeu Locatelli"]
+repository = "https://github.com/maikramer/AiGameKit"
+
+[workspace.dependencies]
+# Bevy 0.20.1 é o pin da família bevy_ext_* (../bevy_extensions).
+bevy = { version = "0.20.1", features = ["basis-universal"] }
+bevy_egui = "0.43"
+egui_extras = "0.36"
+egui-file-dialog = "0.15"
+
+# Decoder GLB (meshopt + KHR_mesh_quantization + KHR_texture_basisu) do
+# checkout irmão. Não está publicado no crates.io.
+bevy_ext_gltf = { path = "../../bevy_extensions/crates/bevy_ext_gltf" }
+
+studio_core = { path = "crates/studio_core" }
+
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+crossbeam-channel = "0.5"
+directories = "6"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+libc = "0.2"
+parking_lot = "0.12"
+rand = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+thiserror = "2"
+toml = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+unicode-normalization = "0.1"
+
+# `dev` com debug mínimo: o target do Bevy cresce depressa e a app não precisa
+# de DWARF completo para iterar.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

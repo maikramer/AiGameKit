@@ -23,6 +23,8 @@ dist/
 build/
 pip-wheel-metadata/
 # Rust — artefactos de build do Materialize (o crate tem o seu .gitignore local)
+# AiGameKit Studio (crate Rust do frontend): o `target/` passa dos 4 GB.
+Studio/target/
 
 # Test & quality
 .pytest_cache/
