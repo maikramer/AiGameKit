@@ -87,8 +87,7 @@ def resolve_and_get_engine(
         if opts.engine == "starvector":
             raise SvgEngineUnavailable("StarVector indisponível neste ambiente")
         raise SvgEngineUnavailable(
-            "nem VTracer nem StarVector estão disponíveis — instala `vtracer` "
-            "ou corre `text2d doctor`."
+            "nem VTracer nem StarVector estão disponíveis — instala `vtracer` ou corre `text2d doctor`."
         )
     return resolved, get_engine(
         resolved,
@@ -111,13 +110,11 @@ def render_svg(
 
     resolved = opts.engine
     if resolved == "auto":
-        resolved = getattr(engine, "name", None) if engine is not None else resolve_engine(
-            opts.engine, category=category
+        resolved = (
+            getattr(engine, "name", None) if engine is not None else resolve_engine(opts.engine, category=category)
         )
     if engine is None:
-        resolved, engine = resolve_and_get_engine(
-            opts, category=category, verbose=verbose
-        )
+        resolved, engine = resolve_and_get_engine(opts, category=category, verbose=verbose)
 
     if resolved == "vtracer":
         raw = trace_image(image, opts)

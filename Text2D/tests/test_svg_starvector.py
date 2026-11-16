@@ -28,8 +28,7 @@ class _FakeModel:
     def generate_im2svg(self, batch, **kwargs):
         self.calls.append((batch, kwargs))
         return [
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-            '<path d="M4 4 L60 60" fill="#1e78f0"/></svg>'
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M4 4 L60 60" fill="#1e78f0"/></svg>'
         ]
 
 

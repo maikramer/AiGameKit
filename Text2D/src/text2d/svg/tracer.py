@@ -19,8 +19,7 @@ def _import_vtracer():
         import vtracer  # type: ignore
     except ImportError as exc:  # pragma: no cover - exercised on machines without it
         raise SvgEngineUnavailable(
-            "vtracer não está instalado — instala com `pip install vtracer` "
-            "ou usa `--svg-engine starvector`."
+            "vtracer não está instalado — instala com `pip install vtracer` ou usa `--svg-engine starvector`."
         ) from exc
     return vtracer
 
@@ -55,9 +54,7 @@ def _pick_sentinel(image: Image.Image) -> tuple[int, int, int]:
     return (255, 0, 255)
 
 
-def prepare_raster(
-    image: Image.Image, opts: SvgOptions
-) -> tuple[Image.Image, tuple[int, int, int] | None, bool]:
+def prepare_raster(image: Image.Image, opts: SvgOptions) -> tuple[Image.Image, tuple[int, int, int] | None, bool]:
     """Prepara o raster e devolve ``(imagem, cor_de_fundo, exigir_canvas)``.
 
     Para imagens com alpha, o VTracer achata a transparência numa cor. Em vez
@@ -111,9 +108,7 @@ def trace_params(opts: SvgOptions) -> dict[str, Any]:
 def _path_covers_canvas(d: str, canvas: tuple[int, int]) -> bool:
     width, height = canvas
     head = d[:240].replace(",", " ")
-    return head.lstrip().startswith("M0 0") and (
-        f"{width} {height}" in head or f"{height} {width}" in head
-    )
+    return head.lstrip().startswith("M0 0") and (f"{width} {height}" in head or f"{height} {width}" in head)
 
 
 def strip_background_paths(
@@ -150,16 +145,12 @@ def trace_image(image: Image.Image, opts: SvgOptions) -> str:
     prepared.save(buffer, format="PNG")
     params = trace_params(opts)
     try:
-        svg = vtracer.convert_raw_image_to_svg(
-            buffer.getvalue(), img_format="png", **params
-        )
+        svg = vtracer.convert_raw_image_to_svg(buffer.getvalue(), img_format="png", **params)
     except TypeError:
         # Wheels antigos não aceitam ``hierarchical``/``path_precision``.
         params.pop("hierarchical", None)
         params.pop("path_precision", None)
-        svg = vtracer.convert_raw_image_to_svg(
-            buffer.getvalue(), img_format="png", **params
-        )
+        svg = vtracer.convert_raw_image_to_svg(buffer.getvalue(), img_format="png", **params)
 
     if background is not None:
         svg = strip_background_paths(

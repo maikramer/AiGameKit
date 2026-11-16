@@ -129,8 +129,7 @@ def test_generate_starvector_sends_a_vectorize_payload(tmp_path, runner, patched
         captured["backend"] = backend
         captured["payload"] = payload
         Path(payload["output"]).write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-            '<path d="M0 0 L64 64" fill="#1e78f0"/></svg>'
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M0 0 L64 64" fill="#1e78f0"/></svg>'
         )
         return True
 
@@ -181,8 +180,7 @@ def test_vectorize_starvector_sends_a_payload(tmp_path, runner, monkeypatch):
         captured["backend"] = backend
         captured["payload"] = payload
         Path(payload["output"]).write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">'
-            '<path d="M0 0 L48 48" fill="#1e78f0"/></svg>'
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M0 0 L48 48" fill="#1e78f0"/></svg>'
         )
         return True
 

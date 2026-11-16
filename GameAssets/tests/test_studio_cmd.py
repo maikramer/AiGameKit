@@ -215,13 +215,9 @@ def test_studio_invalidate_shape_keeps_new_shape(runner: CliRunner, project: Pat
         assert not paths[name].exists(), name
 
 
-def test_studio_invalidate_include_stage_removes_the_stage_itself(
-    runner: CliRunner, project: Path
-) -> None:
+def test_studio_invalidate_include_stage_removes_the_stage_itself(runner: CliRunner, project: Path) -> None:
     paths = _write_all_artifacts(project)
-    payload = _invoke(
-        runner, project, "invalidate", "--from", "paint", "--include-stage"
-    )
+    payload = _invoke(runner, project, "invalidate", "--from", "paint", "--include-stage")
     assert payload["include_stage"] is True
     assert str(paths["painted"]) in payload["deleted"]
 
@@ -236,9 +232,7 @@ def test_studio_invalidate_include_stage_removes_the_stage_itself(
     assert not paths["collision"].exists()
 
 
-def test_studio_invalidate_include_stage_shape_removes_sidecar(
-    runner: CliRunner, project: Path
-) -> None:
+def test_studio_invalidate_include_stage_shape_removes_sidecar(runner: CliRunner, project: Path) -> None:
     paths = _write_all_artifacts(project)
     _invoke(runner, project, "invalidate", "--from", "shape", "--include-stage")
 

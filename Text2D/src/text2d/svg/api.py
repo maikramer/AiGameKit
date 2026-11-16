@@ -28,10 +28,7 @@ def render_preview(svg: str, output_path: Path, *, size: int = 512) -> str | Non
     try:
         import cairosvg  # type: ignore
     except ImportError:
-        return (
-            "preview pedido mas cairosvg não está instalado "
-            "(`pip install 'text2d[svg-preview]'`)"
-        )
+        return "preview pedido mas cairosvg não está instalado (`pip install 'text2d[svg-preview]'`)"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     png = cairosvg.svg2png(
@@ -101,13 +98,9 @@ def save_svg(
 
     if opts.preview:
         size = max(int(width or 512), int(height or 512))
-        preview_warning = render_preview(
-            svg, output.with_name(f"{output.stem}_preview.png"), size=size
-        )
+        preview_warning = render_preview(svg, output.with_name(f"{output.stem}_preview.png"), size=size)
         if preview_warning:
-            result.warning = (
-                f"{result.warning}; {preview_warning}" if result.warning else preview_warning
-            )
+            result.warning = f"{result.warning}; {preview_warning}" if result.warning else preview_warning
 
     if opts.meta:
         write_svg_meta(output, result)
@@ -137,9 +130,7 @@ def vectorize_file(
         if not opts.transparent and image_has_alpha(image):
             opts = replace(opts, transparent=True)
         width, height = image.size
-        raw, engine_meta = render_svg(
-            image, opts, engine=engine, category=None, verbose=verbose
-        )
+        raw, engine_meta = render_svg(image, opts, engine=engine, category=None, verbose=verbose)
 
     return save_svg(
         raw,

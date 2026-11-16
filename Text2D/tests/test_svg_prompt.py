@@ -7,10 +7,7 @@ from text2d.svg.prompt import enhance_prompt_for_svg
 
 
 def test_replaces_raster_terms_and_preserves_subject_and_avoid():
-    prompt = (
-        "hand-painted game art, visible brush strokes, a blue dash swirl, "
-        "Avoid: realistic, gore"
-    )
+    prompt = "hand-painted game art, visible brush strokes, a blue dash swirl, Avoid: realistic, gore"
     out = enhance_prompt_for_svg(prompt, style="flat", colors=8)
 
     assert "brush strokes" not in out.lower()

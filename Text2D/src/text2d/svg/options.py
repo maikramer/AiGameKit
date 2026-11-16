@@ -14,6 +14,7 @@ SVG_DETAILS = ("low", "medium", "high")
 class SvgEngineUnavailable(RuntimeError):
     """O motor pedido não está instalado/cacheado neste ambiente."""
 
+
 # Hints de prompt por estilo (ver ``svg.prompt``).
 STYLE_HINTS: dict[str, str] = {
     "flat": (

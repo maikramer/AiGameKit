@@ -134,11 +134,7 @@ def _svg_stage(
     from .svg.api import vectorize_file
     from .svg.engines import get_engine, resolve_engine, starvector_available
 
-    pairs = [
-        (Path(image), Path(svg))
-        for image, svg in zip(images, svg_paths, strict=True)
-        if Path(image).is_file()
-    ]
+    pairs = [(Path(image), Path(svg)) for image, svg in zip(images, svg_paths, strict=True) if Path(image).is_file()]
     if not pairs:
         return []
 
@@ -266,18 +262,10 @@ def _batch_svg_entries(
 
     entries: list[dict[str, Any]] = []
     for idx in range(max(1, int(num_images))):
-        raster = (
-            raster_path
-            if idx == 0
-            else raster_path.with_name(f"{raster_path.stem}_{idx}{raster_path.suffix}")
-        )
+        raster = raster_path if idx == 0 else raster_path.with_name(f"{raster_path.stem}_{idx}{raster_path.suffix}")
         if not raster.is_file():
             continue
-        svg = (
-            svg_path
-            if idx == 0
-            else svg_path.with_name(f"{svg_path.stem}_{idx}{svg_path.suffix}")
-        )
+        svg = svg_path if idx == 0 else svg_path.with_name(f"{svg_path.stem}_{idx}{svg_path.suffix}")
         entries.append(
             {
                 "id": item_id,
@@ -319,9 +307,7 @@ def _batch_svg_pass(
         opts: SvgOptions = entry["opts"]
         svg_path: Path = entry["svg_path"]
         if not force and svg_path.is_file():
-            emit_result(
-                entry["id"], TOOL_TEXT2D, STATUS_SKIPPED, phase="svg", output=str(svg_path)
-            )
+            emit_result(entry["id"], TOOL_TEXT2D, STATUS_SKIPPED, phase="svg", output=str(svg_path))
             continue
         resolved = resolve_engine(opts.engine, category=entry.get("category"))
         if resolved == "starvector":
@@ -343,9 +329,7 @@ def _batch_svg_pass(
         )
 
     def _err(entry: dict[str, Any], exc: Exception) -> None:
-        emit_result(
-            entry["id"], TOOL_TEXT2D, STATUS_ERROR, phase="svg", error=str(exc)
-        )
+        emit_result(entry["id"], TOOL_TEXT2D, STATUS_ERROR, phase="svg", error=str(exc))
 
     for entry in vtracer_entries:
         started = time.time()
@@ -980,11 +964,7 @@ def generate_cmd(
             if output is None:
                 ensure_dirs()
                 output = str((DEFAULT_IMAGE_DIR / f"{safe}_{int(time.time())}.png").resolve())
-            svg_path = (
-                Path(svg_output).resolve()
-                if svg_output
-                else Path(output).resolve().with_suffix(".svg")
-            )
+            svg_path = Path(svg_output).resolve() if svg_output else Path(output).resolve().with_suffix(".svg")
 
         if svg_enhance:
             prompt = enhance_prompt_for_svg(prompt, style=svg_style, colors=svg_colors)
@@ -1236,8 +1216,7 @@ def generate_cmd(
         svg_results: list[dict[str, Any]] = []
         if svg_requested and svg_opts is not None and svg_path is not None:
             raster_paths = [out_path] + [
-                out_path.with_name(f"{out_path.stem}_{idx}{out_path.suffix}")
-                for idx in range(1, max(1, num_images))
+                out_path.with_name(f"{out_path.stem}_{idx}{out_path.suffix}") for idx in range(1, max(1, num_images))
             ]
             raster_paths = [path for path in raster_paths if path.is_file()]
             # Liberta o FLUX antes do StarVector; para VTracer é inofensivo.
@@ -1413,9 +1392,7 @@ def vectorize_cmd(
     if engine == "starvector" and not no_vramd:
         from aigamekit_shared.cli_helpers import try_vramd_delegation
 
-        payload = build_vectorize_request(
-            image=source, output=destination, opts=opts, gpu_ids=gpu_ids
-        )
+        payload = build_vectorize_request(image=source, output=destination, opts=opts, gpu_ids=gpu_ids)
         if try_vramd_delegation(
             "text2svg",
             payload,
@@ -2364,22 +2341,14 @@ def generate_batch_cmd(
                     raster_path = requested_path.with_suffix(".png")
                 else:
                     svg_path = (
-                        Path(item["svg_output"])
-                        if item.get("svg_output")
-                        else requested_path.with_suffix(".svg")
+                        Path(item["svg_output"]) if item.get("svg_output") else requested_path.with_suffix(".svg")
                     )
 
             prompt = raw_prompt
             if svg_requested_item and svg_enhance and item_svg_opts is not None:
-                prompt = enhance_prompt_for_svg(
-                    prompt, style=item_svg_opts.style, colors=item_svg_opts.colors
-                )
+                prompt = enhance_prompt_for_svg(prompt, style=item_svg_opts.style, colors=item_svg_opts.colors)
 
-            raster_rel = (
-                raster_path.relative_to(out_root)
-                if raster_path.is_relative_to(out_root)
-                else raster_path
-            )
+            raster_rel = raster_path.relative_to(out_root) if raster_path.is_relative_to(out_root) else raster_path
 
             if not force and raster_path.is_file():
                 emit_result(item_id, TOOL_TEXT2D, STATUS_SKIPPED, output=str(raster_rel))
@@ -2564,9 +2533,7 @@ def generate_batch_cmd(
                     part_path = (
                         it["raster_path"]
                         if idx == 0
-                        else it["raster_path"].with_name(
-                            f"{it['raster_path'].stem}_{idx}{it['raster_path'].suffix}"
-                        )
+                        else it["raster_path"].with_name(f"{it['raster_path'].stem}_{idx}{it['raster_path'].suffix}")
                     )
                     KleinFluxGenerator.save_image(img, part_path, image_format=img_format)
                 emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=100)

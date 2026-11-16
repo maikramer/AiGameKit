@@ -568,9 +568,7 @@ def _stage_own_artifacts(paths: dict[str, Path], stage: str) -> list[Path]:
     return out
 
 
-def _downstream_stage_paths(
-    paths: dict[str, Path], stage: str, *, include_stage: bool = False
-) -> list[Path]:
+def _downstream_stage_paths(paths: dict[str, Path], stage: str, *, include_stage: bool = False) -> list[Path]:
     """Ficheiros a apagar para invalidar a jusante da etapa ``stage``.
 
     O artefacto da própria etapa fica (é o resultado novo do re-roll). Com
@@ -769,9 +767,7 @@ def _downstream_stage_paths(
     return out
 
 
-def _invalidate_payload(
-    project_dir: Path, stage: str, *, include_stage: bool = False
-) -> dict[str, Any]:
+def _invalidate_payload(project_dir: Path, stage: str, *, include_stage: bool = False) -> dict[str, Any]:
     project_dir = project_dir.resolve()
     profile, row, _preset, _profile_path, _manifest_path = _load_context(project_dir)
     paths = _artifact_paths(profile, project_dir, row)
@@ -860,9 +856,7 @@ def invalidate_cmd(
 ) -> None:
     """Apaga os derivados de uma etapa (o artefacto da etapa fica, salvo --include-stage)."""
     try:
-        payload = _invalidate_payload(
-            project_dir, from_stage.lower(), include_stage=include_stage
-        )
+        payload = _invalidate_payload(project_dir, from_stage.lower(), include_stage=include_stage)
     except Exception as exc:
         if as_json:
             click.echo(json.dumps({"version": STUDIO_VERSION, "error": str(exc)}))

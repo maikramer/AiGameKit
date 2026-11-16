@@ -58,9 +58,7 @@ def test_strip_background_paths_removes_sentinel_only():
         '<path d="M1 1 L9 9" fill="#123456"/>'
         "</svg>"
     )
-    stripped = strip_background_paths(
-        svg, (255, 0, 255), canvas=(10, 10), require_canvas=False
-    )
+    stripped = strip_background_paths(svg, (255, 0, 255), canvas=(10, 10), require_canvas=False)
     assert "#123456" in stripped
     assert "#FD00FE" not in stripped
 

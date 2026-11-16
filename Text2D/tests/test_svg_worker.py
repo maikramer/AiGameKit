@@ -29,8 +29,7 @@ class _FakeStarVector:
 
     def vectorize(self, image, opts) -> str:
         return (
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">'
-            '<path d="M4 4 L44 44" fill="#1e78f0"/></svg>'
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M4 4 L44 44" fill="#1e78f0"/></svg>'
         )
 
     def unload(self) -> None:

@@ -33,6 +33,8 @@ exclude = [
     "Text3D/src/text3d/hy3dshape",
     "Terrain3D/src/terrain3d/vendor",
     "Motion3D/src/motion3d/vendor",
+    # StarVector-1B do backend `text2svg` (cópia do upstream, não se edita).
+    "Text2D/src/text2d/svg/vendor",
     # Vendored (AGENTS.md): não editar nem formatar.
     "Paint3D/src/paint3d/hy3dpaint",
     "Paint3D/src/paint3d/hunyuan3d-2.1",
