@@ -11,9 +11,7 @@ use crossbeam_channel::{TryRecvError, bounded};
 use studio_core::{
     check::CheckPayload,
     cli::{CmdSpec, run_capture},
-    events::{
-        PipelineEvent, Stream, parse_run_log, stage_failures, stage_timings,
-    },
+    events::{PipelineEvent, Stream, parse_run_log, stage_failures, stage_timings},
     motion,
     project::{self, StudioProject},
     reroll::{self, Stage},
@@ -21,16 +19,23 @@ use studio_core::{
 };
 
 use crate::{
-    preview::{LoadRequest, PreviewCommand, PreviewState},
+    preview::{
+        LoadRequest, PreviewCommand, PreviewState,
+        thumbs::{ThumbnailRequest, ThumbnailState},
+    },
     state::*,
 };
 
 pub struct StudioPlugin {
     pub initial_project: Option<PathBuf>,
+    pub auto_run: bool,
 }
 
 #[derive(Resource, Default)]
-pub struct InitialProject(pub Option<PathBuf>);
+pub struct InitialProject {
+    pub path: Option<PathBuf>,
+    pub auto_run: bool,
+}
 
 #[derive(Resource, Default)]
 struct PreviewSync {
@@ -42,7 +47,10 @@ impl Plugin for StudioPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(StudioState::default())
             .insert_resource(PendingActions::default())
-            .insert_resource(InitialProject(self.initial_project.clone()))
+            .insert_resource(InitialProject {
+                path: self.initial_project.clone(),
+                auto_run: self.auto_run,
+            })
             .insert_resource(PreviewSync::default())
             .init_resource::<CheckWorker>()
             .init_resource::<JobWorker>()
@@ -64,6 +72,7 @@ impl Plugin for StudioPlugin {
                     auto_check,
                     auto_vramd,
                     sync_preview,
+                    auto_thumbnail,
                     expire_toasts,
                 )
                     .chain(),
@@ -78,8 +87,11 @@ fn setup_studio(
     mut actions: ResMut<PendingActions>,
 ) {
     refresh_library(&mut state);
-    if let Some(dir) = initial.0.clone() {
+    if let Some(dir) = initial.path.clone() {
         actions.push(Action::OpenProject(dir));
+        if initial.auto_run {
+            actions.push(Action::Run);
+        }
     } else if state.project.is_none() {
         state.tab = MainTab::Library;
     }
@@ -98,10 +110,7 @@ fn open_project(state: &mut StudioState, dir: PathBuf) {
             state.set_project(project);
             state.tab = MainTab::Studio;
             state.dirty = false;
-            state.push_log(
-                LogKind::Info,
-                format!("projeto aberto: {}", dir.display()),
-            );
+            state.push_log(LogKind::Info, format!("projeto aberto: {}", dir.display()));
         }
         Err(err) => state.toast(ToastKind::Error, err.to_string()),
     }
@@ -111,9 +120,7 @@ fn save_project(state: &StudioState) -> Result<(), String> {
     let Some(project) = state.project.as_ref() else {
         return Err("sem projeto".into());
     };
-    project
-        .save_config()
-        .map_err(|err| err.to_string())
+    project.save_config().map_err(|err| err.to_string())
 }
 
 fn copy_reference(project: &StudioProject, reference: &Path) -> Result<(), String> {
@@ -245,18 +252,25 @@ fn start_run(state: &mut StudioState) {
         state.toast(ToastKind::Warn, "já há um run ativo");
         return;
     }
+    if state.check.is_none() {
+        state.pending_run = true;
+        return;
+    }
+    state.pending_run = false;
     if let Some(lock) = state.lock_live() {
-        state.toast(
-            ToastKind::Warn,
-            format!("lock ativo (pid {:?})", lock.pid),
-        );
+        state.toast(ToastKind::Warn, format!("lock ativo (pid {:?})", lock.pid));
         return;
     }
     if project.config.has_errors() {
-        state.toast(ToastKind::Error, "config inválida; aplica/verifica primeiro");
+        state.toast(
+            ToastKind::Error,
+            "config inválida; aplica/verifica primeiro",
+        );
         return;
     }
-    let reserve = state.cli.resume(&project, state.gpu, project.config.run.fail_fast);
+    let reserve = state
+        .cli
+        .resume(&project, state.gpu, project.config.run.fail_fast);
     let (tx, rx) = bounded(8192);
     state.push_log(LogKind::Tool, format!("$ {}", reserve.spec.display()));
     match runner::spawn(reserve.spec, tx) {
@@ -392,6 +406,51 @@ fn sync_preview(
     });
 }
 
+fn auto_thumbnail(
+    state: Res<StudioState>,
+    preview: Res<PreviewState>,
+    thumbs: Res<ThumbnailState>,
+    mut request: ResMut<ThumbnailRequest>,
+    mut ui: ResMut<UiState>,
+) {
+    if state.run.is_busy() || request.source.is_some() || thumbs.active.is_some() {
+        return;
+    }
+    if let Some(last) = thumbs.last_attempt {
+        if last.elapsed().as_secs() < 10 {
+            return;
+        }
+    }
+    let Some(project) = state.project.as_ref() else {
+        return;
+    };
+    let Some(loaded) = preview.loaded.as_ref() else {
+        return;
+    };
+    if !matches!(
+        loaded.artifact.as_str(),
+        "lod0" | "painted" | "animated" | "rigged"
+    ) {
+        return;
+    }
+    let cover = project.cover_path();
+    let source_time = fs::metadata(&loaded.source)
+        .and_then(|meta| meta.modified())
+        .ok();
+    let cover_time = fs::metadata(&cover).and_then(|meta| meta.modified()).ok();
+    let force = ui.force_thumb;
+    if !force {
+        if let (Some(source_time), Some(cover_time)) = (source_time, cover_time) {
+            if cover_time >= source_time {
+                return;
+            }
+        }
+    }
+    request.source = Some(loaded.source.clone());
+    request.out = Some(cover);
+    ui.force_thumb = false;
+}
+
 fn expire_toasts(mut state: ResMut<StudioState>) {
     let now = Instant::now();
     state.toasts.retain(|toast| toast.until > now);
@@ -435,7 +494,14 @@ fn execute_actions(
             break;
         };
         match action {
-            Action::Run => start_run(&mut state),
+            Action::Run => {
+                if state.check.is_none() {
+                    state.pending_run = true;
+                    start_check(&state, &mut check_worker);
+                } else {
+                    start_run(&mut state);
+                }
+            }
             Action::Cancel => {
                 if let Some(handle) = state.run.handle.as_ref() {
                     handle.cancel();
@@ -446,6 +512,53 @@ fn execute_actions(
             Action::Reroll(stage) => {
                 let run_after = true;
                 reroll_stage(&mut state, &mut check_worker, stage, run_after);
+            }
+            Action::CompareHistory(stage) => {
+                let Some(project) = state.project.clone() else {
+                    continue;
+                };
+                let Some(entry) = studio_core::reroll::list_history(&project, stage)
+                    .into_iter()
+                    .next()
+                else {
+                    state.toast(ToastKind::Info, "sem histórico para esta etapa");
+                    continue;
+                };
+                let path = studio_core::reroll::history_file(&entry, &state.selected)
+                    .map(Path::to_path_buf)
+                    .or_else(|| {
+                        entry
+                            .files
+                            .iter()
+                            .find(|path| {
+                                path.extension()
+                                    .and_then(|ext| ext.to_str())
+                                    .is_some_and(|ext| ext.eq_ignore_ascii_case("glb"))
+                            })
+                            .cloned()
+                    });
+                let Some(path) = path else {
+                    state.toast(ToastKind::Warn, "histórico sem GLB");
+                    continue;
+                };
+                state.preview_override = Some(format!("history:{}", stage.key()));
+                preview_command.load = Some(LoadRequest {
+                    source: path,
+                    artifact: format!("history:{}", stage.key()),
+                    clip: None,
+                });
+            }
+            Action::ReloadPreview => {
+                state.preview_override = None;
+                if let Some(path) = state.artifact_path(&state.selected) {
+                    preview_command.load = Some(LoadRequest {
+                        source: path,
+                        artifact: state.selected.clone(),
+                        clip: None,
+                    });
+                } else {
+                    preview_command.clear = true;
+                }
             }
             Action::InvalidateFrom(stage) => {
                 let Some(project) = state.project.clone() else {
@@ -589,7 +702,11 @@ fn execute_actions(
                 let Some(project) = state.project.clone() else {
                     continue;
                 };
-                if !project.config.pipeline.has(studio_core::config::PipelineStage::Animate) {
+                if !project
+                    .config
+                    .pipeline
+                    .has(studio_core::config::PipelineStage::Animate)
+                {
                     state.toast(
                         ToastKind::Warn,
                         "ativa a etapa Animação no pipeline para empacotar",
@@ -610,10 +727,13 @@ fn execute_actions(
                     .collect();
                 let active = names[0].clone();
                 let out = project.animated_path();
-                let spec =
-                    state
-                        .cli
-                        .motion_pack(&project, &project.rigged_path(), &out, &motions, &active);
+                let spec = state.cli.motion_pack(
+                    &project,
+                    &project.rigged_path(),
+                    &out,
+                    &motions,
+                    &active,
+                );
                 start_job(
                     &mut job_worker,
                     &mut state,
@@ -644,7 +764,7 @@ fn execute_actions(
                 start_job(&mut job_worker, &mut state, JobKind::Doctor, spec);
             }
             Action::BakeThumbnail => {
-                state.toast(ToastKind::Info, "thumbnail bake ainda por ligar");
+                ui.force_thumb = true;
             }
             Action::RefreshLibrary => refresh_library(&mut state),
             Action::SetReference(path) => {
@@ -694,7 +814,10 @@ fn reroll_stage(
             if !outcome.invalidate.failed.is_empty() {
                 state.push_log(
                     LogKind::Warn,
-                    format!("{} ficheiro(s) não apagados", outcome.invalidate.failed.len()),
+                    format!(
+                        "{} ficheiro(s) não apagados",
+                        outcome.invalidate.failed.len()
+                    ),
                 );
             }
             state.stage_errors.remove(stage.key());
@@ -727,6 +850,14 @@ fn poll_check_worker(mut state: ResMut<StudioState>, mut worker: ResMut<CheckWor
                     state.check = Some(payload);
                     state.check_error = None;
                     state.select_default_artifact();
+                    if state.pending_run && !state.run.is_busy() {
+                        state.pending_run = false;
+                        if state.lock_live().is_none() {
+                            start_run(&mut state);
+                        } else {
+                            state.toast(ToastKind::Warn, "lock ativo; o run fica para depois");
+                        }
+                    }
                 }
                 Err(err) => {
                     state.check_error = Some(err.clone());
@@ -980,10 +1111,7 @@ fn pump_run_events(mut state: ResMut<StudioState>, mut actions: ResMut<PendingAc
 fn parse_phase(line: &str) -> Option<String> {
     let index = line.find("Fase ")?;
     let rest = &line[index + 5..];
-    let after_colon = rest
-        .split_once(':')
-        .map(|(_, tail)| tail)
-        .unwrap_or(rest);
+    let after_colon = rest.split_once(':').map(|(_, tail)| tail).unwrap_or(rest);
     let name = after_colon.split('(').next().unwrap_or(after_colon).trim();
     (!name.is_empty()).then(|| name.to_string())
 }

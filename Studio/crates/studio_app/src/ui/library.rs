@@ -91,62 +91,62 @@ fn card(ui: &mut egui::Ui, cx: &mut UiCtx, project: &studio_core::project::Proje
         .fill(theme::PANEL)
         .inner_margin(egui::Margin::same(8))
         .show(ui, |ui| {
-            ui.set_width(230.0);
-            let cover = project.dir.join(".studio").join("thumbs").join("cover.png");
-            let size = egui::vec2(214.0, 128.0);
-            if let Some(handle) = texture_for(ui.ctx(), &cover, cx.textures) {
-                let fit = fit_size(&handle, size);
-                ui.add(egui::Image::new(egui::load::SizedTexture::new(
-                    handle.id(),
-                    fit,
-                )));
-            } else {
-                let (rect, _) =
-                    ui.allocate_exact_size(size, egui::Sense::hover());
-                ui.painter()
-                    .rect_filled(rect, 4.0, theme::PANEL_HIGH);
-                ui.painter().text(
-                    rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    "sem thumbnail",
-                    egui::FontId::proportional(12.0),
-                    theme::MUTED,
-                );
-            }
-            ui.add_space(4.0);
-            ui.label(egui::RichText::new(&project.id).strong().size(13.0));
-            ui.label(theme::chip(project.category.clone(), theme::MUTED));
-            let idea = if project.idea.chars().count() > 90 {
-                format!("{}…", project.idea.chars().take(90).collect::<String>())
-            } else {
-                project.idea.clone()
-            };
-            ui.label(theme::muted(idea));
-            if let Some(modified) = project.modified {
-                if let Ok(elapsed) = modified.elapsed() {
-                    let secs = elapsed.as_secs();
-                    let label = if secs < 90 {
-                        format!("{secs}s")
-                    } else if secs < 5400 {
-                        format!("{}min", secs / 60)
-                    } else if secs < 172800 {
-                        format!("{}h", secs / 3600)
-                    } else {
-                        format!("{}d", secs / 86400)
-                    };
-                    ui.label(theme::muted(format!("há {label}")));
+            ui.vertical(|ui| {
+                ui.set_width(230.0);
+                let cover = project.dir.join(".studio").join("thumbs").join("cover.png");
+                let size = egui::vec2(214.0, 128.0);
+                if let Some(handle) = texture_for(ui.ctx(), &cover, cx.textures) {
+                    let fit = fit_size(&handle, size);
+                    ui.add(egui::Image::new(egui::load::SizedTexture::new(
+                        handle.id(),
+                        fit,
+                    )));
+                } else {
+                    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 4.0, theme::PANEL_HIGH);
+                    ui.painter().text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "sem thumbnail",
+                        egui::FontId::proportional(12.0),
+                        theme::MUTED,
+                    );
                 }
-            }
-            ui.horizontal(|ui| {
-                if ui.button("Abrir").clicked() {
-                    cx.actions.push(Action::OpenProject(project.dir.clone()));
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(&project.id).strong().size(13.0));
+                ui.label(theme::chip(project.category.clone(), theme::MUTED));
+                let idea = if project.idea.chars().count() > 90 {
+                    format!("{}…", project.idea.chars().take(90).collect::<String>())
+                } else {
+                    project.idea.clone()
+                };
+                ui.label(theme::muted(idea));
+                if let Some(modified) = project.modified {
+                    if let Ok(elapsed) = modified.elapsed() {
+                        let secs = elapsed.as_secs();
+                        let label = if secs < 90 {
+                            format!("{secs}s")
+                        } else if secs < 5400 {
+                            format!("{}min", secs / 60)
+                        } else if secs < 172800 {
+                            format!("{}h", secs / 3600)
+                        } else {
+                            format!("{}d", secs / 86400)
+                        };
+                        ui.label(theme::muted(format!("há {label}")));
+                    }
                 }
-                if ui
-                    .button(egui::RichText::new("Apagar").color(theme::ERROR))
-                    .clicked()
-                {
-                    cx.actions.push(Action::DeleteProject(project.dir.clone()));
-                }
+                ui.horizontal(|ui| {
+                    if ui.button("Abrir").clicked() {
+                        cx.actions.push(Action::OpenProject(project.dir.clone()));
+                    }
+                    if ui
+                        .button(egui::RichText::new("Apagar").color(theme::ERROR))
+                        .clicked()
+                    {
+                        cx.actions.push(Action::DeleteProject(project.dir.clone()));
+                    }
+                });
             });
         });
 }

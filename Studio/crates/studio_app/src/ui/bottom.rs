@@ -37,10 +37,7 @@ pub fn draw(ui: &mut egui::Ui, cx: &mut UiCtx) {
                     .unwrap_or_else(|| "a correr".into()),
                 theme::ACCENT,
             ));
-            ui.label(theme::muted(format!(
-                "{:.0}s",
-                cx.state.run.elapsed_secs()
-            )));
+            ui.label(theme::muted(format!("{:.0}s", cx.state.run.elapsed_secs())));
         } else {
             ui.label(theme::muted("idle"));
         }
@@ -95,7 +92,10 @@ fn tasks(ui: &mut egui::Ui, cx: &mut UiCtx) {
         }
         if let Some(check) = cx.state.check.as_ref() {
             ui.label(theme::chip(
-                format!("{} artefacto(s)", check.artifacts.values().filter(|a| a.exists).count()),
+                format!(
+                    "{} artefacto(s)",
+                    check.artifacts.values().filter(|a| a.exists).count()
+                ),
                 theme::MUTED,
             ));
             if let Some(target) = check.asset.target_faces {
@@ -169,10 +169,8 @@ fn tasks(ui: &mut egui::Ui, cx: &mut UiCtx) {
         if ui
             .add_enabled(
                 cx.state.can_run(),
-                egui::Button::new(
-                    egui::RichText::new("Correr").strong().color(theme::BG),
-                )
-                .fill(theme::ACCENT),
+                egui::Button::new(egui::RichText::new("Correr").strong().color(theme::BG))
+                    .fill(theme::ACCENT),
             )
             .clicked()
         {
@@ -219,9 +217,7 @@ fn console(ui: &mut egui::Ui, cx: &mut UiCtx) {
     scroll.show(ui, |ui| {
         let start = cx.state.log.len().saturating_sub(800);
         for line in cx.state.log.iter().skip(start) {
-            if cx.ui.console_errors_only
-                && !matches!(line.kind, LogKind::Warn | LogKind::Error)
-            {
+            if cx.ui.console_errors_only && !matches!(line.kind, LogKind::Warn | LogKind::Error) {
                 continue;
             }
             let color = match line.kind {
@@ -279,11 +275,7 @@ fn motion(ui: &mut egui::Ui, cx: &mut UiCtx) {
             .selected_text(cx.motion_form.quality.clone())
             .show_ui(ui, |ui| {
                 for tier in ["fast", "low", "medium", "high", "highest"] {
-                    ui.selectable_value(
-                        &mut cx.motion_form.quality,
-                        tier.to_string(),
-                        tier,
-                    );
+                    ui.selectable_value(&mut cx.motion_form.quality, tier.to_string(), tier);
                 }
             });
         ui.label("attempts");
@@ -300,7 +292,9 @@ fn motion(ui: &mut egui::Ui, cx: &mut UiCtx) {
         let generate = ui.add_enabled(
             !cx.motion_form.prompt.trim().is_empty() && !cx.job_running,
             egui::Button::new(
-                egui::RichText::new("Gerar movimento").strong().color(theme::BG),
+                egui::RichText::new("Gerar movimento")
+                    .strong()
+                    .color(theme::BG),
             )
             .fill(theme::ACCENT),
         );
@@ -326,7 +320,8 @@ fn motion(ui: &mut egui::Ui, cx: &mut UiCtx) {
             )
             .clicked()
         {
-            cx.actions.push(Action::PackMotions(cx.motion_form.selected.clone()));
+            cx.actions
+                .push(Action::PackMotions(cx.motion_form.selected.clone()));
         }
         if cx.job_running {
             ui.spinner();
@@ -334,6 +329,19 @@ fn motion(ui: &mut egui::Ui, cx: &mut UiCtx) {
     });
     if let Some(error) = &cx.motion_form.error {
         ui.colored_label(theme::ERROR, error);
+    }
+    let duplicate_clips = cx
+        .state
+        .check
+        .as_ref()
+        .and_then(|check| check.artifacts.get("animated"))
+        .and_then(|artifact| artifact.gates.as_ref())
+        .is_some_and(|gates| gates.duplicate_clips);
+    if duplicate_clips {
+        ui.label(theme::chip(
+            "clips duplicados no animado: empacota sobre o _rigged sem game-pack",
+            theme::WARN,
+        ));
     }
 
     ui.separator();

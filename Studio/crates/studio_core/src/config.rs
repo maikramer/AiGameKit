@@ -150,6 +150,19 @@ pub struct PaintParams {
     pub pbr_enrich: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preserve_origin: Option<bool>,
+    /// Views de pintura (menos views = menos activação/VRAM).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_views: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view_resolution: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub render_size: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to_paint_faces: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bake_exp: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub smooth: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -233,7 +246,11 @@ impl PipelineConfig {
     /// `["3d", "paint", …]` como o GameAssets espera.
     pub fn manifest_keywords(&self) -> Vec<String> {
         let mut out = vec!["3d".to_string()];
-        out.extend(self.normalized().into_iter().map(|s| s.keyword().to_string()));
+        out.extend(
+            self.normalized()
+                .into_iter()
+                .map(|s| s.keyword().to_string()),
+        );
         out
     }
 }
@@ -272,20 +289,26 @@ pub struct CameraState {
     pub target: [f32; 3],
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct UiConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_artifact: Option<String>,
-    #[serde(default)]
     pub wireframe: bool,
-    #[serde(default = "default_true")]
     pub show_grid: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub camera: Option<CameraState>,
 }
 
-fn default_true() -> bool {
-    true
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self {
+            last_artifact: None,
+            wireframe: false,
+            show_grid: true,
+            camera: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -335,7 +358,11 @@ impl Issue {
 }
 
 impl StudioConfig {
-    pub fn new(id: impl Into<String>, idea: impl Into<String>, category: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        idea: impl Into<String>,
+        category: impl Into<String>,
+    ) -> Self {
         let mut config = Self::default();
         config.asset.id = id.into();
         config.asset.idea = idea.into();
@@ -392,7 +419,9 @@ impl StudioConfig {
             issues.push(Issue::error("style_preset vazio"));
         }
         if self.pipeline.has(PipelineStage::Rig) && !self.pipeline.has(PipelineStage::Paint) {
-            issues.push(Issue::error("rig exige paint (o rigging corre sobre o painted)"));
+            issues.push(Issue::error(
+                "rig exige paint (o rigging corre sobre o painted)",
+            ));
         }
         if self.pipeline.has(PipelineStage::Animate) && !self.pipeline.has(PipelineStage::Rig) {
             issues.push(Issue::error("animate exige rig"));
@@ -402,10 +431,10 @@ impl StudioConfig {
                 "refine.views > 1: no Vael o FLUX Klein copiava a referência; só vale a pena com vistas reais",
             ));
         }
-        if let Some(size) = self.paint.texture_size {
-            if !size.is_power_of_two() {
-                issues.push(Issue::warning("texture_size não é potência de 2"));
-            }
+        if let Some(size) = self.paint.texture_size
+            && !size.is_power_of_two()
+        {
+            issues.push(Issue::warning("texture_size não é potência de 2"));
         }
         if !self.pipeline.has(PipelineStage::Paint) {
             issues.push(Issue::warning(
@@ -442,7 +471,11 @@ mod tests {
     #[test]
     fn pipeline_order_is_canonical() {
         let mut pipeline = PipelineConfig {
-            stages: vec![PipelineStage::Collision, PipelineStage::Paint, PipelineStage::Lod],
+            stages: vec![
+                PipelineStage::Collision,
+                PipelineStage::Paint,
+                PipelineStage::Lod,
+            ],
         };
         pipeline.set(PipelineStage::Rig, true);
         assert_eq!(

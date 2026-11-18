@@ -8,12 +8,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::{
-    config::GpuMode,
-    motion::MotionRequest,
-    project::StudioProject,
-    reroll::Stage,
-};
+use crate::{config::GpuMode, motion::MotionRequest, project::StudioProject, reroll::Stage};
 
 #[derive(Debug, Clone)]
 pub struct CliConfig {
@@ -37,7 +32,10 @@ fn env_or(keys: &[&str], default: &str) -> String {
 impl CliConfig {
     pub fn resolve() -> Self {
         Self {
-            gameassets: env_or(&["AIGAMEKIT_GAMEASSETS_BIN", "GAMEASSETS_BIN"], "gameassets"),
+            gameassets: env_or(
+                &["AIGAMEKIT_GAMEASSETS_BIN", "GAMEASSETS_BIN"],
+                "gameassets",
+            ),
             motion3d: env_or(&["AIGAMEKIT_MOTION3D_BIN", "MOTION3D_BIN"], "motion3d"),
             vramd: env_or(&["AIGAMEKIT_VRAMD_BIN", "VRAMD_BIN"], "vramd"),
         }
@@ -147,7 +145,11 @@ impl CliConfig {
         let mut args = vec![
             "resume".into(),
             "--profile".into(),
-            project.dir.join(crate::project::GAME_FILE).to_string_lossy().into_owned(),
+            project
+                .dir
+                .join(crate::project::GAME_FILE)
+                .to_string_lossy()
+                .into_owned(),
             "--manifest".into(),
             project
                 .dir
@@ -358,16 +360,20 @@ mod tests {
         assert!(joined.contains("--gpu remote"));
         assert!(joined.contains("--fail-fast"));
         assert!(joined.contains("--log"));
-        assert!(resume
-            .spec
-            .env
-            .iter()
-            .any(|(k, v)| k == "AIGAMEKIT_PIPELINE_TRACE_LOG" && v.contains("trace.jsonl")));
-        assert!(resume
-            .spec
-            .env
-            .iter()
-            .any(|(k, v)| k == "VRAMD_GPU_MODE" && v == "remote"));
+        assert!(
+            resume
+                .spec
+                .env
+                .iter()
+                .any(|(k, v)| k == "AIGAMEKIT_PIPELINE_TRACE_LOG" && v.contains("trace.jsonl"))
+        );
+        assert!(
+            resume
+                .spec
+                .env
+                .iter()
+                .any(|(k, v)| k == "VRAMD_GPU_MODE" && v == "remote")
+        );
     }
 
     #[test]

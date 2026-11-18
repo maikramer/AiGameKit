@@ -15,9 +15,7 @@ use std::{
 use bevy::prelude::*;
 use crossbeam_channel::bounded;
 
-use super::{
-    DecodedGlb, PendingDecode, PendingScene, PreviewCache, PreviewCommand, PreviewState,
-};
+use super::{DecodedGlb, PendingDecode, PendingScene, PreviewCache, PreviewCommand, PreviewState};
 
 pub fn handle_load_request(
     mut commands: ResMut<PreviewCommand>,
@@ -60,6 +58,7 @@ pub fn handle_load_request(
     }
 
     state.bounds = bevy_ext_gltf::glb_bounds::read_json_chunk(&request.source);
+    tracing::debug!("preview bounds: {:?}", state.bounds);
     state.error = None;
     state.source_artifact = Some(request.artifact.clone());
 
@@ -77,10 +76,7 @@ pub fn handle_load_request(
     });
 }
 
-pub fn poll_decode(
-    mut state: ResMut<PreviewState>,
-    asset_server: Res<AssetServer>,
-) {
+pub fn poll_decode(mut state: ResMut<PreviewState>, asset_server: Res<AssetServer>) {
     let Some(pending) = state.pending_decode.as_ref() else {
         return;
     };

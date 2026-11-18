@@ -78,6 +78,7 @@ impl OrbitCamera {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn orbit_input(
     mut camera: ResMut<OrbitCamera>,
     mut command: ResMut<PreviewCommand>,

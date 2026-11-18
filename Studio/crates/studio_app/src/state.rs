@@ -75,11 +75,14 @@ pub struct CreateRequest {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum Action {
     Run,
     Cancel,
     Reroll(Stage),
     InvalidateFrom(Stage),
+    CompareHistory(Stage),
+    ReloadPreview,
     Reset,
     RefreshCheck,
     SaveConfig,
@@ -176,6 +179,7 @@ pub struct StudioState {
     pub vramd_error: Option<String>,
     pub check_generation: u64,
     pub preview_override: Option<String>,
+    pub pending_run: bool,
 }
 
 impl Default for StudioState {
@@ -207,6 +211,7 @@ impl Default for StudioState {
             vramd_error: None,
             check_generation: 0,
             preview_override: None,
+            pending_run: false,
         }
     }
 }
@@ -306,7 +311,10 @@ impl StudioState {
     }
 
     pub fn can_run(&self) -> bool {
-        self.project.is_some() && !self.run.is_busy() && self.lock_live().is_none()
+        self.project.is_some()
+            && self.check.is_some()
+            && !self.run.is_busy()
+            && self.lock_live().is_none()
     }
 
     pub fn lock_live(&self) -> Option<&studio_core::check::LockInfo> {
@@ -319,14 +327,7 @@ impl StudioState {
 
 pub fn default_artifact(check: &Option<CheckPayload>, project: &StudioProject) -> String {
     let order = [
-        "lod0",
-        "painted",
-        "animated",
-        "rigged",
-        "refined",
-        "clean",
-        "shape",
-        "image",
+        "lod0", "painted", "animated", "rigged", "refined", "clean", "shape", "image",
     ];
     if let Some(check) = check {
         for key in order {
@@ -365,6 +366,8 @@ pub struct CheckWorker {
     pub in_flight: bool,
 }
 
+pub type MotionList = Vec<(String, PathBuf)>;
+
 #[derive(Debug, Clone)]
 pub enum JobKind {
     MotionGenerate {
@@ -377,7 +380,7 @@ pub enum JobKind {
     },
     MotionPack {
         active: String,
-        motions: Vec<(String, PathBuf)>,
+        motions: MotionList,
         project: PathBuf,
     },
     Doctor,
@@ -396,9 +399,11 @@ pub struct JobWorker {
     pub label: String,
 }
 
+pub type VramdPoll = Result<(usize, usize, Option<String>), String>;
+
 #[derive(Resource, Default)]
 pub struct VramdWorker {
-    pub rx: Option<Receiver<Result<(usize, usize, Option<String>), String>>>,
+    pub rx: Option<Receiver<VramdPoll>>,
     pub in_flight: bool,
     pub last_poll: Option<Instant>,
 }
@@ -413,6 +418,8 @@ pub struct UiState {
     pub confirm_delete: Option<PathBuf>,
     pub turntable: bool,
     pub wireframe: bool,
+    pub show_grid: bool,
+    pub force_thumb: bool,
     pub invalidate_after_save: Option<Stage>,
     pub console_errors_only: bool,
     pub console_autoscroll: bool,
@@ -433,12 +440,7 @@ pub enum AssetPreset {
 }
 
 impl AssetPreset {
-    pub const ALL: [Self; 4] = [
-        Self::Prop,
-        Self::Character,
-        Self::Creature,
-        Self::Building,
-    ];
+    pub const ALL: [Self; 4] = [Self::Prop, Self::Character, Self::Creature, Self::Building];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -498,11 +500,8 @@ impl NewProjectForm {
     }
 
     pub fn to_config(&self) -> StudioConfig {
-        let mut config = StudioConfig::new(
-            self.id.trim(),
-            self.prompt.trim(),
-            self.preset.category(),
-        );
+        let mut config =
+            StudioConfig::new(self.id.trim(), self.prompt.trim(), self.preset.category());
         config.asset.kind = match self.preset {
             AssetPreset::Prop => None,
             AssetPreset::Character => Some("character".into()),

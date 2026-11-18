@@ -140,10 +140,7 @@ impl StudioProject {
         if !issues.is_empty() {
             return Err(ProjectError::InvalidConfig(issues.join("\n")));
         }
-        let text = self
-            .config
-            .to_toml()
-            .map_err(ProjectError::InvalidConfig)?;
+        let text = self.config.to_toml().map_err(ProjectError::InvalidConfig)?;
         write_atomic(&self.dir.join(STUDIO_FILE), text.as_bytes())?;
         self.write_gameassets_files()
     }
@@ -177,15 +174,18 @@ impl StudioProject {
     }
 
     pub fn shape_path(&self) -> PathBuf {
-        self.intermediate_dir().join(format!("{}_shape.glb", self.id()))
+        self.intermediate_dir()
+            .join(format!("{}_shape.glb", self.id()))
     }
 
     pub fn clean_path(&self) -> PathBuf {
-        self.intermediate_dir().join(format!("{}_clean.glb", self.id()))
+        self.intermediate_dir()
+            .join(format!("{}_clean.glb", self.id()))
     }
 
     pub fn refined_path(&self) -> PathBuf {
-        self.intermediate_dir().join(format!("{}_refined.glb", self.id()))
+        self.intermediate_dir()
+            .join(format!("{}_refined.glb", self.id()))
     }
 
     pub fn to_paint_path(&self) -> PathBuf {
@@ -209,7 +209,8 @@ impl StudioProject {
     }
 
     pub fn lod_path(&self, level: u32) -> PathBuf {
-        self.meshes_dir().join(format!("{}_lod{level}.glb", self.id()))
+        self.meshes_dir()
+            .join(format!("{}_lod{level}.glb", self.id()))
     }
 
     pub fn collision_path(&self) -> PathBuf {
@@ -367,7 +368,7 @@ pub fn scan_workspace(workspace: &Path) -> Vec<ProjectSummary> {
             modified,
         });
     }
-    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    out.sort_by_key(|entry| std::cmp::Reverse(entry.modified));
     out
 }
 
@@ -410,10 +411,7 @@ mod tests {
         assert!(dir.join(GAME_FILE).is_file());
         assert!(dir.join(MANIFEST_FILE).is_file());
         assert_eq!(project.image_path(), dir.join("images/crate.png"));
-        assert_eq!(
-            project.lod_path(0),
-            dir.join("meshes/crate_lod0.glb")
-        );
+        assert_eq!(project.lod_path(0), dir.join("meshes/crate_lod0.glb"));
         assert!(project.intermediate_dir().is_dir());
     }
 

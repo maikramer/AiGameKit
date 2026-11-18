@@ -3,6 +3,8 @@
 use std::time::Duration;
 
 use bevy::{
+    asset::RenderAssetUsages,
+    mesh::{Indices, PrimitiveTopology, skinning::SkinnedMesh},
     prelude::*,
     world_serialization::{WorldAssetRoot, WorldInstanceReady},
 };
@@ -86,10 +88,17 @@ pub fn poll_scene_load(
         return;
     };
     let Some(scene) = gltf.default_scene.clone() else {
-        state.error = Some("GLB sem cena default".into());
+        let error = "GLB sem cena default".to_string();
+        tracing::warn!("{error}");
+        state.error = Some(error);
         state.pending_scene = None;
         return;
     };
+    tracing::debug!(
+        "scene ready: clips={} default_scene={:?}",
+        gltf.named_animations.len(),
+        scene.id()
+    );
 
     let mut clips: Vec<(String, Handle<AnimationClip>)> = gltf
         .named_animations
@@ -112,6 +121,11 @@ pub fn poll_scene_load(
     }
     if let Some(bounds) = state.bounds {
         camera.fit(bounds);
+        tracing::debug!(
+            "fit bounds center={:?} distance={}",
+            bounds.center(),
+            camera.distance
+        );
     }
     state.frame_pending = true;
 
@@ -124,21 +138,32 @@ pub fn poll_scene_load(
     });
 
     commands
-        .spawn((WorldAssetRoot(scene), Transform::default(), Visibility::default()))
+        .spawn((
+            WorldAssetRoot(scene),
+            Transform::default(),
+            Visibility::default(),
+        ))
         .observe(on_scene_ready);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn on_scene_ready(
     ready: On<WorldInstanceReady>,
     mut commands: Commands,
     children: Query<&Children>,
     players: Query<Entity, With<AnimationPlayer>>,
+    mesh_query: Query<(&Mesh3d, Option<&SkinnedMesh>)>,
+    material_query: Query<&MeshMaterial3d<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut state: ResMut<PreviewState>,
 ) {
     let root = ready.entity;
     let Some(scene) = state.ready_scene.take() else {
+        tracing::warn!("WorldInstanceReady sem ready_scene");
         return;
     };
+    tracing::debug!("scene spawned: root={:?}", root);
     let player = children
         .iter_descendants(root)
         .find(|entity| players.contains(*entity));
@@ -148,6 +173,53 @@ fn on_scene_ready(
             .insert(AnimationGraphHandle(graph))
             .insert(AnimationTransitions::new());
     }
+
+    // Ferramentas como o machado são folhas de uma só face; no viewport
+    // queremos ver os dois lados.
+    for entity in children.iter_descendants(root) {
+        if let Ok(material) = material_query.get(entity) {
+            if let Some(mut material) = materials.get_mut(&material.0) {
+                material.cull_mode = None;
+            }
+        }
+    }
+
+    let wire_material = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.92, 0.94, 0.98, 0.55),
+        unlit: true,
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
+    let mut wire_entities = Vec::new();
+    for entity in children.iter_descendants(root) {
+        let Ok((mesh3d, skinned)) = mesh_query.get(entity) else {
+            continue;
+        };
+        if skinned.is_some() {
+            // Os vértices do mesh estão em bind pose; um wireframe estático
+            // não acompanha a skin. Fica só para malhas estáticas.
+            continue;
+        }
+        let line_mesh = {
+            let Some(mesh) = meshes.get(&mesh3d.0) else {
+                continue;
+            };
+            build_wire_mesh(mesh)
+        };
+        let Some(line_mesh) = line_mesh else {
+            continue;
+        };
+        let wire = commands
+            .spawn((
+                Mesh3d(meshes.add(line_mesh)),
+                MeshMaterial3d(wire_material.clone()),
+                Visibility::Hidden,
+                ChildOf(entity),
+            ))
+            .id();
+        wire_entities.push(wire);
+    }
+
     state.loaded = Some(Loaded {
         artifact: scene.artifact,
         source: scene.source,
@@ -157,8 +229,34 @@ fn on_scene_ready(
         indices: scene.indices,
         active_clip: None,
         speed: 1.0,
+        wire_entities,
     });
     state.playing = false;
+}
+
+fn build_wire_mesh(mesh: &Mesh) -> Option<Mesh> {
+    let positions = mesh
+        .attribute(Mesh::ATTRIBUTE_POSITION)?
+        .as_float3()?
+        .to_vec();
+    let indices: Vec<u32> = match mesh.indices()? {
+        Indices::U16(values) => values.iter().map(|value| *value as u32).collect(),
+        Indices::U32(values) => values.to_vec(),
+    };
+    if indices.len() < 3 {
+        return None;
+    }
+    let mut lines = Vec::with_capacity(indices.len() * 2);
+    for triangle in indices.as_chunks::<3>().0 {
+        for (a, b) in [(0, 1), (1, 2), (2, 0)] {
+            lines.push(triangle[a]);
+            lines.push(triangle[b]);
+        }
+    }
+    let mut wire = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::default());
+    wire.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    wire.insert_indices(Indices::U32(lines));
+    Some(wire)
 }
 
 pub fn apply_preview_requests(
@@ -167,9 +265,13 @@ pub fn apply_preview_requests(
     mut camera: ResMut<OrbitCamera>,
     mut players: Query<&mut AnimationPlayer>,
     mut transitions: Query<&mut AnimationTransitions>,
+    mut visibilities: Query<&mut Visibility>,
 ) {
     if let Some(turntable) = commands.turntable.take() {
         camera.turntable = turntable;
+    }
+    if let Some(show_grid) = commands.show_grid.take() {
+        state.show_grid = show_grid;
     }
     if commands.frame || state.frame_pending {
         if let Some(bounds) = state.bounds {
@@ -181,6 +283,17 @@ pub fn apply_preview_requests(
 
     let mut playing = state.playing;
     if let Some(loaded) = state.loaded.as_mut() {
+        if let Some(on) = commands.wireframe.take() {
+            for entity in &loaded.wire_entities {
+                if let Ok(mut visibility) = visibilities.get_mut(*entity) {
+                    *visibility = if on {
+                        Visibility::Inherited
+                    } else {
+                        Visibility::Hidden
+                    };
+                }
+            }
+        }
         let Some(player_entity) = loaded.player else {
             commands.set_clip = None;
             commands.toggle_play = false;
@@ -204,7 +317,11 @@ pub fn apply_preview_requests(
             if loaded.active_clip != Some(index) {
                 if let Ok(mut transition) = transitions.get_mut(player_entity) {
                     transition
-                        .play(&mut player, loaded.indices[index], Duration::from_millis(180))
+                        .play(
+                            &mut player,
+                            loaded.indices[index],
+                            Duration::from_millis(180),
+                        )
                         .repeat();
                 } else {
                     player.play(loaded.indices[index]).repeat();
@@ -264,7 +381,14 @@ fn default_clip_index(clips: &[String]) -> Option<usize> {
     Some(0)
 }
 
-pub fn draw_grid(mut gizmos: Gizmos, state: Res<PreviewState>) {
+pub fn draw_grid(
+    mut gizmos: Gizmos,
+    state: Res<PreviewState>,
+    thumbs: Res<super::thumbs::ThumbnailState>,
+) {
+    if !state.show_grid || thumbs.active.is_some() {
+        return;
+    }
     let y = state.bounds.map(|bounds| bounds.min.y).unwrap_or(0.0);
     let minor = Color::srgba(0.38, 0.41, 0.46, 0.22);
     let major = Color::srgba(0.62, 0.65, 0.70, 0.40);
@@ -304,4 +428,3 @@ pub fn move_ground(
         }
     }
 }
-

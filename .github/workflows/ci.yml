@@ -123,6 +123,20 @@ jobs:
           tests/test_worker_adapter_base.py
           tests/test_gpu_vramd_kill.py
 
+  test-studio:
+    name: cargo (Studio core)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: rustfmt
+        run: cargo fmt --manifest-path Studio/Cargo.toml -- --check
+      - name: Tests (core, sem Bevy)
+        run: cargo test --manifest-path Studio/Cargo.toml -p studio_core
+
   test-rust:
     name: cargo (Materialize)
     runs-on: ubuntu-latest

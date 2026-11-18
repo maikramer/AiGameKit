@@ -201,10 +201,10 @@ fn delete_own_artifacts(
 ) -> Result<Vec<PathBuf>, RerollError> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     for key in stage.artifact_keys().iter().chain(stage.sidecar_keys()) {
-        if let Some(artifact) = check.artifact(key) {
-            if !artifact.path.is_empty() {
-                candidates.push(PathBuf::from(&artifact.path));
-            }
+        if let Some(artifact) = check.artifact(key)
+            && !artifact.path.is_empty()
+        {
+            candidates.push(PathBuf::from(&artifact.path));
         }
     }
     candidates.extend(project.stage_artifact_paths(stage));
@@ -284,10 +284,11 @@ pub fn copy_history(
 ) -> Result<Vec<PathBuf>, RerollError> {
     let mut sources: Vec<PathBuf> = Vec::new();
     for key in stage.artifact_keys() {
-        if let Some(artifact) = check.artifact(key) {
-            if artifact.exists && !artifact.path.is_empty() {
-                sources.push(PathBuf::from(&artifact.path));
-            }
+        if let Some(artifact) = check.artifact(key)
+            && artifact.exists
+            && !artifact.path.is_empty()
+        {
+            sources.push(PathBuf::from(&artifact.path));
         }
     }
     if sources.is_empty() {

@@ -7,7 +7,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::project::{slugify, ProjectError, StudioProject};
+use crate::project::{ProjectError, StudioProject, slugify};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MotionRequest {

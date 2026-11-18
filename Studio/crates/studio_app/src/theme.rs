@@ -34,26 +34,21 @@ pub fn apply(ctx: &egui::Context) {
     style.spacing.item_spacing = egui::vec2(8.0, 6.0);
     style.spacing.button_padding = egui::vec2(10.0, 4.0);
     style.spacing.interact_size.y = 24.0;
-    style.text_styles.insert(
-        egui::TextStyle::Heading,
-        egui::FontId::proportional(17.0),
-    );
-    style.text_styles.insert(
-        egui::TextStyle::Body,
-        egui::FontId::proportional(13.0),
-    );
-    style.text_styles.insert(
-        egui::TextStyle::Button,
-        egui::FontId::proportional(13.0),
-    );
-    style.text_styles.insert(
-        egui::TextStyle::Small,
-        egui::FontId::proportional(11.0),
-    );
-    style.text_styles.insert(
-        egui::TextStyle::Monospace,
-        egui::FontId::monospace(11.5),
-    );
+    style
+        .text_styles
+        .insert(egui::TextStyle::Heading, egui::FontId::proportional(17.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Body, egui::FontId::proportional(13.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Button, egui::FontId::proportional(13.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Small, egui::FontId::proportional(11.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Monospace, egui::FontId::monospace(11.5));
     ctx.set_style_of(egui::Theme::Dark, style);
 }
 
@@ -66,5 +61,8 @@ pub fn muted(text: impl Into<String>) -> egui::RichText {
 }
 
 pub fn chip(text: impl Into<String>, color: Color32) -> egui::RichText {
-    egui::RichText::new(text).color(color).size(11.0).monospace()
+    egui::RichText::new(text)
+        .color(color)
+        .size(11.0)
+        .monospace()
 }

@@ -129,13 +129,13 @@ fn read_stream<R: Read>(reader: R, stream: Stream, tx: Sender<PipelineEvent>) {
                 if line.trim().is_empty() {
                     continue;
                 }
-                if stream == Stream::Stdout {
-                    if let Some(event) = parse_progress(&line) {
-                        if tx.send(PipelineEvent::Progress(event)).is_err() {
-                            return;
-                        }
-                        continue;
+                if stream == Stream::Stdout
+                    && let Some(event) = parse_progress(&line)
+                {
+                    if tx.send(PipelineEvent::Progress(event)).is_err() {
+                        return;
                     }
+                    continue;
                 }
                 if tx
                     .send(PipelineEvent::Line {

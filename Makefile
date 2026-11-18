@@ -5,7 +5,7 @@ PYTHON_PROJECTS := Shared Text2D Text3D Paint3D Part3D Hi3D GameAssets Texture2D
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-hi3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust clean dedupe-venvs typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-hi3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-studio test-studio-core lint-studio fmt-studio clean dedupe-venvs typecheck check install-hooks
 
 # Each package is tested from its own venv (installed by ./install.sh <tool>, which
 # adds the [dev] extra). CI has no per-package venv, so the system interpreter stays
@@ -106,6 +106,20 @@ test-intrinsic: ## pytest Intrinsic/ (CPU-first; usa o venv da package se existi
 	fi
 
 test-rust: test-materialize ## alias for test-materialize
+
+# AiGameKit Studio (Rust/Bevy). O decoder bevy_ext_gltf está vendorizado em
+# Studio/vendor/bevy_ext_gltf, por isso o workspace é autónomo.
+test-studio: ## cargo test no Studio (core + app)
+	cd Studio && cargo test
+
+test-studio-core: ## testes do núcleo headless do Studio
+	cd Studio && cargo test -p studio_core
+
+lint-studio: ## clippy no Studio
+	cd Studio && cargo clippy --all-targets -- -D warnings
+
+fmt-studio: ## rustfmt --check no Studio
+	cd Studio && cargo fmt --check
 
 clean: ## Remove __pycache__, caches, build/, dist/, *.egg-info under the repo
 	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true

@@ -155,6 +155,18 @@ fn paint_profile(config: &StudioConfig) -> Value {
             "pbr_enrich",
             Some(b(config.paint.pbr_enrich.unwrap_or(false))),
         ),
+        ("max_views", config.paint.max_views.map(|v| u(v as u64))),
+        (
+            "view_resolution",
+            config.paint.view_resolution.map(|v| u(v as u64)),
+        ),
+        ("render_size", config.paint.render_size.map(|v| u(v as u64))),
+        (
+            "to_paint_faces",
+            config.paint.to_paint_faces.map(|v| u(v as u64)),
+        ),
+        ("bake_exp", config.paint.bake_exp.map(|v| u(v as u64))),
+        ("smooth", config.paint.smooth.map(b)),
     ])
 }
 
@@ -200,9 +212,9 @@ pub fn build_game_yaml(config: &StudioConfig) -> Result<String, serde_yaml::Erro
 
 fn omni_row(config: &StudioConfig) -> Option<Value> {
     let omni = &config.omni;
-    let size = omni.size_m.map(|size| {
-        Value::Sequence(size.iter().copied().map(f).collect())
-    });
+    let size = omni
+        .size_m
+        .map(|size| Value::Sequence(size.iter().copied().map(f).collect()));
     let value = mapping([
         ("control_type", omni.control_type.clone().map(s)),
         ("bbox_preset", omni.bbox_preset.clone().map(s)),
@@ -218,8 +230,9 @@ fn omni_row(config: &StudioConfig) -> Option<Value> {
 
 fn text3d_row(config: &StudioConfig) -> Option<Value> {
     let text3d = &config.text3d;
+    // O `preset` é do perfil (`text3d:`), não da linha: o GameAssets
+    // rejeita chaves desconhecidas no dict por-asset.
     let value = mapping([
-        ("preset", text3d.preset.clone().map(s)),
         (
             "octree_resolution",
             text3d.octree_resolution.map(|v| u(v as u64)),
@@ -387,10 +400,10 @@ mod tests {
     fn character_preset_turns_on_full_pipeline() {
         let config = StudioConfig::new("hero", "a hero", "humanoid");
         let keywords = config.pipeline.manifest_keywords();
-        assert_eq!(keywords, vec!["3d", "paint", "rig", "animate", "lod", "collision"]);
         assert_eq!(
-            config.omni.pose_preset.as_deref(),
-            Some("quaternius-apose")
+            keywords,
+            vec!["3d", "paint", "rig", "animate", "lod", "collision"]
         );
+        assert_eq!(config.omni.pose_preset.as_deref(), Some("quaternius-apose"));
     }
 }

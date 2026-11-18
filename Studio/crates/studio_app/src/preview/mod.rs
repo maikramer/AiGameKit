@@ -1,8 +1,9 @@
 //! Viewport 3D do Studio: cache de decode, câmara órbita, cena e animação.
 
-pub mod camera;
 pub mod cache;
+pub mod camera;
 pub mod scene;
+pub mod thumbs;
 
 use std::path::PathBuf;
 
@@ -38,6 +39,7 @@ impl Plugin for PreviewPlugin {
             )
                 .chain(),
         );
+        thumbs::plugin(app);
     }
 }
 
@@ -57,6 +59,7 @@ pub struct PreviewCommand {
     pub speed: Option<f32>,
     pub turntable: Option<bool>,
     pub wireframe: Option<bool>,
+    pub show_grid: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -100,9 +103,10 @@ pub struct Loaded {
     pub indices: Vec<AnimationNodeIndex>,
     pub active_clip: Option<usize>,
     pub speed: f32,
+    pub wire_entities: Vec<Entity>,
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct PreviewState {
     pub loaded: Option<Loaded>,
     pub pending_decode: Option<PendingDecode>,
@@ -113,6 +117,24 @@ pub struct PreviewState {
     pub playing: bool,
     pub frame_pending: bool,
     pub source_artifact: Option<String>,
+    pub show_grid: bool,
+}
+
+impl Default for PreviewState {
+    fn default() -> Self {
+        Self {
+            loaded: None,
+            pending_decode: None,
+            pending_scene: None,
+            ready_scene: None,
+            error: None,
+            bounds: None,
+            playing: false,
+            frame_pending: false,
+            source_artifact: None,
+            show_grid: true,
+        }
+    }
 }
 
 /// Área livre do ecrã (entre painéis egui) e estado do input.

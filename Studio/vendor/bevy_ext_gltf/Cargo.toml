@@ -1,0 +1,34 @@
+[package]
+name = "bevy_ext_gltf"
+version = "0.1.1"
+edition = "2024"
+rust-version = "1.97.1"
+description = "GLB decoder for Bevy with EXT_meshopt_compression, KHR_mesh_quantization and KHR_texture_basisu"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/maikramer/bevy_extensions"
+authors = ["Maikeu Locatelli"]
+readme = "README.md"
+keywords = ["bevy", "gltf", "meshopt", "ktx2", "compression"]
+categories = ["game-development", "rendering"]
+
+[features]
+# `bounds` e `textures` são utilitários opcionais; o decoder é sempre incluído.
+default = ["bounds", "textures"]
+bounds = []
+textures = []
+
+[dependencies]
+bevy = { version = "0.20.1", default-features = false, features = [
+    "std",
+    "bevy_asset",
+    "bevy_gltf",
+    "bevy_image",
+    "bevy_log",
+    "bevy_render",
+] }
+meshopt = "0.7"
+anyhow = "1"
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"

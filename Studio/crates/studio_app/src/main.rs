@@ -1,15 +1,15 @@
 //! AiGameKit Studio — front-end gráfico do pipeline de assets.
 
+// UI com `if let` aninhado: um let-chain longo esconde a intenção.
+#![allow(clippy::collapsible_if)]
+
 mod app;
 mod preview;
 mod state;
 mod theme;
 mod ui;
 
-use std::{
-    path::PathBuf,
-    process::ExitCode,
-};
+use std::{path::PathBuf, process::ExitCode};
 
 use bevy::{
     prelude::*,
@@ -30,6 +30,9 @@ struct Args {
     project: Option<PathBuf>,
     spike_glb: Option<PathBuf>,
     spike_out: Option<PathBuf>,
+    spike_wireframe: bool,
+    ui_screenshot: Option<PathBuf>,
+    auto_run: bool,
 }
 
 fn parse_args() -> Args {
@@ -46,10 +49,19 @@ fn parse_args() -> Args {
             "--spike-out" => {
                 args.spike_out = iter.next().map(PathBuf::from);
             }
+            "--spike-wireframe" => {
+                args.spike_wireframe = true;
+            }
+            "--auto-run" => {
+                args.auto_run = true;
+            }
+            "--ui-screenshot" => {
+                args.ui_screenshot = iter.next().map(PathBuf::from);
+            }
             "--help" | "-h" => {
                 println!(
                     "AiGameKit Studio {}\n\
-                     uso: studio_app [--project <dir>] [--spike-glb <glb>] [--spike-out <png>]\n\
+                     uso: studio_app [--project <dir>] [--spike-glb <glb>] [--spike-out <png>] [--ui-screenshot <png>]\n\
                      \n\
                      workspace: {} (AIGAMEKIT_STUDIO_WORKSPACE)\n\
                      cache:     {} (STUDIO_CACHE_DIR)",
@@ -122,6 +134,7 @@ fn main() -> ExitCode {
         })
         .add_plugins(StudioPlugin {
             initial_project: args.project.clone(),
+            auto_run: args.auto_run,
         });
 
     if let Some(glb) = args.spike_glb.clone() {
@@ -135,11 +148,21 @@ fn main() -> ExitCode {
                 out,
                 frames: 0,
                 requested: false,
+                wireframe: args.spike_wireframe,
             })
             .add_systems(Startup, spike_start)
             .add_systems(Update, spike_tick);
     } else {
         bevy_app.add_plugins((EguiPlugin::default(), UiPlugin));
+        if let Some(out) = args.ui_screenshot.clone() {
+            bevy_app
+                .insert_resource(UiShot {
+                    out,
+                    frames: 0,
+                    requested: false,
+                })
+                .add_systems(Update, ui_shot_tick);
+        }
     }
 
     let exit = bevy_app.run();
@@ -150,11 +173,38 @@ fn main() -> ExitCode {
 }
 
 #[derive(Resource)]
+struct UiShot {
+    out: PathBuf,
+    frames: u32,
+    requested: bool,
+}
+
+fn ui_shot_tick(
+    mut shot: ResMut<UiShot>,
+    mut commands: Commands,
+    mut exit: MessageWriter<AppExit>,
+) {
+    shot.frames += 1;
+    if !shot.requested {
+        if shot.frames > 360 {
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(shot.out.display().to_string()));
+            shot.requested = true;
+            shot.frames = 0;
+        }
+    } else if shot.frames > 120 {
+        exit.write(AppExit::Success);
+    }
+}
+
+#[derive(Resource)]
 struct Spike {
     glb: PathBuf,
     out: PathBuf,
     frames: u32,
     requested: bool,
+    wireframe: bool,
 }
 
 fn spike_start(mut commands: ResMut<PreviewCommand>, spike: Res<Spike>) {
@@ -163,6 +213,9 @@ fn spike_start(mut commands: ResMut<PreviewCommand>, spike: Res<Spike>) {
         artifact: "spike".into(),
         clip: None,
     });
+    if spike.wireframe {
+        commands.wireframe = Some(true);
+    }
 }
 
 fn spike_tick(

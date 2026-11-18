@@ -145,6 +145,9 @@ pub fn draw(ui: &mut egui::Ui, cx: &mut UiCtx) {
         {
             cx.actions.push(Action::Reset);
         }
+        if ui.button("Gerar capa").clicked() {
+            cx.actions.push(Action::BakeThumbnail);
+        }
         if ui.button("Fechar projeto").clicked() {
             cx.actions.push(Action::CloseProject);
         }
@@ -170,24 +173,23 @@ fn stage_row(
     stage: Stage,
     check: Option<&studio_core::check::CheckPayload>,
 ) {
-    let exists = check.is_some_and(|check| {
-        stage
-            .artifact_keys()
-            .iter()
-            .all(|key| check.has_artifact(key))
-    });
-    let any_exists = check.is_some_and(|check| {
-        stage
-            .artifact_keys()
-            .iter()
-            .any(|key| check.has_artifact(key))
-    });
+    let required = stage
+        .artifact_keys()
+        .iter()
+        .copied()
+        .filter(|key| *key != "precompute");
+    let exists = check.is_some_and(|check| required.clone().all(|key| check.has_artifact(key)));
+    let any_exists = check.is_some_and(|check| required.clone().any(|key| check.has_artifact(key)));
     let stale = cx.state.stage_stale(stage);
     let error = cx.state.stage_errors.get(stage.key()).cloned();
     let running = active_for(stage, cx.state);
     let timing = cx.state.timings.get(stage.key()).copied();
-    let artifact = check
-        .and_then(|check| stage.artifact_keys().iter().find_map(|key| check.artifact(key)));
+    let artifact = check.and_then(|check| {
+        stage
+            .artifact_keys()
+            .iter()
+            .find_map(|key| check.artifact(key))
+    });
 
     let color = if error.is_some() {
         theme::ERROR
@@ -216,7 +218,11 @@ fn stage_row(
         .fill(theme::PANEL_HIGH)
         .stroke(egui::Stroke::new(
             if running { 1.0 } else { 0.5 },
-            if running { theme::ACCENT } else { theme::ACCENT_DIM },
+            if running {
+                theme::ACCENT
+            } else {
+                theme::ACCENT_DIM
+            },
         ))
         .inner_margin(egui::Margin::symmetric(8, 6))
         .show(ui, |ui| {
@@ -236,7 +242,14 @@ fn stage_row(
                     if ui
                         .add_enabled(
                             exists && !cx.state.run.is_busy(),
-                            egui::Button::new(egui::RichText::new("Re-roll").size(11.0)),
+                            egui::Button::new(
+                                egui::RichText::new(if stage == Stage::Image {
+                                    "Reset"
+                                } else {
+                                    "Re-roll"
+                                })
+                                .size(11.0),
+                            ),
                         )
                         .clicked()
                     {
@@ -246,29 +259,30 @@ fn stage_row(
                         && ui
                             .add_enabled(
                                 any_exists && !cx.state.run.is_busy(),
-                                egui::Button::new(
-                                    egui::RichText::new("Invalidar").size(11.0),
-                                ),
+                                egui::Button::new(egui::RichText::new("Invalidar").size(11.0)),
                             )
                             .clicked()
                     {
                         cx.actions.push(Action::InvalidateFrom(stage));
                     }
+                    if ui
+                        .add_enabled(
+                            any_exists && !cx.state.run.is_busy(),
+                            egui::Button::new(egui::RichText::new("Comparar").size(11.0)),
+                        )
+                        .on_hover_text("carrega o artefacto anterior do histórico")
+                        .clicked()
+                    {
+                        cx.actions.push(Action::CompareHistory(stage));
+                    }
                 });
             });
 
             if let Some(error) = error {
-                ui.label(
-                    egui::RichText::new(error)
-                        .color(theme::ERROR)
-                        .size(10.5),
-                );
+                ui.label(egui::RichText::new(error).color(theme::ERROR).size(10.5));
             }
             if stale {
-                ui.label(theme::chip(
-                    "stale: os parâmetros mudaram",
-                    theme::WARN,
-                ));
+                ui.label(theme::chip("stale: os parâmetros mudaram", theme::WARN));
             }
             if let Some(artifact) = artifact {
                 artifact_line(ui, artifact, stage);
@@ -320,19 +334,13 @@ fn chips(ui: &mut egui::Ui, glb: &GlbSummary) {
             ui.label(theme::chip(format!("v/t {ratio:.2}"), theme::MUTED));
         }
         if glb.materials > 0 {
-            ui.label(theme::chip(
-                format!("{} mat", glb.materials),
-                theme::MUTED,
-            ));
+            ui.label(theme::chip(format!("{} mat", glb.materials), theme::MUTED));
         }
         if glb.skins > 0 {
             ui.label(theme::chip("skin", theme::OK));
         }
         if glb.animations > 0 {
-            ui.label(theme::chip(
-                format!("{} anim", glb.animations),
-                theme::OK,
-            ));
+            ui.label(theme::chip(format!("{} anim", glb.animations), theme::OK));
         }
         if glb.base_color_texture {
             ui.label(theme::chip("tex", theme::OK));

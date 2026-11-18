@@ -46,9 +46,7 @@ pub fn draw(ui: &mut egui::Ui, cx: &mut UiCtx) {
 
     ui.horizontal(|ui| {
         ui.label("ID");
-        let id = ui.add(
-            egui::TextEdit::singleline(&mut config.asset.id).desired_width(180.0),
-        );
+        let id = ui.add(egui::TextEdit::singleline(&mut config.asset.id).desired_width(180.0));
         changed |= id.changed();
         ui.label(theme::muted("slug"));
     });
@@ -71,6 +69,15 @@ pub fn draw(ui: &mut egui::Ui, cx: &mut UiCtx) {
     });
 
     ui.horizontal(|ui| {
+        ui.label("Style");
+        let style = ui.add(
+            egui::TextEdit::singleline(&mut config.asset.style_preset)
+                .desired_width(160.0)
+                .hint_text("painterly"),
+        );
+        changed |= style.changed();
+    });
+    ui.horizontal_wrapped(|ui| {
         ui.label("Preset");
         for preset in AssetPreset::ALL {
             if ui
@@ -94,7 +101,11 @@ pub fn draw(ui: &mut egui::Ui, cx: &mut UiCtx) {
         if ui.checkbox(&mut use_seed, "").changed() {
             changed = true;
         }
-        if use_seed && ui.add(egui::DragValue::new(&mut seed).range(0..=i64::MAX)).changed() {
+        if use_seed
+            && ui
+                .add(egui::DragValue::new(&mut seed).range(0..=i64::MAX))
+                .changed()
+        {
             changed = true;
         }
         if use_seed != config.asset.seed.is_some() {
@@ -113,7 +124,10 @@ pub fn draw(ui: &mut egui::Ui, cx: &mut UiCtx) {
             .selected_text(label)
             .width(90.0)
             .show_ui(ui, |ui| {
-                if ui.selectable_value(&mut quality, String::new(), "herdar").clicked() {
+                if ui
+                    .selectable_value(&mut quality, String::new(), "herdar")
+                    .clicked()
+                {
                     changed = true;
                 }
                 for tier in ["fast", "low", "medium", "high", "highest"] {
@@ -135,9 +149,7 @@ pub fn draw(ui: &mut egui::Ui, cx: &mut UiCtx) {
     ui.separator();
     ui.label(theme::heading("Referência"));
     if image_path.is_file() {
-        if let Some(handle) =
-            texture_for(ui.ctx(), &image_path, cx.textures)
-        {
+        if let Some(handle) = texture_for(ui.ctx(), &image_path, cx.textures) {
             let size = fit_size(&handle, egui::vec2(320.0, 190.0));
             ui.add(egui::Image::new(egui::load::SizedTexture::new(
                 handle.id(),
@@ -213,7 +225,9 @@ pub fn draw(ui: &mut egui::Ui, cx: &mut UiCtx) {
             .add_enabled(
                 cx.state.dirty,
                 egui::Button::new(
-                    egui::RichText::new("Aplicar alterações").strong().color(theme::BG),
+                    egui::RichText::new("Aplicar alterações")
+                        .strong()
+                        .color(theme::BG),
                 )
                 .fill(theme::ACCENT),
             )
@@ -293,6 +307,18 @@ fn params_sections(
             *changed |= ui
                 .checkbox(&mut config.refine.enabled, "Hi3D refine")
                 .changed();
+            let hi3d_missing = cx
+                .state
+                .check
+                .as_ref()
+                .and_then(|check| check.tools.get("hi3d"))
+                .is_some_and(|value| value.is_none());
+            if hi3d_missing && config.refine.enabled {
+                ui.label(theme::chip(
+                    "hi3d indisponível: o refine será saltado",
+                    theme::WARN,
+                ));
+            }
             ui.horizontal(|ui| {
                 ui.label("views");
                 *changed |= ui
@@ -312,7 +338,11 @@ fn params_sections(
                 ui.label("morph_close");
                 *changed |= opt_f32(ui, &mut config.text3d.morph_close, 0.0..=0.2, 0.001);
             });
-            *changed |= tri_bool(ui, "separar árvores por altura", &mut config.text3d.split_at_height);
+            *changed |= tri_bool(
+                ui,
+                "separar árvores por altura",
+                &mut config.text3d.split_at_height,
+            );
             ui.horizontal(|ui| {
                 ui.label("preset");
                 *changed |= opt_text(ui, &mut config.text3d.preset, "hq");
@@ -332,7 +362,10 @@ fn params_sections(
                         control.clone()
                     })
                     .show_ui(ui, |ui| {
-                        if ui.selectable_value(&mut control, String::new(), "auto").clicked() {
+                        if ui
+                            .selectable_value(&mut control, String::new(), "auto")
+                            .clicked()
+                        {
                             *changed = true;
                         }
                         for option in ["bbox", "pose", "point-cloud", "voxel-mesh"] {
@@ -415,6 +448,17 @@ fn params_sections(
             });
             *changed |= tri_bool(ui, "pbr_enrich", &mut config.paint.pbr_enrich);
             *changed |= tri_bool(ui, "preserve_origin", &mut config.paint.preserve_origin);
+            ui.horizontal(|ui| {
+                ui.label("max_views");
+                *changed |= opt_u32(ui, &mut config.paint.max_views, 1..=12);
+                ui.label("view_res");
+                *changed |= opt_u32(ui, &mut config.paint.view_resolution, 256..=4096);
+                ui.label("render");
+                *changed |= opt_u32(ui, &mut config.paint.render_size, 256..=4096);
+            });
+            ui.label(theme::muted(
+                "6 GB: max_views 2–4 e view_res 512; o vramd recusa o que não cabe",
+            ));
         });
 
     egui::CollapsingHeader::new("Rig e animação")
@@ -469,7 +513,10 @@ fn params_sections(
                 egui::ComboBox::from_id_salt("collision_mode")
                     .selected_text(text)
                     .show_ui(ui, |ui| {
-                        if ui.selectable_value(&mut mode, String::new(), "auto").clicked() {
+                        if ui
+                            .selectable_value(&mut mode, String::new(), "auto")
+                            .clicked()
+                        {
                             *changed = true;
                         }
                         for option in ["hull", "envelope", "mesh"] {
@@ -514,7 +561,11 @@ fn opt_text(ui: &mut egui::Ui, value: &mut Option<String>, hint: &str) -> bool {
     }
 }
 
-fn opt_u32(ui: &mut egui::Ui, value: &mut Option<u32>, range: std::ops::RangeInclusive<u32>) -> bool {
+fn opt_u32(
+    ui: &mut egui::Ui,
+    value: &mut Option<u32>,
+    range: std::ops::RangeInclusive<u32>,
+) -> bool {
     let mut has = value.is_some();
     let mut current = value.unwrap_or(*range.start());
     let mut changed = false;
@@ -522,14 +573,22 @@ fn opt_u32(ui: &mut egui::Ui, value: &mut Option<u32>, range: std::ops::RangeInc
         *value = has.then_some(current);
         changed = true;
     }
-    if has && ui.add(egui::DragValue::new(&mut current).range(range)).changed() {
+    if has
+        && ui
+            .add(egui::DragValue::new(&mut current).range(range))
+            .changed()
+    {
         *value = Some(current);
         changed = true;
     }
     changed
 }
 
-fn opt_i32(ui: &mut egui::Ui, value: &mut Option<i32>, range: std::ops::RangeInclusive<i32>) -> bool {
+fn opt_i32(
+    ui: &mut egui::Ui,
+    value: &mut Option<i32>,
+    range: std::ops::RangeInclusive<i32>,
+) -> bool {
     let mut has = value.is_some();
     let mut current = value.unwrap_or(0);
     let mut changed = false;
@@ -537,7 +596,11 @@ fn opt_i32(ui: &mut egui::Ui, value: &mut Option<i32>, range: std::ops::RangeInc
         *value = has.then_some(current);
         changed = true;
     }
-    if has && ui.add(egui::DragValue::new(&mut current).range(range)).changed() {
+    if has
+        && ui
+            .add(egui::DragValue::new(&mut current).range(range))
+            .changed()
+    {
         *value = Some(current);
         changed = true;
     }
@@ -559,11 +622,7 @@ fn opt_f32(
     }
     if has
         && ui
-            .add(
-                egui::DragValue::new(&mut current)
-                    .speed(speed)
-                    .range(range),
-            )
+            .add(egui::DragValue::new(&mut current).speed(speed).range(range))
             .changed()
     {
         *value = Some(current);

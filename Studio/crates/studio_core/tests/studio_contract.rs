@@ -9,10 +9,10 @@ use std::process::Command;
 use studio_core::{check::CheckPayload, config::StudioConfig, project::StudioProject};
 
 fn gameassets() -> Option<String> {
-    if let Ok(bin) = std::env::var("AIGAMEKIT_GAMEASSETS_BIN") {
-        if !bin.trim().is_empty() {
-            return Some(bin);
-        }
+    if let Ok(bin) = std::env::var("AIGAMEKIT_GAMEASSETS_BIN")
+        && !bin.trim().is_empty()
+    {
+        return Some(bin);
     }
     let ok = Command::new("gameassets")
         .arg("--version")
@@ -30,8 +30,7 @@ fn generated_project_is_accepted_by_studio_check() {
     };
     let tmp = tempfile::tempdir().expect("tmp");
     let config = StudioConfig::new("crate", "a small wooden crate with iron bands", "prop");
-    let project =
-        StudioProject::create(tmp.path().join("crate"), config).expect("criar projeto");
+    let project = StudioProject::create(tmp.path().join("crate"), config).expect("criar projeto");
 
     let output = Command::new(&bin)
         .args([
@@ -68,8 +67,7 @@ fn generated_character_project_has_rig_and_animate() {
     };
     let tmp = tempfile::tempdir().expect("tmp");
     let config = StudioConfig::new("hero", "a young adventurer in A-pose", "humanoid");
-    let project =
-        StudioProject::create(tmp.path().join("hero"), config).expect("criar projeto");
+    let project = StudioProject::create(tmp.path().join("hero"), config).expect("criar projeto");
 
     let output = Command::new(&bin)
         .args([
@@ -92,5 +90,5 @@ fn generated_character_project_has_rig_and_animate() {
         vec!["3d", "paint", "rig", "animate", "lod", "collision"]
     );
     assert_eq!(payload.asset.category, "humanoid");
-    assert_eq!(payload.prompt.text2d.is_empty(), false);
+    assert!(!payload.prompt.text2d.is_empty());
 }

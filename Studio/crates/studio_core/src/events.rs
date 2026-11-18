@@ -141,14 +141,14 @@ pub fn stage_failures(records: &[RunLogRecord]) -> Vec<StageFailure> {
     let mut out = Vec::new();
     for record in records {
         for stage in &record.stages {
-            if !stage.ok {
-                if let Some(error) = &stage.error {
-                    out.push(StageFailure {
-                        asset: record.id.clone(),
-                        stage: stage.name.clone(),
-                        error: error.clone(),
-                    });
-                }
+            if !stage.ok
+                && let Some(error) = &stage.error
+            {
+                out.push(StageFailure {
+                    asset: record.id.clone(),
+                    stage: stage.name.clone(),
+                    error: error.clone(),
+                });
             }
         }
         if let Some(error) = &record.error {

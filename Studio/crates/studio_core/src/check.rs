@@ -280,17 +280,22 @@ mod tests {
         assert!(payload.has_artifact("shape"));
         assert!(!payload.has_artifact("painted"));
         assert_eq!(
-            payload.artifact("shape").unwrap().glb.as_ref().unwrap().triangle_count_total,
+            payload
+                .artifact("shape")
+                .unwrap()
+                .glb
+                .as_ref()
+                .unwrap()
+                .triangle_count_total,
             64
         );
     }
 
     #[test]
     fn missing_optional_sections_default() {
-        let payload = CheckPayload::parse(
-            r#"{"version":1,"state":"need_image","asset":{"id":"x"}}"#,
-        )
-        .expect("payload");
+        let payload =
+            CheckPayload::parse(r#"{"version":1,"state":"need_image","asset":{"id":"x"}}"#)
+                .expect("payload");
         assert_eq!(payload.asset.id, "x");
         assert!(payload.artifacts.is_empty());
         assert!(payload.lock.is_none());

@@ -5,10 +5,7 @@ pub mod left;
 pub mod library;
 pub mod right;
 
-use std::{
-    path::Path,
-    time::Duration,
-};
+use std::{path::Path, time::Duration};
 
 use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
@@ -125,13 +122,13 @@ fn draw_ui(
     );
 
     let mut cx = UiCtx {
-        state: &mut *state,
-        actions: &mut *actions,
-        ui: &mut *ui_state,
-        new_form: &mut *new_form,
-        motion_form: &mut *motion_form,
-        library: &mut *library,
-        textures: &mut *textures,
+        state: &mut state,
+        actions: &mut actions,
+        ui: &mut ui_state,
+        new_form: &mut new_form,
+        motion_form: &mut motion_form,
+        library: &mut library,
+        textures: &mut textures,
         preview: &preview,
         job_running: job_worker.in_flight,
         check_in_flight: check_worker.in_flight,
@@ -143,7 +140,11 @@ fn draw_ui(
     match cx.state.tab {
         MainTab::Library => {
             egui::CentralPanel::default()
-                .frame(egui::Frame::new().fill(theme::BG).inner_margin(egui::Margin::same(14)))
+                .frame(
+                    egui::Frame::new()
+                        .fill(theme::BG)
+                        .inner_margin(egui::Margin::same(14)),
+                )
                 .show(&mut root, |ui| library::draw(ui, &mut cx));
         }
         MainTab::Studio => {
@@ -218,6 +219,8 @@ fn draw_ui(
         cx.ui.egui_wants_pointer = viewport.egui_wants_pointer;
         cx.ui.egui_wants_keyboard = viewport.egui_wants_keyboard;
         cx.ui.pointer_in_viewport = viewport.pointer_in_viewport;
+        reference_preview(ctx, &mut cx, rect);
+        viewport_hint(ctx, &mut cx, rect);
     } else {
         viewport.rect = None;
         viewport.pointer_in_viewport = false;
@@ -230,10 +233,7 @@ fn draw_ui(
         cx.ui.egui_wants_keyboard = viewport.egui_wants_keyboard;
     }
 
-    if cx.state.run.is_busy()
-        || !cx.state.toasts.is_empty()
-        || cx.job_running
-        || cx.check_in_flight
+    if cx.state.run.is_busy() || !cx.state.toasts.is_empty() || cx.job_running || cx.check_in_flight
     {
         ctx.request_repaint_after(Duration::from_millis(120));
     } else {
@@ -242,11 +242,7 @@ fn draw_ui(
     Ok(())
 }
 
-fn top_bar(
-    root: &mut egui::Ui,
-    cx: &mut UiCtx,
-    preview_command: &mut PreviewCommand,
-) {
+fn top_bar(root: &mut egui::Ui, cx: &mut UiCtx, preview_command: &mut PreviewCommand) {
     egui::Panel::top("studio_top")
         .frame(
             egui::Frame::new()
@@ -291,10 +287,8 @@ fn top_bar(
                     }
                     let run = ui.add_enabled(
                         cx.state.can_run(),
-                        egui::Button::new(
-                            egui::RichText::new("Correr").strong().color(theme::BG),
-                        )
-                        .fill(theme::ACCENT),
+                        egui::Button::new(egui::RichText::new("Correr").strong().color(theme::BG))
+                            .fill(theme::ACCENT),
                     );
                     if run.clicked() {
                         cx.actions.push(Action::Run);
@@ -339,28 +333,16 @@ fn artifact_bar(ui: &mut egui::Ui, cx: &mut UiCtx, preview_command: &mut Preview
                 .as_ref()
                 .is_some_and(|check| check.has_artifact(key));
             let stale = matches!(key, "shape")
-                && cx
-                    .state
-                    .stage_stale(studio_core::reroll::Stage::Shape)
+                && cx.state.stage_stale(studio_core::reroll::Stage::Shape)
                 || matches!(key, "refined")
-                    && cx
-                        .state
-                        .stage_stale(studio_core::reroll::Stage::Refine);
+                    && cx.state.stage_stale(studio_core::reroll::Stage::Refine);
             let dot = if exists {
-                if stale {
-                    "◐"
-                } else {
-                    "●"
-                }
+                if stale { "◐" } else { "●" }
             } else {
                 "○"
             };
             let color = if exists {
-                if stale {
-                    theme::WARN
-                } else {
-                    theme::OK
-                }
+                if stale { theme::WARN } else { theme::OK }
             } else {
                 theme::MUTED
             };
@@ -373,6 +355,19 @@ fn artifact_bar(ui: &mut egui::Ui, cx: &mut UiCtx, preview_command: &mut Preview
             }
         }
         ui.separator();
+        if let Some(override_view) = cx.state.preview_override.as_ref() {
+            ui.label(theme::chip(
+                if override_view.starts_with("history:") {
+                    "histórico"
+                } else {
+                    "preview de movimento"
+                },
+                theme::WARN,
+            ));
+            if ui.button("Voltar ao atual").clicked() {
+                cx.actions.push(Action::ReloadPreview);
+            }
+        }
         if ui.button("Enquadrar").clicked() {
             cx.actions.push(Action::Frame);
         }
@@ -385,6 +380,11 @@ fn artifact_bar(ui: &mut egui::Ui, cx: &mut UiCtx, preview_command: &mut Preview
         if ui.checkbox(&mut wireframe, "Wireframe").changed() {
             cx.ui.wireframe = wireframe;
             preview_command.wireframe = Some(wireframe);
+        }
+        let mut grid = cx.ui.show_grid;
+        if ui.checkbox(&mut grid, "Grid").changed() {
+            cx.ui.show_grid = grid;
+            preview_command.show_grid = Some(grid);
         }
         ui.separator();
         if let Some(loaded) = cx.preview.loaded.as_ref() {
@@ -541,9 +541,8 @@ fn new_project_dialog(ctx: &egui::Context, cx: &mut UiCtx) {
             }
             ui.horizontal(|ui| {
                 ui.label("ID");
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut cx.new_form.id).desired_width(220.0),
-                );
+                let response =
+                    ui.add(egui::TextEdit::singleline(&mut cx.new_form.id).desired_width(220.0));
                 if response.changed() {
                     cx.new_form.id_touched = true;
                 }
@@ -555,11 +554,7 @@ fn new_project_dialog(ctx: &egui::Context, cx: &mut UiCtx) {
                     .show_ui(ui, |ui| {
                         for preset in AssetPreset::ALL {
                             if ui
-                                .selectable_value(
-                                    &mut cx.new_form.preset,
-                                    preset,
-                                    preset.label(),
-                                )
+                                .selectable_value(&mut cx.new_form.preset, preset, preset.label())
                                 .clicked()
                             {
                                 if !cx.new_form.id_touched {
@@ -616,17 +611,13 @@ fn new_project_dialog(ctx: &egui::Context, cx: &mut UiCtx) {
             ui.separator();
             ui.horizontal(|ui| {
                 let create = ui.add_enabled(
-                    !cx.new_form.prompt.trim().is_empty()
-                        && !cx.new_form.id.trim().is_empty(),
-                    egui::Button::new(
-                        egui::RichText::new("Criar").strong().color(theme::BG),
-                    )
-                    .fill(theme::ACCENT),
+                    !cx.new_form.prompt.trim().is_empty() && !cx.new_form.id.trim().is_empty(),
+                    egui::Button::new(egui::RichText::new("Criar").strong().color(theme::BG))
+                        .fill(theme::ACCENT),
                 );
                 if create.clicked() {
                     let slug = studio_core::project::slugify(&cx.new_form.id);
-                    let dir =
-                        studio_core::project::unique_project_dir(&cx.state.workspace, &slug);
+                    let dir = studio_core::project::unique_project_dir(&cx.state.workspace, &slug);
                     let config = cx.new_form.to_config();
                     cx.actions.push(Action::NewProject(CreateRequest {
                         dir,
@@ -699,6 +690,76 @@ fn toasts(ctx: &egui::Context, cx: &mut UiCtx) {
         });
 }
 
+fn reference_preview(ctx: &egui::Context, cx: &mut UiCtx, rect: egui::Rect) {
+    if cx.state.selected != "image" {
+        return;
+    }
+    let Some(project) = cx.state.project.as_ref() else {
+        return;
+    };
+    let path = project.image_path();
+    let Some(handle) = texture_for(ctx, &path, cx.textures) else {
+        return;
+    };
+    let available = rect.shrink2(egui::vec2(80.0, 70.0));
+    let size = fit_size(&handle, available.size());
+    let position = rect.center() - size * 0.5;
+    egui::Area::new(egui::Id::new("reference_preview"))
+        .fixed_pos(position)
+        .order(egui::Order::Foreground)
+        .show(ctx, |ui| {
+            egui::Frame::popup(ui.style())
+                .fill(theme::BG)
+                .show(ui, |ui| {
+                    ui.add(egui::Image::new(egui::load::SizedTexture::new(
+                        handle.id(),
+                        size,
+                    )));
+                });
+        });
+}
+
+fn viewport_hint(ctx: &egui::Context, cx: &mut UiCtx, rect: egui::Rect) {
+    let hint = if let Some(error) = cx.preview.error.as_ref() {
+        Some((format!("preview: {error}"), theme::ERROR))
+    } else if cx.preview.pending_decode.is_some() || cx.preview.pending_scene.is_some() {
+        Some(("a carregar GLB…".to_string(), theme::MUTED))
+    } else if let Some(loaded) = cx.preview.loaded.as_ref() {
+        if loaded.artifact != cx.state.selected && cx.state.preview_override.is_none() {
+            Some((
+                format!(
+                    "a mostrar {} · {} ainda não existe",
+                    loaded.artifact, cx.state.selected
+                ),
+                theme::MUTED,
+            ))
+        } else {
+            None
+        }
+    } else if cx.state.artifact_path(&cx.state.selected).is_none() {
+        Some((
+            format!("{} ainda não existe · corre o pipeline", cx.state.selected),
+            theme::MUTED,
+        ))
+    } else {
+        None
+    };
+    let Some((text, color)) = hint else {
+        return;
+    };
+    let position = egui::pos2(rect.center().x - 170.0, rect.bottom() - 54.0);
+    egui::Area::new(egui::Id::new("viewport_hint"))
+        .fixed_pos(position)
+        .order(egui::Order::Foreground)
+        .show(ctx, |ui| {
+            egui::Frame::popup(ui.style())
+                .fill(theme::PANEL_HIGH)
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::new(text).color(color).size(11.5));
+                });
+        });
+}
+
 pub fn texture_for(
     ctx: &egui::Context,
     path: &Path,
@@ -715,12 +776,10 @@ pub fn texture_for(
     let image = image::open(path).ok()?.to_rgba8();
     let size = [image.width() as usize, image.height() as usize];
     let color = egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw());
-    let handle = ctx.load_texture(
-        path.to_string_lossy(),
-        color,
-        egui::TextureOptions::LINEAR,
-    );
-    cache.map.insert(path.to_path_buf(), (handle.clone(), mtime));
+    let handle = ctx.load_texture(path.to_string_lossy(), color, egui::TextureOptions::LINEAR);
+    cache
+        .map
+        .insert(path.to_path_buf(), (handle.clone(), mtime));
     Some(handle)
 }
 
@@ -732,4 +791,3 @@ pub fn fit_size(handle: &egui::TextureHandle, max: egui::Vec2) -> egui::Vec2 {
     let scale = (max.x / size.x).min(max.y / size.y).min(1.0);
     egui::vec2(size.x * scale, size.y * scale)
 }
-
