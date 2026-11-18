@@ -19,11 +19,13 @@ Gera **todas** as animações de um rig num único comando. Humanoides: retarget
 animator3d game-pack rigged.glb animated.glb --preset humanoid
 animator3d game-pack rigged.glb animated.glb --clips idle,walk,run      # subconjunto
 animator3d game-pack scorpion_rigged.glb scorpion.glb --preset creature --facing auto
+animator3d game-pack ave_rigged.glb ave.glb --preset avian
+animator3d game-pack borboleta_rigged.glb borboleta.glb --preset butterfly
 ```
 
 | Flag | Efeito |
 |------|--------|
-| `--preset humanoid\|creature\|flying` | Conjunto procedural (auto-deteção humanoid vs creature por defeito) |
+| `--preset humanoid\|creature\|quadruped\|flying\|avian\|butterfly\|aquatic` | Conjunto procedural (auto-deteção humanoid vs creature por defeito) |
 | `--clips idle,walk,run` | Filtrar clips; catálogo: `list-animations` |
 | `--anim-pack quaternius\|quaternius2\|villager\|both\|all` | Packs de retarget (UAL1/UAL2/Kevin Iglesias) |
 | `--facing auto\|+x\|-x\|+z\|-z` | Eixo do focinho (gait para trás = forçar o eixo certo) |

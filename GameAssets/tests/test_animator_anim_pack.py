@@ -101,6 +101,20 @@ class TestManifestAnimPack:
         assert rows[0].animate_anim_pack == "both"
         assert rows[0].generate_animate is True
 
+    def test_aquatic_row_forwards_source_facing(self, tmp_path: Path) -> None:
+        from gameassets.manifest import load_manifest
+
+        manifest = tmp_path / "manifest.yaml"
+        manifest.write_text(
+            "assets:\n  - id: fish\n    idea: trout\n    animate: {preset: aquatic, facing: '-x', clips: swim}\n"
+        )
+        row = load_manifest(manifest)[0]
+        argv = _animator3d_game_pack_argv(
+            "animator3d", Path("in.glb"), Path("out.glb"), preset=row.animate_preset, facing=row.animate_facing
+        )
+        assert argv[argv.index("--preset") + 1] == "aquatic"
+        assert argv[argv.index("--facing") + 1] == "-x"
+
     def test_row_default_none(self, tmp_path: Path) -> None:
         from gameassets.manifest import load_manifest
 

@@ -256,6 +256,24 @@ def finalize_current_action_to_nla(armature_name: str) -> None:
     arm.animation_data.action = None
 
 
+@contextlib.contextmanager
+def isolated_clip_pose(armature_name: str):
+    """Bake one action from rest without sampling older clips on the NLA stack."""
+    from mathutils import Matrix
+
+    arm = _bpy().data.objects[armature_name]
+    ad = arm.animation_data_create()
+    previous = ad.use_nla
+    ad.use_nla = False
+    try:
+        identity = Matrix.Identity(4)
+        for bone in arm.pose.bones:
+            bone.matrix_basis = identity
+        yield
+    finally:
+        ad.use_nla = previous
+
+
 def count_nla_tracks(armature_name: str) -> int:
     """Número de tracks NLA (cada um exporta como uma animação glTF separada)."""
     bpy = _bpy()
@@ -1893,6 +1911,160 @@ def turn_in_place_keyframes(
 
     finalize_current_action_to_nla(armature_name)
     return chains
+
+
+def quadruped_keyframes(
+    armature_name: str,
+    *,
+    frame_start: int,
+    frame_end: int,
+    motion: str,
+    action_name: str,
+) -> None:
+    """Swing the four weight-bearing limbs of a side-profile rig in canonical glTF +Z."""
+    import math
+
+    from mathutils import Quaternion, Vector
+
+    bpy = _bpy()
+    arm = bpy.data.objects[armature_name]
+    # SkinTokens may call a foreleg an arm, or leave it unnamed. Each leg
+    # branches from the torso and descends towards a paw through a single chain.
+    candidates = []
+    for bone in arm.pose.bones:
+        if not bone.parent or len(bone.parent.children) < 2:
+            continue
+        chain = [bone]
+        while len(chain[-1].children) == 1:
+            chain.append(chain[-1].children[0])
+        if len(chain) < 2:
+            continue
+        head = arm.matrix_world @ bone.bone.head_local
+        knee = arm.matrix_world @ chain[1].bone.head_local
+        paw = arm.matrix_world @ chain[-1].bone.head_local
+        reach = head.z - paw.z
+        if head.z > knee.z and reach > 0 and abs(paw.y - head.y) < reach * 1.4:
+            candidates.append((head, reach, chain))
+    if len(candidates) < 4:
+        raise ValueError("Quadruped rig needs four descending leg chains")
+    # Separate the shoulder and hip pairs along the body's longitudinal axis,
+    # then choose the outermost leg on each side if an extra branch was inferred.
+    candidates.sort(key=lambda c: c[0].y)
+    split = max(range(2, len(candidates) - 1), key=lambda i: candidates[i][0].y - candidates[i - 1][0].y)
+    lateral = Vector((1, 0, 0))
+    legs = []
+    for front, group in ((True, candidates[:split]), (False, candidates[split:])):
+        ordered = sorted(group, key=lambda c: c[0].x)
+        for right, (_, _, chain) in ((False, ordered[0]), (True, ordered[-1])):
+            axes = [(arm.matrix_world @ b.bone.matrix_local).to_quaternion().inverted() @ lateral for b in chain[:2]]
+            legs.append((front, right, chain, axes))
+
+    normalize_armature_before_animation(armature_name)
+    stash_if_needed_for_action(armature_name, action_name)
+    ensure_action(armature_name, action_name)
+    with isolated_clip_pose(armature_name):
+        for frame in range(frame_start, frame_end + 1):
+            t = (frame - frame_start) / (frame_end - frame_start)
+            for front, right, chain, axes in legs:
+                if motion == "jump":
+                    tuck = math.sin(math.pi * t) ** 2
+                    swing, bend = (0.34 if front else -0.57) * tuck, (0.25 if front else 0.72) * tuck
+                else:
+                    offset = (
+                        (0.0 if front == right else 0.5) if motion == "walk" else (0.0 if front else 0.5) + 0.1 * right
+                    )
+                    phase = math.tau * (2 * t + offset)
+                    swing = (0.34 if motion == "walk" else 0.55) * math.sin(phase)
+                    bend = (0.26 if motion == "walk" else 0.47) * max(0.0, math.cos(phase))
+                for bone, axis, angle in zip(chain[:2], axes, (swing, bend), strict=True):
+                    bone.rotation_mode = "QUATERNION"
+                    bone.rotation_quaternion = Quaternion(axis, angle)
+                    bone.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+    finalize_current_action_to_nla(armature_name)
+
+
+def bird_keyframes(
+    armature_name: str,
+    *,
+    frame_start: int,
+    frame_end: int,
+    motion: str,
+    action_name: str,
+    four_wings: bool = False,
+) -> None:
+    """Bake independent shoulder and mid-wing movement on each weight-bearing wing."""
+    from mathutils import Quaternion, Vector
+
+    from .wings import prepare_wings, stroke
+
+    bpy = _bpy()
+    arm = bpy.data.objects[armature_name]
+    wings = prepare_wings(arm, four_wings=four_wings)
+    normalize_armature_before_animation(armature_name)
+    stash_if_needed_for_action(armature_name, action_name)
+    ensure_action(armature_name, action_name)
+    scene = bpy.context.scene
+    scene.frame_start, scene.frame_end = frame_start, frame_end
+    with isolated_clip_pose(armature_name):
+        for frame in range(frame_start, frame_end + 1):
+            t = (frame - frame_start) / (frame_end - frame_start)
+            for wing in wings:
+                lift, sweep, bend, tip_sweep = stroke(t, motion, insect=four_wings, hind=wing.hind)
+                for name, pitch, yaw in ((wing.shoulder, lift, sweep), (wing.middle, bend, tip_sweep)):
+                    bone = arm.pose.bones[name]
+                    rest = bone.bone.matrix_local.to_quaternion()
+                    fold = Quaternion(Vector((0, 0, 1)), wing.side * yaw)
+                    flap = Quaternion(Vector((0, 1, 0)), -wing.side * pitch)
+                    bone.rotation_mode = "QUATERNION"
+                    bone.rotation_quaternion = rest.inverted() @ fold @ flap @ rest
+                    bone.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+    finalize_current_action_to_nla(armature_name)
+
+
+def swim_keyframes(
+    armature_name: str,
+    *,
+    frame_start: int = 1,
+    frame_end: int = 25,
+    amplitude: float = 0.55,
+    action_name: str = "Animator3D_Swim",
+) -> None:
+    """Bake one lateral body wave on a fish facing canonical glTF +Z (Blender -Y)."""
+    import math
+
+    from mathutils import Quaternion, Vector
+
+    bpy = _bpy()
+    arm = bpy.data.objects[armature_name]
+    # The wave travels along the body regardless of bone names or hierarchy.
+    # Subtract the parent's rest-space yaw to avoid multiplying the amplitude
+    # on a long chain. Neighbouring fin rays follow the same local body segment.
+    bones = list(arm.pose.bones)
+    midpoints = {b.name: arm.matrix_world @ ((b.bone.head_local + b.bone.tail_local) * 0.5) for b in bones}
+    if len(bones) < 2:
+        raise ValueError("Swimming needs at least two bones along the body")
+    nose = min(p.y for p in midpoints.values())
+    length = max(p.y for p in midpoints.values()) - nose
+    if length < 1e-6:
+        raise ValueError("Swimming needs a longitudinal skeleton facing glTF +Z")
+    positions = {name: (p.y - nose) / length for name, p in midpoints.items()}
+    up = Vector((0, 0, 1))
+    axes = {b.name: (arm.matrix_world @ b.bone.matrix_local).to_quaternion().inverted() @ up for b in bones}
+    normalize_armature_before_animation(armature_name)
+    stash_if_needed_for_action(armature_name, action_name)
+    ensure_action(armature_name, action_name)
+    scene = bpy.context.scene
+    scene.frame_start, scene.frame_end = frame_start, frame_end
+    with isolated_clip_pose(armature_name):
+        for frame in range(frame_start, frame_end + 1):
+            phase = math.tau * (frame - frame_start) / (frame_end - frame_start)
+            yaw = {name: amplitude * t**1.6 * math.sin(phase - 3.0 * t) for name, t in positions.items()}
+            for bone in bones:
+                relative = yaw[bone.name] - (yaw[bone.parent.name] if bone.parent else 0.0)
+                bone.rotation_mode = "QUATERNION"
+                bone.rotation_quaternion = Quaternion(axes[bone.name], relative)
+                bone.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+    finalize_current_action_to_nla(armature_name)
 
 
 def breathe_idle_keyframes(

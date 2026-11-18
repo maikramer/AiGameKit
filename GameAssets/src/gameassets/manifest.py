@@ -292,9 +292,10 @@ class ManifestRow:
     # Per-row animation overrides (from YAML ``animate:`` sub-dict).
     # When None, fall back to the global ``animator3d:`` profile settings.
     animate_clips: str | None = None
-    animate_preset: str | None = None  # humanoid | creature | flying
+    animate_preset: str | None = None  # humanoid | creature | quadruped | flying | avian | butterfly | aquatic
     animate_procedural: bool | None = None
     animate_force_preset: bool | None = None
+    animate_facing: str | None = None
     # anim_pack: quaternius | quaternius2 | villager | both | all | lista (ex.: both,villager)
     animate_anim_pack: str | None = None
     # Controlos Omni por asset (override de ``text3d.omni`` no game.yaml).
@@ -512,6 +513,7 @@ def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
                 animate_preset=animate_cfg.get("preset"),
                 animate_procedural=animate_cfg.get("procedural"),
                 animate_force_preset=animate_cfg.get("force_preset"),
+                animate_facing=animate_cfg.get("facing"),
                 animate_anim_pack=animate_cfg.get("anim_pack"),
                 omni=row_omni,
                 seed=row_seed,

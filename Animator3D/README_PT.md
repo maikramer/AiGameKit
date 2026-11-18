@@ -67,7 +67,7 @@ animator3d game-pack rigged.glb animado.glb --preset humanoid
 | `land` | Aterragem |
 | `roar` | Rugido de vitória |
 | **Lote** | |
-| `game-pack` | Gera todas as animações de jogo num único comando (`--preset humanoid` / `creature` / `flying`; filtro opcional `--clips`) |
+| `game-pack` | Gera todas as animações de jogo num único comando com `--preset` e filtro opcional `--clips` |
 
 ### `game-pack`
 
@@ -77,6 +77,16 @@ Gera todos os clips de um preset de uma vez.
   procedural só se o pack/rig falhar. Inventário:
   [`docs/quaternius_inventory.md`](../docs/quaternius_inventory.md).
 - **`creature`** / **`flying`** — clips procedurais do preset.
+- **`avian`** — batida ampla no ombro e flexão da ponta com atraso. Inclui
+  `perch`, `hover`, `soar` e `land`.
+- **`butterfly`** — `hover` e `soar` com movimento próprio nas quatro asas.
+- **`quadruped`** — repouso, marcha, corrida e salto.
+- **`aquatic`** — nado lento em repouso e nado ativo, com ondulação lateral da cauda.
+
+Para aves e borboletas, usa um rig de asas abertas, orientado para +Z em glTF,
+ou indica a frente com `--facing`. Cada asa deve ter uma cadeia com pesos na
+malha. O Animator3D adiciona o osso intermediário e reparte os pesos ao redor da
+articulação. O exemplo completo com oito espécies está no [manual do manifesto](../docs/MANIFEST_AUTHORING.md#fauna-animada).
 
 **Pivô:** cria `root` estático nos pés; **não** anima a rotação do `root`
 Quaternius (±90° → origem salta para a cintura ao play). Location só no

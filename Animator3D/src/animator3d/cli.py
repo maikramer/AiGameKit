@@ -1012,6 +1012,26 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
         ("hit_keyframes", {"frame_end": 16, "action_name": "Animator3D_Hit"}),
         ("death_keyframes", {"frame_end": 48, "action_name": "Animator3D_Death"}),
     ],
+    "quadruped": [
+        ("breathe_idle_keyframes", {"frame_end": 72, "action_name": "Animator3D_BreatheIdle"}),
+        ("quadruped_keyframes", {"frame_end": 49, "motion": "walk", "action_name": "Animator3D_Walk"}),
+        ("quadruped_keyframes", {"frame_end": 37, "motion": "run", "action_name": "Animator3D_Run"}),
+        ("quadruped_keyframes", {"frame_end": 36, "motion": "jump", "action_name": "Animator3D_Jump"}),
+    ],
+    "avian": [
+        ("bird_keyframes", {"frame_end": 49, "motion": "perch", "action_name": "Animator3D_Perch"}),
+        ("bird_keyframes", {"frame_end": 25, "motion": "hover", "action_name": "Animator3D_Hover"}),
+        ("bird_keyframes", {"frame_end": 49, "motion": "soar", "action_name": "Animator3D_Soar"}),
+        ("bird_keyframes", {"frame_end": 25, "motion": "land", "action_name": "Animator3D_Land"}),
+    ],
+    "butterfly": [
+        ("bird_keyframes", {"frame_end": 25, "motion": "hover", "four_wings": True, "action_name": "Animator3D_Hover"}),
+        ("bird_keyframes", {"frame_end": 49, "motion": "soar", "four_wings": True, "action_name": "Animator3D_Soar"}),
+    ],
+    "aquatic": [
+        ("swim_keyframes", {"frame_end": 49, "amplitude": 0.18, "action_name": "Animator3D_SwimIdle"}),
+        ("swim_keyframes", {"frame_end": 25, "action_name": "Animator3D_Swim"}),
+    ],
     "flying": [
         ("breathe_idle_keyframes", {"frame_end": 72, "action_name": "Animator3D_BreatheIdle"}),
         ("hover_flap_keyframes", {"frame_end": 60, "action_name": "Animator3D_Hover"}),
@@ -1064,8 +1084,8 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
     type=click.Choice(["auto", "+x", "-x", "+z", "-z"], case_sensitive=False),
     help=(
         "Eixo glTF em que o focinho aponta HOJE no ficheiro de entrada "
-        "(caminho procedural). ``auto`` = eixo comprido da bbox + cauda "
-        "levandada; se o gait sair andando para trás, force o eixo certo."
+        "(caminho procedural). auto assume +Z em humanoides, aves e borboletas. "
+        "Nas outras criaturas, estima a frente pela geometria."
     ),
 )
 @click.option(
@@ -1182,12 +1202,10 @@ def cmd_game_pack(
     # modelo (quadrúpedes chegam "de lado" do Hunyuan3D e o classificador/gait
     # assumem lateral=X), renomear chains e aplicar preset.
     #
-    # Humanoide NÃO passa pelo auto: o bbox de um humanoide em A-pose é mais
-    # largo (X) do que fundo (Y) — exactamente o que o heurístico de criatura
-    # lê como "de lado" e roda 90° (merchant do Vael saía de perfil). O shape
-    # humanoide do pipeline já nasce de frente para −Y; o auto só faz sentido
-    # em criaturas. Um --facing explícito continua a mandar.
-    effective_facing = "+z" if (facing == "auto" and preset.lower() == "humanoid") else facing
+    # Humanoids in A-pose and animals with spread wings are widest across
+    # the body. Their canonical frontal rigs face glTF +Z.
+    frontal_rig = preset.lower() in {"humanoid", "avian", "butterfly"}
+    effective_facing = "+z" if facing == "auto" and frontal_rig else facing
     facing_info = bpy_ops.canonicalize_creature_facing(arm_name, facing=effective_facing)
     if facing_info.get("rotated_deg"):
         console.print(

@@ -147,7 +147,7 @@ class Animator3DProfile:
     """Opções para ``animator3d game-pack`` após Rigging3D (GLB rigado -> GLB com clips).
 
     Campos mapeiam 1:1 para flags do CLI ``animator3d game-pack``:
-    - ``preset``: humanoid | creature | flying (caminho procedural).
+    - ``preset``: humanoid | creature | quadruped | flying | avian | butterfly | aquatic (caminho procedural).
     - ``clips``: filtro CSV (ex: ``"idle,walk,run"``); None = todos os clips do preset/retarget.
     - ``procedural``: força clips procedurais mesmo em humanoides (sem retarget Quaternius mocap).
     - ``force_preset``: desativa auto-deteção humanoid vs creature.
@@ -821,7 +821,7 @@ class GameProfile:
         if isinstance(raw_anim, dict):
             pr_a = raw_anim.get("preset")
             pr_as = str(pr_a).strip().lower() if pr_a not in (None, "") else "humanoid"
-            valid_presets = ("humanoid", "creature", "flying")
+            valid_presets = ("humanoid", "creature", "quadruped", "flying", "avian", "butterfly", "aquatic")
             if pr_as not in valid_presets:
                 raise ValueError(f"animator3d.preset deve ser um de: {', '.join(valid_presets)}")
             # Clips filter (CSV string, ex: "idle,walk,run"); None = all clips.

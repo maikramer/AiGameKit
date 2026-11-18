@@ -17,6 +17,34 @@ tune: `Text3D/src/text3d/bbox_tune.py`.
 
 ---
 
+## Fauna animada
+
+Cria um projeto com oito espécies e confere o plano antes de gerar os modelos.
+
+```bash
+gameassets init --template fauna --path minha-fauna
+cd minha-fauna
+gameassets batch --dry-run --dry-run-json plano.json
+```
+
+Com o vramd remoto configurado, executa `gameassets resume --gpu remote` nessa pasta.
+Para acrescentar uma espécie, duplica uma linha com anatomia semelhante e ajusta
+`id`, `idea`, `seed` e `omni.size_m`. Atualiza `omni.bbox` para manter as proporções.
+O bloco `animate` escolhe os clips e a direção em que o animal olha no GLB de entrada.
+
+```yaml
+animate:
+  preset: avian
+  facing: "+z"
+  clips: perch,hover,soar,land
+```
+
+As aves usam `hover` para voo batido e `soar` para planar. O pouso termina
+com as asas recolhidas na pose de `perch`. Para borboletas, usa o preset
+`butterfly` com uma cadeia de ossos para a asa dianteira e outra para a traseira de
+cada lado. A referência deve mostrar os quatro lobos abertos e separados. Os presets
+identificam as asas pela geometria e preservam os nomes dos clips entre espécies.
+
 ## 1. Princípio
 
 1. **`category` + `size_m` (ou `height_m`) bastam** na maioria dos casos.

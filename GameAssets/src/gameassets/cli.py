@@ -7,6 +7,7 @@ import json
 import shutil
 import sys
 from datetime import datetime, timezone
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -170,7 +171,8 @@ def mesh_reorigin_feet_cmd(path: Path, recursive: bool, dry_run: bool, excludes:
     help="Diretório onde criar game.yaml e manifest.yaml",
 )
 @click.option("--force", is_flag=True, help="Sobrescrever ficheiros existentes")
-def init_cmd(target_dir: Path, force: bool) -> None:
+@click.option("--template", type=click.Choice(["default", "fauna"]), default="default", show_default=True)
+def init_cmd(target_dir: Path, force: bool, template: str) -> None:
     """Cria game.yaml e manifest.yaml de exemplo."""
     target_dir = target_dir.resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -180,8 +182,13 @@ def init_cmd(target_dir: Path, force: bool) -> None:
         raise click.ClickException(f"Já existe {gy} (usa --force para sobrescrever)")
     if my.exists() and not force:
         raise click.ClickException(f"Já existe {my} (usa --force para sobrescrever)")
-    gy.write_text(GAME_YAML, encoding="utf-8")
-    my.write_text(MANIFEST_YAML, encoding="utf-8")
+    game, manifest = GAME_YAML, MANIFEST_YAML
+    if template == "fauna":
+        data = files("gameassets").joinpath("data")
+        game = data.joinpath("fauna.game.yaml").read_text(encoding="utf-8")
+        manifest = data.joinpath("fauna.manifest.yaml").read_text(encoding="utf-8")
+    gy.write_text(game, encoding="utf-8")
+    my.write_text(manifest, encoding="utf-8")
     console.print(
         Panel(
             f"Criados [bold cyan]{gy}[/bold cyan] e [bold cyan]{my}[/bold cyan].\n\n"

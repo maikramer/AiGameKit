@@ -1,0 +1,18 @@
+title: Fauna
+genre: exploração
+tone: naturalista
+style_preset: painterly
+generation: medium
+output_dir: ./output
+path_layout: split
+text3d:
+  preset: hq
+  export_origin: feet
+paint3d:
+  preserve_origin: true
+rigging3d:
+  output_suffix: _rigged
+animator3d:
+  procedural: true
+lod:
+  rig_max_level: 2

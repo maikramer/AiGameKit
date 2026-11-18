@@ -202,6 +202,7 @@ def _animator3d_game_pack_argv(
     procedural: bool = False,
     force_preset: bool = False,
     anim_pack: str = "quaternius",
+    facing: str | None = None,
     ik_limits: bool | None = None,
 ) -> list[str]:
     args = [
@@ -212,6 +213,8 @@ def _animator3d_game_pack_argv(
         "--preset",
         preset,
     ]
+    if facing:
+        args.extend(["--facing", facing])
     if clips:
         args.extend(["--clips", clips])
     if procedural:
@@ -3270,6 +3273,7 @@ def run_master_pipeline(
                     clips=eff_clips,
                     procedural=eff_procedural,
                     force_preset=eff_force_preset,
+                    facing=row.animate_facing,
                     anim_pack=eff_anim_pack,
                     ik_limits=anim_prof.ik_limits,
                 )

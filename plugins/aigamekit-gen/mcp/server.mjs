@@ -223,7 +223,7 @@ const TOOLS = [
   {
     name: "animator3d_game_pack",
     description:
-      "Gera todas as animações de um rig num comando: retarget Quaternius (CC0) para humanoides; presets procedurais para criaturas/voadores. Catálogo de clips: animator3d_list_animations. " + GPU_NOTE,
+      "Anima um GLB rigado em CPU com retarget Quaternius para humanoides ou clips procedurais para quadrúpedes, aves, borboletas e peixes.",
     bin: "animator3d",
     timeout: 1800,
     inputSchema: {
@@ -231,7 +231,7 @@ const TOOLS = [
       properties: {
         input: { type: "string", description: "GLB rigado" },
         output: { type: "string", description: "GLB animado" },
-        preset: { type: "string", enum: ["humanoid", "creature", "flying"] },
+        preset: { type: "string", enum: ["humanoid", "creature", "quadruped", "flying", "avian", "butterfly", "aquatic"] },
         clips: { type: "string", description: 'Subconjunto por vírgulas, ex: "idle,walk,run"' },
         anim_pack: { type: "string", enum: ["quaternius", "quaternius2", "villager", "both", "all"] },
         facing: { type: "string", enum: ["auto", "+x", "-x", "+z", "-z"], description: "Eixo do focinho (gait para trás = forçar)" },

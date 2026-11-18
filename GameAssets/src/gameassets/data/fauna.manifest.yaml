@@ -1,0 +1,140 @@
+assets:
+  - id: fox
+    idea: >-
+      red fox with a copper-orange coat, cream muzzle and tail tip, black stockings, four distinct legs in a relaxed standing pose and a long bushy tail extended behind, side three-quarter view.
+      Single full animal, readable painterly game silhouette, isolated on plain white, no scenery or base.
+    seed: 81210
+    kind: character
+    category: creature
+    pipeline: [3d, paint, rig, animate, lod]
+    lod_levels: 1
+    omni:
+      control_type: bbox
+      size_m: [1.32, 0.7, 0.32]
+      bbox: [1.0, 0.53, 0.242]
+    animate:
+      preset: quadruped
+      facing: "-x"
+      clips: idle,walk,run
+  - id: rat
+    idea: >-
+      A single brown field rat scurrying on all fours in strict side profile. Long horizontal back, low narrow
+      head with pointed whiskered snout aimed to the right, small round upright ears, grey brown fur, four
+      separate grounded pink feet, long slender naked tail stretched out behind to the left. Anatomically
+      proportioned rodent, painterly animal field guide illustration against white, full silhouette including
+      tail.
+    seed: 81241
+    kind: character
+    category: creature
+    pipeline: [3d, paint, rig, animate, lod]
+    lod_levels: 1
+    omni:
+      control_type: bbox
+      size_m: [0.43, 0.17, 0.13]
+      bbox: [1.0, 0.395, 0.302]
+    animate:
+      preset: quadruped
+      facing: "+x"
+      clips: idle,walk,run
+  - id: hare
+    idea: >-
+      European brown hare with long black-tipped upright ears, powerful hindquarters, long back feet and short cream tail, standing on four separate feet, side three-quarter view.
+      Single full animal, readable painterly game silhouette, isolated on plain white, no scenery or base.
+    seed: 81212
+    kind: character
+    category: creature
+    pipeline: [3d, paint, rig, animate, lod]
+    lod_levels: 1
+    omni:
+      control_type: bbox
+      size_m: [0.65, 0.66, 0.27]
+      bbox: [0.985, 1.0, 0.409]
+    animate:
+      preset: quadruped
+      facing: "+x"
+      clips: idle,run,jump
+  - id: swallow
+    idea: >-
+      barn swallow in flight with both long pointed wings extended horizontally, deeply forked tail, ink-blue back, russet throat and cream belly, slightly elevated frontal view.
+      Single full animal, readable painterly game silhouette, isolated on plain white, no scenery or base.
+    seed: 81213
+    kind: character
+    category: creature
+    pipeline: [3d, paint, rig, animate, lod]
+    lod_levels: 1
+    omni:
+      control_type: bbox
+      size_m: [0.37, 0.08, 0.22]
+      bbox: [1.0, 0.216, 0.595]
+    animate:
+      preset: avian
+      facing: "+z"
+      clips: hover,soar
+  - id: jay
+    idea: >-
+      Eurasian jay with pinkish buff plumage, pale face and black moustache, blue and black striped wing coverts, dark tail, both wings fully outstretched in flight, slightly elevated frontal view.
+      Single full animal, readable painterly game silhouette, isolated on plain white, no scenery or base.
+    seed: 81214
+    kind: character
+    category: creature
+    pipeline: [3d, paint, rig, animate, lod]
+    lod_levels: 1
+    omni:
+      control_type: bbox
+      size_m: [0.57, 0.17, 0.34]
+      bbox: [1.0, 0.298, 0.596]
+    animate:
+      preset: avian
+      facing: "+z"
+      clips: perch,hover,soar,land
+  - id: owl
+    idea: >-
+      tawny owl with rounded head and dark eyes in a cream facial disk, barred chest, cinnamon and umber feathers, both broad wings spread horizontally in flight, slightly elevated frontal view.
+      Single full animal, readable painterly game silhouette, isolated on plain white, no scenery or base.
+    seed: 81215
+    kind: character
+    category: creature
+    pipeline: [3d, paint, rig, animate, lod]
+    lod_levels: 1
+    omni:
+      control_type: bbox
+      size_m: [0.96, 0.27, 0.42]
+      bbox: [1.0, 0.281, 0.438]
+    animate:
+      preset: avian
+      facing: "+z"
+      clips: perch,hover,soar,land
+  - id: butterfly
+    idea: >-
+      amber and charcoal meadow butterfly, four broad orange wing lobes edged in black, two fine antennae, slim dark abdomen, symmetric open wings viewed from slightly above.
+      Single full animal, readable painterly game silhouette, isolated on plain white, no scenery or base.
+    seed: 81216
+    kind: character
+    category: creature
+    pipeline: [3d, paint, rig, animate, lod]
+    lod_levels: 1
+    omni:
+      control_type: bbox
+      size_m: [0.1, 0.025, 0.075]
+      bbox: [1.0, 0.25, 0.75]
+    animate:
+      preset: butterfly
+      facing: "+z"
+      clips: hover,soar
+  - id: trout
+    idea: >-
+      brown trout with streamlined olive and silver flanks, dark spots and sparse russet speckles, clearly separate single tail fin, dorsal and paired pectoral fins, straight horizontal body in side view.
+      Single full animal, readable painterly game silhouette, isolated on plain white, no scenery or base.
+    seed: 81217
+    kind: character
+    category: creature
+    pipeline: [3d, paint, rig, animate, lod]
+    lod_levels: 1
+    omni:
+      control_type: bbox
+      size_m: [0.58, 0.15, 0.1]
+      bbox: [1.0, 0.259, 0.172]
+    animate:
+      preset: aquatic
+      facing: "-x"
+      clips: idle,swim

@@ -97,7 +97,7 @@ animator3d game-pack hero.glb hero_anim.glb --preset humanoid --draco
 |------|------|---------|-------------|
 | `INPUT` | path | **required** | Input rigged GLB path |
 | `OUTPUT` | path | **required** | Output animated GLB path |
-| `--preset` | choice | `humanoid` | Preset: `humanoid`, `creature`, `flying` |
+| `--preset` | choice | `humanoid` | Preset: `humanoid`, `creature`, `quadruped`, `flying`, `avian`, `butterfly`, `aquatic` |
 | `--clips` | str | (all) | Filter clips by comma-separated names (e.g. `walk,run`) |
 | `--anim-pack` | str | `quaternius` | Retarget pack(s): `quaternius`, `quaternius2`, `villager`, `both`, `all`, or a comma list (order defines replacements, e.g. `both,villager`) |
 | `--force-preset` | flag | `false` | Skip auto-detect (humanoid→creature) |
@@ -111,6 +111,10 @@ animator3d game-pack hero.glb hero_anim.glb --preset humanoid --draco
 | `humanoid` (procedural fallback) | breathe-idle, walk, run, jump, fall, … |
 | `creature` | breathe-idle, walk, attack, roar |
 | `flying` | breathe-idle, hover, soar, dive, land |
+| `quadruped` | breathe-idle, walk, run, jump (four ground-contact limbs) |
+| `avian` | perch, hover, soar, land (shoulder stroke and weighted mid-wing flex) |
+| `butterfly` | hover, soar (independent forewings and hindwings) |
+| `aquatic` | swim-idle, swim (looping lateral tail beats) |
 
 Quaternius clean names for humanoids: run `animator3d list-animations` (see
 [Utility Commands](#animator3d-list-animations)) — no need to read the YAML by

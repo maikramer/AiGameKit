@@ -36,6 +36,34 @@ def test_init_creates_files(runner: CliRunner, tmp_path: Path) -> None:
     assert (tmp_path / "manifest.yaml").is_file()
 
 
+def test_fauna_template_plans_animation_for_every_species(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(cli, ["init", "--template", "fauna"])
+    assert result.exit_code == 0, result.output
+    result = runner.invoke(cli, ["batch", "--dry-run", "--dry-run-json", "plan.json"])
+    assert result.exit_code == 0, result.output
+    steps = json.loads(Path("plan.json").read_text(encoding="utf-8"))["steps"]
+    animations = {}
+    for step in steps:
+        if step.get("phase") == "animator3d":
+            argv = step["argv"]
+            animations[step["row_id"]] = tuple(
+                argv[argv.index(flag) + 1] for flag in ("--preset", "--facing", "--clips")
+            )
+    assert animations == {
+        "fox": ("quadruped", "-x", "idle,walk,run"),
+        "rat": ("quadruped", "+x", "idle,walk,run"),
+        "hare": ("quadruped", "+x", "idle,run,jump"),
+        "swallow": ("avian", "+z", "hover,soar"),
+        "jay": ("avian", "+z", "perch,hover,soar,land"),
+        "owl": ("avian", "+z", "perch,hover,soar,land"),
+        "butterfly": ("butterfly", "+z", "hover,soar"),
+        "trout": ("aquatic", "-x", "idle,swim"),
+    }
+
+
 def test_init_refuses_overwrite_without_force(runner: CliRunner, tmp_path: Path) -> None:
     (tmp_path / "game.yaml").write_text("x: 1\n", encoding="utf-8")
     r = runner.invoke(cli, ["init", "--path", str(tmp_path)])

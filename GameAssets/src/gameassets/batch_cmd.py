@@ -1003,13 +1003,19 @@ def batch_cmd(
                 rig_out = _rigging3d_output_path(rig_in, sfx)
                 anim_out = _animator3d_output_path(rig_out)
                 anim_prof = profile.animator3d or Animator3DProfile()
-                preset = (anim_prof.preset or "humanoid").strip().lower()
+                preset = (row.animate_preset or anim_prof.preset or "humanoid").strip().lower()
                 ap_args = _animator3d_game_pack_argv(
                     animator3d_bin,
                     rig_out,
                     anim_out,
                     preset=preset,
-                    anim_pack=anim_prof.anim_pack,
+                    anim_pack=row.animate_anim_pack or anim_prof.anim_pack,
+                    clips=row.animate_clips or anim_prof.clips,
+                    facing=row.animate_facing,
+                    procedural=anim_prof.procedural if row.animate_procedural is None else row.animate_procedural,
+                    force_preset=(
+                        anim_prof.force_preset if row.animate_force_preset is None else row.animate_force_preset
+                    ),
                     ik_limits=anim_prof.ik_limits,
                 )
                 _dry_run_emit(dry_plan, phase="animator3d", row_id=row.id, argv=ap_args)
