@@ -4,7 +4,7 @@ SprongMotion's own model card warns that results vary a lot between seeds. The
 runtime is fast enough (~0.2 s per clip on a laptop CPU) that generating a few
 seeds and keeping the cleanest one is the pragmatic default.
 
-The score combines three mechanically observable defects — it is **not** a
+The score combines mechanically observable defects — it is **not** a
 perceptual judgement:
 
 * ``foot_slide`` — planted feet must stay put in world space (foot_lock
@@ -12,7 +12,8 @@ perceptual judgement:
 * ``ground_penetration`` — how far the lowest foot goes below the clip's own
   stance plane (floor guesses are relative: no absolute ground in the data);
 * ``jerk`` — third difference of the root trajectory (single-frame glitches,
-  the "pirouette" failure mode).
+  the "pirouette" failure mode);
+* ``loop_seam`` — excess joint displacement when a requested cycle wraps.
 
 Lower is better. Weights are dimensionless-ish ratios chosen so a typical clean
 walk scores < 1 and a glitchy clip > 2; only the ranking between seeds matters.
@@ -42,12 +43,14 @@ class ClipQuality:
     ground_penetration: float
     jerk: float
     score: float
+    loop_seam: float = 0.0
 
     def as_dict(self) -> dict[str, float]:
         return {
             "foot_slide": round(self.foot_slide, 5),
             "ground_penetration": round(self.ground_penetration, 5),
             "jerk": round(self.jerk, 5),
+            "loop_seam": round(self.loop_seam, 5),
             "score": round(self.score, 4),
         }
 
@@ -96,24 +99,42 @@ def jerk(clip: Clip) -> float:
     return float(np.linalg.norm(third, axis=-1).mean())
 
 
-def score_clip(clip: Clip) -> ClipQuality:
+def loop_seam(clip: Clip) -> float:
+    """Excess wrap step at the worst joint, relative to normal playback.
+
+    Remove horizontal travel so a clean travelling walk can loop. Preserve
+    vertical motion so a discontinuity in pelvis height still counts.
+    """
+    joints = np.asarray(clip.joints, dtype=np.float64).copy()
+    if len(joints) < 3:
+        return 0.0
+    joints[..., 0] -= joints[:, :1, 0].copy()
+    joints[..., 2] -= joints[:, :1, 2].copy()
+    wrap = np.linalg.norm(joints[-1] - joints[0], axis=-1)
+    step = np.linalg.norm(np.diff(joints, axis=0), axis=-1)
+    return float(np.maximum(wrap - np.percentile(step, 90, axis=0), 0.0).max())
+
+
+def score_clip(clip: Clip, *, loop: bool = False) -> ClipQuality:
     """Score one clip (lower is better); see module docstring for the weights."""
     slide = foot_slide(clip)
     penetration = ground_penetration(clip)
     shake = jerk(clip)
-    score = _SLIDE_WEIGHT * slide + _PENETRATION_WEIGHT * penetration + _JERK_WEIGHT * shake
+    seam = loop_seam(clip) if loop else 0.0
+    score = 4.0 * seam + _SLIDE_WEIGHT * slide + _PENETRATION_WEIGHT * penetration + _JERK_WEIGHT * shake
     return ClipQuality(
         foot_slide=slide,
         ground_penetration=penetration,
         jerk=shake,
         score=float(score),
+        loop_seam=seam,
     )
 
 
-def best_clip(clips: list[Clip]) -> tuple[Clip, ClipQuality]:
+def best_clip(clips: list[Clip], *, loop: bool = False) -> tuple[Clip, ClipQuality]:
     """Pick the lowest-scoring clip (first wins on ties — deterministic)."""
     if not clips:
         raise ValueError("clips cannot be empty")
-    scored = [(score_clip(clip), index, clip) for index, clip in enumerate(clips)]
+    scored = [(score_clip(clip, loop=loop), index, clip) for index, clip in enumerate(clips)]
     quality, _, clip = min(scored, key=lambda item: (item[0].score, item[1]))
     return clip, quality

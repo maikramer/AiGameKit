@@ -751,41 +751,47 @@ def canonicalize_creature_facing(armature_name: str, facing: str = "auto") -> di
         span_x, span_y = mx.x - mn.x, mx.y - mn.y
         if span_y >= span_x:
             # Já comprido no eixo da frente (±Y): canónico para classificação.
-            return {"facing": "-y", "rotated_deg": 0.0, "method": "already-canonical"}
-        method = "auto"
-        theta = -90.0  # default: focinho em +X do Blender → −Y
-        # Sinal pela cauda levantada: cadeia linear cuja ponta fica na zona
-        # mais alta do corpo aponta para TRÁS.
-        pbones = arm.pose.bones
-        if pbones:
-            zs = [pb.bone.head_local.z for pb in pbones] + [pb.bone.tail_local.z for pb in pbones]
-            z0, z1 = min(zs), max(zs)
+            chains = _classify_bone_chains(armature_name)
+            axis = _quadruped_forward(arm, chains)
+            if axis is None or axis.y <= 0.0:
+                return {"facing": "-y", "rotated_deg": 0.0, "method": "already-canonical"}
+            theta = 180.0
+            method = "auto"
+        else:
+            method = "auto"
+            theta = -90.0  # default: focinho em +X do Blender → −Y
+            # Sinal pela cauda levantada: cadeia linear cuja ponta fica na zona
+            # mais alta do corpo aponta para TRÁS.
+            pbones = arm.pose.bones
+            if pbones:
+                zs = [pb.bone.head_local.z for pb in pbones] + [pb.bone.tail_local.z for pb in pbones]
+                z0, z1 = min(zs), max(zs)
 
-            def _chain_dir(start_pb: Any) -> Vector | None:
-                cursor = start_pb
-                while len(cursor.children) == 1:
-                    cursor = cursor.children[0]
-                d = Vector(cursor.bone.tail_local) - Vector(start_pb.bone.head_local)
-                return d if d.length > 1e-4 else None
+                def _chain_dir(start_pb: Any) -> Vector | None:
+                    cursor = start_pb
+                    while len(cursor.children) == 1:
+                        cursor = cursor.children[0]
+                    d = Vector(cursor.bone.tail_local) - Vector(start_pb.bone.head_local)
+                    return d if d.length > 1e-4 else None
 
-            best_rise = 0.0
-            back_dir = 0.0
-            for pb in pbones:
-                parent = pb.parent
-                if parent is not None and len(parent.children) != 1:
-                    continue  # só inícios de cadeia (raiz ou ramificação)
-                d = _chain_dir(pb)
-                if d is None:
-                    continue
-                cursor = pb
-                while len(cursor.children) == 1:
-                    cursor = cursor.children[0]
-                rise = max(cursor.bone.tail_local.z, cursor.bone.head_local.z) - pb.bone.head_local.z
-                if rise > 0.10 * max(z1 - z0, 1e-6) and rise > best_rise:
-                    best_rise = rise
-                    back_dir = d.x  # componente no eixo comprido (X)
-            if back_dir > 0:  # cauda aponta +X ⇒ focinho em −X
-                theta = 90.0
+                best_rise = 0.0
+                back_dir = 0.0
+                for pb in pbones:
+                    parent = pb.parent
+                    if parent is not None and len(parent.children) != 1:
+                        continue  # só inícios de cadeia (raiz ou ramificação)
+                    d = _chain_dir(pb)
+                    if d is None:
+                        continue
+                    cursor = pb
+                    while len(cursor.children) == 1:
+                        cursor = cursor.children[0]
+                    rise = max(cursor.bone.tail_local.z, cursor.bone.head_local.z) - pb.bone.head_local.z
+                    if rise > 0.10 * max(z1 - z0, 1e-6) and rise > best_rise:
+                        best_rise = rise
+                        back_dir = d.x  # componente no eixo comprido (X)
+                if back_dir > 0:  # cauda aponta +X ⇒ focinho em −X
+                    theta = 90.0
 
     if abs(theta) < 1e-6:
         return {"facing": "-y", "rotated_deg": 0.0, "method": method}
@@ -918,7 +924,8 @@ def _recover_quadruped_chains(arm: Any, chains: dict[str, list[str]]) -> dict[st
             seen.add(frozenset(chain))
             if origin in stolen_keys:
                 consumed[origin] = "legs"
-        elif tz >= top_z:
+        elif tz >= top_z and not (origin == "neck" and tip.children):
+            # A high branching head can carry both ears and front legs.
             rise = tz - start.bone.head_local.z
             if tail_best is None or rise > tail_best[0]:
                 tail_best = (rise, chain)
@@ -937,6 +944,25 @@ def _recover_quadruped_chains(arm: Any, chains: dict[str, list[str]]) -> dict[st
         for origin in consumed:
             chains.pop(origin, None)
         root_z = Vector(root.bone.head_local)
+        # A paw may cross the centreline, and imported left/right names can
+        # describe the wrong limb. Pair the attachments at each end of the
+        # trunk, then compare lateral positions within each pair.
+        distinct = {tuple(leg): leg for side_legs in legs.values() for leg in side_legs}
+        if len(distinct) == 4:
+
+            def attachment(leg: list[str]) -> Vector:
+                return (
+                    (pbones[leg[0]].bone.head_local + pbones[leg[1]].bone.head_local) * 0.5
+                    if len(leg) > 1
+                    else pbones[leg[0]].bone.head_local
+                )
+
+            by_depth = sorted(distinct.values(), key=lambda leg: attachment(leg).y)
+            legs = {"r": [], "l": []}
+            for pair in (by_depth[:2], by_depth[2:]):
+                left, right = sorted(pair, key=lambda leg: attachment(leg).x)
+                legs["l"].append(left)
+                legs["r"].append(right)
         for side in ("r", "l"):
             uniq: list[list[str]] = []
             seen_side: set[frozenset] = set()
@@ -1014,10 +1040,13 @@ def _extract_head_accessories(arm: Any, chains: dict[str, list[str]]) -> None:
         return
     accessories: list[str] = []
     classified = set(neck_chain)
+    for side in ("l", "r"):
+        for leg in chains.get(f"legs_{side}", []):
+            classified.update(leg)
     for child in head_pb.children:
         if child.name in classified:
             continue
-        accessories.extend(_all_descendants(child))
+        accessories.extend(name for name in _all_descendants(child) if name not in classified)
     if accessories:
         chains["head_accessories"] = accessories
 
@@ -1114,11 +1143,36 @@ def rename_bones_from_chains(armature_name: str) -> dict[str, list[str]]:
 _WORLD_UP = (0.0, 0.0, 1.0)
 
 
+def _quadruped_forward(arm_obj: Any, chains: dict[str, list]):
+    """Longitudinal axis between paired limb attachments in canonical rig space."""
+    from mathutils import Vector
+
+    left, right = chains.get("legs_l", []), chains.get("legs_r", [])
+    if len(left) != 2 or len(right) != 2:
+        return None
+    bones = arm_obj.data.bones
+    axis = Vector((0.0, 0.0, 0.0))
+    for pair in (left, right):
+        a, b = sorted((bones[leg[0]].head_local for leg in pair), key=lambda point: point.y)
+        axis += b - a
+    axis.z = 0.0
+    if axis.length < 1e-4:
+        return None
+    neck, body = chains.get("neck") or chains.get("spine"), chains.get("body")
+    # Without a trunk landmark the facing contract is Blender -Y.
+    if not neck or not body or axis.dot(bones[neck[-1]].tail_local - bones[body[0]].head_local) <= 0:
+        axis.negate()
+    return axis.normalized()
+
+
 def _detect_forward(arm_obj: Any, chains: dict[str, list[str]]):
     """Horizontal forward direction of the rig (toes point forward). Falls back
     to -Y (Blender front), which is also the glTF-import convention."""
     from mathutils import Vector
 
+    axis = _quadruped_forward(arm_obj, chains)
+    if axis is not None:
+        return axis
     fwd = Vector((0.0, 0.0, 0.0))
     for key in ("leg_r", "leg_l"):
         names = chains.get(key, [])
@@ -1316,8 +1370,10 @@ def _ik_leg_cycle(
     stride: float,
     lift: float,
     gain: float = 1.0,
+    stance: float = 0.5,
+    ground_paw: bool = False,
 ) -> None:
-    """Anima UMA pata por IK de 2 ossos com trajetória de pé em espaço do corpo.
+    """Anima uma pata por IK de dois ossos ao longo do corpo.
 
     Porquê IK e não FK: em rigs auto-gerados (SkinTokens) os ossos têm
     orientações/roll arbitrários — o mapeamento "eixo local mais próximo do
@@ -1334,6 +1390,8 @@ def _ik_leg_cycle(
         stride: amplitude frente/trás do pé (metros).
         lift: altura máxima do pé no swing (metros).
         gain: multiplicador de passada (traseiras mais drive).
+        stance: fração do ciclo com a pata em apoio.
+        ground_paw: ancora o alvo e a orientação da pata no espaço do armature.
     """
     import math as _math
 
@@ -1424,23 +1482,27 @@ def _ik_leg_cycle(
         bpy.context.scene.frame_set(frame)
         bpy.context.view_layer.update()
         phi = (t * cycles + phase) % 1.0
-        # Stance [0,0.5): pé no chão, recua (frente→trás); swing [0.5,1):
-        # pé levanta e avança (trás→frente). Fases contínuas nos extremos.
-        if phi < 0.5:
-            w = phi / 0.5
+        # Stance recedes at ground speed. Swing lifts and advances the paw.
+        if phi < stance:
+            w = phi / stance
             s = 0.5 * stride * gain * (1.0 - 2.0 * w)
             h = 0.0
         else:
-            w = (phi - 0.5) / 0.5
-            s = 0.5 * stride * gain * (2.0 * w - 1.0)
-            h = lift * _math.sin(_math.pi * w)
+            w = (phi - stance) / (1.0 - stance)
+            s = stride * gain * (_smoothstep01(w) - 0.5)
+            h = lift * _math.sin(_math.pi * w) ** 2
         if body_pb is not None:
             wb = body_pb.matrix.to_quaternion()
             b_pos = Vector(body_pb.matrix.translation)
         else:
             wb = Quaternion()
             b_pos = Vector((0.0, 0.0, 0.0))
-        target_v = b_pos + (wb @ p_local) + (wb @ fwd_local) * s + (wb @ up_local) * h
+        if ground_paw:
+            # An in-place treadmill step is expressed in armature space.
+            # A shoulder roll must not drag the planted pad with the chest.
+            target_v = p0 + fwd * s + Vector((0.0, 0.0, h))
+        else:
+            target_v = b_pos + (wb @ p_local) + (wb @ fwd_local) * s + (wb @ up_local) * h
         pole_frame_v = wb @ pole_local
         pole_frame = np.array([pole_frame_v.x, pole_frame_v.y, pole_frame_v.z], dtype=float)
         root_v = Vector(pb_u.matrix.translation)
@@ -1468,11 +1530,17 @@ def _ik_leg_cycle(
         # — ver docs/findings/ANIMATOR_IK_LIMITS_FINDINGS.md).
         basis1_mq = r1.inverted() @ rp @ wp.inverted() @ w1_mq
         basis2_mq = r2.inverted() @ r1 @ w1_mq.inverted() @ w2_mq
-        for bone, basis in ((upper, basis1_mq), (lower, basis2_mq)):
+        rotations = [(upper, basis1_mq), (lower, basis2_mq)]
+        if ground_paw and b_foot is not None:
+            # Hold the distal paw in its rest orientation. Otherwise long hocks/toes swing sideways past the IK end.
+            r3 = b_foot.matrix_local.to_quaternion()
+            rotations.append((b_foot.name, r3.inverted() @ r2 @ w2_mq.inverted() @ r3))
+        for bone, basis in rotations:
             pq = prev.get(bone)
             if pq is not None and basis.dot(pq) < 0.0:
                 basis.negate()
             prev[bone] = basis.copy()
+            arm_obj.pose.bones[bone].rotation_mode = "QUATERNION"
             arm_obj.pose.bones[bone].rotation_quaternion = basis
             arm_obj.pose.bones[bone].keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
@@ -1662,6 +1730,15 @@ def _locomotion_cycle(
         # Papel anatómico por pata: traseiras têm mais drive (impulso),
         # dianteiras mais cushion (travão/amortecimento).
         front, hind = _split_front_hind_legs(arm_obj, chains, forward)
+        four_beat_walk = leg_phase_by_leg is None and len(legs_r) == len(legs_l) == 2
+        if four_beat_walk:
+            # Touchdowns: hind-right, fore-right, hind-left, fore-left.
+            leg_phase_by_leg = {
+                tuple(hind["r"][0]): 0.0,
+                tuple(front["r"][0]): 0.75,
+                tuple(hind["l"][0]): 0.5,
+                tuple(front["l"][0]): 0.25,
+            }
         roles: dict[tuple[str, ...], tuple[float, float]] = {}
         for leg in front["r"] + front["l"]:
             roles[tuple(leg)] = (0.95, 1.15)  # (gain hip, cushion knee)
@@ -1693,6 +1770,8 @@ def _locomotion_cycle(
                 stride=hip_amp * leg_len * 1.2,
                 lift=hip_amp * leg_len * 0.4,
                 gain=gain,
+                stance=0.65 if four_beat_walk else 0.5,
+                ground_paw=len(legs_r) == len(legs_l) == 2,
             )
 
         if leg_phase_by_leg is not None:
@@ -2580,7 +2659,7 @@ def death_keyframes(
     dobram progressivamente (traseiras antes das dianteiras); (0.60-0.80)
     bounce amortecido; (0.80-1.00) repouso com micro-respiração em decaimento.
     A última frame iguala a anterior — o runtime segura a pose final
-    (Viber: play_death_animation terminal; outros consumidores: loop=false).
+    (Vael: play_death_animation terminal; outros consumidores: loop=false).
 
     Substitui o alias histórico (Death = chop_keyframes — um GOLPE como morte).
     """
@@ -2758,6 +2837,7 @@ def hit_keyframes(
         frame_start=frame_start,
         frame_end=frame_end,
         action_name=action_name,
+        intensity=intensity,
     ):
         return chains
 

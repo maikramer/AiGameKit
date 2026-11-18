@@ -19,9 +19,9 @@ Text3D Shared).
   (`sprong/runtime.py`).
 - Pesos: HF `SegerEnd/SprongMotion-14M` → cache HF; SHA-256 verificado
   (`weights.py`). `SPRONG_MODEL` aponta para um `.gguf` local.
-- Rest skeleton tem o pelvis na origem; o export **levanta-o** para a altura do
-  clip (`export_joints_glb`). Sem isso o Animator3D escala a location do pelvis
-  por `target_height / source_height` ≈ 800× e o corpo voa.
+- O bind do pelvis em `export_joints_glb` usa a altura de pé do esqueleto.
+  A diferença até à altura do primeiro frame também entra na animação, para
+  que um personagem já sentado comece à altura do assento após o retarget.
 - O neutral de braços (`NEUTRAL_AIM`) só vale para clips de hang (walk/idle).
   `export-glb` **e** `apply-rigged` filtram-no com `--arm-neutral auto`: a
   decisão tem de ser medida nos joints **estabilizados** que o bake amostra

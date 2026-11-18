@@ -137,10 +137,19 @@ def filter_neutral_aim_for_clip(
     return out
 
 
+def _bilateral_thigh_flexion(joints: np.ndarray, up_axis: int) -> np.ndarray:
+    """Blend into seated/squat limits when both thighs approach horizontal."""
+    thighs = joints[:, [4, 5]] - joints[:, [1, 2]]
+    lengths = np.linalg.norm(thighs, axis=-1)
+    down = np.divide(-thighs[..., up_axis], lengths, out=np.ones_like(lengths), where=lengths > 1e-8)
+    # Use the more vertical leg: a single lifted foot is an ordinary stride.
+    return np.clip((0.65 - down.max(axis=1)) / 0.45, 0.0, 1.0)
+
+
 def sanitize_locomotion_joints(
     joints: np.ndarray,
     *,
-    min_knee_deg: float = MIN_KNEE_DEG,
+    min_knee_deg: float | None = None,
     max_knee_deg: float = MAX_KNEE_DEG,
     min_foot_pitch_deg: float = MIN_FOOT_PITCH_DEG,
     max_foot_pitch_deg: float = MAX_FOOT_PITCH_DEG,
@@ -177,10 +186,12 @@ def sanitize_locomotion_joints(
             max_pitch_deg=float(max_foot_pitch_deg),
         )
     else:
-        knees = [
-            (prox, joint, dist, float(min_knee_deg), float(max_knee_deg)) for prox, joint, dist, _lo, _hi in KNEE_HINGES
-        ]
-        # Knee → world foot pitch → ankle (shin-relative wins) → elbow.
+        # A standing gait needs a conservative guard, but the same 120°
+        # minimum straightens a seated rower's knees and pushes the feet out.
+        knee_floor = (
+            MIN_KNEE_DEG - 85.0 * _bilateral_thigh_flexion(j, 1) if min_knee_deg is None else float(min_knee_deg)
+        )
+        knees = [(prox, joint, dist, knee_floor, max_knee_deg) for prox, joint, dist, _, _ in KNEE_HINGES]
         _clamp_hinges_yup(j, knees)
         _clamp_foot_pitch_yup(
             j,
@@ -207,7 +218,7 @@ def _rodrigues(v: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
 
 def _clamp_hinges_yup(
     joints: np.ndarray,
-    limits: list[tuple[int, int, int, float, float]],
+    limits: list[tuple[int, int, int, float | np.ndarray, float]],
 ) -> None:
     """In-place: keep each hinge interior angle inside ``[min, max]``.
 
@@ -216,12 +227,11 @@ def _clamp_hinges_yup(
     translated by the same delta so the foot/hand chain stays rigid.
     """
     for prox, joint, dist, min_deg, max_deg in limits:
-        min_rad = math.radians(float(min_deg))
-        max_rad = math.radians(float(max_deg))
-        if max_rad < min_rad:
-            min_rad, max_rad = max_rad, min_rad
+        lower = np.broadcast_to(np.deg2rad(min_deg), (len(joints),))
+        upper = math.radians(float(max_deg))
         followers = HINGE_FOLLOWERS.get(dist, ())
         for fi in range(joints.shape[0]):
+            min_rad, max_rad = sorted((lower[fi], upper))
             p = joints[fi, prox]
             h = joints[fi, joint]
             d = joints[fi, dist]
@@ -556,6 +566,7 @@ def _lookat_keyframe(
         outward = Quaternion(Vector((0.0, 1.0, 0.0)), math.radians(-splay))
         aim_fix[i] = outward @ aim_fix[i] if i in aim_fix else outward
 
+    flexion = _bilateral_thigh_flexion(joints_zup, 2)
     for fi in range(n_frames):
         frame = fi + 1
         scene.frame_set(frame)
@@ -578,8 +589,10 @@ def _lookat_keyframe(
                 # Swing-only: no arbitrary roll → no twisted limbs downstream.
                 swing = rest_dir[bname].rotation_difference(y)
                 max_swing = MAX_SWING_DEG.get(i)
-                if max_swing is not None and swing.angle > math.radians(max_swing):
-                    swing = Quaternion(swing.axis, math.radians(max_swing))
+                if max_swing is not None:
+                    limit = math.radians(max_swing + 65.0 * flexion[fi])
+                    if swing.angle > limit:
+                        swing = Quaternion(swing.axis, limit)
                 mat = (swing @ rest_quat[bname]).to_matrix().to_4x4()
                 mat.translation = Vector((float(head[0]), float(head[1]), float(head[2])))
                 pb.matrix = mat
@@ -596,7 +609,7 @@ def _lookat_keyframe(
             if bname == "pelvis":
                 dx = 0.0 if in_place else float(head[0] - root0[0])
                 dy = 0.0 if in_place else float(head[1] - root0[1])
-                delta = Vector((dx, dy, float(head[2] - root0[2])))
+                delta = Vector((dx, dy, float(head[2] - pb.bone.head_local.z)))
                 rest_m3 = arm_obj.data.bones["pelvis"].matrix_local.to_3x3()
                 loc = rest_m3.inverted() @ delta
                 pb.location = (float(loc.x), float(loc.y), float(loc.z))
@@ -643,6 +656,10 @@ def export_joints_glb(
     """
     if joints.ndim != 3 or joints.shape[1] != 22 or joints.shape[2] != 3:
         raise ValueError(f"joints must be (T, 22, 3); got {joints.shape}")
+    if neutral_aim is None:
+        neutral_aim = filter_neutral_aim_for_clip(
+            joints, {BONE_NAMES[i]: direction for i, direction in NEUTRAL_AIM.items()}, in_place=in_place
+        )
     joints = sanitize_locomotion_joints(
         joints,
         max_lean_deg=max_lean_deg,
@@ -654,11 +671,10 @@ def export_joints_glb(
     out.parent.mkdir(parents=True, exist_ok=True)
 
     joints_y = np.asarray(joints, dtype=np.float64)
-    # The model's reference skeleton has the pelvis at the origin (feet at
-    # -0.89 m). Lift it to where the body actually is: Animator3D scales the
-    # transferred ``pelvis`` location by ``target_height / source_height``, and
-    # a rest pelvis on the floor makes that ratio explode (~800x).
-    rest_y = rest_positions_yup(offsets) + joints_y[0, 0]
+    rest_y = rest_positions_yup(offsets)
+    # Bind at standing height. Key the absolute pelvis height above the
+    # floor so a clip starting in a seat reproduces its initial hip drop.
+    rest_y = rest_y + np.array([joints_y[0, 0, 0], -rest_y[[7, 8, 10, 11], 1].min(), joints_y[0, 0, 2]])
     rest_z = yup_to_blender(rest_y)
     joints_z = yup_to_blender(joints_y)
     if in_place:

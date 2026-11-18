@@ -67,10 +67,10 @@ hips (`max(|head.y|, |head.z|)`, mínimo 1e-3). Como o rest do SprongMotion tem 
 `(0, 0, 0)`, o rácio colapsava (~800×) e o herói subia a **20–40 m** no GLB final
 (frames intermédios com o corpo deitado na render).
 
-Fix em `export_joints_glb`: **levantar o rest skeleton para a altura do clip**
-(`rest_y += joints[0, 0]`). Só translada o rest — as direções dos ossos não mudam — e o
-rácio passa a ≈1. Verificado: pelvis 0,926 → 0,975 m com bob de caminhada no source e
-0,80–0,85 m no herói retargetizado.
+O bind usa a altura da pelve em pé, medida dos pés até à pelve no esqueleto de
+repouso. A translação animada inclui a diferença desde essa altura até à pose
+de cada frame. Usar a altura do primeiro frame como bind também evitava o
+problema de escala, mas perdia o desnível inicial de uma remada sentada.
 
 ## Export e retarget
 
@@ -122,6 +122,8 @@ mecânico de `quality.py`:
   reconstruindo a viagem a partir de `root` para clips `in_place`;
 - `ground_penetration`: profundidade abaixo do plano de apoio do próprio clip (p05 dos pés);
 - `jerk`: terceira diferença da trajetória da raiz (glitches de um frame).
+- `loop_seam`: em ciclos, excesso do passo entre o último e o primeiro frame sobre o
+  percentil 90 do deslocamento habitual de cada junta, descontando a translação horizontal.
 
 Só a ordenação entre seeds importa; a seed escolhida fica no NPZ.
 

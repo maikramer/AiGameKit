@@ -129,7 +129,7 @@ class TestScore:
         quality = score_clip(make_clip(static_feet()))
         assert isinstance(quality, ClipQuality)
         assert quality.score >= 0.0
-        assert set(quality.as_dict()) == {"foot_slide", "ground_penetration", "jerk", "score"}
+        assert set(quality.as_dict()) == {"foot_slide", "ground_penetration", "jerk", "loop_seam", "score"}
 
     def test_glitchy_clip_scores_worse(self) -> None:
         clean = make_clip(static_feet())
@@ -163,3 +163,15 @@ class TestBestClip:
     def test_empty_raises(self) -> None:
         with pytest.raises(ValueError, match="empty"):
             best_clip([])
+
+
+def test_loop_selection_penalizes_wrist_pop_but_preserves_root_travel() -> None:
+    clean = static_feet(30)
+    clean[:, :, 2] += np.arange(30)[:, None] * 0.05
+    arms = clean.copy()
+    arms[:, 20, 0] += np.linspace(0.0, 0.45, 30)
+    open_gesture, cycle = make_clip(arms), make_clip(clean)
+    assert score_clip(cycle, loop=True).loop_seam < 1e-5
+    assert score_clip(open_gesture, loop=True).loop_seam > 0.40
+    assert score_clip(open_gesture).loop_seam == 0
+    assert best_clip([open_gesture, cycle], loop=True)[0] is cycle

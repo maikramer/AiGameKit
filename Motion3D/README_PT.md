@@ -53,6 +53,18 @@ score mecânico (arrasto dos pés plantados, penetração no chão, jerk da raiz
 ver `motion3d/quality.py`). `--attempts 1` fixa uma seed; a seed escolhida fica
 gravada no NPZ, por isso a corrida é reproduzível a partir do ficheiro.
 
+Com `--loop`, a escolha da seed também considera o salto de cada junta ao
+voltar do fim ao início. O bake preserva a altura inicial da pelve e permite
+a flexão dos joelhos em poses sentadas. Exemplo reproduzível a 20 fps:
+
+```bash
+motion3d generate "a person is sitting down rowing a boat with two oars" \
+  --duration 2.6 --seed 106 --attempts 1 --loop -o row.npz
+motion3d generate "a person is hit in the stomach and bends over in pain then stands back up" \
+  --duration 1.8 --seed 130 --attempts 1 --no-loop -o hit.npz
+motion3d pack-rigged hero_rigged.glb -o row-hit.glb -m row=row.npz -m hit=hit.npz
+```
+
 ## Flags
 
 | Flag | Papel |
@@ -71,6 +83,17 @@ gravada no NPZ, por isso a corrida é reproduzível a partir do ficheiro.
 | `--quality` | Soft defaults de duração/steps/residual layers/attempts |
 | `--threads` | Threads do runtime (0 = todos os cores) |
 | `--bvh`, `--also-npz`, `--json` | Artefactos extra / resultado machine-readable |
+
+No retarget `sprong22`, gestos com os dois antebraços voltados para a frente
+recebem um ajuste de alcance na malha de destino. O solver usa os vértices do
+tronco, das pernas, das palmas e dos dedos para posicionar os pulsos. Nos
+clipes `row` e `rowing`, o avanço das mãos no movimento original determina
+quando estender os braços e quando puxar os pulsos até as costelas. Em
+`hit`, `hurt` e `damage`, os cotovelos ficam baixos e as mãos acompanham o
+recuo do tronco à altura do abdômen. Nos dois gestos, a clavícula acompanha
+o peito com menos elevação. Na remada, o antebraço orienta a pegada e o
+pulso mantém uma pequena margem de movimento.
+Quando se pede `--hands-together`, a distância de pega explícita tem prioridade.
 
 `apply-rigged`/`pack-rigged` mantêm as constraints mecânicas do pipeline
 anterior para clips de jogo — todas opt-in:

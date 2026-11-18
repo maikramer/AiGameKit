@@ -420,3 +420,17 @@ def _assert_mock_frames_in_range(rig: Any, frame_start: int, frame_end: int) -> 
     frames = [f for f, _ in rig.keyframes]
     assert min(frames) >= frame_start
     assert max(frames) <= frame_end
+
+
+def test_procedural_humanoid_hit_recoils_and_recovers_on_both_feet() -> None:
+    from animator3d.cli import _PRESETS
+
+    assert any(fn == "hit_keyframes" for fn, _ in _PRESETS["humanoid"])
+    rig = _make_rig()
+    humanoid.hit_clip(rig, frame_start=4, frame_end=19)
+    frames, poses = zip(*rig.keyframes, strict=True)
+    assert frames[0] == 4 and frames[-1] == 19
+    assert poses[0] == poses[-1]
+    assert poses[1][rig.spine()[0]]["pitch"] < 0
+    assert poses[1][rig.arm_bones("l")["fore"]]["pitch"] < poses[0][rig.arm_bones("l")["fore"]]["pitch"]
+    assert all(pose[rig.hips()]["up"] == 0 for pose in poses)

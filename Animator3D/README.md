@@ -108,7 +108,7 @@ animator3d game-pack hero.glb hero_anim.glb --preset humanoid --draco
 
 | Preset | Clips Generated |
 |--------|----------------|
-| `humanoid` (procedural fallback) | breathe-idle, walk, run, jump, fall, … |
+| `humanoid` (procedural fallback) | breathe-idle, walk, run, jump, fall, hit (grounded recoil), … |
 | `creature` | breathe-idle, walk, attack, roar |
 | `flying` | breathe-idle, hover, soar, dive, land |
 | `quadruped` | breathe-idle, walk, run, jump (four ground-contact limbs) |
@@ -533,7 +533,7 @@ animator3d list-clips animated.glb
 Animator3D is the **final animation stage** in the AiGameKit asset pipeline:
 
 ```text
-Text3D (mesh) → Paint3D (texture) → Rigging3D (armature) → Animator3D (clips) → engine (Viber)
+Text3D (mesh) → Paint3D (texture) → Rigging3D (armature) → Animator3D (clips) → engine (Vael)
 ```
 
 1. **Rigging3D** produces a rigged GLB with armature and bones.

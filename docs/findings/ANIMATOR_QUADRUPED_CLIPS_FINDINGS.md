@@ -45,7 +45,7 @@ desliza às velocidades de jogo) mas com papel por pata: traseiras ganham drive
   cedem primeiro) → colapso (pelve desce `drop=0.35` no eixo up, corpo rola
   para `side`, patas dobram progressivamente — traseiras antes das dianteiras)
   → bounce amortecido → repouso com micro-respiração em decaimento. A pose
-  terminal é estável (últimos frames convergem) — o Viber segura-a
+  terminal é estável (últimos frames convergem) — o Vael segura-a
   (`play_death_animation` terminal); noutros runtimes, tocar com `loop: false`.
 - **`hit_keyframes`** (one-shot, 16 frames): flinch — recoil no impacto (~t0.25),
   recuperação com overshoot amortecido, pernas cedem (crouch reflexo).
@@ -64,7 +64,7 @@ limits-clean por construção** — o teste `test_generated_clips_are_ik_clean`
 corre `enforce_joint_limits` sobre os 6 clips e exige 0 correções.
 
 Nomes mantêm `Animator3D_*`: os runtimes resolvem por normalização
-(Viber `normalize_clip_name` → `death`/`hit`). **Zero mudanças nos engines.**
+(Vael `normalize_clip_name` → `death`/`hit`). **Zero mudanças nos engines.**
 
 ## Validação
 
@@ -87,7 +87,7 @@ Nomes mantêm `Animator3D_*`: os runtimes resolvem por normalização
 
 ## Regeneração do pool (assets publicados)
 
-Os assets vivem em `Viber/examples/shared-assets/public/assets/meshes/characters/`
+Os assets vivem em `Vael/assets/public/assets/meshes/characters/`
 (gitignored). Depois de mudar geradores, regenerar **pelo pipeline** (não à mão):
 
 1. Manifesto temporário com só os assets alvo (o `resume` não tem `--only`):
@@ -95,7 +95,7 @@ Os assets vivem em `Viber/examples/shared-assets/public/assets/meshes/characters
    desejados para `manifests/_regen.yaml`.
 2. Mover (backup, não apagar) os artefactos que se quer refazer:
    `_intermediate/{id}_rigged_animated.glb` e `{id}_lod{0,1,2}.glb`.
-3. `cd Viber/examples/shared-assets && gameassets resume --profile game.yaml
+3. `cd Vael/assets && gameassets resume --profile game.yaml
    --manifest manifests/_regen.yaml --no-vramd` (o animate é bpy/CPU; `--no-vramd`
    evita tocar na GPU). O pipeline re-corre animate → lod e re-valida.
 4. Apagar o manifesto temporário.
@@ -168,7 +168,7 @@ solver analítico (2 ossos + pole, o mesmo do passe IK) coloca a junta:
 **Verificação (o critério de aceitação):** deslocamento dos 4 pés no referencial
 do corpo no clip Walk — Δfwd > Δlat em TODAS (lobo: 0.212/0.175, 0.247/0.170,
 0.301/0.221, 0.319/0.115; antes a front-L era 0.212/0.432). No engine
-(`worlds/qa-locomotion.xml` + bridge): o lobo anda com z constante, yaw = −90°
+(`Vael` com um mundo QA de locomoção + bridge): o lobo anda com z constante, yaw = −90°
 = rumo em todos os samples ✔. Renders laterais (`/tmp/ik5_walk_sheet.png`)
 mostram a passada ao longo do corpo.
 
@@ -178,8 +178,23 @@ bípede. Pool regenerado (wolf/scorpion/sand_worm) com o gait novo; o gate
 `animated.yaml` do sand_worm continua a falhar como antes (quirk pré-existente,
 ver secção de regeneração).
 
-## Fora do âmbito (futuro)
+## Lobo do Vael — correção de 2026-11-18
 
-IK de pés com contacto real no chão (foot-planting por pata), 4-beat lateral
-walk, claw-swipe anatómico (se o rig tiver braços), knockback dedicado para
-criaturas (UAL2 `knockback` só existe no retarget humanoide).
+No LOD0 disponível neste checkout, a classificação agrupava as quatro patas
+do mesmo lado. Duas patas dianteiras também recebiam sway de acessórios porque
+descendiam do mesmo nó que as orelhas. A dianteira terminada em
+`HeadAccessory3_4` percorria 8,8 cm em X e 2,8 cm em Y na caminhada
+(coordenadas Blender). A pose de uma action NLA anterior ainda influenciava
+o IK no pack: a caminhada isolada e a precedida por idle davam resultados diferentes.
+
+O classificador agora forma pares dianteiro/traseiro pela profundidade dos
+anexos e resolve os lados dentro de cada par. O rumo usa os anexos e o eixo
+do tronco. Cada pata tem um único controlador. O passo de quatro tempos
+mantém cada pata em apoio durante 65% do ciclo, com alvo e orientação da
+pata em espaço de armature. O galope conserva as suas fases próprias.
+O game-pack desativa a avaliação da pilha NLA ao gerar cada action.
+
+Verificação no GLB exportado com oito clips, a partir da malha e do esqueleto
+do LOD0: na caminhada as quatro extremidades percorrem aproximadamente
+18–20 cm ao longo do corpo e 0,5–1,0 cm de lado. As medições usam a posição
+da última junta de cada pata em todos os frames da action reimportada.

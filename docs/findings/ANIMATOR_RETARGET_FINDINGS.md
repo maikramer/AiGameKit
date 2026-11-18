@@ -150,7 +150,7 @@ Os clips procedurais (`creature`/`flying`) articulam ossos e **não** tocam no y
 do corpo — por isso “como receberam animação” nunca foi a causa do lobo a andar
 de lado. A causa é o **mesh**: o Hunyuan3D gerou `wolf`/`scorpion` com o focinho
 ao longo de **+X**, e nem o rig SkinTokens nem o `game-pack` creature
-canonicalizam a frente para **+Z** (a convenção de facing do Viber
+canonicalizam a frente para **+Z** (a convenção de facing do Vael
 (`facing_rotation` → `rotation * Vec3::Z`)).
 Bípedes escaparam porque o retarget humanoide impõe um rest canónico.
 
@@ -166,13 +166,13 @@ Alternativa: `gltf-transform inspect` — bbox de cena comprido no X é o flag
 (bípedes saem `x≈1.2–1.6, z≈0.4`; lobo era `x=1.40, z=0.41`).
 
 **Fix aplicado (2026-09-13, assets públicos do pool
-`Viber/examples/shared-assets/public/assets/meshes/characters/`):** rotação de
+`Vael/assets/public/assets/meshes/characters/`):** rotação de
 **−90° yaw** (`[0, −√½, 0, √½]` xyzw) no nó **raiz** (`Armature` nos LODs,
 `Mesh` no `*_collision.glb`) de `wolf_{lod0,lod1,lod2,collision}` e
 `scorpion_{…}` — edição só do chunk JSON (buffers KTX2/meshopt intactos),
 clips não animam o nó raiz, verificado com `gltf-transform inspect`
-(bbox pasa a `x ±0.20, z −0.70..+0.70`) e in-engine (bridge screenshot do
-`worlds/qa-locomotion.xml`: corpo alinhado com o rumo nos dois sentidos).
+(bbox pasa a `x ±0.20, z −0.70..+0.70`) e in-engine (screenshot da bridge
+num mundo QA de locomoção: corpo alinhado com o rumo nos dois sentidos).
 `{wolf,scorpion}_precompute.json` AABBs atualizados (troca x↔z; cápsula
 vertical é insensível). `_intermediate/*` fica **sem** rotação (proveniência).
 
@@ -228,7 +228,7 @@ ficheiros (nó raiz vs rest aplicado), logo os canais locais são idênticos
 Resíduo in-game ("andar de caranguejo") após o gait certo: deslize de lado nas
 **viragens do wander** (re-alvo a cada ~3 s; corpo ainda a virar enquanto as
 4 patas marcham — antes, 3 patas congeladas mascaravam o deslize). Mitigação
-nos scripts (`wolf.lua`/`scorpion.lua`): `viber.set_locomotion(walk, run, 9.0)`
+nos scripts (no Vael, `scripts/lib/fsm.lua`): `viber.set_locomotion(walk, run, 9.0)`
 (pivô mais rápido que o default 7 rad/s) + steering do alvo (6 amostras de
 `viber.wander_target`, escolhe a mais alinhada com o rumo atual). Chase medido
 pelo bridge: yaw−rumo = 0°. Se ainda houver caranguejo no **browser** durante

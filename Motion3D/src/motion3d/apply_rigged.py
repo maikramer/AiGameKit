@@ -176,6 +176,39 @@ def _pick(clip_val: Any, pack_val: Any) -> Any:
     return pack_val if clip_val is None else clip_val
 
 
+def _two_handed_front_gesture(joints: np.ndarray) -> bool:
+    """Detect paired forward forearms in the body's frame, independent of heading."""
+    forward = np.cross(joints[:, 1] - joints[:, 2], joints[:, 12] - joints[:, 0])
+    forward /= np.maximum(np.linalg.norm(forward, axis=1, keepdims=True), 1e-9)
+    arms = joints[:, [20, 21]] - joints[:, [18, 19]]
+    directions = arms / np.maximum(np.linalg.norm(arms, axis=2, keepdims=True), 1e-9)
+    return bool(np.median((directions * forward[:, None]).sum(axis=2).min(axis=1)) > 0.45)
+
+
+def _gesture_progress(name: str, joints: np.ndarray) -> tuple[str, np.ndarray] | None:
+    """Recover the two-handed stroke or recoil timing in the source character's heading."""
+    kind = name.lower().removeprefix("animator3d_")
+    if kind not in {"row", "rowing", "hit", "hurt", "damage"}:
+        return None
+    across = joints[:, 1] - joints[:, 2]
+    forward = np.column_stack((-across[:, 2], np.zeros(len(joints)), across[:, 0]))
+    forward /= np.maximum(np.linalg.norm(forward, axis=1, keepdims=True), 1e-9)
+    row = kind in {"row", "rowing"}
+    pair = [20, 21] if row else [16, 17]
+    travel = ((joints[:, pair].mean(axis=1) - joints[:, 0]) * forward).sum(axis=1)
+    if not row:
+        travel = np.abs(travel - travel[0])
+    # Keep both hands on the same beat. Suppress isolated 20 Hz samples before
+    # mapping the catch/finish (or impact/recovery) onto the new proportions.
+    smooth = np.convolve(np.pad(travel, 2, mode="edge"), [1 / 9, 2 / 9, 3 / 9, 2 / 9, 1 / 9], mode="valid")
+    low, high = np.percentile(smooth, [5, 95])
+    if high - low < 0.015:
+        # A stationary torso still needs a low guard on a named hit. A row
+        # without measurable travel has no source timing for a pull.
+        return None if row else ("hit", np.zeros_like(smooth))
+    return ("row" if row else "hit"), np.clip((smooth - low) / (high - low), 0.0, 1.0)
+
+
 def apply_motions_to_rigged(
     clips: Sequence[MotionClip | tuple[str, np.ndarray] | tuple[str, str | Path]],
     rigged_glb: str | Path,
@@ -301,7 +334,7 @@ def apply_motions_to_rigged(
 
         results: list[dict[str, Any]] = []
         kept_actions: set[str] = set()
-        for clip, src_path, use_fps, _joints in prepared:
+        for clip, src_path, use_fps, joints in prepared:
             bpy.context.scene.render.fps = int(use_fps)
             before = {o.name for o in bpy.data.objects}
             before_actions = {a.name for a in bpy.data.actions}
@@ -336,6 +369,15 @@ def apply_motions_to_rigged(
                 clip.name,
                 full_rest_bones=profile.full_rest_bones,
             )
+            if profile_name == DEFAULT_PROFILE and _pick(clip.hands_together_m, hands_together_m) is None:
+                motion = _gesture_progress(clip.name, joints)
+                if motion is not None or _two_handed_front_gesture(joints):
+                    from animator3d.hand_clearance import fit_front_gesture
+
+                    pairs, _ = rt.resolve_bone_pairs(target.data.bones, source.data.bones, profile.bone_map)
+                    fit_front_gesture(
+                        target, bpy.data.actions[clip.name], {src: tgt for tgt, src in pairs.items()}, motion
+                    )
             results.append(res)
             kept_actions.add(clip.name)
 

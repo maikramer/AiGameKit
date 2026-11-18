@@ -168,3 +168,45 @@ class TestRetargetProfile:
         rt = pytest.importorskip("animator3d.retarget")
         profile = rt.load_profile("sprong22")
         assert profile.clip_map["walk"] == DEFAULT_SOURCE_TRACK
+
+
+def test_front_gesture_detection_follows_body_yaw_and_requires_both_arms() -> None:
+    from motion3d.apply_rigged import _two_handed_front_gesture
+
+    joints = np.zeros((4, 22, 3))
+    joints[:, 1, 0], joints[:, 2, 0] = 0.1, -0.1
+    joints[:, 12, 1] = 0.5
+    joints[:, [20, 21], 2] = 0.25
+    assert _two_handed_front_gesture(joints)
+    turned = joints @ np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
+    assert _two_handed_front_gesture(turned)
+    turned[:, 21] = turned[:, 19] + [0, -0.25, 0]
+    assert not _two_handed_front_gesture(turned)
+
+
+@pytest.mark.parametrize(
+    ("name", "joint_ids", "kind"), [("rowing", [20, 21], "row"), ("Animator3D_Hit", [16, 17], "hit")]
+)
+def test_gesture_phase_follows_source_through_a_turn(name: str, joint_ids: list[int], kind: str) -> None:
+    from motion3d.apply_rigged import _gesture_progress
+
+    joints = np.zeros((31, 22, 3))
+    joints[:, 1, 0], joints[:, 2, 0] = 0.12, -0.12
+    joints[:, joint_ids, 2] = (0.25 * np.sin(np.linspace(0, np.pi, len(joints))))[:, None]
+    turned = joints @ np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
+    turned[:, :, 0] += np.linspace(0, 3, len(joints))[:, None]
+    for source in (joints, turned):
+        result = _gesture_progress(name, source)
+        assert result is not None and result[0] == kind
+        assert result[1][15] == 1
+        assert result[1][0] == result[1][-1] == 0
+
+
+def test_static_motion_keeps_low_hit_guard_and_does_not_invent_a_stroke() -> None:
+    from motion3d.apply_rigged import _gesture_progress
+
+    joints = np.zeros((4, 22, 3))
+    assert _gesture_progress("row", joints) is None
+    assert _gesture_progress("walk", joints) is None
+    hit = _gesture_progress("hurt", joints)
+    assert hit is not None and not hit[1].any()

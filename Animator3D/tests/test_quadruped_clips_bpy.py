@@ -324,3 +324,68 @@ def test_gallop_run_asymmetric_feet(quad: str) -> None:
     assert cyc_delta(phases["foot_r2"], phases["foot_r"]) == pytest.approx(0.5, abs=0.25)
     # Pares distintos (não é trot diagonal, onde seriam anti-fase exata).
     assert cyc_delta(phases["foot_r"], phases["foot_l"]) > 0.0
+
+
+def test_crossed_paws_and_head_branches_still_form_four_independent_legs(quad: str) -> None:
+    import bpy
+    from animator3d import bpy_ops
+    from mathutils import Vector
+
+    arm = bpy.data.objects[quad]
+    # Reproduce auto-rig naming/hierarchy: front legs grow from the head hub
+    # and the bone that looks like a toe points across the animal.
+    bpy.ops.object.mode_set(mode="EDIT")
+    for side in ("l", "r"):
+        arm.data.edit_bones[f"thigh_{side}2"].parent = arm.data.edit_bones["Head"]
+        foot = arm.data.edit_bones[f"foot_{side}"]
+        foot.tail = foot.head + Vector((0.1, 0, 0))
+    bpy.ops.object.mode_set(mode="OBJECT")
+    legs = [[f"thigh_{suffix}", f"calf_{suffix}", f"foot_{suffix}"] for suffix in ("r", "r2", "l", "l2")]
+    chains = bpy_ops._recover_quadruped_chains(
+        arm, {"body": ["pelvis"], "neck": ["neck_01", "neck_02", "Head"], "legs_l": legs}
+    )
+    bpy_ops._extract_head_accessories(arm, chains)
+    for side in ("l", "r"):
+        assert {leg[0] for leg in chains[f"legs_{side}"]} == {f"thigh_{side}", f"thigh_{side}2"}
+    assert not set(chains.get("head_accessories", [])).intersection(bone for leg in legs for bone in leg)
+    assert bpy_ops._detect_forward(arm, chains).y > 0.99
+
+
+def test_pack_bakes_each_clip_without_earlier_nla_motion(quad: str) -> None:
+    import bpy
+    from animator3d import bpy_ops
+
+    arm = bpy.data.objects[quad]
+    bpy_ops.jump_keyframes(quad)
+    with bpy_ops.isolated_clip_pose(quad):
+        bpy.context.scene.frame_set(12)
+        assert not arm.animation_data.use_nla
+        assert arm.pose.bones["pelvis"].location.length < 1e-5
+    assert arm.animation_data.use_nla
+    assert _action("Animator3D_Jump") is not None
+
+
+def test_walk_uses_four_distinct_footfalls_along_body_axis(quad: str) -> None:
+    import bpy
+    import numpy as np
+    from animator3d import bpy_ops
+
+    arm = bpy.data.objects[quad]
+    with bpy_ops.isolated_clip_pose(quad):
+        bpy_ops.walk_cycle_keyframes(quad, frame_end=41, cycles=1)
+    ad = arm.animation_data
+    ad.use_nla = False
+    ad.action = _action("Animator3D_Walk")
+    peaks = []
+    for name in ("foot_r", "foot_l", "foot_r2", "foot_l2"):
+        points = []
+        for frame in range(1, 41):
+            bpy.context.scene.frame_set(frame)
+            points.append(tuple(arm.pose.bones[name].head))
+        lateral, along, lift = np.ptp(points, axis=0)
+        assert along > 0.1 and lateral < 0.15 * along
+        assert lift > 0.05
+        peaks.append(np.argmax(np.asarray(points)[:, 2]))
+    # Four quarter-cycle swing peaks, including the interval across the seam.
+    gaps = np.diff(sorted(peaks) + [min(peaks) + 40])
+    assert np.all((7 <= gaps) & (gaps <= 13)), peaks

@@ -144,7 +144,7 @@ class MotionGenerator:
                     bvh_path=None if rounds > 1 else bvh_path,
                 )
             )
-        clip, quality = best_clip(clips)
+        clip, quality = best_clip(clips, loop=bool(options and options.loop))
         self.last_quality = quality
         self.last_seed = int(clip.seed)
         if rounds > 1:
@@ -189,7 +189,7 @@ class MotionGenerator:
             options=options,
             bvh_path=bvh_path,
         )
-        quality = score_clip(clip)
+        quality = score_clip(clip, loop=bool(options and options.loop))
 
         if suffix == ".glb":
             from .bpy_export import export_joints_glb

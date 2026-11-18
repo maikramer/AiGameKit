@@ -979,6 +979,7 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
         ("run_cycle_keyframes", {"frame_end": 36, "action_name": "Animator3D_Run"}),
         ("jump_keyframes", {"frame_end": 36, "action_name": "Animator3D_Jump"}),
         ("fall_keyframes", {"frame_end": 24, "action_name": "Animator3D_Fall"}),
+        ("hit_keyframes", {"frame_end": 16, "action_name": "Animator3D_Hit"}),
         ("attack_keyframes", {"frame_end": 28, "action_name": "Animator3D_Attack"}),
         ("turn_in_place_keyframes", {"frame_end": 32, "direction": 1.0, "action_name": "Animator3D_TurnLeft"}),
         ("turn_in_place_keyframes", {"frame_end": 32, "direction": -1.0, "action_name": "Animator3D_TurnRight"}),
@@ -1240,7 +1241,8 @@ def cmd_game_pack(
         pct = round((i / total) * 100) if total > 1 else 0
         emit_progress(item_id, TOOL_ANIMATOR3D, phase="clips", percent=pct, clip=kwargs["action_name"])
         fn = getattr(bpy_ops, fn_name)
-        fn(arm_name, frame_start=1, **kwargs)
+        with bpy_ops.isolated_clip_pose(arm_name):
+            fn(arm_name, frame_start=1, **kwargs)
         generated.append(kwargs["action_name"])
         console.print(f"  [dim]✓[/dim] {kwargs['action_name']}")
 

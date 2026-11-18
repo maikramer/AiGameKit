@@ -888,6 +888,18 @@ def jump_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
     rig.key_pose(frame_end, base)
 
 
+def hit_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, intensity: float = 1.0) -> None:
+    """Grounded chest impact: recoil, catch balance and return to guard."""
+    neutral = base_pose(rig)
+    recoil = merge(_spine_pose(rig, lean=-0.21, yaw=0.12), _both_arms(rig, upper=-0.32, fore=-0.58))
+    # Key identical neutral channels at both ends, including the spine.
+    for phase, weight in ((0.0, 0.0), (0.18, 1.0), (0.40, 0.55), (0.68, -0.10), (1.0, 0.0)):
+        rig.key_pose(
+            frame_start + round((frame_end - frame_start) * phase),
+            merge(neutral, scale_pose(recoil, weight * intensity), _hips_pose(rig)),
+        )
+
+
 def fall_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
     total = frame_end - frame_start
     base = base_pose(rig)
@@ -959,6 +971,7 @@ _CLIPS = {
     "attack",
     "jump",
     "fall",
+    "hit",
     "turn",
     "mine",
     "chop",
@@ -1032,6 +1045,8 @@ def try_humanoid_clip(
         )
     elif kind == "jump":
         jump_clip(rig, frame_start=frame_start, frame_end=frame_end)
+    elif kind == "hit":
+        hit_clip(rig, frame_start=frame_start, frame_end=frame_end, intensity=float(params.get("intensity", 1.0)))
     elif kind == "fall":
         fall_clip(rig, frame_start=frame_start, frame_end=frame_end)
     elif kind == "turn":

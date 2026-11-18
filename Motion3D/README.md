@@ -51,7 +51,9 @@ of clips need another seed before they are usable. Generation is cheap, so the
 CLI generates **3 seeds by default** (`--attempts N`) and keeps the one with the
 lowest mechanical score (planted-foot slide, ground penetration, root jerk —
 see `motion3d/quality.py`). `--attempts 1` pins a single seed; the chosen seed
-is recorded in the NPZ, so a run is reproducible from its file.
+is recorded in the NPZ, so a run is reproducible from its file. For `--loop`,
+the score also checks the joint displacement across the wrap against normal
+frame-to-frame motion.
 
 ## Flags
 
@@ -71,6 +73,14 @@ is recorded in the NPZ, so a run is reproducible from its file.
 | `--quality` | Soft defaults for duration/steps/residual layers/attempts |
 | `--threads` | Runtime threads (0 = all cores) |
 | `--bvh`, `--also-npz`, `--json` | Extra artifacts / machine-readable result |
+
+With the `sprong22` profile, clips named `row` or `rowing` use the source
+stroke timing to extend both hands and draw them back beside the ribs. Clips
+named `hit`, `hurt` or `damage` keep the wrists near the abdomen during recoil.
+Both gestures soften shoulder elevation relative to the animated chest. The
+forearm turns the rowing grip while the wrist stays close to its bind angle.
+The solver uses the target mesh to clear the torso and knees. An explicit
+`--hands-together` grip takes precedence.
 
 `apply-rigged`/`pack-rigged` keep the mechanical constraints from the previous
 pipeline for game clips — all opt-in:

@@ -258,3 +258,26 @@ class TestExportGlb:
         # must keep one key per baked frame.
         assert max(counts) == 4
         assert counts <= {2, 4}
+
+
+def test_seated_knees_keep_right_angle_while_single_raised_leg_uses_walk_limits() -> None:
+    joints = make_walk_joints(2)
+    for hip, knee, ankle in ((1, 4, 7), (2, 5, 8)):
+        joints[:, knee] = joints[:, hip] + [0, 0, 0.4]
+        joints[:, ankle] = joints[:, knee] + [0, -0.4, 0]
+    joints[1, 5] = joints[1, 2] + [0, -0.4, 0]
+    out = be.sanitize_locomotion_joints(joints)
+    assert TestSanitize.hinge(out[0], 1, 4, 7) == pytest.approx(90)
+    assert TestSanitize.hinge(out[1], 1, 4, 7) >= be.MIN_KNEE_DEG - 0.01
+
+
+def test_initial_seated_height_survives_retarget_bind_pose(tmp_path: Path, bpy_module: object) -> None:
+    import bpy
+
+    joints = make_walk_joints(4)
+    joints[:, :, 1] -= 0.30
+    be.export_joints_glb(joints, tmp_path / "seat.glb")
+    arm = bpy.data.objects["Sprong22"]
+    bpy.context.scene.frame_set(1)
+    assert arm.data.bones["pelvis"].head_local.z > 0.8
+    assert arm.pose.bones["pelvis"].head.z == pytest.approx(joints[0, 0, 1], abs=1e-5)
