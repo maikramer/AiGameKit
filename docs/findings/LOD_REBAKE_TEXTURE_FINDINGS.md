@@ -1,6 +1,6 @@
 # LOD rebake — textura despedaçada (village, ago/2026)
 
-**Sintoma:** LODs da village (`examples/shared-assets/public/assets/meshes/village/`)
+**Sintoma:** LODs da village (`Vael/assets/public/assets/meshes/village/`)
 com texturas quebradas (~40-50% da superfície com cor errada) enquanto o
 `*_painted.glb` está correto. Reproduzível a 7 ago **e** com o código atual —
 não eram artefactos velhos, eram 2 bugs vivos na rota de rebake do
@@ -73,8 +73,8 @@ Calibração: `--samples 4000` em props de ~100k faces demora segundos;
 Regenerar a village:
 
 ```bash
-cd Viber/examples/shared-assets
+cd Vael/assets
 # apagar *_lod{0,1,2}.glb força a stage de LOD (resume salta ladders "ok")
-gameassets resume --profile game.yaml --manifest manifests/village
+gameassets resume --profile game.yaml --manifest manifests/<pack>
 # os exemplos leem o pool diretamente — sem passo de cópia
 ```

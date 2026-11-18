@@ -7,13 +7,6 @@
       "version": "0.2.0",
       "description": "Ferramentas básicas de geração do AiGameKit — text2d, text3d, paint3d, rigging3d, animator3d e gameassets — pipeline encadeado texto → mesh → textura → rig → animação, mais servidor MCP com tools executáveis para todos os CLIs.",
       "displayName": "AiGameKit Gen"
-    },
-    {
-      "name": "viber",
-      "source": "./viber",
-      "version": "0.1.0",
-      "description": "Ponteiro. A engine Viber e o jogo Vael são repositórios irmãos (../Viber, ../Vael).",
-      "displayName": "Viber (repo irmão)"
     }
   ]
 }

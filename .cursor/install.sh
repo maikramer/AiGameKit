@@ -5,7 +5,7 @@
 # development experience that CI validates (see .github/workflows/ci.yml):
 #   - System libs + Python 3.13 (deadsnakes) + uv + a modern Rust stable
 #   - Python 3.13 per-package venvs (Shared + the CI-tested packages) via uv/pip
-#   - Rust toolchain prefetch for Materialize + Viber (edition 2024)
+#   - Rust toolchain prefetch for Materialize + Studio (edition 2024)
 #
 # Every base-tool step is guarded by an existence check, so on a snapshot that
 # already has the toolchains this script skips straight to the fast repo
@@ -25,8 +25,8 @@ log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 
 # --- Base toolchain (idempotent) ------------------------------------------
 # System libraries: Python 3.13 build/venv, plus the C/C++ + graphics/audio
-# deps the Rust crates need (wgpu for Materialize; Bevy + vendored Luau/
-# basis-universal C++ for Viber) and libmeshoptimizer for GLB compression.
+# deps the Rust crates need (wgpu for Materialize; Bevy for Studio) and
+# libmeshoptimizer for GLB compression.
 if ! command -v python3.13 >/dev/null 2>&1 \
    || ! dpkg -s libasound2-dev >/dev/null 2>&1 \
    || ! dpkg -s libmeshoptimizer-dev >/dev/null 2>&1; then
@@ -41,9 +41,9 @@ if ! command -v python3.13 >/dev/null 2>&1 \
 fi
 
 # The base image defaults cc/c++ to clang, which cannot find the libstdc++
-# headers the vendored C++ deps need (Viber's basis-universal-sys + mlua/Luau
-# fail with "'algorithm' file not found"). Point cc/c++ at gcc/g++ so cargo's
-# cc-rs builds succeed for interactive builds too.
+# headers the C/C++ deps need (they fail with "'algorithm' file not found").
+# Point cc/c++ at gcc/g++ so cargo's cc-rs builds succeed for interactive
+# builds too.
 if command -v gcc >/dev/null 2>&1 && command -v g++ >/dev/null 2>&1; then
   sudo update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 100 >/dev/null 2>&1 || true
   sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 100 >/dev/null 2>&1 || true
@@ -57,7 +57,7 @@ if ! command -v uv >/dev/null 2>&1; then
   curl -fsSL https://astral.sh/uv/install.sh | sh
 fi
 
-# Rust >= 1.87 for edition 2024 (Materialize + Viber). The base image ships an
+# Rust >= 1.87 for edition 2024 (Materialize + Studio). The base image ships an
 # older stable; bump it via rustup when present.
 if command -v rustup >/dev/null 2>&1; then
   rustc_minor="$(rustc --version 2>/dev/null | sed -E 's/rustc 1\.([0-9]+).*/\1/')"
@@ -108,11 +108,11 @@ for pkg in "${CI_PACKAGES[@]}"; do
   setup_py_pkg "$pkg"
 done
 
-# --- Rust (Materialize + Viber) -------------------------------------------
+# --- Rust (Materialize + Studio) ------------------------------------------
 if command -v cargo >/dev/null 2>&1; then
-  log "Rust dependency prefetch (Materialize + Viber)"
+  log "Rust dependency prefetch (Materialize + Studio)"
   cargo fetch --manifest-path "$ROOT/Materialize/Cargo.toml" || true
-  cargo fetch --manifest-path "$ROOT/Viber/Cargo.toml" || true
+  cargo fetch --manifest-path "$ROOT/Studio/Cargo.toml" || true
 else
   echo "cargo missing on PATH — skipping Rust prefetch"
 fi

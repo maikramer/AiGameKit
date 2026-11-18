@@ -11,8 +11,8 @@ Complementa [`MODEL_CONSOLIDATION_STUDY.md`](MODEL_CONSOLIDATION_STUDY.md) (mode
 Objetivo: reduzir o toolkit ao que os jogos de exemplo realmente exercitam —
 facilitar instalação/uso, poupar disco (modelos HF, pós-dedupe de venvs) e
 reorganizar a apresentação (AGENTS/README). Método: varrimento de evidências nos
-exemplos (`Viber/examples/*`, manifests `game.yaml`,
-scripts de regen, pool `shared-assets`) + mapa de wiring interno do GameAssets
+exemplos (`Vael/` — mundo e cenas, manifests `assets/game.yaml`, scripts de
+regen, pool `assets/public`) + mapa de wiring interno do GameAssets
 (que sub-tool cada stage invoca) + `tools.yaml`/install.sh.
 
 ## 1. Matriz de uso (20 pacotes)
@@ -29,9 +29,9 @@ scripts de regen, pool `shared-assets`) + mapa de wiring interno do GameAssets
 | Skymap2D | SIM | `README.md:153`; `public/assets/sky/` |
 | Text2Sound | SIM | `regen_sounds.py`, `gen-sfx.sh`, manifest `audio.yaml` (SA3) |
 | AiGameKitLab | SIM | validate do batch (`pipeline.py:1533` — falha dura sem ele) + `precompute` sidecars |
-| Terrain3D | SIM (exemplo browser) | heightmap do exemplo → `terrain.ahgt` (Viber nativo usa script próprio) |
+| Terrain3D | SIM (exemplo browser) | heightmap do exemplo → `terrain.ahgt` (o Vael lê o `.ahgt` em `world.data/terrain.ahgt`) |
 | Rocks3D | SIM (parcial) | formações `form_*` do pool (`world/context.md:195`; stage 0 categoria rock) |
-| Viber | SIM (engine) | os próprios exemplos + porta nativa |
+| Vael | SIM (engine) | o jogo, o pool `assets/` e as cenas `.bsn` |
 | **Part3D** | **NÃO** | zero stages `parts` nos manifests; **nenhum wiring no GameAssets** (só `.gitignore` scratch) |
 | **Motion3D** | **NÃO** | 0 refs nos exemplos; wave `run_motion3d_wave_or_fallback` existe **sem callers** |
 | **Intrinsic** | **NÃO** | 0 refs; opção `materialize_intrinsic: False` (profile.py:133); pesos nem em disco |
@@ -49,7 +49,7 @@ expande o perfil em nomes de tools antes do bootstrap:
 | Perfil | Tools | Para quê |
 |--------|-------|----------|
 | `core` (zero-a-jogo mínimo) | `vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab` | DAG completo GLB animado |
-| `examples` (default sugerido) | core + `texture2d skymap2d text2sound terrain3d rocks3d viber` | tudo que os jogos de exemplo usam (céu, áudio, texturas, heightmap, rochas, track nativa) |
+| `examples` (default sugerido) | core + `texture2d skymap2d text2sound terrain3d rocks3d` | tudo que os jogos de exemplo usam (céu, áudio, texturas, heightmap, rochas) |
 | `all` (actual) | + `part3d motion3d intrinsic` | catálogo completo |
 
 Notas de dependências a respeitar: `text3d` cross-dep de `text2d` (já em

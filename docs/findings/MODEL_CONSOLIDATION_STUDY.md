@@ -24,7 +24,8 @@ calibrações).
 | `~/.cache/torch` | 0 | Intrinsic não descarregado nesta máquina |
 
 Sem revisões duplicadas nos modelos grandes (1 snapshot cada). Fora do âmbito
-"modelos" mas medido: venvs por tool **126 GB** e `Viber/target` **25 GB** (ver §6).
+"modelos" mas medido: venvs por tool **126 GB** e `Viber/target` **25 GB** (o
+checkout `../Viber` foi aposentado a 2026-11-13; ver §6).
 
 ## 2. Inventário HF hub — dono, uso, estado
 
@@ -140,8 +141,9 @@ se o token HF perder acesso SA3 (re-download continua possível com token válid
   filesystems diferentes. Resolvido com dedupe por hardlinks in-place
   (`make dedupe-venvs`, `scripts/dedupe_venvs.py`) — sem reinstalações nem rede.
   Reexecutar após `./install.sh <tool>` ou upgrades de pacotes grandes.
-- **`Viber/target`: 25 GB** — `cargo clean` (ou manter só o profile release). Ainda
-  por fazer (WIP activo de outro agente no Viber — não limpar a meio de builds).
+- **`Viber/target`: 25 GB** — o checkout foi aposentado a 2026-11-13 (o monólito
+  `bevy_ext_viber_engine` foi apagado a 2026-11-15) e o espaço recuperado com
+  ele. Hoje o build do jogo é `Vael/` (`jd build`, com `.jackdaw/target`).
 - **`outputs/` do Motion3D**: ~123 MB de NPZ de teste — limpeza trivial.
 
 ## 7. Sequência recomendada

@@ -8,10 +8,10 @@ Pipeline canónico aplicado a todo output ``meshes/``:
    apagar TANGENT/NORMAL (prune default do CLI 4.x remove TANGENT).
 4. KTX2 (``KHR_texture_basisu``) em **UASTC com supercompressão Zstandard**,
    para todos os mapas. Antes era híbrido (UASTC nas normais, ETC1S no resto);
-   ETC1S produz supercompressão **BasisLZ**, que a Bevy 0.19 não implementa —
+   ETC1S produz supercompressão **BasisLZ**, que a Bevy 0.20 não implementa —
    o loader KTX2 dela só trata ZLIB e Zstandard, e a feature
    ``basis-universal`` entra só depois, a transcodificar o formato, portanto
-   nunca é alcançada. Medido: um GLB ETC1S falha a carregar no Viber, o mesmo
+   nunca é alcançada. Medido: um GLB ETC1S falha a carregar no Vael, o mesmo
    asset em UASTC+Zstd carrega com as texturas corretas. Custo: ~+55% de disco
    (bandit_lod0 2.3 -> 3.6 MB).
 5. Meshopt — **preferir bpy 5.2+** (``export_meshopt_compression_enable``);

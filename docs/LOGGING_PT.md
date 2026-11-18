@@ -68,7 +68,7 @@ vramd: `configure_logging("vramd")` no `vramd start` (path no painel de arranque
 
 ## Fora de scope
 
-- **Crates Rust** (Materialize, Viber) — loggers próprios.
+- **Crates Rust** (Materialize, Studio) — loggers próprios.
 - Profiler JSONL (`AIGAMEKIT_PROFILE_LOG`) é outro canal.
 
 ## Ver também

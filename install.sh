@@ -26,7 +26,8 @@ source "$SCRIPT_DIR/scripts/install-bootstrap.sh"
 # Perfis de instalação (docs/findings/TOOLKIT_CORE_PROFILE_STUDY.md):
 #   ./install.sh core      — zero-a-jogo mínimo: DAG GLB animado → browser
 #   ./install.sh examples  — tudo que os jogos de exemplo usam (core + céu/áudio/
-#                            texturas/terreno/rochas). A engine vive em ../Viber.
+#                            texturas/terreno/rochas). A engine vive em
+#                            ../bevy_extensions e o jogo em ../Vael.
 CORE_TOOLS=(vramd text2d text3d paint3d rigging3d animator3d gameassets motion3d materialize aigamekitlab)
 EXAMPLES_EXTRA_TOOLS=(texture2d skymap2d text2sound terrain3d rocks3d)
 

@@ -57,7 +57,7 @@ Na **raiz** do repositório (pasta que contém `Shared/`, `install.sh`, `.git`):
 |--------|-------|----------|
 | `./install.sh` (sem args) | 9: `vramd text2d text3d paint3d rigging3d animator3d gameassets materialize aigamekitlab` | **Default** — zero-a-jogo mínimo (DAG GLB animado) |
 | `./install.sh core` | as mesmas 9 | Igual a sem-argumentos, explícito |
-| `./install.sh examples` | core + `texture2d skymap2d text2sound terrain3d rocks3d` | Tudo o que os jogos de exemplo usam (inclui sky/terreno/áudio do dream). A engine Bevy é o repo irmão `../Viber`. |
+| `./install.sh examples` | core + `texture2d skymap2d text2sound terrain3d rocks3d` | Tudo o que os jogos de exemplo usam (inclui sky/terreno/áudio do dream). A engine vive no repo irmão `../bevy_extensions` e o jogo em `../Vael`. |
 | `./install.sh --all` | 18: examples + `part3d motion3d intrinsic` | Catálogo completo (extras opt-in) |
 
 Antes de instalar, um **pre-flight** (`scripts/preflight.py`) verifica os pré-requisitos
@@ -124,7 +124,7 @@ Python em `tools.yaml` sem `post_install` / `custom_install` é bug
 
 Tudo abaixo é **detetado ou instalado automaticamente** salvo indicação *manual*. Numa
 máquina limpa os pré-requisitos reais são Python com pip, Node.js (compressão
-KTX2/meshopt) e — por ferramenta — Rust (`materialize`). A engine `viber` constrói-se no repo irmão `../Viber`.
+KTX2/meshopt) e — por ferramenta — Rust (`materialize`). A engine constrói-se no repo irmão `../bevy_extensions` (o jogo está em `../Vael`).
 
 | Dependência | Para quê | Linux / macOS | Windows | Auto? |
 |-------------|----------|---------------|---------|-------|

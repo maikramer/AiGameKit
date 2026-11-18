@@ -6,7 +6,7 @@ só vez, no ponto de origem (export do paint / rebake dos LODs). A partir daí,
 re-imports/re-exports bpy e os passos gltf-transform do finish (dedup, prune,
 uastc, meshopt) round-tripam o slot.
 
-Convenção ORM (a mesma de ``Viber/scripts/enrich_materials.py``): a imagem
+Convenção ORM (a mesma do antigo ``scripts/enrich_materials.py``, fora do repo): a imagem
 referenciada por ``metallicRoughnessTexture`` carrega **R=AO, G=roughness,
 B=metallic** e ``occlusionTexture`` aponta para a mesma texture index.
 """

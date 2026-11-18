@@ -64,7 +64,7 @@ duras (git=`main`, vramd, LOD0). Tribal knowledge longa vive nos docs abaixo —
 
 ## Repository Overview
 
-Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textures, skymaps, PBR map generation, rigging, animation, and asset batching. Primarily Python with the Rust crate Materialize. The Bevy engine and the game live in the sibling repos `../Viber` and `../Vael`.
+Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textures, skymaps, PBR map generation, rigging, animation, and asset batching. Primarily Python, with the Rust crates Materialize and Studio. The engine, the game and the models live in the sibling repos `../bevy_extensions`, `../Vael` and `../CelerAI`.
 
 **Key directories:**
 
@@ -85,6 +85,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Motion3D/` | Python | `motion3d` | core | Text-to-motion **SprongMotion-14M** (CPU, runtime C vendorizado + GGUF 33 MB) → NPZ @20fps / BVH; `apply-rigged` → SkinTokens via Animator3D `sprong22`; sem GPU/vramd/torch |
 | `AiGameKitLab/` | Python | `aigamekit-lab` | core | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | core | PBR map generation (wgpu compute; 3.0: guided filter, HBAO, make-seamless, `--intrinsic`) |
+| `Studio/` | Rust | `studio_app` | frontend | GUI do pipeline por asset (Bevy 0.20 + egui): prompt/referência → shape/Hi3D/paint/rig/animação → LOD/colisão, viewport 3D, re-roll por etapa, `motion3d` e biblioteca. Consome `gameassets studio check/invalidate --json` e `resume`; o decoder `bevy_ext_gltf` está vendorizado em `Studio/vendor/`. [`Studio/README.md`](Studio/README.md) · [`docs/STUDIO.md`](docs/STUDIO.md) |
 | `Intrinsic/` | Python | `intrinsic-worker` | extra | Decomposição intrínseca albedo/shading/especular (compphoto/Intrinsic; **licença académica**; backend vramd `intrinsic` para `materialize --intrinsic`) |
 | `Terrain3D/` | Python | `terrain3d` | examples | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
 | `Rocks3D/` | Python | `rocks3d` | examples | Procedural 3D rock generation (no PyTorch) |
@@ -93,6 +94,20 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 All Python packages depend on `aigamekit-shared` (install Shared first).
 
 **Upstream references:** [Materialize](https://github.com/BoundingBoxSoftware/Materialize) (Bounding Box Software) — see `Materialize/README.md`. Root `README.md` / `README_PT.md` have a **References** section.
+
+### Studio (GUI Rust/Bevy)
+
+```bash
+cargo run --manifest-path Studio/Cargo.toml -p studio_app -- --project <dir>
+cargo test --manifest-path Studio/Cargo.toml -p studio_core
+cargo test --manifest-path Studio/Cargo.toml -p studio_core --test studio_contract  # gate vs gameassets real
+```
+
+O Studio compila sozinho: o decoder `bevy_ext_gltf` está vendorizado em
+`Studio/vendor/bevy_ext_gltf` (snapshot do irmão; ver `VENDORED.md`). O núcleo
+(`studio_core`) não depende de Bevy. `Studio/target/` está no `.gitignore`. A UI não reimplementa
+paths/estado: `gameassets studio check` é a fonte de verdade e o `resume` faz o
+trabalho; `studio invalidate --include-stage` é a extensão usada pelo re-roll.
 
 ## Build / Lint / Test Commands
 
@@ -184,7 +199,7 @@ gameassets batch ...                         # stage `refine` default ON; skip g
 
 **GLB handoff (Text3D / Paint3D / GameAssets):** `gameassets handoff --public-dir <game>/public` packs GLBs (+ audio/sky/icons) from the profile `output_dir` into a game's asset folder (`public/assets/…` + `gameassets_handoff.json`; prefers animated GLB when present). Layout: [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md). Animator3D: [`docs/ANIMATOR3D_AFTER_RIG.md`](docs/ANIMATOR3D_AFTER_RIG.md).
 
-**Idea-to-game (`gameassets dream`):** `gameassets dream "description" --dry-run` calls an LLM to plan assets+scene, emits `game.yaml`/`manifest.yaml`/`world.xml`, and runs batch+terrain+sky+icons+handoff; the emitted files are consumed by the native engine (Viber). Pipeline stages (3D, rig, animate) are auto-detected from manifest columns and `game.yaml` profile blocks. Opt out per feature with `--no-audio`, `--no-sky`, or `--no-terrain` (the per-stage `--no-3d`/`--no-rig`/`--no-animate` flags belong to `gameassets batch`). Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context, planlint). Providers: `--llm-provider openai|huggingface|ollama|stdin` (ollama = local, zero-key). `--dry-run` generates files without GPU. Plans are linted + auto-repaired (`planlint`), cached by description+flags (`--replan` to force; env `AIGAMEKIT_DREAM_CACHE`), and carry provenance (`source`/`seed`/`repairs`). `--seed N` pins deterministic generation. Iterate: `gameassets dream refine plan.json "add a dragon"` (LLM edits the plan, `.bak` backup, seeds preserved, regenerates batch files); audit: `gameassets dream explain plan.json [--json]` (exit 1 on lint errors — CI-ready).
+**Idea-to-game (`gameassets dream`):** `gameassets dream "description" --dry-run` calls an LLM to plan assets+scene, emits `game.yaml`/`manifest.yaml`/`world.bsn` (and `world.data/terrain.ahgt` when terrain is enabled), and runs batch+terrain+sky+icons+handoff; the emitted files are consumed by the native engine (Vael). Pipeline stages (3D, rig, animate) are auto-detected from manifest columns and `game.yaml` profile blocks. Opt out per feature with `--no-audio`, `--no-sky`, or `--no-terrain` (the per-stage `--no-3d`/`--no-rig`/`--no-animate` flags belong to `gameassets batch`). Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context, planlint). Providers: `--llm-provider openai|huggingface|ollama|stdin` (ollama = local, zero-key). `--dry-run` generates files without GPU. Plans are linted + auto-repaired (`planlint`), cached by description+flags (`--replan` to force; env `AIGAMEKIT_DREAM_CACHE`), and carry provenance (`source`/`seed`/`repairs`). `--seed N` pins deterministic generation. Iterate: `gameassets dream refine plan.json "add a dragon"` (LLM edits the plan, `.bak` backup, seeds preserved, regenerates batch files); audit: `gameassets dream explain plan.json [--json]` (exit 1 on lint errors — CI-ready).
 
 ### Tests — single test file or test class
 
@@ -410,13 +425,20 @@ Requires `bpy` installed in the active venv (`pip install bpy`, Python 3.13+ / B
 
 See `AiGameKitLab/README.md` for full documentation.
 
-## Viber e Vael (repos irmãos)
+## Vael, bevy_extensions e CelerAI (repos irmãos)
 
-A engine e o jogo saíram deste monorepo.
+A engine, o jogo e os modelos saíram deste monorepo. O checkout `../Viber` foi
+aposentado a 2026-11-13 (o monólito `bevy_ext_viber_engine` foi apagado a
+2026-11-15); os docs de `docs/findings/` que o citam são históricos.
 
-- Engine e editor: `../Viber` (o editor é a pasta `editor/`). Build: `cd ../Viber && cargo build --release` e copiar `target/release/viber` para `~/.local/bin`.
-- Jogo: `../Vael`. Dia-a-dia: `../Vael/Vael.code-workspace` (jogo + engine).
-- Contrato: `../Viber/AGENTS.md`. Skills: `../Vael/.cursor/skills/`.
+- Jogo e mundo: `../Vael` (editor oficial: `jd open .`, build `jd build`; QA com
+  `vael-tools` em `../Vael/cli`).
+- Engine: crates `bevy_ext_*` em `../bevy_extensions`; contrato em
+  `../bevy_extensions/AGENTS.md`. Extensões do editor (`.jdext`):
+  `../bevy_extensions/extensions/` e `../Vael/extensions/`.
+- Modelos de IA (NLU/d1) e crates de inferência: `../CelerAI`.
+- Dia-a-dia: `../Vael/Vael.code-workspace` (jogo + engine + modelos). Skills:
+  `../Vael/.cursor/skills/`.
 
 ## vramd (VRAM Coordination)
 
