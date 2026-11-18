@@ -37,7 +37,7 @@ gameassets dream "A dark fantasy RPG with skeletons and treasure chests" --dry-r
 gameassets dream "A dark fantasy RPG with skeletons and treasure chests"              # full run
 ```
 
-What `dream` does: plans assets via an LLM (`--llm-provider openai|huggingface|ollama|stdin`), generates `game.yaml` / `manifest.yaml` / `world.xml`, runs the full pipeline (batch → rig → animate → sky → terrain → icons), and hands off assets to the game's public asset folder (consumed by the native engine, Viber). Pipeline stages are auto-detected; opt out with `--no-audio`, `--no-sky`, or `--no-terrain` (per-stage `--no-3d/--no-rig/--no-animate` live in `gameassets batch`). Iterate with `gameassets dream refine plan.json "add a dragon"`.
+What `dream` does: plans assets via an LLM (`--llm-provider openai|huggingface|ollama|stdin`), generates `game.yaml` / `manifest.yaml` / `world.bsn` (plus `world.data/terrain.ahgt` when terrain is enabled), runs the full pipeline (batch → rig → animate → sky → terrain → icons), and hands off assets to the game's public asset folder (consumed by the native engine, [Vael](../Vael)). Pipeline stages are auto-detected; opt out with `--no-audio`, `--no-sky`, or `--no-terrain` (per-stage `--no-3d/--no-rig/--no-animate` live in `gameassets batch`). Iterate with `gameassets dream refine plan.json "add a dragon"`.
 
 Source: [`GameAssets/src/gameassets/dream/`](GameAssets/src/gameassets/dream/).
 
@@ -49,7 +49,7 @@ Generated assets flow into a game's asset folder via handoff:
 gameassets handoff --public-dir public/    # copies GLBs (prefers animated) + manifest.json
 ```
 
-The emitted `world.xml` / manifest describe the scene for the runtime (e.g. the native Viber engine). See [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md).
+The emitted `world.bsn` / manifest describe the scene for the runtime (the native [Vael](../Vael) engine). See [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md).
 
 ## Projects
 

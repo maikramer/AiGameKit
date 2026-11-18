@@ -367,7 +367,7 @@ const TOOLS = [
   {
     name: "gameassets_dream_create",
     description:
-      "Ideia → jogo: plano LLM → game.yaml/manifest/world.xml → projeto Vite jogável. --dry-run gera ficheiros sem GPU; ollama = provider local sem API key. " + GPU_NOTE,
+      "Ideia → jogo: plano LLM → game.yaml/manifest/world.bsn (+ world.data/terrain.ahgt) → projeto do jogo. --dry-run gera ficheiros sem GPU; ollama = provider local sem API key. " + GPU_NOTE,
     bin: "gameassets",
     timeout: 3600,
     inputSchema: {
@@ -403,7 +403,7 @@ const TOOLS = [
   },
   {
     name: "gameassets_handoff",
-    description: "Copia GLB/áudio do output_dir do perfil para public/assets de um projeto Vite e grava gameassets_handoff.json.",
+    description: "Copia GLB/áudio do output_dir do perfil para public/assets de um projeto do jogo e grava gameassets_handoff.json.",
     bin: "gameassets",
     timeout: 300,
     inputSchema: {

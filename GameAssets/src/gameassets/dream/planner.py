@@ -43,17 +43,12 @@ class TerrainPlan:
     world_size: float = 768.0
     max_height: float = 50.0
     size: int = 2048
-    river_threshold: float = 4000.0
-    erosion_particles: int = 80000
-    lake_min_area: int = 20000
-    lake_max_count: int = 3
 
 
 @dataclass
 class SceneLayout:
     sky_color: str = "#87CEEB"
     ground_size: float = 50
-    spawn_y: float = 5
     placements: list[Placement] = field(default_factory=list)
 
 
@@ -99,7 +94,6 @@ class DreamPlan:
             "scene": {
                 "sky_color": self.scene.sky_color,
                 "ground_size": self.scene.ground_size,
-                "spawn_y": self.scene.spawn_y,
                 "placements": [{"asset_id": p.asset_id, "pos": p.pos, "scale": p.scale} for p in self.scene.placements],
             },
         }
@@ -111,10 +105,6 @@ class DreamPlan:
                 "world_size": self.terrain.world_size,
                 "max_height": self.terrain.max_height,
                 "size": self.terrain.size,
-                "river_threshold": self.terrain.river_threshold,
-                "erosion_particles": self.terrain.erosion_particles,
-                "lake_min_area": self.terrain.lake_min_area,
-                "lake_max_count": self.terrain.lake_max_count,
             }
         if self.seed is not None:
             result["seed"] = self.seed
@@ -159,10 +149,6 @@ class DreamPlan:
                 world_size=float(terrain_data.get("world_size", 768.0)),
                 max_height=float(terrain_data.get("max_height", 50.0)),
                 size=int(terrain_data.get("size", 2048)),
-                river_threshold=float(terrain_data.get("river_threshold", 4000.0)),
-                erosion_particles=int(terrain_data.get("erosion_particles", 80000)),
-                lake_min_area=int(terrain_data.get("lake_min_area", 20000)),
-                lake_max_count=int(terrain_data.get("lake_max_count", 3)),
             )
         return cls(
             title=d.get("title", "Untitled"),
@@ -176,7 +162,6 @@ class DreamPlan:
             scene=SceneLayout(
                 sky_color=sc.get("sky_color", "#87CEEB"),
                 ground_size=sc.get("ground_size", 50),
-                spawn_y=sc.get("spawn_y", 5),
                 placements=placements,
             ),
             terrain=terrain,
@@ -327,7 +312,6 @@ def _fallback_plan(description: str, style_preset: str) -> DreamPlan:
         assets=assets,
         scene=SceneLayout(
             ground_size=80,
-            spawn_y=3,
             placements=placements,
         ),
     )

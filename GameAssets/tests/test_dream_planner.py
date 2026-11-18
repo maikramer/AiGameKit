@@ -192,7 +192,6 @@ def _llm_json_response() -> str:
             "scene": {
                 "sky_color": "#87CEEB",
                 "ground_size": 50,
-                "spawn_y": 5,
                 "placements": [
                     {"asset_id": "ground", "pos": "0 0 0", "scale": "10 1 10"},
                     {"asset_id": "coin", "pos": "3 1 0"},

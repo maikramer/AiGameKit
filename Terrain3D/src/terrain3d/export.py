@@ -10,7 +10,7 @@ from PIL import Image
 
 from .generator import TerrainResult
 
-# Layout binário do .ahgt (formato lido nativamente pelo motor Viber em
+# Layout binário do .ahgt (formato lido nativamente pelo motor Vael em
 # world.data/terrain.ahgt):
 #   offset 0  u32  magic "AHGT" (0x54474841 little-endian)
 #   offset 4  u16  version (1)
@@ -33,7 +33,7 @@ def export_ahgt(
 
     Precision is ``max_height / 65535`` (~3 mm over 200 m) versus ~0.78 m for
     the legacy 8-bit PNG path — removes terracing on gentle slopes.  The native
-    engine (Viber) parses this format natively (``world.data/terrain.ahgt``).
+    engine (Vael) parses this format natively (``world.data/terrain.ahgt``).
 
     Args:
         heightmap: 2D float64 array of terrain elevations (0-1).

@@ -29,7 +29,6 @@ def _plan(
     assets: list[AssetEntry] | None = None,
     placements: list[Placement] | None = None,
     *,
-    spawn_y: float = 5,
     terrain: TerrainPlan | None = None,
     title: str = "Test Game",
 ) -> DreamPlan:
@@ -39,7 +38,7 @@ def _plan(
         tone="bright",
         style_preset="lowpoly",
         assets=assets if assets is not None else [],
-        scene=SceneLayout(placements=placements if placements is not None else [], spawn_y=spawn_y),
+        scene=SceneLayout(placements=placements if placements is not None else []),
         terrain=terrain,
     )
 
@@ -198,10 +197,6 @@ class TestValidatePlan:
         plan = _plan(assets=[AssetEntry(id="sfx", idea="x", generate_3d=False, generate_audio=True)])
         assert "DREAM_NO_3D" in _codes(validate_plan(plan))
 
-    def test_spawn_y_low_warning(self) -> None:
-        plan = _plan(assets=[AssetEntry(id="a", idea="x")], spawn_y=0.1)
-        assert "DREAM_SPAWN_Y_LOW" in _codes(validate_plan(plan))
-
     def test_terrain_no_prompt_warning(self) -> None:
         plan = _plan(assets=[AssetEntry(id="a", idea="x")], terrain=TerrainPlan(enabled=True, prompt=""))
         assert "DREAM_TERRAIN_NO_PROMPT" in _codes(validate_plan(plan))
@@ -296,12 +291,6 @@ class TestAutorepairPlan:
         )
         repaired, _ = autorepair_plan(plan)
         assert repaired.scene.placements[0].pos == "1 2 3"
-
-    def test_spawn_y_clamped(self) -> None:
-        plan = _plan(assets=[AssetEntry(id="a", idea="x")], spawn_y=-2)
-        repaired, fixes = autorepair_plan(plan)
-        assert repaired.scene.spawn_y == 1.0
-        assert any("spawn_y" in f for f in fixes)
 
     def test_terrain_prompt_derived(self) -> None:
         plan = _plan(

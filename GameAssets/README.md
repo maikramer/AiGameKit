@@ -28,7 +28,7 @@ GameAssets is the central hub of the [AiGameKit monorepo](../). It does **not** 
 - **Terrain:** Terrain3D (AI terrain generation via diffusion, from `dream` command)
 - **LOD / collision:** Text3D `lod` / `collision` sub-commands
 - **Quality presets:** QualityEngine integration (`fast` | `low` | `medium` | `high` | `highest`)
-- **Idea-to-game:** `dream` command — LLM plans assets + scene, batch generates everything, emits `game.yaml`/`manifest.yaml`/`world.xml`
+- **Idea-to-game:** `dream` command — LLM plans assets + scene, batch generates everything, emits `game.yaml`/`manifest.yaml`/`world.bsn`
 
 ## Pipeline Flow
 
@@ -294,7 +294,9 @@ gameassets dream refine PLAN.json "instruction" # iterate on a plan
 gameassets dream explain PLAN.json [--json]     # audit a plan (CI-ready)
 ```
 
-Idea-to-game: an LLM plans assets + scene from a natural language description, generates everything via batch + skymap, and emits `game.yaml`, `manifest.yaml` and `world.xml` (declarative scene sketch). Every plan goes through deterministic lint + auto-repair (`planlint`) before any GPU time is spent.
+Idea-to-game: an LLM plans assets + scene from a natural language description, generates everything via batch + skymap, and emits `game.yaml`, `manifest.yaml` and `world.bsn` (declarative scene sketch for the Vael engine, plus `world.data/terrain.ahgt` when terrain is enabled). Every plan goes through deterministic lint + auto-repair (`planlint`) before any GPU time is spent.
+
+The generated `world.bsn` is a Vael scene rooted at the project: copy it to the game root and the asset URLs (`/assets/models/…`) resolve against the game's asset pool (`assets/public` in Vael). The terrain `.ahgt` is world state, so it belongs at `<project>/world.data/terrain.ahgt` — the scene references that path directly.
 
 | Flag | Description |
 |------|-------------|
@@ -347,7 +349,7 @@ gameassets dream refine ./my-game/_batch/dream_plan.json "add a dragon boss and 
 The LLM *edits* the existing plan (keeping ids/placements not touched by the
 instruction), lint re-runs, the previous plan is backed up to
 `dream_plan.json.bak`, and the emitted batch files (`game.yaml`,
-`manifest.yaml`, `world.xml`, …) are regenerated (`--no-emit` to skip). Pinned
+`manifest.yaml`, `world.bsn`, …) are regenerated (`--no-emit` to skip). Pinned
 seeds survive; terrain only disappears if explicitly disabled. If the provider
 fails, the original plan is left untouched (exit 1).
 
@@ -368,7 +370,7 @@ error-severity issues — CI-ready.
 output_dir/
 ├── game.yaml            # Generated profile
 ├── manifest.yaml        # Generated asset manifest
-├── world.xml            # Declarative scene sketch (placements, ground/terrain)
+├── world.bsn            # Declarative scene sketch (placements, ground/terrain)
 ├── dream_plan.json      # LLM plan (if --plan-json)
 ├── images/              # Generated 2D images
 ├── meshes/              # Generated GLBs
@@ -972,9 +974,9 @@ gameassets dream "open world RPG with forests and mountains" \
 
 ### Engine Integration
 
-After handoff, GLBs are available at `/assets/models/` in the target game's asset directory. The native engine (Viber) loads them directly from `world.xml` / the `public/` layout produced by handoff (`gameassets_handoff.json` lists every copied file).
+After handoff, GLBs are available at `/assets/models/` in the target game's asset directory. The native engine (Vael) loads them directly from `world.bsn` / the `public/` layout produced by handoff (`gameassets_handoff.json` lists every copied file).
 
-The engine and the playable world live in the sibling repos `../Viber` and `../Vael`.
+The engine lives in the sibling repo `../bevy_extensions` and the playable world in `../Vael`.
 
 ## Development
 
@@ -1043,7 +1045,7 @@ GameAssets/
 │   ├── dream/                  # Idea-to-game subsystem
 │   │   ├── planner.py          # LLM-based game planning
 │   │   ├── runner.py           # Dream execution (batch + sky + terrain + handoff)
-│   │   ├── emitter.py          # game.yaml / manifest.yaml / world.xml generation
+│   │   ├── emitter.py          # game.yaml / manifest.yaml / world.bsn generation
 │   │   └── llm_context.py      # LLM prompt context
 │   └── data/
 │       └── presets.yaml        # Bundled style presets

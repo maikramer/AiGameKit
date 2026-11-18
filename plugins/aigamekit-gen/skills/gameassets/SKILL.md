@@ -48,7 +48,7 @@ Analisa o estado de cada asset e corre **só as fases pendentes** (work-dir `.ga
 gameassets dream create "um RPG de fazenda com goblins" --output-dir meu-jogo --llm-provider ollama --dry-run
 ```
 
-Plano LLM → `game.yaml`/`manifest.yaml`/`world.xml`/projeto Vite → batch + terreno + céu + ícones + handoff. `--dry-run` gera os ficheiros sem GPU. Providers: `openai|huggingface|ollama|stdin` (ollama = local, zero-key). `--seed N` determinístico; planos são cacheados por descrição+flags (`--replan` força). Iterar/auditar:
+Plano LLM → `game.yaml`/`manifest.yaml`/`world.bsn` (+ `world.data/terrain.ahgt`) → batch + terreno + céu + ícones + handoff. `--dry-run` gera os ficheiros sem GPU. Providers: `openai|huggingface|ollama|stdin` (ollama = local, zero-key). `--seed N` determinístico; planos são cacheados por descrição+flags (`--replan` força). Iterar/auditar:
 
 ```bash
 gameassets dream refine plan.json "add a dragon"   # LLM edita o plano (.bak, seeds preservados)

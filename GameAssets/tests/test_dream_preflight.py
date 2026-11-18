@@ -116,7 +116,7 @@ class TestCliIntegration:
             "style_preset": "lowpoly",
             "sky_prompt": "sky",
             "assets": [],
-            "scene": {"sky_color": "#87CEEB", "ground_size": 50, "spawn_y": 5, "placements": []},
+            "scene": {"sky_color": "#87CEEB", "ground_size": 50, "placements": []},
             "seed": 1,
             "source": "llm:openai",
         }

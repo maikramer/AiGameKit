@@ -59,7 +59,8 @@ def test_resolve_with_subdirectory(tmp_path: Path) -> None:
 class TestManifestOutputDirIsRelativeToManifest:
     """``output_dir`` resolve-se contra a pasta do **manifest**, não do perfil.
 
-    Regressão dos packs partilhados: `shared-assets/manifests/*.yaml` traziam
+    Regressão dos packs partilhados: os antigos `shared-assets/manifests/*.yaml`
+    (hoje `Vael/assets/manifests/*.yaml`) traziam
     `output_dir: public/assets` (herdado de um layout em que o manifest vivia à
     raiz), o que apontava para `manifests/public/assets`. Resultado: `resume`
     classificava os 24 assets como `need_image` e o happy path do README

@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 # Bump quando o schema/prompt mudar semanticamente — invalida o cache de planos.
-DREAM_PROMPT_VERSION = "3"
+DREAM_PROMPT_VERSION = "4"
 
 DREAM_PLAN_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -44,7 +44,6 @@ DREAM_PLAN_SCHEMA: dict[str, Any] = {
             "properties": {
                 "sky_color": {"type": "string"},
                 "ground_size": {"type": "number"},
-                "spawn_y": {"type": "number"},
                 "placements": {
                     "type": "array",
                     "items": {
@@ -74,56 +73,34 @@ DREAM_PLAN_SCHEMA: dict[str, Any] = {
                     "type": "integer",
                     "description": "Heightmap resolution in pixels (default: 2048; larger = more detail)",
                 },
-                "river_threshold": {
-                    "type": "number",
-                    "description": "Flow accumulation threshold for rivers (default: 4000; lower = more rivers)",
-                },
-                "erosion_particles": {
-                    "type": "integer",
-                    "description": "Erosion particle count (default: 80000)",
-                },
-                "lake_min_area": {
-                    "type": "integer",
-                    "description": "Minimum lake size in heightmap pixels (default: 20000; higher = only large basins)",
-                },
-                "lake_max_count": {
-                    "type": "integer",
-                    "description": "Max lakes to place (default: 3; each is one Water entity; 0 = unlimited)",
-                },
             },
         },
     },
 }
 
 SCENE_RECIPES = [
-    "GameObject",
-    "MeshRenderer",
-    "static-part",
-    "dynamic-part",
-    "kinematic-part",
-    "Player",
+    "Entity",
+    "GltfScene",
     "PlayerGLTF",
-    "OrbitCamera",
-    "FollowCamera",
-    "GLTFLoader",
-    "GLTFDynamic",
-    "SpawnGroup",
+    "Creature",
+    "Composition",
+    "Box",
+    "Sphere",
+    "Cylinder",
     "Terrain",
+    "OrbitCamera",
+    "PointLight",
+    "DirectionalLight",
+    "AmbientLight",
+    "ParticleSystem",
+    "GroundDecal",
     "Water",
-    "Fog",
-    "AudioSource",
-    "postprocessing",
-    "bloom",
-    "vignette",
-    "chromatic-aberration",
-    "noise",
-    "Paragraph",
-    "Word",
+    "Group",
+    "NavMesh",
 ]
 
 SCENE_RULES = """\
-- The scene MUST have at least one large ground platform (static-part or GLTFLoader).
-- spawn_y should be above the highest ground surface so the player does not clip.
+- The scene MUST have at least one large ground platform (a Composition/Box ground or Terrain).
 - Positions use "X Y Z" strings (Y is up). Reasonable range: -50 to 50 per axis.
 - Scale uses "X Y Z" strings. Ground platforms typically "10 1 10" or larger.
 - Each placement references an asset_id from the assets array (only 3D assets).
@@ -137,7 +114,8 @@ SCENE_RULES = """\
   for games with a HUD/inventory. Each becomes one icon image. Skip for abstract/ambient games.
 - Provide varied, creative ideas for each asset — avoid generic descriptions.
 - All string values in the JSON must be valid JSON (escaped quotes if needed).
-- Characters with generate_rig=true must use `<PlayerGLTF>` instead of `<GLTFLoader>` in the scene XML.
+- Only the first character with generate_rig=true becomes the player (<PlayerGLTF>); every
+  other 3D asset is placed as <GltfScene>. sky_color is the scene clear color.
 - Enable terrain (terrain.enabled=true) for open-world, exploration, RPG, or outdoor games that benefit
   from a procedural landscape instead of a flat ground plane.
 - Do NOT enable terrain for simple platformers, interior scenes, or games that only need a flat arena.
@@ -146,8 +124,7 @@ SCENE_RULES = """\
 - terrain.world_size should match the scale of the game: 128-384 for small arenas,
   512-768 for exploration, 768+ for large worlds.
 - terrain.max_height controls elevation range: 20-30 for gentle hills, 40-80 for mountains,
-  100+ for dramatic peaks.
-- terrain.lake_max_count: use 2-3 for believable open worlds (each lake is a Water entity); avoid large values.\
+  100+ for dramatic peaks.\
 """
 
 
@@ -176,7 +153,7 @@ def build_system_prompt(
     return f"""\
 You are an expert game designer and asset planner. Given a game concept described in \
 natural language, produce a JSON object that defines the game's assets, visual style, \
-and scene layout for a 3D game (declarative scene XML).
+and scene layout for a 3D game (a declarative scene .bsn).
 
 ## Available style presets
 {presets_str}
@@ -195,7 +172,7 @@ and scene layout for a 3D game (declarative scene XML).
 - The JSON must be valid and parseable. Do NOT wrap it in markdown code fences.
 - Respond ONLY with the JSON object — no explanation, no extra text.
 
-## Scene recipes (for reference — used later to build the scene XML)
+## Scene recipes (for reference — used later to build the scene .bsn)
 {", ".join(SCENE_RECIPES)}
 """
 

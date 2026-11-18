@@ -50,7 +50,7 @@ class TestSystemPromptAnchors:
 
     def test_includes_scene_recipes(self) -> None:
         prompt = _default_prompt()
-        for recipe in ("PlayerGLTF", "GLTFLoader", "Terrain", "OrbitCamera"):
+        for recipe in ("PlayerGLTF", "GltfScene", "Terrain", "OrbitCamera"):
             assert recipe in prompt
         assert "PlayerGLTF" in SCENE_RECIPES
 

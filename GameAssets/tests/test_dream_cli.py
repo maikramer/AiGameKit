@@ -33,7 +33,6 @@ def _plan_dict(**overrides: object) -> dict:
         "scene": {
             "sky_color": "#87CEEB",
             "ground_size": 50,
-            "spawn_y": 5,
             "placements": [
                 {"asset_id": "hero", "pos": "0 1 0", "scale": "1 1 1"},
                 {"asset_id": "crate", "pos": "4 0 4", "scale": "1 1 1"},
@@ -174,7 +173,7 @@ class TestDreamRefine:
         doc = yaml.safe_load((tmp_path / "game.yaml").read_text(encoding="utf-8"))
         assert doc["title"] == "Test Game"
         assert (tmp_path / "manifest.yaml").is_file()
-        assert (tmp_path / "world.xml").is_file()
+        assert (tmp_path / "world.bsn").is_file()
 
     def test_refine_no_emit_keeps_files(self, tmp_path: Path) -> None:
         p = self._write_plan(tmp_path)

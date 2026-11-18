@@ -203,10 +203,6 @@ def validate_plan(plan: DreamPlan, *, max_assets: int = 8) -> list[PlanIssue]:
 
     if not plan.scene.placements:
         issues.append(PlanIssue(SEVERITY_WARNING, "DREAM_NO_PLACEMENTS", "cena sem placements"))
-    if plan.scene.spawn_y is not None and plan.scene.spawn_y < 0.5:
-        issues.append(
-            PlanIssue(SEVERITY_WARNING, "DREAM_SPAWN_Y_LOW", f"spawn_y={plan.scene.spawn_y} pode clipar no chão")
-        )
 
     if plan.terrain is not None and plan.terrain.enabled and not (plan.terrain.prompt or "").strip():
         issues.append(PlanIssue(SEVERITY_WARNING, "DREAM_TERRAIN_NO_PROMPT", "terrain enabled sem prompt"))
@@ -297,10 +293,6 @@ def autorepair_plan(plan: DreamPlan, *, max_assets: int = 8) -> tuple[DreamPlan,
             pl.scale = format_vec3(scale)
         placements.append(pl)
     p.scene.placements = placements
-
-    if p.scene.spawn_y is not None and p.scene.spawn_y < 0.5:
-        fixes.append(f"spawn_y {p.scene.spawn_y} → 1.0")
-        p.scene.spawn_y = 1.0
 
     if p.terrain is not None and p.terrain.enabled and not (p.terrain.prompt or "").strip():
         derived = (p.tone or p.genre or "gentle hills").strip()[:80]

@@ -17,7 +17,6 @@ def _simple_plan(title: str = "My Cool Game") -> DreamPlan:
         assets=[AssetEntry(id="ground", idea="large ground platform", kind="environment", generate_3d=True)],
         scene=SceneLayout(
             ground_size=50,
-            spawn_y=5,
             placements=[Placement(asset_id="ground", pos="0 0 0", scale="10 1 10")],
         ),
     )
@@ -60,7 +59,7 @@ class TestRunDreamDryRun:
         assert (batch_dir / "game.yaml").is_file()
         assert (batch_dir / "manifest.yaml").is_file()
         assert (batch_dir / "dream_plan.json").is_file()
-        assert (batch_dir / "world.xml").is_file()
+        assert (batch_dir / "world.bsn").is_file()
 
     def test_dry_run_records_emit_step(self, tmp_path: Path) -> None:
         report = run_dream(_simple_plan(), tmp_path, with_sky=False, dry_run=True)

@@ -12,11 +12,11 @@ import yaml
 
 from gameassets.dream.emitter import (
     _ground_color_for_genre,
-    _xml_escape,
+    _ron_escape,
     emit_all,
     emit_game_yaml,
     emit_manifest_yaml,
-    emit_world_xml,
+    emit_world_bsn,
 )
 from gameassets.dream.planner import AssetEntry, DreamPlan, Placement, SceneLayout, TerrainPlan
 from gameassets.handoff_export import _safe_public_id, resolve_handoff_mesh
@@ -374,13 +374,13 @@ def test_ground_color_for_genre(genre: str, color: str) -> None:
 @pytest.mark.parametrize(
     "raw,escaped",
     [
-        ("a&b", "a&amp;b"),
-        ('say "hi"', "say &quot;hi&quot;"),
-        ("<tag>", "&lt;tag&gt;"),
+        ("a&b", "a&b"),
+        ('say "hi"', 'say \\"hi\\"'),
+        ("back\\slash", "back\\\\slash"),
     ],
 )
-def test_xml_escape(raw: str, escaped: str) -> None:
-    assert _xml_escape(raw) == escaped
+def test_ron_escape(raw: str, escaped: str) -> None:
+    assert _ron_escape(raw) == escaped
 
 
 def test_emit_game_yaml_parses() -> None:
@@ -394,30 +394,32 @@ def test_emit_manifest_yaml_pipeline() -> None:
     assert "rig" in doc["assets"][0]["pipeline"]
 
 
-def test_emit_world_xml_scene() -> None:
-    xml = emit_world_xml(_plan())
-    assert "<Scene" in xml and "</Scene>" in xml
+def test_emit_world_bsn_scene() -> None:
+    bsn = emit_world_bsn(_plan())
+    assert bsn.startswith('#"world"') and 'tag: "world"' in bsn
 
 
-def test_emit_world_xml_terrain() -> None:
+def test_emit_world_bsn_terrain() -> None:
     plan = _plan(terrain=TerrainPlan(enabled=True, world_size=512, max_height=40))
-    assert "Terrain" in emit_world_xml(plan)
+    bsn = emit_world_bsn(plan)
+    assert 'tag: "Terrain"' in bsn
+    assert "world.data/terrain.ahgt" in bsn
 
 
 def test_emit_all_emits_only_batch_files(tmp_path: Path) -> None:
-    # O dream já não faz scaffold de projeto browser: só game.yaml/manifest.yaml/world.xml.
+    # O dream já não faz scaffold de projeto browser: só game.yaml/manifest.yaml/world.bsn.
     paths = emit_all(_plan(), tmp_path)
-    assert set(paths) == {"game_yaml", "manifest_yaml", "world_xml"}
+    assert set(paths) == {"game_yaml", "manifest_yaml", "world_bsn"}
     assert not (tmp_path / "main.ts").exists()
     assert not (tmp_path / "index.html").exists()
 
 
-def test_emit_world_xml_player_gltf_for_rigged() -> None:
+def test_emit_world_bsn_player_gltf_for_rigged() -> None:
     plan = _plan(assets=[AssetEntry(id="h", idea="hero", generate_3d=True, generate_rig=True)])
     plan.scene.placements.append(Placement(asset_id="h", pos="0 1 0"))
-    xml = emit_world_xml(plan)
-    assert "PlayerGLTF" in xml
-    assert "/assets/models/h_lod0.glb" in xml
+    bsn = emit_world_bsn(plan)
+    assert 'tag: "PlayerGLTF"' in bsn
+    assert "/assets/models/h_lod0.glb" in bsn
 
 
 @pytest.mark.parametrize("with_audio", [True, False])

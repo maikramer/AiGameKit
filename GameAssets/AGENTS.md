@@ -84,7 +84,7 @@ gameassets skill install
 
 `batch` runs the master pipeline by default. `resume` picks up from last checkpoint.
 `dream` goes from text description to generated assets + plano (`dream "<desc>"` ≡
-`dream create "<desc>"`; emite `game.yaml`/`manifest.yaml`/`world.xml`, sem scaffold
+`dream create "<desc>"`; emite `game.yaml`/`manifest.yaml`/`world.bsn`, sem scaffold
 de projeto; `dream refine plan.json "instrução"` itera o plano com
 backup `.bak`; `dream explain plan.json --json` audita com exit 1 em erros).
 Flags: `--no-vramd`, `--vramd-stream`, `--no-rig`, `--no-animate`,

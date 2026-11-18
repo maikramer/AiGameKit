@@ -32,7 +32,7 @@ class TerrainResult:
     """Output paths from terrain generation.
 
     Attributes:
-        heightmap_path: Path to the generated heightmap PNG.
+        heightmap_path: Path to the generated `.ahgt` heightfield (read directly by the game).
         metadata_path: Path to the terrain metadata JSON.
     """
 
@@ -48,7 +48,7 @@ class TerrainStage:
 
         Args:
             config: Terrain parameters.
-            output_dir: Directory where heightmap.png and terrain.json are written.
+            output_dir: Directory where ``terrain.ahgt`` and ``terrain.json`` are written.
 
         Returns:
             TerrainResult with paths to the generated files.
@@ -62,7 +62,7 @@ class TerrainStage:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        heightmap_path = output_dir / "heightmap.png"
+        heightmap_path = output_dir / "terrain.ahgt"
         metadata_path = output_dir / "terrain.json"
 
         argv = [
@@ -72,6 +72,8 @@ class TerrainStage:
             str(config.seed),
             "--output",
             str(heightmap_path),
+            "--format",
+            "ahgt",
             "--metadata",
             str(metadata_path),
             "--size",

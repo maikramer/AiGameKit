@@ -1,6 +1,6 @@
 """Testes das correções de qualidade do Terrain3D (2026-07):
 
-- export_ahgt: formato binário uint16+deflate lido nativamente pelo motor Viber;
+- export_ahgt: formato binário uint16+deflate lido nativamente pelo motor Vael;
 - vramd_payload: payload vramd transporta TODOS os params de geração/pós-processamento;
 - worker adapter: overrides por request aplicados mesmo com worker quente;
 - CLI: delegação vramd não descarta flags; coarse_window deriva size; --format ahgt;

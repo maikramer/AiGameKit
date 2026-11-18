@@ -9,9 +9,9 @@ import yaml
 from gameassets.dream.emitter import (
     emit_all,
     emit_game_yaml,
-    emit_world_xml,
+    emit_world_bsn,
 )
-from gameassets.dream.planner import AssetEntry, DreamPlan, Placement, SceneLayout
+from gameassets.dream.planner import AssetEntry, DreamPlan, Placement, SceneLayout, TerrainPlan
 
 
 def _sample_plan() -> DreamPlan:
@@ -43,7 +43,6 @@ def _sample_plan() -> DreamPlan:
         scene=SceneLayout(
             sky_color="#87CEEB",
             ground_size=50,
-            spawn_y=5,
             placements=[
                 Placement(asset_id="ground", pos="0 0 0", scale="10 1 10"),
                 Placement(asset_id="crystal", pos="3 4 0", scale="0.5 0.5 0.5"),
@@ -109,57 +108,65 @@ class TestEmitGameYaml:
                 assert "low_vram" not in doc[block], f"{block} should not have low_vram hardcoded"
 
 
-class TestEmitWorldXml:
-    def test_contains_scene_tags(self) -> None:
-        xml = emit_world_xml(_sample_plan())
-        assert xml.startswith("<Scene")
-        assert xml.strip().endswith("</Scene>")
+class TestEmitWorldBsn:
+    def test_world_root(self) -> None:
+        bsn = emit_world_bsn(_sample_plan())
+        assert bsn.startswith('#"world"')
+        assert 'tag: "world"' in bsn
+        assert 'key: "static", value: "true"' in bsn
+        assert 'key: "clear-color", value: "#87CEEB"' in bsn
 
-    def test_contains_gltf_load(self) -> None:
-        xml = emit_world_xml(_sample_plan())
-        assert "GLTFLoader" in xml
-        assert "/assets/models/crystal_lod0.glb" in xml
+    def test_contains_gltf_scene(self) -> None:
+        bsn = emit_world_bsn(_sample_plan())
+        assert 'tag: "GltfScene"' in bsn
+        assert "/assets/models/crystal_lod0.glb" in bsn
 
     def test_emits_player_gltf_for_rigged_character(self) -> None:
         plan = _sample_plan()
         plan.scene.placements.append(Placement(asset_id="hero", pos="0 1 0", scale="1 1 1"))
-        xml = emit_world_xml(plan)
-        assert "PlayerGLTF" in xml
-        assert "/assets/models/hero_lod0.glb" in xml
-        assert "/assets/models/crystal_lod0.glb" in xml
+        bsn = emit_world_bsn(plan)
+        assert 'tag: "PlayerGLTF"' in bsn
+        assert "/assets/models/hero_lod0.glb" in bsn
+        assert "/assets/models/crystal_lod0.glb" in bsn
 
     def test_player_gltf_default_pos_high_y(self) -> None:
         plan = _sample_plan()
         plan.scene.placements.append(Placement(asset_id="hero", pos="", scale="1 1 1"))
-        xml = emit_world_xml(plan)
-        assert 'pos="0 60 0"' in xml
+        bsn = emit_world_bsn(plan)
+        assert 'key: "pos", value: "0 60 0"' in bsn
 
     def test_no_audio_placement(self) -> None:
-        xml = emit_world_xml(_sample_plan())
-        assert "collect_sfx" not in xml
+        bsn = emit_world_bsn(_sample_plan())
+        assert "collect_sfx" not in bsn
 
     def test_ground_platform(self) -> None:
-        xml = emit_world_xml(_sample_plan())
-        assert "static-part" in xml
+        bsn = emit_world_bsn(_sample_plan())
+        assert 'tag: "Composition"' in bsn
+        assert 'tag: "Box"' in bsn
+        assert 'key: "half-size", value: "25 0.5 25"' in bsn
 
-    def test_has_player(self) -> None:
-        xml = emit_world_xml(_sample_plan())
-        assert "<Player" in xml
-        assert 'pos="0 5 0"' in xml
+    def test_terrain_node(self) -> None:
+        plan = _sample_plan()
+        plan.terrain = TerrainPlan(enabled=True, world_size=512, max_height=40)
+        bsn = emit_world_bsn(plan)
+        assert 'tag: "Terrain"' in bsn
+        assert 'key: "heightmap", value: "world.data/terrain.ahgt"' in bsn
+        assert "bevy_ext_terrain::voxel::VoxelTerrain" in bsn
+        assert 'tag: "Composition"' not in bsn
 
     def test_has_orbit_camera(self) -> None:
-        xml = emit_world_xml(_sample_plan())
-        assert "<OrbitCamera" in xml
+        bsn = emit_world_bsn(_sample_plan())
+        assert 'tag: "OrbitCamera"' in bsn
 
     def test_ground_color_default_green(self) -> None:
-        xml = emit_world_xml(_sample_plan())
-        assert 'color="#4a7a3a"' in xml
+        bsn = emit_world_bsn(_sample_plan())
+        assert 'value: "#4a7a3a"' in bsn
 
     def test_ground_color_desert(self) -> None:
         plan = _sample_plan()
         plan.genre = "desert adventure"
-        xml = emit_world_xml(plan)
-        assert 'color="#c2a860"' in xml
+        bsn = emit_world_bsn(plan)
+        assert 'value: "#c2a860"' in bsn
 
 
 class TestEmitAll:
@@ -167,7 +174,7 @@ class TestEmitAll:
         paths = emit_all(_sample_plan(), tmp_path)
         assert paths["game_yaml"].is_file()
         assert paths["manifest_yaml"].is_file()
-        assert paths["world_xml"].is_file()
+        assert paths["world_bsn"].is_file()
 
     def test_game_yaml_parseable(self, tmp_path: Path) -> None:
         paths = emit_all(_sample_plan(), tmp_path)

@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from .emitter import emit_all
+from .emitter import TERRAIN_REL_PATH, emit_all
 from .planlint import SEVERITY_ERROR, asset_stage_chain, validate_plan
 from .planner import DreamPlan
 from .terrain_stage import TerrainConfig, TerrainStage
@@ -192,7 +192,8 @@ def run_dream(
     terrain_enabled = plan.terrain is not None and plan.terrain.enabled
     if terrain_enabled:
         tp = plan.terrain
-        terrain_dir = public_dir / "assets" / "terrain"
+        assert tp is not None
+        terrain_dir = project_dir / Path(TERRAIN_REL_PATH).parent
         terrain_dir.mkdir(parents=True, exist_ok=True)
         try:
             tcfg = TerrainConfig(
@@ -201,10 +202,6 @@ def run_dream(
                 world_size=tp.world_size,
                 max_height=tp.max_height,
                 size=tp.size,
-                river_threshold=tp.river_threshold,
-                erosion_particles=tp.erosion_particles,
-                lake_min_area=tp.lake_min_area,
-                lake_max_count=tp.lake_max_count,
             )
             stage = TerrainStage()
             result = stage.run(tcfg, terrain_dir)
@@ -311,11 +308,18 @@ def run_dream(
     # --- 6. Resumo final (assets prontos, sem scaffold de projeto) ---
     _step("assets prontos", detail=str(project_dir))
 
+    summary_lines = [
+        f"[green]Assets gerados em[/green] [bold]{project_dir}[/bold]\n",
+        f"  batch:   {batch_dir}  (game.yaml, manifest.yaml, world.bsn)",
+        f"  public:  {public_dir}  (modelos, sky, ícones)",
+    ]
+    terrain_path = project_dir / TERRAIN_REL_PATH
+    if terrain_path.exists():
+        summary_lines.append(f"  terreno: {terrain_path}")
+
     console.print(
         Panel(
-            f"[green]Assets gerados em[/green] [bold]{project_dir}[/bold]\n\n"
-            f"  batch:   {batch_dir}  (game.yaml, manifest.yaml, world.xml)\n"
-            f"  public:  {public_dir}  (modelos, sky, terreno, ícones)",
+            "\n".join(summary_lines),
             border_style="green",
             title="Dream",
         )

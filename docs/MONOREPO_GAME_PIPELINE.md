@@ -1,6 +1,6 @@
 # Monorepo Game Pipeline — from GameAssets to a game folder
 
-This document defines a **reference layout** and **handoff contract** between the asset-generation tools (centered on [GameAssets](../GameAssets/)) and the game folder consumed by a runtime (e.g. the native [Viber](../Viber/) engine). It complements [INSTALLING.md](INSTALLING.md).
+This document defines a **reference layout** and **handoff contract** between the asset-generation tools (centered on [GameAssets](../GameAssets/)) and the game folder consumed by the native [Vael](../Vael/) engine (whose crates live in [bevy_extensions](../bevy_extensions/)). It complements [INSTALLING.md](INSTALLING.md).
 
 **Runtime findings (models, VRAM, Omni, mesh):** [MODEL_FINDINGS.md](MODEL_FINDINGS.md) · [findings/](findings/README.md).  
 **vramd batch waves:** [GAMEASSETS_UMS_BATCH.md](GAMEASSETS_UMS_BATCH.md) · **Mission:** [mission/](mission/README.md).  
@@ -15,7 +15,7 @@ VRAM: **vramd + hw-auto** (no public `--low-vram`); editable monorepo bins: [INS
 | 3D | Text3D, Paint3D, Rigging3D | GLB (mesh + PBR; optional rig) |
 | Audio | Text2Sound | WAV/FLAC (see Text2Sound docs) |
 | QA | AiGameKitLab | GLB inspection (optional) |
-| Runtime | `viber` (native Bevy engine) | Interactive scene consuming the handoff folder |
+| Runtime | `vael` (native Bevy engine, `../Vael`) | Interactive scene consuming the handoff folder |
 
 ## 2. Recommended folder layout (handoff)
 
@@ -37,6 +37,8 @@ my-game/
 - `assets/audio/<id>.<ext>` — matches CSV `id` or slug.
 - `assets/sky/<name>.png` — sky source; how the runtime binds it (background, environment) is up to the game.
 
+In Vael the asset roots are `assets/public` (`config.yaml: assets.roots`) and the terrain heightfield is world state at `world.data/terrain.ahgt` (uint16 `.ahgt`, not an asset-server file). The `world.bsn` emitted by `dream` references both paths directly.
+
 ## 3. Handoff contract (minimum)
 
 | Asset type | Path pattern | Notes |
@@ -49,7 +51,7 @@ my-game/
 
 ## 4. Reference pipeline (minimal game)
 
-1. **Install CLIs** (repo root): `./install.sh` for the tools you need (see [INSTALLING.md](INSTALLING.md)); include `gameassets`, `text2d`/`texture2d`, `text3d`, optional `paint3d`, `text2sound`, `animator3d` (for animated characters), `viber` (native runtime), etc.
+1. **Install CLIs** (repo root): `./install.sh` for the tools you need (see [INSTALLING.md](INSTALLING.md)); include `gameassets`, `text2d`/`texture2d`, `text3d`, optional `paint3d`, `text2sound`, `animator3d` (for animated characters), etc. The runtime/editor is the sibling `../Vael` (`jd build`/`jd open .`).
 2. **Author** `game.yaml` + `manifest.csv` + presets ([GameAssets README](../GameAssets/README.md)).
 3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv`. GPU stages ride **vramd waves** (shape → paint → optional 2D/audio/terrain; see [GAMEASSETS_UMS_BATCH.md](GAMEASSETS_UMS_BATCH.md)). Master DAG after paint is **Round 3** (rig painted → `game-pack`×1 → `text3d lod`) — [MESH_PIPELINE_FINDINGS](findings/MESH_PIPELINE_FINDINGS.md). Omni knobs / soft-fill by category: [OMNI_SHAPE_FINDINGS.md](OMNI_SHAPE_FINDINGS.md). Stages (3D, rig, animate) auto-detect from manifest + `game.yaml`; `--no-rig` / `--no-animate` / `--no-vramd` to opt out.
 4. **Handoff**: **`gameassets handoff --public-dir path/to/public`** copies/symlinks from the profile `output_dir` into `public/assets/…`, writes `assets/gameassets_handoff.json`, and can **prefer animated GLBs** over rigged/base when both exist. Alternatively copy files manually.
@@ -80,7 +82,7 @@ Detalhe:
 
 **Animator3D** can run **inside** `gameassets batch` (auto-detected when `animator3d` profile block exists) or **standalone** on a rigged GLB — see [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md).
 
-**Idea-to-game:** **`gameassets dream`** plans assets + scene from a natural-language description, runs batch (auto-detecting rig + animate from the plan), terrain, sky, icons and handoff, emitting `game.yaml` / `manifest.yaml` / `world.xml` — details in the [GameAssets README](../GameAssets/README.md) and `GameAssets/src/gameassets/dream/`.
+**Idea-to-game:** **`gameassets dream`** plans assets + scene from a natural-language description, runs batch (auto-detecting rig + animate from the plan), terrain, sky, icons and handoff, emitting `game.yaml` / `manifest.yaml` / `world.bsn` (+ `world.data/terrain.ahgt`) — details in the [GameAssets README](../GameAssets/README.md) and `GameAssets/src/gameassets/dream/`.
 
 ## 4.1 Quality Presets (QualityEngine)
 

@@ -1,4 +1,4 @@
-"""Converte DreamPlan em ficheiros prontos para batch (game.yaml, manifest.yaml) + world.xml."""
+"""Converte DreamPlan em ficheiros prontos para batch (game.yaml, manifest.yaml) + world.bsn."""
 
 from __future__ import annotations
 
@@ -94,65 +94,213 @@ def emit_manifest_yaml(plan: DreamPlan) -> str:
 
 
 # ---------------------------------------------------------------------------
-# world XML (esboço declarativo da cena)
+# world .bsn (esboço declarativo da cena)
 # ---------------------------------------------------------------------------
 
+# Caminho canónico do heightmap no projeto do jogo (o runtime lê-o do disco).
+TERRAIN_REL_PATH = "world.data/terrain.ahgt"
 
-def _xml_escape(s: str) -> str:
-    return s.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+_WORLD_NODE = "bevy_world_xml::bsn::WorldNode"
+_WORLD_PROP = "bevy_world_xml::bsn::WorldProp"
+_TRANSFORM = "bevy_transform::components::transform::Transform"
+_VOXEL_TERRAIN = "bevy_ext_terrain::voxel::VoxelTerrain"
+_CHILDREN = "bevy_ecs::hierarchy::Children"
+_IDENTITY_SCALE = (1.0, 1.0, 1.0)
+_ORIGIN = (0.0, 0.0, 0.0)
 
 
-def emit_world_xml(plan: DreamPlan) -> str:
-    """Gera o esboço declarativo da cena (world.xml): ground/terreno, player e placements dos assets 3D."""
-    has_sky_image = bool(plan.sky_prompt)
-    sky_attr = ""
-    if plan.scene.sky_color and not has_sky_image:
-        sky_attr = f' sky="{_xml_escape(plan.scene.sky_color)}"'
+def _ron_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
-    lines = [f"<Scene{sky_attr}>"]
 
-    if has_sky_image:
-        lines.append('  <Skybox url="/assets/sky/sky.png"></Skybox>')
+def _bsn_float(value: float) -> str:
+    return repr(float(value))
 
+
+def _vec3(values: tuple[float, float, float]) -> str:
+    x, y, z = values
+    return f"glam::Vec3 {{ x: {_bsn_float(x)}, y: {_bsn_float(y)}, z: {_bsn_float(z)} }}"
+
+
+def _transform(translation: tuple[float, float, float], scale: tuple[float, float, float]) -> str:
+    return (
+        f"{_TRANSFORM} {{\n"
+        f"    translation: {_vec3(translation)},\n"
+        "    rotation: glam::Quat { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },\n"
+        f"    scale: {_vec3(scale)},\n"
+        "}\n"
+    )
+
+
+def _parse_vec3(text: str, default: tuple[float, float, float]) -> tuple[float, float, float]:
+    parts = text.split()
+    if len(parts) != 3:
+        return default
+    try:
+        return (float(parts[0]), float(parts[1]), float(parts[2]))
+    except ValueError:
+        return default
+
+
+def _world_node(
+    tag: str,
+    attrs: list[tuple[str, str]],
+    *,
+    pose: bool,
+    origin_path: tuple[int, ...],
+) -> str:
+    out = f'{_WORLD_NODE} {{\n    tag: "{_ron_escape(tag)}",\n    attrs: [\n'
+    for key, value in attrs:
+        out += f'        {_WORLD_PROP} {{ key: "{_ron_escape(key)}", value: "{_ron_escape(value)}" }},\n'
+    out += "    ],\n"
+    out += '    text: "",\n'
+    out += '    origin_file: "world.bsn",\n'
+    out += f"    origin_path: [{', '.join(str(i) for i in origin_path)}],\n"
+    out += f"    pose: {'true' if pose else 'false'},\n"
+    out += "}\n"
+    return out
+
+
+def _entity(
+    name: str,
+    tag: str,
+    attrs: list[tuple[str, str]],
+    *,
+    origin_path: tuple[int, ...],
+    translation: tuple[float, float, float] = _ORIGIN,
+    scale: tuple[float, float, float] = _IDENTITY_SCALE,
+    pose: bool = True,
+    extra: str = "",
+    children: tuple[str, ...] = (),
+) -> str:
+    out = f'#"{_ron_escape(name)}"\n'
+    out += _transform(translation, scale)
+    out += _world_node(tag, attrs, pose=pose, origin_path=origin_path)
+    out += extra
+    if children:
+        out += f"{_CHILDREN} [\n"
+        for index, child in enumerate(children):
+            if index:
+                out += "    --\n"
+            out += "".join(f"    {line}\n" for line in child.splitlines())
+        out += "]\n"
+    return out
+
+
+def emit_world_bsn(plan: DreamPlan) -> str:
+    """Gera o esboço da cena em ``world.bsn`` (formato do Vael).
+
+    O `.bsn` é uma árvore de entidades com ``WorldNode { tag, attrs, text }``;
+    o loader do jogo reconstrói o DSL a partir dela. Emite chão
+    (``Composition``/``Box``) ou terreno (``Terrain`` + `.ahgt`), o herói
+    (``PlayerGLTF``) e os placements estáticos (``GltfScene``), mais a câmara.
+    O céu é uma definição do jogo (``world/settings/environment.bsn``), não um
+    nó da cena; ``clear-color`` guarda a cor de fundo do plano.
+    """
     terrain_enabled = plan.terrain is not None and plan.terrain.enabled
+    children: list[str] = []
+    origin = 1
+
     if terrain_enabled:
         tp = plan.terrain
-        ws = tp.world_size or plan.scene.ground_size or 256
-        mh = tp.max_height or 50
-        lines.append(
-            f'  <Terrain heightmap="/assets/terrain/heightmap.png"'
-            f' terrain-data-url="/assets/terrain/terrain.json"'
-            f' world-size="{ws}" max-height="{mh}"></Terrain>'
+        assert tp is not None
+        world_size = tp.world_size or plan.scene.ground_size or 256
+        max_height = tp.max_height or 50
+        children.append(
+            _entity(
+                "Terrain",
+                "Terrain",
+                [
+                    ("heightmap", TERRAIN_REL_PATH),
+                    ("world-size", f"{world_size:g}"),
+                    ("max-height", f"{max_height:g}"),
+                ],
+                pose=False,
+                origin_path=(origin,),
+                extra=f'{_VOXEL_TERRAIN} {{\n    heightmap: "{TERRAIN_REL_PATH}",\n}}\n',
+            )
         )
     else:
-        gs = plan.scene.ground_size or 50
-        ground_color = _ground_color_for_genre(plan.genre)
-        lines.append(
-            f'  <static-part pos="0 -0.5 0" shape="box" size="{gs} 1 {gs}" color="{ground_color}"></static-part>'
+        half = (plan.scene.ground_size or 50) / 2
+        half_text = f"{half:g}"
+        children.append(
+            _entity(
+                "ground",
+                "Composition",
+                [("name", "ground"), ("body", "fixed"), ("collider", "auto")],
+                origin_path=(origin,),
+                children=(
+                    _entity(
+                        "Box",
+                        "Box",
+                        [
+                            ("half-size", f"{half_text} 0.5 {half_text}"),
+                            ("translation", "0 -0.5 0"),
+                            ("color", _ground_color_for_genre(plan.genre)),
+                        ],
+                        translation=(0.0, -0.5, 0.0),
+                        origin_path=(origin, 0),
+                    ),
+                ),
+            )
         )
-
-    spawn_y = plan.scene.spawn_y if plan.scene.spawn_y is not None else 3
-    lines.append(f'  <Player pos="0 {spawn_y} 0"></Player>')
-    lines.append('  <OrbitCamera target-distance="14" target-pitch="-0.4"></OrbitCamera>')
-    lines.append("")
+    origin += 1
 
     three_d_ids = {a.id for a in plan.assets if a.generate_3d}
     rigged_ids = {a.id for a in plan.assets if a.generate_3d and a.generate_rig}
+    hero_placed = False
 
-    for p in plan.scene.placements:
-        if p.asset_id not in three_d_ids:
+    for placement in plan.scene.placements:
+        if placement.asset_id not in three_d_ids:
             continue
-        url = f"/assets/models/{p.asset_id}_lod0.glb"
-        if p.asset_id in rigged_ids:
-            pos = p.pos or "0 60 0"
-            lines.append(f'  <PlayerGLTF model-url="{_xml_escape(url)}" pos="{_xml_escape(pos)}"></PlayerGLTF>')
+        url = f"/assets/models/{placement.asset_id}_lod0.glb"
+        if placement.asset_id in rigged_ids and not hero_placed:
+            pos = placement.pos or "0 60 0"
+            children.append(
+                _entity(
+                    "player",
+                    "PlayerGLTF",
+                    [("name", "player"), ("pos", pos), ("model-url", url)],
+                    translation=_parse_vec3(pos, (0.0, 60.0, 0.0)),
+                    origin_path=(origin,),
+                )
+            )
+            hero_placed = True
         else:
-            pos = p.pos or "0 0 0"
-            scale = p.scale or "1 1 1"
-            lines.append(f'  <GLTFLoader url="{_xml_escape(url)}" transform="pos: {pos}; scale: {scale}"></GLTFLoader>')
+            pos = placement.pos or "0 0 0"
+            scale = placement.scale or "1 1 1"
+            children.append(
+                _entity(
+                    f"GltfScene {placement.asset_id}",
+                    "GltfScene",
+                    [("url", url)],
+                    translation=_parse_vec3(pos, _ORIGIN),
+                    scale=_parse_vec3(scale, _IDENTITY_SCALE),
+                    origin_path=(origin,),
+                )
+            )
+        origin += 1
 
-    lines.append("</Scene>")
-    return "\n".join(lines) + "\n"
+    children.append(
+        _entity(
+            "OrbitCamera",
+            "OrbitCamera",
+            [("distance", "14"), ("pitch", "18")],
+            origin_path=(origin,),
+        )
+    )
+
+    return _entity(
+        "world",
+        "world",
+        [
+            ("static", "true"),
+            ("clear-color", plan.scene.sky_color or "#87CEEB"),
+            ("title", plan.title),
+        ],
+        origin_path=(0,),
+        children=tuple(children),
+    )
 
 
 def _ground_color_for_genre(genre: str) -> str:
@@ -181,7 +329,7 @@ def emit_all(
     with_sky: bool = True,
     with_audio: bool = True,
 ) -> dict[str, Path]:
-    """Escreve os ficheiros gerados (game.yaml, manifest.yaml, world.xml) e devolve mapa nome→caminho.
+    """Escreve os ficheiros gerados (game.yaml, manifest.yaml, world.bsn) e devolve mapa nome→caminho.
 
     Args:
         plan: Plano validado do dream.
@@ -202,9 +350,9 @@ def emit_all(
     manifest.write_text(emit_manifest_yaml(plan), encoding="utf-8")
     paths["manifest_yaml"] = manifest
 
-    world_xml_str = emit_world_xml(plan)
-    world_xml_path = output_dir / "world.xml"
-    world_xml_path.write_text(world_xml_str, encoding="utf-8")
-    paths["world_xml"] = world_xml_path
+    world_bsn_str = emit_world_bsn(plan)
+    world_bsn_path = output_dir / "world.bsn"
+    world_bsn_path.write_text(world_bsn_str, encoding="utf-8")
+    paths["world_bsn"] = world_bsn_path
 
     return paths
