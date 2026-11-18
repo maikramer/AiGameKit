@@ -41,3 +41,9 @@ vector-quantize-pytorch==1.14.41
 wandb>=0.16.0
 webdataset==0.2.100
 x-transformers<1.27.0
+
+# O instalador põe o Text2Sound editável com --no-deps. O mastering dos
+# ficheiros do jogo precisa destas dependências também numa instalação limpa.
+pedalboard>=0.9.0
+pyloudnorm>=0.1.0
+soundfile>=0.12.0

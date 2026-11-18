@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 import torch
 
 from tests._heavy_deps import require_audio_stack
@@ -493,6 +494,7 @@ class TestPlacementCpuFallback:
         assert gen.half_precision is False
         assert next(gen._model.parameters()).dtype == torch.float32
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="Verifica a colocação real em CUDA")
     @patch("text2sound.generator.get_pretrained_model")
     def test_full_gpu_plan_keeps_cuda(self, mock_get):
         from torch import nn

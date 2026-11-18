@@ -142,8 +142,8 @@ class TestGenerateDSPValidation:
         assert result.exit_code != 0
 
     def test_lufs_valid_accepted_at_parse(self, runner):
-        # -5 is within range; will fail later at model load but parsing is fine.
-        result = runner.invoke(cli, ["generate", "test", "--lufs", "-5", "--duration", "100"])
+        # A valid LUFS value reaches duration validation without loading a model.
+        result = runner.invoke(cli, ["generate", "test", "--lufs", "-5", "--duration", "121"])
         # Duration error proves we got past LUFS parsing.
         assert result.exit_code != 0
         assert "dura" in result.output.lower() or "duration" in result.output.lower()
