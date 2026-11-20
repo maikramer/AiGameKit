@@ -11,10 +11,13 @@ import pytest
 from aigamekit_shared.sdnq import (
     SDNQ_CACHE_DIR_ENV,
     SDNQ_CACHE_ENV,
+    SDNQ_CACHE_SCHEMA_VERSION,
     build_sdnq_cache_key,
     load_sdnq_cached_model,
+    load_sdnq_state_cache,
     resolve_hf_snapshot_revision,
     save_sdnq_cached_model,
+    save_sdnq_state_cache,
     sdnq_cache_dir,
     sdnq_cache_enabled,
 )
@@ -230,3 +233,76 @@ class TestSdnqCacheRoundtrip:
             o1 = qlm(input_ids=ids).logits
             o2 = reloaded(input_ids=ids).logits
         assert (o1 - o2).abs().max().item() == 0.0
+
+    def test_custom_module_state_cache_bit_exact_roundtrip(self, tmp_path: Path) -> None:
+        torch = pytest.importorskip("torch")
+        pytest.importorskip("sdnq")
+        pytest.importorskip("safetensors")
+        pytest.importorskip("accelerate")
+
+        from aigamekit_shared.sdnq import quantize_model, register_sdnq
+
+        register_sdnq()
+
+        class _MiniCustomDiT(torch.nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.x_embedder = torch.nn.Linear(64, 256)
+                self.block_fc1 = torch.nn.Linear(256, 512)
+                self.block_fc2 = torch.nn.Linear(512, 256)
+                self.norm = torch.nn.LayerNorm(256)
+                self.final_layer = torch.nn.Linear(256, 64)
+                self.register_buffer("pos_bias", torch.linspace(-0.1, 0.1, 256))
+
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
+                h = self.x_embedder(x) + self.pos_bias.to(x.dtype)
+                h = self.block_fc2(torch.nn.functional.gelu(self.block_fc1(h)))
+                return self.final_layer(self.norm(h))
+
+        torch.manual_seed(7)
+        model = _MiniCustomDiT().to(torch.float16)
+        quantized = quantize_model(
+            model,
+            "sdnq-int4",
+            quantization_device="cpu",
+            return_device="cpu",
+            dequantize_fp32=False,
+            modules_to_not_convert=["x_embedder", "final_layer"],
+        )
+        assert quantized.x_embedder.weight.dtype == torch.float16
+        assert quantized.final_layer.weight.dtype == torch.float16
+
+        cache_entry = tmp_path / "custom_dit"
+        save_sdnq_state_cache(quantized, cache_entry, meta={"component": "dit_model"})
+        assert (cache_entry / "cache_meta.json").is_file()
+        assert (cache_entry / "model.safetensors").is_file()
+
+        reloaded = load_sdnq_state_cache(
+            cache_entry,
+            _MiniCustomDiT,
+            torch_dtype=torch.float16,
+            device="cpu",
+            dequantize_fp32=False,
+        )
+        assert reloaded is not None
+        assert reloaded.x_embedder.weight.dtype == torch.float16
+        assert reloaded.final_layer.weight.dtype == torch.float16
+        assert not any(b.device.type == "meta" for b in reloaded.buffers())
+
+        x = torch.randn(2, 4, 64, dtype=torch.float16)
+        with torch.inference_mode():
+            y1 = quantized(x)
+            y2 = reloaded(x)
+        assert (y1 - y2).abs().max().item() == 0.0
+
+    def test_state_cache_returns_none_on_miss_or_wrong_format(self, tmp_path: Path) -> None:
+        assert load_sdnq_state_cache(tmp_path / "missing", lambda: None) is None
+
+        bad = tmp_path / "wrong_format"
+        bad.mkdir()
+        (bad / "quantization_config.json").write_text("{}", encoding="utf-8")
+        (bad / "cache_meta.json").write_text(
+            json.dumps({"schema": SDNQ_CACHE_SCHEMA_VERSION, "complete": True, "format": "diffusers"}),
+            encoding="utf-8",
+        )
+        assert load_sdnq_state_cache(bad, lambda: None) is None
