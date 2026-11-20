@@ -31,12 +31,18 @@ class StarCoderModel(nn.Module):
 
         self.max_length = int(getattr(config, "max_length_train", 8192))
         model_config = self._build_model_config(config)
-        model_config._attn_implementation = "eager"
+        # SDPA nativo (Flash/Mem-Efficient no PyTorch 2.x) em vez de eager O(N²);
+        # cai para eager apenas se a versão de transformers recusar sdpa.
+        model_config._attn_implementation = "sdpa"
 
         # The StarVector checkpoint carries the fine-tuned LLM; building from
         # config avoids downloading (and needing access to) the gated base
         # repo. If this fails there is nothing sensible to fall back to.
-        model: nn.Module = AutoModelForCausalLM.from_config(model_config)
+        try:
+            model: nn.Module = AutoModelForCausalLM.from_config(model_config)
+        except (ValueError, ImportError):
+            model_config._attn_implementation = "eager"
+            model = AutoModelForCausalLM.from_config(model_config)
         input_embeddings = model.get_input_embeddings()
         if input_embeddings is not None and input_embeddings.weight.shape[0] != len(self.tokenizer):
             model.resize_token_embeddings(len(self.tokenizer))

@@ -65,6 +65,15 @@ FULL_GPU_BUDGET_FRACTION = 0.70
 # Env var do kill-switch de group offload (precedência: tool > global).
 GROUP_OFFLOAD_ENV = "TEXT2D_GROUP_OFFLOAD"
 
+# Camadas sensíveis do Flux3Transformer2DModel que o ``sdnq 0.2.9`` ainda não
+# tem em ``module_skip_keys_dict`` (o SDNQ já lista Flux e Flux2, mas não
+# Flux3). Manter as 6 modulações adaLN em bf16 preserva fidelidade de luz/cor
+# em 4-bit (~0.16 GiB cada bloco de modulação) e espelha a receita oficial Flux2.
+FLUX3_QUANT_SKIP_MODULES: tuple[str, ...] = (
+    "early_stream_modulations",
+    "single_stream_modulations",
+)
+
 
 def _flatten_reference(image: Image.Image) -> Image.Image:
     """Referência em RGB com o alfa composto sobre branco.
@@ -192,7 +201,12 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
 
         set_memory_optimization_env()
 
-        from aigamekit_shared.sdnq import apply_quantized_matmul, register_sdnq
+        from aigamekit_shared.sdnq import (
+            _auto_quantized_matmul_default,
+            apply_quantized_matmul,
+            register_sdnq,
+            sdnq_cache_enabled,
+        )
 
         register_sdnq()
 
@@ -217,6 +231,10 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             blocks.sub_blocks.pop("prompt_upsampler", None)
         pipe = blocks.init_pipeline(self.model_id)
 
+        cached_attrs: set[str] = set()
+        if preset and sdnq_cache_enabled():
+            cached_attrs = self._try_load_sdnq_cache(pipe, preset, torch_dtype=torch.bfloat16)
+
         self._status(f"Passo 2/5 — load_components (pesos; 1ª vez baixa vários GB; quant={qlabel})")
         pipe.load_components(
             dtype={"vae": torch.float32, "default": torch.bfloat16},
@@ -229,18 +247,22 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             # OOM ao mover para o device de quant...), o plano tem de ser
             # refeito a bf16: planear com o footprint quantizado levava a
             # full-GPU/offload sub-dimensionado e OOM no forward.
-            if not self._runtime_quantize(pipe, preset):
+            if not self._runtime_quantize(pipe, preset, already_quantized=cached_attrs):
                 self._log(f"SDNQ {preset} não aplicou ao transformer — a planear em bf16")
                 preset = None
                 self.quant_preset = None
                 qlabel = "bf16 (sem quant)"
 
-        self._status("Passo 4/5 — SDNQ (matmul quantizado desligado no FLUX.3)")
-        # FLUX.3 calcula o embedding de timestep em float32 e o kernel int8 do
-        # SDNQ não faz autocast (RuntimeError float != bf16 no Flux3 time
-        # embedding). A via dequant+linear (default do preset) funciona; a
-        # aceleração de matmul fica desligada para este modelo.
-        apply_quantized_matmul(pipe, enabled=False)
+        matmul_on = bool(preset) and _auto_quantized_matmul_default()
+        self._status(f"Passo 4/5 — SDNQ (matmul quantizado {'on' if matmul_on else 'off'})")
+        # Por defeito desligado (AIGAMEKIT_SDNQ_AUTO_MATMUL=0) para evitar o
+        # compile frio de Triton em runs curtos; com as modulações adaLN em bf16
+        # e dequantize_fp32=False, o opt-in via AIGAMEKIT_SDNQ_AUTO_MATMUL=1
+        # fica desbloqueado para batches/workers longos.
+        try:
+            apply_quantized_matmul(pipe, enabled=matmul_on)
+        except Exception as exc:
+            self._log(f"SDNQ quantized_matmul falhou ({exc}); seguindo em dequant+linear")
 
         self._status(f"Passo 5/5 — colocação: {plan.summary()}")
         self._clear_cache()
@@ -324,7 +346,86 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             return None
         return preset
 
-    def _runtime_quantize(self, pipe: Any, preset: str) -> bool:
+    def _quant_targets(self) -> list[str]:
+        """Componentes pesados sujeitos a quantização SDNQ (e disk cache)."""
+        attrs = ["transformer", "text_encoder"]
+        if self.upsample:
+            attrs.append("prompt_upsampler")
+        return attrs
+
+    @staticmethod
+    def _quant_skip_modules(attr: str) -> list[str] | None:
+        """Camadas sensíveis excluídas da quantização SDNQ por componente."""
+        if attr == "transformer":
+            return list(FLUX3_QUANT_SKIP_MODULES)
+        return None
+
+    def _sdnq_cache_path(self, attr: str, preset: str) -> Path:
+        """Path determinístico do cache SDNQ em disco para um componente."""
+        from aigamekit_shared.sdnq import build_sdnq_cache_key, sdnq_cache_dir
+
+        repo_id = PROMPT_UPSAMPLER_REPO if attr == "prompt_upsampler" else self.model_id
+        key = build_sdnq_cache_key(
+            repo_id,
+            attr,
+            preset,
+            cache_dir=self.cache_dir,
+            modules_to_not_convert=self._quant_skip_modules(attr),
+            dequantize_fp32=False,
+            torch_dtype="bfloat16",
+        )
+        return sdnq_cache_dir() / key
+
+    def _try_load_sdnq_cache(self, pipe: Any, preset: str, *, torch_dtype: Any = None) -> set[str]:
+        """Carrega componentes já quantizados do disk cache antes do load bf16.
+
+        ``ModularPipeline.load_components()`` salta qualquer componente que já
+        esteja preenchido no pipeline — um cache hit elimina tanto a leitura dos
+        pesos bf16 (~18.5 GB) quanto os ~25-30 s de SVD/Hadamard em runtime.
+        """
+        import shutil
+
+        from aigamekit_shared.sdnq import load_sdnq_cached_model
+
+        loaded: dict[str, Any] = {}
+        for attr in self._quant_targets():
+            cache_path = self._sdnq_cache_path(attr, preset)
+            if not cache_path.is_dir():
+                continue
+            try:
+                mod = load_sdnq_cached_model(
+                    cache_path,
+                    torch_dtype=torch_dtype,
+                    device="cpu",
+                    dequantize_fp32=False,
+                )
+            except Exception as exc:
+                self._log(f"SDNQ cache inválido para {attr} ({exc}); a regenerar")
+                shutil.rmtree(cache_path, ignore_errors=True)
+                continue
+            if mod is not None:
+                loaded[attr] = mod
+                self._log(f"SDNQ cache hit para {attr} ({preset})")
+
+        if loaded:
+            if hasattr(pipe, "update_components"):
+                try:
+                    pipe.update_components(**loaded)
+                except Exception:
+                    for attr, mod in loaded.items():
+                        setattr(pipe, attr, mod)
+            else:
+                for attr, mod in loaded.items():
+                    setattr(pipe, attr, mod)
+        return set(loaded)
+
+    def _runtime_quantize(
+        self,
+        pipe: Any,
+        preset: str,
+        *,
+        already_quantized: set[str] | None = None,
+    ) -> bool:
         """Quantiza os componentes pesados do pipeline em runtime (SDNQ post-load).
 
         Componentes FLUX.3 Klein: ``transformer`` (5.6B), ``text_encoder``
@@ -339,38 +440,54 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             — senão o planner dimensiona para ~11 GiB quantizados e o pipeline
             real ocupa ~2x isso (OOM no forward/VAE).
         """
-        from aigamekit_shared.sdnq import quantize_model
+        from aigamekit_shared.sdnq import quantize_model, save_sdnq_cached_model, sdnq_cache_enabled
 
+        already = set(already_quantized or ())
         quant_device = "cuda" if self.device == "cuda" else "cpu"
-        attrs = ["transformer", "text_encoder"]
-        if self.upsample:
-            attrs.append("prompt_upsampler")
-        transformer_quantized = False
-        for attr in attrs:
+        cache_on = sdnq_cache_enabled()
+        transformer_quantized = "transformer" in already
+        for attr in self._quant_targets():
+            if attr in already:
+                continue
             mod = getattr(pipe, attr, None)
             if mod is None:
                 continue
+            skip_modules = self._quant_skip_modules(attr)
+            quant_kwargs: dict[str, Any] = {
+                "quantization_device": quant_device,
+                "return_device": "cpu",
+                # O ModularPipeline deriva o dtype de compute de
+                # ``transformer.dtype`` (= dtype do 1.º param flutuante).
+                # Com scales fp32 (default do preset) o pipeline passaria
+                # latents fp32 e os lineares não-quantizados (bf16)
+                # rebentavam com "float != bf16". Scales bf16 mantêm o
+                # compute bf16 e o dequant consistente.
+                "dequantize_fp32": False,
+            }
+            if skip_modules:
+                quant_kwargs["modules_to_not_convert"] = skip_modules
             try:
-                setattr(
-                    pipe,
-                    attr,
-                    quantize_model(
-                        mod,
-                        preset,
-                        quantization_device=quant_device,
-                        return_device="cpu",
-                        # O ModularPipeline deriva o dtype de compute de
-                        # ``transformer.dtype`` (= dtype do 1.º param flutuante).
-                        # Com scales fp32 (default do preset) o pipeline passaria
-                        # latents fp32 e os lineares não-quantizados (bf16)
-                        # rebentavam com "float != bf16". Scales bf16 mantêm o
-                        # compute bf16 e o dequant consistente.
-                        dequantize_fp32=False,
-                    ),
-                )
+                quantized = quantize_model(mod, preset, **quant_kwargs)
+                setattr(pipe, attr, quantized)
                 self._log(f"SDNQ {preset} aplicado a {attr}")
                 if attr == "transformer":
                     transformer_quantized = True
+                if cache_on and hasattr(quantized, "save_pretrained"):
+                    try:
+                        cache_path = self._sdnq_cache_path(attr, preset)
+                        save_sdnq_cached_model(
+                            quantized,
+                            cache_path,
+                            meta={
+                                "model_id": PROMPT_UPSAMPLER_REPO if attr == "prompt_upsampler" else self.model_id,
+                                "component": attr,
+                                "preset": preset,
+                                "modules_to_not_convert": skip_modules or [],
+                            },
+                        )
+                        self._log(f"SDNQ cache gravado para {attr} ({preset})")
+                    except Exception as cache_exc:
+                        self._log(f"SDNQ cache save ignorado para {attr} ({cache_exc})")
             except Exception as exc:
                 self._log(f"quantização de {attr} falhou ({exc}); componente fica em bf16")
         self._clear_cache()
@@ -509,7 +626,16 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
         # Com upsampler, pedir também a caption que o pup escreveu (observabilidade
         # do que o modelo de imagem recebeu).
         output_keys: str | list[str] = ["images", "prompt"] if self.upsample else "images"
-        out = pipe(**pipe_kwargs, output=output_keys)
+        import contextlib
+
+        try:
+            import torch
+
+            ctx_mgr = torch.inference_mode()
+        except Exception:
+            ctx_mgr = contextlib.nullcontext()
+        with ctx_mgr:
+            out = pipe(**pipe_kwargs, output=output_keys)
         caption = None
         if isinstance(out, dict):
             images = out.get("images") or []

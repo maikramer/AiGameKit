@@ -144,6 +144,31 @@ class TestRemoveBackground:
         fake_remove.assert_called_once()
         assert fake_remove.call_args.kwargs.get("session") is session
 
+    def test_session_cached_across_calls_when_new_session_available(self) -> None:
+        from text2d.bg_removal import clear_session_cache, remove_background
+
+        clear_session_cache()
+        sessions_created: list[object] = []
+
+        def _new_session(name: str) -> object:
+            s = {"model": name, "id": len(sessions_created)}
+            sessions_created.append(s)
+            return s
+
+        fake_remove = MagicMock(return_value=_rgba_png_bytes())
+        fake_rembg = types.ModuleType("rembg")
+        fake_rembg.remove = fake_remove
+        fake_rembg.new_session = _new_session
+        try:
+            with patch.dict(sys.modules, {"rembg": fake_rembg}):
+                remove_background(_rgb_image())
+                remove_background(_rgb_image())
+            assert len(sessions_created) == 1
+            assert fake_remove.call_args_list[0].kwargs["session"] is sessions_created[0]
+            assert fake_remove.call_args_list[1].kwargs["session"] is sessions_created[0]
+        finally:
+            clear_session_cache()
+
     def test_import_error_clear_message_when_rembg_missing(self) -> None:
         from text2d.bg_removal import remove_background
 

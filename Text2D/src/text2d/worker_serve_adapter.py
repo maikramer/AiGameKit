@@ -212,10 +212,16 @@ class Adapter(WorkerAdapter):
         # O unload do gerador (e o cache do allocator) têm de correr sempre —
         # mesmo que um levante, a VRAM tem de voltar ao driver antes da fase
         # seguinte (text3d/paint3d eram recusados com ~5 GiB presos).
+        import sys
+
         with contextlib.suppress(Exception):
             unload = getattr(model, "unload", None)
             if callable(unload):
                 unload()
+        with contextlib.suppress(Exception):
+            bg_mod = sys.modules.get("text2d.bg_removal")
+            if bg_mod is not None and hasattr(bg_mod, "clear_session_cache"):
+                bg_mod.clear_session_cache()
         try:
             import torch
 

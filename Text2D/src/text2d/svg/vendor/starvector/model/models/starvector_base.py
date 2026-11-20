@@ -9,14 +9,28 @@ from transformers.generation.stopping_criteria import StoppingCriteria, Stopping
 
 class StoppingCriteriaSub(StoppingCriteria):
 
-    def __init__(self, stops=[]):
-        super().__init__()  # Correct super() call
-        self.stops = stops
+    def __init__(self, stops=None):
+        super().__init__()
+        self.stops = [list(s) for s in (stops or []) if s]
+        self._stop_tensors: dict[torch.device, list[torch.Tensor]] = {}
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor):
-        # Check if any of the stop sequences are in the input_ids
-        for stop_ids in self.stops:
-            if input_ids[0][-len(stop_ids):].tolist() == stop_ids:
+    def _tensors_for(self, device: torch.device) -> list[torch.Tensor]:
+        cached = self._stop_tensors.get(device)
+        if cached is None:
+            cached = [torch.tensor(s, dtype=torch.long, device=device) for s in self.stops]
+            self._stop_tensors[device] = cached
+        return cached
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> bool:
+        if not self.stops:
+            return False
+        seq = input_ids[0]
+        seq_len = seq.shape[0]
+        # Comparação em tensor no próprio device (sem .tolist() a copiar N ints
+        # para a CPU a cada token).
+        for stop_t in self._tensors_for(seq.device):
+            n = stop_t.shape[0]
+            if seq_len >= n and bool(torch.equal(seq[-n:], stop_t)):
                 return True
         return False
 

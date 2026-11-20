@@ -97,7 +97,12 @@ class StarVectorEngine:
         else:
             import torch
 
-            self.dtype = torch.float16 if self.device == "cuda" else torch.float32
+            if self.device != "cpu" and torch.cuda.is_available():
+                self.dtype = (
+                    torch.bfloat16 if getattr(torch.cuda, "is_bf16_supported", lambda: False)() else torch.float16
+                )
+            else:
+                self.dtype = torch.float32
         self.model = None
         self.image_size = 224
 

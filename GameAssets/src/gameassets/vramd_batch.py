@@ -807,6 +807,7 @@ def text2d_specs_from_items(
             # inclui o group offload do perfil de 6 GB (estava a cair no
             # fallback genérico 2430 MiB e o worker text2d OOMava).
             allow_group_offload=mem,
+            channels_last=True,
             footprint_key=footprint,
             category=category,
             transparent=True if transparent else None,

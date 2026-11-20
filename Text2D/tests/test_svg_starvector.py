@@ -57,6 +57,30 @@ def test_engine_calls_generate_im2svg_with_deterministic_kwargs():
     engine.unload()
 
 
+def test_stopping_criteria_matches_tensor_suffix_without_tolist():
+    import torch
+
+    from text2d.svg.vendor.starvector.model.models.starvector_base import StoppingCriteriaSub
+
+    crit = StoppingCriteriaSub(stops=[[10, 20, 30]])
+    assert crit(torch.tensor([[1, 2, 10, 20]]), torch.zeros(1, 32)) is False
+    assert crit(torch.tensor([[1, 2, 10, 20, 30]]), torch.zeros(1, 32)) is True
+    assert crit(torch.tensor([[10, 20]]), torch.zeros(1, 32)) is False
+
+
+def test_engine_prefers_bf16_on_supported_cuda(monkeypatch):
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
+    engine = StarVectorEngine(device="cuda")
+    assert engine.dtype == torch.bfloat16
+
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: False)
+    engine_fp16 = StarVectorEngine(device="cuda")
+    assert engine_fp16.dtype == torch.float16
+
+
 @pytest.mark.skipif(
     os.environ.get("TEXT2D_STARVECTOR") != "1",
     reason="teste real do StarVector: define TEXT2D_STARVECTOR=1 (GPU + pesos em cache)",

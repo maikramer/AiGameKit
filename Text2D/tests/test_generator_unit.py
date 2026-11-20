@@ -129,6 +129,124 @@ class TestRuntimeQuantize:
         # O text_encoder segue quantizado; só o footprint do transformer importa.
         assert pipe.text_encoder == "quant"
 
+    def test_generate_runs_inside_inference_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import torch
+        from PIL import Image
+
+        from text2d.generator import KleinFluxGenerator
+
+        seen_inference_mode: list[bool] = []
+
+        def _fake_pipe(**_kwargs):
+            seen_inference_mode.append(torch.is_inference_mode_enabled())
+            return [Image.new("RGB", (8, 8), (0, 0, 0))]
+
+        gen = KleinFluxGenerator(device="cpu", group_offload=False)
+        monkeypatch.setattr(gen, "_load_pipeline", lambda: _fake_pipe)
+        monkeypatch.setattr(gen, "_clear_cache", lambda: None)
+        img, _meta = gen.generate("a red cube", width=256, height=256, num_inference_steps=4, seed=1)
+        assert img.size == (8, 8)
+        assert seen_inference_mode == [True]
+
+    def test_runtime_quantize_skips_flux3_modulations_only_for_transformer(self, monkeypatch) -> None:
+        """Transformer passa ``FLUX3_QUANT_SKIP_MODULES`` ao SDNQ; text_encoder não."""
+        from types import SimpleNamespace
+
+        from text2d.generator import FLUX3_QUANT_SKIP_MODULES, KleinFluxGenerator
+
+        calls: list[tuple[object, str, dict]] = []
+
+        def _fake_quant(mod, preset, **kw):
+            calls.append((mod, preset, kw))
+            return mod
+
+        monkeypatch.setattr("aigamekit_shared.sdnq.quantize_model", _fake_quant)
+        monkeypatch.setenv("AIGAMEKIT_SDNQ_CACHE", "0")
+
+        tf = SimpleNamespace(name="tf")
+        te = SimpleNamespace(name="te")
+        pipe = SimpleNamespace(transformer=tf, text_encoder=te)
+        gen = KleinFluxGenerator(device="cpu", group_offload=False)
+        monkeypatch.setattr(gen, "_clear_cache", lambda: None)
+
+        assert gen._runtime_quantize(pipe, "sdnq-int4") is True
+        assert len(calls) == 2
+        assert calls[0][0] is tf
+        assert calls[0][2]["modules_to_not_convert"] == list(FLUX3_QUANT_SKIP_MODULES)
+        assert calls[1][0] is te
+        assert "modules_to_not_convert" not in calls[1][2]
+
+    def test_runtime_quantize_respects_already_quantized_and_saves_cache(self, monkeypatch, tmp_path) -> None:
+        """Componentes vindos do cache pulam quantize_model; misses gravam no cache."""
+        from types import SimpleNamespace
+
+        from text2d.generator import KleinFluxGenerator
+
+        quant_calls: list[str] = []
+        save_calls: list[tuple[str, object]] = []
+
+        class _Saveable:
+            def __init__(self, tag: str) -> None:
+                self.tag = tag
+
+            def save_pretrained(self, _path: str) -> None:
+                pass
+
+        def _fake_quant(mod, preset, **kw):
+            quant_calls.append(mod.tag)
+            return mod
+
+        def _fake_save(mod, target_dir, **kw):
+            save_calls.append((mod.tag, target_dir))
+            return target_dir
+
+        monkeypatch.setattr("aigamekit_shared.sdnq.quantize_model", _fake_quant)
+        monkeypatch.setattr("aigamekit_shared.sdnq.save_sdnq_cached_model", _fake_save)
+        monkeypatch.setenv("AIGAMEKIT_SDNQ_CACHE", "1")
+        monkeypatch.setenv("AIGAMEKIT_SDNQ_CACHE_DIR", str(tmp_path))
+
+        pipe = SimpleNamespace(transformer=_Saveable("tf"), text_encoder=_Saveable("te"))
+        gen = KleinFluxGenerator(device="cpu", group_offload=False)
+        monkeypatch.setattr(gen, "_clear_cache", lambda: None)
+
+        # transformer veio do cache → só text_encoder é quantizado e salvo
+        assert gen._runtime_quantize(pipe, "sdnq-int4", already_quantized={"transformer"}) is True
+        assert quant_calls == ["te"]
+        assert [tag for tag, _ in save_calls] == ["te"]
+
+    def test_try_load_sdnq_cache_updates_pipeline_components(self, monkeypatch, tmp_path) -> None:
+        """Cache hit injeta o módulo no pipe via update_components antes do load_components."""
+        from text2d.generator import KleinFluxGenerator
+
+        monkeypatch.setenv("AIGAMEKIT_SDNQ_CACHE_DIR", str(tmp_path))
+        gen = KleinFluxGenerator(device="cpu", group_offload=False)
+
+        tf_cache = gen._sdnq_cache_path("transformer", "sdnq-int4")
+        tf_cache.mkdir(parents=True)
+
+        sentinel_tf = object()
+        monkeypatch.setattr(
+            "aigamekit_shared.sdnq.load_sdnq_cached_model",
+            lambda path, **_kw: sentinel_tf if path == tf_cache else None,
+        )
+
+        updated: dict = {}
+
+        class _Pipe:
+            transformer = None
+            text_encoder = None
+
+            def update_components(self, **kw) -> None:
+                updated.update(kw)
+                for k, v in kw.items():
+                    setattr(self, k, v)
+
+        pipe = _Pipe()
+        hits = gen._try_load_sdnq_cache(pipe, "sdnq-int4")
+        assert hits == {"transformer"}
+        assert pipe.transformer is sentinel_tf
+        assert updated == {"transformer": sentinel_tf}
+
 
 class TestWorkerAdapterGenerate:
     """Contrato do adapter text2d do worker (sem modelo)."""
