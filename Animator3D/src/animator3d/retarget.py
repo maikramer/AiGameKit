@@ -43,6 +43,7 @@ Fontes: docs/quaternius_inventory.md, protótipos validados visualmente no brows
 
 from __future__ import annotations
 
+import contextlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -561,6 +562,138 @@ def _swap_side_pairs(tgt_to_src: dict[str, str]) -> None:
             tgt_to_src[tgt_bn], tgt_to_src[other] = tgt_to_src[other], tgt_to_src[tgt_bn]
 
 
+@contextlib.contextmanager
+def _mute_armature_modifiers(*arm_objs: Any) -> Any:
+    """Desliga ``show_viewport`` de modifiers ARMATURE durante retarget/IK.
+
+    Durante retarget e passe IK nenhum código lê vértices deformados da malha;
+    manter o modifier ligado força o Blender a fazer skinning na CPU em 50k–200k
+    vértices a cada ``scene.frame_set(frame)`` (milhares de vezes por personagem).
+    """
+    bpy = _bpy()
+    targets = {a for a in arm_objs if a is not None}
+    saved: list[tuple[Any, bool]] = []
+    if targets:
+        with contextlib.suppress(Exception):
+            for obj in bpy.data.objects:
+                if getattr(obj, "type", None) != "MESH":
+                    continue
+                for mod in getattr(obj, "modifiers", ()):
+                    if getattr(mod, "type", None) == "ARMATURE" and getattr(mod, "object", None) in targets:
+                        prev = bool(mod.show_viewport)
+                        if prev:
+                            saved.append((mod, prev))
+                            mod.show_viewport = False
+    try:
+        yield
+    finally:
+        for mod, prev in saved:
+            with contextlib.suppress(Exception):
+                mod.show_viewport = prev
+
+
+@dataclass
+class _RetargetContext:
+    """Estado constante de um par ``(target, source)`` reutilizado em ``retarget_batch``."""
+
+    tgt_to_src: dict[str, str]
+    skipped: list[str]
+    order: list[str]
+    full_order: list[str]
+    axis_correction: dict[str, Any]
+    tgt_rest_quat: dict[str, Any]
+    tgt_parent: dict[str, str | None]
+    tgt_rel_rest: dict[str, Any]
+    loc_scale: float
+    loc_targets: set[str]
+    loc_conv: dict[str, Any]
+    src_pbs: dict[str, Any]
+    tgt_pbs: dict[str, Any]
+    ik_chains: Any | None = None
+    ik_chains_dict: dict[str, Any] | None = None
+    ik_forward: Any | None = None
+
+
+def _build_retarget_context(
+    target: Any,
+    source: Any,
+    bone_map: dict[str, str | list[str]],
+    *,
+    apose_open_deg: float = 0.0,
+    apose_bones: tuple[str, ...] | None = None,
+    full_rest_bones: tuple[str, ...] | None = None,
+) -> _RetargetContext:
+    tgt_to_src, skipped = resolve_bone_pairs(target.data.bones, source.data.bones, bone_map)
+    if _rig_sides_mirrored(target, source, tgt_to_src):
+        _swap_side_pairs(tgt_to_src)
+
+    order = _topo_sort_target_bones(target, list(tgt_to_src))
+    axis_correction: dict[str, Any] = {}
+    src_mapped = set(tgt_to_src.values())
+    tgt_mapped = set(tgt_to_src)
+    apose_set = set(apose_bones) if apose_bones is not None else set()
+    full_rest_set = set(full_rest_bones) if full_rest_bones is not None else set()
+    for tgt_bn, src_bn in tgt_to_src.items():
+        src_bone = source.data.bones[src_bn]
+        tgt_bone = target.data.bones[tgt_bn]
+        if tgt_bn in full_rest_set:
+            axis_correction[tgt_bn] = (
+                src_bone.matrix_local.to_quaternion().inverted() @ tgt_bone.matrix_local.to_quaternion()
+            )
+            continue
+        src_dir = _bone_rest_dir(source, src_bn, src_mapped)
+        tgt_dir = _bone_rest_dir(target, tgt_bn, tgt_mapped)
+        axis_correction[tgt_bn] = _axis_correction(
+            src_bone.matrix_local.to_quaternion(),
+            tgt_bone.matrix_local.to_quaternion(),
+            src_dir,
+            tgt_dir,
+            apose_open_deg=apose_open_deg if tgt_bn in apose_set else 0.0,
+        )
+
+    full_order = _armature_topo_order(target)
+    tgt_rest_quat = {b.name: b.matrix_local.to_quaternion() for b in target.data.bones}
+    tgt_parent = {b.name: (b.parent.name if b.parent else None) for b in target.data.bones}
+    tgt_rel_rest = {
+        bn: (tgt_rest_quat[parent].inverted() @ tgt_rest_quat[bn])
+        for bn, parent in tgt_parent.items()
+        if parent is not None
+    }
+
+    tgt_hips, src_hips = _resolve_location_pair(tgt_to_src)
+    if tgt_hips is not None and src_hips is not None:
+        loc_scale = _bone_rest_height(target, (tgt_hips,)) / _bone_rest_height(source, (src_hips,))
+        loc_targets: set[str] = {tgt_hips}
+    else:
+        loc_scale = 1.0
+        loc_targets = set()
+
+    loc_conv = {
+        tgt_bn: (
+            target.data.bones[tgt_bn].matrix_local.to_3x3().inverted()
+            @ source.data.bones[tgt_to_src[tgt_bn]].matrix_local.to_3x3()
+        )
+        for tgt_bn in loc_targets
+    }
+    src_pbs = {tgt_bn: source.pose.bones[src_bn] for tgt_bn, src_bn in tgt_to_src.items()}
+    tgt_pbs = {tgt_bn: target.pose.bones[tgt_bn] for tgt_bn in tgt_to_src}
+    return _RetargetContext(
+        tgt_to_src=tgt_to_src,
+        skipped=skipped,
+        order=order,
+        full_order=full_order,
+        axis_correction=axis_correction,
+        tgt_rest_quat=tgt_rest_quat,
+        tgt_parent=tgt_parent,
+        tgt_rel_rest=tgt_rel_rest,
+        loc_scale=loc_scale,
+        loc_targets=loc_targets,
+        loc_conv=loc_conv,
+        src_pbs=src_pbs,
+        tgt_pbs=tgt_pbs,
+    )
+
+
 def retarget_animation(
     target_arm_name: str,
     source_arm_name: str,
@@ -573,6 +706,7 @@ def retarget_animation(
     apose_open_deg: float = 0.0,
     apose_bones: tuple[str, ...] | None = None,
     full_rest_bones: tuple[str, ...] | None = None,
+    _ctx: _RetargetContext | None = None,
 ) -> dict[str, Any]:
     """Retarget de uma action do source para o target (matrix_basis copy).
 
@@ -609,74 +743,31 @@ def retarget_animation(
     if src_action is None:
         raise ValueError(f"Action source não encontrada: {source_action_name!r}")
 
-    # Pares mapeados que existem em ambos os rigs (candidatos: primeiro ganha).
-    tgt_to_src, skipped = resolve_bone_pairs(target.data.bones, source.data.bones, bone_map)
-    # Rig espelhado (bandit): trocar os lados antes de calcular as correcções,
-    # senão o braço esquerdo do mesh segue o direito do source e cruza o tronco.
-    if _rig_sides_mirrored(target, source, tgt_to_src):
-        _swap_side_pairs(tgt_to_src)
-
-    order = _topo_sort_target_bones(target, list(tgt_to_src))
-
-    # Correção fixa por osso (ver _axis_correction): pose global target =
-    # pose global source @ correction. O swing entre direções de rest é
-    # removido para que T-pose vs A-pose não vire delta duplicado; os ossos de
-    # braço abrem ``apose_open_deg`` desse arco para fora (mãos fora da cintura).
-    axis_correction: dict[str, Any] = {}
-    src_mapped = set(tgt_to_src.values())
-    tgt_mapped = set(tgt_to_src)
-    apose_set = set(apose_bones) if apose_bones is not None else set()
-    full_rest_set = set(full_rest_bones) if full_rest_bones is not None else set()
-    for tgt_bn, src_bn in tgt_to_src.items():
-        src_bone = source.data.bones[src_bn]
-        tgt_bone = target.data.bones[tgt_bn]
-        if tgt_bn in full_rest_set:
-            # Rest completo (sem swing, sem open): a orientação do osso —
-            # incluindo o twist/roll que o swing-only não transporta — segue o
-            # source. É o que põe as palmas a apontar para dentro no idle em
-            # vez de ficarem na palma-do-rest (para a frente) do rig gerado.
-            axis_correction[tgt_bn] = (
-                src_bone.matrix_local.to_quaternion().inverted() @ tgt_bone.matrix_local.to_quaternion()
-            )
-            continue
-        src_dir = _bone_rest_dir(source, src_bn, src_mapped)
-        tgt_dir = _bone_rest_dir(target, tgt_bn, tgt_mapped)
-        axis_correction[tgt_bn] = _axis_correction(
-            src_bone.matrix_local.to_quaternion(),
-            tgt_bone.matrix_local.to_quaternion(),
-            src_dir,
-            tgt_dir,
-            apose_open_deg=apose_open_deg if tgt_bn in apose_set else 0.0,
+    ctx = (
+        _ctx
+        if _ctx is not None
+        else _build_retarget_context(
+            target,
+            source,
+            bone_map,
+            apose_open_deg=apose_open_deg,
+            apose_bones=apose_bones,
+            full_rest_bones=full_rest_bones,
         )
-
-    # Rests do target pré-calculados para a propagação analítica por frame.
-    full_order = _armature_topo_order(target)
-    tgt_rest_quat = {b.name: b.matrix_local.to_quaternion() for b in target.data.bones}
-    tgt_parent = {b.name: (b.parent.name if b.parent else None) for b in target.data.bones}
-    # Location: role-based (ver _resolve_location_pair). A escala usa as
-    # ALTURAS DOS BONES MAPEADOS — o naming do source não é fixo e packs como
-    # o KevDev vêm em cm no FBX: com candidatos fixos (pelvis/Hips ausentes),
-    # _bone_rest_height devolvia 1.0 e os ~38 cm do clip entravam como metros.
-    tgt_hips, src_hips = _resolve_location_pair(tgt_to_src)
-    if tgt_hips is not None and src_hips is not None:
-        loc_scale = _bone_rest_height(target, (tgt_hips,)) / _bone_rest_height(source, (src_hips,))
-        loc_targets = {tgt_hips}
-    else:
-        loc_scale = 1.0
-        loc_targets: set[str] = set()
-    # ``pose.bone.location`` vive no frame de REST do próprio osso, e esses
-    # frames diferem entre rigs (Quaternius pelvis ≈ +104° X vs target
-    # identidade). Copiar componentes cruas troca vertical↔horizontal: o
-    # agachamento (location.y do source) vira deslocamento para trás no
-    # target — corpo não desce e os pés "flutuam". Converter via espaço de
-    # armature: ``tgt_rest⁻¹ @ src_rest @ location``.
-    loc_conv = {
-        tgt_bn: (
-            target.data.bones[tgt_bn].matrix_local.to_3x3().inverted()
-            @ source.data.bones[tgt_to_src[tgt_bn]].matrix_local.to_3x3()
-        )
-        for tgt_bn in loc_targets
-    }
+    )
+    tgt_to_src = ctx.tgt_to_src
+    skipped = ctx.skipped
+    order = ctx.order
+    full_order = ctx.full_order
+    axis_correction = ctx.axis_correction
+    tgt_rest_quat = ctx.tgt_rest_quat
+    tgt_parent = ctx.tgt_parent
+    tgt_rel_rest = ctx.tgt_rel_rest
+    loc_scale = ctx.loc_scale
+    loc_targets = ctx.loc_targets
+    loc_conv = ctx.loc_conv
+    src_pbs = ctx.src_pbs
+    tgt_pbs = ctx.tgt_pbs
 
     # Reset do estado de animação do target. O reset do basis de TODOS os pose
     # bones garante que ossos não mapeados ficam mesmo no rest (a propagação
@@ -695,65 +786,62 @@ def retarget_animation(
     new_act = bpy.data.actions.new(name=output_clip_name)
     target.animation_data.action = new_act
 
-    bpy.context.view_layer.objects.active = target
-    bpy.ops.object.mode_set(mode="POSE")
-    for tgt_bn in order:
-        pb = target.pose.bones[tgt_bn]
-        pb.rotation_mode = "QUATERNION"
+    with _mute_armature_modifiers(target, source):
+        bpy.context.view_layer.objects.active = target
+        bpy.ops.object.mode_set(mode="POSE")
+        for tgt_bn in order:
+            tgt_pbs[tgt_bn].rotation_mode = "QUATERNION"
 
-    prev_basis: dict[str, Any] = {}
-    for frame in range(f0, f1 + 1):
-        scene.frame_set(frame)
-        bpy.context.view_layer.update()
-        # Pose global (armature space) propagada analiticamente, pais primeiro.
-        # Ossos não mapeados ficam no rest (basis identidade).
-        pose_global: dict[str, Any] = {}
-        for bn in full_order:
-            parent = tgt_parent[bn]
-            if parent is None:
-                rest_chain = tgt_rest_quat[bn]
-            else:
-                rest_chain = pose_global[parent] @ tgt_rest_quat[parent].inverted() @ tgt_rest_quat[bn]
-            if bn not in tgt_to_src:
-                pose_global[bn] = rest_chain
-                continue
-            source_pose = source.pose.bones[tgt_to_src[bn]].matrix.to_quaternion()
-            if parent is None:
-                target_basis = _solve_target_basis(source_pose, axis_correction[bn], tgt_rest_quat[bn])
-            else:
-                target_basis = _solve_target_basis(
-                    source_pose,
-                    axis_correction[bn],
-                    tgt_rest_quat[bn],
-                    target_parent_pose=pose_global[parent],
-                    target_parent_rest=tgt_rest_quat[parent],
-                )
-            target_basis.normalize()
-            prev = prev_basis.get(bn)
-            if prev is not None:
-                target_basis.make_compatible(prev)
-            prev_basis[bn] = target_basis.copy()
-            pose_global[bn] = rest_chain @ target_basis
-            tpb = target.pose.bones[bn]
-            tpb.rotation_quaternion = target_basis
-            tpb.keyframe_insert(data_path="rotation_quaternion", frame=frame)
-            # Hip bob / agachamento: location convertida do frame de rest do
-            # osso source para o do target (ver loc_conv acima) + escala.
-            if bn in loc_targets:
-                sl = loc_conv[bn] @ source.pose.bones[tgt_to_src[bn]].location
-                tpb.location = (float(sl.x) * loc_scale, float(sl.y) * loc_scale, float(sl.z) * loc_scale)
-                tpb.keyframe_insert(data_path="location", frame=frame)
+        prev_basis: dict[str, Any] = {}
+        for frame in range(f0, f1 + 1):
+            scene.frame_set(frame)
+            # Pose global (armature space) propagada analiticamente, pais primeiro.
+            # Ossos não mapeados ficam no rest (basis identidade).
+            pose_global: dict[str, Any] = {}
+            for bn in full_order:
+                parent = tgt_parent[bn]
+                if parent is None:
+                    rest_chain = tgt_rest_quat[bn]
+                else:
+                    rest_chain = pose_global[parent] @ tgt_rel_rest[bn]
+                if bn not in tgt_to_src:
+                    pose_global[bn] = rest_chain
+                    continue
+                source_pose = src_pbs[bn].matrix.to_quaternion()
+                target_basis = rest_chain.inverted() @ (source_pose @ axis_correction[bn])
+                target_basis.normalize()
+                prev = prev_basis.get(bn)
+                if prev is not None:
+                    target_basis.make_compatible(prev)
+                prev_basis[bn] = target_basis.copy()
+                pose_global[bn] = rest_chain @ target_basis
+                tpb = tgt_pbs[bn]
+                tpb.rotation_quaternion = target_basis
+                tpb.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+                # Hip bob / agachamento: location convertida do frame de rest do
+                # osso source para o do target (ver loc_conv acima) + escala.
+                if bn in loc_targets:
+                    sl = loc_conv[bn] @ src_pbs[bn].location
+                    tpb.location = (float(sl.x) * loc_scale, float(sl.y) * loc_scale, float(sl.z) * loc_scale)
+                    tpb.keyframe_insert(data_path="location", frame=frame)
 
-    bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.mode_set(mode="OBJECT")
 
-    # Passe IK/limites de juntas: o retarget adopta quaternions absolutos do
-    # source sem verificação anatómica — joelhos invertidos/hiperextensões do
-    # mocap são reparados aqui (preserva end-effectors; clips válidos intactos).
-    ik_stats: dict[str, Any] | None = None
-    if enforce_limits:
-        from . import ik
+        # Passe IK/limites de juntas: o retarget adopta quaternions absolutos do
+        # source sem verificação anatómica — joelhos invertidos/hiperextensões do
+        # mocap são reparados aqui (preserva end-effectors; clips válidos intactos).
+        ik_stats: dict[str, Any] | None = None
+        if enforce_limits:
+            from . import ik
 
-        ik_stats = ik.enforce_joint_limits(target.name, new_act, limits=limits)
+            ik_stats = ik.enforce_joint_limits(
+                target.name,
+                new_act,
+                limits=limits,
+                chains=ctx.ik_chains,
+                _chains_dict=ctx.ik_chains_dict,
+                _forward=ctx.ik_forward,
+            )
 
     # Empurrar a nova action para NLA e limpar action activa.
     new_act.name = output_clip_name
@@ -811,25 +899,45 @@ def retarget_batch(
     if only_clips:
         clips = {k: v for k, v in clips.items() if k in set(only_clips)}
 
+    source = bpy.data.objects.get(source_arm_name)
+    batch_ctx: _RetargetContext | None = None
+    if source is not None and source.type == "ARMATURE":
+        batch_ctx = _build_retarget_context(
+            target,
+            source,
+            profile.bone_map,
+            apose_open_deg=profile.apose_open_deg,
+            apose_bones=profile.apose_bones,
+            full_rest_bones=profile.full_rest_bones,
+        )
+        if enforce_limits:
+            from . import bpy_ops, ik
+
+            batch_ctx.ik_chains_dict = bpy_ops._classify_bone_chains(target.name)
+            batch_ctx.ik_chains = ik.resolve_ik_chains(target.name, chains=batch_ctx.ik_chains_dict)
+            batch_ctx.ik_forward = bpy_ops._detect_forward(target, batch_ctx.ik_chains_dict)
+
     results = []
-    for clean_name, src_track in clips.items():
-        try:
-            res = retarget_animation(
-                target_arm_name,
-                source_arm_name,
-                profile.bone_map,
-                src_track,
-                clean_name,
-                enforce_limits=enforce_limits,
-                limits=limits,
-                apose_open_deg=profile.apose_open_deg,
-                apose_bones=profile.apose_bones,
-                full_rest_bones=profile.full_rest_bones,
-            )
-            results.append(res)
-        except ValueError as e:
-            # Clip source em falta — reportar mas continuar.
-            results.append({"clip": clean_name, "source_track": src_track, "error": str(e)})
+    with _mute_armature_modifiers(target, source):
+        for clean_name, src_track in clips.items():
+            try:
+                res = retarget_animation(
+                    target_arm_name,
+                    source_arm_name,
+                    profile.bone_map,
+                    src_track,
+                    clean_name,
+                    enforce_limits=enforce_limits,
+                    limits=limits,
+                    apose_open_deg=profile.apose_open_deg,
+                    apose_bones=profile.apose_bones,
+                    full_rest_bones=profile.full_rest_bones,
+                    _ctx=batch_ctx,
+                )
+                results.append(res)
+            except ValueError as e:
+                # Clip source em falta — reportar mas continuar.
+                results.append({"clip": clean_name, "source_track": src_track, "error": str(e)})
     return results
 
 

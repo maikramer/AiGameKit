@@ -65,34 +65,71 @@ def transfer_vgroup_weights_kdtree(src_mesh: Any, tgt_mesh: Any) -> int:
     ``bpy.ops.object.data_transfer`` (VGROUP_WEIGHTS) on Blender 5.x often
     leaves empty groups; GLTF exporter then omits ``skins[]``.
     """
-    from mathutils.kdtree import KDTree
+    import sys
+
+    import numpy as np
 
     src_me = src_mesh.data
+    tgt_me = tgt_mesh.data
     n_src = len(src_me.vertices)
+    n_tgt = len(tgt_me.vertices)
     if n_src == 0:
         raise ValueError("Source mesh has no vertices")
+    if n_tgt == 0:
+        return 0
 
-    kd = KDTree(n_src)
-    for i, v in enumerate(src_me.vertices):
-        kd.insert(src_mesh.matrix_world @ v.co, i)
-    kd.balance()
+    src_local = np.empty(n_src * 3, dtype=np.float32)
+    src_me.vertices.foreach_get("co", src_local)
+    src_m = np.asarray(src_mesh.matrix_world, dtype=np.float64)
+    src_world = src_local.reshape(n_src, 3).astype(np.float64) @ src_m[:3, :3].T + src_m[:3, 3]
 
+    tgt_local = np.empty(n_tgt * 3, dtype=np.float32)
+    tgt_me.vertices.foreach_get("co", tgt_local)
+    tgt_m = np.asarray(tgt_mesh.matrix_world, dtype=np.float64)
+    tgt_world = tgt_local.reshape(n_tgt, 3).astype(np.float64) @ tgt_m[:3, :3].T + tgt_m[:3, 3]
+
+    nearest_idx: Any = None
+    # Avoid ~300ms cold import of scipy.spatial on small meshes when not already loaded.
+    if "scipy.spatial" in sys.modules or (n_src + n_tgt) >= 40_000:
+        with contextlib.suppress(ImportError):
+            from scipy.spatial import cKDTree
+
+            workers = -1 if (n_src + n_tgt) >= 40_000 else 1
+            _dist, nearest = cKDTree(src_world).query(tgt_world, k=1, workers=workers)
+            nearest_idx = np.asarray(nearest, dtype=np.int64).tolist()
+
+    if nearest_idx is None:
+        from mathutils.kdtree import KDTree
+
+        kd = KDTree(n_src)
+        for i, co in enumerate(src_world.tolist()):
+            kd.insert(co, i)
+        kd.balance()
+        nearest_idx = [kd.find(co)[1] for co in tgt_world.tolist()]
+
+    tgt_groups_by_src_idx: list[Any] = []
     for g in src_mesh.vertex_groups:
-        if g.name not in tgt_mesh.vertex_groups:
-            tgt_mesh.vertex_groups.new(name=g.name)
+        tg = tgt_mesh.vertex_groups.get(g.name)
+        if tg is None:
+            tg = tgt_mesh.vertex_groups.new(name=g.name)
+        tgt_groups_by_src_idx.append(tg)
 
-    src_w: list[list[tuple[int, float]]] = [[(g.group, g.weight) for g in v.groups] for v in src_me.vertices]
+    src_w: list[list[tuple[int, float]]] = []
+    for v in src_me.vertices:
+        pairs = [(g.group, g.weight) for g in v.groups]
+        if pairs:
+            inv_total = 1.0 / (sum(w for _gi, w in pairs) or 1.0)
+            src_w.append([(gi, w * inv_total) for gi, w in pairs])
+        else:
+            src_w.append([])
 
     assigned = 0
-    for i, v in enumerate(tgt_mesh.data.vertices):
-        _co, idx, _dist = kd.find(tgt_mesh.matrix_world @ v.co)
+    for i, idx in enumerate(nearest_idx):
         pairs = src_w[idx]
         if not pairs:
             continue
-        total = sum(w for _gi, w in pairs) or 1.0
         for gi, w in pairs:
-            gname = src_mesh.vertex_groups[gi].name
-            tgt_mesh.vertex_groups[gname].add([i], w / total, "REPLACE")
+            tgt_groups_by_src_idx[gi].add((i,), w, "REPLACE")
         assigned += 1
     return assigned
 

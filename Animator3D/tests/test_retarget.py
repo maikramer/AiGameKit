@@ -552,3 +552,23 @@ def test_cli_retarget_batch_requires_source_or_profile_source(tmp_path: Path, mo
     )
     # Falta bpy OR falta source — qualquer dos dois é erro não-zero.
     assert result.exit_code != 0
+
+
+def test_mute_armature_modifiers_restores_on_exception() -> None:
+    """_mute_armature_modifiers desliga show_viewport e restaura mesmo em erro."""
+    import pytest
+
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    arm_data = bpy.data.armatures.new("Arm")
+    arm = bpy.data.objects.new("Arm", arm_data)
+    bpy.context.collection.objects.link(arm)
+    bpy.ops.mesh.primitive_cube_add()
+    mesh = bpy.context.active_object
+    mod = mesh.modifiers.new("Armature", "ARMATURE")
+    mod.object = arm
+    mod.show_viewport = True
+
+    with pytest.raises(RuntimeError), rt._mute_armature_modifiers(arm):
+        assert mod.show_viewport is False
+        raise RuntimeError("boom")
+    assert mod.show_viewport is True

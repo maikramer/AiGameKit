@@ -534,6 +534,8 @@ def enforce_joint_limits(
     *,
     limits: JointLimitSet | None = None,
     chains: list[TwoBoneChain] | None = None,
+    _chains_dict: dict[str, Any] | None = None,
+    _forward: Any | None = None,
 ) -> dict[str, Any] | None:
     """Aplica limites de juntas + reparações IK a UMA action do armature.
 
@@ -584,8 +586,8 @@ def enforce_joint_limits(
     if target_action is None:
         return None
 
-    chains_dict = bpy_ops._classify_bone_chains(arm_name)
-    forward = bpy_ops._detect_forward(arm_obj, chains_dict)
+    chains_dict = _chains_dict if _chains_dict is not None else bpy_ops._classify_bone_chains(arm_name)
+    forward = _forward if _forward is not None else bpy_ops._detect_forward(arm_obj, chains_dict)
 
     pb_map = {
         name: arm_obj.pose.bones[name]
@@ -635,177 +637,199 @@ def enforce_joint_limits(
     _BONE_Y = np.array([0.0, 1.0, 0.0])
     _IDENTITY_Q = np.array([1.0, 0.0, 0.0, 0.0])
 
+    from .retarget import _mute_armature_modifiers
+
+    def _eval_at(fr: float) -> None:
+        """Avalia o depsgraph no tempo EXATO da key numa única chamada.
+
+        ``scene.frame_set(int, subframe=...)`` já actualiza o depsgraph para
+        o instante exacto (incl. keys fracionárias de 30fps em cena 24fps).
+        """
+        fi = math.floor(fr)
+        sf = fr - fi
+        try:
+            scene.frame_set(fi, subframe=sf)
+        except TypeError:
+            scene.frame_set(fi)
+            scene.frame_subframe = sf
+            bpy.context.view_layer.update()
+
+    # Pré-prepara metadados estáticos de todas as cadeias para fazer UM ÚNICO
+    # passe sobre ``frames`` (em vez de 2 passes × N cadeias = 8×).
+    chain_specs: list[dict[str, Any]] = []
+    for chain in chains:
+        lim = lim_set.roles.get(chain.role, ChainLimit())
+        pb_u = pb_map[chain.upper]
+        pb_l = pb_map[chain.lower]
+        pb_e = pb_map.get(chain.effector) if chain.effector else None
+        r1_arr = _nm(rest_quats[chain.upper])
+        r2_arr = _nm(rest_quats[chain.lower])
+        r_e_arr = _nm(rest_quats[chain.effector]) if chain.effector else None
+        if pb_u.parent is not None:
+            r_parent_arr = _nm(arm_obj.data.bones[pb_u.parent.name].matrix_local.to_quaternion())
+        else:
+            r_parent_arr = _IDENTITY_Q
+        pole_rest = _n(_resolve_pole(arm_obj, chain, lim, forward))
+        pole_upper_local = q_rot_vec(q_conj(r1_arr), pole_rest)
+        l1 = (arm_obj.data.bones[chain.upper].tail_local - arm_obj.data.bones[chain.upper].head_local).length
+        l2 = (arm_obj.data.bones[chain.lower].tail_local - arm_obj.data.bones[chain.lower].head_local).length
+        l1 = l1 if l1 > _EPS else 1e-4
+        l2 = l2 if l2 > _EPS else 1e-4
+        chain_specs.append(
+            {
+                "chain": chain,
+                "lim": lim,
+                "pb_u": pb_u,
+                "pb_l": pb_l,
+                "pb_e": pb_e,
+                "r1_arr": r1_arr,
+                "r2_arr": r2_arr,
+                "r_e_arr": r_e_arr,
+                "r_parent_arr": r_parent_arr,
+                "pole_upper_local": pole_upper_local,
+                "l1": l1,
+                "l2": l2,
+                "obs": [],
+                "sides": [],
+            }
+        )
+
+    def _read_spec(spec: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        pb_u = spec["pb_u"]
+        pb_l = spec["pb_l"]
+        pb_e = spec["pb_e"]
+        root = _n(pb_u.matrix.translation)
+        knee = _n(pb_l.matrix.translation)
+        eff = _n(pb_e.matrix.translation) if pb_e is not None else _n(pb_l.tail)
+        w1 = _nm(pb_u.matrix.to_quaternion())
+        wp = _nm(pb_u.parent.matrix.to_quaternion()) if pb_u.parent else _IDENTITY_Q
+        return root, knee, eff, w1, wp
+
     try:
-        for chain in chains:
-            lim = lim_set.roles.get(chain.role, ChainLimit())
-            pb_u = pb_map[chain.upper]
-            pb_l = pb_map[chain.lower]
-            pb_e = pb_map.get(chain.effector) if chain.effector else None
-            r1_arr = _nm(rest_quats[chain.upper])
-            r2_arr = _nm(rest_quats[chain.lower])
-            r_e_arr = _nm(rest_quats[chain.effector]) if chain.effector else None
-            # Identidade de cadeia (validada empiricamente): W = Wp·Rp⁻¹·R·B,
-            # logo o basis (rotação da JUNTA, relativa ao pai) é
-            # B = (Wp·Rp⁻¹·R)⁻¹·W — o termo Rp é essencial (rigs com rest
-            # rodado, ex. Quaternius pelvis/thigh ~±90°, sem ele tudo explode).
-            # Wp anima (pelve roda em death/roll), logo lê-se POR FRAME.
-            if pb_u.parent is not None:
-                r_parent_arr = _nm(arm_obj.data.bones[pb_u.parent.name].matrix_local.to_quaternion())
-            else:
-                r_parent_arr = np.array([1.0, 0.0, 0.0, 0.0])
-            # Pole no frame de REST do OSSO UPPER (constante) → rodado por
-            # W1(t) por frame: segue o swing da perna (deteção de eixo com
-            # sinal estável mesmo com a coxa a cruzar a vertical, e reparação
-            # espelhada consistente com a deteção) e o corpo (deitar/rolhar
-            # roda o pole com o rig).
-            pole_rest = _n(_resolve_pole(arm_obj, chain, lim, forward))
-            pole_upper_local = q_rot_vec(q_conj(r1_arr), pole_rest)
-            l1 = (arm_obj.data.bones[chain.upper].tail_local - arm_obj.data.bones[chain.upper].head_local).length
-            l2 = (arm_obj.data.bones[chain.lower].tail_local - arm_obj.data.bones[chain.lower].head_local).length
-            l1 = l1 if l1 > _EPS else 1e-4
-            l2 = l2 if l2 > _EPS else 1e-4
-
-            def _read() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-                root = _n(pb_u.matrix.translation)
-                knee = _n(pb_l.matrix.translation)
-                eff = _n(pb_e.matrix.translation) if pb_e is not None else _n(pb_l.tail)
-                w1 = _nm(pb_u.matrix.to_quaternion())
-                wp = _nm(pb_u.parent.matrix.to_quaternion()) if pb_u.parent else _IDENTITY_Q
-                return root, knee, eff, w1, wp
-
-            def _eval_at(fr: float) -> None:
-                """Avalia o depsgraph no tempo EXATO da key (bpy 5.x: frame_set
-                é int-only → inteiro + ``frame_subframe``). Avaliar no
-                ``round`` avaliava a pose interpolada no tempo errado e
-                escrevia a correção na key do frame vizinho (clips com keys a
-                30fps em cena 24fps têm keys fracionárias)."""
-                fi = math.floor(fr)
-                scene.frame_set(fi)
-                scene.frame_subframe = fr - fi
-                bpy.context.view_layer.update()
-
-            # Pré-passo: alinhamento do eixo de dobradiça em todos os frames →
-            # maioria-voto do one_way. Clips em que a maioria dos frames
-            # dobra do lado "errado" do pole (pole mal configurado, rigs
-            # exóticos) NÃO têm flips — rede de segurança.
-            sides: list[float] = []
+        with _mute_armature_modifiers(arm_obj):
+            # Passe 1 único: lê todas as cadeias em cada frame de uma só vez.
             for frame in frames:
                 _eval_at(frame)
-                n_root, n_knee, n_eff, w1_t, _ = _read()
-                n_pole_t = q_rot_vec(w1_t, pole_upper_local)
-                sides.append(hinge_axis_alignment(n_root, n_knee, n_eff, n_pole_t))
-            n_positive = sum(1 for s in sides if s > 0.5)
-            one_way_active = lim.one_way and (len(sides) > 0 and n_positive / len(sides) >= 0.7)
+                for spec in chain_specs:
+                    n_root, n_knee, n_eff, q1n, wp_t = _read_spec(spec)
+                    n_pole_t = q_rot_vec(q1n, spec["pole_upper_local"])
+                    side = hinge_axis_alignment(n_root, n_knee, n_eff, n_pole_t)
+                    spec["sides"].append(side)
+                    spec["obs"].append((n_root, n_knee, n_eff, q1n, wp_t, n_pole_t, side))
 
-            prev: dict[str, Any] = {}
-            for frame in frames:
-                _eval_at(frame)
-                n_root, n_knee, n_eff, q1n, wp_t = _read()
-                n_pole_t = q_rot_vec(q1n, pole_upper_local)
+            # Passe 2 cirúrgico: verifica violações em NumPy puro e só revisita
+            # no Blender os frames/cadeias que realmente precisam de correção.
+            for spec in chain_specs:
+                chain = spec["chain"]
+                lim = spec["lim"]
+                pb_u = spec["pb_u"]
+                pb_l = spec["pb_l"]
+                pb_e = spec["pb_e"]
+                r1_arr = spec["r1_arr"]
+                r2_arr = spec["r2_arr"]
+                r_e_arr = spec["r_e_arr"]
+                r_parent_arr = spec["r_parent_arr"]
+                l1 = spec["l1"]
+                l2 = spec["l2"]
+                sides = spec["sides"]
+                n_positive = sum(1 for s in sides if s > 0.5)
+                one_way_active = lim.one_way and (len(sides) > 0 and n_positive / len(sides) >= 0.7)
 
-                # -- 1. Clamp ball da anca/ombro (swing/twist da JUNTA = basis) --
-                upper_ref_t = q_mul(q_mul(wp_t, q_conj(r_parent_arr)), r1_arr)  # Wp(t)·Rp⁻¹·R1
-                q_rel = q_mul(q_conj(upper_ref_t), q1n)  # = matrix_basis do upper
-                q_rel_c, changed = swing_twist_clamp(
-                    q_rel, _BONE_Y, max_swing_deg=lim.upper_swing_max, max_twist_deg=lim.upper_twist_max
-                )
-                if changed:
-                    basis = _mq(q_rel_c)
-                    pq = prev.get(chain.upper)
-                    if pq is not None and basis.dot(pq) < 0.0:
-                        basis.negate()
-                    prev[chain.upper] = basis.copy()
-                    pb_u.rotation_quaternion = basis
-                    pb_u.keyframe_insert(data_path="rotation_quaternion", frame=frame)
-                    stats["ball_clamps"] += 1
-                    bpy.context.view_layer.update()
-                    n_root, n_knee, n_eff, q1n, wp_t = _read()
-
-                # -- 2. Hinge: banda de ângulo interior + eixo da dobradiça ---
-                angle = interior_angle_deg(n_root, n_knee, n_eff)
-                side = hinge_axis_alignment(n_root, n_knee, n_eff, n_pole_t)
-                angle_bad = angle < lim.hinge_min - _DEG_TOL or angle > lim.hinge_max + _DEG_TOL
-                # Inversão: eixo de flexão invertido (side < -0.5 ≈ >30° de
-                # desvio) com dobra suficiente para o sinal ser fiável
-                # (membros quase esticados não têm sinal fiável).
-                side_bad = one_way_active and side < -0.5 and angle < lim.hinge_max - 5.0
-                if not angle_bad and not side_bad:
-                    continue
-
-                d = float(np.linalg.norm(n_eff - n_root))
-                if d < 1e-6:
-                    continue  # cadeia colapsada no root — nada sensato a fazer
-                if angle_bad:
-                    angle_t = min(max(angle, lim.hinge_min), lim.hinge_max)
-                    d_target = distance_for_interior_angle(l1, l2, angle_t)
-                    u_eff = (n_eff - n_root) / d
-                    n_target = n_root + u_eff * d_target
-                else:
-                    n_target = n_eff  # espelho do joelho com o pé NO SÍTIO
-                if side_bad:
-                    stats["flips"] += 1
-                else:
-                    stats["hinge_fixes"] += 1
-                # Pole do REPARO: alinhar o lado da solução com o lado
-                # DESEJADO da junta. No flip é o lado OPOSTO ao joelho atual
-                # (espelho); no clamp de curso é o MESMO lado (não inverter a
-                # dobradiça). O pole do frame roda com a coxa e, com ela
-                # além de ±90°, pode apontar para o lado contrário ao
-                # desejado — o sinal aqui garante a geometria.
-                u_chk = (n_target - n_root) / max(float(np.linalg.norm(n_target - n_root)), 1e-9)
-                knee_off = n_knee - n_root
-                knee_perp = knee_off - float(np.dot(knee_off, u_chk)) * u_chk
-                # Sinal desejado de dot(knee_perp, pole): flip = joelho no lado
-                # OPOSTO ao atual; clamp = MESMO lado (não inverter a dobra).
-                want_sign = -1.0 if side_bad else 1.0
-                if float(np.dot(knee_perp, n_pole_t)) * want_sign < 0.0:
-                    n_pole_repair = -n_pole_t
-                else:
-                    n_pole_repair = n_pole_t
-                n_knee_new = two_bone_knee_position(n_root, n_target, l1, l2, n_pole_repair)
-
-                # Rotações world de arco mínimo: upper leva a junta ao sítio
-                # novo; lower alinha a canela com o novo joelho→effector.
-                q1 = rotation_between(n_knee - n_root, n_knee_new - n_root)
-                q2 = rotation_between(n_eff - n_knee, n_target - n_knee_new)
-                w1_new = q_mul(q1, q1n)
-                w2_new = q_mul(q2, _nm(pb_l.matrix.to_quaternion()))
-                # B1 = R1⁻¹·Rp·Wp(t)⁻¹·W1n ; B2 = R2⁻¹·R1·W1n⁻¹·W2n (identidade acima)
-                basis1 = _mq(q_mul(q_mul(q_conj(r1_arr), r_parent_arr), q_mul(q_conj(wp_t), w1_new)))
-                basis2 = _mq(q_mul(q_mul(q_conj(r2_arr), r1_arr), q_mul(q_conj(w1_new), w2_new)))
-                for bone, basis in ((chain.upper, basis1), (chain.lower, basis2)):
-                    pq = prev.get(bone)
-                    if pq is not None and basis.dot(pq) < 0.0:
-                        basis.negate()
-                    prev[bone] = basis.copy()
-                    pb_map[bone].rotation_quaternion = basis
-                    pb_map[bone].keyframe_insert(data_path="rotation_quaternion", frame=frame)
-
-                # -- 3. Clamp ball do pé/mão (junta relativa ao lower) ---------
-                if pb_e is not None:
-                    bpy.context.view_layer.update()
-                    n_we = _nm(pb_e.matrix.to_quaternion())
-                    # O pai do effector (lower) pode ter sido reescrito neste
-                    # frame — ler a rotação world ATUAL dele do depsgraph.
-                    w_lower = _nm(pb_e.parent.matrix.to_quaternion()) if pb_e.parent else n_we
-                    # B_e = (Wl·R2⁻¹·Re)⁻¹·We
-                    eff_ref = q_mul(q_mul(w_lower, q_conj(r2_arr)), r_e_arr)
-                    q_rel_e = q_mul(q_conj(eff_ref), n_we)
-                    q_ec, e_changed = swing_twist_clamp(
-                        q_rel_e,
+                prev: dict[str, Any] = {}
+                for frame, (n_root, n_knee, n_eff, q1n, wp_t, n_pole_t, side) in zip(frames, spec["obs"], strict=True):
+                    upper_ref_t = q_mul(q_mul(wp_t, q_conj(r_parent_arr)), r1_arr)
+                    q_rel = q_mul(q_conj(upper_ref_t), q1n)
+                    q_rel_c, ball_changed = swing_twist_clamp(
+                        q_rel,
                         _BONE_Y,
-                        max_swing_deg=lim.effector_swing_max,
-                        max_twist_deg=lim.effector_twist_max,
+                        max_swing_deg=lim.upper_swing_max,
+                        max_twist_deg=lim.upper_twist_max,
                     )
-                    if e_changed:
-                        basis_e = _mq(q_ec)
-                        pq = prev.get(chain.effector)
-                        if pq is not None and basis_e.dot(pq) < 0.0:
-                            basis_e.negate()
-                        prev[chain.effector] = basis_e.copy()
-                        pb_e.rotation_quaternion = basis_e
-                        pb_e.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+                    angle = interior_angle_deg(n_root, n_knee, n_eff)
+                    angle_bad = angle < lim.hinge_min - _DEG_TOL or angle > lim.hinge_max + _DEG_TOL
+                    side_bad = one_way_active and side < -0.5 and angle < lim.hinge_max - 5.0
+                    if not ball_changed and not angle_bad and not side_bad:
+                        continue
+
+                    _eval_at(frame)
+                    if ball_changed:
+                        basis = _mq(q_rel_c)
+                        pq = prev.get(chain.upper)
+                        if pq is not None and basis.dot(pq) < 0.0:
+                            basis.negate()
+                        prev[chain.upper] = basis.copy()
+                        pb_u.rotation_quaternion = basis
+                        pb_u.keyframe_insert(data_path="rotation_quaternion", frame=frame)
                         stats["ball_clamps"] += 1
+                        bpy.context.view_layer.update()
+                        n_root, n_knee, n_eff, q1n, wp_t = _read_spec(spec)
+                        n_pole_t = q_rot_vec(q1n, spec["pole_upper_local"])
+                        angle = interior_angle_deg(n_root, n_knee, n_eff)
+                        side = hinge_axis_alignment(n_root, n_knee, n_eff, n_pole_t)
+                        angle_bad = angle < lim.hinge_min - _DEG_TOL or angle > lim.hinge_max + _DEG_TOL
+                        side_bad = one_way_active and side < -0.5 and angle < lim.hinge_max - 5.0
+                        if not angle_bad and not side_bad:
+                            continue
+
+                    d = float(np.linalg.norm(n_eff - n_root))
+                    if d < 1e-6:
+                        continue
+                    if angle_bad:
+                        angle_t = min(max(angle, lim.hinge_min), lim.hinge_max)
+                        d_target = distance_for_interior_angle(l1, l2, angle_t)
+                        u_eff = (n_eff - n_root) / d
+                        n_target = n_root + u_eff * d_target
+                    else:
+                        n_target = n_eff
+                    if side_bad:
+                        stats["flips"] += 1
+                    else:
+                        stats["hinge_fixes"] += 1
+                    u_chk = (n_target - n_root) / max(float(np.linalg.norm(n_target - n_root)), 1e-9)
+                    knee_off = n_knee - n_root
+                    knee_perp = knee_off - float(np.dot(knee_off, u_chk)) * u_chk
+                    want_sign = -1.0 if side_bad else 1.0
+                    if float(np.dot(knee_perp, n_pole_t)) * want_sign < 0.0:
+                        n_pole_repair = -n_pole_t
+                    else:
+                        n_pole_repair = n_pole_t
+                    n_knee_new = two_bone_knee_position(n_root, n_target, l1, l2, n_pole_repair)
+
+                    q1 = rotation_between(n_knee - n_root, n_knee_new - n_root)
+                    q2 = rotation_between(n_eff - n_knee, n_target - n_knee_new)
+                    w1_new = q_mul(q1, q1n)
+                    w2_new = q_mul(q2, _nm(pb_l.matrix.to_quaternion()))
+                    basis1 = _mq(q_mul(q_mul(q_conj(r1_arr), r_parent_arr), q_mul(q_conj(wp_t), w1_new)))
+                    basis2 = _mq(q_mul(q_mul(q_conj(r2_arr), r1_arr), q_mul(q_conj(w1_new), w2_new)))
+                    for bone, basis in ((chain.upper, basis1), (chain.lower, basis2)):
+                        pq = prev.get(bone)
+                        if pq is not None and basis.dot(pq) < 0.0:
+                            basis.negate()
+                        prev[bone] = basis.copy()
+                        pb_map[bone].rotation_quaternion = basis
+                        pb_map[bone].keyframe_insert(data_path="rotation_quaternion", frame=frame)
+
+                    if pb_e is not None:
+                        bpy.context.view_layer.update()
+                        n_we = _nm(pb_e.matrix.to_quaternion())
+                        w_lower = _nm(pb_e.parent.matrix.to_quaternion()) if pb_e.parent else n_we
+                        eff_ref = q_mul(q_mul(w_lower, q_conj(r2_arr)), r_e_arr)
+                        q_rel_e = q_mul(q_conj(eff_ref), n_we)
+                        q_ec, e_changed = swing_twist_clamp(
+                            q_rel_e,
+                            _BONE_Y,
+                            max_swing_deg=lim.effector_swing_max,
+                            max_twist_deg=lim.effector_twist_max,
+                        )
+                        if e_changed:
+                            basis_e = _mq(q_ec)
+                            pq = prev.get(chain.effector)
+                            if pq is not None and basis_e.dot(pq) < 0.0:
+                                basis_e.negate()
+                            prev[chain.effector] = basis_e.copy()
+                            pb_e.rotation_quaternion = basis_e
+                            pb_e.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+                            stats["ball_clamps"] += 1
     finally:
         if saved_action is not None:
             ad.action = saved_action
@@ -843,11 +867,28 @@ def enforce_all_actions(
             for strip in track.strips:
                 if strip.action is not None and not any(a.name == strip.action.name for a in actions):
                     actions.append(strip.action)
+    if not actions:
+        return []
+    from . import bpy_ops
+    from .retarget import _mute_armature_modifiers
+
+    chains_dict = bpy_ops._classify_bone_chains(arm_name)
+    chains = resolve_ik_chains(arm_name, chains=chains_dict)
+    forward = bpy_ops._detect_forward(arm, chains_dict)
+
     out = []
-    for act in actions:
-        res = enforce_joint_limits(arm_name, act, limits=limits)
-        if res is not None:
-            out.append(res)
+    with _mute_armature_modifiers(arm):
+        for act in actions:
+            res = enforce_joint_limits(
+                arm_name,
+                act,
+                limits=limits,
+                chains=chains,
+                _chains_dict=chains_dict,
+                _forward=forward,
+            )
+            if res is not None:
+                out.append(res)
     return out
 
 

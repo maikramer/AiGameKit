@@ -83,6 +83,8 @@ class Adapter(WorkerAdapter):
 
     def unload(self, model: Any) -> None:
         # Liberta os pesos e o allocator; o próximo ``load`` recarrega do cache.
+        import gc
+
         with contextlib.suppress(Exception):
             from . import skintokens_runner
 
@@ -90,8 +92,10 @@ class Adapter(WorkerAdapter):
             skintokens_runner._tokenizer = None
             skintokens_runner._transform = None
             skintokens_runner._loaded_ckpt = None
+        gc.collect()
         with contextlib.suppress(Exception):
             import torch
 
-            torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
+            if torch.cuda.is_available() and (not hasattr(torch.cuda, "is_initialized") or torch.cuda.is_initialized()):
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()

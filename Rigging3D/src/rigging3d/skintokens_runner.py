@@ -123,6 +123,17 @@ def _load_model(ckpt_path: str, device: str = "cuda") -> tuple[Any, Any, Any]:
     if _model is not None and ckpt_path == _loaded_ckpt:
         return _model, _tokenizer, _transform
 
+    with contextlib.suppress(ImportError):
+        from aigamekit_shared.env import set_memory_optimization_env
+
+        set_memory_optimization_env()
+    with contextlib.suppress(Exception):
+        import torch
+
+        if torch.cuda.is_available():
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+
     _ensure_sys_path()
     from src.data.transform import Transform
     from src.server.spec import get_model
@@ -242,14 +253,18 @@ def run_rig_inprocess(
         else:
             skeleton_tokens = None
 
-        preds: list[TokenRigResult] = model.predict_step(
-            batch,
-            skeleton_tokens=[skeleton_tokens] if skeleton_tokens is not None else None,
-            make_asset=True,
-        )["results"]
+        with torch.inference_mode():
+            preds: list[TokenRigResult] = model.predict_step(
+                batch,
+                skeleton_tokens=[skeleton_tokens] if skeleton_tokens is not None else None,
+                make_asset=True,
+            )["results"]
 
         asset = preds[0].asset
         assert asset is not None
+        del batch, preds
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         if use_postprocess:
             from src.data.vertex_group import voxel_skin

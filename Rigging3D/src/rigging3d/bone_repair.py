@@ -103,7 +103,12 @@ def _straighten_elbows(arm: Any, *, min_move: float = 1e-3) -> list[str]:
 def _import_glb(path: Path) -> tuple[Any, Any]:
     import bpy
 
-    bpy.ops.import_scene.gltf(filepath=str(path))
+    try:
+        from aigamekit_shared.bpy_mesh import import_gltf
+
+        import_gltf(path)
+    except Exception:
+        bpy.ops.import_scene.gltf(filepath=str(path))
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     arms = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
     if not arms:
