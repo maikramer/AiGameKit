@@ -32,42 +32,44 @@ _ROW_NEED_VALIDATE = "need_validate"  # tudo gerado, falta validação
 # deixaram de existir com o fim do rigged_hi e do transfer-weights por LOD.
 
 
+def _glb_json(path: Path) -> dict | None:
+    from aigamekit_shared.glb_verify import read_glb_json
+
+    chunk, _size, err = read_glb_json(path)
+    return chunk if err is None else None
+
+
+def _json_has_base_color(j: dict | None) -> bool:
+    if not j:
+        return False
+    for m in j.get("materials") or []:
+        pbr = m.get("pbrMetallicRoughness") or {}
+        if "baseColorTexture" in pbr:
+            return True
+    return False
+
+
+def _json_is_promoted_animated(j: dict | None) -> bool:
+    if not j:
+        return False
+    if not (j.get("skins") and j.get("animations")):
+        return False
+    if not any("skin" in n for n in (j.get("nodes") or [])):
+        return False
+    return _json_has_base_color(j)
+
+
+def _json_is_promoted_rigged(j: dict | None) -> bool:
+    if not j:
+        return False
+    if not (j.get("skins") and any("skin" in n for n in (j.get("nodes") or []))):
+        return False
+    return _json_has_base_color(j)
+
+
 def _glb_has_base_color(path: Path) -> bool:
     """True se o GLB tem material com ``baseColorTexture`` (paint presente)."""
-    try:
-        import json
-        import struct
-
-        with open(path, "rb") as f:
-            if f.read(4) != b"glTF":
-                return False
-            f.read(8)
-            json_len = struct.unpack("<I", f.read(4))[0]
-            f.read(4)
-            j = json.loads(f.read(json_len))
-        for m in j.get("materials") or []:
-            pbr = m.get("pbrMetallicRoughness") or {}
-            if "baseColorTexture" in pbr:
-                return True
-        return False
-    except Exception:
-        return False
-
-
-def _glb_json(path: Path) -> dict | None:
-    try:
-        import json
-        import struct
-
-        with open(path, "rb") as f:
-            if f.read(4) != b"glTF":
-                return None
-            f.read(8)
-            json_len = struct.unpack("<I", f.read(4))[0]
-            f.read(4)
-            return json.loads(f.read(json_len))
-    except Exception:
-        return None
+    return _json_has_base_color(_glb_json(path))
 
 
 def _glb_is_promoted_animated(path: Path) -> bool:
@@ -77,32 +79,12 @@ def _glb_is_promoted_animated(path: Path) -> bool:
     ``_intermediate/`` - o classificador não pode exigir esses ficheiros
     em ``meshes/`` ou resume fica preso em ``need_transfer`` para sempre.
     """
-    j = _glb_json(path)
-    if not j:
-        return False
-    if not (j.get("skins") and j.get("animations")):
-        return False
-    if not any("skin" in n for n in (j.get("nodes") or [])):
-        return False
-    for m in j.get("materials") or []:
-        pbr = m.get("pbrMetallicRoughness") or {}
-        if "baseColorTexture" in pbr:
-            return True
-    return False
+    return _json_is_promoted_animated(_glb_json(path))
 
 
 def _glb_is_promoted_rigged(path: Path) -> bool:
     """True se ``lod0`` já é o entregável rigged (skin+paint, sem exigir clips)."""
-    j = _glb_json(path)
-    if not j:
-        return False
-    if not (j.get("skins") and any("skin" in n for n in (j.get("nodes") or []))):
-        return False
-    for m in j.get("materials") or []:
-        pbr = m.get("pbrMetallicRoughness") or {}
-        if "baseColorTexture" in pbr:
-            return True
-    return False
+    return _json_is_promoted_rigged(_glb_json(path))
 
 
 def _paths_for_row(profile: GameProfile, row: ManifestRow) -> tuple[Path, Path]:
@@ -712,8 +694,11 @@ def _classify_row_state_master(
     if refine_stale:
         return _ROW_NEED_PAINT
 
-    promoted_anim = _valid_file(lod0) and _glb_is_promoted_animated(lod0)
-    promoted_rig = _valid_file(lod0) and _glb_is_promoted_rigged(lod0)
+    # Lê o cabeçalho JSON de lod0 uma única vez (antes era lido até 5x por row).
+    lod0_valid = _valid_file(lod0)
+    lod0_json = _glb_json(lod0) if lod0_valid else None
+    promoted_anim = _json_is_promoted_animated(lod0_json)
+    promoted_rig = _json_is_promoted_rigged(lod0_json)
 
     # Rig/animate: saltar só quando o entregável final já reflecte o estágio
     # (intermediários podem ter sido limpos pelo utilizador — não re-rigar).
@@ -723,23 +708,26 @@ def _classify_row_state_master(
         if wants_animate and _animated_existing(mesh_final) is None:
             return _ROW_NEED_ANIMATE
 
-    if not _valid_file(lod0):
+    if not lod0_valid:
         return _ROW_NEED_BAKE_MASTER
     # lod0 branco sem baseColorTexture enquanto painted existe -> a ladder
     # não herdou o paint (bug histórico) — regenerar a partir da fonte.
     # Só flaga com GLB parseável (dummy/corrupto não bloqueia o resume).
-    if painted_any is not None and _valid_file(lod0):
-        lod0_json = _glb_json(lod0)
-        if lod0_json is not None and lod0_json.get("meshes") and not _glb_has_base_color(lod0):
-            return _ROW_NEED_LOD_GEN
+    if (
+        painted_any is not None
+        and lod0_json is not None
+        and lod0_json.get("meshes")
+        and not _json_has_base_color(lod0_json)
+    ):
+        return _ROW_NEED_LOD_GEN
     if wants_lod and (not _valid_file(lod1) or not _valid_file(lod2)):
         return _ROW_NEED_LOD_GEN
     if wants_rig:
         # Entregável tem de estar promovido ao nível esperado (animated >
         # rigged), em lod0 E na ladder — senão falta a promoção/ladder rigada.
-        expect = _glb_is_promoted_animated if wants_animate else _glb_is_promoted_rigged
-        if not expect(lod0):
+        if not (promoted_anim if wants_animate else promoted_rig):
             return _ROW_NEED_LOD_GEN
+        expect = _glb_is_promoted_animated if wants_animate else _glb_is_promoted_rigged
         if wants_lod and (not expect(lod1) or not expect(lod2)):
             return _ROW_NEED_LOD_GEN
     return _ROW_DONE

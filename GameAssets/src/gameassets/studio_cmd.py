@@ -19,7 +19,6 @@ import json
 import os
 import shutil
 import socket
-import struct
 from pathlib import Path
 from typing import Any
 
@@ -167,17 +166,10 @@ def _base_stem(name: str) -> str:
 
 
 def _read_glb_json(path: Path) -> dict[str, Any] | None:
-    try:
-        data = path.read_bytes()
-    except OSError:
-        return None
-    if len(data) < 20 or data[:4] != b"glTF":
-        return None
-    json_len = struct.unpack_from("<I", data, 12)[0]
-    try:
-        return json.loads(data[20 : 20 + json_len])
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return None
+    from aigamekit_shared.glb_verify import read_glb_json
+
+    chunk, _size, err = read_glb_json(path)
+    return chunk if err is None else None
 
 
 def _glb_summary(path: Path) -> dict[str, Any]:
@@ -236,17 +228,18 @@ def _glb_summary(path: Path) -> dict[str, Any]:
 
 def _glb_gates(path: Path) -> dict[str, bool]:
     from .pipeline import (
-        _glb_has_animations,
-        _glb_has_duplicate_clips,
-        _glb_has_materials,
-        _glb_has_skin,
+        _json_has_animations,
+        _json_has_duplicate_clips,
+        _json_has_materials,
+        _json_has_skin,
     )
 
+    j = _read_glb_json(path)
     return {
-        "skins": _glb_has_skin(path),
-        "animations": _glb_has_animations(path),
-        "materials": _glb_has_materials(path),
-        "duplicate_clips": _glb_has_duplicate_clips(path),
+        "skins": _json_has_skin(j),
+        "animations": _json_has_animations(j),
+        "materials": _json_has_materials(j),
+        "duplicate_clips": _json_has_duplicate_clips(j),
     }
 
 

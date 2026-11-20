@@ -170,36 +170,43 @@ def _dequantize(acc: dict[str, Any], values: list[float]) -> list[float]:
     return [max(v / div, -1.0) if signed else v / div for v in values]
 
 
-def glb_world_bounds(path: str | Path) -> tuple[list[float], list[float]] | None:
-    """AABB em espaço-mundo de um GLB, compondo as transforms dos nós (sem bpy).
+def read_glb_json(path: str | Path) -> tuple[dict[str, Any] | None, int, str | None]:
+    """Lê apenas o header (20 B) + chunk JSON de um GLB sem carregar o chunk BIN.
 
-    Os ``min``/``max`` dos accessors estão em espaço **local** e, com
-    ``KHR_mesh_quantization``, em unidades **inteiras**: ler o accessor
-    directamente devolve ``-32767`` em vez de metros (todo o lod0 finalizado do
-    projecto). A escala/offset da dequantização vive na TRS do nó, portanto
-    compor a hierarquia resolve os dois problemas de uma vez.
-
-    Skins: os bounds de uma malha skinned estão em espaço de bind; sem avaliar
-    os joints o resultado é aproximado (suficiente para verificar origem e
-    alinhamento colisão↔visual).
+    Evita ler dezenas/centenas de MB de geometria/texturas para a RAM quando só
+    precisamos dos metadados glTF.
 
     Returns:
-        ``(min_xyz, max_xyz)`` em unidades de mundo, ou ``None`` se o ficheiro
-        não tiver geometria legível.
+        ``(chunk_dict, byte_size, error_message)``. Em sucesso ``error_message`` é
+        ``None``; em erro ``chunk_dict`` é ``None``.
     """
     p = Path(path)
     try:
-        data = p.read_bytes()
-    except OSError:
-        return None
-    if len(data) < 20 or data[:4] != b"glTF":
-        return None
-    json_len = struct.unpack_from("<I", data, 12)[0]
-    try:
-        chunk = json.loads(data[20 : 20 + json_len])
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return None
+        with open(p, "rb") as f:
+            byte_size = os.fstat(f.fileno()).st_size
+            header = f.read(20)
+            if len(header) < 20 or header[:4] != b"glTF":
+                return None, byte_size, "não é GLB"
+            json_len = struct.unpack_from("<I", header, 12)[0]
+            if json_len <= 0 or 20 + json_len > byte_size:
+                return None, byte_size, "json chunk: truncado"
+            raw_json = f.read(json_len)
+    except OSError as exc:
+        return None, 0, f"read: {exc}"
 
+    if len(raw_json) < json_len:
+        return None, byte_size, "json chunk: truncado"
+    try:
+        chunk = json.loads(raw_json)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return None, byte_size, f"json chunk: {exc}"
+    if not isinstance(chunk, dict):
+        return None, byte_size, "json chunk: não é objecto"
+    return chunk, byte_size, None
+
+
+def _world_bounds_from_chunk(chunk: dict[str, Any]) -> tuple[list[float], list[float]] | None:
+    """Computa AABB em espaço-mundo a partir de um chunk JSON glTF já parseado."""
     accessors = chunk.get("accessors") or []
     meshes = chunk.get("meshes") or []
     nodes = chunk.get("nodes") or []
@@ -248,6 +255,29 @@ def glb_world_bounds(path: str | Path) -> tuple[list[float], list[float]] | None
     return ([round(v, 6) for v in lo], [round(v, 6) for v in hi]) if found else None
 
 
+def glb_world_bounds(path: str | Path) -> tuple[list[float], list[float]] | None:
+    """AABB em espaço-mundo de um GLB, compondo as transforms dos nós (sem bpy).
+
+    Os ``min``/``max`` dos accessors estão em espaço **local** e, com
+    ``KHR_mesh_quantization``, em unidades **inteiras**: ler o accessor
+    directamente devolve ``-32767`` em vez de metros (todo o lod0 finalizado do
+    projecto). A escala/offset da dequantização vive na TRS do nó, portanto
+    compor a hierarquia resolve os dois problemas de uma vez.
+
+    Skins: os bounds de uma malha skinned estão em espaço de bind; sem avaliar
+    os joints o resultado é aproximado (suficiente para verificar origem e
+    alinhamento colisão↔visual).
+
+    Returns:
+        ``(min_xyz, max_xyz)`` em unidades de mundo, ou ``None`` se o ficheiro
+        não tiver geometria legível.
+    """
+    chunk, _byte_size, err = read_glb_json(path)
+    if chunk is None or err is not None:
+        return None
+    return _world_bounds_from_chunk(chunk)
+
+
 def extract_glb_meta(path: str | Path) -> dict[str, Any]:
     """Metadados leves do GLB (JSON chunk) — sem bpy.
 
@@ -255,20 +285,9 @@ def extract_glb_meta(path: str | Path) -> dict[str, Any]:
         Dict com ``attributes_present``, ``v_per_tri``, counts, ``has_tangents``,
         ``has_normals``, ``has_uv``, ``world_bounds_y_min``, ou ``_error``.
     """
-    p = Path(path)
-    try:
-        data = p.read_bytes()
-    except OSError as exc:
-        return {"_error": f"read: {exc}"}
-
-    if len(data) < 20 or data[:4] != b"glTF":
-        return {"_error": "não é GLB"}
-
-    json_len = struct.unpack_from("<I", data, 12)[0]
-    try:
-        chunk = json.loads(data[20 : 20 + json_len])
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        return {"_error": f"json chunk: {exc}"}
+    chunk, byte_size, err = read_glb_json(path)
+    if chunk is None or err is not None:
+        return {"_error": err or "não é GLB"}
 
     accessors = chunk.get("accessors") or []
     union: set[str] = set()
@@ -299,9 +318,8 @@ def extract_glb_meta(path: str | Path) -> dict[str, Any]:
     tris = total_i // 3 if total_i else 0
     v_per_tri = round(total_v / tris, 4) if tris > 0 else None
     # Bounds a sério: com transforms de nó compostas e dequantização implícita.
-    # O ``y_min`` cru dos accessors dava -32767 em qualquer GLB quantizado
-    # (KHR_mesh_quantization) e ignorava rotações/escalas de nó nos restantes.
-    world = glb_world_bounds(p)
+    # Reutiliza o chunk já parseado (evita reler o GLB inteiro uma segunda vez).
+    world = _world_bounds_from_chunk(chunk)
     if world is not None:
         y_min = world[0][1]
     return {
@@ -321,7 +339,7 @@ def extract_glb_meta(path: str | Path) -> dict[str, Any]:
         "world_bounds_min": world[0] if world else None,
         "world_bounds_max": world[1] if world else None,
         "extensions_used": list(chunk.get("extensionsUsed") or []),
-        "byte_size": len(data),
+        "byte_size": byte_size,
     }
 
 

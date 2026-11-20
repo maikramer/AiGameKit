@@ -417,12 +417,28 @@ def run_shape_wave_or_fallback(
     return results_as_batch_jsonl(wave)
 
 
-def _respawn_paint_worker() -> None:
-    """Renova o worker paint3d — recovery documentado para OOM-spin do allocator."""
+def _respawn_paint_worker(items: list[dict[str, Any]] | None = None) -> None:
+    """Renova o worker paint3d — recovery documentado para OOM-spin do allocator.
+
+    Respeita o destino ``gpu:`` dos itens falhados (local/remoto) em vez de
+    mandar o respawn sempre ao endpoint global.
+    """
     try:
         from aigamekit_shared.vramd_client import respawn_vramd_backend
 
-        respawn_vramd_backend("paint3d", lazy=True)
+        if not items:
+            respawn_vramd_backend("paint3d", lazy=True)
+            return
+        from aigamekit_shared.vramd_remote import remote_enabled
+
+        from .vramd_coord import _gpu_remote
+
+        targets: set[bool] = set()
+        for item in items:
+            remote = _gpu_remote(str(item.get("gpu") or "auto"))
+            targets.add(remote if remote is not None else remote_enabled())
+        for remote in sorted(targets):
+            respawn_vramd_backend("paint3d", lazy=True, remote=remote)
     except Exception:
         pass
 
@@ -474,8 +490,9 @@ def _retry_failed_paint_items(
     if not failed:
         return results
 
-    _respawn_paint_worker()
-    retry_items = [it for it in items if str(it.get("id")) in set(failed)]
+    failed_set = set(failed)
+    retry_items = [it for it in items if str(it.get("id")) in failed_set]
+    _respawn_paint_worker(retry_items)
     specs = paint_specs_from_items(retry_items, **spec_kwargs)
     if specs:
         wave = _run_wave(
@@ -494,10 +511,10 @@ def _retry_failed_paint_items(
     if reprep_item is None:
         return results
 
-    still = _failed_ids(results)
+    still_set = set(_failed_ids(results))
     degraded_items: list[dict[str, Any]] = []
     for it in retry_items:
-        if str(it.get("id")) in set(still):
+        if str(it.get("id")) in still_set:
             try:
                 new_it = reprep_item(it)
             except Exception:
@@ -505,7 +522,7 @@ def _retry_failed_paint_items(
             if new_it:
                 degraded_items.append(new_it)
     if degraded_items:
-        _respawn_paint_worker()
+        _respawn_paint_worker(degraded_items)
         specs = paint_specs_from_items(degraded_items, **spec_kwargs)
         if specs:
             wave = _run_wave(

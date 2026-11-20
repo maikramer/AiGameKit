@@ -229,14 +229,17 @@ def send_request(
     try:
         with sock:
             sock.sendall((json.dumps(endpoint.with_auth(request, token)) + "\n").encode())
-            data = b""
+            chunks: list[bytes] = []
+            total = 0
             while True:
-                chunk = sock.recv(8192)
+                chunk = sock.recv(65536)
                 if not chunk:
                     break
-                data += chunk
-                if len(data) > MAX_RESPONSE_BYTES:
+                total += len(chunk)
+                if total > MAX_RESPONSE_BYTES:
                     return None
+                chunks.append(chunk)
+            data = b"".join(chunks)
             lines = data.decode("utf-8", errors="replace").strip().split("\n")
             if not lines:
                 return None
@@ -286,22 +289,27 @@ def send_request_stream(
     try:
         with sock:
             sock.sendall((json.dumps(endpoint.with_auth(request, token)) + "\n").encode())
-            buf = b""
+            buf = bytearray()
             while True:
-                chunk = sock.recv(8192)
+                chunk = sock.recv(65536)
                 if not chunk:
                     break
-                buf += chunk
-                while b"\n" in buf:
-                    line, buf = buf.split(b"\n", 1)
-                    if len(line) > MAX_RESPONSE_BYTES:
+                buf.extend(chunk)
+                start = 0
+                while True:
+                    nl = buf.find(b"\n", start)
+                    if nl < 0:
+                        break
+                    line_len = nl - start
+                    if line_len > MAX_RESPONSE_BYTES:
                         yield {
                             "status": "error",
                             "error": f"linha NDJSON excedeu {MAX_RESPONSE_BYTES} bytes",
                             "error_code": "VRAMD_PROTOCOL",
                         }
                         return
-                    text = line.decode("utf-8", errors="replace").strip()
+                    text = bytes(buf[start:nl]).decode("utf-8", errors="replace").strip()
+                    start = nl + 1
                     if not text:
                         continue
                     try:
@@ -310,6 +318,8 @@ def send_request_stream(
                         continue
                     if isinstance(event, dict):
                         yield event
+                if start:
+                    del buf[:start]
                 if len(buf) > MAX_RESPONSE_BYTES:
                     # Uma única linha sem newline: não deixar o buffer crescer sem
                     # limite (o servidor não vai terminar a linha).
@@ -322,7 +332,7 @@ def send_request_stream(
             # O servidor fechou sem newline na última linha (ex.: um stream de
             # uma só resposta): não perder o evento final em silêncio.
             if buf:
-                text = buf.decode("utf-8", errors="replace").strip()
+                text = bytes(buf).decode("utf-8", errors="replace").strip()
                 if text:
                     try:
                         event = json.loads(text)
@@ -492,6 +502,44 @@ def resolve_vramd_calibration(vram_total_mib: int | None = None) -> Path | None:
     return chosen
 
 
+_CALIBRATION_YAML_CACHE: dict[str, tuple[int, int, dict[str, dict[str, Any]]]] = {}
+_CALIBRATION_CACHE_LOCK = threading.Lock()
+
+
+def _load_calibration_signals(cal: Path) -> dict[str, dict[str, Any]]:
+    """Lê e cacheia o mapa ``backend → peak signals`` por ``(path, mtime_ns, size)``."""
+    resolved = cal.resolve()
+    key = str(resolved)
+    st = resolved.stat()
+    with _CALIBRATION_CACHE_LOCK:
+        cached = _CALIBRATION_YAML_CACHE.get(key)
+        if cached is not None and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
+            return cached[2]
+    import yaml
+
+    data = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
+    parsed: dict[str, dict[str, Any]] = {}
+    for entry in data.get("backends", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if not name:
+            continue
+        pp = entry.get("peak_profile") or {}
+        lk = pp.get("load_kwargs") or {}
+        signals: dict[str, Any] = {}
+        preset = pp.get("quant_mode") or lk.get("sdnq_preset") or lk.get("quant_preset")
+        if preset and str(preset).strip().lower() not in ("", "none", "null"):
+            signals["sdnq_preset"] = str(preset)
+        if lk.get("memory_efficient") is not None:
+            signals["memory_efficient"] = bool(lk["memory_efficient"])
+        if signals:
+            parsed[str(name)] = signals
+    with _CALIBRATION_CACHE_LOCK:
+        _CALIBRATION_YAML_CACHE[key] = (st.st_mtime_ns, st.st_size, parsed)
+    return parsed
+
+
 def calibrated_peak_signals(backend: str) -> dict[str, Any] | None:
     """Sinais de pico do hw-auto vindos da calibração selecionada.
 
@@ -509,24 +557,10 @@ def calibrated_peak_signals(backend: str) -> dict[str, Any] | None:
     if cal is None:
         return None
     try:
-        import yaml
-
-        data = yaml.safe_load(cal.read_text(encoding="utf-8"))
-        for entry in data.get("backends", []):
-            if entry.get("name") != backend:
-                continue
-            pp = entry.get("peak_profile") or {}
-            lk = pp.get("load_kwargs") or {}
-            signals: dict[str, Any] = {}
-            preset = pp.get("quant_mode") or lk.get("sdnq_preset") or lk.get("quant_preset")
-            if preset and str(preset).strip().lower() not in ("", "none", "null"):
-                signals["sdnq_preset"] = str(preset)
-            if lk.get("memory_efficient") is not None:
-                signals["memory_efficient"] = bool(lk["memory_efficient"])
-            return signals or None
+        signals = _load_calibration_signals(cal).get(backend)
+        return dict(signals) if signals else None
     except Exception:
         return None
-    return None
 
 
 def _discover_vramd_python() -> Path | None:
@@ -740,10 +774,12 @@ def _start_vramd_process(*, timeout_sec: float) -> bool:
                 log_fh.close()
         return False
 
-    # Esperar que o socket fique pronto.
+    # Esperar que o socket fique pronto (backoff suave: reduz ~400 ms no arranque frio).
     deadline = time.monotonic() + timeout_sec
+    sleep_s = 0.05
     while time.monotonic() < deadline:
-        time.sleep(0.5)
+        time.sleep(sleep_s)
+        sleep_s = min(0.5, sleep_s * 2.0)
         if is_vramd_running():
             _logger.info("[vramd] Auto-start: vramd ativo e pronto.")
             return True
@@ -1110,6 +1146,7 @@ def respawn_vramd_backend(
     *,
     lazy: bool = True,
     timeout_sec: float = 120.0,
+    remote: bool | None = None,
 ) -> dict[str, Any] | None:
     """Reinicia o worker subprocesso de um backend vramd (sem reiniciar o supervisor).
 
@@ -1126,15 +1163,26 @@ def respawn_vramd_backend(
             para o próximo ``generate``/``preload``. Se ``False``, recarrega já
             o modelo com o mesmo ``load_shape`` (fica quente).
         timeout_sec: Timeout da chamada (load pode demorar em modo ``hot``).
+        remote: ``True``/``False`` para fixar destino remoto/local; ``None``
+            segue a política global (``VRAMD_REMOTE``/``VRAMD_GPU_MODE``).
 
     Returns:
         Resposta do vramd (``{"status": "ok", "results": [...], ...}``) ou
         ``None`` se o vramd não estiver ativo (nada para respawnar).
     """
+    from . import vramd_remote
+
     req: dict[str, Any] = {"cmd": "respawn", "lazy": lazy}
     if backend:
         req["backend"] = backend
-    return send_to_vramd(req, timeout_sec=timeout_sec, auto_start=False)
+    resolved = _resolve_remote(remote)
+    use_remote = resolved if resolved is not None else vramd_remote.remote_enabled()
+    if resolved is True and not vramd_remote.remote_enabled():
+        return _remote_error(
+            "VRAMD_REMOTE_NOT_CONFIGURED",
+            "respawn pediu GPU remota mas VRAMD_REMOTE/VRAMD_REMOTE_TOKEN não estão definidos",
+        )
+    return send_to_vramd(req, timeout_sec=timeout_sec, auto_start=False, force_local=not use_remote)
 
 
 def zero_vramd_vram(*, timeout_sec: float = 120.0) -> dict[str, Any] | None:

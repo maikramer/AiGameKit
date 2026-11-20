@@ -15,6 +15,7 @@ Usage::
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -242,6 +243,21 @@ class QualityEngine:
         return None
 
 
+_YAML_CACHE: dict[str, tuple[int, int, dict[str, Any]]] = {}
+_YAML_CACHE_LOCK = threading.Lock()
+
+
 def _load_yaml(path: Path) -> dict[str, Any]:
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    resolved = path.resolve()
+    key = str(resolved)
+    st = resolved.stat()
+    sig = (st.st_mtime_ns, st.st_size)
+    with _YAML_CACHE_LOCK:
+        cached = _YAML_CACHE.get(key)
+        if cached is not None and cached[0] == sig[0] and cached[1] == sig[1]:
+            return cached[2]
+    with open(resolved, encoding="utf-8") as f:
+        data: dict[str, Any] = yaml.safe_load(f) or {}
+    with _YAML_CACHE_LOCK:
+        _YAML_CACHE[key] = (sig[0], sig[1], data)
+    return data

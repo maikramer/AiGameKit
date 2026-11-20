@@ -7,6 +7,7 @@ usadas, mime types das imagens, e bounding box agregada via accessors.
 from __future__ import annotations
 
 import json
+import os
 import struct
 from pathlib import Path
 from typing import Any
@@ -128,20 +129,23 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
     """
     p = Path(path).expanduser().resolve()
     with open(p, "rb") as f:
-        data = f.read()
+        file_size = os.fstat(f.fileno()).st_size
+        header = f.read(20)
+        if len(header) < 20 or header[:4] != b"glTF":
+            return {"_error": "não é GLB"}
 
-    if len(data) < 20 or data[:4] != b"glTF":
-        return {"_error": "não é GLB"}
-
-    json_len = struct.unpack_from("<I", data, 12)[0]
-    # GLB truncado/corrupto: sem estes guards o check glb morria com
-    # traceback cru em vez de falhar controlado (contrato do precompute.py).
-    if json_len <= 0 or 20 + json_len > len(data):
+        json_len = struct.unpack_from("<I", header, 12)[0]
+        # GLB truncado/corrupto: sem estes guards o check glb morria com
+        # traceback cru em vez de falhar controlado (contrato do precompute.py).
+        if json_len <= 0 or 20 + json_len > file_size:
+            return {"_error": "GLB truncado (chunk JSON incompleto)"}
+        if header[16:20] != b"JSON":
+            return {"_error": "GLB inválido (primeiro chunk não é JSON)"}
+        raw_json = f.read(json_len)
+    if len(raw_json) < json_len:
         return {"_error": "GLB truncado (chunk JSON incompleto)"}
-    if data[16:20] != b"JSON":
-        return {"_error": "GLB inválido (primeiro chunk não é JSON)"}
     try:
-        chunk = json.loads(data[20 : 20 + json_len])
+        chunk = json.loads(raw_json)
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         return {"_error": f"GLB com JSON ilegível: {e}"}
 

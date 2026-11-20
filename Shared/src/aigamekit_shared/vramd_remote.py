@@ -169,21 +169,24 @@ class RemoteClient:
             except OSError as exc:
                 last_error = exc
                 continue
-            data = b""
+            chunks: list[bytes] = []
+            total = 0
             try:
                 sock.sendall((json.dumps(endpoint.with_auth(request, token)) + "\n").encode())
                 while True:
                     chunk = sock.recv(65536)
                     if not chunk:
                         break
-                    data += chunk
-                    if len(data) > MAX_RESPONSE_BYTES:
+                    total += len(chunk)
+                    if total > MAX_RESPONSE_BYTES:
                         raise RemoteStagingError("resposta do vramd remoto excedeu o teto")
+                    chunks.append(chunk)
             except OSError as exc:
                 last_error = exc
                 continue
             finally:
                 sock.close()
+            data = b"".join(chunks)
             lines = data.decode("utf-8", errors="replace").strip().split("\n")
             if not lines or not lines[-1]:
                 last_error = RemoteDown("resposta vazia do vramd remoto")
@@ -402,12 +405,35 @@ def _resolve_local(value: str | os.PathLike[str]) -> Path:
     return path if path.is_absolute() else (Path.cwd() / path)
 
 
+_SHA256_CACHE: dict[str, tuple[int, int, str]] = {}
+_SHA256_CACHE_LOCK = threading.Lock()
+_SHA256_CACHE_MAX = 512
+
+
 def _sha256(path: Path, *, chunk: int = 1 << 20) -> str:
+    try:
+        resolved = str(path.resolve())
+        st = path.stat()
+        sig = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        resolved = ""
+        sig = None
+    if resolved and sig is not None:
+        with _SHA256_CACHE_LOCK:
+            cached = _SHA256_CACHE.get(resolved)
+            if cached is not None and cached[0] == sig[0] and cached[1] == sig[1]:
+                return cached[2]
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         while block := handle.read(chunk):
             digest.update(block)
-    return digest.hexdigest()
+    hex_digest = digest.hexdigest()
+    if resolved and sig is not None:
+        with _SHA256_CACHE_LOCK:
+            if len(_SHA256_CACHE) >= _SHA256_CACHE_MAX and resolved not in _SHA256_CACHE:
+                _SHA256_CACHE.pop(next(iter(_SHA256_CACHE)), None)
+            _SHA256_CACHE[resolved] = (sig[0], sig[1], hex_digest)
+    return hex_digest
 
 
 def _expand(template: str, primary: Path) -> str:
@@ -689,23 +715,25 @@ def finalize(staged: StagedJob, response: Any) -> Any:
                 raise
 
         known = {item.local.name for item in [*staged.outputs, *staged.sidecars]}
-        for pattern, local_dir in staged.globs:
+        if staged.globs:
+            # Listar ``out`` uma única vez por job (em vez de um RPC de rede por pattern).
             try:
                 names = staged.client.list(staged.job, "out")
             except (RemoteStagingError, TransferError):
                 names = []
-            # `list` devolve nomes soltos de `out/`; um template expandido com
-            # `{output}` traria o path absoluto e `fnmatch` nunca casaria.
-            basename_pattern = Path(pattern).name
-            for name in names:
-                # Defesa em profundidade: o nome vem do servidor e vai ser usado
-                # para escrever localmente. Só componentes simples são aceites.
-                if not name or name in (".", "..") or Path(name).name != name:
-                    continue
-                if name in known or not fnmatch.fnmatch(name, basename_pattern):
-                    continue
-                staged.client.get_file(staged.job, f"out/{name}", local_dir / name)
-                known.add(name)
+            for pattern, local_dir in staged.globs:
+                # `list` devolve nomes soltos de `out/`; um template expandido com
+                # `{output}` traria o path absoluto e `fnmatch` nunca casaria.
+                basename_pattern = Path(pattern).name
+                for name in names:
+                    # Defesa em profundidade: o nome vem do servidor e vai ser usado
+                    # para escrever localmente. Só componentes simples são aceites.
+                    if not name or name in (".", "..") or Path(name).name != name:
+                        continue
+                    if name in known or not fnmatch.fnmatch(name, basename_pattern):
+                        continue
+                    staged.client.get_file(staged.job, f"out/{name}", local_dir / name)
+                    known.add(name)
     except BaseException:
         # O download falhou: não deixar o socket persistente aberto. O sandbox
         # fica para o TTL porque o job pode ter produzido o resto.

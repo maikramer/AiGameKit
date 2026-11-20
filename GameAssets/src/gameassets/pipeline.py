@@ -29,7 +29,6 @@ import logging
 import os
 import re
 import shutil
-import struct
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -120,25 +119,27 @@ def _resolve_animator3d_bin() -> str | None:
         return None
 
 
-def _count_faces_glb(path: Path) -> int:
-    """Count total triangles in a GLB file by parsing the binary header (no bpy required)."""
-    try:
-        with open(path, "rb") as f:
-            data = f.read()
-        if len(data) < 20 or data[:4] != b"glTF":
-            return -1
-        json_len = struct.unpack_from("<I", data, 12)[0]
-        chunk = json.loads(data[20 : 20 + json_len])
-        accessors = chunk.get("accessors", [])
-        faces = 0
-        for m in chunk.get("meshes", []):
-            for p in m.get("primitives", []):
-                idx = p.get("indices")
-                if idx is not None and idx < len(accessors):
-                    faces += accessors[idx].get("count", 0) // 3
-        return faces
-    except Exception:
+def _json_face_count(chunk: dict[str, Any] | None) -> int:
+    if not chunk:
         return -1
+    accessors = chunk.get("accessors", [])
+    faces = 0
+    for m in chunk.get("meshes", []):
+        for p in m.get("primitives", []):
+            idx = p.get("indices")
+            if idx is not None and idx < len(accessors):
+                faces += accessors[idx].get("count", 0) // 3
+    return faces
+
+
+def _count_faces_glb(path: Path) -> int:
+    """Count total triangles in a GLB file by parsing only the JSON header (no bpy)."""
+    from aigamekit_shared.glb_verify import read_glb_json
+
+    chunk, _size, err = read_glb_json(path)
+    if chunk is None or err is not None:
+        return -1
+    return _json_face_count(chunk)
 
 
 def _release_vramd_before_external_stage(stage_name: str) -> None:
@@ -2423,66 +2424,60 @@ def _stage(
     return StageResult(name, True, dt, output=output)
 
 
+def _json_has_skin(j: dict[str, Any] | None) -> bool:
+    if not j:
+        return False
+    skins = j.get("skins") or []
+    if not skins:
+        return False
+    return any("skin" in n for n in (j.get("nodes") or []))
+
+
+def _json_has_materials(j: dict[str, Any] | None) -> bool:
+    if not j:
+        return False
+    for m in j.get("materials") or []:
+        pbr = m.get("pbrMetallicRoughness") or {}
+        if "baseColorTexture" in pbr:
+            return True
+    return False
+
+
+def _json_has_animations(j: dict[str, Any] | None) -> bool:
+    return bool(j and j.get("animations"))
+
+
+def _json_has_duplicate_clips(j: dict[str, Any] | None) -> bool:
+    if not j:
+        return False
+    names = [a.get("name", "") for a in (j.get("animations") or [])]
+    bases = [n.split(".")[0] for n in names]
+    return len(names) != len(set(names)) or len(bases) != len(set(bases))
+
+
 def _glb_has_skin(path: Path) -> bool:
     """Verifica se um GLB tem skin real (``skins[]`` + node com ``skin``).
 
     JOINTS_0/WEIGHTS_0 sozinhos NÃO contam - transfer-weights partido exportava
     attrs sem ``skins[]``, e o fallback animava ``rigged_hi`` sem paint.
     """
-    try:
-        import json
-        import struct
+    from .paths import _glb_json
 
-        with open(path, "rb") as f:
-            if f.read(4) != b"glTF":
-                return False
-            f.read(8)  # version + total length
-            json_len = struct.unpack("<I", f.read(4))[0]
-            f.read(4)  # chunk type
-            j = json.loads(f.read(json_len))
-        skins = j.get("skins") or []
-        if not skins:
-            return False
-        return any("skin" in n for n in (j.get("nodes") or []))
-    except Exception:
-        return False
+    return _json_has_skin(_glb_json(path))
 
 
 def _glb_has_materials(path: Path) -> bool:
     """True se o GLB tem material com baseColorTexture (paint presente)."""
-    try:
-        import json
-        import struct
+    from .paths import _glb_json
 
-        with open(path, "rb") as f:
-            if f.read(4) != b"glTF":
-                return False
-            f.read(8)
-            json_len = struct.unpack("<I", f.read(4))[0]
-            f.read(4)
-            j = json.loads(f.read(json_len))
-        for m in j.get("materials") or []:
-            pbr = m.get("pbrMetallicRoughness") or {}
-            if "baseColorTexture" in pbr:
-                return True
-        return False
-    except Exception:
-        return False
+    return _json_has_materials(_glb_json(path))
 
 
 def _glb_has_animations(path: Path) -> bool:
     """True se o GLB declara pelo menos uma animation."""
-    try:
-        with open(path, "rb") as f:
-            if f.read(4) != b"glTF":
-                return False
-            f.read(8)
-            json_len = struct.unpack("<I", f.read(4))[0]
-            f.read(4)
-            j = json.loads(f.read(json_len))
-        return bool(j.get("animations"))
-    except Exception:
-        return False
+    from .paths import _glb_json
+
+    return _json_has_animations(_glb_json(path))
 
 
 def _glb_has_duplicate_clips(path: Path) -> bool:
@@ -2493,19 +2488,9 @@ def _glb_has_duplicate_clips(path: Path) -> bool:
     sufixo ``.00N`` (bandit/boss_ogre com 14-18 clips em vez de 7-9). Um GLB
     assim NÃO é fonte aceitável para a ladder — o animate corre de novo.
     """
-    try:
-        with open(path, "rb") as f:
-            if f.read(4) != b"glTF":
-                return False
-            f.read(8)
-            json_len = struct.unpack("<I", f.read(4))[0]
-            f.read(4)
-            j = json.loads(f.read(json_len))
-        names = [a.get("name", "") for a in (j.get("animations") or [])]
-        bases = [n.split(".")[0] for n in names]
-        return len(names) != len(set(names)) or len(bases) != len(set(bases))
-    except Exception:
-        return False
+    from .paths import _glb_json
+
+    return _json_has_duplicate_clips(_glb_json(path))
 
 
 @dataclass(frozen=True)
@@ -2631,26 +2616,35 @@ def _run_static_lod_stages(
     KTX2 + meshopt ao LOD0. ``--texture-size`` = atlas lod0 (volume); lod1/2
     = /2 /4. Se um lod0 promovido existir, nada e clobberado.
     """
+    from .paths import _glb_json, _json_is_promoted_animated, _json_is_promoted_rigged
+
     lod0_p = _lod_path(mesh_final, 0)
     lod1_p = _lod_path(mesh_final, 1)
     lod2_p = _lod_path(mesh_final, 2)
     painted_faces = _count_faces_glb(painted_p)
-    lod0_faces = _count_faces_glb(lod0_p) if lod0_p.is_file() else -1
+    # Lê o cabeçalho JSON de lod0 uma única vez (evita 5 aberturas/parses).
+    lod0_exists = lod0_p.is_file()
+    lod0_j = _glb_json(lod0_p) if lod0_exists else None
+    lod0_faces = _json_face_count(lod0_j) if lod0_j is not None else -1
+    lod0_has_mat = _json_has_materials(lod0_j)
     # Entregável já promovido (animate/rig) NÃO pode ser clobberado por painted→lod0.
-    lod0_is_promoted = lod0_p.is_file() and (
-        _glb_is_promoted_animated(lod0_p) or (with_rig and _glb_is_promoted_rigged(lod0_p))
+    lod0_is_promoted = lod0_exists and (
+        _json_is_promoted_animated(lod0_j) or (with_rig and _json_is_promoted_rigged(lod0_j))
     )
     # Frescura por mtime: o skip antigo comparava as faces de LOD1/2 com o
     # painted (25%/8%) e nunca disparava (LOD1 ~ 0.4x target << 0.25x painted),
     # pelo que a ladder era regenerada em cada passagem do master.
     _painted_mtime = painted_p.stat().st_mtime if painted_p.is_file() else 0.0
 
-    def _fresh_lod(p: Path) -> bool:
-        return p.is_file() and p.stat().st_size > 64 and p.stat().st_mtime >= _painted_mtime and _glb_has_materials(p)
+    def _fresh_lod(p: Path, j: dict[str, Any] | None = None) -> bool:
+        if not p.is_file():
+            return False
+        st = p.stat()
+        if st.st_size <= 64 or st.st_mtime < _painted_mtime:
+            return False
+        return _json_has_materials(j if j is not None else _glb_json(p))
 
-    lod0_matches_painted = (
-        lod0_p.is_file() and not lod0_is_promoted and _glb_has_materials(lod0_p) and _fresh_lod(lod0_p)
-    )
+    lod0_matches_painted = lod0_exists and not lod0_is_promoted and lod0_has_mat and _fresh_lod(lod0_p, lod0_j)
 
     if lod0_is_promoted:
         res.stages.append(
@@ -2674,10 +2668,16 @@ def _run_static_lod_stages(
     # ``with_lod=False`` (pipeline sem 'lod'): mesmo assim emitir lod0 — é o
     # entregável Round 3. Sem isto bake-master "deferred to lod" + skip lod
     # deixava weapons/terrain forms sem *_lod0.glb para sempre.
-    lod1_faces = _count_faces_glb(lod1_p) if lod1_p.is_file() else -1
-    lod2_faces = _count_faces_glb(lod2_p) if lod2_p.is_file() else -1
+    lod1_j = _glb_json(lod1_p) if lod1_p.is_file() else None
+    lod2_j = _glb_json(lod2_p) if lod2_p.is_file() else None
+    lod1_faces = _json_face_count(lod1_j) if lod1_j is not None else -1
+    lod2_faces = _json_face_count(lod2_j) if lod2_j is not None else -1
     lod_ladder_ok = (
-        _fresh_lod(lod1_p) and _fresh_lod(lod2_p) and lod1_faces > 0 and lod2_faces > 0 and lod2_faces < lod1_faces
+        _fresh_lod(lod1_p, lod1_j)
+        and _fresh_lod(lod2_p, lod2_j)
+        and lod1_faces > 0
+        and lod2_faces > 0
+        and lod2_faces < lod1_faces
     )
     if lod0_is_promoted:
         res.stages.append(
@@ -2685,7 +2685,7 @@ def _run_static_lod_stages(
         )
     elif with_lod and lod_ladder_ok and lod0_matches_painted:
         res.stages.append(StageResult("lod", True, 0.0, "skipped (lod1/lod2 ok)", lod1_p))
-    elif not with_lod and lod0_p.is_file() and _glb_has_materials(lod0_p) and lod0_faces > 0:
+    elif not with_lod and lod0_exists and lod0_has_mat and lod0_faces > 0:
         res.stages.append(StageResult("lod", True, 0.0, "skipped (lod0 ok, no ladder)", lod0_p))
     else:
         # LOD0 budget = 1.2x category target_faces (alinha com lod0.yaml
@@ -3176,17 +3176,25 @@ def run_master_pipeline(
 
     def _rigged_ok(p: Path | None) -> bool:
         """Rigged utilizável: skin real + o paint herdado do painted."""
-        return p is not None and p.is_file() and _glb_has_skin(p) and _glb_has_materials(p)
+        if p is None or not p.is_file():
+            return False
+        from .paths import _glb_json
+
+        j = _glb_json(p)
+        return _json_has_skin(j) and _json_has_materials(j)
 
     def _animated_ok(p: Path | None) -> bool:
         """Animated utilizável: skin + clips + paint, sem clips duplicadas .00N."""
+        if p is None or not p.is_file():
+            return False
+        from .paths import _glb_json
+
+        j = _glb_json(p)
         return (
-            p is not None
-            and p.is_file()
-            and _glb_has_skin(p)
-            and _glb_has_animations(p)
-            and _glb_has_materials(p)
-            and not _glb_has_duplicate_clips(p)
+            _json_has_skin(j)
+            and _json_has_animations(j)
+            and _json_has_materials(j)
+            and not _json_has_duplicate_clips(j)
         )
 
     promotion_kind = "none"

@@ -160,12 +160,37 @@ def _backend_entries() -> dict[str, dict[str, Any]]:
     return out
 
 
+_FREEZE_CACHE: dict[tuple[str, str], tuple[tuple[int, int], tuple[str, str]]] = {}
+_FREEZE_CACHE_LOCK = threading.Lock()
+
+
+def _venv_signature(venv: Path) -> tuple[int, int] | None:
+    """Assinatura ``(pyvenv_cfg_mtime_ns, site_packages_mtime_ns)`` do venv."""
+    try:
+        cfg = venv / "pyvenv.cfg"
+        cfg_m = cfg.stat().st_mtime_ns if cfg.is_file() else 0
+        sp_m = 0
+        for candidate in (venv / "Lib" / "site-packages", *venv.glob("lib/python*/site-packages")):
+            if candidate.is_dir():
+                sp_m = max(sp_m, candidate.stat().st_mtime_ns)
+        return (cfg_m, sp_m)
+    except OSError:
+        return None
+
+
 def _freeze(tool_dir: str, root: Path) -> tuple[str, str]:
     """Devolve ``(python_version, lock_text)`` a partir do venv da tool."""
     venv = root / tool_dir / ".venv"
     python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if not python.is_file():
         raise BundleError(f"venv da tool não encontrado: {venv} — instala {tool_dir} antes de usar GPU remota")
+    cache_key = (tool_dir, str(python))
+    sig = _venv_signature(venv)
+    if sig is not None and sig != (0, 0):
+        with _FREEZE_CACHE_LOCK:
+            cached = _FREEZE_CACHE.get(cache_key)
+            if cached is not None and cached[0] == sig:
+                return cached[1]
     try:
         version = subprocess.run(
             [str(python), "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
@@ -243,7 +268,11 @@ def _freeze(tool_dir: str, root: Path) -> tuple[str, str]:
     header = ["--index-url https://pypi.org/simple"]
     if cuda_tag:
         header.append(f"--extra-index-url https://download.pytorch.org/whl/{cuda_tag}")
-    return python_version, "\n".join([*header, *lines]) + "\n"
+    result = (python_version, "\n".join([*header, *lines]) + "\n")
+    if sig is not None and sig != (0, 0):
+        with _FREEZE_CACHE_LOCK:
+            _FREEZE_CACHE[cache_key] = (sig, result)
+    return result
 
 
 def _iter_files(root: Path, rel_roots: Iterable[str]) -> Iterable[tuple[str, Path]]:
