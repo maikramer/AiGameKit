@@ -59,6 +59,51 @@ def get_attention_backend() -> str:
     return requested
 
 
+def _enable_sdpa_backends() -> None:
+    """Garante Flash/Mem-Efficient SDPA activos no PyTorch sem acordar contexto CUDA."""
+    try:
+        import torch
+
+        cuda_backends = getattr(torch.backends, "cuda", None)
+        if cuda_backends is not None:
+            if hasattr(cuda_backends, "enable_flash_sdp"):
+                cuda_backends.enable_flash_sdp(True)
+            if hasattr(cuda_backends, "enable_mem_efficient_sdp"):
+                cuda_backends.enable_mem_efficient_sdp(True)
+    except Exception:
+        pass
+
+
+def _resolve_diffusers_attention_enum(backend: str) -> Any | None:
+    """Resolve enum ``AttentionBackendName`` em diffusers 0.34+ e 0.42+."""
+    enum_cls = None
+    for module_path in ("diffusers.models.attention_dispatch", "diffusers.hooks"):
+        try:
+            mod = __import__(module_path, fromlist=["AttentionBackendName"])
+            enum_cls = getattr(mod, "AttentionBackendName", None)
+            if enum_cls is not None:
+                break
+        except ImportError:
+            continue
+    if enum_cls is None:
+        return None
+
+    # diffusers >=0.42 usa SAGE / FLASH / NATIVE / FLEX; versões 0.34-0.41 usavam
+    # SAGE_ATTENTION / FLASH_ATTENTION / SDPA.
+    candidates: dict[str, tuple[str, ...]] = {
+        "sage": ("SAGE", "SAGE_ATTENTION"),
+        "flash": ("FLASH", "FLASH_ATTENTION"),
+        "sdpa": ("NATIVE", "SDPA"),
+        "native": ("NATIVE", "SDPA"),
+        "flex": ("FLEX",),
+    }
+    for attr in candidates.get(backend, ()):
+        val = getattr(enum_cls, attr, None)
+        if val is not None:
+            return val
+    return None
+
+
 def select_attention_backend(
     pipe: Any,
     *,
@@ -70,7 +115,7 @@ def select_attention_backend(
 
     Args:
         pipe: pipeline diffusers.
-        backend: ``"auto"``, ``"sage"``, ``"flash"``, ou ``"sdpa"``.
+        backend: ``"auto"``, ``"sage"``, ``"flash"``, ``"flex"``, ou ``"sdpa"``.
         apply_to_vae: se True, aplica também ao VAE (default False — SageAttention
             pode causar stuck decode em VAEs de vídeo).
         log_fn: callback de logging.
@@ -86,24 +131,15 @@ def select_attention_backend(
     if backend == "auto":
         backend = get_attention_backend()
 
-    # Tentar diffusers set_attention_backend se disponível (diffusers 0.34+).
-    try:
-        from diffusers import hooks as _diffusers_hooks
+    if backend in ("sdpa", "native"):
+        _enable_sdpa_backends()
 
-        # AttentionBackendName só existe em diffusers >= 0.34 (sem stubs estáveis).
-        AttentionBackendName = getattr(_diffusers_hooks, "AttentionBackendName", None)
-        if AttentionBackendName is None:
-            raise ImportError("diffusers sem AttentionBackendName")
-
-        backend_map = {
-            "sage": getattr(AttentionBackendName, "SAGE_ATTENTION", None),
-            "flash": getattr(AttentionBackendName, "FLASH_ATTENTION", None),
-            "sdpa": getattr(AttentionBackendName, "SDPA", None),
-        }
-        backend_enum = backend_map.get(backend)
-        if backend_enum is not None:
-            transformer = getattr(pipe, "transformer", None)
-            if transformer is not None and hasattr(transformer, "set_attention_backend"):
+    # Tentar diffusers set_attention_backend (diffusers 0.34+ / 0.42+ attention_dispatch).
+    backend_enum = _resolve_diffusers_attention_enum(backend)
+    if backend_enum is not None:
+        transformer = getattr(pipe, "transformer", None)
+        if transformer is not None and hasattr(transformer, "set_attention_backend"):
+            try:
                 transformer.set_attention_backend(backend_enum)
                 _log(f"Attention backend '{backend}' aplicado ao transformer")
                 if apply_to_vae:
@@ -111,8 +147,10 @@ def select_attention_backend(
                     if vae is not None and hasattr(vae, "set_attention_backend"):
                         vae.set_attention_backend(backend_enum)
                 return backend
-    except ImportError:
-        pass
+            except Exception as exc:
+                _log(f"Attention backend '{backend}' recusado pelo transformer ({exc}); fallback SDPA")
+                _enable_sdpa_backends()
+                return "sdpa"
 
     # Fallback: env vars (alguns modelos vendored lêem env diretamente).
     if backend == "sage":

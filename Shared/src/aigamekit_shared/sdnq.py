@@ -22,10 +22,14 @@ References:
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import inspect
 import json
 import logging
 import os
+import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -642,6 +646,346 @@ def pre_quantize_model(
         pass
 
     return output_dir
+
+
+# ---------------------------------------------------------------------------
+# SDNQ Disk Cache (evita reler pesos bf16 + repetir SVD/Hadamard a cada cold load)
+# ---------------------------------------------------------------------------
+
+SDNQ_CACHE_SCHEMA_VERSION = "sdnq-cache-v1"
+SDNQ_CACHE_ENV = "AIGAMEKIT_SDNQ_CACHE"
+SDNQ_CACHE_DIR_ENV = "AIGAMEKIT_SDNQ_CACHE_DIR"
+
+
+def sdnq_cache_enabled() -> bool:
+    """Whether the on-disk SDNQ quantized-component cache is enabled.
+
+    Enabled by default; set ``AIGAMEKIT_SDNQ_CACHE=0`` (or ``false/no/off``)
+    to disable (useful for A/B benchmarks or ephemeral containers).
+    """
+    raw = os.environ.get(SDNQ_CACHE_ENV, "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
+def sdnq_cache_dir() -> Path:
+    """Root directory for cached SDNQ-quantized components."""
+    override = os.environ.get(SDNQ_CACHE_DIR_ENV, "").strip()
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".cache" / "aigamekit" / "sdnq-cache"
+
+
+def _sdnq_installed_version() -> str:
+    """Return installed ``sdnq`` package version string (best-effort)."""
+    try:
+        import importlib.metadata
+
+        return importlib.metadata.version("sdnq")
+    except Exception:
+        pass
+    try:
+        import sdnq  # type: ignore[import-untyped]
+
+        return str(getattr(sdnq, "__version__", "unknown"))
+    except Exception:
+        return "unknown"
+
+
+def resolve_hf_snapshot_revision(model_id: str, *, cache_dir: str | Path | None = None) -> str:
+    """Resolve a local revision fingerprint for ``model_id`` without network calls.
+
+    For local directories, uses the resolved path + config/index mtime. For HF
+    repo ids (``org/repo``), reads ``refs/main`` or the newest ``snapshots/*``
+    entry from the local HuggingFace cache so model updates automatically
+    invalidate the SDNQ disk cache.
+    """
+    local_path = Path(model_id).expanduser()
+    if local_path.exists():
+        mtime = 0
+        for probe in ("modular_model_index.json", "model_index.json", "config.json"):
+            candidate = local_path / probe
+            if candidate.is_file():
+                with contextlib.suppress(OSError):
+                    mtime = max(mtime, int(candidate.stat().st_mtime))
+        return f"local:{local_path.resolve()}:{mtime}"
+
+    hub_root_raw = (
+        str(cache_dir)
+        if cache_dir
+        else (
+            os.environ.get("HF_HUB_CACHE")
+            or os.environ.get("HUGGINGFACE_HUB_CACHE")
+            or str(Path.home() / ".cache" / "huggingface" / "hub")
+        )
+    )
+    repo_dir = Path(hub_root_raw).expanduser() / f"models--{model_id.replace('/', '--')}"
+    ref_main = repo_dir / "refs" / "main"
+    if ref_main.is_file():
+        try:
+            rev = ref_main.read_text(encoding="utf-8").strip()
+            if rev:
+                return rev
+        except OSError:
+            pass
+    snaps_dir = repo_dir / "snapshots"
+    if snaps_dir.is_dir():
+        try:
+            snaps = [p for p in snaps_dir.iterdir() if p.is_dir()]
+            if snaps:
+                snaps.sort(key=lambda p: p.stat().st_mtime)
+                return snaps[-1].name
+        except OSError:
+            pass
+    return "unknown"
+
+
+def build_sdnq_cache_key(
+    model_id: str,
+    component_name: str,
+    preset: str,
+    *,
+    revision: str | None = None,
+    cache_dir: str | Path | None = None,
+    modules_to_not_convert: list[str] | tuple[str, ...] | None = None,
+    dequantize_fp32: bool | None = None,
+    torch_dtype: str = "bfloat16",
+    extra: dict[str, Any] | None = None,
+) -> str:
+    """Build a deterministic filesystem-safe cache directory name for a component."""
+    p = PRESETS.get(preset)
+    preset_payload: dict[str, Any]
+    if p is not None:
+        preset_payload = {
+            "weights_dtype": p.weights_dtype,
+            "group_size": p.group_size,
+            "use_svd": p.use_svd,
+            "svd_rank": p.svd_rank,
+            "svd_steps": p.svd_steps,
+            "use_hadamard": p.use_hadamard,
+            "hadamard_group_size": p.hadamard_group_size,
+            "use_codebook": p.use_codebook,
+            "scale_dtype": p.scale_dtype,
+            "zero_point_dtype": p.zero_point_dtype,
+            "use_codebook_scale": p.use_codebook_scale,
+            "use_dynamic_quantization": p.use_dynamic_quantization,
+            "dynamic_loss_threshold": p.dynamic_loss_threshold,
+            "weights_dtype_order": list(p.weights_dtype_order) if p.weights_dtype_order else None,
+        }
+    else:
+        preset_payload = {"preset": preset}
+
+    payload = {
+        "schema": SDNQ_CACHE_SCHEMA_VERSION,
+        "sdnq_version": _sdnq_installed_version(),
+        "model_id": model_id,
+        "revision": revision or resolve_hf_snapshot_revision(model_id, cache_dir=cache_dir),
+        "component": component_name,
+        "preset": preset,
+        "preset_params": preset_payload,
+        "dequantize_fp32": dequantize_fp32 if dequantize_fp32 is not None else (p.dequantize_fp32 if p else True),
+        "modules_to_not_convert": sorted(str(x) for x in (modules_to_not_convert or ())),
+        "torch_dtype": str(torch_dtype),
+        "extra": extra or {},
+    }
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()[:16]
+    safe_comp = re.sub(r"[^a-zA-Z0-9_.-]+", "_", component_name).strip("_") or "component"
+    safe_preset = re.sub(r"[^a-zA-Z0-9_.-]+", "_", preset).strip("_") or "preset"
+    return f"{safe_comp}-{safe_preset}-{digest}"
+
+
+def _resolve_model_class_from_config(model_config: dict[str, Any]) -> Any:
+    """Resolve diffusers/transformers model class from a saved ``config.json``."""
+    class_name = model_config.get("_class_name") or model_config.get("architectures")
+    if isinstance(class_name, list):
+        class_name = class_name[0] if class_name else None
+    if not class_name or not isinstance(class_name, str):
+        return None
+    for pkg_name in ("diffusers", "transformers"):
+        try:
+            pkg = __import__(pkg_name)
+            cls = getattr(pkg, class_name, None)
+            if cls is not None:
+                return cls
+        except ImportError:
+            continue
+    return None
+
+
+def save_sdnq_cached_model(
+    model: Any,
+    target_dir: Path,
+    *,
+    meta: dict[str, Any] | None = None,
+    max_shard_size: str = "5GB",
+) -> Path:
+    """Atomically save an SDNQ-quantized component into ``target_dir``.
+
+    Writes into a sibling temporary directory first and swaps into place only
+    after ``cache_meta.json`` is written, so an interrupted run never leaves a
+    corrupt cache entry behind.
+    """
+    from sdnq.loader import save_sdnq_model
+
+    target_dir = Path(target_dir)
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
+    tmp_dir = target_dir.parent / f".{target_dir.name}.tmp.{os.getpid()}"
+    if tmp_dir.exists():
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    try:
+        save_sdnq_model(model, str(tmp_dir), max_shard_size=max_shard_size)
+        cache_meta = {
+            "schema": SDNQ_CACHE_SCHEMA_VERSION,
+            "complete": True,
+            "sdnq_version": _sdnq_installed_version(),
+            **(meta or {}),
+        }
+        (tmp_dir / "cache_meta.json").write_text(json.dumps(cache_meta, indent=2), encoding="utf-8")
+        if target_dir.exists():
+            # Outro worker gravou a mesma chave em paralelo — mantém a existente.
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            return target_dir
+        os.replace(tmp_dir, target_dir)
+        return target_dir
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+
+
+def load_sdnq_cached_model(
+    target_dir: Path,
+    *,
+    model_cls: Any = None,
+    torch_dtype: Any = None,
+    device: str = "cpu",
+    dequantize_fp32: bool | None = None,
+    use_quantized_matmul: bool | None = None,
+) -> Any | None:
+    """Load a previously cached SDNQ-quantized component with bit-exact parity.
+
+    Contorna um bug upstream do ``sdnq 0.2.9``: ``sdnq.loader.load_sdnq_model``
+    chama ``sdnq_post_load_quant(**get_quant_args_from_config(...))``, o que
+    descarta silenciosamente ``scale_dtype``/``zero_point_dtype`` (double quant)
+    e faz o ``load_state_dict`` rebentar com ``Unexpected key: *.scale_2``.
+    Passar o ``SDNQConfig`` completo directamente a ``sdnq_post_load_quant``
+    (com ``quantization_device=None``/``return_device=None``) reconstrói o
+    esqueleto SDNQ exacto sobre ``init_empty_weights()`` e carrega os pesos em
+    ``strict=True`` sem perda nem re-quantização.
+
+    Returns:
+        Loaded quantized ``nn.Module``, or ``None`` on cache miss.
+    """
+    target_dir = Path(target_dir)
+    meta_path = target_dir / "cache_meta.json"
+    qcfg_path = target_dir / "quantization_config.json"
+    cfg_path = target_dir / "config.json"
+    if not (meta_path.is_file() and qcfg_path.is_file() and cfg_path.is_file()):
+        return None
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        if not meta.get("complete") or meta.get("schema") != SDNQ_CACHE_SCHEMA_VERSION:
+            return None
+    except Exception:
+        return None
+
+    shard_files = sorted(target_dir.glob("*.safetensors"))
+    if not shard_files:
+        return None
+
+    from accelerate import init_empty_weights
+    from safetensors.torch import load_file
+    from sdnq import SDNQConfig, sdnq_post_load_quant
+    from sdnq.loader import apply_sdnq_options_to_model, post_process_model
+    from sdnq.quantizer import QuantizationMethod, SDNQQuantizer
+
+    model_config = json.loads(cfg_path.read_text(encoding="utf-8"))
+    qcfg_dict = json.loads(qcfg_path.read_text(encoding="utf-8"))
+    qcfg_dict["is_training"] = False
+    # Em init_empty_weights(), passar quantization_device/return_device tenta
+    # mover meta tensors e levanta NotImplementedError — zerar aqui.
+    qcfg_dict["quantization_device"] = None
+    qcfg_dict["return_device"] = None
+    qcfg_dict["add_skip_keys"] = False
+    qcfg_dict["use_dynamic_quantization"] = False
+    qcfg = SDNQConfig.from_dict(qcfg_dict)
+
+    resolved_cls = model_cls or _resolve_model_class_from_config(model_config)
+    if resolved_cls is None:
+        raise ValueError(f"Não foi possível resolver a classe do modelo em {target_dir}")
+
+    with init_empty_weights():
+        if hasattr(resolved_cls, "load_config") and hasattr(resolved_cls, "from_config"):
+            config = resolved_cls.load_config(str(target_dir))
+            if hasattr(config, "quantization_config"):
+                delattr(config, "quantization_config")
+            if hasattr(config, "pop"):
+                config.pop("quantization_config", None)
+            model = resolved_cls.from_config(config)
+        elif hasattr(resolved_cls, "_from_config"):
+            from transformers import AutoConfig
+
+            config = AutoConfig.from_pretrained(str(target_dir))
+            if hasattr(config, "quantization_config"):
+                delattr(config, "quantization_config")
+            model = resolved_cls(config)
+        else:
+            clean_cfg = dict(model_config)
+            clean_cfg.pop("quantization_config", None)
+            model = resolved_cls(**clean_cfg)
+
+        model = sdnq_post_load_quant(
+            model,
+            quantization_config=qcfg,
+            torch_dtype=torch_dtype,
+            pre_quantized=True,
+        )
+
+    state_dict: dict[str, Any] = {}
+    for shard in shard_files:
+        state_dict.update(load_file(str(shard), device=str(device)))
+
+    tied = getattr(model, "_tied_weights_keys", None)
+    if isinstance(tied, dict):
+        for dst_key, src_key in tied.items():
+            if src_key in state_dict and dst_key not in state_dict:
+                state_dict[dst_key] = state_dict[src_key]
+    elif (
+        model.__class__.__name__ == "Qwen3ForCausalLM"
+        and "lm_head.weight" not in state_dict
+        and "model.embed_tokens.weight" in state_dict
+    ):
+        state_dict["lm_head.weight"] = state_dict["model.embed_tokens.weight"]
+
+    model.load_state_dict(state_dict, strict=True, assign=True)
+    del state_dict
+
+    meta_left = [n for n, t in list(model.named_parameters()) + list(model.named_buffers()) if t.device.type == "meta"]
+    if meta_left:
+        raise RuntimeError(f"SDNQ cache deixou tensores em meta ({len(meta_left)}): {meta_left[:3]}")
+
+    model = post_process_model(model)
+    model.quantization_config = qcfg
+    model.quantization_method = QuantizationMethod.SDNQ
+    if hasattr(model, "config"):
+        with contextlib.suppress(Exception):
+            model.config.quantization_config = qcfg
+        with contextlib.suppress(Exception):
+            model.config["quantization_config"] = qcfg.to_dict()
+    if hasattr(model, "hf_quantizer"):
+        model.hf_quantizer.quantization_config = qcfg
+    else:
+        model.hf_quantizer = SDNQQuantizer(qcfg)
+
+    need_opts = (dequantize_fp32 is not None and bool(dequantize_fp32) != bool(qcfg.dequantize_fp32)) or (
+        use_quantized_matmul is not None and bool(use_quantized_matmul) != bool(qcfg.use_quantized_matmul)
+    )
+    if need_opts:
+        model = apply_sdnq_options_to_model(
+            model,
+            dequantize_fp32=dequantize_fp32,
+            use_quantized_matmul=use_quantized_matmul,
+        )
+
+    return model
 
 
 # ---------------------------------------------------------------------------

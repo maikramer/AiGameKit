@@ -491,6 +491,20 @@ def set_memory_optimization_env(
 
     if enable_cudnn_benchmark:
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        # Flags de backend PyTorch (TF32 Ampere+/Ada + cuDNN autotuner). Não
+        # inicializam o contexto CUDA — seguro chamar antes do load/no worker.
+        try:
+            import torch
+
+            if hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "matmul"):
+                torch.backends.cuda.matmul.allow_tf32 = True
+            if hasattr(torch.backends, "cudnn"):
+                torch.backends.cudnn.allow_tf32 = True
+                torch.backends.cudnn.benchmark = True
+            if hasattr(torch, "set_float32_matmul_precision"):
+                torch.set_float32_matmul_precision("high")
+        except Exception:
+            pass
 
     fast = enable_hf_transfer if enable_hf_fast_download is None else enable_hf_fast_download
     if fast:

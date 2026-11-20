@@ -66,7 +66,7 @@ class GroupOffloadConfig:
     use_stream: bool = True
     num_blocks_per_group: int | None = None
     record_stream: bool = False
-    non_blocking: bool = False
+    non_blocking: bool = True
 
     def summary(self) -> str:
         parts = [f"group-offload({self.offload_type}"]
@@ -74,6 +74,8 @@ class GroupOffloadConfig:
             parts.append("stream")
         if self.record_stream:
             parts.append("record")
+        if self.non_blocking and not self.use_stream:
+            parts.append("non_blocking")
         return " | ".join(parts) + ")"
 
 
@@ -125,26 +127,34 @@ def plan_group_offload(
         return None
 
     # Não cabe (ou force). Espaço para pesos onloaded após reservar ativação.
-    largest = footprint.largest_gib(quant_mode)
+    # Quando o footprint declara ``largest_block_gib``, comparamos contra 1 bloco
+    # (em vez do módulo inteiro) — block_level carrega 1 grupo de cada vez.
+    block_budget = (
+        footprint.block_gib(quant_mode) if hasattr(footprint, "block_gib") else footprint.largest_gib(quant_mode)
+    )
     headroom = max(0.0, usable_vram_gib - activation)
 
-    if prefer_leaf or headroom < largest * GROUP_TIGHT_HEADROOM_FACTOR:
-        # Grupos mínimos: leaf_level + streams — máxima VRAM para ativação/octave.
+    if prefer_leaf or headroom < block_budget * GROUP_TIGHT_HEADROOM_FACTOR:
+        # Grupos mínimos: leaf_level — máxima VRAM para ativação/octave.
         # record_stream=False (conservador): com record=True medimos OOM-spin no
         # Paint3D dual-UNet (frees não determinísticos sob churn de onloads);
         # sem record os frees são determinísticos ao custo de ligeiro overhead.
+        # non_blocking=True habilita DMA assíncrono sobre tensores pinned no CPU
+        # (ganho directo especialmente quando use_stream=False, ex. FLUX.3).
         return GroupOffloadConfig(
             offload_type="leaf_level",
             use_stream=stream,
             record_stream=False,
+            non_blocking=True,
         )
-    # Folga para blocks inteiros: menos sync points, ainda com overlap de stream.
+    # Folga para blocks inteiros: menos sync points (~8-13x menos transfers que leaf).
     # (diffusers força num_blocks_per_group=1 quando use_stream=True.)
     return GroupOffloadConfig(
         offload_type="block_level",
         use_stream=stream,
         num_blocks_per_group=1,
         record_stream=False,
+        non_blocking=True,
     )
 
 
@@ -179,7 +189,7 @@ def try_group_offloading(
     use_stream: bool = True,
     num_blocks_per_group: int | None = None,
     record_stream: bool = False,
-    non_blocking: bool = False,
+    non_blocking: bool = True,
     modules: tuple[str, ...] | None = None,
     log: bool = True,
     log_fn: Any = None,
@@ -300,7 +310,8 @@ def try_group_offloading(
             _log(f"Group offload falhou em {name} ({e})")
             continue
         applied_any = True
-        _log(f"Group offload aplicado a {name} ({offload_type}, streams={'on' if use_stream else 'off'})")
+        nb_tag = ", non_blocking" if non_blocking else ""
+        _log(f"Group offload aplicado a {name} ({offload_type}, streams={'on' if use_stream else 'off'}{nb_tag})")
 
     return applied_any
 

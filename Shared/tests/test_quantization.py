@@ -302,6 +302,26 @@ class TestSetMemoryOptimizationEnv:
         assert "PYTORCH_CUDA_ALLOC_CONF" not in os.environ
         assert os.environ["CUBLAS_WORKSPACE_CONFIG"] == ":4096:8"
 
+    def test_enables_tf32_and_cudnn_benchmark_when_torch_present(self, monkeypatch):
+        import sys
+        import types
+
+        calls: list[str] = []
+        fake_matmul = types.SimpleNamespace(allow_tf32=False)
+        fake_cudnn = types.SimpleNamespace(allow_tf32=False, benchmark=False)
+        fake_torch = types.ModuleType("torch")
+        fake_torch.backends = types.SimpleNamespace(  # type: ignore[attr-defined]
+            cuda=types.SimpleNamespace(matmul=fake_matmul),
+            cudnn=fake_cudnn,
+        )
+        fake_torch.set_float32_matmul_precision = lambda p: calls.append(p)  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "torch", fake_torch)
+        set_memory_optimization_env(enable_expandable_segments=False, enable_hf_fast_download=False)
+        assert fake_matmul.allow_tf32 is True
+        assert fake_cudnn.allow_tf32 is True
+        assert fake_cudnn.benchmark is True
+        assert calls == ["high"]
+
 
 class TestGetSuggestedQuantizationForVram:
     @patch("aigamekit_shared.quantization.is_sdnq_available", return_value=False)

@@ -485,16 +485,18 @@ class DiffusionGeneratorBase(ABC):
         apply_step_cache(pipe, method=mode, log_fn=self._log)
 
     def _maybe_apply_channels_last(self, pipe: Any, plan: Any) -> None:
-        """Aplica ``channels_last`` ao VAE (e transformer se Conv) quando pedido.
+        """Aplica ``channels_last`` aos módulos Conv (VAE/UNet) quando pedido.
 
         Opt-in via ``self.channels_last``. Seguro com qualquer offload — formato
-        de memória, não muda device placement.
+        de memória, não muda device placement. DiT ``transformer`` (token-based)
+        é omitido de propósito: não beneficia de NHWC e iterar bilhões de
+        parâmetros SDNQ/offloaded acrescenta custo sem ganho.
         """
         if not self.channels_last or self.device == "cpu":
             return
         from aigamekit_shared.quantization import apply_channels_last
 
-        for attr in ("vae", "transformer", "unet"):
+        for attr in ("vae", "unet"):
             mod = getattr(pipe, attr, None)
             if mod is None:
                 continue

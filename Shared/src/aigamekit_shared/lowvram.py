@@ -106,12 +106,17 @@ class ModelFootprint:
         architecture: Nome da arquitetura (ex: ``"flux"``, ``"hunyuan3d"``) para
             ligar ao ``no_split_module_classes`` do registry multi-GPU. ``None``
             se irrelevante (offload only, sem multi-GPU).
+        largest_block_gib: Maior grupo residente em ``block_level`` group offload
+            (em fp16). Quando > 0, :func:`plan_group_offload` compara o headroom
+            contra este valor em vez de ``largest_module_gib`` (que é o módulo
+            inteiro e forçava ``leaf_level`` mesmo quando 1 bloco cabe com folga).
     """
 
     fp16_weights_gib: float
     activation_gib: float = 1.5
     largest_module_gib: float = 0.0
     architecture: str | None = None
+    largest_block_gib: float = 0.0
 
     def weights_gib(self, quant_mode: str) -> float:
         return self.fp16_weights_gib * QUANT_WEIGHT_FACTOR.get(quant_mode, 1.0)
@@ -119,6 +124,12 @@ class ModelFootprint:
     def largest_gib(self, quant_mode: str) -> float:
         base = self.largest_module_gib or (self.fp16_weights_gib * 0.4)
         return base * QUANT_WEIGHT_FACTOR.get(quant_mode, 1.0)
+
+    def block_gib(self, quant_mode: str) -> float:
+        """Tamanho estimado do maior grupo em ``block_level`` offload."""
+        if self.largest_block_gib > 0.0:
+            return self.largest_block_gib * QUANT_WEIGHT_FACTOR.get(quant_mode, 1.0)
+        return self.largest_gib(quant_mode)
 
 
 # Registry centralizado de pegadas por modelo/família. Cada tool consulta aqui
@@ -130,9 +141,10 @@ class ModelFootprint:
 FOOTPRINTS: dict[str, ModelFootprint] = {
     # FLUX.3 Image Klein (Text2D): transformer 5.6B + text encoder Qwen3-VL 4B +
     # VAE Flux2 ≈ 9.7B (~18.5 GiB fp16); maior módulo = transformer (~11.2 GiB).
-    # Activación = reserva do planner GO (pico real medido anda ~5 GiB a 1024²,
-    # como no FLUX.2) — 2.0 evita mandar 6 GB para int2 sem necessidade.
-    # Estimativa do model card — recalibrar com `vramd calibrate text2d`.
+    # Nota medida na RTX 4050 6 GB (2026-11): ``mode_blocks`` é um ModuleDict
+    # (image + image_cond) — em block_level o root sobe ``image_cond`` mesmo em
+    # t2i (+1.35 GiB VRAM: 4304 vs 2956 MiB, +2.1 s/img em regime). Portanto
+    # ``largest_block_gib`` fica em 0.0 para manter ``leaf_level`` + non_blocking.
     "flux3-klein": ModelFootprint(18.5, 2.0, 11.2, architecture="flux"),
     # StarVector-1B (image→SVG): StarCoder-1B + CLIP ViT-L/14 + adapter,
     # ~1.43B params em fp16 (~2.9 GiB); KV/activação para 4k tokens ~1.2 GiB.

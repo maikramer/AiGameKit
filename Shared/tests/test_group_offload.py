@@ -228,6 +228,26 @@ class TestPlanGroupOffload:
         assert cfg is not None
         assert cfg.offload_type == "leaf_level"
 
+    def test_largest_block_gib_enables_block_level_and_flux3_stays_leaf(self) -> None:
+        """Footprint com largest_block_gib usa block_level(1); flux3-klein mantém leaf_level + non_blocking."""
+        from aigamekit_shared.lowvram import get_footprint
+
+        # Modelo com blocos puros (ModuleList): 1 bloco = 1.0 GiB fp16 → 0.32 GiB int4.
+        fp_blocks = ModelFootprint(18.0, 2.0, 11.0, largest_block_gib=1.0)
+        cfg_blk = plan_group_offload(5.4, fp_blocks, quant_mode="sdnq-int4", use_stream=False)
+        assert cfg_blk is not None
+        assert cfg_blk.offload_type == "block_level"
+        assert cfg_blk.num_blocks_per_group == 1
+        assert cfg_blk.non_blocking is True
+
+        # FLUX.3 Klein: mode_blocks é ModuleDict → mantém leaf_level na 6 GB (evita subir image_cond em t2i).
+        fp_flux3 = get_footprint("flux3-klein")
+        cfg_flux3 = plan_group_offload(5.4, fp_flux3, quant_mode="sdnq-int4", use_stream=False)
+        assert cfg_flux3 is not None
+        assert cfg_flux3.offload_type == "leaf_level"
+        assert cfg_flux3.use_stream is False
+        assert cfg_flux3.non_blocking is True
+
 
 class TestGroupOffloadConfig:
     def test_summary_leaf_level(self) -> None:
@@ -245,6 +265,7 @@ class TestGroupOffloadConfig:
         cfg = GroupOffloadConfig()
         assert cfg.offload_type == "leaf_level"
         assert cfg.use_stream is True
+        assert cfg.non_blocking is True
 
 
 class TestTryGroupOffloadingWithConfig:
