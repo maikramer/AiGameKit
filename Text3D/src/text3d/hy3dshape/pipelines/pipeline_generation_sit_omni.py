@@ -49,6 +49,7 @@ class Hunyuan3DOmniSiTFlowMatchingPipeline:
         resume_download=False,
         force_download=False,
         revision="main",
+        preloaded_submodules=None,
         **kwargs,
     ):
 
@@ -73,9 +74,18 @@ class Hunyuan3DOmniSiTFlowMatchingPipeline:
             )
             print("path", path)
 
-        ckpt_name = "pytorch_model.bin"
+        preloaded = preloaded_submodules or {}
         submodules = dict()
         for submodule_name in ["model", "vae", "cond_encoder", "scheduler", "image_processor"]:
+            if submodule_name in preloaded and preloaded[submodule_name] is not None:
+                submodule = preloaded[submodule_name]
+                if isinstance(submodule, nn.Module):
+                    submodule.disable_drop = True
+                    submodule.eval()
+                submodules[submodule_name] = submodule
+                print(f"Using preloaded {submodule_name}")
+                continue
+
             config_path = os.path.join(model_path, submodule_name, "config.json")
             config = get_config_from_file(config_path)
 
@@ -92,6 +102,7 @@ class Hunyuan3DOmniSiTFlowMatchingPipeline:
 
             submodule = instantiate_from_config(config)
             if isinstance(submodule, nn.Module):
+                ckpt_name = "pytorch_model.bin"
                 ckpt_path = os.path.join(model_path, submodule_name, ckpt_name)
                 if variant == "ema":
                     ckpt_name = "pytorch_model_ema.bin"
@@ -100,9 +111,12 @@ class Hunyuan3DOmniSiTFlowMatchingPipeline:
                         ckpt_name = "pytorch_model.bin"
                         ckpt_path = os.path.join(model_path, submodule_name, ckpt_name)
                 if os.path.exists(ckpt_path):
-                    missing, unexpected = submodule.load_state_dict(
-                        torch.load(ckpt_path, map_location="cpu", weights_only=True), strict=False
-                    )
+                    try:
+                        state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=True, mmap=True)
+                    except (TypeError, RuntimeError):
+                        state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+                    missing, unexpected = submodule.load_state_dict(state_dict, strict=False)
+                    del state_dict
                     print(f"Loaded {ckpt_path} with {len(missing)} missing and {len(unexpected)} unexpected keys")
                     if len(missing) > 0:
                         print(f"Missing Keys: {Counter([s.split('.')[0] for s in missing])}")

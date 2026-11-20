@@ -153,12 +153,12 @@ class MoEBlock(nn.Module):
         return y
     
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def moe_infer(self, x, flat_expert_indices, flat_expert_weights):
-        expert_cache = torch.zeros_like(x) 
+        expert_cache = torch.zeros_like(x)
         idxs = flat_expert_indices.argsort()
         tokens_per_expert = flat_expert_indices.bincount().cpu().numpy().cumsum(0)
-        token_idxs = idxs // self.moe_top_k 
+        token_idxs = idxs // self.moe_top_k
         for i, end_idx in enumerate(tokens_per_expert):
             start_idx = 0 if i == 0 else tokens_per_expert[i-1]
             if start_idx == end_idx:
@@ -167,11 +167,12 @@ class MoEBlock(nn.Module):
             exp_token_idx = token_idxs[start_idx:end_idx]
             expert_tokens = x[exp_token_idx]
             expert_out = expert(expert_tokens)
-            expert_out.mul_(flat_expert_weights[idxs[start_idx:end_idx]]) 
-            
-            # for fp16 and other dtype
-            expert_cache = expert_cache.to(expert_out.dtype)
-            expert_cache.scatter_reduce_(0, exp_token_idx.view(-1, 1).repeat(1, x.shape[-1]),
-                                         expert_out, 
-                                         reduce='sum')
+            expert_out.mul_(flat_expert_weights[idxs[start_idx:end_idx]])
+
+            # for fp16 and other dtype — evita cópia por expert quando dtype já coincide
+            if expert_cache.dtype != expert_out.dtype:
+                expert_cache = expert_cache.to(expert_out.dtype)
+            # index_add_ é matematicamente equivalente a scatter_reduce_(..., 'sum')
+            # sem alocar o tensor expandido [N_tokens, hidden_size] em int64 a cada expert.
+            expert_cache.index_add_(0, exp_token_idx, expert_out)
         return expert_cache

@@ -3,7 +3,7 @@ Text3D — Text-to-3D via Text2D (texto → imagem) e Hunyuan3D-Omni (imagem →
 
 Fluxo: KleinFluxGenerator → unload explícito → Hunyuan3DOmniSiTFlowMatchingPipeline.
 SDNQ quantization é opcional (activada via ``sdnq_preset`` ou hw-auto em GPUs pequenas).
-Pre-quantização (save/load) não funciona devido a tensores SVD não-contíguos do SDNQ int4.
+Pesos SDNQ quantizados do DiT são cacheados atomicamente em disco (``AIGAMEKIT_SDNQ_CACHE``).
 
 OmniEncoder exige um controlo geométrico (bbox/pose/point/voxel). Sem controlo
 explícito usa-se bbox humanoid 2u (ver ``DEFAULT_OMNI_BBOX``).
@@ -37,6 +37,17 @@ from .utils.omni_controls import resolve_control_kwargs
 from .utils.prompt_enhance import create_optimized_prompt as _optimize_prompt
 
 _logger = Logger()
+
+# Camadas sensíveis do HunYuanDiTPlain que ficam em fp16/bf16 no SDNQ (~37 MB,
+# ~0.3% do DiT): embeddings de entrada/timestep, projecção final e o router MoE
+# (8 experts). Protege geometria fina e roteamento MoE sem inflar VRAM.
+HUNYUAN_DIT_QUANT_SKIP_MODULES: tuple[str, ...] = (
+    "x_embedder",
+    "t_embedder",
+    "final_layer",
+    "moe.gate",
+    "default_modulation",
+)
 
 
 def _as_trimesh(mesh_or_nested: Any) -> trimesh.Trimesh:
@@ -198,7 +209,7 @@ class HunyuanTextTo3DGenerator:
         # Group-offload / accelerate deixam hooks e staging buffers na GPU —
         # tentar CPU + drop refs antes do GC (contexto CUDA ~1 GiB continua
         # no processo até o vramd sair; isto só liberta pesos/activação).
-        for attr in ("model", "cond_stage_model", "first_stage_model", "scheduler"):
+        for attr in ("model", "cond_encoder", "vae", "cond_stage_model", "first_stage_model", "scheduler"):
             mod = getattr(pipe, attr, None)
             if mod is None:
                 continue
@@ -227,9 +238,14 @@ class HunyuanTextTo3DGenerator:
         if self._hunyuan_pipeline is not None:
             return self._hunyuan_pipeline
 
+        from aigamekit_shared.quantization import set_memory_optimization_env
+
+        set_memory_optimization_env()
+
         from .hy3dshape_paths import ensure_hy3dshape_on_path
 
         ensure_hy3dshape_on_path(quiet=True)
+        from hy3dshape.models.utils.misc import get_config_from_file, instantiate_from_config
         from hy3dshape.pipelines import Hunyuan3DOmniSiTFlowMatchingPipeline
 
         hunyuan_device = self.device
@@ -248,27 +264,103 @@ class HunyuanTextTo3DGenerator:
         if self.use_ema:
             kwargs["variant"] = "ema"
 
+        preloaded_dit: Any = None
+        dit_cache_target: Path | None = None
+        dit_cache_meta: dict[str, Any] = {}
+        effective_matmul = bool(self.sdnq_quantized_matmul)
+
+        if wants_quant:
+            from aigamekit_shared.sdnq import (
+                _auto_quantized_matmul_default,
+                build_sdnq_cache_key,
+                load_sdnq_state_cache,
+                sdnq_cache_dir,
+                sdnq_cache_enabled,
+            )
+            from aigamekit_shared.sdnq import (
+                is_available as _sdnq_ok,
+            )
+
+            effective_matmul = bool(self.sdnq_quantized_matmul or _auto_quantized_matmul_default())
+            if _sdnq_ok():
+                model_cfg_path = os.path.join(model_path, "model", "config.json")
+                if sdnq_cache_enabled() and os.path.isfile(model_cfg_path):
+                    cache_key = build_sdnq_cache_key(
+                        model_path,
+                        "dit_model",
+                        self.sdnq_preset,
+                        modules_to_not_convert=HUNYUAN_DIT_QUANT_SKIP_MODULES,
+                        torch_dtype=str(load_dtype),
+                        extra={"variant": "ema" if self.use_ema else "base"},
+                    )
+                    dit_cache_target = sdnq_cache_dir() / cache_key
+                    dit_cache_meta = {
+                        "model_id": self.hunyuan_model_id,
+                        "component": "dit_model",
+                        "preset": self.sdnq_preset,
+                        "variant": "ema" if self.use_ema else "base",
+                    }
+                    try:
+                        preloaded_dit = load_sdnq_state_cache(
+                            dit_cache_target,
+                            lambda: instantiate_from_config(get_config_from_file(model_cfg_path)),
+                            torch_dtype=load_dtype,
+                            device="cpu",
+                            use_quantized_matmul=effective_matmul,
+                        )
+                    except Exception as exc:
+                        _logger.warn(f"SDNQ cache hit falhou ({exc}) — a recair para load+quantização normal.")
+                        preloaded_dit = None
+                    if preloaded_dit is not None:
+                        self._log(f"SDNQ cache HIT para DiT ({dit_cache_target.name}) — 11.4 GB + SVD pulados.")
+                        kwargs["preloaded_submodules"] = {"model": preloaded_dit}
+            else:
+                wants_quant = False
+                self._log("SDNQ não disponível — a correr sem quantização (VRAM elevada).")
+
         self._log(f"A carregar Hunyuan3DOmniSiTFlowMatchingPipeline ({model_path})...")
         _clear_cuda_cache()
         pipe = Hunyuan3DOmniSiTFlowMatchingPipeline.from_pretrained(model_path, **kwargs)
 
-        if wants_quant:
-            self._log(f"A quantizar DiT com SDNQ preset={self.sdnq_preset} (post-load)...")
-            from aigamekit_shared.sdnq import is_available as _sdnq_ok
-            from aigamekit_shared.sdnq import quantize_model
+        if wants_quant and preloaded_dit is None:
+            from aigamekit_shared.sdnq import quantize_model, save_sdnq_state_cache
 
-            if _sdnq_ok():
+            # Quantizar camada-a-camada na GPU (~10-20x mais rápido que SVD/Hadamard
+            # em CPU) devolvendo cada camada já comprimida para CPU (pico VRAM < 200 MB).
+            q_dev = "cuda" if torch.cuda.is_available() else "cpu"
+            self._log(f"A quantizar DiT com SDNQ preset={self.sdnq_preset} ({q_dev}→cpu)...")
+            try:
                 pipe.model = quantize_model(
                     pipe.model,
                     preset=self.sdnq_preset,
-                    quantization_device="cpu",
+                    quantization_device=q_dev,
                     return_device="cpu",
-                    use_quantized_matmul=self.sdnq_quantized_matmul,
+                    modules_to_not_convert=list(HUNYUAN_DIT_QUANT_SKIP_MODULES),
+                    use_quantized_matmul=effective_matmul,
                 )
-                self._log(f"SDNQ {self.sdnq_preset} aplicado ao DiT (CPU).")
-            else:
-                wants_quant = False
-                self._log("SDNQ não disponível — a correr sem quantização (VRAM elevada).")
+            except RuntimeError as exc:
+                if q_dev == "cuda" and "out of memory" in str(exc).lower():
+                    _logger.warn(f"OOM na quantização GPU ({exc}) — fallback para CPU.")
+                    _clear_cuda_cache()
+                    pipe.model = quantize_model(
+                        pipe.model,
+                        preset=self.sdnq_preset,
+                        quantization_device="cpu",
+                        return_device="cpu",
+                        modules_to_not_convert=list(HUNYUAN_DIT_QUANT_SKIP_MODULES),
+                        use_quantized_matmul=effective_matmul,
+                    )
+                else:
+                    raise
+            _clear_cuda_cache()
+            self._log(f"SDNQ {self.sdnq_preset} aplicado ao DiT ({q_dev}→cpu).")
+
+            if dit_cache_target is not None:
+                try:
+                    save_sdnq_state_cache(pipe.model, dit_cache_target, meta=dit_cache_meta)
+                    self._log(f"SDNQ cache gravado em disco ({dit_cache_target.name}).")
+                except Exception as exc:
+                    _logger.warn(f"Falha ao gravar SDNQ cache ({exc}) — inferência segue normalmente.")
 
         if hunyuan_device == "cuda":
             _clear_cuda_cache()
@@ -298,11 +390,14 @@ class HunyuanTextTo3DGenerator:
             omni_offload_modules = ("model",)
             # hw-auto `offload` em GPUs <5GB → forçar escada group/model_cpu.
             use_group = bool(self.allow_group_offload or self.offload)
-            # Qualidade > velocidade: leaf+stream reserva VRAM para octree/MC.
             # Em GPUs ≤~10 GiB (ou offload pedido) força group mesmo se pesos cabem.
+            # HunYuanDiTPlain é um ModuleList puro (21 blocos, sem ModuleDict condicional):
+            # medido em RTX 4050 6 GB, block_level+stream é 1.44x mais rápido que
+            # leaf_level (30.9s vs 44.6s, pico 3.19 GiB) com paridade exacta.
+            # leaf_level fica reservado para GPUs < 5 GiB ou offload explícito.
             total_gib = max((s[-1] / (1024**3) for s in specs), default=0.0)
             force_group = bool(use_group and (self.offload or total_gib <= 10.0))
-            prefer_leaf = bool(use_group)
+            prefer_leaf = bool(use_group and (self.offload or total_gib < 5.0))
 
             offload_plan = place_pipeline(
                 pipe,
@@ -317,8 +412,9 @@ class HunyuanTextTo3DGenerator:
                 offload_modules=omni_offload_modules,
                 on_status=lambda m: self._log(m),
             )
-            if force_group and prefer_leaf:
-                self._log(f"Omni: group leaf+stream forçado (VRAM≈{total_gib:.1f} GiB → ativação/octree)")
+            if force_group:
+                gran = "leaf+stream" if prefer_leaf else "block+stream"
+                self._log(f"Omni: group {gran} forçado (VRAM≈{total_gib:.1f} GiB → ativação/octree)")
             self._offload_plan = offload_plan
 
             # hw-auto pediu cpu-offload e planner ficou em full-GPU (margem optimista).
@@ -346,10 +442,11 @@ class HunyuanTextTo3DGenerator:
             if self.channels_last:
                 from aigamekit_shared.quantization import apply_channels_last
 
-                for attr in ("vae", "model", "cond_encoder"):
-                    mod = getattr(pipe, attr, None)
-                    if mod is not None:
-                        apply_channels_last(mod, log_fn=lambda m, a=attr: self._log(f"{a}: {m}"))
+                # Só cond_encoder (DINOv2 patch_embed) tem Conv2d; model (DiT) e
+                # vae (ShapeVAE) são 100% Linear/Attention 1D (0 ganhos em NHWC).
+                cond_mod = getattr(pipe, "cond_encoder", None)
+                if cond_mod is not None:
+                    apply_channels_last(cond_mod, log_fn=lambda m: self._log(f"cond_encoder: {m}"))
 
             primary = offload_plan.primary_gpu or 0
             primary_dev = f"cuda:{primary}"
@@ -487,6 +584,8 @@ class HunyuanTextTo3DGenerator:
         voxel_mesh: str | Path | None = None,
         bounds_mode: str = "auto",
         auto_num_chunks: bool = True,
+        dino_image_size: int | None = None,
+        image_processor_size: int | None = None,
     ) -> trimesh.Trimesh | tuple[trimesh.Trimesh, Image.Image]:
         """
         Text-to-3D: gera imagem com Text2D, descarrega Text2D, gera mesh com Hunyuan3D-Omni.
@@ -551,6 +650,8 @@ class HunyuanTextTo3DGenerator:
             voxel_mesh=voxel_mesh,
             bounds_mode=bounds_mode,
             auto_num_chunks=auto_num_chunks,
+            dino_image_size=dino_image_size,
+            image_processor_size=image_processor_size,
         )
         if return_reference_image:
             return mesh, pil_image
@@ -600,18 +701,28 @@ class HunyuanTextTo3DGenerator:
                 ``dino_image_size`` — senão o DINO volta a reduzir a 518.
         """
         if isinstance(image, (str, Path)):
-            image = Image.open(image).convert("RGB")
+            with Image.open(image) as opened:
+                opened.load()
+                image = opened.convert("RGBA") if "A" in opened.getbands() else opened.convert("RGB")
 
         if remove_bg:
-            self._log("A remover fundo com BiRefNet...")
-            bg_remover = self._bg_remover or BiRefNetBGRemover(device=self.device)
-            image = bg_remover.remove_background(image)
-            image = crop_to_content(image)
-            if keep_loaded:
-                self._bg_remover = bg_remover
+            if has_meaningful_alpha(image):
+                self._log("Imagem já tem canal alpha real — BiRefNet pulado.")
+                image = crop_to_content(image)
             else:
-                bg_remover.unload()
-                self._bg_remover = None
+                self._log("A remover fundo com BiRefNet...")
+                bg_remover = self._bg_remover or BiRefNetBGRemover(device=self.device)
+                image = bg_remover.remove_background(image)
+                image = crop_to_content(image)
+                if keep_loaded:
+                    # Liberta ~420-850 MB VRAM antes de correr Omni/decode, mantendo
+                    # BiRefNet quente em RAM (~40 ms reload na próxima imagem).
+                    if hasattr(bg_remover, "offload_to_cpu"):
+                        bg_remover.offload_to_cpu()
+                    self._bg_remover = bg_remover
+                else:
+                    bg_remover.unload()
+                    self._bg_remover = None
         elif not has_meaningful_alpha(image):
             keyed = key_uniform_background(image)
             if keyed is not None:

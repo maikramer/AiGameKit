@@ -88,7 +88,7 @@ def extract_near_surface_volume_fn(input_tensor: torch.Tensor, alpha: float):
 
         # 应用切片并恢复维度
         padded = padded.squeeze(0).squeeze(0)
-        sliced = padded[slice_dims]
+        sliced = padded[tuple(slice_dims)]
         return sliced
 
     # 获取各方向邻居（确保维度一致）

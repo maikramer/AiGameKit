@@ -126,7 +126,7 @@ class FastGeometryExtractorV2(BaseGeometryExtractor):
             disable_tqdm=disable_tqdm,
             desc=f"MC Level {mc_level} Implicit Function:",
         ):
-            batch_queries = repeat(queries.half(), "p c -> b p c", b=1)
+            batch_queries = queries.half().unsqueeze(0)
             logits = geometric_func(batch_queries)
             if mc_level == -1:
                 mc_level = 0
@@ -174,7 +174,7 @@ class FastGeometryExtractorV2(BaseGeometryExtractor):
                 leave=False,
             ):
                 queries = next_points[start : start + num_chunks, :]
-                batch_queries = repeat(queries, "p c -> b p c", b=1)
+                batch_queries = queries.unsqueeze(0)
                 logits = geometric_func(batch_queries)
                 if mc_level == -1:
                     mc_level = 0
