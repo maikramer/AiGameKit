@@ -144,7 +144,8 @@ def enrich_maps_from_albedo(
             return None
 
         def _load_rgb(path: Path) -> np.ndarray:
-            arr = np.asarray(PILImage.open(path).convert("RGB"), dtype=np.uint8)
+            with PILImage.open(path) as opened:
+                arr = np.asarray(opened.convert("RGB"), dtype=np.uint8)
             if arr.shape[:2] != (h, w):
                 arr = np.asarray(
                     PILImage.fromarray(arr).resize((w, h), PILImage.Resampling.LANCZOS),

@@ -119,6 +119,59 @@ from .utils.mesh_io import load_mesh_trimesh, save_glb  # noqa: E402
 
 _logger = Logger()
 
+# Camadas sensíveis do UNet2p5DConditionModel mantidas em fp16 no SDNQ
+# (mesma lista do multiview_utils.py): projeções de entrada/saída, timestep e
+# condicionamento DINO/CLIP — protege fidelidade cromática e bordas no bake.
+PAINT_UNET_QUANT_SKIP_MODULES: tuple[str, ...] = (
+    "conv_in",
+    "conv_out",
+    "conv_shortcut",
+    "time_emb",
+    "cond_proj",
+    "context_embedder",
+    "image_proj_model_dino",
+    "learned_text_clip",
+)
+
+
+def _quantize_paint_unet(
+    pipe: Any,
+    *,
+    allow_group_offload: bool,
+    verbose: bool = False,
+    prefix: str = "",
+) -> None:
+    """Quantiza ``pipe.unet`` com SDNQ uint8 (skip camadas sensíveis, erro duro).
+
+    Falhar a meio deixa camadas trocadas in-place (UNet meio-quantizado → bake
+    lixo reportado como OK), por isso propaga ``RuntimeError`` em vez de engolir.
+    Quando group offload vai engajar, devolve cada camada quantizada já para CPU
+    evitando pico duplo de VRAM antes dos hooks.
+    """
+    from aigamekit_shared.sdnq import quantize_model
+
+    return_dev = "cpu" if POLICY.will_engage(allow_group_offload) else None
+    if verbose:
+        dev_note = "cuda→cpu" if return_dev == "cpu" else "cuda"
+        _logger.info(
+            f"{prefix}Modo memory-efficient: aplicando SDNQ uint8 ao UNet "
+            f"(dequantize_fp32=False, {dev_note}, skip={len(PAINT_UNET_QUANT_SKIP_MODULES)} módulos)..."
+        )
+    try:
+        pipe.unet = quantize_model(
+            pipe.unet,
+            preset="sdnq-uint8",
+            dequantize_fp32=False,
+            return_device=return_dev,
+            modules_to_not_convert=list(PAINT_UNET_QUANT_SKIP_MODULES),
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"Quantização SDNQ do UNet falhou ({e}) — a abortar para não pintar com modelo meio-quantizado."
+        ) from e
+    if return_dev == "cpu":
+        clear_cuda_memory()
+
 
 def _env_flag(name: str, default: bool) -> bool:
     """Override booleano via env: "0/false/no/off" desliga, "1/true/yes/on" liga."""
@@ -863,12 +916,25 @@ def _get_combined_bounds(objects: list) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _apply_translation(objects: list, offset: np.ndarray) -> None:
-    """Desloca vértices de todos os objectos (in-place)."""
+    """Desloca vértices de todos os objectos (in-place, vetorizado via foreach)."""
+    dx, dy, dz = float(offset[0]), float(offset[1]), float(offset[2])
+    delta = np.array([dx, dy, dz], dtype=np.float64)
     for obj in objects:
-        for v in obj.data.vertices:
-            v.co[0] += float(offset[0])
-            v.co[1] += float(offset[1])
-            v.co[2] += float(offset[2])
+        verts = obj.data.vertices
+        n = len(verts)
+        if n == 0:
+            continue
+        if hasattr(verts, "foreach_get") and hasattr(verts, "foreach_set"):
+            co = np.empty(n * 3, dtype=np.float64)
+            verts.foreach_get("co", co)
+            pts = co.reshape(-1, 3)
+            pts += delta
+            verts.foreach_set("co", co)
+        else:
+            for v in verts:
+                v.co[0] += dx
+                v.co[1] += dy
+                v.co[2] += dz
         obj.data.update()
 
 
@@ -987,13 +1053,27 @@ def _fit_glb_aabb_to_reference(output_path: str | Path, reference_path: str | Pa
 
 
 def _apply_uniform_scale(objects: list, center: np.ndarray, scale: float) -> None:
-    """Escala uniforme dos vértices em torno de ``center`` (in-place)."""
+    """Escala uniforme dos vértices em torno de ``center`` (in-place, vetorizado)."""
     cx, cy, cz = float(center[0]), float(center[1]), float(center[2])
+    c_arr = np.array([cx, cy, cz], dtype=np.float64)
     for obj in objects:
-        for v in obj.data.vertices:
-            v.co[0] = cx + (float(v.co[0]) - cx) * scale
-            v.co[1] = cy + (float(v.co[1]) - cy) * scale
-            v.co[2] = cz + (float(v.co[2]) - cz) * scale
+        verts = obj.data.vertices
+        n = len(verts)
+        if n == 0:
+            continue
+        if hasattr(verts, "foreach_get") and hasattr(verts, "foreach_set"):
+            co = np.empty(n * 3, dtype=np.float64)
+            verts.foreach_get("co", co)
+            pts = co.reshape(-1, 3)
+            pts -= c_arr
+            pts *= float(scale)
+            pts += c_arr
+            verts.foreach_set("co", co)
+        else:
+            for v in verts:
+                v.co[0] = cx + (float(v.co[0]) - cx) * scale
+                v.co[1] = cy + (float(v.co[1]) - cy) * scale
+                v.co[2] = cz + (float(v.co[2]) - cz) * scale
         obj.data.update()
 
 
@@ -1142,7 +1222,9 @@ def apply_hunyuan_paint(
     renormalização interna do pipeline de pintura.
     """
     from aigamekit_shared.profiler import profile_span
-    from aigamekit_shared.quantization import enable_vae_optimizations
+    from aigamekit_shared.quantization import enable_vae_optimizations, set_memory_optimization_env
+
+    set_memory_optimization_env()
 
     with profile_span("paint_check_env"):
         check_paint_rasterizer_available()
@@ -1256,20 +1338,11 @@ def apply_hunyuan_paint(
             # convive com leaf-level (as camadas subclassam Conv2d/Linear e
             # scale/zero_point são Parameters registados no mesmo grupo).
             if memory_efficient and _sdnq_available() and pipe.unet is not None:
-                from aigamekit_shared.sdnq import quantize_model
-
-                if verbose:
-                    _logger.info("Modo memory-efficient: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
-                try:
-                    pipe.unet = quantize_model(pipe.unet, preset="sdnq-uint8", dequantize_fp32=False)
-                except Exception as e:
-                    # A quantização troca camadas in-place: falhar a meio deixa
-                    # o UNet parcialmente quantizado → imagens multiview lixo →
-                    # bake "embaralhado" reportado como OK. Abortar com erro
-                    # claro (o batch degrade/retry) em vez de pintar corrompido.
-                    raise RuntimeError(
-                        f"Quantização SDNQ do UNet falhou ({e}) — a abortar para não pintar com modelo meio-quantizado."
-                    ) from e
+                _quantize_paint_unet(
+                    pipe,
+                    allow_group_offload=allow_group_offload,
+                    verbose=verbose,
+                )
             elif verbose:
                 if memory_efficient:
                     _logger.warn("Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
@@ -1342,7 +1415,7 @@ def apply_hunyuan_paint(
 
         with profile_span("paint_inference", sync_cuda=True):
             try:
-                with torch.no_grad():
+                with torch.inference_mode():
                     pipe(
                         mesh_path=str(mesh_in),
                         image_path=image_arg,
@@ -1517,7 +1590,9 @@ class PaintBatchProcessor:
 
     def __enter__(self) -> PaintBatchProcessor:
         from aigamekit_shared.profiler import profile_span
-        from aigamekit_shared.quantization import enable_vae_optimizations
+        from aigamekit_shared.quantization import enable_vae_optimizations, set_memory_optimization_env
+
+        set_memory_optimization_env()
 
         with profile_span("paint_check_env"):
             check_paint_rasterizer_available()
@@ -1598,30 +1673,33 @@ class PaintBatchProcessor:
             # do back_sample rejeita como auto-oclusão (bake salpicado).
             install_depth_bias(pipe.render, logger=_logger)
 
+        group_offload_applied = False
         with profile_span("paint_optimize_pipeline"):
             # SDNQ PRIMEIRO, hooks DEPOIS (ver apply_hunyuan_paint): os hooks
             # guardam referências aos parâmetros — quantizar depois invalidava-as.
-            try:
-                if self._memory_efficient and _sdnq_available() and pipe.unet is not None:
-                    from aigamekit_shared.sdnq import quantize_model
-
-                    if self._verbose:
-                        _logger.info(
-                            "[batch] Modo memory-efficient: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)..."
-                        )
-                    pipe.unet = quantize_model(pipe.unet, preset="sdnq-uint8", dequantize_fp32=False)
-                elif self._verbose:
-                    if self._memory_efficient:
-                        _logger.warn("[batch] Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
-                    else:
-                        _logger.info("[batch] Modo alta VRAM — UNet em FP16 (sem quantização)")
-
-                group_offload_applied = _try_paint_group_offload(
-                    pipe, allow=self._allow_group_offload, verbose=self._verbose
+            # Quantização fora do try/except opcional: falha parcial deixaria o
+            # UNet meio-quantizado e geraria texturas corrompidas silenciosamente.
+            if self._memory_efficient and _sdnq_available() and pipe.unet is not None:
+                _quantize_paint_unet(
+                    pipe,
+                    allow_group_offload=self._allow_group_offload,
+                    verbose=self._verbose,
+                    prefix="[batch] ",
                 )
-                if group_offload_applied and self._verbose:
-                    quant_note = "SDNQ uint8 + streams" if self._memory_efficient else "fp16 + streams"
-                    _logger.info(f"[batch] Group offload ativo ({quant_note})")
+            elif self._verbose:
+                if self._memory_efficient:
+                    _logger.warn("[batch] Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
+                else:
+                    _logger.info("[batch] Modo alta VRAM — UNet em FP16 (sem quantização)")
+
+            group_offload_applied = _try_paint_group_offload(
+                pipe, allow=self._allow_group_offload, verbose=self._verbose
+            )
+            if group_offload_applied and self._verbose:
+                quant_note = "SDNQ uint8 + streams" if self._memory_efficient else "fp16 + streams"
+                _logger.info(f"[batch] Group offload ativo ({quant_note})")
+
+            try:
                 if pipe.vae is not None:
                     enable_vae_optimizations(
                         pipe.vae,
@@ -1746,7 +1824,7 @@ class PaintBatchProcessor:
                 # Referência cinzenta (blockout / text2d falhado) => asset escuro.
                 _check_reference_images(ref_paths, logger=_logger)
 
-            with profile_span("paint_batch_inference", sync_cuda=True), torch.no_grad():
+            with profile_span("paint_batch_inference", sync_cuda=True), torch.inference_mode():
                 self._pipe(
                     mesh_path=str(mesh_in),
                     image_path=image_arg,

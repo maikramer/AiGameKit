@@ -96,21 +96,29 @@ def _get_base_color_image(
 
 
 def _bpy_image_to_pil(bpy_image: bpy.types.Image) -> Image.Image:
-    """Convert a bpy Image to a PIL Image (RGB)."""
+    """Convert a bpy Image to a PIL Image (RGB) without Python float list copies."""
     w, h = bpy_image.size
-    pixels = np.array(bpy_image.pixels[:]).reshape(h, w, 4)
-    return Image.fromarray((pixels[:, :, :3] * 255).astype(np.uint8))
+    if hasattr(bpy_image.pixels, "foreach_get"):
+        buf = np.empty(h * w * 4, dtype=np.float32)
+        bpy_image.pixels.foreach_get(buf)
+        pixels = buf.reshape(h, w, 4)
+    else:
+        pixels = np.array(bpy_image.pixels[:], dtype=np.float32).reshape(h, w, 4)
+    return Image.fromarray(np.clip(pixels[:, :, :3] * 255.0, 0, 255).astype(np.uint8))
 
 
 def _write_pil_to_bpy(pil_image: Image.Image, bpy_image: bpy.types.Image) -> None:
     """Write a PIL Image back into an existing bpy Image in-place."""
     new_w, new_h = pil_image.size
-    arr = np.array(pil_image.convert("RGB"), dtype=np.float32) / 255.0
+    arr = np.asarray(pil_image.convert("RGB"), dtype=np.float32) * (1.0 / 255.0)
     if bpy_image.size[0] != new_w or bpy_image.size[1] != new_h:
         bpy_image.scale(new_w, new_h)
     rgba = np.ones((new_h, new_w, 4), dtype=np.float32)
     rgba[:, :, :3] = arr
-    bpy_image.pixels = rgba.ravel().tolist()
+    if hasattr(bpy_image.pixels, "foreach_set"):
+        bpy_image.pixels.foreach_set(rgba.ravel())
+    else:
+        bpy_image.pixels = rgba.ravel().tolist()
     bpy_image.update()
     bpy_image.pack()
 

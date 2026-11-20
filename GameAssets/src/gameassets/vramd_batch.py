@@ -326,6 +326,7 @@ def paint_specs_from_items(
             gpu_ids=item_gpu_ids,
             memory_efficient=bool(item_mem),
             sdnq_preset=item_sdnq,
+            channels_last=True,
             pbr_enrich=item.get("pbr_enrich", pbr_enrich),
         )
         payload = build_texture_request(**kwargs)

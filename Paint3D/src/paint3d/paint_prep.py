@@ -94,6 +94,7 @@ def _nearest_trusted_colors(
     position_map: np.ndarray,
     *,
     max_samples: int = FILL_NEIGHBOUR_SAMPLES,
+    valid_uv_mask: np.ndarray | None = None,
 ) -> np.ndarray | None:
     """Cor do texel baked mais próximo **em 3D** para cada texel nunca baked.
 
@@ -103,6 +104,8 @@ def _nearest_trusted_colors(
         trusted: Bool (H,W) dos texels realmente baked.
         position_map: (H,W,3) posição 3D por texel (``render.uv_feature_map``).
         max_samples: Tecto de amostras trusted na KD-tree.
+        valid_uv_mask: Máscara bool (H,W) de texels cobertos por triângulos UV
+            (exclui o gutter/fundo do atlas, que tem posição ``(0,0,0)``).
 
     Returns:
         (N,C) cores na ordem de ``np.nonzero(far_holes)``, ou ``None`` se não
@@ -113,9 +116,15 @@ def _nearest_trusted_colors(
     except ImportError:
         return None
 
-    src = trusted & np.isfinite(position_map).all(axis=-1)
-    dst = far_holes & np.isfinite(position_map).all(axis=-1)
-    if not src.any() or not dst.any():
+    finite = np.isfinite(position_map).all(axis=-1)
+    if valid_uv_mask is not None:
+        in_tri = np.asarray(valid_uv_mask, dtype=bool)
+        src = trusted & finite & in_tri
+        dst = far_holes & finite & in_tri
+    else:
+        src = trusted & finite
+        dst = far_holes & finite
+    if not src.any():
         return None
 
     src_pos = position_map[src]
@@ -124,11 +133,17 @@ def _nearest_trusted_colors(
         pick = np.random.default_rng(0).choice(len(src_pos), max_samples, replace=False)
         src_pos, src_rgb = src_pos[pick], src_rgb[pick]
 
-    _dist, nn = cKDTree(src_pos).query(position_map[far_holes], k=1, workers=-1)
-    out = np.repeat(src_rgb.mean(axis=0, keepdims=True), int(far_holes.sum()), axis=0)
-    # Texels far sem posição 3D (fora de qualquer triângulo) ficam na média.
+    mean_rgb = src_rgb.mean(axis=0, dtype=np.float64, keepdims=True).astype(tex_np.dtype)
+    out = np.repeat(mean_rgb, int(far_holes.sum()), axis=0)
+    if not dst.any():
+        return out.astype(tex_np.dtype, copy=False)
+
+    # Consultar apenas os texels válidos (dentro de triângulos UV) com eps=0.05:
+    # evita o pior caso degenerado da cKDTree em superfícies esféricas/equidistantes
+    # sem perda visual perceptível no preenchimento de áreas nunca vistas.
+    _dist, nn = cKDTree(src_pos).query(position_map[dst], k=1, eps=0.05, workers=-1)
     valid = dst[far_holes]
-    out[valid] = src_rgb[nn[valid]]
+    out[valid] = src_rgb[nn]
     return out.astype(tex_np.dtype, copy=False)
 
 
@@ -157,7 +172,8 @@ def fill_far_holes(
         texture: Textura (H,W,C) — ``torch.Tensor`` ou array.
         far_holes: Bool (H,W) das ilhas nunca baked.
         trusted: Bool (H,W) dos texels baked. ``None`` → usa ``rgb``.
-        position_map: (H,W,3) posição 3D por texel, ou ``None``.
+        position_map: (H,W,3) posição 3D por texel, ou (H,W,4) com canal 3 de
+            cobertura UV (>0.5 dentro de triângulo), ou ``None``.
         rgb: Cor de recurso quando não há texels trusted.
 
     Returns:
@@ -186,8 +202,9 @@ def fill_far_holes(
         pos_np = (
             position_map.detach().cpu().numpy() if isinstance(position_map, torch.Tensor) else np.asarray(position_map)
         )
-        if pos_np.shape[:2] == far_holes.shape and pos_np.shape[-1] == 3:
-            patch = _nearest_trusted_colors(tex_np, far_holes, trusted, pos_np)
+        if pos_np.shape[:2] == far_holes.shape and pos_np.shape[-1] in (3, 4):
+            valid_uv = (pos_np[..., 3] > 0.5) if pos_np.shape[-1] == 4 else None
+            patch = _nearest_trusted_colors(tex_np, far_holes, trusted, pos_np[..., :3], valid_uv_mask=valid_uv)
 
     tex_np[far_holes] = fill if patch is None else patch
 
@@ -311,11 +328,15 @@ def install_depth_bias(
 
 
 def _texel_position_map(render: Any, shape: tuple[int, int], logger: Any = None) -> Any:
-    """Mapa texel → posição 3D (``uv_feature_map``) ou ``None`` se indisponível."""
+    """Mapa texel → (x, y, z, uv_coverage) via ``uv_feature_map`` ou ``None``."""
     if render is None:
         return None
     try:
-        pos = render.uv_feature_map(render.vtx_pos[:, :3].contiguous())
+        import torch
+
+        vtx = render.vtx_pos[:, :3]
+        ones = torch.ones((vtx.shape[0], 1), dtype=vtx.dtype, device=vtx.device)
+        pos = render.uv_feature_map(torch.cat([vtx, ones], dim=-1).contiguous())
     except Exception as exc:  # renderer sem mesh carregada / rasterizer em falta
         if logger is not None:
             logger.warn(f"Fill mesh-aware indisponível ({exc}); a usar média dos texels pintados")

@@ -101,7 +101,7 @@ def upscale_image(
     h, w = img_tensor.shape[2], img_tensor.shape[3]
 
     if h <= tile_size and w <= tile_size:
-        with torch.no_grad():
+        with torch.inference_mode():
             output = model(img_tensor)
     else:
         output = _tiled_inference(model, img_tensor, tile_size, tile_pad, _SCALE, verbose)
@@ -135,51 +135,50 @@ def _tiled_inference(
     scale: int,
     verbose: bool,
 ) -> torch.Tensor:
-    """Process image in overlapping tiles to fit in VRAM."""
+    """Process image in overlapping input tiles writing disjoint output regions."""
     _, c, h, w = img.shape
     out_h, out_w = h * scale, w * scale
-    output = torch.zeros((1, c, out_h, out_w), dtype=img.dtype, device=img.device)
-    weights = torch.zeros_like(output)
+    output = torch.empty((1, c, out_h, out_w), dtype=img.dtype, device=img.device)
 
     tiles_x = math.ceil(w / tile_size)
     tiles_y = math.ceil(h / tile_size)
     total = tiles_x * tiles_y
 
-    for yi in range(tiles_y):
-        for xi in range(tiles_x):
-            idx = yi * tiles_x + xi + 1
-            if verbose and idx % 4 == 1:
-                _logger.dim(f"tile {idx}/{total}")
+    with torch.inference_mode():
+        for yi in range(tiles_y):
+            for xi in range(tiles_x):
+                idx = yi * tiles_x + xi + 1
+                if verbose and idx % 4 == 1:
+                    _logger.dim(f"tile {idx}/{total}")
 
-            x_start = xi * tile_size
-            y_start = yi * tile_size
-            x_end = min(x_start + tile_size, w)
-            y_end = min(y_start + tile_size, h)
+                x_start = xi * tile_size
+                y_start = yi * tile_size
+                x_end = min(x_start + tile_size, w)
+                y_end = min(y_start + tile_size, h)
 
-            x_start_pad = max(x_start - tile_pad, 0)
-            y_start_pad = max(y_start - tile_pad, 0)
-            x_end_pad = min(x_end + tile_pad, w)
-            y_end_pad = min(y_end + tile_pad, h)
+                x_start_pad = max(x_start - tile_pad, 0)
+                y_start_pad = max(y_start - tile_pad, 0)
+                x_end_pad = min(x_end + tile_pad, w)
+                y_end_pad = min(y_end + tile_pad, h)
 
-            tile_input = img[:, :, y_start_pad:y_end_pad, x_start_pad:x_end_pad]
-
-            with torch.no_grad():
+                tile_input = img[:, :, y_start_pad:y_end_pad, x_start_pad:x_end_pad]
                 tile_output = model(tile_input)
 
-            out_x_start = (x_start - x_start_pad) * scale
-            out_y_start = (y_start - y_start_pad) * scale
-            out_x_end = out_x_start + (x_end - x_start) * scale
-            out_y_end = out_y_start + (y_end - y_start) * scale
+                out_x_start = (x_start - x_start_pad) * scale
+                out_y_start = (y_start - y_start_pad) * scale
+                out_x_end = out_x_start + (x_end - x_start) * scale
+                out_y_end = out_y_start + (y_end - y_start) * scale
 
-            ox = x_start * scale
-            oy = y_start * scale
-            ow = (x_end - x_start) * scale
-            oh = (y_end - y_start) * scale
+                ox = x_start * scale
+                oy = y_start * scale
+                ow = (x_end - x_start) * scale
+                oh = (y_end - y_start) * scale
 
-            output[:, :, oy : oy + oh, ox : ox + ow] += tile_output[:, :, out_y_start:out_y_end, out_x_start:out_x_end]
-            weights[:, :, oy : oy + oh, ox : ox + ow] += 1.0
+                output[:, :, oy : oy + oh, ox : ox + ow] = tile_output[
+                    :, :, out_y_start:out_y_end, out_x_start:out_x_end
+                ]
 
-    return output / weights.clamp(min=1.0)
+    return output
 
 
 def _get_base_color_image(
@@ -212,21 +211,29 @@ def _get_base_color_image(
 
 
 def _bpy_image_to_pil(bpy_image: bpy.types.Image) -> Image.Image:
-    """Convert a bpy Image to a PIL Image (RGB)."""
+    """Convert a bpy Image to a PIL Image (RGB) without Python float list copies."""
     w, h = bpy_image.size
-    pixels = np.array(bpy_image.pixels[:]).reshape(h, w, 4)
-    return Image.fromarray((pixels[:, :, :3] * 255).astype(np.uint8))
+    if hasattr(bpy_image.pixels, "foreach_get"):
+        buf = np.empty(h * w * 4, dtype=np.float32)
+        bpy_image.pixels.foreach_get(buf)
+        pixels = buf.reshape(h, w, 4)
+    else:
+        pixels = np.array(bpy_image.pixels[:], dtype=np.float32).reshape(h, w, 4)
+    return Image.fromarray(np.clip(pixels[:, :, :3] * 255.0, 0, 255).astype(np.uint8))
 
 
 def _write_pil_to_bpy(pil_image: Image.Image, bpy_image: bpy.types.Image) -> None:
     """Write a PIL Image back into an existing bpy Image in-place."""
     new_w, new_h = pil_image.size
-    arr = np.array(pil_image.convert("RGB"), dtype=np.float32) / 255.0
+    arr = np.asarray(pil_image.convert("RGB"), dtype=np.float32) * (1.0 / 255.0)
     if bpy_image.size[0] != new_w or bpy_image.size[1] != new_h:
         bpy_image.scale(new_w, new_h)
     rgba = np.ones((new_h, new_w, 4), dtype=np.float32)
     rgba[:, :, :3] = arr
-    bpy_image.pixels = rgba.ravel().tolist()
+    if hasattr(bpy_image.pixels, "foreach_set"):
+        bpy_image.pixels.foreach_set(rgba.ravel())
+    else:
+        bpy_image.pixels = rgba.ravel().tolist()
     bpy_image.update()
     bpy_image.pack()
 
