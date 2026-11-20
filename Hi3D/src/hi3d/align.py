@@ -63,13 +63,16 @@ def restore_frame(mesh: trimesh.Trimesh, frame: Frame) -> trimesh.Trimesh:
 
 
 def load_mesh(path: str | Path) -> trimesh.Trimesh:
-    """Carrega GLB/OBJ/PLY como ``Trimesh`` (achata cenas, sem materiais)."""
+    """Carrega GLB/OBJ/PLY como ``Trimesh`` (aplica transforms de cena, sem materiais)."""
     loaded = trimesh.load(str(path), force="mesh", process=False)
     if isinstance(loaded, trimesh.Scene):
-        geoms = [g for g in loaded.geometry.values() if isinstance(g, trimesh.Trimesh)]
+        dumped = loaded.dump(concatenate=False)
+        geoms = [g for g in dumped if isinstance(g, trimesh.Trimesh) and len(g.faces) > 0]
+        if not geoms:
+            geoms = [g for g in loaded.geometry.values() if isinstance(g, trimesh.Trimesh) and len(g.faces) > 0]
         if not geoms:
             raise ValueError(f"sem geometria de triângulos em {path}")
-        loaded = trimesh.util.concatenate(geoms)
+        loaded = trimesh.util.concatenate(geoms) if len(geoms) > 1 else geoms[0]
     if not isinstance(loaded, trimesh.Trimesh):
         raise ValueError(f"{path} não é uma malha de triângulos")
     if len(loaded.vertices) == 0 or len(loaded.faces) == 0:
@@ -112,21 +115,60 @@ def strip_debris(
     (``sparc3d.sparcubes.postprocess.COMPONENT_FACE_RATIO``), mas a decimação
     posterior fragmenta lascas novas (medi: 214 ilhas de 1-7 faces num hero de
     32k). Aplicar o mesmo critério depois devolve o asset a um único corpo.
+
+    Usa ``scipy.sparse.csgraph.connected_components`` sobre as arestas de
+    vértices (O(F), sem instanciar centenas de submeshes intermediárias como
+    ``mesh.split``).
     """
-    if face_count(mesh) == 0:
+    n_faces = face_count(mesh)
+    if n_faces == 0:
         return mesh
-    parts = mesh.split(only_watertight=False)
-    if len(parts) <= 1:
+
+    try:
+        from scipy.sparse import csr_matrix
+        from scipy.sparse.csgraph import connected_components
+    except ImportError:
+        parts = mesh.split(only_watertight=False)
+        if len(parts) <= 1:
+            return mesh
+        counts = [face_count(p) for p in parts]
+        largest_idx = max(range(len(parts)), key=lambda i: counts[i])
+        threshold = max(int(min_faces), int(counts[largest_idx] * float(ratio)))
+        keep = [p for i, (p, n) in enumerate(zip(parts, counts, strict=True)) if n >= threshold or i == largest_idx]
+        if len(keep) == len(parts):
+            return mesh
+        return trimesh.util.concatenate(keep) if len(keep) > 1 else keep[0]
+
+    faces = np.asarray(mesh.faces, dtype=np.int64)
+    verts = np.asarray(mesh.vertices)
+    n_verts = len(verts)
+    if n_verts == 0:
         return mesh
-    counts = [face_count(p) for p in parts]
-    largest_idx = max(range(len(parts)), key=lambda i: counts[i])
-    threshold = max(int(min_faces), int(counts[largest_idx] * float(ratio)))
-    # O maior componente é sempre mantido: um ``min_faces`` acima do próprio
-    # maior corpo não pode esvaziar o asset.
-    keep = [p for i, (p, n) in enumerate(zip(parts, counts, strict=True)) if n >= threshold or i == largest_idx]
-    if len(keep) == len(parts):
+
+    row = faces.ravel()
+    col = np.roll(faces, -1, axis=1).ravel()
+    data = np.ones(row.shape[0], dtype=np.int8)
+    graph = csr_matrix((data, (row, col)), shape=(n_verts, n_verts))
+    _n_comp, v_labels = connected_components(graph, directed=False, return_labels=True)
+
+    f_labels = v_labels[faces[:, 0]]
+    comp_counts = np.bincount(f_labels)
+    nonzero_comps = np.flatnonzero(comp_counts)
+    if len(nonzero_comps) <= 1:
         return mesh
-    return trimesh.util.concatenate(keep) if len(keep) > 1 else keep[0]
+
+    largest_comp = int(nonzero_comps[np.argmax(comp_counts[nonzero_comps])])
+    threshold = max(int(min_faces), int(comp_counts[largest_comp] * float(ratio)))
+    keep_comps = (comp_counts >= threshold) | (np.arange(len(comp_counts)) == largest_comp)
+    keep_face_mask = keep_comps[f_labels]
+    if keep_face_mask.all():
+        return mesh
+
+    kept_faces = faces[keep_face_mask]
+    used_verts, inverse = np.unique(kept_faces, return_inverse=True)
+    new_verts = verts[used_verts]
+    new_faces = inverse.reshape(-1, 3)
+    return trimesh.Trimesh(vertices=new_verts, faces=new_faces, process=False)
 
 
 def snap_to_bounds(mesh: trimesh.Trimesh, reference: trimesh.Trimesh) -> trimesh.Trimesh:

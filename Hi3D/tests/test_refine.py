@@ -405,6 +405,13 @@ class TestResidencyContract:
         monkeypatch.setattr(refine, "apply_phase_staging", lambda p, **_k: True)
         assert refine._apply_residency(pipeline, offload=None, staging=None, fast_postprocess=False) == "staged"
 
+    def test_no_staging_skips_group_offload(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        pipeline = _ResidencyPipeline()
+        monkeypatch.setattr(refine, "apply_group_offload_staging", lambda _p, **_k: True)
+        mode = refine._apply_residency(pipeline, offload=None, staging=False, fast_postprocess=False)
+        assert mode == "sequential"
+        assert pipeline.mode_calls == ["offload:cuda"]
+
 
 def _fake_sparc3d_pipeline_module(monkeypatch: pytest.MonkeyPatch, budgets: tuple[int, ...]) -> Any:
     """Instala um ``sparc3d.pipelines.sparc3d_pipeline`` falso só com a ladder."""

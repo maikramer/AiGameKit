@@ -26,6 +26,7 @@ O que foi medido e rejeitado (não repetir sem bench novo):
 from __future__ import annotations
 
 import contextlib
+import inspect
 import logging
 import os
 from dataclasses import dataclass
@@ -88,6 +89,12 @@ def staging_supported(pipeline: Any) -> bool:
 
 
 def _move(module: Any, device: Any) -> None:
+    if getattr(device, "type", str(device)) == "cuda":
+        try:
+            module.to(device, non_blocking=True)
+            return
+        except TypeError:
+            pass
     module.to(device)
 
 
@@ -106,10 +113,12 @@ def _staged_call(
         module = module_of(*args, **kwargs)
         _move(module, device)
         try:
-            if autocast and getattr(device, "type", str(device)) == "cuda":
-                with torch.autocast("cuda", dtype=torch.float16):
-                    return fn(*args, **kwargs)
-            return fn(*args, **kwargs)
+            ctx = torch.inference_mode() if hasattr(torch, "inference_mode") else contextlib.nullcontext()
+            with ctx:
+                if autocast and getattr(device, "type", str(device)) == "cuda":
+                    with torch.autocast("cuda", dtype=torch.float16):
+                        return fn(*args, **kwargs)
+                return fn(*args, **kwargs)
         finally:
             _move(module, "cpu")
             with contextlib.suppress(RuntimeError):
@@ -165,23 +174,8 @@ def apply_phase_staging(
         autocast=True,
     )
 
-    conditioner = pipeline.conditioner
-
-    class _StagedConditioner:
-        def __call__(self, *args: Any, **kwargs: Any) -> Any:
-            _move(conditioner, target)
-            try:
-                return conditioner(*args, **kwargs)
-            finally:
-                _move(conditioner, "cpu")
-                with contextlib.suppress(RuntimeError):
-                    torch.cuda.empty_cache()
-
-        def __getattr__(self, name: str) -> Any:
-            return getattr(conditioner, name)
-
-    originals["conditioner"] = conditioner
-    pipeline.conditioner = _StagedConditioner()
+    originals["conditioner"] = pipeline.conditioner
+    pipeline.conditioner = _StagedConditioner(pipeline.conditioner, target)
 
     if fast_postprocess:
         _install_fast_postprocess(pipeline, originals)
@@ -227,7 +221,12 @@ def restore_phase_staging(pipeline: Any) -> bool:
             from sparc3d.sparcubes import postprocess as postprocess_mod
 
             postprocess_mod._filter_components = originals["_filter_components"]
-    for module in (getattr(pipeline, "conditioner", None), getattr(pipeline, "transformer_512", None)):
+    for module in (
+        getattr(pipeline, "conditioner", None),
+        getattr(pipeline, "transformer_512", None),
+        getattr(pipeline, "_transformer_1024", None),
+        getattr(pipeline, "vae", None),
+    ):
         if module is not None:
             with contextlib.suppress(Exception):
                 module.to("cpu")
@@ -255,17 +254,20 @@ def group_offload_supported(pipeline: Any) -> bool:
 
 
 def _apply_group_offloading(module: Any, target: Any) -> None:
-    """Leaf-level + CUDA streams: um leaf na GPU de cada vez, com prefetch."""
+    """Leaf-level + CUDA streams (+ non_blocking quando suportado): prefetch real."""
     import torch
     from diffusers.hooks import apply_group_offloading
 
-    apply_group_offloading(
-        module,
-        onload_device=target,
-        offload_device=torch.device("cpu"),
-        offload_type="leaf_level",
-        use_stream=True,
-    )
+    kwargs: dict[str, Any] = {
+        "onload_device": target,
+        "offload_device": torch.device("cpu"),
+        "offload_type": "leaf_level",
+        "use_stream": True,
+    }
+    with contextlib.suppress(TypeError, ValueError):
+        if "non_blocking" in inspect.signature(apply_group_offloading).parameters:
+            kwargs["non_blocking"] = True
+    apply_group_offloading(module, **kwargs)
 
 
 class _StagedConditioner:
@@ -278,11 +280,13 @@ class _StagedConditioner:
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         import torch
 
-        self._module.to(self._device)
+        _move(self._module, self._device)
         try:
-            return self._module(*args, **kwargs)
+            ctx = torch.inference_mode() if hasattr(torch, "inference_mode") else contextlib.nullcontext()
+            with ctx:
+                return self._module(*args, **kwargs)
         finally:
-            self._module.to("cpu")
+            _move(self._module, "cpu")
             with contextlib.suppress(RuntimeError):
                 torch.cuda.empty_cache()
 
@@ -290,8 +294,13 @@ class _StagedConditioner:
         return getattr(self._module, name)
 
 
-def apply_group_offload_staging(pipeline: Any, *, device: str = "cuda") -> bool:
-    """Group offload do transformer (diffusers hooks) + fase para conditioner/VAE.
+def apply_group_offload_staging(
+    pipeline: Any,
+    *,
+    device: str = "cuda",
+    fast_postprocess: bool = False,
+) -> bool:
+    """Group offload do transformer/VAE (diffusers hooks) + fase para conditioner.
 
     O ``Sparc3DTransformer`` (1.8B, ~3.6 GB em fp16) era movido inteiro para a
     GPU na residência por fase; com o spconv da malha grosa o pico passava dos
@@ -300,8 +309,7 @@ def apply_group_offload_staging(pipeline: Any, *, device: str = "cuda") -> bool:
     (streams sobrepõem a transferência), libertando VRAM para a ativação.
 
     O conditioner é chamado uma vez por refine e continua em fase (mover o
-    DINO+CLIP inteiro é mais barato que hooks leaf-level num modelo HF). O VAE
-    fica em fase porque group offload em autoencoders conflitua com tiling/decode.
+    DINO+CLIP inteiro é mais barato que hooks leaf-level num modelo HF).
     """
     if getattr(pipeline, "_hi3d_group_offload", False):
         return True
@@ -336,6 +344,8 @@ def apply_group_offload_staging(pipeline: Any, *, device: str = "cuda") -> bool:
         pipeline.vae._hi3d_group_offload_applied = True
         vae_grouped = True
     except Exception as exc:
+        _clear_module_hooks(pipeline.vae)
+        pipeline.vae._hi3d_group_offload_applied = False
         log.warning("Hi3D: group offload no VAE falhou (%s) — decode fica em fase", exc)
 
     originals: dict[str, Any] = {}
@@ -358,6 +368,7 @@ def apply_group_offload_staging(pipeline: Any, *, device: str = "cuda") -> bool:
                     _apply_group_offloading(transformer, target)
                     transformer._hi3d_group_offload_applied = True
                 except Exception as exc:
+                    _clear_module_hooks(transformer)
                     log.warning("Hi3D: group offload no transformer materializado falhou (%s)", exc)
             return original_sample(transformer, *args, **kwargs)
 
@@ -374,9 +385,14 @@ def apply_group_offload_staging(pipeline: Any, *, device: str = "cuda") -> bool:
         )
     originals["conditioner"] = pipeline.conditioner
     pipeline.conditioner = _StagedConditioner(pipeline.conditioner, target)
+    if fast_postprocess:
+        _install_fast_postprocess(pipeline, originals)
     pipeline._hi3d_group_offload = True
     pipeline._hi3d_group_originals = originals
-    log.info("Hi3D: group offload (leaf_level, streams) no transformer; conditioner/vae por fase")
+    if vae_grouped:
+        log.info("Hi3D: group offload (leaf_level, streams) no transformer+vae; conditioner por fase")
+    else:
+        log.info("Hi3D: group offload (leaf_level, streams) no transformer; conditioner/vae por fase")
     return True
 
 
@@ -420,6 +436,11 @@ def restore_group_offload(pipeline: Any) -> bool:
                 delattr(pipeline, attr)
         else:
             setattr(pipeline, attr, previous)
+    if "_filter_components" in originals:
+        with contextlib.suppress(ImportError, AttributeError):
+            from sparc3d.sparcubes import postprocess as postprocess_mod
+
+            postprocess_mod._filter_components = originals["_filter_components"]
     for module in (
         getattr(pipeline, "transformer_512", None),
         getattr(pipeline, "_transformer_1024", None),
@@ -427,8 +448,11 @@ def restore_group_offload(pipeline: Any) -> bool:
     ):
         if module is not None:
             _clear_module_hooks(module)
+            with contextlib.suppress(Exception):
+                module._hi3d_group_offload_applied = False
     for module in (
         getattr(pipeline, "transformer_512", None),
+        getattr(pipeline, "_transformer_1024", None),
         getattr(pipeline, "conditioner", None),
         getattr(pipeline, "vae", None),
     ):

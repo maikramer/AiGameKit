@@ -168,7 +168,18 @@ class TestApplyStaging:
         assert pipeline.conditioner.name == "cond"
 
     def test_fast_postprocess_patches_and_restores(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import sparc3d.sparcubes.postprocess as pp
+        import sys
+        from types import ModuleType
+
+        try:
+            import sparc3d.sparcubes.postprocess as pp
+        except ImportError:
+            pp = ModuleType("sparc3d.sparcubes.postprocess")
+            pp._filter_components = lambda mesh, _ratio: mesh  # type: ignore[attr-defined]
+            pp.validate_mesh = lambda mesh: mesh  # type: ignore[attr-defined]
+            for name in ("sparc3d", "sparc3d.sparcubes"):
+                monkeypatch.setitem(sys.modules, name, ModuleType(name))
+            monkeypatch.setitem(sys.modules, pp.__name__, pp)
 
         original = pp._filter_components
         pipeline = _FakePipeline()
@@ -311,3 +322,73 @@ class TestGroupOffload:
         assert set(cleared) >= {"t512", "vae"}
         assert pipeline._hi3d_group_offload is False
         assert restore_group_offload(pipeline) is False
+
+    def test_apply_group_offloading_passes_non_blocking_when_supported(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import sys
+        from types import ModuleType
+
+        seen: dict[str, Any] = {}
+
+        def _fake_apply(
+            module: Any,
+            *,
+            onload_device: Any,
+            offload_device: Any,
+            offload_type: str,
+            use_stream: bool,
+            non_blocking: bool = False,
+        ) -> None:
+            seen["non_blocking"] = non_blocking
+            seen["use_stream"] = use_stream
+            seen["offload_type"] = offload_type
+
+        hooks_mod = ModuleType("diffusers.hooks")
+        hooks_mod.apply_group_offloading = _fake_apply  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "diffusers", ModuleType("diffusers"))
+        monkeypatch.setitem(sys.modules, "diffusers.hooks", hooks_mod)
+        perf._apply_group_offloading(_FakeModule("t"), "cpu")
+        assert seen == {"non_blocking": True, "use_stream": True, "offload_type": "leaf_level"}
+
+    def test_group_offload_fast_postprocess_and_restore_resets_1024(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import sys
+        from types import ModuleType
+
+        _allow_group_offload(monkeypatch)
+        pp = ModuleType("sparc3d.sparcubes.postprocess")
+        original_filter = lambda mesh, _ratio: mesh  # noqa: E731
+        pp._filter_components = original_filter  # type: ignore[attr-defined]
+        pp.validate_mesh = lambda mesh: mesh  # type: ignore[attr-defined]
+        for name in ("sparc3d", "sparc3d.sparcubes"):
+            monkeypatch.setitem(sys.modules, name, ModuleType(name))
+        monkeypatch.setitem(sys.modules, pp.__name__, pp)
+
+        pipeline = _FakePipeline()
+        pipeline._transformer_1024 = _FakeModule("t1024")
+        pipeline._transformer_1024._hi3d_group_offload_applied = True
+        monkeypatch.setattr(perf, "_apply_group_offloading", lambda m, _t: None)
+        monkeypatch.setattr(perf, "_clear_module_hooks", lambda m: None)
+
+        assert apply_group_offload_staging(pipeline, device="cpu", fast_postprocess=True) is True
+        assert pp._filter_components is not original_filter
+
+        assert restore_group_offload(pipeline) is True
+        assert pp._filter_components is original_filter
+        assert pipeline.transformer_512._hi3d_group_offload_applied is False
+        assert pipeline._transformer_1024._hi3d_group_offload_applied is False
+        assert "cpu" in pipeline._transformer_1024.devices
+
+    def test_group_offload_vae_failure_clears_partial_hooks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _allow_group_offload(monkeypatch)
+        pipeline = _FakePipeline()
+        cleared: list[str] = []
+
+        def _apply(m: Any, _t: Any) -> None:
+            if m.name == "vae":
+                raise RuntimeError("vae hook fail")
+
+        monkeypatch.setattr(perf, "_apply_group_offloading", _apply)
+        monkeypatch.setattr(perf, "_clear_module_hooks", lambda m: cleared.append(m.name))
+        assert apply_group_offload_staging(pipeline, device="cpu") is True
+        assert cleared == ["vae"]
+        assert pipeline.vae._hi3d_group_offload_applied is False
+        assert "_decode_latents" in pipeline.__dict__

@@ -233,3 +233,14 @@ class TestSnapToBounds:
         before = mesh.vertices.copy()
         snap_to_bounds(mesh, ref)
         np.testing.assert_array_equal(mesh.vertices, before)
+
+    def test_load_mesh_applies_scene_graph_transform(self, tmp_path) -> None:
+        box = trimesh.creation.box(extents=(1.0, 2.0, 1.0))
+        tf = np.eye(4)
+        tf[:3, 3] = [10.0, 5.0, -3.0]
+        scene = trimesh.Scene()
+        scene.add_geometry(box, transform=tf)
+        path = tmp_path / "shifted.glb"
+        scene.export(str(path), file_type="glb")
+        loaded = load_mesh(path)
+        np.testing.assert_allclose(loaded.centroid, [10.0, 5.0, -3.0], atol=1e-4)

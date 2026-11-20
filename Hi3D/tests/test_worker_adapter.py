@@ -33,7 +33,9 @@ class TestAdapterBasics:
         assert isinstance(Adapter().vram_mib(), int)
 
     def test_unload_with_fake_model_is_safe(self) -> None:
-        Adapter().unload({"pipeline": object()})
+        model = {"pipeline": object()}
+        Adapter().unload(model)
+        assert model == {}
 
     def test_unload_with_none_is_safe(self) -> None:
         Adapter().unload(None)

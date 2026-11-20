@@ -34,11 +34,13 @@ class Adapter:
     name = "hi3d"
 
     def vram_mib(self) -> int:
-        """VRAM reservada pelo processo (0 quando o torch ainda não existe)."""
+        """VRAM reservada pelo processo (0 quando o torch/CUDA ainda não existe)."""
         try:
             import torch
 
             if not torch.cuda.is_available():
+                return 0
+            if hasattr(torch.cuda, "is_initialized") and not torch.cuda.is_initialized():
                 return 0
             return int(torch.cuda.memory_reserved() // (1024 * 1024))
         except Exception:
@@ -85,6 +87,10 @@ class Adapter:
             )
         except _Cancelled:
             raise RuntimeError("cancelado") from None
+        finally:
+            close_fn = getattr(image, "close", None)
+            if callable(close_fn):
+                close_fn()
 
         out, faces, raw_faces = finalize_mesh(
             result.mesh,
@@ -107,9 +113,8 @@ class Adapter:
     def unload(self, model: Any) -> None:
         """Liberta pesos e cache CUDA (idempotente)."""
         try:
-            pipeline = model.get("pipeline") if isinstance(model, dict) else None
-            if pipeline is not None:
-                del pipeline
+            if isinstance(model, dict):
+                model.clear()
             del model
         except Exception:
             pass
@@ -117,7 +122,7 @@ class Adapter:
         try:
             import torch
 
-            if torch.cuda.is_available():
+            if torch.cuda.is_available() and (not hasattr(torch.cuda, "is_initialized") or torch.cuda.is_initialized()):
                 torch.cuda.empty_cache()
         except Exception:
             pass

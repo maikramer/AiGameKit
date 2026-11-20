@@ -7,6 +7,7 @@ entre jobs.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import logging
 import os
@@ -204,11 +205,17 @@ def _apply_residency(
     # ``offload=True`` é o pedido explícito do offload sequencial do upstream
     # (usado como escape quando o group offload tem bugs num build): não pode
     # ser silenciosamente substituído por "group".
+    # ``staging=False`` (CLI ``--no-staging``) também pede o offload sequencial
+    # do upstream (~0.9 GiB de pico) — não deve cair em group offload.
     # Group offload (diffusers hooks) é o automático: o transformer (1.8B) fica
     # em CPU e só um leaf está na GPU, libertando VRAM para o spconv da malha
     # grossa. É o que permite refinar buildings que estouravam os 6 GiB na
     # residência por fase. HI3D_GROUP_OFFLOAD=0 volta ao comportamento antigo.
-    if offload is None and apply_group_offload_staging(pipeline, device="cuda"):
+    if (
+        offload is None
+        and staging is not False
+        and apply_group_offload_staging(pipeline, device="cuda", fast_postprocess=fast_postprocess)
+    ):
         return "group"
     if offload is True:
         pipeline.enable_sequential_cpu_offload("cuda")
@@ -262,13 +269,20 @@ def run_pipeline(
     pipeline.progress_callback = _progress_bridge(pipeline, emit, should_abort)
 
     def _invoke() -> Any:
-        return pipeline(
-            image,
-            coarse,
-            resolution=int(resolution),
-            num_inference_steps=int(num_inference_steps),
-            seed=seed,
-        )
+        ctx: Any = contextlib.nullcontext()
+        with contextlib.suppress(ImportError, AttributeError):
+            import torch
+
+            if hasattr(torch, "inference_mode"):
+                ctx = torch.inference_mode()
+        with ctx:
+            return pipeline(
+                image,
+                coarse,
+                resolution=int(resolution),
+                num_inference_steps=int(num_inference_steps),
+                seed=seed,
+            )
 
     try:
         return _invoke()
@@ -310,15 +324,18 @@ def finalize_mesh(
     Returns:
         ``(path, faces_finais, faces_do_refine_cru)``.
     """
-    if align_to_coarse:
-        frame = frame_of(mesh_vertices(coarse))
-        mesh = restore_frame(mesh, frame)
     raw_faces = face_count(mesh)
     if target_faces and target_faces > 0:
+        if align_to_coarse:
+            # Decimar no frame de mundo (erro medido em metros reais do asset).
+            frame = frame_of(mesh_vertices(coarse))
+            mesh = restore_frame(mesh, frame)
         mesh = decimate(mesh, int(target_faces))
         mesh = strip_debris(mesh)
     if align_to_coarse:
         # Depois do strip: lascas soltas não podem esticar a AABB.
+        # Quando target_faces == 0, snap_to_bounds aplica escala + centro XZ +
+        # base Y direto, evitando a cópia/transformação redundante de restore_frame.
         mesh = snap_to_bounds(mesh, coarse)
     return export_glb(mesh, output_path), face_count(mesh), raw_faces
 
@@ -407,7 +424,9 @@ def refine_mesh(
 def _open_image(image_path: str | Path, remove_background: bool) -> Any:
     from PIL import Image
 
-    image = Image.open(str(image_path))
+    with Image.open(str(image_path)) as opened:
+        opened.load()
+        image = opened.copy()
     if remove_background:
         from sparc3d.utils.image import remove_background as _rm_bg
 

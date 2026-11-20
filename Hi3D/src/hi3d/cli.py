@@ -179,6 +179,7 @@ def doctor_cmd(as_json: bool, verbose: bool) -> None:
     """Diagnóstico: stack, GPU, pesos e plano de execução."""
     from .capability import pick_gpu, plan_for_gpu, query_gpus
     from .paths import default_model_dir, is_complete, missing_artifacts, resolve_model_ref, weight_bytes
+    from .perf import _group_offload_enabled
     from .refine import stack_status
 
     console = _console(verbose)
@@ -190,7 +191,23 @@ def doctor_cmd(as_json: bool, verbose: bool) -> None:
     model_dir = default_model_dir()
     weights = weight_bytes(model_dir) if model_dir.is_dir() else 0
 
+    import importlib.util
     import platform
+
+    has_diffusers_hooks = False
+    try:
+        has_diffusers_hooks = importlib.util.find_spec("diffusers.hooks") is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        has_diffusers_hooks = False
+    planned_mode = (
+        "full"
+        if not plan.offload
+        else (
+            "group"
+            if (_group_offload_enabled() and has_diffusers_hooks)
+            else ("staged" if plan.staging else "sequential")
+        )
+    )
 
     payload: dict[str, Any] = {
         "ok": plan.available,
@@ -220,7 +237,7 @@ def doctor_cmd(as_json: bool, verbose: bool) -> None:
             "resolution": plan.resolution,
             "offload": plan.offload,
             "staging": plan.staging,
-            "mode": "staged" if plan.staging else ("sequential" if plan.offload else "full"),
+            "mode": planned_mode,
         },
     }
     if as_json:
@@ -241,10 +258,13 @@ def doctor_cmd(as_json: bool, verbose: bool) -> None:
         f"({'completo' if payload['model']['complete'] else 'incompleto'})"
     )
     if plan.available:
-        console.print(
-            f"  plano       [green]@{plan.resolution}³[/], "
-            + ("residência por fase" if plan.staging else ("offload sequencial" if plan.offload else "tudo na GPU"))
-        )
+        mode_labels = {
+            "group": "group offload (streams)",
+            "staged": "residência por fase",
+            "sequential": "offload sequencial",
+            "full": "tudo na GPU",
+        }
+        console.print(f"  plano       [green]@{plan.resolution}³[/], {mode_labels.get(planned_mode, planned_mode)}")
     else:
         console.print(f"  plano       [yellow]indisponível[/]: {plan.reason}")
 
