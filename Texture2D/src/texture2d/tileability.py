@@ -87,7 +87,8 @@ def _to_rgb_array(image: Path | Image.Image) -> numpy.ndarray:
         FileNotFoundError: Caminho não existe.
     """
     img = image if isinstance(image, Image.Image) else Image.open(image)
-    return numpy.asarray(img.convert("RGB"), dtype=numpy.uint8)
+    rgb = img if img.mode == "RGB" else img.convert("RGB")
+    return numpy.asarray(rgb, dtype=numpy.uint8)
 
 
 def _direction_score(seam_mse: float, adjacent_mse: float) -> float:
@@ -123,19 +124,31 @@ def score_tileability(image: Path | Image.Image) -> TileabilityReport:
 
     arr_f = arr.astype(numpy.float32)
 
-    # Costura horizontal: última coluna vs primeira coluna (vizinhança no wrap).
-    seam_h = float(numpy.mean((arr_f[:, -1, :] - arr_f[:, 0, :]) ** 2))
-    adj_h = float(numpy.mean((arr_f[:, 1:, :] - arr_f[:, :-1, :]) ** 2))
+    # Diferenças nas bordas reutilizadas para MSE e max_abs_edge_diff (evita recalcular).
+    dh = arr_f[:, -1, :] - arr_f[:, 0, :]
+    dv = arr_f[-1, :, :] - arr_f[0, :, :]
+    max_abs_edge_diff = int(max(float(numpy.abs(dh).max()), float(numpy.abs(dv).max())))
+    numpy.square(dh, out=dh)
+    numpy.square(dv, out=dv)
+    seam_h = float(dh.mean())
+    seam_v = float(dv.mean())
 
-    # Costura vertical: última linha vs primeira linha.
-    seam_v = float(numpy.mean((arr_f[-1, :, :] - arr_f[0, :, :]) ** 2))
-    adj_v = float(numpy.mean((arr_f[1:, :, :] - arr_f[:-1, :, :]) ** 2))
+    # Gradientes internos com buffer único reutilizável (~70% menos RAM temporária em 1024²).
+    buf = numpy.empty((height, width - 1, 3), dtype=numpy.float32)
+    numpy.subtract(arr_f[:, 1:, :], arr_f[:, :-1, :], out=buf)
+    numpy.square(buf, out=buf)
+    adj_h = float(buf.mean())
+
+    n_v = (height - 1) * width * 3
+    if n_v <= buf.size:
+        buf_v = buf.reshape(-1)[:n_v].reshape(height - 1, width, 3)
+    else:
+        buf_v = numpy.empty((height - 1, width, 3), dtype=numpy.float32)
+    numpy.subtract(arr_f[1:, :, :], arr_f[:-1, :, :], out=buf_v)
+    numpy.square(buf_v, out=buf_v)
+    adj_v = float(buf_v.mean())
 
     score = min(_direction_score(seam_h, adj_h), _direction_score(seam_v, adj_v))
-
-    h_diff = numpy.abs(arr_f[:, -1, :] - arr_f[:, 0, :])
-    v_diff = numpy.abs(arr_f[-1, :, :] - arr_f[0, :, :])
-    max_abs_edge_diff = int(max(float(h_diff.max()), float(v_diff.max())))
 
     return TileabilityReport(
         score=float(score),

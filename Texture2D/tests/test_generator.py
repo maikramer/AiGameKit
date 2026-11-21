@@ -676,3 +676,87 @@ class TestCliSeamlessFlags:
 
         r = CliRunner().invoke(cli, ["generate", "stone", "--seamless-mode", "banana"])
         assert r.exit_code != 0
+
+
+class TestSeamlessQualityAndPerfFixes:
+    """Regressões: heal_seam sem espelhamento, upscale circular, pad simétrico, cache CLIP e negative ≤77 tokens."""
+
+    def test_heal_seam_preserves_asymmetric_detail_without_butterfly_mirror(self):
+        import numpy
+
+        from texture2d.tileability import score_tileability
+
+        # Cria textura com padrões distintos à esquerda e à direita + degrau na costura.
+        rng = numpy.random.default_rng(7)
+        arr = rng.integers(80, 140, (128, 128, 3), dtype=numpy.uint8).astype(numpy.float32)
+        arr += numpy.linspace(-30.0, 30.0, 128, dtype=numpy.float32)[None, :, None]
+        img = Image.fromarray(numpy.clip(arr, 0, 255).astype(numpy.uint8), "RGB")
+
+        healed = heal_seam(img, band=16)
+        assert score_tileability(healed).score >= 0.99
+        h_arr = numpy.asarray(healed, dtype=numpy.float32)
+        # Sem efeito borboleta: correlação entre borda esquerda e direita espelhada fica baixa.
+        corr = float(numpy.corrcoef(h_arr[:, :16, :].ravel(), numpy.flip(h_arr[:, -16:, :], axis=1).ravel())[0, 1])
+        assert corr < 0.5
+
+    def test_circular_upscale_latents_preserves_periodicity(self):
+        for tw in (128, 96):
+            xs = torch.arange(64, dtype=torch.float32)
+            wave = torch.sin(2 * torch.pi * xs / 64.0 * 3.0)[None, None, None, :].expand(1, 4, 64, 64)
+            up = TextureGenerator._circular_upscale_latents(wave, tw, tw)
+            assert up.shape == (1, 4, tw, tw)
+            seam_step = float((up[0, 0, 0, 0] - up[0, 0, 0, -1]).abs())
+            interior_step = float((up[0, 0, 0, 1] - up[0, 0, 0, 0]).abs())
+            assert seam_step == pytest.approx(interior_step, rel=1e-4, abs=1e-5)
+
+    def test_tiled_circular_crops_symmetric_center(self):
+        gen = TextureGenerator(device="cpu")
+        pipe = _FakePipe()
+        # Registra a imagem devolvida pelo postprocess com um marcador único no centro (32..288).
+        crop_boxes: list[tuple[int, int, int, int]] = []
+        orig_post = pipe.image_processor.postprocess
+
+        class _SpyImg:
+            def __init__(self, inner: Image.Image) -> None:
+                self._inner = inner
+
+            def crop(self, box: tuple[int, int, int, int]) -> Image.Image:
+                crop_boxes.append(box)
+                return self._inner.crop(box)
+
+        pipe.image_processor.postprocess = lambda s, output_type="pil": [
+            _SpyImg(orig_post(s, output_type=output_type)[0])
+        ]
+        lat = torch.zeros(1, 4, 32, 32)
+        img, tiled = gen._decode_latents(pipe, lat, width=256, height=256, vae_tiling=True)
+        assert tiled is True
+        assert pipe.vae.decode_calls == [(40, 40)]
+        assert crop_boxes == [(32, 32, 288, 288)]
+        assert img.size == (256, 256)
+
+    def test_clip_embed_cache_avoids_second_encode_and_clears_on_unload(self):
+        gen = TextureGenerator(device="cpu")
+        calls = 0
+
+        class _PipeWithEncode:
+            def encode_prompt(self, **kwargs):
+                nonlocal calls
+                calls += 1
+                return torch.ones(1, 77, 16), torch.zeros(1, 77, 16)
+
+        pipe = _PipeWithEncode()
+        p1, n1 = gen._encode_prompt_cached(pipe, prompt="stone", negative_prompt="blur", do_cfg=True, device="cpu")
+        p2, n2 = gen._encode_prompt_cached(pipe, prompt="stone", negative_prompt="blur", do_cfg=True, device="cpu")
+        assert calls == 1
+        assert p1 is p2 and n1 is n2
+        gen.unload()
+        assert gen._cached_embeds is None
+
+    def test_ground_and_base_negative_compact_for_clip_77_budget(self):
+        from texture2d.generator import SD_BASE_NEGATIVE, merge_negative_prompt
+        from texture2d.prompt_enhancer import enhance_ground_negative
+
+        merged = merge_negative_prompt(SD_BASE_NEGATIVE, enhance_ground_negative(""))
+        assert "visible seam" in merged
+        assert "tiling artifacts" in merged
+        assert len(merged.split()) <= 60

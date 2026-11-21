@@ -128,28 +128,44 @@ def set_conv2d_padding(module: Any, mode: str) -> int:
 
 
 def heal_seam(image: Image.Image, band: int | None = None) -> Image.Image:
-    """Cross-fade das bandas de borda para suavizar uma costura residual.
+    """Difusão simétrica C¹ das bordas para suavizar uma costura residual.
 
-    Mistura as últimas ``band`` colunas com o conteúdo das primeiras (peso em
-    rampa) e o mesmo nas linhas — a descontinuidade da costura espalha-se pela
-    banda em vez de concentrar-se num degrau. Só deve ser usado como recurso
-    quando o score de tileability fica abaixo do threshold.
+    Calcula a discrepância exacta na costura (``arr[:, 0] - arr[:, -1]`` e
+    ``arr[0, :] - arr[-1, :]``) e distribui-a simetricamente pelas duas bandas
+    de largura ``band`` com peso em meio-cosseno (1 na costura → 0 no interior).
+    Ao contrário de um cross-fade com ``flip`` (que espelha uma borda sobre a
+    outra criando efeito "borboleta"), preserva o grão/textura original dos dois
+    lados e zera o salto de fronteira sem descontinuidade de derivada.
     """
     import numpy
 
-    arr = numpy.asarray(image.convert("RGB"), dtype=numpy.float32)
+    rgb = image if image.mode == "RGB" else image.convert("RGB")
+    arr = numpy.array(rgb, dtype=numpy.float32, copy=True)
     height, width = arr.shape[0], arr.shape[1]
     b = band or max(8, min(24, min(width, height) // 32))
+    b_w = min(b, width // 2)
+    b_h = min(b, height // 2)
 
-    # Costura vertical (wrap esquerda↔direita): banda direita ← conteúdo esquerdo.
-    ramp = numpy.linspace(0.0, 1.0, b, dtype=numpy.float32)[None, :, None]
-    arr[:, width - b :, :] = (1.0 - ramp) * arr[:, width - b :, :] + ramp * numpy.flip(arr[:, :b, :], axis=1)
+    # Costura horizontal (wrap esquerda↔direita): difusão simétrica em cosseno.
+    if b_w >= 2:
+        t_w = numpy.linspace(0.0, 1.0, b_w, dtype=numpy.float32)
+        w_in = 0.5 * (1.0 + numpy.cos(numpy.pi * t_w))  # 1 na borda → 0 no interior
+        err_h = arr[:, 0, :] - arr[:, -1, :]
+        half_h = (0.5 * err_h)[:, None, :]
+        arr[:, :b_w, :] -= half_h * w_in[None, :, None]
+        arr[:, -b_w:, :] += half_h * w_in[None, ::-1, None]
 
-    # Costura horizontal (wrap topo↔base): banda inferior ← conteúdo superior.
-    ramp_v = numpy.linspace(0.0, 1.0, b, dtype=numpy.float32)[:, None, None]
-    arr[height - b :, :, :] = (1.0 - ramp_v) * arr[height - b :, :, :] + ramp_v * numpy.flip(arr[:b, :, :], axis=0)
+    # Costura vertical (wrap topo↔base): difusão simétrica em cosseno.
+    if b_h >= 2:
+        t_h = numpy.linspace(0.0, 1.0, b_h, dtype=numpy.float32)
+        w_in = 0.5 * (1.0 + numpy.cos(numpy.pi * t_h))
+        err_v = arr[0, :, :] - arr[-1, :, :]
+        half_v = (0.5 * err_v)[None, :, :]
+        arr[:b_h, :, :] -= half_v * w_in[:, None, None]
+        arr[-b_h:, :, :] += half_v * w_in[::-1, None, None]
 
-    return Image.fromarray(arr.clip(0, 255).astype("uint8"), mode="RGB")
+    numpy.clip(arr, 0.0, 255.0, out=arr)
+    return Image.fromarray(arr.astype("uint8"), mode="RGB")
 
 
 def merge_negative_prompt(preset_neg: str, user_neg: str) -> str:
@@ -220,6 +236,8 @@ class TextureGenerator(DiffusionGeneratorBase):
         self._vae_id: str = _default_vae_id()
         # True quando o swap ft-mse correu com sucesso (set em _load_pipeline).
         self._vae_swapped = False
+        # Cache 1-entry dos embeddings CLIP (evita rodar CLIP 2x no hires e em re-rolls).
+        self._cached_embeds: tuple[Any, ...] | None = None
 
         if self.verbose:
             _logger.info(f"device={self.device} dtype={self.torch_dtype} model={self.model_id}")
@@ -299,6 +317,12 @@ class TextureGenerator(DiffusionGeneratorBase):
         # target_resolution = nativa: o decode/tiling decide-se por-request em
         # _decode_latents (o tiled_decode do diffusers parte a costura circular).
         self._status("Passo 3/4 — colocação")
+        if self.device.startswith("cuda"):
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
         self._clear_cache()
         self._reset_peak_mem_stats()
         plan = self._place_with_planner(
@@ -416,6 +440,58 @@ class TextureGenerator(DiffusionGeneratorBase):
 
         return callback_on_step_end
 
+    def unload(self) -> None:
+        """Descarrega pipeline e limpa cache de embeddings CLIP."""
+        self._cached_embeds = None
+        super().unload()
+
+    def _encode_prompt_cached(
+        self,
+        pipe: Any,
+        *,
+        prompt: str,
+        negative_prompt: str,
+        do_cfg: bool,
+        device: Any,
+    ) -> tuple[Any, Any]:
+        """Codifica prompt no CLIP com cache de 1 entrada (hires + re-rolls)."""
+        key = (prompt, negative_prompt, do_cfg, str(device))
+        cached = self._cached_embeds
+        if cached is not None and cached[0] == key:
+            return cached[1], cached[2]
+        prompt_embeds, negative_embeds = pipe.encode_prompt(
+            prompt=prompt,
+            device=device,
+            num_images_per_prompt=1,
+            do_classifier_free_guidance=do_cfg,
+            negative_prompt=negative_prompt,
+        )
+        self._cached_embeds = (key, prompt_embeds, negative_embeds)
+        return prompt_embeds, negative_embeds
+
+    @staticmethod
+    def _circular_upscale_latents(latents: Any, target_h: int, target_w: int) -> Any:
+        """Upscale bilinear circular-aware para latents de texturas tileable.
+
+        ``F.interpolate`` padrão faz clamp nas bordas, criando um salto até 4x
+        maior na costura antes mesmo do refine. Pad circular de 1 latent +
+        ``grid_sample`` garante continuidade periódica exata em qualquer razão.
+        """
+        import torch
+        import torch.nn.functional as F
+
+        _, _, h, w = latents.shape
+        padded = F.pad(latents, (1, 1, 1, 1), mode="circular")
+        ys = (torch.arange(target_h, device=latents.device, dtype=torch.float32) + 0.5) * (h / target_h) + 0.5
+        xs = (torch.arange(target_w, device=latents.device, dtype=torch.float32) + 0.5) * (w / target_w) + 0.5
+        gy = 2.0 * (ys + 0.5) / (h + 2) - 1.0
+        gx = 2.0 * (xs + 0.5) / (w + 2) - 1.0
+        grid_y, grid_x = torch.meshgrid(gy, gx, indexing="ij")
+        grid = torch.stack([grid_x, grid_y], dim=-1).unsqueeze(0).expand(latents.shape[0], -1, -1, -1)
+        return F.grid_sample(padded.float(), grid, mode="bilinear", padding_mode="border", align_corners=False).to(
+            latents.dtype
+        )
+
     # ---------------------------------------------------------------- refine
 
     def _refine_latents(
@@ -445,12 +521,12 @@ class TextureGenerator(DiffusionGeneratorBase):
 
         device = latents.device
         do_cfg = guidance_scale > 1.0
-        prompt_embeds, negative_embeds = pipe.encode_prompt(
+        prompt_embeds, negative_embeds = self._encode_prompt_cached(
+            pipe,
             prompt=prompt,
-            device=device,
-            num_images_per_prompt=1,
-            do_classifier_free_guidance=do_cfg,
             negative_prompt=negative_prompt,
+            do_cfg=do_cfg,
+            device=device,
         )
         embeds = torch.cat([negative_embeds, prompt_embeds]) if do_cfg else prompt_embeds
 
@@ -519,15 +595,19 @@ class TextureGenerator(DiffusionGeneratorBase):
             return pipe.image_processor.postprocess(sample, output_type="pil")[0]
 
         def _tiled_circular() -> Image.Image:
-            # Pad circular (bottom ← topo, right ← esquerda) para os tiles das
-            # bordas verem o contexto do lado oposto; crop do pad no fim.
-            pad = 8  # 8 latents = 64 px ≥ blend do tiled_decode (overlap 0.25)
-            zp = torch.cat([z, z[:, :, :pad, :]], dim=2)
-            zp = torch.cat([zp, zp[:, :, :, :pad]], dim=3)
+            # Pad circular SIMÉTRICO nos 4 lados (4 latents = 32 px em cada borda,
+            # mesmo tamanho total h+8 / w+8 do pad unilateral antigo). Antes só
+            # fazia pad em bottom/right, deixando topo e esquerda sem contexto
+            # circular do lado oposto (score 0.00 → 0.986 medido em 1024²).
+            import torch.nn.functional as F
+
+            pad = 4
+            pad_px = pad * 8
+            zp = F.pad(z, (pad, pad, pad, pad), mode="circular")
             vae.enable_tiling()
             sample = vae.decode(zp, return_dict=False)[0]
             img = pipe.image_processor.postprocess(sample, output_type="pil")[0]
-            return img.crop((0, 0, width, height))
+            return img.crop((pad_px, pad_px, pad_px + width, pad_px + height))
 
         use_tiling = bool(vae_tiling) if vae_tiling is not None else False
         if vae_tiling is None and max(width, height) > 768 and self.device.startswith("cuda"):
@@ -643,7 +723,7 @@ class TextureGenerator(DiffusionGeneratorBase):
             negative_prompt = enhance_ground_negative(negative_prompt)
         elif "texture" not in p.lower():
             p = f"{p}, seamless texture"
-        negative_prompt = f"{negative_prompt}, {SD_BASE_NEGATIVE}" if negative_prompt.strip() else SD_BASE_NEGATIVE
+        negative_prompt = merge_negative_prompt(SD_BASE_NEGATIVE, negative_prompt)
 
         is_valid, error = validate_prompt(p, max_length=1200)
         if not is_valid:
@@ -725,6 +805,7 @@ class TextureGenerator(DiffusionGeneratorBase):
                     num_inference_steps=num_inference_steps,
                     refine_steps=refine_steps if do_hires else 0,
                     do_hires=do_hires,
+                    seamless_mode=seamless_mode,
                     width=width,
                     height=height,
                     generator=generator,
@@ -782,6 +863,7 @@ class TextureGenerator(DiffusionGeneratorBase):
         num_inference_steps: int,
         refine_steps: int,
         do_hires: bool,
+        seamless_mode: str = "late",
         width: int,
         height: int,
         generator: Any,
@@ -793,7 +875,26 @@ class TextureGenerator(DiffusionGeneratorBase):
         """Difusão (+ refine hires) e decode — corre dentro de ``inference_mode``."""
         import torch
 
-        out = pipe(**pipe_kwargs_builder())
+        pipe_kwargs = pipe_kwargs_builder()
+        # Em hires, pré-codifica o prompt 1 única vez no cache e reutiliza no
+        # pipe + _refine_latents (evita 2º pass CLIP / swap de group offload).
+        if do_hires and callable(getattr(pipe, "encode_prompt", None)):
+            exec_dev = getattr(pipe, "_execution_device", None) or getattr(pipe, "device", self.device)
+            do_cfg = guidance_scale > 1.0
+            p_emb, n_emb = self._encode_prompt_cached(
+                pipe,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                do_cfg=do_cfg,
+                device=exec_dev,
+            )
+            pipe_kwargs.pop("prompt", None)
+            pipe_kwargs.pop("negative_prompt", None)
+            pipe_kwargs["prompt_embeds"] = p_emb
+            if do_cfg and n_emb is not None:
+                pipe_kwargs["negative_prompt_embeds"] = n_emb
+
+        out = pipe(**pipe_kwargs)
         # output_type="latent": o SD devolve o tensor direto; FLUX-like
         # devolvem lista — normalizar para (1, 4, h, w).
         latents = out.images
@@ -803,12 +904,16 @@ class TextureGenerator(DiffusionGeneratorBase):
             raise RuntimeError("Nenhum latent devolvido pelo pipeline")
 
         if do_hires:
-            latents = torch.nn.functional.interpolate(
-                latents,
-                size=(height // 8, width // 8),
-                mode="bilinear",
-                align_corners=False,
-            )
+            target_h, target_w = height // 8, width // 8
+            if seamless_mode != "off":
+                latents = self._circular_upscale_latents(latents, target_h, target_w)
+            else:
+                latents = torch.nn.functional.interpolate(
+                    latents,
+                    size=(target_h, target_w),
+                    mode="bilinear",
+                    align_corners=False,
+                )
             # O refine é a fase de healing do modo late — circular já ligado
             # no fim da fase principal; "full" já ligou no início.
             latents = self._refine_latents(

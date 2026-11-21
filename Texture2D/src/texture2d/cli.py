@@ -357,6 +357,8 @@ def generate_cmd(
                 **({"vae_tiling": vae_tiling} if vae_tiling is not None else {}),
                 **({"seam_heal": False} if not seam_heal else {}),
                 **({"hires": False} if no_hires else {}),
+                **({"torch_compile": True, "torch_compile_mode": torch_compile_mode} if torch_compile else {}),
+                **({"channels_last": True} if channels_last else {}),
             },
             t_start=t_start,
             noun="Textura",
@@ -625,6 +627,7 @@ def batch_cmd(
         steps = _qresolved.params["steps"]
     if not _user_set_guidance and "guidance" in _qresolved.params:
         guidance_scale = _qresolved.params["guidance"]
+    refine_steps = int(_qresolved.params.get("refine_steps", DEFAULT_REFINE_STEPS))
 
     # Hardware auto-detection (soft): SD1.5 cabe em qualquer GPU — sem offload/clamp.
     from .hardware import detect_hardware_profile, hw_auto_enabled
@@ -679,6 +682,9 @@ def batch_cmd(
                 "ground": ground,
                 "model_id": resolved_model,
                 "allow_group_offload": group_offload,
+                "refine_steps": refine_steps,
+                **({"torch_compile": True, "torch_compile_mode": torch_compile_mode} if torch_compile else {}),
+                **({"channels_last": True} if channels_last else {}),
             },
             t_start=t0,
             noun="Textura",
@@ -724,6 +730,7 @@ def batch_cmd(
                     height=height,
                     preset=preset if preset and preset != "None" else None,
                     ground=ground,
+                    refine_steps=refine_steps,
                 )
                 saved = save_image(
                     image,

@@ -62,25 +62,29 @@ class Adapter(WorkerAdapter):
         if error:
             return error
 
-        prompt = request.get("prompt", "")
+        def _opt(key: str, default: Any) -> Any:
+            val = request.get(key)
+            return default if val is None else val
+
+        prompt = str(_opt("prompt", ""))
         output = request.get("output")
         t_start = time.perf_counter()
         try:
             image, metadata = model.generate(
                 prompt=prompt,
-                negative_prompt=request.get("negative_prompt", ""),
-                guidance_scale=float(request.get("guidance", DEFAULT_GUIDANCE)),
+                negative_prompt=str(_opt("negative_prompt", "")),
+                guidance_scale=float(_opt("guidance", DEFAULT_GUIDANCE)),
                 num_inference_steps=steps,
                 seed=request.get("seed"),
-                width=int(request.get("width", DEFAULT_RESOLUTION)),
-                height=int(request.get("height", DEFAULT_RESOLUTION)),
+                width=int(_opt("width", DEFAULT_RESOLUTION)),
+                height=int(_opt("height", DEFAULT_RESOLUTION)),
                 preset=request.get("preset"),
-                ground=request.get("ground", "auto"),
-                seamless_mode=request.get("seamless_mode", "late"),
-                refine_steps=int(request.get("refine_steps", DEFAULT_REFINE_STEPS)),
+                ground=str(_opt("ground", "auto")),
+                seamless_mode=str(_opt("seamless_mode", "late")),
+                refine_steps=int(_opt("refine_steps", DEFAULT_REFINE_STEPS)),
                 vae_tiling=request.get("vae_tiling"),
-                seam_heal=bool(request.get("seam_heal", True)),
-                hires=bool(request.get("hires", True)),
+                seam_heal=bool(_opt("seam_heal", True)),
+                hires=bool(_opt("hires", True)),
                 should_abort=should_abort,
                 on_step=on_step,
             )

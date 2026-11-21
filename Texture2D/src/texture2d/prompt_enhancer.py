@@ -28,12 +28,12 @@ GROUND_SUFFIX = (
 
 # Negative prompt por defeito para ground textures — bloqueia os 3 problemas e os
 # artefactos de "vista aérea" típicos do SD1.5 (satélite/drone/paisagem).
+# Mantido compacto (~40 tokens) para caber junto com SD_BASE_NEGATIVE na janela
+# de 77 tokens do CLIP (antes excedia 107 tokens e truncava "visible seam, tiling artifacts").
 GROUND_DEFAULT_NEGATIVE = (
-    "aerial view, satellite image, drone shot, landscape, horizon, sky, trees, bushes, "
-    "buildings, roads, water, isometric view, oblique angle, perspective, tilted camera, "
-    "side view, macro photography, extreme close-up, individual grass blades leaning sideways, "
-    "3d render, depth of field, bokeh, strong directional shadows, deep relief, "
-    "ambient occlusion, high contrast, dramatic lighting"
+    "aerial view, satellite, horizon, sky, trees, isometric view, oblique angle, "
+    "perspective, side view, macro photography, extreme close-up, 3d render, "
+    "depth of field, strong directional shadows, deep relief, ambient occlusion"
 )
 
 # Orçamento brando em palavras (~55 ≈ 70-75 tokens CLIP). O SD1.5 trunca a 77

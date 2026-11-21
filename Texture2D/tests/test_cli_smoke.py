@@ -59,3 +59,42 @@ def test_skill_install_help() -> None:
     r = runner.invoke(cli, ["skill", "install", "--help"])
     assert r.exit_code == 0
     assert "--target" in r.output or "-t" in r.output
+
+
+def test_worker_serve_adapter_handles_none_optional_fields(tmp_path) -> None:
+    from PIL import Image
+
+    from texture2d.worker_serve_adapter import Adapter
+
+    out = tmp_path / "tex.png"
+    seen: dict[str, object] = {}
+
+    class _FakeModel:
+        def generate(self, **kwargs):
+            seen.update(kwargs)
+            return Image.new("RGB", (64, 64), (128, 128, 128)), {
+                "prompt_final": kwargs["prompt"],
+                "seed": 7,
+            }
+
+    resp = Adapter().generate(
+        _FakeModel(),
+        {
+            "prompt": "mossy cobblestone",
+            "output": str(out),
+            "width": None,
+            "height": None,
+            "guidance": None,
+            "negative_prompt": None,
+            "ground": None,
+            "seamless_mode": None,
+            "refine_steps": None,
+            "seam_heal": None,
+            "hires": None,
+        },
+    )
+    assert resp["status"] == "ok"
+    assert out.exists()
+    assert seen["width"] == 512 and seen["height"] == 512
+    assert seen["seamless_mode"] == "late"
+    assert seen["ground"] == "auto"
