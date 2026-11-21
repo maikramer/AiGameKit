@@ -715,3 +715,76 @@ class TestRemoteCleanupOnError:
 
         assert response is not None and response["error_code"] == "VRAMD_REMOTE_DOWN"
         assert closed == [True]
+
+    def test_wait_remote_timeout_preserves_staged_job(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Timeout de espera remoto não pode descartar o StagedJob de _PENDING."""
+        from aigamekit_shared import vramd_remote
+
+        responses = iter(
+            [
+                {"status": "error", "error_code": "WAIT_TIMEOUT", "error": "still running"},
+                {"status": "ok", "output": "/srv/remote/a/out.glb"},
+            ]
+        )
+        finalized: list[dict] = []
+
+        class Client:
+            def rpc(self, _request, *, timeout: float = 60.0) -> dict:
+                return next(responses)
+
+            def close(self) -> None:
+                pass
+
+        staged = vramd_remote.StagedJob(client=Client(), job="b" * 32, root="/srv/remote/b", request={})
+        vramd_remote.remember("job-timeout-1", staged)
+        monkeypatch.setattr(vramd_remote, "remote_enabled", lambda: True)
+        monkeypatch.setattr(vramd_remote, "finalize", lambda s, r: finalized.append(r) or r)
+
+        try:
+            first = ms.wait_vramd_job("job-timeout-1", timeout_sec=1.0, remote=True)
+            assert first is not None and first["error_code"] == "WAIT_TIMEOUT"
+            assert vramd_remote.peek("job-timeout-1") is staged
+            assert finalized == []
+
+            second = ms.wait_vramd_job("job-timeout-1", timeout_sec=1.0, remote=True)
+            assert second == {"status": "ok", "output": "/srv/remote/a/out.glb"}
+            assert vramd_remote.peek("job-timeout-1") is None
+            assert len(finalized) == 1
+        finally:
+            vramd_remote.take("job-timeout-1")
+
+
+class TestQueueAndRemoteParity:
+    def test_fetch_queue_snapshot_avoids_duplicate_liveness_probe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[dict] = []
+
+        def _send(req: dict, *, timeout_sec: float, auto_start: bool) -> dict:
+            calls.append({"req": req, "timeout_sec": timeout_sec, "auto_start": auto_start})
+            return {"status": "ok", "inflight": 0, "queue_depth": 0}
+
+        monkeypatch.setattr(ms, "is_vramd_running", lambda: pytest.fail("probe redundante"))
+        monkeypatch.setattr(ms, "send_to_vramd", _send)
+
+        snap = ms.fetch_vramd_queue_snapshot(timeout_sec=3.0)
+        assert snap == {"status": "ok", "inflight": 0, "queue_depth": 0}
+        assert calls == [{"req": {"cmd": "queue"}, "timeout_sec": 3.0, "auto_start": False}]
+
+    def test_poll_and_zero_remote_parity(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("VRAMD_REMOTE", raising=False)
+        monkeypatch.delenv("VRAMD_GPU_MODE", raising=False)
+
+        poll_err = ms.poll_vramd_job("j1", remote=True)
+        zero_err = ms.zero_vramd_vram(remote=True)
+        assert poll_err is not None and poll_err["error_code"] == "VRAMD_REMOTE_NOT_CONFIGURED"
+        assert zero_err is not None and zero_err["error_code"] == "VRAMD_REMOTE_NOT_CONFIGURED"
+
+        seen: list[tuple[str, bool]] = []
+
+        def _send(req: dict, *, timeout_sec: float, auto_start: bool, force_local: bool = False) -> dict:
+            seen.append((req["cmd"], force_local))
+            return {"status": "ok"}
+
+        monkeypatch.setattr(ms, "send_to_vramd", _send)
+        assert ms.poll_vramd_job("j1", remote=False) == {"status": "ok"}
+        assert ms.zero_vramd_vram(remote=False) == {"status": "ok"}
+        assert seen == [("poll", True), ("zero", True)]

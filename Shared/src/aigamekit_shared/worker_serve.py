@@ -23,6 +23,7 @@ Lifecycle do worker:
 from __future__ import annotations
 
 import contextlib
+import gc
 import io
 import queue
 import sys
@@ -341,9 +342,15 @@ def run_worker_loop(
             try:
                 result = adapter.generate(model, request)
             except Exception as exc:
-                _release_cuda_cache()
                 tb = traceback.format_exc()
+                err_msg = f"generate: {exc}"
                 code = ERR_VRAM_INSUFFICIENT if _is_vram_error(exc) else ERR_GENERATE_FAILED
+                # Quebrar o ciclo de referências do traceback antes de libertar
+                # o allocator CUDA: em OOM os frames da stack seguram tensores
+                # GPU e ``empty_cache()`` sozinho não os devolve ao driver.
+                exc.__traceback__ = None
+                gc.collect()
+                _release_cuda_cache()
                 # Cancelado cooperativamente: o vramd mandou abort (state["abort"])
                 # ou o adapter substituiu o hook e ele retorna True.
                 hook = request.get("_abort")
@@ -352,7 +359,7 @@ def run_worker_loop(
                     code = ERR_CANCELLED
                 emit_event(
                     EVENT_ERROR,
-                    error=f"generate: {exc}",
+                    error=err_msg,
                     error_code=code,
                     backend=backend_name,
                     traceback=tb,
@@ -458,13 +465,15 @@ def _probe_vram_mib() -> int | None:
             return int(v)
     except Exception:
         pass
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            return int(torch.cuda.memory_allocated() // (1024 * 1024))
-    except Exception:
-        pass
+    # Não importar torch só para sondar VRAM (carregaria PyTorch ~800ms em
+    # workers sem torch ou tocaria CUDA antes do load).
+    torch = sys.modules.get("torch")
+    if torch is not None:
+        try:
+            if torch.cuda.is_initialized():
+                return int(torch.cuda.memory_allocated() // (1024 * 1024))
+        except Exception:
+            pass
     return None
 
 

@@ -504,3 +504,11 @@ class TestReleaseCudaCache:
         monkeypatch.delitem(sys.modules, "torch", raising=False)
         worker_serve._release_cuda_cache()  # não importa torch
         assert "torch" not in sys.modules
+
+    def test_probe_vram_mib_does_not_import_torch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from aigamekit_shared import gpu, worker_serve
+
+        monkeypatch.delitem(sys.modules, "torch", raising=False)
+        monkeypatch.setattr(gpu, "process_vram_mib", lambda: None)
+        assert worker_serve._probe_vram_mib() is None
+        assert "torch" not in sys.modules

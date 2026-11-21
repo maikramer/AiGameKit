@@ -198,3 +198,41 @@ def test_vramd_pin_covers_shared_requirement() -> None:
     shared = _floor(root / "Shared" / "pyproject.toml")
     pinned = _floor(root / "Vramd" / "pyproject.toml")
     assert pinned >= shared, f"Vramd pin {pinned} < Shared requirement {shared}"
+
+
+def test_freeze_filters_all_monorepo_local_packages(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Todos os pacotes locais do monorepo (incl. texture2d/skymap2d/part3d/terrain3d) ficam fora do lock remoto."""
+    python = tmp_path / "Texture2D" / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    python.parent.mkdir(parents=True)
+    python.write_text("", encoding="utf-8")
+
+    class Result:
+        def __init__(self, stdout: str) -> None:
+            self.returncode = 0
+            self.stderr = ""
+            self.stdout = stdout
+
+    results = iter(
+        [
+            Result("3.13\n"),
+            Result(
+                "aigamekit-shared==0.1.0\n"
+                "texture2d==0.1.0\n"
+                "skymap2d==0.1.0\n"
+                "part3d==0.1.0\n"
+                "terrain3d==0.1.0\n"
+                "animator3d==0.1.0\n"
+                "motion3d==0.1.0\n"
+                "gameassets==0.1.0\n"
+                "aigamekit-lab==0.1.0\n"
+                "numpy==2.1.0\n"
+            ),
+        ]
+    )
+    monkeypatch.setattr(vramd_bundle.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(vramd_bundle.subprocess, "run", lambda *_a, **_k: next(results))
+
+    _version, lock = vramd_bundle._freeze("Texture2D", tmp_path)
+    for local in ("texture2d", "skymap2d", "part3d", "terrain3d", "animator3d", "motion3d", "gameassets", "aigamekit"):
+        assert local not in lock
+    assert "numpy==2.1.0" in lock

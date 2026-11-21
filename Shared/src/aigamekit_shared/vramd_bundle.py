@@ -147,7 +147,21 @@ def _session_block(entry: dict[str, Any], name: str) -> dict[str, Any] | None:
     return _DEFAULT_SESSIONS.get(name)
 
 
+_BACKEND_ENTRIES_CACHE: tuple[str, int, int, dict[str, dict[str, Any]]] | None = None
+_BACKEND_ENTRIES_LOCK = threading.Lock()
+
+
 def _backend_entries() -> dict[str, dict[str, Any]]:
+    global _BACKEND_ENTRIES_CACHE
+    try:
+        st = SPECS_PATH.stat()
+    except OSError as exc:
+        raise BundleError(f"não foi possível ler {SPECS_PATH.name}: {exc}") from exc
+    key = (str(SPECS_PATH), st.st_mtime_ns, st.st_size)
+    with _BACKEND_ENTRIES_LOCK:
+        cached = _BACKEND_ENTRIES_CACHE
+        if cached is not None and cached[:3] == key:
+            return cached[3]
     try:
         data = yaml.safe_load(SPECS_PATH.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError) as exc:
@@ -157,6 +171,8 @@ def _backend_entries() -> dict[str, dict[str, Any]]:
         if not isinstance(entry, dict) or not entry.get("name"):
             continue
         out[str(entry["name"])] = entry
+    with _BACKEND_ENTRIES_LOCK:
+        _BACKEND_ENTRIES_CACHE = (*key, out)
     return out
 
 
@@ -225,13 +241,13 @@ def _freeze(tool_dir: str, root: Path) -> tuple[str, str]:
     local_names = {
         "aigamekit-shared",
         "aigamekit_shared",
+        "aigamekit-lab",
         "shared",
-        "text2d",
-        "text3d",
-        "paint3d",
-        "text2sound",
-        "rigging3d",
-        "hi3d",
+        "gameassets",
+        "animator3d",
+        "motion3d",
+        "rocks3d",
+        *(_name.lower().replace("_", "-") for _name in _TOOL_DIRS),
     }
     for line in frozen.stdout.splitlines():
         text = line.strip()
@@ -275,30 +291,53 @@ def _freeze(tool_dir: str, root: Path) -> tuple[str, str]:
     return result
 
 
-def _iter_files(root: Path, rel_roots: Iterable[str]) -> Iterable[tuple[str, Path]]:
+def _scan_dir(base: Path) -> Iterable[tuple[Path, int]]:
+    """Percorre ``base`` em ordem determinística usando ``os.scandir``.
+
+    Usa ``d_type`` do ``DirEntry`` para ignorar symlinks e diretórios saltados
+    sem ``stat`` extra, fazendo um único ``lstat`` nos ficheiros elegíveis.
+    """
+    try:
+        entries = sorted(os.scandir(base), key=lambda e: e.name)
+    except OSError:
+        return
+    dirs: list[Path] = []
+    for entry in entries:
+        name = entry.name
+        try:
+            if entry.is_symlink():
+                continue
+            if entry.is_dir(follow_symlinks=False):
+                if name not in _SKIP_DIRS:
+                    dirs.append(Path(entry.path))
+                continue
+            if not entry.is_file(follow_symlinks=False):
+                continue
+            p = Path(entry.path)
+            if p.suffix in _SKIP_SUFFIXES:
+                continue
+            size = entry.stat(follow_symlinks=False).st_size
+        except OSError:
+            continue
+        if size > _MAX_FILE_BYTES:
+            continue
+        yield p, size
+    for sub in dirs:
+        yield from _scan_dir(sub)
+
+
+def _iter_files(root: Path, rel_roots: Iterable[str]) -> Iterable[tuple[str, Path, int]]:
     seen: set[str] = set()
     for rel_root in rel_roots:
         base = root / rel_root
         if not base.is_dir():
             raise BundleError(f"code_root não existe: {rel_root}")
-        for current, dirs, files in os.walk(base, followlinks=False):
-            dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS)
-            for name in sorted(files):
-                path = Path(current) / name
-                if not path.is_file() or path.is_symlink():
-                    continue
-                if path.suffix in _SKIP_SUFFIXES:
-                    continue
-                rel = path.relative_to(root).as_posix()
-                if rel in seen:
-                    continue
-                try:
-                    if path.stat().st_size > _MAX_FILE_BYTES:
-                        continue
-                except OSError:
-                    continue
-                seen.add(rel)
-                yield rel, path
+        for path, size in _scan_dir(base):
+            rel = path.relative_to(root).as_posix()
+            if rel in seen:
+                continue
+            seen.add(rel)
+            yield rel, path, size
 
 
 def build_bundle(backends: Iterable[str] | None = None) -> Bundle:
@@ -358,11 +397,7 @@ def build_bundle(backends: Iterable[str] | None = None) -> Bundle:
     files: list[dict[str, Any]] = []
     payloads: dict[str, bytes] = {}
     total_bytes = 0
-    for rel, path in _iter_files(root, sorted(set(code_roots))):
-        try:
-            size = path.stat().st_size
-        except OSError:
-            continue
+    for rel, path, size in _iter_files(root, sorted(set(code_roots))):
         total_bytes += size
         if total_bytes > _MAX_TOTAL_BYTES:
             # ``build_bundle`` materializa tudo em memória antes do blob; um
@@ -371,7 +406,11 @@ def build_bundle(backends: Iterable[str] | None = None) -> Bundle:
                 f"bundle excede {_MAX_TOTAL_BYTES // (1024 * 1024)} MiB de código "
                 f"(chegou a {total_bytes // (1024 * 1024)} MiB em {rel})"
             )
-        payloads[rel] = path.read_bytes()
+        try:
+            payloads[rel] = path.read_bytes()
+        except OSError:
+            total_bytes -= size
+            continue
     payloads.update(extras)
     if sum(len(data) for data in payloads.values()) > _MAX_TOTAL_BYTES:
         raise BundleError(f"bundle excede {_MAX_TOTAL_BYTES // (1024 * 1024)} MiB (código + locks)")
@@ -469,24 +508,24 @@ def ensure_session(backends: Iterable[str] | None = None) -> str | None:
         if not response.get("session"):
             raise BundleError(f"session-open sem id de sessão: {response}")
         previous = _SESSION
+        new_session = str(response["session"])
         _SESSION = {
-            "session": str(response["session"]),
+            "session": new_session,
             "bundle_sha": bundle.sha256,
             "backends": {item["name"] for item in bundle.backends},
         }
-        if previous is not None and previous["session"] != _SESSION["session"]:
-            # A sessão antiga (outro conjunto de backends) não deve segurar
-            # workers/VRAM; se estiver ocupada, fica para o TTL.
-            with _LOCK:
-                old_client = TransferClient()
-                try:
-                    old_client.connect()
-                    old_client.request({"cmd": "session-close", "session": previous["session"]})
-                except Exception:
-                    pass
-                finally:
-                    old_client.close()
-        return str(_SESSION["session"])
+    # Fechar a sessão antiga FORA de ``_LOCK``: o RPC de rede não deve
+    # bloquear outras threads a ler ``session_id()`` / ``ensure_session()``.
+    if previous is not None and previous["session"] != new_session:
+        old_client = TransferClient()
+        try:
+            old_client.connect()
+            old_client.request({"cmd": "session-close", "session": previous["session"]})
+        except Exception:
+            pass
+        finally:
+            old_client.close()
+    return new_session
 
 
 def session_id() -> str | None:

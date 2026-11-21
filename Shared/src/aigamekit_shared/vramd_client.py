@@ -104,7 +104,8 @@ def is_server_running(socket_path: Path | str | None = None) -> bool:
     spath = Path(socket_path) if socket_path else server_socket_path("text2d")
     ppath = _pid_path(spath)
 
-    if endpoint.read_endpoint(spath) is None:
+    info = endpoint.read_endpoint(spath)
+    if info is None:
         if not ppath.exists():
             return False
 
@@ -116,11 +117,13 @@ def is_server_running(socket_path: Path | str | None = None) -> bool:
         if not endpoint.pid_exists(pid):
             return False
 
-    if not spath.exists():
-        return False
+        if not spath.exists():
+            return False
 
     try:
-        sock, _token = endpoint.connect(spath, timeout=2.0)
+        sock, _token = (
+            endpoint.connect_remote(info, timeout=2.0) if info is not None else endpoint.connect(spath, timeout=2.0)
+        )
         sock.close()
         return True
     except OSError:
@@ -239,13 +242,14 @@ def send_request(
                 if total > MAX_RESPONSE_BYTES:
                     return None
                 chunks.append(chunk)
-            data = b"".join(chunks)
-            lines = data.decode("utf-8", errors="replace").strip().split("\n")
-            if not lines:
+            data = b"".join(chunks).rstrip(b"\r\n \t")
+            if not data:
                 return None
+            nl = data.rfind(b"\n")
+            last_line = data[nl + 1 :] if nl >= 0 else data
             try:
-                response = json.loads(lines[-1])
-            except json.JSONDecodeError:
+                response = json.loads(last_line)
+            except (json.JSONDecodeError, UnicodeDecodeError):
                 return None
             # Uma resposta que não é um objecto não tem o contrato (``.get``);
             # devolvê-la rebentava em todos os callers.
@@ -402,8 +406,8 @@ def is_vramd_running() -> bool:
 
 def fetch_vramd_queue_snapshot(*, timeout_sec: float = 5.0) -> dict[str, Any] | None:
     """Snapshot da fila vramd (``cmd=queue``), ou ``None`` se o vramd estiver down."""
-    if not is_vramd_running():
-        return None
+    # ``send_to_vramd(..., auto_start=False)`` já verifica liveness uma vez via
+    # ``ensure_vramd_running(auto_start=False)`` — evita duplicar o probe TCP/Unix.
     return send_to_vramd({"cmd": "queue"}, timeout_sec=timeout_sec, auto_start=False)
 
 
@@ -1030,8 +1034,28 @@ def submit_to_vramd(
     return send_request(req, VRAMD_SOCKET, timeout_sec=timeout_sec, force_local=True)
 
 
-def poll_vramd_job(job_id: str, *, timeout_sec: float = 5.0) -> dict[str, Any] | None:
+def poll_vramd_job(
+    job_id: str,
+    *,
+    timeout_sec: float = 5.0,
+    remote: bool | None = None,
+) -> dict[str, Any] | None:
     """Consulta o estado de um job vramd."""
+    from . import vramd_remote
+
+    resolved = _resolve_remote(remote)
+    if resolved is True and not vramd_remote.remote_enabled():
+        return _remote_error(
+            "VRAMD_REMOTE_NOT_CONFIGURED",
+            "poll pediu GPU remota mas VRAMD_REMOTE/VRAMD_REMOTE_TOKEN não estão definidos",
+        )
+    if resolved is not None:
+        return send_to_vramd(
+            {"cmd": "poll", "job_id": job_id},
+            timeout_sec=timeout_sec,
+            auto_start=False,
+            force_local=not resolved,
+        )
     return send_to_vramd({"cmd": "poll", "job_id": job_id}, timeout_sec=timeout_sec, auto_start=False)
 
 
@@ -1078,6 +1102,11 @@ def wait_vramd_job(
             except (vramd_remote.RemoteDown, vramd_remote.TransferError, OSError) as retry_exc:
                 return _remote_error("VRAMD_REMOTE_DOWN", str(retry_exc))
         if staged is None:
+            return response
+        # Se o ``wait`` apenas atingiu timeout no servidor, o job continua a
+        # correr: manter ``staged`` em ``_PENDING`` para um retry subsequente
+        # ainda poder baixar os outputs quando o job terminar.
+        if response.get("status") == "timeout" or response.get("error_code") in ("TIMEOUT", "WAIT_TIMEOUT"):
             return response
         # ``take`` pode devolver None se outra thread já levou o staging;
         # usar o ``staged`` do peek mantém o caminho idempotente.
@@ -1185,7 +1214,7 @@ def respawn_vramd_backend(
     return send_to_vramd(req, timeout_sec=timeout_sec, auto_start=False, force_local=not use_remote)
 
 
-def zero_vramd_vram(*, timeout_sec: float = 120.0) -> dict[str, Any] | None:
+def zero_vramd_vram(*, timeout_sec: float = 120.0, remote: bool | None = None) -> dict[str, Any] | None:
     """Zera TODA a VRAM segurada pelo vramd sem parar o supervisor.
 
     ``evict``/``release`` só largam os pesos — os workers subprocesso ficam
@@ -1196,12 +1225,29 @@ def zero_vramd_vram(*, timeout_sec: float = 120.0) -> dict[str, Any] | None:
 
     Args:
         timeout_sec: Timeout da chamada (shutdown gracioso de workers).
+        remote: ``True``/``False`` para fixar destino remoto/local; ``None``
+            segue a política global (``VRAMD_REMOTE``/``VRAMD_GPU_MODE``).
 
     Returns:
         Resposta do vramd (``{"status": "ok", "workers_killed": N,
         "free_mib_before/after": ..., "results": [...]}``) ou ``None`` se o
         vramd não estiver ativo (nada para zerar).
     """
+    from . import vramd_remote
+
+    resolved = _resolve_remote(remote)
+    if resolved is True and not vramd_remote.remote_enabled():
+        return _remote_error(
+            "VRAMD_REMOTE_NOT_CONFIGURED",
+            "zero pediu GPU remota mas VRAMD_REMOTE/VRAMD_REMOTE_TOKEN não estão definidos",
+        )
+    if resolved is not None:
+        return send_to_vramd(
+            {"cmd": "zero"},
+            timeout_sec=timeout_sec,
+            auto_start=False,
+            force_local=not resolved,
+        )
     return send_to_vramd({"cmd": "zero"}, timeout_sec=timeout_sec, auto_start=False)
 
 
@@ -1435,13 +1481,13 @@ class ModelServer:
             self._active_clients += 1
         try:
             conn.settimeout(300.0)
-            data = b""
-            while b"\n" not in data:
-                chunk = conn.recv(4096)
+            buf = bytearray()
+            while True:
+                chunk = conn.recv(65536)
                 if not chunk:
                     break
-                data += chunk
-                if len(data) > MAX_REQUEST_BYTES:
+                buf.extend(chunk)
+                if len(buf) > MAX_REQUEST_BYTES:
                     # Sem newline e acima do tecto: não continuar a acumular.
                     with contextlib.suppress(OSError):
                         conn.sendall(
@@ -1457,8 +1503,10 @@ class ModelServer:
                             ).encode()
                         )
                     return
+                if b"\n" in chunk:
+                    break
 
-            line = data.decode("utf-8", errors="replace").strip()
+            line = bytes(buf).decode("utf-8", errors="replace").strip()
             if not line:
                 return
 

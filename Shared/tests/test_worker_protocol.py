@@ -131,6 +131,35 @@ class TestEmitEvent:
         msg = json.loads(capsys.readouterr().out.strip())
         assert msg["event"] == EVENT_PONG
 
+    def test_emit_event_thread_safe(self) -> None:
+        import threading
+
+        from aigamekit_shared import worker_protocol
+
+        buf = io.StringIO()
+        prev = worker_protocol._jsonl_stream
+        worker_protocol.set_jsonl_stream(buf)
+        try:
+            threads = [
+                threading.Thread(
+                    target=lambda tid=t: [
+                        emit_event(worker_protocol.EVENT_PROGRESS, tid=tid, step=i) for i in range(40)
+                    ]
+                )
+                for t in range(8)
+            ]
+            for th in threads:
+                th.start()
+            for th in threads:
+                th.join()
+        finally:
+            worker_protocol.set_jsonl_stream(prev)
+
+        lines = buf.getvalue().splitlines()
+        assert len(lines) == 320
+        parsed = [json.loads(line) for line in lines]
+        assert all(item["event"] == worker_protocol.EVENT_PROGRESS for item in parsed)
+
 
 class TestReadCmd:
     def test_reads_from_provided_stream(self) -> None:

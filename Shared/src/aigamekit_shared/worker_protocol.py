@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from typing import Any, TextIO, TypedDict
 
 # ---------------------------------------------------------------------------
@@ -151,6 +152,9 @@ def read_event(stream: TextIO) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 
+_EMIT_LOCK = threading.Lock()
+
+
 def emit_event(event: str, **fields: Any) -> None:
     """Emitir um evento no stdout (uma linha JSON + flush obrigatório).
 
@@ -159,15 +163,19 @@ def emit_event(event: str, **fields: Any) -> None:
     :mod:`worker_serve`), escreve nesse stream limpo — separado dos prints/
     warnings da tool (que vão para stderr).
 
+    Thread-safe: callbacks de progresso podem disparar fora da main thread;
+    ``_EMIT_LOCK`` impede intercalação de linhas NDJSON.
+
     Args:
         event: Nome do evento (ex.: ``"ready"``, ``"progress"``, ``"done"``).
         **fields: Campos extra do evento (ex.: ``pct=0.5``, ``result={...}``).
     """
     msg = {"event": event, **fields}
     line = json.dumps(msg, ensure_ascii=False) + "\n"
-    stream = _jsonl_stream or sys.stdout
-    stream.write(line)
-    stream.flush()
+    with _EMIT_LOCK:
+        stream = _jsonl_stream or sys.stdout
+        stream.write(line)
+        stream.flush()
 
 
 # Stream JSONL dedicado para o modo worker — activado por

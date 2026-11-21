@@ -186,14 +186,15 @@ class RemoteClient:
                 continue
             finally:
                 sock.close()
-            data = b"".join(chunks)
-            lines = data.decode("utf-8", errors="replace").strip().split("\n")
-            if not lines or not lines[-1]:
+            data = b"".join(chunks).rstrip(b"\r\n \t")
+            if not data:
                 last_error = RemoteDown("resposta vazia do vramd remoto")
                 continue
+            nl = data.rfind(b"\n")
+            last_line = data[nl + 1 :] if nl >= 0 else data
             try:
-                response = json.loads(lines[-1])
-            except json.JSONDecodeError as exc:
+                response = json.loads(last_line)
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
                 last_error = exc
                 continue
             if not isinstance(response, dict):
@@ -266,7 +267,9 @@ class RemoteClient:
 
     def get_file(self, job: str, rel: str, local: Path, *, timeout: float = 120.0) -> int:
         local.parent.mkdir(parents=True, exist_ok=True)
-        temporary = local.with_name(local.name + ".part")
+        # Nome temporário único por (pid, thread) evita colisão em downloads
+        # concorrentes/retries no mesmo directório antes do os.replace atómico.
+        temporary = local.with_name(f".{local.name}.{os.getpid()}.{threading.get_ident()}.part")
         offset = 0
         size = 0
         try:
