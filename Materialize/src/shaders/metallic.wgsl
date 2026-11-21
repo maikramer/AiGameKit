@@ -15,13 +15,9 @@ var output_texture: texture_storage_2d<rgba8unorm, write>;
 @group(1) @binding(0)
 var<uniform> params: Params;
 
-fn sample_coord(coords: vec2<i32>) -> vec2<i32> {
-    let dims = textureDimensions(input_texture);
-    return wrap_or_clamp(coords, dims, params.seamless);
-}
-
-fn sample_rgb(coords: vec2<i32>) -> vec3<f32> {
-    return textureLoad(input_texture, sample_coord(coords), 0).rgb;
+fn sample_rgb(coords: vec2<i32>, dims: vec2<u32>) -> vec3<f32> {
+    let c = wrap_or_clamp(coords, dims, params.seamless);
+    return textureLoad(input_texture, c, 0).rgb;
 }
 
 fn rgb_to_hsl(rgb: vec3<f32>) -> vec3<f32> {
@@ -103,34 +99,33 @@ fn detect_metallic(rgb: vec3<f32>) -> f32 {
     return clamp(metallic, 0.0, 1.0);
 }
 
-fn local_luma_variance_3x3(center: vec2<i32>) -> f32 {
+fn local_luma_variance_3x3(center: vec2<i32>, dims: vec2<u32>) -> f32 {
     var sum = 0.0;
     var sum_sq = 0.0;
-    let n = 9.0;
+    let inv_n = 1.0 / 9.0;
     for (var dy = -1; dy <= 1; dy++) {
         for (var dx = -1; dx <= 1; dx++) {
-            let rgb = sample_rgb(center + vec2<i32>(dx, dy));
+            let rgb = sample_rgb(center + vec2<i32>(dx, dy), dims);
             let luma = luma709(rgb);
             sum += luma;
             sum_sq += luma * luma;
         }
     }
-    let mean = sum / n;
-    return clamp((sum_sq / n) - mean * mean, 0.0, 0.25);
+    let mean = sum * inv_n;
+    return clamp((sum_sq * inv_n) - mean * mean, 0.0, 0.25);
 }
 
-fn green_neighbourhood_fraction(center: vec2<i32>) -> f32 {
+fn green_neighbourhood_fraction(center: vec2<i32>, dims: vec2<u32>) -> f32 {
     var green = 0.0;
-    let n = 25.0;
     for (var dy = -4; dy <= 4; dy += 2) {
         for (var dx = -4; dx <= 4; dx += 2) {
-            let hsl = rgb_to_hsl(sample_rgb(center + vec2<i32>(dx, dy)));
+            let hsl = rgb_to_hsl(sample_rgb(center + vec2<i32>(dx, dy), dims));
             if (hsl.x > 0.17 && hsl.x < 0.46 && hsl.y > 0.15) {
                 green += 1.0;
             }
         }
     }
-    return green / n;
+    return green * 0.04;
 }
 
 @compute @workgroup_size(8, 8, 1)
@@ -151,15 +146,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     let raw = detect_metallic(color);
-
-    let variance = local_luma_variance_3x3(coords);
-    let variance_factor = params.metallic_local_variance_factor;
-    let damping = 1.0 - variance_factor * clamp(variance * 4.0, 0.0, 1.0);
-
-    let green_frac = green_neighbourhood_fraction(coords);
-    let vegetation_veto = 1.0 - smooth_step(0.30, 0.60, green_frac);
-
-    var metallic = raw * params.metallic_scale * damping * vegetation_veto;
+    var base_metallic = raw * params.metallic_scale;
 
     // Specular evidence: bright desaturated highlights are metal-only in
     // PBR (dielectrics cap specular at ~0.04). Prefer the intrinsic residual
@@ -172,10 +159,22 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             textureLoad(specular_texture, coords, 0).r,
             has_specular,
         );
-        metallic += params.metallic_specular_gain * spec * damping * vegetation_veto;
+        base_metallic += params.metallic_specular_gain * spec;
     }
 
-    metallic = clamp(metallic, 0.0, 1.0);
+    if (base_metallic <= 0.0) {
+        textureStore(output_texture, coords, vec4<f32>(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
+
+    let variance = local_luma_variance_3x3(coords, dims);
+    let variance_factor = params.metallic_local_variance_factor;
+    let damping = 1.0 - variance_factor * clamp(variance * 4.0, 0.0, 1.0);
+
+    let green_frac = green_neighbourhood_fraction(coords, dims);
+    let vegetation_veto = 1.0 - smooth_step(0.30, 0.60, green_frac);
+
+    let metallic = clamp(base_metallic * damping * vegetation_veto, 0.0, 1.0);
 
     textureStore(output_texture, coords, vec4<f32>(metallic, 0.0, 0.0, 1.0));
 }

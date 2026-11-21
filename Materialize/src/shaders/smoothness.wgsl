@@ -17,56 +17,50 @@ var output_texture: texture_storage_2d<rgba8unorm, write>;
 @group(1) @binding(0)
 var<uniform> params: Params;
 
-fn sample_coord(coords: vec2<i32>) -> vec2<i32> {
-    let dims = textureDimensions(diffuse_texture);
-    return wrap_or_clamp(coords, dims, params.seamless);
-}
-
-fn luma_at(coords: vec2<i32>) -> f32 {
-    let rgb = textureLoad(diffuse_texture, sample_coord(coords), 0).rgb;
+fn luma_at(coords: vec2<i32>, dims: vec2<u32>) -> f32 {
+    let c = wrap_or_clamp(coords, dims, params.seamless);
+    let rgb = textureLoad(diffuse_texture, c, 0).rgb;
     return luma709(rgb);
 }
 
-// 5×5 luminance variance, scaled to ~[0,1].
-fn local_contrast_5x5(center: vec2<i32>) -> f32 {
+// 5×5 luminance variance in a single pass (E[X²] − E[X]²), scaled to ~[0,1].
+fn local_contrast_5x5(center: vec2<i32>, dims: vec2<u32>) -> f32 {
     var sum = 0.0;
-    let n = 25.0;
+    var sum_sq = 0.0;
+    let inv_n = 0.04; // 1.0 / 25.0
     for (var dy = -2; dy <= 2; dy++) {
         for (var dx = -2; dx <= 2; dx++) {
-            sum += luma_at(center + vec2<i32>(dx, dy));
+            let luma = luma_at(center + vec2<i32>(dx, dy), dims);
+            sum += luma;
+            sum_sq += luma * luma;
         }
     }
-    let mean = sum / n;
-    var acc = 0.0;
-    for (var dy = -2; dy <= 2; dy++) {
-        for (var dx = -2; dx <= 2; dx++) {
-            let luma = luma_at(center + vec2<i32>(dx, dy));
-            acc += (luma - mean) * (luma - mean);
-        }
-    }
-    return clamp((acc / n) * 8.0, 0.0, 1.0);
+    let mean = sum * inv_n;
+    let var_l = max(sum_sq * inv_n - mean * mean, 0.0);
+    return clamp(var_l * 8.0, 0.0, 1.0);
 }
 
 // Decoded normal slope (nx, ny) at a texel.
-fn slope_at(coords: vec2<i32>) -> vec2<f32> {
-    let n = textureLoad(normal_texture, sample_coord(coords), 0);
+fn slope_at(coords: vec2<i32>, dims: vec2<u32>) -> vec2<f32> {
+    let c = wrap_or_clamp(coords, dims, params.seamless);
+    let n = textureLoad(normal_texture, c, 0);
     return vec2<f32>(n.r, n.g) * 2.0 - 1.0;
 }
 
 // Variance of the slope field over 5×5 — the microfacet dispersion proxy.
-fn slope_variance_5x5(center: vec2<i32>) -> f32 {
+fn slope_variance_5x5(center: vec2<i32>, dims: vec2<u32>) -> f32 {
     var sum = vec2<f32>(0.0);
     var sum_sq = 0.0;
-    let n = 25.0;
+    let inv_n = 0.04; // 1.0 / 25.0
     for (var dy = -2; dy <= 2; dy++) {
         for (var dx = -2; dx <= 2; dx++) {
-            let s = slope_at(center + vec2<i32>(dx, dy));
+            let s = slope_at(center + vec2<i32>(dx, dy), dims);
             sum += s;
             sum_sq += dot(s, s);
         }
     }
-    let mean = sum / n;
-    let var_total = (sum_sq / n) - dot(mean, mean);
+    let mean = sum * inv_n;
+    let var_total = (sum_sq * inv_n) - dot(mean, mean);
     return max(var_total, 0.0);
 }
 
@@ -80,7 +74,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     let metallic = textureLoad(metallic_texture, coords, 0).r;
-    let lc = local_contrast_5x5(coords);
+    let lc = local_contrast_5x5(coords, dims);
 
     var smoothness = clamp(
         params.smoothness_base
@@ -91,7 +85,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     );
 
     if (params.roughness_slope_mix > 0.0) {
-        let slope_std = sqrt(slope_variance_5x5(coords));
+        let slope_std = sqrt(slope_variance_5x5(coords, dims));
         let rough_proxy = clamp(params.roughness_slope_scale * slope_std, 0.0, 1.0);
         smoothness = clamp(smoothness - params.roughness_slope_mix * rough_proxy, 0.0, 1.0);
     }

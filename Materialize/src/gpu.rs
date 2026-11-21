@@ -91,8 +91,12 @@ impl GpuContext {
     }
 
     pub fn create_texture_from_image(&self, image: &image::DynamicImage) -> wgpu::Texture {
-        let rgba = image.to_rgba8();
-        self.create_texture_from_rgba(rgba.as_raw(), image.width(), image.height())
+        if let Some(rgba) = image.as_rgba8() {
+            self.create_texture_from_rgba(rgba.as_raw(), image.width(), image.height())
+        } else {
+            let rgba = image.to_rgba8();
+            self.create_texture_from_rgba(rgba.as_raw(), image.width(), image.height())
+        }
     }
 
     /// Upload raw rgba8 bytes as an Rgba8Unorm sampled texture.
@@ -204,11 +208,19 @@ impl GpuContext {
         })
     }
 
-    /// Generalised compute pipeline: N sampled input textures followed by M
-    /// write-only storage outputs at @group(0); a uniform at @group(1).
-    pub fn create_pipeline(
+    /// Compile a WGSL shader module once so multiple entry points can share it.
+    pub fn create_shader_module(&self, shader_code: &str) -> wgpu::ShaderModule {
+        self.device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("compute_shader"),
+                source: wgpu::ShaderSource::Wgsl(shader_code.into()),
+            })
+    }
+
+    /// Generalised compute pipeline using a precompiled [`wgpu::ShaderModule`].
+    pub fn create_pipeline_from_module(
         &self,
-        shader_code: &str,
+        shader: &wgpu::ShaderModule,
         entry_point: &str,
         input_formats: &[wgpu::TextureFormat],
         output_formats: &[wgpu::TextureFormat],
@@ -219,14 +231,8 @@ impl GpuContext {
             "compute pipeline needs at least one input and one output texture"
         );
 
-        let shader = self
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("compute_shader"),
-                source: wgpu::ShaderSource::Wgsl(shader_code.into()),
-            });
-
-        let mut entries: Vec<wgpu::BindGroupLayoutEntry> = Vec::new();
+        let mut entries: Vec<wgpu::BindGroupLayoutEntry> =
+            Vec::with_capacity(input_formats.len() + output_formats.len());
         for (i, format) in input_formats.iter().enumerate() {
             let filterable = matches!(
                 format,
@@ -276,7 +282,7 @@ impl GpuContext {
             .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some("compute_pipeline"),
                 layout: Some(&pipeline_layout),
-                module: &shader,
+                module: shader,
                 entry_point: Some(entry_point),
                 compilation_options: Default::default(),
                 cache: None,
@@ -288,12 +294,30 @@ impl GpuContext {
         })
     }
 
-    /// Pipeline variant with EXPLICIT binding slots (for shader modules whose
-    /// entry points share module-level declarations at fixed slots, e.g.
-    /// seamless.wgsl). `inputs`/`outputs` are (slot, format) pairs.
-    pub fn create_pipeline_slotted(
+    /// Generalised compute pipeline: N sampled input textures followed by M
+    /// write-only storage outputs at @group(0); a uniform at @group(1).
+    pub fn create_pipeline(
         &self,
         shader_code: &str,
+        entry_point: &str,
+        input_formats: &[wgpu::TextureFormat],
+        output_formats: &[wgpu::TextureFormat],
+        params_layout: &wgpu::BindGroupLayout,
+    ) -> Result<ComputePipeline> {
+        let shader = self.create_shader_module(shader_code);
+        self.create_pipeline_from_module(
+            &shader,
+            entry_point,
+            input_formats,
+            output_formats,
+            params_layout,
+        )
+    }
+
+    /// Slotted pipeline variant using a precompiled [`wgpu::ShaderModule`].
+    pub fn create_pipeline_slotted_from_module(
+        &self,
+        shader: &wgpu::ShaderModule,
         entry_point: &str,
         inputs: &[(u32, wgpu::TextureFormat)],
         outputs: &[(u32, wgpu::TextureFormat)],
@@ -303,13 +327,6 @@ impl GpuContext {
             !inputs.is_empty() && !outputs.is_empty(),
             "compute pipeline needs at least one input and one output texture"
         );
-
-        let shader = self
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("compute_shader"),
-                source: wgpu::ShaderSource::Wgsl(shader_code.into()),
-            });
 
         let entries: Vec<wgpu::BindGroupLayoutEntry> = inputs
             .iter()
@@ -365,7 +382,7 @@ impl GpuContext {
             .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some("compute_pipeline"),
                 layout: Some(&pipeline_layout),
-                module: &shader,
+                module: shader,
                 entry_point: Some(entry_point),
                 compilation_options: Default::default(),
                 cache: None,
@@ -375,6 +392,27 @@ impl GpuContext {
             pipeline,
             bind_group_layout,
         })
+    }
+
+    /// Pipeline variant with EXPLICIT binding slots (for shader modules whose
+    /// entry points share module-level declarations at fixed slots, e.g.
+    /// seamless.wgsl). `inputs`/`outputs` are (slot, format) pairs.
+    pub fn create_pipeline_slotted(
+        &self,
+        shader_code: &str,
+        entry_point: &str,
+        inputs: &[(u32, wgpu::TextureFormat)],
+        outputs: &[(u32, wgpu::TextureFormat)],
+        params_layout: &wgpu::BindGroupLayout,
+    ) -> Result<ComputePipeline> {
+        let shader = self.create_shader_module(shader_code);
+        self.create_pipeline_slotted_from_module(
+            &shader,
+            entry_point,
+            inputs,
+            outputs,
+            params_layout,
+        )
     }
 
     /// Bind group for a slotted pipeline: (slot, view) pairs, inputs and
@@ -451,85 +489,142 @@ impl GpuContext {
         self.queue.submit(Some(encoder.finish()));
     }
 
-    pub async fn read_texture(&self, texture: &wgpu::Texture) -> Result<Vec<u8>> {
-        let size = texture.size();
-        let format = texture.format();
-
-        let bytes_per_pixel = match format {
-            wgpu::TextureFormat::R32Float => 4,
-            wgpu::TextureFormat::R8Unorm => 1,
-            wgpu::TextureFormat::Rgba8Unorm => 4,
-            wgpu::TextureFormat::Rgba16Float => 8,
-            _ => anyhow::bail!("Unsupported texture format for readback"),
-        };
-
-        let unpadded_bytes_per_row = size.width * bytes_per_pixel;
-        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let padded_bytes_per_row = unpadded_bytes_per_row.div_ceil(align) * align;
-        let buffer_size = padded_bytes_per_row * size.height;
-
-        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("readback_buffer"),
-            size: buffer_size as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+    /// Execute a chain of dispatches AND copy all requested output textures to
+    /// staging buffers in ONE command encoder / ONE submit / ONE device poll.
+    pub async fn dispatch_and_read_textures(
+        &self,
+        steps: &[ChainStep<'_>],
+        textures: &[&wgpu::Texture],
+    ) -> Result<Vec<Vec<u8>>> {
+        struct StagingSlot {
+            buffer: wgpu::Buffer,
+            unpadded_bpr: u32,
+            padded_bpr: u32,
+            height: u32,
+        }
 
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("readback_encoder"),
+                label: Some("chain_and_readback_encoder"),
             });
 
-        encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
-                aspect: wgpu::TextureAspect::All,
-                texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            wgpu::TexelCopyBufferInfo {
-                buffer: &buffer,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded_bytes_per_row),
-                    rows_per_image: Some(size.height),
+        for step in steps {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("chain_pass"),
+                timestamp_writes: None,
+            });
+
+            compute_pass.set_pipeline(&step.pipeline.pipeline);
+            compute_pass.set_bind_group(0, Some(&step.bind_group0), &[]);
+            compute_pass.set_bind_group(1, Some(&step.bind_group1), &[]);
+            compute_pass.dispatch_workgroups(step.workgroups_x, step.workgroups_y, 1);
+        }
+
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let mut slots = Vec::with_capacity(textures.len());
+        for &texture in textures {
+            let size = texture.size();
+            let bytes_per_pixel = match texture.format() {
+                wgpu::TextureFormat::R32Float => 4,
+                wgpu::TextureFormat::R8Unorm => 1,
+                wgpu::TextureFormat::Rgba8Unorm => 4,
+                wgpu::TextureFormat::Rgba16Float => 8,
+                _ => anyhow::bail!("Unsupported texture format for readback"),
+            };
+            let unpadded_bpr = size.width * bytes_per_pixel;
+            let padded_bpr = unpadded_bpr.div_ceil(align) * align;
+            let buffer_size = (padded_bpr as u64) * (size.height as u64);
+
+            let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("readback_buffer"),
+                size: buffer_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+
+            encoder.copy_texture_to_buffer(
+                wgpu::TexelCopyTextureInfo {
+                    aspect: wgpu::TextureAspect::All,
+                    texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
                 },
-            },
-            size,
-        );
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &buffer,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(padded_bpr),
+                        rows_per_image: Some(size.height),
+                    },
+                },
+                size,
+            );
+
+            slots.push(StagingSlot {
+                buffer,
+                unpadded_bpr,
+                padded_bpr,
+                height: size.height,
+            });
+        }
 
         self.queue.submit(Some(encoder.finish()));
 
-        let buffer_slice = buffer.slice(..);
-        let (sender, receiver) = futures::channel::oneshot::channel();
+        if slots.is_empty() {
+            self.device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .context("GPU device poll failed after dispatch")?;
+            return Ok(Vec::new());
+        }
 
-        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
-        });
+        let mut receivers = Vec::with_capacity(slots.len());
+        for slot in &slots {
+            let (sender, receiver) = futures::channel::oneshot::channel();
+            slot.buffer
+                .slice(..)
+                .map_async(wgpu::MapMode::Read, move |result| {
+                    let _ = sender.send(result);
+                });
+            receivers.push(receiver);
+        }
 
-        // Propagar o erro do poll: com `.ok()` um device lost engolia-se e o
-        // receiver.await abaixo ficava pendurado para sempre (hang em vez do
-        // erro tipado do contrato de exit code).
         self.device
             .poll(wgpu::PollType::wait_indefinitely())
             .context("GPU device poll failed before readback")?;
-        receiver.await??;
 
-        let data = buffer_slice
-            .get_mapped_range()
-            .context("Failed to get mapped buffer range")?;
-
-        let mut unpadded_data = Vec::with_capacity((unpadded_bytes_per_row * size.height) as usize);
-        for row in 0..size.height {
-            let start = (row * padded_bytes_per_row) as usize;
-            let end = start + unpadded_bytes_per_row as usize;
-            unpadded_data.extend_from_slice(&data[start..end]);
+        for rx in receivers {
+            rx.await??;
         }
 
-        drop(data);
-        buffer.unmap();
+        let mut outputs = Vec::with_capacity(slots.len());
+        for slot in &slots {
+            let data = slot
+                .buffer
+                .slice(..)
+                .get_mapped_range()
+                .context("Failed to get mapped buffer range")?;
+            let out = if slot.padded_bpr == slot.unpadded_bpr {
+                data.to_vec()
+            } else {
+                let mut unpadded = Vec::with_capacity((slot.unpadded_bpr * slot.height) as usize);
+                for row in 0..slot.height {
+                    let start = (row * slot.padded_bpr) as usize;
+                    let end = start + slot.unpadded_bpr as usize;
+                    unpadded.extend_from_slice(&data[start..end]);
+                }
+                unpadded
+            };
+            drop(data);
+            slot.buffer.unmap();
+            outputs.push(out);
+        }
 
-        Ok(unpadded_data)
+        Ok(outputs)
+    }
+
+    pub async fn read_texture(&self, texture: &wgpu::Texture) -> Result<Vec<u8>> {
+        let mut results = self.dispatch_and_read_textures(&[], &[texture]).await?;
+        Ok(results.pop().unwrap_or_default())
     }
 }

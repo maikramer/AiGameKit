@@ -172,8 +172,13 @@ fn try_intrinsic(
 
 async fn run_single_mode(args: &Cli, input: &str) -> Result<()> {
     // Load + validate input first so a missing file yields exit code 2 even on
-    // machines without a GPU (CI runners).
-    let image = crate::io::load_image(input).map_err(MaterializeError::from)?;
+    // machines without a GPU (CI runners). Convert to RGBA8 once up front so
+    // analyze, gray-world, and GPU upload are zero-copy.
+    let image = DynamicImage::ImageRgba8(
+        crate::io::load_image(input)
+            .map_err(MaterializeError::from)?
+            .into_rgba8(),
+    );
     let (width, height) = (image.width(), image.height());
 
     let pipeline = Pipeline::new()
@@ -184,14 +189,25 @@ async fn run_single_mode(args: &Cli, input: &str) -> Result<()> {
         println!("GPU: {}", pipeline.adapter_info);
     }
 
-    let (resolved_preset, base_params) = resolve_base_params(args, &image);
-    let params = apply_overrides_and_auto_scale(args, &image, resolved_preset, base_params);
+    let needs_features = args.preset == Preset::Auto || args.make_seamless.is_some();
+    let features = needs_features.then(|| analyze(&image));
+
+    let (resolved_preset, base_params) =
+        resolve_base_params_with_features(args, &image, features.as_ref());
+    let params = apply_overrides_and_auto_scale_with_features(
+        args,
+        &image,
+        resolved_preset,
+        base_params,
+        features.as_ref(),
+    );
 
     if args.verbose {
         println!("Loaded: {} ({}x{})", input, width, height);
         println!("Preset: {}", resolved_preset);
         if args.preset == Preset::Auto {
-            println!("{}", format_report(&classify(&analyze(&image))));
+            let f = features.as_ref().expect("features computed for auto");
+            println!("{}", format_report(&classify(f)));
         }
     }
     if args.quality == 0 && args.verbose {
@@ -199,7 +215,8 @@ async fn run_single_mode(args: &Cli, input: &str) -> Result<()> {
     }
 
     let selection = build_selection(args)?;
-    let mut options = resolve_process_options(args, &image, &params);
+    let mut options =
+        resolve_process_options_with_features(args, &image, &params, features.as_ref());
     let mut params = params;
     let intrinsic_maps = if args.intrinsic {
         try_intrinsic(input, &args.output, args.verbose)
@@ -273,12 +290,19 @@ async fn run_batch_mode(args: &Cli, pipeline: &Pipeline) -> Result<()> {
         println!("Found {} image(s) to process", inputs.len());
     }
 
-    let result = run_batch(pipeline, inputs, args, &|img: &DynamicImage| {
-        // Classify EACH image (a dummy 1×1 always resolved to Default, so
-        // `-p auto` applied Default's params to every image in the batch —
-        // unlike single-file mode).
-        let (resolved_preset, base_params) = resolve_base_params(args, img);
-        apply_overrides_and_auto_scale(args, img, resolved_preset, base_params)
+    let result = run_batch(pipeline, inputs, args, &|img: &DynamicImage,
+                                                     features: Option<
+        &crate::analyze::ImageFeatures,
+    >| {
+        // Classify EACH image using its precomputed features (no redundant analyze).
+        let (resolved_preset, base_params) = resolve_base_params_with_features(args, img, features);
+        apply_overrides_and_auto_scale_with_features(
+            args,
+            img,
+            resolved_preset,
+            base_params,
+            features,
+        )
     })?;
 
     println!(
@@ -302,14 +326,22 @@ async fn run_batch_mode(args: &Cli, pipeline: &Pipeline) -> Result<()> {
 
 /// Build the per-image process options: make-seamless tier (skipped when the
 /// texture is already tileable — wrap sampling is enough) and intrinsic maps.
-fn resolve_process_options<'a>(
+fn resolve_process_options_with_features<'a>(
     args: &Cli,
     image: &'a DynamicImage,
     params: &PresetParams,
+    precomputed: Option<&crate::analyze::ImageFeatures>,
 ) -> crate::pipeline::ProcessOptions<'a> {
     let mut options = crate::pipeline::ProcessOptions::default();
     if let Some(tier) = args.make_seamless {
-        let features = analyze(image);
+        let owned;
+        let features = match precomputed {
+            Some(f) => f,
+            None => {
+                owned = analyze(image);
+                &owned
+            }
+        };
         if features.tile_mse < 0.005 {
             if args.verbose {
                 println!(
@@ -325,21 +357,38 @@ fn resolve_process_options<'a>(
     options
 }
 
-fn resolve_base_params(args: &Cli, image: &DynamicImage) -> (Preset, PresetParams) {
+fn resolve_base_params_with_features(
+    args: &Cli,
+    image: &DynamicImage,
+    precomputed: Option<&crate::analyze::ImageFeatures>,
+) -> (Preset, PresetParams) {
     if args.preset == Preset::Auto {
-        let features = analyze(image);
-        let class = classify(&features);
+        let owned;
+        let features = match precomputed {
+            Some(f) => f,
+            None => {
+                owned = analyze(image);
+                &owned
+            }
+        };
+        let class = classify(features);
         (class.preset, class.preset.params())
     } else {
         (args.preset, args.preset.params())
     }
 }
 
-fn apply_overrides_and_auto_scale(
+#[cfg(test)]
+fn resolve_base_params(args: &Cli, image: &DynamicImage) -> (Preset, PresetParams) {
+    resolve_base_params_with_features(args, image, None)
+}
+
+fn apply_overrides_and_auto_scale_with_features(
     args: &Cli,
     image: &DynamicImage,
     resolved_preset: Preset,
     mut params: PresetParams,
+    precomputed: Option<&crate::analyze::ImageFeatures>,
 ) -> PresetParams {
     let ov = args.overrides();
 
@@ -401,13 +450,18 @@ fn apply_overrides_and_auto_scale(
         params.gray_gain_b = gb;
     }
 
+    let mut owned_features: Option<crate::analyze::ImageFeatures> = None;
+
     // Auto-tile (F2.4): only override seamless if neither flag is set.
     if args.seamless {
         params.seamless = 1;
     } else if args.no_seamless {
         params.seamless = 0;
     } else if resolved_preset == Preset::Auto || args.preset == Preset::Auto {
-        let features = analyze(image);
+        let features = match precomputed {
+            Some(f) => f,
+            None => owned_features.get_or_insert_with(|| analyze(image)),
+        };
         if features.tile_mse < 0.005 {
             params.seamless = 1;
             if args.verbose {
@@ -421,12 +475,25 @@ fn apply_overrides_and_auto_scale(
 
     // Auto-scale (A2): tune contrast/strength by edge density when on auto.
     if args.preset == Preset::Auto {
-        let features = analyze(image);
+        let features = match precomputed {
+            Some(f) => f,
+            None => owned_features.get_or_insert_with(|| analyze(image)),
+        };
         params.height_contrast *= 0.7 + 0.6 * features.edge_density;
         params.normal_strength *= 1.2 - features.edge_density.min(1.0);
     }
 
     params
+}
+
+#[cfg(test)]
+fn apply_overrides_and_auto_scale(
+    args: &Cli,
+    image: &DynamicImage,
+    resolved_preset: Preset,
+    params: PresetParams,
+) -> PresetParams {
+    apply_overrides_and_auto_scale_with_features(args, image, resolved_preset, params, None)
 }
 
 fn print_timings(t: &crate::pipeline::StageTimings) {
@@ -454,39 +521,8 @@ fn save_maps(
     quality: u8,
     roughness: bool,
 ) -> Result<()> {
-    if let Some(p) = &paths.height_path {
-        let img = crate::io::height_to_image(width, height, &maps.height);
-        crate::io::save_image(&img, p, image_format, quality).map_err(MaterializeError::from)?;
-    }
-    if let Some(p) = &paths.normal_path {
-        let img = crate::io::normal_to_image(width, height, &maps.normal);
-        crate::io::save_image(&img, p, image_format, quality).map_err(MaterializeError::from)?;
-    }
-    if let Some(p) = &paths.metallic_path {
-        let img = crate::io::metallic_to_image(width, height, &maps.metallic);
-        crate::io::save_image(&img, p, image_format, quality).map_err(MaterializeError::from)?;
-    }
-    if let Some(p) = &paths.smoothness_path {
-        let img = if roughness {
-            crate::io::roughness_to_image(width, height, &maps.smoothness)
-        } else {
-            crate::io::smoothness_to_image(width, height, &maps.smoothness)
-        };
-        crate::io::save_image(&img, p, image_format, quality).map_err(MaterializeError::from)?;
-    }
-    if let Some(p) = &paths.edge_path {
-        let img = crate::io::edge_to_image(width, height, &maps.edge);
-        crate::io::save_image(&img, p, image_format, quality).map_err(MaterializeError::from)?;
-    }
-    if let Some(p) = &paths.ao_path {
-        let img = crate::io::ao_to_image(width, height, &maps.ao);
-        crate::io::save_image(&img, p, image_format, quality).map_err(MaterializeError::from)?;
-    }
-    if let Some(p) = &paths.curvature_path {
-        let img = crate::io::curvature_to_image(width, height, &maps.curvature);
-        crate::io::save_image(&img, p, image_format, quality).map_err(MaterializeError::from)?;
-    }
-    Ok(())
+    crate::io::save_maps_parallel(maps, width, height, paths, image_format, quality, roughness)
+        .map_err(MaterializeError::from)
 }
 
 fn print_presets_table() {

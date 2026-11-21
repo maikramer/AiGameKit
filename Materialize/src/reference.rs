@@ -267,7 +267,8 @@ pub fn gradient(
     (gx, gy)
 }
 
-/// Normal map from height — mirrors `normal.wgsl`. Returns rgba8.
+/// Normal map from height — mirrors `normal.wgsl` (with upstream separable
+/// pre-filter when `prefilter_sigma >= 0.05`). Returns rgba8.
 #[allow(clippy::too_many_arguments)]
 pub fn normal_map(
     height: &[f32],
@@ -280,10 +281,18 @@ pub fn normal_map(
     prefilter_sigma: f32,
     seamless: bool,
 ) -> Vec<u8> {
+    let filtered;
+    let src = if prefilter_sigma >= 0.05 {
+        let radius = (prefilter_sigma * 3.0).ceil().max(1.0) as i32;
+        filtered = separable_blur(height, w, h, radius, prefilter_sigma, 1, seamless);
+        filtered.as_slice()
+    } else {
+        height
+    };
     let mut out = vec![0u8; w * h * 4];
     for y in 0..h as i32 {
         for x in 0..w as i32 {
-            let (gx, gy) = gradient(height, w, h, x, y, operator, prefilter_sigma, seamless);
+            let (gx, gy) = gradient(src, w, h, x, y, operator, 0.0, seamless);
             let nx = -gx * strength;
             let mut ny = -gy * strength;
             if flip_y {
@@ -303,7 +312,8 @@ pub fn normal_map(
     out
 }
 
-/// Multi-scale LoG curvature — mirrors `curvature.wgsl`. Returns grayscale u8.
+/// Multi-scale LoG curvature — mirrors separable `blur.wgsl` + `curvature.wgsl`.
+/// Returns grayscale u8.
 #[allow(clippy::too_many_arguments)]
 pub fn curvature_map(
     height: &[f32],
@@ -314,30 +324,41 @@ pub fn curvature_map(
     seamless: bool,
 ) -> Vec<u8> {
     let levels = levels.clamp(1, 3);
+    let blur_at = |sigma: f32| {
+        let radius = (sigma * 3.0).ceil().max(1.0) as i32;
+        separable_blur(height, w, h, radius, sigma, 1, seamless)
+    };
+    let b1 = blur_at(1.0);
+    let b2 = if levels > 1 { Some(blur_at(2.0)) } else { None };
+    let b3 = if levels > 2 { Some(blur_at(4.0)) } else { None };
+
+    let lap = |buf: &[f32], x: i32, y: i32| -> f32 {
+        let c = buf[y as usize * w + x as usize];
+        sample_at(buf, w, h, x - 1, y, seamless)
+            + sample_at(buf, w, h, x + 1, y, seamless)
+            + sample_at(buf, w, h, x, y - 1, seamless)
+            + sample_at(buf, w, h, x, y + 1, seamless)
+            - 4.0 * c
+    };
+
     let mut out = vec![0u8; w * h];
     for y in 0..h as i32 {
         for x in 0..w as i32 {
-            let lap_at = |sigma: f32| -> f32 {
-                let s =
-                    |dx: i32, dy: i32| smoothed_at(height, w, h, x + dx, y + dy, sigma, seamless);
-                let c = s(0, 0);
-                s(-1, 0) + s(1, 0) + s(0, -1) + s(0, 1) - 4.0 * c
-            };
-            let mut best = lap_at(1.0);
-            if levels > 1 {
-                let l2 = lap_at(2.0);
+            let mut best = lap(&b1, x, y);
+            if let Some(ref buf) = b2 {
+                let l2 = lap(buf, x, y);
                 if l2.abs() > best.abs() {
                     best = l2;
                 }
             }
-            if levels > 2 {
-                let l3 = lap_at(4.0);
+            if let Some(ref buf) = b3 {
+                let l3 = lap(buf, x, y);
                 if l3.abs() > best.abs() {
                     best = l3;
                 }
             }
             let v = (best * gain + 0.5).clamp(0.0, 1.0);
-            out[y as usize * w + x as usize] = (v * 255.0) as u8;
+            out[y as usize * w + x as usize] = (v * 255.0).round() as u8;
         }
     }
     out

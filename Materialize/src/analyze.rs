@@ -73,7 +73,15 @@ fn luma_at(view: &image::ImageBuffer<Rgba<u8>, Vec<u8>>, x: u32, y: u32) -> f32 
 /// (F5): each channel is scaled so its mean matches the luminance mean.
 /// Returns (r, g, b) gains, all 1.0 on a neutral image.
 pub fn gray_world_gains(image: &image::DynamicImage) -> (f32, f32, f32) {
-    let rgba = image.to_rgba8();
+    if let Some(rgba) = image.as_rgba8() {
+        gray_world_gains_rgba(rgba)
+    } else {
+        let rgba = image.to_rgba8();
+        gray_world_gains_rgba(&rgba)
+    }
+}
+
+fn gray_world_gains_rgba(rgba: &image::RgbaImage) -> (f32, f32, f32) {
     let (w, h) = rgba.dimensions();
     let step_x = ((w as f32).sqrt().max(2.0)).round() as u32;
     let step_y = ((h as f32).sqrt().max(2.0)).round() as u32;
@@ -118,16 +126,20 @@ pub fn gray_world_gains(image: &image::DynamicImage) -> (f32, f32, f32) {
 }
 
 pub fn analyze(image: &image::DynamicImage) -> ImageFeatures {
-    let rgba = image.to_rgba8();
+    if let Some(rgba) = image.as_rgba8() {
+        analyze_rgba(rgba)
+    } else {
+        let rgba = image.to_rgba8();
+        analyze_rgba(&rgba)
+    }
+}
+
+fn analyze_rgba(rgba: &image::RgbaImage) -> ImageFeatures {
     let (w, h) = rgba.dimensions();
-    let total = (w as u64) * (h as u64);
 
     // === Stratified interior sampling ===
     let step_x = ((w as f32).sqrt().max(2.0)).round() as u32;
     let step_y = ((h as f32).sqrt().max(2.0)).round() as u32;
-    let mut lumas = Vec::with_capacity(INTERIOR_SAMPLES as usize);
-    let mut sats = Vec::with_capacity(INTERIOR_SAMPLES as usize);
-    let mut hues: Vec<f32> = Vec::with_capacity(INTERIOR_SAMPLES as usize);
     let mut hue_hist = [0u32; HIST_BINS];
     let mut alpha_transparent = 0u32;
     let mut alpha_total = 0u32;
@@ -153,10 +165,7 @@ pub fn analyze(image: &image::DynamicImage) -> ImageFeatures {
             ];
             let l = luma(p);
             let [hue, sat, _l2] = rgb_to_hsl(rgb_f);
-            lumas.push(l);
-            sats.push(sat);
             if sat > 0.1 {
-                hues.push(hue);
                 let bin = ((hue * HIST_BINS as f32) as usize) % HIST_BINS;
                 hue_hist[bin] += 1;
             }
@@ -167,7 +176,7 @@ pub fn analyze(image: &image::DynamicImage) -> ImageFeatures {
             visited += 1;
 
             alpha_total += 1;
-            if (p[3] as f32 / 255.0) < 1.0 {
+            if p[3] < 255 {
                 alpha_transparent += 1;
             }
             x += step_x;
@@ -191,7 +200,7 @@ pub fn analyze(image: &image::DynamicImage) -> ImageFeatures {
         0.0
     };
 
-    // === Sobel edge density on a sub-sample (5×5 grid spacing) ===
+    // === Sobel edge density on a sub-sample (4×4 grid spacing) ===
     let mut edge_count = 0u32;
     let mut edge_total = 0u32;
     let edge_step = 4u32;
@@ -203,18 +212,17 @@ pub fn analyze(image: &image::DynamicImage) -> ImageFeatures {
     while ey < ey_end {
         let mut ex = ex_start;
         while ex < ex_end {
-            let l00 = luma_at(&rgba, ex - 1, ey - 1);
-            let l10 = luma_at(&rgba, ex, ey - 1);
-            let l20 = luma_at(&rgba, ex + 1, ey - 1);
-            let l01 = luma_at(&rgba, ex - 1, ey);
-            let l21 = luma_at(&rgba, ex + 1, ey);
-            let l02 = luma_at(&rgba, ex - 1, ey + 1);
-            let l12 = luma_at(&rgba, ex, ey + 1);
-            let l22 = luma_at(&rgba, ex + 1, ey + 1);
+            let l00 = luma_at(rgba, ex - 1, ey - 1);
+            let l10 = luma_at(rgba, ex, ey - 1);
+            let l20 = luma_at(rgba, ex + 1, ey - 1);
+            let l01 = luma_at(rgba, ex - 1, ey);
+            let l21 = luma_at(rgba, ex + 1, ey);
+            let l02 = luma_at(rgba, ex - 1, ey + 1);
+            let l12 = luma_at(rgba, ex, ey + 1);
+            let l22 = luma_at(rgba, ex + 1, ey + 1);
             let gx = -l00 + l20 - 2.0 * l01 + 2.0 * l21 - l02 + l22;
             let gy = -l00 - 2.0 * l10 - l20 + l02 + 2.0 * l12 + l22;
-            let mag = (gx * gx + gy * gy).sqrt();
-            if mag > 0.15 {
+            if gx * gx + gy * gy > 0.15 * 0.15 {
                 edge_count += 1;
             }
             edge_total += 1;
@@ -228,7 +236,7 @@ pub fn analyze(image: &image::DynamicImage) -> ImageFeatures {
         0.0
     };
 
-    // === Local contrast variance (5×5 windows, subsampled) ===
+    // === Local contrast variance (5×5 windows, single-pass E[X²]-E[X]²) ===
     let mut var_sum = 0.0f64;
     let mut var_count = 0u32;
     let lc_step = 8u32;
@@ -237,26 +245,18 @@ pub fn analyze(image: &image::DynamicImage) -> ImageFeatures {
         let mut lcx = lc_step;
         while lcx + lc_step < w {
             let mut sum = 0.0f64;
-            let mut n = 0.0f64;
+            let mut sum_sq = 0.0f64;
             for dy in -2i32..=2 {
+                let yy = (lcy as i32 + dy) as u32;
                 for dx in -2i32..=2 {
-                    let xx = (lcx as i32 + dx).max(0).min((w - 1) as i32) as u32;
-                    let yy = (lcy as i32 + dy).max(0).min((h - 1) as i32) as u32;
-                    sum += luma_at(&rgba, xx, yy) as f64;
-                    n += 1.0;
+                    let xx = (lcx as i32 + dx) as u32;
+                    let l = luma_at(rgba, xx, yy) as f64;
+                    sum += l;
+                    sum_sq += l * l;
                 }
             }
-            let mean = sum / n;
-            let mut v = 0.0f64;
-            for dy in -2i32..=2 {
-                for dx in -2i32..=2 {
-                    let xx = (lcx as i32 + dx).max(0).min((w - 1) as i32) as u32;
-                    let yy = (lcy as i32 + dy).max(0).min((h - 1) as i32) as u32;
-                    let l = luma_at(&rgba, xx, yy) as f64;
-                    v += (l - mean) * (l - mean);
-                }
-            }
-            var_sum += v / n;
+            let mean = sum / 25.0;
+            var_sum += (sum_sq / 25.0 - mean * mean).max(0.0);
             var_count += 1;
             lcx += lc_step;
         }
@@ -275,8 +275,8 @@ pub fn analyze(image: &image::DynamicImage) -> ImageFeatures {
     let mut sq_err_count = 0u64;
     for r in 0..rows {
         for x in 0..w {
-            let top = luma_at(&rgba, x, r);
-            let bot = luma_at(&rgba, x, h - 1 - r);
+            let top = luma_at(rgba, x, r);
+            let bot = luma_at(rgba, x, h - 1 - r);
             let d = top - bot;
             sq_err_sum += (d * d) as f64;
             sq_err_count += 1;
@@ -284,8 +284,8 @@ pub fn analyze(image: &image::DynamicImage) -> ImageFeatures {
     }
     for c in 0..cols {
         for y in 0..h {
-            let lft = luma_at(&rgba, c, y);
-            let rgt = luma_at(&rgba, w - 1 - c, y);
+            let lft = luma_at(rgba, c, y);
+            let rgt = luma_at(rgba, w - 1 - c, y);
             let d = lft - rgt;
             sq_err_sum += (d * d) as f64;
             sq_err_count += 1;
@@ -297,7 +297,6 @@ pub fn analyze(image: &image::DynamicImage) -> ImageFeatures {
         1.0
     };
 
-    let _ = total;
     ImageFeatures {
         luma_mean,
         luma_std,

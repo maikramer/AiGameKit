@@ -11,8 +11,7 @@ var output_texture: texture_storage_2d<rgba8unorm, write>;
 @group(1) @binding(0)
 var<uniform> params: Params;
 
-fn sample_normal_rg(coords: vec2<i32>) -> vec2<f32> {
-    let dims = textureDimensions(normal_texture);
+fn sample_normal_rg(coords: vec2<i32>, dims: vec2<u32>) -> vec2<f32> {
     let c = wrap_or_clamp(coords, dims, params.seamless);
     let n = textureLoad(normal_texture, c, 0);
     return vec2<f32>(n.r, n.g);
@@ -28,10 +27,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     // Central difference of the 2D normal field; keep the full vector norm.
-    let gx = sample_normal_rg(coords + vec2<i32>(1, 0)) -
-             sample_normal_rg(coords + vec2<i32>(-1, 0));
-    let gy = sample_normal_rg(coords + vec2<i32>(0, 1)) -
-             sample_normal_rg(coords + vec2<i32>(0, -1));
+    let gx = sample_normal_rg(coords + vec2<i32>(1, 0), dims) -
+             sample_normal_rg(coords + vec2<i32>(-1, 0), dims);
+    let gy = sample_normal_rg(coords + vec2<i32>(0, 1), dims) -
+             sample_normal_rg(coords + vec2<i32>(0, -1), dims);
 
     let mag = sqrt(dot(gx, gx) + dot(gy, gy));
     let edge = smoothstep(0.05, 0.40, mag * params.edge_contrast);

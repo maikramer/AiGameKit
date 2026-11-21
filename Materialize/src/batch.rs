@@ -93,96 +93,227 @@ pub fn run_batch(
     pipeline: &Pipeline,
     inputs: Vec<PathBuf>,
     cli: &Cli,
-    resolve_params: &dyn Fn(&DynamicImage) -> PresetParams,
+    resolve_params: &(
+         dyn Fn(&DynamicImage, Option<&crate::analyze::ImageFeatures>) -> PresetParams + Sync
+     ),
 ) -> Result<BatchResult> {
-    let resolve_options = |img: &DynamicImage| -> crate::pipeline::ProcessOptions<'static> {
-        let mut options = crate::pipeline::ProcessOptions::default();
-        if let Some(tier) = cli.make_seamless {
-            let features = crate::analyze::analyze(img);
-            if features.tile_mse >= 0.005 {
-                options.seamless_mode = tier.to_mode();
-            }
-        }
-        options
-    };
     let selection = build_selection(cli)?;
     let format_str = format!("{}", cli.format);
     let image_format = io::output_format_to_image_format(&cli.format);
+    let needs_features = cli.preset == crate::preset::Preset::Auto || cli.make_seamless.is_some();
 
     let mut processed = 0usize;
     let mut failed: Vec<(PathBuf, String)> = Vec::new();
     let mut skipped = 0usize;
 
     let total = inputs.len();
-    for (idx, input_path) in inputs.into_iter().enumerate() {
-        if cli.skip_existing && output_exists(&input_path, &cli.output, &format_str, &selection) {
-            skipped += 1;
-            if cli.verbose || cli.progress {
-                println!(
-                    "[{}/{}] skip {} (exists)",
-                    idx + 1,
-                    total,
-                    input_path.display()
-                );
-            }
-            continue;
-        }
 
-        if cli.verbose || cli.progress {
-            print!("[{}/{}] {} ... ", idx + 1, total, input_path.display());
-            use std::io::Write;
-            let _ = std::io::stdout().flush();
-        }
+    enum LoadedItem {
+        Skipped {
+            idx: usize,
+            path: PathBuf,
+        },
+        LoadError {
+            idx: usize,
+            path: PathBuf,
+            err: String,
+        },
+        Ready {
+            idx: usize,
+            path: PathBuf,
+            img: DynamicImage,
+            params: PresetParams,
+            seamless_mode: crate::pipeline::SeamlessMode,
+        },
+    }
 
-        let img = match image::open(&input_path) {
-            Ok(im) => im,
-            Err(e) => {
-                if cli.verbose || cli.progress {
-                    println!("FAIL");
-                }
-                failed.push((input_path, format!("load: {e}")));
-                continue;
-            }
-        };
+    struct SaveItem {
+        idx: usize,
+        path: PathBuf,
+        width: u32,
+        height: u32,
+        maps: crate::pipeline::PbrMaps,
+        total_ms: u128,
+    }
 
-        let params = resolve_params(&img);
-        let options = resolve_options(&img);
-        let (width, height) = (img.width(), img.height());
+    // Pipeline CPU decode/analyze (producer thread) → GPU compute (caller
+    // thread) → parallel CPU PNG/JPG encode (saver thread via Rayon) so the
+    // GPU is never stalled waiting on disk I/O or image compression.
+    let (load_tx, load_rx) = crossbeam_channel::bounded::<LoadedItem>(2);
+    let (save_tx, save_rx) = crossbeam_channel::bounded::<SaveItem>(2);
 
-        let result = pipeline.process_blocking_with(&img, &params, &selection, &options);
-        match result {
-            Ok((maps, timings)) => {
-                if let Err(e) = save_job(
-                    &input_path,
-                    &cli.output,
-                    &format_str,
-                    image_format,
-                    cli.quality,
-                    cli.roughness,
-                    &selection,
-                    width,
-                    height,
-                    &maps,
-                ) {
-                    failed.push((input_path, format!("save: {e}")));
-                    if cli.verbose || cli.progress {
-                        println!("FAIL (save)");
+    let save_errors: std::sync::Mutex<Vec<(PathBuf, String)>> = std::sync::Mutex::new(Vec::new());
+    let save_ok = std::sync::atomic::AtomicUsize::new(0);
+
+    std::thread::scope(|scope| {
+        let sel_ref = &selection;
+        let fmt_ref = &format_str;
+
+        // Producer thread: load + RGBA8 convert + single analyze/resolve_params.
+        scope.spawn(move || {
+            for (idx, input_path) in inputs.into_iter().enumerate() {
+                if cli.skip_existing && output_exists(&input_path, &cli.output, fmt_ref, sel_ref) {
+                    if load_tx
+                        .send(LoadedItem::Skipped {
+                            idx,
+                            path: input_path,
+                        })
+                        .is_err()
+                    {
+                        break;
                     }
                     continue;
                 }
-                processed += 1;
-                if cli.verbose || cli.progress {
-                    println!("done ({}ms)", timings.total_ms);
+
+                let img = match image::open(&input_path) {
+                    Ok(im) => DynamicImage::ImageRgba8(im.into_rgba8()),
+                    Err(e) => {
+                        if load_tx
+                            .send(LoadedItem::LoadError {
+                                idx,
+                                path: input_path,
+                                err: format!("load: {e}"),
+                            })
+                            .is_err()
+                        {
+                            break;
+                        }
+                        continue;
+                    }
+                };
+
+                let features = needs_features.then(|| crate::analyze::analyze(&img));
+                let params = resolve_params(&img, features.as_ref());
+                let seamless_mode = match cli.make_seamless {
+                    Some(tier) => {
+                        let mse = features
+                            .as_ref()
+                            .map(|f| f.tile_mse)
+                            .unwrap_or_else(|| crate::analyze::analyze(&img).tile_mse);
+                        if mse >= 0.005 {
+                            tier.to_mode()
+                        } else {
+                            crate::pipeline::SeamlessMode::Off
+                        }
+                    }
+                    None => crate::pipeline::SeamlessMode::Off,
+                };
+
+                if load_tx
+                    .send(LoadedItem::Ready {
+                        idx,
+                        path: input_path,
+                        img,
+                        params,
+                        seamless_mode,
+                    })
+                    .is_err()
+                {
+                    break;
                 }
             }
-            Err(e) => {
-                failed.push((input_path, format!("process: {e}")));
-                if cli.verbose || cli.progress {
-                    println!("FAIL");
+        });
+
+        // Saver thread: encodes and writes each completed image's maps in parallel.
+        let save_errors_ref = &save_errors;
+        let save_ok_ref = &save_ok;
+        scope.spawn(move || {
+            for item in save_rx {
+                match save_job(
+                    &item.path,
+                    &cli.output,
+                    fmt_ref,
+                    image_format,
+                    cli.quality,
+                    cli.roughness,
+                    sel_ref,
+                    item.width,
+                    item.height,
+                    &item.maps,
+                ) {
+                    Ok(()) => {
+                        save_ok_ref.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if cli.verbose || cli.progress {
+                            println!(
+                                "[{}/{}] {} ... done ({}ms)",
+                                item.idx + 1,
+                                total,
+                                item.path.display(),
+                                item.total_ms
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        if cli.verbose || cli.progress {
+                            println!(
+                                "[{}/{}] {} ... FAIL (save)",
+                                item.idx + 1,
+                                total,
+                                item.path.display()
+                            );
+                        }
+                        save_errors_ref
+                            .lock()
+                            .unwrap()
+                            .push((item.path, format!("save: {e}")));
+                    }
+                }
+            }
+        });
+
+        // Caller thread: owns GPU dispatches exclusively.
+        for loaded in load_rx {
+            match loaded {
+                LoadedItem::Skipped { idx, path } => {
+                    skipped += 1;
+                    if cli.verbose || cli.progress {
+                        println!("[{}/{}] skip {} (exists)", idx + 1, total, path.display());
+                    }
+                }
+                LoadedItem::LoadError { idx, path, err } => {
+                    if cli.verbose || cli.progress {
+                        println!("[{}/{}] {} ... FAIL", idx + 1, total, path.display());
+                    }
+                    failed.push((path, err));
+                }
+                LoadedItem::Ready {
+                    idx,
+                    path,
+                    img,
+                    params,
+                    seamless_mode,
+                } => {
+                    let (width, height) = (img.width(), img.height());
+                    let options = crate::pipeline::ProcessOptions {
+                        seamless_mode,
+                        intrinsic: None,
+                    };
+                    match pipeline.process_blocking_with(&img, &params, sel_ref, &options) {
+                        Ok((maps, timings)) => {
+                            let _ = save_tx.send(SaveItem {
+                                idx,
+                                path,
+                                width,
+                                height,
+                                maps,
+                                total_ms: timings.total_ms,
+                            });
+                        }
+                        Err(e) => {
+                            failed.push((path.clone(), format!("process: {e}")));
+                            if cli.verbose || cli.progress {
+                                println!("[{}/{}] {} ... FAIL", idx + 1, total, path.display());
+                            }
+                        }
+                    }
                 }
             }
         }
-    }
+        drop(save_tx);
+    });
+
+    processed += save_ok.into_inner();
+    failed.extend(save_errors.into_inner().unwrap());
 
     Ok(BatchResult {
         processed,
@@ -212,39 +343,16 @@ fn save_job(
         roughness_instead_of_smoothness,
     );
 
-    if let Some(p) = &paths.height_path {
-        let img = io::height_to_image(width, height, &maps.height);
-        io::save_image(&img, p, image_format, quality)?;
-    }
-    if let Some(p) = &paths.normal_path {
-        let img = io::normal_to_image(width, height, &maps.normal);
-        io::save_image(&img, p, image_format, quality)?;
-    }
-    if let Some(p) = &paths.metallic_path {
-        let img = io::metallic_to_image(width, height, &maps.metallic);
-        io::save_image(&img, p, image_format, quality)?;
-    }
-    if let Some(p) = &paths.smoothness_path {
-        let img = if roughness_instead_of_smoothness {
-            io::roughness_to_image(width, height, &maps.smoothness)
-        } else {
-            io::smoothness_to_image(width, height, &maps.smoothness)
-        };
-        io::save_image(&img, p, image_format, quality)?;
-    }
-    if let Some(p) = &paths.edge_path {
-        let img = io::edge_to_image(width, height, &maps.edge);
-        io::save_image(&img, p, image_format, quality)?;
-    }
-    if let Some(p) = &paths.ao_path {
-        let img = io::ao_to_image(width, height, &maps.ao);
-        io::save_image(&img, p, image_format, quality)?;
-    }
-    if let Some(p) = &paths.curvature_path {
-        let img = io::curvature_to_image(width, height, &maps.curvature);
-        io::save_image(&img, p, image_format, quality)?;
-    }
-    Ok(())
+    io::save_maps_parallel(
+        maps,
+        width,
+        height,
+        &paths,
+        image_format,
+        quality,
+        roughness_instead_of_smoothness,
+    )
+    .map_err(MaterializeError::from)
 }
 
 #[cfg(test)]

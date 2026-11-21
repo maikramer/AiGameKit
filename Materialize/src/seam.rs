@@ -12,31 +12,51 @@
 //! mismatch; the compute pre-pass (`seamless.wgsl`: mirror cross-fade,
 //! optional Poisson) then makes the wrap C0-continuous.
 
-/// Squared-RGB distance between two texels.
-fn rgb_dist2(rgba: &[u8], a: usize, b: usize) -> f64 {
-    let dr = rgba[a * 4] as f64 - rgba[b * 4] as f64;
-    let dg = rgba[a * 4 + 1] as f64 - rgba[b * 4 + 1] as f64;
-    let db = rgba[a * 4 + 2] as f64 - rgba[b * 4 + 2] as f64;
-    dr * dr + dg * dg + db * db
+/// Squared-RGB distance between two texels (exact integer math, converted to f64).
+#[inline]
+fn rgb_dist2_at(rgba: &[u8], a_off: usize, b_off: usize) -> u64 {
+    let dr = rgba[a_off] as i32 - rgba[b_off] as i32;
+    let dg = rgba[a_off + 1] as i32 - rgba[b_off + 1] as i32;
+    let db = rgba[a_off + 2] as i32 - rgba[b_off + 2] as i32;
+    (dr * dr + dg * dg + db * db) as u64
 }
 
 /// Seam-cost profiles: V[c] = cost of cutting between columns c−1 and c
 /// (summed over all rows), H[r] = cost of cutting between rows r−1 and r.
 #[allow(clippy::needless_range_loop)]
 pub fn seam_cost_profiles(rgba: &[u8], w: usize, h: usize) -> (Vec<f64>, Vec<f64>) {
-    let mut v = vec![0.0f64; w];
-    let mut hh = vec![0.0f64; h];
-    for y in 0..h {
-        for x in 0..w {
-            let i = y * w + x;
-            // Wrap: column 0 pairs with column w−1.
-            let left = if x == 0 { y * w + (w - 1) } else { i - 1 };
-            v[x] += rgb_dist2(rgba, i, left);
-            let up = if y == 0 { (h - 1) * w + x } else { i - w };
-            hh[y] += rgb_dist2(rgba, i, up);
-        }
+    let mut v = vec![0u64; w];
+    let mut hh = vec![0u64; h];
+    if w == 0 || h == 0 {
+        return (vec![0.0; w], vec![0.0; h]);
     }
-    (v, hh)
+    let row_bytes = w * 4;
+
+    for y in 0..h {
+        let row_off = y * row_bytes;
+        let up_row_off = if y == 0 {
+            (h - 1) * row_bytes
+        } else {
+            (y - 1) * row_bytes
+        };
+
+        // Column 0 pairs with column w - 1 horizontally, and with up_row_off vertically.
+        v[0] += rgb_dist2_at(rgba, row_off, row_off + (w - 1) * 4);
+        let mut row_h = rgb_dist2_at(rgba, row_off, up_row_off);
+
+        // Interior columns 1..w: branch-free sequential scan.
+        for x in 1..w {
+            let off = row_off + x * 4;
+            v[x] += rgb_dist2_at(rgba, off, off - 4);
+            row_h += rgb_dist2_at(rgba, off, up_row_off + x * 4);
+        }
+        hh[y] = row_h;
+    }
+
+    (
+        v.into_iter().map(|c| c as f64).collect(),
+        hh.into_iter().map(|c| c as f64).collect(),
+    )
 }
 
 #[allow(clippy::needless_range_loop)]
@@ -72,14 +92,25 @@ pub fn find_best_offset(rgba: &[u8], w: usize, h: usize, _band: usize) -> (i32, 
 
 /// Roll (out[y][x] = in[(y+dy) mod h][(x+dx) mod w]).
 pub fn roll_image(rgba: &[u8], w: usize, h: usize, dx: i32, dy: i32) -> Vec<u8> {
+    if w == 0 || h == 0 {
+        return Vec::new();
+    }
+    let row_bytes = w * 4;
+    let sx0 = dx.rem_euclid(w as i32) as usize;
+    let sy0 = dy.rem_euclid(h as i32) as usize;
+    let split_bytes = (w - sx0) * 4;
+    let src_split = sx0 * 4;
+
     let mut out = vec![0u8; rgba.len()];
-    for y in 0..h as i32 {
-        for x in 0..w as i32 {
-            let sx = (x + dx).rem_euclid(w as i32) as usize;
-            let sy = (y + dy).rem_euclid(h as i32) as usize;
-            let d = (y as usize * w + x as usize) * 4;
-            let s = (sy * w + sx) * 4;
-            out[d..d + 4].copy_from_slice(&rgba[s..s + 4]);
+    for y in 0..h {
+        let sy = (y + sy0) % h;
+        let src_row = &rgba[sy * row_bytes..(sy + 1) * row_bytes];
+        let dst_row = &mut out[y * row_bytes..(y + 1) * row_bytes];
+        if src_split == 0 {
+            dst_row.copy_from_slice(src_row);
+        } else {
+            dst_row[..split_bytes].copy_from_slice(&src_row[src_split..]);
+            dst_row[split_bytes..].copy_from_slice(&src_row[..src_split]);
         }
     }
     out

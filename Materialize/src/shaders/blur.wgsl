@@ -11,19 +11,36 @@ var dst_tex: texture_storage_2d<r32float, write>;
 @group(1) @binding(0)
 var<uniform> fparams: FilterParams;
 
-fn sample_r(coords: vec2<i32>) -> f32 {
-    let dims = textureDimensions(src_tex);
+fn sample_r(coords: vec2<i32>, dims: vec2<u32>) -> f32 {
     let c = wrap_or_clamp(coords, dims, fparams.seamless);
     return textureLoad(src_tex, c, 0).r;
 }
 
-fn kernel_weight(d: i32) -> f32 {
+fn blur_1d(coords: vec2<i32>, dims: vec2<u32>, axis: vec2<i32>) -> f32 {
+    let r = i32(fparams.radius);
+    if (r <= 0) {
+        return textureLoad(src_tex, coords, 0).r;
+    }
     if (fparams.kind == 0u) {
-        return 1.0;
+        var acc = textureLoad(src_tex, coords, 0).r;
+        for (var d = 1; d <= r; d++) {
+            let off = axis * d;
+            acc += sample_r(coords + off, dims) + sample_r(coords - off, dims);
+        }
+        return acc / f32(2 * r + 1);
     }
     let s = max(fparams.sigma, 0.05);
-    let fd = f32(d);
-    return exp(-(fd * fd) / (2.0 * s * s));
+    let inv_two_s2 = -0.5 / (s * s);
+    var acc = textureLoad(src_tex, coords, 0).r;
+    var wsum = 1.0;
+    for (var d = 1; d <= r; d++) {
+        let fd = f32(d);
+        let w = exp(fd * fd * inv_two_s2);
+        let off = axis * d;
+        acc += w * (sample_r(coords + off, dims) + sample_r(coords - off, dims));
+        wsum += 2.0 * w;
+    }
+    return acc / wsum;
 }
 
 @compute @workgroup_size(8, 8, 1)
@@ -35,16 +52,8 @@ fn main_h(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    let r = i32(fparams.radius);
-    var acc = 0.0;
-    var wsum = 0.0;
-    for (var d = -r; d <= r; d++) {
-        let w = kernel_weight(d);
-        acc += w * sample_r(coords + vec2<i32>(d, 0));
-        wsum += w;
-    }
-
-    textureStore(dst_tex, coords, vec4<f32>(acc / wsum, 0.0, 0.0, 1.0));
+    let val = blur_1d(coords, dims, vec2<i32>(1, 0));
+    textureStore(dst_tex, coords, vec4<f32>(val, 0.0, 0.0, 1.0));
 }
 
 @compute @workgroup_size(8, 8, 1)
@@ -56,14 +65,6 @@ fn main_v(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    let r = i32(fparams.radius);
-    var acc = 0.0;
-    var wsum = 0.0;
-    for (var d = -r; d <= r; d++) {
-        let w = kernel_weight(d);
-        acc += w * sample_r(coords + vec2<i32>(0, d));
-        wsum += w;
-    }
-
-    textureStore(dst_tex, coords, vec4<f32>(acc / wsum, 0.0, 0.0, 1.0));
+    let val = blur_1d(coords, dims, vec2<i32>(0, 1));
+    textureStore(dst_tex, coords, vec4<f32>(val, 0.0, 0.0, 1.0));
 }

@@ -6,7 +6,7 @@
 //! → final composition. Every dispatch runs in ONE encoder/submit; WebGPU
 //! serialises dispatches with implicit barriers between passes.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use image::DynamicImage;
 use std::time::Instant;
 
@@ -124,139 +124,144 @@ impl Pipeline {
         let params_bind_group_layout = gpu.create_params_bind_group_layout();
         let r32 = wgpu::TextureFormat::R32Float;
         let rgba8 = wgpu::TextureFormat::Rgba8Unorm;
-        let prelude = |body: &str| compose(body);
+        let rgba16f = wgpu::TextureFormat::Rgba16Float;
 
-        let luma_pipeline = gpu.create_pipeline(
-            &prelude(UNARY_SHADER),
+        // Compile multi-entry-point WGSL modules once instead of per entry point.
+        let unary_mod = gpu.create_shader_module(&compose(UNARY_SHADER));
+        let binary_mod = gpu.create_shader_module(&compose(BINARY_SHADER));
+        let blur_mod = gpu.create_shader_module(&compose(BLUR_SHADER));
+        let seamless_mod = gpu.create_shader_module(&compose(SEAMLESS_SHADER));
+
+        let luma_pipeline = gpu.create_pipeline_from_module(
+            &unary_mod,
             "main_luma",
             &[rgba8],
             &[r32],
             &params_bind_group_layout,
         )?;
-        let scale_pipeline = gpu.create_pipeline(
-            &prelude(UNARY_SHADER),
+        let scale_pipeline = gpu.create_pipeline_from_module(
+            &unary_mod,
             "main_scale",
             &[r32],
             &[r32],
             &params_bind_group_layout,
         )?;
-        let blend_add_pipeline = gpu.create_pipeline(
-            &prelude(BINARY_SHADER),
+        let blend_add_pipeline = gpu.create_pipeline_from_module(
+            &binary_mod,
             "main_blend_add",
             &[r32, r32],
             &[r32],
             &params_bind_group_layout,
         )?;
-        let square_pipeline = gpu.create_pipeline(
-            &prelude(UNARY_SHADER),
+        let square_pipeline = gpu.create_pipeline_from_module(
+            &unary_mod,
             "main_square",
             &[r32],
             &[r32],
             &params_bind_group_layout,
         )?;
-        let sub_pipeline = gpu.create_pipeline(
-            &prelude(BINARY_SHADER),
+        let sub_pipeline = gpu.create_pipeline_from_module(
+            &binary_mod,
             "main_sub",
             &[r32, r32],
             &[r32],
             &params_bind_group_layout,
         )?;
-        let blur_h_pipeline = gpu.create_pipeline(
-            &prelude(BLUR_SHADER),
+        let blur_h_pipeline = gpu.create_pipeline_from_module(
+            &blur_mod,
             "main_h",
             &[r32],
             &[r32],
             &params_bind_group_layout,
         )?;
-        let blur_v_pipeline = gpu.create_pipeline(
-            &prelude(BLUR_SHADER),
+        let blur_v_pipeline = gpu.create_pipeline_from_module(
+            &blur_mod,
             "main_v",
             &[r32],
             &[r32],
             &params_bind_group_layout,
         )?;
         let guided_pipeline = gpu.create_pipeline(
-            &prelude(GUIDED_SHADER),
+            &compose(GUIDED_SHADER),
             "main",
             &[r32, r32, r32],
             &[r32, r32],
             &params_bind_group_layout,
         )?;
         let height_final_pipeline = gpu.create_pipeline(
-            &prelude(HEIGHT_FINAL_SHADER),
+            &compose(HEIGHT_FINAL_SHADER),
             "main",
             &[r32, r32, r32],
             &[r32],
             &params_bind_group_layout,
         )?;
-        let rgba16f = wgpu::TextureFormat::Rgba16Float;
-        let seam_blend_pipeline = gpu.create_pipeline_slotted(
-            &prelude(SEAMLESS_SHADER),
+        let seam_blend_pipeline = gpu.create_pipeline_slotted_from_module(
+            &seamless_mod,
             "main_blend",
             &[(0, rgba8)],
             &[(3, rgba8)],
             &params_bind_group_layout,
         )?;
-        let seam_upconvert_pipeline = gpu.create_pipeline_slotted(
-            &prelude(SEAMLESS_SHADER),
+        let seam_upconvert_pipeline = gpu.create_pipeline_slotted_from_module(
+            &seamless_mod,
             "main_upconvert",
             &[(0, rgba8)],
             &[(4, rgba16f)],
             &params_bind_group_layout,
         )?;
-        let seam_poisson_pipeline = gpu.create_pipeline_slotted(
-            &prelude(SEAMLESS_SHADER),
+        let seam_poisson_pipeline = gpu.create_pipeline_slotted_from_module(
+            &seamless_mod,
             "main_poisson",
             &[(0, rgba16f), (1, rgba8), (2, rgba8)],
             &[(4, rgba16f)],
             &params_bind_group_layout,
         )?;
-        let seam_downconvert_pipeline = gpu.create_pipeline_slotted(
-            &prelude(SEAMLESS_SHADER),
+        let seam_downconvert_pipeline = gpu.create_pipeline_slotted_from_module(
+            &seamless_mod,
             "main_downconvert",
             &[(0, rgba16f)],
             &[(3, rgba8)],
             &params_bind_group_layout,
         )?;
         let normal_pipeline = gpu.create_pipeline(
-            &prelude(NORMAL_SHADER),
+            &compose(NORMAL_SHADER),
             "main",
             &[r32],
             &[rgba8],
             &params_bind_group_layout,
         )?;
         let metallic_pipeline = gpu.create_pipeline(
-            &prelude(METALLIC_SHADER),
+            &compose(METALLIC_SHADER),
             "main",
             &[rgba8, rgba8],
             &[rgba8],
             &params_bind_group_layout,
         )?;
         let smoothness_pipeline = gpu.create_pipeline(
-            &prelude(SMOOTHNESS_SHADER),
+            &compose(SMOOTHNESS_SHADER),
             "main",
             &[rgba8, rgba8, rgba8],
             &[rgba8],
             &params_bind_group_layout,
         )?;
         let edge_pipeline = gpu.create_pipeline(
-            &prelude(EDGE_SHADER),
+            &compose(EDGE_SHADER),
             "main",
             &[rgba8],
             &[rgba8],
             &params_bind_group_layout,
         )?;
         let ao_pipeline = gpu.create_pipeline(
-            &prelude(AO_SHADER),
+            &compose(AO_SHADER),
             "main",
             &[r32, r32],
             &[rgba8],
             &params_bind_group_layout,
         )?;
         let curvature_pipeline = gpu.create_pipeline(
-            &prelude(CURVATURE_SHADER),
+            &compose(CURVATURE_SHADER),
             "main",
-            &[r32],
+            &[r32, r32, r32],
             &[rgba8],
             &params_bind_group_layout,
         )?;
@@ -387,22 +392,35 @@ impl Pipeline {
 
         // === F4: make-seamless pre-pass (roll + band blend on the diffuse) ===
         let t_seam = Instant::now();
-        let (diffuse_bytes, rolled_offset) = match options.seamless_mode {
-            SeamlessMode::Off => (image.to_rgba8().into_raw(), None),
-            mode => {
-                let rgba = image.to_rgba8();
-                let raw = rgba.as_raw().clone();
+        let owned_rgba;
+        let raw_rgba: &[u8] = if let Some(rgba) = image.as_rgba8() {
+            rgba.as_raw()
+        } else {
+            owned_rgba = image.to_rgba8();
+            owned_rgba.as_raw()
+        };
+        let rolled_storage: Option<Vec<u8>>;
+        let (diffuse_slice, rolled_offset): (&[u8], Option<(i32, i32)>) = match options
+            .seamless_mode
+        {
+            SeamlessMode::Off => (raw_rgba, None),
+            _ => {
                 let band = params.seam_band as usize;
                 let (dx, dy) =
-                    crate::seam::find_best_offset(&raw, width as usize, height as usize, band);
-                let rolled = crate::seam::roll_image(&raw, width as usize, height as usize, dx, dy);
-                let _ = mode;
-                (rolled, Some((dx, dy)))
+                    crate::seam::find_best_offset(raw_rgba, width as usize, height as usize, band);
+                rolled_storage = Some(crate::seam::roll_image(
+                    raw_rgba,
+                    width as usize,
+                    height as usize,
+                    dx,
+                    dy,
+                ));
+                (rolled_storage.as_deref().unwrap(), Some((dx, dy)))
             }
         };
         let diffuse_texture = self
             .gpu
-            .create_texture_from_rgba(&diffuse_bytes, width, height);
+            .create_texture_from_rgba(diffuse_slice, width, height);
         let rolled_view = diffuse_texture.create_view(&Default::default());
 
         let effective_diffuse_view: wgpu::TextureView = match options.seamless_mode {
@@ -523,52 +541,20 @@ impl Pipeline {
 
         // F6: albedo replaces the diffuse for metallic/smoothness; specular is
         // direct evidence; shading folds its high-frequency into the height.
-        let albedo_texture = intrinsic
-            .map(|maps| self.gpu.create_texture_from_image(&maps.albedo))
-            .unwrap_or_else(|| {
-                self.gpu
-                    .create_output_texture(1, 1, wgpu::TextureFormat::Rgba8Unorm)
-            });
-        let albedo_view = if intrinsic.is_some() {
-            albedo_texture.create_view(&Default::default())
-        } else {
-            self.dummy_rgba8_black.create_view(&Default::default())
+        let _albedo_texture =
+            intrinsic.map(|maps| self.gpu.create_texture_from_image(&maps.albedo));
+        let albedo_view = match &_albedo_texture {
+            Some(tex) => tex.create_view(&Default::default()),
+            None => self.dummy_rgba8_black.create_view(&Default::default()),
         };
-        let specular_view = match intrinsic {
-            Some(maps) => self
-                .gpu
-                .create_texture_from_image(&maps.specular)
-                .create_view(&Default::default()),
+        let _specular_texture =
+            intrinsic.map(|maps| self.gpu.create_texture_from_image(&maps.specular));
+        let specular_view = match &_specular_texture {
+            Some(tex) => tex.create_view(&Default::default()),
             None => self.dummy_rgba8_black.create_view(&Default::default()),
         };
 
-        // Scratch pool (r32float ping-pong) + final height/base/detail.
-        let mk_r32 = |gpu: &GpuContext| {
-            gpu.create_output_texture(width, height, wgpu::TextureFormat::R32Float)
-        };
-        let s0 = mk_r32(&self.gpu);
-        let s1 = mk_r32(&self.gpu);
-        let s2 = mk_r32(&self.gpu);
-        let s3 = mk_r32(&self.gpu);
-        let s4 = mk_r32(&self.gpu);
-        let s5 = mk_r32(&self.gpu);
-        let base_tex = mk_r32(&self.gpu);
-        let detail_tex = mk_r32(&self.gpu);
-        let height_tex = mk_r32(&self.gpu);
-        let v = |t: &wgpu::Texture| t.create_view(&Default::default());
-        let (s0v, s1v, s2v, s3v, s4v, s5v) = (v(&s0), v(&s1), v(&s2), v(&s3), v(&s4), v(&s5));
-        let base_v = v(&base_tex);
-        let detail_v = v(&detail_tex);
-        let height_v = v(&height_tex);
-
-        // Filter uniform buffers: gaussian σ0, gaussian σ0·√3 (level doubling),
-        // box window for the guided filter, and one weight per pyramid level.
         let seamless = params.seamless == 1;
-        let levels = params.height_pyramid_levels.round().clamp(1.0, 7.0) as usize;
-        let sigma0 = params.height_sigma_base.max(0.1);
-        let sigma_double = sigma0 * 3.0f32.sqrt(); // σ² add: (σd)² + (σd)² = 3σ0² on a σ0 base ⇒ σk = 2σk−1
-        let weights = params.pyramid_weights();
-
         let filter_buffer = |fp: &FilterParams| -> (wgpu::Buffer, wgpu::BindGroup) {
             let buf = self.gpu.create_params_buffer(bytemuck::bytes_of(fp));
             let bg = self
@@ -576,264 +562,361 @@ impl Pipeline {
                 .create_params_bind_group(&self.params_bind_group_layout, &buf);
             (buf, bg)
         };
-        let (_b0, gauss0_bg) = filter_buffer(&FilterParams::gaussian(sigma0, seamless));
-        let (_bd, gaussd_bg) = filter_buffer(&FilterParams::gaussian(sigma_double, seamless));
-        let (_bx, box_bg) = filter_buffer(&FilterParams::boxed(params.guided_radius, seamless));
-        let weight_bgs: Vec<wgpu::BindGroup> = weights
-            .iter()
-            .map(|w| filter_buffer(&FilterParams::boxed(0.0, seamless).with_weight(*w)).1)
-            .collect();
 
-        // === Height chain (F1) ===
-        let t0 = Instant::now();
+        let needs_height =
+            selection.height || selection.normal || selection.ao || selection.curvature;
 
-        // Luminance of the diffuse.
-        let luma_bg = self.gpu.create_bind_group(
-            &self.luma_pipeline.bind_group_layout,
-            &[&diffuse_view],
-            &[&s0v],
-        );
-        steps.push(ChainStep {
-            pipeline: &self.luma_pipeline,
-            bind_group0: luma_bg,
-            bind_group1: params_bind_group.clone(),
-            workgroups_x,
-            workgroups_y,
-        });
+        // Scratch pool (r32float ping-pong) + final height/base/detail.
+        // Only allocated when height or any height-derived map is requested.
+        let mk_r32 = |gpu: &GpuContext| {
+            gpu.create_output_texture(width, height, wgpu::TextureFormat::R32Float)
+        };
+        let height_resources = if needs_height {
+            let s0 = mk_r32(&self.gpu);
+            let s1 = mk_r32(&self.gpu);
+            let s2 = mk_r32(&self.gpu);
+            let s3 = mk_r32(&self.gpu);
+            let s4 = mk_r32(&self.gpu);
+            let s5 = mk_r32(&self.gpu);
+            let base_tex = mk_r32(&self.gpu);
+            let detail_tex = mk_r32(&self.gpu);
+            let height_tex = mk_r32(&self.gpu);
+            let v = |t: &wgpu::Texture| t.create_view(&Default::default());
+            let (s0v, s1v, s2v, s3v, s4v, s5v) = (v(&s0), v(&s1), v(&s2), v(&s3), v(&s4), v(&s5));
+            let base_v = v(&base_tex);
+            let detail_v = v(&detail_tex);
+            let height_v = v(&height_tex);
 
-        // Level 0: gaussian σ0 of the luma.
-        let bh =
-            self.gpu
-                .create_bind_group(&self.blur_h_pipeline.bind_group_layout, &[&s0v], &[&s1v]);
-        steps.push(ChainStep {
-            pipeline: &self.blur_h_pipeline,
-            bind_group0: bh,
-            bind_group1: gauss0_bg.clone(),
-            workgroups_x,
-            workgroups_y,
-        });
-        let bv =
-            self.gpu
-                .create_bind_group(&self.blur_v_pipeline.bind_group_layout, &[&s1v], &[&s2v]);
-        steps.push(ChainStep {
-            pipeline: &self.blur_v_pipeline,
-            bind_group0: bv,
-            bind_group1: gauss0_bg.clone(),
-            workgroups_x,
-            workgroups_y,
-        });
+            // Filter uniform buffers: gaussian σ0, gaussian σ0·√3 (level doubling),
+            // box window for the guided filter, and one weight per pyramid level.
+            let levels = params.height_pyramid_levels.round().clamp(1.0, 7.0) as usize;
+            let sigma0 = params.height_sigma_base.max(0.1);
+            let sigma_double = sigma0 * 3.0f32.sqrt();
+            let weights = params.pyramid_weights();
 
-        // Accumulator seed: acc = w0 · b0.
-        let seed_bg =
-            self.gpu
-                .create_bind_group(&self.scale_pipeline.bind_group_layout, &[&s2v], &[&s3v]);
-        steps.push(ChainStep {
-            pipeline: &self.scale_pipeline,
-            bind_group0: seed_bg,
-            bind_group1: weight_bgs[0].clone(),
-            workgroups_x,
-            workgroups_y,
-        });
+            let (_b0, gauss0_bg) = filter_buffer(&FilterParams::gaussian(sigma0, seamless));
+            let (_bd, gaussd_bg) = filter_buffer(&FilterParams::gaussian(sigma_double, seamless));
+            let (_bx, box_bg) = filter_buffer(&FilterParams::boxed(params.guided_radius, seamless));
+            let weight_bgs: Vec<wgpu::BindGroup> = weights
+                .iter()
+                .map(|w| filter_buffer(&FilterParams::boxed(0.0, seamless).with_weight(*w)).1)
+                .collect();
 
-        // Levels 1..L: double σ with two σ0·√3 rounds, then accumulate.
-        // acc ping-pongs between s3 and s4; b_k lives in s2.
-        let mut acc_in = &s3v;
-        let mut acc_out = &s4v;
-        #[allow(clippy::needless_range_loop)]
-        for k in 1..levels {
-            for _round in 0..2 {
-                // h: s2 → s1, then v: s1 → s2 (b is back in s2 with doubled σ).
-                let bg = self.gpu.create_bind_group(
-                    &self.blur_h_pipeline.bind_group_layout,
-                    &[&s2v],
-                    &[&s1v],
-                );
-                steps.push(ChainStep {
-                    pipeline: &self.blur_h_pipeline,
-                    bind_group0: bg,
-                    bind_group1: gaussd_bg.clone(),
-                    workgroups_x,
-                    workgroups_y,
-                });
-                let bg = self.gpu.create_bind_group(
-                    &self.blur_v_pipeline.bind_group_layout,
-                    &[&s1v],
-                    &[&s2v],
-                );
-                steps.push(ChainStep {
-                    pipeline: &self.blur_v_pipeline,
-                    bind_group0: bg,
-                    bind_group1: gaussd_bg.clone(),
-                    workgroups_x,
-                    workgroups_y,
-                });
-            }
-            let bg = self.gpu.create_bind_group(
-                &self.blend_add_pipeline.bind_group_layout,
-                &[acc_in, &s2v],
-                &[acc_out],
+            // === Height chain (F1) ===
+            let t0 = Instant::now();
+
+            // Luminance of the diffuse.
+            let luma_bg = self.gpu.create_bind_group(
+                &self.luma_pipeline.bind_group_layout,
+                &[&diffuse_view],
+                &[&s0v],
             );
             steps.push(ChainStep {
-                pipeline: &self.blend_add_pipeline,
-                bind_group0: bg,
-                bind_group1: weight_bgs[k].clone(),
+                pipeline: &self.luma_pipeline,
+                bind_group0: luma_bg,
+                bind_group1: params_bind_group.clone(),
                 workgroups_x,
                 workgroups_y,
             });
-            std::mem::swap(&mut acc_in, &mut acc_out);
-        }
-        let h_view: &wgpu::TextureView = acc_in;
 
-        // Guided filter statistics: meanI and meanII over a box window.
-        let bg =
-            self.gpu
-                .create_bind_group(&self.blur_h_pipeline.bind_group_layout, &[h_view], &[&s0v]);
-        steps.push(ChainStep {
-            pipeline: &self.blur_h_pipeline,
-            bind_group0: bg,
-            bind_group1: box_bg.clone(),
-            workgroups_x,
-            workgroups_y,
-        });
-        let bg =
-            self.gpu
-                .create_bind_group(&self.blur_v_pipeline.bind_group_layout, &[&s0v], &[&s2v]);
-        steps.push(ChainStep {
-            pipeline: &self.blur_v_pipeline,
-            bind_group0: bg,
-            bind_group1: box_bg.clone(),
-            workgroups_x,
-            workgroups_y,
-        });
-        let mean_i_view = &s2v; // meanI
+            // Level 0: gaussian σ0 of the luma.
+            let bh = self.gpu.create_bind_group(
+                &self.blur_h_pipeline.bind_group_layout,
+                &[&s0v],
+                &[&s1v],
+            );
+            steps.push(ChainStep {
+                pipeline: &self.blur_h_pipeline,
+                bind_group0: bh,
+                bind_group1: gauss0_bg.clone(),
+                workgroups_x,
+                workgroups_y,
+            });
+            let bv = self.gpu.create_bind_group(
+                &self.blur_v_pipeline.bind_group_layout,
+                &[&s1v],
+                &[&s2v],
+            );
+            steps.push(ChainStep {
+                pipeline: &self.blur_v_pipeline,
+                bind_group0: bv,
+                bind_group1: gauss0_bg.clone(),
+                workgroups_x,
+                workgroups_y,
+            });
 
-        let bg =
-            self.gpu
-                .create_bind_group(&self.square_pipeline.bind_group_layout, &[h_view], &[&s1v]);
-        steps.push(ChainStep {
-            pipeline: &self.square_pipeline,
-            bind_group0: bg,
-            bind_group1: params_bind_group.clone(),
-            workgroups_x,
-            workgroups_y,
-        });
-        let bg =
-            self.gpu
-                .create_bind_group(&self.blur_h_pipeline.bind_group_layout, &[&s1v], &[&s0v]);
-        steps.push(ChainStep {
-            pipeline: &self.blur_h_pipeline,
-            bind_group0: bg,
-            bind_group1: box_bg.clone(),
-            workgroups_x,
-            workgroups_y,
-        });
-        let bg =
-            self.gpu
-                .create_bind_group(&self.blur_v_pipeline.bind_group_layout, &[&s0v], &[&s1v]);
-        steps.push(ChainStep {
-            pipeline: &self.blur_v_pipeline,
-            bind_group0: bg,
-            bind_group1: box_bg.clone(),
-            workgroups_x,
-            workgroups_y,
-        });
-        let mean_ii_view = &s1v; // meanII
+            // Accumulator seed: acc = w0 · b0.
+            let seed_bg = self.gpu.create_bind_group(
+                &self.scale_pipeline.bind_group_layout,
+                &[&s2v],
+                &[&s3v],
+            );
+            steps.push(ChainStep {
+                pipeline: &self.scale_pipeline,
+                bind_group0: seed_bg,
+                bind_group1: weight_bgs[0].clone(),
+                workgroups_x,
+                workgroups_y,
+            });
 
-        let bg = self.gpu.create_bind_group(
-            &self.guided_pipeline.bind_group_layout,
-            &[h_view, mean_i_view, mean_ii_view],
-            &[&base_v, &detail_v],
-        );
-        steps.push(ChainStep {
-            pipeline: &self.guided_pipeline,
-            bind_group0: bg,
-            bind_group1: params_bind_group.clone(),
-            workgroups_x,
-            workgroups_y,
-        });
-
-        // F6: high-frequency shading → optional third input of the composer.
-        let hf_view: wgpu::TextureView = match intrinsic {
-            Some(maps) => {
-                let shading_tex = self.gpu.create_texture_from_image(&maps.shading);
-                let shading_v = shading_tex.create_view(&Default::default());
-                let sld = self.gpu.create_bind_group(
-                    &self.luma_pipeline.bind_group_layout,
-                    &[&shading_v],
-                    &[&s0v],
+            // Levels 1..L: double σ with two σ0·√3 rounds, then accumulate.
+            // acc ping-pongs between s3 and s4; b_k lives in s2.
+            let mut acc_in = &s3v;
+            let mut acc_out = &s4v;
+            #[allow(clippy::needless_range_loop)]
+            for k in 1..levels {
+                for _round in 0..2 {
+                    let bg = self.gpu.create_bind_group(
+                        &self.blur_h_pipeline.bind_group_layout,
+                        &[&s2v],
+                        &[&s1v],
+                    );
+                    steps.push(ChainStep {
+                        pipeline: &self.blur_h_pipeline,
+                        bind_group0: bg,
+                        bind_group1: gaussd_bg.clone(),
+                        workgroups_x,
+                        workgroups_y,
+                    });
+                    let bg = self.gpu.create_bind_group(
+                        &self.blur_v_pipeline.bind_group_layout,
+                        &[&s1v],
+                        &[&s2v],
+                    );
+                    steps.push(ChainStep {
+                        pipeline: &self.blur_v_pipeline,
+                        bind_group0: bg,
+                        bind_group1: gaussd_bg.clone(),
+                        workgroups_x,
+                        workgroups_y,
+                    });
+                }
+                let bg = self.gpu.create_bind_group(
+                    &self.blend_add_pipeline.bind_group_layout,
+                    &[acc_in, &s2v],
+                    &[acc_out],
                 );
                 steps.push(ChainStep {
-                    pipeline: &self.luma_pipeline,
-                    bind_group0: sld,
-                    bind_group1: params_bind_group.clone(),
+                    pipeline: &self.blend_add_pipeline,
+                    bind_group0: bg,
+                    bind_group1: weight_bgs[k].clone(),
                     workgroups_x,
                     workgroups_y,
                 });
-                let bg = self.gpu.create_bind_group(
+                std::mem::swap(&mut acc_in, &mut acc_out);
+            }
+            let h_view: &wgpu::TextureView = acc_in;
+
+            // Guided filter statistics: meanI and meanII over a box window.
+            let bg = self.gpu.create_bind_group(
+                &self.blur_h_pipeline.bind_group_layout,
+                &[h_view],
+                &[&s0v],
+            );
+            steps.push(ChainStep {
+                pipeline: &self.blur_h_pipeline,
+                bind_group0: bg,
+                bind_group1: box_bg.clone(),
+                workgroups_x,
+                workgroups_y,
+            });
+            let bg = self.gpu.create_bind_group(
+                &self.blur_v_pipeline.bind_group_layout,
+                &[&s0v],
+                &[&s2v],
+            );
+            steps.push(ChainStep {
+                pipeline: &self.blur_v_pipeline,
+                bind_group0: bg,
+                bind_group1: box_bg.clone(),
+                workgroups_x,
+                workgroups_y,
+            });
+            let mean_i_view = &s2v;
+
+            let bg = self.gpu.create_bind_group(
+                &self.square_pipeline.bind_group_layout,
+                &[h_view],
+                &[&s1v],
+            );
+            steps.push(ChainStep {
+                pipeline: &self.square_pipeline,
+                bind_group0: bg,
+                bind_group1: params_bind_group.clone(),
+                workgroups_x,
+                workgroups_y,
+            });
+            let bg = self.gpu.create_bind_group(
+                &self.blur_h_pipeline.bind_group_layout,
+                &[&s1v],
+                &[&s0v],
+            );
+            steps.push(ChainStep {
+                pipeline: &self.blur_h_pipeline,
+                bind_group0: bg,
+                bind_group1: box_bg.clone(),
+                workgroups_x,
+                workgroups_y,
+            });
+            let bg = self.gpu.create_bind_group(
+                &self.blur_v_pipeline.bind_group_layout,
+                &[&s0v],
+                &[&s1v],
+            );
+            steps.push(ChainStep {
+                pipeline: &self.blur_v_pipeline,
+                bind_group0: bg,
+                bind_group1: box_bg.clone(),
+                workgroups_x,
+                workgroups_y,
+            });
+            let mean_ii_view = &s1v;
+
+            let bg = self.gpu.create_bind_group(
+                &self.guided_pipeline.bind_group_layout,
+                &[h_view, mean_i_view, mean_ii_view],
+                &[&base_v, &detail_v],
+            );
+            steps.push(ChainStep {
+                pipeline: &self.guided_pipeline,
+                bind_group0: bg,
+                bind_group1: params_bind_group.clone(),
+                workgroups_x,
+                workgroups_y,
+            });
+
+            // F6: high-frequency shading → optional third input of the composer.
+            let hf_view: wgpu::TextureView = match intrinsic {
+                Some(maps) => {
+                    let shading_tex = self.gpu.create_texture_from_image(&maps.shading);
+                    let shading_v = shading_tex.create_view(&Default::default());
+                    let sld = self.gpu.create_bind_group(
+                        &self.luma_pipeline.bind_group_layout,
+                        &[&shading_v],
+                        &[&s0v],
+                    );
+                    steps.push(ChainStep {
+                        pipeline: &self.luma_pipeline,
+                        bind_group0: sld,
+                        bind_group1: params_bind_group.clone(),
+                        workgroups_x,
+                        workgroups_y,
+                    });
+                    let bg = self.gpu.create_bind_group(
+                        &self.blur_h_pipeline.bind_group_layout,
+                        &[&s0v],
+                        &[&s5v],
+                    );
+                    steps.push(ChainStep {
+                        pipeline: &self.blur_h_pipeline,
+                        bind_group0: bg,
+                        bind_group1: box_bg.clone(),
+                        workgroups_x,
+                        workgroups_y,
+                    });
+                    let bg = self.gpu.create_bind_group(
+                        &self.blur_v_pipeline.bind_group_layout,
+                        &[&s5v],
+                        &[&s2v],
+                    );
+                    steps.push(ChainStep {
+                        pipeline: &self.blur_v_pipeline,
+                        bind_group0: bg,
+                        bind_group1: box_bg.clone(),
+                        workgroups_x,
+                        workgroups_y,
+                    });
+                    let bg = self.gpu.create_bind_group(
+                        &self.sub_pipeline.bind_group_layout,
+                        &[&s0v, &s2v],
+                        &[&s5v],
+                    );
+                    steps.push(ChainStep {
+                        pipeline: &self.sub_pipeline,
+                        bind_group0: bg,
+                        bind_group1: params_bind_group.clone(),
+                        workgroups_x,
+                        workgroups_y,
+                    });
+                    s5v.clone()
+                }
+                None => self.dummy_r32_zero.create_view(&Default::default()),
+            };
+
+            let bg = self.gpu.create_bind_group(
+                &self.height_final_pipeline.bind_group_layout,
+                &[&base_v, &detail_v, &hf_view],
+                &[&height_v],
+            );
+            steps.push(ChainStep {
+                pipeline: &self.height_final_pipeline,
+                bind_group0: bg,
+                bind_group1: params_bind_group.clone(),
+                workgroups_x,
+                workgroups_y,
+            });
+            timings.height_ms = t0.elapsed().as_millis();
+
+            Some((
+                (s0, s1, s2, s3, s4, s5),
+                (s0v, s1v, s2v, s3v, s4v, s5v),
+                base_tex,
+                base_v,
+                detail_tex,
+                height_tex,
+                height_v,
+            ))
+        } else {
+            None
+        };
+
+        // === Downstream maps ===
+        let normal_texture = if selection.normal {
+            let t = Instant::now();
+            let (_, (_, _, _, _, s4v, s5v), _, _, _, _, height_v) = height_resources
+                .as_ref()
+                .expect("height computed for normal");
+            let normal_src = if params.normal_prefilter_sigma >= 0.05 {
+                let (_bp, prefilter_bg) = filter_buffer(&FilterParams::gaussian(
+                    params.normal_prefilter_sigma,
+                    seamless,
+                ));
+                let bh = self.gpu.create_bind_group(
                     &self.blur_h_pipeline.bind_group_layout,
-                    &[&s0v],
-                    &[&s5v],
+                    &[height_v],
+                    &[s4v],
                 );
                 steps.push(ChainStep {
                     pipeline: &self.blur_h_pipeline,
-                    bind_group0: bg,
-                    bind_group1: box_bg.clone(),
+                    bind_group0: bh,
+                    bind_group1: prefilter_bg.clone(),
                     workgroups_x,
                     workgroups_y,
                 });
-                let bg = self.gpu.create_bind_group(
+                let bv = self.gpu.create_bind_group(
                     &self.blur_v_pipeline.bind_group_layout,
-                    &[&s5v],
-                    &[&s2v],
+                    &[s4v],
+                    &[s5v],
                 );
                 steps.push(ChainStep {
                     pipeline: &self.blur_v_pipeline,
-                    bind_group0: bg,
-                    bind_group1: box_bg.clone(),
+                    bind_group0: bv,
+                    bind_group1: prefilter_bg,
                     workgroups_x,
                     workgroups_y,
                 });
-                let bg = self.gpu.create_bind_group(
-                    &self.sub_pipeline.bind_group_layout,
-                    &[&s0v, &s2v],
-                    &[&s5v],
-                );
-                steps.push(ChainStep {
-                    pipeline: &self.sub_pipeline,
-                    bind_group0: bg,
-                    bind_group1: params_bind_group.clone(),
-                    workgroups_x,
-                    workgroups_y,
-                });
-                s5v.clone()
-            }
-            None => self.dummy_r32_zero.create_view(&Default::default()),
-        };
+                s5v
+            } else {
+                height_v
+            };
 
-        let bg = self.gpu.create_bind_group(
-            &self.height_final_pipeline.bind_group_layout,
-            &[&base_v, &detail_v, &hf_view],
-            &[&height_v],
-        );
-        steps.push(ChainStep {
-            pipeline: &self.height_final_pipeline,
-            bind_group0: bg,
-            bind_group1: params_bind_group.clone(),
-            workgroups_x,
-            workgroups_y,
-        });
-        timings.height_ms = t0.elapsed().as_millis();
-
-        // === Downstream single-pass maps ===
-        let normal_texture = if selection.normal {
-            let t = Instant::now();
             let tex =
                 self.gpu
                     .create_output_texture(width, height, wgpu::TextureFormat::Rgba8Unorm);
             let view = tex.create_view(&Default::default());
             let bg = self.gpu.create_bind_group(
                 &self.normal_pipeline.bind_group_layout,
-                &[&height_v],
+                &[normal_src],
                 &[&view],
             );
             steps.push(ChainStep {
@@ -949,13 +1032,15 @@ impl Pipeline {
 
         let ao_texture = if selection.ao {
             let t = Instant::now();
+            let (_, _, _, base_v, _, _, height_v) =
+                height_resources.as_ref().expect("height computed for ao");
             let tex =
                 self.gpu
                     .create_output_texture(width, height, wgpu::TextureFormat::Rgba8Unorm);
             let view = tex.create_view(&Default::default());
             let bg = self.gpu.create_bind_group(
                 &self.ao_pipeline.bind_group_layout,
-                &[&height_v, &base_v],
+                &[height_v, base_v],
                 &[&view],
             );
             steps.push(ChainStep {
@@ -973,13 +1058,60 @@ impl Pipeline {
 
         let curvature_texture = if selection.curvature {
             let t = Instant::now();
+            let (_, (s0v, s1v, s2v, s3v, _, _), _, _, _, _, height_v) = height_resources
+                .as_ref()
+                .expect("height computed for curvature");
+            let curv_levels = (params.curvature_levels as i32).clamp(1, 3);
+
+            // Separable Gaussian blurs at σ = 1, 2, 4 reusing s0..s3 (scratch).
+            let mut push_blur = |sigma: f32, dst_v: &wgpu::TextureView| {
+                let (_buf, bg_u) = filter_buffer(&FilterParams::gaussian(sigma, seamless));
+                let bh = self.gpu.create_bind_group(
+                    &self.blur_h_pipeline.bind_group_layout,
+                    &[height_v],
+                    &[s0v],
+                );
+                steps.push(ChainStep {
+                    pipeline: &self.blur_h_pipeline,
+                    bind_group0: bh,
+                    bind_group1: bg_u.clone(),
+                    workgroups_x,
+                    workgroups_y,
+                });
+                let bv = self.gpu.create_bind_group(
+                    &self.blur_v_pipeline.bind_group_layout,
+                    &[s0v],
+                    &[dst_v],
+                );
+                steps.push(ChainStep {
+                    pipeline: &self.blur_v_pipeline,
+                    bind_group0: bv,
+                    bind_group1: bg_u,
+                    workgroups_x,
+                    workgroups_y,
+                });
+            };
+            push_blur(1.0, s1v);
+            let blur2_v = if curv_levels > 1 {
+                push_blur(2.0, s2v);
+                s2v
+            } else {
+                s1v
+            };
+            let blur3_v = if curv_levels > 2 {
+                push_blur(4.0, s3v);
+                s3v
+            } else {
+                s1v
+            };
+
             let tex =
                 self.gpu
                     .create_output_texture(width, height, wgpu::TextureFormat::Rgba8Unorm);
             let view = tex.create_view(&Default::default());
             let bg = self.gpu.create_bind_group(
                 &self.curvature_pipeline.bind_group_layout,
-                &[&height_v],
+                &[s1v, blur2_v, blur3_v],
                 &[&view],
             );
             steps.push(ChainStep {
@@ -995,61 +1127,89 @@ impl Pipeline {
             None
         };
 
-        // One submit for the whole chain.
-        self.gpu.dispatch_chain(&steps);
-
-        // Read back results
+        // One encoder, one submit, one poll for the entire compute chain + all readbacks.
         let t_read = Instant::now();
-        // Propagar (o mesmo `.ok()` do gpu.rs engolia device-lost e o
-        // read_texture a seguir podia ficar pendurado no map_async).
-        self.gpu
-            .device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .context("GPU device poll failed before readback")?;
+        let mut readback_textures: Vec<&wgpu::Texture> = Vec::with_capacity(7);
+        let idx_height = if selection.height {
+            let (_, _, _, _, _, height_tex, _) = height_resources.as_ref().unwrap();
+            let idx = readback_textures.len();
+            readback_textures.push(height_tex);
+            Some(idx)
+        } else {
+            None
+        };
+        let idx_normal = normal_texture.as_ref().map(|t| {
+            let idx = readback_textures.len();
+            readback_textures.push(t);
+            idx
+        });
+        let idx_metallic = metallic_texture.as_ref().map(|t| {
+            let idx = readback_textures.len();
+            readback_textures.push(t);
+            idx
+        });
+        let idx_smoothness = smoothness_texture.as_ref().map(|t| {
+            let idx = readback_textures.len();
+            readback_textures.push(t);
+            idx
+        });
+        let idx_edge = edge_texture.as_ref().map(|t| {
+            let idx = readback_textures.len();
+            readback_textures.push(t);
+            idx
+        });
+        let idx_ao = ao_texture.as_ref().map(|t| {
+            let idx = readback_textures.len();
+            readback_textures.push(t);
+            idx
+        });
+        let idx_curvature = curvature_texture.as_ref().map(|t| {
+            let idx = readback_textures.len();
+            readback_textures.push(t);
+            idx
+        });
 
-        let height_data = self.gpu.read_texture(&height_tex).await?;
-        let normal_data = if let Some(ref nt) = normal_texture {
-            self.gpu.read_texture(nt).await?
-        } else {
-            Vec::new()
-        };
-        let metallic_data = if let Some(ref mt) = metallic_texture {
-            self.gpu.read_texture(mt).await?
-        } else {
-            Vec::new()
-        };
-        let smoothness_data = if let Some(ref st) = smoothness_texture {
-            self.gpu.read_texture(st).await?
-        } else {
-            Vec::new()
-        };
-        let edge_data = if let Some(ref et) = edge_texture {
-            self.gpu.read_texture(et).await?
-        } else {
-            Vec::new()
-        };
-        let ao_data = if let Some(ref at) = ao_texture {
-            self.gpu.read_texture(at).await?
-        } else {
-            Vec::new()
-        };
-        let curvature_data = if let Some(ref ct) = curvature_texture {
-            self.gpu.read_texture(ct).await?
-        } else {
-            Vec::new()
-        };
+        let mut raw_outputs = self
+            .gpu
+            .dispatch_and_read_textures(&steps, &readback_textures)
+            .await?;
         timings.readback_ms = t_read.elapsed().as_millis();
 
-        let height_f32: Vec<f32> = height_data
-            .chunks_exact(4)
-            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-            .collect();
+        let mut take = |idx: Option<usize>| -> Vec<u8> {
+            idx.map(|i| std::mem::take(&mut raw_outputs[i]))
+                .unwrap_or_default()
+        };
 
-        let metallic_r: Vec<u8> = metallic_data.chunks_exact(4).map(|c| c[0]).collect();
-        let smoothness_r: Vec<u8> = smoothness_data.chunks_exact(4).map(|c| c[0]).collect();
-        let edge_r: Vec<u8> = edge_data.chunks_exact(4).map(|c| c[0]).collect();
-        let ao_r: Vec<u8> = ao_data.chunks_exact(4).map(|c| c[0]).collect();
-        let curvature_r: Vec<u8> = curvature_data.chunks_exact(4).map(|c| c[0]).collect();
+        let height_data = take(idx_height);
+        let normal_data = take(idx_normal);
+        let metallic_data = take(idx_metallic);
+        let smoothness_data = take(idx_smoothness);
+        let edge_data = take(idx_edge);
+        let ao_data = take(idx_ao);
+        let curvature_data = take(idx_curvature);
+
+        let height_f32: Vec<f32> = if height_data.is_empty() {
+            Vec::new()
+        } else {
+            #[cfg(target_endian = "little")]
+            {
+                bytemuck::pod_collect_to_vec(&height_data)
+            }
+            #[cfg(not(target_endian = "little"))]
+            {
+                height_data
+                    .chunks_exact(4)
+                    .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                    .collect()
+            }
+        };
+
+        let extract_r = |rgba: &[u8]| -> Vec<u8> { rgba.chunks_exact(4).map(|c| c[0]).collect() };
+        let metallic_r = extract_r(&metallic_data);
+        let smoothness_r = extract_r(&smoothness_data);
+        let edge_r = extract_r(&edge_data);
+        let ao_r = extract_r(&ao_data);
+        let curvature_r = extract_r(&curvature_data);
 
         timings.total_ms = total_start.elapsed().as_millis();
 

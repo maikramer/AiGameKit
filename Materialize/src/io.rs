@@ -191,32 +191,22 @@ pub fn get_output_paths(
 }
 
 pub fn height_to_image(width: u32, height: u32, data: &[f32]) -> DynamicImage {
-    use image::{ImageBuffer, Luma};
-
-    let mut img = ImageBuffer::new(width, height);
-
-    for (x, y, pixel) in img.enumerate_pixels_mut() {
-        let idx = (y * width + x) as usize;
-        let value = (data[idx] * 255.0).clamp(0.0, 255.0) as u8;
-        *pixel = Luma([value]);
-    }
-
+    let raw: Vec<u8> = data
+        .iter()
+        .map(|&v| (v * 255.0).clamp(0.0, 255.0) as u8)
+        .collect();
+    let img = image::GrayImage::from_raw(width, height, raw)
+        .expect("Invalid image dimensions for height data");
     DynamicImage::ImageLuma8(img)
 }
 
 pub fn normal_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
-    use image::{ImageBuffer, Rgb};
-
-    let mut img = ImageBuffer::new(width, height);
-
-    for (x, y, pixel) in img.enumerate_pixels_mut() {
-        let idx = ((y * width + x) * 4) as usize;
-        let r = data[idx];
-        let g = data[idx + 1];
-        let b = data[idx + 2];
-        *pixel = Rgb([r, g, b]);
+    let mut raw = Vec::with_capacity((width * height * 3) as usize);
+    for px in data.chunks_exact(4) {
+        raw.extend_from_slice(&px[..3]);
     }
-
+    let img = image::RgbImage::from_raw(width, height, raw)
+        .expect("Invalid image dimensions for normal data");
     DynamicImage::ImageRgb8(img)
 }
 
@@ -239,7 +229,9 @@ pub fn roughness_to_image(width: u32, height: u32, smoothness: &[u8]) -> Dynamic
         .iter()
         .map(|&v| 255u8.saturating_sub(v))
         .collect();
-    channel_r8_to_image(width, height, &inverted)
+    let img = image::GrayImage::from_raw(width, height, inverted)
+        .expect("Invalid image dimensions for roughness data");
+    DynamicImage::ImageLuma8(img)
 }
 
 pub fn edge_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
@@ -252,6 +244,81 @@ pub fn ao_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
 
 pub fn curvature_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
     channel_r8_to_image(width, height, data)
+}
+
+/// Convert and encode all selected PBR maps in parallel using Rayon.
+#[allow(clippy::too_many_arguments)]
+pub fn save_maps_parallel(
+    maps: &crate::pipeline::PbrMaps,
+    width: u32,
+    height: u32,
+    paths: &OutputPaths,
+    image_format: ImageFormat,
+    quality: u8,
+    roughness: bool,
+) -> Result<()> {
+    use rayon::prelude::*;
+
+    enum MapKind {
+        Height,
+        Normal,
+        Metallic,
+        Smoothness,
+        Edge,
+        Ao,
+        Curvature,
+    }
+
+    let mut tasks: Vec<(MapKind, &str)> = Vec::with_capacity(7);
+    if let Some(p) = &paths.height_path {
+        tasks.push((MapKind::Height, p.as_str()));
+    }
+    if let Some(p) = &paths.normal_path {
+        tasks.push((MapKind::Normal, p.as_str()));
+    }
+    if let Some(p) = &paths.metallic_path {
+        tasks.push((MapKind::Metallic, p.as_str()));
+    }
+    if let Some(p) = &paths.smoothness_path {
+        tasks.push((MapKind::Smoothness, p.as_str()));
+    }
+    if let Some(p) = &paths.edge_path {
+        tasks.push((MapKind::Edge, p.as_str()));
+    }
+    if let Some(p) = &paths.ao_path {
+        tasks.push((MapKind::Ao, p.as_str()));
+    }
+    if let Some(p) = &paths.curvature_path {
+        tasks.push((MapKind::Curvature, p.as_str()));
+    }
+
+    if let Some((_, first_path)) = tasks.first() {
+        if let Some(parent) = Path::new(first_path).parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)
+                    .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
+            }
+        }
+    }
+
+    tasks.par_iter().try_for_each(|(kind, path)| {
+        let img = match kind {
+            MapKind::Height => height_to_image(width, height, &maps.height),
+            MapKind::Normal => normal_to_image(width, height, &maps.normal),
+            MapKind::Metallic => metallic_to_image(width, height, &maps.metallic),
+            MapKind::Smoothness => {
+                if roughness {
+                    roughness_to_image(width, height, &maps.smoothness)
+                } else {
+                    smoothness_to_image(width, height, &maps.smoothness)
+                }
+            }
+            MapKind::Edge => edge_to_image(width, height, &maps.edge),
+            MapKind::Ao => ao_to_image(width, height, &maps.ao),
+            MapKind::Curvature => curvature_to_image(width, height, &maps.curvature),
+        };
+        save_image(&img, path, image_format, quality)
+    })
 }
 
 pub fn output_format_to_image_format(format: &super::cli::OutputFormat) -> ImageFormat {
