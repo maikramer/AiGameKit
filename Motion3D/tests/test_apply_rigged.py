@@ -210,3 +210,54 @@ def test_static_motion_keeps_low_hit_guard_and_does_not_invent_a_stroke() -> Non
     assert _gesture_progress("walk", joints) is None
     hit = _gesture_progress("hurt", joints)
     assert hit is not None and not hit[1].any()
+
+
+def test_in_memory_retarget_matches_keep_sources_disk_roundtrip(tmp_path: Path) -> None:
+    """Caminho in-memory (sem GLB temporário) produz poses idênticas ao round-trip em disco."""
+    bpy = pytest.importorskip("bpy")
+    rt = pytest.importorskip("animator3d.retarget")
+    from motion3d.bpy_export import _build_armature_zup, yup_to_blender
+    from motion3d.skeleton import rest_positions_yup
+
+    from aigamekit_shared.bpy_mesh import import_gltf, save_glb
+
+    profile = rt.load_profile("sprong22")
+    rest = rest_positions_yup(REFERENCE_OFFSETS)
+    rest_z = yup_to_blender(rest + np.array([0.0, -rest[[7, 8, 10, 11], 1].min(), 0.0]))
+    rig_path = tmp_path / "target_rigged.glb"
+
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    arm = _build_armature_zup(bpy, rest_z, name="HeroArm")
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    for src_name, targets in profile.bone_map.items():
+        eb = arm.data.edit_bones.get(src_name)
+        if eb is not None:
+            eb.name = targets[0]
+    bpy.ops.object.mode_set(mode="OBJECT")
+    save_glb([arm], rig_path, export_animations=False, export_skins=True, skip_verify=True)
+
+    joints = make_walk_joints(10)
+    clips = [MotionClip(name="walk", joints=joints, fps=20, offsets=REFERENCE_OFFSETS)]
+    out_disk = tmp_path / "out_disk.glb"
+    out_mem = tmp_path / "out_mem.glb"
+    apply_motions_to_rigged(clips, rig_path, out_disk, keep_sources_dir=tmp_path / "sources")
+    apply_motions_to_rigged(clips, rig_path, out_mem)
+
+    def _eval_poses(glb: Path) -> list[dict[str, np.ndarray]]:
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        import_gltf(glb)
+        obj = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+        poses = []
+        for frame in range(1, 11):
+            bpy.context.scene.frame_set(frame)
+            bpy.context.view_layer.update()
+            poses.append({pb.name: np.array(pb.matrix) for pb in obj.pose.bones})
+        return poses
+
+    poses_disk = _eval_poses(out_disk)
+    poses_mem = _eval_poses(out_mem)
+    assert set(poses_disk[0]) == set(poses_mem[0])
+    for f in range(10):
+        for bn in poses_disk[f]:
+            assert np.allclose(poses_disk[f][bn], poses_mem[f][bn], atol=1e-4)

@@ -100,6 +100,20 @@ class TestBuildCommand:
         command = runtime.build_command("cc")
         assert "-O3" in command and "-march=native" in command
 
+    def test_uses_o3_and_single_pthread(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SPRONG_CFLAGS", raising=False)
+        command = runtime.build_command("cc")
+        assert "-O3" in command
+        assert "-ffp-contract=off" in command
+        assert command.count("-pthread") == 1
+
+    def test_build_dir_tracks_sprong_cflags(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SPRONG_CFLAGS", raising=False)
+        default_dir = runtime.build_dir()
+        monkeypatch.setenv("SPRONG_CFLAGS", "-march=native")
+        custom_dir = runtime.build_dir()
+        assert custom_dir != default_dir
+
     def test_compiler_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SPRONG_CC", "/opt/cc9")
         assert runtime.build_command()[0] == "/opt/cc9"

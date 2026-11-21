@@ -67,10 +67,7 @@ def world_joints(clip: Clip) -> np.ndarray:
     return joints + (root - joints[:, 0, :])[:, None, :]
 
 
-def foot_slide(clip: Clip) -> float:
-    """Mean horizontal motion of a planted foot, across feet and contact frames."""
-    joints = world_joints(clip)
-    contacts = np.asarray(clip.contacts)
+def _foot_slide_world(joints: np.ndarray, contacts: np.ndarray) -> float:
     if len(joints) < 2:
         return 0.0
     delta = np.linalg.norm(np.diff(joints[:, [L_ANKLE, L_FOOT, R_ANKLE, R_FOOT], :], axis=0)[..., [0, 2]], axis=-1)
@@ -80,14 +77,22 @@ def foot_slide(clip: Clip) -> float:
     return float(delta[planted].mean())
 
 
-def ground_penetration(clip: Clip) -> float:
-    """Depth the lowest foot sinks below the clip's own stance plane (p05)."""
-    joints = world_joints(clip)
+def foot_slide(clip: Clip) -> float:
+    """Mean horizontal motion of a planted foot, across feet and contact frames."""
+    return _foot_slide_world(world_joints(clip), np.asarray(clip.contacts))
+
+
+def _ground_penetration_world(joints: np.ndarray) -> float:
     lowest = joints[:, [L_ANKLE, L_FOOT, R_ANKLE, R_FOOT], 1].min(axis=1)
     if lowest.size == 0:
         return 0.0
     floor = float(np.percentile(lowest, 5))
     return float(max(0.0, floor - float(lowest.min())))
+
+
+def ground_penetration(clip: Clip) -> float:
+    """Depth the lowest foot sinks below the clip's own stance plane (p05)."""
+    return _ground_penetration_world(world_joints(clip))
 
 
 def jerk(clip: Clip) -> float:
@@ -117,8 +122,9 @@ def loop_seam(clip: Clip) -> float:
 
 def score_clip(clip: Clip, *, loop: bool = False) -> ClipQuality:
     """Score one clip (lower is better); see module docstring for the weights."""
-    slide = foot_slide(clip)
-    penetration = ground_penetration(clip)
+    world = world_joints(clip)
+    slide = _foot_slide_world(world, np.asarray(clip.contacts))
+    penetration = _ground_penetration_world(world)
     shake = jerk(clip)
     seam = loop_seam(clip) if loop else 0.0
     score = 4.0 * seam + _SLIDE_WEIGHT * slide + _PENETRATION_WEIGHT * penetration + _JERK_WEIGHT * shake

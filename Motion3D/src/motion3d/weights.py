@@ -31,11 +31,8 @@ class ModelIntegrityError(RuntimeError):
 
 def sha256_file(path: str | Path, *, chunk: int = 1 << 20) -> str:
     """Streaming SHA-256 of ``path`` (never loads the file into memory)."""
-    digest = hashlib.sha256()
     with Path(path).open("rb") as handle:
-        for block in iter(lambda: handle.read(chunk), b""):
-            digest.update(block)
-    return digest.hexdigest()
+        return hashlib.file_digest(handle, "sha256", _bufsize=chunk).hexdigest()
 
 
 def _override() -> Path | None:

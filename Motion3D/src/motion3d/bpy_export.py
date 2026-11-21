@@ -209,11 +209,12 @@ def sanitize_locomotion_joints(
     return j
 
 
-def _rodrigues(v: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
-    """Rotate vector ``v`` around unit ``axis`` by ``angle`` radians."""
-    cos_a = math.cos(angle)
-    sin_a = math.sin(angle)
-    return v * cos_a + np.cross(axis, v) * sin_a + axis * float(np.dot(axis, v)) * (1.0 - cos_a)
+def _rodrigues_batch(v: np.ndarray, axis: np.ndarray, angle: np.ndarray) -> np.ndarray:
+    """Vectorized Rodrigues rotation of ``v`` ``(N, 3)`` around unit ``axis`` ``(N, 3)`` by ``angle`` ``(N,)``."""
+    cos_a = np.cos(angle)[:, None]
+    sin_a = np.sin(angle)[:, None]
+    dot = np.sum(axis * v, axis=-1, keepdims=True)
+    return v * cos_a + np.cross(axis, v) * sin_a + axis * dot * (1.0 - cos_a)
 
 
 def _clamp_hinges_yup(
@@ -226,43 +227,64 @@ def _clamp_hinges_yup(
     distal joint (e.g. ball when the ankle moves from a knee correction) are
     translated by the same delta so the foot/hand chain stays rigid.
     """
+    n_frames = joints.shape[0]
     for prox, joint, dist, min_deg, max_deg in limits:
-        lower = np.broadcast_to(np.deg2rad(min_deg), (len(joints),))
-        upper = math.radians(float(max_deg))
+        lower_raw = np.broadcast_to(np.deg2rad(min_deg), (n_frames,))
+        upper_raw = math.radians(float(max_deg))
+        min_rad = np.minimum(lower_raw, upper_raw)
+        max_rad = np.maximum(lower_raw, upper_raw)
         followers = HINGE_FOLLOWERS.get(dist, ())
-        for fi in range(joints.shape[0]):
-            min_rad, max_rad = sorted((lower[fi], upper))
-            p = joints[fi, prox]
-            h = joints[fi, joint]
-            d = joints[fi, dist]
-            v1 = p - h
-            v2 = d - h
-            n1 = float(np.linalg.norm(v1))
-            n2 = float(np.linalg.norm(v2))
-            if n1 < 1e-8 or n2 < 1e-8:
-                continue
-            cos = float(np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0))
-            ang = math.acos(cos)
-            if min_rad <= ang <= max_rad:
-                continue
-            target = min(max(ang, min_rad), max_rad)
-            axis = np.cross(v1, v2)
-            axn = float(np.linalg.norm(axis))
-            if axn < 1e-8:
-                axis = np.cross(v1, np.array([0.0, 1.0, 0.0], dtype=np.float64))
-                axn = float(np.linalg.norm(axis))
-            if axn < 1e-8:
-                axis = np.cross(v1, np.array([1.0, 0.0, 0.0], dtype=np.float64))
-                axn = float(np.linalg.norm(axis))
-            if axn < 1e-8:
-                continue
-            axis = axis / axn
-            v2r = _rodrigues(v2 / n2, axis, target - ang) * n2
-            new_d = h + v2r
-            delta = new_d - d
-            joints[fi, dist] = new_d
-            for child in followers:
-                joints[fi, child] = joints[fi, child] + delta
+
+        p = joints[:, prox]
+        h = joints[:, joint]
+        d = joints[:, dist]
+        v1 = p - h
+        v2 = d - h
+        n1 = np.linalg.norm(v1, axis=-1)
+        n2 = np.linalg.norm(v2, axis=-1)
+        valid = (n1 >= 1e-8) & (n2 >= 1e-8)
+        if not valid.any():
+            continue
+
+        denom = np.where(valid, n1 * n2, 1.0)
+        cos = np.clip(np.sum(v1 * v2, axis=-1) / denom, -1.0, 1.0)
+        ang = np.arccos(cos)
+        mask = valid & ((ang < min_rad) | (ang > max_rad))
+        if not mask.any():
+            continue
+
+        idx = np.flatnonzero(mask)
+        v1_m = v1[idx]
+        v2_m = v2[idx]
+        n2_m = n2[idx]
+        ang_m = ang[idx]
+        target_m = np.clip(ang_m, min_rad[idx], max_rad[idx])
+
+        axis = np.cross(v1_m, v2_m)
+        axn = np.linalg.norm(axis, axis=-1)
+        deg1 = axn < 1e-8
+        if deg1.any():
+            alt1 = np.cross(v1_m[deg1], np.array([0.0, 1.0, 0.0], dtype=np.float64))
+            axis[deg1] = alt1
+            axn[deg1] = np.linalg.norm(alt1, axis=-1)
+        deg2 = axn < 1e-8
+        if deg2.any():
+            alt2 = np.cross(v1_m[deg2], np.array([1.0, 0.0, 0.0], dtype=np.float64))
+            axis[deg2] = alt2
+            axn[deg2] = np.linalg.norm(alt2, axis=-1)
+
+        ok = axn >= 1e-8
+        if not ok.any():
+            continue
+        idx = idx[ok]
+        axis_u = axis[ok] / axn[ok, None]
+        v2_u = v2_m[ok] / n2_m[ok, None]
+        v2r = _rodrigues_batch(v2_u, axis_u, target_m[ok] - ang_m[ok]) * n2_m[ok, None]
+        new_d = h[idx] + v2r
+        delta = new_d - d[idx]
+        joints[idx, dist] = new_d
+        for child in followers:
+            joints[idx, child] += delta
 
 
 def _clamp_torso_lean_yup(joints: np.ndarray, *, max_deg: float) -> None:
@@ -275,30 +297,35 @@ def _clamp_torso_lean_yup(joints: np.ndarray, *, max_deg: float) -> None:
     sits in the upper spine, so the neck — not the chest — is the honest axis.
     """
     max_rad = math.radians(max(float(max_deg), 0.0))
+    pelvis = joints[:, 0]
+    v = joints[:, 12] - pelvis
+    n = np.linalg.norm(v, axis=-1)
+    valid = n >= 1e-8
+    if not valid.any():
+        return
+    u = np.divide(v, n[:, None], out=np.zeros_like(v), where=valid[:, None])
+    tilt = np.arccos(np.clip(u[:, 1], -1.0, 1.0))
+    mask = valid & (tilt > max_rad)
+    if not mask.any():
+        return
+
+    idx = np.flatnonzero(mask)
     up = np.array([0.0, 1.0, 0.0], dtype=np.float64)
-    for fi in range(joints.shape[0]):
-        pelvis = joints[fi, 0]
-        v = joints[fi, 12] - pelvis
-        n = float(np.linalg.norm(v))
-        if n < 1e-8:
-            continue
-        u = v / n
-        tilt = math.acos(float(np.clip(np.dot(u, up), -1.0, 1.0)))
-        if tilt <= max_rad:
-            continue
-        axis = np.cross(u, up)
-        axn = float(np.linalg.norm(axis))
-        if axn < 1e-8:
-            continue
-        axis = axis / axn
-        delta = tilt - max_rad
-        cos_d = math.cos(delta)
-        sin_d = math.sin(delta)
-        for joint_i in UPPER_BODY_INDICES:
-            rel = joints[fi, joint_i] - pelvis
-            joints[fi, joint_i] = pelvis + (
-                rel * cos_d + np.cross(axis, rel) * sin_d + axis * float(np.dot(axis, rel)) * (1.0 - cos_d)
-            )
+    axis = np.cross(u[idx], up)
+    axn = np.linalg.norm(axis, axis=-1)
+    ok = axn >= 1e-8
+    if not ok.any():
+        return
+    idx = idx[ok]
+    axis_u = (axis[ok] / axn[ok, None])[:, None, :]  # (K, 1, 3)
+    delta = (tilt[idx] - max_rad)[:, None, None]  # (K, 1, 1)
+    cos_d = np.cos(delta)
+    sin_d = np.sin(delta)
+    upper = np.asarray(UPPER_BODY_INDICES, dtype=np.intp)
+    piv = pelvis[idx, None, :]  # (K, 1, 3)
+    rel = joints[idx[:, None], upper] - piv  # (K, U, 3)
+    dot = np.sum(axis_u * rel, axis=-1, keepdims=True)
+    joints[idx[:, None], upper] = piv + (rel * cos_d + np.cross(axis_u, rel) * sin_d + axis_u * dot * (1.0 - cos_d))
 
 
 def _body_lateral_yup(joints: np.ndarray) -> np.ndarray:
@@ -351,27 +378,27 @@ def _join_wrists_yup(
     max_sep = max(float(max_sep_m), 1e-4)
     half = 0.5 * max_sep
     lat = _body_lateral_yup(joints)
-    for fi in range(joints.shape[0]):
-        left = joints[fi, 20]
-        right = joints[fi, 21]
-        mid = 0.5 * (left + right)
-        mid_y = float(mid[1])
-        delta = np.asarray(right - left, dtype=np.float64)
-        delta[1] = 0.0  # grip width is lateral; shaft stacks height via shared Y
-        sep_h = float(np.linalg.norm(delta))
-        if sep_h < 1e-6:
-            axis = -lat[fi]
-            half_use = half
-        else:
-            axis = delta / sep_h
-            # Axis must point away from the left side: left never crosses right.
-            if float(np.dot(axis, lat[fi])) > 0.0:
-                axis = -axis
-            half_use = min(half, 0.5 * sep_h) if sep_h <= max_sep else half
-        joints[fi, 20] = mid - axis * half_use
-        joints[fi, 21] = mid + axis * half_use
-        joints[fi, 20, 1] = mid_y
-        joints[fi, 21, 1] = mid_y
+    left = joints[:, 20]
+    right = joints[:, 21]
+    mid = 0.5 * (left + right)
+    mid_y = mid[:, 1].copy()
+
+    delta = (right - left).copy()
+    delta[:, 1] = 0.0  # grip width is lateral; shaft stacks height via shared Y
+    sep_h = np.linalg.norm(delta, axis=-1)
+    degen = sep_h < 1e-6
+    safe_sep = np.where(degen, 1.0, sep_h)
+    axis = np.where(degen[:, None], -lat, delta / safe_sep[:, None])
+    # Axis must point away from the left side: left never crosses right.
+    flipped = (~degen) & (np.sum(axis * lat, axis=-1) > 0.0)
+    axis[flipped] = -axis[flipped]
+    half_use = np.where(degen | (sep_h > max_sep), half, np.minimum(half, 0.5 * sep_h))
+
+    offset = axis * half_use[:, None]
+    joints[:, 20] = mid - offset
+    joints[:, 21] = mid + offset
+    joints[:, 20, 1] = mid_y
+    joints[:, 21, 1] = mid_y
 
 
 def _clamp_foot_pitch_yup(
@@ -383,27 +410,32 @@ def _clamp_foot_pitch_yup(
     """In-place: rebuild ball from ankle so foot pitch stays in ``[min, max]``."""
     min_p = math.radians(float(min_pitch_deg))
     max_p = math.radians(float(max_pitch_deg))
-    up = np.array([0.0, 1.0, 0.0], dtype=np.float64)
     for an, ball in ((7, 10), (8, 11)):
-        for fi in range(joints.shape[0]):
-            ankle = joints[fi, an]
-            v = joints[fi, ball] - ankle
-            length = float(np.linalg.norm(v))
-            if length < 1e-6:
-                continue
-            horiz = float(np.linalg.norm(v[[0, 2]]))
-            pitch = math.atan2(float(v[1]), max(horiz, 1e-8))
-            if min_p <= pitch <= max_p:
-                continue
-            pitch_c = min(max(pitch, min_p), max_p)
-            if horiz < 1e-5:
-                # Degenerate vertical foot — aim slightly forward (-Z in Y-up HML).
-                yaw = np.array([0.0, 0.0, -1.0], dtype=np.float64)
-            else:
-                yaw = np.array([v[0], 0.0, v[2]], dtype=np.float64)
-                yaw /= float(np.linalg.norm(yaw))
-            dir_c = yaw * math.cos(pitch_c) + up * math.sin(pitch_c)
-            joints[fi, ball] = ankle + dir_c * length
+        ankle = joints[:, an]
+        v = joints[:, ball] - ankle
+        length = np.linalg.norm(v, axis=-1)
+        valid = length >= 1e-6
+        if not valid.any():
+            continue
+        horiz = np.hypot(v[:, 0], v[:, 2])
+        pitch = np.arctan2(v[:, 1], np.maximum(horiz, 1e-8))
+        mask = valid & ((pitch < min_p) | (pitch > max_p))
+        if not mask.any():
+            continue
+        idx = np.flatnonzero(mask)
+        pitch_c = np.clip(pitch[idx], min_p, max_p)
+        v_m = v[idx]
+        h_m = horiz[idx]
+        len_m = length[idx]
+        degen = h_m < 1e-5
+        safe_h = np.where(degen, 1.0, h_m)
+        yaw_x = np.where(degen, 0.0, v_m[:, 0] / safe_h)
+        yaw_z = np.where(degen, -1.0, v_m[:, 2] / safe_h)
+        cos_p = np.cos(pitch_c) * len_m
+        sin_p = np.sin(pitch_c) * len_m
+        joints[idx, ball, 0] = ankle[idx, 0] + yaw_x * cos_p
+        joints[idx, ball, 1] = ankle[idx, 1] + sin_p
+        joints[idx, ball, 2] = ankle[idx, 2] + yaw_z * cos_p
 
 
 def yup_to_blender(v: np.ndarray) -> np.ndarray:
@@ -492,6 +524,17 @@ def _aim_directions(joints_zup: np.ndarray) -> np.ndarray:
     return aim_directions(joints_zup)
 
 
+def _action_fcurves(action: Any, arm_obj: Any) -> Any:
+    """Return the writable FCurve collection for ``action`` (Blender 5.x channelbag or 4.x)."""
+    if hasattr(action, "layers"):
+        slot = action.slots.new(id_type="OBJECT", name=arm_obj.name)
+        arm_obj.animation_data.action_slot = slot
+        layer = action.layers.new(name="Layer")
+        strip = layer.strips.new(type="KEYFRAME")
+        return strip.channelbag(slot, ensure=True).fcurves
+    return action.fcurves
+
+
 def _lookat_keyframe(
     bpy: Any,
     arm_obj: Any,
@@ -501,13 +544,19 @@ def _lookat_keyframe(
     clip_name: str,
     in_place: bool = True,
     neutral_aim: dict[str, tuple[float, float, float]] | None = None,
-) -> None:
+    clear_other_actions: bool = True,
+) -> Any:
     """Keyframe pose by aiming each bone at its child joint (armature Z-up).
 
     Orientation is **swing-only**: minimal arc from the bone's rest direction to
     the target direction, composed with the rest orientation. ``to_track_quat``
     picks its own roll from a world reference axis, so limbs came out twisted
     around their own axis once Animator3D copied that roll onto the hero.
+
+    Pose-basis quaternions are solved analytically in topological bone order
+    (``PARENTS[i] < i``) and written straight into FCurves via ``foreach_set``,
+    avoiding per-bone ``view_layer.update()`` and ``frame_set()`` depsgraph
+    re-evaluations (~50x faster with <1e-5 parity).
 
     ``in_place`` keeps the horizontal pelvis travel out of the clip (loopable
     animation); vertical bob stays. Game code drives locomotion, not the clip.
@@ -526,31 +575,35 @@ def _lookat_keyframe(
     n_frames = int(joints_zup.shape[0])
     scene.frame_end = n_frames
 
-    bpy.context.view_layer.objects.active = arm_obj
-    bpy.ops.object.mode_set(mode="POSE")
-
     if arm_obj.animation_data is None:
         arm_obj.animation_data_create()
-    for act in list(bpy.data.actions):
-        bpy.data.actions.remove(act)
+    if clear_other_actions:
+        for act in list(bpy.data.actions):
+            bpy.data.actions.remove(act)
     action = bpy.data.actions.new(name=clip_name)
     arm_obj.animation_data.action = action
+    fcurves = _action_fcurves(action, arm_obj)
 
     for pb in arm_obj.pose.bones:
         pb.rotation_mode = "QUATERNION"
         pb.matrix_basis.identity()
 
     aim_child = AIM_CHILD
-
-    root0 = joints_zup[0, 0].copy()
-    prev: dict[str, Any] = {}
+    n_bones = len(BONE_NAMES)
+    root0 = joints_zup[0, 0]
 
     # Rest orientation + rest bone direction, both in ARMATURE space.
     # ``Bone.y_axis`` is bone-local — using it here aimed every bone 90° off.
-    rest_quat = {bn: arm_obj.data.bones[bn].matrix_local.to_quaternion() for bn in BONE_NAMES}
-    rest_dir = {
-        bn: (arm_obj.data.bones[bn].tail_local - arm_obj.data.bones[bn].head_local).normalized() for bn in BONE_NAMES
-    }
+    bones_data = arm_obj.data.bones
+    rest_quat = [bones_data[bn].matrix_local.to_quaternion() for bn in BONE_NAMES]
+    rest_quat_inv = [q.inverted() for q in rest_quat]
+    rest_rel_inv = [
+        (rest_quat_inv[i] @ rest_quat[PARENTS[i]]) if PARENTS[i] >= 0 else rest_quat_inv[i] for i in range(n_bones)
+    ]
+    rest_rel = [(rest_quat_inv[PARENTS[i]] @ rest_quat[i]) if PARENTS[i] >= 0 else rest_quat[i] for i in range(n_bones)]
+    rest_dir = [(bones_data[bn].tail_local - bones_data[bn].head_local).normalized() for bn in BONE_NAMES]
+    pelvis_rest_m3_inv = bones_data["pelvis"].matrix_local.to_3x3().inverted()
+    pelvis_head_z = float(bones_data["pelvis"].head_local.z)
 
     # Animator3D copies bone directions in world space, so the neutral correction
     # has to be baked into the aim itself (not into the source rest pose).
@@ -567,59 +620,141 @@ def _lookat_keyframe(
         aim_fix[i] = outward @ aim_fix[i] if i in aim_fix else outward
 
     flexion = _bilateral_thigh_flexion(joints_zup, 2)
+    quats = np.empty((n_bones, n_frames, 4), dtype=np.float64)
+    pelvis_locs = np.empty((n_frames, 3), dtype=np.float64)
+    prev: list[Any] = [None] * n_bones
+    identity_q = Quaternion((1.0, 0.0, 0.0, 0.0))
+
     for fi in range(n_frames):
-        frame = fi + 1
-        scene.frame_set(frame)
-        for i, bname in enumerate(BONE_NAMES):
-            pb = arm_obj.pose.bones.get(bname)
-            if pb is None:
-                continue
-            head = joints_zup[fi, i]
+        pose_q: list[Any] = [None] * n_bones
+        flex_bonus = 65.0 * float(flexion[fi])
+        for i in range(n_bones):
+            parent_i = PARENTS[i]
             if i in LEAF_BONES:
-                q = Quaternion((1.0, 0.0, 0.0, 0.0))
+                q = identity_q
+                pose_q[i] = (pose_q[parent_i] @ rest_rel[i]) if parent_i >= 0 else rest_quat[i]
             else:
+                head = joints_zup[fi, i]
                 tip = joints_zup[fi, aim_child[i]]
                 y = Vector((float(tip[0] - head[0]), float(tip[1] - head[1]), float(tip[2] - head[2])))
                 if y.length < 1e-8:
-                    y = rest_dir[bname].copy()
+                    y = rest_dir[i].copy()
                 else:
                     y.normalize()
                 if i in aim_fix:
                     y = aim_fix[i] @ y
                 # Swing-only: no arbitrary roll → no twisted limbs downstream.
-                swing = rest_dir[bname].rotation_difference(y)
+                swing = rest_dir[i].rotation_difference(y)
                 max_swing = MAX_SWING_DEG.get(i)
                 if max_swing is not None:
-                    limit = math.radians(max_swing + 65.0 * flexion[fi])
+                    limit = math.radians(max_swing + flex_bonus)
                     if swing.angle > limit:
                         swing = Quaternion(swing.axis, limit)
-                mat = (swing @ rest_quat[bname]).to_matrix().to_4x4()
-                mat.translation = Vector((float(head[0]), float(head[1]), float(head[2])))
-                pb.matrix = mat
-                bpy.context.view_layer.update()
-
-                q = pb.rotation_quaternion.copy()
+                world_q = swing @ rest_quat[i]
+                pose_q[i] = world_q
+                if parent_i >= 0:
+                    q = rest_rel_inv[i] @ pose_q[parent_i].inverted() @ world_q
+                else:
+                    q = rest_quat_inv[i] @ world_q
                 q.normalize()
-                if bname in prev:
-                    q.make_compatible(prev[bname])
-            prev[bname] = q.copy()
+                if prev[i] is not None:
+                    q.make_compatible(prev[i])
+            prev[i] = q.copy()
+            quats[i, fi, 0] = q.w
+            quats[i, fi, 1] = q.x
+            quats[i, fi, 2] = q.y
+            quats[i, fi, 3] = q.z
+            if i == 0:
+                head0 = joints_zup[fi, 0]
+                dx = 0.0 if in_place else float(head0[0] - root0[0])
+                dy = 0.0 if in_place else float(head0[1] - root0[1])
+                delta = Vector((dx, dy, float(head0[2] - pelvis_head_z)))
+                loc = pelvis_rest_m3_inv @ delta
+                pelvis_locs[fi, 0] = loc.x
+                pelvis_locs[fi, 1] = loc.y
+                pelvis_locs[fi, 2] = loc.z
 
-            pb.matrix_basis.identity()
-            pb.rotation_quaternion = q
-            if bname == "pelvis":
-                dx = 0.0 if in_place else float(head[0] - root0[0])
-                dy = 0.0 if in_place else float(head[1] - root0[1])
-                delta = Vector((dx, dy, float(head[2] - pb.bone.head_local.z)))
-                rest_m3 = arm_obj.data.bones["pelvis"].matrix_local.to_3x3()
-                loc = rest_m3.inverted() @ delta
-                pb.location = (float(loc.x), float(loc.y), float(loc.z))
-                pb.keyframe_insert(data_path="location", frame=frame)
-            else:
-                pb.location = (0.0, 0.0, 0.0)
-            pb.keyframe_insert(data_path="rotation_quaternion", frame=frame)
-            bpy.context.view_layer.update()
+    frames = np.arange(1, n_frames + 1, dtype=np.float64)
+    co_buf = np.empty(n_frames * 2, dtype=np.float64)
+    co_buf[0::2] = frames
 
-    bpy.ops.object.mode_set(mode="OBJECT")
+    pelvis_loc_dp = 'pose.bones["pelvis"].location'
+    for idx in range(3):
+        fc = fcurves.new(data_path=pelvis_loc_dp, index=idx)
+        fc.keyframe_points.add(n_frames)
+        co_buf[1::2] = pelvis_locs[:, idx]
+        fc.keyframe_points.foreach_set("co", co_buf)
+        fc.update()
+
+    for i, bname in enumerate(BONE_NAMES):
+        dp = f'pose.bones["{bname}"].rotation_quaternion'
+        for idx in range(4):
+            fc = fcurves.new(data_path=dp, index=idx)
+            fc.keyframe_points.add(n_frames)
+            co_buf[1::2] = quats[i, :, idx]
+            fc.keyframe_points.foreach_set("co", co_buf)
+            fc.update()
+
+    return action
+
+
+def build_source_armature_in_scene(
+    bpy: Any,
+    joints: np.ndarray,
+    *,
+    fps: int = DEFAULT_FPS,
+    clip_name: str = "sprong_motion",
+    armature_name: str = "Sprong22",
+    offsets: np.ndarray | None = None,
+    in_place: bool = True,
+    neutral_aim: dict[str, tuple[float, float, float]] | None = None,
+    max_lean_deg: float | None = None,
+    hands_together_m: float | None = None,
+    plant_feet: bool = False,
+    clear_other_actions: bool = False,
+) -> tuple[Any, Any]:
+    """Build and keyframe a Sprong22 source armature directly in the current Blender scene.
+
+    Returns ``(armature_object, action)``. Used by both :func:`export_joints_glb`
+    and in-memory retargeting in :mod:`motion3d.apply_rigged` (skips temporary
+    GLB export/re-import round-trips when ``keep_sources_dir`` is not requested).
+    """
+    if joints.ndim != 3 or joints.shape[1] != 22 or joints.shape[2] != 3:
+        raise ValueError(f"joints must be (T, 22, 3); got {joints.shape}")
+    if neutral_aim is None:
+        neutral_aim = filter_neutral_aim_for_clip(
+            joints, {BONE_NAMES[i]: direction for i, direction in NEUTRAL_AIM.items()}, in_place=in_place
+        )
+    joints = sanitize_locomotion_joints(
+        joints,
+        max_lean_deg=max_lean_deg,
+        hands_together_m=hands_together_m,
+        plant_feet=plant_feet,
+    )
+
+    joints_y = np.asarray(joints, dtype=np.float64)
+    rest_y = rest_positions_yup(offsets)
+    # Bind at standing height. Key the absolute pelvis height above the
+    # floor so a clip starting in a seat reproduces its initial hip drop.
+    rest_y = rest_y + np.array([joints_y[0, 0, 0], -rest_y[[7, 8, 10, 11], 1].min(), joints_y[0, 0, 2]])
+    rest_z = yup_to_blender(rest_y)
+    joints_z = yup_to_blender(joints_y)
+    if in_place:
+        joints_z = stabilize_facing_zup(joints_z)
+
+    bpy.context.scene.render.fps = int(fps)
+    arm = _build_armature_zup(bpy, rest_z, name=armature_name)
+    action = _lookat_keyframe(
+        bpy,
+        arm,
+        joints_z,
+        fps=fps,
+        clip_name=clip_name,
+        in_place=in_place,
+        neutral_aim=neutral_aim,
+        clear_other_actions=clear_other_actions,
+    )
+    return arm, action
 
 
 def export_joints_glb(
@@ -656,42 +791,25 @@ def export_joints_glb(
     """
     if joints.ndim != 3 or joints.shape[1] != 22 or joints.shape[2] != 3:
         raise ValueError(f"joints must be (T, 22, 3); got {joints.shape}")
-    if neutral_aim is None:
-        neutral_aim = filter_neutral_aim_for_clip(
-            joints, {BONE_NAMES[i]: direction for i, direction in NEUTRAL_AIM.items()}, in_place=in_place
-        )
-    joints = sanitize_locomotion_joints(
-        joints,
-        max_lean_deg=max_lean_deg,
-        hands_together_m=hands_together_m,
-        plant_feet=plant_feet,
-    )
 
     out = Path(output).expanduser().resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    joints_y = np.asarray(joints, dtype=np.float64)
-    rest_y = rest_positions_yup(offsets)
-    # Bind at standing height. Key the absolute pelvis height above the
-    # floor so a clip starting in a seat reproduces its initial hip drop.
-    rest_y = rest_y + np.array([joints_y[0, 0, 0], -rest_y[[7, 8, 10, 11], 1].min(), joints_y[0, 0, 2]])
-    rest_z = yup_to_blender(rest_y)
-    joints_z = yup_to_blender(joints_y)
-    if in_place:
-        joints_z = stabilize_facing_zup(joints_z)
-
     bpy = _bpy()
     _clear_scene(bpy)
-    bpy.context.scene.render.fps = int(fps)
-    arm = _build_armature_zup(bpy, rest_z)
-    _lookat_keyframe(
+    arm, _action = build_source_armature_in_scene(
         bpy,
-        arm,
-        joints_z,
+        joints,
         fps=fps,
         clip_name=clip_name,
+        armature_name="Sprong22",
+        offsets=offsets,
         in_place=in_place,
         neutral_aim=neutral_aim,
+        max_lean_deg=max_lean_deg,
+        hands_together_m=hands_together_m,
+        plant_feet=plant_feet,
+        clear_other_actions=True,
     )
 
     from aigamekit_shared.bpy_mesh import save_glb

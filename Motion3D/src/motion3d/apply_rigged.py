@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import contextlib
 import re
-import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -268,6 +267,7 @@ def apply_motions_to_rigged(
     from motion3d.bpy_export import (
         BONE_NAMES,
         NEUTRAL_AIM,
+        build_source_armature_in_scene,
         export_joints_glb,
         filter_neutral_aim_for_clip,
     )
@@ -278,66 +278,69 @@ def apply_motions_to_rigged(
         keep_sources_dir = Path(keep_sources_dir).expanduser().resolve()
         keep_sources_dir.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="motion3d_pack_") as tmp:
-        tmp_path = Path(tmp)
-        # Pre-bake every source GLB (constraints + look-at) before the pack scene.
-        prepared: list[tuple[MotionClip, Path, int, np.ndarray]] = []
-        for clip in normalized:
-            joints, clip_fps, offsets = load_clip_joints(clip)
-            if joints.ndim != 3 or joints.shape[1] != 22 or joints.shape[2] != 3:
-                raise ValueError(f"clip {clip.name!r}: joints must be (T, 22, 3); got {joints.shape}")
-            use_fps = int(clip_fps if clip_fps is not None else fps)
-            src_name = f"{clip.name}_sprong_source.glb"
-            src_path = (keep_sources_dir / src_name) if keep_sources_dir else tmp_path / src_name
-            base_neutral = {BONE_NAMES[i]: d for i, d in NEUTRAL_AIM.items()}
-            use_arm = str(_pick(clip.arm_neutral, arm_neutral))
-            use_in_place = bool(_pick(clip.in_place, in_place))
-            # The auto arm-neutral must be decided on the same (stabilized)
-            # joints the bake will sample, or a gesturing clip that turns gets
-            # its arms neutralized and ends up inside the torso.
-            neutral_aim = filter_neutral_aim_for_clip(
-                joints,
-                base_neutral,
-                arm_neutral=use_arm,
-                in_place=use_in_place,
-            )
+    # Validate & resolve every clip upfront before mutating the Blender scene.
+    base_neutral = {BONE_NAMES[i]: d for i, d in NEUTRAL_AIM.items()}
+    clip_specs: list[
+        tuple[MotionClip, np.ndarray, int, np.ndarray, bool, dict[str, tuple[float, float, float]], Path | None]
+    ] = []
+    for clip in normalized:
+        joints, clip_fps, offsets = load_clip_joints(clip)
+        if joints.ndim != 3 or joints.shape[1] != 22 or joints.shape[2] != 3:
+            raise ValueError(f"clip {clip.name!r}: joints must be (T, 22, 3); got {joints.shape}")
+        use_fps = int(clip_fps if clip_fps is not None else fps)
+        use_arm = str(_pick(clip.arm_neutral, arm_neutral))
+        use_in_place = bool(_pick(clip.in_place, in_place))
+        # The auto arm-neutral must be decided on the same (stabilized)
+        # joints the bake will sample, or a gesturing clip that turns gets
+        # its arms neutralized and ends up inside the torso.
+        neutral_aim = filter_neutral_aim_for_clip(
+            joints,
+            base_neutral,
+            arm_neutral=use_arm,
+            in_place=use_in_place,
+        )
+        use_offsets = offsets if offsets is not None else REFERENCE_OFFSETS
+        src_path: Path | None = None
+        if keep_sources_dir is not None:
+            src_path = keep_sources_dir / f"{clip.name}_sprong_source.glb"
             export_joints_glb(
                 joints,
                 src_path,
                 fps=use_fps,
                 clip_name=DEFAULT_SOURCE_TRACK,
-                offsets=offsets if offsets is not None else REFERENCE_OFFSETS,
+                offsets=use_offsets,
                 in_place=use_in_place,
                 neutral_aim=neutral_aim,
                 max_lean_deg=_pick(clip.max_lean_deg, max_lean_deg),
                 hands_together_m=_pick(clip.hands_together_m, hands_together_m),
                 plant_feet=bool(_pick(clip.plant_feet, plant_feet)),
             )
-            prepared.append((clip, src_path, use_fps, joints))
+        clip_specs.append((clip, joints, use_fps, use_offsets, use_in_place, neutral_aim, src_path))
 
-        bpy = _bpy()
-        bpy.ops.wm.read_factory_settings(use_empty=True)
-        # Scene FPS = first clip; each source was baked at its own fps already.
-        bpy.context.scene.render.fps = int(prepared[0][2])
-        import_gltf(rigged)
-        targets = [o for o in bpy.data.objects if o.type == "ARMATURE"]
-        if not targets:
-            raise RuntimeError(f"No armature in {rigged}")
-        target = targets[0]
-        target.name = "Target"
-        rt.ensure_feet_root_bone(target)
+    bpy = _bpy()
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    # Scene FPS = first clip; each source is baked at its own fps.
+    bpy.context.scene.render.fps = int(clip_specs[0][2])
+    import_gltf(rigged)
+    targets = [o for o in bpy.data.objects if o.type == "ARMATURE"]
+    if not targets:
+        raise RuntimeError(f"No armature in {rigged}")
+    target = targets[0]
+    target.name = "Target"
+    rt.ensure_feet_root_bone(target)
 
-        if target.animation_data is not None:
-            while target.animation_data.nla_tracks:
-                target.animation_data.nla_tracks.remove(target.animation_data.nla_tracks[0])
-            target.animation_data.action = None
+    if target.animation_data is not None:
+        while target.animation_data.nla_tracks:
+            target.animation_data.nla_tracks.remove(target.animation_data.nla_tracks[0])
+        target.animation_data.action = None
 
-        results: list[dict[str, Any]] = []
-        kept_actions: set[str] = set()
-        for clip, src_path, use_fps, joints in prepared:
-            bpy.context.scene.render.fps = int(use_fps)
+    results: list[dict[str, Any]] = []
+    kept_actions: set[str] = set()
+    for clip, joints, use_fps, use_offsets, use_in_place, neutral_aim, src_path in clip_specs:
+        bpy.context.scene.render.fps = int(use_fps)
+        before_actions = {a.name for a in bpy.data.actions}
+        if src_path is not None:
             before = {o.name for o in bpy.data.objects}
-            before_actions = {a.name for a in bpy.data.actions}
             import_gltf(src_path)
             sources = [o for o in bpy.data.objects if o.type == "ARMATURE" and o.name not in before]
             if not sources:
@@ -346,7 +349,6 @@ def apply_motions_to_rigged(
                 raise RuntimeError(f"No source armature from {src_path}")
             source = sources[0]
             source.name = "Sprong_Source"
-
             src_action = _resolve_source_action(bpy, source, DEFAULT_SOURCE_TRACK)
             if src_action is None:
                 raise RuntimeError(f"Source action missing after import ({clip.name})")
@@ -354,81 +356,105 @@ def apply_motions_to_rigged(
             if source.animation_data is None:
                 source.animation_data_create()
             source.animation_data.action = src_action
-
-            # Drop colliding target clip name before retarget creates a fresh one.
-            old = bpy.data.actions.get(clip.name)
-            if old is not None:
+        else:
+            # Build Sprong_Source directly in memory — skips temporary GLB
+            # serialization + re-import round-trips per clip.
+            old_src_act = bpy.data.actions.get(DEFAULT_SOURCE_TRACK)
+            if old_src_act is not None and DEFAULT_SOURCE_TRACK not in kept_actions:
                 with contextlib.suppress(RuntimeError):
-                    bpy.data.actions.remove(old)
-
-            res = rt.retarget_animation(
-                "Target",
-                "Sprong_Source",
-                profile.bone_map,
-                DEFAULT_SOURCE_TRACK,
-                clip.name,
-                full_rest_bones=profile.full_rest_bones,
+                    bpy.data.actions.remove(old_src_act)
+            source, src_action = build_source_armature_in_scene(
+                bpy,
+                joints,
+                fps=use_fps,
+                clip_name=DEFAULT_SOURCE_TRACK,
+                armature_name="Sprong_Source",
+                offsets=use_offsets,
+                in_place=use_in_place,
+                neutral_aim=neutral_aim,
+                max_lean_deg=_pick(clip.max_lean_deg, max_lean_deg),
+                hands_together_m=_pick(clip.hands_together_m, hands_together_m),
+                plant_feet=bool(_pick(clip.plant_feet, plant_feet)),
+                clear_other_actions=False,
             )
-            if profile_name == DEFAULT_PROFILE and _pick(clip.hands_together_m, hands_together_m) is None:
-                motion = _gesture_progress(clip.name, joints)
-                if motion is not None or _two_handed_front_gesture(joints):
-                    from animator3d.hand_clearance import fit_front_gesture
+            src_action.name = DEFAULT_SOURCE_TRACK
 
-                    pairs, _ = rt.resolve_bone_pairs(target.data.bones, source.data.bones, profile.bone_map)
-                    fit_front_gesture(
-                        target, bpy.data.actions[clip.name], {src: tgt for tgt, src in pairs.items()}, motion
-                    )
-            results.append(res)
-            kept_actions.add(clip.name)
+        # Drop colliding target clip name before retarget creates a fresh one.
+        old = bpy.data.actions.get(clip.name)
+        if old is not None:
+            with contextlib.suppress(RuntimeError):
+                bpy.data.actions.remove(old)
 
-            bpy.data.objects.remove(source, do_unlink=True)
-            # Remove only actions that arrived with this source import.
-            for act in list(bpy.data.actions):
-                if act.name in kept_actions:
-                    continue
-                if act.name in before_actions:
-                    continue
-                with contextlib.suppress(RuntimeError):
-                    bpy.data.actions.remove(act)
-
-        active_name = active_clip or normalized[0].name
-        if active_name not in kept_actions:
-            raise ValueError(f"active_clip {active_name!r} not in pack {sorted(kept_actions)}")
-        clip_act = bpy.data.actions.get(active_name)
-        if target.animation_data is None:
-            target.animation_data_create()
-        # Keep NLA strips (retarget pushed each clip) AND set active for viewers
-        # that only play the active action.
-        if clip_act is not None:
-            target.animation_data.action = clip_act
-
-        _strip_debug_meshes(bpy)
-        # O glTF exporter converte TODAS as actions com o fps de cena único.
-        # O loop re-definia o fps por clip e o save corria com o do ÚLTIMO —
-        # packs com fps mistos exportavam durações erradas. Voltar ao fps do
-        # primeiro clip (contrato "Scene FPS = first clip") e avisar quando o
-        # pack mistura fps (conversão única não os pode representar a todos).
-        fps_set = {int(f) for _, _, f, _ in prepared}
-        if len(fps_set) > 1:
-            import warnings
-
-            warnings.warn(
-                f"apply_motions_to_rigged: pack com fps mistos {sorted(fps_set)} — "
-                "a exportação usa um fps de cena único; clips com fps diferente "
-                "do primeiro terão duração ajustada no GLB final.",
-                stacklevel=2,
-            )
-        bpy.context.scene.render.fps = int(prepared[0][2])
-        objs = [o for o in bpy.context.scene.objects if o.type in ("ARMATURE", "MESH")]
-        save_glb(
-            objs,
-            out,
-            export_animations=True,
-            export_animation_mode="ACTIONS",
-            export_skins=True,
-            export_apply=False,
-            skip_verify=True,
+        res = rt.retarget_animation(
+            "Target",
+            "Sprong_Source",
+            profile.bone_map,
+            DEFAULT_SOURCE_TRACK,
+            clip.name,
+            full_rest_bones=profile.full_rest_bones,
         )
+        if profile_name == DEFAULT_PROFILE and _pick(clip.hands_together_m, hands_together_m) is None:
+            motion = _gesture_progress(clip.name, joints)
+            if motion is not None or _two_handed_front_gesture(joints):
+                from animator3d.hand_clearance import fit_front_gesture
+
+                pairs, _ = rt.resolve_bone_pairs(target.data.bones, source.data.bones, profile.bone_map)
+                fit_front_gesture(target, bpy.data.actions[clip.name], {src: tgt for tgt, src in pairs.items()}, motion)
+        results.append(res)
+        kept_actions.add(clip.name)
+
+        source_arm_data = source.data
+        bpy.data.objects.remove(source, do_unlink=True)
+        if source_arm_data is not None and source_arm_data.users == 0:
+            with contextlib.suppress(RuntimeError):
+                bpy.data.armatures.remove(source_arm_data)
+        # Remove only actions that arrived with this source clip.
+        for act in list(bpy.data.actions):
+            if act.name in kept_actions:
+                continue
+            if act.name in before_actions:
+                continue
+            with contextlib.suppress(RuntimeError):
+                bpy.data.actions.remove(act)
+
+    active_name = active_clip or normalized[0].name
+    if active_name not in kept_actions:
+        raise ValueError(f"active_clip {active_name!r} not in pack {sorted(kept_actions)}")
+    clip_act = bpy.data.actions.get(active_name)
+    if target.animation_data is None:
+        target.animation_data_create()
+    # Keep NLA strips (retarget pushed each clip) AND set active for viewers
+    # that only play the active action.
+    if clip_act is not None:
+        target.animation_data.action = clip_act
+
+    _strip_debug_meshes(bpy)
+    # O glTF exporter converte TODAS as actions com o fps de cena único.
+    # O loop re-definia o fps por clip e o save corria com o do ÚLTIMO —
+    # packs com fps mistos exportavam durações erradas. Voltar ao fps do
+    # primeiro clip (contrato "Scene FPS = first clip") e avisar quando o
+    # pack mistura fps (conversão única não os pode representar a todos).
+    fps_set = {int(f) for _, _, f, _, _, _, _ in clip_specs}
+    if len(fps_set) > 1:
+        import warnings
+
+        warnings.warn(
+            f"apply_motions_to_rigged: pack com fps mistos {sorted(fps_set)} — "
+            "a exportação usa um fps de cena único; clips com fps diferente "
+            "do primeiro terão duração ajustada no GLB final.",
+            stacklevel=2,
+        )
+    bpy.context.scene.render.fps = int(clip_specs[0][2])
+    objs = [o for o in bpy.context.scene.objects if o.type in ("ARMATURE", "MESH")]
+    save_glb(
+        objs,
+        out,
+        export_animations=True,
+        export_animation_mode="ACTIONS",
+        export_skins=True,
+        export_apply=False,
+        skip_verify=True,
+    )
 
     return {
         "output": out,

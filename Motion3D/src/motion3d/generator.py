@@ -61,9 +61,19 @@ class MotionGenerator:
         with cls._instance_lock:
             if cls._instance is None:
                 cls._instance = cls(model_path, thread_count=thread_count, on_status=on_status)
-            elif model_path is not None and cls._instance._model_path != Path(model_path).expanduser():
-                cls._instance.unload()
-                cls._instance._model_path = Path(model_path).expanduser()
+            else:
+                new_path = Path(model_path).expanduser() if model_path is not None else None
+                need_reload = (new_path is not None and cls._instance._model_path != new_path) or (
+                    thread_count is not None and cls._instance._thread_count != thread_count
+                )
+                if need_reload:
+                    cls._instance.unload()
+                    if new_path is not None:
+                        cls._instance._model_path = new_path
+                    if thread_count is not None:
+                        cls._instance._thread_count = thread_count
+                if on_status is not None:
+                    cls._instance._on_status = _status_logger(on_status)
             return cls._instance
 
     # -- lifecycle --------------------------------------------------------
@@ -189,7 +199,7 @@ class MotionGenerator:
             options=options,
             bvh_path=bvh_path,
         )
-        quality = score_clip(clip, loop=bool(options and options.loop))
+        quality = self.last_quality or score_clip(clip, loop=bool(options and options.loop))
 
         if suffix == ".glb":
             from .bpy_export import export_joints_glb

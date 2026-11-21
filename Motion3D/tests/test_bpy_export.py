@@ -281,3 +281,26 @@ def test_initial_seated_height_survives_retarget_bind_pose(tmp_path: Path, bpy_m
     bpy.context.scene.frame_set(1)
     assert arm.data.bones["pelvis"].head_local.z > 0.8
     assert arm.pose.bones["pelvis"].head.z == pytest.approx(joints[0, 0, 1], abs=1e-5)
+
+
+def test_vectorized_sanitize_respects_all_constraints_across_frames() -> None:
+    joints = make_walk_joints(16)
+    # Introduce extreme torso lean, wide wrists and hyper-extended knees on alternating frames.
+    joints[1::2, 12, 2] += 0.8
+    joints[:, 20, 0] += 0.4
+    joints[:, 21, 0] -= 0.4
+    joints[0::2, 7, 2] -= 0.45
+
+    out = be.sanitize_locomotion_joints(
+        joints,
+        max_lean_deg=20.0,
+        hands_together_m=0.12,
+        plant_feet=True,
+    )
+    assert np.isfinite(out).all()
+    v = out[:, 12] - out[:, 0]
+    lean = np.degrees(np.arccos(np.clip(v[:, 1] / np.linalg.norm(v, axis=-1), -1.0, 1.0)))
+    assert float(lean.max()) <= 20.05
+    wrist_sep = np.linalg.norm(out[:, 21] - out[:, 20], axis=-1)
+    assert float(wrist_sep.max()) <= 0.1205
+    assert np.allclose(out[:, 20, 1], out[:, 21, 1], atol=1e-9)
