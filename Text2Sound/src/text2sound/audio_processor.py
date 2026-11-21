@@ -369,6 +369,7 @@ def apply_mastering_chain(
     lufs_target: float | None = None,
     true_peak_db: float | None = None,
     headroom_db: float = 0.3,
+    preroll_samples: int = 0,
 ) -> torch.Tensor:
     """Apply an optional mastering chain (pedalboard + pyloudnorm).
 
@@ -380,6 +381,10 @@ def apply_mastering_chain(
 
     A fixed headroom margin (``headroom_db``) is left below 0 dBFS at the very
     end via a Gain stage, so PCM quantization rounding cannot clip.
+
+    When ``preroll_samples > 0``, the leading samples are used to warm up the
+    stateful DSP stages (HPF, compressor, limiter) for seamless loop wraps,
+    excluded from the LUFS measurement window, and stripped from the output.
 
     This is a pure function: returns a new tensor, never mutates the input.
     When every optional param is None, the audio is returned unchanged.
@@ -395,12 +400,16 @@ def apply_mastering_chain(
         lufs_target: Target integrated loudness in LUFS (None = skip LUFS).
         true_peak_db: Limiter ceiling in dB (None = skip limiter).
         headroom_db: Margin below 0 dBFS applied at the end (default 0.3).
+        preroll_samples: Leading warmup samples to exclude from LUFS and trim
+            from the returned tensor (default 0).
 
     Returns:
-        Tensor (channels, samples) float32, same shape as input.
+        Tensor (channels, samples - preroll_samples) float32.
     """
     if audio.shape[-1] == 0:
         return audio
+
+    preroll = max(0, min(int(preroll_samples), int(audio.shape[-1]) - 1))
 
     # Decide whether there's any work to do.
     want_hp = bool(high_pass_hz and high_pass_hz > 0)
@@ -408,13 +417,13 @@ def apply_mastering_chain(
     want_lufs = lufs_target is not None
     want_limiter = true_peak_db is not None
     if not (want_hp or want_comp or want_lufs or want_limiter):
-        return audio
+        return audio[..., preroll:] if preroll > 0 else audio
 
     try:
         from pedalboard import Compressor, HighpassFilter, Limiter, Pedalboard
     except ImportError:
         # pedalboard unavailable — degrade gracefully, preserve old behaviour.
-        return audio
+        return audio[..., preroll:] if preroll > 0 else audio
 
     # (channels, samples) → (samples, channels) for pedalboard.
     audio_in = audio.detach().cpu().to(torch.float32).numpy().T
@@ -435,9 +444,11 @@ def apply_mastering_chain(
             )
         shaping.append(Compressor(**_COMPRESSOR_PRESETS[compressor_preset]))
 
+    owned = False
     if shaping:
         shaped_board = Pedalboard(shaping)
         audio_in = shaped_board(audio_in, sample_rate)
+        owned = True
 
     # Stage 2: LUFS normalization — measure loudness on the shaped signal (post
     # HP/compressor) and apply a digital gain to hit the target. This runs
@@ -445,25 +456,31 @@ def apply_mastering_chain(
     if want_lufs:
         import pyloudnorm as pyln
 
-        # pyloudnorm's integrated loudness needs >= 1 block (0.4s default) of
-        # audio. Very short SFX (e.g. 0.5s after crop) can fall below this and
-        # raise "Audio must have length greater than the block size". In that
-        # case fall back to peak normalization (still respects the headroom).
-        n_samples = audio_in.shape[0]
+        # Measure only the steady-state body (excluding seamless preroll) so
+        # integrated loudness matches the final loop without double-work.
+        body = audio_in[preroll:] if preroll > 0 else audio_in
+        n_samples = body.shape[0]
         min_lufs_samples = int(0.45 * sample_rate)  # 0.4s block + small margin
         if n_samples >= min_lufs_samples:
             meter = pyln.Meter(sample_rate)
-            measured = meter.integrated_loudness(audio_in)
+            measured = meter.integrated_loudness(body)
             if np.isfinite(measured):
                 delta_db = float(lufs_target) - float(measured)
-                audio_in = audio_in * (10.0 ** (delta_db / 20.0))
+                gain = float(10.0 ** (delta_db / 20.0))
+                if not owned:
+                    audio_in = audio_in.copy()
+                    owned = True
+                audio_in *= gain
         else:
             # Audio too short for LUFS measurement — fall back to peak
             # normalization to a safe level.
-            peak = float(np.max(np.abs(audio_in)))
+            peak = float(np.max(np.abs(body)))
             if peak > 1e-6:
-                target_peak = 10.0 ** (-(1.0 + (headroom_db or 0.0)) / 20.0)
-                audio_in = audio_in * (target_peak / peak)
+                target_peak = float(10.0 ** (-(1.0 + (headroom_db or 0.0)) / 20.0))
+                if not owned:
+                    audio_in = audio_in.copy()
+                    owned = True
+                audio_in *= target_peak / peak
 
     # Stage 3: true-peak limiter — runs AFTER LUFS gain to clamp any peaks the
     # gain pushed above the ceiling. This is correct mastering order: shape →
@@ -471,18 +488,26 @@ def apply_mastering_chain(
     if want_limiter:
         lim_board = Pedalboard([Limiter(threshold_db=float(true_peak_db), release_ms=100.0)])
         audio_in = lim_board(audio_in, sample_rate)
+        owned = True
         # Hard-clip at the ceiling as an absolute guarantee. Pedalboard's Limiter
         # (like analog limiters) permits inter-sample overshoot; the hard clip
         # ensures no sample exceeds the threshold. Industry-standard "brickwall".
-        ceiling_linear = 10.0 ** (float(true_peak_db) / 20.0)
-        audio_in = np.clip(audio_in, -ceiling_linear, ceiling_linear)
+        ceiling_linear = float(10.0 ** (float(true_peak_db) / 20.0))
+        np.clip(audio_in, -ceiling_linear, ceiling_linear, out=audio_in)
+
+    # Strip seamless preroll after all stateful DSP stages have settled.
+    if preroll > 0:
+        audio_in = audio_in[preroll:]
 
     # Final headroom margin — digital attenuation below 0 dBFS so PCM/OGG
     # quantization rounding cannot clip.
+    if not owned:
+        audio_in = audio_in.copy()
     if headroom_db and headroom_db > 0:
-        audio_in = audio_in * (10.0 ** (-float(headroom_db) / 20.0))
+        audio_in *= float(10.0 ** (-float(headroom_db) / 20.0))
 
-    processed = np.clip(audio_in, -1.0, 1.0)
+    np.clip(audio_in, -1.0, 1.0, out=audio_in)
+    processed = audio_in
 
     # Restore original layout: if input was mono 1D, keep it 1D.
     if len(original_shape) == 1:
@@ -624,12 +649,17 @@ def save_audio(
             # Compressor/limiter são **stateful**: no início do ficheiro o
             # envelope parte de zero e no fim está activo — a diferença de
             # ganho quebra a costura do loop (jump no wrap 0.085 vs p99 0.043
-            # medido). Render em buffer dobrado (loop x2) e extrair a 2ª
-            # cópia: o estado no arranque herda o estado do fim → jump volta
-            # ao nível de um passo normal (0.010). LUFS integrado é idêntico
-            # sobre conteúdo duplicado.
-            half = audio.shape[-1]
-            audio = apply_mastering_chain(torch.cat([audio, audio], dim=1), sample_rate, **chain_kwargs)[:, half:]
+            # medido). Prefixar 2.0 s da cauda (10x o maior release do
+            # compressor/limiter = 200 ms) aquece todos os filtros/envelopes
+            # sem dobrar o buffer inteiro (2x mais rápido e 2x menos RAM em
+            # BGM de 60 s; LUFS mede apenas o corpo).
+            preroll = min(audio.shape[-1], int(2.0 * sample_rate))
+            audio = apply_mastering_chain(
+                torch.cat([audio[:, -preroll:], audio], dim=1),
+                sample_rate,
+                preroll_samples=preroll,
+                **chain_kwargs,
+            )
         else:
             audio = apply_mastering_chain(audio, sample_rate, **chain_kwargs)
 
@@ -637,7 +667,7 @@ def save_audio(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # (channels, samples) → (samples, channels) for soundfile
-    audio_np: np.ndarray = np.ascontiguousarray(audio.numpy().T)
+    audio_np: np.ndarray = np.ascontiguousarray(audio.numpy().T, dtype=np.float32)
 
     # OGG Vorbis is lossy and can introduce inter-sample overshoot during
     # quantization — a signal peaking at 0.94 can decode back at 1.1+ on sharp
@@ -648,7 +678,7 @@ def save_audio(
         ogg_safety_peak = 0.70  # ≈ -3.1 dBFS, absorbs worst-case Vorbis overshoot
         current_peak = float(np.max(np.abs(audio_np)))
         if current_peak > ogg_safety_peak and current_peak > 1e-6:
-            audio_np = audio_np * (ogg_safety_peak / current_peak)
+            audio_np *= ogg_safety_peak / current_peak
 
     subtype = _SF_SUBTYPES_BY_DEPTH.get((bit_depth, fmt), _SF_SUBTYPES.get(fmt, "PCM_16"))
 
@@ -691,12 +721,11 @@ def save_audio(
 def _write_ogg_with_quality(path: str, audio_np: np.ndarray, sample_rate: int, quality: float) -> None:
     """Write OGG Vorbis com qualidade Vorbis explícita (0.0-1.0).
 
-    A via anterior tentava um comando C interno do soundfile que NUNCA existiu
-    na binding Python (``_SoundFile.command``) — o setter nunca corria, o
-    ficheiro saía sempre com a qualidade default e o metadata registava o valor
-    pedido como se aplicado. Agora: re-encode via ``ffmpeg`` (qscale 0-10 ==
-    Vorbis quality 0.0-1.0); sem ffmpeg no sistema, escreve com o default e
-    avisa (não claims silenciosos).
+    Escreve PCM float32 cru (``arr.tofile`` sem cópia em RAM nem pré-quantização
+    16-bit) em ficheiro temporário e codifica via ``ffmpeg -c:a libvorbis
+    -q:a <0..10>`` (aceita valores fracionários como ``8.5`` para
+    ``quality=0.85``). Sem ffmpeg no sistema, escreve com o default libsndfile
+    e avisa.
     """
     import logging
     import shutil
@@ -704,26 +733,38 @@ def _write_ogg_with_quality(path: str, audio_np: np.ndarray, sample_rate: int, q
     import tempfile
 
     quality = max(0.0, min(1.0, quality))
+    q_str = f"{quality * 10.0:.2f}".rstrip("0").rstrip(".") or "0"
     log = logging.getLogger(__name__)
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is not None:
         try:
+            pcm = np.ascontiguousarray(audio_np, dtype="<f4")
+            channels = 1 if pcm.ndim == 1 else int(pcm.shape[1])
             with tempfile.TemporaryDirectory(prefix="t2s_ogg_") as td:
-                wav = Path(td) / "in.wav"
-                sf.write(str(wav), audio_np, sample_rate, subtype="PCM_16")
+                raw = Path(td) / "in.f32"
+                pcm.tofile(raw)
                 subprocess.run(
                     [
                         ffmpeg,
                         "-y",
+                        "-loglevel",
+                        "error",
+                        "-f",
+                        "f32le",
+                        "-ar",
+                        str(int(sample_rate)),
+                        "-ac",
+                        str(channels),
                         "-i",
-                        str(wav),
+                        str(raw),
                         "-c:a",
                         "libvorbis",
                         "-q:a",
-                        str(round(quality * 10)),
+                        q_str,
                         str(path),
                     ],
-                    capture_output=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
                     timeout=180,
                     check=True,
                 )

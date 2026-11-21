@@ -672,3 +672,65 @@ class TestSeamlessMasteringState:
         p99 = np.percentile(np.abs(np.diff(m)), 99)
         assert len(m) / sr == pytest.approx(4.0, abs=1 / sr)
         assert wrap_jump <= max(p99 * 2.0, 0.02), (wrap_jump, p99)
+
+    def test_preroll_mastering_matches_doubled_lufs_and_shape(self):
+        """preroll_samples devolve comprimento exato do corpo com LUFS idêntico ao buffer dobrado."""
+        from tests._heavy_deps import require_mastering_stack
+
+        require_mastering_stack()
+        import pyloudnorm as pyln
+
+        from text2sound.audio_processor import apply_mastering_chain
+
+        sr = 44100
+        t = torch.arange(sr * 4) / sr
+        music = 0.45 * torch.sin(2 * torch.pi * 220.0 * t) * (0.7 + 0.3 * torch.sin(2 * torch.pi * 0.5 * t))
+        audio = music.repeat(2, 1)
+        kw = dict(
+            lufs_target=-16.0,
+            high_pass_hz=30.0,
+            compressor_preset="glue",
+            compressor_enabled=True,
+            true_peak_db=-1.0,
+        )
+        doubled = apply_mastering_chain(torch.cat([audio, audio], dim=1), sr, **kw)[:, audio.shape[1] :]
+        preroll = int(2.0 * sr)
+        prerolled = apply_mastering_chain(
+            torch.cat([audio[:, -preroll:], audio], dim=1), sr, preroll_samples=preroll, **kw
+        )
+        assert prerolled.shape == audio.shape
+        meter = pyln.Meter(sr)
+        lufs_d = meter.integrated_loudness(doubled.numpy().T)
+        lufs_p = meter.integrated_loudness(prerolled.numpy().T)
+        assert abs(lufs_d - lufs_p) < 0.05
+        assert float((doubled - prerolled).abs().max()) < 0.005
+
+
+class TestOggQualityEncoding:
+    """_write_ogg_with_quality preserva fração de qualidade (0.85 → 8.5) e usa f32le."""
+
+    def test_fractional_qscale_and_f32le_args(self, tmp_path):
+        from unittest.mock import patch
+
+        import numpy as np
+
+        from text2sound.audio_processor import _write_ogg_with_quality
+
+        out = tmp_path / "test.ogg"
+        arr = np.zeros((4410, 2), dtype=np.float32)
+        captured: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            captured.append(list(cmd))
+            out.write_bytes(b"OggS")
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffmpeg"),
+            patch("subprocess.run", side_effect=fake_run),
+        ):
+            _write_ogg_with_quality(str(out), arr, 44100, 0.85)
+
+        assert len(captured) == 1
+        cmd = captured[0]
+        assert "-f" in cmd and cmd[cmd.index("-f") + 1] == "f32le"
+        assert "-q:a" in cmd and cmd[cmd.index("-q:a") + 1] == "8.5"

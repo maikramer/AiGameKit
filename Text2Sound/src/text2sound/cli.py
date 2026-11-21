@@ -636,29 +636,30 @@ def generate_cmd(
         if resolved.model_id is not None and ctx.get_parameter_source("model_id") == ParameterSource.DEFAULT:
             model_id = resolved.model_id
 
-            # Determine trim buffer + compressor preset from audio_kind_info
-            if quality_audio_kind:
-                try:
-                    kind_info = qe.audio_kind_info(quality_audio_kind)
-                    trim_buffer_ms = int(kind_info.get("trim_buffer_ms", 200))
-                    trim_threshold_db = float(kind_info.get("trim_threshold_db", -60.0))
-                    kind_compressor_preset = kind_info.get("compressor_preset")
-                    # Seamless loop from audio_kind (overridden later by --seamless-loop if given)
-                    if kind_info.get("loop_hint"):
-                        category_seamless = True
-                        # crossfade_ms: quality profile override > audio_kind default
-                        if "crossfade_ms" in resolved.params:
-                            category_crossfade_ms = float(resolved.params["crossfade_ms"])
-                        elif "crossfade_ms" in kind_info:
-                            category_crossfade_ms = float(kind_info["crossfade_ms"])
-                        # loop_edge_trim_s: remove o intro/outro musicais antes do
-                        # fold (mesma precedência profile > kind)
-                        if "loop_edge_trim_s" in resolved.params:
-                            category_loop_edge_trim_s = float(resolved.params["loop_edge_trim_s"])
-                        elif "loop_edge_trim_s" in kind_info:
-                            category_loop_edge_trim_s = float(kind_info["loop_edge_trim_s"])
-                except KeyError:
-                    pass
+        # Determine trim buffer + compressor preset from audio_kind_info
+        # (independente de --model explícito — antes ficava preso no if acima).
+        if quality_audio_kind:
+            try:
+                kind_info = qe.audio_kind_info(quality_audio_kind)
+                trim_buffer_ms = int(kind_info.get("trim_buffer_ms", 200))
+                trim_threshold_db = float(kind_info.get("trim_threshold_db", -60.0))
+                kind_compressor_preset = kind_info.get("compressor_preset")
+                # Seamless loop from audio_kind (overridden later by --seamless-loop if given)
+                if kind_info.get("loop_hint"):
+                    category_seamless = True
+                    # crossfade_ms: quality profile override > audio_kind default
+                    if "crossfade_ms" in resolved.params:
+                        category_crossfade_ms = float(resolved.params["crossfade_ms"])
+                    elif "crossfade_ms" in kind_info:
+                        category_crossfade_ms = float(kind_info["crossfade_ms"])
+                    # loop_edge_trim_s: remove o intro/outro musicais antes do
+                    # fold (mesma precedência profile > kind)
+                    if "loop_edge_trim_s" in resolved.params:
+                        category_loop_edge_trim_s = float(resolved.params["loop_edge_trim_s"])
+                    elif "loop_edge_trim_s" in kind_info:
+                        category_loop_edge_trim_s = float(kind_info["loop_edge_trim_s"])
+            except KeyError:
+                pass
 
     except Exception:
         pass  # QualityEngine unavailable — continue with defaults
@@ -844,8 +845,17 @@ def generate_cmd(
             "sigma_min": sigma_min,
             "sigma_max": sigma_max,
             "sampler_type": sampler,
+            "prompt_hints": resolved_hints or None,
             "negative_prompt": effective_negative,
             "half_precision": half_precision,
+            "chunked_vae": chunked_vae,
+            "torch_compile": torch_compile,
+            "torch_compile_mode": torch_compile_mode,
+            "channels_last": channels_last,
+            "profile": profile,
+            "quality": quality,
+            "category": category,
+            "audio_kind": quality_audio_kind,
             # O worker é quem grava o ficheiro — sem estes campos o caminho
             # delegado dropava TODO o pós-processamento e invertia defaults
             # (trim True→False = as caudas 20-30s que o AGENTS documenta).

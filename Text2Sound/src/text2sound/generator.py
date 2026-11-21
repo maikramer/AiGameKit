@@ -10,6 +10,8 @@ T5Gemma, checkpoints dedicados por domínio) via ``stable-audio-tools``:
 
 from __future__ import annotations
 
+import contextlib
+import gc
 import threading
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -205,6 +207,10 @@ class AudioGenerator:
                 channels_last,
             )
             if cls._instance is None or cls._instance._cache_key != _cache_key:
+                # Descarregar o singleton anterior antes de trocar de modelo
+                # (ex. music ↔ sfx): evita manter dois checkpoints em VRAM até o GC.
+                if cls._instance is not None:
+                    cls._instance.unload()
                 cls._instance = cls(
                     model_id=model_id,
                     device=device,
@@ -341,17 +347,30 @@ class AudioGenerator:
             from aigamekit_shared.hardware import cuda_gpu_free_specs
             from aigamekit_shared.lowvram import get_footprint, place_pipeline
 
+            # TF32 em GPUs Ampere/Ada+: acelera o VAE fp32 (Conv1d/Linear) e camadas
+            # fp32 do DiT sem perda audível de qualidade.
+            with contextlib.suppress(Exception):
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
+
             specs = cuda_gpu_free_specs()
             if self._gpu_ids:
                 keep = set(self._gpu_ids)
                 specs = [s for s in specs if s[0] in keep]
             allow_multi = self._gpu_ids is None or len(self._gpu_ids) >= 2
+            # SA3-small / open-small (~0.6B) ocupam ~1.3 GiB em fp16 (~2.0 GiB pico).
+            # Usar o footprint do stable-audio-open (5.0 GiB) derrubava GPUs 6 GB
+            # para CPU; stable-audio-tools também não é diffusers (sem group_offload).
+            mid_lower = (self.model_id or "").lower()
+            is_small_sa = "stable-audio-3-small" in mid_lower or "open-small" in mid_lower
+            fp_key = "stable-audio-3-small" if (is_small_sa and self._half) else "stable-audio-open"
             plan = place_pipeline(
                 self._model,
-                get_footprint("stable-audio-open"),
+                get_footprint(fp_key),
                 specs,
                 allow_quant=("none",),
                 allow_multi_gpu=allow_multi,
+                allow_group_offload=False,
                 no_split_classes=["DiTBlock", "AudioDiTBlock"],
             )
             self._placement_offload = getattr(plan, "offload", "none") or "none"
@@ -506,6 +525,7 @@ class AudioGenerator:
         self._model = None
         self._model_config = {}
         self._loaded = False
+        gc.collect()
         self._clear_cuda()
 
     def _clear_cuda(self) -> None:

@@ -565,3 +565,53 @@ class TestSfxConditioningFloor:
         result = gen.generate(prompt="theme", duration=15.0, steps=16)
         # música: crop exacto ao pedido (matemática do seamless loop)
         assert result.audio.shape[-1] == int(44100 * 15.0)
+
+
+class TestSingletonUnloadAndFootprint:
+    """Troca de modelo no singleton descarrega anterior; SA3-small usa footprint real."""
+
+    def test_get_instance_unloads_previous_on_model_switch(self):
+        AudioGenerator.reset_instance()
+        try:
+            inst1 = AudioGenerator.get_instance(model_id="stabilityai/stable-audio-3-small-music", device="cpu")
+            inst1._loaded = True
+            inst1._model = MagicMock()
+            with patch.object(inst1, "unload", wraps=inst1.unload) as spy_unload:
+                inst2 = AudioGenerator.get_instance(model_id="stabilityai/stable-audio-3-small-sfx", device="cpu")
+            assert spy_unload.call_count == 1
+            assert inst1._loaded is False
+            assert inst2 is not inst1
+        finally:
+            AudioGenerator.reset_instance()
+
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_sa3_small_uses_small_footprint_and_disables_group_offload(self, mock_get):
+        from torch import nn
+
+        from aigamekit_shared.lowvram import get_footprint
+
+        mock_model = nn.Linear(4, 4)
+        mock_model.diffusion_objective = "rf_denoiser"
+        mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
+
+        seen: dict[str, object] = {}
+
+        def fake_place(model, footprint, specs, **kwargs):
+            seen["footprint"] = footprint
+            seen["allow_group_offload"] = kwargs.get("allow_group_offload")
+            return MagicMock(offload="none", multi_gpu_ids=None)
+
+        with (
+            patch("aigamekit_shared.hardware.cuda_gpu_free_specs", return_value=[(0, 3 * 1024**3, 6 * 1024**3)]),
+            patch("aigamekit_shared.lowvram.place_pipeline", side_effect=fake_place),
+        ):
+            gen = AudioGenerator(
+                model_id="stabilityai/stable-audio-3-small-music",
+                device="cuda",
+                auto_clear=False,
+                half_precision=True,
+            )
+            gen.load()
+
+        assert seen["footprint"] == get_footprint("stable-audio-3-small")
+        assert seen["allow_group_offload"] is False

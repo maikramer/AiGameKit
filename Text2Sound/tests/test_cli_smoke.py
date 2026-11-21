@@ -163,3 +163,97 @@ class TestGenerateDSPValidation:
     def test_true_peak_out_of_range(self, runner):
         result = runner.invoke(cli, ["generate", "test", "--true-peak", "1.0"])
         assert result.exit_code != 0
+
+
+class TestVramdDelegationAndWorkerParity:
+    """Paridade CLI ↔ vramd: audio_kind com --model explícito + defaults seguros no worker."""
+
+    def test_explicit_model_still_applies_audio_kind_and_forwards_vramd_fields(self, runner, tmp_path):
+        from unittest.mock import patch
+
+        out = tmp_path / "sword.ogg"
+        captured: dict[str, object] = {}
+
+        def fake_delegate(backend, payload, **kwargs):
+            captured["backend"] = backend
+            captured["payload"] = payload
+            return True
+
+        with patch("text2sound.cli.delegate_or_prepare", side_effect=fake_delegate):
+            result = runner.invoke(
+                cli,
+                [
+                    "generate",
+                    "metallic sword clash",
+                    "-o",
+                    str(out),
+                    "--model",
+                    "effects",
+                    "--category",
+                    "weapon",
+                    "--quality",
+                    "high",
+                    "--chunked-vae",
+                ],
+            )
+        assert result.exit_code == 0, result.output
+        payload = captured["payload"]
+        assert isinstance(payload, dict)
+        # Regressão do bug de indentação: --model explícito NÃO pode desligar audio_kind
+        assert payload["audio_kind"] is not None
+        assert payload["compressor_preset"] is not None
+        # Campos que antes faltavam no payload vramd
+        assert "prompt_hints" in payload
+        assert payload["chunked_vae"] is True
+        assert payload["quality"] == "high"
+        assert payload["category"] == "weapon"
+
+    def test_worker_serve_adapter_handles_minimal_request_and_writes_full_metadata(self, tmp_path):
+        import json
+        from types import SimpleNamespace
+
+        import torch
+
+        from text2sound.worker_serve_adapter import Adapter
+
+        out = tmp_path / "minimal.wav"
+        fake_result = SimpleNamespace(
+            audio=torch.zeros(2, 44100, dtype=torch.float32),
+            sample_rate=44100,
+            seed=12345,
+        )
+
+        class FakeModel:
+            model_id = "stabilityai/stable-audio-3-small-sfx"
+            device = "cpu"
+
+            def generate(self, **kwargs):
+                return fake_result
+
+        adapter = Adapter()
+        resp = adapter.generate(
+            FakeModel(),
+            {
+                "prompt": "wooden door creak",
+                "output": str(out),
+                "duration": 1.0,
+                "steps": 12,
+                "cfg_scale": 6.0,
+                "seed": 12345,
+                "quality": "high",
+                "category": "sfx",
+                "audio_kind": "sfx",
+                "prompt_hints": ["clean studio foley"],
+                # Omitir bit_depth, crossfade_ms, loop_edge_trim_s, fade_out_seconds, headroom_db
+            },
+        )
+        assert resp["status"] == "ok"
+        assert out.exists()
+        meta = json.loads(out.with_suffix(".wav.json").read_text(encoding="utf-8"))
+        assert meta["steps"] == 12
+        assert meta["cfg_scale"] == 6.0
+        assert meta["seed_effective"] == 12345
+        assert meta["quality"] == "high"
+        assert meta["category"] == "sfx"
+        assert meta["audio_kind"] == "sfx"
+        assert meta["prompt_hints"] == ["clean studio foley"]

@@ -162,6 +162,10 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     # Hunyuan3D-Part: DiT ~3.3 + conditioner ~0.9 + ShapeVAE ~0.3 + P3-SAM ~0.2 + overhead.
     "hunyuan3d-part": ModelFootprint(4.75, 1.5, 5.2, architecture="dit"),
     "hunyuan-paint": ModelFootprint(6.0, 2.0, 5.0, architecture="unet"),
+    # Stable Audio 3 Small (music/sfx, ~0.6B): medido na RTX 4050 6 GB em fp16 +
+    # chunked VAE: ~1.29 GiB carregado, ~1.98 GiB pico. Usar stable-audio-open
+    # (3.5+1.5=5.0 GiB) fazia o planner derrubar o SA3-small para CPU em GPUs 6 GB.
+    "stable-audio-3-small": ModelFootprint(1.4, 0.5, 0.8, architecture="stable-audio"),
     "stable-audio-open": ModelFootprint(3.5, 1.5, 2.0, architecture="stable-audio"),
 }
 

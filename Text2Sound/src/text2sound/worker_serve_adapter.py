@@ -105,36 +105,53 @@ class Adapter(WorkerAdapter):
 
         from text2sound.audio_processor import save_audio
 
+        def _opt(key: str, default: Any) -> Any:
+            val = request.get(key)
+            return default if val is None else val
+
         self.report_progress(request, 0.95, "saving")
-        metadata = {
+        metadata: dict[str, Any] = {
             "prompt": prompt,
-            "duration": request.get("duration", 30.0),
+            "negative_prompt": request.get("negative_prompt"),
+            "duration": _opt("duration", 30.0),
+            "steps": steps,
+            "cfg_scale": float(_opt("cfg_scale", SPEC_MUSIC.default_cfg)),
+            "seed": request.get("seed"),
+            "seed_effective": getattr(result, "seed", request.get("seed")),
+            "sampler": _opt("sampler_type", SPEC_MUSIC.default_sampler),
             "model_id": getattr(model, "model_id", None),
+            "sample_rate": getattr(result, "sample_rate", None),
+            "device": getattr(model, "device", None),
         }
+        for extra_key in ("profile", "quality", "category", "audio_kind", "prompt_hints"):
+            if request.get(extra_key) is not None:
+                metadata[extra_key] = request[extra_key]
         # Espelhar a chamada in-process do CLI: o payload delegado traz todos
-        # os parâmetros de pós-processamento — lê-los aqui garante que o
-        # resultado pelo vramd é idêntico ao in-process.
+        # os parâmetros de pós-processamento — defaults seguros garantem que
+        # clientes diretos do vramd que omitam campos opcionais não quebram.
         saved = save_audio(
             audio=result.audio,
             sample_rate=result.sample_rate,
             output_path=out_path,
             fmt=fmt,
-            trim=bool(request.get("trim", False)),
+            trim=bool(_opt("trim", False)),
             metadata=metadata,
-            trim_buffer_ms=request.get("trim_buffer_ms", 200),
-            trim_threshold_db=request.get("trim_threshold_db", -60.0),
-            seamless_loop=bool(request.get("seamless_loop", False)),
-            crossfade_ms=request.get("crossfade_ms"),
-            loop_edge_trim_s=request.get("loop_edge_trim_s"),
+            trim_buffer_ms=int(_opt("trim_buffer_ms", 200)),
+            trim_threshold_db=float(_opt("trim_threshold_db", -60.0)),
+            apply_fade=bool(_opt("apply_fade", True)),
+            seamless_loop=bool(_opt("seamless_loop", False)),
+            crossfade_ms=float(_opt("crossfade_ms", 500.0)),
+            loop_edge_trim_s=float(_opt("loop_edge_trim_s", 0.0)),
             loop_target_seconds=request.get("loop_target_seconds"),
             crop_seconds=request.get("crop_seconds"),
-            fade_out_seconds=request.get("fade_out_seconds"),
+            fade_out_seconds=float(_opt("fade_out_seconds", 0.06)),
             lufs_target=request.get("lufs_target"),
             high_pass_hz=request.get("high_pass_hz"),
             compressor_preset=request.get("compressor_preset"),
             compressor_enabled=request.get("compressor_enabled"),
             true_peak_db=request.get("true_peak_db"),
-            bit_depth=request.get("bit_depth"),
+            headroom_db=float(_opt("headroom_db", 0.3)),
+            bit_depth=int(_opt("bit_depth", 16)),
             ogg_quality=request.get("ogg_quality"),
         )
 
