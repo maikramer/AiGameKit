@@ -644,6 +644,13 @@ def _classify_bone_chains(armature_name: str) -> dict[str, list[str]]:
     rz = root.bone.head_local.z
     root_kids = list(root.children)
 
+    # Artrópodes / aracnídeos (6–10 membros radiais a sair diretamente da raiz,
+    # e.g. escorpião com 8 patas + 2 pinças + cauda): classificar por geometria
+    # canónica em vez de confiar em nomes arbitrários ou no layout humanoide.
+    arthropod = _classify_arthropod_root_chains(arm, root)
+    if arthropod is not None:
+        return arthropod
+
     # Humanoid heuristic: when root has 3+ children and two form a left/right
     # pair (symmetric about x≈0) with the third being roughly centered, the
     # lateral pair are legs even if |x| < 0.15.
@@ -681,6 +688,181 @@ def _classify_bone_chains(armature_name: str) -> dict[str, list[str]]:
     _extract_head_accessories(arm, chains)
 
     return chains
+
+
+def _classify_arthropod_root_chains(arm: Any, root: Any) -> dict[str, Any] | None:
+    """Classificação geométrica para artrópodes/aracnídeos com membros radiais na raiz.
+
+    Activa-se quando a raiz tem ≥5 filhos diretos e ≥6 cadeias lineares multi-osso
+    (insetos de 6 patas, aranhas/caranguejos/escorpiões de 8 patas + pinças + cauda).
+    Classifica estritamente por geometria canónica (X = lateral, Y = frente/trás,
+    Z = cima), ignorando nomes arbitrários ``LegLeft*``/``LegRight*`` gerados por
+    ordem par/ímpar no Rigging3D e descartando stubs de carapaça de 1 osso.
+
+    Retorna dict com chaves: ``body``, ``legs_r`` (+X, frente→trás), ``legs_l``
+    (-X, frente→trás), ``leg_r``, ``leg_l``, e opcionalmente ``pincers_r``,
+    ``pincers_l``, ``tail``. Retorna ``None`` fora do caso artrópode.
+    """
+    from mathutils import Vector
+
+    root_kids = list(root.children)
+    if len(root_kids) < 5:
+        return None
+
+    def _linear(start_pb: Any) -> list[Any]:
+        out = [start_pb]
+        cur = start_pb
+        while len(cur.children) == 1:
+            cur = cur.children[0]
+            out.append(cur)
+        return out
+
+    # Só considerar cadeias multi-osso (≥2); stubs de 1 osso ficam fixos à carapaça.
+    multi_chains = [_linear(c) for c in root_kids]
+    multi_chains = [c for c in multi_chains if len(c) >= 2]
+    if len(multi_chains) < 6:
+        return None
+
+    pbones = arm.pose.bones
+    zs = [z for pb in pbones for z in (pb.bone.head_local.z, pb.bone.tail_local.z)]
+    xs = [x for pb in pbones for x in (pb.bone.head_local.x, pb.bone.tail_local.x)]
+    ys = [y for pb in pbones for y in (pb.bone.head_local.y, pb.bone.tail_local.y)]
+    h = max(max(zs) - min(zs), 1e-4)
+    span_x = max(xs) - min(xs)
+    span_y = max(ys) - min(ys)
+    max_lat = max(max(abs(x) for x in xs), 1e-4)
+    body_len = max(span_x, span_y, 1e-4)
+
+    # 1) Cauda dorsal na linha média (ex.: 7 segmentos do escorpião).
+    tail_chain: list[Any] | None = None
+    best_tail_score = -1.0
+    for c in multi_chains:
+        if len(c) < 3:
+            continue
+        base_x = abs(c[0].bone.head_local.x)
+        max_x = max(max(abs(b.bone.head_local.x), abs(b.bone.tail_local.x)) for b in c)
+        if base_x > 0.18 * max_lat or max_x > 0.28 * max_lat:
+            continue
+        max_z = max(max(b.bone.head_local.z, b.bone.tail_local.z) for b in c)
+        rise = max_z - c[0].bone.head_local.z
+        score = rise + 0.05 * len(c)
+        if rise > 0.15 * h and score > best_tail_score:
+            best_tail_score = score
+            tail_chain = c
+
+    laterals = [c for c in multi_chains if c is not tail_chain]
+    if len(laterals) < 6:
+        return None
+
+    # 2) Sinal longitudinal de frente (canónico = -Y; se a cauda estiver em -Y, frente = +Y).
+    fwd_y = -1.0
+    if tail_chain is not None:
+        tail_base_y = tail_chain[0].bone.head_local.y
+        mean_lat_y = sum(c[0].bone.head_local.y for c in laterals) / len(laterals)
+        fwd_y = -1.0 if tail_base_y >= mean_lat_y else 1.0
+
+    # 3) Separar pinças/pedipalpos (par dianteiro horizontal elevado que estende
+    #    para a frente) de patas ambulatórias (descem do joelho para o chão).
+    legs_r_raw: list[list[Any]] = []
+    legs_l_raw: list[list[Any]] = []
+    pincer_cands: dict[str, list[tuple[float, list[Any]]]] = {"r": [], "l": []}
+
+    for c in laterals:
+        # Lado decidido estritamente pelo sinal X geométrico dos segmentos externos.
+        outer_xs = [b.bone.head_local.x for b in c[1:]] + [c[-1].bone.tail_local.x]
+        mean_x = sum(outer_xs) / max(len(outer_xs), 1)
+        side = "r" if mean_x >= 0.0 else "l"
+
+        base_z = c[0].bone.head_local.z
+        knee_z = max(b.bone.head_local.z for b in c)
+        tip_z = min(c[-1].bone.head_local.z, c[-1].bone.tail_local.z)
+        descend = knee_z - tip_z
+        fwd_reach = (c[-1].bone.tail_local.y - c[0].bone.head_local.y) * fwd_y
+        lat_reach = abs(c[-1].bone.head_local.x) - abs(c[0].bone.head_local.x)
+
+        # Pinça: fica elevada (não mergulha abaixo do quadril) e projeta-se para a frente.
+        is_pincer = (
+            tip_z >= base_z - 0.03 * h and descend < 0.10 * h and fwd_reach > 0.14 * body_len and fwd_reach > lat_reach
+        )
+        if is_pincer:
+            pincer_cands[side].append((c[0].bone.head_local.y * fwd_y, c))
+        else:
+            (legs_r_raw if side == "r" else legs_l_raw).append(c)
+
+    # Confirmar pinças como par bilateral (ou pelo menos dianteiras elevadas) se sobrarem >=4 patas.
+    pincers: dict[str, list[str]] = {}
+    if len(legs_r_raw) + len(legs_l_raw) >= 4:
+        for side in ("r", "l"):
+            if pincer_cands[side]:
+                pincer_cands[side].sort(key=lambda item: item[0], reverse=True)
+                pincers[f"pincers_{side}"] = [b.name for b in pincer_cands[side][0][1]]
+                # Qualquer excedente volta para as patas.
+                for _, extra in pincer_cands[side][1:]:
+                    (legs_r_raw if side == "r" else legs_l_raw).append(extra)
+    else:
+        for side in ("r", "l"):
+            for _, cand in pincer_cands[side]:
+                (legs_r_raw if side == "r" else legs_l_raw).append(cand)
+
+    if len(legs_r_raw) < 2 or len(legs_l_raw) < 2:
+        return None
+    if len(legs_r_raw) < 3 and len(legs_l_raw) < 3 and not pincers:
+        return None
+
+    # 4) Ordenar patas estritamente da FRENTE para TRÁS ao longo de forward (fwd_y).
+    def _fwd_proj(chain: list[Any]) -> float:
+        p0 = Vector(chain[0].bone.head_local)
+        pt = Vector(chain[-1].bone.head_local)
+        return (0.6 * p0.y + 0.4 * pt.y) * fwd_y
+
+    legs_r_raw.sort(key=_fwd_proj, reverse=True)
+    legs_l_raw.sort(key=_fwd_proj, reverse=True)
+
+    out: dict[str, Any] = {
+        "body": [root.name],
+        "legs_r": [[b.name for b in c] for c in legs_r_raw],
+        "legs_l": [[b.name for b in c] for c in legs_l_raw],
+        "leg_r": [b.name for b in legs_r_raw[0]],
+        "leg_l": [b.name for b in legs_l_raw[0]],
+    }
+    if tail_chain is not None:
+        out["tail"] = [b.name for b in tail_chain]
+    out.update(pincers)
+    return out
+
+
+def _arthropod_forward(arm_obj: Any, chains: dict[str, Any]):
+    """Direção horizontal de frente para artrópodes (cauda/traseiras → pinças/dianteiras)."""
+    from mathutils import Vector
+
+    legs_r = chains.get("legs_r", [])
+    legs_l = chains.get("legs_l", [])
+    if len(legs_r) < 3 and len(legs_l) < 3 and not (chains.get("pincers_r") or chains.get("pincers_l")):
+        return None
+    bones = arm_obj.data.bones
+    tail = chains.get("tail", [])
+    pincers = [chains[k] for k in ("pincers_r", "pincers_l") if chains.get(k)]
+
+    # Pinças (frente) vs cauda (trás) dão o eixo longitudinal sem ambiguidade.
+    if pincers and tail and tail[0] in bones:
+        p_front = sum((Vector(bones[p[-1]].tail_local) for p in pincers if p[-1] in bones), Vector()) / len(pincers)
+        p_back = Vector(bones[tail[0]].head_local)
+        axis = p_front - p_back
+        axis.z = 0.0
+        if axis.length > 1e-4:
+            return axis.normalized()
+
+    # Sem pinças: usar base da cauda vs centroide das patas.
+    all_legs = legs_r + legs_l
+    if tail and tail[0] in bones and all_legs:
+        leg_center = sum((Vector(bones[lg[0]].head_local) for lg in all_legs if lg and lg[0] in bones), Vector())
+        leg_center /= max(len(all_legs), 1)
+        axis = leg_center - Vector(bones[tail[0]].head_local)
+        axis.z = 0.0
+        if axis.length > 1e-4:
+            return axis.normalized()
+
+    return Vector((0.0, -1.0, 0.0))
 
 
 def canonicalize_creature_facing(armature_name: str, facing: str = "auto") -> dict[str, Any]:
@@ -733,6 +915,15 @@ def canonicalize_creature_facing(armature_name: str, facing: str = "auto") -> di
             pts = co.reshape(-1, 3)
             mn = np.minimum(mn, pts.min(axis=0))
             mx = np.maximum(mx, pts.max(axis=0))
+        if mn[0] > mx[0]:
+            # Fallback para rigs sintéticos sem malha: usar bounds dos ossos.
+            bpts = np.array(
+                [p for b in arm.data.bones for p in (tuple(b.head_local), tuple(b.tail_local))],
+                dtype=np.float32,
+            )
+            if len(bpts):
+                mn = bpts.min(axis=0)
+                mx = bpts.max(axis=0)
         return Vector(mn.tolist()), Vector(mx.tolist())
 
     theta = 0.0
@@ -753,6 +944,8 @@ def canonicalize_creature_facing(armature_name: str, facing: str = "auto") -> di
             # Já comprido no eixo da frente (±Y): canónico para classificação.
             chains = _classify_bone_chains(armature_name)
             axis = _quadruped_forward(arm, chains)
+            if axis is None:
+                axis = _arthropod_forward(arm, chains)
             if axis is None or axis.y <= 0.0:
                 return {"facing": "-y", "rotated_deg": 0.0, "method": "already-canonical"}
             theta = 180.0
@@ -760,37 +953,47 @@ def canonicalize_creature_facing(armature_name: str, facing: str = "auto") -> di
         else:
             method = "auto"
             theta = -90.0  # default: focinho em +X do Blender → −Y
-            # Sinal pela cauda levantada: cadeia linear cuja ponta fica na zona
-            # mais alta do corpo aponta para TRÁS.
+            # Sinal pela cauda levantada: cadeia linear cujo pico sobe acima
+            # do dorso pertence à traseira. Usar a BASE/ARCO da cadeia relativo
+            # ao centro do corpo (não `ponta - base`): a cauda do escorpião
+            # encurva-se PARA A FRENTE sobre o dorso, pelo que `ponta - base`
+            # invertia o sinal e rodava o escorpião de costas (-90° em vez de +90°).
             pbones = arm.pose.bones
             if pbones:
                 zs = [pb.bone.head_local.z for pb in pbones] + [pb.bone.tail_local.z for pb in pbones]
                 z0, z1 = min(zs), max(zs)
-
-                def _chain_dir(start_pb: Any) -> Vector | None:
-                    cursor = start_pb
-                    while len(cursor.children) == 1:
-                        cursor = cursor.children[0]
-                    d = Vector(cursor.bone.tail_local) - Vector(start_pb.bone.head_local)
-                    return d if d.length > 1e-4 else None
+                cx = 0.5 * (mn.x + mx.x)
 
                 best_rise = 0.0
                 back_dir = 0.0
                 for pb in pbones:
                     parent = pb.parent
-                    if parent is not None and len(parent.children) != 1:
+                    if parent is not None and len(parent.children) == 1:
                         continue  # só inícios de cadeia (raiz ou ramificação)
-                    d = _chain_dir(pb)
-                    if d is None:
-                        continue
+                    chain_pts = [Vector(pb.bone.head_local)]
                     cursor = pb
                     while len(cursor.children) == 1:
                         cursor = cursor.children[0]
-                    rise = max(cursor.bone.tail_local.z, cursor.bone.head_local.z) - pb.bone.head_local.z
+                        chain_pts.append(Vector(cursor.bone.head_local))
+                    chain_pts.append(Vector(cursor.bone.tail_local))
+                    if len(chain_pts) < 3:
+                        continue
+                    d = chain_pts[-1] - chain_pts[0]
+                    if d.length <= 1e-4:
+                        continue
+                    max_z = max(p.z for p in chain_pts)
+                    rise = max_z - chain_pts[0].z
                     if rise > 0.10 * max(z1 - z0, 1e-6) and rise > best_rise:
                         best_rise = rise
-                        back_dir = d.x  # componente no eixo comprido (X)
-                if back_dir > 0:  # cauda aponta +X ⇒ focinho em −X
+                        base_off = chain_pts[0].x - cx
+                        arch_off = max((p.x - cx for p in chain_pts), key=abs)
+                        if abs(base_off) > 0.12 * max(span_x, 1e-4):
+                            back_dir = base_off
+                        elif abs(arch_off) > 0.12 * max(span_x, 1e-4):
+                            back_dir = arch_off
+                        else:
+                            back_dir = d.x
+                if back_dir > 0:  # cauda está em +X ⇒ focinho em −X
                     theta = 90.0
 
     if abs(theta) < 1e-6:
@@ -1171,6 +1374,9 @@ def _detect_forward(arm_obj: Any, chains: dict[str, list[str]]):
     from mathutils import Vector
 
     axis = _quadruped_forward(arm_obj, chains)
+    if axis is not None:
+        return axis
+    axis = _arthropod_forward(arm_obj, chains)
     if axis is not None:
         return axis
     fwd = Vector((0.0, 0.0, 0.0))
@@ -1864,10 +2070,21 @@ def turn_in_place_keyframes(
     walk. The engine applies the actual heading change."""
     import math
 
-    from . import humanoid
+    from . import arthropod, humanoid
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
+        "turn",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+        direction=direction,
+        turn_amp=turn_amp,
+    ):
+        return chains
+    if arthropod.try_arthropod_clip(
         "turn",
         armature_name,
         chains,
@@ -2164,7 +2381,7 @@ def breathe_idle_keyframes(
     """
     import math
 
-    from . import humanoid
+    from . import arthropod, humanoid
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
@@ -2176,6 +2393,16 @@ def breathe_idle_keyframes(
         action_name=action_name,
         cycles=cycles,
         breath_amp=breath_amp,
+    ):
+        return chains
+    if arthropod.try_arthropod_clip(
+        "idle",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+        cycles=cycles,
     ):
         return chains
 
@@ -2421,7 +2648,7 @@ def attack_keyframes(
     """
     import math
 
-    from . import humanoid
+    from . import arthropod, humanoid
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
@@ -2432,6 +2659,15 @@ def attack_keyframes(
         frame_end=frame_end,
         action_name=action_name,
         strikes=strikes,
+    ):
+        return chains
+    if arthropod.try_arthropod_clip(
+        "attack",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
     ):
         return chains
 
@@ -2665,7 +2901,7 @@ def death_keyframes(
     """
     import math
 
-    from . import humanoid
+    from . import arthropod, humanoid
     from ._motion import fbm
 
     chains = _classify_bone_chains(armature_name)
@@ -2676,6 +2912,16 @@ def death_keyframes(
         frame_start=frame_start,
         frame_end=frame_end,
         action_name=action_name,
+    ):
+        return chains
+    if arthropod.try_arthropod_clip(
+        "death",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+        side=side,
     ):
         return chains
 
@@ -2827,10 +3073,20 @@ def hit_keyframes(
     """
     import math
 
-    from . import humanoid
+    from . import arthropod, humanoid
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
+        "hit",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+        intensity=intensity,
+    ):
+        return chains
+    if arthropod.try_arthropod_clip(
         "hit",
         armature_name,
         chains,
@@ -3072,10 +3328,20 @@ def walk_cycle_keyframes(
 ) -> dict[str, list[str]]:
     """Ciclo de caminhada: hip swing + flexao de joelho anatomica em eixos
     resolvidos do rig, com balanco contralateral de bracos."""
-    from . import humanoid
+    from . import arthropod, humanoid
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
+        "walk",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+        cycles=cycles,
+    ):
+        return chains
+    if arthropod.try_arthropod_clip(
         "walk",
         armature_name,
         chains,
@@ -3733,6 +3999,19 @@ def victory_roar_keyframes(
     """
     import math
 
+    from . import arthropod
+
+    chains = _classify_bone_chains(armature_name)
+    if arthropod.try_arthropod_clip(
+        "roar",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+    ):
+        return chains
+
     bpy = _bpy()
     normalize_armature_before_animation(armature_name)
     stash_if_needed_for_action(armature_name, action_name)
@@ -3868,10 +4147,20 @@ def run_cycle_keyframes(
 ) -> dict[str, list[str]]:
     """Running cycle: maior amplitude de hip swing e flexao de joelho, em eixos
     resolvidos do rig."""
-    from . import humanoid
+    from . import arthropod, humanoid
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
+        "run",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+        cycles=cycles,
+    ):
+        return chains
+    if arthropod.try_arthropod_clip(
         "run",
         armature_name,
         chains,
@@ -3954,10 +4243,19 @@ def jump_keyframes(
     """Jump: anticipation -> crouch -> extend -> airborne -> descend -> land. Non-looping."""
     import math
 
-    from . import humanoid
+    from . import arthropod, humanoid
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
+        "jump",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+    ):
+        return chains
+    if arthropod.try_arthropod_clip(
         "jump",
         armature_name,
         chains,

@@ -84,8 +84,10 @@ APOSE_OPEN_DEG_DEFAULT = 15.0
 # frente em TODOS os clips (idle "a rezar", palmas à frente no walk/attack). A
 # correção completa leva a orientação do source (palmas nas coxas no idle
 # Quaternius) e também é convenção-segura: cada osso mapeia rest→rest.
-# Override por perfil: ``full_rest_bones:`` (lista de ossos do target; [] desliga).
-_DEFAULT_FULL_REST_BONES = ("hand_l", "hand_r")
+# Override por perfil: ``full_rest_bones:`` (lista de ossos do target; default vazio
+# para não dobrar o arco T→A sobre os pulsos em rigs A-pose — ``hand_l``/``hand_r``
+# seguem ``_axis_correction`` alinhados com ``lowerarm_l``/``lowerarm_r``).
+_DEFAULT_FULL_REST_BONES: tuple[str, ...] = ()
 
 
 def _resolve_location_pair(tgt_to_src: dict[str, str]) -> tuple[str | None, str | None]:

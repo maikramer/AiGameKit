@@ -408,12 +408,24 @@ def resolve_ik_chains(arm_name: str, chains: dict[str, Any] | None = None) -> li
 
         chains = bpy_ops._classify_bone_chains(arm_name)
 
+    bpy = _bpy()
+    arm = bpy.data.objects.get(arm_name)
+    bones = arm.data.bones if arm is not None and arm.type == "ARMATURE" else None
+
     def _chain(names: list[Any], role: str) -> TwoBoneChain | None:
         if len(names) < 2:
             return None
         if role == "arm" and len(names) >= 4:
             # [shoulder, upper, fore, hand] — salta o shoulder (HumanoidRig.arm_bones).
             return TwoBoneChain(role, str(names[1]), str(names[2]), str(names[3]))
+        if role == "leg" and len(names) >= 4 and bones is not None:
+            # Patas estendidas de artrópode (coxa -> fémur a subir -> joelho alto -> tíbia):
+            # a dobradiça real é no pico do joelho (índice >= 2), não na coxa.
+            present = [str(n) for n in names if str(n) in bones]
+            if len(present) >= 4:
+                knee_idx = max(range(1, len(present) - 1), key=lambda k: bones[present[k]].head_local.z)
+                if knee_idx >= 2 and bones[present[knee_idx]].head_local.z > bones[present[0]].head_local.z + 0.02:
+                    return TwoBoneChain(role, present[knee_idx - 1], present[knee_idx], present[knee_idx + 1])
         if len(names) >= 3:
             # [thigh, calf, foot(, toe)] — knee no 2.º osso, foot é o effector.
             return TwoBoneChain(role, str(names[0]), str(names[1]), str(names[2]))
@@ -490,6 +502,10 @@ def _resolve_pole(arm: Any, chain: TwoBoneChain, lim: ChainLimit, forward: Any) 
             pole = bend - axis_u * bend.dot(axis_u)
             if pole.length > 1e-4:
                 pole_u = pole.normalized()
+                # Em patas estendidas de artrópodes, o joelho dobra na VERTICAL (+Z);
+                # não rejeitar contra o fallback horizontal ``back`` de mamíferos.
+                if abs(pole_u.z) > 0.55:
+                    return pole_u
                 # Validar contra o prior anatómico do papel: rigs com joelho
                 # ligeiramente À FRENTE no rest (rótula anterior) produzem um
                 # auto-pole invertido que marca TODOS os clips como joelho

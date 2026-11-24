@@ -445,9 +445,9 @@ def test_full_rest_correction_preserves_the_twist() -> None:
 
 
 def test_profile_full_rest_bones_defaults_to_hands() -> None:
-    """Todos os perfis bundled herdam o fix de orientação das mãos."""
+    """Perfis bundled não forçam full_rest_bones por defeito (evita dobra dupla T→A nos pulsos)."""
     for name in ("quaternius", "quaternius2", "sprong22"):
-        assert rt.load_profile(name).full_rest_bones == ("hand_l", "hand_r"), name
+        assert rt.load_profile(name).full_rest_bones == (), name
 
 
 def test_load_profile_full_rest_bones_override(tmp_path: Path) -> None:
