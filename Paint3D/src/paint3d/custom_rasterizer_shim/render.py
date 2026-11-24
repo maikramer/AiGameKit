@@ -56,12 +56,14 @@ def rasterize(
     rast_out, _ = dr.rasterize(ctx, pos_f32, tri_i32, resolution)
 
     # rast_out: [B, H, W, 4]  →  (u, v, z/w, tri_id_1indexed)
+    # Convenção nvdiffrast: dr.interpolate usa u*v0 + v*v1 + (1-u-v)*v2,
+    # logo os pesos baricêntricos na ordem (v0, v1, v2) são (u, v, w) — NÃO (w, u, v).
     findices = rast_out[0, :, :, 3].int()  # [H, W]
 
     u = rast_out[0, :, :, 0]
     v = rast_out[0, :, :, 1]
     w = 1.0 - u - v
-    barycentric = torch.stack([w, u, v], dim=-1)  # [H, W, 3]
+    barycentric = torch.stack([u, v, w], dim=-1)  # [H, W, 3]
 
     return findices, barycentric
 
