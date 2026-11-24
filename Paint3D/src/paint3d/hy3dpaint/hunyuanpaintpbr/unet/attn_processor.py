@@ -77,6 +77,55 @@ def _resolve_sdpa():
 scaled_dot_product_attention = _resolve_sdpa()
 
 
+def _resolve_cudnn_asym_sdpa():
+    """Prepara prioridade cuDNN para SDPA assimétrico (``d_qk != d_v``, ex. RefAttn).
+
+    No ``RefAttnProcessor2_0`` (Hunyuan3D-Paint 2.1), ``Q/K`` têm ``head_dim=64``
+    e ``V`` concatena ``albedo+mr`` (``head_dim=128``). FlashAttention-2 rejeita
+    ``d_qk != d_v`` e o dispatcher default do PyTorch cai em ``EFFICIENT``; com
+    cuDNN 9+ (Ampere+/Ada), priorizar ``CUDNN_ATTENTION`` acelera ~1.65x mantendo
+    fallback automático para ``EFFICIENT``/``MATH``. Desligável via
+    ``PAINT3D_CUDNN_ASYM_SDPA=0``.
+    """
+    if os.environ.get("PAINT3D_CUDNN_ASYM_SDPA", "1") == "0":
+        return None
+    try:
+        import inspect
+
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        if "set_priority" not in inspect.signature(sdpa_kernel).parameters:
+            return None
+        backends = [SDPBackend.CUDNN_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]
+        return sdpa_kernel, backends
+    except Exception:
+        return None
+
+
+_CUDNN_ASYM_SDPA = _resolve_cudnn_asym_sdpa()
+
+
+def _run_sdpa(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Despacha SDPA priorizando cuDNN quando ``head_dim_qk != head_dim_v`` (RefAttn)."""
+    if (
+        _CUDNN_ASYM_SDPA is not None
+        and attention_mask is None
+        and query.is_cuda
+        and query.shape[-1] != value.shape[-1]
+        and query.dtype in (torch.float16, torch.bfloat16)
+        and torch.backends.cuda.cudnn_sdp_enabled()
+    ):
+        sdpa_kernel_fn, backends = _CUDNN_ASYM_SDPA
+        with sdpa_kernel_fn(backends, set_priority=True):
+            return scaled_dot_product_attention(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False)
+    return scaled_dot_product_attention(query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False)
+
+
 class AttnUtils:
     """
     Shared utility functions for attention processing.
@@ -600,9 +649,7 @@ class AttnCore:
             query, key = apply_rope_fn(query, key, head_dim, **kwargs)
 
         # Compute attention
-        hidden_states = scaled_dot_product_attention(
-            query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
-        )
+        hidden_states = _run_sdpa(query, key, value, attention_mask)
 
         return hidden_states, residual, input_ndim, shape_info, batch_size, attn.heads, head_dim
 

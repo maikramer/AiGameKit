@@ -203,3 +203,102 @@ class TestGroupOffloadPartialPlacement:
 
         assert painter._try_paint_group_offload(pipe, allow=True) is True
         assert wrapper.offload_ref_unet is False
+
+
+class TestCudnnAsymSdpa:
+    """Prioridade cuDNN no SDPA assimétrico (RefAttn: head_dim_qk != head_dim_v)."""
+
+    def test_env_disable_turns_off_resolver(self, monkeypatch) -> None:
+        from paint3d.hy3dpaint.hunyuanpaintpbr.unet import attn_processor
+
+        monkeypatch.setenv("PAINT3D_CUDNN_ASYM_SDPA", "0")
+        assert attn_processor._resolve_cudnn_asym_sdpa() is None
+
+    def test_symmetric_and_cpu_bypass_cudnn_priority(self, monkeypatch) -> None:
+        from contextlib import contextmanager
+
+        import torch
+
+        from paint3d.hy3dpaint.hunyuanpaintpbr.unet import attn_processor
+
+        entered: list[bool] = []
+
+        @contextmanager
+        def _fake_ctx(backends, *, set_priority=False):
+            entered.append(set_priority)
+            yield
+
+        monkeypatch.setattr(attn_processor, "_CUDNN_ASYM_SDPA", (_fake_ctx, ["cudnn"]))
+
+        q_cpu = torch.randn(1, 2, 8, 16)
+        k_cpu = torch.randn(1, 2, 8, 16)
+        v_cpu_asym = torch.randn(1, 2, 8, 32)
+        out = attn_processor._run_sdpa(q_cpu, k_cpu, v_cpu_asym, None)
+        assert out.shape == (1, 2, 8, 32)
+        assert entered == []
+
+    def test_asym_cuda_fp16_enters_cudnn_priority(self, monkeypatch) -> None:
+        from contextlib import contextmanager
+
+        import torch
+
+        from paint3d.hy3dpaint.hunyuanpaintpbr.unet import attn_processor
+
+        entered: list[tuple[list[str], bool]] = []
+
+        @contextmanager
+        def _fake_ctx(backends, *, set_priority=False):
+            entered.append((list(backends), set_priority))
+            yield
+
+        class _FakeTensor:
+            def __init__(self, shape, dtype, is_cuda=True):
+                self.shape = shape
+                self.dtype = dtype
+                self.is_cuda = is_cuda
+
+        calls: list[tuple] = []
+
+        def _fake_sdpa(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False):
+            calls.append((q.shape, v.shape, attn_mask))
+            return "ok"
+
+        monkeypatch.setattr(attn_processor, "_CUDNN_ASYM_SDPA", (_fake_ctx, ["CUDNN", "EFFICIENT", "MATH"]))
+        monkeypatch.setattr(attn_processor, "scaled_dot_product_attention", _fake_sdpa)
+        monkeypatch.setattr(torch.backends.cuda, "cudnn_sdp_enabled", lambda: True)
+
+        q = _FakeTensor((1, 5, 16, 64), torch.float16)
+        k = _FakeTensor((1, 5, 16, 64), torch.float16)
+        v_asym = _FakeTensor((1, 5, 16, 128), torch.float16)
+        v_sym = _FakeTensor((1, 5, 16, 64), torch.float16)
+
+        assert attn_processor._run_sdpa(q, k, v_asym, None) == "ok"
+        assert entered == [(["CUDNN", "EFFICIENT", "MATH"], True)]
+
+        # Simétrico não entra no context manager
+        entered.clear()
+        assert attn_processor._run_sdpa(q, k, v_sym, None) == "ok"
+        assert entered == []
+
+        # Com attn_mask também não entra
+        assert attn_processor._run_sdpa(q, k, v_asym, object()) == "ok"
+        assert entered == []
+
+    def test_cuda_refattn_numerical_parity(self) -> None:
+        import torch
+        import torch.nn.functional as F
+
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA indisponível")
+
+        from paint3d.hy3dpaint.hunyuanpaintpbr.unet import attn_processor
+
+        torch.manual_seed(0)
+        q = torch.randn((1, 5, 256, 64), device="cuda", dtype=torch.float16)
+        k = torch.randn((1, 5, 64, 64), device="cuda", dtype=torch.float16)
+        v = torch.randn((1, 5, 64, 128), device="cuda", dtype=torch.float16)
+
+        out_cudnn = attn_processor._run_sdpa(q, k, v, None)
+        out_default = F.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False)
+        assert out_cudnn.shape == (1, 5, 256, 128)
+        assert (out_cudnn - out_default).abs().max().item() < 1e-3

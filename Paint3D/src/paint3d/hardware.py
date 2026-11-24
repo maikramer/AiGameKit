@@ -55,7 +55,7 @@ class Paint3DHardwareProfile(HardwareProfileBase):
     texture_size: int | None = None
 
     def summary(self) -> str:
-        parts = [self.name, "memory-efficient (SDNQ uint8)" if self.memory_efficient else "FP16"]
+        parts = [self.name, "memory-efficient (FP16 smart-offload)" if self.memory_efficient else "FP16"]
         if self.max_views is not None:
             parts.append(f"views={self.max_views}@{self.view_resolution}px")
         if self.render_size is not None:
@@ -103,7 +103,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Paint3DHardwareProfile:
             total_vram_gib=round(total_gib, 1),
         )
 
-    # 8.0 - 10.0 GiB: FP16, mid-tier resolutions
+    # 8.0 - 10.0 GiB: FP16, 8v@640, render 2048, tex 3072
     if capacity_gib >= MID_TIER_MIN_GIB:
         return Paint3DHardwareProfile(
             name=name,
@@ -111,27 +111,26 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Paint3DHardwareProfile:
             memory_efficient=False,
             gpu_ids=None,
             total_vram_gib=round(total_gib, 1),
-            max_views=6,
-            view_resolution=512,
-            render_size=1536,
+            max_views=8,
+            view_resolution=640,
+            render_size=2048,
             texture_size=3072,
         )
 
-    # < 8.0 GiB: SDNQ uint8 + CFG chunking + ref-UNet offload permitem 6v@512.
-    # Envelope de OURO do modo mem-eff: render 1024 / tex 2048. O pico de
-    # 4.45 GiB foi medido com mesh pequena; malhas 280-320k faces levam o
-    # raster/bake a ~5.7 GiB e tex 3072 + render 1536 estouravam (OOM-spin
-    # do worker, texturas embaralhadas). render/tex acima do envelope só
-    # em GPUs de tier superior.
+    # < 8.0 GiB (ex.: RTX 4050 6 GB): FP16 puro sem SDNQ (unet.unet residente
+    # em CUDA quando free >= 4.6 GiB + unet_dual/text_encoder em group offload
+    # leaf_level; fallback full leaf_level FP16 ~2.5 GiB se VRAM partilhada) +
+    # CFG chunking + streaming bake O(1) → 8v@640 + render 2048 + tex 2048
+    # medidos em 4.32-4.52 GiB de pico alocado (2x mais rápido que SDNQ uint8).
     return Paint3DHardwareProfile(
         name=name,
         device="cuda",
         memory_efficient=True,
         gpu_ids=None,
         total_vram_gib=round(total_gib, 1),
-        max_views=6,
-        view_resolution=512,
-        render_size=1024,
+        max_views=8,
+        view_resolution=640,
+        render_size=2048,
         texture_size=2048,
     )
 

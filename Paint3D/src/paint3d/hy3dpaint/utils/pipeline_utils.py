@@ -12,6 +12,8 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+import os
+
 import numpy as np
 import torch
 
@@ -102,16 +104,65 @@ class ViewProcessor:
         total_viewed_tri_idxs = set()
         total_viewed_area = 0.0
 
-        for idx in range(6):
-            selected_camera_elevs.append(candidate_camera_elevs[idx])
-            selected_camera_azims.append(candidate_camera_azims[idx])
-            selected_view_weights.append(candidate_view_weights[idx])
-            selected_alpha_maps.append(viewed_masks[idx])
-            is_selected[idx] = True
-            total_viewed_tri_idxs.update(viewed_tri_idxs[idx])
+        # Em malhas assentes no chão (edifícios/personagens/props), elev=-90°
+        # desperdiçava 1 vista inteira no piso inferior ou sola dos pés.
+        # Só entra se o utilizador pedir explicitamente (PAINT3D_ALLOW_BOTTOM_VIEW=1).
+        allow_bottom = os.environ.get("PAINT3D_ALLOW_BOTTOM_VIEW", "0").strip().lower() in ("1", "true", "yes", "on")
+
+        def _add_candidate(cidx: int) -> None:
+            selected_camera_elevs.append(candidate_camera_elevs[cidx])
+            selected_camera_azims.append(candidate_camera_azims[cidx])
+            selected_view_weights.append(candidate_view_weights[cidx])
+            selected_alpha_maps.append(viewed_masks[cidx])
+            is_selected[cidx] = True
+            total_viewed_tri_idxs.update(viewed_tri_idxs[cidx])
+
+        # Com >=8 vistas e os 4 cantos 3/4 elevados disponíveis (20° @ 45/135/225/315),
+        # ancora o ring simétrico (4 cardinais + 4 diagonais 3/4) — evita viés de
+        # um único lado e cobre telhados/beirais/ombros a 98-99.8% da área UV.
+        # Com >=9 vistas ancora também o topo (elev=90°).
+        # Com <8 vistas ancora as 4 cardinais + topo (se existir) e deixa o guloso
+        # escolher as restantes entre vistas úteis (sem desperdiçar em elev=-90°).
+        want = int(max_selected_view_num)
+        diag_targets = [(20, 45), (20, 135), (20, 225), (20, 315)]
+        diag_indices = []
+        for te, ta in diag_targets:
+            found = next(
+                (
+                    i
+                    for i, (e, a) in enumerate(zip(candidate_camera_elevs, candidate_camera_azims, strict=False))
+                    if int(round(e)) == te and int(round(a)) % 360 == ta
+                ),
+                None,
+            )
+            if found is not None:
+                diag_indices.append(found)
+
+        if want >= 8 and len(diag_indices) == 4 and candidate_view_num >= 8:
+            for idx in range(min(4, candidate_view_num)):
+                _add_candidate(idx)
+            for idx in diag_indices:
+                if not is_selected[idx] and len(selected_view_weights) < want:
+                    _add_candidate(idx)
+            # 9.ª+ vista: topo (elev=90°) se disponível na lista
+            if want >= 9:
+                top_idx = next(
+                    (
+                        i
+                        for i, e in enumerate(candidate_camera_elevs)
+                        if int(round(e)) >= 80 and not is_selected[i]
+                    ),
+                    None,
+                )
+                if top_idx is not None:
+                    _add_candidate(top_idx)
+        else:
+            base_count = min(5, want, candidate_view_num)
+            for idx in range(base_count):
+                _add_candidate(idx)
 
         total_viewed_area = face_area_ratios[list(total_viewed_tri_idxs)].sum()
-        for _iter in range(max_selected_view_num - len(selected_view_weights)):
+        for _iter in range(want - len(selected_view_weights)):
             max_inc = 0
             max_idx = -1
 
@@ -120,6 +171,8 @@ class ViewProcessor:
             ):
                 if is_selected[idx]:
                     continue
+                if not allow_bottom and float(elev) <= -80.0:
+                    continue
                 new_tri_idxs = viewed_tri_idxs[idx] - total_viewed_tri_idxs
                 new_inc_area = face_area_ratios[list(new_tri_idxs)].sum()
 
@@ -127,13 +180,8 @@ class ViewProcessor:
                     max_inc = new_inc_area
                     max_idx = idx
 
-            if max_inc > 0.01:
-                is_selected[max_idx] = True
-                selected_camera_elevs.append(candidate_camera_elevs[max_idx])
-                selected_camera_azims.append(candidate_camera_azims[max_idx])
-                selected_view_weights.append(candidate_view_weights[max_idx])
-                selected_alpha_maps.append(viewed_masks[max_idx])
-                total_viewed_tri_idxs = total_viewed_tri_idxs.union(viewed_tri_idxs[max_idx])
+            if max_inc > 0.005:
+                _add_candidate(max_idx)
                 total_viewed_area += max_inc
             else:
                 break
@@ -143,11 +191,19 @@ class ViewProcessor:
         return selected_camera_elevs, selected_camera_azims, selected_view_weights
 
     def bake_from_multiview(self, views, camera_elevs, camera_azims, view_weights):
-        project_textures, project_weighted_cos_maps = [], []
-        project_boundary_maps = []
+        """Acumulação streaming O(1) VRAM por vista (substitui lista O(N) em VRAM).
+
+        Mantém apenas um acumulador de textura e um acumulador de pesos na GPU,
+        libertando cada vista logo após a projeção — desbloqueia render 2048px
+        e 8-9 vistas confortavelmente em GPUs de 6 GB.
+        """
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         blur_radius = 5
         _blur_k = None
+        tex_accum = None
+        w_accum = None
 
         for view, camera_elev, camera_azim, weight in zip(
             views, camera_elevs, camera_azims, view_weights, strict=False
@@ -170,14 +226,26 @@ class ViewProcessor:
                 .squeeze(0)
                 .permute(1, 2, 0)
             )
-            soft_factor = (1.0 - 0.5 * bm_blurred.clamp(0, 1)).clamp(min=0.0)
-            project_cos_map = project_cos_map * soft_factor
+            # ``boundary_map`` (sketch_image invertido em MeshRender.back_project) vale
+            # 1.0 no interior limpo e 0.0 nas bordas de profundidade — interior recebe
+            # peso total (1.0) e bordas de silhueta/oclusão reduzem suavemente até 0.25.
+            soft_factor = (0.25 + 0.75 * bm_blurred.clamp(0.0, 1.0)).clamp(0.0, 1.0)
+            w = project_cos_map * soft_factor
 
-            project_textures.append(project_texture)
-            project_weighted_cos_maps.append(project_cos_map)
-            project_boundary_maps.append(project_boundary_map)
-        texture, ori_trust_map = self.render.fast_bake_texture(project_textures, project_weighted_cos_maps)
-        return texture, ori_trust_map > 1e-8
+            if tex_accum is None:
+                tex_accum = project_texture * w
+                w_accum = w.clone()
+            else:
+                tex_accum.add_(project_texture * w)
+                w_accum.add_(w)
+
+            del project_texture, project_cos_map, project_boundary_map, bm_blurred, w
+
+        if tex_accum is None or w_accum is None:
+            raise ValueError("bake_from_multiview recebeu lista de vistas vazia")
+        valid = w_accum > 1e-8
+        texture = torch.where(valid, tex_accum / w_accum.clamp(min=1e-8), torch.zeros_like(tex_accum))
+        return texture, valid
 
     def texture_inpaint(self, texture, mask, defualt=None):
         if defualt is not None:

@@ -26,9 +26,12 @@ TEXT3D_CHUNKS_LO = 8_192
 TEXT3D_CHUNKS_HI = 524_288
 TEXT3D_BYTES_PER_QUERY_ENV = "TEXT3D_DECODE_BYTES_PER_QUERY"
 
-# Paint3D: activação multiview UNet (por vista @ 512px, SDNQ/fp16 mix medido
-# na 6 GB: ~6 vistas cabem com ~1.5-2 GiB livres após pesos+offload).
+# Paint3D: activação multiview UNet (por vista @ 512px).
+# Sem CFG chunking (batch 3x): ~280 MiB/vista @ 512px.
+# Com CFG chunking (batch 1x sequencial + streaming bake O(1)): medido em
+# ~170 MiB/vista @ 512px (~265 MiB/vista @ 640px → 8v@640 cabem em ~2.1 GiB act).
 PAINT_BYTES_PER_VIEW_512 = 280 * 1024 * 1024
+PAINT_BYTES_PER_VIEW_512_CHUNKED = 175 * 1024 * 1024
 PAINT_VIEWS_LO = 2
 PAINT_VIEWS_HI = 10
 # DINO ViT-g precisa ~1.5 GiB livres para ficar na GPU sem empurrar o UNet.
@@ -143,10 +146,11 @@ def text3d_num_chunks(
     return max(1, q)
 
 
-def paint_bytes_per_view(view_resolution: int) -> int:
+def paint_bytes_per_view(view_resolution: int, *, cfg_batch_chunking: bool = False) -> int:
     """Custo estimado de activação por vista multiview (escala com res²)."""
     r = max(256, int(view_resolution))
-    return int(PAINT_BYTES_PER_VIEW_512 * (r / 512.0) ** 2)
+    base = PAINT_BYTES_PER_VIEW_512_CHUNKED if cfg_batch_chunking else PAINT_BYTES_PER_VIEW_512
+    return int(base * (r / 512.0) ** 2)
 
 
 def paint_esrgan_tile(free_vram_bytes: int | None, *, memory_efficient: bool) -> int:
@@ -217,7 +221,15 @@ def paint_runtime_budget(
     res = max(256, int(requested_resolution))
     # Respeitar pedido (mesmo 1); não subir 1→PAINT_VIEWS_LO.
     want = max(1, int(requested_views))
-    bpv = paint_bytes_per_view(res)
+    # Em cards apertadas força CFG chunking + ref offload mesmo se o tier
+    # hw-auto não marcou memory_efficient (flutuação pós-load).
+    tight = free_vram_bytes is not None and free_vram_bytes < 2.5 * 1024**3
+    cfg = bool(memory_efficient or tight)
+    ref_off = bool(memory_efficient or tight)
+    if tight and not memory_efficient:
+        notes.append("VRAM livre apertada — cfg_chunk+ref_offload ON")
+
+    bpv = paint_bytes_per_view(res, cfg_batch_chunking=cfg)
     capped = budget_units(
         free_vram_bytes,
         bpv,
@@ -237,14 +249,6 @@ def paint_runtime_budget(
         views = min(want, capped)
         if views < want:
             notes.append(f"views {want}->{views} (free act budget)")
-
-    # Em cards apertadas força CFG chunking + ref offload mesmo se o tier
-    # hw-auto não marcou memory_efficient (flutuação pós-load).
-    tight = free_vram_bytes is not None and free_vram_bytes < 2.5 * 1024**3
-    cfg = bool(memory_efficient or tight)
-    ref_off = bool(memory_efficient or tight)
-    if tight and not memory_efficient:
-        notes.append("VRAM livre apertada — cfg_chunk+ref_offload ON")
 
     # memory_efficient: DINO SEMPRE em CPU. Com ~3 GiB livres pós-pesos a
     # heurística antiga (free≥1.6 GiB e não-tight) puxava DINO→CUDA (~2 GiB)

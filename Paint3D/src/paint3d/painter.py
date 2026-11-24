@@ -306,6 +306,19 @@ def _preflight_paint_model(model_repo: str, subfolder: str, *, verbose: bool = F
             _logger.info(f"preflight paint falhou ({exc}); pipeline baixa on-demand")
 
 
+def _want_sdnq_quant(memory_efficient: bool) -> bool:
+    """SDNQ uint8 no UNet é opt-in explícito (``PAINT3D_USE_SDNQ=1``).
+
+    Com load staged em CPU + UNet principal FP16 residente (2.09 GiB) +
+    ``unet_dual``/``text_encoder`` em group offload (ou full leaf-level FP16 em
+    2.5 GiB sob VRAM partilhada), FP16 puro cabe confortavelmente em 6 GB sem
+    ruído de quantização e 2x mais rápido que SDNQ uint8.
+    """
+    if not memory_efficient:
+        return False
+    return _env_flag("PAINT3D_USE_SDNQ", False)
+
+
 def _apply_optimization_config(config: Any, *, memory_efficient: bool, gpu_ids: list[int] | None) -> None:
     """Anexa knobs de otimização ao Hunyuan3DPaintConfig.
 
@@ -315,11 +328,14 @@ def _apply_optimization_config(config: Any, *, memory_efficient: bool, gpu_ids: 
     - offload_ref_unet: ref-UNet (dual stream) → CPU após o 1º step de cada
       pintura (liberta ~1.7 GB fp16). Default: ligado em modo memory-efficient.
       Env: PAINT3D_OFFLOAD_REF_UNET.
+    - defer_cuda_placement: mantém UNet/text_encoder em CPU no load para evitar
+      o pico de 5.1 GiB antes do placement/group-offload.
     - dino_device / realesrgan_device: colocação automática por VRAM.
       Env: PAINT3D_DINO_DEVICE / PAINT3D_ESRGAN_DEVICE.
     """
     config.cfg_batch_chunking = _env_flag("PAINT3D_CFG_CHUNKING", memory_efficient)
     config.offload_ref_unet = _env_flag("PAINT3D_OFFLOAD_REF_UNET", memory_efficient)
+    config.defer_cuda_placement = bool(memory_efficient and torch.cuda.is_available())
     config.dino_device = os.environ.get("PAINT3D_DINO_DEVICE", "").strip() or _auto_dino_device(
         memory_efficient, gpu_ids
     )
@@ -535,10 +551,14 @@ def apply_runtime_vram_budget(
     vae = getattr(pipe, "vae", None) if pipe is not None else None
     if vae is not None:
         try:
+            # Só activa VAE tiling sob VRAM extremamente apertada (<1.2 GiB):
+            # com slicing, descodificar 1 vista a 640px custa ~40 MiB e não gera
+            # costuras de tiles 256px.
+            need_tiling = free_b is not None and free_b < int(1.2 * 1024**3)
             enable_vae_optimizations(
                 vae,
                 enable_slicing=True,
-                enable_tiling=True,
+                enable_tiling=need_tiling,
                 tile_sample_min_size=int(budget.vae_tile_size),
             )
         except Exception as exc:
@@ -810,8 +830,43 @@ def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = 
     applied_attrs: set[str] = set()
     inner_unet = getattr(diff_pipe, "unet", None)
     if inner_unet is not None:
-        # O wrapper expõe .unet (UNet2DConditionModel real) e opcionalmente .unet_dual.
-        for attr in ("unet", "unet_dual"):
+        # Caminho rápido em GPUs 6-8 GB: ``unet.unet`` (2.09 GiB FP16) fica
+        # residente em CUDA (zero stalls PCIe nos 30 steps — 2x mais rápido),
+        # enquanto ``unet_dual`` (1.65 GiB, corre SÓ no step 0) e ``text_encoder``
+        # correm com group offload leaf_level. Sob pressão de VRAM partilhada
+        # (< 4.6 GiB livres), ``unet.unet`` também entra em leaf_level (~2.5 GiB).
+        from aigamekit_shared.vram_budget import free_vram_bytes
+
+        force_full_offload = _env_flag("PAINT3D_FORCE_FULL_OFFLOAD", False)
+        keep_main_resident = False
+        main_sub = getattr(inner_unet, "unet", None)
+        if (
+            not force_full_offload
+            and isinstance(main_sub, torch.nn.Module)
+            and hasattr(main_sub, "to")
+            and torch.cuda.is_available()
+        ):
+            free_b = free_vram_bytes()
+            if free_b is not None:
+                try:
+                    main_on_cuda = next(main_sub.parameters()).device.type == "cuda"
+                except StopIteration:
+                    main_on_cuda = False
+                eff_free_gib = (free_b / (1024**3)) + (2.1 if main_on_cuda else 0.0)
+                keep_main_resident = eff_free_gib >= 4.6
+
+        if keep_main_resident and main_sub is not None:
+            main_sub.to(torch.device("cuda"))
+            if verbose:
+                _logger.info(
+                    "UNet principal (FP16, ~2.1 GiB) mantido residente em CUDA; "
+                    "offload apenas em unet_dual/text_encoder"
+                )
+            unet_offload_attrs = ("unet_dual",)
+        else:
+            unet_offload_attrs = ("unet", "unet_dual")
+
+        for attr in unet_offload_attrs:
             sub = getattr(inner_unet, attr, None)
             if sub is not None and hasattr(sub, "enable_group_offload"):
                 try:
@@ -1332,12 +1387,8 @@ def apply_hunyuan_paint(
             # Bake supersampled: subdiv SIMPLE só no bake para precisão por-texel.
 
         with profile_span("paint_optimize_pipeline"):
-            # SDNQ PRIMEIRO, hooks DEPOIS: os hooks de group offload guardam
-            # referências aos parâmetros/buffers (grupos + cópias pinned) —
-            # quantizar depois trocaria as camadas e invalidava-as. SDNQ uint8
-            # convive com leaf-level (as camadas subclassam Conv2d/Linear e
-            # scale/zero_point são Parameters registados no mesmo grupo).
-            if memory_efficient and _sdnq_available() and pipe.unet is not None:
+            use_sdnq = _want_sdnq_quant(memory_efficient)
+            if use_sdnq and _sdnq_available() and pipe.unet is not None:
                 _quantize_paint_unet(
                     pipe,
                     allow_group_offload=allow_group_offload,
@@ -1345,14 +1396,24 @@ def apply_hunyuan_paint(
                 )
             elif verbose:
                 if memory_efficient:
-                    _logger.warn("Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
+                    _logger.info("Modo memory-efficient — UNet em FP16 puro (SDNQ opt-in via PAINT3D_USE_SDNQ=1)")
                 else:
                     _logger.info("Modo alta VRAM — UNet em FP16 (sem quantização)")
 
             # Group offload com CUDA streams (depois da quantização).
             group_offload_applied = _try_paint_group_offload(pipe, allow=allow_group_offload, verbose=verbose)
+            if (
+                not group_offload_applied
+                and getattr(config, "defer_cuda_placement", False)
+                and str(config.device).startswith("cuda")
+            ):
+                # Sem offload (GPU grande com --memory-efficient): mover pesos pendentes para CUDA.
+                if pipe.unet is not None:
+                    pipe.unet.to(config.device)
+                if getattr(pipe.multiview_pipeline, "text_encoder", None) is not None:
+                    pipe.multiview_pipeline.text_encoder.to(config.device)
             if group_offload_applied and verbose:
-                quant_note = "SDNQ uint8 + streams" if memory_efficient else "fp16 + streams"
+                quant_note = "SDNQ uint8 + streams" if use_sdnq else "FP16 + streams"
                 _logger.info(f"Group offload ativo ({quant_note})")
             try:
                 if pipe.vae is not None:
@@ -1675,11 +1736,8 @@ class PaintBatchProcessor:
 
         group_offload_applied = False
         with profile_span("paint_optimize_pipeline"):
-            # SDNQ PRIMEIRO, hooks DEPOIS (ver apply_hunyuan_paint): os hooks
-            # guardam referências aos parâmetros — quantizar depois invalidava-as.
-            # Quantização fora do try/except opcional: falha parcial deixaria o
-            # UNet meio-quantizado e geraria texturas corrompidas silenciosamente.
-            if self._memory_efficient and _sdnq_available() and pipe.unet is not None:
+            use_sdnq = _want_sdnq_quant(self._memory_efficient)
+            if use_sdnq and _sdnq_available() and pipe.unet is not None:
                 _quantize_paint_unet(
                     pipe,
                     allow_group_offload=self._allow_group_offload,
@@ -1688,15 +1746,26 @@ class PaintBatchProcessor:
                 )
             elif self._verbose:
                 if self._memory_efficient:
-                    _logger.warn("[batch] Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
+                    _logger.info(
+                        "[batch] Modo memory-efficient — UNet em FP16 puro (SDNQ opt-in via PAINT3D_USE_SDNQ=1)"
+                    )
                 else:
                     _logger.info("[batch] Modo alta VRAM — UNet em FP16 (sem quantização)")
 
             group_offload_applied = _try_paint_group_offload(
                 pipe, allow=self._allow_group_offload, verbose=self._verbose
             )
+            if (
+                not group_offload_applied
+                and getattr(config, "defer_cuda_placement", False)
+                and str(config.device).startswith("cuda")
+            ):
+                if pipe.unet is not None:
+                    pipe.unet.to(config.device)
+                if getattr(pipe.multiview_pipeline, "text_encoder", None) is not None:
+                    pipe.multiview_pipeline.text_encoder.to(config.device)
             if group_offload_applied and self._verbose:
-                quant_note = "SDNQ uint8 + streams" if self._memory_efficient else "fp16 + streams"
+                quant_note = "SDNQ uint8 + streams" if use_sdnq else "FP16 + streams"
                 _logger.info(f"[batch] Group offload ativo ({quant_note})")
 
             try:
