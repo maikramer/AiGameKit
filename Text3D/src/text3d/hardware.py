@@ -103,10 +103,10 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
         img_w: int | None = None
         img_h: int | None = None
     else:
-        # <= 10 GB: quant + resolução de imagem reduzida (todos os tiers por
-        # baixo de 10 GB partilham o mesmo perfil — os antigos `>= 7.5/6.0` e
-        # `>= 4.0` eram ramos duplicados com valores idênticos).
-        tier = balanced if capacity_gib >= 6.0 else fast
+        # <= 10 GB: GPUs de 6 GB reais (ex. RTX 4050 Laptop = 5.72 GiB utilizáveis
+        # em CUDA) ficavam abaixo de 6.0 e caíam em `fast` (octree=128, 20 steps),
+        # fundindo dedos e detalhes finos. Limiar 5.2 GiB captura toda placa 6 GB.
+        tier = balanced if capacity_gib >= 5.2 else fast
         sdnq = "sdnq-int4"
         img_w = 1024
         img_h = 1024

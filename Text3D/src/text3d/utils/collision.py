@@ -81,8 +81,42 @@ def _decimate_to(obj, target: int) -> None:
         bpy.ops.object.modifier_apply(modifier=mod.name)
 
 
+_HULL_SCIPY_MIN_VERTS = 50_000
+
+
 def _apply_hull(obj) -> None:
+    """Casco convexo. Acima de ~50k vértices usa Qhull (scipy) em vez do
+    ``bpy.ops.mesh.convex_hull``: em edifícios de milhões de faces o operador do
+    Blender ficava >2 h a 100% de CPU (village_forge, 158 MB)."""
     import bpy
+
+    mesh = obj.data
+    n = len(mesh.vertices)
+    if n >= _HULL_SCIPY_MIN_VERTS:
+        import numpy as np
+        from scipy.spatial import ConvexHull
+
+        co = np.empty(n * 3, dtype=np.float32)
+        mesh.vertices.foreach_get("co", co)
+        pts = co.reshape(-1, 3).astype(np.float64)
+        hull = ConvexHull(pts)
+        used = np.unique(hull.simplices)
+        remap = {int(v): i for i, v in enumerate(used)}
+        verts = [tuple(pts[v]) for v in used]
+        faces = [tuple(remap[int(i)] for i in tri) for tri in hull.simplices]
+        new_mesh = bpy.data.meshes.new("CollisionHull")
+        new_mesh.from_pydata(verts, [], faces)
+        new_mesh.update()
+        new_mesh.validate(verbose=False)
+        old = obj.data
+        obj.data = new_mesh
+        bpy.data.meshes.remove(old)
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.normals_make_consistent(inside=False)
+        bpy.ops.object.mode_set(mode="OBJECT")
+        return
 
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")

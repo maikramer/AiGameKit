@@ -76,15 +76,38 @@ def point_cloud_tensor(
     *,
     device: torch.device | str,
     dtype: torch.dtype,
-    max_points: int = 81920,
+    max_points: int = 2048,
 ) -> torch.Tensor:
-    """Carrega mesh/PLY e devolve vértices normalizados ``(1, N, 3)``."""
+    """Carrega mesh ou point cloud PLY e devolve pontos normalizados ``(1, N, 3)``.
+
+    Nota: ``OmniEncoder`` foi treinado com ``resolutions=[512, 1024, 2048]`` tokens
+    de ponto na cross-attention — limitar a ``max_points`` (default 2048; override
+    via ``TEXT3D_OMNI_MAX_POINTS``) evita explosão O(Q*K) e mantém-se in-distribution.
+    """
+    import os
+
     import trimesh
 
-    mesh = trimesh.load(str(path), force="mesh")
-    if isinstance(mesh, trimesh.Scene):
-        mesh = mesh.dump(concatenate=True)
-    verts = np.asarray(mesh.vertices, dtype=np.float64)
+    env_max = os.environ.get("TEXT3D_OMNI_MAX_POINTS", "").strip()
+    if env_max:
+        max_points = max(64, int(env_max))
+
+    loaded = trimesh.load(str(path))
+    if isinstance(loaded, trimesh.Scene):
+        geoms = [g for g in loaded.geometry.values() if hasattr(g, "vertices") and len(g.vertices) > 0]
+        if not geoms:
+            raise ValueError(f"point_cloud vazio (cena sem vértices): {path}")
+        verts = np.concatenate([np.asarray(g.vertices, dtype=np.float64) for g in geoms], axis=0)
+    elif isinstance(loaded, trimesh.Trimesh) and len(loaded.faces) > 0 and len(loaded.vertices) > max_points:
+        # Mesh denso → amostrar superfície uniforme em vez de enviesar para zonas subdivididas.
+        pts, _ = trimesh.sample.sample_surface(loaded, max_points, seed=0)
+        verts = np.asarray(pts, dtype=np.float64)
+    elif hasattr(loaded, "vertices"):
+        verts = np.asarray(loaded.vertices, dtype=np.float64)
+    else:
+        raise ValueError(f"point_cloud inválido (sem vértices): {path}")
+    if len(verts) == 0:
+        raise ValueError(f"point_cloud vazio (0 vértices): {path}")
     verts = normalize_mesh_vertices(verts, scale=0.98)
     if len(verts) > max_points:
         idx = np.random.default_rng(0).choice(len(verts), size=max_points, replace=False)

@@ -28,15 +28,16 @@ def test_no_gpu_yields_cpu_fast_profile() -> None:
 
 
 def test_rtx4050_6gb_gets_int4_balanced() -> None:
-    """RTX 4050 6GB: Omni ~10GB fp16 → SDNQ int4 + balanced."""
-    p = profile_from_specs([(0, _gib(6))])
-    assert p.device == "cuda"
-    assert p.gpu_ids is None
-    assert p.sdnq_preset == "sdnq-int4"
-    assert (p.steps, p.octree, p.chunks) == (30, 256, 8000)  # balanced
-    assert p.volume_decoder == "flashvdm"
-    assert p.image_width == 1024
-    assert p.image_height == 1024
+    """RTX 4050 6GB (6.0 nominal ou 5.72 GiB CUDA reais): SDNQ int4 + balanced (nunca fast o128)."""
+    for gib in (6.0, 5.72):
+        p = profile_from_specs([(0, _gib(gib))])
+        assert p.device == "cuda"
+        assert p.gpu_ids is None
+        assert p.sdnq_preset == "sdnq-int4"
+        assert (p.steps, p.octree, p.chunks) == (30, 256, 8000)  # balanced
+        assert p.volume_decoder == "flashvdm"
+        assert p.image_width == 1024
+        assert p.image_height == 1024
 
 
 def test_dual_rtx3060_24gb_gets_multigpu_hq_no_quant() -> None:

@@ -10,6 +10,7 @@ from text3d.utils.omni_controls import (
     DEFAULT_OMNI_BBOX,
     bbox_tensor,
     normalize_mesh_vertices,
+    point_cloud_tensor,
     resolve_control_kwargs,
 )
 
@@ -59,3 +60,28 @@ def test_resolve_bbox_requires_values() -> None:
 def test_resolve_invalid_type() -> None:
     with pytest.raises(ValueError, match="control_type"):
         resolve_control_kwargs("banana", device="cpu", dtype=torch.float32)
+
+
+def test_point_cloud_tensor_loads_ply_pointcloud_and_caps_2048(tmp_path) -> None:
+    import trimesh
+
+    rng = np.random.default_rng(7)
+    pts = rng.uniform(-2.0, 2.0, size=(3500, 3))
+    ply_path = tmp_path / "cloud.ply"
+    trimesh.points.PointCloud(pts).export(str(ply_path))
+
+    t = point_cloud_tensor(ply_path, device="cpu", dtype=torch.float32)
+    assert t.shape == (1, 2048, 3)
+    assert float(t.min()) >= -0.9801
+    assert float(t.max()) <= 0.9801
+
+
+def test_point_cloud_tensor_samples_dense_mesh_surface(tmp_path) -> None:
+    import trimesh
+
+    sphere = trimesh.creation.icosphere(subdivisions=4)  # >2500 vertices
+    glb_path = tmp_path / "dense.glb"
+    sphere.export(str(glb_path))
+
+    t = point_cloud_tensor(glb_path, device="cpu", dtype=torch.float32)
+    assert t.shape == (1, 2048, 3)

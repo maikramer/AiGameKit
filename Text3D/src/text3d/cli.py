@@ -630,6 +630,48 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "em conjunto com --dino-image-size (senão o DINO volta a reduzir)."
     ),
 )
+@click.option(
+    "--view-back",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Vista ortográfica traseira (180°) → ativa Hunyuan3D-2mv multiview (FP16 ~2.8 GiB).",
+)
+@click.option(
+    "--view-left",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Vista lateral esquerda anatómica (sujeito virado para <-) → Hunyuan3D-2mv.",
+)
+@click.option(
+    "--view-right",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Vista lateral direita anatómica (sujeito virado para ->) → Hunyuan3D-2mv.",
+)
+@click.option(
+    "--auto-turnaround",
+    is_flag=True,
+    default=False,
+    help=(
+        "Gera automaticamente vistas coerentes back + left via FLUX.3 Klein a partir da "
+        "frontal (com alinhamento front↔back anti-6-dedos) e corre Hunyuan3D-2mv."
+    ),
+)
+@click.option(
+    "--fuse-omni",
+    is_flag=True,
+    default=False,
+    help=(
+        "Fusão 2mv → bbox fit → Hunyuan3D-Omni --control-type point (2048 pts): ideal para "
+        "edifícios/portas/props que exigem bbox anisotrópico rígido + detalhes nas costas."
+    ),
+)
+@click.option(
+    "--no-align-back",
+    is_flag=True,
+    default=False,
+    help="Desliga o alinhamento automático front↔mirror(back) no modo Hunyuan3D-2mv.",
+)
 @add_vramd_options
 @click.pass_context
 def generate(
@@ -693,6 +735,12 @@ def generate(
     category,
     dino_image_size,
     image_processor_size,
+    view_back,
+    view_left,
+    view_right,
+    auto_turnaround,
+    fuse_omni,
+    no_align_back,
     vramd_priority,
     no_vramd,
     vramd_stream,
@@ -1022,6 +1070,19 @@ def generate(
                         _ums_request["text2d_model_id"] = text2d_model_id
                     _ums_request["t2d_full_gpu"] = t2d_full_gpu
 
+                _is_multiview = bool(view_back or view_left or view_right or auto_turnaround)
+                if fuse_omni and not _is_multiview:
+                    console.print(
+                        "[red]Erro: --fuse-omni requer --view-back/--view-left/--view-right ou --auto-turnaround.[/red]"
+                    )
+                    sys.exit(1)
+                if _is_multiview and not from_image and not (auto_turnaround and prompt):
+                    console.print(
+                        "[red]Erro: --view-back/--view-left/--view-right requer --from-image "
+                        "(ou use --auto-turnaround junto com PROMPT).[/red]"
+                    )
+                    sys.exit(1)
+
                 # vramd primeiro — nunca ensure_vram/kill antes de enfileirar.
                 if delegate_or_prepare(
                     "text3d",
@@ -1035,7 +1096,7 @@ def generate(
                     t_start=start_time,
                     noun="Mesh",
                     console=console,
-                    enabled=not no_vramd,
+                    enabled=(not no_vramd) and (not _is_multiview),
                     priority=vramd_priority,
                     stream=vramd_stream,
                     gpu_ids=parsed_gpu_ids,
@@ -1046,8 +1107,11 @@ def generate(
 
                 # Path in-process: coordenação VRAM / kill só aqui.
                 if not cpu:
+                    _mem_eff_gen = bool(
+                        _is_multiview or offload or allow_group_offload or sdnq_preset not in (None, "none", "")
+                    )
                     prepare_gpu_exclusive(
-                        needed_mib=6000,
+                        needed_mib=3200 if _mem_eff_gen else 5000,
                         allow_shared=allow_shared,
                         kill_others=gpu_kill,
                         allow_shared_env="TEXT3D_ALLOW_SHARED_GPU",
@@ -1059,7 +1123,7 @@ def generate(
 
                 from text3d.vramd_load import map_vramd_load_kwargs
 
-                with console.status("[bold yellow]A preparar gerador...", spinner="dots"):
+                def _build_omni_generator() -> HunyuanTextTo3DGenerator:
                     _load_kw = map_vramd_load_kwargs(
                         {
                             "verbose": verbose,
@@ -1080,7 +1144,12 @@ def generate(
                     )
                     if cpu:
                         _load_kw["device"] = "cpu"
-                    generator = HunyuanTextTo3DGenerator(**_load_kw)
+                    return HunyuanTextTo3DGenerator(**_load_kw)
+
+                generator: HunyuanTextTo3DGenerator | None = None
+                if not _is_multiview:
+                    with console.status("[bold yellow]A preparar gerador...", spinner="dots"):
+                        generator = _build_omni_generator()
 
                 item_id = output.stem if output else "text3d_single"
                 _ctrl = dict(
@@ -1090,6 +1159,8 @@ def generate(
                     point_cloud=point_cloud,
                     voxel_mesh=voxel_mesh,
                 )
+                _mv_stats: dict = {}
+                _mv_view_keys: list[str] | None = None
 
                 emit_progress(item_id, TOOL_TEXT3D, phase="loading_model", percent=0)
 
@@ -1098,7 +1169,116 @@ def generate(
                     TextColumn("[progress.description]{task.description}"),
                     console=console,
                 ) as progress:
-                    if from_image:
+                    if _is_multiview:
+                        from .hy2mv import Hunyuan2MVGenerator, fuse_2mv_with_omni
+                        from .turnaround import generate_turnaround_views, turnaround_seed_from_front_seed
+
+                        task = progress.add_task("[cyan]Hunyuan3D-2mv (multiview → mesh)...", total=None)
+                        front_img_path = Path(from_image).resolve() if from_image else None
+                        if front_img_path is None:
+                            progress.update(task, description="[cyan]FLUX.3 Klein (vista frontal)...")
+                            from text2d.generator import KleinFluxGenerator
+
+                            t2d_gen = KleinFluxGenerator(
+                                device="cpu" if cpu else "cuda",
+                                memory_efficient=True,
+                                verbose=verbose,
+                            )
+                            try:
+                                front_im, _ = t2d_gen.generate(
+                                    prompt=prompt,
+                                    width=image_width,
+                                    height=image_height,
+                                    num_inference_steps=t2d_steps,
+                                    guidance_scale=t2d_guidance,
+                                    seed=seed,
+                                )
+                            finally:
+                                t2d_gen.unload()
+                                del t2d_gen
+                            front_img_path = (output.parent / f"{output.stem}_front.png").resolve()
+                            front_img_path.parent.mkdir(parents=True, exist_ok=True)
+                            front_im.save(front_img_path)
+
+                        mv_views: dict[str, Path] = {"front": front_img_path}
+                        if view_back is not None:
+                            mv_views["back"] = Path(view_back).resolve()
+                        if view_left is not None:
+                            mv_views["left"] = Path(view_left).resolve()
+                        if view_right is not None:
+                            mv_views["right"] = Path(view_right).resolve()
+
+                        _back_already_aligned = False
+                        if auto_turnaround and ("back" not in mv_views or "left" not in mv_views):
+                            progress.update(task, description="[cyan]FLUX.3 Klein turnaround (back + left)...")
+                            auto_views = generate_turnaround_views(
+                                front_img_path,
+                                out_dir=output.parent,
+                                subject_hint=prompt or "",
+                                category=category or "humanoid",
+                                align_back=not no_align_back,
+                                steps=max(4, min(t2d_steps, 12)),
+                                seed=turnaround_seed_from_front_seed(seed),
+                                device="cpu" if cpu else "cuda",
+                                memory_efficient=True,
+                                verbose=verbose,
+                            )
+                            for k in ("back", "left"):
+                                if k not in mv_views and k in auto_views:
+                                    mv_views[k] = auto_views[k]
+                                    if k == "back" and not no_align_back:
+                                        _back_already_aligned = True
+
+                        _mv_view_keys = sorted(mv_views.keys())
+                        progress.update(
+                            task,
+                            description=f"[cyan]Hunyuan3D-2mv ({'+'.join(_mv_view_keys)} → mesh)...",
+                        )
+                        emit_progress(item_id, TOOL_TEXT3D, phase="inference", percent=0)
+                        _is_humanoid = str(category or "humanoid").strip().lower() in (
+                            "humanoid",
+                            "character",
+                            "npc",
+                            "hero",
+                        )
+                        mv_gen = Hunyuan2MVGenerator(
+                            device="cpu" if cpu else "cuda",
+                            verbose=verbose,
+                        )
+                        result = mv_gen.generate_from_views(
+                            mv_views,
+                            num_inference_steps=steps,
+                            guidance_scale=guidance,
+                            octree_resolution=octree_resolution,
+                            num_chunks=num_chunks,
+                            seed=seed,
+                            remove_bg=not no_remove_bg,
+                            align_back=(not no_align_back) and (not _back_already_aligned),
+                            lock_outer_hands=_is_humanoid,
+                        )
+                        _mv_stats = dict(mv_gen.last_stats)
+
+                        if fuse_omni:
+                            progress.update(
+                                task,
+                                description="[cyan]Fusão 2mv → bbox → Hunyuan3D-Omni (point)...",
+                            )
+                            generator = _build_omni_generator()
+                            result = fuse_2mv_with_omni(
+                                result,
+                                mv_views["front"],
+                                omni_generator=generator,
+                                target_bbox_lhw=bbox_vals or size_m_vals,
+                                num_inference_steps=steps,
+                                guidance_scale=guidance,
+                                octree_resolution=octree_resolution,
+                                num_chunks=num_chunks,
+                                hy_seed=seed,
+                                mc_level=mc_level,
+                                remove_bg=not no_remove_bg,
+                            )
+                        emit_progress(item_id, TOOL_TEXT3D, phase="inference", percent=100)
+                    elif from_image:
                         task = progress.add_task("[cyan]Hunyuan3D-Omni (imagem → mesh)...", total=None)
                         result = generator.generate_from_image(
                             from_image,
@@ -1196,7 +1376,7 @@ def generate(
                         write_omni_fingerprint,
                     )
 
-                    _decode_stats = dict(getattr(generator, "last_decode_stats", None) or {})
+                    _decode_stats = dict(getattr(generator, "last_decode_stats", None) or _mv_stats or {})
                     _morph_n = morph_close_voxels_for(category)
                     _dbg = build_generate_debug(
                         seconds=elapsed,
@@ -1235,6 +1415,8 @@ def generate(
                             "t2d_guidance": t2d_guidance,
                             "text2d_model_id": text2d_model_id,
                             "t2d_full_gpu": t2d_full_gpu,
+                            "multiview": _mv_view_keys,
+                            "fuse_omni": bool(fuse_omni),
                         },
                         omni_resolved=_omni,
                         hardware={
@@ -1256,7 +1438,10 @@ def generate(
                             "offload": offload,
                         },
                         mesh=mesh_stats_for_debug(result, path=mp),
-                        extra={"path": "cli_generate"},
+                        extra={
+                            "path": "cli_generate_multiview" if _is_multiview else "cli_generate",
+                            "mv_stats": _mv_stats or None,
+                        },
                     )
                     write_omni_fingerprint(
                         mp,
@@ -1279,6 +1464,8 @@ def generate(
                             "size_m": size_m_vals,
                             "seed": seed_fingerprint,
                             "octree_resolution": octree_resolution,
+                            "multiview": _mv_view_keys,
+                            "fuse_omni": bool(fuse_omni),
                         },
                         debug=_dbg,
                     )
@@ -2653,9 +2840,9 @@ def remesh_textured_cmd(
 @click.option(
     "--preset",
     type=str,
-    default="default",
+    default="auto",
     show_default=True,
-    help="Preset do Materialize para derivar normal/AO do albedo",
+    help="Preset do Materialize para derivar normal/AO do albedo (auto infere pela categoria)",
 )
 @click.option(
     "--force",
@@ -3352,8 +3539,9 @@ def generate_batch(
         global _batch_generator
         if _batch_generator is not None:
             return
+        _mem_eff_batch = bool(batch_offload or allow_group_offload or sdnq_preset not in (None, "none", ""))
         prepare_gpu_exclusive(
-            needed_mib=6000,
+            needed_mib=3200 if _mem_eff_batch else 5000,
             allow_shared=allow_shared,
             kill_others=gpu_kill,
             allow_shared_env="TEXT3D_ALLOW_SHARED_GPU",
@@ -3420,18 +3608,24 @@ def generate_batch(
 
                 try:
                     _item_size_m = size_m_from_mapping(item.get("size_m"))
+                    _item_hm = float(item["height_m"]) if item.get("height_m") is not None else None
+                    _item_fm = float(item["footprint_m"]) if item.get("footprint_m") is not None else None
                     _omni = merge_omni_controls(
                         control_type=item.get("control_type"),
                         bbox=item.get("bbox"),
                         bbox_preset=item.get("bbox_preset"),
                         size=item.get("size"),
                         size_m=_item_size_m,
+                        height_m=_item_hm,
+                        footprint_m=_item_fm,
                         pose_file=item.get("pose_file"),
                         pose_preset=item.get("pose_preset"),
                         point_cloud=item.get("point_cloud"),
                         voxel_mesh=item.get("voxel_mesh"),
                         category=item.get("category"),
                     )
+                    if _item_size_m is None and _omni.get("size_m") is not None:
+                        _item_size_m = list(_omni["size_m"])
                 except (KeyError, FileNotFoundError, ValueError) as exc:
                     raise click.ClickException(f"item {item_id}: {exc}") from exc
 
@@ -3475,6 +3669,12 @@ def generate_batch(
 
                 t0 = time.time()
                 from .vramd_payload import build_generate_request
+
+                _item_auto_ta = bool(item.get("auto_turnaround", False))
+                _item_fuse_omni = bool(item.get("fuse_omni", False))
+                _item_mv = bool(
+                    _item_auto_ta or item.get("view_back") or item.get("view_left") or item.get("view_right")
+                )
 
                 if delegate_or_prepare(
                     "text3d",
@@ -3520,7 +3720,7 @@ def generate_batch(
                     t_start=t0,
                     noun="Mesh",
                     console=_err,
-                    enabled=not no_vramd,
+                    enabled=(not no_vramd) and (not _item_mv),
                     priority=vramd_priority or "batch",
                     stream=vramd_stream,
                     timeout_sec=1800.0,
@@ -3540,22 +3740,113 @@ def generate_batch(
                     )
                     continue
 
-                _ensure_inprocess_generator()
-                assert _batch_generator is not None
-                emit_progress(item_id, TOOL_TEXT3D, phase="loading_model", percent=0)
-                mesh = _batch_generator.generate_from_image(
-                    str(img_path),
-                    num_inference_steps=item_steps,
-                    guidance_scale=guidance,
-                    octree_resolution=item_octree,
-                    num_chunks=item_chunks,
-                    hy_seed=item_seed,
-                    mc_level=item_mc_level,
-                    bounds_mode=bounds_mode,
-                    keep_loaded=True,
-                    step_callback=_make_step_callback(item_id, item_steps),
-                    **_ctrl,
-                )
+                _mv_stats_item: dict = {}
+                if _item_mv:
+                    # Liberta gerador Omni se já estiver na VRAM para manter pico <= 3.3 GiB em 6 GB.
+                    if _batch_generator is not None:
+                        with contextlib.suppress(Exception):
+                            _batch_generator.unload_models()
+                        _batch_generator = None
+                    from .hy2mv import Hunyuan2MVGenerator, fuse_2mv_with_omni
+                    from .turnaround import generate_turnaround_views, turnaround_seed_from_front_seed
+
+                    mv_views: dict[str, Path] = {"front": img_path}
+                    for vk, ik in (("back", "view_back"), ("left", "view_left"), ("right", "view_right")):
+                        if item.get(ik):
+                            mv_views[vk] = (manifest_dir / item[ik]).resolve()
+
+                    _item_cat = str(item.get("category", category) or "humanoid")
+                    _is_hum = _item_cat.strip().lower() in ("humanoid", "character", "npc", "hero")
+                    _no_align = bool(item.get("no_align_back", False))
+                    _include_right = bool(item.get("include_right", True))
+                    _back_aligned = False
+
+                    if _item_auto_ta:
+                        # Reaproveita turnaround existente ao lado da frontal quando não é --force
+                        _stem = img_path.stem
+                        _ta_dir = img_path.parent
+                        _need_ta = force or any(
+                            not (_ta_dir / f"{_stem}_{vk}.png").is_file()
+                            for vk in (("back", "left", "right") if _include_right else ("back", "left"))
+                        )
+                        if _need_ta:
+                            emit_progress(item_id, TOOL_TEXT3D, phase="turnaround", percent=0)
+                            auto_v = generate_turnaround_views(
+                                img_path,
+                                out_dir=_ta_dir,
+                                subject_hint=str(item.get("subject_hint") or ""),
+                                back_details=str(item.get("back_details") or ""),
+                                category=_item_cat,
+                                include_right=_include_right,
+                                align_back=not _no_align,
+                                steps=int(item.get("turnaround_steps", 8)),
+                                seed=turnaround_seed_from_front_seed(item_seed),
+                                device="cuda",
+                                memory_efficient=True,
+                                verbose=batch_verbose,
+                            )
+                            emit_progress(item_id, TOOL_TEXT3D, phase="turnaround", percent=100)
+                            for vk in ("back", "left"):
+                                if vk not in mv_views and vk in auto_v:
+                                    mv_views[vk] = auto_v[vk]
+                                    if vk == "back" and not _no_align:
+                                        _back_aligned = True
+                        else:
+                            for vk in ("back", "left"):
+                                cand = _ta_dir / f"{_stem}_{vk}.png"
+                                if vk not in mv_views and cand.is_file():
+                                    mv_views[vk] = cand
+                                    if vk == "back":
+                                        _back_aligned = True
+
+                    emit_progress(item_id, TOOL_TEXT3D, phase="inference", percent=0)
+                    mv_gen = Hunyuan2MVGenerator(device="cuda", verbose=batch_verbose)
+                    mesh = mv_gen.generate_from_views(
+                        mv_views,
+                        num_inference_steps=int(item_steps),
+                        guidance_scale=float(guidance),
+                        octree_resolution=int(item_octree),
+                        num_chunks=int(item_chunks),
+                        seed=item_seed,
+                        remove_bg=True,
+                        align_back=(not _no_align) and (not _back_aligned),
+                        lock_outer_hands=_is_hum,
+                    )
+                    _mv_stats_item = dict(mv_gen.last_stats)
+                    if _item_fuse_omni:
+                        _ensure_inprocess_generator()
+                        assert _batch_generator is not None
+                        mesh = fuse_2mv_with_omni(
+                            mesh,
+                            mv_views["front"],
+                            omni_generator=_batch_generator,
+                            target_bbox_lhw=_omni.get("bbox") or _item_size_m,
+                            num_inference_steps=int(item_steps),
+                            guidance_scale=float(guidance),
+                            octree_resolution=int(item_octree),
+                            num_chunks=int(item_chunks),
+                            hy_seed=item_seed,
+                            mc_level=item_mc_level,
+                            remove_bg=True,
+                        )
+                    emit_progress(item_id, TOOL_TEXT3D, phase="inference", percent=100)
+                else:
+                    _ensure_inprocess_generator()
+                    assert _batch_generator is not None
+                    emit_progress(item_id, TOOL_TEXT3D, phase="loading_model", percent=0)
+                    mesh = _batch_generator.generate_from_image(
+                        str(img_path),
+                        num_inference_steps=item_steps,
+                        guidance_scale=guidance,
+                        octree_resolution=item_octree,
+                        num_chunks=item_chunks,
+                        hy_seed=item_seed,
+                        mc_level=item_mc_level,
+                        bounds_mode=bounds_mode,
+                        keep_loaded=True,
+                        step_callback=_make_step_callback(item_id, item_steps),
+                        **_ctrl,
+                    )
 
                 # Escala Omni (~2u) → metros reais antes do reparo/export:
                 # morph/weld em metros e mundo do jogo recebem tamanho físico.
@@ -3597,7 +3888,9 @@ def generate_batch(
                             "bounds_mode": bounds_mode,
                             "volume_decoder": volume_decoder,
                             "mc_algo": mc_algo,
-                            "last_decode_stats": dict(getattr(_batch_generator, "last_decode_stats", None) or {}),
+                            "last_decode_stats": dict(
+                                getattr(_batch_generator, "last_decode_stats", None) or _mv_stats_item or {}
+                            ),
                         },
                         generation={
                             "quality": item.get("quality", quality),
@@ -3804,6 +4097,11 @@ def models():
         "tencent/Hunyuan3D-Omni; hy3dshape vendorizado; licença Tencent Hunyuan Community",
     )
     table.add_row(
+        "Hunyuan3D-2mv",
+        "Multiview Image-to-3D (front+back+left/right); FP16 sequencial ~2.8 GiB VRAM",
+        "tencent/Hunyuan3D-2mv (hunyuan3d-dit-v2-mv); ativa com --view-* / --auto-turnaround",
+    )
+    table.add_row(
         "Hunyuan3D-Paint",
         "Textura multivista (delight + paint)",
         "CLI [bold]paint3d[/bold] ou [bold]gameassets[/bold] (não faz parte do text3d)",
@@ -3818,6 +4116,95 @@ def models():
             border_style="dim",
         )
     )
+
+
+@cli.command("turnaround")
+@click.option(
+    "--from-image",
+    "from_image",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Imagem frontal de referência (fundo branco ou transparente).",
+)
+@click.option(
+    "-o",
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Pasta de saída para *_back.png / *_left.png / *_right.png (default: pasta da frontal).",
+)
+@click.option(
+    "--category",
+    type=str,
+    default="humanoid",
+    show_default=True,
+    help="Categoria do asset (humanoid trava mãos externas front↔back para 5 dedos exatos).",
+)
+@click.option(
+    "--subject",
+    type=str,
+    default="",
+    help="Descrição curta do sujeito para guiar o FLUX.3 Klein (ex: 'medieval cartographer').",
+)
+@click.option(
+    "--back-details",
+    type=str,
+    default="",
+    help="Detalhes específicos das costas (ex: 'external cylindrical leather map tube strapped on back').",
+)
+@click.option(
+    "--include-right",
+    is_flag=True,
+    default=False,
+    help="Gera também a vista lateral direita (*_right.png, útil para Paint3D Multi-Ref).",
+)
+@click.option(
+    "--no-align-back",
+    is_flag=True,
+    default=False,
+    help="Desliga o alinhamento automático front↔mirror(back).",
+)
+@click.option("--steps", type=int, default=8, show_default=True, help="Passos de inferência do FLUX.3 Klein.")
+@click.option("--seed", type=int, default=202, show_default=True, help="Seed base do turnaround.")
+@click.option("--cpu", is_flag=True, default=False, help="Força execução em CPU.")
+@click.option("-v", "--verbose", is_flag=True, default=False, help="Logs detalhados.")
+def turnaround(
+    from_image: Path,
+    output_dir: Path | None,
+    category: str,
+    subject: str,
+    back_details: str,
+    include_right: bool,
+    no_align_back: bool,
+    steps: int,
+    seed: int,
+    cpu: bool,
+    verbose: bool,
+) -> None:
+    """Gera turnaround ortográfico (back + left [+ right]) via FLUX.3 Klein para Hunyuan3D-2mv e Paint3D Multi-Ref."""
+    from .turnaround import generate_turnaround_views
+
+    views = generate_turnaround_views(
+        from_image,
+        out_dir=output_dir,
+        subject_hint=subject,
+        back_details=back_details,
+        category=category,
+        include_right=include_right,
+        align_back=not no_align_back,
+        steps=steps,
+        seed=seed,
+        device="cpu" if cpu else "cuda",
+        memory_efficient=True,
+        verbose=verbose,
+    )
+    table = Table(title="Turnaround gerado", show_header=True)
+    table.add_column("Vista", style="cyan")
+    table.add_column("Ficheiro", style="green")
+    for k in ("front", "back", "left", "right"):
+        if k in views:
+            table.add_row(k, str(views[k]))
+    console.print(table)
 
 
 @cli.command("serve")
