@@ -327,18 +327,25 @@ class TestResultsAsBatchJsonl:
 
 
 class TestShapePaintSpecs:
-    def test_shape_specs_import_or_empty(self, tmp_path: Path) -> None:
+    def test_shape_specs_without_text3d_package(self, tmp_path: Path) -> None:
+        """A wave shape monta os specs sem importar ``text3d`` (que puxa torch).
+
+        O builder vive no Shared; com o import antigo o GameAssets caía no
+        ``generate-batch`` sequencial e a 2.ª GPU remota ficava parada.
+        """
         items = [{"id": "h", "image": "i.png", "output": "o.glb"}]
-        try:
-            import text3d.vramd_payload  # noqa: F401
-        except ImportError:
-            assert shape_specs_from_items(items, manifest_dir=tmp_path) == []
-            return
         specs = shape_specs_from_items(items, manifest_dir=tmp_path, steps=40)
         assert len(specs) == 1
         assert specs[0].asset_id == "h"
-        assert "from_image" in specs[0].payload
+        assert specs[0].payload["from_image"].endswith("i.png")
         assert specs[0].payload["steps"] == 40
+
+    def test_quant_for_mib_matches_text3d_cut(self) -> None:
+        """12 GiB remoto fica fp16; 6 GiB fica int4 — sem importar text3d."""
+        from aigamekit_shared.vramd_shape_payload import quant_for_mib
+
+        assert quant_for_mib(12288) == (None, False)
+        assert quant_for_mib(6144) == ("sdnq-int4", True)
 
     def test_paint_specs_without_paint3d_package(self, tmp_path: Path) -> None:
         """A wave paint monta os specs sem importar ``paint3d`` (que puxa torch).

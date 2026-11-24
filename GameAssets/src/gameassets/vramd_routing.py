@@ -114,11 +114,21 @@ def _single_gpu(size_mib: int) -> list[tuple[int, int]]:
 
 
 def text3d_opts_for_size(size_mib: int) -> tuple[str | None, bool] | None:
-    """``(sdnq_preset, memory_efficient)`` que o hw-auto do text3d escolhe para uma GPU."""
+    """``(sdnq_preset, memory_efficient)`` que o hw-auto do text3d escolhe para uma GPU.
+
+    Sem o pacote ``text3d`` (venv do GameAssets) usa o mesmo corte de 10 GiB
+    que vive no Shared — senão a wave não tinha ``hw_tiers`` e a GPU de 12 GiB
+    herdava o int4 do cliente de 6 GiB.
+    """
     try:
         from text3d.hardware import hw_auto_enabled, profile_from_specs
     except ImportError:
-        return None
+        from aigamekit_shared.hardware import hw_auto_enabled
+        from aigamekit_shared.vramd_shape_payload import quant_for_mib
+
+        if not hw_auto_enabled("TEXT3D_HW_AUTO"):
+            return None
+        return quant_for_mib(size_mib)
     if not hw_auto_enabled():
         return None
     hwp = profile_from_specs(_single_gpu(size_mib))
