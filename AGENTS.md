@@ -77,7 +77,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Part3D/` | Python | `part3d` | extra | Semantic mesh part decomposition (Hunyuan3D-Part: P3-SAM + X-Part; SDNQ) |
 | `Hi3D/` | Python | `hi3d` | extra | Refinamento de malha image-conditioned (Hi3D v1.0 / SPARC3D). **Único venv Python 3.10** (torch 2.5.0+cu124, flash-attn 2.7.4.post1, spconv-cu120); stage `refine` do batch, default ON; 512³ em 6 GB com offload (~0.86 GiB, ~130 s). [`docs/findings/HI3D_REFINE_FINDINGS.md`](docs/findings/HI3D_REFINE_FINDINGS.md) · [`Hi3D/README.md`](Hi3D/README.md) |
 | `GameAssets/` | Python | `gameassets` | core | Batch asset generation |
-| `Texture2D/` | Python | `texture2d` | examples | Seamless 2D textures (local SD1.5; seamless 2.0: late-circular + noise rolling, decode integral, hires 512+refine, score/auto-heal — [`docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md`](docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md)) |
+| `Texture2D/` | Python | `texture2d` | examples | Seamless 2D textures (local SD1.5; seamless 2.0: late-circular + noise rolling, decode integral, hires 512+refine, score/auto-heal, orçamento de tokens do CLIP, portões de qualidade com re-roll (pormenor isolado, bandas por eixo, cauda pesada), `--axis` e cor pedida `--match-color` — [`docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md`](docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md)) |
 | `Skymap2D/` | Python | `skymap2d` | examples | 360-degree skymaps (local FLUX.1-dev + LoRA) |
 | `Text2Sound/` | Python | `text2sound` | examples | Text-to-audio (Stable Audio 3 Small: music/sfx) |
 | `Rigging3D/` | Python | `rigging3d` | core | Auto-rigging (SkinTokens, Python 3.13) |

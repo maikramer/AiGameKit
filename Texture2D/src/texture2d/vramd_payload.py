@@ -40,10 +40,24 @@ def build_generate_request(
     vae_tiling: bool | None = None,
     seam_heal: bool | None = None,
     hires: bool | None = None,
+    explicit: list[str] | None = None,
+    max_isolated_detail: float | None = None,
+    max_banding: float | None = None,
+    max_tail_ratio: float | None = None,
+    axis: str | None = None,
+    match_color: str | None = None,
+    attempts: int | None = None,
     gpu_ids: list[int] | str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Monta payload vramd texture2d com peak/load opts."""
+    """Monta payload vramd texture2d com peak/load opts.
+
+    ``explicit`` são os parâmetros que o chamador definiu (ganham ao preset no
+    gerador); vazio/``None`` é omitido e o preset ganha sempre, como antes.
+    ``max_isolated_detail``/``max_banding``/``max_tail_ratio`` são os limiares
+    dos portões de qualidade (com re-roll até ``attempts``), ``axis`` o eixo
+    pedido e ``match_color`` a cor média pedida; todos omitidos quando vazios.
+    """
     norm_ground = _normalize_ground(ground)
     core: dict[str, Any] = {
         "width": int(width),
@@ -67,6 +81,13 @@ def build_generate_request(
             "vae_tiling": vae_tiling,
             "seam_heal": seam_heal,
             "hires": hires,
+            "explicit": sorted(set(explicit)) if explicit else None,
+            "max_isolated_detail": max_isolated_detail,
+            "max_banding": max_banding,
+            "max_tail_ratio": max_tail_ratio,
+            "axis": axis,
+            "match_color": match_color,
+            "attempts": attempts,
         },
         extra=extra,
     )

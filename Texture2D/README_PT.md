@@ -23,6 +23,7 @@ No monorepo [AiGameKit](../README_PT.md), o pacote depende de [**aigamekit-share
 - **CFG real** — o negative prompt funciona nativamente (`--negative-prompt`), sem o custo 2x do true-cfg
 - **Prompt seamless automático** — acrescenta instruções tileable/seamless automaticamente
 - **Score de tileability + auto-heal** — score no sidecar JSON; cross-fade opcional abaixo de 0.85
+- **Precisão do pedido** — prompts cabidos na janela de 77 tokens do CLIP sem perder a cauda do utilizador; flags explícitas (e um `--quality` escolhido) ganham ao preset; os portões de qualidade voltam a gerar uma seed que dê um nó, frestas de tábuas ou flocos que o tiling repetiria (`--max-isolated-detail`, `--max-banding`, `--max-tail-ratio`); `--axis` endireita uma textura cujas linhas saíram deitadas; `--match-color` gradua o resultado à cor pedida
 - **13 presets de materiais** — Wood, Stone, Grass, Sand, Dirt, Metal, Brick, Fabric, Leather, Concrete, Marble, Gravel, Tile Floor
 - **Quality tiers** — `fast`, `low`, `medium` (default), `high`, `highest` via `--quality`
 - **Batch** — gera múltiplas texturas a partir de um ficheiro de prompts
@@ -63,7 +64,7 @@ Requer uma **GPU CUDA** (PyTorch, diffusers, transformers e accelerate são depe
 | `texture2d server-stop` | **Deprecated** — usar `vramd stop` |
 | `texture2d info` | Configuração, sistema e ambiente |
 | `texture2d skill install` | Instala a Agent Skill do Cursor |
-| `texture2d validate-tileable` | Valida a tileability de uma textura |
+| `texture2d validate-tileable` | Valida a tileability de uma textura (e, com `--max-isolated-detail`, `--max-banding`, `--max-tail-ratio`, os pormenores que o tiling repetiria, as linhas que a atravessam e os flocos) |
 
 ### `texture2d generate PROMPT`
 
@@ -103,10 +104,76 @@ texture2d generate "dark marble floor" -n "blurry, watermark" -o marble.png
 | `--refine-steps` | int | 12 | Steps do refine hires (alvos >512²); tier `high` usa 12, `highest` 16 |
 | `--vae-tiling/--no-vae-tiling` | flag | auto | Decode do VAE: auto = integral sempre que cabe (preserva a costura); `--vae-tiling` força o tiling wrap-preserving |
 | `--seam-heal/--no-seam-heal` | flag | on | Cross-fade da banda de borda quando o score de tileability fica < 0.85 |
+| `--max-isolated-detail` | float | off | Limiar (0..1) do pormenor isolado — um nó, uma mancha que o tiling repete em cada célula mesmo com a costura perfeita. Acima dele a seed volta a ser sorteada (ver `--attempts`). Recomendado para madeira: 0.12 |
+| `--max-banding` | float | off | Limiar das bandas por eixo — frestas de tábuas ou linhas que atravessam a textura inteira (medido: 0,87 em tábuas, 0,68 em veio deitado, 0,20–0,44 em veio direito). Acima dele a seed volta a ser sorteada. Recomendado para madeira: 0.5 |
+| `--max-tail-ratio` | float | off | Limiar da cauda pesada — flocos ou pontos claros sobre um fundo liso (medido: 28 numa cal com flocos, 1,5–3,2 no resto). Acima dele a seed volta a ser sorteada. Recomendado para madeira: 5 |
+| `--axis` | `v`/`u` | off | A textura tem uma direção: `v` = as linhas correm de cima a baixo (veio de madeira), `u` = da esquerda à direita. Roda 90° quando saírem ao contrário — o SD1.5 não obedece a «vertical grain» |
+| `--match-color` | `#RRGGBB` | off | A cor pedida, como cor média. O SD1.5 tem um prior de tom médio (todos os prompts de madeira saíram castanhos, a 96–128 de 255): a imagem é graduada até ao alvo e mantém a estrutura (`match_color` no sidecar) |
+| `--attempts` | int | 1 | Gerações no máximo quando há um portão de qualidade; se nenhuma passar, devolve a que passa mais perto (o sidecar assinala `quality_gates`) |
 | `--no-hires` | flag | off | Gerar directamente à resolução pedida (sem 512 + refine) |
 | `-v, --verbose` | flag | `false` | Logs detalhados |
 
-> **Nota:** quando `--quality` é definido, resolução e passos são preenchidos a partir do perfil de qualidade **apenas se** o utilizador não passou explicitamente `-W`, `-H`, `-s` ou `-g`. Flags explícitas têm sempre prioridade (resolução soft via `QualityEngine`).
+> **Nota:** quando `--quality` é definido, resolução e passos são preenchidos a partir do perfil de qualidade **apenas se** o utilizador não passou explicitamente `-W`, `-H`, `-s` ou `-g`. Flags explícitas têm sempre prioridade (resolução soft via `QualityEngine`). O mesmo vale contra o
+preset de material: o preset só preenche o que NÃO foi declarado (um `-s`/`-g`/`-W`/`-H` explícito,
+ou um `--quality` escolhido); sem nenhum deles o preset ganha, como antes.
+
+### Precisão do pedido
+
+O codificador de texto do SD1.5 lê 77 tokens por prompt — no positivo e no negativo. O que passa
+disso cai sem erro nem aviso. Seis garantias:
+
+- **A cauda do utilizador nunca é o que cai.** Quando `preset + prompt` cabe, o texto é o clássico
+  (preset à cabeça). Quando não cabe, o pedido do utilizador vem inteiro e o preset só empresta as
+  cláusulas que couberem — `preset_dropped` no sidecar lista as restantes. Um prompt demasiado
+  longo por si é cortado numa fronteira de vírgula e assinalado em `prompt_user_truncated`.
+- **Negative prompt sem desperdício.** Só quando o negativo não cabe: as repetições saem e as
+  cláusulas ficam por prioridade (a base da ferramenta, depois o utilizador, depois o preset).
+  `negative_dropped` diz o que ficou de fora.
+- **Nenhuma esquisitice repetida.** `isolated_detail.spot` no sidecar mede o quanto o pormenor
+  pequeno mais destacado foge ao resto da textura (0..1, mais baixo = melhor: as texturas do pool
+  ficam abaixo de ~0,10; um nó com halo dá 0,17–0,30). Com `--max-isolated-detail 0.12` uma seed
+  reprovada volta a gerar com `seed + 1`. Uma mancha que reprova em todas as
+  seeds é o **decode do VAE em tiles**, não a seed: deixa uma borra por tile
+  (medido 0,40 contra 0,08 no decode integral). A política automática esvazia
+  o cache do PyTorch antes de medir a VRAM livre, pelo que uma GPU de 6 GB
+  fica com o decode integral; `--no-vae-tiling` força-o.
+- **Sem tábuas, sem veio deitado.** `banding` no sidecar é, por eixo, o quanto
+  uma linha inteira da textura se destaca (em unidades do percentil 99 do
+  passa-bando): frestas de tábuas dão 0,87, veio deitado 0,68, veio direito
+  0,20–0,44. `--max-banding 0.5` re-genera uma seed com frestas; `--axis v` roda
+  uma textura cujas linhas saíram da esquerda para a direita (só quando um eixo
+  domina claramente — uma corda diagonal fica como está; `axis.rotated` diz se
+  rodou).
+- **Sem flocos.** Muitos pontos claros pequenos sobre um fundo liso cabem
+  dentro do percentil 99, e o portão do pormenor isolado não os vê.
+  `tail_ratio` é a distância do percentil 99,9 à mediana em unidades do
+  percentil 95 (uma textura densa dá 1,5–3,2; uma cal com flocos deu 28).
+  `--max-tail-ratio 5`.
+- **A cor pedida.** O SD1.5 tem um prior de tom médio: nove prompts de madeira
+  — de um pinho quase preto a uma cal marfim — saíram todos castanhos, com
+  luminância média de 96–128 em 255. `--match-color #RRGGBB` gradua a imagem
+  até a sua cor média ser o alvo, com uma única escala de contraste partilhada
+  pelos canais que mantém a estrutura (o veio quente continua quente sobre um
+  alvo escuro) e só comprime o contraste quando o alvo está perto do preto ou
+  do branco (`match_color` no sidecar: `before`, `after`, `scale`).
+
+Com vários portões, cada tentativa reprovada volta a gerar; se nenhuma passar,
+devolve a de menor razão valor/limiar e `quality_gates` diz que portão falhou
+(`best_of`).
+
+Os dois prompts trazem `prompt_tokens` / `negative_prompt_tokens` no sidecar.
+
+`texture2d validate-tileable IMAGE --max-isolated-detail 0.12 --max-banding 0.5
+--max-tail-ratio 5` aplica os mesmos portões a um ficheiro já gerado (exit 1
+acima de qualquer limiar).
+
+```bash
+# Um pinho escuro manchado: veio ao longo de V, a cor da paleta, sem frestas nem flocos
+texture2d generate "very dark stained pine wood, fine straight vertical grain" \
+  --quality high -W 1024 -H 1024 --seed 51121 \
+  --max-isolated-detail 0.12 --max-banding 0.5 --max-tail-ratio 5 --attempts 6 \
+  --axis v --match-color "#2F2D25" -o pine.png
+```
 
 ### `texture2d presets`
 
@@ -299,6 +366,7 @@ Texture2D/
 │   ├── hardware.py            # Perfil de auto-detecção de hardware
 │   ├── image_processor.py     # Gravação de imagem + metadata
 │   ├── presets.py             # 13 presets de materiais
+│   ├── prompt_budget.py       # Janela de 77 tokens do CLIP: cabimento dos prompts
 │   ├── prompt_enhancer.py     # Enhancers de prompt chão/top-down
 │   ├── server.py              # Model server (mantém o pipeline carregado)
 │   ├── tileability.py         # Helpers de tileability

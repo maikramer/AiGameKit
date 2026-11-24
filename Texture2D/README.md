@@ -23,6 +23,7 @@ In the [AiGameKit](../README.md) monorepo, the package depends on [**aigamekit-s
 - **Real CFG** — negative prompts work natively (`--negative-prompt`), no `true-cfg` 2x cost
 - **Automatic seamless prompting** — appends tileable/seamless instructions automatically
 - **Tileability score + auto-heal** — score in the JSON sidecar; optional cross-fade heal below 0.85
+- **Request precision** — prompts fitted to the CLIP 77-token window without losing your prompt's tail; explicit flags (and a chosen `--quality`) win over the material preset; quality gates re-roll a seed that yields a knot, plank gaps or flecks the tiling would repeat (`--max-isolated-detail`, `--max-banding`, `--max-tail-ratio`); `--axis` turns a texture whose lines came out sideways; `--match-color` grades the result to the colour you asked for
 - **13 material presets** — Wood, Stone, Grass, Sand, Dirt, Metal, Brick, Fabric, Leather, Concrete, Marble, Gravel, Tile Floor
 - **Quality tiers** — `fast`, `low`, `medium` (default), `high`, `highest` via `--quality`
 - **Batch generation** — multiple textures from a prompt file
@@ -63,7 +64,7 @@ Requires a **CUDA GPU** (PyTorch, diffusers, transformers, accelerate are runtim
 | `texture2d server-stop` | **Deprecated** — use `vramd stop` |
 | `texture2d info` | Config, system, and environment info |
 | `texture2d skill install` | Install Cursor Agent Skill |
-| `texture2d validate-tileable` | Validate a texture's tileability |
+| `texture2d validate-tileable` | Validate a texture's tileability (and, with `--max-isolated-detail`, `--max-banding`, `--max-tail-ratio`, the details the tiling would repeat, the lines across it and the flecks) |
 
 ### `texture2d generate PROMPT`
 
@@ -104,10 +105,74 @@ texture2d generate "dark marble floor" -n "blurry, watermark" -o marble.png
 | `--refine-steps` | int | 12 | Hires refine steps (targets >512²); tier `high` uses 12, `highest` 16 |
 | `--vae-tiling/--no-vae-tiling` | flag | auto | VAE decode: auto = integral whenever it fits (preserves the seam); force wrap-preserving tiling with `--vae-tiling` |
 | `--seam-heal/--no-seam-heal` | flag | on | Cross-fade heal of the border band when the tileability score < 0.85 |
+| `--max-isolated-detail` | float | off | Threshold (0..1) for an isolated detail — a knot, a blotch that tiling repeats in every cell even with a perfect seam. Above it the seed is re-rolled (see `--attempts`). Recommended for wood: 0.12 |
+| `--max-banding` | float | off | Threshold for axis banding — plank gaps or lines running across the whole texture (measured: 0.87 on planks, 0.68 on sideways grain, 0.20–0.44 on straight grain). Above it the seed is re-rolled. Recommended for wood: 0.5 |
+| `--max-tail-ratio` | float | off | Threshold for a heavy tail — flecks or bright dots on a smooth background (measured: 28 on a flecked whitewash, 1.5–3.2 elsewhere). Above it the seed is re-rolled. Recommended for wood: 5 |
+| `--axis` | `v`/`u` | off | The texture has a direction: `v` = lines run top to bottom (wood grain), `u` = left to right. Rotates 90° when they come out the other way — SD1.5 does not obey "vertical grain" |
+| `--match-color` | `#RRGGBB` | off | Colour you asked for, as the mean colour. SD1.5 has a mid-tone prior (every wood prompt came out brown at 96–128 of 255): the image is graded to the target and keeps its structure (`match_color` in the sidecar) |
+| `--attempts` | int | 1 | Maximum generations when a quality gate is set; if none passes, the one that comes closest is returned (the sidecar marks `quality_gates`) |
 | `--no-hires` | flag | off | Generate directly at the requested resolution (skip 512 + refine) |
 | `-v, --verbose` | flag | `false` | Verbose logging |
 
-> **Note:** When `--quality` is set, resolution and steps are auto-filled from the quality profile **only if** the user didn't explicitly pass `-W`, `-H`, `-s`, or `-g`. Explicit flags always win (soft resolution via `QualityEngine`).
+> **Note:** When `--quality` is set, resolution and steps are auto-filled from the quality profile **only if** the user didn't explicitly pass `-W`, `-H`, `-s`, or `-g`. Explicit flags always win (soft resolution via `QualityEngine`). The same holds against the material
+preset: a preset only fills what you did **not** declare (an explicit `-s`/`-g`/`-W`/`-H`, or a
+`--quality` you chose); with none of them the preset wins, as before.
+
+### Request precision
+
+SD1.5's text encoder reads 77 tokens per prompt — positive and negative. Anything past that is
+silently dropped, without an error. Six guarantees:
+
+- **Your prompt is never the part that falls off.** When `preset + prompt` fits, the text is the
+  classic one (preset first). When it does not, your prompt comes whole and the preset only lends
+  the clauses that fit — `preset_dropped` in the sidecar lists the rest. A prompt too long on its
+  own is cut on a comma boundary and reported as `prompt_user_truncated`.
+- **A negative prompt without waste.** Only when the negative overflows: duplicates are removed
+  and clauses are kept by priority (the tool's base terms, then yours, then the preset's).
+  `negative_dropped` says what stayed out.
+- **No repeated oddity.** `isolated_detail.spot` in the sidecar measures how much the most
+  salient small detail stands out from the rest of the texture (0..1, lower is better: the pool
+  textures stay below ~0.10; a knot with a halo gives 0.17–0.30). With `--max-isolated-detail
+  0.12` a failing seed is re-rolled with `seed + 1`. A blotch that fails on
+  every seed is the **tiled VAE decode**, not the seed: it leaves a smear per
+  tile (measured 0.40 against 0.08 with the integral decode). The automatic
+  policy empties the PyTorch cache before measuring free VRAM, so a 6 GB GPU
+  takes the integral decode; `--no-vae-tiling` forces it.
+- **No planks, no sideways grain.** `banding` in the sidecar is, per axis, how
+  much a whole line of the texture stands out (in units of the band-pass 99th
+  percentile): plank gaps give 0.87, sideways grain 0.68, straight grain
+  0.20–0.44. `--max-banding 0.5` re-rolls a seed with gaps; `--axis v` rotates
+  a texture whose lines came out running left to right (only when one axis
+  clearly dominates — a diagonal rope is left alone; `axis.rotated` says so).
+- **No flecks.** Many small bright dots on a smooth background sit inside the
+  99th percentile, so the isolated-detail gate misses them. `tail_ratio` is how
+  far the 99.9th percentile sits from the median in units of the 95th (a dense
+  texture gives 1.5–3.2; a flecked whitewash gave 28). `--max-tail-ratio 5`.
+- **The colour you asked for.** SD1.5 has a mid-tone prior: nine wood prompts
+  — from near-black pine to ivory whitewash — all came out brown at a mean
+  luminance of 96–128 out of 255. `--match-color #RRGGBB` grades the image so
+  its mean colour is the target, with a single contrast scale shared by all
+  channels that keeps the structure (warm grain stays warm on a dark target)
+  and only compresses contrast when the target is close to black or white
+  (`match_color` in the sidecar: `before`, `after`, `scale`).
+
+With several gates, every failing attempt re-rolls; if none passes, the one
+with the lowest worst value/threshold ratio is returned and `quality_gates`
+says which gate failed (`best_of`).
+
+Both prompts carry `prompt_tokens` / `negative_prompt_tokens` in the sidecar.
+
+`texture2d validate-tileable IMAGE --max-isolated-detail 0.12 --max-banding 0.5
+--max-tail-ratio 5` applies the same gates to an existing file (exit 1 above
+any threshold).
+
+```bash
+# A dark stained pine: grain along V, the palette's colour, no gaps or flecks
+texture2d generate "very dark stained pine wood, fine straight vertical grain" \
+  --quality high -W 1024 -H 1024 --seed 51121 \
+  --max-isolated-detail 0.12 --max-banding 0.5 --max-tail-ratio 5 --attempts 6 \
+  --axis v --match-color "#2F2D25" -o pine.png
+```
 
 ### `texture2d presets`
 
@@ -302,6 +367,7 @@ Texture2D/
 │   ├── hardware.py            # Hardware auto-detection profile
 │   ├── image_processor.py     # Image saving + metadata
 │   ├── presets.py             # 13 material presets
+│   ├── prompt_budget.py       # CLIP 77-token window: prompt/negative fitting
 │   ├── prompt_enhancer.py     # Ground/top-down prompt enhancers
 │   ├── server.py              # Model server (keeps pipeline warm)
 │   ├── tileability.py         # Tileability helpers

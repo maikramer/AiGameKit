@@ -7,6 +7,64 @@ próprio: [`Materialize/CHANGELOG.md`](Materialize/CHANGELOG.md).
 
 ## [Unreleased]
 
+### Fixed — texture2d: o pedido chegava truncado ao modelo
+
+- **Prompt e negativo truncados a 77 tokens do CLIP sem aviso.** Com um
+  preset, o prompt genérico ia à cabeça e um prompt de utilizador corrente
+  (78 tokens) perdia a cauda — a parte mais específica. Novo
+  `prompt_budget.py`: se o texto clássico couber fica igual (um asset de antes
+  reproduz-se com a mesma seed); se não couber, o utilizador vem inteiro e o
+  preset só empresta o que cabe; no negativo saem as repetições e fica a
+  prioridade base > utilizador > preset. O sidecar traz `prompt_tokens`,
+  `preset_dropped`, `negative_dropped` e `prompt_user_truncated`.
+- **O preset pisava os parâmetros explícitos.** `--quality high -s 28` corria
+  a 50 passos e guidance 7,5 com `--preset wood`. O CLI declara agora o que o
+  utilizador escolheu (`explicit`, no payload do vramd e no adapter do
+  worker) e o preset só preenche o resto.
+
+### Added — texture2d: pormenor isolado com re-roll
+
+- **`score_isolated_detail`** + flags `--max-isolated-detail` / `--attempts`:
+  um nó ou uma mancha passam o score de tileabilidade e repetem-se em cada
+  tile; acima do limiar a seed volta a ser gerada (`seed + 1`). Medido:
+  pool 0,014–0,103, nós 0,17–0,30; limiar recomendado para madeira 0,12.
+  `validate-tileable --max-isolated-detail` aplica o mesmo portão a um
+  ficheiro. Evidência em
+  `docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md`.
+
+### Fixed — texture2d: o decode em tiles deixava manchas a 1024²
+
+- **A folga de VRAM media-se com o cache reservado do PyTorch contando como
+  ocupado.** Numa GPU de 6 GB isso escolhia o decode do VAE em tiles, que deixa
+  uma borra por tile (attention do bloco médio) — parecia um nó na madeira e
+  o portão novo reprovava seed atrás de seed. Medido: 0,40 em tiles contra
+  0,08 no integral, qualquer que fosse a força do refine. Agora o cache
+  esvazia-se antes de medir; o caminho de OOM → tiles continua para quem tem
+  mesmo pouca memória. Evidência na secção 4 de
+  `docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md`.
+
+### Added — texture2d: a cor pedida, o eixo e os portões de estrutura
+
+- **`--match-color #RRGGBB`** (`grading.match_mean_color`): o SD1.5 tem um
+  prior de tom médio — nove prompts de madeira, de um pinho quase preto a uma
+  cal marfim, saíram todos castanhos com luminância média 96–128 de 255. A
+  imagem é graduada até a cor média pedida com uma escala de contraste
+  partilhada pelos canais (a estrutura mantém-se; o contraste só comprime
+  perto do preto ou do branco). O sidecar traz `match_color`.
+- **`score_structure`** (bandas por eixo e cauda pesada) + portões
+  `--max-banding` / `--max-tail-ratio`: tábuas com frestas e veio deitado dão
+  0,87 e 0,68 contra 0,20–0,44 no veio direito; flocos sobre um fundo liso dão
+  28 contra 1,5–3,2. Passam a costura e o pormenor isolado e repetiam-se em
+  cada tile.
+- **`--axis v|u`**: roda 90° uma textura cujas linhas saíram no eixo errado
+  (o SD1.5 não obedece a «vertical grain»), só quando um eixo domina — uma
+  corda diagonal fica como está. O sidecar traz `axis.rotated`.
+- Os portões passam a ser um ciclo só (`quality_gates` no sidecar): com
+  vários, cada reprovação volta a gerar e, se nenhuma passar, devolve a de
+  menor razão valor/limiar. `validate-tileable` aceita os limiares novos.
+  Suite: Texture2D 387 ✓. Evidência nas secções 5–7 de
+  `docs/findings/TEXTURE2D_SEAMLESS_QUALITY_FINDINGS.md`.
+
 ### Fixed — rigging3d: `diffusers` < 0.43 (LayerNorm do Tripo2)
 
 - **Pin `diffusers>=0.35.0,<0.43.0`** (`Rigging3D/pyproject.toml`): o SkinTokens

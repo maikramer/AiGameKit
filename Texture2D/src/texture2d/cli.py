@@ -224,6 +224,68 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     show_default=True,
     help="Memory format NHWC (channels_last) no VAE/UNet — Ampere+ conv path.",
 )
+@click.option(
+    "--max-isolated-detail",
+    type=float,
+    default=None,
+    help=(
+        "Limiar (0..1) do pormenor isolado: um nó, uma mancha que o tiling repete em "
+        "cada célula mesmo com a costura boa. Acima do limiar volta a gerar com a "
+        "seed seguinte (ver --attempts). Recomendado para madeira: 0.12."
+    ),
+)
+@click.option(
+    "--max-banding",
+    type=float,
+    default=None,
+    help=(
+        "Limiar das bandas por eixo: tábuas com frestas, linhas que atravessam a "
+        "textura mesmo com a costura boa. Acima do limiar volta a gerar com a seed "
+        "seguinte (ver --attempts). Medido: 0.85 em tábuas, 0.26-0.44 em veio de "
+        "madeira direito. Recomendado para madeira: 0.5."
+    ),
+)
+@click.option(
+    "--max-tail-ratio",
+    type=float,
+    default=None,
+    help=(
+        "Limiar da cauda pesada: flocos ou pontos claros sobre um fundo liso. Acima "
+        "do limiar volta a gerar com a seed seguinte (ver --attempts). Medido: 24 "
+        "numa cal com flocos, 1.5-3.2 no resto. Recomendado para madeira: 5."
+    ),
+)
+@click.option(
+    "--axis",
+    type=click.Choice(["v", "u"]),
+    default=None,
+    help=(
+        "A textura tem uma direção: v = as linhas correm de cima a baixo (veio de "
+        "madeira), u = da esquerda à direita. Roda 90° se saírem no eixo errado — o "
+        'SD1.5 não obedece a "vertical grain".'
+    ),
+)
+@click.option(
+    "--match-color",
+    "match_color",
+    default=None,
+    help=(
+        "Cor média pedida, #RRGGBB. O SD1.5 tem um prior de tom médio (toda a "
+        "madeira sai castanha, luminância 96-128 de 255): a ferramenta gradua a "
+        "imagem até à cor e mantém a estrutura (o sidecar traz match_color)."
+    ),
+)
+@click.option(
+    "--attempts",
+    default=1,
+    show_default=True,
+    type=int,
+    help=(
+        "Gerações no máximo quando há --max-isolated-detail, --max-banding ou "
+        "--max-tail-ratio. Sem nenhuma a passar devolve a que passa mais perto "
+        "(o sidecar assinala quality_gates)."
+    ),
+)
 @add_vramd_options
 @click.pass_context
 def generate_cmd(
@@ -253,6 +315,12 @@ def generate_cmd(
     torch_compile: bool,
     torch_compile_mode: str,
     channels_last: bool,
+    max_isolated_detail: float | None,
+    max_banding: float | None,
+    max_tail_ratio: float | None,
+    axis: str | None,
+    match_color: str | None,
+    attempts: int,
     vramd_priority: str | None,
     no_vramd: bool,
     vramd_stream: bool,
@@ -290,6 +358,23 @@ def generate_cmd(
     # refine_steps do tier (hires) — flag explícita ganha.
     if not _user_set_refine and "refine_steps" in _qresolved.params:
         refine_steps = int(_qresolved.params["refine_steps"])
+
+    # O que o utilizador escolheu a sério ganha ao preset no gerador (antes um
+    # `--preset wood` punha 50 passos e guidance 7.5 por cima do `--quality`,
+    # do `-s` e do `-g`). Um tier escolhido explicitamente conta como escolha.
+    _unset = (_src.DEFAULT,)
+    _tier_chosen = ctx.get_parameter_source("quality") not in _unset
+    explicit: set[str] = set()
+    if _user_set_steps or (_tier_chosen and "steps" in _qresolved.params):
+        explicit.add("num_inference_steps")
+    if _user_set_guidance or (_tier_chosen and "guidance" in _qresolved.params):
+        explicit.add("guidance_scale")
+    if _user_set_width or (_tier_chosen and "width" in _qresolved.params):
+        explicit.add("width")
+    if _user_set_height or (_tier_chosen and "height" in _qresolved.params):
+        explicit.add("height")
+    if ctx.get_parameter_source("negative_prompt") not in _unset:
+        explicit.add("negative_prompt")
 
     if not cpu:
         warn_if_vram_occupied()
@@ -354,6 +439,13 @@ def generate_cmd(
                 "allow_group_offload": group_offload,
                 "seamless_mode": seamless_mode,
                 "refine_steps": refine_steps,
+                "explicit": sorted(explicit),
+                **({"max_isolated_detail": max_isolated_detail} if max_isolated_detail is not None else {}),
+                **({"max_banding": max_banding} if max_banding is not None else {}),
+                **({"max_tail_ratio": max_tail_ratio} if max_tail_ratio is not None else {}),
+                **({"axis": axis} if axis is not None else {}),
+                **({"match_color": match_color} if match_color is not None else {}),
+                **({"attempts": attempts} if attempts > 1 else {}),
                 **({"vae_tiling": vae_tiling} if vae_tiling is not None else {}),
                 **({"seam_heal": False} if not seam_heal else {}),
                 **({"hires": False} if no_hires else {}),
@@ -467,6 +559,13 @@ def generate_cmd(
                 vae_tiling=vae_tiling,
                 seam_heal=seam_heal,
                 hires=not no_hires,
+                explicit=explicit,
+                max_isolated_detail=max_isolated_detail,
+                max_banding=max_banding,
+                max_tail_ratio=max_tail_ratio,
+                axis=axis,
+                match_color=match_color,
+                attempts=attempts,
             )
             progress.update(task, description="[green]Concluído")
 
@@ -490,6 +589,50 @@ def generate_cmd(
         console.print(f"[dim]Seed: {metadata.get('seed', '?')}[/dim]")
         if isinstance(metadata.get("tileability"), dict):
             console.print(f"[dim]Tileability: {metadata['tileability'].get('score', '?'):.4f}[/dim]")
+        detail = metadata.get("isolated_detail")
+        if isinstance(detail, dict):
+            console.print(f"[dim]Pormenor isolado: {detail.get('spot', '?'):.3f}[/dim]")
+        banding = metadata.get("banding")
+        if isinstance(banding, dict):
+            console.print(f"[dim]Bandas por eixo: {banding.get('rows', 0):.3f} / {banding.get('cols', 0):.3f}[/dim]")
+        tail = metadata.get("tail_ratio")
+        if isinstance(tail, dict):
+            console.print(f"[dim]Cauda pesada: {tail.get('high', 0):.2f} / {tail.get('low', 0):.2f}[/dim]")
+        turned = metadata.get("axis")
+        if isinstance(turned, dict) and turned.get("rotated"):
+            console.print(f"[dim]Eixo {turned.get('wanted')}: as linhas saíram no eixo errado — rodada 90°.[/dim]")
+        graded = metadata.get("match_color")
+        if isinstance(graded, dict):
+            console.print(
+                f"[dim]Cor: {graded.get('before')} → {graded.get('after')} (escala {graded.get('scale', 1):.3f})[/dim]"
+            )
+        console.print(
+            f"[dim]Tokens CLIP: prompt {metadata.get('prompt_tokens', '?')}, negativo "
+            f"{metadata.get('negative_prompt_tokens', '?')} (janela 77)[/dim]"
+        )
+        if metadata.get("prompt_user_truncated"):
+            console.print(
+                "[yellow]O prompt passa a janela de 77 tokens do CLIP e foi cortado — encurte o pedido.[/yellow]"
+            )
+        if metadata.get("preset_dropped"):
+            console.print(f"[dim]Preset: {len(metadata['preset_dropped'])} cláusulas fora da janela do CLIP.[/dim]")
+        gate = metadata.get("isolated_detail_gate")
+        if (
+            isinstance(gate, dict)
+            and not gate.get("passed", True)
+            and not isinstance(metadata.get("quality_gates"), dict)
+        ):
+            console.print(
+                f"[yellow]Pormenor isolado: nenhuma das {metadata.get('attempts', '?')} seeds passou o "
+                f"limiar {gate.get('max')} — devolvida a melhor (seed {metadata.get('seed')}).[/yellow]"
+            )
+        gates = metadata.get("quality_gates")
+        if isinstance(gates, dict) and not gates.get("passed", True):
+            failed = [name for name, info in gates.items() if isinstance(info, dict) and not info.get("passed", True)]
+            console.print(
+                f"[yellow]Portões de qualidade: nenhuma das {gates.get('best_of', '?')} seeds passou "
+                f"({', '.join(failed)}) — devolvida a que passa mais perto (seed {metadata.get('seed')}).[/yellow]"
+            )
         console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
 
     except ImportError as e:

@@ -69,6 +69,14 @@ class Adapter(WorkerAdapter):
         prompt = str(_opt("prompt", ""))
         output = request.get("output")
         t_start = time.perf_counter()
+
+        # Parâmetros que o chamador definiu: ganham ao preset no gerador. Um
+        # pedido antigo não traz a chave — o preset ganha sempre, como antes.
+        declared = request.get("explicit")
+        explicit = {str(name) for name in declared} if declared else None
+        limit = request.get("max_isolated_detail")
+        axis = request.get("axis")
+        match_color = request.get("match_color")
         try:
             image, metadata = model.generate(
                 prompt=prompt,
@@ -87,6 +95,13 @@ class Adapter(WorkerAdapter):
                 hires=bool(_opt("hires", True)),
                 should_abort=should_abort,
                 on_step=on_step,
+                explicit=explicit,
+                max_isolated_detail=None if limit is None else float(limit),
+                max_banding=request.get("max_banding"),
+                max_tail_ratio=request.get("max_tail_ratio"),
+                axis=None if axis is None else str(axis),
+                match_color=None if match_color is None else str(match_color),
+                attempts=int(_opt("attempts", 1)),
             )
         except GenerationAborted:
             return self.cancelled_response("cancelled during diffusion")

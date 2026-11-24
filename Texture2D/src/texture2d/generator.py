@@ -26,6 +26,12 @@ Extras de qualidade: VAE ``stabilityai/sd-vae-ft-mse`` por defeito
 (``TEXTURE2D_VAE_ID=none`` desliga), negative prompt com termos de costura, e
 score de tileability gravado no sidecar com auto-heal opcional da costura.
 
+Precisão do pedido (2026-11-23): os prompts cabem na janela de 77 tokens do
+CLIP sem perder a cauda do utilizador (:mod:`texture2d.prompt_budget`); os
+parâmetros que o chamador declara explícitos (``explicit``) ganham ao preset;
+e ``max_isolated_detail``/``attempts`` voltam a gerar com a seed seguinte
+quando sai um pormenor isolado (um nó, uma mancha) que o tiling repetiria.
+
 Herda a infraestrutura partilhada de ``DiffusionGeneratorBase`` (lifecycle,
 logging, cache, device resolution, multi-GPU, save_image, batch generation).
 """
@@ -33,6 +39,7 @@ logging, cache, device resolution, multi-GPU, save_image, batch generation).
 from __future__ import annotations
 
 import os
+from collections.abc import Collection
 from typing import Any
 
 from PIL import Image
@@ -40,13 +47,15 @@ from PIL import Image
 from aigamekit_shared.base_generator import DiffusionGeneratorBase
 from aigamekit_shared.logging import Logger
 
+from .grading import match_mean_color, parse_hex_color
 from .presets import get_preset_params, get_preset_prompt
+from .prompt_budget import CLIP_BUDGET, NegativeFit, PromptFit, counter_for, fit_negative, fit_prompt
 from .prompt_enhancer import (
     enhance_ground_negative,
     enhance_ground_prompt,
     looks_like_ground,
 )
-from .tileability import score_tileability
+from .tileability import score_isolated_detail, score_structure, score_tileability
 from .utils import validate_params, validate_prompt
 
 _logger = Logger()
@@ -76,6 +85,22 @@ SEAM_HEAL_THRESHOLD = 0.85
 
 # Negative base para qualidade de textura (SD1.5 beneficia sempre de um negative).
 SD_BASE_NEGATIVE = "blurry, low quality, watermark, text, signature, frame, border, visible seam, tiling artifacts"
+
+# Eixo da textura (`axis`): ``v`` = as linhas correm de cima a baixo (o veio de
+# uma madeira), ``u`` = da esquerda à direita.
+AXES = ("v", "u")
+# Só roda quando um eixo domina mesmo: uma corda torcida (diagonal) mede 0,14
+# contra 0,07 — não se roda por uma diferença sem significado.
+_AXIS_MIN_DOMINANCE = 0.25
+_AXIS_DOMINANCE_RATIO = 1.5
+
+# Portões de qualidade: o valor vem dos metadados da geração
+# (:func:`_gate_values`) e o limiar de ``max_<nome>``.
+GATE_LABELS = {
+    "isolated_detail": "Pormenor isolado",
+    "banding": "Bandas por eixo",
+    "tail_ratio": "Cauda pesada",
+}
 
 DEFAULT_PARAMS: dict[str, Any] = {
     "guidance_scale": DEFAULT_GUIDANCE,
@@ -181,6 +206,37 @@ def merge_negative_prompt(preset_neg: str, user_neg: str) -> str:
     if user_neg.lower() in preset_neg.lower():
         return preset_neg
     return f"{preset_neg}, {user_neg}"
+
+
+def normalize_axis(axis: str | None) -> str | None:
+    """``axis`` pedido: ``v``/``vertical`` → ``v``, ``u``/``h``/``horizontal`` → ``u``.
+
+    Raises:
+        ValueError: Um eixo que não é um dos dois.
+    """
+    if axis is None:
+        return None
+    value = str(axis).strip().lower()
+    if value in ("v", "vertical"):
+        return "v"
+    if value in ("u", "h", "horizontal"):
+        return "u"
+    raise ValueError(f"axis inválido: {axis!r} (esperado v ou u)")
+
+
+def _gate_values(metadata: dict[str, Any]) -> dict[str, float]:
+    """O valor de cada portão de qualidade presente nos metadados de uma geração."""
+    values: dict[str, float] = {}
+    detail = metadata.get("isolated_detail")
+    if isinstance(detail, dict):
+        values["isolated_detail"] = float(detail["spot"])
+    banding = metadata.get("banding")
+    if isinstance(banding, dict):
+        values["banding"] = max(float(banding["rows"]), float(banding["cols"]))
+    tail = metadata.get("tail_ratio")
+    if isinstance(tail, dict):
+        values["tail_ratio"] = max(float(tail["high"]), float(tail["low"]))
+    return values
 
 
 class TextureGenerator(DiffusionGeneratorBase):
@@ -571,7 +627,12 @@ class TextureGenerator(DiffusionGeneratorBase):
         Integral (sem tiling) sempre que possível: o ``tiled_decode`` do
         diffusers fatura sem wrap e parte a costura circular. Tiling apenas por
         força maior (flag explícita ou VRAM livre curta a >768²), sempre com
-        circular-padding do latent + crop (wrap-preserving).
+        circular-padding do latent + crop (wrap-preserving) — e mesmo assim
+        deixa manchas: a attention do bloco médio do VAE vê uma janela por
+        tile e os tiles discordam nos limites (2026-11-23, 1024² em tiles:
+        pormenor isolado 0,40 contra 0,08 no integral). Por isso a folga
+        mede-se depois de esvaziar o cache: cair no tiling por uma leitura
+        pessimista é pagar manchas por nada.
         """
         import torch
 
@@ -611,6 +672,11 @@ class TextureGenerator(DiffusionGeneratorBase):
 
         use_tiling = bool(vae_tiling) if vae_tiling is not None else False
         if vae_tiling is None and max(width, height) > 768 and self.device.startswith("cuda"):
+            # O cache reservado do PyTorch conta como ocupado para o driver: sem o
+            # esvaziar antes de medir, uma GPU de 6 GB parecia sem folga e caía no
+            # tiling — que deixa manchas (medido a 1024²: pormenor isolado 0,40
+            # em tiles contra 0,08 no integral, qualquer que fosse o refine).
+            self._clear_cache()
             try:
                 free_b, _total_b = torch.cuda.mem_get_info()
                 use_tiling = (free_b / (1024**2)) < 3000  # decode integral 1024² ≈ 3 GiB fp16
@@ -651,6 +717,13 @@ class TextureGenerator(DiffusionGeneratorBase):
         hires: bool = True,
         should_abort: Any = None,
         on_step: Any = None,
+        explicit: Collection[str] | None = None,
+        max_isolated_detail: float | None = None,
+        max_banding: float | None = None,
+        max_tail_ratio: float | None = None,
+        axis: str | None = None,
+        match_color: str | None = None,
+        attempts: int = 1,
         **_ignored: Any,
     ) -> tuple[Image.Image, dict[str, Any]]:
         """Gera uma textura seamless.
@@ -679,11 +752,155 @@ class TextureGenerator(DiffusionGeneratorBase):
                 (hires-fix). ``False`` gera directamente à resolução pedida.
             should_abort: Callback cooperativo de cancelamento.
             on_step: Callback ``(step_1based, total)`` de progresso.
+            explicit: Parâmetros que o chamador definiu a sério (entre
+                ``"guidance_scale"``, ``"num_inference_steps"``, ``"width"`` e
+                ``"height"``): o preset só preenche os restantes. ``None``/vazio
+                mantém o comportamento antigo — o preset ganha sempre.
+            max_isolated_detail: Limiar (0..1) do pormenor isolado
+                (:func:`texture2d.tileability.score_isolated_detail`); ``None``
+                (default) não avalia.
+            max_banding: Limiar das bandas por eixo
+                (:func:`texture2d.tileability.score_axis_banding`): tábuas com
+                frestas, linhas que atravessam a textura. Medido: 0,85 em
+                tábuas, 0,26-0,44 em veio de madeira direito. ``None`` não avalia.
+            max_tail_ratio: Limiar da cauda pesada
+                (:func:`texture2d.tileability.score_tail_ratio`): flocos ou
+                pontos sobre um fundo liso. Medido: 24 numa cal com flocos,
+                1,5-3,2 no resto. ``None`` não avalia.
+            axis: ``"v"`` ou ``"u"`` quando a textura tem uma direção: roda 90°
+                se as linhas saírem no eixo errado (o SD1.5 troca o veio da
+                madeira). ``None`` (default) nunca roda.
+            match_color: Cor média pedida, ``#RRGGBB``
+                (:func:`texture2d.grading.match_mean_color`): o SD1.5 tem um
+                prior de tom médio e não sai do castanho só com o prompt.
+                ``None`` não gradua.
+            attempts: Número máximo de gerações quando há limiar: cada
+                reprovação volta a gerar com ``seed + 1``; se nenhuma passar,
+                devolve a que passa mais perto (menor razão valor/limiar). Sem
+                limiar só gera uma vez.
             **_ignored: Parâmetros legacy aceites e ignorados (compat de chamada).
 
         Returns:
             Tuple (imagem PIL, metadata dict).
+
+        Raises:
+            ValueError: ``axis`` inválido ou ``match_color`` que não é ``#RRGGBB``.
         """
+        attempts = max(1, int(attempts))
+        axis = normalize_axis(axis)
+        if match_color is not None:
+            parse_hex_color(match_color)
+        explicit_keys = frozenset(explicit or ())
+        limits = {
+            name: max(0.0, float(limit))
+            for name, limit in (
+                ("isolated_detail", max_isolated_detail),
+                ("banding", max_banding),
+                ("tail_ratio", max_tail_ratio),
+            )
+            if limit is not None
+        }
+        seed_requested = self._resolve_seed(seed)
+        count = counter_for(self._load_pipeline())
+        call = dict(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            guidance_scale=guidance_scale,
+            num_inference_steps=num_inference_steps,
+            width=width,
+            height=height,
+            preset=preset,
+            ground=ground,
+            seamless_mode=seamless_mode,
+            refine_steps=refine_steps,
+            vae_tiling=vae_tiling,
+            seam_heal=seam_heal,
+            hires=hires,
+            should_abort=should_abort,
+            on_step=on_step,
+            explicit=explicit_keys,
+            axis=axis,
+            match_color=match_color,
+            count=count,
+        )
+
+        best: tuple[Image.Image, dict[str, Any], float] | None = None
+        current = seed_requested
+        for attempt in range(1, attempts + 1):
+            image, metadata = self._generate_once(seed=current, **call)
+            if not limits:
+                return image, metadata
+            values = _gate_values(metadata)
+            # A razão ao limiar: ≤ 1 passa em todos; a melhor de todas é a de
+            # menor razão máxima (não há ordem entre um nó e uma fresta).
+            worst = max((values.get(name, 0.0) / limit for name, limit in limits.items()), default=0.0)
+            if best is None or worst < best[2]:
+                best = (image, metadata, worst)
+            passed = worst <= 1.0
+            metadata["quality_gates"] = {
+                "passed": passed,
+                **{
+                    name: {"value": values.get(name), "max": limit, "passed": values.get(name, 0.0) <= limit}
+                    for name, limit in limits.items()
+                },
+            }
+            if "isolated_detail" in limits:
+                metadata["isolated_detail_gate"] = {
+                    "max": limits["isolated_detail"],
+                    "passed": metadata["quality_gates"]["isolated_detail"]["passed"],
+                }
+            if passed:
+                if attempt > 1:
+                    self._log(f"Portões de qualidade passaram na tentativa {attempt} (seed {current})")
+                return image, metadata
+            failed = [
+                f"{GATE_LABELS[name]} {values.get(name, 0.0):.3f} > {limit:.3f}"
+                for name, limit in limits.items()
+                if values.get(name, 0.0) > limit
+            ]
+            if attempt < attempts:
+                self._log(f"{'; '.join(failed)} — a repetir com a seed {current + 1}")
+            current += 1
+
+        # Nenhuma passou: a mais perto, com os portões assinalados como falhados.
+        assert best is not None
+        image, metadata, _ = best
+        metadata["seed_requested"] = seed_requested
+        metadata["attempts"] = attempts
+        metadata["quality_gates"] = {**metadata["quality_gates"], "passed": False, "best_of": attempts}
+        if "isolated_detail" in limits:
+            metadata["isolated_detail_gate"] = {
+                "max": limits["isolated_detail"],
+                "passed": metadata["quality_gates"]["isolated_detail"]["passed"],
+                "best_of": attempts,
+            }
+        return image, metadata
+
+    def _generate_once(
+        self,
+        *,
+        prompt: str,
+        negative_prompt: str,
+        guidance_scale: float,
+        num_inference_steps: int,
+        seed: int,
+        width: int,
+        height: int,
+        preset: str | None,
+        ground: str,
+        seamless_mode: str,
+        refine_steps: int,
+        vae_tiling: bool | None,
+        seam_heal: bool,
+        hires: bool,
+        should_abort: Any,
+        on_step: Any,
+        explicit: Collection[str],
+        axis: str | None,
+        match_color: str | None,
+        count: Any,
+    ) -> tuple[Image.Image, dict[str, Any]]:
+        """Uma geração com a seed já resolvida (ver :meth:`generate`)."""
         import torch
 
         if seamless_mode not in SEAMLESS_MODES:
@@ -696,47 +913,95 @@ class TextureGenerator(DiffusionGeneratorBase):
 
         pipe = self._load_pipeline()
         self._select_scheduler(pipe, seamless_mode)
-        p = (prompt or "").strip()
+        user_prompt = (prompt or "").strip()
+        user_negative = negative_prompt or ""
 
-        # Merge preset — o preset pode definir prompt base, guidance/steps/resolução
-        # e negative prompt. O prompt do utilizador é sempre prefixado ao do preset.
+        # Preset — prompt base e defaults de guidance/steps/resolução. Só preenche
+        # o que o chamador NÃO declarou explícito: um `-s 28` ou um `--quality
+        # high` escolhido a sério não pode ser pisado pelo preset.
+        preset_prompt = ""
+        preset_negative = ""
+        preset_applied: list[str] = []
         if preset and preset != "None":
-            preset_prompt = get_preset_prompt(preset)
-            preset_params = get_preset_params(preset)
-            if preset_prompt:
-                p = f"{preset_prompt}, {p}" if p else preset_prompt
-            if preset_params:
-                guidance_scale = float(preset_params.get("guidance_scale", guidance_scale))
-                num_inference_steps = int(preset_params.get("num_inference_steps", num_inference_steps))
-                width = int(preset_params.get("width", width))
-                height = int(preset_params.get("height", height))
-                if "negative_prompt" in preset_params:
-                    negative_prompt = merge_negative_prompt(
-                        str(preset_params.get("negative_prompt") or ""),
-                        negative_prompt,
-                    )
+            preset_prompt = get_preset_prompt(preset) or ""
+            preset_params = get_preset_params(preset) or {}
+            defaults = {
+                "guidance_scale": float,
+                "num_inference_steps": int,
+                "width": int,
+                "height": int,
+            }
+            filled: dict[str, Any] = {}
+            for key, cast in defaults.items():
+                if key in preset_params and key not in explicit:
+                    filled[key] = cast(preset_params[key])
+                    preset_applied.append(key)
+            guidance_scale = filled.get("guidance_scale", guidance_scale)
+            num_inference_steps = filled.get("num_inference_steps", num_inference_steps)
+            width = filled.get("width", width)
+            height = filled.get("height", height)
+            preset_negative = str(preset_params.get("negative_prompt") or "")
+
+        # Composição antiga (preset à cabeça): é o texto final sempre que couber
+        # na janela do CLIP — um asset gerado antes reproduz-se com a mesma seed.
+        if preset_prompt and user_prompt:
+            legacy_prompt = f"{preset_prompt}, {user_prompt}"
+        else:
+            legacy_prompt = user_prompt or preset_prompt
 
         # Ground enhancer (top-down viewpoint / flat lighting / superfície próxima).
-        ground_active = ground == "on" or (ground == "auto" and looks_like_ground(p))
+        ground_active = ground == "on" or (ground == "auto" and looks_like_ground(legacy_prompt))
         if ground_active:
-            p = enhance_ground_prompt(p)
-            negative_prompt = enhance_ground_negative(negative_prompt)
-        elif "texture" not in p.lower():
-            p = f"{p}, seamless texture"
-        negative_prompt = merge_negative_prompt(SD_BASE_NEGATIVE, negative_prompt)
+            legacy_prompt = enhance_ground_prompt(legacy_prompt)
+            own_prompt = enhance_ground_prompt(user_prompt)
+            user_negative = enhance_ground_negative(user_negative)
+        else:
+            needs_texture = "texture" not in legacy_prompt.lower()
+            own_prompt = f"{user_prompt}, seamless texture" if needs_texture and user_prompt else user_prompt
+            if needs_texture:
+                legacy_prompt = f"{legacy_prompt}, seamless texture"
+
+        # Não cabe: o pedido do utilizador vem inteiro e o preset só empresta o
+        # que couber (ver prompt_budget). O negativo só muda quando não cabe.
+        if count(legacy_prompt) <= CLIP_BUDGET:
+            p = legacy_prompt
+            prompt_fit = PromptFit(p, count(p))
+        else:
+            prompt_fit = fit_prompt(own_prompt, preset_prompt, count)
+            p = prompt_fit.text
+            lost = []
+            if prompt_fit.dropped:
+                lost.append(f"o preset perde {len(prompt_fit.dropped)} cláusulas")
+            if prompt_fit.user_truncated:
+                lost.append("o prompt do utilizador foi cortado")
+            self._log(
+                f"Prompt: {count(legacy_prompt)} tokens > {CLIP_BUDGET} — o utilizador vem primeiro ({'; '.join(lost)})"
+            )
+
+        # Prioridade quando não cabe: a base da ferramenta (costura, texto,
+        # marca de água) é o que torna a textura utilizável — um negativo de 60
+        # termos do utilizador não a pode pôr fora; o preset é o primeiro a ceder.
+        legacy_negative = merge_negative_prompt(SD_BASE_NEGATIVE, merge_negative_prompt(preset_negative, user_negative))
+        if count(legacy_negative) <= CLIP_BUDGET:
+            negative_fit = NegativeFit(legacy_negative, count(legacy_negative))
+        else:
+            negative_fit = fit_negative([(SD_BASE_NEGATIVE, 2), (user_negative, 1), (preset_negative, 0)], count)
+            self._log(
+                f"Negative: {count(legacy_negative)} tokens > {CLIP_BUDGET} — sem repetições, "
+                f"{len(negative_fit.dropped)} cláusulas de fora"
+            )
+        negative_prompt = negative_fit.text
 
         is_valid, error = validate_prompt(p, max_length=1200)
         if not is_valid:
             p = p[:1200]
-
-        resolved_seed = self._resolve_seed(seed)
 
         params = {
             "prompt": p,
             "negative_prompt": negative_prompt,
             "guidance_scale": guidance_scale,
             "num_inference_steps": num_inference_steps,
-            "seed": resolved_seed,
+            "seed": seed,
             "width": width,
             "height": height,
         }
@@ -756,7 +1021,7 @@ class TextureGenerator(DiffusionGeneratorBase):
             gen_h = max(256, round(height / f / 8) * 8)
             refine_steps = max(1, int(refine_steps))
 
-        generator = self._build_generator(resolved_seed)
+        generator = self._build_generator(seed)
 
         self._clear_cache()
         mode_label = {"late": "late (roll + circular tardio)", "full": "full (circular)", "off": "off (SD puro)"}[
@@ -827,11 +1092,35 @@ class TextureGenerator(DiffusionGeneratorBase):
             report = score_tileability(image)
             healed = True
 
+        # Eixo: o SD1.5 não obedece a "vertical grain" — mede-se em vez de
+        # pedir. Roda 90° quando as linhas saíram no eixo errado; a rotação
+        # preserva a tileabilidade (o toro é simétrico) e troca os eixos.
+        rotated = False
+        if axis is not None:
+            banding = score_structure(image).banding
+            wanted, other = (banding.rows, banding.cols) if axis == "v" else (banding.cols, banding.rows)
+            if image.width != image.height:
+                self._log("Eixo: a imagem não é quadrada — não roda")
+            elif wanted >= _AXIS_MIN_DOMINANCE and wanted >= _AXIS_DOMINANCE_RATIO * other:
+                self._log(f"Eixo {axis}: as linhas saíram no eixo errado ({banding.summary()}) — roda 90°")
+                image = image.transpose(Image.Transpose.ROTATE_90)
+                rotated = True
+
+        # Cor: o prior de tom médio do SD1.5 pisa a paleta do prompt.
+        graded = None
+        if match_color is not None:
+            image, graded = match_mean_color(image, match_color)
+
+        # Pormenor isolado (um nó, uma mancha): o tiling repete-o em cada célula.
+        detail = score_isolated_detail(image)
+        # Estrutura: tábuas com frestas e flocos passam os portões de cima.
+        structure = score_structure(image)
+
         metadata = {
             "backend": "sd-circular",
             "model_id": self.model_id,
             "vae_id": self._vae_id or None,
-            "seed": resolved_seed,
+            "seed": seed,
             "prompt_final": p,
             "prompt": p,
             "negative_prompt": negative_prompt,
@@ -848,6 +1137,18 @@ class TextureGenerator(DiffusionGeneratorBase):
             "vae_tiled_decode": used_tiling,
             "tileability": report.to_dict(),
             "seam_healed": healed,
+            "isolated_detail": detail.to_dict(),
+            "banding": structure.banding.to_dict(),
+            "tail_ratio": structure.tail.to_dict(),
+            "axis": {"wanted": axis, "rotated": rotated} if axis is not None else None,
+            "match_color": graded.to_dict() if graded is not None else None,
+            "preset": preset or None,
+            "preset_params_applied": preset_applied or None,
+            "prompt_tokens": prompt_fit.tokens,
+            "negative_prompt_tokens": negative_fit.tokens,
+            "prompt_user_truncated": True if prompt_fit.user_truncated else None,
+            "preset_dropped": list(prompt_fit.dropped) or None,
+            "negative_dropped": list(negative_fit.dropped) or None,
         }
         metadata = {k: v for k, v in metadata.items() if v is not None}
         return image, metadata
