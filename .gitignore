@@ -149,6 +149,9 @@ graphify-out/
 # ZCode agent workspace (estado local da sessão)
 .zcode/
 
+# Estado local do editor Jackdaw (schema/components gerados, layout, prefs).
+.jackdaw/
+
 # Artefactos de experimentos locais (trash/bench/runs — não são fonte)
 .trash-*/
 Motion3D/runs/
