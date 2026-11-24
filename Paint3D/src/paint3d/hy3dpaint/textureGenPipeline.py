@@ -200,20 +200,27 @@ class Hunyuan3DPaintConfig:
         # albedo. Por omissão só o albedo passa pelo enhance; ``PAINT3D_ENHANCE_MR=1``
         # repõe o comportamento antigo.
         self.enhance_mr = os.environ.get("PAINT3D_ENHANCE_MR", "0").strip().lower() in ("1", "true", "yes", "on")
+        self.defer_cuda_placement = False
+        self.enable_vae_tiling = False
+        self.scheduler_name = None
+        self.num_inference_steps = None
+        self.guidance_scale = None
+        self.guidance_rescale = None
 
-        # view selection
-        self.candidate_camera_azims = [0, 90, 180, 270, 0, 180]
-        self.candidate_camera_elevs = [0, 0, 0, 0, 90, -90]
-        self.candidate_view_weights = [1, 0.25, 0.7, 0.25, 0.05, 0.05]
+        # view selection: 4 cardinais equilibrados + topo/baixo + 4 diagonais 3/4 elevadas
+        # (20° @ 45/135/225/315) que fecham cobertura de cantos, beirais, ombros e telhados.
+        self.candidate_camera_azims = [0, 90, 180, 270, 0, 180, 45, 135, 225, 315]
+        self.candidate_camera_elevs = [0, 0, 0, 0, 90, -90, 20, 20, 20, 20]
+        self.candidate_view_weights = [1.0, 0.9, 0.9, 0.9, 0.05, 0.05, 0.85, 0.85, 0.85, 0.85]
 
         for azim in range(0, 360, 30):
             self.candidate_camera_azims.append(azim)
             self.candidate_camera_elevs.append(20)
-            self.candidate_view_weights.append(0.01)
+            self.candidate_view_weights.append(0.35)
 
             self.candidate_camera_azims.append(azim)
             self.candidate_camera_elevs.append(-20)
-            self.candidate_view_weights.append(0.01)
+            self.candidate_view_weights.append(0.25)
 
 
 class Hunyuan3DPaintPipeline:
@@ -221,11 +228,18 @@ class Hunyuan3DPaintPipeline:
         self.config = config if config is not None else Hunyuan3DPaintConfig()
         self.models = {}
         self.stats_logs = {}
+        smooth_normals = os.environ.get("PAINT3D_NORMAL_SMOOTH", "1").strip().lower() not in (
+            "0",
+            "false",
+            "no",
+            "off",
+        )
         self.render = MeshRender(
             default_resolution=self.config.render_size,
             texture_size=self.config.texture_size,
             bake_mode=self.config.bake_mode,
             raster_mode=self.config.raster_mode,
+            shader_type="crease_smooth" if smooth_normals else "face",
         )
         self.view_processor = ViewProcessor(self.config, self.render)
         self.load_models()
@@ -289,6 +303,7 @@ class Hunyuan3DPaintPipeline:
                 step_callback(phase, pct)
 
         image_prompt, owned_images = _load_reference_images(image_path)
+        raw_ref_image = None
         try:
             # Validação dos azimutes ANTES do uv_unwrap/seleção de vistas: um
             # pedido inconsistente (-‑blend-refs com azimutes a menos) falhava
@@ -297,9 +312,11 @@ class Hunyuan3DPaintPipeline:
 
             ##########  Style  ###########
             image_caption = "high quality"
+            ref_size = max(512, int(self.config.resolution))
+            raw_ref_image = image_prompt[0].copy()
             image_style = []
             for image in image_prompt:
-                image = image.resize((512, 512))
+                image = image.resize((ref_size, ref_size), Image.Resampling.LANCZOS)
                 if image.mode == "RGBA":
                     white_bg = Image.new("RGB", image.size, (255, 255, 255))
                     white_bg.paste(image, mask=image.getchannel("A"))
@@ -330,18 +347,48 @@ class Hunyuan3DPaintPipeline:
 
         # Load mesh
         mesh = load_glb(processed_mesh_path)
+        try:
+            from aigamekit_shared.logging import Logger as _PaintLogger
+            from paint3d.mesh_denoise import prepare_mesh_for_uv_and_paint
+
+            mesh = prepare_mesh_for_uv_and_paint(mesh, render=self.render, logger=_PaintLogger())
+        except Exception as _prep_exc:
+            print(f"[Paint 2.1] AVISO: mesh prep pré-UV saltado ({_prep_exc})")
         _tex = self.config.texture_size
         _tex = int(_tex[0]) if isinstance(_tex, (list, tuple)) else int(_tex)
         mesh = mesh_uv_wrap(mesh, texture_size=_tex)
         self.render.load_mesh(mesh=mesh)
+        try:
+            from aigamekit_shared.logging import Logger as _PaintLogger
+            from paint3d.paint_prep import orient_visible_faces_outward
+
+            orient_visible_faces_outward(self.render, logger=_PaintLogger())
+        except Exception as _orient_exc:
+            print(f"[Paint 2.1] AVISO: orientação exterior saltada ({_orient_exc})")
         _step("uv_unwrap", 100)
 
         ########### View Selection #########
         _step("view_selection", 0)
+        candidate_weights = list(self.config.candidate_view_weights)
+        if (
+            not os.environ.get("PAINT3D_TOP_VIEW_WEIGHT", "").strip()
+            and len(candidate_weights) > 4
+            and candidate_weights[4] <= 0.05
+        ):
+            try:
+                from paint3d.face_closeup import detect_humanoid_head
+
+                # Personagens mantêm elev=+90 a 0.05 (evita bleed de cima sobre
+                # ombros/botas); edifícios e props sem cabeça humana ganham 0.35
+                # no topo para telhados e planos horizontais nítidos.
+                if detect_humanoid_head(self.render, force=False) is None:
+                    candidate_weights[4] = 0.35
+            except Exception:
+                pass
         selected_camera_elevs, selected_camera_azims, selected_view_weights = self.view_processor.bake_view_selection(
             self.config.candidate_camera_elevs,
             self.config.candidate_camera_azims,
-            self.config.candidate_view_weights,
+            candidate_weights,
             self.config.max_selected_view_num,
         )
 
@@ -372,9 +419,16 @@ class Hunyuan3DPaintPipeline:
             multiviews_pbr = _blend_multiview_runs(runs, selected_camera_azims, ref_azims)
         else:
             if len(image_style) > 1:
-                # Sem blend o modelo só vê a 1.ª referência (forward_one usa
-                # input_images[0:1]); as restantes eram descartadas em silêncio.
-                print(f"Paint3D: {len(image_style)} referências sem --blend-refs — a usar só a primeira")
+                native_mref = os.environ.get("PAINT3D_NATIVE_MULTIREF", "1").strip().lower() not in (
+                    "0",
+                    "false",
+                    "no",
+                    "off",
+                )
+                if native_mref:
+                    print(f"Paint3D: multi-referência nativa UNet2p5D ({len(image_style)} referências em 1 passe)")
+                else:
+                    print(f"Paint3D: {len(image_style)} referências sem --blend-refs — a usar só a primeira")
             multiviews_pbr = self.models["multiview_model"](
                 image_style,
                 normal_maps + position_maps,
@@ -416,9 +470,11 @@ class Hunyuan3DPaintPipeline:
         _step("bake", 0)
         for i in range(len(enhance_images["albedo"])):
             enhance_images["albedo"][i] = enhance_images["albedo"][i].resize(
-                (self.config.render_size, self.config.render_size)
+                (self.config.render_size, self.config.render_size), Image.Resampling.LANCZOS
             )
-            enhance_images["mr"][i] = enhance_images["mr"][i].resize((self.config.render_size, self.config.render_size))
+            enhance_images["mr"][i] = enhance_images["mr"][i].resize(
+                (self.config.render_size, self.config.render_size), Image.Resampling.LANCZOS
+            )
         # Um só passe de bake: albedo (3ch) + mr (3ch) concatenados em 6 canais.
         # A rasterização/back-projection é geométrica (idêntica para os dois
         # mapas) — assim as N vistas são projectadas uma vez em vez de duas. A
@@ -429,9 +485,29 @@ class Hunyuan3DPaintPipeline:
             merged_views, selected_camera_elevs, selected_camera_azims, selected_view_weights
         )
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
-        mask_mr_np = mask_np
         texture, texture_mr = split_baked_albedo_mr(texture6)
 
+        # Passe de close-up no rosto para humanoides (recupera olhos/sobrancelhas/boca
+        # que ficavam em ~5x5 tokens latentes no bake de corpo inteiro a 512px).
+        if raw_ref_image is not None:
+            try:
+                from aigamekit_shared.logging import Logger as _PaintLogger
+                from paint3d.face_closeup import apply_face_closeup_pass
+
+                texture, mask_np, texture_mr, _face_ok = apply_face_closeup_pass(
+                    self,
+                    raw_ref_image,
+                    texture,
+                    mask_np,
+                    texture_mr,
+                    mode=getattr(self.config, "face_closeup", None),
+                    debug_dir=debug_dir,
+                    logger=_PaintLogger(),
+                )
+            except Exception as _face_exc:
+                print(f"[Paint 2.1] AVISO: passe de rosto saltado ({_face_exc})")
+
+        mask_mr_np = mask_np
         _step("bake", 100)
         if debug_dir:
             Image.fromarray((texture.clamp(0, 1).cpu().numpy() * 255).astype(np.uint8)).save(
@@ -442,6 +518,20 @@ class Hunyuan3DPaintPipeline:
         ##########  inpaint  ###########
         _step("inpaint", 0)
         texture = self.view_processor.texture_inpaint(texture, mask_np)
+        if os.environ.get("PAINT3D_POST_BILAT", "1").strip().lower() not in ("0", "false", "no", "off"):
+            try:
+                import cv2
+
+                _d = int(os.environ.get("PAINT3D_POST_BILAT_D", "5") or 5)
+                _sc = float(os.environ.get("PAINT3D_POST_BILAT_SC", "18") or 18.0)
+                _ss = float(os.environ.get("PAINT3D_POST_BILAT_SS", "5") or 5.0)
+                _arr = np.clip(texture.detach().cpu().numpy() * 255.0, 0, 255).astype(np.uint8)
+                _smooth = cv2.bilateralFilter(_arr, d=_d, sigmaColor=_sc, sigmaSpace=_ss)
+                texture = torch.from_numpy(_smooth.astype(np.float32) / 255.0).to(
+                    device=texture.device, dtype=texture.dtype
+                )
+            except Exception as _bilat_exc:
+                print(f"[Paint 2.1] AVISO: bilateral pós-bake saltado ({_bilat_exc})")
         self.render.set_texture(texture, force_set=True)
         if "mr" in enhance_images:
             texture_mr = self.view_processor.texture_inpaint(texture_mr, mask_mr_np)

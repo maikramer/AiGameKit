@@ -89,6 +89,27 @@ def _adopt_vendored_unet_optimizations(pipeline) -> None:
         print("[Paint 2.1] AVISO: AttnCore do snapshot não encontrado — SageAttention inativa no UNet.")
 
 
+def _build_scheduler(scheduler_config, name: str | None = None):
+    """Constrói o scheduler de difusão multiview (default: EulerA — menor ruído guache).
+
+    Overrides: ``PAINT3D_SCHEDULER`` em ``{"euler_a", "unipc", "ddim", "dpmpp"}``.
+    """
+    sched_key = (name or os.environ.get("PAINT3D_SCHEDULER", "") or "euler_a").strip().lower()
+    if sched_key in ("euler_a", "eulera", "euler_ancestral", "euler"):
+        return EulerAncestralDiscreteScheduler.from_config(scheduler_config, timestep_spacing="trailing")
+    if sched_key in ("unipc", "uni_pc"):
+        return UniPCMultistepScheduler.from_config(scheduler_config, timestep_spacing="trailing")
+    if sched_key == "ddim":
+        return DDIMScheduler.from_config(scheduler_config, timestep_spacing="trailing")
+    if sched_key in ("dpmpp", "dpm++", "dpmsolver"):
+        from diffusers import DPMSolverMultistepScheduler
+
+        return DPMSolverMultistepScheduler.from_config(
+            scheduler_config, algorithm_type="dpmsolver++", timestep_spacing="trailing"
+        )
+    return EulerAncestralDiscreteScheduler.from_config(scheduler_config, timestep_spacing="trailing")
+
+
 class multiviewDiffusionNet:
     def __init__(self, config) -> None:
         self.device = config.device
@@ -114,10 +135,13 @@ class multiviewDiffusionNet:
 
         _adopt_vendored_unet_optimizations(pipeline)
 
-        pipeline.scheduler = UniPCMultistepScheduler.from_config(pipeline.scheduler.config, timestep_spacing="trailing")
+        pipeline.scheduler = _build_scheduler(
+            pipeline.scheduler.config, getattr(config, "scheduler_name", None)
+        )
         pipeline.set_progress_bar_config(disable=True)
         pipeline.eval()
         pipeline.view_size = cfg.model.params.get("view_size", 320)
+        self._config = config
 
         explicit_quant = getattr(config, "quantization_config", None)
         explicit_quant_type = None
@@ -196,11 +220,35 @@ class multiviewDiffusionNet:
             except Exception as e:
                 print(f"[Paint 2.1] AVISO: TinyVAE falhou ({e}); VAE original mantido.")
 
-        self.pipeline = pipeline.to(self.device)
+        # Em GPUs <=8 GB, ``defer_cuda_placement=True`` evita materializar os
+        # 5.1 GiB de pesos na GPU antes do placement/group-offload (pico load
+        # cai de 5.1 GiB → ~177 MiB). Só VAE + projeções leves vão para CUDA.
+        if getattr(config, "defer_cuda_placement", False) and str(self.device).startswith("cuda"):
+            if getattr(pipeline, "vae", None) is not None:
+                pipeline.vae.to(self.device)
+            unet_wrap = getattr(pipeline, "unet", None)
+            if unet_wrap is not None:
+                for attr in ("image_proj_model_dino", "learned_text_clip", "learned_text_clip_ref"):
+                    mod = getattr(unet_wrap, attr, None)
+                    if isinstance(mod, torch.nn.Module):
+                        mod.to(self.device)
+                    elif isinstance(mod, torch.nn.Parameter):
+                        mod.data = mod.data.to(self.device)
+                inner = getattr(unet_wrap, "unet", None)
+                if inner is not None:
+                    for attr in ("learned_text_clip", "learned_text_clip_ref"):
+                        mod = getattr(inner, attr, None)
+                        if isinstance(mod, torch.nn.Parameter):
+                            mod.data = mod.data.to(self.device)
+            self.pipeline = pipeline
+        else:
+            self.pipeline = pipeline.to(self.device)
 
         if hasattr(self.pipeline, "enable_vae_slicing"):
             self.pipeline.enable_vae_slicing()
-        if hasattr(self.pipeline, "enable_vae_tiling"):
+        # VAE tiling não é ligado por omissão: com slicing, descodificar 1 vista
+        # a 640px custa ~40 MiB e evita costuras de tiles 256px nas vistas.
+        if getattr(config, "enable_vae_tiling", False) and hasattr(self.pipeline, "enable_vae_tiling"):
             self.pipeline.enable_vae_tiling()
 
         # CFG em chunks sequenciais (uncond/ref/full): pico de ativações ÷3,
@@ -240,18 +288,19 @@ class multiviewDiffusionNet:
         custom_view_size = custom_view_size if custom_view_size is not None else self.pipeline.view_size
         if not isinstance(input_images, List):
             input_images = [input_images]
-        if not resize_input:
-            input_images = [
-                input_image.resize((self.pipeline.view_size, self.pipeline.view_size)) for input_image in input_images
-            ]
-        else:
-            input_images = [input_image.resize((custom_view_size, custom_view_size)) for input_image in input_images]
+        ref_size = custom_view_size if resize_input else self.pipeline.view_size
+        input_images = [
+            input_image.resize((ref_size, ref_size), Image.Resampling.LANCZOS) for input_image in input_images
+        ]
         for i in range(len(control_images)):
-            control_images[i] = control_images[i].resize((custom_view_size, custom_view_size))
+            control_images[i] = control_images[i].resize(
+                (custom_view_size, custom_view_size), Image.Resampling.LANCZOS
+            )
             if control_images[i].mode == "L":
                 control_images[i] = control_images[i].point(lambda x: 255 if x > 1 else 0, mode="1")
 
-        kwargs = dict(generator=torch.Generator(device=self.pipeline.device).manual_seed(0))
+        gen_dev = torch.device(self.device) if str(self.device).startswith("cuda") else self.pipeline.device
+        kwargs = dict(generator=torch.Generator(device=gen_dev).manual_seed(0))
 
         num_view = len(control_images) // 2
         normal_image = [[control_images[i] for i in range(num_view)]]
@@ -263,8 +312,20 @@ class multiviewDiffusionNet:
         kwargs["images_normal"] = normal_image
         kwargs["images_position"] = position_image
 
+        native_multiref = os.environ.get("PAINT3D_NATIVE_MULTIREF", "1").strip().lower() not in (
+            "0",
+            "false",
+            "no",
+            "off",
+        )
+        refs_to_use = input_images if (native_multiref and len(input_images) > 1) else input_images[0:1]
+
         if hasattr(self.pipeline.unet, "use_dino") and self.pipeline.unet.use_dino:
-            dino_hidden_states = self.dino_v2(input_images[0])
+            if len(refs_to_use) > 1:
+                dino_list = [self.dino_v2(im) for im in refs_to_use]
+                dino_hidden_states = torch.stack(dino_list, dim=0).mean(dim=0)
+            else:
+                dino_hidden_states = self.dino_v2(refs_to_use[0])
             if isinstance(dino_hidden_states, torch.Tensor):
                 dino_hidden_states = dino_hidden_states.to(torch.device(self.device)).to(self.pipeline.unet.dtype)
             kwargs["dino_hidden_states"] = dino_hidden_states
@@ -274,18 +335,34 @@ class multiviewDiffusionNet:
         infer_steps_dict = {
             "EulerAncestralDiscreteScheduler": 30,
             "UniPCMultistepScheduler": 15,
-            "DDIMScheduler": 50,
+            "DDIMScheduler": 35,
+            "DPMSolverMultistepScheduler": 25,
             "ShiftSNRScheduler": 15,
         }
+        default_steps = infer_steps_dict.get(self.pipeline.scheduler.__class__.__name__, 25)
+        env_steps = os.environ.get("PAINT3D_STEPS", "").strip()
+        cfg_steps = getattr(self._config, "num_inference_steps", None) if hasattr(self, "_config") else None
+        num_steps = int(env_steps) if env_steps else (int(cfg_steps) if cfg_steps else default_steps)
+
+        env_gs = os.environ.get("PAINT3D_GUIDANCE_SCALE", "").strip()
+        cfg_gs = getattr(self._config, "guidance_scale", None) if hasattr(self, "_config") else None
+        guidance_scale = float(env_gs) if env_gs else (float(cfg_gs) if cfg_gs is not None else 2.6)
+
+        env_gr = os.environ.get("PAINT3D_GUIDANCE_RESCALE", "").strip()
+        cfg_gr = getattr(self._config, "guidance_rescale", None) if hasattr(self, "_config") else None
+        guidance_rescale = float(env_gr) if env_gr else (float(cfg_gr) if cfg_gr is not None else 0.4)
 
         mvd_image = self.pipeline(
-            input_images[0:1],
-            num_inference_steps=infer_steps_dict[self.pipeline.scheduler.__class__.__name__],
+            refs_to_use,
+            num_inference_steps=num_steps,
             prompt=prompt,
             sync_condition=sync_condition,
-            guidance_scale=3.0,
+            guidance_scale=guidance_scale,
+            guidance_rescale=guidance_rescale,
             **kwargs,
         ).images
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         if "pbr" in self.mode:
             mvd_image = {"albedo": mvd_image[:num_view], "mr": mvd_image[num_view:]}

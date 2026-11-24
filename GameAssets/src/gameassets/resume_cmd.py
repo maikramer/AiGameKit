@@ -62,6 +62,8 @@ from .pipeline import (
     _simplify_to_target,
     _texture_subprocess_argv,
     _try_paint3d_bin,
+    attach_multiref_paint_fields,
+    attach_multiview_shape_fields,
     ensure_to_paint_for_paint,
     resolve_row_omni,
 )
@@ -922,6 +924,7 @@ def resume_cmd(
                         item_d["num_chunks"] = opts.num_chunks
                     # Overrides text3d: do manifest ganham do optimize/hw-auto.
                     apply_row_text3d_overrides(item_d, row)
+                    attach_multiview_shape_fields(item_d, profile, row)
                     shape_manifest_items.append(item_d)
                     shape_item_map[row.id] = i
 
@@ -930,9 +933,13 @@ def resume_cmd(
                     s_manifest_path = work_dir / "resume_shape_manifest.json"
                     s_manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
                     t3 = t3_opts
+                    _has_mv_shape = any(
+                        bool(x.get("auto_turnaround") or x.get("view_back") or x.get("view_left"))
+                        for x in shape_manifest_items
+                    )
                     _shape_kw: dict[str, Any] = {
                         "manifest_dir": manifest_dir,
-                        "no_vramd": no_vramd,
+                        "no_vramd": no_vramd or _has_mv_shape,
                         "vramd_stream": vramd_stream,
                         "gpu_ids": gpu_ids,
                         "quality": profile.generation,
@@ -1170,25 +1177,26 @@ def resume_cmd(
                                     raise click.Abort()
                             dash.advance_phase()
                             continue
-                        paint_manifest_items.append(
-                            {
-                                "id": row.id,
-                                "mesh": str(mesh_paint),
-                                "image": str(it["img_final"]),
-                                "output": str(_painted_path(it["mesh_final"])),
-                                "texture_size": _resolve_paint_texture_size(profile, row),
-                                **_paint_item_overrides(profile, row),
-                            }
-                        )
+                        paint_item_d: dict[str, Any] = {
+                            "id": row.id,
+                            "mesh": str(mesh_paint),
+                            "image": str(it["img_final"]),
+                            "output": str(_painted_path(it["mesh_final"])),
+                            "texture_size": _resolve_paint_texture_size(profile, row),
+                            **_paint_item_overrides(profile, row),
+                        }
+                        attach_multiref_paint_fields(paint_item_d, profile, it["img_final"])
+                        paint_manifest_items.append(paint_item_d)
                         paint_item_map[row.id] = i
 
                     if paint_manifest_items:
                         attach_gpu(paint_manifest_items, rows)
                         paint_manifest_path = work_dir / "resume_paint_manifest.json"
                         paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
+                        _has_multiref_paint = any(bool(x.get("blend_refs")) for x in paint_manifest_items)
                         _paint_kw: dict[str, Any] = {
                             "manifest_dir": manifest_dir,
-                            "no_vramd": no_vramd,
+                            "no_vramd": no_vramd or _has_multiref_paint,
                             "vramd_stream": vramd_stream,
                             "gpu_ids": gpu_ids,
                             "texture_size": _quality_paint_texture_cap(profile),
@@ -1257,6 +1265,10 @@ def resume_cmd(
                                 if p3.smooth_passes is not None:
                                     batch_args.extend(["--smooth-passes", str(p3.smooth_passes)])
                                 batch_args.append("--pbr-enrich" if p3.pbr_enrich else "--no-pbr-enrich")
+                                if p3.roughness_min is not None:
+                                    batch_args.extend(["--roughness-min", str(p3.roughness_min)])
+                                if p3.metallic_max is not None:
+                                    batch_args.extend(["--metallic-max", str(p3.metallic_max)])
                             if gpu_ids:
                                 batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
 
@@ -1738,6 +1750,7 @@ def resume_cmd(
                         item["octree_resolution"] = opts.octree_resolution
                         item["num_chunks"] = opts.num_chunks
                     apply_row_text3d_overrides(item, row)
+                    attach_multiview_shape_fields(item, profile, row)
                     shape_manifest_items.append(item)
                     shape_item_map[row.id] = i
 
@@ -1746,9 +1759,13 @@ def resume_cmd(
                     manifest_path = work_dir / "resume_shape_manifest.json"
                     manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
                     t3 = t3_opts
+                    _has_mv_shape = any(
+                        bool(x.get("auto_turnaround") or x.get("view_back") or x.get("view_left"))
+                        for x in shape_manifest_items
+                    )
                     _shape_kw: dict[str, Any] = {
                         "manifest_dir": manifest_dir,
-                        "no_vramd": no_vramd,
+                        "no_vramd": no_vramd or _has_mv_shape,
                         "vramd_stream": vramd_stream,
                         "gpu_ids": gpu_ids,
                         "quality": profile.generation,
@@ -1955,25 +1972,26 @@ def resume_cmd(
                             if not continue_on_error:
                                 break
                             continue
-                        paint_manifest_items.append(
-                            {
-                                "id": row.id,
-                                "mesh": str(mesh_paint),
-                                "image": str(it["img_final"]),
-                                "output": str(_painted_path(it["mesh_final"])),
-                                "texture_size": _resolve_paint_texture_size(profile, row),
-                                **_paint_item_overrides(profile, row),
-                            }
-                        )
+                        paint_item_d: dict[str, Any] = {
+                            "id": row.id,
+                            "mesh": str(mesh_paint),
+                            "image": str(it["img_final"]),
+                            "output": str(_painted_path(it["mesh_final"])),
+                            "texture_size": _resolve_paint_texture_size(profile, row),
+                            **_paint_item_overrides(profile, row),
+                        }
+                        attach_multiref_paint_fields(paint_item_d, profile, it["img_final"])
+                        paint_manifest_items.append(paint_item_d)
                         paint_item_map[row.id] = i
 
                     if paint_manifest_items:
                         attach_gpu(paint_manifest_items, rows)
                         paint_manifest_path = work_dir / "resume_paint_manifest.json"
                         paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
+                        _has_multiref_paint = any(bool(x.get("blend_refs")) for x in paint_manifest_items)
                         _paint_kw: dict[str, Any] = {
                             "manifest_dir": manifest_dir,
-                            "no_vramd": no_vramd,
+                            "no_vramd": no_vramd or _has_multiref_paint,
                             "vramd_stream": vramd_stream,
                             "gpu_ids": gpu_ids,
                             "texture_size": _quality_paint_texture_cap(profile),
@@ -2038,6 +2056,10 @@ def resume_cmd(
                                 if p3.smooth_passes is not None:
                                     batch_args.extend(["--smooth-passes", str(p3.smooth_passes)])
                                 batch_args.append("--pbr-enrich" if p3.pbr_enrich else "--no-pbr-enrich")
+                                if p3.roughness_min is not None:
+                                    batch_args.extend(["--roughness-min", str(p3.roughness_min)])
+                                if p3.metallic_max is not None:
+                                    batch_args.extend(["--metallic-max", str(p3.metallic_max)])
                             if gpu_ids:
                                 batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
 

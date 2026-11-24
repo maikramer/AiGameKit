@@ -209,6 +209,20 @@ def cli(ctx, verbose):
     ),
     help="Preset do Materialize para o enriquecimento (env PAINT3D_PBR_PRESET).",
 )
+@click.option(
+    "--roughness-min",
+    "roughness_min",
+    default=None,
+    type=float,
+    help="Piso mínimo de roughness [0-0.95] para estilos mates (env PAINT3D_ROUGHNESS_MIN).",
+)
+@click.option(
+    "--metallic-max",
+    "metallic_max",
+    default=None,
+    type=float,
+    help="Tecto máximo de metallic [0-1] contra brilho metálico alucinado (env PAINT3D_METALLIC_MAX).",
+)
 @click.option("-v", "--verbose", "texture_verbose", is_flag=True, help="Logs detalhados.")
 @click.option(
     "--preserve-origin/--no-preserve-origin",
@@ -316,6 +330,8 @@ def texture(
     smooth_passes,
     pbr_enrich,
     pbr_preset,
+    roughness_min,
+    metallic_max,
     texture_verbose,
     preserve_origin,
     allow_shared_gpu,
@@ -362,6 +378,10 @@ def texture(
         os.environ.pop("PAINT3D_PBR_ENRICH", None)
     if pbr_preset:
         os.environ["PAINT3D_PBR_PRESET"] = pbr_preset
+    if roughness_min is not None or metallic_max is not None:
+        from .pbr_enrich import set_pbr_mr_clamp
+
+        set_pbr_mr_clamp(roughness_min=roughness_min, metallic_max=metallic_max)
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
@@ -512,6 +532,8 @@ def texture(
             channels_last=channels_last,
             allow_group_offload=allow_group_offload,
             pbr_enrich=pbr_enrich,
+            roughness_min=roughness_min,
+            metallic_max=metallic_max,
         ),
         t_start=t_start,
         noun="Mesh texturizado",
@@ -689,6 +711,20 @@ def texture(
     ),
     help="Preset do Materialize para o enriquecimento (env PAINT3D_PBR_PRESET).",
 )
+@click.option(
+    "--roughness-min",
+    "roughness_min",
+    default=None,
+    type=float,
+    help="Piso mínimo de roughness [0-0.95] para estilos mates (env PAINT3D_ROUGHNESS_MIN).",
+)
+@click.option(
+    "--metallic-max",
+    "metallic_max",
+    default=None,
+    type=float,
+    help="Tecto máximo de metallic [0-1] contra brilho metálico alucinado (env PAINT3D_METALLIC_MAX).",
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
 @add_vramd_options
 @click.pass_context
@@ -705,6 +741,8 @@ def texture_batch(
     smooth_passes,
     pbr_enrich,
     pbr_preset,
+    roughness_min,
+    metallic_max,
     preserve_origin,
     allow_shared_gpu,
     gpu_kill_others,
@@ -736,6 +774,10 @@ def texture_batch(
         os.environ.pop("PAINT3D_PBR_ENRICH", None)
     if pbr_preset:
         os.environ["PAINT3D_PBR_PRESET"] = pbr_preset
+    if roughness_min is not None or metallic_max is not None:
+        from .pbr_enrich import set_pbr_mr_clamp
+
+        set_pbr_mr_clamp(roughness_min=roughness_min, metallic_max=metallic_max)
     from .painter import PaintBatchProcessor, _fit_glb_aabb_to_reference
     from .texture_smooth import smooth_trimesh_texture
     from .utils.mesh_io import load_mesh_trimesh, save_glb
@@ -885,11 +927,32 @@ def texture_batch(
                 item_pbr = item.get("pbr_enrich", pbr_enrich)
                 item_views = int(item.get("max_views", item.get("max_num_view", max_views)))
                 item_res = int(item.get("view_resolution", view_resolution))
+                raw_images = item.get("images")
+                if isinstance(raw_images, list) and len(raw_images) >= 1:
+                    item_image_paths = [(manifest_dir / p).resolve() for p in raw_images]
+                    for p in item_image_paths:
+                        if not p.is_file():
+                            raise FileNotFoundError(f"Imagem de referência não encontrada: {p}")
+                else:
+                    item_image_paths = [image_path]
+                item_blend_refs = bool(item.get("blend_refs", False)) and len(item_image_paths) > 1
+                raw_azims = item.get("image_azims")
+                item_azims = (
+                    [float(a) % 360.0 for a in raw_azims] if isinstance(raw_azims, list) and raw_azims else None
+                )
+                item_image_arg: str | list[str] = (
+                    [str(p) for p in item_image_paths] if len(item_image_paths) > 1 else str(item_image_paths[0])
+                )
+                item_r_min = item.get("roughness_min", roughness_min)
+                item_m_max = item.get("metallic_max", metallic_max)
                 if delegate_or_prepare(
                     "paint3d",
                     payload=build_texture_request(
                         mesh_path=str(mesh_path),
                         image_path=str(image_path),
+                        images=[str(p) for p in item_image_paths] if len(item_image_paths) > 1 else None,
+                        blend_refs=item_blend_refs,
+                        image_azims=item_azims,
                         output=str(output_path),
                         max_num_view=item_views,
                         view_resolution=item_res,
@@ -905,6 +968,8 @@ def texture_batch(
                         channels_last=channels_last,
                         allow_group_offload=allow_group_offload,
                         pbr_enrich=item_pbr,
+                        roughness_min=float(item_r_min) if item_r_min is not None else None,
+                        metallic_max=float(item_m_max) if item_m_max is not None else None,
                     ),
                     t_start=t0,
                     noun="Mesh texturizado",
@@ -924,7 +989,12 @@ def texture_batch(
                     {
                         "id": item_id,
                         "mesh_path": mesh_path,
-                        "image_path": image_path,
+                        "image_arg": item_image_arg,
+                        "blend_refs": item_blend_refs,
+                        "image_azims": item_azims,
+                        "pbr_enrich": item_pbr,
+                        "roughness_min": item.get("roughness_min", roughness_min),
+                        "metallic_max": item.get("metallic_max", metallic_max),
                         "output_path": output_path,
                     }
                 )
@@ -958,13 +1028,20 @@ def texture_batch(
             )
             _batch_proc.__enter__()
 
+            from .pbr_enrich import set_pbr_enrich_override, set_pbr_mr_clamp
+
             for it in pending_inprocess:
                 item_id = it["id"]
                 mesh_path = it["mesh_path"]
-                image_path = it["image_path"]
+                image_arg = it["image_arg"]
                 output_path = it["output_path"]
                 t0 = time.time()
                 try:
+                    set_pbr_enrich_override(it["pbr_enrich"])
+                    set_pbr_mr_clamp(
+                        roughness_min=it.get("roughness_min"),
+                        metallic_max=it.get("metallic_max"),
+                    )
                     emit_progress(item_id, TOOL_PAINT3D, phase="loading_model", percent=0)
                     mesh_obj = load_mesh_trimesh(mesh_path)
                     emit_progress(item_id, TOOL_PAINT3D, phase="loading_model", percent=100)
@@ -972,7 +1049,13 @@ def texture_batch(
                     def _paint_step(phase, pct, _id=item_id):
                         emit_progress(_id, TOOL_PAINT3D, phase=phase, percent=pct)
 
-                    textured = _batch_proc.paint_mesh(mesh_obj, str(image_path), step_callback=_paint_step)
+                    textured = _batch_proc.paint_mesh(
+                        mesh_obj,
+                        image_arg,
+                        step_callback=_paint_step,
+                        blend_refs=bool(it["blend_refs"]),
+                        image_azims=it["image_azims"],
+                    )
 
                     if smooth:
                         textured = smooth_trimesh_texture(

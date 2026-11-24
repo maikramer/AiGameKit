@@ -105,7 +105,7 @@ class TestCharacterPaintDefaults:
     def test_paint_item_overrides_character(self) -> None:
         profile = _profile(paint3d=Paint3DProfile(pbr_enrich=False))
         opts = _paint_item_overrides(profile, _char_row())
-        assert opts == {"max_views": 8, "view_resolution": 512, "pbr_enrich": False}
+        assert opts == {"max_views": 8, "view_resolution": 640, "pbr_enrich": False}
 
     def test_row_paint_override_beats_character_default(self) -> None:
         profile = _profile(paint3d=Paint3DProfile(pbr_enrich=False))
@@ -122,5 +122,39 @@ class TestCharacterPaintDefaults:
         assert opts["pbr_enrich"] is False
 
     def test_character_paint_opts(self) -> None:
-        assert _character_paint_opts(_char_row()) == (8, 512)
+        assert _character_paint_opts(_char_row()) == (8, 640)
         assert _character_paint_opts(_row(rid="prop", category="prop", size_m=(0.4, 0.4, 0.4))) == (None, None)
+
+    def test_multiview_shape_and_multiref_paint_helpers(self, tmp_path) -> None:
+        from gameassets.pipeline import (
+            _concise_turnaround_subject,
+            attach_multiref_paint_fields,
+            attach_multiview_shape_fields,
+        )
+        from gameassets.profile import Text3DProfile
+
+        assert (
+            _concise_turnaround_subject(
+                "stylized rural fantasy cartographer with 6.5-head craft proportions and sculpted chamfered "
+                "facial planes, wearing linen shirt, front-facing"
+            )
+            == "stylized rural fantasy cartographer"
+        )
+
+        prof = _profile(paint3d=Paint3DProfile(multi_ref=True))
+        prof.text3d = Text3DProfile(auto_turnaround_categories=("humanoid",), turnaround_include_right=True)
+        shape_item: dict = {"id": "hero"}
+        attach_multiview_shape_fields(shape_item, prof, _row(rid="hero", category="humanoid", size_m=(0.55, 1.55, 0.4)))
+        assert shape_item["auto_turnaround"] is True
+        assert shape_item["include_right"] is True
+
+        front = tmp_path / "hero.png"
+        back = tmp_path / "hero_back.png"
+        right = tmp_path / "hero_right.png"
+        for p in (front, back, right):
+            p.write_bytes(b"PNG")
+        paint_item: dict = {"id": "hero", "image": str(front)}
+        attach_multiref_paint_fields(paint_item, prof, front)
+        assert paint_item["blend_refs"] is True
+        assert paint_item["image_azims"] == [0.0, 180.0, 90.0]
+        assert len(paint_item["images"]) == 3

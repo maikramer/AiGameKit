@@ -131,8 +131,10 @@ class TestShapeSpecsHwAuto:
             hw_auto_enabled=lambda: True,
             detect_hardware_profile=lambda: hwp,
         )
-        payload_mods = _make_pkg("text3d.vramd_payload", build_generate_request=mock_build)
-        with _temp_modules({**hw_mods, **payload_mods}):
+        with (
+            _temp_modules(hw_mods),
+            patch("aigamekit_shared.vramd_shape_payload.build_generate_request", mock_build),
+        ):
             specs = shape_specs_from_items(items, manifest_dir=tmp_path)
 
         assert len(specs) == 1
@@ -362,9 +364,8 @@ class TestRemoteGpuIds:
         out = tmp_path / "a.glb"
         items = [{"id": "a", "image": str(tmp_path / "a.png"), "output": str(out), "gpu": gpu}]
         mock_build = MagicMock(return_value={"output": str(out)})
-        mods = _make_pkg("text3d.vramd_payload", build_generate_request=mock_build)
         with (
-            _temp_modules(mods),
+            patch("aigamekit_shared.vramd_shape_payload.build_generate_request", mock_build),
             patch("gameassets.vramd_coord._gpu_remote", return_value=remote),
         ):
             shape_specs_from_items(items, manifest_dir=tmp_path, gpu_ids=[0, 1])
@@ -381,9 +382,8 @@ class TestRemoteGpuIds:
         out = tmp_path / "a.glb"
         items = [{"id": "a", "image": str(tmp_path / "a.png"), "output": str(out), "gpu": "auto"}]
         mock_build = MagicMock(return_value={"output": str(out)})
-        mods = _make_pkg("text3d.vramd_payload", build_generate_request=mock_build)
         with (
-            _temp_modules(mods),
+            patch("aigamekit_shared.vramd_shape_payload.build_generate_request", mock_build),
             patch("gameassets.vramd_coord._gpu_remote", return_value=None),
         ):
             shape_specs_from_items(items, manifest_dir=tmp_path, gpu_ids=[0])

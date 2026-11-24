@@ -39,6 +39,12 @@ class Paint3DProfile:
     bake_exp: int | None = None
     smooth: bool = True
     smooth_passes: int | None = None
+    # Multi-ref automático: se existirem <stem>_back.png e/ou <stem>_right.png ao lado da frontal,
+    # passa-os ao Paint3D com --blend-refs --image-azims 0,180,90 (Paint3D v3 Multi-Ref).
+    multi_ref: bool = True
+    # Guardas PBR de estilo mate (ex.: guache/têmpera: roughness_min=0.72, metallic_max=0.15).
+    roughness_min: float | None = None
+    metallic_max: float | None = None
     # Quick paint (solid / perlin)
     solid_color: str = "#888888"
     perlin_tint: str = "#7a7268"
@@ -81,6 +87,10 @@ class Text3DProfile:
     # None → text3d/Shared usam min(0.8 m, altura/4).
     split_cut_height: float | None = None
     split_files: bool = True
+    # Turnaround automático (FLUX.3 Klein front→back+left+right com alinhamento anti-6-dedos)
+    # + Hunyuan3D-2mv FP16 para as categorias listadas (ex.: ("humanoid",)).
+    auto_turnaround_categories: tuple[str, ...] = ()
+    turnaround_include_right: bool = True
 
 
 @dataclass
@@ -705,6 +715,17 @@ class GameProfile:
                 raise ValueError("text3d.split_cut_height deve ser um número (metros)") from e
             sf_raw = raw_t3.get("split_files")
             sf_b = True if sf_raw is None else bool(sf_raw)
+            atc_raw = raw_t3.get("auto_turnaround_categories")
+            if atc_raw is None:
+                atc_t: tuple[str, ...] = ()
+            elif isinstance(atc_raw, str):
+                atc_t = tuple(c.strip().lower() for c in atc_raw.split(",") if c.strip())
+            elif isinstance(atc_raw, (list, tuple)):
+                atc_t = tuple(str(c).strip().lower() for c in atc_raw if str(c).strip())
+            else:
+                raise ValueError("text3d.auto_turnaround_categories deve ser lista de strings")
+            tir_raw = raw_t3.get("turnaround_include_right")
+            tir_b = True if tir_raw is None else bool(tir_raw)
             t3 = Text3DProfile(
                 preset=pr,
                 export_origin=eo,
@@ -726,6 +747,8 @@ class GameProfile:
                 split_at_height=sah_b,
                 split_cut_height=sch_f,
                 split_files=sf_b,
+                auto_turnaround_categories=atc_t,
+                turnaround_include_right=tir_b,
             )
         p3d: Paint3DProfile | None = None
         raw_p3d = data.get("paint3d")
@@ -781,6 +804,13 @@ class GameProfile:
                     raise ValueError("paint3d.perlin_seed deve ser inteiro ou omitido") from e
             paint_smooth_val = raw_p3d.get("smooth")
             paint_smooth = bool(paint_smooth_val) if paint_smooth_val is not None else True
+            rmin_raw = raw_p3d.get("roughness_min")
+            mmax_raw = raw_p3d.get("metallic_max")
+            try:
+                rmin_f = float(rmin_raw) if rmin_raw not in (None, "") else None
+                mmax_f = float(mmax_raw) if mmax_raw not in (None, "") else None
+            except (TypeError, ValueError) as e:
+                raise ValueError("paint3d.roughness_min e metallic_max devem ser números") from e
             p3d = Paint3DProfile(
                 style=ps,
                 preserve_origin=bool(raw_p3d.get("preserve_origin", True)),
@@ -793,6 +823,9 @@ class GameProfile:
                 bake_exp=pbe_i,
                 smooth=paint_smooth,
                 smooth_passes=psp_i,
+                multi_ref=bool(raw_p3d.get("multi_ref", True)),
+                roughness_min=rmin_f,
+                metallic_max=mmax_f,
                 solid_color=psc_s,
                 perlin_tint=ptint_s,
                 perlin_frequency=pf,
@@ -1097,6 +1130,8 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
         split_at_height=t3.split_at_height,
         split_cut_height=t3.split_cut_height,
         split_files=t3.split_files,
+        auto_turnaround_categories=t3.auto_turnaround_categories,
+        turnaround_include_right=t3.turnaround_include_right,
     )
 
     p3d = profile.paint3d or Paint3DProfile()
@@ -1114,6 +1149,9 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
         bake_exp=p3d.bake_exp if p3d.bake_exp is not None else gp.paint_bake_exp,
         smooth=p3d.smooth if p3d.smooth else gp.paint_smooth,
         smooth_passes=p3d.smooth_passes if p3d.smooth_passes is not None else gp.paint_smooth_passes,
+        multi_ref=p3d.multi_ref,
+        roughness_min=p3d.roughness_min,
+        metallic_max=p3d.metallic_max,
         solid_color=p3d.solid_color,
         perlin_tint=p3d.perlin_tint,
         perlin_frequency=p3d.perlin_frequency,

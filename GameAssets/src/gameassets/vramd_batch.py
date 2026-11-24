@@ -182,10 +182,9 @@ def shape_specs_from_items(
     ``octree_resolution``/``steps``/``num_chunks`` omitidos (``None``) → não vão no
     payload vramd → ``bbox_tune`` size-based pode subir octree (ex. longhouse → 448).
     """
-    try:
-        from text3d.vramd_payload import build_generate_request
-    except ImportError:
-        return []
+    # Shared, não ``text3d``: o pacote não está no venv do GameAssets e o
+    # import vazio fazia a wave cair no generate-batch sequencial (1 GPU).
+    from aigamekit_shared.vramd_shape_payload import build_generate_request
 
     wave_sdnq, wave_mem = resolve_text3d_vram_opts(sdnq_preset, memory_efficient)
 
@@ -236,6 +235,8 @@ def shape_specs_from_items(
             pose_preset=item.get("pose_preset"),
             bbox_preset=item.get("bbox_preset"),
             size_m=item.get("size_m") or item.get("size"),
+            height_m=item.get("height_m"),
+            footprint_m=item.get("footprint_m"),
             bbox=item.get("bbox"),
             pose_file=str(item["pose_file"]) if item.get("pose_file") else None,
             point_cloud=str(item["point_cloud"]) if item.get("point_cloud") else None,
@@ -311,9 +312,18 @@ def paint_specs_from_items(
             item.get("sdnq_preset") if item.get("sdnq_preset") is not None else wave_sdnq,
         )
         item_gpu_ids = _payload_gpu_ids(item, gpu_ids)
+        raw_images = item.get("images")
+        resolved_images = (
+            [str(_resolve_path(manifest_dir, str(p))) for p in raw_images]
+            if isinstance(raw_images, list) and len(raw_images) > 1
+            else None
+        )
         kwargs: dict[str, Any] = dict(
             mesh_path=str(mesh),
             image_path=str(image),
+            images=resolved_images,
+            blend_refs=bool(item.get("blend_refs", False)) and bool(resolved_images),
+            image_azims=item.get("image_azims") if resolved_images else None,
             output=str(out),
             max_num_view=int(item.get("max_num_view", item.get("max_views", max_views))),
             view_resolution=int(item.get("view_resolution", view_resolution)),
@@ -328,6 +338,8 @@ def paint_specs_from_items(
             sdnq_preset=item_sdnq,
             channels_last=True,
             pbr_enrich=item.get("pbr_enrich", pbr_enrich),
+            roughness_min=item.get("roughness_min"),
+            metallic_max=item.get("metallic_max"),
         )
         payload = build_texture_request(**kwargs)
 

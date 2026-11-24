@@ -720,6 +720,93 @@ def _paint3d_quick_argv(
     return [str(x) for x in args]
 
 
+def resolve_paint_multi_refs(front_image: Path, *, enabled: bool = True) -> tuple[list[Path], list[float]]:
+    """Deteta vistas turnaround (``_back``, ``_right`` / ``_left``) ao lado da frontal para Paint3D Multi-Ref."""
+    front_p = Path(front_image)
+    if not enabled:
+        return [front_p], [0.0]
+    refs: list[Path] = [front_p]
+    azims: list[float] = [0.0]
+    ext = front_p.suffix or ".png"
+    stem = front_p.stem
+    parent = front_p.parent
+    back_p = parent / f"{stem}_back{ext}"
+    if back_p.is_file() and back_p.stat().st_size > 0:
+        refs.append(back_p)
+        azims.append(180.0)
+    right_p = parent / f"{stem}_right{ext}"
+    left_p = parent / f"{stem}_left{ext}"
+    if right_p.is_file() and right_p.stat().st_size > 0:
+        refs.append(right_p)
+        azims.append(90.0)
+    elif left_p.is_file() and left_p.stat().st_size > 0:
+        refs.append(left_p)
+        azims.append(270.0)
+    return refs, azims
+
+
+def row_wants_auto_turnaround(profile: GameProfile, row: ManifestRow | None) -> bool:
+    """Decide se a linha usa FLUX.3 Klein turnaround + Hunyuan3D-2mv FP16."""
+    if row is None:
+        return False
+    rt3 = row.text3d
+    if rt3 is not None and rt3.auto_turnaround is not None:
+        return bool(rt3.auto_turnaround)
+    t3 = profile.text3d
+    cats = getattr(t3, "auto_turnaround_categories", ()) if t3 is not None else ()
+    if not cats:
+        return False
+    cat = str(row.category or "").strip().lower()
+    return cat in cats
+
+
+def _concise_turnaround_subject(idea: str) -> str:
+    """Extrai o sujeito curto de ``row.idea`` sem cláusulas de rosto/frente que atrapalham a vista traseira."""
+    text = " ".join(str(idea or "").split()).strip()
+    if not text:
+        return ""
+    lower = text.lower()
+    cut = len(text)
+    for sep in (" with ", ", wearing", ", standing", ", facing", ", full body", ","):
+        idx = lower.find(sep)
+        if idx >= 8 and idx < cut:
+            cut = idx
+    short = text[:cut].strip(" ,.;:-")
+    if len(short) > 72:
+        short = short[:72].rsplit(" ", 1)[0].strip(" ,.;:-")
+    return short
+
+
+def attach_multiview_shape_fields(item: dict[str, Any], profile: GameProfile, row: ManifestRow) -> dict[str, Any]:
+    """Preenche campos de turnaround/2mv num item de ``text3d generate-batch`` quando a row o pede."""
+    if not row_wants_auto_turnaround(profile, row):
+        return item
+    t3 = profile.text3d
+    item["auto_turnaround"] = True
+    item["include_right"] = bool(getattr(t3, "turnaround_include_right", True)) if t3 is not None else True
+    if row.idea and not item.get("subject_hint"):
+        item["subject_hint"] = _concise_turnaround_subject(row.idea)
+    rt3 = row.text3d
+    if rt3 is not None:
+        if rt3.fuse_omni:
+            item["fuse_omni"] = True
+        if rt3.back_details:
+            item["back_details"] = rt3.back_details
+    return item
+
+
+def attach_multiref_paint_fields(item: dict[str, Any], profile: GameProfile, front_image: Path) -> dict[str, Any]:
+    """Anexa ``images`` + ``blend_refs`` + ``image_azims`` se existirem vistas turnaround junto à frontal."""
+    p3 = profile.paint3d
+    enabled = bool(p3.multi_ref) if p3 is not None else True
+    refs, azims = resolve_paint_multi_refs(front_image, enabled=enabled)
+    if len(refs) > 1:
+        item["images"] = [str(p) for p in refs]
+        item["blend_refs"] = True
+        item["image_azims"] = azims
+    return item
+
+
 def _paint3d_texture_argv(
     paint3d_bin: str,
     p3: Paint3DProfile | None,
@@ -734,15 +821,19 @@ def _paint3d_texture_argv(
     texture_size: int | None = None,
 ) -> list[str]:
     """Subcomando ``paint3d texture`` (Hunyuan3D-Paint 2.1; saída GLB com material PBR)."""
+    multi_ref_on = bool(p3.multi_ref) if p3 is not None else True
+    ref_paths, ref_azims = resolve_paint_multi_refs(image_path, enabled=multi_ref_on)
     args = [
         paint3d_bin,
         "texture",
         str(mesh_in),
-        "--image",
-        str(image_path),
-        "-o",
-        str(mesh_out),
     ]
+    for rp in ref_paths:
+        args.extend(["--image", str(rp)])
+    if len(ref_paths) > 1:
+        args.append("--blend-refs")
+        args.extend(["--image-azims", ",".join(f"{a:g}" for a in ref_azims)])
+    args.extend(["-o", str(mesh_out)])
     if quality:
         args.extend(["--quality", quality])
     if category:
@@ -775,6 +866,10 @@ def _paint3d_texture_argv(
     # Normal+AO derivados do albedo do atlas (bordos de ilha = arestas
     # falsas). O perfil do Vael desliga-o.
     args.append("--pbr-enrich" if p3.pbr_enrich else "--no-pbr-enrich")
+    if p3.roughness_min is not None:
+        args.extend(["--roughness-min", str(p3.roughness_min)])
+    if p3.metallic_max is not None:
+        args.extend(["--metallic-max", str(p3.metallic_max)])
     if gpu_ids:
         args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
     if not hw_auto:
@@ -801,7 +896,16 @@ def _texture_subprocess_argv(
         _over = {
             k: v
             for k, v in row.paint3d.items()
-            if k in ("max_views", "view_resolution", "render_size", "texture_size", "bake_exp")
+            if k
+            in (
+                "max_views",
+                "view_resolution",
+                "render_size",
+                "texture_size",
+                "bake_exp",
+                "roughness_min",
+                "metallic_max",
+            )
         }
         if _over:
             p3 = _dc.replace(p3, **_over)
@@ -1824,7 +1928,7 @@ _CHARACTER_PAINT_CATEGORIES = frozenset({"humanoid", "creature", "character", "n
 # ``medium``. Subir a resolução para 640 estoura a VRAM em 6 GiB (pico do
 # worker com raster+UNet) — 8@512 é o ponto seguro e já cobre melhor o atlas.
 _CHARACTER_PAINT_MAX_VIEWS = 8
-_CHARACTER_PAINT_VIEW_RESOLUTION = 512
+_CHARACTER_PAINT_VIEW_RESOLUTION = 640
 # O xatlas é superlinear nos charts: 260k faces num atlas 2048 rebentava o
 # timeout de 300 s em vários personagens. 100k ainda dá ~2.5x o LOD0 e ~23
 # texels/face; o reflexo no atlas é muito maior que o detalhe perdido.
@@ -1862,7 +1966,15 @@ def _paint_item_overrides(profile: GameProfile, row: ManifestRow | None) -> dict
     """
     opts: dict[str, object] = {}
     if row is not None and row.paint3d:
-        for key in ("max_views", "view_resolution", "render_size", "texture_size", "bake_exp"):
+        for key in (
+            "max_views",
+            "view_resolution",
+            "render_size",
+            "texture_size",
+            "bake_exp",
+            "roughness_min",
+            "metallic_max",
+        ):
             if row.paint3d.get(key) is not None:
                 opts[key] = row.paint3d[key]
     char_views, char_res = _character_paint_opts(row)
@@ -1872,6 +1984,11 @@ def _paint_item_overrides(profile: GameProfile, row: ManifestRow | None) -> dict
         opts["view_resolution"] = char_res
     p3 = profile.paint3d
     opts["pbr_enrich"] = bool(p3.pbr_enrich) if p3 is not None else False
+    if p3 is not None:
+        if "roughness_min" not in opts and p3.roughness_min is not None:
+            opts["roughness_min"] = p3.roughness_min
+        if "metallic_max" not in opts and p3.metallic_max is not None:
+            opts["metallic_max"] = p3.metallic_max
     return opts
 
 

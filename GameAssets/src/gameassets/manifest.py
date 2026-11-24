@@ -100,6 +100,10 @@ class RowText3D:
     morph_close_voxels: float | None = None
     # Override do profile ``text3d.split_at_height`` (cogumelos baixos, etc.)
     split_at_height: bool | None = None
+    # Override turnaround/multiview (Hunyuan3D-2mv FP16 + alinhamento front↔back)
+    auto_turnaround: bool | None = None
+    fuse_omni: bool = False
+    back_details: str | None = None
 
 
 _ROW_TEXT3D_KEYS = frozenset(
@@ -111,6 +115,9 @@ _ROW_TEXT3D_KEYS = frozenset(
         "morph_close_voxels",
         "voxel_merge",
         "split_at_height",
+        "auto_turnaround",
+        "fuse_omni",
+        "back_details",
     }
 )
 
@@ -201,6 +208,9 @@ def _row_text3d_from_dict(raw: Any, asset_id: str) -> RowText3D | None:
     # voxel_merge = alias authoring de morph_close_voxels
     mcv = raw.get("morph_close_voxels", raw.get("voxel_merge"))
     sah = raw.get("split_at_height")
+    ata = raw.get("auto_turnaround")
+    fo = raw.get("fuse_omni", False)
+    bd = raw.get("back_details")
     try:
         steps_i = int(steps) if steps is not None else None
         octree_i = int(octree) if octree is not None else None
@@ -214,6 +224,14 @@ def _row_text3d_from_dict(raw: Any, asset_id: str) -> RowText3D | None:
         if not isinstance(sah, bool):
             raise ValueError(f"asset {asset_id!r} text3d.split_at_height deve ser bool")
         sah_b = sah
+    ata_b: bool | None = None
+    if ata is not None:
+        if not isinstance(ata, bool):
+            raise ValueError(f"asset {asset_id!r} text3d.auto_turnaround deve ser bool")
+        ata_b = ata
+    if not isinstance(fo, bool):
+        raise ValueError(f"asset {asset_id!r} text3d.fuse_omni deve ser bool")
+    bd_s = str(bd).strip() if bd not in (None, "") else None
     return RowText3D(
         steps=steps_i,
         octree_resolution=octree_i,
@@ -221,6 +239,9 @@ def _row_text3d_from_dict(raw: Any, asset_id: str) -> RowText3D | None:
         morph_close=morph_m,
         morph_close_voxels=morph_n,
         split_at_height=sah_b,
+        auto_turnaround=ata_b,
+        fuse_omni=fo,
+        back_details=bd_s,
     )
 
 
@@ -348,6 +369,12 @@ def apply_row_text3d_overrides(item: dict[str, Any], row: ManifestRow) -> dict[s
         item["octree_resolution"] = rt3.octree_resolution
     if rt3.mc_level is not None:
         item["mc_level"] = rt3.mc_level
+    if rt3.auto_turnaround is not None:
+        item["auto_turnaround"] = rt3.auto_turnaround
+    if rt3.fuse_omni:
+        item["fuse_omni"] = True
+    if rt3.back_details:
+        item["back_details"] = rt3.back_details
     return item
 
 
