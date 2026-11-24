@@ -170,7 +170,7 @@ class TestCustomRasterizerInterpolate:
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
     def test_cuda_nvdiffrast_interpolate_parity(self) -> None:
-        pytest.importorskip("nvdiffrast.torch")
+        dr = pytest.importorskip("nvdiffrast.torch")
         from paint3d.custom_rasterizer_shim import render as cr
 
         pos = torch.tensor(
@@ -185,6 +185,47 @@ class TestCustomRasterizerInterpolate:
         out_gpu = cr.interpolate(col, findices, bary, tri).cpu()
         out_cpu = cr.interpolate(col.cpu(), findices.cpu(), bary.cpu(), tri.cpu())
         assert torch.allclose(out_gpu, out_cpu, atol=1e-5)
+
+        # Paridade geométrica directa com dr.interpolate (evita regressão [w, u, v] vs [u, v, w]).
+        rast_true, _ = dr.rasterize(cr._get_ctx(), pos, tri, (128, 128))
+        out_true, _ = dr.interpolate(col, rast_true, tri)
+        assert torch.allclose(out_gpu, out_true.cpu(), atol=1e-5)
+
+
+class TestFaceCloseupHelpers:
+    def test_resolve_face_closeup_mode_env_and_arg(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from paint3d.face_closeup import resolve_face_closeup_mode
+
+        monkeypatch.delenv("PAINT3D_FACE_CLOSEUP", raising=False)
+        assert resolve_face_closeup_mode(None) == "auto"
+        assert resolve_face_closeup_mode(True) == "on"
+        assert resolve_face_closeup_mode(False) == "off"
+        monkeypatch.setenv("PAINT3D_FACE_CLOSEUP", "0")
+        assert resolve_face_closeup_mode(True) == "off"
+        monkeypatch.setenv("PAINT3D_FACE_CLOSEUP", "1")
+        assert resolve_face_closeup_mode(False) == "on"
+
+    def test_crop_reference_head_returns_requested_size(self) -> None:
+        from paint3d.face_closeup import HeadFrame, crop_reference_head
+
+        img = Image.new("RGB", (768, 768), (255, 255, 255))
+        arr = np.asarray(img).copy()
+        arr[80:700, 260:510] = (120, 90, 60)
+        img = Image.fromarray(arr)
+        head = HeadFrame(
+            cam_center=(0.0, 0.0, 0.42),
+            ortho_scale=0.30,
+            head_center_xy=(0.0, 0.0),
+            z_max=0.53,
+            z_min=-0.53,
+            neck_z_hi=0.36,
+            neck_z_lo=0.30,
+            radial_inner=0.12,
+            radial_outer=0.18,
+        )
+        crop = crop_reference_head(img, head, 512)
+        assert crop.size == (512, 512)
+        assert crop.mode == "RGB"
 
 
 class TestPaintPrepKdTreeGutterFix:
