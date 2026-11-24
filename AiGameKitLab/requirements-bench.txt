@@ -16,9 +16,6 @@ diffusers>=0.30.0
 transformers>=5.14.0
 accelerate>=0.34.0
 
-# Otimizações VRAM
-xformers>=0.0.28
-
 # Modelos Hugging Face
 huggingface-hub>=1.5.0,<2
 safetensors>=0.4.0

@@ -79,7 +79,7 @@ Também pode ser executado sem `pip install` via scripts na raiz do monorepo:
 
 ```bash
 # Dentro do monorepo (modo editável).
-# Deps core (torch, rich-click, bitsandbytes/torchao/quanto/sdnq, xformers, psutil, bpy>=5.2.0)
+# Deps core (torch, rich-click, bitsandbytes/quanto/sdnq, psutil, bpy>=5.2.0)
 # são instaladas automaticamente — não há extras GPU/CLI/quantização opcionais.
 pip install -e Shared/
 ```
@@ -88,7 +88,7 @@ pip install -e Shared/
 
 - `dev` — pytest, pytest-cov, ruff, mypy, clified, numpy, scipy, trimesh (testes/lint + deps de `mesh_repair*` para CI)
 
-> Deps de runtime (`torch`, `rich-click`, `bitsandbytes`, `torchao`, `optimum-quanto`, `sdnq`, `xformers` em Linux, `psutil`, `bpy>=5.2.0`) são **core** — não estão atrás de um extra. **Não há** flag CLI `--low-vram` / `--memory-efficient`; a VRAM é gerida pelo **vramd + hw-auto** (ver [`Vramd/README.md`](../Vramd/README.md)).
+> Deps de runtime (`torch`, `rich-click`, `bitsandbytes`, `optimum-quanto`, `sdnq`, `psutil`, `bpy>=5.2.0`) são **core** — não estão atrás de um extra. **Não há** flag CLI `--low-vram` / `--memory-efficient`; a VRAM é gerida pelo **vramd + hw-auto** (ver [`Vramd/README.md`](../Vramd/README.md)).
 
 ## Desenvolvimento
 

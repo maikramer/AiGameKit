@@ -30,7 +30,6 @@ dependencies = [
     "easydict>=1.10",
     "scikit-image>=0.24.0",
     "addict>=2.4.0",
-    "xformers>=0.0.28",
     "accelerate>=0.34.0",
 ]
 

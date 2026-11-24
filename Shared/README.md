@@ -70,7 +70,7 @@ quem só orquestra. O supervisor vramd instala-se sem torch — 8.7 MB em vez de
 | Extra | Traz | Quem precisa |
 |-------|------|--------------|
 | *(nenhum)* | núcleo: click, rich, rich-click, psutil, nvidia-ml-py, PyYAML | **ModelServer** (supervisor vramd) |
-| `gpu` | torch, bitsandbytes, torchao, optimum-quanto, sdnq, xformers, transformers, hf-xet, huggingface-hub | tools de inferência |
+| `gpu` | torch, bitsandbytes, optimum-quanto, sdnq, transformers, hf-xet, huggingface-hub | tools de inferência |
 | `image` | Pillow | tools 2D e quem grava PNG |
 | `mesh` | bpy>=5.2.0 | tools de malha (`mesh_repair`, `bpy_mesh`) |
 | `all` | `gpu` + `image` + `mesh` | desenvolvimento completo |
@@ -107,7 +107,7 @@ chega para quem só orquestra:
 | Extra | Traz | Quem precisa |
 |---|---|---|
 | *(nenhum)* | núcleo | **ModelServer** (supervisor vramd) |
-| `gpu` | torch, bitsandbytes, torchao, optimum-quanto, sdnq, xformers, transformers, huggingface-hub | tools de inferência |
+| `gpu` | torch, bitsandbytes, optimum-quanto, sdnq, transformers, huggingface-hub | tools de inferência |
 | `image` | Pillow | tools 2D e quem grava PNG |
 | `mesh` | bpy | tools de malha |
 | `all` | os três | desenvolvimento completo |
