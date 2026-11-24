@@ -870,6 +870,13 @@ def pipeline_cmd(
                 console.print(f"[green]Renomeados {renamed} ossos para nomes semânticos (humanoid).[/green]")
             _validate_and_fix_origin(out)
             _fix_bone_orientation_or_warn(out)
+            from .back_prop_weights import reweight_back_props_to_spine
+
+            reweighted = reweight_back_props_to_spine(out)
+            if reweighted:
+                console.print(
+                    f"[green]Pesos de acessórios dorsais ancorados em spine_03 ({reweighted} vértices).[/green]"
+                )
     finally:
         if _old_cuda is not None:
             os.environ["CUDA_VISIBLE_DEVICES"] = _old_cuda

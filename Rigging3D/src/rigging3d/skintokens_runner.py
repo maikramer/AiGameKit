@@ -86,6 +86,9 @@ def ensure_checkpoints(home: Path | None = None) -> Path:
             # download não pode escrever por cima da entrada existente.
             with contextlib.suppress(OSError):
                 local_path.unlink()
+        if local_path.parent.is_symlink() and not local_path.parent.exists():
+            with contextlib.suppress(OSError):
+                local_path.parent.unlink()
         local_path.parent.mkdir(parents=True, exist_ok=True)
         cached = _cached_checkpoint(filename)
         if cached is not None:
