@@ -183,9 +183,9 @@ def resolve_materialize_bin() -> str | None:
     # Shared/src/aigamekit_shared/pbr_uv.py → raiz do monorepo AiGameKit
     repo_root = Path(__file__).resolve().parents[3]
     for name in ("materialize-cli", "materialize"):
-        cand = repo_root / "Materialize" / "target" / "release" / name
-        if cand.is_file() and os.access(cand, os.X_OK):
-            candidates.append(str(cand))
+        built = repo_root / "Materialize" / "target" / "release" / name
+        if built.is_file() and os.access(built, os.X_OK):
+            candidates.append(str(built))
 
     for name in ("materialize-cli", "materialize"):
         found = shutil.which(name)
@@ -626,11 +626,12 @@ def extract_glb_uv_triangles(glb_path: Path, material_index: int = 0) -> np.ndar
             + struct.pack("<II", len(bin_pad), 0x004E4942)
             + bin_pad
         )
-        cmd = (
-            [gt_bin, "copy", str(src_geom), str(dst_geom)]
-            if gt_bin
-            else [npx_bin, "--yes", "@gltf-transform/cli", "copy", str(src_geom), str(dst_geom)]
-        )
+        if gt_bin:
+            cmd = [gt_bin, "copy", str(src_geom), str(dst_geom)]
+        elif npx_bin:
+            cmd = [npx_bin, "--yes", "@gltf-transform/cli", "copy", str(src_geom), str(dst_geom)]
+        else:
+            return None
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
         if proc.returncode != 0 or not dst_geom.is_file():
             return None
