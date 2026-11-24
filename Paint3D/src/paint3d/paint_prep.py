@@ -264,7 +264,7 @@ def check_reference_image(image: Any, *, logger: Any = None) -> float:
     return saturation
 
 
-def apply_top_view_weight(config: Any, weight: float = DEFAULT_TOP_VIEW_WEIGHT, *, logger: Any = None) -> float:
+def apply_top_view_weight(config: Any, weight: float | None = None, *, logger: Any = None) -> float:
     """Reponderar as vistas de topo/baixo do bake (``candidate_view_weights``).
 
     Só muda o *blend*: a seleção de vistas é por área nova, e o trust map não
@@ -274,7 +274,8 @@ def apply_top_view_weight(config: Any, weight: float = DEFAULT_TOP_VIEW_WEIGHT, 
 
     Args:
         config: ``Hunyuan3DPaintConfig`` do pipeline.
-        weight: Peso novo para as vistas de topo e de baixo.
+        weight: Peso novo para as vistas de topo e de baixo (``None`` mantém o
+            valor da config, salvo override via ``PAINT3D_TOP_VIEW_WEIGHT``).
         logger: Logger opcional.
 
     Returns:
@@ -287,11 +288,104 @@ def apply_top_view_weight(config: Any, weight: float = DEFAULT_TOP_VIEW_WEIGHT, 
     weights = getattr(config, "candidate_view_weights", None)
     if not weights or len(weights) <= max(_TOP_VIEW_IDX):
         return DEFAULT_TOP_VIEW_WEIGHT
+    if weight is None:
+        return float(weights[_TOP_VIEW_IDX[0]])
     for i in _TOP_VIEW_IDX:
         weights[i] = float(weight)
     if logger is not None and weight != DEFAULT_TOP_VIEW_WEIGHT:
         logger.info(f"Bake: peso das vistas topo/baixo = {weight:g} (default {DEFAULT_TOP_VIEW_WEIGHT:g})")
     return float(weight)
+
+
+def orient_visible_faces_outward(
+    render: Any,
+    *,
+    resolution: int = 512,
+    logger: Any = None,
+) -> int:
+    """Corrige faces com winding invertido votando visibilidade de 30 câmaras exteriores.
+
+    Malhas não-watertight ou simplificadas (ex.: edifícios de várias cascas)
+    chegam por vezes ao Paint3D com paredes/telhados de normais invertidas para
+    dentro. Sem esta correcção:
+      - ``render_normal`` alimenta o UNet com normais invertidas (frente verde em
+        vez de magenta);
+      - ``back_project`` rejeita todas as faces invertidas (``cos < 0``), derrubando
+        o bake trust e deixando paredes inteiras ao inpaint;
+      - motores com backface culling (Bevy) ocultam as faces invertidas.
+
+    No espaço interno do ``MeshRender`` (``set_mesh`` troca Y↔Z com det=-1), uma
+    face glTF virada para fora tem ``cross(v1-v0, v2-v0)`` alinhada com
+    ``lookat_world = -r_mv[2, :3]`` (mesmo sinal usado em ``back_project``).
+    Desligar via ``PAINT3D_ORIENT_NORMALS=0``.
+
+    Returns:
+        Número de faces invertidas corrigidas.
+    """
+    env = os.environ.get("PAINT3D_ORIENT_NORMALS", "1").strip().lower()
+    if env in ("0", "false", "no", "off"):
+        return 0
+    if render is None or getattr(render, "vtx_pos", None) is None or getattr(render, "pos_idx", None) is None:
+        return 0
+
+    import torch
+    import torch.nn.functional as F
+
+    from .hy3dpaint.DifferentiableRenderer.camera_utils import get_mv_matrix, transform_pos
+
+    n_faces = int(render.pos_idx.shape[0])
+    if n_faces == 0:
+        return 0
+
+    device = render.vtx_pos.device
+    tris = render.vtx_pos[render.pos_idx.long()]
+    fn_world = F.normalize(torch.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0], dim=-1), dim=-1)
+
+    votes = torch.zeros(n_faces, device=device, dtype=torch.float32)
+    cam_pairs = [
+        (0, 0),
+        (0, 90),
+        (0, 180),
+        (0, 270),
+        (90, 0),
+        (-90, 180),
+    ] + [(elev, azim) for azim in range(0, 360, 30) for elev in (25, -25)]
+
+    res = (int(resolution), int(resolution))
+    with torch.no_grad():
+        for elev, azim in cam_pairs:
+            r_mv = get_mv_matrix(elev=elev, azim=azim, camera_distance=render.camera_distance)
+            pos_cam = transform_pos(r_mv, render.vtx_pos, keepdim=True)
+            pos_clip = transform_pos(render.camera_proj_mat, pos_cam)
+            rast_out, _ = render.raster_rasterize(pos_clip, render.pos_idx, resolution=res)
+            tri_id = rast_out[0, ..., 3].long()
+            fg = tri_id > 0
+            if not fg.any():
+                continue
+            fids = tri_id[fg] - 1
+            counts = torch.bincount(fids, minlength=n_faces).float()
+            # Espaço reflectido do MeshRender: faces exteriores apontam ao longo de lookat (-r_mv[2, :3]).
+            lookat_world = torch.from_numpy(-r_mv[2, :3]).to(device=device, dtype=torch.float32)
+            dots = (fn_world * lookat_world).sum(dim=-1)
+            votes += counts * dots
+
+    flip = votes < 0
+    n_flip = int(flip.sum().item())
+    if n_flip == 0:
+        return 0
+
+    render.pos_idx[flip] = render.pos_idx[flip][:, [0, 2, 1]]
+    render._crease_normals_cache = None
+    uv_idx = getattr(render, "uv_idx", None)
+    if uv_idx is not None and uv_idx.shape == render.pos_idx.shape and uv_idx.data_ptr() != render.pos_idx.data_ptr():
+        uv_idx[flip] = uv_idx[flip][:, [0, 2, 1]]
+
+    if uv_idx is not None and getattr(render, "vtx_uv", None) is not None:
+        render.extract_textiles()
+
+    if logger is not None:
+        logger.info(f"Orientação exterior: {n_flip:,}/{n_faces:,} ({n_flip / n_faces:.1%}) faces invertidas corrigidas")
+    return n_flip
 
 
 def install_depth_bias(

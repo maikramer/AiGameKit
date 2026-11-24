@@ -13,6 +13,7 @@
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
 import logging
+import os
 from dataclasses import dataclass
 from enum import Enum
 
@@ -406,6 +407,7 @@ class MeshRender:
         self.set_boundary_unreliable_scale(2)
         self.bake_mode = bake_mode
         self.shader_type = shader_type
+        self.crease_angle_deg = float(os.environ.get("PAINT3D_NORMAL_CREASE_DEG", "55.0") or 55.0)
 
         self.raster_mode = raster_mode
         if self.raster_mode == "cr":
@@ -474,6 +476,36 @@ class MeshRender:
             )
             vertex_normals = torch.from_numpy(vertex_normals).float().to(self.device).contiguous()
             normal, _ = self.raster_interpolate(vertex_normals[None, ...], rast_out, self.pos_idx)
+
+        elif self.shader_type == "crease_smooth":
+            from paint3d.mesh_denoise import compute_welded_crease_normals
+
+            vpos = self.vtx_pos if use_abs_coor else pos_camera
+            crease_deg = float(getattr(self, "crease_angle_deg", 55.0))
+            cache_key = (int(vpos.data_ptr()), int(self.pos_idx.data_ptr()), crease_deg) if use_abs_coor else None
+            cached = getattr(self, "_crease_normals_cache", None)
+            if cache_key is not None and cached is not None and cached[0] == cache_key:
+                cn_t = cached[1]
+            else:
+                cn = compute_welded_crease_normals(
+                    vpos.detach().cpu().numpy(),
+                    self.pos_idx.detach().cpu().numpy(),
+                    face_normals.detach().cpu().numpy(),
+                    crease_deg=crease_deg,
+                )
+                cn_t = torch.from_numpy(cn).to(device=rast_out.device, dtype=torch.float32)
+                if cache_key is not None:
+                    self._crease_normals_cache = (cache_key, cn_t)
+            u = rast_out[..., 0:1]
+            v = rast_out[..., 1:2]
+            w = (1.0 - u - v).clamp(0.0, 1.0)
+            tri_ids = rast_out[..., 3].long()
+            fg = tri_ids > 0
+            normal = torch.zeros((*rast_out.shape[:3], 3), device=rast_out.device, dtype=torch.float32)
+            if fg.any():
+                fids = (tri_ids[fg] - 1).clamp(0, cn_t.shape[0] - 1)
+                interp = u[fg] * cn_t[fids, 0] + v[fg] * cn_t[fids, 1] + w[fg] * cn_t[fids, 2]
+                normal[fg] = F.normalize(interp, dim=-1)
 
         elif self.shader_type == "face":
             tri_ids = rast_out[..., 3]
@@ -1223,7 +1255,7 @@ class MeshRender:
             )
             vertex_normals = torch.from_numpy(vertex_normals).float().to(self.device).contiguous()
             normal, _ = self.raster_interpolate(vertex_normals[None, ...], rast_out, self.pos_idx)
-        elif self.shader_type == "face":
+        elif self.shader_type in ("face", "crease_smooth"):
             tri_ids = rast_out[..., 3]
             tri_ids_mask = tri_ids > 0
             tri_ids = ((tri_ids - 1) * tri_ids_mask).long()
