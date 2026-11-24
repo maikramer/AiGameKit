@@ -185,3 +185,137 @@ class TestPatchFlow:
         monkeypatch.setattr(mod, "resolve_materialize_bin", lambda: None)
         with pytest.raises(RuntimeError, match="materialize não encontrado"):
             patch_glb_pbr(p, logger=None)
+
+    def test_force_packs_orm_and_repacks_without_bloat(self, tmp_path, monkeypatch):
+        import numpy as np
+
+        import text3d.utils.glb_patch_pbr as mod
+
+        p = _base_glb(tmp_path)
+        monkeypatch.setattr(mod, "resolve_materialize_bin", lambda: "/fake/materialize-cli")
+
+        def fake_derive(albedo_rgb, **kwargs):
+            h, w = albedo_rgb.shape[:2]
+            n = np.zeros((h, w, 3), dtype=np.uint8)
+            n[..., 0] = 128
+            n[..., 1] = 128
+            n[..., 2] = 255
+            ao = np.full((h, w, 3), 180, dtype=np.uint8)
+            return n, ao
+
+        monkeypatch.setattr(mod, "derive_uv_masked_pbr", fake_derive)
+        r1 = patch_glb_pbr(p, force=True, logger=None)
+        assert not r1.skipped
+        size1 = p.stat().st_size
+        g1, _ = _load_glb(p)
+        slots1 = material_slots(g1)
+        assert slots1["normal"] is not None
+        assert slots1["ao"] is not None
+        # ORM partilhado: occlusion aponta para metallicRoughness (não para baseColor!)
+        assert slots1["ao"] == slots1["mr"]
+        assert slots1["mr"] != slots1["base"]
+
+        # Segunda passagem --force substitui in-place sem duplicar blobs
+        r2 = patch_glb_pbr(p, force=True, logger=None)
+        assert not r2.skipped
+        assert p.stat().st_size == size1
+
+    def test_orphan_image_left_by_the_upsert_is_dropped(self, tmp_path, monkeypatch):
+        """A ORM passa a servir a occlusion: a textura ``ao`` antiga fica órfã.
+
+        O Bevy descodifica todas as imagens do GLB, usadas ou não — uma órfã com
+        ``byteLength`` 0 derruba o asset inteiro (``UnexpectedEnd``).
+        """
+        import numpy as np
+
+        import text3d.utils.glb_patch_pbr as mod
+
+        names = ("albedo", "n", "mr", "ao")
+        # geometria DEPOIS das imagens: a remoção renumera as views dela
+        chunks = [_png_bytes(rgb) for rgb in ((200, 100, 80), (128, 128, 255), (160, 160, 160), (180, 180, 180))]
+        chunks += [struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0), struct.pack("<3H", 0, 1, 2)]
+        views, data = [], bytearray()
+        for blob in chunks:
+            data += b"\0" * ((-len(data)) % 4)
+            views.append({"buffer": 0, "byteOffset": len(data), "byteLength": len(blob)})
+            data += blob
+        gltf = {
+            "asset": {"version": "2.0"},
+            "buffers": [{"byteLength": len(data)}],
+            "accessors": [
+                {"bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 5, "componentType": 5123, "count": 3, "type": "SCALAR"},
+            ],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+            "bufferViews": views,
+            "images": [{"bufferView": i, "mimeType": "image/png", "name": n} for i, n in enumerate(names)],
+            "samplers": [{}],
+            "textures": [{"source": i, "sampler": 0} for i in range(len(names))],
+            "materials": [
+                {
+                    "pbrMetallicRoughness": {
+                        "baseColorTexture": {"index": 0},
+                        "metallicRoughnessTexture": {"index": 2},
+                    },
+                    "normalTexture": {"index": 1},
+                    "occlusionTexture": {"index": 3},
+                }
+            ],
+        }
+        p = tmp_path / "split.glb"
+        _write_glb(p, gltf, bytes(data))
+        monkeypatch.setattr(mod, "resolve_materialize_bin", lambda: "/fake/materialize-cli")
+
+        def fake_derive(albedo_rgb, **kwargs):
+            h, w = albedo_rgb.shape[:2]
+            return np.full((h, w, 3), 128, dtype=np.uint8), np.full((h, w, 3), 180, dtype=np.uint8)
+
+        monkeypatch.setattr(mod, "derive_uv_masked_pbr", fake_derive)
+        assert not patch_glb_pbr(p, force=True, logger=None).skipped
+
+        g, bin_data = _load_glb(p)
+        views = g["bufferViews"]
+
+        def image_of(tex_index):
+            tex = g["textures"][tex_index]
+            source = tex.get("extensions", {}).get("KHR_texture_basisu", {}).get("source", tex.get("source"))
+            view = views[g["images"][source]["bufferView"]]
+            start = view.get("byteOffset", 0)
+            return bytes(bin_data[start : start + view["byteLength"]])
+
+        assert [im["name"] for im in g["images"] if views[im["bufferView"]]["byteLength"] == 0] == []
+        slots = material_slots(g)
+        assert image_of(slots["base"]) == chunks[0]
+        for slot in ("mr", "normal", "ao"):
+            assert image_of(slots[slot]).startswith(b"\xabKTX")
+        # nem textura nem imagem órfã sobrevivem: albedo, normal e ORM
+        assert [im["name"] for im in g["images"]] == ["albedo", "normal_m0", "orm_m0"]
+        assert len(g["textures"]) == 3
+        # a geometria continua a ler os mesmos bytes, agora uma view abaixo
+        assert [a["bufferView"] for a in g["accessors"]] == [3, 4]
+        for accessor, blob in zip(g["accessors"], chunks[4:], strict=True):
+            view = views[accessor["bufferView"]]
+            start = view.get("byteOffset", 0)
+            assert bytes(bin_data[start : start + view["byteLength"]]) == blob
+
+    def test_resolve_skips_legacy_materialize_without_only(self, tmp_path, monkeypatch):
+        import aigamekit_shared.pbr_uv as pbr_uv
+
+        legacy = tmp_path / "materialize"
+        legacy.write_text("#!/bin/sh\necho 'Usage: materialize <input>'\n", encoding="utf-8")
+        legacy.chmod(0o755)
+        modern = tmp_path / "materialize-cli"
+        modern.write_text("#!/bin/sh\necho 'Usage: materialize-cli --only --no-seamless'\n", encoding="utf-8")
+        modern.chmod(0o755)
+
+        pbr_uv._supports_modern_flags.cache_clear()
+        monkeypatch.setenv("MATERIALIZE_BIN", str(legacy))
+        monkeypatch.setattr(
+            pbr_uv.shutil,
+            "which",
+            lambda name: str(modern) if name == "materialize-cli" else str(legacy),
+        )
+        resolved = pbr_uv.resolve_materialize_bin()
+        assert resolved is not None
+        assert Path(resolved).name != "materialize" or "materialize-cli" in resolved
+        pbr_uv._supports_modern_flags.cache_clear()

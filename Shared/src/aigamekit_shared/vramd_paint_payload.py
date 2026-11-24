@@ -72,6 +72,8 @@ def build_texture_request(
     memory_efficient: bool = False,
     sdnq_preset: str | None = None,
     pbr_enrich: bool | None = None,
+    roughness_min: float | None = None,
+    metallic_max: float | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload vramd paint3d com peak opts."""
@@ -105,6 +107,8 @@ def build_texture_request(
             "upscale_factor": None if upscale_factor is None else float(upscale_factor),
             "torch_compile_mode": torch_compile_mode,
             "pbr_enrich": pbr_enrich,
+            "roughness_min": None if roughness_min is None else float(roughness_min),
+            "metallic_max": None if metallic_max is None else float(metallic_max),
         },
         extra=extra,
     )

@@ -138,12 +138,32 @@ class Adapter(WorkerAdapter):
         if self.should_abort(request):
             return self.cancelled_response("cancelled before generate")
 
-        # O worker é outro processo: o ``--no-pbr-enrich`` do CLI/GameAssets não
-        # chegava aqui e o default ON derivava normal+AO do albedo (bordos das
-        # ilhas UV viram arestas). O request traz o valor efectivo.
-        from paint3d.pbr_enrich import set_pbr_enrich_override
+        # O worker é outro processo: o ``--no-pbr-enrich`` e os limites PBR
+        # (--roughness-min / --metallic-max) do CLI/GameAssets chegam no request.
+        from paint3d.pbr_enrich import set_pbr_enrich_override, set_pbr_mr_clamp
 
         set_pbr_enrich_override(request.get("pbr_enrich"))
+        r_min = request.get("roughness_min")
+        m_max = request.get("metallic_max")
+        set_pbr_mr_clamp(
+            float(r_min) if r_min is not None else None,
+            float(m_max) if m_max is not None else None,
+        )
+        try:
+            return self._run_generate(model, request, mesh_path, image_arg, blend_refs, image_azims, output)
+        finally:
+            set_pbr_mr_clamp(None, None)
+
+    def _run_generate(
+        self,
+        model: Any,
+        request: dict[str, Any],
+        mesh_path: str,
+        image_arg: Any,
+        blend_refs: bool,
+        image_azims: list[float] | None,
+        output: str,
+    ) -> dict[str, Any]:
 
         self.report_progress(request, 0.0, "started")
         t_start = time.perf_counter()

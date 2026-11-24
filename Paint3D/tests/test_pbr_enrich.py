@@ -126,10 +126,70 @@ class TestPbrEnrichModule:
         assert ao[0, 0, 0] == 64
         cmd = captured["cmd"]
         assert cmd[0] == "/fake/materialize"
-        assert "--only" in cmd and cmd[cmd.index("--only") + 1] == "normal,ao"
+        assert "--only" in cmd
+        only_maps = set(cmd[cmd.index("--only") + 1].split(","))
+        assert {"normal", "ao"}.issubset(only_maps)
         assert "--no-seamless" in cmd
         assert "--normal-format" in cmd and cmd[cmd.index("--normal-format") + 1] == "opengl"
         assert "-p" in cmd and cmd[cmd.index("-p") + 1] == "stone"
+
+    def test_uv_seam_mask_flattens_border_and_preserves_interior(self) -> None:
+        from aigamekit_shared.pbr_uv import mask_and_dilate_pbr_maps
+
+        h = w = 64
+        cov = np.zeros((h, w), dtype=np.uint8)
+        cov[16:48, 16:48] = 255
+        # Normal inclinada forte em todo o mapa + AO escura
+        n_xyz = np.zeros((h, w, 3), dtype=np.float32)
+        n_xyz[..., 0] = 0.6
+        n_xyz[..., 1] = -0.5
+        n_xyz[..., 2] = np.sqrt(1.0 - 0.36 - 0.25)
+        ao = np.full((h, w), 0.4, dtype=np.float32)
+
+        n_u8, ao_u8 = mask_and_dilate_pbr_maps(n_xyz, ao, cov, fade_px=6.0)
+        # Na borda da ilha UV (y=16, x=32): normal quase plana (128,128,255) e AO perto de 255
+        assert abs(int(n_u8[16, 32, 0]) - 128) <= 6
+        assert abs(int(n_u8[16, 32, 1]) - 128) <= 6
+        assert int(n_u8[16, 32, 2]) >= 250
+        assert int(ao_u8[16, 32, 0]) >= 245
+        # No centro da ilha (y=32, x=32): relevo e AO preservados integralmente
+        assert int(n_u8[32, 32, 0]) > 190
+        assert int(n_u8[32, 32, 1]) < 75
+        assert abs(int(ao_u8[32, 32, 0]) - round(0.4 * 255)) <= 2
+
+    def test_calibrate_matte_roughness_relieves_chalk_without_touching_metal(self) -> None:
+        from aigamekit_shared.pbr_uv import calibrate_matte_roughness
+
+        # 4 casos: giz saturado em plano, giz em fenda, couro 0.72, metal 0.95
+        r = np.array([[252, 252, 184, 242]], dtype=np.uint8)
+        m = np.array([[0, 0, 0, 220]], dtype=np.uint8)
+        ao = np.array([[255, 130, 255, 255]], dtype=np.uint8)
+        out = calibrate_matte_roughness(r, m, ao)
+        assert 192 <= int(out[0, 0]) <= 212  # plano exposto: ~0.78 (mate guache)
+        assert 225 <= int(out[0, 1]) <= 240  # fenda: ~0.91 (ultra-mate)
+        assert int(out[0, 2]) == 184  # <= 0.86 intocado
+        assert int(out[0, 3]) == 242  # metálico intocado
+
+    def test_real_materialize_opengl_y_convention(self, monkeypatch) -> None:
+        """Verifica que o normal derivado numa cúpula branca é OpenGL +Y para cima."""
+        monkeypatch.setenv("PAINT3D_PBR_ENRICH", "1")
+        if pbr_enrich.resolve_materialize_bin() is None:
+            pytest.skip("materialize-cli não disponível")
+        yy, xx = np.mgrid[0:128, 0:128]
+        r = np.sqrt((xx - 64.0) ** 2 + (yy - 64.0) ** 2)
+        h = np.clip((36.0 - r) / 8.0, 0.0, 1.0)
+        g = (h * 220.0 + 20.0).astype(np.uint8)
+        albedo = np.stack([g, g, g], axis=-1)
+        result = pbr_enrich.enrich_maps_from_albedo(albedo, preset="default")
+        if result is None:
+            pytest.skip("materialize indisponível (sem adapter GPU)")
+        normal, _ao = result
+        # OpenGL +Y up: topo da cúpula (y~30) tem G > 128; base (y~98) tem G < 128
+        assert int(normal[28:34, 60:68, 1].mean()) > 140
+        assert int(normal[94:100, 60:68, 1].mean()) < 116
+        # Esquerda (x~30) tem R < 128; direita (x~98) tem R > 128
+        assert int(normal[60:68, 28:34, 0].mean()) < 116
+        assert int(normal[60:68, 94:100, 0].mean()) > 140
 
     def test_real_materialize_when_available(self, monkeypatch) -> None:
         """Integração com o binário real — skip sem MATERIALIZE_BIN/GPU."""

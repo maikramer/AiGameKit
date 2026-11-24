@@ -234,30 +234,31 @@ def _seam_dilation_pixels(texture_width: int) -> int:
 def _dilate_texture_at_seams(texture_np, vtx_uv, uv_idx, dilation_pixels=4):
     """Dilate texture at UV island boundaries to prevent visible seam cracks.
 
-    Rasterizes UV triangles into a mask, then dilates painted regions outward
-    so GPU sampling near seam edges picks up correct color instead of background.
+    Rasterizes UV triangles into a mask, then fills gutter pixels via Voronoi
+    nearest-texel copy (instead of per-channel max dilation, which skews normal
+    maps pink/cyan and bleeds colors independently at UV seams).
     """
     h, w = texture_np.shape[:2]
     uv_triangles = vtx_uv[uv_idx]
     coverage = np.zeros((h, w), dtype=np.uint8)
     pts = (uv_triangles * [w, h]).astype(np.float32)
     pts[:, :, 1] = np.clip(h - pts[:, :, 1], 0, h - 1)
-    for tri in pts:
-        cv2.fillConvexPoly(coverage, tri.astype(np.int32), 255)
+    cv2.fillPoly(coverage, [tri.astype(np.int32) for tri in pts], 255)
+    if (coverage > 0).all() or not (coverage > 0).any():
+        return texture_np
+    from aigamekit_shared.pbr_uv import voronoi_fill
+
+    if dilation_pixels <= 0:
+        return voronoi_fill(texture_np, coverage)
     kernel = np.ones((dilation_pixels * 2 + 1, dilation_pixels * 2 + 1), np.uint8)
     dilated = cv2.dilate(coverage, kernel, iterations=1)
     border_mask = (dilated > 0) & (coverage == 0)
     if not border_mask.any():
         return texture_np
-    if texture_np.ndim == 3:
-        filled = np.zeros_like(texture_np)
-        for c in range(texture_np.shape[2]):
-            filled[:, :, c] = cv2.dilate(texture_np[:, :, c], kernel, iterations=1)
-        texture_np[border_mask] = filled[border_mask]
-    else:
-        filled = cv2.dilate(texture_np, kernel, iterations=1)
-        texture_np[border_mask] = filled[border_mask]
-    return texture_np
+    filled = voronoi_fill(texture_np, coverage)
+    out = texture_np.copy()
+    out[border_mask] = filled[border_mask]
+    return out
 
 
 def _weld_seam_vertices(vtx_pos, pos_idx, tolerance=1e-4):
@@ -431,23 +432,63 @@ def _save_glb_mesh_bpy(
         if metallic is not None:
             bsdf.inputs["Metallic"].default_value = 1.0
             bsdf.inputs["Roughness"].default_value = 1.0
-        # Enriquecimento PBR (PAINT3D_PBR_ENRICH=0 desliga): normal + AO
-        # derivados do albedo via Materialize — o mr do modelo fica. Falha do
-        # binário/GPU vira warning e segue sem os mapas (pbr_enrich).
+        # Enriquecimento PBR (PAINT3D_PBR_ENRICH=0 desliga): normal OpenGL + AO
+        # UV-masked derivados do albedo via Materialize — o mr do modelo fica
+        # (com calibração mate subtil se a rugosidade vier saturada > 0.88).
         ao_map = None
         if metallic is not None:
-            from paint3d.pbr_enrich import enrich_maps_from_albedo, pbr_enrich_enabled
+            from paint3d.pbr_enrich import (
+                calibrate_matte_roughness,
+                enrich_maps_from_albedo,
+                get_pbr_mr_clamp,
+                pbr_enrich_enabled,
+                rasterize_uv_coverage,
+                sanitize_pbr_mr,
+            )
 
             if pbr_enrich_enabled():
-                enrich = enrich_maps_from_albedo(texture_uint8, logger=_log)
+                h_tex, w_tex = texture_uint8.shape[:2]
+                coverage_u8 = rasterize_uv_coverage(vtx_uv[uv_idx], h_tex, w_tex, flip_v=True)
+                try:
+                    enrich = enrich_maps_from_albedo(
+                        texture_uint8,
+                        preset="auto",
+                        coverage_u8=coverage_u8,
+                        mesh_hint=mesh_path,
+                        logger=_log,
+                    )
+                except TypeError:
+                    # Compatibilidade com monkeypatches antigos em testes
+                    enrich = enrich_maps_from_albedo(texture_uint8, logger=_log)
                 if enrich is not None:
                     # pbr_enrich devolve uint8 0-255; o wiring espera float 0-1
                     # (mesma convenção dos arrays metallic/roughness do render).
-                    enrich_normal, ao_map = enrich
+                    enrich_normal, ao_u8 = enrich
                     enrich_normal = enrich_normal.astype(np.float64) / 255.0
-                    ao_map = ao_map.astype(np.float64) / 255.0
+                    ao_map = ao_u8.astype(np.float64) / 255.0
                     if normal is None:
                         normal = enrich_normal
+                    if roughness is not None:
+                        r_u8 = (np.clip(roughness[..., 0], 0.0, 1.0) * 255.0).astype(np.uint8)
+                        m_u8 = (np.clip(metallic[..., 0], 0.0, 1.0) * 255.0).astype(np.uint8)
+                        cal_u8 = calibrate_matte_roughness(r_u8, m_u8, ao_u8[..., 0])
+                        cal_f = cal_u8.astype(np.float64) / 255.0
+                        roughness = np.repeat(cal_f[..., None], roughness.shape[2], axis=2)
+
+            if roughness is not None:
+                rmin, mmax = get_pbr_mr_clamp()
+                r_u8 = (np.clip(roughness[..., 0], 0.0, 1.0) * 255.0).astype(np.uint8)
+                m_u8 = (np.clip(metallic[..., 0], 0.0, 1.0) * 255.0).astype(np.uint8)
+                r_s, m_s = sanitize_pbr_mr(
+                    texture_uint8,
+                    r_u8,
+                    m_u8,
+                    roughness_min=rmin,
+                    metallic_max=mmax,
+                    protect_skin=True,
+                )
+                roughness = np.repeat((r_s.astype(np.float64) / 255.0)[..., None], roughness.shape[2], axis=2)
+                metallic = np.repeat((m_s.astype(np.float64) / 255.0)[..., None], metallic.shape[2], axis=2)
 
         tmp_pbr_paths = _wire_pbr_maps(
             mat,
